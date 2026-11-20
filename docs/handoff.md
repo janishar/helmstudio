@@ -79,8 +79,9 @@ Lessons that cost time:
    say.
 6. **Import of the old gallery**: `helm import ~/.helmstudio --user <email>` is ready; a dry run found 90 items.
 7. **The GCP disk**: keep (small storage bill) or delete.
-8. **The empty Create screen**: build it to the Direct board (composer under the title, looks grid, Elements aside)
-   or change the board.
+8. **The empty Create screen**: decided 2026-11-20, built to the Direct board (title, composer under it, looks grid
+   of the open tile's group, Elements aside). Inspector-only settings show when a composer setting is clicked; after the
+   first run the screen is as before.
 9. **The MiniMax H3 video first + last frame golden** passes at 25 dB (two runs differ by 26-27 dB), the silent
    video one at 27 dB, not 30.
 

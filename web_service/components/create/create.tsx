@@ -22,9 +22,9 @@ import { mediaItem, offerLabel } from "@/lib/source";
 import { useUses } from "@/lib/take-cache";
 import { clipOf, placeRows, positionOf } from "@/lib/video";
 import { WorkflowPicker } from "@/components/create/workflows";
-import { ElementsPicker } from "@/components/create/elements";
+import { ElementsPanel, ElementsPicker } from "@/components/create/elements";
 import { AddToTimeline } from "@/components/timeline/add";
-import { LooksPicker, QuickTiles } from "@/components/create/looks";
+import { LooksPicker, LooksSection, QuickTiles } from "@/components/create/looks";
 import { MentionChips, insertAtCaret } from "@/components/create/prompt";
 import { useLibrary, useLooks } from "@/lib/library";
 import {
@@ -33,6 +33,7 @@ import {
   liveChosen,
   looksReuseNote,
   reasonOf,
+  tileGroup,
   tilesOf,
   type Chosen,
 } from "@/lib/looks";
@@ -215,6 +216,10 @@ export function Create({
   // the chosen looks per group (the composer's look tiles), and the group whose picker is open
   const [looksPicked, setLooksChosen] = useState<Chosen>({});
   const [lookGroup, setLookGroup] = useState<S<"LibraryGroup"> | null>(null);
+  // the empty screen (no run, no take: docs/mock/Direct.dc.html): the look group shown under the composer, and
+  // whether a chip opened the Inspector in the aside in place of the Elements panel
+  const [inlineGroup, setInlineGroup] = useState<S<"LibraryGroup"> | null>(null);
+  const [inspect, setInspect] = useState(false);
   // a reused take's look ids, put under their groups once the looks are known
   const [reusedLooks, setReusedLooks] = useState<string[] | null>(null);
   // what Reuse said about the elements the take was made with (changed, deleted, renamed since)
@@ -244,6 +249,8 @@ export function Create({
     setSelected(null);
     setTracks({});
     setTakes([]);
+    setInspect(false);
+    setInlineGroup(null);
     if (!keep) setChosen("");
     runsRef.current = [];
     setRuns(id ? null : []);
@@ -636,6 +643,7 @@ export function Create({
       : null;
   /** Opens a field's inspector control (or the canvas picker) and moves focus to it. */
   const show = (key: string) => {
+    setInspect(true);
     if (key !== "canvas") setOpenKey(key);
     requestAnimationFrame(() => {
       // a size no aspect chip matches leaves none pressed: then the first one
@@ -747,6 +755,42 @@ export function Create({
   const shownTake = picked?.take;
   useFullScreenKey(!!shownTake && !full, () => setFull(true));
   const shown = picked?.run ?? runs?.find((r) => r.id === shownTake?.run_id);
+  // no run and no take yet: the title, the composer under it with the open look group's looks, and the Elements
+  // panel in the aside (docs/mock/Direct.dc.html); the first run brings the Stage and the Inspector
+  const empty = !runs?.length && !takes.length;
+  const lookTiles = tiles.flatMap((t) => tileGroup(t) ?? []);
+  // the tile opened last, else the first look tile
+  const openGroup =
+    inlineGroup && lookTiles.includes(inlineGroup) ? inlineGroup : (lookTiles[0] ?? null);
+  const elementsAside =
+    empty &&
+    !!textFields[0] &&
+    !inspect &&
+    !fields.some((f) => f.param.type !== "text" && errors[f.key]);
+  const insert = (h: string) =>
+    textFields[0] &&
+    insertAtCaret(idOf(textFields[0].key), texts[0], h, (v) => change(textFields[0].key, v));
+  // the reference control and the prompt's @mentions: in the tiles row, or on the empty screen in the bottom row
+  // by Generate, as the board's + and @ (docs/mock/Direct.dc.html)
+  const refsAndMentions = (
+    <>
+      {refField ? (
+        <RefChips
+          fields={fields}
+          raws={raws}
+          errors={errors}
+          onChange={change}
+          uploads={uploads}
+          extra={<MentionChips texts={texts} />}
+        />
+      ) : (
+        <>
+          {firstFrameIn && <FirstFrameTile onPick={(id) => void applyUse(id, firstFrameIn.id)} />}
+          <MentionChips texts={texts} />
+        </>
+      )}
+    </>
+  );
   const shownWorkflow =
     workflows?.find((w) => w.id === (shown?.workflow_id ?? shownTake?.made_with?.workflow_id)) ??
     workflow;
@@ -917,6 +961,15 @@ export function Create({
 
         {spanField && sourceSet && sourceView ? (
           <SourceStage span={spanField} fields={fields} raws={raws} onChange={change} grid={grid} />
+        ) : empty ? (
+          <div className="flex flex-col items-center gap-2 pt-7 pb-1 text-center">
+            <h1 className="m-0 font-display text-[40px] leading-[44px] font-bold tracking-[0.01em]">
+              What will you <span className="text-a1">make?</span>
+            </h1>
+            <p className="m-0 text-[15px] text-t2">
+              Describe an image or a clip. Pull in characters and places with @. Runs on this Mac.
+            </p>
+          </div>
         ) : (
           <Stage
             run={shown}
@@ -992,7 +1045,9 @@ export function Create({
           </div>
         )}
 
-        <div className="flex shrink-0 flex-wrap items-stretch gap-2.5">
+        <div
+          className={`flex shrink-0 flex-wrap items-stretch gap-2.5 ${empty ? "w-full max-w-[980px] self-center" : ""}`}
+        >
           {kinds.length > 1 && (
             <MediaSwitch
               kinds={kinds}
@@ -1035,23 +1090,7 @@ export function Create({
                     }}
                   />
                 )}
-                {refField ? (
-                  <RefChips
-                    fields={fields}
-                    raws={raws}
-                    errors={errors}
-                    onChange={change}
-                    uploads={uploads}
-                    extra={<MentionChips texts={texts} />}
-                  />
-                ) : (
-                  <>
-                    {firstFrameIn && (
-                      <FirstFrameTile onPick={(id) => void applyUse(id, firstFrameIn.id)} />
-                    )}
-                    <MentionChips texts={texts} />
-                  </>
-                )}
+                {!empty && refsAndMentions}
                 {mediaRowFields.map((f) => (
                   <MediaRows
                     key={f.key}
@@ -1067,7 +1106,8 @@ export function Create({
                   chosen={looksChosen}
                   mentioned={handles.length}
                   onElements={() => setElementsOpen(true)}
-                  onLook={setLookGroup}
+                  onLook={empty ? setInlineGroup : setLookGroup}
+                  open={empty ? openGroup : undefined}
                 />
               </div>
             )}
@@ -1107,6 +1147,7 @@ export function Create({
                 </p>
               )}
             <div className="flex flex-wrap items-center gap-2">
+              {empty && refsAndMentions}
               <Chips
                 fields={fields}
                 raws={raws}
@@ -1184,16 +1225,21 @@ export function Create({
             </div>
           </form>
         </div>
+        {empty && openGroup && current && (
+          <LooksSection
+            group={openGroup}
+            chosen={looksChosen}
+            onChosen={setLooksChosen}
+            reason={(x) => reasonOf(current, x, loraFamilies)}
+            prompt={texts[0] ?? ""}
+          />
+        )}
         {textFields[0] && (
           <ElementsPicker
             open={elementsOpen}
             onClose={() => setElementsOpen(false)}
             inPrompt={handles}
-            onInsert={(h) =>
-              insertAtCaret(idOf(textFields[0].key), texts[0], h, (v) =>
-                change(textFields[0].key, v),
-              )
-            }
+            onInsert={insert}
           />
         )}
         {current && (
@@ -1208,27 +1254,31 @@ export function Create({
       </main>
 
       <aside
-        aria-label="Inspector"
+        aria-label={elementsAside ? "Elements" : "Inspector"}
         className="aside m-3.5 flex flex-[1_1_320px] flex-col gap-[22px] px-[18px] pt-4 pb-6 md:ml-0"
       >
-        <Inspector
-          groups={groups}
-          resolved={shown?.workflow_id === workflow?.id ? shown?.resolved?.params : undefined}
-          presets={workflow?.studio?.presets}
-          fields={fields}
-          raws={raws}
-          errors={errors}
-          onChange={change}
-          open={openKey}
-          setOpen={setOpenKey}
-          uploads={uploads}
-          compact={video}
-          grid={grid}
-          familyTitle={
-            palette?.groups.find((g) => g.family === workflow?.family)?.title ??
-            (workflow?.source === "mine" ? undefined : workflow?.title)
-          }
-        />
+        {elementsAside ? (
+          <ElementsPanel inPrompt={handles} onInsert={insert} />
+        ) : (
+          <Inspector
+            groups={groups}
+            resolved={shown?.workflow_id === workflow?.id ? shown?.resolved?.params : undefined}
+            presets={workflow?.studio?.presets}
+            fields={fields}
+            raws={raws}
+            errors={errors}
+            onChange={change}
+            open={openKey}
+            setOpen={setOpenKey}
+            uploads={uploads}
+            compact={video}
+            grid={grid}
+            familyTitle={
+              palette?.groups.find((g) => g.family === workflow?.family)?.title ??
+              (workflow?.source === "mine" ? undefined : workflow?.title)
+            }
+          />
+        )}
       </aside>
     </>
   );
@@ -1443,16 +1493,8 @@ function Stage({
         className="absolute inset-x-6 top-[68px] bottom-6 flex items-center justify-center"
         style={{ containerType: "size" }}
       >
-        {!run && !take ? (
-          <div className="flex flex-col items-center gap-2 text-center">
-            <h1 className="m-0 font-display text-[40px] leading-[44px] font-bold tracking-[0.01em]">
-              What will you <span className="text-a1">make?</span>
-            </h1>
-            <p className="m-0 text-[15px] text-t2">
-              Describe an image or a clip. Pull in characters and places with @. Runs on this Mac.
-            </p>
-          </div>
-        ) : out?.kind === "image" || out?.kind === "video" ? (
+        {/* with neither, Create shows its empty screen, not the Stage */}
+        {!run && !take ? null : out?.kind === "image" || out?.kind === "video" ? (
           <Media
             key={outKey}
             take={out}

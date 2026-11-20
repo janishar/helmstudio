@@ -40,10 +40,9 @@ Notes from the owner while using the app. Not scheduled; each is picked up when 
   - small runner notes: ffmpeg on user files runs with the runner's full environment (NATS and S3 secrets); the h3
     prompt is visible to other local accounts through ps; a media take is held in memory (up to 1 GiB);
   - GPU paths not run: MiniMax H3 Image with 16 references or large references; H3 video references at 1 MP or 15 s;
-  - screens left as built until the owner decides: the empty Create screen (Direct board: composer under the title,
-    looks grid, Elements aside); the Gallery "This project only" chip and search placeholder; the Pipelines list
-    extras (New pipeline / Rename / Delete; four batches with "All batches"); no landing page (Landing board, not in a
-    milestone).
+  - screens left as built until the owner decides: the Gallery "This project only" chip and search placeholder; the
+    Pipelines list extras (New pipeline / Rename / Delete; four batches with "All batches"); no landing page (Landing
+    board, not in a milestone).
 
 ## Product
 

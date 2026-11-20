@@ -68,6 +68,7 @@ function gridKeys(e: React.KeyboardEvent<HTMLUListElement>) {
 }
 
 export function VisualPicker<A extends string, B extends string>({
+  head,
   info,
   action,
   search,
@@ -79,10 +80,13 @@ export function VisualPicker<A extends string, B extends string>({
   children,
   footer,
 }: {
+  /** set when the picker sits in the page, not a dialog (the empty Create screen, docs/mock/Direct.dc.html): its own
+   * title row in place of the dialog's info and action, and no scrolling of its own */
+  head?: ReactNode;
   info: ReactNode;
   /** the kind's "New element" / "Upload .safetensors" / "New look" button (and what it needs, a file input) */
   action?: ReactNode;
-  search: {
+  search?: {
     id: string;
     label: string;
     placeholder: string;
@@ -102,32 +106,40 @@ export function VisualPicker<A extends string, B extends string>({
   footer: ReactNode;
 }) {
   return (
-    <div className="flex max-h-[76dvh] flex-col gap-3.5">
-      <div className="-mt-11 flex items-center justify-end gap-2">
-        <Info>{info}</Info>
-        {action}
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <label htmlFor={search.id} className="sr-only">
-          {search.label}
-        </label>
-        <input
-          id={search.id}
-          type="search"
-          placeholder={search.placeholder}
-          value={search.value}
-          maxLength={80}
-          autoFocus
-          onChange={(e) => search.onChange(e.target.value)}
-          // the picker may sit inside the composer's form: Enter must not submit it
-          onKeyDown={(e) => e.key === "Enter" && e.preventDefault()}
-          className={`h-9 rounded-xl border border-s5 bg-s1 px-3 text-t1 ${search.className}`}
-        />
-        {filters[0] && <Filters f={filters[0]} />}
-        {filters[1] && <Filters f={filters[1]} />}
-      </div>
+    <div className={`flex flex-col gap-3.5 ${head ? "" : "max-h-[76dvh]"}`}>
+      {head ?? (
+        <div className="-mt-11 flex items-center justify-end gap-2">
+          <Info>{info}</Info>
+          {action}
+        </div>
+      )}
+      {(search || filters[0]) && (
+        <div className="flex flex-wrap items-center gap-2">
+          {search && (
+            <>
+              <label htmlFor={search.id} className="sr-only">
+                {search.label}
+              </label>
+              <input
+                id={search.id}
+                type="search"
+                placeholder={search.placeholder}
+                value={search.value}
+                maxLength={80}
+                autoFocus
+                onChange={(e) => search.onChange(e.target.value)}
+                // the picker may sit inside the composer's form: Enter must not submit it
+                onKeyDown={(e) => e.key === "Enter" && e.preventDefault()}
+                className={`h-9 rounded-xl border border-s5 bg-s1 px-3 text-t1 ${search.className}`}
+              />
+            </>
+          )}
+          {filters[0] && <Filters f={filters[0]} />}
+          {filters[1] && <Filters f={filters[1]} />}
+        </div>
+      )}
       {error && <ErrorNote>{error}</ErrorNote>}
-      <div className="min-h-32 overflow-y-auto p-0.5">
+      <div className={`p-0.5 ${head ? "" : "min-h-32 overflow-y-auto"}`}>
         {status}
         <ul
           aria-label={listLabel}

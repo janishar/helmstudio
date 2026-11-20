@@ -4,8 +4,8 @@
 // group, edit and delete one's own), the look editor (New look, ✎) and the gallery's Save as look.
 import { useEffect, useState } from "react";
 import { Pencil, X } from "lucide-react";
-import { ErrorNote, Modal } from "@/components/kit";
-import { ElementsButton } from "@/components/create/elements";
+import { ErrorNote, Info, Modal } from "@/components/kit";
+import { ElementsButton, TileWords, picClass, tileClass } from "@/components/create/elements";
 import { LoraPicker } from "@/components/create/loras";
 import { Pic, Tile, VisualPicker } from "@/components/create/visual-picker";
 import { GalleryPicker } from "@/components/gallery/picker";
@@ -18,6 +18,7 @@ import {
   MAX_LOOKS,
   filterItems,
   liveChosen,
+  lookGroupLabel,
   lookLine,
   tileGroup,
   tileState,
@@ -33,34 +34,37 @@ function LookTile({
   group,
   chosen,
   looks,
+  open,
   onClick,
 }: {
   group: Group;
   chosen: Chosen;
   looks: Item[] | null;
+  /** the tiles open their group in the page (the empty Create screen): whether this one is open */
+  open?: boolean;
   onClick: () => void;
 }) {
   const st = tileState(group, chosen, looks);
   const src = safeUrl(st.thumb);
   const label = LOOK_GROUPS.find(([g]) => g === group)?.[1] ?? group;
+  const big = open !== undefined;
   return (
     <button
       type="button"
-      aria-haspopup="dialog"
+      {...(big ? { "aria-expanded": open } : { "aria-haspopup": "dialog" as const })}
       aria-label={`${label}: ${st.name}`}
       onClick={onClick}
-      className="bevel flex h-8 items-center gap-2 rounded-lg bg-s3 pr-2.5 pl-1 text-[12px]"
+      className={`${tileClass(big)} ${open ? "outline-2 outline-a1" : ""}`}
     >
       {src ? (
-        <img src={src} alt="" className="size-6 rounded-md object-cover" />
+        <img src={src} alt="" className={`${picClass(big)} object-cover`} />
       ) : (
         <span
           aria-hidden
-          className={`size-6 rounded-md ${st.count ? "bg-line" : "border border-dashed border-dash"}`}
+          className={`${picClass(big)} ${st.count ? "bg-line" : "border border-dashed border-dash"}`}
         />
       )}
-      <span className="mono text-[10px] text-t2">{label}</span>
-      <b className="font-semibold">{st.name}</b>
+      <TileWords big={big} label={label} value={st.name} />
     </button>
   );
 }
@@ -72,6 +76,7 @@ export function QuickTiles({
   mentioned,
   onElements,
   onLook,
+  open,
 }: {
   tiles: TileName[];
   chosen: Chosen;
@@ -79,16 +84,59 @@ export function QuickTiles({
   mentioned: number;
   onElements: () => void;
   onLook: (g: Group) => void;
+  /** set when the look tiles open their group in the page, not the picker (the empty Create screen): the open one */
+  open?: Group | null;
 }) {
   const looks = useLooks();
+  const big = open !== undefined;
   return tiles.map((t) => {
     const g = tileGroup(t);
     return g ? (
-      <LookTile key={t} group={g} chosen={chosen} looks={looks} onClick={() => onLook(g)} />
+      <LookTile
+        key={t}
+        group={g}
+        chosen={chosen}
+        looks={looks}
+        open={big ? g === open : undefined}
+        onClick={() => onLook(g)}
+      />
     ) : (
-      <ElementsButton key={t} count={mentioned} onClick={onElements} />
+      <ElementsButton key={t} count={mentioned} onClick={onElements} big={big} />
     );
   });
+}
+
+/** The looks of one group in the page, under the composer of the empty Create screen (docs/mock/Direct.dc.html): the
+ * picker's grid, where a pick applies at once; Reset clears every group's looks, Save current as look starts a look
+ * from the prompt as typed. */
+export function LooksSection({
+  group,
+  chosen,
+  onChosen,
+  reason,
+  prompt,
+}: {
+  group: Group;
+  chosen: Chosen;
+  onChosen: (c: Chosen) => void;
+  reason: (x: Item) => string | null;
+  prompt: string;
+}) {
+  return (
+    <section
+      aria-label={`${lookGroupLabel(group)} looks`}
+      className="panel w-full max-w-[980px] shrink-0 self-center p-4"
+    >
+      <Picker
+        start={group}
+        chosen={chosen}
+        onClose={() => undefined}
+        onChosen={onChosen}
+        reason={reason}
+        inline={{ prompt }}
+      />
+    </section>
+  );
 }
 
 /** The Looks picker, opened on `group`; `onChosen` gets every group's picks when the user applies them. `reason`:
@@ -127,21 +175,28 @@ function Picker({
   onClose,
   onChosen,
   reason,
+  inline,
 }: {
   start: Group;
   chosen: Chosen;
   onClose: () => void;
   onChosen: (c: Chosen) => void;
   reason: (x: Item) => string | null;
+  /** in the page (LooksSection): `start` is the group, picks apply at once; `prompt` fills Save current as look */
+  inline?: { prompt: string };
 }) {
   const looks = useLooks();
   // the list may be stale (another tab, a host came or went): read it again on each opening
   useEffect(() => void reloadLibrary(), []);
-  const [group, setGroup] = useState<Group>(start);
+  const [tab, setGroup] = useState<Group>(start);
+  const group = inline ? start : tab;
   const [source, setSource] = useState<S<"LibrarySource"> | "">("");
   const [q, setQ] = useState("");
-  const [picks, setPicks] = useState<Chosen>(chosen);
-  const [editing, setEditing] = useState<Item | "new" | null>(null);
+  const [local, setLocal] = useState<Chosen>(chosen);
+  const picks = inline ? chosen : local;
+  const setPicks = (f: (p: Chosen) => Chosen) => (inline ? onChosen(f(chosen)) : setLocal(f));
+  // a look being edited, "new", or "current" (Save current as look: a new look with the prompt as its text)
+  const [editing, setEditing] = useState<Item | "new" | "current" | null>(null);
   const [deleting, setDeleting] = useState("");
   const [error, setError] = useState("");
   const shown = filterItems(looks ?? [], { group, source, q });
@@ -167,15 +222,49 @@ function Picker({
   }
   const icon = "grid size-6 place-items-center rounded-lg bg-s3 text-t2 hover:text-t1";
   const small = "chip h-6 px-2 text-[11px]";
+  const info = (
+    <>
+      A look adds its text after the prompt, its images as references and its LoRAs to the LoRA
+      stack, at its strength. Starter looks come with the models; yours you save from a take or make
+      here.
+    </>
+  );
+  const editor = (
+    <LookEditor
+      open={editing !== null}
+      onClose={() => setEditing(null)}
+      item={typeof editing === "object" ? (editing ?? undefined) : undefined}
+      group={group}
+      text={editing === "current" ? inline?.prompt : undefined}
+    />
+  );
   return (
     <VisualPicker
-      info={
-        <>
-          A look adds its text after the prompt, its images as references and its LoRAs to the LoRA
-          stack, at its strength. Starter looks come with the models; yours you save from a take or
-          make here.
-        </>
+      head={
+        inline && (
+          <div className="flex flex-wrap items-center justify-between gap-2.5">
+            <h2 className="m-0 flex items-center text-base font-semibold">
+              {lookGroupLabel(group)}
+              <Info>{info}</Info>
+            </h2>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="chip bevel"
+                disabled={!total}
+                title="Clear the looks of every group"
+                onClick={() => onChosen({})}
+              >
+                Reset
+              </button>
+              <button type="button" className="chip bevel" onClick={() => setEditing("current")}>
+                Save current as look
+              </button>
+            </div>
+          </div>
+        )
       }
+      info={info}
       action={
         <button
           type="button"
@@ -185,28 +274,42 @@ function Picker({
           New look
         </button>
       }
-      search={{
-        id: "look-q",
-        label: "Search names",
-        placeholder: "Search names",
-        value: q,
-        onChange: setQ,
-        className: "flex-[1_1_200px]",
-      }}
-      filters={[
-        { label: "Group", kind: "tab", options: LOOK_GROUPS, value: group, onChange: setGroup },
-        {
-          label: "Source",
-          kind: "press",
-          options: [
-            ["", "All"],
-            ["starter", "Starter"],
-            ["mine", "Mine"],
-          ] as const,
-          value: source,
-          onChange: setSource,
-        },
-      ]}
+      search={
+        inline
+          ? undefined
+          : {
+              id: "look-q",
+              label: "Search names",
+              placeholder: "Search names",
+              value: q,
+              onChange: setQ,
+              className: "flex-[1_1_200px]",
+            }
+      }
+      filters={
+        inline
+          ? []
+          : [
+              {
+                label: "Group",
+                kind: "tab",
+                options: LOOK_GROUPS,
+                value: group,
+                onChange: setGroup,
+              },
+              {
+                label: "Source",
+                kind: "press",
+                options: [
+                  ["", "All"],
+                  ["starter", "Starter"],
+                  ["mine", "Mine"],
+                ] as const,
+                value: source,
+                onChange: setSource,
+              },
+            ]
+      }
       error={error}
       status={
         <>
@@ -228,38 +331,41 @@ function Picker({
         </>
       }
       listLabel="Looks"
-      grid="grid-cols-[repeat(auto-fill,minmax(130px,1fr))] gap-3"
+      grid={
+        inline
+          ? "grid-cols-2 gap-3 sm:grid-cols-4"
+          : "grid-cols-[repeat(auto-fill,minmax(130px,1fr))] gap-3"
+      }
       footer={
-        <>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <span className="mono mr-auto text-[12px] text-t2" aria-live="polite">
-              {total} chosen · up to {MAX_LOOKS} in all
-            </span>
-            <button type="button" className="chip bevel" onClick={onClose}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="chip bevel bg-a1 font-semibold text-on1"
-              onClick={() => {
-                onChosen(live);
-                onClose();
-              }}
-            >
-              {total ? `Use ${total}` : "Use none"}
-            </button>
-          </div>
-          <p className="m-0 text-[12px] text-t2">
-            Looks that do not fit this workflow are greyed with the reason. Starter looks are
-            read-only: save your own from a take. Auto adds nothing.
-          </p>
-          <LookEditor
-            open={editing !== null}
-            onClose={() => setEditing(null)}
-            item={editing === "new" ? undefined : (editing ?? undefined)}
-            group={group}
-          />
-        </>
+        inline ? (
+          editor
+        ) : (
+          <>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <span className="mono mr-auto text-[12px] text-t2" aria-live="polite">
+                {total} chosen · up to {MAX_LOOKS} in all
+              </span>
+              <button type="button" className="chip bevel" onClick={onClose}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="chip bevel bg-a1 font-semibold text-on1"
+                onClick={() => {
+                  onChosen(live);
+                  onClose();
+                }}
+              >
+                {total ? `Use ${total}` : "Use none"}
+              </button>
+            </div>
+            <p className="m-0 text-[12px] text-t2">
+              Looks that do not fit this workflow are greyed with the reason. Starter looks are
+              read-only: save your own from a take. Auto adds nothing.
+            </p>
+            {editor}
+          </>
+        )
       }
     >
       {looks && (
@@ -328,6 +434,17 @@ function Picker({
           </li>
         );
       })}
+      {inline && looks && (
+        <li className="flex min-w-0 flex-col gap-1.5">
+          <Tile
+            pic={<Pic thumb={null} empty="+" />}
+            name="New look"
+            line="from a take or from scratch"
+            pressed={false}
+            onClick={() => setEditing("new")}
+          />
+        </li>
+      )}
     </VisualPicker>
   );
 }
@@ -337,17 +454,19 @@ const MAX_LORAS = 4;
 type Img = { take_id: string; thumb_url: string };
 type LoraRow = { id: string; name: string; strength: number };
 
-/** The look editor: a new look (in `group`) or one's own `item`. */
+/** The look editor: a new look (in `group`, with `text` to start from) or one's own `item`. */
 export function LookEditor({
   open,
   onClose,
   item,
   group = "lighting",
+  text,
 }: {
   open: boolean;
   onClose: () => void;
   item?: Item;
   group?: Group;
+  text?: string;
 }) {
   return (
     <Modal
@@ -356,7 +475,7 @@ export function LookEditor({
       title={item ? "Edit look" : "New look"}
       width="w-[min(94vw,600px)]"
     >
-      <Editor key={item?.id ?? "new"} item={item} group={group} onClose={onClose} />
+      <Editor key={item?.id ?? "new"} item={item} group={group} text={text} onClose={onClose} />
     </Modal>
   );
 }
@@ -384,11 +503,21 @@ function GroupButtons({ value, onChange }: { value: Group; onChange: (g: Group) 
 
 const box = "h-[38px] w-full rounded-[10px] bg-s4 px-3 text-[13px] text-t1";
 
-function Editor({ item, group: g0, onClose }: { item?: Item; group: Group; onClose: () => void }) {
+function Editor({
+  item,
+  group: g0,
+  text: t0 = "",
+  onClose,
+}: {
+  item?: Item;
+  group: Group;
+  text?: string;
+  onClose: () => void;
+}) {
   const library = useLoras();
   const [name, setName] = useState(item?.name ?? "");
   const [group, setGroup] = useState<Group>(item?.group ?? g0);
-  const [text, setText] = useState(item?.text ?? "");
+  const [text, setText] = useState(item?.text ?? t0.slice(0, 2000));
   const [images, setImages] = useState<Img[]>(item?.images ?? []);
   const [loras, setLoras] = useState<LoraRow[]>(
     (item?.loras ?? []).flatMap((l) =>

@@ -4,7 +4,7 @@
 // images from the gallery picker). Saved through /v1/studio/library.
 import { useEffect, useState } from "react";
 import { Pencil, X } from "lucide-react";
-import { ErrorNote, Modal } from "@/components/kit";
+import { ErrorNote, Info, Modal } from "@/components/kit";
 import { VisualPicker } from "@/components/create/visual-picker";
 import { GalleryPicker } from "@/components/gallery/picker";
 import { api, message, ok, type S } from "@/lib/api";
@@ -22,20 +22,51 @@ import { HANDLE, handleFrom } from "@/lib/mentions";
 type Item = S<"LibraryItem">;
 type Img = { take_id: string; thumb_url: string };
 
-/** The composer's Elements button: how many distinct elements the prompt mentions. */
-export function ElementsButton({ count, onClick }: { count: number; onClick: () => void }) {
+/** A composer tile: compact (h-8, the Stage layout) or big (the empty Create screen, docs/mock/Direct.dc.html). */
+export const tileClass = (big: boolean) =>
+  big
+    ? "bevel flex min-h-[52px] flex-[1_1_150px] items-center gap-2.5 rounded-xl bg-s3 px-3 py-2 text-left"
+    : "bevel flex h-8 items-center gap-2 rounded-lg bg-s3 pr-2.5 pl-1 text-[12px]";
+export const picClass = (big: boolean) =>
+  big ? "size-8 shrink-0 rounded-lg" : "size-6 rounded-md";
+export function TileWords({ big, label, value }: { big: boolean; label: string; value: string }) {
   return (
-    <button
-      type="button"
-      aria-haspopup="dialog"
-      onClick={onClick}
-      className="bevel flex h-8 items-center gap-2 rounded-lg bg-s3 pr-2.5 pl-1 text-[12px]"
-    >
-      <span aria-hidden className="size-6 rounded-md bg-line" />
-      <span className="mono text-[10px] text-t2">Elements</span>
-      <b className="font-semibold">{count ? `${count} in prompt` : "Add"}</b>
+    <span className={big ? "flex min-w-0 flex-col" : "contents"}>
+      <span className="mono text-[10px] text-t2">{label}</span>
+      <b className={`font-semibold ${big ? "truncate text-sm" : ""}`}>{value}</b>
+    </span>
+  );
+}
+
+/** The composer's Elements button: how many distinct elements the prompt mentions; `big` on the empty Create
+ * screen. */
+export function ElementsButton({
+  count,
+  onClick,
+  big = false,
+}: {
+  count: number;
+  onClick: () => void;
+  big?: boolean;
+}) {
+  return (
+    <button type="button" aria-haspopup="dialog" onClick={onClick} className={tileClass(big)}>
+      <span aria-hidden className={`${picClass(big)} bg-line`} />
+      <TileWords big={big} label="Elements" value={count ? `${count} in prompt` : "Add"} />
     </button>
   );
+}
+
+/** The Elements panel in the aside of the empty Create screen (docs/mock/Direct.dc.html): the picker's cards by
+ * group, without search; a click puts the @handle in the prompt. */
+export function ElementsPanel({
+  onInsert,
+  inPrompt,
+}: {
+  onInsert: (handle: string) => void;
+  inPrompt: string[];
+}) {
+  return <Picker onClose={() => undefined} onInsert={onInsert} inPrompt={inPrompt} inline />;
 }
 
 /** The Elements picker; `onInsert` puts a handle in the prompt (the dialog closes); `inPrompt` marks the cards. */
@@ -61,10 +92,12 @@ function Picker({
   onClose,
   onInsert,
   inPrompt,
+  inline = false,
 }: {
   onClose: () => void;
   onInsert: (handle: string) => void;
   inPrompt: string[];
+  inline?: boolean;
 }) {
   const lib = useLibrary();
   // elements and own looks share the 200 library items
@@ -91,15 +124,33 @@ function Picker({
       setError(message(err));
     }
   }
+  const info = (
+    <>
+      An element is a name, 1 to 4 images from your gallery and optional text. Type @ in any prompt
+      to use it: it adds its images as references where the workflow takes them, and its text after
+      the prompt.
+    </>
+  );
+  const editor = (
+    <ElementEditor
+      open={editing !== null}
+      onClose={() => setEditing(null)}
+      item={editing === "new" ? undefined : (editing ?? undefined)}
+    />
+  );
   return (
     <VisualPicker
-      info={
-        <>
-          An element is a name, 1 to 4 images from your gallery and optional text. Type @ in any
-          prompt to use it: it adds its images as references where the workflow takes them, and its
-          text after the prompt.
-        </>
+      head={
+        inline ? (
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="m-0 font-display text-base font-bold tracking-[0.03em]">Elements</h2>
+            <button type="button" className="chip bevel" onClick={() => setEditing("new")}>
+              New element
+            </button>
+          </div>
+        ) : undefined
       }
+      info={info}
       action={
         <button
           type="button"
@@ -109,14 +160,18 @@ function Picker({
           New element
         </button>
       }
-      search={{
-        id: "el-q",
-        label: "Search names and handles",
-        placeholder: "Search names and @handles",
-        value: q,
-        onChange: setQ,
-        className: "flex-[1_1_220px]",
-      }}
+      search={
+        inline
+          ? undefined
+          : {
+              id: "el-q",
+              label: "Search names and handles",
+              placeholder: "Search names and @handles",
+              value: q,
+              onChange: setQ,
+              className: "flex-[1_1_220px]",
+            }
+      }
       filters={[
         {
           label: "Group",
@@ -148,19 +203,22 @@ function Picker({
         </>
       }
       listLabel="Elements"
-      grid="grid-cols-1 gap-2.5 sm:grid-cols-2"
+      grid={inline ? "grid-cols-1 gap-2.5" : "grid-cols-1 gap-2.5 sm:grid-cols-2"}
       footer={
-        <>
-          <p className="m-0 text-[12px] text-t2">
-            Click an element to put its @handle in the prompt at the caret.
-            {lib ? ` ${lib.length + ownLooks} of 200.` : ""}
-          </p>
-          <ElementEditor
-            open={editing !== null}
-            onClose={() => setEditing(null)}
-            item={editing === "new" ? undefined : (editing ?? undefined)}
-          />
-        </>
+        inline ? (
+          <span>
+            <Info>{info}</Info>
+            {editor}
+          </span>
+        ) : (
+          <>
+            <p className="m-0 text-[12px] text-t2">
+              Click an element to put its @handle in the prompt at the caret.
+              {lib ? ` ${lib.length + ownLooks} of 200.` : ""}
+            </p>
+            {editor}
+          </>
+        )
       }
     >
       {shown.map((e) => {
@@ -194,10 +252,10 @@ function Picker({
               )}
               <span className="flex min-w-0 flex-col gap-0.5">
                 <b className={`mono truncate font-medium ${on ? "text-a1" : ""}`}>@{e.handle}</b>
-                <small className="truncate text-[12px] text-t2">
+                <small className={`text-[12px] text-t2 ${inline ? "" : "truncate"}`}>
                   {deleting === e.id
                     ? `Delete @${e.handle}? Takes made with it keep it.`
-                    : `${e.name} · ${groupLabel(e.group)}${on ? " · in this prompt" : ""}${n ? "" : " · its images were deleted"}`}
+                    : `${inline ? "" : `${e.name} · `}${groupLabel(e.group)}${on ? " · in this prompt" : ""}${n ? "" : " · its images were deleted"}`}
                 </small>
               </span>
             </button>
