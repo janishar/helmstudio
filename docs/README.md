@@ -33,3 +33,4 @@ other sections point to it rather than restate it.
 | [Agent-powered pipelines](plan/12-agents.md) | §16 | LangGraph engine, agent nodes, talking to LLMs, memory |
 | [Service architecture](plan/13-services.md) | §17 | Services, users, databases, messaging, dispatcher, deployment, contracts |
 | [Dependencies](plan/14-dependencies.md) | §18 | Version pins, what moves together, how they stay current |
+| [Voices](plan/15-voices.md) | §19 | Qwen3-TTS and ZONOS3 packs, saved voices, dialogue, audio takes (a plan, not in a milestone) |
