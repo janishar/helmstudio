@@ -2,6 +2,7 @@
 // Small shared pieces: the logo, the theme select, the info button, error notes and a modal dialog.
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useTheme } from "next-themes";
+import { X } from "lucide-react";
 import { THEMES } from "@/lib/themes";
 
 /** The helmstudio mark on its accent gradient. */
@@ -116,7 +117,7 @@ export function ErrorNote({ children, onRetry }: { children: ReactNode; onRetry?
   );
 }
 
-/** A modal <dialog>, open while `open`; Escape or the backdrop's close button call `onClose`. */
+/** A modal <dialog>, open while `open`; Escape, the × button or a click on the backdrop call `onClose`. */
 export function Modal({
   open,
   onClose,
@@ -141,10 +142,28 @@ export function Modal({
     <dialog
       ref={ref}
       onClose={onClose}
+      onClick={(e) => {
+        // the backdrop's clicks land on the dialog itself, outside its box (its padding is inside)
+        const d = e.currentTarget;
+        const r = d.getBoundingClientRect();
+        const out =
+          e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
+        if (e.target === d && out) d.close();
+      }}
       aria-label={title}
       className={`pop m-auto ${width} p-5 text-t1 backdrop:bg-black/50`}
     >
-      <h2 className="mb-4 font-display text-base font-bold">{title}</h2>
+      <div className="mb-4 flex h-7 items-center justify-between gap-2">
+        <h2 className="m-0 font-display text-base font-bold">{title}</h2>
+        <button
+          type="button"
+          aria-label="Close"
+          onClick={() => ref.current?.close()}
+          className="grid size-7 shrink-0 place-items-center rounded-lg hover:bg-s3"
+        >
+          <X size={16} aria-hidden />
+        </button>
+      </div>
       {open && children}
     </dialog>
   );

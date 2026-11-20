@@ -108,7 +108,7 @@ export function VisualPicker<A extends string, B extends string>({
   return (
     <div className={`flex flex-col gap-3.5 ${head ? "" : "max-h-[76dvh]"}`}>
       {head ?? (
-        <div className="-mt-11 flex items-center justify-end gap-2">
+        <div className="-mt-11 mr-9 flex items-center justify-end gap-2">
           <Info>{info}</Info>
           {action}
         </div>
