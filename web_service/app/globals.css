@@ -107,6 +107,11 @@
     border-radius: 18px 18px 18px 8px;
     background: var(--s2);
     box-shadow: 0 24px 40px -12px color-mix(in srgb, var(--shd) 80%, transparent);
+    /* an anchored popover that does not fit opens on the other side instead of squeezing */
+    position-try-fallbacks:
+      flip-inline,
+      flip-block,
+      flip-block flip-inline;
   }
   .bevel {
     box-shadow:

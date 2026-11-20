@@ -85,7 +85,7 @@ export function Info({
       <span
         id={id}
         popover="auto"
-        className="pop max-w-72 text-[13px] font-normal tracking-normal text-t1"
+        className="pop w-max max-w-72 text-[13px] font-normal tracking-normal text-t1"
         style={
           {
             positionAnchor: `--${id}`,
