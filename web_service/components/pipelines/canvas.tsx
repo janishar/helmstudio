@@ -2,7 +2,8 @@
 // A pipeline's graph (docs/mock/PipelineGraph.dc.html, Execution.dc.html): its nodes as cards and its edges on
 // @xyflow/react, laid out by elkjs when nodes have no positions; a gate's fail edge is the dashed loop over the top
 // with its cap. Editable (drag to connect from a port, drop a wire on the canvas to add a node, Backspace deletes,
-// A or a double- or right-click adds) or read-only with the marks of one row's execution. Loaded with next/dynamic.
+// A or a double- or right-click adds; a step shows the last batch's progress) or read-only with the marks of one
+// row's execution. Loaded with next/dynamic.
 // Stage B (docs/mock/DirectorChat.dc.html): Agent cards (tools, how a visit ends, caps, chat), custom nodes from the
 // published list in Add node, and a fanned-out step drawn as a stack of cards with "× item · max N".
 import "@xyflow/react/dist/base.css";
@@ -26,7 +27,7 @@ import {
   type Node,
   type NodeProps,
 } from "@xyflow/react";
-import { Check, Plus } from "lucide-react";
+import { Check } from "lucide-react";
 import type { S } from "@/lib/api";
 import {
   addPipelineNode,
@@ -43,11 +44,12 @@ import {
   type PProblem,
   type Via,
 } from "@/lib/pipeline";
-import type { asRun } from "@/lib/pipeline-run";
+import type { asRun, stepProgress } from "@/lib/pipeline-run";
 
 type Pos = { x: number; y: number };
 type Kind = S<"PipelineNode">["kind"];
 export type Marks = ReturnType<typeof asRun>;
+export type Progress = ReturnType<typeof stepProgress>;
 
 const W = 176;
 const FIT: FitViewOptions = { maxZoom: 1, padding: { top: "56px", x: "24px", bottom: "72px" } };
@@ -61,6 +63,7 @@ type Ctx = {
   titles: Record<string, string>;
   problems: PProblem[];
   marks?: Marks;
+  progress?: Progress;
   readOnly: boolean;
   /** per step: its runs per visit (seeds) for the card's "seeds" row */
   steps: Record<string, number>;
@@ -77,6 +80,8 @@ export type CanvasProps = {
   problems?: PProblem[];
   /** the marks of one row's execution: read-only */
   marks?: Marks;
+  /** per step, the last batch's progress (lib/pipeline-run stepProgress): a bar and "5 / 12" on its card */
+  progress?: Progress;
   selected: string | null;
   onSelect: (id: string | null) => void;
   /** edits (absent: read-only) */
@@ -104,6 +109,7 @@ function Canvas({
   titles,
   problems = [],
   marks,
+  progress,
   selected,
   onSelect,
   edit,
@@ -191,7 +197,7 @@ function Canvas({
   };
 
   const steps = useMemo(() => stepTakes(doc), [doc]);
-  const ctx: Ctx = { doc, titles, problems, marks, readOnly, steps, selected, models };
+  const ctx: Ctx = { doc, titles, problems, marks, progress, readOnly, steps, selected, models };
 
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
@@ -317,17 +323,6 @@ function Canvas({
             onPick={add}
             onClose={() => setMenu(null)}
           />
-        )}
-        {!readOnly && (
-          <button
-            type="button"
-            className="bevel absolute bottom-4 left-4 flex h-10 items-center gap-1.5 rounded-[10px] border border-line bg-s2 px-3.5 text-[13px]"
-            title="Add node (A, or double-click the canvas)"
-            onClick={() => openMenu()}
-          >
-            <Plus size={16} strokeWidth={2} aria-hidden />
-            Add node
-          </button>
         )}
       </div>
     </CanvasCtx>
@@ -456,6 +451,7 @@ function Card({ id }: NodeProps) {
   if (!n) return null;
   const mine = g.problems.filter((p) => p.node === id);
   const m = g.marks?.nodes[id];
+  const p = g.marks ? undefined : g.progress?.[id];
   const nums = stepNumbers(g.doc);
   const out = g.doc.edges.find((e) => e[0] === id)?.[1];
   const label = nodeLabel(g.doc, id, g.titles);
@@ -476,13 +472,15 @@ function Card({ id }: NodeProps) {
           : "done"
     : g.marks
       ? "not reached"
-      : n.kind === "agent" || n.kind === "custom"
-        ? n.kind
-        : fanned
-          ? `× item · max ${fanMax}`
-          : isAgent(n.kind)
-            ? "agent node"
-            : { inputs: "list", step: "step", gate: "gate", output: "" }[n.kind as "step"];
+      : p?.state
+        ? p.state
+        : n.kind === "agent" || n.kind === "custom"
+          ? n.kind
+          : fanned
+            ? `× item · max ${fanMax}`
+            : isAgent(n.kind)
+              ? "agent node"
+              : { inputs: "list", step: "step", gate: "gate", output: "" }[n.kind as "step"];
   const port = (side: "source" | "target", via: string, color: string, label?: string) => (
     <Handle
       type={side}
@@ -511,7 +509,8 @@ function Card({ id }: NodeProps) {
       style={{
         width: W,
         opacity: g.marks && !m ? 0.5 : undefined,
-        borderColor: m?.current ? "var(--a2)" : isAgent(n.kind) ? AGENT : undefined,
+        borderColor:
+          m?.current || p?.state === "running" ? "var(--a2)" : isAgent(n.kind) ? AGENT : undefined,
         outline: g.selected === id ? "2px solid var(--t2)" : undefined,
         outlineOffset: 2,
         // a fanned-out step: two cards behind it, as the mock draws the branches
@@ -557,6 +556,24 @@ function Card({ id }: NodeProps) {
               v.startsWith("$") ? v.slice(1) : ref(v),
               mine.some((p) => p.port === k),
             ),
+          )}
+          {p && p.total > 0 && (
+            <>
+              <span className="mx-3.5 mt-1.5 block h-1 rounded-sm bg-s5">
+                <span
+                  className="block h-1 rounded-sm"
+                  style={{
+                    width: `${Math.min(100, (100 * p.done) / p.total)}%`,
+                    background: p.state === "done" ? "var(--a1)" : "var(--a2)",
+                  }}
+                />
+              </span>
+              <div className="gn-r" style={{ height: 22 }}>
+                <b>
+                  {p.done} / {p.total}
+                </b>
+              </div>
+            </>
           )}
         </>
       )}

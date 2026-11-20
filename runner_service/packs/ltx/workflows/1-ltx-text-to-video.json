@@ -132,8 +132,7 @@
       {
         "title": "Duration",
         "items": [
-          "duration.frames",
-          "duration.fps"
+          "duration.frames"
         ]
       },
       {

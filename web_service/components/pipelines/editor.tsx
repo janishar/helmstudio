@@ -7,7 +7,8 @@
 // (docs/mock/AgentNodes.dc.html), Memory (read or write) and the Memory dialog. Stage B (docs/mock/AgentSettings.dc.html,
 // DirectorChat.dc.html): the Agent panel (instruction, reads, tools, how it ends, caps, model source, director), a
 // step's fan-out, a custom node's fields, the pipeline's Remote calls, and Chat with director for the last batch. The
-// mock's Studio | Graph switch, memory meter and "Test on takes" have no backend yet and are left out.
+// memory chip is Create's, for the host of the first step's env; steps show the last batch's progress. The mock's
+// Studio | Graph switch (no Studio view yet) and "Test on takes" (no backend yet) are left out.
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
@@ -21,6 +22,9 @@ import { followBatch } from "@/components/pipelines/pipelines";
 import { ChatPanel, useChat } from "@/components/pipelines/chat";
 import { rowMarks } from "@/lib/chat";
 import { RunTable } from "@/components/pipelines/run-table";
+import { Memory, useHosts } from "@/components/create/memory-chip";
+import { hostMemory } from "@/lib/hosts";
+import { MEDIA_WORDS, stepProgress } from "@/lib/pipeline-run";
 import type { CanvasProps } from "@/components/pipelines/canvas";
 import { api, ApiError, errorText, message, ok, type S } from "@/lib/api";
 import { applyBatchEvent, type BatchView } from "@/lib/batches";
@@ -355,16 +359,34 @@ export function PipelineEditor({
   const chat = useChat(run?.batch.director ? (lastId ?? null) : null);
   const badge = [
     "Unattended",
+    run ? plural(run.batch.counts.total, "item") : "",
     plural(count("step"), "step"),
     count("gate") ? plural(count("gate"), "gate") : "",
     count("judge") ? plural(count("judge"), "judge") : "",
     count("agent") ? plural(count("agent"), "agent") : "",
-    problems.length ? plural(problems.length, "problem") : "valid",
+    problems.length ? plural(problems.length, "problem") : "",
     saving === "saving" ? "saving…" : saving === "failed" ? "not saved" : "",
   ]
     .filter(Boolean)
     .join(" · ");
   const firstWorkflow = workflows[0]?.id;
+  // ponytail: progress counts the rows loaded (the first 100); a bigger batch's bar stops short of its total
+  const progress = useMemo(
+    () => (run ? stepProgress(doc, run.rows, run.batch.counts.total) : undefined),
+    [doc, run],
+  );
+  const media = useMemo(
+    () => Object.fromEntries(workflows.map((w) => [w.id, w.media ?? "image"])),
+    [workflows],
+  );
+  // the memory chip: the host of the first step's env; none before the pipeline has a step
+  const hosts = useHosts();
+  const firstStep = order(doc).find((x) => doc.nodes[x].kind === "step");
+  const firstEnv = (() => {
+    const n = firstStep ? doc.nodes[firstStep] : undefined;
+    return n?.kind === "step" ? workflows.find((w) => w.id === n.workflow)?.env : undefined;
+  })();
+  const host = hostMemory(hosts, firstEnv);
   const sel = selected && doc.nodes[selected] ? selected : null;
   const blocked = problems.length > 0;
 
@@ -404,7 +426,7 @@ export function PipelineEditor({
             </Link>
           )}
           <div className="grow" />
-          <span className="mono text-[12px] text-t2">v{cur.version}</span>
+          {host && <Memory memory={host} />}
         </div>
         {notice && (
           <p role="status" className="rounded-xl bg-s2 px-3 py-2 text-[13px]">
@@ -430,17 +452,16 @@ export function PipelineEditor({
             flowKey={String(flowKey)}
             custom={custom}
             models={models}
+            progress={progress}
           />
         </div>
         {last && run && (
           <>
-            <div className="flex items-center gap-2">
-              <h2 className="heading">Last batch</h2>
-              <Link href={`/pipelines/batches/${last.id}`} className="text-[12px] text-t2">
-                {run.batch.title}
-              </Link>
-            </div>
-            <div className="panel shrink-0 overflow-x-auto px-2 py-1.5">
+            <div
+              className="panel shrink-0 overflow-x-auto px-2 py-1.5"
+              aria-label={`Last batch · ${run.batch.title}`}
+              role="region"
+            >
               <RunTable
                 batch={run.batch}
                 rows={run.rows}
@@ -450,6 +471,7 @@ export function PipelineEditor({
                 onRetry={(r) => void retryRow(r)}
                 onOpen={(ids) => void openTakes(ids)}
                 marks={chat.view ? rowMarks(chat.view.messages) : undefined}
+                media={media}
               />
             </div>
           </>
@@ -497,10 +519,9 @@ export function PipelineEditor({
             )}
             <RemotePanel doc={doc} sources={sources} edit={edit} />
             <p className="m-0 text-[13px] text-t2">
-              Select a node to edit it. Add one with Add node, A, a double-click or a right-click;
-              drag from a port to connect it, or drop the wire on the canvas to add the next node. A
-              gate&apos;s fail port loops back for new seeds, at most the cap&apos;s times. ⌘Z
-              undoes.
+              Select a node to edit it. Add one with A, a double-click or a right-click; drag from a
+              port to connect it, or drop the wire on the canvas to add the next node. A gate&apos;s
+              fail port loops back for new seeds, at most the cap&apos;s times. ⌘Z undoes.
             </p>
             <div className="grow" />
             <button
@@ -644,10 +665,14 @@ function NodePanel(props: PanelProps) {
   const general = problems.filter((p) => !p.port && !p.param);
   return (
     <>
-      <Head
-        title={`${n.kind === "step" ? `${nums[id]} · ` : ""}${nodeLabel(doc, id, titles)}`}
-        sub={`${kindName} · ${id}`}
-      />
+      {n.kind === "judge" ? (
+        <JudgeHead {...props} />
+      ) : (
+        <Head
+          title={`${n.kind === "step" ? `${nums[id]} · ` : ""}${nodeLabel(doc, id, titles)}`}
+          sub={`${kindName} · ${id}`}
+        />
+      )}
       <Problems list={asProblems(general)} />
       {n.kind !== "inputs" && (
         <label className="flex flex-col gap-1.5">
@@ -1275,10 +1300,36 @@ function TextSources(props: PanelProps) {
   );
 }
 
+/** The Judge panel's heading (docs/mock/PipelineGraph.dc.html): its name, and in (i) what it looks at, what it
+ * decides for and what it runs on. */
+function JudgeHead({ doc, id, titles, models, workflows }: PanelProps) {
+  const n = doc.nodes[id] as S<"PipelineJudgeNode">;
+  const step = doc.nodes[n.takes];
+  const made = step?.kind === "step" ? stepTakes(doc)[n.takes] : 0;
+  const mediaOf = (node?: PNodeOf) =>
+    node?.kind === "step" ? workflows.find((w) => w.id === node.workflow)?.media : undefined;
+  const what = mediaOf(step) === "video" ? "video" : "image";
+  const out = edgeOut(doc, id)?.[1];
+  const pass = typeof out === "string" ? out : out && "pass" in out ? out.pass : "";
+  const next = mediaOf(pass ? doc.nodes[pass] : undefined);
+  const model = models[id] ? (titles[models[id]] ?? models[id]) : "no model yet";
+  return (
+    <h2 className="m-0 flex items-center font-display text-base font-bold">
+      {nodeLabel(doc, id, titles)}
+      <Info>
+        Looks at each row&apos;s {made || "?"} {what}
+        {made === 1 ? "" : "s"} and decides what goes on{next ? ` to ${MEDIA_WORDS[next]}` : ""}.
+        Runs locally on {model}, as a queue item like any step. On Auto it uses the step&apos;s own
+        vision model when its family has one, so no extra model is loaded.
+      </Info>
+    </h2>
+  );
+}
+
 /** The Judge panel (docs/mock/PipelineGraph.dc.html's aside): checklist, keep and the retry branch (GatePanel),
  * Trust (Suggest | Auto), the model, and memory. */
 function JudgePanel(props: PanelProps & { targets: [string, string][] }) {
-  const { doc, id, problems, edit, models, titles, memory, onOpenMemory } = props;
+  const { doc, id, problems, edit, titles, memory, onOpenMemory } = props;
   const n = doc.nodes[id] as S<"PipelineJudgeNode">;
   const set = (v: Partial<S<"PipelineJudgeNode">>) => edit((d) => setNode(d, id, { ...n, ...v }));
   const lines = [
@@ -1293,17 +1344,8 @@ function JudgePanel(props: PanelProps & { targets: [string, string][] }) {
       },
     });
   const mems = memoryCandidates(doc, id);
-  const seeds = (doc.nodes[n.takes] as S<"PipelineStepNode"> | undefined)?.seeds ?? 1;
   return (
     <>
-      <p className="m-0 flex items-center text-[12px] text-t2">
-        Looks at each row&apos;s {seeds} take{seeds === 1 ? "" : "s"} and decides what goes on.
-        <Info>
-          Runs locally on {models[id] ? (titles[models[id]] ?? models[id]) : "no model yet"}, as a
-          queue item like any step. On Auto it uses the step&apos;s own vision model when its family
-          has one, so no extra model is loaded.
-        </Info>
-      </p>
       <section aria-labelledby="pp-checks" className="flex flex-col gap-1.5">
         <h3 id="pp-checks" className="heading">
           Checklist
@@ -1385,7 +1427,13 @@ function JudgePanel(props: PanelProps & { targets: [string, string][] }) {
         <h3 id="pp-model" className="heading">
           Model
         </h3>
-        <ModelChoice {...props} label="Judge runs on" />
+        <div className="grid grid-cols-2 gap-2">
+          <ModelChoice {...props} label="Judge runs on" />
+          <div className="set flex flex-col gap-1">
+            <small className="text-[12px] text-t2">Remote agents</small>
+            <b className="font-semibold">{doc.remote?.enabled ? "On" : "Off"}</b>
+          </div>
+        </div>
         {problems
           .filter((p) => p.code === "unknown_model")
           .map((p) => (

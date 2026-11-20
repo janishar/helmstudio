@@ -413,7 +413,7 @@ def lora_stack_schema(pack: Pack) -> dict:
     """The generated <family>/lora-stack node (Model → Model, rows of {lora, strength, mode}) from model.yaml
     `lora` (component, modes, max_rows, strength {min, max, default})."""
     spec = pack.spec["lora"]
-    st = {"min": -4, "max": 4, "default": 1} | spec.get("strength", {})
+    st = {"min": 0, "max": 2, "default": 1} | spec.get("strength", {})
     modes = spec.get("modes", ["adapter", "bake"])
     item = {
         "lora": "Lora",

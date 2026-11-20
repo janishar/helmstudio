@@ -2027,7 +2027,7 @@ thumbnail. Looks are **chosen, not typed**: the run request names them (`looks`)
   `{id, group, name, text?, version?, lora?: {file, strength}, image?}`: `id` a slug `^[a-z0-9][a-z0-9-]{0,63}$`
   unique in the family; `text` ≤ 2000 code points (default `""`); `version` ≥ 1 (default 1; bump it when the look
   changes); `lora.file` a file name (no path) looked up in the folders the shared LoRA index scans (`<models>/loras/`, a
-  `loras/` folder inside one of the family's model folders), `strength` −4..4 (default 1); `image` a png, jpeg or webp
+  `loras/` folder inside one of the family's model folders), `strength` 0..2 (default 1); `image` a png, jpeg or webp
   file next to the YAML, at most 2 MB. A look needs non-empty `text` or a `lora`. At most 200 looks per pack. A broken
   file (schema, duplicate id, missing image) stops the runner like a broken pack; a `lora.file` this host does not have
   is not an error (`lora_id: null`, logged). At start the runner publishes registry `<host>.<env>.looks`
@@ -2063,9 +2063,14 @@ null. With `?workflow=<id>` every item also gets `fits` and `reason` (fit, below
 a look group`; an element: `… is not an element group`); `handle` absent or null (422 `a look has no handle`); `text`
 ≤ 2000; `images` 0-4 with the element image checks; `loras` 0-4 (422 `loras: a look has at most 4 LoRAs`), each a LoRA
 the caller can use now (own `ready`, or shared and listed by a live host; else 404 `loras[<i>].lora: LoRA <id> not
-found`), distinct (422 `loras[<i>]: LoRA <name> is listed twice`), `strength` −4..4; at least one of text, an image, a
-LoRA (422 `a look needs text, an image or a LoRA`). An element with `loras` is 422 `loras: an element has no LoRAs`.
-The stored LoRA keeps its id, its name at save time (shown while it is gone) and the strength.
+found`), distinct (422 `loras[<i>]: LoRA <name> is listed twice`), `strength` 0..2 (422 `loras[<i>].strength: must be
+between 0 and 2`; −4..4 before API 1.23); at least one of text, an image, a LoRA (422 `a look needs text, an image or a
+LoRA`). An element with `loras` is 422 `loras: an element has no LoRAs`. The stored LoRA keeps its id, its name at save
+time (shown while it is gone) and the strength. **Strengths saved before API 1.23** (−4..4) are clamped to 0..2 when
+read: a look's GET, the resolver and `from_take` copies all see the clamped value (nothing is rewritten). A workflow,
+preset, batch row, pipeline or reused take whose `lora.rows` still holds a strength outside 0..2 is refused by the run
+rules like any bad value (422 `lora.rows[<i>].strength: must be between 0 and 2`) until the strength is moved into
+range.
 
 **Save as look** (the take's action, plan 06-platform.md 9.1) = `POST /v1/studio/library` with `kind: look` and
 `from_take {take_id, prompt = true, loras = true}`. The take must be the caller's, not deleted (else 404 `from_take:
@@ -2185,7 +2190,7 @@ Sharing a user's LoRA with others is not in this version.
   "adapter"}]`.
 - **The stack node** `<family>/lora-stack` (`qwen-image/lora-stack`, title `LoRA Stack`): input `model: Model`, output
   `model: Model` (so it is bypassable: bypassed = the model as it is), one param `rows` (label `LoRAs`, default `[]`,
-  `min` 0, `max` 8 = the family's row cap) with item `{lora: Lora, strength: float -4..4 default 1 step 0.05, mode:
+  `min` 0, `max` 8 = the family's row cap) with item `{lora: Lora, strength: float 0..2 default 1 step 0.05, mode:
   enum adapter|bake default adapter}`. A family that cannot run adapters yet publishes `enum: [bake]` default `bake`
   (**ltx**: `ltx/lora-stack`, same item, bake only: the old MLX code fuses every LoRA; no adapter exists to copy or
   prove); `mode: adapter` then fails the enum like any value (`param_invalid`; 422 `lora.rows[1].mode: must be one of

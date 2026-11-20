@@ -139,8 +139,7 @@
           {
             "title": "Duration",
             "items": [
-              "duration.frames",
-              "duration.fps"
+              "duration.frames"
             ]
           },
           {
@@ -326,8 +325,7 @@
           {
             "title": "Duration",
             "items": [
-              "duration.frames",
-              "duration.fps"
+              "duration.frames"
             ]
           },
           {
@@ -763,8 +761,7 @@
               "sample1.steps",
               "sample1.cfg",
               "sample1.stg",
-              "sample2.steps",
-              "audio.fps"
+              "sample2.steps"
             ]
           }
         ],

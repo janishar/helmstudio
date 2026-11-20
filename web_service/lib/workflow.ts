@@ -86,6 +86,8 @@ export function display(f: Field, raw: Raw): { label: string; value: string } {
   const l = label.toLowerCase();
   if (l.endsWith(" " + t) && f.param.type === "enum")
     return { label: f.nodeTitle, value: `${pretty(label.slice(0, -t.length - 1))} · ${v}` };
+  // a whole float keeps one decimal, so it reads as a float ("CFG 3.0", docs/mock/VideoSource.dc.html)
+  if (f.param.type === "float" && /^-?\d+$/.test(v)) return { label, value: `${v}.0` };
   return { label, value: f.param.type === "enum" ? pretty(v) : v };
 }
 

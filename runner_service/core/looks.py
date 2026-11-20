@@ -75,8 +75,8 @@ def _check(x, where: str, folder: Path) -> dict:
         lora = look["lora"] = {"strength": 1} | lora
         if not isinstance(lora.get("file"), str) or not LORA_FILE.match(lora["file"]):
             raise ValueError(f"{where}: lora.file must be a .safetensors file name (no path)")
-        if not _number(lora["strength"]) or not -4 <= lora["strength"] <= 4:
-            raise ValueError(f"{where}: lora.strength must be a number in -4..4")
+        if not _number(lora["strength"]) or not 0 <= lora["strength"] <= 2:
+            raise ValueError(f"{where}: lora.strength must be a number in 0..2")
     if not look["text"] and lora is None:
         raise ValueError(f"{where}: a look needs text or a lora")
     if look["image"] is not None:

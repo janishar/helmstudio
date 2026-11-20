@@ -510,7 +510,7 @@ export interface paths {
          *     another user's, deleted, pending or rejected, or a shared id no live host of the env lists: one message, nothing
          *     leaks), `lora.rows[2].lora: LoRA <name> does not fit qwen-image (it is for <family>)` (or `(its model is
          *     unknown)`), `lora.rows[2].lora: LoRA <name> is already in row 1`; strength and mode are checked by the run rules
-         *     (`lora.rows[1].strength: must be between -4 and 4`), the row count by `max` (`lora.rows: at most 8 items`). A
+         *     (`lora.rows[1].strength: must be between 0 and 2`), the row count by `max` (`lora.rows: at most 8 items`). A
          *     shared LoRA no live host of the env has at dispatch fails the run `no live host for env <env> has LoRA
          *     <name>`.
          *
@@ -4043,7 +4043,7 @@ export interface components {
         };
         LookLoraRef: {
             lora: components["schemas"]["LoraRef"];
-            /** @description the strength the look applies it at */
+            /** @description the strength the look applies it at (from 1.23 0..2) */
             strength: number;
         };
         /** @description "Save as look": fill the fields the body leaves out from a take the caller made with a run (contracts/README.md, Looks: Save as look) */

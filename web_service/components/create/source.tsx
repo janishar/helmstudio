@@ -11,6 +11,7 @@ import { GalleryPicker } from "@/components/gallery/picker";
 import { ItemFields } from "@/components/create/rows";
 import { api, ok, type S } from "@/lib/api";
 import { safeUrl } from "@/lib/format";
+import type { Opener } from "@/components/create/refs";
 import { audioFormat } from "@/lib/media";
 import {
   audioMap,
@@ -142,13 +143,19 @@ export function MediaTile({
   fields,
   raws,
   onChange,
+  openerRef,
 }: {
   f: Field;
   fields: Field[];
   raws: Record<string, Raw>;
   onChange: Change;
+  /** set to what opens the picker (the composer's +) */
+  openerRef?: Opener;
 }) {
   const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (openerRef) openerRef.current = () => setOpen(true);
+  }, [openerRef]);
   const v = refOf(f, raws);
   const t = useTakes(v ? [v.take_id] : [])(v?.take_id ?? "");
   const label = f.param.label ?? f.param.name;
@@ -161,7 +168,7 @@ export function MediaTile({
         aria-haspopup="dialog"
         aria-label={`${label}: ${name}`}
         onClick={() => setOpen(true)}
-        className="bevel flex min-h-12 max-w-[34ch] flex-[1_1_200px] items-center gap-2 rounded-xl bg-s3 px-3 py-1.5 text-left"
+        className="bevel flex min-h-12 max-w-[34ch] flex-[1_1_220px] items-center gap-2 rounded-xl bg-s3 px-3 py-1.5 text-left"
       >
         {thumb ? (
           <img src={thumb} alt="" className="h-7 w-11 shrink-0 rounded-md object-cover" />

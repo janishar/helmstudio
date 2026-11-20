@@ -93,12 +93,12 @@ func TestLooksLibrary(t *testing.T) {
 	}
 	five := []any{lora(mine, 1), lora(inkWash, 1), lora(fluxStyle, 1), lora(mine, 1), lora(inkWash, 1)}
 	for want, b := range map[string]map[string]any{
-		"a look has no handle":                        body(map[string]any{"handle": "x"}),
-		"group character is not a look group":         body(map[string]any{"group": "character"}),
-		"a look needs text, an image or a LoRA":       body(map[string]any{"text": " "}),
-		"loras: a look has at most 4 LoRAs":           body(map[string]any{"loras": five}),
-		"loras[2]: LoRA ink-wash is listed twice":     body(map[string]any{"loras": []any{lora(inkWash, 1), lora(inkWash, 0.5)}}),
-		"loras[1].strength: must be between -4 and 4": body(map[string]any{"loras": []any{lora(inkWash, 5)}}),
+		"a look has no handle":                       body(map[string]any{"handle": "x"}),
+		"group character is not a look group":        body(map[string]any{"group": "character"}),
+		"a look needs text, an image or a LoRA":      body(map[string]any{"text": " "}),
+		"loras: a look has at most 4 LoRAs":          body(map[string]any{"loras": five}),
+		"loras[2]: LoRA ink-wash is listed twice":    body(map[string]any{"loras": []any{lora(inkWash, 1), lora(inkWash, 0.5)}}),
+		"loras[1].strength: must be between 0 and 2": body(map[string]any{"loras": []any{lora(inkWash, 5)}}),
 		"from_take makes looks only": with(body(map[string]any{"kind": "element", "handle": "x", "group": "prop",
 			"images": []any{map[string]any{"take_id": one}}}), map[string]any{"from_take": map[string]any{"take_id": one}}),
 	} {
@@ -106,13 +106,24 @@ func TestLooksLibrary(t *testing.T) {
 			t.Errorf("%v, want %s", got["detail"], want)
 		}
 	}
+	if got := e.call(userA, "POST", library, body(map[string]any{"loras": []any{lora(inkWash, -1)}}), 422); got["detail"] !=
+		"loras[1].strength: must be between 0 and 2" {
+		t.Fatal(got)
+	}
 	if got := e.call(userA, "POST", library, body(map[string]any{"loras": []any{lora(theirs, 1)}}), 404); got["detail"] !=
 		"loras[1].lora: LoRA "+theirs+" not found" { // another user's LoRA: nothing leaks
 		t.Fatal(got)
 	}
-	warm := e.call(userA, "POST", library, body(map[string]any{"text": "", "loras": []any{lora(inkWash, 0.6), lora(mine, -1)}}), 201)
+	warm := e.call(userA, "POST", library, body(map[string]any{"text": "", "loras": []any{lora(inkWash, 0.6), lora(mine, 1.5)}}), 201)
 	if l, _ := json.Marshal(warm["loras"]); string(l) != `[{"lora":{"lora_id":"`+inkWash+`"},"name":"ink-wash","strength":0.6},`+
-		`{"lora":{"lora_id":"`+mine+`"},"name":"sketch","strength":-1}]` {
+		`{"lora":{"lora_id":"`+mine+`"},"name":"sketch","strength":1.5}]` {
+		t.Fatal(string(l))
+	}
+	// a strength saved before API 1.23 (-4..4) is clamped to 0..2 when read; nothing is rewritten
+	e.sql(`UPDATE library_items SET loras = jsonb_set(jsonb_set(loras, '{0,strength}', '-1'), '{1,strength}', '3.5') WHERE id = $1`, warm["id"])
+	if l, _ := json.Marshal(e.call(userA, "GET", library+"/"+warm["id"].(string), nil, 200)["loras"]); string(l) !=
+		`[{"lora":{"lora_id":"`+inkWash+`"},"name":"ink-wash","strength":0},`+
+			`{"lora":{"lora_id":"`+mine+`"},"name":"sketch","strength":2}]` {
 		t.Fatal(string(l))
 	}
 
@@ -205,9 +216,39 @@ func TestLooksLibrary(t *testing.T) {
 		"from_take": map[string]any{"take_id": take}}, 404); got["detail"] != "from_take: take "+take+" not found" {
 		t.Fatal(got)
 	}
+	// a take made before API 1.23 (strengths -4..4): Save as look clamps them to 0..2
+	e.sql(`UPDATE takes SET made_with = jsonb_set(jsonb_set(made_with, '{loras,0,strength}', '-1'), '{loras,1,strength}', '3.5')
+		WHERE id = $1`, take)
+	old := e.call(userA, "POST", library, map[string]any{"kind": "look", "group": "film", "name": "Old fox",
+		"from_take": map[string]any{"take_id": take}}, 201)
+	if l, _ := json.Marshal(old["loras"]); string(l) != `[{"lora":{"lora_id":"`+inkWash+`"},"name":"ink-wash","strength":0},`+
+		`{"lora":{"lora_id":"`+mine+`"},"name":"sketch","strength":2}]` {
+		t.Fatal(string(l))
+	}
 	e.exec(`UPDATE takes SET deleted_at = now() WHERE id = $1`, take)
 	if got := e.call(userA, "GET", library+"/"+saved["id"].(string), nil, 200); got["from_take_id"] != nil || got["thumb_url"] != nil {
 		t.Fatal(got)
+	}
+
+	// a starter look from an older host (strength 3) reads clamped to 2
+	data, err := os.ReadFile(filepath.Join("..", "..", "contracts", "fixtures", "registry", "looks.valid.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var published map[string]any
+	if err := json.Unmarshal(data, &published); err != nil {
+		t.Fatal(err)
+	}
+	published["looks"].([]any)[1].(map[string]any)["loras"].([]any)[0].(map[string]any)["strength"] = 3
+	if data, err = json.Marshal(published); err == nil {
+		err = e.registry.SetRegistry("fake.fake.looks", data)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l, _ := json.Marshal(e.call(userA, "GET", library+"/echo/grain", nil, 200)["loras"]); string(l) !=
+		`[{"lora":null,"name":"echo-grain","strength":2}]` {
+		t.Fatal(string(l))
 	}
 }
 

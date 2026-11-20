@@ -114,7 +114,7 @@ lora:
   ignore: []
   modes: [bake]
   max_rows: 8
-  strength: {min: -4, max: 4, default: 1}
+  strength: {min: 0, max: 2, default: 1}
   help: "Bakes LoRAs into the model's transformer at load, in order. Empty: the model as it is."
   rows_help: "Each row: a LoRA that fits this model and its strength."
   mode_help: "Bake: merged into the transformer at load (its own copy in memory; a strength change reloads it). LTX on MLX has no adapter yet."
@@ -139,7 +139,7 @@ stages:
             help: "LTX was trained at 24; values far from it drift."}
     outputs: {duration: Duration}
   encode:
-    title: Encode prompt
+    title: Encode
     help: "Encodes the prompt (and its beats, as one prompt) for video and audio with Gemma 4 and the connector; the text encoder is unloaded before sampling."
     uses: [text_encoder, connector]
     unload_after: [text_encoder, connector]   # Gemma never sits beside the DiT (GOTCHAS: watchdog, jetsam)

@@ -77,7 +77,7 @@ def test_a_look_lora_is_looked_up_in_the_index_by_file(tmp_path):
     )
     yaml_text = """
 - {id: a, group: film, name: A, lora: {file: echo-grain.safetensors}}
-- {id: b, group: film, name: B, text: x, lora: {file: missing.safetensors, strength: -2}}
+- {id: b, group: film, name: B, text: x, lora: {file: missing.safetensors, strength: 0.5}}
 - {id: c, group: film, name: C, lora: {file: far.safetensors}}
 """
     p = fake_pack(tmp_path, {"film.yaml": yaml_text})
@@ -88,7 +88,7 @@ def test_a_look_lora_is_looked_up_in_the_index_by_file(tmp_path):
     assert a["loras"] == [
         {"file": "echo-grain.safetensors", "name": "echo-grain", "strength": 1, "lora_id": sha}
     ]
-    assert b["loras"][0]["lora_id"] is None and b["loras"][0]["strength"] == -2
+    assert b["loras"][0]["lora_id"] is None and b["loras"][0]["strength"] == 0.5
     assert c["loras"][0]["lora_id"] is None  # not in a loras/ folder of this family's models
 
 
@@ -145,7 +145,7 @@ async def test_an_image_becomes_a_content_addressed_thumb_put_once(tmp_path):
         ({"a.yaml": "- {id: a, group: film, name: A, lora: {file: ../x.safetensors}}"}, "no path"),
         (
             {"a.yaml": "- {id: a, group: film, name: A, lora: {file: x.safetensors, strength: 5}}"},
-            "-4..4",
+            "0..2",
         ),
         (
             {

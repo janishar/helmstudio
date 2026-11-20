@@ -1,11 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import nodesFixture from "../../contracts/fixtures/registry/nodes.valid.json";
 import workflowsFixture from "../../contracts/fixtures/registry/workflows.valid.json";
 import batchFixture from "../../contracts/fixtures/http/Batch.valid.1.json";
 import rowFixture from "../../contracts/fixtures/http/BatchRow.valid.1.json";
 import stillToClip from "../../contracts/fixtures/pipelines/valid.still-to-clip.json";
 import batch9 from "../../contracts/fixtures/http/BatchCreate.valid.9.json";
-import type { S } from "@/lib/api";
+import { api, type S } from "@/lib/api";
 import {
   appendRows,
   applyBatchEvent,
@@ -22,6 +22,7 @@ import {
   matchColumn,
   parseCsv,
   rowError,
+  retryFailedRows,
   rowState,
   sizeError,
   summary,
@@ -151,6 +152,41 @@ describe("batch display and controls", () => {
     expect([canResume(stopped), canStop(stopped)]).toEqual([false, false]);
     expect(canRetry(running, row({ status: "failed" }))).toBe(true);
     expect(canRetry(stopped, row({ status: "failed" }))).toBe(false);
+  });
+  it("retries every failed row on every page, past a refused one", async () => {
+    const running = { ...batch, control: "run" as const };
+    const pages: Record<string, { rows: S<"BatchRow">[]; next_cursor: string | null }> = {
+      "": { rows: [row({ row: 1, status: "failed" }), row({ row: 2 })], next_cursor: "c2" },
+      c2: {
+        rows: [row({ row: 3, status: "failed" }), row({ row: 4, status: "failed" })],
+        next_cursor: null,
+      },
+    };
+    const reply = (status: number, data?: unknown) =>
+      Promise.resolve({
+        data: status < 300 ? data : undefined,
+        error: status < 300 ? undefined : { detail: "Too many open batches." },
+        response: new Response(null, { status }),
+      });
+    vi.spyOn(api, "GET").mockImplementation(((
+      _: string,
+      init: { params: { query: { cursor?: string } } },
+    ) => reply(200, pages[init.params.query.cursor ?? ""])) as never);
+    const tried: string[] = [];
+    vi.spyOn(api, "POST").mockImplementation(((
+      _: string,
+      init: { params: { path: { row: string } } },
+    ) => {
+      const n = init.params.path.row;
+      tried.push(n);
+      return n === "1" ? reply(409) : reply(200, row({ row: +n, status: "queued" }));
+    }) as never);
+    const got: number[] = [];
+    const errors = await retryFailedRows(running, (r) => got.push(r.row));
+    expect(tried).toEqual(["1", "3", "4"]);
+    expect(got).toEqual([3, 4]);
+    expect(errors).toEqual(["Row 1: Too many open batches."]);
+    vi.restoreAllMocks();
   });
   it("words a row's state", () => {
     expect(rowState(row())).toBe("done · 1 take");

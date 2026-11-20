@@ -22,24 +22,36 @@ import { HANDLE, handleFrom } from "@/lib/mentions";
 type Item = S<"LibraryItem">;
 type Img = { take_id: string; thumb_url: string };
 
-/** A composer tile: compact (h-8, the Stage layout) or big (the empty Create screen, docs/mock/Direct.dc.html). */
-export const tileClass = (big: boolean) =>
-  big
-    ? "bevel flex min-h-[52px] flex-[1_1_150px] items-center gap-2.5 rounded-xl bg-s3 px-3 py-2 text-left"
-    : "bevel flex h-8 items-center gap-2 rounded-lg bg-s3 pr-2.5 pl-1 text-[12px]";
-export const picClass = (big: boolean) =>
-  big ? "size-8 shrink-0 rounded-lg" : "size-6 rounded-md";
-export function TileWords({ big, label, value }: { big: boolean; label: string; value: string }) {
+/** A composer tile: compact (h-8, the Stage layout), big (the empty Create screen, docs/mock/Direct.dc.html) or a
+ * card (a video workflow, docs/mock/TextToVideo.dc.html: the label over the value, no picture). */
+export type TileSize = boolean | "card";
+export const tileClass = (big: TileSize) =>
+  big === "card"
+    ? "bevel flex min-h-12 flex-[1_1_130px] items-center gap-2 rounded-xl bg-s3 px-3 py-1.5 text-left"
+    : big
+      ? "bevel flex min-h-[52px] flex-[1_1_150px] items-center gap-2.5 rounded-xl bg-s3 px-3 py-2 text-left"
+      : "bevel flex h-8 items-center gap-2 rounded-lg bg-s3 pr-2.5 pl-1 text-[12px]";
+export const picClass = (big: TileSize) =>
+  big === "card"
+    ? "h-7 w-11 shrink-0 rounded-md"
+    : big
+      ? "size-8 shrink-0 rounded-lg"
+      : "size-6 rounded-md";
+export function TileWords({ big, label, value }: { big: TileSize; label: string; value: string }) {
   return (
     <span className={big ? "flex min-w-0 flex-col" : "contents"}>
       <span className="mono text-[10px] text-t2">{label}</span>
-      <b className={`font-semibold ${big ? "truncate text-sm" : ""}`}>{value}</b>
+      <b
+        className={`font-semibold ${big === "card" ? "truncate text-[13px]" : big ? "truncate text-sm" : ""}`}
+      >
+        {value}
+      </b>
     </span>
   );
 }
 
 /** The composer's Elements button: how many distinct elements the prompt mentions; `big` on the empty Create
- * screen. */
+ * screen. A card (the video boards) reads "None" without any, and has no picture. */
 export function ElementsButton({
   count,
   onClick,
@@ -47,12 +59,16 @@ export function ElementsButton({
 }: {
   count: number;
   onClick: () => void;
-  big?: boolean;
+  big?: TileSize;
 }) {
   return (
     <button type="button" aria-haspopup="dialog" onClick={onClick} className={tileClass(big)}>
-      <span aria-hidden className={`${picClass(big)} bg-line`} />
-      <TileWords big={big} label="Elements" value={count ? `${count} in prompt` : "Add"} />
+      {big !== "card" && <span aria-hidden className={`${picClass(big)} bg-line`} />}
+      <TileWords
+        big={big}
+        label="Elements"
+        value={count ? `${count} in prompt` : big === "card" ? "None" : "Add"}
+      />
     </button>
   );
 }

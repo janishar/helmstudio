@@ -76,8 +76,8 @@ describe("the rows of a LoRA stack", () => {
   it("clamps a strength to the schema's range and step", () => {
     const s = strengthOf(rows)![1];
     expect(clampStrength(0.83, s)).toBe(0.85);
-    expect(clampStrength(9, s)).toBe(4);
-    expect(clampStrength(-7.3, s)).toBe(-4);
+    expect(clampStrength(9, s)).toBe(2);
+    expect(clampStrength(-7.3, s)).toBe(0);
     expect(clampStrength(Number.NaN, s)).toBe(1);
     expect(clampStrength(0.1 + 0.2, s)).toBe(0.3);
   });

@@ -124,7 +124,7 @@
     },
     {
       "kind": "qwen-image/encode",
-      "title": "Encode prompt",
+      "title": "Encode",
       "family": "qwen-image",
       "help": "Encodes the prompt with the text encoder.",
       "params": [

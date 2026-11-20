@@ -28,19 +28,23 @@ export default async function Page({
   if (x.response.status === 404 || x.response.status === 422) notFound();
   const exec = await initial(Promise.resolve(x));
   if (!b || !exec) throw new Error(`GET execution: ${x.response.status}`);
-  const p = b.pipeline_id
-    ? await initial(
-        api.GET("/v1/studio/pipelines/{pipeline_id}", {
-          params: { path: { pipeline_id: b.pipeline_id } },
-        }),
-      )
-    : null;
+  const [p, w] = await Promise.all([
+    b.pipeline_id
+      ? initial(
+          api.GET("/v1/studio/pipelines/{pipeline_id}", {
+            params: { path: { pipeline_id: b.pipeline_id } },
+          }),
+        )
+      : null,
+    initial(api.GET("/v1/studio/workflows")),
+  ]);
   return (
     <Execution
       batch={b}
       initial={exec as S<"RowExecution">}
       attempt={attempt}
       titles={p?.workflow_titles ?? {}}
+      envs={Object.fromEntries((w?.workflows ?? []).map((x) => [x.id, x.env]))}
     />
   );
 }

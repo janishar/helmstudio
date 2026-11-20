@@ -1,7 +1,8 @@
 "use client";
 // Pipelines (docs/mock/Pipelines.dc.html, plan 7.2): the saved pipelines (search, filter chips, a card each with its
 // chain of nodes and its last batch), the selected pipeline's panel (its steps, its Memory box with Open memory, Run,
-// Open graph, Duplicate, Rename, Delete), New pipeline and New batch, and the Recent batches table. The "Models it
+// Open graph, Duplicate, Rename, Delete), New pipeline and New batch, and the Recent batches table (the 4 newest; All
+// batches shows the rest). The "Models it
 // will load" box lists each step's workflow and each model a node names, and whether remote calls are on (a listed
 // pipeline carries no resolved models: auto stays "auto"); the cards' tags mark a director ("chat") and remote calls.
 import Link from "next/link";
@@ -10,8 +11,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { MemoryDialog, useMemory } from "@/components/pipelines/memory";
 import { NewBatch } from "@/components/pipelines/new-batch";
+import { useUser } from "@/components/shell";
 import { api, message, ok, type S } from "@/lib/api";
-import { batchState, canPause, canResume, doneRows } from "@/lib/batches";
+import {
+  batchState,
+  canPause,
+  canResume,
+  canRetry,
+  doneRows,
+  retryFailedRows,
+} from "@/lib/batches";
 import { when } from "@/lib/format";
 import { useHydrated } from "@/lib/hydrated";
 import {
@@ -30,6 +39,8 @@ type Pipeline = S<"Pipeline">;
 
 /** A page of the batches table. */
 export const PAGE = 20;
+/** The batches shown until All batches. */
+export const RECENT = 4;
 
 /** The batch's events, as JSON (the polling form of the stream). */
 export const batchEvents = (id: string, since: number) =>
@@ -62,6 +73,9 @@ export function controlBatch(id: string, op: "pause" | "resume" | "stop") {
 }
 
 const ended = (b: Batch) => ["done", "failed", "stopped"].includes(b.status);
+/** Retry failed on a batch's line: it has failed rows that can run again. */
+const retryable = (b: Batch) =>
+  !!b.counts.failed && canRetry(b, { status: "failed" } as S<"BatchRow">);
 
 /** The state chip of the mock: .st with its tone. */
 export function StateChip({ batch }: { batch: Batch }) {
@@ -155,6 +169,8 @@ export function Pipelines({
   const [running, setRunning] = useState<Pipeline | null>(null);
   const [renaming, setRenaming] = useState<{ p: Pipeline; title: string } | null>(null);
   const [deleting, setDeleting] = useState<Pipeline | null>(null);
+  const [all, setAll] = useState(false);
+  const user = useUser();
 
   const load = useCallback(async () => {
     setError("");
@@ -234,6 +250,25 @@ export function Pipelines({
     }
   }
 
+  /** Retry failed: each failed row of the batch, page by page, then the batch as it is now. */
+  async function retryFailed(b: Batch) {
+    setBusy(b.id);
+    setError("");
+    try {
+      const errors = await retryFailedRows(b);
+      put(
+        await ok(
+          api.GET("/v1/studio/batches/{batch_id}", { params: { path: { batch_id: b.id } } }),
+        ),
+      );
+      if (errors.length) setError(errors.join(" · "));
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      setBusy("");
+    }
+  }
+
   /** New pipeline or Duplicate: the new one opens in its editor. */
   async function create(body: S<"PipelineCreate">) {
     setBusy("create");
@@ -301,8 +336,9 @@ export function Pipelines({
           <h1 className="m-0 flex items-center font-display text-[22px] font-bold tracking-[0.01em]">
             Pipelines
             <Info>
-              A pipeline runs once per row of inputs as one unattended batch: steps run workflows,
-              gates stop a row for your pick. A batch always runs the version it was submitted with.
+              A pipeline runs once per row of inputs as one unattended batch. Steps run workflows;
+              agent nodes judge, write, decide and remember. A batch always runs the version it was
+              submitted with.
             </Info>
           </h1>
           <div className="grow" />
@@ -425,16 +461,18 @@ export function Pipelines({
             </Info>
           </h2>
           <div className="grow" />
-          {cursor && (
-            <button
-              type="button"
-              className="chip bevel h-[30px]"
-              disabled={busy === "more"}
-              onClick={() => void more()}
-            >
-              All batches
-            </button>
-          )}
+          <button
+            type="button"
+            className="chip bevel h-[30px] aria-pressed:bg-t1 aria-pressed:font-semibold aria-pressed:text-panel"
+            aria-pressed={all}
+            disabled={busy === "more"}
+            onClick={() => {
+              setAll(!all);
+              if (!all && cursor) void more();
+            }}
+          >
+            All batches
+          </button>
         </div>
         <div className="panel shrink-0 overflow-x-auto px-2 py-1.5">
           <table className="grid-table">
@@ -451,7 +489,7 @@ export function Pipelines({
               </tr>
             </thead>
             <tbody>
-              {batches?.map((b) => (
+              {(all ? batches : batches?.slice(0, RECENT))?.map((b) => (
                 <tr key={b.id}>
                   <td className="m max-w-[200px] truncate" title={b.title}>
                     {b.title}
@@ -473,6 +511,16 @@ export function Pipelines({
                         >
                           Pick
                         </Link>
+                      )}
+                      {retryable(b) && (
+                        <button
+                          type="button"
+                          className="chip bevel h-[30px]"
+                          disabled={busy === b.id}
+                          onClick={() => void retryFailed(b)}
+                        >
+                          Retry failed
+                        </button>
                       )}
                       <Link href={`/pipelines/batches/${b.id}`} className="chip bevel h-[30px]">
                         Open
@@ -525,12 +573,22 @@ export function Pipelines({
             <h2 className="m-0 flex items-center gap-2 font-display text-[18px] font-bold">
               {selected.title}
               <Info>
-                Edits change only new batches. A running batch keeps the version it was submitted
-                with.
+                Edits change only new batches.{" "}
+                {selected.last_batch && !ended(selected.last_batch)
+                  ? `Running batch ${selected.last_batch.title} keeps`
+                  : "A running batch keeps"}{" "}
+                the version it was submitted with.
               </Info>
             </h2>
             <span className="mono text-[11px] text-t2">
-              v{selected.version} · {hydrated && when(selected.updated_at)}
+              {[
+                collectionOf(selected),
+                `v${selected.version}`,
+                user?.name,
+                hydrated && when(selected.updated_at),
+              ]
+                .filter(Boolean)
+                .join(" · ")}
             </span>
           </div>
           <h3 className="heading">Steps</h3>
@@ -626,6 +684,13 @@ export function Pipelines({
     </>
   );
 }
+
+/** The collection a pipeline's output names (the first output, by node id), as the aside's slug. */
+const collectionOf = (p: Pipeline) =>
+  Object.keys(p.nodes)
+    .sort()
+    .map((id) => p.nodes[id])
+    .find((n) => n.kind === "output")?.collection;
 
 /** The selected pipeline's nodes in row order, as the mock's step list. */
 function Steps({ p }: { p: Pipeline }) {

@@ -4,22 +4,27 @@
 // the chosen step's details: a step's runs and takes, a gate's candidates and pick, the state after it (read on
 // demand; gone once the batch has finished) and Retry row from here. Live from the batch's events. A judge, write or
 // decide step shows its decision: a judge's verdict per check, the thumbnails it saw, the model and what it read from
-// memory (Execution.dc.html); a write's text before and after as a diff, a decide's route (AgentSteps.dc.html).
+// memory (Execution.dc.html); a write's text before and after as a diff, a decide's route (AgentSteps.dc.html). The
+// graph is laid out by elkjs left to right (saved positions ignored); the header's title opens a menu (the batch, all
+// pipelines) and the memory chip is Create's. The board's Studio | Graph switch is left out: no Studio view yet.
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Activity, ChevronLeft } from "lucide-react";
+import { Activity, ChevronDown } from "lucide-react";
 import { Thumb } from "@/components/media";
 import { ErrorNote } from "@/components/kit";
 import { FullScreen } from "@/components/media";
-import { StateChip, followBatch } from "@/components/pipelines/pipelines";
+import { followBatch } from "@/components/pipelines/pipelines";
+import { Memory, useHosts } from "@/components/create/memory-chip";
 import type { CanvasProps } from "@/components/pipelines/canvas";
 import { api, ApiError, message, ok, type S } from "@/lib/api";
-import { nodeLabel } from "@/lib/pipeline";
+import { nodeLabel, stepNumbers, type PDoc } from "@/lib/pipeline";
+import { hostMemory } from "@/lib/hosts";
 import {
   agentEnd,
   asRun,
+  attemptWords,
   canRetryFrom,
   criterionLines,
   decisionModel,
@@ -43,6 +48,16 @@ const PipelineCanvas = dynamic<CanvasProps>(
   },
 );
 
+const TONE = { warn: "text-[#f2c14e]", ok: "text-a1", now: "font-medium text-a2", "": "" };
+
+/** The pipeline without its saved positions: the canvas lays it out with elkjs. */
+const unplaced = (doc: PDoc): PDoc => ({
+  ...doc,
+  nodes: Object.fromEntries(
+    Object.entries(doc.nodes).map(([id, n]) => [id, { ...n, position: undefined }]),
+  ) as PDoc["nodes"],
+});
+
 const STATUS: Record<string, string> = {
   queued: "queued",
   running: "running",
@@ -57,6 +72,7 @@ export function Execution({
   initial,
   attempt,
   titles = {},
+  envs = {},
 }: {
   batch: S<"Batch">;
   initial: Exec;
@@ -64,6 +80,8 @@ export function Execution({
   titles?: Record<string, string>;
   /** the attempt asked for in the URL (absent: the current one) */
   attempt?: number;
+  /** workflow id → its env, for the memory chip */
+  envs?: Record<string, string>;
 }) {
   const router = useRouter();
   const [batch, setBatch] = useState(initialBatch);
@@ -173,9 +191,19 @@ export function Execution({
   }
 
   const doc = x.pipeline;
+  const nums = stepNumbers(doc);
   const where = x.current
-    ? `${STATUS[x.status] ?? x.status} on ${nodeLabel(doc, x.current, titles)}`
+    ? `${STATUS[x.status] ?? x.status} on ${doc.nodes[x.current]?.kind === "step" ? `step ${nums[x.current]}` : nodeLabel(doc, x.current, titles)}`
     : (STATUS[x.status] ?? x.status);
+  // drawn left to right by elkjs, as the board: an edited pipeline's saved positions can be anywhere
+  const laid = useMemo(() => unplaced(doc), [doc]);
+  // the memory chip: the host of the step the row is at, else of the first step
+  const hosts = useHosts();
+  const stepAt = [x.current, ...Object.keys(nums)].find(
+    (id) => id && doc.nodes[id]?.kind === "step",
+  );
+  const at = stepAt ? doc.nodes[stepAt] : undefined;
+  const host = hostMemory(hosts, at?.kind === "step" ? envs[at.workflow] : undefined);
   const rowsTotal = batch.counts.total;
   const picked = detail?.kind === "gate" ? detail.picked : null;
 
@@ -183,14 +211,38 @@ export function Execution({
     <>
       <main id="main" className="flex min-w-0 flex-[999_1_560px] flex-col gap-3.5 px-5 pt-4 pb-5">
         <div className="flex flex-wrap items-center gap-3">
-          <Link
-            href={`/pipelines/batches/${x.batch_id}`}
-            aria-label="Back to the batch"
-            className="grid size-9 place-items-center rounded-[10px] text-t2 hover:bg-s2"
+          <h1 className="m-0">
+            <button
+              type="button"
+              popoverTarget="ex-menu"
+              className="flex h-10 items-center gap-2 rounded-[10px] px-3 font-display text-[18px] font-bold tracking-[0.01em] hover:bg-s2"
+              style={{ anchorName: "--ex-menu" } as React.CSSProperties}
+            >
+              {doc.title}
+              <ChevronDown size={16} strokeWidth={2} aria-hidden />
+            </button>
+          </h1>
+          <div
+            id="ex-menu"
+            popover="auto"
+            role="menu"
+            aria-label={doc.title}
+            className="pop flex w-60 flex-col gap-1 text-[13px]"
+            style={
+              {
+                positionAnchor: "--ex-menu",
+                positionArea: "bottom span-right",
+                marginTop: 6,
+              } as React.CSSProperties
+            }
           >
-            <ChevronLeft size={18} aria-hidden />
-          </Link>
-          <h1 className="m-0 font-display text-[18px] font-bold tracking-[0.01em]">{doc.title}</h1>
+            <Link role="menuitem" href={`/pipelines/batches/${x.batch_id}`} className="truncate">
+              The batch · {batch.title}
+            </Link>
+            <Link role="menuitem" href="/pipelines">
+              All pipelines
+            </Link>
+          </div>
           <span className="rounded-full bg-s2 px-2.5 py-1 text-[12px] font-medium text-t2">
             Row {x.row} of {rowsTotal} · {where}
           </span>
@@ -199,7 +251,7 @@ export function Execution({
           </label>
           <select
             id="ex-row"
-            className="chip bevel bg-s4"
+            className="chip bevel appearance-none bg-s4"
             value={x.row}
             onChange={(e) => router.push(`/pipelines/batches/${x.batch_id}/rows/${e.target.value}`)}
           >
@@ -238,7 +290,7 @@ export function Execution({
             </Link>
           )}
           <div className="grow" />
-          <StateChip batch={batch} />
+          {host && <Memory memory={host} />}
         </div>
         {x.retried_from && (
           <p className="m-0 text-[12px] text-t2">
@@ -252,7 +304,7 @@ export function Execution({
           style={{ background: "var(--in)" }}
         >
           <PipelineCanvas
-            doc={doc}
+            doc={laid}
             titles={titles}
             marks={marks}
             selected={s?.node ?? null}
@@ -296,7 +348,7 @@ export function Execution({
                     </td>
                     <td className={on ? "font-semibold" : undefined}>{l.label}</td>
                     <td
-                      className={`max-w-[360px] truncate ${l.error ? "text-[#f2c14e]" : l.status === "now" ? "font-medium text-a2" : ""}`}
+                      className={`max-w-[360px] truncate ${TONE[l.tone]}`}
                       title={l.error ?? l.what}
                     >
                       {l.what}
@@ -324,7 +376,7 @@ export function Execution({
                 {lines.find((l) => l.step === s.step)?.label} · step {s.step}
               </h2>
               <span className="text-[12px] text-t2">
-                Row {x.row} · attempt {x.attempt} · checkpoint {s.step} of {x.steps.length}
+                Row {x.row} · {attemptWords(x.attempt)} · checkpoint {s.step} of {x.steps.length}
               </span>
             </div>
             {s.error && <p className="m-0 text-[13px] text-[#f2c14e]">{s.error}</p>}
@@ -372,43 +424,47 @@ export function Execution({
                 </div>
               </>
             )}
-            <div className="grid grid-cols-2 gap-2">
-              {detail?.kind === "gate" ? (
+            {!s.decision && (
+              <div className="grid grid-cols-2 gap-2">
+                {detail?.kind === "gate" ? (
+                  <div className="set flex flex-col gap-0.5">
+                    <small className="text-[12px] text-t2">Picked</small>
+                    <b className="font-semibold">
+                      {picked === null
+                        ? "not yet"
+                        : picked.length
+                          ? `${picked.length} take${picked.length === 1 ? "" : "s"}`
+                          : "none: rejected all"}
+                    </b>
+                  </div>
+                ) : (
+                  <div className="set flex flex-col gap-0.5">
+                    <small className="text-[12px] text-t2">Runs</small>
+                    <b className="font-semibold">{s.run_ids.length || "none"}</b>
+                  </div>
+                )}
                 <div className="set flex flex-col gap-0.5">
-                  <small className="text-[12px] text-t2">Picked</small>
-                  <b className="font-semibold">
-                    {picked === null
-                      ? "not yet"
-                      : picked.length
-                        ? `${picked.length} take${picked.length === 1 ? "" : "s"}`
-                        : "none: rejected all"}
+                  <small className="text-[12px] text-t2">Then</small>
+                  <b className="truncate font-semibold">
+                    {s.edge
+                      ? `${s.edge.via === "next" ? "" : `${s.edge.via} → `}${nodeLabel(doc, s.edge.to, titles)}`
+                      : s.status === "current"
+                        ? "here now"
+                        : "—"}
                   </b>
                 </div>
-              ) : (
-                <div className="set flex flex-col gap-0.5">
-                  <small className="text-[12px] text-t2">Runs</small>
-                  <b className="font-semibold">{s.run_ids.length || "none"}</b>
-                </div>
-              )}
-              <div className="set flex flex-col gap-0.5">
-                <small className="text-[12px] text-t2">Then</small>
-                <b className="truncate font-semibold">
-                  {s.edge
-                    ? `${s.edge.via === "next" ? "" : `${s.edge.via} → `}${nodeLabel(doc, s.edge.to, titles)}`
-                    : s.status === "current"
-                      ? "here now"
-                      : "—"}
-                </b>
+                {Object.entries(s.loops).map(([g, n]) => (
+                  <div key={g} className="set flex flex-col gap-0.5">
+                    <small className="text-[12px] text-t2">
+                      Loop at {nodeLabel(doc, g, titles)}
+                    </small>
+                    <b className="font-semibold">
+                      {n} time{n === 1 ? "" : "s"}
+                    </b>
+                  </div>
+                ))}
               </div>
-              {Object.entries(s.loops).map(([g, n]) => (
-                <div key={g} className="set flex flex-col gap-0.5">
-                  <small className="text-[12px] text-t2">Loop at {nodeLabel(doc, g, titles)}</small>
-                  <b className="font-semibold">
-                    {n} time{n === 1 ? "" : "s"}
-                  </b>
-                </div>
-              ))}
-            </div>
+            )}
             <div className="flex flex-col gap-2">
               <h3 className="heading">State after this step</h3>
               {state?.key === `${x.attempt}:${s.step}` ? (
@@ -593,19 +649,23 @@ function DecisionDetail({ d, name }: { d: S<"Decision">; name: (id: string) => s
                   className={`aspect-square rounded-lg bg-s3 object-cover ${d.judge!.picked.includes(t.take_id) ? "outline-2 outline-a1" : ""}`}
                 />
               ))}
-              {!d.seen.length && (
-                <span className="col-span-4 text-[12px] text-t2">No thumbnails.</span>
-              )}
+              {!d.seen.length &&
+                d.judge.takes.map((t, i) => (
+                  <div
+                    key={t.take_id}
+                    className="grid aspect-square place-items-center rounded-lg border border-dashed border-dash text-[10px] text-t2"
+                  >
+                    take {i + 1}
+                  </div>
+                ))}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2">
             {tile("Model", model)}
             {tile(
               "Memory read",
-              d.memory_read.length ? `${d.memory_read.length} items` : "nothing",
+              `${d.memory_read.length} example${d.memory_read.length === 1 ? "" : "s"}`,
             )}
-            {d.judge.agreed != null && tile("Your pick", d.judge.agreed ? "agreed" : "changed it")}
-            {answer}
           </div>
         </>
       )}

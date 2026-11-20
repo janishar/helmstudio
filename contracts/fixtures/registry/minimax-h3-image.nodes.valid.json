@@ -171,7 +171,7 @@
     },
     {
       "kind": "minimax-h3-image/encode",
-      "title": "Encode prompt",
+      "title": "Encode",
       "family": "minimax-h3-image",
       "help": "Encodes the prompt and up to 16 reference images; with references the run is an edit.",
       "params": [

@@ -173,8 +173,8 @@
               "type": "float",
               "label": "Strength",
               "default": 1,
-              "min": -4,
-              "max": 4,
+              "min": 0,
+              "max": 2,
               "step": 0.05
             },
             "mode": {
@@ -206,7 +206,7 @@
     },
     {
       "kind": "qwen-image/encode",
-      "title": "Encode prompt",
+      "title": "Encode",
       "family": "qwen-image",
       "help": "Encodes the prompt and up to 10 reference images; with references the run is an edit.",
       "params": [

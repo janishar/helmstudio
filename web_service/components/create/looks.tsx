@@ -5,7 +5,13 @@
 import { useEffect, useState } from "react";
 import { Pencil, X } from "lucide-react";
 import { ErrorNote, Info, Modal } from "@/components/kit";
-import { ElementsButton, TileWords, picClass, tileClass } from "@/components/create/elements";
+import {
+  ElementsButton,
+  TileWords,
+  picClass,
+  tileClass,
+  type TileSize,
+} from "@/components/create/elements";
 import { LoraPicker } from "@/components/create/loras";
 import { Pic, Tile, VisualPicker } from "@/components/create/visual-picker";
 import { GalleryPicker } from "@/components/gallery/picker";
@@ -35,6 +41,7 @@ function LookTile({
   chosen,
   looks,
   open,
+  card,
   onClick,
 }: {
   group: Group;
@@ -42,12 +49,14 @@ function LookTile({
   looks: Item[] | null;
   /** the tiles open their group in the page (the empty Create screen): whether this one is open */
   open?: boolean;
+  /** a video workflow's tile: the label over the value, no picture (docs/mock/TextToVideo.dc.html) */
+  card?: boolean;
   onClick: () => void;
 }) {
   const st = tileState(group, chosen, looks);
   const src = safeUrl(st.thumb);
   const label = LOOK_GROUPS.find(([g]) => g === group)?.[1] ?? group;
-  const big = open !== undefined;
+  const big: TileSize = card ? "card" : open !== undefined;
   return (
     <button
       type="button"
@@ -56,7 +65,7 @@ function LookTile({
       onClick={onClick}
       className={`${tileClass(big)} ${open ? "outline-2 outline-a1" : ""}`}
     >
-      {src ? (
+      {card ? null : src ? (
         <img src={src} alt="" className={`${picClass(big)} object-cover`} />
       ) : (
         <span
@@ -77,6 +86,7 @@ export function QuickTiles({
   onElements,
   onLook,
   open,
+  card,
 }: {
   tiles: TileName[];
   chosen: Chosen;
@@ -86,9 +96,11 @@ export function QuickTiles({
   onLook: (g: Group) => void;
   /** set when the look tiles open their group in the page, not the picker (the empty Create screen): the open one */
   open?: Group | null;
+  /** a video workflow's tiles (docs/mock/TextToVideo.dc.html) */
+  card?: boolean;
 }) {
   const looks = useLooks();
-  const big = open !== undefined;
+  const big: TileSize = card ? "card" : open !== undefined;
   return tiles.map((t) => {
     const g = tileGroup(t);
     return g ? (
@@ -97,7 +109,8 @@ export function QuickTiles({
         group={g}
         chosen={chosen}
         looks={looks}
-        open={big ? g === open : undefined}
+        open={open !== undefined ? g === open : undefined}
+        card={card}
         onClick={() => onLook(g)}
       />
     ) : (
@@ -653,8 +666,8 @@ function Editor({
             </div>
             <input
               type="range"
-              min={-4}
-              max={4}
+              min={0}
+              max={2}
               step={0.05}
               value={l.strength}
               aria-label={`Strength of ${l.name}`}
@@ -755,7 +768,7 @@ function SaveForm({ take: t, onClose }: { take: S<"Take">; onClose: () => void }
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
-  // what studio copies: the first per id, at most 4 (one the caller cannot use now is left out there)
+  // what studio copies: the first per id, at most 4 (one the caller cannot use now is left out there), strength in 0..2
   const loras = (m?.loras ?? [])
     .filter((l, i, all) => all.findIndex((x) => x.id === l.id) === i)
     .slice(0, MAX_LORAS);
@@ -845,7 +858,9 @@ function SaveForm({ take: t, onClose }: { take: S<"Take">; onClose: () => void }
             Its LoRAs, at their strengths
             <small className={sub}>
               {loras.length
-                ? loras.map((l) => `${l.name} ${l.strength.toFixed(2)}`).join(" · ")
+                ? loras
+                    .map((l) => `${l.name} ${Math.min(2, Math.max(0, l.strength)).toFixed(2)}`)
+                    .join(" · ")
                 : "it was made without LoRAs"}
             </small>
           </span>

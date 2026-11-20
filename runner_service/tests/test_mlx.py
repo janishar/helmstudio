@@ -344,6 +344,30 @@ def test_stage1_noise_is_the_goldens_bit_for_bit(case, on_cpu):
 
 
 @needs_mlx
+def test_an_image_on_frame_0_keeps_the_first_frame_marked(on_cpu):
+    """FirstFrame keeps `keyframes_mask` (the vendored VideoConditionByLatentIndex drops it, GOTCHAS 2026-11-20):
+    latent frame 0's tokens are marked, the rest and a later keyframe's appended tokens are not."""
+    from packs.ltx import mlx as ltx_mlx
+
+    fhw = (3, 2, 2)
+    hw = fhw[1] * fhw[2]
+    pos = ltx_mlx.compute_video_positions(*fhw, frame_rate=24.0)
+    first = ltx_mlx.FirstFrame(frame_indices=[0], clean_latent=mx.zeros((1, hw, 128)), strength=1.0)
+    later = ltx_mlx.VideoConditionByKeyframeIndex(
+        frame_idx=8,
+        keyframe_latent=mx.zeros((1, hw, 128)),
+        spatial_dims=fhw,
+        frame_rate=24.0,
+        strength=1.0,
+    )
+    for conds, appended in (([first], 0), ([first, later], hw)):
+        state = ltx_mlx.noised_state((1, 3 * hw, 128), conds, fhw, pos, 42, 1.0)
+        assert state.keyframes_mask is not None
+        marks = state.keyframes_mask.reshape(-1).tolist()
+        assert marks == [1.0] * hw + [0.0] * (2 * hw + appended)
+
+
+@needs_mlx
 def test_a_second_upscale_of_one_latent_fails_before_it_loads_anything(on_cpu):
     """Each upscale doubles the latent: chained, it would grow past the canvas admission budgeted and past memory."""
     from packs.ltx import mlx as ltx_mlx

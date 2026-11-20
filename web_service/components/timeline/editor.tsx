@@ -730,11 +730,12 @@ export function TimelineEditor({ id }: { id?: string }) {
             slot={shot}
             workflows={workflows}
             onClose={() => setShot(null)}
-            onDone={(nt) => {
+            onDone={(nt, note) => {
               tlRef.current = nt;
               setTl(nt);
               setDraft(null);
               setShot(null);
+              if (note) setNotice(note);
             }}
           />
         )}
@@ -1031,7 +1032,13 @@ function ClipPanel({
   const [gain, setGain] = useDraft(String(c.gain_db ?? 0));
   const [hold, setHold] = useDraft(c.hold !== undefined ? c.hold.toFixed(2) : "");
   const sub = take
-    ? `From take ${take.seed != null ? `seed ${take.seed}` : take.title}${take.workflow_title ? ` · ${take.workflow_title}` : ""}`
+    ? [
+        `From take ${take.seed != null ? `seed ${take.seed}` : take.title}`,
+        take.workflow_title,
+        take.video && `${take.video.frames} frames`, // docs/mock/TakeActions.dc.html
+      ]
+        .filter(Boolean)
+        .join(" · ")
     : line;
   // the marked range on this clip, in its take's time and frames (the take actions work on it)
   const fps = take?.video?.fps ?? 0;
@@ -1116,17 +1123,22 @@ function ClipPanel({
           </div>
         )}
         {(kind === "video" || ti > 0) && (
-          <Cell label="Gain (dB)">
+          <Cell label="Gain">
             <div className="flex items-center gap-2">
-              <input
-                aria-label="Gain in decibels"
-                className={num}
-                inputMode="decimal"
-                value={gain}
-                onChange={(e) => setGain(e.target.value)}
-                onBlur={setGainDb}
-                onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-              />
+              {/* the board's tile reads "0 dB": the number stays editable */}
+              <span className="mono flex grow items-baseline gap-1 font-medium">
+                <input
+                  aria-label="Gain in decibels"
+                  className="mono min-w-0 bg-transparent font-medium text-t1 outline-0"
+                  size={Math.max(1, gain.length)}
+                  inputMode="decimal"
+                  value={gain}
+                  onChange={(e) => setGain(e.target.value)}
+                  onBlur={setGainDb}
+                  onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+                />
+                dB
+              </span>
               <button
                 type="button"
                 aria-pressed={!!c.mute}

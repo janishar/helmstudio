@@ -385,7 +385,20 @@
         "abs_mean": 0.75,
         "sha256_f32": "5aeaefda83c996f0485b5c6ebd4937f0bcf177fdfe54fa71b4b568c03ae9c6b0"
       },
-      "video_keyframes_mask": null,
+      "video_keyframes_mask": {
+        "shape": [
+          1,
+          224,
+          1
+        ],
+        "dtype": "bfloat16",
+        "mean": 0.125,
+        "std": 0.330719,
+        "min": 0.0,
+        "max": 1.0,
+        "abs_mean": 0.125,
+        "sha256_f32": "336979d794f77e5a12f2a96b441d4a04cf7bd26aaadec73a63495d8c76898379"
+      },
       "video_attention_mask": null,
       "video_positions_stats": {
         "shape": [
@@ -409,12 +422,12 @@
           128
         ],
         "dtype": "bfloat16",
-        "mean": 0.009051,
-        "std": 1.492117,
+        "mean": 0.009063,
+        "std": 1.492079,
         "min": -5.71875,
         "max": 7.40625,
-        "abs_mean": 1.167676,
-        "sha256_f32": "909eae03c304092db10c858eddf8ff2477d9f973920faa1a1eabdfcd590d4107"
+        "abs_mean": 1.167636,
+        "sha256_f32": "98bf60aed2620c59886d457a9f08bf0bce178124da25644d73d7bfc8e1a4e5ba"
       },
       "audio_out_tokens": {
         "shape": [
@@ -423,12 +436,12 @@
           128
         ],
         "dtype": "bfloat16",
-        "mean": -0.62208,
-        "std": 2.047325,
+        "mean": -0.622239,
+        "std": 2.047462,
         "min": -5.46875,
         "max": 4.8125,
-        "abs_mean": 1.833943,
-        "sha256_f32": "90fe08ed3ddeb171219eab86b62796417458e564815fb6f2ed199b3cc46f7bbd"
+        "abs_mean": 1.834136,
+        "sha256_f32": "44b046bb7ef8c0b20eb2742b91382699fea66964371ba2df0a9589becd3fd2ad"
       }
     },
     {
@@ -448,12 +461,12 @@
           128
         ],
         "dtype": "bfloat16",
-        "mean": -0.003002,
-        "std": 1.087196,
+        "mean": -0.00302,
+        "std": 1.087194,
         "min": -6.0,
         "max": 6.0,
-        "abs_mean": 0.834507,
-        "sha256_f32": "6d8686d892f94aeb1f1cd5b2084d0e169abf99b4ac95ca8a346d9d1842b0d402"
+        "abs_mean": 0.834497,
+        "sha256_f32": "68557fcc060e826e92897bc59a687e65b2beef20ea53388ccd2e1a337e1fb12b"
       },
       "audio_in": {
         "shape": [
@@ -462,12 +475,12 @@
           128
         ],
         "dtype": "bfloat16",
-        "mean": -0.050845,
-        "std": 0.916104,
+        "mean": -0.050851,
+        "std": 0.916068,
         "min": -3.4375,
         "max": 3.375,
-        "abs_mean": 0.731243,
-        "sha256_f32": "9843f7ab6f107043cca778db000962dd09fb4db333b5246de78ffc72d1660543"
+        "abs_mean": 0.731226,
+        "sha256_f32": "0ccf3c801c5aea84ae064bc0febc2a128925249ed65abac6c6c740921ae0620a"
       },
       "video_positions": [
         1,
@@ -487,12 +500,12 @@
           128
         ],
         "dtype": "bfloat16",
-        "mean": -0.003173,
-        "std": 1.48193,
+        "mean": -0.003254,
+        "std": 1.481746,
         "min": -6.4375,
         "max": 6.375,
-        "abs_mean": 1.141154,
-        "sha256_f32": "783162e4356b34ca25270b24818a25842ab2bb52b07b0093135411cd450d0202"
+        "abs_mean": 1.140886,
+        "sha256_f32": "e7e6e5b309fd993296f68d72e7ad1b2ac03c4917df75571cc307286d2425441e"
       },
       "video_denoise_mask": {
         "shape": [
@@ -508,7 +521,20 @@
         "abs_mean": 0.75,
         "sha256_f32": "7a2b815632a7cc16a8e39a7fd40920d53fbbcb54d3f4ff8bfb2b124db915d740"
       },
-      "video_keyframes_mask": null,
+      "video_keyframes_mask": {
+        "shape": [
+          1,
+          896,
+          1
+        ],
+        "dtype": "bfloat16",
+        "mean": 0.125,
+        "std": 0.330719,
+        "min": 0.0,
+        "max": 1.0,
+        "abs_mean": 0.125,
+        "sha256_f32": "cb4aabc6e88e92401882be5356ee0b75d757549f599031a250c8e24decface9d"
+      },
       "video_attention_mask": null,
       "video_positions_stats": {
         "shape": [
@@ -532,12 +558,12 @@
           128
         ],
         "dtype": "bfloat16",
-        "mean": -0.003173,
-        "std": 1.48193,
+        "mean": -0.003254,
+        "std": 1.481746,
         "min": -6.4375,
         "max": 6.375,
-        "abs_mean": 1.141154,
-        "sha256_f32": "783162e4356b34ca25270b24818a25842ab2bb52b07b0093135411cd450d0202"
+        "abs_mean": 1.140886,
+        "sha256_f32": "e7e6e5b309fd993296f68d72e7ad1b2ac03c4917df75571cc307286d2425441e"
       },
       "audio_from_stage1": {
         "shape": [
@@ -546,12 +572,12 @@
           128
         ],
         "dtype": "bfloat16",
-        "mean": -0.62208,
-        "std": 2.047325,
+        "mean": -0.622239,
+        "std": 2.047462,
         "min": -5.46875,
         "max": 4.8125,
-        "abs_mean": 1.833943,
-        "sha256_f32": "90fe08ed3ddeb171219eab86b62796417458e564815fb6f2ed199b3cc46f7bbd"
+        "abs_mean": 1.834136,
+        "sha256_f32": "44b046bb7ef8c0b20eb2742b91382699fea66964371ba2df0a9589becd3fd2ad"
       },
       "video_out_tokens": {
         "shape": [
@@ -560,12 +586,12 @@
           128
         ],
         "dtype": "float32",
-        "mean": -0.007495,
-        "std": 1.45248,
+        "mean": -0.007458,
+        "std": 1.452417,
         "min": -6.0,
-        "max": 6.109442,
-        "abs_mean": 1.116659,
-        "sha256_f32": "ca03a1b3203bafa62c6e8dda6bb60bc150696682d3cd982709cb9abe49112789"
+        "max": 6.105241,
+        "abs_mean": 1.116595,
+        "sha256_f32": "877bc2592a95fc852fc7206009572d522fe440142ee35307691e4c6fb18e74ab"
       },
       "audio_out_tokens": {
         "shape": [
@@ -574,12 +600,12 @@
           128
         ],
         "dtype": "bfloat16",
-        "mean": -0.618854,
-        "std": 2.043818,
+        "mean": -0.618333,
+        "std": 2.043597,
         "min": -6.375,
         "max": 5.46875,
-        "abs_mean": 1.823733,
-        "sha256_f32": "36ab7f9ff8acdf177c39aeab2fdb6d726350dd150d6f1a5d8f423676c691f8ed"
+        "abs_mean": 1.823216,
+        "sha256_f32": "bd4c2b749684db0ab17a8fb0ae4ba17f0630b0f346b50f9cd556ea21d68789db"
       }
     }
   ],
@@ -592,12 +618,12 @@
       14
     ],
     "dtype": "float32",
-    "mean": -0.006748,
-    "std": 1.449619,
+    "mean": -0.006705,
+    "std": 1.449546,
     "min": -5.9375,
-    "max": 6.109442,
-    "abs_mean": 1.114642,
-    "sha256_f32": "59efe92fa99963bbb3bbebaf89050a50a8d8939ed8528b3482424848009cd7c3"
+    "max": 6.105241,
+    "abs_mean": 1.11457,
+    "sha256_f32": "34ab97bad3246ba7e9d75129eb9d29bf74f94526eb7af844d1ce1fcb30bd380b"
   },
   "final_audio_latent": {
     "shape": [
@@ -607,12 +633,12 @@
       16
     ],
     "dtype": "bfloat16",
-    "mean": -0.618854,
-    "std": 2.043818,
+    "mean": -0.618333,
+    "std": 2.043597,
     "min": -6.375,
     "max": 5.46875,
-    "abs_mean": 1.823733,
-    "sha256_f32": "a217c1369a569949d5a3f3d3b35651bcf5b8000d922147a8c008680c069fcbf4"
+    "abs_mean": 1.823216,
+    "sha256_f32": "a95909ce89b8aeb686a63e2910e6d547e63969a0210b8c35e073362cf8215cf4"
   },
   "waveform": {
     "shape": [
@@ -622,11 +648,11 @@
     ],
     "dtype": "bfloat16",
     "mean": -1.1e-05,
-    "std": 0.066201,
-    "min": -0.300781,
-    "max": 0.447266,
-    "abs_mean": 0.050495,
-    "sha256_f32": "ebf29a5043920df5d78df9af348b539a09eed5e4072c31f993a70f0ba7467333"
+    "std": 0.066123,
+    "min": -0.302734,
+    "max": 0.451172,
+    "abs_mean": 0.050525,
+    "sha256_f32": "2e2881c5c188a18980f9cc91e190191b65870cc0ed573c8e07586e1bb005bbe1"
   },
   "wav": {
     "sample_rate": 48000,
@@ -649,7 +675,7 @@
   },
   "mp4": {
     "file": "kf-448x256-49f-s42.mp4",
-    "bytes": 80268,
+    "bytes": 80440,
     "ffprobe": {
       "programs": [],
       "stream_groups": [],
@@ -680,90 +706,90 @@
       ],
       "format": {
         "duration": "2.041667",
-        "bit_rate": "314519"
+        "bit_rate": "315193"
       }
     },
-    "sha256": "928bea30349cc570b0c48c6255339c48825d5821413a6aaf6573802c79a33355"
+    "sha256": "5a23c42416ce81ba43f658d146567877fad4675afc9164c6079bcb6d5b55f034"
   },
   "timing_s": {
-    "pipeline_init": 0.01,
-    "text_encoder_load": 4.24,
-    "text_encode": 2.15,
-    "dit_vae_encoder_upsampler_load": 4.67,
-    "image_conditioning": 0.72,
-    "stage1_denoise": 6.81,
-    "stage2_denoise": 6.44,
-    "generate_two_stage_total": 25.37,
-    "decoders_load": 0.06,
-    "audio_decode": 0.39,
-    "decode_video_audio_mux": 1.49,
-    "total_wall": 27.1
+    "pipeline_init": 0.02,
+    "text_encoder_load": 4.87,
+    "text_encode": 2.84,
+    "dit_vae_encoder_upsampler_load": 5.52,
+    "image_conditioning": 0.79,
+    "stage1_denoise": 8.21,
+    "stage2_denoise": 7.48,
+    "generate_two_stage_total": 30.7,
+    "decoders_load": 0.08,
+    "audio_decode": 0.41,
+    "decode_video_audio_mux": 1.73,
+    "total_wall": 32.8
   },
   "memory": {
     "phases": {
       "text_encoder_load": {
-        "s": 4.24,
-        "peak_gib": 12.73,
+        "s": 4.87,
+        "peak_gib": 12.74,
         "calls": 2,
         "active_after_gib": 12.66
       },
       "text_encode": {
-        "s": 2.15,
+        "s": 2.84,
         "peak_gib": 20.28,
         "calls": 1,
         "active_after_gib": 18.59
       },
       "dit_vae_encoder_upsampler_load": {
-        "s": 4.67,
-        "peak_gib": 19.35,
+        "s": 5.52,
+        "peak_gib": 19.29,
         "calls": 1,
         "active_after_gib": 19.19
       },
       "image_conditioning": {
-        "s": 0.72,
+        "s": 0.79,
         "peak_gib": 21.92,
         "calls": 2,
         "active_after_gib": 20.71
       },
       "stage1_denoise": {
-        "s": 6.81,
-        "peak_gib": 21.47,
+        "s": 8.21,
+        "peak_gib": 21.48,
         "calls": 1,
         "active_after_gib": 19.79
       },
       "stage2_denoise": {
-        "s": 6.44,
-        "peak_gib": 20.76,
+        "s": 7.48,
+        "peak_gib": 20.77,
         "calls": 1,
         "active_after_gib": 19.19
       },
       "generate_two_stage_total": {
-        "s": 25.37,
-        "peak_gib": 20.76,
+        "s": 30.7,
+        "peak_gib": 20.77,
         "calls": 1,
         "active_after_gib": 19.18
       },
       "decoders_load": {
-        "s": 0.06,
+        "s": 0.08,
         "peak_gib": 0.0,
         "calls": 1,
         "active_after_gib": 0.0
       },
       "audio_decode": {
-        "s": 0.39,
-        "peak_gib": 3.49,
+        "s": 0.41,
+        "peak_gib": 3.79,
         "calls": 1,
         "active_after_gib": 0.54
       },
       "decode_video_audio_mux": {
-        "s": 1.49,
+        "s": 1.73,
         "peak_gib": 8.24,
         "calls": 1,
         "active_after_gib": 1.3
       }
     },
     "mlx_peak_gib_whole_run": 21.92,
-    "process_max_rss_gib": 9.74
+    "process_max_rss_gib": 7.95
   },
   "env": {
     "LTX_MLX_CACHE_DIR": "<scratch>",

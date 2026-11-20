@@ -33,7 +33,7 @@ import {
 } from "@xyflow/react";
 import { Check, Plus } from "lucide-react";
 import { Thumb } from "@/components/media";
-import { Head, Panel, Problems, nodeName, valueText } from "@/components/graph/panel";
+import { Head, Panel, Problems, envText, nodeName, valueText } from "@/components/graph/panel";
 import { api, ApiError, errorText, message, ok, type S } from "@/lib/api";
 import {
   WIREABLE,
@@ -64,9 +64,12 @@ import {
   historyOf,
   mergedParam,
   moveNodes,
+  nodeHeight,
   removeNodes,
   removeWires,
+  sizeParams,
 } from "@/lib/graph-edit";
+import { sizeText } from "@/components/create/form";
 import { etaText, isActive, segments, type RunTrack, type Segment } from "@/lib/runs";
 import { useLoras } from "@/lib/lora-library";
 import { loraFieldOf, rowIds, strengthOf, usable } from "@/lib/loras";
@@ -96,7 +99,8 @@ const LEGEND: [string, string][] = [
   ["Image", WIRE.Image],
 ];
 // the toolbar and the preview float over the canvas's bottom (as in the mock): keep the fitted graph above them
-const FIT: FitViewOptions = { maxZoom: 0.9, padding: { top: "24px", x: "24px", bottom: "280px" } };
+const ZOOM = 0.9;
+const FIT: FitViewOptions = { maxZoom: ZOOM, padding: { top: "24px", x: "24px", bottom: "280px" } };
 const SAVE_MS = 700;
 
 /** What the cards read: the document, the kinds, run states and problems by node. */
@@ -134,6 +138,8 @@ export type GraphProps = {
   generate: (w: Workflow) => Promise<void>;
   busy: boolean;
   anyActive: boolean;
+  /** the runner hosts (Create's poll): what torch runs on */
+  hosts?: S<"Host">[] | null;
 };
 
 export function GraphView(props: GraphProps) {
@@ -159,6 +165,7 @@ function Graph({
   generate,
   busy,
   anyActive,
+  hosts,
 }: GraphProps) {
   const rf = useReactFlow();
   const [h, dispatch] = useReducer(history, workflow, (w) => historyOf(docOf(w)));
@@ -499,10 +506,29 @@ function Graph({
     setSearch(null);
   };
 
+  /** The mock's view: the graph at 90 % from the top-left when that fits above the toolbar, else fitted. */
+  const frame = (pos: Record<string, Pos | undefined>, duration?: number) => {
+    const r = canvas.current?.getBoundingClientRect();
+    const fits =
+      !!r &&
+      Object.entries(doc.nodes).every(([id, n]) => {
+        const p = pos[id];
+        return (
+          p &&
+          p.x >= 0 &&
+          p.y >= 0 &&
+          (p.x + NODE_W) * ZOOM <= r.width - 24 &&
+          (p.y + nodeHeight(schemas[n.kind], n)) * ZOOM <= r.height - 280
+        );
+      });
+    if (fits) void rf.setViewport({ x: 0, y: 0, zoom: ZOOM }, { duration });
+    else void rf.fitView({ ...FIT, duration });
+  };
+
   const tidy = async () => {
     const p = await layout(doc, schemas);
     edit((d) => moveNodes(d, p));
-    requestAnimationFrame(() => void rf.fitView({ ...FIT, duration: 200 }));
+    requestAnimationFrame(() => frame(p, 200));
   };
 
   const count = Object.keys(doc.nodes).length;
@@ -620,8 +646,13 @@ function Graph({
               zoomOnDoubleClick={false}
               minZoom={0.2}
               maxZoom={2}
-              fitView
-              fitViewOptions={FIT}
+              onInit={() =>
+                frame(
+                  Object.fromEntries(
+                    Object.entries(doc.nodes).map(([id, n]) => [id, n.position ?? auto?.[id]]),
+                  ),
+                )
+              }
               proOptions={{ hideAttribution: true }}
               ariaLabelConfig={{
                 "node.a11yDescription.default":
@@ -736,6 +767,7 @@ function Graph({
             onParamSet={onParamSet}
             loraPick={loraPick === selected}
             onLoraPicked={() => setLoraPick(null)}
+            hosts={hosts}
           />
         ) : (
           <>
@@ -743,8 +775,8 @@ function Graph({
               title={cur.title}
               sub={
                 cur.source === "mine"
-                  ? `Yours · runs on ${doc.env}`
-                  : `A template · runs on ${doc.env}. Your first edit saves your own copy, “${cur.title} (mine)”.`
+                  ? `Yours · runs on ${envText(doc.env, hosts)}`
+                  : `A template · runs on ${envText(doc.env, hosts)}. Your first edit saves your own copy, “${cur.title} (mine)”.`
               }
             />
             <div id="graph-problems">
@@ -833,6 +865,8 @@ function Card({ id }: NodeProps) {
   const value = (p: S<"ParamSchema">) =>
     valueText(p, g.overrides[`${id}.${p.name}`] ?? n.params?.[p.name] ?? p.default);
   const merged = s.params.find((p) => mergedParam(s, p) && !(p.name in wires));
+  const size = sizeParams(s, n);
+  const num = (x?: S<"ParamSchema">) => Number(x && value(x)) || 0;
   const p = g.progress;
   return (
     <div
@@ -843,7 +877,7 @@ function Card({ id }: NodeProps) {
       data-bad={mine.length ? true : undefined}
     >
       <div className="gn-h">
-        <span title={s.title}>{s.title}</span>
+        <span title={s.title}>{n.kind === `${s.family}/model` ? "Model" : s.title}</span>
         {tag && (
           <span>
             {state === "done" && (
@@ -872,8 +906,17 @@ function Card({ id }: NodeProps) {
           </div>
         );
       })}
+      {size.length > 0 && (
+        <div className="gn-r">
+          <span>size</span>
+          <b>
+            {size[0].name === "mode" && value(size[0]) === "Auto" ? "Auto · " : ""}
+            {sizeText(num(size.at(-2)), num(size.at(-1)), size.at(-2)!.step)}
+          </b>
+        </div>
+      )}
       {s.params
-        .filter((x) => x !== merged)
+        .filter((x) => x !== merged && !size.includes(x))
         .map((x) => {
           if (loraFieldOf(x) && !wires[x.name]) {
             const v = g.overrides[`${id}.${x.name}`] ?? n.params?.[x.name] ?? x.default;

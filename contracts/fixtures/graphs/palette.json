@@ -258,8 +258,8 @@
                   "type": "float",
                   "label": "Strength",
                   "default": 1,
-                  "min": -4,
-                  "max": 4,
+                  "min": 0,
+                  "max": 2,
                   "step": 0.05
                 },
                 "mode": {
@@ -932,8 +932,8 @@
                   "type": "float",
                   "label": "Strength",
                   "default": 1,
-                  "min": -4,
-                  "max": 4,
+                  "min": 0,
+                  "max": 2,
                   "step": 0.05
                 },
                 "mode": {
@@ -968,7 +968,7 @@
         },
         {
           "kind": "qwen-image/encode",
-          "title": "Encode prompt",
+          "title": "Encode",
           "family": "qwen-image",
           "help": "Encodes the prompt and up to 10 reference images; with references the run is an edit.",
           "params": [
@@ -1517,8 +1517,8 @@
                   "type": "float",
                   "label": "Strength",
                   "default": 1,
-                  "min": -4,
-                  "max": 4,
+                  "min": 0,
+                  "max": 2,
                   "step": 0.05
                 },
                 "mode": {
@@ -1552,7 +1552,7 @@
         },
         {
           "kind": "ltx/encode",
-          "title": "Encode prompt",
+          "title": "Encode",
           "family": "ltx",
           "help": "Encodes the prompt (and its beats, as one prompt) for video and audio with Gemma 4 and the connector; the text encoder is unloaded before sampling.",
           "params": [
@@ -2416,7 +2416,7 @@
         },
         {
           "kind": "minimax-h3-image/encode",
-          "title": "Encode prompt",
+          "title": "Encode",
           "family": "minimax-h3-image",
           "help": "Encodes the prompt and up to 16 reference images; with references the run is an edit.",
           "params": [

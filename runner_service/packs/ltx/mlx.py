@@ -329,9 +329,17 @@ def keyframe_frames(cond: Cond, frames: int, fps: float) -> list[int]:
     return out
 
 
+class FirstFrame(VideoConditionByLatentIndex):
+    """VideoConditionByLatentIndex that keeps the state's `keyframes_mask`: the vendored apply drops it, so the DiT
+    lost the keyframe embedding on latent frame 0 (the reference marks frame 0 always; GOTCHAS: fixed 2026-11-20)."""
+
+    def apply(self, state: LatentState, spatial_dims) -> LatentState:
+        return replace(super().apply(state, spatial_dims), keyframes_mask=state.keyframes_mask)
+
+
 def _conditionings(ctx, model, cond: Cond, fhw, frames: int, fps: float) -> list:
     """_orchestration.combined_image_conditionings at the grid fhw: frame 0 replaces latent frame 0
-    (VideoConditionByLatentIndex), any other frame appends its tokens (VideoConditionByKeyframeIndex), in row order."""
+    (FirstFrame, the marker kept), any other frame appends its tokens (VideoConditionByKeyframeIndex), in row order."""
     if not cond.images:
         return []
     at = keyframe_frames(cond, frames, fps)
@@ -343,7 +351,7 @@ def _conditionings(ctx, model, cond: Cond, fhw, frames: int, fps: float) -> list
             to_pixels(rgb, fhw[1] * 32, fhw[2] * 32)[:, :, None, :, :]
         )  # (1, 128, 1, H, W)
         tokens = latent.transpose(0, 2, 3, 4, 1).reshape(1, -1, 128)
-        out.append(VideoConditionByLatentIndex(frame_indices=[0], clean_latent=tokens, strength=strength) if frame == 0
+        out.append(FirstFrame(frame_indices=[0], clean_latent=tokens, strength=strength) if frame == 0
                    else VideoConditionByKeyframeIndex(frame_idx=frame, keyframe_latent=tokens, spatial_dims=fhw,
                                                       frame_rate=fps, strength=strength))  # fmt: skip
     return out
@@ -477,8 +485,8 @@ def noised_state(
     """helpers.create_noised_state. scalar_blend (`legacy_scalar_blend`, video in both stages and stage-1 audio):
     noise * sigma + clean * (1 - sigma) with a Python sigma on the plain grid first, then the conditionings (so
     conditioned tokens start clean even at strength < 1); else conditionings, then noise_latent_state's mask * sigma
-    blend (stage-2 audio). Frame-0 replacement drops `keyframes_mask` (VideoConditionByLatentIndex.apply): copied
-    for parity with the goldens, though the reference marks frame 0 always (GOTCHAS: a probable port bug)."""
+    blend (stage-2 audio). The first latent frame is marked in `keyframes_mask`, an image at frame 0 included
+    (FirstFrame)."""
     latent = mx.zeros(shape, dtype=mx.bfloat16) if initial is None else initial
     mask = mx.ones((shape[0], shape[1], 1), dtype=mx.bfloat16)
     keyframes_ = (

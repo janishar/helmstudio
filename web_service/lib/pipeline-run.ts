@@ -23,14 +23,22 @@ export function runColumns(
   doc: PDoc | null,
   rows: Row[],
   titles: Record<string, string> = {},
+  /** workflow id → what it makes: a step's column is then named by it ("Step 1 · images") */
+  media: Record<string, string | undefined> = {},
 ): Column[] {
   const out: Column[] = [];
   if (doc) {
     const n = stepNumbers(doc);
     for (const id of order(doc)) {
-      const k = doc.nodes[id].kind;
+      const node = doc.nodes[id];
+      const k = node.kind;
+      const made = node.kind === "step" ? MEDIA_WORDS[media[node.workflow] ?? ""] : undefined;
       if (k === "step")
-        out.push({ node: id, kind: k, title: `Step ${n[id]} · ${nodeLabel(doc, id, titles)}` });
+        out.push({
+          node: id,
+          kind: k,
+          title: `Step ${n[id]} · ${made ?? nodeLabel(doc, id, titles)}`,
+        });
       else if (COLUMN_KINDS.has(k as Kind))
         out.push({ node: id, kind: k as Kind, title: nodeLabel(doc, id, titles) });
     }
@@ -41,6 +49,13 @@ export function runColumns(
         out.push({ node: c.node, kind: c.kind, title: c.node });
   return out;
 }
+
+/** A workflow's `media` as a run table column names it. */
+export const MEDIA_WORDS: Record<string, string> = {
+  image: "images",
+  video: "video",
+  text: "text",
+};
 
 /** One attempt of a cell as a line of the run table. Tones: ok (picked), run (running), warn (failed, rejected),
  * wait (waiting for a pick), plain. */
@@ -115,6 +130,35 @@ export function cellLines(cell: Cell | undefined): CellLine[] {
     }
   }
   return out;
+}
+
+/** A cell as the run table's one line (docs/mock/PipelineGraph: "done · 4 takes", "done · 2 attempts", "failed · did
+ * not fit in memory"): its last visit, a fanned-out one summed up, and the takes of that visit. */
+export function cellSummary(cell: Cell): Pick<CellLine, "text" | "tone" | "takes" | "error"> {
+  const lines = cellLines(cell);
+  const last = lines.at(-1);
+  if (!last) return { text: "—", tone: "", takes: [], error: null };
+  const visits = new Set(lines.map((l) => l.visit)).size;
+  const shots = cell.attempts.filter((a) => a.visit === last.visit);
+  const takes = shots.flatMap((a) => a.take_ids);
+  if (shots.length > 1) {
+    const done = shots.filter((a) => a.status === "succeeded").length;
+    const failed = shots.filter((a) => a.status === "failed").length;
+    const running = shots.some((a) => a.status === "running");
+    return {
+      text: `${plural(shots.length, "shot")} · ${done} done${failed ? ` · ${failed} failed` : ""}`,
+      tone: running ? "run" : failed ? "warn" : "",
+      takes,
+      error: null,
+    };
+  }
+  const text =
+    last.text.startsWith("done") && visits > 1
+      ? `done · ${visits} attempts`
+      : last.text === "done · 1 take" || last.text === "done · 0 takes"
+        ? "done"
+        : last.text;
+  return { text, tone: last.tone, takes: last.takes, error: last.error };
 }
 
 function lineOf(cell: Cell, a: Attempt): CellLine {
@@ -345,9 +389,13 @@ export function memorySource(
 export const initialPick = (item: S<"BatchReviewItem">) =>
   item.kind === "judge" ? (item.suggested ?? []) : [];
 
-/** A cell the row has not reached: skipped once the row ended, else nothing yet. */
+/** A cell the row has not reached: skipped once the row ended, parked while it waits for a pick, else nothing yet. */
 export const unreached = (r: Row) =>
-  ["failed", "cancelled", "succeeded"].includes(r.status) ? "skipped" : "—";
+  ["failed", "cancelled", "succeeded"].includes(r.status)
+    ? "skipped"
+    : r.status === "waiting"
+      ? "parked"
+      : "—";
 
 /** The takes the row ended with (its output's), and their first thumbnail. */
 export function rowTakes(r: Row): { ids: string[]; thumb: string | null } {
@@ -369,6 +417,31 @@ export function countFacts(c: S<"BatchCounts">): string[] {
   ].filter(Boolean);
 }
 
+/** Per step, the last batch's progress for its card (docs/mock/PipelineGraph: a bar, "5 / 12", running or done): the
+ * rows whose latest visit of it succeeded, of the batch's rows; running while any row runs it. */
+export function stepProgress(
+  doc: PDoc,
+  rows: Row[],
+  total: number,
+): Record<string, { done: number; total: number; state: "done" | "running" | "" }> {
+  const out: Record<string, { done: number; total: number; state: "done" | "running" | "" }> = {};
+  for (const [id, n] of Object.entries(doc.nodes)) {
+    if (n.kind !== "step") continue;
+    let done = 0;
+    let running = false;
+    for (const r of rows) {
+      const c = r.cells?.find((x) => x.node === id);
+      const last = c?.attempts.at(-1);
+      if (!c || !last) continue;
+      const visit = c.attempts.filter((a) => a.visit === last.visit);
+      if (visit.every((a) => a.status === "succeeded")) done++;
+      if (visit.some((a) => a.status === "running" || a.status === "queued")) running = true;
+    }
+    out[id] = { done, total, state: total && done >= total ? "done" : running ? "running" : "" };
+  }
+  return out;
+}
+
 /** Whether picks can be sent now (contracts: 409 on a stopped or failed batch, or while stopping). */
 export const canPick = (b: Batch) =>
   !!b.counts.waiting && b.status !== "stopped" && b.status !== "failed" && b.control !== "stop";
@@ -384,16 +457,23 @@ export type StepLine = {
   changed: string;
   status: "done" | "resumed" | "now";
   error: string | null;
+  /** What happened's colour (docs/mock/Execution): warn (an error, a judge that failed), ok (a judge that passed),
+   * now (where the row is) */
+  tone: "warn" | "ok" | "now" | "";
 };
 
-/** The step list of an execution: each graph step named by its pipeline node (and part, for a step's submit and
- * wait or a gate's route). */
+/** The step list of an execution: each graph step named by its pipeline node ("Step 1", as the board: no workflow
+ * title) and part, for a step's submit and wait or a gate's route. */
 export function stepLines(x: Exec, titles: Record<string, string> = {}): StepLine[] {
   const nums = stepNumbers(x.pipeline);
   const name = (id: string) =>
-    x.pipeline.nodes[id]?.kind === "step"
-      ? `Step ${nums[id]} · ${nodeLabel(x.pipeline, id, titles)}`
-      : nodeLabel(x.pipeline, id, titles);
+    x.pipeline.nodes[id]?.kind === "step" ? `Step ${nums[id]}` : nodeLabel(x.pipeline, id, titles);
+  const tone = (s: Exec["steps"][number]): StepLine["tone"] => {
+    const v = s.decision?.judge?.verdict;
+    if (s.error || v === "fail") return "warn";
+    if (s.status === "current") return "now";
+    return v === "pass" ? "ok" : "";
+  };
   return x.steps.map((s) => ({
     step: s.step,
     node: s.node,
@@ -407,8 +487,13 @@ export function stepLines(x: Exec, titles: Record<string, string> = {}): StepLin
     changed: s.changed.length ? s.changed.join(", ") : "—",
     status: s.status === "finished" ? "done" : s.status === "resumed" ? "resumed" : "now",
     error: s.error,
+    tone: tone(s),
   }));
 }
+
+/** "first attempt" … "fifth attempt", then "attempt 6" (docs/mock/Execution: "Row 6 · first attempt"). */
+export const attemptWords = (n: number) =>
+  ["first", "second", "third", "fourth", "fifth"][n - 1]?.concat(" attempt") ?? `attempt ${n}`;
 
 /** The graph as run: per node whether the row passed it, its visits and last status, and whether it is the node
  * the row is at now; per edge how many times it was taken. */

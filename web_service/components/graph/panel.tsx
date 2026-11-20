@@ -42,6 +42,18 @@ export function valueText(p: S<"ParamSchema">, v: unknown): string {
   return String(v ?? "");
 }
 
+const ENV_LABELS: Record<string, string> = { mlx: "MLX", native: "Native" };
+const DEVICES = { cuda: "CUDA", mps: "MPS", cpu: "CPU" } as const;
+/** A runner env as the board names it ("MLX"); torch by the devices of its hosts ("PyTorch CUDA"), MPS when none
+ * reports one (Apple silicon, the board's); another env as it is. */
+export function envText(env: string, hosts?: S<"Host">[] | null) {
+  if (env !== "torch") return ENV_LABELS[env] ?? env;
+  const kinds = new Set(
+    (hosts ?? []).filter((h) => h.env === env).map((h) => DEVICES[h.device?.kind ?? "mps"]),
+  );
+  return `PyTorch ${kinds.size ? [...kinds].join("/") : "MPS"}`;
+}
+
 /** Title of a node for lists: its schema's title, with the id when the title is shared. */
 export function nodeName(doc: Doc, schemas: Schemas, id: string): string {
   const title = schemas[doc.nodes[id]?.kind]?.title ?? id;
@@ -63,6 +75,7 @@ export function Panel({
   onParamSet,
   loraPick = false,
   onLoraPicked,
+  hosts,
 }: {
   doc: Doc;
   schemas: Schemas;
@@ -77,6 +90,8 @@ export function Panel({
   /** open this node's LoRA picker (its card's Add LoRA) */
   loraPick?: boolean;
   onLoraPicked?: () => void;
+  /** the runner hosts: what torch runs on */
+  hosts?: S<"Host">[] | null;
 }) {
   const n = doc.nodes[id];
   const s = schemas[n.kind];
@@ -123,8 +138,9 @@ export function Panel({
         title={s.title}
         sub={[
           groupTitle,
-          live?.envs.length ? `runs on ${live.envs.join(", ")}` : "no runner offers it now",
-          s.help,
+          live?.envs.length
+            ? `runs on ${live.envs.map((e) => envText(e, hosts)).join(", ")}`
+            : "no runner offers it now",
         ]
           .filter(Boolean)
           .join(" · ")}

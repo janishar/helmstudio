@@ -82,10 +82,10 @@ lora:                             # LoRAs: the generated qwen-image/lora-stack n
   ignore: []                      # fnmatch globs over raw keys counted as ignored, not unapplied
   modes: [adapter, bake]          # [bake] for a runtime without adapters yet
   max_rows: 8
-  strength: {min: -4, max: 4, default: 1}
+  strength: {min: 0, max: 2, default: 1}
 stages:                           # one node kind each: <family>/<stage>; the function <stage>() in torch.py
   encode:
-    title: Encode prompt
+    title: Encode
     help: Encodes the prompt and up to 10 reference images; with references the run is an edit.
     uses: [text_encoder, vae]     # the vae encodes the references          # the components it may ask for (admission, cache keys)
     inputs: {model: Model, prompt: Text}
@@ -419,7 +419,7 @@ Starter looks (contracts/README.md "Looks"): each file is a list; files are read
   name: Window                # 1-80 characters
   text: "soft daylight from a single window, deep falloff into shadow"   # <= 2000; default ""
   version: 1                  # >= 1, default 1: bump it when the look changes (reuse then says `changed`)
-  lora: {file: window.safetensors, strength: 0.8}   # optional; a file name (no path), strength -4..4 (default 1)
+  lora: {file: window.safetensors, strength: 0.8}   # optional; a file name (no path), strength 0..2 (default 1)
   image: window-light.webp    # optional thumbnail next to the YAML: PNG, JPEG or WebP, at most 2 MB
 ```
 

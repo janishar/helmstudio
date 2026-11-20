@@ -2,7 +2,7 @@
 // The rows editor for image references (plan 8.4): an ordered list of takes, added from the gallery picker or by
 // uploading (picker, drop, paste: the file becomes a gallery take first), removed, and reordered by drag or
 // Alt + arrow keys. Each item shows how the prompt names it (the param's `mention`, "<image1>").
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ImagePlus, Upload, X } from "lucide-react";
 import { Info } from "@/components/kit";
 import { GalleryPicker } from "@/components/gallery/picker";
@@ -444,6 +444,9 @@ export function RefThumbs({ ids, onPick }: { ids: string[]; onPick: (t: S<"Take"
   );
 }
 
+/** What opens a tile's picker: the composer's + calls the first one. */
+export type Opener = React.RefObject<(() => void) | null>;
+
 /** The composer's "First frame" tile (docs/mock/TextToVideo.dc.html): the take on the clip's first frame (`id`) and
  * how many other frames there are, or "None · text only"; it opens the gallery picker for one image. */
 export function FirstFrameTile({
@@ -452,6 +455,8 @@ export function FirstFrameTile({
   onPick,
   label = "First frame",
   empty = "None · text only",
+  card,
+  openerRef,
 }: {
   id?: string;
   more?: number;
@@ -459,8 +464,15 @@ export function FirstFrameTile({
   /** the tile's label (an image param's: "Last frame") and what it says with no take */
   label?: string;
   empty?: string;
+  /** a video workflow's tile (docs/mock/ImageToVideo.dc.html): the label over the value, the picture only with a take */
+  card?: boolean;
+  /** set to what opens the picker (the composer's +) */
+  openerRef?: Opener;
 }) {
   const [picking, setPicking] = useState(false);
+  useEffect(() => {
+    if (openerRef) openerRef.current = () => setPicking(true);
+  }, [openerRef]);
   const t = useTakes(id ? [id] : [])(id ?? "");
   const thumb = t ? safeUrl(t.thumb_url) : undefined;
   const name = id ? (t?.title ?? (t === null ? "gone" : "…")) : empty;
@@ -472,18 +484,44 @@ export function FirstFrameTile({
         aria-haspopup="dialog"
         aria-label={`${label}: ${shown}`}
         onClick={() => setPicking(true)}
-        className="bevel flex h-8 max-w-[28ch] items-center gap-2 rounded-lg bg-s3 pr-2.5 pl-1 text-[12px]"
+        className={
+          card
+            ? "bevel flex min-h-12 flex-[1_1_130px] items-center gap-2 rounded-xl bg-s3 px-3 py-1.5 text-left"
+            : "bevel flex h-8 max-w-[28ch] items-center gap-2 rounded-lg bg-s3 pr-2.5 pl-1 text-[12px]"
+        }
       >
         {thumb ? (
-          <img src={thumb} alt="" className="size-6 rounded-md object-cover" />
+          <img
+            src={thumb}
+            alt=""
+            className={
+              card ? "h-7 w-11 shrink-0 rounded-md object-cover" : "size-6 rounded-md object-cover"
+            }
+          />
+        ) : card ? (
+          id && (
+            <span
+              aria-hidden
+              className="h-7 w-11 shrink-0 rounded-md border border-dashed border-dash"
+            />
+          )
         ) : (
           <span
             aria-hidden
             className="size-6 shrink-0 rounded-md border border-dashed border-dash"
           />
         )}
-        <span className="mono text-[10px] text-t2">{label}</span>
-        <b className="truncate font-semibold">{shown}</b>
+        {card ? (
+          <span className="flex min-w-0 flex-col">
+            <small className="mono text-[10px] text-t2">{label}</small>
+            <b className="truncate text-[13px] font-semibold">{shown}</b>
+          </span>
+        ) : (
+          <>
+            <span className="mono text-[10px] text-t2">{label}</span>
+            <b className="truncate font-semibold">{shown}</b>
+          </>
+        )}
       </button>
       <GalleryPicker
         open={picking}

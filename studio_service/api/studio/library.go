@@ -90,6 +90,9 @@ func (s *Service) itemDTO(row libraryRow, names map[string]string) dto.LibraryIt
 func rowLoras(row libraryRow) []lookLora {
 	var out []lookLora
 	_ = json.Unmarshal(row.Loras, &out)
+	for i := range out {
+		out[i].Strength = dto.ClampStrength(out[i].Strength) // saved before API 1.23: -4..4
+	}
 	return slices.DeleteFunc(out, func(l lookLora) bool { return l.LoraID == nil })
 }
 
@@ -100,7 +103,7 @@ func (s *Service) starterDTO(l registry.LiveLook) dto.LibraryItem {
 		Version: l.Version, CreatedAt: l.PublishedAt, UpdatedAt: l.PublishedAt, Source: "starter", Family: &family,
 		Loras: []dto.LookLora{}}
 	for _, x := range l.Loras {
-		item := dto.LookLora{Name: x.Name, Strength: x.Strength}
+		item := dto.LookLora{Name: x.Name, Strength: dto.ClampStrength(x.Strength)}
 		if x.LoraID != nil {
 			item.Lora = &dto.LoraRef{LoraID: *x.LoraID}
 		}
@@ -118,7 +121,7 @@ func starterItem(l registry.LiveLook) lookItem {
 	out := lookItem{ID: l.ID, Source: "starter", Name: l.Name, Version: l.Version, Text: l.Text, Images: []string{},
 		Loras: []lookLora{}}
 	for _, x := range l.Loras {
-		out.Loras = append(out.Loras, lookLora{LoraID: x.LoraID, Name: x.Name, Strength: x.Strength})
+		out.Loras = append(out.Loras, lookLora{LoraID: x.LoraID, Name: x.Name, Strength: dto.ClampStrength(x.Strength)})
 	}
 	return out
 }
@@ -426,7 +429,7 @@ func (s *Service) fillFromTake(ctx context.Context, tx pgx.Tx, ownerID string, b
 		for _, l := range made.Loras {
 			if _, ok := usable[l.ID]; ok && !slices.Contains(seen, l.ID) && len(seen) < dto.MaxLookLoras {
 				seen = append(seen, l.ID)
-				strength := l.Strength
+				strength := dto.ClampStrength(l.Strength) // a take made before API 1.23 may hold -4..4
 				body.Loras = append(body.Loras, dto.LookLoraRef{Lora: &dto.LoraRef{LoraID: l.ID}, Strength: &strength})
 			}
 		}

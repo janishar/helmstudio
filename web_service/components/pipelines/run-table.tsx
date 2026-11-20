@@ -1,20 +1,20 @@
 "use client";
 // The run table of a pipeline batch (plan 8.3, docs/mock/PipelineGraph.dc.html's table): one line per row, one cell
-// per step, gate, judge, write, decide, agent and custom node the row reached (loop attempts stacked, a fanned-out
-// step's shots one per line, the first few then the rest summed up, each with its thumbnail, seed and
-// time; a judge's one line: its verdict and first failed criterion, opening its attempts side by side with each
-// take's reason per criterion, docs/mock/AgentNodes.dc.html), the takes it ended with, and per row Pick, Retry and
-// the execution view. Rows the director added or changed are marked (docs/mock/DirectorChat.dc.html).
+// per step, gate, judge, write, decide, agent and custom node the row reached, each one line of text (its last
+// visit: "done · 4 takes", "done · 2 attempts", a fanned-out step's shots summed up), opening its takes; a judge's
+// one line in its tone (its verdict and first failed criterion), opening its attempts side by side with each take's
+// reason per criterion (docs/mock/AgentNodes.dc.html); the takes it ended with, and per row Open in gallery, Pick
+// and Retry. The row's number opens its execution view. Rows the director added or changed are marked
+// (docs/mock/DirectorChat.dc.html).
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Activity } from "lucide-react";
 import { Modal } from "@/components/kit";
 import { api, ok, type S } from "@/lib/api";
 import { canRetry, inputSummary } from "@/lib/batches";
 import { safeUrl } from "@/lib/format";
 import {
   canPick,
-  cellLines,
+  cellSummary,
   judgeLine,
   judgeSummary,
   rowTakes,
@@ -45,6 +45,7 @@ export function RunTable({
   onRetry,
   onOpen,
   marks = {},
+  media,
 }: {
   batch: S<"Batch">;
   rows: Row[];
@@ -56,8 +57,10 @@ export function RunTable({
   onOpen: (ids: string[]) => void;
   /** the rows the director added or changed (lib/chat rowMarks) */
   marks?: Record<number, { how: "added" | "changed" }>;
+  /** workflow id → what it makes, to name a step's column by it */
+  media?: Record<string, string | undefined>;
 }) {
-  const cols = runColumns(doc, rows, titles);
+  const cols = runColumns(doc, rows, titles, media);
   const summarise = inputSummary(rows);
   const pick = canPick(b);
   const [judged, setJudged] = useState<{ row: Row; cell: S<"BatchCell">; title: string } | null>(
@@ -85,8 +88,17 @@ export function RunTable({
             const inputs = summarise(r);
             const out = rowTakes(r);
             return (
-              <tr key={r.row} className="align-top">
-                <td className="m">{r.row}</td>
+              <tr key={r.row}>
+                <td className="m">
+                  <Link
+                    href={`/pipelines/batches/${b.id}/rows/${r.row}`}
+                    title="Execution view"
+                    aria-label={`Row ${r.row}: execution view`}
+                    className="text-t2 no-underline hover:text-t1"
+                  >
+                    {r.row}
+                  </Link>
+                </td>
                 <td className="max-w-[240px]" title={inputs}>
                   <span className="block truncate">{inputs || "—"}</span>
                   {marks[r.row] && (
@@ -107,7 +119,7 @@ export function RunTable({
                         <button
                           type="button"
                           aria-haspopup="dialog"
-                          className={`chip bevel h-[30px] max-w-[280px] truncate ${TONE[j.tone]}`}
+                          className={`max-w-[280px] truncate p-0 text-left hover:underline ${TONE[j.tone]}`}
                           title="Every attempt with its reasons"
                           onClick={() => setJudged({ row: r, cell, title: c.title })}
                         >
@@ -116,53 +128,28 @@ export function RunTable({
                       </td>
                     );
                   }
-                  const lines = cellLines(cell);
-                  const visits = new Set(lines.map((l) => l.visit)).size;
-                  if (!lines.length)
+                  if (!cell?.attempts.length)
                     return (
                       <td key={c.node} className="m">
                         {unreached(r)}
                       </td>
                     );
+                  const l = cellSummary(cell);
+                  const tone = `max-w-[260px] truncate ${TONE[l.tone]}`;
                   return (
-                    <td key={c.node}>
-                      <div className="flex flex-col gap-1">
-                        {lines.map((l, i) => (
-                          <div
-                            key={`${l.visit}:${l.branch ?? ""}:${i}`}
-                            className="flex items-center gap-2"
-                          >
-                            {l.thumb && (
-                              <button
-                                type="button"
-                                className="shrink-0 p-0"
-                                aria-label={`Open the takes of row ${r.row}, ${c.title}${visits > 1 ? `, attempt ${l.visit}` : ""}${l.branch !== undefined ? `, shot ${l.branch + 1}` : ""}`}
-                                onClick={() => onOpen(l.takes)}
-                              >
-                                <img
-                                  src={safeUrl(l.thumb)}
-                                  alt=""
-                                  className="h-7 w-11 rounded-[5px] bg-s3 object-cover"
-                                />
-                              </button>
-                            )}
-                            <span className="flex min-w-0 flex-col">
-                              <span
-                                className={`max-w-[260px] truncate ${TONE[l.tone]}`}
-                                title={l.error ?? undefined}
-                              >
-                                {visits > 1 && `${l.visit} · `}
-                                {l.text}
-                              </span>
-                              {(l.seed || l.time) && (
-                                <span className="mono text-[11px] text-t2">
-                                  {[l.seed, l.time].filter(Boolean).join(" · ")}
-                                </span>
-                              )}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
+                    <td key={c.node} title={l.error ?? undefined}>
+                      {l.takes.length ? (
+                        <button
+                          type="button"
+                          className={`p-0 text-left hover:underline ${tone}`}
+                          aria-label={`Open the takes of row ${r.row}, ${c.title}: ${l.text}`}
+                          onClick={() => onOpen(l.takes)}
+                        >
+                          {l.text}
+                        </button>
+                      ) : (
+                        <span className={`block ${tone}`}>{l.text}</span>
+                      )}
                     </td>
                   );
                 })}
@@ -189,6 +176,11 @@ export function RunTable({
                 </td>
                 <td>
                   <span className="flex items-center gap-1.5">
+                    {r.status === "succeeded" && out.ids.length > 0 && (
+                      <Link href="/gallery" className="chip bevel h-[30px]">
+                        Open in gallery
+                      </Link>
+                    )}
                     {r.status === "waiting" && pick && (
                       <Link
                         href={`/pipelines/batches/${b.id}/review#row-${r.row}`}
@@ -207,14 +199,6 @@ export function RunTable({
                         Retry
                       </button>
                     )}
-                    <Link
-                      href={`/pipelines/batches/${b.id}/rows/${r.row}`}
-                      aria-label={`Row ${r.row}: execution view`}
-                      title="Execution view"
-                      className="grid h-[30px] w-9 place-items-center rounded-[10px] bg-s4 text-t1"
-                    >
-                      <Activity size={16} aria-hidden />
-                    </Link>
                   </span>
                 </td>
               </tr>

@@ -61,7 +61,8 @@ BARS = {
     "t2v-448x256-49f-s42": {"video_mean_db": 22.5, "video_worst_db": 18.0, "logmel_db": 1.25},
     "t2v-512x320-57f-s7": {"video_mean_db": 31.5, "video_worst_db": 30.0, "logmel_db": 0.95},
     # stage B, 0.32.4 measured 2026-11-15 (mean / worst dB, log-mel dB): the images anchor the clip, so i2v / kf
-    # drift little (42.19 / 39.34 / 1.479; 43.15 / 42.42 / 1.473); beats 23.25 / 16.53 / 1.526; the LoRA clip
+    # drift little (re-recorded 2026-11-20 with the frame-0 keyframe marker, GOTCHAS: 41.74 / 38.98 / 1.466;
+    # 43.45 / 42.60 / 1.489); beats 23.25 / 16.53 / 1.526; the LoRA clip
     # 26.91 / 23.73 / 1.154 (its fused weights are bit-equal on 0.32.4 too: quantize / dequantize did not change)
     "i2v-448x256-49f-s42": {"video_mean_db": 41.5, "video_worst_db": 38.5, "logmel_db": 1.6},
     "kf-448x256-49f-s42": {"video_mean_db": 42.5, "video_worst_db": 41.5, "logmel_db": 1.6},

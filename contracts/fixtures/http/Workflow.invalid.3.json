@@ -251,7 +251,7 @@
     },
     "ltx/encode": {
       "kind": "ltx/encode",
-      "title": "Encode prompt",
+      "title": "Encode",
       "family": "ltx",
       "help": "Encodes the prompt for video and audio with Gemma 4 and the connector; the text encoder is unloaded before sampling.",
       "params": [],

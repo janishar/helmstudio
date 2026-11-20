@@ -4,6 +4,7 @@
 // with the sequence's defaults (the cast typed into the prompt as mentions, the looks sent as RunRequest.looks) and
 // offers start/end keyframes only when the workflow (or its family's image-to-video template) has them.
 import Link from "next/link";
+import { Minus, Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ErrorNote } from "@/components/kit";
 import { PromptArea } from "@/components/create/prompt";
@@ -11,7 +12,15 @@ import { useLibrary } from "@/lib/library";
 import { api, message, ok, type S } from "@/lib/api";
 import { mediaOf, snapFrames, gridOf } from "@/lib/media";
 import { clipOf } from "@/lib/video";
-import { buildInputs, fields as fieldsOf, rawsFrom, toRaw, type Raw } from "@/lib/workflow";
+import {
+  buildInputs,
+  fields as fieldsOf,
+  pretty,
+  queueInputs,
+  rawsFrom,
+  toRaw,
+  type Raw,
+} from "@/lib/workflow";
 import {
   Grid,
   kindOf,
@@ -24,6 +33,9 @@ import {
 } from "@/lib/timeline";
 
 type Workflow = S<"Workflow">;
+
+/** The most runs one Generate shot queues (consecutive seeds), as Create's stepper. */
+const MAX_SEEDS = 4;
 type Timeline = S<"Timeline">;
 
 /** Where the shot goes: a new slot at the playhead, an empty slot, or a clip redone with its own settings. */
@@ -73,6 +85,15 @@ async function frameTake(takeId: string, at: "first" | "last"): Promise<string> 
   return job.take_id;
 }
 
+/** The element is an open popover (Escape then closes only it). jsdom knows no :popover-open. */
+function popOpen(el: Element | null) {
+  try {
+    return !!el?.matches(":popover-open");
+  } catch {
+    return false;
+  }
+}
+
 export function ShotComposer({
   tl,
   doc,
@@ -87,7 +108,8 @@ export function ShotComposer({
   facts: Takes;
   slot: ShotSlot;
   workflows: Workflow[];
-  onDone: (t: Timeline) => void;
+  /** the shot made; `note`: what did not run (more seeds with no session to run them in) */
+  onDone: (t: Timeline, note?: string) => void;
   onClose: () => void;
 }) {
   const video = useMemo(() => workflows.filter((w) => mediaOf(w) === "video"), [workflows]);
@@ -108,6 +130,7 @@ export function ShotComposer({
   const [start, setStart] = useState(false);
   const [end, setEnd] = useState(false);
   const [frames, setFrames] = useState<number | null>(null);
+  const [count, setCount] = useState(1);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const library = useLibrary();
@@ -135,6 +158,12 @@ export function ShotComposer({
   const fields = useMemo(() => (workflow ? fieldsOf(workflow) : []), [workflow]);
   const promptField = fields.find((f) => f.param.type === "text");
   const framesField = fields.find((f) => f.param.type === "frames");
+  const seedField = fields.find((f) => f.param.type === "seed");
+  // the workflow chip names the model: "LTX-2.5 · Distilled" (its model node's title and variant), else the title
+  const variant = fields.find((f) => f.model && f.param.name === "variant");
+  const modelText = variant
+    ? `${variant.nodeTitle} · ${pretty(String(raws[variant.key] ?? variant.initial))}`
+    : (workflow?.title ?? "Workflow");
   // the start / end frame options: this workflow's keyframes, else its family's template that has them
   const kfw = workflow?.keyframes
     ? workflow
@@ -200,8 +229,10 @@ export function ShotComposer({
         r[`${kf.param}`] = rows;
       }
       const built = buildInputs(fields, r);
-      const bad = Object.entries(built.errors)[0];
+      const queued = queueInputs(fields, built.inputs, seedField ? count : 1);
+      const bad = Object.entries({ ...built.errors, ...queued.errors })[0];
       if (bad) throw new Error(`${bad[0]}: ${bad[1]}`);
+      const looks = tl.defaults.looks.length ? { looks: tl.defaults.looks } : {};
       const shotSlot: S<"TimelineSlot"> =
         "clip" in slot
           ? { clip: slot.clip }
@@ -211,15 +242,25 @@ export function ShotComposer({
           params: { path: { timeline_id: tl.id } },
           body: {
             slot: shotSlot,
-            run: {
-              workflow_id: workflow.id,
-              inputs: built.inputs,
-              ...(tl.defaults.looks.length && { looks: tl.defaults.looks }),
-            },
+            run: { workflow_id: workflow.id, inputs: queued.runs[0], ...looks },
           },
         }),
       );
-      onDone(res.timeline);
+      // the other seeds run in the sequence's session: their takes land in Add clips and the gallery
+      const sid = res.timeline.session_id;
+      for (const inputs of sid ? queued.runs.slice(1) : [])
+        await ok(
+          api.POST("/v1/studio/sessions/{session_id}/runs", {
+            params: { path: { session_id: sid! } },
+            body: { workflow_id: workflow.id, inputs, ...looks },
+          }),
+        );
+      onDone(
+        res.timeline,
+        !sid && queued.runs.length > 1
+          ? "Only the first seed ran: this sequence has no session."
+          : undefined,
+      );
     } catch (e) {
       setError(message(e));
     } finally {
@@ -239,6 +280,10 @@ export function ShotComposer({
   return (
     <section
       aria-label="New shot"
+      // the board draws no Close: Escape (or New shot again) leaves the composer
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && !popOpen(e.currentTarget.querySelector("[popover]"))) onClose();
+      }}
       className="flex flex-col gap-2.5 rounded-[28px_28px_28px_12px] border border-s5 bg-s2 px-3.5 py-3 shadow-[0_16px_40px_color-mix(in_srgb,var(--shd)_50%,transparent)]"
     >
       <div className="flex flex-wrap items-center gap-2">
@@ -288,24 +333,46 @@ export function ShotComposer({
         </>
       )}
       <div className="flex flex-wrap items-center gap-2">
-        <label htmlFor="shot-workflow" className="sr-only">
-          Workflow
-        </label>
-        <select
-          id="shot-workflow"
+        <button
+          type="button"
+          popoverTarget="shot-workflow"
           className="chip bevel rounded-[10px] text-t1"
-          value={workflowId}
-          onChange={(e) => {
-            const w = video.find((x) => x.id === e.target.value);
-            if (w) pick(w);
-          }}
+          title={workflow?.title}
+          style={{ anchorName: "--shot-workflow" } as React.CSSProperties}
         >
-          {video.map((w) => (
-            <option key={w.id} value={w.id}>
-              {w.title}
-            </option>
-          ))}
-        </select>
+          {modelText}
+        </button>
+        <div
+          id="shot-workflow"
+          popover="auto"
+          role="dialog"
+          aria-label="Workflow"
+          className="pop w-64"
+          style={
+            {
+              positionAnchor: "--shot-workflow",
+              positionArea: "top span-right",
+              marginBottom: 6,
+            } as React.CSSProperties
+          }
+        >
+          <div className="flex flex-col gap-1.5">
+            {video.map((w) => (
+              <button
+                key={w.id}
+                type="button"
+                className="opt bevel px-3 text-left text-[13px]"
+                aria-pressed={w.id === workflowId}
+                onClick={(e) => {
+                  pick(w);
+                  e.currentTarget.closest<HTMLElement>("[popover]")?.hidePopover?.();
+                }}
+              >
+                {w.title}
+              </button>
+            ))}
+          </div>
+        </div>
         {framesField && nFrames && (
           <>
             <label htmlFor="shot-length" className="sr-only">
@@ -313,7 +380,7 @@ export function ShotComposer({
             </label>
             <select
               id="shot-length"
-              className="chip bevel rounded-[10px] text-t1"
+              className="chip bevel appearance-none rounded-[10px] text-t1"
               disabled={fixedLen !== null}
               value={nFrames}
               onChange={(e) => setFrames(Number(e.target.value))}
@@ -326,6 +393,35 @@ export function ShotComposer({
             </select>
           </>
         )}
+        {seedField && (
+          <div
+            role="group"
+            aria-label="Seeds to queue"
+            className="bevel flex h-9 items-center rounded-[10px] bg-s4 text-[13px] font-medium"
+          >
+            <button
+              type="button"
+              aria-label="Fewer seeds"
+              disabled={count <= 1}
+              onClick={() => setCount((n) => n - 1)}
+              className="grid size-9 place-items-center rounded-[10px] disabled:text-t2 disabled:opacity-60"
+            >
+              <Minus size={14} aria-hidden />
+            </button>
+            <span className="mono" aria-live="polite">
+              {count} / {MAX_SEEDS}
+            </span>
+            <button
+              type="button"
+              aria-label="More seeds"
+              disabled={count >= MAX_SEEDS}
+              onClick={() => setCount((n) => n + 1)}
+              className="grid size-9 place-items-center rounded-[10px] disabled:text-t2 disabled:opacity-60"
+            >
+              <Plus size={14} aria-hidden />
+            </button>
+          </div>
+        )}
         {tl.session_id && (
           <Link
             href={`/?s=${encodeURIComponent(tl.session_id)}`}
@@ -334,9 +430,6 @@ export function ShotComposer({
             Open in Create
           </Link>
         )}
-        <button type="button" className="chip bevel rounded-[10px]" onClick={onClose}>
-          Close
-        </button>
         <div className="grow" />
         <button
           type="button"

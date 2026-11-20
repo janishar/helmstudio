@@ -276,7 +276,7 @@ func TestLoraRuns(t *testing.T) {
 		{[]any{row(mine, 1, "adapter"), row(fluxStyle, 1, "adapter")}, "lora.rows[2].lora: LoRA flux-style does not fit qwen-image (its model is unknown)"},
 		{[]any{row(unknown, 1, "adapter")}, "lora.rows[1].lora: LoRA flux does not fit qwen-image (its model is unknown)"},
 		{[]any{row(mine, 1, "adapter"), row(inkWash, 1, "bake"), row(mine, 0.5, "adapter")}, "lora.rows[3].lora: LoRA sketch is already in row 1"},
-		{[]any{row(mine, 5, "adapter")}, "lora.rows[1].strength: must be between -4 and 4"},
+		{[]any{row(mine, 5, "adapter")}, "lora.rows[1].strength: must be between 0 and 2"},
 		{[]any{map[string]any{"strength": 1}}, "lora.rows[1].lora: a LoRA is required"},
 		{[]any{map[string]any{"lora": map[string]any{"lora_id": mine, "key": "u/x"}}}, `lora.rows[1].lora: must be {"lora_id": <id>}`},
 	} {

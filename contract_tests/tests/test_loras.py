@@ -521,7 +521,7 @@ def test_empty_stack_is_the_identity(ul, sid, lwf):
 def test_run_records_its_loras(ul, sid, lwf, ready):
     p, k = ready["peft"], ready["kohya"]
     take = run_take(
-        ul, sid, lwf["id"], {ROWS: [row(p["id"], 0.8, mode="adapter"), row(k["id"], -1)]}
+        ul, sid, lwf["id"], {ROWS: [row(p["id"], 0.8, mode="adapter"), row(k["id"], 1.5)]}
     )
     mw = take["made_with"]
     assert mw["loras"] == [
@@ -539,7 +539,7 @@ def test_run_records_its_loras(ul, sid, lwf, ready):
             "id": k["id"],
             "source": "mine",
             "name": k["name"],
-            "strength": -1,
+            "strength": 1.5,
             "mode": "adapter",
             "sha256": k["sha256"],
         },
@@ -568,7 +568,8 @@ def test_run_refusals(ul, anon, sid, lwf, ready, need_stack):
     put(anon, bad, b"\x80\x04" + bytes(64))
     assert complete(ul, bad["lora"]["id"]).status_code == 422
     for rows, want in (
-        ([row(p["id"], 4.5)], "lora.rows[1].strength: must be between -4 and 4"),
+        ([row(p["id"], 2.5)], "lora.rows[1].strength: must be between 0 and 2"),
+        ([row(p["id"], -0.5)], "lora.rows[1].strength: must be between 0 and 2"),
         (
             [row(p["id"]), row(p["id"], 0.5)],
             f"lora.rows[2].lora: LoRA {p['name']} is already in row 1",

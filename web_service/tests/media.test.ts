@@ -180,7 +180,7 @@ describe("video takes and the run strip", () => {
   it("numbers twin nodes and lists the stages in graph order with their steps", () => {
     expect(nodeLabel(ltx, "sample1")).toBe("Sample 1");
     expect(nodeLabel(ltx, "sample2")).toBe("Sample 2");
-    expect(nodeLabel(ltx, "encode")).toBe("Encode prompt");
+    expect(nodeLabel(ltx, "encode")).toBe("Encode");
     const run = {
       id: "r",
       workflow_id: ltx.id,
@@ -190,7 +190,7 @@ describe("video takes and the run strip", () => {
       outputs: [],
     } as unknown as S<"Run">;
     expect(segments(ltx, run).map((x) => [x.title, x.state, x.steps])).toEqual([
-      ["Encode prompt", "done", undefined],
+      ["Encode", "done", undefined],
       ["Sample 1", "active", undefined],
       ["Upscale latent", "pending", undefined],
       ["Sample 2", "pending", 3],

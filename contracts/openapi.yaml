@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.22.0
+  version: 1.23.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -27,7 +27,7 @@ servers:
 security:
   - {ApiKey: [], BearerJWT: []}
 tags:
-  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media)'}
+  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media); from 1.23 LoRA strengths 0..2 (looks saved before are clamped when read; contracts/README.md, Looks)'}
   - {name: files, description: signed file downloads and uploads}
   - name: auth
     description: 'auth_service: users, sessions (JWT access + rotating refresh tokens), roles, client API keys'
@@ -683,7 +683,7 @@ paths:
         another user's, deleted, pending or rejected, or a shared id no live host of the env lists: one message, nothing
         leaks), `lora.rows[2].lora: LoRA <name> does not fit qwen-image (it is for <family>)` (or `(its model is
         unknown)`), `lora.rows[2].lora: LoRA <name> is already in row 1`; strength and mode are checked by the run rules
-        (`lora.rows[1].strength: must be between -4 and 4`), the row count by `max` (`lora.rows: at most 8 items`). A
+        (`lora.rows[1].strength: must be between 0 and 2`), the row count by `max` (`lora.rows: at most 8 items`). A
         shared LoRA no live host of the env has at dispatch fails the run `no live host for env <env> has LoRA
         <name>`.
 
@@ -4031,7 +4031,7 @@ components:
       properties:
         lora: {oneOf: [{$ref: '#/components/schemas/LoraRef'}, {type: 'null'}], description: 'the LoRA; null only for a starter look whose file no live host has (the look then does not fit anything)'}
         name: {type: string, minLength: 1, maxLength: 80, description: 'own look: the LoRA''s name now (as recorded when it is gone); starter look: the file name without .safetensors'}
-        strength: {type: number, minimum: -4, maximum: 4}
+        strength: {type: number, minimum: 0, maximum: 2}
     LibraryItem:
       type: object
       description: |
@@ -4080,7 +4080,7 @@ components:
       additionalProperties: false
       properties:
         lora: {$ref: '#/components/schemas/LoraRef'}
-        strength: {type: number, minimum: -4, maximum: 4, description: 'the strength the look applies it at'}
+        strength: {type: number, minimum: 0, maximum: 2, description: 'the strength the look applies it at (from 1.23 0..2)'}
     LibraryFromTake:
       type: object
       required: [take_id]

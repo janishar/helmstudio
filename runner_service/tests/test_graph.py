@@ -445,7 +445,7 @@ def test_a_row_field_left_out_takes_its_default():
     assert nodes["lora"]["params"]["rows"] == [{"lora": SHARED, "mode": "adapter", "strength": 1}]
     bad = lora_nodes([{"lora": SHARED, "mode": "adapter", "strength": 9}])
     assert graph.validate(bad, _qwen_schemas()) == [
-        "lora.rows item 1.strength is above the maximum 4"
+        "lora.rows item 1.strength is above the maximum 2"
     ]
 
 

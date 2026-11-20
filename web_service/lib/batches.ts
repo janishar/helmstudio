@@ -1,6 +1,6 @@
 // Batches (contracts/openapi.yaml `BatchCreate`, `Batch`, `BatchRow`, `BatchEvent`): building the rows in the
 // browser (lines, a CSV table, a grid), the run maths, and folding the batch's events into what the screens show.
-import type { S } from "@/lib/api";
+import { api, message, ok, type S } from "@/lib/api";
 import { cellRef, imageFieldOf } from "@/lib/refs";
 import { readValue, type Field } from "@/lib/workflow";
 
@@ -224,6 +224,33 @@ export const canResume = (b: Batch) =>
 export const canStop = (b: Batch) => !ended(b) && b.control !== "stop";
 export const canRetry = (b: Batch, r: Row) =>
   r.status === "failed" && b.status !== "failed" && b.status !== "stopped" && b.control !== "stop";
+
+/** Retry failed: a retry for each row `canRetry` allows, page by page; a row that is refused (a 409: the open-batch
+ * cap, a row already queued) does not stop the rest. `onRow` gets each retried row; the answer is the refusals. */
+export async function retryFailedRows(b: Batch, onRow?: (r: Row) => void): Promise<string[]> {
+  const errors: string[] = [];
+  let cursor: string | null | undefined;
+  do {
+    const p = await ok(
+      api.GET("/v1/studio/batches/{batch_id}/rows", {
+        params: { path: { batch_id: b.id }, query: { limit: 200, ...(cursor ? { cursor } : {}) } },
+      }),
+    );
+    for (const r of p.rows.filter((x) => canRetry(b, x)))
+      try {
+        const row = await ok(
+          api.POST("/v1/studio/batches/{batch_id}/rows/{row}/retry", {
+            params: { path: { batch_id: b.id, row: String(r.row) } },
+          }),
+        );
+        onRow?.(row);
+      } catch (e) {
+        errors.push(`Row ${r.row}: ${message(e)}`);
+      }
+    cursor = p.next_cursor;
+  } while (cursor);
+  return errors;
+}
 
 /** A row's state as the run table shows it: "done · 4 takes", "failed · <error>", "queued". */
 export function rowState(r: Row): string {

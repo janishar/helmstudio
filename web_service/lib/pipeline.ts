@@ -1018,14 +1018,13 @@ export function stepNumbers(doc: PDoc): Record<string, number> {
   return Object.fromEntries(steps.map((id, i) => [id, i + 1]));
 }
 
-/** A one-line description of a pipeline for its card tags: steps, gates, agent nodes, loops. */
+/** A pipeline's card tags (docs/mock/Pipelines.dc.html): its agent nodes ("No agent nodes"), loops, chat, fan-out,
+ * remote calls. */
 export function facts(doc: PDoc): string[] {
   const ns = Object.values(doc.nodes);
-  const count = (k: Kind) => ns.filter((n) => n.kind === k).length;
   const s = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
   const agents = ns.filter((n) => isAgent(n.kind)).length;
-  const out = [s(count("step"), "step"), s(count("gate"), "gate")];
-  if (agents) out.push(s(agents, "agent node"));
+  const out = [agents ? s(agents, "agent node") : "No agent nodes"];
   for (const [, to] of doc.edges)
     if (typeof to !== "string") out.push(`retry loop · cap ${to.max}`);
   if (directorOf(doc)) out.push("chat");

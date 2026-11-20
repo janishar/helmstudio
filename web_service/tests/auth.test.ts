@@ -318,6 +318,18 @@ describe("proxy on an expiring session", () => {
   });
 });
 
+describe("a signed-out visitor", () => {
+  it("sees the landing page at /, and goes to /signin from anywhere else", async () => {
+    const home = await proxy(new NextRequest("http://web/"));
+    expect(home.headers.get("x-middleware-rewrite")).toBe("http://web/welcome");
+    expect(home.headers.get("location")).toBeNull();
+    const admin = await proxy(new NextRequest("http://web/admin"));
+    expect(admin.headers.get("location")).toBe("http://web/signin?next=%2Fadmin");
+    const welcome = await proxy(new NextRequest("http://web/welcome"));
+    expect(welcome.headers.get("x-middleware-next")).toBe("1");
+  });
+});
+
 describe("a session the API refused", () => {
   it("clears both cookies and keeps a safe next", () => {
     const res = expiredGET(new NextRequest("http://web/signin/expired?next=%2Fadmin%3Fx%3D1"));

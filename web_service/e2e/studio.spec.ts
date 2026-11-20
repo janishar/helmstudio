@@ -15,9 +15,23 @@ test.afterAll(() => page?.close());
 
 const takes = () => page.getByRole("group", { name: "Takes" });
 
-test("sign in: a wrong password is refused, the right one opens Create", async () => {
+test("signed out, / is the landing page, and its Sign in opens /signin", async () => {
   await page.goto("/");
-  await expect(page).toHaveURL(/\/signin/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "Wire the models.Direct the film.",
+  );
+  await expect(page).toHaveURL(/\/$/);
+  await page
+    .getByRole("navigation", { name: "Site" })
+    .getByRole("link", { name: "Sign in" })
+    .click();
+  await expect(page).toHaveURL(/\/signin$/);
+  await page.goto("/gallery"); // any other page still goes to /signin, back there afterwards
+  await expect(page).toHaveURL(/\/signin\?next=%2Fgallery$/);
+});
+
+test("sign in: a wrong password is refused, the right one opens Create", async () => {
+  await page.goto("/signin");
   await page.getByLabel("Email").fill(user.email);
   await page.getByLabel("Password").fill("not the password");
   await page.getByRole("button", { name: "Sign in" }).click();

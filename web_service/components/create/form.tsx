@@ -5,7 +5,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { ChevronRight, Dices } from "lucide-react";
 import { Info } from "@/components/kit";
 import { PromptArea } from "@/components/create/prompt";
-import { FirstFrameTile, RowsEditor, type RefUploads } from "@/components/create/refs";
+import { FirstFrameTile, RowsEditor, type Opener, type RefUploads } from "@/components/create/refs";
 import { LoraRows } from "@/components/create/loras";
 import {
   ExtendControl,
@@ -142,7 +142,7 @@ function useAutoRef(fs: Field[], raws: Record<string, Raw>) {
 }
 
 /** "16:9 · 4 MP", else "1000 × 700 · 0.7 MP". */
-const sizeText = (w: number, h: number, grid = 1) =>
+export const sizeText = (w: number, h: number, grid = 1) =>
   `${aspectOf(w, h, grid) ?? `${w} × ${h}`} · ${mpText(w, h)}`;
 /** "0.3 MP"; under 0.1 MP two significant digits ("0.033 MP"), never "0 MP". */
 const mpText = (w: number, h: number) => {
@@ -193,6 +193,7 @@ export function Inspector({
   resolved,
   presets,
   grid = null,
+  stage1,
 }: FormProps &
   OpenProps & {
     uploads: RefUploads;
@@ -206,6 +207,8 @@ export function Inspector({
     presets?: Record<string, Record<string, S<"ParamValue">>>;
     /** the family's frame grid: what a span, an extension or a part comes to */
     grid?: FrameGrid | null;
+    /** a two-stage workflow: stage 1 runs at the canvas divided by this (LTX: 2) */
+    stage1?: number;
   }) {
   const s = sections(fields);
   const ext = extensionOf(fields);
@@ -238,7 +241,7 @@ export function Inspector({
           switches={fields
             .filter((x) => x.node === f.node && x.param.type === "bool")
             .map((x) => (
-              <Switch key={x.key} f={x} raw={rawOf(x, raws)} onChange={onChange} />
+              <Switch key={x.key} f={x} raw={rawOf(x, raws)} onChange={onChange} note />
             ))}
         />
       );
@@ -256,6 +259,7 @@ export function Inspector({
           error={errors[f.key]}
           onChange={onChange}
           resolved={resolved?.[f.key]}
+          plain={compact}
         />
       );
     if (f.param.type === "string" || f.param.type === "text")
@@ -308,7 +312,7 @@ export function Inspector({
     gap = "gap-2.5",
   ) =>
     (fs.length > 0 || head) && (
-      <section aria-labelledby={id} className={`flex flex-col ${gap}`}>
+      <section key={id} aria-labelledby={id} className={`flex flex-col ${gap}`}>
         <h2 id={id} className="heading flex items-center">
           {title}
           {help && <Info>{help}</Info>}
@@ -343,14 +347,22 @@ export function Inspector({
               ))}
               {refs.map(rowsEditor)}
               {canvas && (
-                <CanvasPicker c={c} errors={errors} onChange={onChange} compact={compact} />
+                <CanvasPicker
+                  c={c}
+                  errors={errors}
+                  onChange={onChange}
+                  compact={compact}
+                  stage1={stage1}
+                />
               )}
             </>
           ),
           loras[0]
             ? loraHelp(familyTitle ?? loras[0].family ?? "this model", loras[0])
             : (refs[0]?.param.help ??
-                (g.fields.length === 1 && s.media.includes(g.fields[0])
+                (g.fields.length === 1 &&
+                s.media.includes(g.fields[0]) &&
+                g.fields[0].param.type === "media"
                   ? g.fields[0].param.help
                   : undefined)),
         );
@@ -369,7 +381,15 @@ export function Inspector({
         "sec-canvas",
         "Canvas",
         extra,
-        c && <CanvasPicker c={c} errors={errors} onChange={onChange} compact={compact} />,
+        c && (
+          <CanvasPicker
+            c={c}
+            errors={errors}
+            onChange={onChange}
+            compact={compact}
+            stage1={stage1}
+          />
+        ),
         s.canvas[0]?.nodeHelp,
       )}
       {section("sec-duration", "Duration", s.duration, undefined, s.duration[0]?.nodeHelp)}
@@ -395,11 +415,13 @@ function CanvasPicker({
   errors,
   onChange,
   compact,
+  stage1,
 }: {
   c: NonNullable<ReturnType<typeof canvasOf>>;
   errors: Record<string, string>;
   onChange: (key: string, raw: Raw) => void;
   compact?: boolean;
+  stage1?: number;
 }) {
   const { width, height, mode, w, h } = c;
   // compact: which tile's choices are open
@@ -495,10 +517,14 @@ function CanvasPicker({
         ))}
       </div>
       <span className="mono text-[12px] text-t2">
-        {w} × {h} · {mpText(w, h)}
+        {/* a video's line has no megapixels (the Size tile says them); a two-stage one adds stage 1's size
+            (docs/mock/TextToVideo.dc.html) */}
+        {w} × {h}
+        {!compact && ` · ${mpText(w, h)}`}
         {c.fromRef
           ? ` · from the ${c.first ? "first" : "last"} reference`
           : grid > 1 && ` · on the ${grid} px grid`}
+        {stage1 && ` · stage 1 runs at ${Math.round(w / stage1)} × ${Math.round(h / stage1)}`}
       </span>
       <FieldError k={width.key} errors={errors} />
       <FieldError k={height.key} errors={errors} />
@@ -522,6 +548,7 @@ function Duration({
   error,
   onChange,
   resolved,
+  plain,
 }: {
   f: Field;
   raw: Raw;
@@ -529,6 +556,8 @@ function Duration({
   error?: string;
   onChange: (key: string, raw: Raw) => void;
   resolved?: number;
+  /** without the (i) (a video workflow's Length, docs/mock/TextToVideo.dc.html) */
+  plain?: boolean;
 }) {
   const id = idOf(f.key);
   const g = gridOf(f.param);
@@ -543,7 +572,7 @@ function Duration({
       <label htmlFor={id} className="flex justify-between gap-2">
         <span className="flex items-center">
           {f.param.label ?? f.param.name}
-          {f.param.help && <Info>{f.param.help}</Info>}
+          {f.param.help && !plain && <Info>{f.param.help}</Info>}
         </span>
         <span className="mono text-[12px] text-t2">{text}</span>
       </label>
@@ -828,19 +857,29 @@ export function Switch({
   f,
   raw,
   onChange,
+  note,
 }: {
   f: Field;
   raw: Raw;
   onChange: (key: string, raw: Raw) => void;
+  /** the help as a line under the label, not an (i) (a span's switch, docs/mock/VideoSource.dc.html) */
+  note?: boolean;
 }) {
   const id = idOf(f.key);
   const on = raw === true;
   return (
     <div className="col-span-2 flex items-center justify-between gap-3">
-      <span className="flex items-center">
-        <span id={id + "-l"}>{f.param.label ?? f.param.name}</span>
-        {f.param.help && <Info>{f.param.help}</Info>}
-      </span>
+      {note ? (
+        <span className="flex flex-col gap-0.5">
+          <span id={id + "-l"}>{f.param.label ?? f.param.name}</span>
+          {f.param.help && <span className="text-[12px] text-t2">{f.param.help}</span>}
+        </span>
+      ) : (
+        <span className="flex items-center">
+          <span id={id + "-l"}>{f.param.label ?? f.param.name}</span>
+          {f.param.help && <Info>{f.param.help}</Info>}
+        </span>
+      )}
       <button
         id={id}
         type="button"
@@ -901,14 +940,18 @@ export function Chips({
   compact,
   toggles = [],
   models,
+  family,
 }: Omit<FormProps, "errors"> & {
   show: (key: string) => void;
   /** a video workflow's chips (docs/mock/TextToVideo.dc.html): the size as w × h, no seed chip */
   compact?: boolean;
   /** bool params placed on the composer (`studio.quick`): a chip each that switches it ("Audio on") */
   toggles?: Field[];
-  /** a Studio block's unplaced model choices: the chip still names them (docs/mock/CreateEnhance.dc.html), read-only */
+  /** a Studio block's model choices outside the inspector's sections: the chip names them
+   * (docs/mock/CreateEnhance.dc.html); one placed in `fields` with several values is picked from the chip's menu */
   models?: Field[];
+  /** the family's title: a chip naming one choice leads with it ("LTX-2.5 · Distilled") */
+  family?: string;
 }) {
   const s = sections(fields);
   const model = (models ?? s.tiles).filter((f) => f.model && f.param.type === "enum");
@@ -918,14 +961,79 @@ export function Chips({
   const frames = s.duration.filter((f) => f.param.type === "frames");
   const chip = "chip bevel rounded-[10px] bg-s4";
   const random = seed && rawOf(seed, raws) === "";
+  // the chip's menu: the choices placed in the form that have more than one value
+  const pickable = (models ?? []).filter(
+    (f) => fields.some((x) => x.key === f.key) && (f.param.enum?.length ?? 0) > 1,
+  );
+  const named = model.map((f) => pretty(String(rawOf(f, raws))));
+  const modelText = (named.length === 1 && family ? [family, ...named] : named).join(" · ");
   return (
     <>
-      {first && models && (
+      {first && models && pickable.length > 0 && (
+        <>
+          <button
+            type="button"
+            popoverTarget="model-pick"
+            className={chip}
+            title={model.map((f) => f.param.label ?? f.param.name).join(" · ")}
+            style={{ anchorName: "--model-pick" } as React.CSSProperties}
+          >
+            {modelText}
+          </button>
+          <div
+            id="model-pick"
+            popover="auto"
+            role="dialog"
+            aria-label="Model"
+            className="pop w-64"
+            style={
+              {
+                positionAnchor: "--model-pick",
+                positionArea: "top span-right",
+                marginBottom: 6,
+              } as React.CSSProperties
+            }
+          >
+            {pickable.map((f) => (
+              <div
+                key={f.key}
+                role="group"
+                aria-label={display(f, "").label}
+                className="flex flex-col gap-1.5"
+              >
+                <span className="flex items-center text-[12px] text-t2">
+                  {display(f, "").label}
+                  {f.param.help && <Info>{f.param.help}</Info>}
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {f.param.enum?.map((o) => (
+                    <button
+                      key={o}
+                      type="button"
+                      className="opt bevel min-w-16 px-3 text-[13px]"
+                      aria-pressed={rawOf(f, raws) === o}
+                      onClick={() => onChange(f.key, o)}
+                    >
+                      {pretty(o)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+      {first && models && !pickable.length && (
         <span
           className={`${chip} inline-flex items-center`}
-          title={model.map((f) => f.param.label ?? f.param.name).join(" · ")}
+          title={
+            // a workflow that allows one variant (its `only`, docs/mock/VideoSource.dc.html)
+            models.length === 1 && models[0].param.enum?.length === 1
+              ? `This workflow runs on ${named[0]} only`
+              : model.map((f) => f.param.label ?? f.param.name).join(" · ")
+          }
         >
-          {model.map((f) => pretty(String(rawOf(f, raws)))).join(" · ")}
+          {modelText}
         </span>
       )}
       {first && !models && (
@@ -970,16 +1078,24 @@ export function Chips({
       })}
       {toggles.map((f) => {
         const on = rawOf(f, raws) === true;
+        const label = f.param.label ?? f.param.name;
+        // a one-word label says its state ("Audio on"); a longer one is just pressed, and looks it
+        // ("Regenerate audio", docs/mock/VideoSource.dc.html)
+        const words = label.includes(" ");
         return (
           <button
             key={f.key}
             type="button"
             aria-pressed={on}
             title={f.param.help}
-            className={chip}
+            className={
+              words
+                ? `${chip} aria-pressed:bg-t1 aria-pressed:font-semibold aria-pressed:text-panel`
+                : chip
+            }
             onClick={() => onChange(f.key, !on)}
           >
-            {f.param.label ?? f.param.name} {on ? "on" : "off"}
+            {words ? label : `${label} ${on ? "on" : "off"}`}
           </button>
         );
       })}
@@ -1020,7 +1136,16 @@ export function RefChips({
   onChange,
   uploads,
   extra,
-}: FormProps & { uploads: RefUploads; extra?: React.ReactNode }) {
+  card,
+  openerRef,
+}: FormProps & {
+  uploads: RefUploads;
+  extra?: React.ReactNode;
+  /** a video workflow's tiles (docs/mock/ImageToVideo.dc.html) */
+  card?: boolean;
+  /** what opens the first tile's picker (the composer's +) */
+  openerRef?: Opener;
+}) {
   const clip = clipOf(fields, raws);
   return imageInputs(fields).map((f, i) => {
     // one image (MiniMax H3's First frame, its optional Last frame): a tile with its label, as the boards draw it
@@ -1032,6 +1157,8 @@ export function RefChips({
             empty={f.optional ? "None · optional" : "None"}
             id={refIds(f, raws[f.key])[0]}
             onPick={(id) => onChange(f.key, id)}
+            card={card}
+            openerRef={i === 0 ? openerRef : undefined}
           />
           {i === 0 && extra}
         </Fragment>
@@ -1059,6 +1186,8 @@ export function RefChips({
         <FirstFrameTile
           id={first ? refIds(f, [first])[0] : undefined}
           more={rows.length - (first ? 1 : 0)}
+          card={card}
+          openerRef={i === 0 ? openerRef : undefined}
           onPick={(id) =>
             onChange(f.key, (old) =>
               setFirstFrame(f.param, Array.isArray(old) ? old : rows, id, clip),

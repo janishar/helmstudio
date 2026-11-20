@@ -22,8 +22,10 @@ import {
   elkPositions,
   history,
   historyOf,
+  nodeHeight,
   removeNodes,
   setBypass,
+  sizeParams,
 } from "@/lib/graph-edit";
 import { deriveStudio, hideFromStudio, placement, showInStudio, studioView } from "@/lib/studio";
 import { fields } from "@/lib/workflow";
@@ -275,7 +277,28 @@ describe("layout", () => {
     });
     const pos = elkPositions(await new ELK().layout(input));
     expect(Object.keys(pos).sort()).toEqual(Object.keys(qwen.nodes).sort());
-    for (const e of input.edges) expect(pos[e.sources[0]].x).toBeLessThan(pos[e.targets[0]].x);
+    for (const e of input.edges.filter((x) => x.targets[0] !== "output"))
+      expect(pos[e.sources[0]].x).toBeLessThan(pos[e.targets[0]].x);
+    // the mock: every source in the first column from (16, 40), Output under Decode
+    for (const id of ["prompt", "seed", "canvas", "model"]) expect(pos[id].x).toBe(16);
+    expect(Math.min(...Object.values(pos).map((p) => p.y))).toBe(40);
+    expect(pos.output.x).toBe(pos.decode.x);
+    expect(pos.output.y).toBe(
+      pos.decode.y + nodeHeight(schemas["qwen-image/decode"], qwen.nodes.decode) + 40,
+    );
+  });
+
+  it("draws a canvas's mode, width and height as one size row, unless one is wired", () => {
+    const s = schemas.canvas;
+    expect(sizeParams(s, { kind: "canvas" }).map((p) => p.name)).toEqual([
+      "mode",
+      "width",
+      "height",
+    ]);
+    expect(sizeParams(s, { kind: "canvas", in: { width: "n.value" } })).toEqual([]);
+    expect(sizeParams(schemas["qwen-image/decode"], { kind: "qwen-image/decode" })).toEqual([]);
+    // header, the canvas output row, the size row
+    expect(nodeHeight(s, { kind: "canvas" })).toBe(45 + 2 * 26 + 8);
   });
 });
 

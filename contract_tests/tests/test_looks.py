@@ -6,7 +6,8 @@ row wins), reuse's looks_status, a lines and a table batch with looks (the batch
 isolation. Every contracts/fixtures/mentions resolve case whose graph is echo runs against check.py resolve_mentions.
 
 Not covered: the echo image's drawn text (the LoRA rows are checked in made_with instead), starter thumbnails (the
-echo pack ships none), the strength clamp (echo's stack takes -4..4, the look rules' range)."""
+echo pack ships none), the strength clamp (echo's stack takes 0..2, the look rules' range), looks saved before API 1.23
+with a strength outside 0..2 (clamped when read: studio_service/tests/looks_test.go)."""
 
 import copy
 import json
@@ -286,7 +287,7 @@ def test_look_rules(uk, pics, loras):
     assert detail(r, 422) == "loras: an element has no LoRAs"
     r = uk.post(LIB, json=elem | {"from_take": {"take_id": pics[0]}})
     assert detail(r, 422) == "from_take makes looks only"
-    assert look(uk, "Lora only", loras=[lora_ref(p["id"], -1.5)])["needs"] == ["lora"]
+    assert look(uk, "Lora only", loras=[lora_ref(p["id"], 1.5)])["needs"] == ["lora"]
 
 
 def test_list_filters(uk, pics):
@@ -387,14 +388,14 @@ def test_save_as_look_from_a_take(uk, api_b, anon, sid, pics):
 def test_save_as_look_copies_usable_loras(uk, anon, sid, loras, lwf):
     p, k = loras["peft"], loras["kohya"]
     gone = uploaded(uk, anon, fixture_file("comfyui", 11), f"look-gone-{tag()}.safetensors")
-    rows = [row(p["id"], 0.8, mode="adapter"), row(gone["id"], 0.3), row(k["id"], -1)]
+    rows = [row(p["id"], 0.8, mode="adapter"), row(gone["id"], 0.3), row(k["id"], 1.5)]
     take = run_take(uk, sid, {"prompt.text": f"ink {tag()}", ROWS: rows}, [], lwf["id"])
     assert uk.delete(f"/v1/studio/loras/{gone['id']}").status_code == 204
     base = {"kind": "look", "group": "film", "name": "LoRAs of a take"}
     x = ok(uk.post(LIB, json=base | {"from_take": {"take_id": take["id"]}}), 201)
     assert x["loras"] == [
         {"lora": {"lora_id": p["id"]}, "name": p["name"], "strength": 0.8},
-        {"lora": {"lora_id": k["id"]}, "name": k["name"], "strength": -1},
+        {"lora": {"lora_id": k["id"]}, "name": k["name"], "strength": 1.5},
     ]
     assert x["needs"] == ["text", "lora"]
     y = ok(uk.post(LIB, json=base | {"from_take": {"take_id": take["id"], "loras": False}}), 201)

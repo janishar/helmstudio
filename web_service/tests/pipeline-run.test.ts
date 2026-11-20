@@ -23,6 +23,7 @@ import {
   wordDiff,
   canRetryFrom,
   cellLines,
+  cellSummary,
   countFacts,
   gridMove,
   rejectLabel,
@@ -32,6 +33,8 @@ import {
   settledCell,
   stepDetail,
   stepLines,
+  attemptWords,
+  stepProgress,
   unreached,
 } from "@/lib/pipeline-run";
 
@@ -90,8 +93,54 @@ describe("run table", () => {
       tone: "warn",
     });
   });
+  it("names step columns by what they make, and sums a cell up in one line", () => {
+    const wf = (doc.nodes.still as S<"PipelineStepNode">).workflow;
+    expect(runColumns(doc, [row], {}, { [wf]: "image" })[0].title).toBe("Step 1 · images");
+    const cell = row.cells![0];
+    const a = cell.attempts[0];
+    expect(cellSummary(cell).text).toBe("done · 4 takes");
+    expect(cellSummary({ ...cell, attempts: [{ ...a, take_ids: [a.take_ids[0]] }] }).text).toBe(
+      "done",
+    );
+    expect(cellSummary({ ...cell, attempts: [a, { ...a, visit: 2 }] })).toMatchObject({
+      text: "done · 2 attempts",
+      takes: a.take_ids,
+    });
+    expect(
+      cellSummary({
+        ...cell,
+        attempts: [{ ...a, status: "failed", error: "did not fit in memory" }],
+      }),
+    ).toMatchObject({ text: "failed · did not fit in memory", tone: "warn" });
+    expect(
+      cellSummary({
+        ...cell,
+        attempts: [
+          { ...a, branch: 0 },
+          { ...a, branch: 1, status: "failed" },
+        ],
+      }),
+    ).toMatchObject({ text: "2 shots · 1 done · 1 failed", tone: "warn" });
+  });
+  it("counts each step's progress over the last batch's rows", () => {
+    const p = stepProgress(doc, [row, { ...row, row: 2, cells: [] }], 2);
+    expect(p.still).toEqual({ done: 1, total: 2, state: "" });
+    expect(p.edit).toEqual({ done: 0, total: 2, state: "" });
+    expect(stepProgress(doc, [row], 1).still.state).toBe("done");
+    const running = {
+      ...row,
+      cells: [
+        {
+          ...row.cells![0],
+          attempts: [{ ...row.cells![0].attempts[0], status: "running" as const }],
+        },
+      ],
+    };
+    expect(stepProgress(doc, [running], 1).still).toEqual({ done: 0, total: 1, state: "running" });
+  });
   it("marks unreached cells, takes and counts", () => {
-    expect(unreached(row)).toBe("—");
+    expect(unreached(row)).toBe("parked"); // waiting for a pick
+    expect(unreached({ ...row, status: "running" })).toBe("—");
     expect(unreached({ ...row, status: "failed" })).toBe("skipped");
     expect(rowTakes(row)).toEqual({ ids: [], thumb: null });
     expect(
@@ -116,11 +165,14 @@ describe("execution view", () => {
   it("names each graph step by node and part", () => {
     expect(stepLines(exec).map((s) => [s.step, s.label, s.status])).toEqual([
       [1, "Inputs", "done"],
-      [2, "Step 1 · Qwen Image · submit", "done"],
-      [3, "Step 1 · Qwen Image · wait", "resumed"],
+      [2, "Step 1 · submit", "done"],
+      [3, "Step 1 · wait", "resumed"],
       [4, "Pick one still to edit", "now"],
     ]);
     expect(stepLines(exec)[2].changed).toBe("takes.still = 4");
+    expect(stepLines(exec).map((s) => s.tone)).toEqual(["", "", "", "now"]);
+    expect(attemptWords(1)).toBe("first attempt");
+    expect(attemptWords(7)).toBe("attempt 7");
   });
   it("marks the graph as run", () => {
     const g = asRun(exec);

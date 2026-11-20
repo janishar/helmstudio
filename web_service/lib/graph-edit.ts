@@ -185,8 +185,11 @@ const ROW = 26;
 export function nodeHeight(s: S<"NodeSchema"> | undefined, node: DocNode): number {
   if (!s) return HEADER + ROW + 8;
   const ports = Math.max(s.inputs.length, s.outputs.length);
-  const params = s.params.filter((p) => !mergedParam(s, p) && !(p.name in (node.in ?? {})));
-  const rows = ports + params.filter((p) => p.type !== "text").length;
+  const folded = sizeParams(s, node);
+  const params = s.params.filter(
+    (p) => !mergedParam(s, p) && !(p.name in (node.in ?? {})) && !folded.includes(p),
+  );
+  const rows = ports + params.filter((p) => p.type !== "text").length + (folded.length ? 1 : 0);
   const text = params.filter((p) => p.type === "text").length;
   return HEADER + rows * ROW + text * 22 + 8;
 }
@@ -203,7 +206,20 @@ export function mergedParam(s: S<"NodeSchema">, p: S<"ParamSchema">): boolean {
   );
 }
 
-/** The elkjs graph for a document: layered, left to right, the cards' sizes, one edge per wire. */
+/** A canvas's size params (width, height and a `mode` enum), drawn as one "size 16:9 · 1 MP" row; none when it has
+ * no width and height or one of them is wired. */
+export function sizeParams(s: S<"NodeSchema">, node: DocNode): S<"ParamSchema">[] {
+  const wired = node.in ?? {};
+  const by = (name: string) => s.params.find((p) => p.name === name);
+  const w = by("width");
+  const h = by("height");
+  if (w?.type !== "int" || h?.type !== "int" || "width" in wired || "height" in wired) return [];
+  const mode = by("mode");
+  return mode?.type === "enum" && !("mode" in wired) ? [mode, w, h] : [w, h];
+}
+
+/** The elkjs graph for a document: layered left to right from the sources (every source in the first column), the
+ * cards' sizes, one edge per wire. */
 export function elkInput(doc: Doc, schemas: Record<string, S<"NodeSchema">>) {
   return {
     id: "root",
@@ -213,6 +229,8 @@ export function elkInput(doc: Doc, schemas: Record<string, S<"NodeSchema">>) {
       "elk.layered.spacing.nodeNodeBetweenLayers": "24",
       "elk.spacing.nodeNode": "24",
       "elk.layered.nodePlacement.strategy": "BRANDES_KOEPF",
+      "elk.layered.layering.strategy": "LONGEST_PATH_SOURCE",
+      "elk.padding": "[top=0,left=0,bottom=0,right=0]",
     },
     children: Object.entries(doc.nodes).map(([id, n]) => ({
       id,
@@ -227,11 +245,34 @@ export function elkInput(doc: Doc, schemas: Record<string, S<"NodeSchema">>) {
   };
 }
 
-/** The positions elkjs chose, offset to start at (16, 40) as the mock's first column does. */
+const GAP = 40; // the mock's Output: 40 under Decode
+
+/** The positions elkjs chose, offset to start at (16, 40) as the mock's first column does. A node that feeds nothing,
+ * wired from one node, sits under that node instead of in a column of its own (the mock's Output under Decode) when
+ * the spot is free. */
 export function elkPositions(result: {
-  children?: { id: string; x?: number; y?: number }[];
+  children?: { id: string; x?: number; y?: number; height?: number }[];
+  edges?: { sources: string[]; targets: string[] }[];
 }): Record<string, Pos> {
+  const kids = result.children ?? [];
+  const edges = result.edges ?? [];
+  const at = Object.fromEntries(
+    kids.map((c) => [c.id, { x: c.x ?? 0, y: c.y ?? 0, h: c.height ?? 0 }]),
+  );
+  for (const c of kids) {
+    const from = new Set(edges.filter((e) => e.targets[0] === c.id).map((e) => e.sources[0]));
+    if (from.size !== 1 || edges.some((e) => e.sources[0] === c.id)) continue;
+    const f = at[[...from][0]];
+    const spot = { x: f.x, y: f.y + f.h + GAP, h: at[c.id].h };
+    const free = kids.every(({ id }) => {
+      const o = at[id];
+      return (
+        id === c.id || o.x !== spot.x || o.y >= spot.y + spot.h + GAP || o.y + o.h + GAP <= spot.y
+      );
+    });
+    if (free) at[c.id] = spot;
+  }
   return Object.fromEntries(
-    (result.children ?? []).map((c) => [c.id, { x: 16 + (c.x ?? 0), y: 40 + (c.y ?? 0) }]),
+    Object.entries(at).map(([id, p]) => [id, { x: 16 + p.x, y: 40 + p.y }]),
   );
 }

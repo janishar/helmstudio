@@ -23,6 +23,7 @@ import {
   canRetry,
   canStop,
   inputSummary,
+  retryFailedRows,
   rowState,
   type BatchView,
 } from "@/lib/batches";
@@ -148,9 +149,21 @@ export function BatchRun({
     }
   }
 
-  /** Retry failed: each failed row loaded, one after another. */
+  /** Retry failed: each failed row, one after another, past a row that is refused. */
   async function retryFailed() {
-    for (const r of view?.rows.filter((x) => view && canRetry(view.batch, x)) ?? []) await retry(r);
+    if (!view) return;
+    setBusy("failed");
+    setError("");
+    try {
+      const errors = await retryFailedRows(view.batch, (row) =>
+        setView((v) => v && applyBatchEvent(v, { seq: 0, type: "row", ts: "", data: row })),
+      );
+      if (errors.length) setError(errors.join(" · "));
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      setBusy("");
+    }
   }
 
   /** Run again: a new batch of the source's snapshot, rows and seeds; `same` reuses its decisions. */

@@ -1,0 +1,332 @@
+/* The landing page (docs/mock/Landing.dc.html), its classes scoped under .lp. Loaded only with the page. */
+.lp {
+  --lp-display: var(--font-bricolage), var(--font-inter), sans-serif;
+  --lp-mono: var(--font-jetbrains), monospace;
+  min-height: 100dvh;
+  overflow: hidden;
+  background: var(--g);
+  color: var(--t1);
+  font-size: 15px;
+  line-height: 24px;
+  background-image:
+    radial-gradient(1200px 700px at 12% -8%, rgba(255, 196, 120, 0.13), transparent 62%),
+    radial-gradient(
+      900px 700px at 104% 22%,
+      color-mix(in srgb, var(--a1) 10%, transparent),
+      transparent 60%
+    ),
+    radial-gradient(
+      1000px 700px at -6% 70%,
+      color-mix(in srgb, var(--a2) 7%, transparent),
+      transparent 60%
+    ),
+    repeating-linear-gradient(118deg, rgba(255, 255, 255, 0.014) 0 1px, transparent 1px 4px);
+}
+.lp .wrap {
+  max-width: 1296px;
+  margin: 0 auto;
+  padding: 0 72px;
+}
+.lp .d {
+  font-family: var(--lp-display);
+  font-weight: 700;
+  margin: 0;
+}
+.lp .m {
+  font-family: var(--lp-mono);
+}
+.lp .eb {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--t1b);
+}
+.lp .h2 {
+  font-size: 44px;
+  line-height: 48px;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+.lp .p {
+  margin: 0;
+  color: var(--t2);
+  max-width: 52ch;
+}
+.lp .top {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  margin: 20px auto 0;
+  max-width: 1152px;
+  padding: 10px 12px 10px 20px;
+  border-radius: 26px 26px 26px 10px;
+  background: color-mix(in srgb, var(--s1) 88%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 24px 40px -20px color-mix(in srgb, var(--shd) 80%, transparent);
+}
+.lp .top a.l {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--t2);
+}
+.lp .top a.l:hover {
+  color: var(--t1);
+}
+.lp .b1,
+.lp .b2 {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 52px;
+  padding: 0 26px;
+  border: 0;
+  border-radius: 20px 20px 20px 8px;
+  font-family: var(--lp-display);
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: 0.02em;
+}
+.lp .b1 {
+  background: var(--a1);
+  color: var(--on1);
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0) 55%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -3px 0 color-mix(in srgb, var(--shd) 22%, transparent),
+    0 16px 28px -10px color-mix(in srgb, var(--a1) 55%, transparent);
+}
+.lp .b2 {
+  background: var(--s3);
+  color: var(--t1);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -3px 0 color-mix(in srgb, var(--shd) 28%, transparent),
+    0 10px 18px -10px color-mix(in srgb, var(--shd) 70%, transparent);
+}
+.lp .sm {
+  height: 40px;
+  padding: 0 18px;
+  font-size: 14px;
+  border-radius: 14px 14px 14px 6px;
+}
+.lp .ic {
+  flex: 0 0 auto;
+  width: 52px;
+  height: 52px;
+  padding: 13px;
+  border-radius: 17px;
+  color: #fff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -5px 8px color-mix(in srgb, var(--shd) 35%, transparent),
+    0 14px 22px -8px color-mix(in srgb, var(--shd) 75%, transparent);
+}
+.lp .ic.s {
+  width: 34px;
+  height: 34px;
+  padding: 8px;
+  border-radius: 11px;
+}
+.lp .c1 {
+  background: linear-gradient(155deg, #a393ff, #4a2fe0);
+}
+.lp .c2 {
+  background: linear-gradient(155deg, #6cc4ff, #1f5fe0);
+}
+.lp .c3 {
+  background: linear-gradient(155deg, #ffb07a, #e0457a);
+}
+.lp .c4 {
+  background: linear-gradient(155deg, #ffe07a, #f08a1c);
+}
+.lp .c5 {
+  background: linear-gradient(155deg, #7af5d6, #12967f);
+}
+.lp .c6 {
+  background: linear-gradient(155deg, #c9ced9, #5b6478);
+}
+.lp .card {
+  position: relative;
+  padding: 28px;
+  border-radius: 32px 32px 32px 12px;
+  background: var(--s1);
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 46%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 34px 56px -24px color-mix(in srgb, var(--shd) 85%, transparent),
+    0 12px 20px -12px color-mix(in srgb, var(--shd) 60%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.lp .card h3 {
+  margin: 0;
+  font-family: var(--lp-display);
+  font-size: 24px;
+  line-height: 28px;
+  font-weight: 700;
+}
+.lp .card p {
+  margin: 0;
+  color: var(--t2);
+  font-size: 14px;
+  line-height: 22px;
+}
+.lp .pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: var(--s2);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--t1b);
+  white-space: nowrap;
+}
+.lp .pill i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--a1);
+  box-shadow: 0 0 10px var(--a1);
+}
+.lp .nd {
+  position: absolute;
+  width: 104px;
+  height: 56px;
+  padding: 9px 12px;
+  border-radius: 16px 16px 16px 6px;
+  background: linear-gradient(180deg, var(--s4), var(--s2));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 16px 24px -10px color-mix(in srgb, var(--shd) 85%, transparent);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+}
+.lp .nd small,
+.lp .sc small {
+  display: block;
+  font-family: var(--lp-mono);
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--t2);
+}
+.lp .tk {
+  aspect-ratio: 16/10;
+  border-radius: 12px 12px 12px 5px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 10px 16px -8px color-mix(in srgb, var(--shd) 80%, transparent);
+}
+.lp .t1 {
+  background:
+    radial-gradient(60% 80% at 30% 75%, #ffb07a, transparent 70%),
+    linear-gradient(170deg, #2b2a5c, #7a3d6b 60%, #f08a1c);
+}
+.lp .t2 {
+  background:
+    radial-gradient(50% 70% at 70% 30%, #ffe9b0, transparent 70%),
+    linear-gradient(190deg, #1d4a5c, #3a7d6b 55%, #d9c27a);
+}
+.lp .t3 {
+  background:
+    radial-gradient(60% 80% at 50% 90%, #ff8552, transparent 70%),
+    linear-gradient(160deg, #141a3a, #4a2f7a 60%, #e0457a);
+}
+.lp .t4 {
+  background:
+    radial-gradient(50% 60% at 25% 25%, #c9f0ff, transparent 70%),
+    linear-gradient(200deg, #23405c, #5c6f8a 55%, #e6d6c2);
+}
+/* the board's .st (a pipeline stage chip); renamed, globals.css has its own .st */
+.lp .sc {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 86px;
+  padding: 14px 8px;
+  border-radius: 20px 20px 20px 8px;
+  background: linear-gradient(180deg, var(--s4), var(--s2));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 18px 28px -12px color-mix(in srgb, var(--shd) 85%, transparent);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+}
+.lp .ar {
+  flex: 0 0 14px;
+  height: 2px;
+  background: var(--ln);
+  position: relative;
+}
+.lp .ar::after {
+  content: "";
+  position: absolute;
+  right: -1px;
+  top: -4px;
+  border-left: 7px solid var(--ln);
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+}
+.lp .code {
+  margin: 0;
+  padding: 22px 24px;
+  border-radius: 22px 22px 22px 8px;
+  background: var(--in);
+  font-family: var(--lp-mono);
+  font-size: 13px;
+  line-height: 22px;
+  color: var(--t1b);
+  white-space: pre;
+  overflow-x: auto;
+  box-shadow: inset 0 2px 8px color-mix(in srgb, var(--shd) 60%, transparent);
+}
+.lp .code b {
+  font-weight: 500;
+  color: var(--a1);
+}
+.lp .code u {
+  text-decoration: none;
+  color: var(--t2);
+}
+.lp .ck {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--t1b);
+}
+.lp .ck::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  background: var(--a1);
+  clip-path: polygon(14% 52%, 0 66%, 38% 100%, 100% 22%, 86% 8%, 38% 72%);
+}
+/* phones: the board is drawn at 1440; below 760 px the card grids stack and the gutter is 16 px */
+@media (max-width: 760px) {
+  .lp .wrap {
+    padding: 0 16px;
+  }
+  .lp .top {
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+  .lp .grid12 > * {
+    grid-column: span 12 !important;
+  }
+  .lp .hero-art {
+    display: none;
+  }
+}

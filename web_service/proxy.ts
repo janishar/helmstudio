@@ -15,7 +15,7 @@ import {
 } from "@/lib/session";
 
 /** Pages that never need a session (/signin/expired clears a dead session's cookies). */
-const PUBLIC = new Set(["/signin", "/signin/expired"]);
+const PUBLIC = new Set(["/signin", "/signin/expired", "/welcome"]);
 // Refresh tokens are single use (reuse revokes the family), so parallel requests share one refresh.
 // ponytail: per-process dedupe; with several web replicas, pin sessions or move this into a shared store.
 const inflight = new Map<string, Promise<RefreshResult>>();
@@ -42,7 +42,8 @@ function refreshOnce(token: string, ip?: string): Promise<RefreshResult> {
 }
 
 /** Next.js proxy, run before every matched request: public pages and valid tokens pass, an expiring token is
- * refreshed, and a signed-out visitor goes to /signin (a 401 for /api) with both cookies cleared. When auth_service
+ * refreshed, and a signed-out visitor sees the landing page at / and goes to /signin from anywhere else (a 401 for
+ * /api), with both cookies cleared. When auth_service
  * can't answer, the request passes with its cookies kept, so an outage doesn't sign anyone out. */
 export async function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
@@ -71,9 +72,11 @@ export async function proxy(req: NextRequest) {
 
   const res = pathname.startsWith("/api/")
     ? NextResponse.json({ detail: "signed out" }, { status: 401 })
-    : NextResponse.redirect(
-        new URL(`/signin?next=${encodeURIComponent(pathname + search)}`, publicOrigin(req)),
-      );
+    : pathname === "/"
+      ? NextResponse.rewrite(new URL("/welcome", req.url), { request: { headers: req.headers } })
+      : NextResponse.redirect(
+          new URL(`/signin?next=${encodeURIComponent(pathname + search)}`, publicOrigin(req)),
+        );
   res.cookies.delete(ACCESS_COOKIE);
   res.cookies.delete(REFRESH_COOKIE);
   return res;

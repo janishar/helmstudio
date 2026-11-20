@@ -51,10 +51,10 @@ lora:                             # LoRAs: the generated qwen-image/lora-stack n
   ignore: []                      # fnmatch globs over raw keys counted as ignored, not unapplied
   modes: [adapter, bake]          # [bake] for a runtime without adapters yet
   max_rows: 8
-  strength: {min: -4, max: 4, default: 1}
+  strength: {min: 0, max: 2, default: 1}
 stages:
   encode:
-    title: Encode prompt
+    title: Encode
     help: Encodes the prompt and up to 10 reference images; with references the run is an edit.
     uses: [text_encoder, vae]
     inputs: {model: Model, prompt: Text}

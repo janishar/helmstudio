@@ -115,6 +115,9 @@ const (
 	MaxLookLoras     = 4
 )
 
+// ClampStrength is a look LoRA's strength in 0..2 (API 1.23; looks saved before held -4..4 and are clamped when read).
+func ClampStrength(v float64) float64 { return min(max(v, 0), 2) }
+
 // HandleOrEmpty is the handle, "" when absent.
 func (f *LibraryFields) HandleOrEmpty() string {
 	if f.Handle == nil {
@@ -172,7 +175,7 @@ func (f *LibraryFields) Check(kind string) string {
 	return f.checkLoras()
 }
 
-// checkLoras checks the LoRAs' shape: at most 4, each a {lora_id} and a strength -4..4.
+// checkLoras checks the LoRAs' shape: at most 4, each a {lora_id} and a strength 0..2.
 func (f *LibraryFields) checkLoras() string {
 	if len(f.Loras) > MaxLookLoras {
 		return "loras: a look has at most 4 LoRAs"
@@ -181,8 +184,8 @@ func (f *LibraryFields) checkLoras() string {
 		switch {
 		case l.Lora == nil || l.Lora.LoraID == "":
 			return fmt.Sprintf("loras[%d].lora: a {lora_id} is required", i+1)
-		case l.Strength == nil || *l.Strength < -4 || *l.Strength > 4:
-			return fmt.Sprintf("loras[%d].strength: must be between -4 and 4", i+1)
+		case l.Strength == nil || *l.Strength < 0 || *l.Strength > 2:
+			return fmt.Sprintf("loras[%d].strength: must be between 0 and 2", i+1)
 		}
 	}
 	return ""

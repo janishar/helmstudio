@@ -4,7 +4,7 @@
 // can't be held).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { Check, ChevronDown, Cpu, Maximize, Minus, Pause, Play, Plus, Star } from "lucide-react";
+import { Check, ChevronDown, Maximize, Minus, Pause, Play, Plus, Star } from "lucide-react";
 import { FullScreen, Media, Thumb, useFullScreenKey } from "@/components/media";
 import { ErrorNote, Info } from "@/components/kit";
 import { Chips, Inspector, RefChips, TextFields, canvasOf, idOf } from "@/components/create/form";
@@ -19,7 +19,7 @@ import {
   videoSource,
 } from "@/components/create/source";
 import { mediaItem, offerLabel } from "@/lib/source";
-import { useUses } from "@/lib/take-cache";
+import { useTakes, useUses } from "@/lib/take-cache";
 import { clipOf, placeRows, positionOf } from "@/lib/video";
 import { WorkflowPicker } from "@/components/create/workflows";
 import { ElementsPanel, ElementsPicker } from "@/components/create/elements";
@@ -72,7 +72,8 @@ import {
   type RunTrack,
 } from "@/lib/runs";
 import { stripItems } from "@/lib/takes";
-import { hostMemory, type HostMemory } from "@/lib/hosts";
+import { hostMemory } from "@/lib/hosts";
+import { Memory, useHosts } from "@/components/create/memory-chip";
 import {
   TAKE_MIME,
   capacity,
@@ -145,30 +146,6 @@ function useSessionEvents(sessionId: string | null, onEvent: (e: SessionEvent) =
     () => (sessionId ? followSession(sessionId, (e) => handler.current(e)) : undefined),
     [sessionId],
   );
-}
-
-/** The runner hosts, refreshed every 10 s while the tab is visible (they rewrite their state that often) and at once
- * when it shows again; null until the first answer. */
-function useHosts() {
-  const [hosts, setHosts] = useState<S<"Host">[] | null>(null);
-  useEffect(() => {
-    let stop = false;
-    const tick = () => {
-      if (document.hidden) return;
-      ok(api.GET("/v1/studio/hosts"))
-        .then((h) => !stop && setHosts(h.hosts))
-        .catch(() => undefined);
-    };
-    tick();
-    const t = setInterval(tick, 10_000);
-    document.addEventListener("visibilitychange", tick);
-    return () => {
-      stop = true;
-      clearInterval(t);
-      document.removeEventListener("visibilitychange", tick);
-    };
-  }, []);
-  return hosts;
 }
 
 /** What the page read on the server: the sessions and workflows, the open session (null: none yet) and its runs and
@@ -467,7 +444,8 @@ export function Create({
     );
     if (open) setChosen(w.id);
   }, []);
-  const seedField = fields.find((f) => f.param.type === "seed");
+  // the Seeds stepper whenever the workflow has a seed, placed or not (docs/mock/TextToVideo.dc.html)
+  const seedField = all.find((f) => f.param.type === "seed");
   const change = (key: string, u: Update) => {
     setRaws((r) => {
       const v = typeof u === "function" ? u(r[key]) : u;
@@ -540,13 +518,18 @@ export function Create({
     const audio = !m[1].accepts?.includes("video");
     return [`${n} ${audio ? "audio" : `video${n === 1 ? "" : "s"}`}`];
   });
+  // the family's title ("LTX-2.5": the palette's, else its model node's): the model chip and the top bar's label
+  // lead with it
+  const familyName =
+    palette?.groups.find((g) => g.family === workflow?.family)?.title ??
+    all.find((f) => f.model)?.nodeTitle;
   // the top bar's label: an edit counts its references; a clip its frames, or offers a first frame
   const workflowLabel = !workflow
     ? ""
     : !video
       ? editLabel(workflow.title, refs)
       : [
-          workflow.title,
+          videoTitle(workflow, familyName),
           refs
             ? [`${refs} ${refUnit(refField)}${refs === 1 ? "" : "s"}`, ...mediaCounts].join(" · ")
             : mediaCounts.length
@@ -557,6 +540,15 @@ export function Create({
         ]
           .filter(Boolean)
           .join(" · ");
+  // the model choices outside the inspector's sections (quick ones or unplaced): the model chip names them
+  const chipModels = layout
+    ? all.filter(
+        (f) =>
+          f.model &&
+          f.param.type === "enum" &&
+          !layout.groups.some((g) => g.title !== "Quick" && g.fields.some((x) => x.key === f.key)),
+      )
+    : [];
   // the composer holds the quick switches and one-value choices; a quick rows editor is its own inspector section
   const quick =
     layout?.groups.find((g) => g.title === "Quick")?.fields.filter((f) => fields.includes(f)) ?? [];
@@ -564,8 +556,12 @@ export function Create({
   const groups = layout?.groups.flatMap((g) => {
     const fs = g.fields.filter((f) => fields.includes(f));
     if (g.title !== "Quick") return [{ title: g.title, fields: fs }];
+    // a quick model choice is picked from the model chip's menu (docs/mock/TextToVideo.dc.html has no Model tile)
     const rest = fs.filter(
-      (f) => !toggles.includes(f) && !(f.param.type === "enum" && (f.param.enum?.length ?? 0) < 2),
+      (f) =>
+        !toggles.includes(f) &&
+        !(f.param.type === "enum" && (f.param.enum?.length ?? 0) < 2) &&
+        !(f.model && f.param.type === "enum"),
     );
     const own = rest.filter((f) => ["rows", "image", "media", "span"].includes(f.param.type));
     // an extension's seconds and direction: a section named by its node ("Extend")
@@ -586,6 +582,10 @@ export function Create({
   const grid = useFrameGrid(mediaFields.length ? workflow?.family : undefined);
   const source = videoSource(fields);
   const sourceSet = !!source && typeof (raws[source.key] ?? "") === "object";
+  const sourceId = sourceSet ? (raws[source.key] as { take_id: string }).take_id : undefined;
+  const sourceTake = useTakes(sourceId ? [sourceId] : [])(sourceId ?? "");
+  const wholeClip =
+    spanField && sourceTake?.video ? `whole clip · ${sourceTake.video.frames} frames` : "";
   // the mentions: what they add for this workflow (the line under the prompt), checked as studio checks them
   const library = useLibrary();
   const looks = useLooks();
@@ -676,10 +676,12 @@ export function Create({
   async function send(w: S<"Workflow">, fields: Field[]) {
     if (sending.current) return;
     const built = buildInputs(fields, raws);
+    // an unplaced seed still steps from the workflow's own value
+    const seed = fieldsOf(w).find((f) => f.param.type === "seed");
     const queued = queueInputs(
-      fields,
+      seed && !fields.some((f) => f.key === seed.key) ? [...fields, seed] : fields,
       built.inputs,
-      fields.some((f) => f.param.type === "seed") ? count : 1,
+      seed ? count : 1,
     );
     // the mention preview (the note under the prompt) is advisory: this tab's element list may be stale, so studio
     // decides and its 422 lands on the fields
@@ -754,6 +756,16 @@ export function Create({
     items[0];
   const shownTake = picked?.take;
   useFullScreenKey(!!shownTake && !full, () => setFull(true));
+  const offers = useUses(shownTake?.id);
+  const takeFamily =
+    workflows?.find((w) => w.id === shownTake?.made_with?.workflow_id)?.family ?? workflow?.family;
+  // a video take's Extend beside Add to timeline (docs/mock/TextToVideo.dc.html): its family's, else the first
+  const extendOffer =
+    shownTake?.kind === "video"
+      ? (offers ?? [])
+          .filter((o) => o.action === "Extend")
+          .sort((a, b) => +(b.family === takeFamily) - +(a.family === takeFamily))[0]
+      : undefined;
   const shown = picked?.run ?? runs?.find((r) => r.id === shownTake?.run_id);
   // no run and no take yet: the title, the composer under it with the open look group's looks, and the Elements
   // panel in the aside (docs/mock/Direct.dc.html); the first run brings the Stage and the Inspector
@@ -772,6 +784,16 @@ export function Create({
     insertAtCaret(idOf(textFields[0].key), texts[0], h, (v) => change(textFields[0].key, v));
   // the reference control and the prompt's @mentions: in the tiles row, or on the empty screen in the bottom row
   // by Generate, as the board's + and @ (docs/mock/Direct.dc.html)
+  // a video workflow's composer tiles are cards, label over value (docs/mock/TextToVideo.dc.html)
+  const card = video && !empty;
+  // what opens the first tile's picker (the + chip)
+  const firstPicker = useRef<(() => void) | null>(null);
+  // its + and @ chips (docs/mock/TextToVideo.dc.html, VideoSource.dc.html); a workflow with its own add controls
+  // (reference rows, image params, video or audio rows: docs/mock/CreateMediaRefs.dc.html) has none
+  const plusAt =
+    card &&
+    !mediaRowFields.length &&
+    !imageInputs(fields).some((f) => f.param.type === "image" || !positionOf(f.param));
   const refsAndMentions = (
     <>
       {refField ? (
@@ -782,10 +804,18 @@ export function Create({
           onChange={change}
           uploads={uploads}
           extra={<MentionChips texts={texts} />}
+          card={card}
+          openerRef={mediaFields.length ? undefined : firstPicker}
         />
       ) : (
         <>
-          {firstFrameIn && <FirstFrameTile onPick={(id) => void applyUse(id, firstFrameIn.id)} />}
+          {firstFrameIn && (
+            <FirstFrameTile
+              onPick={(id) => void applyUse(id, firstFrameIn.id)}
+              card={card}
+              openerRef={mediaFields.length ? undefined : firstPicker}
+            />
+          )}
           <MentionChips texts={texts} />
         </>
       )}
@@ -924,6 +954,7 @@ export function Create({
           run={shown}
           track={shown && tracks[shown.id]}
           take={shownTake}
+          hosts={hosts}
           generate={(w) => {
             const fs = fieldsOf(w);
             return send(w, visible(studioView(w, fs)?.shown ?? fs, raws));
@@ -1034,6 +1065,16 @@ export function Create({
                 />
               ),
             )}
+            {extendOffer && (
+              <button
+                type="button"
+                className="chip bevel h-11 shrink-0 rounded-[10px]"
+                title={offerLabel(extendOffer)}
+                onClick={() => applyOffer(extendOffer)}
+              >
+                Extend
+              </button>
+            )}
             {shownTake && shownTake.kind !== "audio" && (
               <AddToTimeline
                 key={shownTake.id}
@@ -1041,7 +1082,7 @@ export function Create({
                 className="chip bevel h-11 shrink-0 rounded-[10px]"
               />
             )}
-            {shownTake && <UseIn takeId={shownTake.id} onUse={applyOffer} />}
+            {offers && <UseIn offers={offers} onUse={applyOffer} />}
           </div>
         )}
 
@@ -1073,8 +1114,15 @@ export function Create({
               mediaFields.length > 0 ||
               mediaRowFields.length > 0) && (
               <div className="flex flex-wrap items-center gap-2">
-                {mediaFields.map((f) => (
-                  <MediaTile key={f.key} f={f} fields={fields} raws={raws} onChange={change} />
+                {mediaFields.map((f, i) => (
+                  <MediaTile
+                    key={f.key}
+                    f={f}
+                    fields={fields}
+                    raws={raws}
+                    onChange={change}
+                    openerRef={i === 0 ? firstPicker : undefined}
+                  />
                 ))}
                 {spanField && (
                   <SpanTile
@@ -1108,6 +1156,7 @@ export function Create({
                   onElements={() => setElementsOpen(true)}
                   onLook={empty ? setInlineGroup : setLookGroup}
                   open={empty ? openGroup : undefined}
+                  card={card}
                 />
               </div>
             )}
@@ -1148,6 +1197,31 @@ export function Create({
               )}
             <div className="flex flex-wrap items-center gap-2">
               {empty && refsAndMentions}
+              {plusAt && (
+                <>
+                  {/* the first tile that opens a picker: the first frame, the source video or the audio */}
+                  {(refField || firstFrameIn || mediaFields.length > 0) && (
+                    <button
+                      type="button"
+                      className="chip bevel rounded-[10px] bg-s4"
+                      aria-label="Add image, video or audio"
+                      onClick={() => firstPicker.current?.()}
+                    >
+                      +
+                    </button>
+                  )}
+                  {textFields[0] && (
+                    <button
+                      type="button"
+                      className="chip bevel rounded-[10px] bg-s4"
+                      aria-label="Insert element"
+                      onClick={() => setElementsOpen(true)}
+                    >
+                      @
+                    </button>
+                  )}
+                </>
+              )}
               <Chips
                 fields={fields}
                 raws={raws}
@@ -1156,12 +1230,11 @@ export function Create({
                 compact={video}
                 toggles={toggles}
                 models={
-                  layout && !fields.some((f) => f.model && f.param.type === "enum")
-                    ? all.filter((f) => f.model && f.param.type === "enum")
-                    : undefined
+                  // the model choices outside the inspector's sections (quick ones or unplaced)
+                  chipModels.length ? chipModels : undefined
                 }
+                family={familyName}
               />
-              <div className="grow" />
               {seedField && (
                 <div
                   role="group"
@@ -1191,10 +1264,13 @@ export function Create({
                   </button>
                 </div>
               )}
+              {/* the Seeds stepper sits with the chips, Generate at the end (docs/mock/Direct.dc.html) */}
+              <div className="grow" />
               <button
                 type="submit"
                 title="Generate (⌘ or Ctrl + Enter)"
-                className="key flex h-14 flex-col items-center justify-center gap-px px-6"
+                // a video workflow's key is the second accent (docs/mock/TextToVideo.dc.html)
+                className={`key flex h-14 flex-col items-center justify-center gap-px px-6 ${video ? "bg-a2 text-[var(--on2)]" : ""}`}
                 disabled={!workflow || busy || blocked > 0}
               >
                 <span className="text-sm">
@@ -1210,6 +1286,9 @@ export function Create({
                   <span className="mono text-[11px] font-medium" title={`The queued run ${pinned}`}>
                     {pinned}
                   </span>
+                ) : wholeClip && !busy ? (
+                  // a retake runs over the whole source clip, whatever the span (docs/mock/VideoSource.dc.html)
+                  <span className="mono text-[11px] font-medium">{wholeClip}</span>
                 ) : (
                   took != null &&
                   !busy && (
@@ -1273,6 +1352,15 @@ export function Create({
             uploads={uploads}
             compact={video}
             grid={grid}
+            // ponytail: by kind (LTX's upscaler doubles the stage-1 latent); a schema hint would make it generic
+            stage1={
+              video &&
+              Object.values(workflow?.nodes ?? {}).some(
+                (n) => n.kind.endsWith("/upscale") && !n.bypass,
+              )
+                ? 2
+                : undefined
+            }
             familyTitle={
               palette?.groups.find((g) => g.family === workflow?.family)?.title ??
               (workflow?.source === "mine" ? undefined : workflow?.title)
@@ -1284,66 +1372,12 @@ export function Create({
   );
 }
 
-/** The memory button: used / budget of the host that runs the workflow, across its envs; its popover lists what
- * each env holds. */
-function Memory({ memory }: { memory: HostMemory }) {
-  const resident = memory.envs.flatMap((e) => e.resident ?? []);
-  const gb = (n: number) => +n.toFixed(1);
-  return (
-    <>
-      <button
-        type="button"
-        popoverTarget="memory"
-        aria-label={`Memory on ${memory.host}: ${gb(memory.used_gb)} of ${gb(memory.budget_gb)} gigabytes used, ${resident.length} loaded${memory.busy ? ", busy" : ""}`}
-        className="bevel mono flex h-10 items-center gap-2 rounded-[10px] border border-s3 bg-s1 px-3 text-[12px]"
-        style={{ anchorName: "--memory" } as React.CSSProperties}
-      >
-        <Cpu size={16} strokeWidth={1.75} aria-hidden />
-        {Math.round(memory.used_gb)} / {Math.round(memory.budget_gb)} GB
-      </button>
-      <div
-        id="memory"
-        popover="auto"
-        role="dialog"
-        aria-label="Memory"
-        className="pop w-72 text-[13px]"
-        style={
-          {
-            positionAnchor: "--memory",
-            positionArea: "bottom span-left",
-            marginTop: 6,
-          } as React.CSSProperties
-        }
-      >
-        <div className="flex flex-col gap-2">
-          <span className="heading">
-            {memory.host} · {gb(memory.used_gb)} of {gb(memory.budget_gb)} GB
-            {memory.busy ? " · busy" : ""}
-          </span>
-          {memory.envs.map((e) => (
-            <div key={e.env} className="flex flex-col gap-1">
-              <span className="text-t2">
-                {e.env} · {e.state}
-              </span>
-              {e.resident?.length ? (
-                e.resident.map((r, i) => (
-                  <div key={i} className="flex justify-between gap-3">
-                    <span className="min-w-0 truncate">
-                      {r.component} · {r.variant} · {r.precision}
-                      {r.loras?.length ? ` · ${r.loras.length} LoRA` : ""}
-                    </span>
-                    <span className="mono text-t2">{gb(r.gb)} GB</span>
-                  </div>
-                ))
-              ) : (
-                <span className="text-t2">Nothing loaded.</span>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-    </>
-  );
+/** A video workflow's name in the top bar: "LTX-2.5 · Text to video", the family then the rest of the title, or the
+ * action when it says more ("LTX-2.5 · Retake a section", docs/mock/VideoSource.dc.html); else the title. */
+export function videoTitle(w: Pick<S<"Workflow">, "title" | "action">, family?: string) {
+  if (!family || !w.title.startsWith(family + " ")) return w.title;
+  const rest = w.title.slice(family.length + 1);
+  return `${family} · ${w.action?.startsWith(rest) ? w.action : rest}`;
 }
 
 /** The key of a workflow's seed param, if it has one. */
@@ -1788,9 +1822,14 @@ function MediaSwitch({
 
 /** The strip's "Use in…": a menu of the take's offers (GET …/takes/{id}/uses); choosing one opens its workflow
  * with the take in it. */
-function UseIn({ takeId, onUse }: { takeId: string; onUse: (o: S<"TakeOffer">) => void }) {
-  const offers = useUses(takeId);
-  if (!offers?.length) return null;
+function UseIn({
+  offers,
+  onUse,
+}: {
+  offers: S<"TakeOffer">[];
+  onUse: (o: S<"TakeOffer">) => void;
+}) {
+  if (!offers.length) return null;
   return (
     <>
       <button

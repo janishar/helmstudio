@@ -69,7 +69,7 @@ stages:
     peak_gb: "11 + images"
     stall_s: 900                  # an edit's ~8.5k-token prefill is one forward
   encode:
-    title: Encode prompt
+    title: Encode
     help: Encodes the prompt and up to 16 reference images; with references the run is an edit.
     uses: [text_encoder]
     unload_after: [text_encoder]

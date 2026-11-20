@@ -8,7 +8,6 @@
 // the step-settings panel belong to the pipeline's Studio view of a later milestone and are left out.
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronLeft } from "lucide-react";
 import { ErrorNote, Info } from "@/components/kit";
 import { FullScreen } from "@/components/media";
 import { MemoryPanel } from "@/components/pipelines/memory";
@@ -102,15 +101,11 @@ export function Review({
     <>
       <main id="main" className="flex min-w-0 flex-[999_1_560px] flex-col gap-3.5 px-5 pt-4 pb-5">
         <div className="flex flex-wrap items-center gap-3">
-          <Link
-            href={`/pipelines/batches/${id}`}
-            aria-label="Back to the batch"
-            className="grid size-9 place-items-center rounded-[10px] text-t2 hover:bg-s2"
-          >
-            <ChevronLeft size={18} aria-hidden />
-          </Link>
           <h1 className="m-0 flex items-center font-display text-[18px] font-bold tracking-[0.02em]">
-            {batch?.title ?? "Review"}
+            {/* the title leads back to its batch (the board draws no back chevron) */}
+            <Link href={`/pipelines/batches/${id}`} title="The batch">
+              {batch?.title ?? "Review"}
+            </Link>
             <Info>
               Parked rows hold nothing in the queue: pick in any order. A judge&apos;s pick is
               pre-selected: A agrees, a click changes it. Arrows move, Space picks, Enter sends, R
@@ -186,6 +181,9 @@ export function Review({
   );
 }
 
+/** "gave up after 2 retries" (docs/mock/JudgeReview): a judge that found none that pass after looping back. */
+const gaveUp = (n: number) => `gave up after ${n} ${n === 1 ? "retry" : "retries"}`;
+
 function ReviewRow({
   batchId,
   item,
@@ -256,6 +254,7 @@ function ReviewRow({
           {inputs && " · "}
           {item.keep === 1 ? "pick 1" : `pick 1 to ${item.keep}`} of {n}
           {item.visit > 1 && ` · try ${item.visit}`}
+          {judge && item.verdict === "fail" && item.visit > 1 && ` · ${gaveUp(item.visit - 1)}`}
           {item.model && ` · ${item.model}`}
         </span>
       </div>
@@ -352,6 +351,7 @@ function ReviewRow({
             id={`note-${item.row}`}
             className="in"
             maxLength={2000}
+            placeholder="The softer one keeps the fox's face; sharpness matters less"
             value={note}
             onChange={(e) => setNote(e.target.value)}
             onKeyDown={(e) => {

@@ -44,9 +44,15 @@ From the old studio's code and the scout's note (docs/reference-notes/ltx.md, se
   are `1 - strength` in float32 (so stage 2's Euler output is float32); a mask that is not all 1 passes per-token
   timesteps `mask * sigma`; the ancestral stage 1 re-applies the mask after its noise; appended tokens are cut before
   the upscale and the decode.
-- **Frame-0 replacement drops `keyframes_mask`** (`VideoConditionByLatentIndex.apply`): with an image at frame 0 the
-  DiT gets no keyframe embedding, though the reference marks frame 0 always. Copied (the goldens embody it); fixing it
-  needs new goldens from a fixed old studio.
+- **Frame 0 keeps its keyframe marker** (fixed 2026-11-20, the owner's decision 4). The old studio's
+  `VideoConditionByLatentIndex.apply` drops `keyframes_mask`, so with an image at frame 0 the DiT got no keyframe
+  embedding on latent frame 0, though the reference marks frame 0 always (t2v, retake, extend, a2v do). `mlx.py`
+  `FirstFrame` keeps the marker (the vendored file stays byte for byte); later keyframe rows extend it with zeros.
+  The `i2v` and `kf` goldens were re-recorded by `tests/golden/record_ltx.py` on the old studio with that one line
+  fixed (a scratch copy of `ltx_core_mlx` first on `PYTHONPATH`, mlx 0.32.2): every input up to stage 1 is unchanged
+  (images, embeddings, noise, positions, denoise masks), the keyframes mask is now 1/7 (i2v) and 1/8 (kf: the appended
+  frame unmarked) of the tokens, and everything after it differs: old against new 42.5 / 39.1 dB (i2v, mean / worst
+  frame), 43.5 / 42.6 (kf). The pack is bit-exact on 0.32.2 against the new goldens (every point, frame, WAV).
 - Keyframe images: RGB → one libx264 frame at CRF 33 and back (yuv444p with ffmpeg 9.0.2: the pixels depend on the
   ffmpeg build) → LANCZOS cover + centre crop to each stage's grid → the conv VAE encoder (`vae_encoder`, 0.59 GB),
   once per stage. The round trip is done once in `keyframes`; each sample resizes and encodes.
@@ -61,8 +67,9 @@ From the old studio's code and the scout's note (docs/reference-notes/ltx.md, se
   silently dropped; the old studio ignored unmatched keys and kohya files), merged after int8 quantization module by
   module: dequantize, + float32 delta, requantize (float32 scales and biases). Unchanged on 0.32.4 (bit-equal fused
   weights). Block streaming does not exist on our layout (the old `--low-ram` refused the official files).
-- 0.32.4 against the stage-B goldens (mean / worst frame dB, log-mel dB): i2v 42.19 / 39.34 / 1.48, kf 43.15 /
-  42.42 / 1.47, beats 23.25 / 16.53 / 1.53, lora 26.91 / 23.73 / 1.15; bars just under them.
+- 0.32.4 against the stage-B goldens (mean / worst frame dB, log-mel dB): i2v 41.74 / 38.98 / 1.47, kf 43.45 /
+  42.60 / 1.49 (both on the 2026-11-20 goldens), beats 23.25 / 16.53 / 1.53, lora 26.91 / 23.73 / 1.15; bars just
+  under them.
 - Memory: one process keeps components resident within the budget (RAM - 12 GB), so a baked transformer and the
   plain one can sit side by side (38 GB; decode peaked 50.5 GiB in the bench). Who evicts what across envs and runs
   is stage C. The Metal buffer cache was then capped at the budget too, so the process footprint reached 53 GB (now 2 GB: GPU and Metal).

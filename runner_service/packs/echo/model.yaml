@@ -86,7 +86,7 @@ stages:
         max: 8
         item:
           lora: Lora
-          strength: {type: float, label: Strength, default: 1, min: -4, max: 4, step: 0.05}
+          strength: {type: float, label: Strength, default: 1, min: 0, max: 2, step: 0.05}
           mode: {type: enum, label: Mode, default: adapter, enum: [adapter, bake]}
         help: "Each row: a LoRA, its strength and mode; the fake runner applies nothing, it only names them."
   canvas:
