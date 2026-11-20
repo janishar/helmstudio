@@ -36,6 +36,17 @@
     background-color: var(--g);
     color: var(--t1);
     -webkit-font-smoothing: antialiased;
+    /* an app, not a document: only fields and code (commands to copy) select text */
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  input,
+  textarea,
+  [contenteditable],
+  pre,
+  code {
+    -webkit-user-select: text;
+    user-select: text;
   }
   /* a faint warm light from the top left, on a fixed layer behind the page: Safari paints a fixed body background
      separately behind scrolling areas (a visible box), Chrome does not */
