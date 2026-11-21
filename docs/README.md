@@ -38,3 +38,4 @@ other sections point to it rather than restate it.
 | [NVIDIA quantized path](plan/17-nvidia-quantized.md) | §21 | Community FP8 / int8 variants for NVIDIA hosts (M9) |
 | [In-app assistant](plan/18-assistant.md) | §22 | An AI assistant panel that works every screen, confirms costly actions, sees takes (a plan, not in a milestone) |
 | [ltx studio features](plan/19-ltx-studio-features.md) | §23 | The new ltx studio options in the LTX pack: distilled actions, NAG, float16, audio relay, adapters, DFR detail, bindings, Refine details and Deblur, SDR to HDR; what is left out and why (a plan, not in a milestone) |
+| [H3 options and optimised uploads](plan/20-h3-options-and-uploads.md) | §24 | MiniMax H3 presets, chaining from a frame, Mac speed controls, replacing a video reference's sound, NVIDIA quality and flow shift; the browser optimising every media upload (images, audio, and new video uploads) before storage (a plan, not in a milestone) |

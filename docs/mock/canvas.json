@@ -397,6 +397,24 @@
       "w": 1440,
       "x": 13680,
       "y": 2280
+    },
+    "H3Options.dc.html": {
+      "expand": "fill",
+      "h": 3240,
+      "is_interactive": true,
+      "title": "Create · MiniMax H3 options: presets, Advanced speed controls, NVIDIA Mode and flow shift, replace a video's sound, last / first frame in…, H3 New shot",
+      "w": 1440,
+      "x": -3040,
+      "y": 0
+    },
+    "UploadOptimise.dc.html": {
+      "expand": "fill",
+      "h": 1880,
+      "is_interactive": true,
+      "title": "Uploads · optimised in the browser: Optimising… on reference, audio and Gallery tiles, video uploads, fallbacks",
+      "w": 1440,
+      "x": -3040,
+      "y": 3360
     }
   },
   "createdOnFiles": {
@@ -461,7 +479,9 @@
     "CreateAudioZonos3.dc.html",
     "VoicePickerZonos3.dc.html",
     "TimelineAudioZonos3.dc.html",
-    "Assistant.dc.html"
+    "Assistant.dc.html",
+    "H3Options.dc.html",
+    "UploadOptimise.dc.html"
   ],
   "pages": [],
   "title": "helmstudio-next UI mock"

@@ -1,0 +1,488 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Create: MiniMax H3 presets, speed, sound and frames</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Bricolage+Grotesque:wght@600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* themes */
+[data-theme="forest"]{--g:#0e1512;--in:#090e0c;--p0:#131c17;--s1:#16201b;--s2:#1e2a24;--s3:#26342d;--s4:#2c3b33;--s5:#32433a;--ln:#3d5146;--dash:#5a7265;--t2:#a9b8ab;--t1:#f0f2e8;--t1b:#dfe5d8;--ib:#354a3f;--it:#cfdacb;--a1:#b9e37a;--on1:#17200a;--a2:#ff8552;--on2:#2b0c02;--shd:#000000}
+[data-theme="ocean"]{--g:#0c1320;--in:#080d17;--p0:#101a2a;--s1:#131d2e;--s2:#1c2940;--s3:#24344f;--s4:#2b3d5c;--s5:#33486b;--ln:#40587f;--dash:#5e779e;--t2:#9fb0c6;--t1:#eaf0f7;--t1b:#d6dfeb;--ib:#33486b;--it:#cdd8e6;--a1:#ff8a6b;--on1:#2b0d05;--a2:#7cc7f2;--on2:#06202e;--shd:#000000}
+[data-theme="aubergine"]{--g:#15101a;--in:#0f0b13;--p0:#1a1421;--s1:#1f1826;--s2:#2b2135;--s3:#352a41;--s4:#3f324d;--s5:#4a3b5a;--ln:#5c4a6e;--dash:#7a678c;--t2:#b3a6b8;--t1:#f3ecf2;--t1b:#e2d8e3;--ib:#4a3b5a;--it:#d9cedc;--a1:#ffb36b;--on1:#2b1500;--a2:#d59bf6;--on2:#230a33;--shd:#000000}
+[data-theme="espresso"]{--g:#17110d;--in:#0f0b08;--p0:#1c1510;--s1:#211914;--s2:#2e231c;--s3:#3a2d24;--s4:#45362b;--s5:#514033;--ln:#655141;--dash:#84705e;--t2:#b8a896;--t1:#f5ece0;--t1b:#e5d9c9;--ib:#514033;--it:#dccfbd;--a1:#f2b84b;--on1:#2a1c00;--a2:#ff8552;--on2:#2b0c02;--shd:#000000}
+[data-theme="oxblood"]{--g:#170e10;--in:#0f0809;--p0:#1c1113;--s1:#221517;--s2:#301d20;--s3:#3c2529;--s4:#472d31;--s5:#54363a;--ln:#694549;--dash:#896266;--t2:#bfa8a6;--t1:#f6ecea;--t1b:#e6d8d6;--ib:#54363a;--it:#dccccb;--a1:#f6c177;--on1:#2b1a00;--a2:#ff7d96;--on2:#33060f;--shd:#000000}
+[data-theme="indigo"]{--g:#0e0f22;--in:#090a18;--p0:#12142b;--s1:#161832;--s2:#20234a;--s3:#292d5c;--s4:#32376c;--s5:#3c417d;--ln:#4b5194;--dash:#6a70b0;--t2:#a5a9cf;--t1:#eceefc;--t1b:#d9dcf3;--ib:#3c417d;--it:#d0d3ee;--a1:#ffc145;--on1:#2b1d00;--a2:#ff7fa8;--on2:#33061a;--shd:#000000}
+[data-theme="parchment"]{--g:#f3ede2;--in:#e9e1d3;--p0:#f8f3ea;--s1:#fbf7ef;--s2:#ffffff;--s3:#efe7d9;--s4:#e6ddcd;--s5:#dcd1be;--ln:#cdbfa8;--dash:#a8987f;--t2:#6e6455;--t1:#1f1a14;--t1b:#3a3228;--ib:#dcd1be;--it:#3a3228;--a1:#c8553d;--on1:#ffffff;--a2:#2f5d8a;--on2:#ffffff;--shd:#b8a688}
+body{margin:0}
+nav button{flex-direction:column!important;width:58px!important;height:54px!important;gap:3px;font-size:10px;font-weight:500}
+nav button::after{content:attr(aria-label)}
+*{text-transform:none!important}
+nav button{height:64px!important;gap:5px!important;background:transparent!important}
+nav button svg{width:36px;height:36px;padding:8px;box-sizing:border-box;border-radius:12px;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.5),inset 0 -4px 6px color-mix(in srgb, var(--shd) 35%, transparent),0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)}
+nav button[aria-label="Create"] svg{background:linear-gradient(155deg,#a393ff,#4a2fe0)}
+nav button[aria-label="Pipelines"] svg{background:linear-gradient(155deg,#6cc4ff,#1f5fe0)}
+nav button[aria-label="Gallery"] svg{background:linear-gradient(155deg,#ffb07a,#e0457a)}
+nav button[aria-label="Timeline"] svg{background:linear-gradient(155deg,#ffe07a,#f08a1c)}
+nav button[aria-label="Models"] svg{background:linear-gradient(155deg,#7af5d6,#12967f)}
+nav button:not([aria-current]) svg{filter:saturate(.55) brightness(.8)}
+nav button[aria-current]{color:var(--t1)!important}
+nav button[aria-current] svg{outline:2px solid rgba(255,255,255,.85);outline-offset:2px}
+main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.09),inset 0 -2px 0 color-mix(in srgb, var(--shd) 30%, transparent),0 2px 5px color-mix(in srgb, var(--shd) 45%, transparent)}
+[style*="border-radius: 16px"],[style*="border-radius: 18px"],[style*="border-radius: 14px"]{box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 28px 48px -18px color-mix(in srgb, var(--shd) 85%, transparent),0 10px 18px -10px color-mix(in srgb, var(--shd) 60%, transparent)}
+aside{box-shadow:-28px 0 48px -28px color-mix(in srgb, var(--shd) 80%, transparent)}
+.n{background:linear-gradient(180deg,var(--s3),var(--s1))!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 20px 34px -12px color-mix(in srgb, var(--shd) 85%, transparent)!important}
+.pi,.po{box-shadow:0 0 8px currentColor}
+input[type=range]{filter:drop-shadow(0 2px 3px color-mix(in srgb, var(--shd) 60%, transparent))}
+button{font:inherit;color:inherit;cursor:pointer}
+a{color:var(--t2)}a:hover{color:var(--t1)}
+nav{gap:14px!important}
+.i{width:18px;height:18px;margin-left:6px;border-radius:50%;border:0;background:var(--ib);color:var(--it);font:600 11px/18px Inter,sans-serif;padding:0;vertical-align:middle;flex:0 0 auto}
+[style*="border-radius: 16px"],[style*="border-radius: 18px"],.set,.crit,.tile{background-image:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,0) 46%)}
+.chip{height:36px;padding:0 12px;border-radius:10px;border:0;background:var(--s4);font-size:13px;font-weight:500}
+.lane{display:flex;align-items:stretch;height:56px}
+.lane>span:first-child{flex:0 0 72px;display:flex;align-items:center;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t2)}
+.clip{outline:3px solid var(--s1);outline-offset:-1px;flex:0 0 auto;box-sizing:border-box;height:56px;border-radius:8px;padding:6px 8px;text-align:left;font-size:11px;line-height:14px;overflow:hidden;display:flex;flex-direction:column;justify-content:space-between}
+.clip b{font-weight:600;font-size:12px;white-space:nowrap}
+.clip small{font-family:'JetBrains Mono',monospace;font-size:10px;white-space:nowrap}
+.act{height:40px;border-radius:10px;border:0;background:var(--s3);font-size:13px;font-weight:500;text-align:left;padding:0 12px}
+.tile{flex:1 1 130px;min-height:48px;text-align:left;padding:6px 12px;border-radius:12px;border:0;background:var(--s3)}
+.tile small{display:block;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t2)}
+.tile b{display:block;font-size:13px;font-weight:600}
+.set{text-align:left;padding:10px 12px;border-radius:12px;border:0;background:var(--s2);display:flex;flex-direction:column;gap:2px}
+.set small{font-size:12px;color:var(--t2)}
+.set b{font-weight:600}
+.h{margin:0;font-size:12px;font-weight:600;letter-spacing:.04em;color:var(--t2)}
+.step{display:flex;align-items:center;gap:6px;padding:6px 10px;border-radius:8px;background:var(--s1);font-size:13px}
+.mono{font-family:'JetBrains Mono',monospace;color:var(--t2)}
+.row{display:flex;justify-content:space-between;gap:10px;font-size:13px}
+.row span:last-child{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t2);text-align:right}
+.thumb{width:44px;height:28px;flex:0 0 auto;border-radius:6px;border:1px dashed var(--dash);background:var(--s3)}
+.x{width:22px;height:22px;padding:0;border:0;border-radius:8px;background:var(--s3);color:var(--t2);font-size:12px}
+.pk{text-align:left;padding:0;border:0;background:transparent;display:flex;flex-direction:column;gap:6px;box-shadow:none!important}
+.pk i{display:flex;align-items:center;justify-content:center;aspect-ratio:16/10;border-radius:10px;border:1px dashed var(--dash);background:var(--s1);font-style:normal;font-size:11px;color:var(--t2)}
+.pk b{font-size:12px;font-weight:600}
+.pk small{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t2)}
+.err{margin:0;font-size:12px;line-height:17px;color:#ff8a80;font-family:'JetBrains Mono',monospace}
+/* media inputs: the trim bar on the source's frame grid, the waveform */
+.bar{position:relative;height:44px;border-radius:10px;background:repeating-linear-gradient(90deg,var(--s3) 0 calc(100% / 49 - 1px),var(--s1) calc(100% / 49 - 1px) calc(100% / 49));border:1px solid var(--s5)}
+.bar .sel{position:absolute;top:-3px;bottom:-3px;border:2px solid var(--a2);border-radius:8px;background:color-mix(in srgb, var(--a2) 14%, transparent);box-sizing:border-box}
+.bar .sel::before,.bar .sel::after{content:"";position:absolute;top:8px;bottom:8px;width:6px;border-radius:3px;background:var(--a2)}
+.bar .sel::before{left:-4px}.bar .sel::after{right:-4px}
+.bar .snap{position:absolute;bottom:-12px;height:6px;border-radius:3px;background:var(--a1)}
+.wave{height:44px;border-radius:10px;border:1px solid var(--s5);background:repeating-linear-gradient(90deg,transparent 0 3px,var(--s1) 3px 5px),linear-gradient(180deg,var(--s1) 22%,var(--s4) 22% 78%,var(--s1) 78%)}
+.seg{display:flex;padding:3px;border-radius:10px;background:var(--s1);border:1px solid var(--s3)}
+.seg button{height:30px;padding:0 12px;border-radius:8px;border:0;background:transparent;color:var(--t2);font-size:13px;font-weight:500;box-shadow:none!important}
+.seg button[aria-pressed="true"]{background:var(--s5);color:var(--t1)}
+.card{position:relative;box-sizing:border-box;padding:18px 20px;border-radius:16px;background:var(--s2);border:1px solid var(--s5);display:flex;flex-direction:column;gap:12px}
+.note{font-size:12px;color:var(--t2);margin:0}
+/* organic layer */
+[style*="min-height: 960px"]{background-image:radial-gradient(1100px 620px at 14% -12%,rgba(255,196,120,.11),transparent 62%),radial-gradient(900px 640px at 108% 112%,color-mix(in srgb, var(--a1) 7%, transparent),transparent 60%),repeating-linear-gradient(118deg,rgba(255,255,255,.014) 0 1px,transparent 1px 4px)}
+nav{margin:14px 0 14px 14px;border:0!important;border-radius:30px;background:var(--s1);align-self:flex-start;padding:14px 4px!important;flex:0 0 68px!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 24px 40px -18px color-mix(in srgb, var(--shd) 80%, transparent)}
+aside{margin:14px 14px 14px 0;border:0!important;border-radius:34px 34px 34px 14px;background:var(--p0)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 28px 48px -20px color-mix(in srgb, var(--shd) 85%, transparent)!important}
+main [style*="border-radius: 16px"]{border-radius:28px 28px 28px 12px!important;border-color:transparent!important}
+main [style*="border-radius: 18px"]{border-radius:32px!important;border-color:transparent!important}
+aside [style*="border-radius: 14px"],aside [style*="border-radius: 12px"],.set,.crit{border-radius:18px 18px 18px 8px!important;border-color:transparent!important}
+.n{border-radius:20px 20px 20px 8px!important;border-color:rgba(255,255,255,.08)}
+button[style*="border-radius: 14px"]{border-radius:20px 20px 20px 8px!important}
+main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -2px 0 color-mix(in srgb, var(--shd) 28%, transparent),0 3px 6px color-mix(in srgb, var(--shd) 35%, transparent)}
+/* LTX studio features board: frames, inspector panels, menus, the Generate key, Models variants */
+.chip{display:inline-flex;align-items:center;gap:6px}
+.frame{display:flex;flex-direction:column;gap:10px;min-width:0}
+.sec{grid-column:1 / -1;margin:14px 0 -6px;display:flex;flex-wrap:wrap;align-items:center;gap:10px;font-family:'Bricolage Grotesque',Inter,sans-serif;font-size:20px;font-weight:700}
+.ph{white-space:nowrap;padding:2px 8px;border-radius:999px;background:color-mix(in srgb, var(--a2) 22%, var(--s4));font-family:Inter,sans-serif;font-size:11px;font-weight:500;color:var(--t1)}
+.insp{box-sizing:border-box;padding:16px 18px 18px;border-radius:34px 34px 34px 14px;background:var(--p0);box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 28px 48px -20px color-mix(in srgb, var(--shd) 85%, transparent);display:flex;flex-direction:column;gap:18px;min-width:0}
+.insp>div{display:flex;flex-direction:column;gap:10px}
+.g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:start}
+.cbar{border-radius:16px;background:var(--s2);border:1px solid var(--s5);padding:12px 14px;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.comp{border-radius:18px;background:var(--s2);border:1px solid var(--s5);box-shadow:0 16px 40px color-mix(in srgb, var(--shd) 50%, transparent);padding:10px;display:flex;flex-direction:column;gap:8px}
+.comp textarea{width:100%;box-sizing:border-box;resize:none;border:0;outline:0;background:transparent;color:var(--t1);font:inherit;font-size:15px;line-height:22px;padding:2px 6px}
+.menu{box-sizing:border-box;padding:8px;border-radius:18px 18px 18px 8px;background:var(--s2);border:1px solid var(--s5);box-shadow:0 24px 40px -12px color-mix(in srgb, var(--shd) 80%, transparent);display:flex;flex-direction:column;gap:2px}
+.menu .hd{padding:4px 12px 2px;font-size:12px;font-weight:600;letter-spacing:.04em;color:var(--t2);display:flex;align-items:center}
+.mi{text-align:left;padding:8px 12px;border-radius:10px;border:0;background:transparent;box-shadow:none!important;font-size:13px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.mi>span{display:flex;flex-direction:column;gap:1px;min-width:0}
+.mi small{font-size:11px;line-height:15px;color:var(--t2)}
+.mi em{font-style:normal;font-size:11px;color:var(--t2);white-space:nowrap}
+.mi[aria-checked="true"]{background:var(--s4);font-weight:600}
+.mi[aria-checked="true"] small{font-weight:400}
+.mi[aria-disabled="true"]{color:var(--t2);cursor:not-allowed}
+.mi[aria-disabled="true"]>span,.seg button[aria-disabled="true"]{opacity:.55}
+.seg button[aria-disabled="true"]{color:var(--t2);cursor:not-allowed}
+.bl{white-space:nowrap;padding:2px 8px;border-radius:999px;background:var(--s3);box-shadow:inset 0 0 0 1px var(--dash);font-family:Inter,sans-serif;font-size:11px;font-weight:600;color:var(--t2)}
+.frame.later>:not(:first-child),.later-x{opacity:.42;filter:saturate(.3)}
+.ao{display:flex;flex-direction:column;gap:8px;padding:10px 12px;border-radius:12px;background:var(--s1);border:1px solid var(--s3)}
+.off{cursor:not-allowed;color:var(--t2)}
+.off>b,.off>.lb{opacity:.55}
+.off em{font-style:normal;font-size:11px;color:var(--t2)}
+.key{height:56px;padding:0 22px;border-radius:14px;border:0;background:var(--a2);color:var(--on2);background-image:linear-gradient(180deg,rgba(255,255,255,.35),rgba(255,255,255,0) 55%);box-shadow:inset 0 1px 0 rgba(255,255,255,.6),inset 0 -5px 0 color-mix(in srgb, var(--shd) 25%, transparent),0 14px 26px -8px color-mix(in srgb, var(--shd) 75%, transparent)!important;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px}
+.cbar .key,.comp .key{margin-left:auto}
+.key b{font-family:'Bricolage Grotesque',Inter,sans-serif;font-weight:700;font-size:14px;letter-spacing:.04em;text-transform:uppercase}
+.key span{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:500}
+.sw{flex:0 0 auto;width:44px;height:26px;border-radius:999px;border:1px solid var(--ln);background:var(--s1);padding:2px;display:flex}
+.sw span{width:20px;height:20px;border-radius:999px;background:var(--t2);display:block}
+.sw[aria-checked="true"]{background:var(--a1);justify-content:flex-end}
+.sw[aria-checked="true"] span{background:var(--on1)}
+.kf{display:flex;flex-direction:column;gap:8px;padding:10px 12px;border-radius:10px;background:var(--s1);border:1px solid var(--s3)}
+.lbl{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--t2)}
+.dash{height:40px;border-radius:10px;border:1px dashed var(--dash);background:transparent;font-size:13px}
+.ta{width:100%;box-sizing:border-box;resize:none;border:0;border-radius:10px;background:var(--s2);color:var(--t1);font:inherit;font-size:13px;line-height:19px;padding:8px 10px}
+.m{font-family:'JetBrains Mono',monospace;font-size:12px}
+.tag{display:inline-flex;align-items:center;gap:6px;padding:2px 8px;border-radius:999px;background:var(--s4);font-size:11px;font-weight:500}
+.tag.q{background:color-mix(in srgb, var(--a1) 22%, var(--s4))}
+.tag.sh{background:color-mix(in srgb, var(--a2) 22%, var(--s4))}
+.tag.hdr{background:linear-gradient(90deg,#ffd36b,#ff7a59);color:#2b0c02;font-weight:700;letter-spacing:.04em}
+.dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
+.cube{width:30px;height:30px;border-radius:10px;flex:0 0 auto;box-shadow:inset 0 1px 0 rgba(255,255,255,.5),inset 0 -4px 6px color-mix(in srgb, var(--shd) 35%, transparent),0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)}
+.var{min-width:0;display:flex;flex-direction:column;gap:10px;padding:12px;border-radius:18px 18px 18px 8px;background:linear-gradient(180deg,var(--s3),var(--s2));box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 12px 22px -12px color-mix(in srgb, var(--shd) 80%, transparent)}
+.host{display:inline-flex;align-items:center;gap:6px;min-width:0;padding:4px 10px;border-radius:999px;background:var(--s1);font-size:12px}
+.stage{border-radius:12px;border:1px dashed var(--dash);display:flex;align-items:center;justify-content:center;color:var(--t2);font-size:13px;text-align:center}
+</style>
+</helmet>
+<div data-theme="{{theme}}" style="display: flex; flex-wrap: wrap; min-height: 960px; background: var(--g); color: var(--t1); font-family: Inter, system-ui, sans-serif; font-size: 14px; line-height: 20px">
+
+<nav aria-label="Sections" style="flex: 0 0 64px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 0; border-right: 1px solid var(--s3)">
+<button aria-label="Create" aria-current="page" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: var(--s2); color: var(--a1); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"></path><circle cx="12" cy="12" r="3"></circle></svg></button>
+<button aria-label="Pipelines" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="6" height="6" rx="1.5"></rect><rect x="15" y="14" width="6" height="6" rx="1.5"></rect><path d="M9 7h4a2 2 0 0 1 2 2v5"></path></svg></button>
+<button aria-label="Gallery" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="9" cy="10" r="2"></circle><path d="m21 16-5-5L5 20"></path></svg></button>
+<button aria-label="Timeline" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 17h18"></path><rect x="5" y="4" width="6" height="6" rx="1.5"></rect><rect x="12" y="14" width="7" height="6" rx="1.5"></rect></svg></button>
+<button aria-label="Models" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"></path><path d="m3 8 9 5 9-5M12 13v8"></path></svg></button>
+<details style="position: relative; margin-top: 6px">
+<summary aria-label="Settings" style="list-style: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10px; font-weight: 500; color: var(--t2)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 36px; height: 36px; padding: 8px; box-sizing: border-box; border-radius: 12px; color: #fff; background: linear-gradient(155deg, #a7b0c2, #4b5468); box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg>Settings</summary>
+<div style="position: absolute; left: 70px; bottom: 0; z-index: 5; width: 220px; box-sizing: border-box; padding: 14px; border-radius: 18px 18px 18px 8px; background: var(--s2); box-shadow: 0 24px 40px -12px color-mix(in srgb, var(--shd) 80%, transparent); display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 12px; font-weight: 600; color: var(--t2)">Settings</span>
+<label for="theme" style="font-size: 13px; color: var(--t1)">Theme</label>
+<select id="theme" value="{{theme}}" onChange="{{setTheme}}" style="width: 100%; height: 36px; padding: 0 10px; border-radius: 10px; border: 0; background: var(--s4); color: var(--t1); font: inherit; font-size: 13px">
+<option value="forest">Forest ink</option>
+<option value="ocean">Deep ocean</option>
+<option value="aubergine">Aubergine dusk</option>
+<option value="espresso">Espresso</option>
+<option value="oxblood">Oxblood</option>
+<option value="indigo">Indigo night</option>
+<option value="parchment">Parchment (light)</option>
+</select>
+</div>
+</details>
+</nav>
+
+
+
+<main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 20px; padding: 16px 24px 32px">
+
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+<button style="height: 40px; padding: 0 12px; border-radius: 10px; border: 0; background: transparent; display: flex; align-items: center; gap: 8px; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 18px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em">[YOUR PROJECT]<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></button>
+<span style="padding: 4px 10px; border-radius: 999px; background: var(--s2); color: var(--t2); font-size: 12px; font-weight: 500">MiniMax H3 · presets, speed, sound, frames</span>
+</div>
+
+<p class="note" style="display: flex; align-items: center; max-width: 960px; font-size: 13px">Each frame is the existing screen with only the new control added; everything else is as on CreateMediaRefs, TakeActions, GalleryPicker and Timeline. The tag is the item in 20-h3-options-and-uploads.md 24.9. Base runs on a Mac (h3), Base fp8 on NVIDIA (SGLang).<button class="i" aria-label="More information" title="Labels and help come from the minimax-h3 params in model.yaml. Red lines are the studio's 422 texts under the input they name, or the run's own refusals, verbatim.">i</button></p>
+
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 32px; align-items: start">
+
+<!-- ============ Mac ============ -->
+<h2 class="sec">Create · MiniMax H3 on a Mac (Base)</h2>
+
+<!-- 1 -->
+<section class="frame" aria-label="Preset, Quality and Advanced on Base">
+<p class="note">1 · Inspector. Preset pills replace Speed; Quick keeps Variant and Seed. Advanced is the last section. <span class="ph">A1</span> <span class="ph">A3</span></p>
+<div class="pair">
+<div class="insp">
+<div>
+<h2 class="h">Preset<button class="i" aria-label="More information" title="Draft 4 steps; Fast 20 steps, 45 layers, reuse 2, token reduction; Default the same without token reduction; Reference 50 steps, every layer. On NVIDIA a preset sets only the steps.">i</button></h2>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<button style="height: 36px; padding: 0 14px; border-radius: 999px; border: 0; background: var(--s3); font-size: 13px">Draft</button>
+<button style="height: 36px; padding: 0 14px; border-radius: 999px; border: 0; background: var(--s3); font-size: 13px">Fast</button>
+<button aria-pressed="true" style="height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--a2); background: var(--s1); font-size: 13px">Default</button>
+<button style="height: 36px; padding: 0 14px; border-radius: 999px; border: 0; background: var(--s3); font-size: 13px">Reference</button>
+</div>
+</div>
+<div>
+<h2 class="h">Quality</h2>
+<div class="g2">
+<button class="set"><small>Precision</small><b>int8</b></button>
+<button class="set"><small>Steps</small><b>20</b></button>
+</div>
+</div>
+<div>
+<h2 class="h">Advanced<button class="i" aria-label="More information" title="Mac only. Fewer layers and more reuse are faster and drift further from the reference.">i</button></h2>
+<div class="g2">
+<button class="set"><small>Layers</small><b>45</b></button>
+<button class="set"><small>Reuse</small><b>2</b></button>
+<button class="set" aria-expanded="true" style="outline: 2px solid var(--a1)"><small>Render</small><b>Full</b></button>
+</div>
+<div style="display: flex; align-items: center; gap: 10px"><span style="flex-grow: 1">Token reduction<button class="i" aria-label="More information" title="Pairs video tokens in the middle blocks: about 25 % faster, can shift the composition.">i</button></span><button class="sw" role="switch" aria-checked="false" aria-label="Token reduction"><span></span></button></div>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 14px">
+<div role="menu" aria-label="Render" class="menu">
+<span class="hd">Render<button class="i" aria-label="More information" title="Renders smaller and scales up after decoding: faster, less fine detail. Picks the nearest smaller size of the same shape on the 32 px grid.">i</button></span>
+<button role="menuitemradio" aria-checked="true" class="mi"><span>Full<small>the canvas size</small></span></button>
+<button role="menuitemradio" aria-checked="false" class="mi"><span>75%<small>faster, a little softer</small></span></button>
+<button role="menuitemradio" aria-checked="false" class="mi"><span>62.5%<small>a quick look; loses fine detail</small></span></button>
+</div>
+<div role="menu" aria-label="Reuse" class="menu">
+<span class="hd">Reuse</span>
+<button role="menuitemradio" aria-checked="false" class="mi"><span>1<small>every step fresh</small></span><em>Draft, Reference</em></button>
+<button role="menuitemradio" aria-checked="true" class="mi"><span>2<small>at 20 steps, 11 fresh passes</small></span><em>Fast, Default</em></button>
+<button role="menuitemradio" aria-checked="false" class="mi"><span>3<small>at 20 steps, 8 fresh passes</small></span></button>
+</div>
+</div>
+</div>
+<p class="note">Layers is 35 to 50 and Reuse 1 to 3, as menus of their values. A preset sets only the keys it names; changing one shows no preset picked.</p>
+</section>
+
+<!-- 2 -->
+<section class="frame" aria-label="Draft with core reuse and render 75 percent, running">
+<p class="note">2 · Draft picked, then Render 75%. At Reuse 1 Core reuse shows. The stage tag names the size h3 renders. <span class="ph">A3</span></p>
+<div class="stage" style="aspect-ratio: 864 / 480; max-height: 200px; position: relative">The take plays here<span style="position: absolute; left: 12px; top: 12px; padding: 4px 8px; border-radius: 8px; background: color-mix(in srgb, var(--s2) 92%, transparent); font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--t1)">renders 576 × 320 → 864 × 480</span></div>
+<div aria-label="Run progress" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+<span class="step"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg>Encode <span class="mono">8.9 s</span></span>
+<span class="step" style="background: var(--s2); border: 1px solid var(--s5); font-weight: 500; gap: 10px">Sample<span style="width: 70px; height: 4px; border-radius: 2px; background: var(--s5); display: block"><span style="display: block; width: 50%; height: 4px; border-radius: 2px; background: var(--a2)"></span></span><span class="mono" style="font-weight: 400">2 / 4</span></span>
+<span class="step" style="color: var(--t2)">Decode audio</span>
+<span class="step" style="color: var(--t2)">Decode video</span>
+<span class="step" style="color: var(--t2)">Saving</span>
+</div>
+<div class="insp">
+<div>
+<h2 class="h">Advanced</h2>
+<div class="g2">
+<button class="set"><small>Layers</small><b>50</b></button>
+<button class="set"><small>Reuse</small><b>1</b></button>
+<button class="set" style="outline: 2px solid var(--a1)"><small>Core reuse</small><b>1</b></button>
+<button class="set"><small>Render</small><b>75%</b></button>
+</div>
+<div style="display: flex; align-items: center; gap: 10px"><span style="flex-grow: 1">Token reduction</span><button class="sw" role="switch" aria-checked="false" aria-label="Token reduction"><span></span></button></div>
+</div>
+</div>
+<div role="menu" aria-label="Core reuse" class="menu">
+<span class="hd">Core reuse<button class="i" aria-label="More information" title="Runs the costly core every n steps and refreshes the rest every step. Only with Reuse 1.">i</button></span>
+<button role="menuitemradio" aria-checked="true" class="mi"><span>1<small>every step</small></span></button>
+<button role="menuitemradio" aria-checked="false" class="mi"><span>4<small>fast</small></span></button>
+<button role="menuitemradio" aria-checked="false" class="mi"><span>6<small>a rough preview</small></span></button>
+</div>
+<div class="cbar">
+<button class="chip">Base · int8</button>
+<button class="chip" title="Run on: Auto picks a free machine (see Create · Run on)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 auto"><rect x="4" y="4" width="16" height="16" rx="2"></rect><rect x="9" y="9" width="6" height="6" rx="1"></rect><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"></path></svg>Mac</button>
+<button class="chip">864 × 480</button>
+<button class="chip">5.2 s</button>
+<button class="key"><b>Generate</b><span>≈ 0:38 · 26 GB</span></button>
+</div>
+<p class="note">Core reuse lists 1 to 6. The memory estimate drops with Render (the denoise and the video decode run at 576 × 320).</p>
+</section>
+
+<!-- ============ NVIDIA ============ -->
+<h2 class="sec">Create · MiniMax H3 on NVIDIA (Base fp8)</h2>
+
+<!-- 3 -->
+<section class="frame" aria-label="Preset and Quality on Base fp8">
+<p class="note">3 · Base fp8. The presets set only Steps here, so Fast and Default run the same. Mode, Flow shift and Audio flow shift are new; there is no Advanced. <span class="ph">A1</span> <span class="ph">A5</span></p>
+<div class="pair">
+<div class="insp">
+<div>
+<h2 class="h">Preset<button class="i" aria-label="More information" title="NVIDIA: a preset sets only the steps (Draft 4, Fast and Default 20, Reference 50).">i</button></h2>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<button style="height: 36px; padding: 0 14px; border-radius: 999px; border: 0; background: var(--s3); font-size: 13px">Draft</button>
+<button style="height: 36px; padding: 0 14px; border-radius: 999px; border: 0; background: var(--s3); font-size: 13px">Fast</button>
+<button aria-pressed="true" style="height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--a2); background: var(--s1); font-size: 13px">Default</button>
+<button style="height: 36px; padding: 0 14px; border-radius: 999px; border: 0; background: var(--s3); font-size: 13px">Reference</button>
+</div>
+</div>
+<div>
+<h2 class="h">Quality</h2>
+<div class="g2">
+<button class="set"><small>Precision</small><b>fp8</b></button>
+<button class="set"><small>Steps</small><b>20</b></button>
+<button class="set" aria-expanded="true" style="outline: 2px solid var(--a1)"><small>Mode</small><b>Lossless</b></button>
+<button class="set"><small>Flow shift</small><b>12</b></button>
+<button class="set"><small>Audio flow shift</small><b>3</b></button>
+</div>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 14px">
+<div role="menu" aria-label="Mode" class="menu">
+<span class="hd">Mode<button class="i" aria-label="More information" title="High is not offered: SGLang allows it only on its audited 4-GPU setup.">i</button></span>
+<button role="menuitemradio" aria-checked="true" class="mi"><span>Lossless<small>SGLang's fast paths, the same maths</small></span></button>
+<button role="menuitemradio" aria-checked="false" class="mi"><span>Exact<small>bit for bit the reference path, slower</small></span></button>
+</div>
+<div class="ao">
+<div class="lbl"><span>Flow shift<button class="i" aria-label="More information" title="How the noise schedule spends its steps on the picture. The model's value is 12.">i</button></span><span class="m">12.0</span></div>
+<input type="range" min="1" max="20" step="0.5" value="12" aria-label="Flow shift" style="width: 100%; accent-color: var(--a2)">
+<div class="lbl"><span>Audio flow shift</span><span class="m">3.0</span></div>
+<input type="range" min="1" max="10" step="0.5" value="3" aria-label="Audio flow shift" style="width: 100%; accent-color: var(--a2)">
+</div>
+</div>
+</div>
+<p class="note">Layers, Reuse, Core reuse, Token reduction and Render are hidden on Base fp8 and the NVIDIA run ignores them.</p>
+</section>
+
+<!-- 4 -->
+<section class="frame" aria-label="Refusals">
+<p class="note">4 · What is refused before h3 starts, under the input it names. <span class="ph">A3</span></p>
+<div class="insp">
+<div>
+<h2 class="h">Canvas</h2>
+<div class="g2">
+<button class="set"><small>Aspect</small><b>26:15</b></button>
+<button class="set"><small>Size</small><b>832 × 480</b></button>
+</div>
+</div>
+<div>
+<h2 class="h">Advanced</h2>
+<div class="g2">
+<button class="set"><small>Layers</small><b>40</b></button>
+<button class="set"><small>Reuse</small><b>3</b></button>
+<button class="set" style="outline: 2px solid #ff8a80"><small>Render</small><b>62.5%</b></button>
+</div>
+<p class="err">generate: the canvas 832 × 480 has no smaller size of the same shape; use Full</p>
+<div style="display: flex; align-items: center; gap: 10px"><span style="flex-grow: 1">Token reduction</span><button class="sw" role="switch" aria-checked="true" aria-label="Token reduction"><span></span></button></div>
+<p class="err">generate: token reduction with 40 layers or fewer and reuse 3 gives colour ringing; use reuse 2 or more layers</p>
+</div>
+</div>
+<div class="cbar">
+<button class="chip">Base · int8</button>
+<button class="chip">832 × 480</button>
+<button class="chip">5.2 s</button>
+<button class="key" aria-disabled="true" style="opacity: .55"><b>Generate</b><span>fix 2 problems</span></button>
+</div>
+<p class="note">Token reduction is also refused when h3 renders at 256 × 256. The Generate key is the board's usual blocked state.</p>
+</section>
+
+<!-- ============ Replace sound ============ -->
+<h2 class="sec">Create · References: replace a video's sound</h2>
+
+<!-- 5 -->
+<section class="frame" aria-label="Video reference with a replaced sound">
+<p class="note">5 · Video references, Sound gets Replace and a soundtrack row. It counts as a sound input, like Keep. Mac and NVIDIA. <span class="ph">A4</span></p>
+<div class="insp">
+<div>
+<h2 class="h" style="display: flex; align-items: center">Video references<button class="i" aria-label="More information" title="Videos the prompt names &lt;Video 1&gt;, &lt;Video 2&gt;, &lt;Video 3&gt;: 2 to 15 s each, 15 s in all.">i</button><span style="flex-grow: 1"></span><span class="mono" style="font-weight: 400" aria-label="1 of 3">1 / 3</span></h2>
+<div class="kf">
+<div style="display: flex; align-items: center; gap: 8px"><span class="thumb" aria-hidden="true"></span><span style="flex-grow: 1; min-width: 0"><b style="display: block; font-size: 13px">[YOUR VIDEO]</b><span class="mono" style="font-size: 11px">512 × 512 · 96 f · 4.00 s · sound</span></span><span class="mono" style="font-size: 11px; color: var(--t1)">&lt;Video 1&gt;</span><button class="x" aria-label="Remove &lt;Video 1&gt;">×</button></div>
+<div class="bar" role="group" aria-label="Part of &lt;Video 1&gt;, in 0.50 s, out 3.50 s"><span class="sel" style="left: 12.5%; width: 75%"></span></div>
+<div class="row"><span>Part</span><span>3.0 s · 2 to 15 s</span></div>
+<div role="group" aria-label="Sound" style="display: flex; flex-direction: column; gap: 6px"><span style="font-size: 12px; color: var(--t2)">Sound<button class="i" aria-label="More information" title="Keep: the model also hears the video's sound. Silent: picture only. Replace: it hears the soundtrack you pick instead, cut to the part's length.">i</button></span><div class="seg"><button aria-pressed="false">Keep</button><button aria-pressed="false">Silent</button><button aria-pressed="true">Replace</button></div></div>
+<div class="ao">
+<div style="display: flex; align-items: center; gap: 8px"><span class="thumb wave" aria-hidden="true" style="height: 28px"></span><span style="flex-grow: 1; min-width: 0"><small style="display: block; font-size: 11px; color: var(--t2)">Soundtrack</small><b style="display: block; font-size: 13px">[YOUR SOUND]</b><span class="mono" style="font-size: 11px">wav · 12.0 s</span></span><button class="x" aria-label="Remove the soundtrack">×</button></div>
+<div class="wave" style="position: relative" role="group" aria-label="Part of the soundtrack, in 4.00 s, out 7.00 s"><span class="sel" style="position: absolute; top: -3px; bottom: -3px; left: 33.3%; width: 25%; border: 2px solid var(--a2); border-radius: 8px; background: color-mix(in srgb, var(--a2) 14%, transparent); box-sizing: border-box"></span></div>
+<div class="row"><span>Part</span><span>3.0 s · cut to the video's 3.0 s</span></div>
+</div>
+</div>
+<span class="mono" style="font-size: 12px">3.0 s of 15.0 s sound · 1 of 3 sound inputs</span>
+<button class="dash">Add video</button>
+</div>
+</div>
+</section>
+
+<!-- 6 -->
+<section class="frame" aria-label="Replace without a soundtrack">
+<p class="note">6 · Replace picked, no soundtrack yet: the row asks for one and Generate is blocked. <span class="ph">A4</span></p>
+<div class="comp">
+<div role="list" aria-label="References" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+<span role="listitem" style="display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 6px 0 4px; border-radius: 8px; background: var(--s5); font-size: 12px; font-family: 'JetBrains Mono', monospace"><i aria-hidden="true" class="thumb" style="width: 24px; height: 24px; border-radius: 5px"></i>&lt;Picture 1&gt;</span>
+<span role="listitem" style="display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 6px 0 4px; border-radius: 8px; background: var(--s5); font-size: 12px; font-family: 'JetBrains Mono', monospace"><i aria-hidden="true" class="thumb" style="width: 24px; height: 24px; border-radius: 5px"></i>&lt;Video 1&gt;</span>
+</div>
+<textarea rows="2" aria-label="Prompt">The dancer from &lt;Picture 1&gt; moves like the one in &lt;Video 1&gt;, to the new beat</textarea>
+</div>
+<div class="insp">
+<div>
+<h2 class="h">Video references</h2>
+<div class="kf">
+<div style="display: flex; align-items: center; gap: 8px"><span class="thumb" aria-hidden="true"></span><span style="flex-grow: 1; min-width: 0"><b style="display: block; font-size: 13px">[YOUR VIDEO]</b><span class="mono" style="font-size: 11px">3.0 s part · sound</span></span><span class="mono" style="font-size: 11px; color: var(--t1)">&lt;Video 1&gt;</span></div>
+<div class="seg"><button aria-pressed="false">Keep</button><button aria-pressed="false">Silent</button><button aria-pressed="true">Replace</button></div>
+<button class="dash">Pick soundtrack</button>
+<p class="err">generate.videos[1].soundtrack: Replace needs a soundtrack</p>
+</div>
+</div>
+</div>
+<p class="note">The soundtrack comes from the gallery (an audio take, or a video's sound); Pick soundtrack opens the gallery picker on Audio. A soundtrack under 2.34 s is refused like a short kept sound.</p>
+</section>
+
+<!-- ============ Chain ============ -->
+<h2 class="sec">Gallery, Create and Timeline · a take's frame as H3's first or last frame</h2>
+
+<!-- 7 -->
+<section class="frame" aria-label="Last frame in menu">
+<p class="note">7 · A video take's menu (Create strip, Gallery, a Timeline clip): Last frame in… and First frame in… make the frame, then show its Use in… offers. <span class="ph">A2</span></p>
+<div style="display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap">
+<button aria-label="Take, seed 42, 5.2 seconds" style="flex: 0 0 auto; width: 112px; height: 72px; border-radius: 8px; border: 2px solid var(--a2); background: var(--s1); color: var(--t2); font-family: 'JetBrains Mono', monospace; font-size: 11px">seed 42 · 5.2 s</button>
+<div role="menu" aria-label="Take" class="menu" style="flex: 0 1 200px">
+<button role="menuitem" class="mi"><span>Use in…</span></button>
+<button role="menuitem" class="mi" style="background: var(--s4); font-weight: 600"><span>Last frame in…</span></button>
+<button role="menuitem" class="mi"><span>First frame in…</span></button>
+<button role="menuitem" class="mi"><span>Add to timeline</span></button>
+</div>
+<div role="menu" aria-label="Last frame of seed 42 in" class="menu" style="flex: 1 1 220px">
+<span class="hd">Last frame in</span>
+<button role="menuitem" class="mi"><span>H3 Image to video<small>First frame</small></span></button>
+<button role="menuitem" class="mi"><span>LTX Image to video<small>Keyframe 1</small></span></button>
+<button role="menuitem" class="mi"><span>H3 References<small>&lt;Picture 1&gt;</small></span></button>
+<button role="menuitem" class="mi"><span>Qwen Image<small>Reference</small></span></button>
+</div>
+</div>
+<p class="note">The frame becomes an image take "seed 42 · last frame" in the Gallery (parent: the video). Same on Mac and NVIDIA.</p>
+</section>
+
+<!-- 8 -->
+<section class="frame" aria-label="Last frame tile picks a frame of a video">
+<p class="note">8 · H3 Image to video's Last frame tile. Its picker shows video takes too; a video offers its last or first frame. <span class="ph">A2</span></p>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<button class="tile" aria-haspopup="dialog" aria-label="First frame: seed 42, last frame" style="display: flex; align-items: center; gap: 8px; flex: 0 1 220px"><span class="thumb" aria-hidden="true"></span><span><small>First frame</small><b>seed 42 · last frame</b></span></button>
+<button class="tile" aria-haspopup="dialog" aria-expanded="true" aria-label="Last frame: None, optional" style="display: flex; align-items: center; gap: 8px; flex: 0 1 220px; outline: 2px solid var(--a1)"><span class="thumb" aria-hidden="true"></span><span><small>Last frame</small><b>None · optional</b></span></button>
+</div>
+<div class="card" style="gap: 10px">
+<div style="display: flex; align-items: center; gap: 8px"><b style="flex-grow: 1">Last frame</b><div class="seg"><button aria-pressed="false">Images</button><button aria-pressed="true">Video</button></div></div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px">
+<div class="pk"><i style="border: 2px solid var(--a1)">video</i><b>Shot 3 · tree line</b><small>H3 · Create</small></div>
+<div class="pk"><i>video</i><b>Fox trots in</b><small>LTX · pipeline</small></div>
+<div class="pk"><i>video</i><b>[YOUR VIDEO]</b><small>Upload</small></div>
+</div>
+<div style="display: flex; gap: 8px; justify-content: flex-end"><button class="chip">Use first frame</button><button class="chip" style="background: var(--a1); color: var(--on1)">Use last frame</button></div>
+</div>
+</section>
+
+<!-- 9 -->
+<section class="frame" aria-label="Timeline New shot on H3" style="grid-column: 1 / -1">
+<p class="note">9 · Timeline New shot with H3 Image to video: both frame options now work for it (its First and Last frame, from the workflow's keyframes). Re-render keeps the binds. <span class="ph">A2</span></p>
+<section aria-label="New shot" style="border-radius: 16px; background: var(--s2); border: 1px solid var(--s5); box-shadow: 0 16px 40px color-mix(in srgb, var(--shd) 50%, transparent); padding: 12px 14px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em">New shot</h2>
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--t2)">at 0:10 · fills the 5.2 s gap · uses this sequence's cast</span>
+<div style="flex-grow: 1"></div>
+<button class="chip" aria-pressed="true" style="outline: 2px solid var(--a1)">Start from last frame of Shot 2</button>
+<button class="chip" aria-pressed="true" style="outline: 2px solid var(--a1)">End on first frame of Shot 3</button>
+</div>
+<label for="shot" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%)">Shot prompt</label>
+<textarea id="shot" rows="1" style="width: 100%; box-sizing: border-box; resize: none; border: 0; outline: 0; background: transparent; color: var(--t1); font: inherit; font-size: 15px; line-height: 22px">@fox turns at the river and looks back, water rushing</textarea>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+<button class="chip">H3 Image to video</button>
+<button class="chip">Base · int8</button>
+<button class="chip" title="Run on: Auto picks a free machine (see Create · Run on)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 auto"><rect x="4" y="4" width="16" height="16" rx="2"></rect><rect x="9" y="9" width="6" height="6" rx="1"></rect><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"></path></svg>Auto</button>
+<button class="chip">5.2 s · 124 frames</button>
+<button class="chip">Open in Create</button>
+<div style="flex-grow: 1"></div>
+<button style="height: 48px; padding: 0 22px; border-radius: 12px; border: 0; background: var(--a1); color: var(--on1); background-image: linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 55%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), inset 0 -5px 0 color-mix(in srgb, var(--shd) 25%, transparent), 0 14px 26px -8px color-mix(in srgb, var(--shd) 75%, transparent); font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.04em; text-transform: uppercase">Generate shot</button>
+</div>
+</section>
+<p class="note">The gap's length snaps to H3's 5 + 17k grid (124 frames · 5.2 s). The shot's First frame is Shot 2's last frame, its Last frame Shot 3's first.</p>
+</section>
+
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":3240}}'>
+class Component extends DCLogic {
+state = { theme: null };
+renderVals() {
+return {
+theme: this.state.theme ?? this.props.theme ?? 'forest',
+setTheme: (e) => this.setState({ theme: e.target.value })
+};
+}
+}
+</script>
+</body>
+</html>
