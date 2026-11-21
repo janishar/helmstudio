@@ -54,7 +54,7 @@ variants:
         - loras/ltx-2.5-22b-distilled-lora-450-bf16.safetensors
       licence: ltx-2-community
       must_accept: true
-      gated: false
+      gated: true   # Lightricks/LTX-2.5 is gated (auto): the host needs a Hub token
       bytes: 79998697238
   # the full (non-distilled) transformer, in the same folder (core/models.py: one folder, two variants); every other
   # component is the distilled variant's (the connector too: the old studio read it from the distilled file first)
@@ -70,7 +70,7 @@ variants:
       allow_patterns: [diffusion_models/ltx-2.5-22b-dev-transformer-bf16.safetensors]
       licence: ltx-2-community
       must_accept: true
-      gated: false
+      gated: true   # Lightricks/LTX-2.5 is gated (auto): the host needs a Hub token
       bytes: 42018190584
   # The alternate path for NVIDIA hosts (docs/plan/17-nvidia-quantized.md 21.6): community weights, FP8 where one
   # exists, else int8 ConvRot, run by torch.py on the vendored ltx-core. distilled-fp8: unsloth's per-row FP8
@@ -90,7 +90,7 @@ variants:
              allow_patterns: [latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors,
                               vae/ltx-2.5-video-vae-conv-bf16.safetensors, vae/ltx-2.5-audio-vae-bf16.safetensors,
                               model_patches/ltx-2.5-duration-head-bf16.safetensors],
-             licence: ltx-2-community, must_accept: true, gated: false, bytes: 43721932016}
+             licence: ltx-2-community, must_accept: true, gated: true, bytes: 43721932016}
     sources:
       - {repo: unsloth/LTX-2.5-FP8, revision: 9001a61f9b788e21ae7e7e2eca2ea2ee66041570,
          allow_patterns: [LTX-2.5-FP8.safetensors, "connectors/*"], gated: false, bytes: 25400522558}
