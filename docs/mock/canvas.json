@@ -388,6 +388,15 @@
       "w": 1440,
       "x": 1520,
       "y": 1080
+    },
+    "LtxFeatures.dc.html": {
+      "expand": "fill",
+      "h": 5080,
+      "is_interactive": true,
+      "title": "Create · LTX studio features: Detail, negative prompt, float16, bindings, distilled actions, Deblur, Refine details, SDR to HDR",
+      "w": 1440,
+      "x": 13680,
+      "y": 2280
     }
   },
   "createdOnFiles": {
@@ -422,6 +431,7 @@
     "TextToVideo.dc.html",
     "ImageToVideo.dc.html",
     "VideoSource.dc.html",
+    "LtxFeatures.dc.html",
     "Gallery.dc.html",
     "GalleryPicker.dc.html",
     "Elements.dc.html",
