@@ -67,7 +67,7 @@ describe("RowsEditor: the References grid", () => {
     const [a, b] = [take(), take()];
     remember([a, b]);
     grid(refs, rowsOf(a.id, b.id));
-    expect(screen.getByText("In the prompt: <Picture 1>, <Picture 2>…")).toBeTruthy();
+    expect(screen.queryByText(/In the prompt/)).toBeNull(); // the (i) help says it
     expect(screen.getByLabelText("2 of 9").textContent).toBe("2 / 9");
     const list = screen.getByRole("list", { name: "References" });
     expect(

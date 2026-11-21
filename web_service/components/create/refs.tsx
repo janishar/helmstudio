@@ -349,11 +349,7 @@ export function RowsEditor({
     >
       {!compact && (
         <span className="mono flex justify-between gap-2 text-[12px] text-t2">
-          <span className="min-w-0">
-            {f.param.mention &&
-              `In the prompt: ${max > 1 ? `${label(0)}, ${label(1)}…` : label(0)}`}
-            {f.optional && "Optional: may stay empty"}
-          </span>
+          <span className="min-w-0">{f.optional && "Optional: may stay empty"}</span>
           <span aria-label={`${ids.length} of ${max}`} className="shrink-0">
             {ids.length} / {max}
           </span>

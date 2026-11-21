@@ -79,7 +79,7 @@ describe("MediaRows: the inspector's cards", () => {
     const b = video(4, 30);
     remember([a, b]);
     mount(videos, rowsOf({ take_id: a.id, in: 0, out: 8 }, { take_id: b.id, in: 1, out: 3 }));
-    expect(screen.getByText("In the prompt: <Video 1>, <Video 2>…")).toBeTruthy();
+    expect(screen.queryByText(/In the prompt/)).toBeNull(); // the (i) help says it
     expect(screen.getByLabelText("2 of 3").textContent).toBe("2 / 3");
     const list = screen.getByRole("list", { name: "Videos, in order" });
     const items = within(list).getAllByRole("listitem");

@@ -887,9 +887,7 @@ export function MediaRows({
   return (
     <div className="flex flex-col gap-2.5">
       <span className="mono flex justify-between gap-2 text-[12px] text-t2">
-        <span className="min-w-0">
-          {p.mention && `In the prompt: ${max > 1 ? `${label(0)}, ${label(1)}…` : label(0)}`}
-        </span>
+        <span className="min-w-0" />
         <span aria-label={`${rows.length} of ${max}`} className="shrink-0">
           {rows.length} / {max}
         </span>
