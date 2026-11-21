@@ -122,6 +122,21 @@ Last full contract suite on the final M7 code: see the last M7 commit message (p
 - Open: the stored int8 scales are rounded to bf16 by the core loader; the enhancer on CUDA (NVFP4 dequant, then int8)
   and everything else is unrun on CUDA (goldens, PSNR, `_scaled_mm` on the VM); peaks in model.yaml are MPS measurements.
 
+## M9 phase 1 notes: Qwen3-TTS on CUDA
+
+- Official bf16 only (1.7B: a quantized variant gains nothing). `runtimes.torch.devices` is now `[mps, cuda]`
+  (fixture `qwen3-tts.models.valid.json`); neither variant has `devices`, so both publish on every host (torch
+  runtime devices never gate; `tests/test_qwen3_tts.py` checks both on a faked cuda).
+- No pack code change: the pack and its vendored port have no MPS-only path (sdpa attention by default, global
+  `torch.manual_seed` seeds CUDA too, no synchronize, no dtype workaround, the codec bf16 as on MPS; no clone path:
+  the codec encoder is never read). torch.compile stays off on CUDA too (untested there; same codes as the reference).
+- Goldens: sampling diverges across devices, so CUDA gets its own `<case>.cuda.*`; `tests/golden/record_qwen3_tts.py`
+  on CUDA records all three cases (voice-overs from their MPS golden's settings) from the vendored port, and
+  `tests/test_qwen3_tts_golden.py` compares against them there (fails "no CUDA golden" until recorded).
+- VM, once: `uv run --extra torch python tests/golden/record_qwen3_tts.py --port packs/qwen3_tts/vendor`, then
+  `uv run --extra torch pytest -m gpu -s tests/test_qwen3_tts_golden.py` (preset-ryan-calm-s7 2.1 s, design-s7
+  1.5 s, dialogue-ryan-aiden-s1 3.6 s). Weights: both folders (about 9 GB). Not yet run on CUDA.
+
 ## M9 phase 1 notes: brought up on the spot VM (`helm-gpu`, RTX PRO 6000, driver 615)
 
 - Joined as host `gcp` to the dev stack (STACK_TLS on, tunnel), source copied from the working tree, `docker compose
@@ -160,10 +175,18 @@ Last full contract suite on the final M7 code: see the last M7 commit message (p
 - Qwen FP8 through the dev stack (Mac runners restarted on the new schema): `helm run qwen-image` base-fp8 and
   turbo-fp8, 768² seed 42, golden prompt, ran on `gcp` (`made_with.host` = gcp, precision fp8);
   docs/mock/checks/m9/qwen-app-*.png.
-- **MiniMax H3 Image `base-fp8` still not downloaded**: `helm model download … --accept-licence` was refused by this
-  session's permission guard (the acceptance came relayed, not from the owner in the session). The owner runs
-  `cli/bin/helm model download minimax-h3-image --host gcp --variant base-fp8 --accept-licence` himself; then the
-  CUDA checks (t2i ≤ 1 MP fixed seed against the Mac int8, the curve-form adaLN slow test) can run.
+- MiniMax H3 Image `base-fp8` on `gcp` (third VM pass; the owner accepted the licence in the lead's session, model
+  job ff0c1816 took 2.5 min for 47 GB). The curve-form adaLN slow test passes on the real FP8 DiT (the dense
+  time-MLP and adaLN tensors copied over as a 0.6 GB file; the VM has no official DiT). Through the dev stack, the
+  golden cases' settings (1024², seed 42, 6 steps, fox prompt; the edit with the golden's one 768² reference):
+  `made_with.host` = gcp, variant base-fp8, precision fp8. 22.2 dB t2i / 27.5 dB edit against the Mac int8 goldens;
+  same scene, the t2i fox sits a little more to the right; no noise or artefacts, so the curve timesteps are right
+  and no code changed. Numbers in reference-notes/nvidia-quantized.md, Measured; images docs/mock/checks/m9/minimax-*.
+- **Gap: base-fp8 never becomes `present` after a download.** The `enhancer` component (MiniMax-H3-Image-PE, its
+  own dir) has no source in any variant, so the variant stays `partial` and the studio finds no host. To test, a
+  140-byte placeholder `model-00001-of-00001.safetensors` was put in `/srv/helm/models/MiniMax-H3-Image-PE` on the
+  VM (still there): an un-bypassed enhance node on `gcp` will fail on it. Owner's choice: add the PE repo as a source
+  (17 GB, same licence) or make the enhancer optional for presence; then delete the placeholder.
 - Not done: trimming the ZONOS3 sources (~23 MB) from the CUDA runtime image (a later `rm` layer would not shrink
   it). The Qwen ask stage (FP8 lm_head and `generate()`) is still unrun on CUDA.
 
