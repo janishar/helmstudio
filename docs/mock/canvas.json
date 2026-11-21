@@ -370,6 +370,15 @@
       "title": "Timeline · New line on ZONOS3, a ZONOS3 dialogue clip",
       "expand": "fill",
       "is_interactive": true
+    },
+    "Assistant.dc.html": {
+      "expand": "fill",
+      "h": 4281,
+      "is_interactive": true,
+      "title": "Assistant · the drawer on Create and Timeline, phone, confirm cards, small states",
+      "w": 1440,
+      "x": 21280,
+      "y": 0
     }
   },
   "createdOnFiles": {
@@ -431,7 +440,8 @@
     "TimelineAudio.dc.html",
     "CreateAudioZonos3.dc.html",
     "VoicePickerZonos3.dc.html",
-    "TimelineAudioZonos3.dc.html"
+    "TimelineAudioZonos3.dc.html",
+    "Assistant.dc.html"
   ],
   "pages": [],
   "title": "helmstudio-next UI mock"

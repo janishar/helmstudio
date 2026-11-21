@@ -1,0 +1,638 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Assistant: the drawer on Create and Timeline, phone, confirm cards</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Bricolage+Grotesque:wght@600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* themes */
+[data-theme="forest"]{--g:#0e1512;--in:#090e0c;--p0:#131c17;--s1:#16201b;--s2:#1e2a24;--s3:#26342d;--s4:#2c3b33;--s5:#32433a;--ln:#3d5146;--dash:#5a7265;--t2:#a9b8ab;--t1:#f0f2e8;--t1b:#dfe5d8;--ib:#354a3f;--it:#cfdacb;--a1:#b9e37a;--on1:#17200a;--a2:#ff8552;--on2:#2b0c02;--shd:#000000}
+[data-theme="ocean"]{--g:#0c1320;--in:#080d17;--p0:#101a2a;--s1:#131d2e;--s2:#1c2940;--s3:#24344f;--s4:#2b3d5c;--s5:#33486b;--ln:#40587f;--dash:#5e779e;--t2:#9fb0c6;--t1:#eaf0f7;--t1b:#d6dfeb;--ib:#33486b;--it:#cdd8e6;--a1:#ff8a6b;--on1:#2b0d05;--a2:#7cc7f2;--on2:#06202e;--shd:#000000}
+[data-theme="aubergine"]{--g:#15101a;--in:#0f0b13;--p0:#1a1421;--s1:#1f1826;--s2:#2b2135;--s3:#352a41;--s4:#3f324d;--s5:#4a3b5a;--ln:#5c4a6e;--dash:#7a678c;--t2:#b3a6b8;--t1:#f3ecf2;--t1b:#e2d8e3;--ib:#4a3b5a;--it:#d9cedc;--a1:#ffb36b;--on1:#2b1500;--a2:#d59bf6;--on2:#230a33;--shd:#000000}
+[data-theme="espresso"]{--g:#17110d;--in:#0f0b08;--p0:#1c1510;--s1:#211914;--s2:#2e231c;--s3:#3a2d24;--s4:#45362b;--s5:#514033;--ln:#655141;--dash:#84705e;--t2:#b8a896;--t1:#f5ece0;--t1b:#e5d9c9;--ib:#514033;--it:#dccfbd;--a1:#f2b84b;--on1:#2a1c00;--a2:#ff8552;--on2:#2b0c02;--shd:#000000}
+[data-theme="oxblood"]{--g:#170e10;--in:#0f0809;--p0:#1c1113;--s1:#221517;--s2:#301d20;--s3:#3c2529;--s4:#472d31;--s5:#54363a;--ln:#694549;--dash:#896266;--t2:#bfa8a6;--t1:#f6ecea;--t1b:#e6d8d6;--ib:#54363a;--it:#dccccb;--a1:#f6c177;--on1:#2b1a00;--a2:#ff7d96;--on2:#33060f;--shd:#000000}
+[data-theme="indigo"]{--g:#0e0f22;--in:#090a18;--p0:#12142b;--s1:#161832;--s2:#20234a;--s3:#292d5c;--s4:#32376c;--s5:#3c417d;--ln:#4b5194;--dash:#6a70b0;--t2:#a5a9cf;--t1:#eceefc;--t1b:#d9dcf3;--ib:#3c417d;--it:#d0d3ee;--a1:#ffc145;--on1:#2b1d00;--a2:#ff7fa8;--on2:#33061a;--shd:#000000}
+[data-theme="parchment"]{--g:#f3ede2;--in:#e9e1d3;--p0:#f8f3ea;--s1:#fbf7ef;--s2:#ffffff;--s3:#efe7d9;--s4:#e6ddcd;--s5:#dcd1be;--ln:#cdbfa8;--dash:#a8987f;--t2:#6e6455;--t1:#1f1a14;--t1b:#3a3228;--ib:#dcd1be;--it:#3a3228;--a1:#c8553d;--on1:#ffffff;--a2:#2f5d8a;--on2:#ffffff;--shd:#b8a688}
+body{margin:0}
+nav button{flex-direction:column!important;width:58px!important;height:54px!important;gap:3px;font-size:10px;font-weight:500}
+nav button::after{content:attr(aria-label)}
+*{text-transform:none!important}
+nav button{height:64px!important;gap:5px!important;background:transparent!important}
+nav button svg{width:36px;height:36px;padding:8px;box-sizing:border-box;border-radius:12px;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.5),inset 0 -4px 6px color-mix(in srgb, var(--shd) 35%, transparent),0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)}
+nav button[aria-label="Create"] svg{background:linear-gradient(155deg,#a393ff,#4a2fe0)}
+nav button[aria-label="Pipelines"] svg{background:linear-gradient(155deg,#6cc4ff,#1f5fe0)}
+nav button[aria-label="Gallery"] svg{background:linear-gradient(155deg,#ffb07a,#e0457a)}
+nav button[aria-label="Timeline"] svg{background:linear-gradient(155deg,#ffe07a,#f08a1c)}
+nav button[aria-label="Models"] svg{background:linear-gradient(155deg,#7af5d6,#12967f)}
+nav button:not([aria-current]) svg{filter:saturate(.55) brightness(.8)}
+nav button[aria-current]{color:var(--t1)!important}
+nav button[aria-current] svg{outline:2px solid rgba(255,255,255,.85);outline-offset:2px}
+main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.09),inset 0 -2px 0 color-mix(in srgb, var(--shd) 30%, transparent),0 2px 5px color-mix(in srgb, var(--shd) 45%, transparent)}
+[style*="border-radius: 16px"],[style*="border-radius: 18px"],[style*="border-radius: 14px"]{box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 28px 48px -18px color-mix(in srgb, var(--shd) 85%, transparent),0 10px 18px -10px color-mix(in srgb, var(--shd) 60%, transparent)}
+aside{box-shadow:-28px 0 48px -28px color-mix(in srgb, var(--shd) 80%, transparent)}
+.n{background:linear-gradient(180deg,var(--s3),var(--s1))!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 20px 34px -12px color-mix(in srgb, var(--shd) 85%, transparent)!important}
+.pi,.po{box-shadow:0 0 8px currentColor}
+input[type=range]{filter:drop-shadow(0 2px 3px color-mix(in srgb, var(--shd) 60%, transparent))}
+button{font:inherit;color:inherit;cursor:pointer}
+a{color:var(--t2)}a:hover{color:var(--t1)}
+nav{gap:14px!important}
+.i{width:18px;height:18px;margin-left:6px;border-radius:50%;border:0;background:var(--ib);color:var(--it);font:600 11px/18px Inter,sans-serif;padding:0;vertical-align:middle;flex:0 0 auto}
+[style*="border-radius: 16px"],[style*="border-radius: 18px"],.set,.crit,.tile{background-image:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,0) 46%)}
+.tile{flex:1 1 150px;min-height:52px;text-align:left;padding:8px 12px;border-radius:12px;border:0;background:var(--s3);display:flex;align-items:center;gap:10px}
+.tile i{flex:0 0 auto;width:32px;height:32px;border-radius:8px;background:var(--ln);display:block}
+.tile small{display:block;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t2)}
+.tile b{display:block;font-size:14px;font-weight:600}
+.look{text-align:left;padding:0;border:0;background:transparent;display:flex;flex-direction:column;gap:6px}
+.look i{display:flex;align-items:center;justify-content:center;aspect-ratio:16/10;border-radius:10px;border:1px dashed var(--dash);background:var(--s1);font-style:normal;font-size:11px;color:var(--t2)}
+.look b{font-size:13px;font-weight:600}
+.look small{font-size:11px;color:var(--t2)}
+.chip{height:36px;padding:0 12px;border-radius:10px;border:0;background:var(--s4);font-size:13px;font-weight:500}
+/* organic layer */
+[style*="min-height: 960px"]{background-image:radial-gradient(1100px 620px at 14% -12%,rgba(255,196,120,.11),transparent 62%),radial-gradient(900px 640px at 108% 112%,color-mix(in srgb, var(--a1) 7%, transparent),transparent 60%),repeating-linear-gradient(118deg,rgba(255,255,255,.014) 0 1px,transparent 1px 4px)}
+nav{margin:14px 0 14px 14px;border:0!important;border-radius:30px;background:var(--s1);align-self:flex-start;padding:14px 4px!important;flex:0 0 68px!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 24px 40px -18px color-mix(in srgb, var(--shd) 80%, transparent)}
+aside{margin:14px 14px 14px 0;border:0!important;border-radius:34px 34px 34px 14px;background:var(--p0)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 28px 48px -20px color-mix(in srgb, var(--shd) 85%, transparent)!important}
+main [style*="border-radius: 16px"]{border-radius:28px 28px 28px 12px!important;border-color:transparent!important}
+main [style*="border-radius: 18px"]{border-radius:32px!important;border-color:transparent!important}
+aside [style*="border-radius: 14px"],aside [style*="border-radius: 12px"],.set,.crit{border-radius:18px 18px 18px 8px!important;border-color:transparent!important}
+.n{border-radius:20px 20px 20px 8px!important;border-color:rgba(255,255,255,.08)}
+button[style*="border-radius: 14px"]{border-radius:20px 20px 20px 8px!important}
+main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -2px 0 color-mix(in srgb, var(--shd) 28%, transparent),0 3px 6px color-mix(in srgb, var(--shd) 35%, transparent)}
+.lane{display:flex;align-items:stretch;height:56px}
+.lane>span:first-child{flex:0 0 72px;display:flex;align-items:center;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t2)}
+.clip{outline:3px solid var(--s1);outline-offset:-1px;flex:0 0 auto;box-sizing:border-box;height:56px;border-radius:8px;padding:6px 8px;text-align:left;font-size:11px;line-height:14px;overflow:hidden;display:flex;flex-direction:column;justify-content:space-between}
+.clip b{font-weight:600;font-size:12px;white-space:nowrap}
+.clip small{font-family:'JetBrains Mono',monospace;font-size:10px;white-space:nowrap}
+.act{height:40px;border-radius:10px;border:0;background:var(--s3);font-size:13px;font-weight:500;text-align:left;padding:0 12px}
+/* assistant board */
+nav button[aria-label="Assistant"] svg{background:linear-gradient(155deg,#d8f58c,#3c9a2e)}
+nav button[aria-label="Assistant"][aria-expanded="true"]{color:var(--t1)!important}
+nav button[aria-label="Assistant"][aria-expanded="true"] svg{filter:none;outline:2px solid rgba(255,255,255,.85);outline-offset:2px}
+.board{position:relative;flex:1 1 100%;display:flex;flex-wrap:nowrap;align-items:flex-start;box-sizing:border-box}
+.board+.board{border-top:1px solid var(--s3)}
+.lbl{position:absolute;left:96px;top:-1px;z-index:30;padding:5px 12px;border-radius:0 0 10px 10px;background:var(--s3);font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t2)}
+.note{font-size:12px;color:var(--t2);margin:0}
+.mono{font-family:'JetBrains Mono',monospace;color:var(--t2)}
+.drw{position:absolute;top:14px;right:14px;bottom:14px;z-index:20;width:340px;box-sizing:border-box;padding:16px 16px 16px;border-radius:34px 34px 34px 14px;background:var(--s1);background-image:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,0) 30%);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),-30px 0 60px -24px color-mix(in srgb,var(--shd) 90%,transparent),0 40px 80px -20px color-mix(in srgb,var(--shd) 90%,transparent);display:flex;flex-direction:column;gap:10px;overflow:hidden}
+.drw button,.sheet button,.mini button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -2px 0 color-mix(in srgb, var(--shd) 28%, transparent),0 3px 6px color-mix(in srgb, var(--shd) 35%, transparent)}
+.dh{display:flex;align-items:center;gap:8px}
+.dh h2{margin:0;font-family:'Bricolage Grotesque',Inter,sans-serif;font-size:16px;font-weight:700;flex:1 1 auto;display:flex;align-items:center;gap:8px}
+.dh h2 svg{width:26px;height:26px;padding:5px;box-sizing:border-box;border-radius:9px;color:#fff;background:linear-gradient(155deg,#d8f58c,#3c9a2e)}
+.ib{width:32px;height:32px;padding:0;border:0;border-radius:10px;background:var(--s3);color:var(--t2);display:inline-grid;place-items:center;flex:0 0 auto}
+.x{width:28px;height:28px;padding:0;border:0;border-radius:8px;background:transparent;color:var(--t1);display:grid;place-items:center;flex:0 0 auto;box-shadow:none!important}
+.where{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:11px;color:var(--t2)}
+.where span{padding:2px 8px;border-radius:999px;background:var(--s3);color:var(--t1b)}
+.rem{display:flex;align-items:center;gap:6px;font-size:11px;line-height:15px;color:#f2c14e}
+.thr{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;justify-content:flex-end;gap:10px;overflow:hidden;-webkit-mask-image:linear-gradient(180deg,transparent 0,#000 40px);mask-image:linear-gradient(180deg,transparent 0,#000 40px)}
+.msg{align-self:flex-start;max-width:94%;box-sizing:border-box;padding:8px 12px;border-radius:18px 18px 18px 6px;background:var(--s2);font-size:13px;line-height:19px}
+.msg.me{align-self:flex-end;border-radius:18px 18px 6px 18px;background:var(--s4)}
+.msg p{margin:0}
+.msg ol{margin:4px 0 0;padding-left:18px}
+.mn{padding:0 3px;border-radius:5px;background:var(--s5);font-family:'JetBrains Mono',monospace;font-size:12px}
+.al{list-style:none;margin:8px 0 0;padding:4px;border-radius:12px;background:var(--s1);display:flex;flex-direction:column;gap:1px}
+.al li{display:flex;align-items:center;gap:8px;min-height:28px;padding:0 4px 0 6px;font-size:12px;line-height:16px;color:var(--t1b)}
+.al li>span{flex:1 1 auto;min-width:0}
+.al li svg{flex:0 0 auto}
+.ok{color:var(--a1)}.run{color:var(--a2)}.bad{color:#ff8a80}.skip{color:var(--t2)}.wait{color:#f2c14e}
+.un{height:24px;padding:0 8px;border:0;border-radius:8px;background:transparent;color:var(--t2);font-size:11px;font-weight:500;display:inline-flex;align-items:center;gap:4px;box-shadow:none!important}
+.un:hover{background:var(--s3);color:var(--t1)}
+.cf{align-self:stretch;box-sizing:border-box;padding:12px 14px 14px;border-radius:18px 18px 18px 8px;background:var(--s2);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--a1) 55%,transparent),0 18px 30px -14px color-mix(in srgb,var(--shd) 80%,transparent);display:flex;flex-direction:column;gap:10px}
+.cf h3{margin:0;font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px}
+.cf h3 b{flex:1 1 auto;font-weight:600}
+.gpu{padding:1px 8px;border-radius:999px;font-size:10px;font-weight:600;box-shadow:inset 0 0 0 1px var(--a2);color:var(--a2);white-space:nowrap}
+.cf dl{margin:0;display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 12px;font-size:12px}
+.cf dt{color:var(--t2)}
+.cf dd{margin:0;font-family:'JetBrains Mono',monospace;font-size:11px;line-height:16px;color:var(--t1)}
+.est{display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:10px;background:var(--s3);font-family:'JetBrains Mono',monospace;font-size:11px;line-height:15px;color:var(--t1b)}
+.qt{margin:0;padding:6px 10px;border-left:2px solid var(--ln);font-size:12px;line-height:17px;color:var(--t1b)}
+.cfb{display:flex;align-items:center;gap:8px}
+.go{height:40px;padding:0 18px;border:0;border-radius:14px 14px 14px 6px;background:var(--a1);color:var(--on1);background-image:linear-gradient(180deg,rgba(255,255,255,.35),rgba(255,255,255,0) 55%);font-family:'Bricolage Grotesque',Inter,sans-serif;font-size:13px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+.no{height:40px;padding:0 14px;border:0;border-radius:12px;background:var(--s4);font-size:13px;font-weight:500}
+.fine{font-size:11px;line-height:15px;color:var(--t2);margin:0}
+.cmp{display:flex;flex-direction:column;gap:6px;padding:8px;border-radius:18px 18px 18px 8px;background:var(--s3)}
+.cmp textarea{width:100%;box-sizing:border-box;border:0;outline:0;resize:none;background:transparent;color:var(--t1);font:inherit;font-size:13px;line-height:19px;padding:2px 4px}
+.cmp textarea::placeholder{color:var(--t2)}
+.cmpb{display:flex;align-items:center;gap:6px}
+.cmpb small{flex:1 1 auto;font-size:11px;color:var(--t2)}
+.snd{width:34px;height:34px;padding:0;border:0;border-radius:12px 12px 12px 5px;background:var(--a2);color:var(--on2);display:grid;place-items:center}
+.kbd{display:inline-block;padding:0 5px;border-radius:5px;background:var(--s4);box-shadow:inset 0 -1px 0 color-mix(in srgb,var(--shd) 40%,transparent);font-family:'JetBrains Mono',monospace;font-size:10px;line-height:16px;color:var(--t1b)}
+.by{outline:2px solid var(--a2)!important;outline-offset:2px}
+.tag{display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border-radius:999px;background:color-mix(in srgb,var(--a2) 18%,transparent);color:var(--a2);font-size:10px;font-weight:600;white-space:nowrap}
+.thumbs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:8px}
+.thumbs span{position:relative;aspect-ratio:16/10;border-radius:7px;border:1px dashed var(--dash);background:var(--s1);display:flex;align-items:flex-end;padding:3px 4px;box-sizing:border-box;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t2)}
+.thumbs span.on{border:2px solid var(--a1);color:var(--t1)}
+/* phone */
+.fone{position:relative;flex:0 0 auto;width:390px;height:844px;border-radius:46px;overflow:hidden;background:var(--g);box-shadow:0 0 0 9px #050605,0 0 0 10px #2a2d2b,0 50px 90px -30px color-mix(in srgb,var(--shd) 95%,transparent);display:flex;flex-direction:column}
+.fdock{margin:44px 12px 0;padding:4px 8px;border-radius:30px;background:var(--s1);display:flex;gap:6px;overflow:hidden;flex:0 0 auto}
+.fdock span{flex:0 0 auto;width:54px;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 0;font-size:9px;font-weight:500;color:var(--t2)}
+.fdock span i{width:30px;height:30px;border-radius:10px;display:block;filter:saturate(.55) brightness(.8)}
+.fdock span.cur{color:var(--t1)}.fdock span.cur i{filter:none;outline:2px solid rgba(255,255,255,.85);outline-offset:2px}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:5;box-sizing:border-box;padding:8px 14px 26px;border-radius:28px 28px 0 0;background:var(--s1);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 -30px 60px -20px color-mix(in srgb,var(--shd) 90%,transparent);display:flex;flex-direction:column;gap:10px}
+.grab{align-self:center;width:40px;height:5px;border-radius:3px;background:var(--ln);display:block}
+/* small states */
+.mini{position:relative;box-sizing:border-box;width:340px;padding:16px;border-radius:34px 34px 34px 14px;background:var(--s1);background-image:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,0) 30%);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 30px 60px -24px color-mix(in srgb,var(--shd) 90%,transparent);display:flex;flex-direction:column;gap:10px}
+.ex{text-align:left;padding:10px 12px;border:0;border-radius:16px 16px 16px 6px;background:var(--s2);font-size:13px;line-height:18px;color:var(--t1)}
+.ex small{display:block;font-size:11px;color:var(--t2)}
+.ro{opacity:.55}
+.bar2{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:16px 16px 16px 6px;font-size:12px;line-height:17px}
+.cap{display:flex;flex-direction:column;gap:4px}
+</style>
+</helmet>
+<div data-theme="{{theme}}" style="display: flex; flex-wrap: wrap; background: var(--g); color: var(--t1); font-family: Inter, system-ui, sans-serif; font-size: 14px; line-height: 20px">
+
+<!-- ============ 1 · Create (Image) with the Assistant drawer ============ -->
+<section class="board" aria-label="Create with the Assistant drawer" style="min-height: 960px; height: 960px">
+
+<nav aria-label="Sections" style="flex: 0 0 64px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 0; border-right: 1px solid var(--s3)">
+<button aria-label="Create" aria-current="page" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: var(--s2); color: var(--a1); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"></path><circle cx="12" cy="12" r="3"></circle></svg></button>
+<button aria-label="Pipelines" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="6" height="6" rx="1.5"></rect><rect x="15" y="14" width="6" height="6" rx="1.5"></rect><path d="M9 7h4a2 2 0 0 1 2 2v5"></path></svg></button>
+<button aria-label="Gallery" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="9" cy="10" r="2"></circle><path d="m21 16-5-5L5 20"></path></svg></button>
+<button aria-label="Timeline" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 17h18"></path><rect x="5" y="4" width="6" height="6" rx="1.5"></rect><rect x="12" y="14" width="7" height="6" rx="1.5"></rect></svg></button>
+<button aria-label="Models" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"></path><path d="m3 8 9 5 9-5M12 13v8"></path></svg></button>
+<button aria-label="Assistant" aria-expanded="true" title="Assistant (⌘J)" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path><path d="M20 3v4M22 5h-4"></path></svg></button>
+<details style="position: relative; margin-top: 6px">
+<summary aria-label="Settings" style="list-style: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10px; font-weight: 500; color: var(--t2)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 36px; height: 36px; padding: 8px; box-sizing: border-box; border-radius: 12px; color: #fff; background: linear-gradient(155deg, #a7b0c2, #4b5468); box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg>Settings</summary>
+<div style="position: absolute; left: 70px; bottom: 0; z-index: 40; width: 220px; box-sizing: border-box; padding: 14px; border-radius: 18px 18px 18px 8px; background: var(--s2); box-shadow: 0 24px 40px -12px color-mix(in srgb, var(--shd) 80%, transparent); display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 12px; font-weight: 600; color: var(--t2)">Settings</span>
+<label for="theme" style="font-size: 13px; color: var(--t1)">Theme</label>
+<select id="theme" value="{{theme}}" onChange="{{setTheme}}" style="width: 100%; height: 36px; padding: 0 10px; border-radius: 10px; border: 0; background: var(--s4); color: var(--t1); font: inherit; font-size: 13px">
+<option value="forest">Forest ink</option>
+<option value="ocean">Deep ocean</option>
+<option value="aubergine">Aubergine dusk</option>
+<option value="espresso">Espresso</option>
+<option value="oxblood">Oxblood</option>
+<option value="indigo">Indigo night</option>
+<option value="parchment">Parchment (light)</option>
+</select>
+</div>
+</details>
+</nav>
+
+<main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 20px; padding: 16px 20px 24px">
+
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+<button style="height: 40px; padding: 0 12px; border-radius: 10px; border: 0; background: transparent; display: flex; align-items: center; gap: 8px; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 18px; font-weight: 700; letter-spacing: 0.02em">[YOUR PROJECT]<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></button>
+<span style="padding: 4px 10px; border-radius: 999px; background: var(--s2); color: var(--t2); font-size: 12px; font-weight: 500">New session</span>
+<div style="flex-grow: 1"></div>
+<div role="group" aria-label="View" style="display: flex; padding: 3px; border-radius: 10px; background: var(--s1); border: 1px solid var(--s3)">
+<button aria-pressed="true" style="height: 34px; padding: 0 16px; border-radius: 8px; border: 0; background: var(--s5); font-weight: 500">Studio</button>
+<button aria-pressed="false" style="height: 34px; padding: 0 16px; border-radius: 8px; border: 0; background: transparent; color: var(--t2); font-weight: 500">Graph</button>
+</div>
+<button aria-label="Memory: nothing loaded, 64 gigabytes available" style="height: 40px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--s3); background: var(--s1); font-family: 'JetBrains Mono', monospace; font-size: 12px">0 / 64 GB</button>
+</div>
+
+<div style="display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 20px 0 0; text-align: center">
+<h1 style="margin: 0; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 40px; line-height: 44px; font-weight: 700; letter-spacing: 0.01em">What will you <span style="color: var(--a1)">make?</span></h1>
+<p style="margin: 0; color: var(--t2); font-size: 15px">Describe an image or a clip. Pull in characters and places with @. Runs on this Mac.</p>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; align-items: stretch; gap: 10px; width: 100%; max-width: 980px; align-self: center">
+<div role="tablist" aria-label="Output kind" style="flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; padding: 6px; border-radius: 16px; background: var(--s1)">
+<button role="tab" aria-selected="true" style="flex: 1 1 0; min-height: 44px; width: 64px; border-radius: 12px; border: 0; background: var(--s5); font-size: 12px; font-weight: 600">Image</button>
+<button role="tab" aria-selected="false" style="flex: 1 1 0; min-height: 44px; width: 64px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); font-size: 12px; font-weight: 600">Video</button>
+<button role="tab" aria-selected="false" style="flex: 1 1 0; min-height: 44px; width: 64px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); font-size: 12px; font-weight: 600">Audio</button>
+</div>
+<div style="flex: 1 1 520px; min-width: 0; border-radius: 18px; background: var(--s2); border: 1px solid var(--s5); box-shadow: 0 16px 40px color-mix(in srgb, var(--shd) 50%, transparent); padding: 10px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px">
+<button class="tile by"><i style="display: grid; place-items: center; color: var(--t2)"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 21a8 8 0 0 0-16 0"></path><circle cx="10" cy="8" r="5"></circle><path d="M22 20c0-3.37-2-6.5-4-8a5 5 0 0 0-.45-8.3"></path></svg></i><span><small>Elements</small><b>1 in prompt</b></span></button>
+<button class="tile"><i style="background: transparent; border: 1px dashed var(--dash); box-sizing: border-box; display: grid; place-items: center; color: var(--t2)"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M7 3v18M3 7.5h4M3 12h18M3 16.5h4M17 3v18M17 7.5h4M17 16.5h4"></path></svg></i><span><small>Film</small><b>Auto</b></span></button>
+<button class="tile"><i style="background: transparent; border: 1px dashed var(--dash); box-sizing: border-box; display: grid; place-items: center; color: var(--t2)"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z"></path><circle cx="12" cy="13" r="3"></circle></svg></i><span><small>Camera</small><b>Auto</b></span></button>
+<button class="tile"><i style="background: transparent; border: 1px dashed var(--dash); box-sizing: border-box; display: grid; place-items: center; color: var(--t2)"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"></path></svg></i><span><small>Colour</small><b>Auto</b></span></button>
+<button class="tile by"><i style="display: grid; place-items: center; color: var(--t2)"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"></path><path d="M9 18h6M10 22h4"></path></svg></i><span><small>Lighting</small><b>Blue hour</b></span></button>
+</div>
+<label for="scene" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%)">Scene prompt</label>
+<textarea id="scene" class="by" rows="3" style="width: 100%; box-sizing: border-box; resize: none; border: 0; border-radius: 10px; outline: 0; background: transparent; color: var(--t1); font: inherit; font-size: 15px; line-height: 22px; padding: 4px 6px">@mara under a transparent umbrella on a rainy London street at evening, wet cobbles, red bus lights blurred behind, cinematic, 35 mm, shallow depth of field</textarea>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+<button class="chip" aria-label="Add reference"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="display: block; margin: 0 auto"><path d="M5 12h14M12 5v14"></path></svg></button>
+<button class="chip" aria-label="Insert element"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="display: block; margin: 0 auto"><circle cx="12" cy="12" r="4"></circle><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"></path></svg></button>
+<button class="chip by">Qwen Image · Turbo</button>
+<button class="chip">16:9 · 4 MP</button>
+<div role="group" aria-label="Seeds to queue" style="display: flex; align-items: center; height: 36px; border-radius: 10px; background: var(--s4); font-size: 13px; font-weight: 500">
+<button aria-label="Fewer seeds" style="width: 36px; height: 36px; border: 0; background: transparent; color: var(--t2); box-shadow: none">−</button><span style="font-family: 'JetBrains Mono', monospace">4 / 4</span><button aria-label="More seeds" style="width: 36px; height: 36px; border: 0; background: transparent; color: var(--t2); box-shadow: none">+</button>
+</div>
+<div style="flex-grow: 1"></div>
+<button style="height: 56px; padding: 0 28px; border-radius: 14px; border: 0; background: var(--a1); color: var(--on1); background-image: linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 55%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), inset 0 -5px 0 color-mix(in srgb, var(--shd) 25%, transparent), 0 14px 26px -8px color-mix(in srgb, var(--shd) 75%, transparent); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px"><span style="font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.04em">GENERATE</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500">~1:20 · 24 GB</span></button>
+</div>
+</div>
+</div>
+
+<section aria-label="Lighting looks" style="width: 100%; max-width: 980px; align-self: center; box-sizing: border-box; border-radius: 18px; background: var(--s1); border: 1px solid var(--s3); padding: 16px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px">
+<h2 style="margin: 0; font-size: 16px; font-weight: 600">Lighting</h2>
+<div style="display: flex; gap: 8px"><button class="chip">Reset</button><button class="chip">Save current as look</button></div>
+</div>
+<div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px">
+<button class="look"><i>no look</i><b>Auto</b><small>nothing added</small></button>
+<button class="look"><i>preview</i><b>Window</b><small>prompt</small></button>
+<button class="look" aria-pressed="true"><i class="by" style="border: 2px solid var(--a1)">preview</i><b>Blue hour</b><small>prompt</small></button>
+<button class="look"><i>preview</i><b>Practicals</b><small>prompt</small></button>
+<button class="look"><i>preview</i><b>Neon rain</b><small>prompt + LoRA</small></button>
+</div>
+</section>
+</main>
+
+<aside aria-label="Elements" style="flex: 1 1 320px; box-sizing: border-box; padding: 16px 18px 24px; border-left: 1px solid var(--s3); background: var(--p0); display: flex; flex-direction: column; gap: 16px; align-self: stretch">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 8px">
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 16px; font-weight: 700; letter-spacing: 0.03em">Elements</h2>
+<button class="chip">New element</button>
+</div>
+<button style="text-align: left; padding: 10px; border-radius: 14px; border: 1px solid var(--a1); background: var(--s2); display: flex; gap: 12px; align-items: center"><span style="flex: 0 0 auto; width: 64px; height: 64px; border-radius: 10px; border: 1px dashed var(--dash); display: flex; align-items: center; justify-content: center; font-size: 10px; color: var(--t2)">3 images</span><span style="display: flex; flex-direction: column; gap: 2px"><span style="font-family: 'JetBrains Mono', monospace; font-weight: 500; color: var(--a1)">@mara</span><span style="font-size: 12px; color: var(--t2)">Character · in this prompt</span></span></button>
+<button style="text-align: left; padding: 10px; border-radius: 14px; border: 1px solid var(--s5); background: var(--s1); display: flex; gap: 12px; align-items: center"><span style="flex: 0 0 auto; width: 64px; height: 64px; border-radius: 10px; border: 1px dashed var(--dash); display: flex; align-items: center; justify-content: center; font-size: 10px; color: var(--t2)">2 images</span><span style="display: flex; flex-direction: column; gap: 2px"><span style="font-family: 'JetBrains Mono', monospace; font-weight: 500">@fox</span><span style="font-size: 12px; color: var(--t2)">Character</span></span></button>
+</aside>
+
+<span class="lbl" style="top: auto; bottom: -1px; border-radius: 10px 10px 0 0">1 · Create, Image · Elements panel open under the drawer · ringed = just changed by the assistant</span>
+
+<div class="drw" role="complementary" aria-label="Assistant">
+<div class="dh">
+<h2><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path></svg>Assistant</h2>
+<span class="st" style="padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; box-shadow: inset 0 0 0 1px #f2c14e; color: #f2c14e">Waiting for you</span>
+<button class="ib" aria-label="New chat" title="New chat"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.4 2.6a1 1 0 0 1 3 3l-9 9a2 2 0 0 1-.85.5l-2.87.84a.5.5 0 0 1-.62-.62l.84-2.87a2 2 0 0 1 .5-.85z"></path></svg></button>
+<button class="x" aria-label="Close (⌘J)" title="Close (⌘J)"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg></button>
+</div>
+<div class="where">Sees<span>Create · Image</span><span>New session</span><span>@mara</span></div>
+<div class="rem"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20M2 12h20"></path></svg>DeepSeek · your messages leave this machine</div>
+
+<div class="thr">
+<div class="msg me">Make a rainy London evening still of <span class="mn">@mara</span> with a transparent umbrella, cinematic</div>
+<div class="msg">
+<p>Done. Check the prompt on the left, then say Generate.</p>
+<ul class="al" aria-label="What it did">
+<li><svg class="ok" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg><span>Opened Create · Image</span></li>
+<li><svg class="ok" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg><span>Set model: Qwen Image Turbo</span><button class="un"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"></path><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"></path></svg>Undo</button></li>
+<li><svg class="ok" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg><span>Wrote prompt</span><button class="un"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"></path><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"></path></svg>Undo</button></li>
+<li><svg class="ok" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg><span>Added <span class="mn">@mara</span></span><button class="un"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"></path><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"></path></svg>Undo</button></li>
+<li><svg class="ok" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg><span>Set Lighting: Blue hour</span><button class="un"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"></path><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"></path></svg>Undo</button></li>
+</ul>
+</div>
+
+<section class="cf" aria-label="Confirm: Generate">
+<h3><svg class="wait" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"></rect><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"></path></svg><b>Generate 4 images?</b><span class="gpu">uses the GPU</span></h3>
+<dl>
+<dt>Model</dt><dd>Qwen Image · Turbo</dd>
+<dt>Size</dt><dd>16:9 · 2752 × 1536</dd>
+<dt>Seeds</dt><dd>4 · random</dd>
+</dl>
+<div class="est"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>about 1 min 20 s · 24 of 64 GB · starts now</div>
+<p class="qt"><span class="mn">@mara</span> under a transparent umbrella on a rainy London street at evening, wet cobbles…</p>
+<div class="cfb"><button class="go">GENERATE</button><button class="no">Not now</button></div>
+<p class="fine">Same as the Generate button on the screen. Change anything there first if you like.</p>
+</section>
+</div>
+
+<div class="cmp">
+<label for="ask1" class="sr" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%)">Message the assistant</label>
+<textarea id="ask1" rows="2" placeholder="Ask, or say what to do"></textarea>
+<div class="cmpb"><small><span class="kbd">⌘J</span> open or close · <span class="kbd">@</span> elements</small><button class="snd" aria-label="Send"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 7-7 7 7M12 19V5"></path></svg></button></div>
+</div>
+</div>
+</section>
+
+<!-- ============ 2 · Timeline with the drawer ============ -->
+<section class="board" aria-label="Timeline with the Assistant drawer" style="min-height: 960px; height: 960px">
+<span class="lbl" style="top: auto; bottom: -1px; border-radius: 10px 10px 0 0">2 · Timeline · script to shots, clips placed with Undo, New shot × 3 waits for a click, a look at 4 takes</span>
+
+<nav aria-label="Sections" style="flex: 0 0 64px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 0; border-right: 1px solid var(--s3)">
+<button aria-label="Create" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"></path><circle cx="12" cy="12" r="3"></circle></svg></button>
+<button aria-label="Pipelines" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="6" height="6" rx="1.5"></rect><rect x="15" y="14" width="6" height="6" rx="1.5"></rect><path d="M9 7h4a2 2 0 0 1 2 2v5"></path></svg></button>
+<button aria-label="Gallery" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="9" cy="10" r="2"></circle><path d="m21 16-5-5L5 20"></path></svg></button>
+<button aria-label="Timeline" aria-current="page" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: var(--s2); color: var(--a1); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 17h18"></path><rect x="5" y="4" width="6" height="6" rx="1.5"></rect><rect x="12" y="14" width="7" height="6" rx="1.5"></rect></svg></button>
+<button aria-label="Models" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"></path><path d="m3 8 9 5 9-5M12 13v8"></path></svg></button>
+<button aria-label="Assistant" aria-expanded="true" title="Assistant (⌘J)" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path><path d="M20 3v4M22 5h-4"></path></svg></button>
+<div style="margin-top: 6px; display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10px; font-weight: 500; color: var(--t2)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 36px; height: 36px; padding: 8px; box-sizing: border-box; border-radius: 12px; color: #fff; background: linear-gradient(155deg, #a7b0c2, #4b5468)"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg>Settings</div>
+</nav>
+
+<main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 14px; padding: 16px 20px 20px; align-self: stretch">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+<button style="height: 40px; padding: 0 12px; border-radius: 10px; border: 0; background: transparent; display: flex; align-items: center; gap: 8px; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 18px; font-weight: 700; letter-spacing: 0.02em">Seq 2 · Bus stop<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></button>
+<span style="padding: 4px 10px; border-radius: 999px; background: var(--s2); color: var(--t2); font-family: 'JetBrains Mono', monospace; font-size: 12px">1280 × 704 · 24 fps · 0:20</span>
+<button class="chip">Cast · @mara</button>
+<button class="chip">Look · Blue hour</button>
+<div style="flex-grow: 1"></div>
+<button class="chip">Undo</button>
+<button class="chip">Redo</button>
+</div>
+
+<div style="flex-grow: 1; min-height: 200px; border-radius: 16px; background: var(--in); border: 1px solid var(--s3); padding: 18px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px">
+<div style="width: 100%; max-width: 380px; aspect-ratio: 16 / 9; border-radius: 10px; border: 1px dashed var(--dash); display: flex; align-items: center; justify-content: center; color: var(--t2); font-size: 13px">Sequence preview</div>
+<div style="display: flex; align-items: center; gap: 8px">
+<button aria-label="Play" style="width: 44px; height: 44px; border-radius: 999px; border: 0; background: var(--t1); color: var(--g); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8L7 4Z"></path></svg></button>
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 13px; padding: 0 8px">0:12.00 <span style="color: var(--t2)">/ 0:20.00</span></span>
+</div>
+</div>
+
+<section aria-label="New shot" style="border-radius: 16px; background: var(--s2); border: 1px solid var(--s5); box-shadow: 0 16px 40px color-mix(in srgb, var(--shd) 50%, transparent); padding: 12px 14px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 14px; font-weight: 700; letter-spacing: 0.04em">NEW SHOT 5</h2>
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--t2)">at 0:12 · 2.0 s · 1 of 3 placed by the assistant</span>
+</div>
+<textarea aria-label="Shot prompt" class="by" rows="1" style="width: 100%; box-sizing: border-box; resize: none; border: 0; border-radius: 8px; outline: 0; background: transparent; color: var(--t1); font: inherit; font-size: 15px; line-height: 22px">Wide: @mara waits alone at a bus stop in heavy rain, blue hour</textarea>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+<button class="chip">LTX-2.5 · Distilled</button>
+<button class="chip">2.0 s · 49 frames</button>
+<div style="flex-grow: 1"></div>
+<button style="height: 48px; padding: 0 22px; border-radius: 12px; border: 0; background: var(--a1); color: var(--on1); background-image: linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 55%); font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.04em">GENERATE SHOT</button>
+</div>
+</section>
+
+<div style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 12px 14px 14px; overflow: hidden">
+<div style="position: relative; width: 912px; display: flex; flex-direction: column; gap: 6px">
+<div aria-hidden="true" style="display: flex; padding-left: 72px; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--t2); height: 18px"><span style="flex: 0 0 200px">0:00</span><span style="flex: 0 0 200px">0:05</span><span style="flex: 0 0 200px">0:10</span><span style="flex: 0 0 200px">0:15</span><span style="flex: 0 0 40px">0:20</span></div>
+<div class="lane"><span>V1</span>
+<button class="clip" style="width: 100px; border: 1px solid var(--a1); background: color-mix(in srgb, var(--a1) 14%, transparent)"><b>Shot 1 · street</b><small>2.5 s</small></button>
+<button class="clip" style="width: 140px; border: 1px solid var(--a2); background: rgba(255,122,89,0.14)"><b>Shot 2 · umbrella</b><small>3.5 s · sharpest</small></button>
+<button class="clip" style="width: 120px; border: 1px solid var(--a2); background: rgba(255,122,89,0.14)"><b>Shot 3 · puddle</b><small>3.0 s</small></button>
+<button class="clip" style="width: 120px; border: 1px solid var(--a2); background: rgba(255,122,89,0.14)"><b>Shot 4 · walk</b><small>3.0 s</small></button>
+<button class="clip by" aria-pressed="true" style="width: 80px; border: 1px dashed var(--dash); background: transparent; color: var(--t2)"><b>New 5</b><small>2.0 s</small></button>
+<button class="clip by" style="width: 120px; border: 1px dashed var(--dash); background: transparent; color: var(--t2)"><b>New 6 · bus</b><small>3.0 s</small></button>
+<button class="clip by" style="width: 120px; border: 1px dashed var(--dash); background: transparent; color: var(--t2)"><b>New 7 · looks back</b><small>3.0 s</small></button>
+</div>
+<div class="lane" style="height: 36px"><span>A1</span><button class="clip" style="width: 800px; height: 36px; border: 1px solid #86cdea; background: rgba(62,224,255,0.12); justify-content: center"><small>[RAIN AMBIENCE] · −8 dB</small></button></div>
+<span aria-hidden="true" style="position: absolute; left: 552px; top: 14px; bottom: 0; width: 2px; background: var(--t1); display: block"></span>
+</div>
+</div>
+</main>
+
+<aside aria-label="Clip inspector" style="flex: 1 1 320px; box-sizing: border-box; padding: 16px 18px 24px; border-left: 1px solid var(--s3); background: var(--p0); display: flex; flex-direction: column; gap: 20px; align-self: stretch">
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 16px; font-weight: 700">New shot 5</h2>
+</aside>
+
+<div class="drw" role="complementary" aria-label="Assistant">
+<div class="dh">
+<h2><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path></svg>Assistant</h2>
+<span style="padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; box-shadow: inset 0 0 0 1px #f2c14e; color: #f2c14e">Waiting for you</span>
+<button class="ib" aria-label="New chat" title="New chat"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.4 2.6a1 1 0 0 1 3 3l-9 9a2 2 0 0 1-.85.5l-2.87.84a.5.5 0 0 1-.62-.62l.84-2.87a2 2 0 0 1 .5-.85z"></path></svg></button>
+<button class="x" aria-label="Close (⌘J)" title="Close (⌘J)"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg></button>
+</div>
+<div class="where">Sees<span>Timeline · Seq 2</span><span>New shot 5</span></div>
+
+<div class="thr">
+<div class="msg me">Which of the 4 shots is sharpest?</div>
+<div class="msg">
+<ul class="al" style="margin-top: 0"><li><svg class="ok" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0"></path><circle cx="12" cy="12" r="3"></circle></svg><span>Looked at 4 takes · shot 2 is sharpest</span></li></ul>
+<div class="thumbs" aria-label="The takes it looked at"><span>1</span><span class="on">2</span><span>3</span><span>4</span></div>
+<p style="margin-top: 8px">Shot 2: face and rain are crisp.</p>
+</div>
+<div class="msg me">Next scene: Mara waits at a bus stop in the rain. A bus pulls up. She gets on and looks back.</div>
+<div class="msg">
+<ul class="al" aria-label="What it did">
+<li><svg class="ok" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg><span>Placed shots 5, 6, 7 at 0:12</span><button class="un"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"></path><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"></path></svg>Undo</button></li>
+</ul>
+</div>
+
+<section class="cf" aria-label="Confirm: New shot × 3">
+<h3><svg class="wait" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"></rect><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"></path></svg><b>New shot × 3?</b><span class="gpu">uses the GPU</span></h3>
+<dl>
+<dt>Model</dt><dd>LTX-2.5 · Distilled</dd>
+<dt>Size</dt><dd>1280 × 704 · 24 fps</dd>
+<dt>Shots</dt><dd>5, 6, 7 · 2 s, 3 s, 3 s · 1 seed each</dd>
+</dl>
+<div class="est"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>about 6 min · 38 of 64 GB · one by one</div>
+<p class="qt">Wide: <span class="mn">@mara</span> waits alone at a bus stop in heavy rain… +2</p>
+<div class="cfb"><button class="go">GENERATE 3</button><button class="no">Not now</button></div>
+<p class="fine">Same as the Generate shot button on the screen. Change anything there first if you like.</p>
+</section>
+</div>
+
+<div class="cmp">
+<textarea aria-label="Message the assistant" rows="2" placeholder="Ask, or say what to do"></textarea>
+<div class="cmpb"><small><span class="kbd">⌘J</span> open or close</small><button class="snd" aria-label="Send"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 7-7 7 7M12 19V5"></path></svg></button></div>
+</div>
+</div>
+</section>
+
+<!-- ============ 3 · Phone ============ -->
+<section class="board" aria-label="Phone width" style="padding: 64px 40px 56px 96px; gap: 64px; align-items: flex-start">
+<span class="lbl" style="top: auto; bottom: -1px; border-radius: 10px 10px 0 0">3 · Phone, 390 px · the drawer is a bottom sheet; while actions run it shrinks to one line so the screen shows</span>
+
+<div style="display: flex; flex-direction: column; gap: 12px">
+<p class="note">Expanded</p>
+<div class="fone" aria-label="Phone, sheet expanded">
+<div class="fdock" aria-hidden="true"><span class="cur"><i style="background: linear-gradient(155deg,#a393ff,#4a2fe0)"></i>Create</span><span><i style="background: linear-gradient(155deg,#6cc4ff,#1f5fe0)"></i>Pipelines</span><span><i style="background: linear-gradient(155deg,#ffb07a,#e0457a)"></i>Gallery</span><span><i style="background: linear-gradient(155deg,#ffe07a,#f08a1c)"></i>Timeline</span><span class="cur"><i style="background: linear-gradient(155deg,#d8f58c,#3c9a2e)"></i>Assistant</span></div>
+<div style="padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; opacity: .6">
+<span style="font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 16px; font-weight: 700">[YOUR PROJECT]</span>
+<div style="padding: 10px; border-radius: 18px 18px 18px 8px; background: var(--s2); font-size: 14px; line-height: 20px">@mara under a transparent umbrella on a rainy London street at evening, wet cobbles…</div>
+</div>
+<div class="sheet" style="top: 256px">
+<span class="grab" aria-hidden="true"></span>
+<div class="dh">
+<h2><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path></svg>Assistant</h2>
+<button class="ib" aria-label="New chat" title="New chat"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.4 2.6a1 1 0 0 1 3 3l-9 9a2 2 0 0 1-.85.5l-2.87.84a.5.5 0 0 1-.62-.62l.84-2.87a2 2 0 0 1 .5-.85z"></path></svg></button>
+<button class="ib" aria-label="Shrink"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></button>
+<button class="x" aria-label="Close"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg></button>
+</div>
+<div class="rem"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20M2 12h20"></path></svg>DeepSeek · your messages leave this machine</div>
+<div class="thr" style="-webkit-mask-image: none; mask-image: none">
+<div class="msg me">Rainy London evening still of <span class="mn">@mara</span>, transparent umbrella, cinematic</div>
+<div class="msg">
+<ul class="al" style="margin-top: 0">
+<li><svg class="ok" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg><span>Set model: Qwen Image Turbo</span><button class="un">Undo</button></li>
+<li><svg class="ok" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg><span>Wrote prompt · added <span class="mn">@mara</span></span><button class="un">Undo</button></li>
+<li><svg class="ok" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg><span>Set Lighting: Blue hour</span><button class="un">Undo</button></li>
+</ul>
+</div>
+<section class="cf" aria-label="Confirm: Generate">
+<h3><b>Generate 4 images?</b><span class="gpu">uses the GPU</span></h3>
+<div class="est"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg><span>Qwen Image Turbo · 16:9 · 4 seeds<br>about 1 min 20 s · 24 of 64 GB</span></div>
+<p class="qt" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis"><span class="mn">@mara</span> under a transparent umbrella on a rainy London street at evening…</p>
+<div class="cfb"><button class="go" style="flex: 1 1 auto">GENERATE</button><button class="no">Not now</button></div>
+</section>
+</div>
+<div class="cmp"><textarea aria-label="Message the assistant" rows="1" placeholder="Ask, or say what to do"></textarea>
+<div class="cmpb"><small></small><button class="snd" aria-label="Send"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 7-7 7 7M12 19V5"></path></svg></button></div></div>
+</div>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 12px">
+<p class="note">Shrunk to one line while actions run</p>
+<div class="fone" aria-label="Phone, sheet shrunk">
+<div class="fdock" aria-hidden="true"><span class="cur"><i style="background: linear-gradient(155deg,#a393ff,#4a2fe0)"></i>Create</span><span><i style="background: linear-gradient(155deg,#6cc4ff,#1f5fe0)"></i>Pipelines</span><span><i style="background: linear-gradient(155deg,#ffb07a,#e0457a)"></i>Gallery</span><span><i style="background: linear-gradient(155deg,#ffe07a,#f08a1c)"></i>Timeline</span><span class="cur"><i style="background: linear-gradient(155deg,#d8f58c,#3c9a2e)"></i>Assistant</span></div>
+<div style="padding: 14px 16px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; align-items: center; gap: 8px"><span style="font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 16px; font-weight: 700; flex: 1 1 auto">[YOUR PROJECT]</span><span class="mono" style="font-size: 11px">0 / 64 GB</span></div>
+<div role="tablist" aria-label="Output kind" style="display: flex; gap: 6px; padding: 4px; border-radius: 14px; background: var(--s1)"><button role="tab" aria-selected="true" style="flex: 1 1 0; height: 34px; border: 0; border-radius: 10px; background: var(--s5); font-size: 12px; font-weight: 600">Image</button><button role="tab" aria-selected="false" style="flex: 1 1 0; height: 34px; border: 0; border-radius: 10px; background: transparent; color: var(--t2); font-size: 12px; font-weight: 600">Video</button><button role="tab" aria-selected="false" style="flex: 1 1 0; height: 34px; border: 0; border-radius: 10px; background: transparent; color: var(--t2); font-size: 12px; font-weight: 600">Audio</button></div>
+<div style="padding: 10px; border-radius: 18px 18px 18px 8px; background: var(--s2); display: flex; flex-direction: column; gap: 10px">
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+<button class="tile by" style="min-height: 46px"><span><small>Elements</small><b>1 in prompt</b></span></button>
+<button class="tile" style="min-height: 46px"><span><small>Camera</small><b>Auto</b></span></button>
+<button class="tile" style="min-height: 46px"><span><small>Colour</small><b>Auto</b></span></button>
+<button class="tile by" style="min-height: 46px"><span><small>Lighting</small><b>Blue hour…</b></span></button>
+</div>
+<div class="by" style="border-radius: 10px; padding: 4px 6px; font-size: 14px; line-height: 20px">@mara under a transparent umbrella on a rainy London street at evening, wet cobbles, red bus lights blurred behind, cinematic, 35 mm</div>
+<div style="display: flex; flex-wrap: wrap; gap: 6px"><button class="chip by" style="height: 32px; font-size: 12px">Qwen Image · Turbo</button><button class="chip" style="height: 32px; font-size: 12px">16:9 · 4 MP</button><button class="chip" style="height: 32px; font-size: 12px">4 / 4</button></div>
+<button style="height: 52px; border-radius: 14px; border: 0; background: var(--a1); color: var(--on1); background-image: linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 55%); font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.04em">GENERATE</button>
+</div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+<button class="look"><i>preview</i><b>Window</b></button>
+<button class="look" aria-pressed="true"><i class="by" style="border: 2px solid var(--a1)">preview</i><b>Blue hour</b></button>
+<button class="look"><i>preview</i><b>Practicals</b></button>
+</div>
+</div>
+<div class="sheet" style="padding: 8px 14px 28px; gap: 6px">
+<span class="grab" aria-hidden="true"></span>
+<div role="status" style="display: flex; align-items: center; gap: 10px; min-height: 40px">
+<svg class="run" aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.22-8.56"></path></svg>
+<span style="flex: 1 1 auto; font-size: 14px; font-weight: 500">Setting Lighting…</span>
+<span class="mono" style="font-size: 11px">4 of 5</span>
+<button class="no" style="height: 32px; padding: 0 12px; font-size: 12px">Stop</button>
+<button class="ib" aria-label="Open the chat"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"></path></svg></button>
+</div>
+</div>
+</div>
+</div>
+
+<div style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 10px; padding-top: 32px; max-width: 300px">
+<p class="note" style="font-size: 13px; color: var(--t1b)">On a phone the dock is the bar at the top, and Assistant sits in it.</p>
+<p class="note" style="font-size: 13px; color: var(--t1b)">The sheet opens to about three quarters of the screen. Drag the handle to change it.</p>
+<p class="note" style="font-size: 13px; color: var(--t1b)">When it starts doing things, it drops to one line. You watch the screen change. Stop ends the rest.</p>
+<p class="note" style="font-size: 13px; color: var(--t1b)">A confirm card opens the sheet again, so you never miss one.</p>
+</div>
+</section>
+
+<!-- ============ 4 · Small states ============ -->
+<section class="board" aria-label="Small states" style="padding: 64px 40px 56px 96px; display: grid; grid-template-columns: repeat(3, 340px); gap: 32px 48px; align-items: start">
+<span class="lbl" style="top: auto; bottom: -1px; border-radius: 10px 10px 0 0">4 · Small states · empty, remote notice, another tab, limit reached, line states, the dock item, batch and delete cards</span>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<p class="note">Empty, on Create</p>
+<div class="mini" aria-label="Assistant, empty">
+<div class="dh"><h2><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path></svg>Assistant</h2><button class="x" aria-label="Close"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg></button></div>
+<p style="margin: 8px 0 0; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 20px; line-height: 26px; font-weight: 700">Hi. What should we make?</p>
+<p class="note" style="font-size: 13px">I can fill this screen for you. Anything that uses the GPU waits for your OK.</p>
+<button class="ex">Make a portrait of <span class="mn">@mara</span> at golden hour<small>fills the prompt, model and look</small></button>
+<button class="ex">Turn my last take into a 5 s clip<small>switches to Video</small></button>
+<button class="ex">Why did my last run fail?<small>reads the run and explains</small></button>
+<div class="cmp"><textarea aria-label="Message the assistant" rows="2" placeholder="Ask, or say what to do"></textarea><div class="cmpb"><small><span class="kbd">⌘J</span> open or close</small><button class="snd" aria-label="Send"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 7-7 7 7M12 19V5"></path></svg></button></div></div>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<p class="note">Remote provider, shown first and kept as one line after</p>
+<div class="mini" aria-label="Assistant, remote notice">
+<div class="dh"><h2><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path></svg>Assistant</h2><button class="x" aria-label="Close"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg></button></div>
+<div role="note" class="bar2" style="flex-direction: column; align-items: stretch; gap: 8px; background: color-mix(in srgb, #f2c14e 10%, transparent); box-shadow: inset 0 0 0 1px #f2c14e">
+<span style="display: flex; align-items: center; gap: 8px; color: #f2c14e; font-weight: 600; font-size: 13px"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20M2 12h20"></path></svg>Remote provider: your messages leave this machine (DeepSeek)</span>
+<span style="color: var(--t1b)">Sent: what you type, a short summary of this screen, and what it looks up.</span>
+<span style="color: var(--t1b)">Never sent: images, video, audio or files.</span>
+<span style="display: flex; justify-content: flex-end"><button class="no" style="height: 32px; font-size: 12px">OK</button></span>
+</div>
+<div class="rem"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20M2 12h20"></path></svg>After OK: DeepSeek · your messages leave this machine</div>
+<p class="fine">With a local model the line reads "Runs on this machine" and the notice never shows.</p>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<p class="note">Open in another tab: read-only here</p>
+<div class="mini" aria-label="Assistant, read-only">
+<div class="dh"><h2><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path></svg>Assistant</h2><span style="padding: 2px 9px; border-radius: 999px; background: var(--s3); font-size: 11px; color: var(--t2)">Read-only</span><button class="x" aria-label="Close"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg></button></div>
+<div class="ro" style="display: flex; flex-direction: column; gap: 8px">
+<div class="msg me">Make 3 shots from this script</div>
+<div class="msg"><ul class="al" style="margin-top: 0"><li><svg class="ok" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg><span>Placed New shot 5 · 0:12</span></li><li><svg class="run" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.22-8.56"></path></svg><span>Placing New shot 6…</span></li></ul></div>
+</div>
+<div class="bar2" style="background: var(--s2)">
+<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--t2)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 auto"><rect width="20" height="14" x="2" y="3" rx="2"></rect><path d="M8 21h8M12 17v4"></path></svg>
+<span style="flex: 1 1 auto; color: var(--t1b)">This chat is working in another tab. Its actions run there.</span>
+</div>
+<button class="go" style="text-transform: none; letter-spacing: 0">Continue here</button>
+<p class="fine">Continue here moves the chat to this tab. The other tab turns read-only.</p>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<p class="note">Limit reached</p>
+<div class="mini" aria-label="Assistant, limit reached">
+<div class="dh"><h2><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path></svg>Assistant</h2><button class="x" aria-label="Close"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg></button></div>
+<div class="msg me">Now make it snow instead</div>
+<div role="alert" class="bar2" style="align-items: flex-start; background: color-mix(in srgb, #ff8a80 10%, transparent); box-shadow: inset 0 0 0 1px #ff8a80">
+<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff8a80" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 auto"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4M12 16h.01"></path></svg>
+<span class="cap"><b style="color: #ff8a80; font-size: 13px">Daily limit reached</b><span style="color: var(--t1b)">You used today's 200 model calls. It starts again at midnight, in 5 h. Your admin can raise it.</span></span>
+</div>
+<p class="fine">Your message is kept. The screen still works as usual.</p>
+<div class="cmp" style="opacity: .5"><textarea aria-label="Message the assistant" rows="1" disabled placeholder="Back at midnight"></textarea><div class="cmpb"><small></small><button class="snd" aria-label="Send" disabled><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 7-7 7 7M12 19V5"></path></svg></button></div></div>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<p class="note">Action lines: every state</p>
+<div class="mini" aria-label="Action line states">
+<ul class="al" style="margin: 0; background: var(--s2)">
+<li><svg class="ok" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg><span>Done · Set Lighting: Blue hour</span><button class="un">Undo</button></li>
+<li><svg class="skip" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg><span style="color: var(--t2); text-decoration: line-through">Undone · Wrote prompt</span><button class="un">Redo</button></li>
+<li><svg class="ok" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"></path></svg><span>Went to · Timeline · Seq 2</span></li>
+<li><svg class="run" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.22-8.56"></path></svg><span>Running · Setting seeds…</span></li>
+<li><svg class="run" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0"></path><circle cx="12" cy="12" r="3"></circle></svg><span>Looking at 4 takes · 2nd in line</span></li>
+<li><svg class="wait" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg><span>Waiting for your OK · Generate</span></li>
+<li><svg class="skip" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M8 12h8"></path></svg><span style="color: var(--t2)">Did not run · the tab was closed</span></li>
+<li><svg class="bad" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg><span>Failed · Seeds: 12 · the most is 8</span></li>
+</ul>
+<p class="fine">A card that was not answered says "Cancelled: you left the screen".</p>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<p class="note">The dock item and ⌘J</p>
+<div class="mini" aria-label="Dock item" style="flex-direction: row; align-items: flex-start; gap: 18px; background: var(--g); background-image: none">
+<nav aria-label="Dock, bottom part" style="margin: 0; flex: 0 0 68px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 4px">
+<button aria-label="Models" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"></path><path d="m3 8 9 5 9-5M12 13v8"></path></svg></button>
+<button aria-label="Assistant" style="position: relative; width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path><path d="M20 3v4M22 5h-4"></path></svg><span aria-label="1 card waits for you" style="position: absolute; right: 6px; top: 2px; width: 10px; height: 10px; border-radius: 50%; background: #f2c14e; box-shadow: 0 0 0 2px var(--s1)"></span></button>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10px; font-weight: 500; color: var(--t2)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 36px; height: 36px; padding: 8px; box-sizing: border-box; border-radius: 12px; color: #fff; background: linear-gradient(155deg, #a7b0c2, #4b5468)"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg>Settings</div>
+</nav>
+<div style="display: flex; flex-direction: column; gap: 10px; padding-top: 86px">
+<span role="tooltip" style="align-self: flex-start; padding: 6px 10px; border-radius: 10px 10px 10px 4px; background: var(--s3); font-size: 12px; display: flex; align-items: center; gap: 6px; box-shadow: 0 12px 24px -8px color-mix(in srgb, var(--shd) 80%, transparent)">Assistant <span class="kbd">⌘J</span></span>
+<p class="fine">Under Models, above Settings. ⌘J (Ctrl J) opens and closes it on any screen. The dot means a card waits for you.</p>
+<p class="fine">Hidden when the admin turns the assistant off.</p>
+</div>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<p class="note">Confirm card: start a batch</p>
+<div class="mini" aria-label="Confirm card, batch">
+<section class="cf" aria-label="Confirm: start a batch">
+<h3><b>Start the batch?</b><span class="gpu">uses the GPU</span></h3>
+<dl>
+<dt>Pipeline</dt><dd>[YOUR PIPELINE]</dd>
+<dt>Rows</dt><dd>10 · at most 6 runs and 15 LLM calls a row</dd>
+</dl>
+<div class="rem" style="align-items: flex-start"><svg aria-hidden="true" width="13" height="13" style="flex: 0 0 auto; margin-top: 1px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20M2 12h20"></path></svg><span>What leaves the machine: Decide sends its question, routes and the Judge's reasons to DeepSeek; no thumbnails. Worst case 60 calls, 539,520 tokens.</span></div>
+<div class="cfb"><button class="go">START BATCH</button><button class="no">Not now</button></div>
+<p class="fine">Same as Submit on New batch. Change the rows there first if you like.</p>
+</section>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<p class="note">Confirm card: delete</p>
+<div class="mini" aria-label="Confirm card, delete">
+<section class="cf" aria-label="Confirm: delete" style="box-shadow: inset 0 0 0 1px #ff8a80">
+<h3><b>Delete 3 takes?</b></h3>
+<dl>
+<dt>Goes</dt><dd>New shot 5 · takes 1, 3, 4</dd>
+<dt>Stays</dt><dd>take 2, on the timeline at 0:12</dd>
+</dl>
+<div class="thumbs" aria-label="The takes that go" style="margin-top: 0"><span>1</span><span style="opacity: .35">2</span><span>3</span><span>4</span></div>
+<div class="cfb"><button class="go" style="background: #ff8a80; color: #1a0d0c">DELETE 3</button><button class="no">Not now</button></div>
+<p class="fine">This can't be undone. Same as Delete on the take menu.</p>
+</section>
+</div>
+</div>
+</section>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":4281}}'>
+class Component extends DCLogic {
+state = { theme: null };
+renderVals() {
+return {
+theme: this.state.theme ?? this.props.theme ?? 'forest',
+setTheme: (e) => this.setState({ theme: e.target.value })
+};
+}
+}
+</script>
+</body>
+</html>
