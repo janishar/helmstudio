@@ -49,3 +49,14 @@ Notes from the owner while using the app. Not scheduled; each is picked up when 
   key file in `deploy/secrets/`, never logged; the key-file option stays. Needs the owner's yes on relaxing the
   secrets-are-files rule (keys would then also be in database backups), a write-only field in the contract, the
   board updated first, and tests that the key never comes back through the API or logs. About half a day to a day.
+- **Evaluate cloud vendors such as fal and Magnific** (owner, 2026-11-21: "add to todo only for evaluation not
+  build"). Not to build yet: weigh whether and how. The shape considered: a "cloud" runner env (no GPU, a container in
+  the stack) whose packs call the vendor's API instead of loading weights, so a vendor model is one more model in
+  Create, pipelines, batches, the Timeline and the assistant, and its result a normal take. Per vendor a small adapter
+  (submit, poll, fetch) mapping its models onto the canonical params, so a vendor can be swapped without UI changes.
+  To evaluate: money per run (cost recorded on the take, daily spend caps, the price on confirm cards, an idempotency
+  key so a retry never pays twice); egress (references and LoRAs uploaded to the vendor, shown before a run, under
+  `REMOTE_MODELS` and a per-vendor switch; keys as files in `deploy/secrets/vendors/`); results downloaded at once
+  (vendor links expire); seeds that may not repeat, queue waits, content-policy refusals, each vendor's terms.
+  Magnific fits as an Upscale take action and a pipeline step; fal as a short curated list of models. Rough size if
+  built: 2–4 days for the runner and the first vendor, about a day per further vendor or model family.
