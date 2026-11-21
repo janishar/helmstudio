@@ -5,7 +5,7 @@
 
 # STACK_TLS=on (here or in deploy/.env) adds deploy/compose/tls.yml to the dev stack: TLS for NATS and S3 (GPU hosts)
 STACK_TLS ?= $(shell sed -n 's/^STACK_TLS=//p' deploy/.env 2>/dev/null)
-DEV  := docker compose -f deploy/docker-compose.yml -f deploy/compose/fake.yml $(if $(filter on,$(STACK_TLS)),-f deploy/compose/tls.yml)
+DEV  := docker compose -f deploy/docker-compose.yml -f deploy/compose/fake.yml -f deploy/compose/dev-remote.yml $(if $(filter on,$(STACK_TLS)),-f deploy/compose/tls.yml)
 # the test stack turns remote models on: its pipelines trusts only the fake OpenAI server's certificate (fake.yml);
 # TLS is always on in it (tls.yml): the fake runner joins over tls:// and https://
 TEST := KONG_HTTP_PORT=8390 POSTGRES_HOST_PORT=5464 NATS_HOST_PORT=4323 S3_HOST_PORT=8434 S3_TLS_HOST_PORT=8444 \

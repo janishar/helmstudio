@@ -152,11 +152,8 @@ func (c *client) pipelineColumns(id string) (wf workflow, col string, err error)
 	var p struct {
 		Title string `json:"title"`
 		Nodes map[string]struct {
-			Kind   string `json:"kind"`
-			Inputs []struct {
-				Name string `json:"name"`
-				Type string `json:"type"`
-			} `json:"inputs"`
+			Kind   string          `json:"kind"`
+			Inputs json.RawMessage `json:"inputs"` // a list on the inputs node; a step's param values are an object
 		} `json:"nodes"`
 	}
 	if err := c.call(http.MethodGet, pipelineKind.path+"/"+url.PathEscape(id), nil, http.StatusOK, &p); err != nil {
@@ -167,8 +164,15 @@ func (c *client) pipelineColumns(id string) (wf workflow, col string, err error)
 		if n.Kind != "inputs" {
 			continue
 		}
+		var ins []struct {
+			Name string `json:"name"`
+			Type string `json:"type"`
+		}
+		if err := json.Unmarshal(n.Inputs, &ins); err != nil {
+			return wf, "", fmt.Errorf("pipeline %s: inputs node %s: %w", id, nid, err)
+		}
 		ps := []map[string]any{}
-		for _, in := range n.Inputs {
+		for _, in := range ins {
 			typ := strings.ToLower(in.Type) // Text Int Float Seed Image -> the param types that parse them
 			if col == "" && (typ == "text" || typ == "image") {
 				col = nid + "." + in.Name

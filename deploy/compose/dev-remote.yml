@@ -1,0 +1,13 @@
+# The dev stack only (Makefile DEV, after fake.yml): real remote providers next to the fake ones. fake.yml makes
+# pipelines trust only the fake OpenAI server's certificate and read keys only from /fake-keys, which suits the test
+# stack (it must never reach a real provider) but leaves a real provider (DeepSeek, Claude, ...) unreachable here.
+# At start this joins the public CA bundle with the fake's certificate, and the admin's key files
+# (deploy/secrets/providers, named by key_secret) with the fake's placeholder, in the container's /tmp.
+services:
+  pipelines:
+    environment:
+      PIPELINES_PROVIDER_KEYS_DIR: /tmp/provider-keys
+      SSL_CERT_FILE: /tmp/ca-bundle.pem
+    entrypoint: [sh, -c, 'umask 077 && mkdir -p /tmp/provider-keys && cp /fake-keys/* /run/secrets/providers/* /tmp/provider-keys/ 2>/dev/null;
+                 cat "$$(python -c "import certifi; print(certifi.where())")" /certs/fake-openai.pem > /tmp/ca-bundle.pem && exec "$$@"', --]
+    command: [python, main.py]

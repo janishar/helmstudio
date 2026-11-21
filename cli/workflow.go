@@ -22,7 +22,7 @@ type docKind struct {
 
 var (
 	workflowKind = docKind{"workflow", "/v1/studio/workflows", []string{"title", "family", "env", "nodes", "studio"}, ""}
-	pipelineKind = docKind{"pipeline", "/v1/studio/pipelines", []string{"title", "nodes", "edges"}, ""}
+	pipelineKind = docKind{"pipeline", "/v1/studio/pipelines", []string{"title", "nodes", "edges", "remote"}, ""}
 	elementKind  = docKind{"element", "/v1/studio/library", []string{"group", "name", "handle", "text", "images"}, "element"}
 	lookKind     = docKind{"look", "/v1/studio/library", []string{"group", "name", "text", "images", "loras", "from_take"}, "look"}
 )

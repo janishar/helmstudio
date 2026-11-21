@@ -21,9 +21,10 @@ const pipelineJSON = `{"id":"` + pipeID + `","title":"Fox at night","version":2,
  "created_at":"2026-11-14T10:00:00Z","updated_at":"2026-11-14T10:00:00Z","workflow_titles":{"echo":"Echo"},
  "last_batch":{"id":"b1","status":"waiting"},"problems":[],
  "nodes":{"inputs":{"kind":"inputs","inputs":[{"name":"steps","type":"Int"},{"name":"prompt","type":"Text"}]},
-  "s1":{"kind":"step","workflow":"echo","bind":{"prompt.text":"$prompt","echo.steps":"$steps"}},
+  "s1":{"kind":"step","workflow":"echo","bind":{"prompt.text":"$prompt","echo.steps":"$steps"},"inputs":{"echo.delay_ms":50}},
   "review":{"kind":"gate","takes":"s1"},"out":{"kind":"output","from":"review.picked","collection":"Fox"}},
- "edges":[["inputs","s1"],["s1","review"],["review",{"pass":"out","fail":"s1","max":2,"then":"out"}]]}`
+ "edges":[["inputs","s1"],["s1","review"],["review",{"pass":"out","fail":"s1","max":2,"then":"out"}]],
+ "remote":{"enabled":true,"providers":["deepseek"]}}`
 
 const reviewJSON = `{"batch_id":"b1","items":[
  {"row":2,"attempt":1,"inputs":{},"gate":"review","gate_title":null,"visit":1,"keep":1,"on_reject":"retry","rejects_left":2,
@@ -110,14 +111,14 @@ func TestPipelinesListAndFiles(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "p.json")
 	_ = os.WriteFile(file, []byte(helmOK(t, "pipeline", "get", pipeID)), 0o600)
 	doc, id, version, _, err := pipelineKind.readFile(file)
-	if err != nil || id != pipeID || version != 2 || len(doc) != 3 || doc["edges"] == nil {
+	if err != nil || id != pipeID || version != 2 || len(doc) != 4 || doc["edges"] == nil {
 		t.Fatalf("file: %v %q %d %v", doc, id, version, err)
 	}
 	if got := helmOK(t, "pipeline", "save", file); got != "saved "+pipeID+" version 3\n" {
 		t.Fatalf("save: %q", got)
 	}
 	if !strings.HasPrefix(f.last(), "PUT /v1/studio/pipelines/"+pipeID+" {") || strings.Contains(f.last(), `"id"`) ||
-		strings.Contains(f.last(), "workflow_titles") {
+		strings.Contains(f.last(), "workflow_titles") || !strings.Contains(f.last(), `"remote":{"enabled":true`) {
 		t.Fatalf("PUT: %s", f.last())
 	}
 	stale := strings.Replace(string(must(os.ReadFile(file))), `"version": 2`, `"version": 1`, 1)

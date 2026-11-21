@@ -206,11 +206,22 @@ async def chat(name: str, p: dict, req: dict) -> dict:
         kw = {"response_format": {"type": "json_schema",
                                   "json_schema": {"name": "answer", "schema": schema, "strict": False}}}  # fmt: skip
     msgs = [SystemMessage(req["system"]), HumanMessage(req["prompt"])]
+    if "response_format" in kw and name in _NO_JSON_SCHEMA:
+        kw, msgs = _json_object(req, msgs)
     t = time.monotonic()
     try:
         async with _http(name, p) as http:
             llm = _client(name, p, req["model"], req["max_tokens"], http)
-            msg = await llm.bind(**kw).ainvoke(msgs)
+            try:
+                msg = await llm.bind(**kw).ainvoke(msgs)
+            except openai.BadRequestError:
+                # some OpenAI-compatible providers (DeepSeek) refuse response_format json_schema but take json_object:
+                # ask again once with the schema in the system prompt; the caller still validates the answer
+                if kw.get("response_format", {}).get("type") != "json_schema":
+                    raise
+                _NO_JSON_SCHEMA.add(name)
+                kw, msgs = _json_object(req, msgs)
+                msg = await llm.bind(**kw).ainvoke(msgs)
     except Exception as e:  # noqa: BLE001 - every failure is classed (network or answer)
         raise _classify(name, e) from None
     # the calls as the model wrote them: parsed ones re-serialised, unparsable ones as sent (an invalid turn)
@@ -231,6 +242,17 @@ async def chat(name: str, p: dict, req: dict) -> dict:
     if len(raw) > 4:  # never cut silently: the turn is invalid (asked once more)
         out["error"] = f"the answer has {len(raw)} tool calls; at most 4 per turn"
     return out
+
+
+_NO_JSON_SCHEMA: set[str] = (
+    set()
+)  # providers that refused response_format json_schema (this process)
+
+
+def _json_object(req: dict, msgs: list) -> tuple[dict, list]:
+    """JSON mode without a schema: the schema goes into the system prompt instead."""
+    system = f"{req['system']}\n\nAnswer with one JSON object that matches this JSON schema:\n{req['schema']}"
+    return {"response_format": {"type": "json_object"}}, [SystemMessage(system), msgs[1]]
 
 
 def estimate(text: str) -> int:

@@ -246,3 +246,30 @@ async def test_a_wake_resumed_after_a_failure_clears_its_inbox(pool):
         k for k in studio.asked if k.startswith(f"{b}:0:") and ":plan:1:" in k
     ]  # no second wake
     assert json.loads(json.dumps(await e._one("SELECT wakes FROM directors")))["wakes"] == 1
+
+
+async def test_a_provider_without_json_schema_gets_json_object_with_the_schema_in_the_system(fake):  # noqa: F811
+    p = server_provider(fake.url)
+    schema = json.dumps(
+        {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}
+    )
+    fake.script["m"] = [
+        {"status": 400},
+        {"content": '{"text": "hi"}'},
+        {"content": '{"text": "again"}'},
+    ]
+    req = {"model": "m", "system": "s", "prompt": "p", "max_tokens": 8, "schema": schema}
+    providers._NO_JSON_SCHEMA.discard("nojs")
+    got = await providers.chat("nojs", p, req)
+    first, second = (r["body"] for r in fake.requests[:2])
+    assert first["response_format"]["type"] == "json_schema" and got["text"] == '{"text": "hi"}'
+    assert (
+        second["response_format"] == {"type": "json_object"}
+        and schema in second["messages"][0]["content"]
+    )
+    await providers.chat("nojs", p, req)  # remembered: straight to json_object
+    assert (
+        fake.requests[2]["body"]["response_format"] == {"type": "json_object"}
+        and len(fake.requests) == 3
+    )
+    providers._NO_JSON_SCHEMA.discard("nojs")
