@@ -1729,7 +1729,17 @@
                                     "fp32"
                                   ]
                                 },
-                                "description": "first = as stored; the rest are load-time quantizations"
+                                "description": "what it can load at; with `stored`, one that differs from it is made at load (int8 from bf16), else first = as stored and the rest are load-time quantizations"
+                              },
+                              "stored": {
+                                "enum": [
+                                  "bf16",
+                                  "fp16",
+                                  "fp32",
+                                  "fp8",
+                                  "int8"
+                                ],
+                                "description": "from API 1.34: the dtype most of its weight bytes have on disk, read from its safetensors headers (BF16, F16, F32, F8_E4M3 / F8_E5M2 = fp8, I8 = int8). Absent when its files are on no disk of this host or their format does not say (GGUF, packed U8 / U32)"
                               },
                               "bytes": {
                                 "type": "integer",
