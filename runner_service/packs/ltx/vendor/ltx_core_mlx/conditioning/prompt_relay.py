@@ -8,10 +8,16 @@ cross-attention (``attn2``) — so it only influences the video frames inside it
 temporal window. Global-prompt tokens (and the connector's register/padding tokens)
 receive zero penalty and attend freely across all frames.
 
-Ported from Kijai/WhatDreamsCost's ComfyUI ``prompt_relay.py``. This module only
-covers the **video** integer-frame path (audio's scaled non-integer-frame path is a
-follow-on). The output is an additive bias of shape ``(1, 1, Nv, Nk)`` suitable for
-``mx.fast.scaled_dot_product_attention(..., mask=...)``.
+Ported from Kijai/WhatDreamsCost's ComfyUI ``prompt_relay.py``. Two masks, as in the
+reference's LTX patch (``attn2`` and ``audio_attn2``):
+
+- :func:`build_relay_mask` — video queries, integer frame per token
+  (``token // tokens_per_frame``, reference ``build_temporal_cost``), shape ``(1, 1, Nv, Nk)``;
+- :func:`build_relay_mask_audio` — audio queries, which do not map to whole latent
+  frames: token *i* of ``Na`` sits at ``i * F / Na`` latent frames (reference
+  ``build_temporal_cost_scaled``), shape ``(1, 1, Na, Nk)``.
+
+Both are additive biases for ``mx.fast.scaled_dot_product_attention(..., mask=...)``.
 
 Token→position note: the Gemma feature connector front-packs valid tokens to the
 front of the ``Nk``-length sequence (see ``text_encoders/gemma`` embeddings
@@ -40,13 +46,30 @@ class PromptRelayInput:
             auto-distributes evenly across the timeline. Length, if given, must
             match ``local_prompts``.
         epsilon: Plateau→penalty falloff (smaller = sharper temporal gating).
-        strength: Global multiplier on the penalty magnitude.
+        strength: Multiplier on the video penalty magnitude.
+        audio_strength: Multiplier on the audio penalty (``audio_attn2``). ``0``
+            leaves the audio cross-attention unmasked (video-only relay). ``None``
+            (default) lets the pipeline pick: ``1.0`` (the reference's default,
+            independent of ``strength``) on the distilled paths, ``0`` on the dev +
+            CFG paths, where the audio mask was not seen to move the speech (see
+            ``BasePipeline._prompt_relay_audio_mask_builder``).
+        audio_epsilon: Falloff of the audio penalty; ``None`` inherits ``epsilon``
+            (the reference's ``audio_epsilon=0`` "inherit" default).
     """
 
     local_prompts: list[str]
     segment_lengths: list[int | None] | None = None
     epsilon: float = 1e-3
     strength: float = 1.0
+    audio_strength: float | None = None
+    audio_epsilon: float | None = None
+
+    def __post_init__(self) -> None:
+        # Checked here, i.e. before any model load, rather than when the mask is built.
+        if self.audio_strength is not None and self.audio_strength < 0.0:
+            raise ValueError(f"Prompt Relay audio strength must be >= 0, got {self.audio_strength}")
+        if self.audio_epsilon is not None:
+            _relay_sigma(self.audio_epsilon)
 
 
 @dataclass
@@ -70,10 +93,14 @@ def map_token_ranges(
 
     Uses incremental tokenization (measuring cumulative prefixes) to sidestep
     SentencePiece context-dependency, mirroring the reference implementation.
-    The tokenizer is an mlx-lm tokenizer whose ``.encode()`` returns a token-id list.
+    The tokenizer is the text encoder's own, whose ``.encode()`` returns a token-id
+    list: the mlx-lm Gemma-3 tokenizer on 2.3 packs (prepends ``<bos>``), the pack's
+    HuggingFace Gemma-4 tokenizer on 2.5 packs (no ``<bos>``, no ``<eos>``). Either
+    way the encoder tokenizes with the same ``.encode()``, so the counts below are
+    the column offsets it produces (``tests/test_prompt_relay_ltx25.py``).
 
     Args:
-        tokenizer: mlx-lm tokenizer (``pipe.prompt_encoder._text_encoder._tokenizer``).
+        tokenizer: The text encoder's tokenizer (``pipe.prompt_encoder._text_encoder._tokenizer``).
         global_prompt: Prompt applied to every frame.
         local_prompts: Ordered per-segment prompts, gated to their time windows.
         max_length: Encoder sequence limit (``LTX2_GEMMA_MAX_LENGTH``). When set,
@@ -188,6 +215,63 @@ def _build_segments(
     return segments
 
 
+def _relay_sigma(epsilon: float) -> float:
+    """Gaussian width of the penalty: the reference's constant ``1 / ln(1 / epsilon)``."""
+    # Reject out-of-range epsilon rather than silently substituting a default: e.g.
+    # epsilon=1.0 means "no falloff" (sigma -> inf) but a fallback would produce the
+    # opposite (sharp default gating).
+    if not 0.0 < epsilon < 1.0:
+        raise ValueError(f"Prompt Relay epsilon must be in (0, 1), got {epsilon}")
+    return 1.0 / math.log(1.0 / epsilon)
+
+
+def _check_segments(
+    token_ranges: list[tuple[int, int]],
+    segment_lengths: list[int],
+    num_text_tokens: int,
+) -> None:
+    # A zero-length beat has no temporal window; leaving its columns at cost 0 would
+    # let it attend to *every* frame — the inverse of gating. Fail fast instead.
+    if any(length <= 0 for length in segment_lengths):
+        raise ValueError(
+            f"Prompt Relay segment lengths {segment_lengths} contain a zero-length "
+            "beat: that segment would attend to every frame instead of being gated. "
+            "Give it an explicit length or drop a segment."
+        )
+    # numpy silently clips out-of-bounds column slices, which would ungate a segment
+    # without warning. Reject ranges past the text axis.
+    if any(end > num_text_tokens for _, end in token_ranges):
+        raise ValueError(
+            f"Prompt Relay token ranges {token_ranges} exceed the text axis (num_text_tokens={num_text_tokens})"
+        )
+
+
+def _penalty_bias(
+    segments: list[_Segment],
+    query_frames: np.ndarray,
+    real: np.ndarray | None,
+    num_text_tokens: int,
+    sigma: float,
+    dtype: mx.Dtype,
+) -> mx.array:
+    """``-strength * relu(|frame - midpoint| - window)^2 / (2 sigma^2)`` on each segment's columns.
+
+    ``query_frames`` holds each query row's position in latent frames; rows where
+    ``real`` is False get no penalty. Returns the bias as ``(1, 1, Nq, Nk)``.
+    """
+    cost = np.zeros((query_frames.shape[0], num_text_tokens), dtype=np.float32)
+    inv_two_sigma_sq = 1.0 / (2.0 * sigma * sigma)
+    for seg in segments:
+        d = np.abs(query_frames - seg.midpoint)
+        penalty = seg.strength * np.square(np.maximum(d - seg.window, 0.0)) * inv_two_sigma_sq
+        if real is not None:
+            penalty = np.where(real, penalty, 0.0)
+        cost[:, seg.tok_start : seg.tok_end] = penalty.astype(np.float32)[:, None]
+
+    mask = -cost  # additive negative bias
+    return mx.array(mask, dtype=dtype)[None, None, :, :]
+
+
 def build_relay_mask(
     token_ranges: list[tuple[int, int]],
     segment_lengths: list[int],
@@ -199,7 +283,7 @@ def build_relay_mask(
     strength: float = 1.0,
     dtype: mx.Dtype = mx.bfloat16,
 ) -> mx.array:
-    """Build the additive Prompt Relay cross-attention bias.
+    """Build the additive Prompt Relay cross-attention bias for the video queries (``attn2``).
 
     Args:
         token_ranges: Per-segment ``[start, end)`` column ranges (from
@@ -221,49 +305,64 @@ def build_relay_mask(
         where a text range is penalised for a video frame outside its window.
     """
     # Reference uses a constant sigma = 1/ln(1/epsilon) regardless of segment length.
-    # Reject out-of-range epsilon rather than silently substituting a default: e.g.
-    # epsilon=1.0 means "no falloff" (sigma -> inf) but a fallback would produce the
-    # opposite (sharp default gating).
-    if not 0.0 < epsilon < 1.0:
-        raise ValueError(f"Prompt Relay epsilon must be in (0, 1), got {epsilon}")
-    sigma = 1.0 / math.log(1.0 / epsilon)
-    # A zero-length beat has no temporal window; leaving its columns at cost 0 would
-    # let it attend to *every* frame — the inverse of gating. Fail fast instead.
-    if any(length <= 0 for length in segment_lengths):
-        raise ValueError(
-            f"Prompt Relay segment lengths {segment_lengths} contain a zero-length "
-            "beat: that segment would attend to every frame instead of being gated. "
-            "Give it an explicit length or drop a segment."
-        )
-    # numpy silently clips out-of-bounds column slices, which would ungate a segment
-    # without warning. Reject ranges past the text axis.
-    if any(end > num_text_tokens for _, end in token_ranges):
-        raise ValueError(
-            f"Prompt Relay token ranges {token_ranges} exceed the text axis (num_text_tokens={num_text_tokens})"
-        )
+    sigma = _relay_sigma(epsilon)
+    _check_segments(token_ranges, segment_lengths, num_text_tokens)
     segments = _build_segments(token_ranges, segment_lengths, strength)
-    cost = np.zeros((num_video_tokens, num_text_tokens), dtype=np.float32)
 
     rows = np.arange(num_video_tokens)
     query_frames = (rows // tokens_per_frame).astype(np.float32)
     # Only the first F*tokens_per_frame rows map to real frames; appended keyframe
     # tokens (if any) sit beyond that and must attend freely.
     real = rows < latent_frames * tokens_per_frame
+    return _penalty_bias(segments, query_frames, real, num_text_tokens, sigma, dtype)
 
-    inv_two_sigma_sq = 1.0 / (2.0 * sigma * sigma)
-    for seg in segments:
-        d = np.abs(query_frames - seg.midpoint)
-        penalty = seg.strength * np.square(np.maximum(d - seg.window, 0.0)) * inv_two_sigma_sq
-        penalty = np.where(real, penalty, 0.0).astype(np.float32)
-        cost[:, seg.tok_start : seg.tok_end] = penalty[:, None]
 
-    mask = -cost  # additive negative bias
-    return mx.array(mask, dtype=dtype)[None, None, :, :]
+def build_relay_mask_audio(
+    token_ranges: list[tuple[int, int]],
+    segment_lengths: list[int],
+    num_audio_tokens: int,
+    latent_frames: int,
+    num_text_tokens: int,
+    epsilon: float = 1e-3,
+    strength: float = 1.0,
+    dtype: mx.Dtype = mx.bfloat16,
+) -> mx.array:
+    """Build the additive Prompt Relay cross-attention bias for the audio queries (``audio_attn2``).
+
+    Port of the reference's ``build_temporal_cost_scaled``: audio tokens run at their
+    own rate (25 per second) and do not map to whole latent frames, so token *i* of
+    ``Na`` is placed at ``i * F / Na`` latent frames and penalised with the same
+    segments (midpoint, plateau half-width) as the video mask.
+
+    Args:
+        token_ranges: Per-segment ``[start, end)`` column ranges (from
+            :func:`map_token_ranges`).
+        segment_lengths: Per-segment length in latent frames (from
+            :func:`distribute_segment_lengths`), the same as the video mask's.
+        num_audio_tokens: Audio token count ``Na`` at attention time.
+        latent_frames: Number of video latent frames ``F`` the segments are laid on.
+        num_text_tokens: Text sequence length ``Nk``.
+        epsilon: Falloff of the audio penalty (the reference's ``audio_epsilon``, which
+            defaults to the video epsilon).
+        strength: Multiplier on the audio penalty (the reference's ``audio_strength``).
+        dtype: Output dtype.
+
+    Returns:
+        Additive bias ``(1, 1, Na, Nk)``.
+    """
+    sigma = _relay_sigma(epsilon)
+    _check_segments(token_ranges, segment_lengths, num_text_tokens)
+    if num_audio_tokens <= 0:
+        raise ValueError(f"Prompt Relay audio mask needs at least one audio token, got {num_audio_tokens}")
+    segments = _build_segments(token_ranges, segment_lengths, strength)
+    query_frames = np.arange(num_audio_tokens, dtype=np.float32) * latent_frames / num_audio_tokens
+    return _penalty_bias(segments, query_frames, None, num_text_tokens, sigma, dtype)
 
 
 __all__ = [
     "PromptRelayInput",
     "build_relay_mask",
+    "build_relay_mask_audio",
     "distribute_segment_lengths",
     "map_token_ranges",
 ]

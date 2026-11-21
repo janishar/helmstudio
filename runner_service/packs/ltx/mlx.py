@@ -1,6 +1,6 @@
 """Stage functions of the ltx pack (runtime mlx): LTX-2.5 distilled two-stage text-to-video and image-to-video
 (keyframes) with audio, auto length and Prompt Relay beats, a port of ltx-2-studio's
-`DistilledPipeline.generate_two_stage` + `decode_and_save_video` (ltx-pipelines-mlx 0.15.4) over its model library
+`DistilledPipeline.generate_two_stage` + `decode_and_save_video` (ltx-pipelines-mlx 0.18.0) over its model library
 ltx-core-mlx, vendored in vendor/ (MIT, VENDORED.md). The order of every noise draw, the seeds, the sigma tables, the
 blends and the conditioning order are the old code's, so the same mlx version gives the same bytes
 (docs/reference-notes/ltx.md sections 4, 6 and 11; GOTCHAS.md).
@@ -36,6 +36,7 @@ from core import media
 from core.graph import RunError, auto_frames
 from packs.ltx.common import (  # the runtime-neutral part
     ANCESTRAL_SEED,
+    ANCESTRAL_SEED_2,
     CANVAS_MAX,
     DURATION_HEAD,
     FFMPEG,
@@ -52,15 +53,19 @@ from packs.ltx.common import (  # the runtime-neutral part
     _failed,
     _ffmpeg,
     _needs_dev,
+    ancestral,
     audio_map,
+    audio_window,
     check_sample,  # noqa: F401 (the sample stage's check)
     cover,
     crf_round_trip,
     distilled_lora,  # noqa: F401 (tests use it from here)
     extend_map,
+    image_crf,
     keyframe_frames,
     lora_block_prefused,
     ltx_floor,
+    model_version,
     retake_map,
 )
 
@@ -103,6 +108,7 @@ from ltx_core_mlx.model.audio_vae.audio_vae import AudioVAEDecoder
 from ltx_core_mlx.model.audio_vae.bwe import VocoderWithBWE
 from ltx_core_mlx.model.transformer.model import LTXModel, LTXModelConfig, X0Model
 from ltx_core_mlx.model.upsampler.model import LatentUpsampler
+from ltx_core_mlx.model.video_vae.tiling import TilingConfig, prepare_tiles_for_encoding
 from ltx_core_mlx.model.video_vae.video_vae import VideoDecoder, VideoEncoder
 from ltx_core_mlx.text_encoders.gemma.encoders.gemma4_encoder import Gemma4TextEncoder
 from ltx_core_mlx.text_encoders.gemma.feature_extractor import GemmaFeaturesExtractorV2
@@ -133,6 +139,9 @@ class Cond:
     images_at: str = ""
     neg_video: mx.array | None = None  # the fixed negative prompt's (encode-guided: CFG)
     neg_audio: mx.array | None = None
+    crf: int | None = (
+        None  # the keyframe images' CRF, from the encoding model's generation (common.image_crf)
+    )
 
 
 @dataclass(frozen=True)
@@ -156,6 +165,11 @@ class Latent:
 
 def _meta(path: Path) -> dict:
     return op.read_safetensors_header(path)[1]
+
+
+def _version(model) -> tuple:
+    """The transformer checkpoint's model_version (common.model_version), which picks the generation's rules."""
+    return model_version(_meta(model.files("transformer")[0]))
 
 
 def _dit_config(model) -> LTXModelConfig:
@@ -269,28 +283,41 @@ def _tokenizer(path: Path, size: int, mtime: int):
 # resize and the VAE encode per sample at its grid)
 
 
+def _bilinear(x: np.ndarray, size: int, axis: int) -> np.ndarray:
+    """One axis as torch interpolate(mode="bilinear", align_corners=False): half-pixel centres, the source coordinate
+    clamped at 0, no antialias (media_io._bilinear_resize_axis, float32)."""
+    n = x.shape[axis]
+    src = np.maximum((np.arange(size, dtype=np.float32) + np.float32(0.5)) * np.float32(n / size) - np.float32(0.5),
+                     np.float32(0.0))  # fmt: skip
+    i0 = np.minimum(np.floor(src).astype(np.int64), n - 1)
+    i1 = np.minimum(i0 + 1, n - 1)
+    shape = [1] * x.ndim
+    shape[axis] = size
+    lam = (src - i0).astype(np.float32).reshape(shape)
+    return np.take(x, i0, axis=axis) * (np.float32(1.0) - lam) + np.take(x, i1, axis=axis) * lam
+
+
+def resize_and_center_crop(rgb: np.ndarray, height: int, width: int) -> np.ndarray:
+    """media_io.resize_and_center_crop: scaled to cover (sides rounded up), bilinear on float32, centre crop →
+    (height, width, 3) float32 in [0, 255]."""
+    h, w = rgb.shape[:2]
+    scale = max(height / h, width / w)
+    new_h, new_w = math.ceil(h * scale), math.ceil(w * scale)
+    f = _bilinear(_bilinear(rgb.astype(np.float32), new_h, 0), new_w, 1)
+    top, left = (new_h - height) // 2, (new_w - width) // 2
+    return f[top : top + height, left : left + width]
+
+
 def to_pixels(rgb: np.ndarray, height: int, width: int) -> mx.array:
-    """media_io.resize_and_center_crop (scale to cover, ceil, LANCZOS, centre crop) → [-1, 1] BCHW bfloat16."""
-    image = Image.fromarray(rgb, mode="RGB")
-    scale = max(height / image.height, width / image.width)
-    new_w, new_h = math.ceil(image.width * scale), math.ceil(image.height * scale)
-    image = image.resize((new_w, new_h), Image.LANCZOS)
-    left, top = (new_w - width) // 2, (new_h - height) // 2
-    f = np.asarray(image.crop((left, top, left + width, top + height)), dtype=np.float32) / 255.0
-    return mx.array(f * 2.0 - 1.0).transpose(2, 0, 1)[None, ...].astype(mx.bfloat16)
-
-
-class FirstFrame(VideoConditionByLatentIndex):
-    """VideoConditionByLatentIndex that keeps the state's `keyframes_mask`: the vendored apply drops it, so the DiT
-    lost the keyframe embedding on latent frame 0 (the reference marks frame 0 always; GOTCHAS: fixed 2026-11-20)."""
-
-    def apply(self, state: LatentState, spatial_dims) -> LatentState:
-        return replace(super().apply(state, spatial_dims), keyframes_mask=state.keyframes_mask)
+    """resize_and_center_crop, then x / 127.5 - 1 (normalize_images) → BCHW bfloat16."""
+    f = resize_and_center_crop(rgb, height, width) / np.float32(127.5) - np.float32(1.0)
+    return mx.array(f).transpose(2, 0, 1)[None, ...].astype(mx.bfloat16)
 
 
 def _conditionings(ctx, model, cond: Cond, fhw, frames: int, fps: float) -> list:
-    """_orchestration.combined_image_conditionings at the grid fhw: frame 0 replaces latent frame 0
-    (FirstFrame, the marker kept), any other frame appends its tokens (VideoConditionByKeyframeIndex), in row order."""
+    """_orchestration.combined_image_conditionings at the grid fhw: frame 0 replaces latent frame 0 (its keyframe
+    marker kept), any other frame appends its tokens (VideoConditionByKeyframeIndex), in row order; each encode is
+    evaluated while the encoder is loaded (else it runs inside the first DiT step)."""
     if not cond.images:
         return []
     at = keyframe_frames(cond, frames, fps)
@@ -302,7 +329,8 @@ def _conditionings(ctx, model, cond: Cond, fhw, frames: int, fps: float) -> list
             to_pixels(rgb, fhw[1] * 32, fhw[2] * 32)[:, :, None, :, :]
         )  # (1, 128, 1, H, W)
         tokens = latent.transpose(0, 2, 3, 4, 1).reshape(1, -1, 128)
-        out.append(FirstFrame(frame_indices=[0], clean_latent=tokens, strength=strength) if frame == 0
+        mx.eval(tokens)
+        out.append(VideoConditionByLatentIndex(frame_indices=[0], clean_latent=tokens, strength=strength) if frame == 0
                    else VideoConditionByKeyframeIndex(frame_idx=frame, keyframe_latent=tokens, spatial_dims=fhw,
                                                       frame_rate=fps, strength=strength))  # fmt: skip
     return out
@@ -351,18 +379,19 @@ def encode(ctx, params: dict, inputs: dict) -> dict:
     video, audio = extractor(hidden, attention_mask=mask)
     mx.eval(video, audio)
     return {"cond": Cond(video, audio, tuple(float(b["seconds"]) for b in beats), tuple(tuple(r) for r in ranges),
-                         beats_at=f"{ctx.node}.beats")}  # fmt: skip
+                         beats_at=f"{ctx.node}.beats", crf=image_crf(_version(model)))}  # fmt: skip
 
 
 def keyframes(ctx, params: dict, inputs: dict) -> dict:
-    """The rows onto the conditioning, unresolved (each sample places and encodes them at its grid); the H.264 round
-    trip is done here, once for both stages."""
+    """The rows onto the conditioning, unresolved (each sample places and encodes them at its grid); the decode and
+    the H.264 round trip at the encoding model's CRF are done here, once for both stages."""
+    crf = inputs["cond"].crf
     trips: dict[
         int, np.ndarray
     ] = {}  # core.images.load gives each take one PIL image: round-trip it once
     for r in params["images"]:
         if id(r["image"]) not in trips:
-            trips[id(r["image"])] = cover(crf_round_trip(r["image"]), CANVAS_MAX)
+            trips[id(r["image"])] = cover(crf_round_trip(r["image"], crf), CANVAS_MAX)
     rows = tuple((trips[id(r["image"])], float(r["seconds"]), float(r["strength"])) for r in params["images"])  # fmt: skip
     if not rows:
         raise RunError(f"{ctx.node}.images: at least 1 items")
@@ -417,7 +446,7 @@ def noised_state(
     noise * sigma + clean * (1 - sigma) with a Python sigma on the plain grid first, then the conditionings (so
     conditioned tokens start clean even at strength < 1); else conditionings, then noise_latent_state's mask * sigma
     blend (stage-2 audio). The first latent frame is marked in `keyframes_mask`, an image at frame 0 included
-    (FirstFrame)."""
+    (the vendored VideoConditionByLatentIndex keeps it)."""
     latent = mx.zeros(shape, dtype=mx.bfloat16) if initial is None else initial
     mask = mx.ones((shape[0], shape[1], 1), dtype=mx.bfloat16)
     keyframes_ = (
@@ -441,12 +470,19 @@ def _uniform(mask: mx.array) -> bool:
     return bool(mx.all(mask == 1.0).item())
 
 
+def _frozen(video: LatentState, audio: LatentState, batch: int) -> dict:
+    """samplers._frozen_sigma_kwargs: a frozen stream (whole-stream conditioning) conditions the DiT on sigma 0, its
+    prompt AdaLN and the other modality's cross-attention gate (upstream modality_from_latent_state)."""
+    zero = mx.zeros((batch,), dtype=mx.bfloat16)
+    return {k: zero for k, s in (("video_sigma", video), ("audio_sigma", audio)) if s.frozen}
+
+
 def _denoise(ctx, x0_model, video: LatentState, audio: LatentState, cond: Cond, sigmas, phase: str,
              noise_seed: int | None, cross_mask=None):  # fmt: skip
     """samplers.denoise_loop (noise_seed None: deterministic Euler) or euler_ancestral_denoising_loop (eta 1,
     s_noise 1, the loop's noise drawn video then audio from mx.random.seed(noise_seed)), with a cancel point and a
-    progress event per step. A conditioned state (mask not all 1) passes per-token timesteps mask * sigma; the
-    ancestral step re-applies the mask after its noise."""
+    progress event per step. A conditioned state (mask not all 1) passes per-token timesteps mask * sigma, a frozen
+    one sigma 0; the ancestral step re-applies the mask after its noise."""
     mx.eval(video.latent, video.clean_latent, audio.latent)  # _pre_denoise_flush: the GPU watchdog
     vx, ax = video.latent, audio.latent
     vdtype, adtype = vx.dtype, ax.dtype
@@ -458,7 +494,9 @@ def _denoise(ctx, x0_model, video: LatentState, audio: LatentState, cond: Cond, 
     for i, (sigma, sigma_next) in enumerate(steps):
         ctx.check()
         sig = mx.broadcast_to(mx.array([sigma], dtype=mx.bfloat16), (vx.shape[0],))
-        kw = {} if cross_mask is None else {"video_cross_attention_mask": cross_mask}
+        kw = _frozen(video, audio, vx.shape[0]) | (
+            {} if cross_mask is None else {"video_cross_attention_mask": cross_mask}
+        )
         if not v_uniform:
             kw["video_timesteps"] = (video.denoise_mask * sigma).squeeze(-1)
         if not a_uniform:
@@ -493,11 +531,14 @@ def _denoise(ctx, x0_model, video: LatentState, audio: LatentState, cond: Cond, 
 
 
 def sample(ctx, params: dict, inputs: dict) -> dict:
-    """stage1: from the seed's noise at half the canvas, ancestral Euler; stage2: the (upscaled) latent renoised at
-    sigma 0.909375 with seed + 2 (video and audio alike), deterministic Euler. Audio is denoised in both. Keyframe
+    """stage1: from the seed's noise at half the canvas; stage2: the (upscaled) latent renoised at sigma 0.909375
+    with seed + 2 (video and audio alike). Both ancestral Euler from 2.5 on (noise seed + 10000, + 20000), else
+    deterministic (common.ancestral). Audio is denoised in both, except audio to video's (a latent carrying its
+    source sound): there the source audio stays frozen and stage 2 is deterministic, as A2VidPipelineTwoStage. Keyframe
     rows are encoded at the stage's grid, beats become its relay mask; an "auto" length is resolved in stage 1,
     before the transformer loads (so are the rows' positions and the beats' lengths)."""
     model, cond, seed = inputs["model"], inputs["cond"], inputs["seed"]
+    anc = ancestral(_version(model))
     if params["role"] == "stage1":
         size, d = inputs["canvas"], inputs["duration"]
         fps = float(d["fps"])
@@ -516,8 +557,8 @@ def sample(ctx, params: dict, inputs: dict) -> dict:
             (1, audio_t, 128), [], fhw, compute_audio_positions(audio_t), seed + 1, 1.0
         )
         mask = relay_mask(cond, fhw, video.latent.shape[1], fps)
-        vx, ax = _denoise(ctx, x0_model, video, audio, cond, STAGE1_SIGMAS, "stage 1", seed + ANCESTRAL_SEED,
-                          mask)  # fmt: skip
+        vx, ax = _denoise(ctx, x0_model, video, audio, cond, STAGE1_SIGMAS, "stage 1",
+                          seed + ANCESTRAL_SEED if anc else None, mask)  # fmt: skip
         return {"latent": Latent(vx, ax, fhw, frames, fps)}
     latent: Latent = inputs["latent"]
     fhw, sigmas = latent.fhw, STAGE2_SIGMAS
@@ -527,10 +568,16 @@ def sample(ctx, params: dict, inputs: dict) -> dict:
     video = noised_state(
         latent.video.shape, conds, fhw, positions, seed + 2, sigmas[0], latent.video
     )
-    audio = noised_state(latent.audio.shape, [], fhw, compute_audio_positions(latent.audio.shape[1]), seed + 2,
-                         sigmas[0], latent.audio, scalar_blend=False)  # fmt: skip
+    if latent.sound:  # audio to video: the source audio frozen (create_noised_state(frozen=True): sigma 0, mask 0)
+        audio = _audio_state(
+            latent.audio, mx.zeros((1, latent.audio.shape[1], 1), dtype=mx.bfloat16), frozen=True
+        )
+    else:
+        audio = noised_state(latent.audio.shape, [], fhw, compute_audio_positions(latent.audio.shape[1]), seed + 2,
+                             sigmas[0], latent.audio, scalar_blend=False)  # fmt: skip
     mask = relay_mask(cond, fhw, video.latent.shape[1], latent.fps)
-    vx, ax = _denoise(ctx, x0_model, video, audio, cond, sigmas, "stage 2", None, mask)
+    noise = seed + ANCESTRAL_SEED_2 if anc and not latent.sound else None
+    vx, ax = _denoise(ctx, x0_model, video, audio, cond, sigmas, "stage 2", noise, mask)
     return {"latent": replace(latent, video=vx, audio=ax)}
 
 
@@ -696,7 +743,11 @@ def encode_guided(ctx, params: dict, inputs: dict) -> dict:
         video, audio = extractor(hidden, attention_mask=mask)
         mx.eval(video, audio)
         out += [video, audio]
-    return {"cond": Cond(out[0], out[1], neg_video=out[2], neg_audio=out[3])}
+    return {
+        "cond": Cond(
+            out[0], out[1], neg_video=out[2], neg_audio=out[3], crf=image_crf(_version(model))
+        )
+    }
 
 
 def load_video_frames(path: Path, height: int, width: int, frames: int) -> mx.array:
@@ -735,8 +786,9 @@ def _audio_tokens(ctx, model, path: Path, frames: int, fps: float, start: float 
 
 def encode_video(ctx, params: dict, inputs: dict) -> dict:
     """retake._encode_source_video: probed (its real size, frames and fps re-checked against the input's caps),
-    frames floored to 8k + 1 at its own size and fps → the conv VAE encoder (every frame at once); its sound at
-    16 kHz → the audio VAE encoder, or the old zero latent for a source without sound."""
+    frames floored to 8k + 1 at its own size and fps → the conv VAE encoder (retake.encode_video_tensor: tiled with
+    TilingConfig.default() when it spans more than one tile, else at once), evaluated before the DiT loads; its sound
+    at 16 kHz → the audio VAE encoder, or the old zero latent for a source without sound."""
     model, src = inputs["model"], params["source"]
     where, tid = f"{ctx.node}.source", src["take_id"]
     ctx.progress(1, 1, "encoding")
@@ -753,7 +805,12 @@ def encode_video(ctx, params: dict, inputs: dict) -> dict:
             raise RunError(f"{where}: take {tid} has {info.num_frames} frames; this input takes at most {MAX_FRAMES}")  # fmt: skip
         frames = ltx_floor(info.num_frames)
         pixels = load_video_frames(path, info.height, info.width, frames)
-        latent = ctx.component(model, "vae_encoder").encode(pixels)
+        encoder, tiling = ctx.component(model, "vae_encoder"), TilingConfig.default()
+        if len(prepare_tiles_for_encoding(pixels.shape, tiling)) > 1:  # fmt: skip
+            # float32 blend buffers, back to bf16 (upstream's .to(dtype))
+            latent = encoder.tiled_encode(pixels, tiling).astype(mx.bfloat16)
+        else:
+            latent = encoder.encode(pixels)
         mx.eval(latent)
         del pixels
         sound = _audio_tokens(ctx, model, path, frames, info.fps) if info.has_audio else None
@@ -830,7 +887,7 @@ def _guided(
                 "sigma": mx.broadcast_to(mx.array([sigma], dtype=mx.bfloat16), (vx.shape[0],)),
                 "video_positions": video.positions, "audio_positions": audio.positions,
                 "video_attention_mask": video.attention_mask, "video_keyframes_mask": video.keyframes_mask,
-                "audio_attention_mask": audio.attention_mask}  # fmt: skip
+                "audio_attention_mask": audio.attention_mask, **_frozen(video, audio, vx.shape[0])}  # fmt: skip
         if not v_uniform:
             base["video_timesteps"] = (video.denoise_mask * sigma).squeeze(-1)
         if not a_uniform:
@@ -865,9 +922,9 @@ def _guided(
     return vx, ax
 
 
-def _audio_state(tokens, mask) -> LatentState:
+def _audio_state(tokens, mask, frozen: bool = False) -> LatentState:
     return LatentState(latent=tokens, clean_latent=tokens, denoise_mask=mask,
-                       positions=compute_audio_positions(tokens.shape[1]))  # fmt: skip
+                       positions=compute_audio_positions(tokens.shape[1]), frozen=frozen)  # fmt: skip
 
 
 def _edit(
@@ -899,8 +956,9 @@ def _edit(
 
 def retake(ctx, params: dict, inputs: dict) -> dict:
     """RetakePipeline.retake: the latent frames [S, E) of the span (retake_map) regenerated, the rest clean context
-    (a hard 0/1 mask), the first latent frame marked as a keyframe; audio regenerated over [round(S·T/F),
-    round(E·T/F)) unless `audio` is off (mask 0: re-encoded, not muxed)."""
+    (a hard 0/1 mask), the first latent frame marked as a keyframe; audio regenerated over the tokens that overlap
+    the span in time (common.audio_window) unless `audio` is off (then frozen: mask 0, sigma 0; re-encoded, not
+    muxed)."""
     src: Latent = inputs["latent"]
     span = params["span"]
     m = retake_map(span["start"], span["end"], src.fps, src.frames)
@@ -914,15 +972,14 @@ def retake(ctx, params: dict, inputs: dict) -> dict:
     t = src.audio.shape[1]
     amask = mx.zeros((1, t, 1), dtype=mx.bfloat16)
     if params["audio"]:
-        per = t / f  # audio tokens per latent frame (the old code's float, then round)
-        a0, a1 = round(s * per), round(e * per)
+        a0, a1 = audio_window(s, e, t, src.fps)
         amask = amask.at[:, a0:a1, :].add(mx.ones((1, a1 - a0, 1), dtype=mx.bfloat16))
     return _edit(
         ctx,
         params,
         inputs,
         video,
-        _audio_state(src.audio, amask),
+        _audio_state(src.audio, amask, frozen=not params["audio"]),
         src,
         src.fhw,
         src.frames,
@@ -971,8 +1028,7 @@ def extend(ctx, params: dict, inputs: dict) -> dict:
 def sample_guided(ctx, params: dict, inputs: dict) -> dict:
     """a2vid_two_stage stage 1: half the canvas (64 px grid), pure noise (`seed`, the legacy scalar blend) with
     optional keyframe rows as i2v, the source audio frozen (mask 0: it steers the video through the A<->V cross
-    attention); video guided, audio guider off. RoPE at the default 24 fps, as the old code (encode-audio allows
-    only 24)."""
+    attention, at sigma 0: frozen); video guided, audio guider off. RoPE at the clip's fps."""
     model, cond, seed, a = inputs["model"], inputs["cond"], inputs["seed"], inputs["audio"]
     size, d = inputs["canvas"], inputs["duration"]
     frames, fps = d["frames"], float(d["fps"])
@@ -984,8 +1040,10 @@ def sample_guided(ctx, params: dict, inputs: dict) -> dict:
     factories = _guiders(params, cond, audio_guided=False)
     x0_model = X0Model(ctx.component(model, "transformer"))
     video = noised_state((1, fhw[0] * fhw[1] * fhw[2], 128), _conditionings(ctx, model, cond, fhw, frames, fps), fhw,
-                         compute_video_positions(*fhw), seed, 1.0)  # fmt: skip
-    audio = _audio_state(a.audio, mx.zeros((1, a.audio.shape[1], 1), dtype=mx.bfloat16))
+                         compute_video_positions(*fhw, frame_rate=fps), seed, 1.0)  # fmt: skip
+    audio = _audio_state(
+        a.audio, mx.zeros((1, a.audio.shape[1], 1), dtype=mx.bfloat16), frozen=True
+    )
     sigmas = ltx2_schedule(params["steps"], fhw[0] * fhw[1] * fhw[2])
     vx, ax = _guided(ctx, x0_model, video, audio, cond, factories, sigmas, "guided")
     return {"latent": Latent(vx, ax, fhw, frames, fps, source_map=a.source_map, sound=a.sound)}

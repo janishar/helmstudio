@@ -218,7 +218,7 @@ class Ctx:
         module = self.residency.get(key, gb, transient, lambda: model.load(name, self), model.resident_loras(name))  # fmt: skip
         if model.baked(
             name
-        ):  # counted at what it holds, not at the plain size (loaders_mlx: float32 scales)
+        ):  # counted at what it holds, not at the plain size (loaders_mlx extra_gb)
             gb += model.extra_gb(name, module)
             self.residency.resize(key, gb)
         if (

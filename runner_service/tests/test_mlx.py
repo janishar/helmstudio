@@ -345,14 +345,16 @@ def test_stage1_noise_is_the_goldens_bit_for_bit(case, on_cpu):
 
 @needs_mlx
 def test_an_image_on_frame_0_keeps_the_first_frame_marked(on_cpu):
-    """FirstFrame keeps `keyframes_mask` (the vendored VideoConditionByLatentIndex drops it, GOTCHAS 2026-11-20):
-    latent frame 0's tokens are marked, the rest and a later keyframe's appended tokens are not."""
+    """VideoConditionByLatentIndex keeps `keyframes_mask` (the vendored apply dropped it before 0.18; GOTCHAS
+    2026-11-20): latent frame 0's tokens are marked, the rest and a later keyframe's appended tokens are not."""
     from packs.ltx import mlx as ltx_mlx
 
     fhw = (3, 2, 2)
     hw = fhw[1] * fhw[2]
     pos = ltx_mlx.compute_video_positions(*fhw, frame_rate=24.0)
-    first = ltx_mlx.FirstFrame(frame_indices=[0], clean_latent=mx.zeros((1, hw, 128)), strength=1.0)
+    first = ltx_mlx.VideoConditionByLatentIndex(
+        frame_indices=[0], clean_latent=mx.zeros((1, hw, 128)), strength=1.0
+    )
     later = ltx_mlx.VideoConditionByKeyframeIndex(
         frame_idx=8,
         keyframe_latent=mx.zeros((1, hw, 128)),
@@ -394,14 +396,17 @@ def golden(path: str) -> dict:
 @needs_mlx
 @pytest.mark.parametrize("case", ["i2v-448x256-49f-s42", "kf-448x256-49f-s42"])
 def test_keyframe_images_are_preprocessed_as_the_goldens(case, on_cpu):
-    """RGB → H.264 CRF 33 round trip → LANCZOS cover + centre crop → [-1, 1] bf16, per stage grid, bit for bit
-    (the round trip depends on the host's ffmpeg / libx264 build, as the goldens' did)."""
+    """RGB → H.264 round trip at the generation's CRF (18 on 2.5, yuv420p) → bilinear cover on float32 + centre
+    crop → x / 127.5 - 1 bf16, per stage grid, bit for bit (the round trip depends on the host's ffmpeg / libx264
+    build, as the goldens' did)."""
     from PIL import Image
 
     from packs.ltx import mlx as ltx_mlx
 
     g = golden(f"ltx-image-to-video/{case}")
-    rgb = {m["file"]: ltx_mlx.crf_round_trip(Image.open(GOLDENS / "ltx-image-to-video" / m["file"])) for m in g["images"]}  # fmt: skip
+    assert {m["crf"] for m in g["images"]} == {ltx_mlx.image_crf((2, 5, 0))}
+    rgb = {m["file"]: ltx_mlx.crf_round_trip(Image.open(GOLDENS / "ltx-image-to-video" / m["file"]), m["crf"])
+           for m in g["images"]}  # fmt: skip
     for row in g["image_preprocess"]:
         px = ltx_mlx.to_pixels(rgb[row["file"]], row["height"], row["width"])
         assert sha(px) == row["pixels"]["sha256_f32"], (row["file"], row["height"])
@@ -503,20 +508,97 @@ def test_keyframes_round_trip_each_take_once_and_keep_at_most_the_largest_canvas
 
     trips = []
     real = ltx_mlx.crf_round_trip
-    monkeypatch.setattr(ltx_mlx, "crf_round_trip", lambda img: trips.append(img.size) or real(img))
+    monkeypatch.setattr(
+        ltx_mlx, "crf_round_trip", lambda img, crf: trips.append((img.size, crf)) or real(img, crf)
+    )
     big, small = (
         Image.new("RGB", (4000, 2400), (200, 10, 10)),
         Image.new("RGB", (640, 400), (10, 200, 10)),
     )
     c = Ctx(progress=None, output=None, check=lambda: None)
     c.node = "keyframes"
-    cond = ltx_mlx.Cond(mx.zeros((1, 1, 1)), mx.zeros((1, 1, 1)))
+    cond = ltx_mlx.Cond(mx.zeros((1, 1, 1)), mx.zeros((1, 1, 1)), crf=18)
     rows = [{"image": small, "seconds": 0, "strength": 1}, {"image": big, "seconds": 1, "strength": 1},
             {"image": small, "seconds": 2, "strength": 0.5}]  # fmt: skip
     got = ltx_mlx.keyframes(c, {"images": rows}, {"cond": cond})["cond"].images
-    assert trips == [(640, 400), (4000, 2400)]  # the repeated take once
+    assert trips == [
+        ((640, 400), 18),
+        ((4000, 2400), 18),
+    ]  # the repeated take once, at the Cond's CRF
     assert [r[0].shape for r in got] == [(400, 640, 3), (1920, 3200, 3), (400, 640, 3)]
     assert got[0][0] is got[2][0] and [r[1:] for r in got] == [(0.0, 1.0), (1.0, 1.0), (2.0, 0.5)]
+
+
+def test_the_generation_rules_come_from_model_version():
+    """detect_model_version / detect_params / should_use_ancestral_sampler: CRF 18 from 2.4 on, ancestral from 2.5."""
+    from packs.ltx import common
+
+    v = common.model_version
+    assert [v({"model_version": x}) for x in ("2.5.0", "2.4-rc2", "2.3.rc1", "", None)] == [(2, 5, 0), (2, 4), (2, 3), (), ()]  # fmt: skip
+    assert [common.image_crf(x) for x in ((2, 5, 0), (2, 4), (2, 3), ())] == [18, 18, 33, 33]
+    assert [common.ancestral(x) for x in ((2, 5, 0), (2, 4), ())] == [True, False, False]
+
+
+def test_keyframe_images_decode_and_round_trip_as_upstream():
+    """media_io.decode_image + preprocess: EXIF orientation, ICC → sRGB, alpha dropped, odd sides cropped, CRF 0 kept."""
+    import io
+
+    import numpy as np
+    from PIL import Image, ImageCms
+
+    from packs.ltx import common
+
+    img = Image.new("RGB", (5, 3), (250, 10, 10))
+    exif = img.getexif()
+    exif[0x0112] = 6  # rotate 270 (upright as the camera held it)
+    buf = io.BytesIO()
+    img.save(buf, "PNG", exif=exif.tobytes())
+    assert common.decode_image(Image.open(buf)).shape == (5, 3, 3)
+    tagged = Image.new("RGB", (4, 4), (90, 140, 200))
+    tagged.info["icc_profile"] = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
+    assert (
+        np.abs(common.decode_image(tagged).astype(int) - (90, 140, 200)).max() <= 1
+    )  # converted, sRGB to sRGB
+    rgba = Image.new("RGBA", (4, 4), (10, 200, 10, 0))
+    assert common.decode_image(rgba).tolist() == np.full((4, 4, 3), (10, 200, 10)).tolist()
+    bad = Image.new("RGB", (4, 4), (1, 2, 3))
+    bad.info["icc_profile"] = b"not a profile"
+    assert (
+        common.decode_image(bad).tolist() == np.full((4, 4, 3), (1, 2, 3)).tolist()
+    )  # a plain RGB conversion
+    odd = Image.new("RGB", (65, 33), (120, 60, 30))
+    assert common.crf_round_trip(odd, 18).shape == (32, 64, 3)
+    assert common.crf_round_trip(odd, 0).shape == (33, 65, 3)
+
+
+@needs_mlx
+def test_the_resize_is_upstream_torch_bilinear():
+    """resize_and_center_crop against Lightricks' torch interpolate(bilinear, align_corners=False) outputs
+    (ltx-2-studio tests/fixtures/image_preprocess_resize_golden.npz: 4 cases, down and up)."""
+    import numpy as np
+
+    from packs.ltx import mlx as ltx_mlx
+
+    g = np.load(ROOT / "tests/fixtures/ltx_image_resize_golden.npz")
+    for i in range(4):
+        want = g[f"out_{i}"]
+        got = ltx_mlx.resize_and_center_crop(g[f"src_{i}"], *want.shape[:2])
+        assert got.dtype == np.float32 and np.abs(got - want).max() < 1e-3, i
+
+
+@needs_mlx
+def test_a_bake_keeps_the_scales_and_biases_dtype():
+    """fuse_loras f3c5bad: requantized from float32, the layer keeps its bf16 scales and biases (else
+    quantized_matmul runs the whole layer in float32)."""
+    from core import loaders_mlx
+
+    w = mx.random.normal((8, 128)).astype(mx.bfloat16)
+    q, s, b = mx.quantize(w, group_size=64, bits=8)
+    weights = {"l.weight": q, "l.scales": s, "l.biases": b}
+    a, bb = mx.ones((2, 128)), mx.ones((8, 2))
+    loaders_mlx._bake(weights, "l", [(a, bb, 0.5)], 8, True)
+    assert weights["l.scales"].dtype == weights["l.biases"].dtype == mx.bfloat16
+    assert not mx.array_equal(weights["l.weight"], q)
 
 
 @needs_mlx

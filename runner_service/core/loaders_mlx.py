@@ -14,8 +14,9 @@ loads its own checkpoint format (llm: mlx-vlm) defines `load_component(component
 LoRA (contracts/README.md "LoRAs", MLX bake): bake only, no adapters. The rows of mode bake are normalised against
 the family's lora block (core/lora.py: no key is silently dropped) and merged after quantization, module by module
 and evaluated as it goes, in the old studio's order (ltx_core_mlx.loader.fuse_loras): delta = sum (B · s) @ A in
-float32 (s = strength · alpha / rank); a quantized Linear is dequantized, + delta, requantized (so it carries float32
-scales and biases), a float one is (W.f32 + delta) cast back to W's dtype. A baked component is its own residency
+float32 (s = strength · alpha / rank); a quantized Linear is dequantized, + delta, requantized with its scales and
+biases kept at their dtype (mx.quantize gives float32 from the float32 sum, which made quantized_matmul promote the
+layer to float32), a float one is (W.f32 + delta) cast back to W's dtype. A baked component is its own residency
 entry (core.pack.ModelRef.key).
 
 Memory: `measure_gb` is the process's physical footprint (core.residency.footprint_gb); `free` is gc +
@@ -96,8 +97,8 @@ def activate(model, component: str, module: nn.Module, ctx) -> float:
 
 
 def extra_gb(module: nn.Module) -> float:
-    """What the quantized Linears' scales and biases hold beyond size_gb's count of them at bf16: a baked one is
-    re-quantized from float32 (`_bake`), so its scales and biases are float32."""
+    """What the quantized Linears' scales and biases hold beyond size_gb's count of them at bf16 (a Linear quantized
+    from a float32 weight carries float32 ones; `_bake` keeps the loaded dtype)."""
     extra = sum(m.scales.nbytes + m.biases.nbytes - 2 * (m.scales.size + m.biases.size)
                 for _, m in module.named_modules() if isinstance(m, nn.QuantizedLinear))  # fmt: skip
     return extra / 2**30
@@ -142,9 +143,11 @@ def _bake(weights: dict, layer: str, terms: list, bits: int | None, quantized: b
         f32 = mx.dequantize(w, scales=scales, biases=biases, group_size=GROUP, bits=bits).astype(
             mx.float32
         )
-        q, scales, biases = mx.quantize(f32 + delta.astype(mx.float32), group_size=GROUP, bits=bits)
-        weights |= {f"{layer}.weight": q, f"{layer}.scales": scales, f"{layer}.biases": biases}
-        mx.eval(q, scales, biases)
+        q, s, b = mx.quantize(f32 + delta.astype(mx.float32), group_size=GROUP, bits=bits)
+        # fuse_loras._fuse_delta_with_quantized (f3c5bad): the loaded scales / biases dtype kept
+        s, b = s.astype(scales.dtype), b.astype(biases.dtype)
+        weights |= {f"{layer}.weight": q, f"{layer}.scales": s, f"{layer}.biases": b}
+        mx.eval(q, s, b)
     else:
         weights[f"{layer}.weight"] = (w.astype(mx.float32) + delta.astype(mx.float32)).astype(
             w.dtype

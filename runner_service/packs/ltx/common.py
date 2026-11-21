@@ -1,16 +1,19 @@
 """The ltx pack's runtime-neutral helpers, shared by its runtimes' modules (mlx.py; torch.py on NVIDIA): ffmpeg,
-the distilled sigma tables and fixed values, the keyframe images' H.264 round trip and frame placement, the media
-maps of retake, extend and audio to video, and the checks that need no model library. Moved from mlx.py unchanged."""
+the distilled sigma tables and fixed values, the model generation's rules (image CRF, ancestral sampling, from the
+transformer's `model_version`), the keyframe images' decode, H.264 round trip and frame placement, the media maps of
+retake, extend and audio to video (and retake's audio window), and the checks that need no model library."""
 
+import logging
 import math
 import shutil
 import subprocess
 from decimal import ROUND_HALF_UP, Decimal
+from io import BytesIO
 from pathlib import Path
 
 import numpy as np
 import yaml
-from PIL import Image
+from PIL import Image, ImageCms
 
 from core.graph import RunError
 
@@ -23,14 +26,11 @@ if FFMPEG is None:  # checked when the runner loads the pack: it stops with this
 STAGE1_SIGMAS = [1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725, 0.421875, 0.0]
 STAGE2_SIGMAS = [0.909375, 0.725, 0.421875, 0.0]
 SIGMAS = {"stage1": STAGE1_SIGMAS, "stage2": STAGE2_SIGMAS}
-ANCESTRAL_SEED = (
-    10000  # distilled.ANCESTRAL_NOISE_SEED_OFFSET: the stage-1 loop's noise seed is seed + this
-)
+# distilled.ANCESTRAL_NOISE_SEED_OFFSET / ANCESTRAL_STAGE_2_NOISE_SEED_OFFSET: each ancestral loop's noise seed is
+# seed + its offset (upstream v1.4.0: both stages of a >= 2.5 distilled run are ancestral)
+ANCESTRAL_SEED, ANCESTRAL_SEED_2 = 10000, 20000
 MAX_TOKENS = 1024  # Gemma prompt length (left-padded; LTX2_GEMMA_MAX_LENGTH)
 SAMPLE_RATE = 48000
-IMAGE_CRF = (
-    33  # media_io.DEFAULT_IMAGE_CRF: keyframe images go through H.264 as the training data did
-)
 RELAY_EPSILON, RELAY_STRENGTH = (
     1e-3,
     1.0,
@@ -44,27 +44,94 @@ CANVAS_MAX = max(
     _STAGES["canvas"]["params"][s]["max"] for s in ("width", "height")
 )  # the largest canvas side
 
-# --- keyframe images (media_io.load_image_and_preprocess, split: the H.264 round trip once in `keyframes`, the
-# resize and the VAE encode per sample at its grid)
+# --- the model generation (ltx-pipelines constants.detect_params, distilled.should_use_ancestral_sampler)
 
 
-def crf_round_trip(img: Image.Image, crf: int = IMAGE_CRF) -> np.ndarray:
-    """media_io.decode_image + preprocess: RGB uint8 (alpha dropped) through one libx264 frame at `crf` and back
-    (odd sides padded, then cropped back). The pixels depend on the ffmpeg/libx264 build (yuv444p here)."""
-    a = np.asarray(img.convert("RGB"), dtype=np.uint8)
-    h, w, _ = a.shape
-    ph, pw = h + (h & 1), w + (w & 1)
-    if (ph, pw) != (h, w):
-        a = np.pad(a, ((0, ph - h), (0, pw - w), (0, 0)))
-    enc = subprocess.run([FFMPEG, "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{pw}x{ph}",
-                          "-r", "1", "-i", "pipe:0", "-c:v", "libx264", "-preset", "veryfast", "-crf", str(crf),
-                          "-frames:v", "1", "-f", "mp4", "-movflags", "frag_keyframe+empty_moov", "pipe:1"],
+def model_version(meta: dict) -> tuple[int, ...]:
+    """constants.detect_model_version: the transformer header's `model_version` ("2.5.0") as numbers (a hyphen read
+    as a dot, parsing stops at the first non-number); () when unset, which compares below every version."""
+    out = []
+    for part in str(meta.get("model_version") or "").replace("-", ".").split("."):
+        if not part.isdigit():
+            break
+        out.append(int(part))
+    return tuple(out)
+
+
+def image_crf(version: tuple) -> int:
+    """The H.264 CRF keyframe images are re-compressed at, as the generation was trained (LTX_2_4_PARAMS): 18 from
+    2.4 on, 33 before (DEFAULT_IMAGE_CRF)."""
+    return 18 if version >= (2, 4) else 33
+
+
+def ancestral(version: tuple) -> bool:
+    """Distilled sampling is ancestral Euler from 2.5 on (ANCESTRAL_SAMPLER_SINCE_VERSION), deterministic before."""
+    return version >= (2, 5)
+
+
+# --- keyframe images (media_io.load_conditioning_still, split: decode + the H.264 round trip once in `keyframes`,
+# the resize and the VAE encode per sample at its grid)
+
+_SRGB = ImageCms.createProfile("sRGB")
+
+
+def decode_image(img: Image.Image) -> np.ndarray:
+    """media_io.decode_image: EXIF orientation (3 / 6 / 8, a rotation) applied, alpha dropped, an embedded ICC
+    profile converted to sRGB (a plain RGB conversion if it cannot be used) → RGB uint8 (H, W, 3). core.images
+    already turned a JPEG upright (and dropped its tag), so it is not rotated twice."""
+    rotation = {3: 180, 6: 270, 8: 90}.get(img.getexif().get(0x0112))
+    if rotation:
+        img = img.rotate(rotation, expand=True)
+    icc = img.info.get("icc_profile")
+    if img.mode == "RGBA":
+        img = img.convert("RGB")
+    elif img.mode == "LA":
+        img = img.convert("L")
+    if icc:
+        try:
+            img = ImageCms.profileToProfile(img, ImageCms.ImageCmsProfile(BytesIO(icc)), ImageCms.ImageCmsProfile(_SRGB),
+                                            outputMode="RGB")  # fmt: skip
+        except (ImageCms.PyCMSError, OSError, ValueError) as e:
+            logging.getLogger(__name__).warning(
+                "ltx: an image's ICC profile could not be used: %s", e
+            )
+            img = img.convert("RGB")
+    else:
+        img = img.convert("RGB")
+    return np.array(img, dtype=np.uint8)
+
+
+def crf_round_trip(img: Image.Image, crf: int) -> np.ndarray:
+    """decode_image, then media_io.preprocess: one libx264 frame at `crf` (yuv420p, bilinear RGB <-> YUV and slice
+    threads as PyAV hands libx264) and back; odd sides cropped to even, as upstream. CRF 0 or a side < 2: as decoded.
+    The pixels depend on the ffmpeg/libx264 build."""
+    a = decode_image(img)
+    if crf == 0 or min(a.shape[:2]) < 2:
+        return a
+    h, w = a.shape[0] // 2 * 2, a.shape[1] // 2 * 2
+    a = np.ascontiguousarray(a[:h, :w])
+    enc = subprocess.run([FFMPEG, "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{w}x{h}", "-r",
+                          "1", "-i", "pipe:0", "-sws_flags", "bilinear", "-pix_fmt", "yuv420p", "-c:v", "libx264",
+                          "-preset", "veryfast", "-crf", str(int(crf)), "-thread_type", "slice", "-frames:v", "1",
+                          "-f", "mp4", "-movflags", "frag_keyframe+empty_moov", "pipe:1"],
                          input=a.tobytes(), capture_output=True, check=False, timeout=60)  # fmt: skip
-    dec = subprocess.run([FFMPEG, "-v", "error", "-i", "pipe:0", "-frames:v", "1", "-pix_fmt", "rgb24", "-f",
-                          "rawvideo", "pipe:1"], input=enc.stdout, capture_output=True, check=False, timeout=60)  # fmt: skip
-    if enc.returncode or dec.returncode or len(dec.stdout) != ph * pw * 3:
+    dec = subprocess.run([FFMPEG, "-v", "error", "-i", "pipe:0", "-frames:v", "1", "-sws_flags", "bilinear",
+                          "-pix_fmt", "rgb24", "-f", "rawvideo", "pipe:1"],
+                         input=enc.stdout, capture_output=True, check=False, timeout=60)  # fmt: skip
+    if enc.returncode or dec.returncode or len(dec.stdout) != h * w * 3:
         raise RunError(f"ffmpeg failed on a keyframe image: {(enc.stderr or dec.stderr).decode(errors='ignore')[-300:]}")  # fmt: skip
-    return np.frombuffer(dec.stdout, np.uint8).reshape(ph, pw, 3)[:h, :w].copy()
+    return np.frombuffer(dec.stdout, np.uint8).reshape(h, w, 3).copy()
+
+
+def audio_window(start: int, end: int, tokens: int, fps: float) -> tuple[int, int]:
+    """retake.audio_window_tokens (upstream TemporalRegionMask): the audio tokens [a0, a1) whose time overlaps latent
+    frames [start, end) (latent frame k covers pixel frames [max(0, 8k - 7), 8k + 1); audio token i mel frames
+    [max(0, 4i - 3), 4i + 1) of 10 ms); (0, 0) when none does."""
+    t0, t1 = max(0, 8 * start - 7) / fps, max(0, 8 * end - 7) / fps
+    inside = [
+        i for i in range(tokens) if max(0, 4 * i + 1) * 0.01 > t0 and max(0, 4 * i - 3) * 0.01 < t1
+    ]
+    return (inside[0], inside[-1] + 1) if inside else (0, 0)
 
 
 def cover(rgb: np.ndarray, side: int) -> np.ndarray:

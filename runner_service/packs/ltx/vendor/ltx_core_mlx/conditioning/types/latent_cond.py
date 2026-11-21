@@ -61,6 +61,10 @@ class LatentState:
         generated_keyframes: Denoised slot content as an unpatchified ``(B, C, K, H, W)``
             latent once extracted, one latent frame per keyframe. Decode each as a standalone
             one-frame clip, never as a K-frame video.
+        frozen: The whole stream is conditioning, not generated (upstream ``LatentState.frozen``):
+            the samplers then condition the model on sigma 0 for this modality -- its prompt
+            AdaLN and the other modality's cross-attention gate -- while its tokens are already
+            preserved by ``denoise_mask``. Conditionings that rebuild the state carry it through.
     """
 
     latent: mx.array
@@ -71,6 +75,7 @@ class LatentState:
     keyframes_mask: mx.array | None = None
     generated_keyframe_layout: GeneratedKeyframeLayout | None = None
     generated_keyframes: mx.array | None = None
+    frozen: bool = False
 
 
 class VideoConditionByLatentIndex:
@@ -123,13 +128,11 @@ class VideoConditionByLatentIndex:
             frame_mask = mx.full((state.denoise_mask.shape[0], tokens_per_frame, 1), mask_value)
             new_mask = mx.concatenate([new_mask[:, :start, :], frame_mask, new_mask[:, end:, :]], axis=1)
 
-        return LatentState(
-            latent=new_latent,
-            clean_latent=new_clean,
-            denoise_mask=new_mask,
-            positions=state.positions,
-            attention_mask=state.attention_mask,
-        )
+        # Token count is unchanged (frames are replaced in place), so every field this
+        # item does not own stays valid: ``keyframes_mask`` (incl. the first-frame marker
+        # every 2.5 state carries), ``generated_keyframe_layout`` and ``generated_keyframes``.
+        # Upstream gets this for free by mutating ``latent_state.clone()`` in place.
+        return replace(state, latent=new_latent, clean_latent=new_clean, denoise_mask=new_mask)
 
 
 class TemporalRegionMask:

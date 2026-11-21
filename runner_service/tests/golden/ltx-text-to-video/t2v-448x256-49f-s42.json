@@ -8,6 +8,11 @@
   "prompt": "A golden retriever puppy runs across a sunny park lawn toward the camera, barking happily, birds chirping in the trees behind it",
   "pipeline": "DistilledPipeline (ltx-2-mlx generate --distilled)",
   "argv_equivalent": "ltx-2-mlx generate --distilled --model ~/GenAI/models/ltx-2.5 --quantize-on-load 8 --width 448 --height 256 --frames 49 --frame-rate 24 --seed 42 --prompt '...' -o t2v-448x256-49f-s42.mp4",
+  "images": null,
+  "image_preprocess": null,
+  "image_conditionings": null,
+  "prompt_relay": null,
+  "lora": null,
   "quantize_on_load": 8,
   "quant_group_size": 64,
   "low_ram": false,
@@ -21,7 +26,8 @@
     "stage1_video": 42,
     "stage1_audio": 43,
     "stage1_ancestral_loop": 10042,
-    "stage2_video_and_audio": 44
+    "stage2_video_and_audio": 44,
+    "stage2_ancestral_loop": 20042
   },
   "prompt_embeds": {
     "video": {
@@ -107,6 +113,66 @@
         51,
         1
       ],
+      "video_tokens_total": 196,
+      "video_clean_in": {
+        "shape": [
+          1,
+          196,
+          128
+        ],
+        "dtype": "bfloat16",
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "abs_mean": 0.0,
+        "sha256_f32": "c7ed01f07cdc4b4dcc076f195492aa8e5c1807b4aaa7ed597c0ccb77981f9a04"
+      },
+      "video_denoise_mask": {
+        "shape": [
+          1,
+          196,
+          1
+        ],
+        "dtype": "bfloat16",
+        "mean": 1.0,
+        "std": 0.0,
+        "min": 1.0,
+        "max": 1.0,
+        "abs_mean": 1.0,
+        "sha256_f32": "fff91e873df93b4fe0f83d2e7a763bf00af8fe4a51f4e5662a433611336db00a"
+      },
+      "video_keyframes_mask": {
+        "shape": [
+          1,
+          196,
+          1
+        ],
+        "dtype": "bfloat16",
+        "mean": 0.142857,
+        "std": 0.349927,
+        "min": 0.0,
+        "max": 1.0,
+        "abs_mean": 0.142857,
+        "sha256_f32": "18d1049f1be511fdd4c669e14e1d01b95c7c34b13d87ad38048537385ba4ad7b"
+      },
+      "video_attention_mask": null,
+      "video_positions_stats": {
+        "shape": [
+          1,
+          196,
+          3
+        ],
+        "dtype": "float32",
+        "mean": 58.965275,
+        "std": 62.14632,
+        "min": 0.020833,
+        "max": 208.0,
+        "abs_mean": 58.965275,
+        "sha256_f32": "99a4af172e9e016cbec9c6d0e5ed953494f83900711eacdcb91c27994de557bd"
+      },
+      "video_cross_attention_mask": null,
+      "audio_cross_attention_mask": null,
       "video_out_tokens": {
         "shape": [
           1,
@@ -144,8 +210,8 @@
         0.421875,
         0.0
       ],
-      "ancestral": false,
-      "loop_noise_seed": null,
+      "ancestral": true,
+      "loop_noise_seed": 20042,
       "video_in": {
         "shape": [
           1,
@@ -184,6 +250,66 @@
         51,
         1
       ],
+      "video_tokens_total": 784,
+      "video_clean_in": {
+        "shape": [
+          1,
+          784,
+          128
+        ],
+        "dtype": "bfloat16",
+        "mean": 0.009326,
+        "std": 1.366711,
+        "min": -6.90625,
+        "max": 4.96875,
+        "abs_mean": 1.086543,
+        "sha256_f32": "920ae30dbe4e143269a3895daa020adabb5247bcd03632f52bddef8e8dcc5678"
+      },
+      "video_denoise_mask": {
+        "shape": [
+          1,
+          784,
+          1
+        ],
+        "dtype": "bfloat16",
+        "mean": 1.0,
+        "std": 0.0,
+        "min": 1.0,
+        "max": 1.0,
+        "abs_mean": 1.0,
+        "sha256_f32": "c0acddaeb5e08ca7c6f0ab859e008b5ea5544cac1fe9eea8d644f87f071f9eab"
+      },
+      "video_keyframes_mask": {
+        "shape": [
+          1,
+          784,
+          1
+        ],
+        "dtype": "bfloat16",
+        "mean": 0.142857,
+        "std": 0.349927,
+        "min": 0.0,
+        "max": 1.0,
+        "abs_mean": 0.142857,
+        "sha256_f32": "e7d8ae3920fc0f6c037cc0f106aeb0cb7da4d77abfaf1c7ab80f7ac945451c61"
+      },
+      "video_attention_mask": null,
+      "video_positions_stats": {
+        "shape": [
+          1,
+          784,
+          3
+        ],
+        "dtype": "float32",
+        "mean": 117.63195,
+        "std": 125.253593,
+        "min": 0.020833,
+        "max": 432.0,
+        "abs_mean": 117.63195,
+        "sha256_f32": "2e5f674ebbb5b2e4ec1cd692f12659dcc4d34e53d4a0f1dc79460de52662917e"
+      },
+      "video_cross_attention_mask": null,
+      "audio_cross_attention_mask": null,
       "video_upscaled": {
         "shape": [
           1,
@@ -219,12 +345,12 @@
           128
         ],
         "dtype": "bfloat16",
-        "mean": 0.013669,
-        "std": 1.368338,
-        "min": -5.78125,
-        "max": 5.40625,
-        "abs_mean": 1.092578,
-        "sha256_f32": "02f83fdcae1ff90d4476535f5cd4415960b7223a40e3dd2a9fe088ff75e0e2a3"
+        "mean": 0.017829,
+        "std": 1.316039,
+        "min": -5.375,
+        "max": 5.46875,
+        "abs_mean": 1.050398,
+        "sha256_f32": "992a89126640ab4dd0db7b0a0149948267828233d967ec9eced45ee5d5e93da5"
       },
       "audio_out_tokens": {
         "shape": [
@@ -233,12 +359,12 @@
           128
         ],
         "dtype": "bfloat16",
-        "mean": -0.385747,
-        "std": 1.340267,
-        "min": -6.84375,
-        "max": 5.90625,
-        "abs_mean": 1.190543,
-        "sha256_f32": "832b8938e5fabb470ff57268314cdb7c62a7e3c32a08a1781995d8fcb3094a01"
+        "mean": -0.385143,
+        "std": 1.289883,
+        "min": -6.28125,
+        "max": 5.09375,
+        "abs_mean": 1.152782,
+        "sha256_f32": "581fa6677a4eadf7f9789260c433d9eaff8e23a168027473f41d8c3546476e93"
       }
     }
   ],
@@ -251,12 +377,12 @@
       14
     ],
     "dtype": "bfloat16",
-    "mean": 0.013669,
-    "std": 1.368338,
-    "min": -5.78125,
-    "max": 5.40625,
-    "abs_mean": 1.092578,
-    "sha256_f32": "0849c97bed132750b533bf084d67d24cc16f3628ff9e57e55f8f041f39f8b96f"
+    "mean": 0.017829,
+    "std": 1.316039,
+    "min": -5.375,
+    "max": 5.46875,
+    "abs_mean": 1.050398,
+    "sha256_f32": "b28bf97f73f15f1e8b08581bfa0893b12f03f257c0f8ec5f0cb83ab60fc1fa48"
   },
   "final_audio_latent": {
     "shape": [
@@ -266,12 +392,12 @@
       16
     ],
     "dtype": "bfloat16",
-    "mean": -0.385747,
-    "std": 1.340267,
-    "min": -6.84375,
-    "max": 5.90625,
-    "abs_mean": 1.190543,
-    "sha256_f32": "4bbad223c979fe6fbb78a95c88d6153944be630b5bd89fabe04ed823f74e6cdf"
+    "mean": -0.385143,
+    "std": 1.289883,
+    "min": -6.28125,
+    "max": 5.09375,
+    "abs_mean": 1.152782,
+    "sha256_f32": "3a04797c5a41003dac337dad71f6b1487bc955919a26587031673b167ac31705"
   },
   "waveform": {
     "shape": [
@@ -280,12 +406,12 @@
       96480
     ],
     "dtype": "bfloat16",
-    "mean": 5e-06,
-    "std": 0.034894,
-    "min": -0.289062,
-    "max": 0.283203,
-    "abs_mean": 0.013086,
-    "sha256_f32": "08e1728553c0b6a038db12e9af2829f2a2cd15311937bb71728d517bad6f820c"
+    "mean": -1.1e-05,
+    "std": 0.028708,
+    "min": -0.208984,
+    "max": 0.239258,
+    "abs_mean": 0.011785,
+    "sha256_f32": "776252aed753d3bfce448c06497a48b5ed4924cd1614ce58094dde78662408bc"
   },
   "wav": {
     "sample_rate": 48000,
@@ -308,7 +434,7 @@
   },
   "mp4": {
     "file": "t2v-448x256-49f-s42.mp4",
-    "bytes": 519289,
+    "bytes": 687329,
     "ffprobe": {
       "programs": [],
       "stream_groups": [],
@@ -339,83 +465,83 @@
       ],
       "format": {
         "duration": "2.041667",
-        "bit_rate": "2034764"
+        "bit_rate": "2693207"
       }
     },
-    "sha256": "8b9caefd55212e57950e99ba0d151de7df9a359f2293796ce95ecbc90e99b90c"
+    "sha256": "5c91f5c1333e4734499009d91241d45993703a02772859bf08dfb1dc8185a2c2"
   },
   "timing_s": {
-    "pipeline_init": 0.01,
-    "text_encoder_load": 4.29,
-    "text_encode": 2.21,
-    "dit_vae_encoder_upsampler_load": 4.92,
-    "stage1_denoise": 6.9,
-    "stage2_denoise": 5.53,
-    "generate_two_stage_total": 24.32,
-    "decoders_load": 0.06,
-    "audio_decode": 0.4,
-    "decode_video_audio_mux": 1.58,
-    "total_wall": 26.1
+    "pipeline_init": 0.09,
+    "text_encoder_load": 9.4,
+    "text_encode": 4.69,
+    "dit_vae_encoder_upsampler_load": 6.79,
+    "stage1_denoise": 12.09,
+    "stage2_denoise": 11.07,
+    "generate_two_stage_total": 46.51,
+    "decoders_load": 0.1,
+    "audio_decode": 0.42,
+    "decode_video_audio_mux": 2.76,
+    "total_wall": 50.5
   },
   "memory": {
     "phases": {
       "text_encoder_load": {
-        "s": 4.29,
+        "s": 9.4,
         "peak_gib": 12.73,
         "calls": 2,
         "active_after_gib": 12.66
       },
       "text_encode": {
-        "s": 2.21,
+        "s": 4.69,
         "peak_gib": 20.28,
         "calls": 1,
         "active_after_gib": 18.59
       },
       "dit_vae_encoder_upsampler_load": {
-        "s": 4.92,
+        "s": 6.79,
         "peak_gib": 19.29,
         "calls": 1,
         "active_after_gib": 19.19
       },
       "stage1_denoise": {
-        "s": 6.9,
+        "s": 12.09,
         "peak_gib": 20.79,
         "calls": 1,
         "active_after_gib": 19.19
       },
       "stage2_denoise": {
-        "s": 5.53,
-        "peak_gib": 20.93,
+        "s": 11.07,
+        "peak_gib": 20.92,
         "calls": 1,
         "active_after_gib": 19.19
       },
       "generate_two_stage_total": {
-        "s": 24.32,
-        "peak_gib": 20.93,
+        "s": 46.51,
+        "peak_gib": 20.92,
         "calls": 1,
         "active_after_gib": 19.18
       },
       "decoders_load": {
-        "s": 0.06,
+        "s": 0.1,
         "peak_gib": 0.0,
         "calls": 1,
         "active_after_gib": 0.0
       },
       "audio_decode": {
-        "s": 0.4,
-        "peak_gib": 3.05,
+        "s": 0.42,
+        "peak_gib": 3.08,
         "calls": 1,
         "active_after_gib": 0.54
       },
       "decode_video_audio_mux": {
-        "s": 1.58,
+        "s": 2.76,
         "peak_gib": 8.24,
         "calls": 1,
         "active_after_gib": 1.3
       }
     },
-    "mlx_peak_gib_whole_run": 20.93,
-    "process_max_rss_gib": 9.32
+    "mlx_peak_gib_whole_run": 20.92,
+    "process_max_rss_gib": 6.89
   },
   "env": {
     "LTX_MLX_CACHE_DIR": "<scratch>",
@@ -426,7 +552,7 @@
     "python": "3.13.14",
     "numpy": "2.4.3",
     "ffmpeg": "ffmpeg version 9.0.2 Copyright (c) 2000-2026 the FFmpeg developers",
-    "ltx_pipelines_mlx": "0.15.4 (ltx-2-studio lockfile)",
+    "ltx_pipelines_mlx": "0.18.0 (ltx-2-studio main 4b2f609, upstream ltx-2-mlx 747b30e)",
     "machine": "Darwin 27.2.0 arm64",
     "metal": {
       "memory_size": 68719476736,

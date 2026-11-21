@@ -9,7 +9,8 @@ From the old studio's code and the scout's note (docs/reference-notes/ltx.md, se
   (`tests/test_ltx_golden.py`, case `t2v-448x256-49f-s42`). Any change to the order of noise draws, a seed offset, a
   blend or a dtype breaks that; re-run the check after touching `mlx.py` or `vendor/`.
 - **Seeds**: stage-1 video noise `seed`, audio `seed+1`, the ancestral loop `seed+10000` (video then audio each step,
-  float32), stage-2 renoise `seed+2` for video *and* audio (re-seeded: the two draws are correlated; keep it).
+  float32), stage-2 renoise `seed+2` for video *and* audio (re-seeded: the two draws are correlated; keep it), the
+  stage-2 ancestral loop `seed+20000` (0.18: both stages ancestral on 2.5, `common.ancestral`).
 - **Blends**: video uses the scalar blend `noise * sigma + clean * (1 - sigma)` with a Python sigma in both stages
   (bf16 cannot hold 0.05; the mask blend adds ~3e-3 per element); stage-2 audio uses `noise_latent_state`'s
   `mask * sigma` blend. Do not "fix" either.
@@ -47,25 +48,32 @@ From the old studio's code and the scout's note (docs/reference-notes/ltx.md, se
 - **Frame 0 keeps its keyframe marker** (fixed 2026-11-20, the owner's decision 4). The old studio's
   `VideoConditionByLatentIndex.apply` drops `keyframes_mask`, so with an image at frame 0 the DiT got no keyframe
   embedding on latent frame 0, though the reference marks frame 0 always (t2v, retake, extend, a2v do). `mlx.py`
-  `FirstFrame` keeps the marker (the vendored file stays byte for byte); later keyframe rows extend it with zeros.
+  `FirstFrame` kept the marker until the 0.18 sync, whose vendored `VideoConditionByLatentIndex` keeps it itself;
+  later keyframe rows extend it with zeros.
   The `i2v` and `kf` goldens were re-recorded by `tests/golden/record_ltx.py` on the old studio with that one line
   fixed (a scratch copy of `ltx_core_mlx` first on `PYTHONPATH`, mlx 0.32.2): every input up to stage 1 is unchanged
   (images, embeddings, noise, positions, denoise masks), the keyframes mask is now 1/7 (i2v) and 1/8 (kf: the appended
   frame unmarked) of the tokens, and everything after it differs: old against new 42.5 / 39.1 dB (i2v, mean / worst
   frame), 43.5 / 42.6 (kf). The pack is bit-exact on 0.32.2 against the new goldens (every point, frame, WAV).
-- Keyframe images: RGB → one libx264 frame at CRF 33 and back (yuv444p with ffmpeg 9.0.2: the pixels depend on the
-  ffmpeg build) → LANCZOS cover + centre crop to each stage's grid → the conv VAE encoder (`vae_encoder`, 0.59 GB),
-  once per stage. The round trip is done once in `keyframes`; each sample resizes and encodes.
+- Keyframe images (0.18, media_io bfa5755 / 2524595): EXIF orientation, ICC → sRGB, odd sides cropped → one libx264
+  frame at the generation's CRF (18 from 2.4 on, 33 before: `common.image_crf` from the transformer's
+  `model_version`) in yuv420p with bilinear RGB↔YUV and slice threads, and back (the pixels depend on the ffmpeg
+  build) → bilinear (torch `align_corners=False`, no antialias) cover on float32 + centre crop to each stage's grid →
+  x / 127.5 - 1 → the conv VAE encoder (`vae_encoder`, 0.59 GB), once per stage. The round trip is done once in
+  `keyframes`; each sample resizes and encodes.
 - **Steps**: only the whole tables end at sigma 0 (stage 1: 8, stage 2: 3); the old `--stageN-steps n` truncated
   them, leaving noise. The schema's `values_by` allows exactly those; `check_sample` refuses anything else.
 - Prompt Relay: one prompt `prompt + " " + beat ...`, token ranges by incremental tokenization (refused over 1024
   tokens: the left truncation would shift every range); the additive mask gates the video cross-attention only.
+  The studio's 0.18 also gates `audio_attn2` by default on the distilled path (0879826); the pack does not port that
+  (the beats golden is recorded with `--relay-audio-strength 0`).
 - Auto length: the DurationHead (3.8 MB, held outside the residency manager) on the connector outputs; deterministic.
   Across mlx versions its seconds move by a bf16 step (0.32.4: 2.92 against 2.89 s), which can cross a grid point
   (73 against 65 frames at 25 fps).
 - **LoRA, bake only** (no MLX adapter exists to copy): normalised by core/lora.py (`at: end` renames, nothing
   silently dropped; the old studio ignored unmatched keys and kohya files), merged after int8 quantization module by
-  module: dequantize, + float32 delta, requantize (float32 scales and biases). Unchanged on 0.32.4 (bit-equal fused
+  module: dequantize, + float32 delta, requantize, the scales and biases cast back to their loaded dtype (0.18,
+  f3c5bad: float32 ones made quantized_matmul run the layer in float32). Unchanged on 0.32.4 (bit-equal fused
   weights). Block streaming does not exist on our layout (the old `--low-ram` refused the official files).
 - 0.32.4 against the stage-B goldens (mean / worst frame dB, log-mel dB): i2v 41.74 / 38.98 / 1.47, kf 43.45 /
   42.60 / 1.49 (both on the 2026-11-20 goldens), beats 23.25 / 16.53 / 1.53, lora 26.91 / 23.73 / 1.15; bars just
@@ -161,8 +169,14 @@ run each; before the cap the decode alone reached 49.1 / 49.8 GB footprint, 27 G
 - **Noise**: `noise_latent_state` (mask x sigma, not the scalar blend) for retake / extend, video `seed`, audio
   `seed + 1`; a2v stage 1 is the scalar blend (as t2v). Retake's video mask is float32 (TemporalRegionMask), extend's
   bf16: the per-token timesteps differ by dtype; keep both.
-- **Retake audio range**: `round(S * (T / F))` with the float ratio first, as the old code (not `S * T / F`).
-- **a2v RoPE** ignores fps (positions at the default 24.0): `ltx/encode-audio.fps` allows only 24.
+- **Retake audio range** (0.18, fc399f3): the audio tokens whose time overlaps the latent frames `[S, E)`
+  (`common.audio_window`, upstream TemporalRegionMask), not a proportional index. Audio off: the stream is frozen.
+- **Frozen streams** (0.18, 9b91fe2): a2v's source audio (both stages; stage 2 deterministic) and a retake's audio
+  when off pass sigma 0 for that modality (`video_sigma` / `audio_sigma`: its prompt AdaLN and the other modality's
+  cross gate).
+- **a2v RoPE** at the clip's fps (0.18, 4254a8f; `ltx/encode-audio.fps` allows only 24 today).
+- **Sources** are VAE-encoded tiled (`TilingConfig.default()`) when they span more than one tile, else at once, and
+  evaluated before the DiT loads (51b0332).
 - **a2v stage 2** is `ltx/sample` stage2 on the handle `ltx/distill` makes: the dev transformer loaded again and the
   distilled LoRA (3320 keys, all applied) baked at load, a second residency entry (`loras: [{prefused id, 1}]`);
   the old code fused in place after stage 1. `sample-guided` unloads the plain dev transformer after it runs, so one
@@ -187,3 +201,19 @@ run each; before the cap the decode alone reached 49.1 / 49.8 GB footprint, 27 G
   retake right after it held both transformers (39.4 GiB) and peaked at a 45.7 GiB footprint, under the 52 budget.
 - **Harness**: a load or loop resets MLX's peak counter; `Bench.reset_peak` keeps the node's peak across them (before
   it, a node's `peak_gib` was only what followed its last load).
+
+## 0.18 sync (2026-11-22: ltx-2-studio 4b2f609, upstream ltx-2-mlx 0.18.0 / 747b30e)
+
+- **Ported by hand** (mlx.py and torch.py alike; the fork's commit in brackets): stage 2 ancestral on 2.5 with noise
+  `seed + 20000` (5c1ca4a); the generation's rules from the transformer header's `model_version`
+  (`common.model_version`: image CRF 18 from 2.4, ancestral from 2.5; 2524595); keyframe image decode / yuv420p
+  round trip / float bilinear resize (bfa5755); bake keeps the scales / biases dtype (f3c5bad); frozen streams at sigma 0 (9b91fe2); retake's
+  audio window by time (fc399f3); sources tiled and evaluated before the DiT (51b0332); image latents evaluated while
+  the encoder is loaded (aaa3d51); a2v positions at the clip's fps (4254a8f). The vendored
+  `VideoConditionByLatentIndex` now keeps `keyframes_mask`, so `FirstFrame` is gone.
+- **Not ported**: the audio Prompt Relay mask (0879826, the studio's default on distilled), DFR (`--dfr` with the
+  refine-details IC-LoRA), the distilled retake / extend / a2v presets, NAG, float16 compute, block-sparse stage 2.
+- **Goldens**: every ltx golden re-recorded on 4b2f609 (`tests/golden/record_ltx.py`, mlx 0.32.2; beats with
+  `--relay-audio-strength 0`, as the pack). The pack is bit-exact against all ten on 0.32.2 (every point, every frame,
+  the WAV) and the auto / noaudio / reseed variants pass; on 0.32.4 the bars were re-measured
+  (tests/test_ltx_golden.py).

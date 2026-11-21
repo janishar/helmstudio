@@ -57,17 +57,21 @@ def golden_dir(name: str) -> Path:
 # the first DiT call to 10-19 % of the final latent. Bars per case, just under what 0.32.4 measured (mean / worst
 # frame dB, log-mel dB): 448x256x49 23.09 / 18.72 / 1.133; 512x320x57 32.46 / 30.78 / 0.834. A new mlx may drift
 # differently: re-measure and re-set these, after checking the 0.32.2 run is still bit-exact.
+# Re-set 2026-11-22 after the 0.18 sync (goldens re-recorded on ltx-2-studio 4b2f609; the pack bit-exact on 0.32.2
+# against every one of them, PSNR inf, WAV equal): stage 2 is ancestral too now, which grows the 0.32.4 drift.
+# Measured: t2v 448 23.48 / 18.75 / 1.267, 512 32.42 / 30.75 / 0.867; i2v 37.92 / 32.05 / 1.536; kf 43.54 / 42.69 /
+# 1.513; beats 23.01 / 16.65 / 1.472; LoRA 22.64 / 18.49 / 2.140.
 BARS = {
-    "t2v-448x256-49f-s42": {"video_mean_db": 22.5, "video_worst_db": 18.0, "logmel_db": 1.25},
+    "t2v-448x256-49f-s42": {"video_mean_db": 22.5, "video_worst_db": 18.0, "logmel_db": 1.35},
     "t2v-512x320-57f-s7": {"video_mean_db": 31.5, "video_worst_db": 30.0, "logmel_db": 0.95},
     # stage B, 0.32.4 measured 2026-11-15 (mean / worst dB, log-mel dB): the images anchor the clip, so i2v / kf
     # drift little (re-recorded 2026-11-20 with the frame-0 keyframe marker, GOTCHAS: 41.74 / 38.98 / 1.466;
     # 43.45 / 42.60 / 1.489); beats 23.25 / 16.53 / 1.526; the LoRA clip
     # 26.91 / 23.73 / 1.154 (its fused weights are bit-equal on 0.32.4 too: quantize / dequantize did not change)
-    "i2v-448x256-49f-s42": {"video_mean_db": 41.5, "video_worst_db": 38.5, "logmel_db": 1.6},
+    "i2v-448x256-49f-s42": {"video_mean_db": 37.5, "video_worst_db": 31.5, "logmel_db": 1.6},
     "kf-448x256-49f-s42": {"video_mean_db": 42.5, "video_worst_db": 41.5, "logmel_db": 1.6},
     "beats-448x256-49f-s42": {"video_mean_db": 22.5, "video_worst_db": 16.0, "logmel_db": 1.65},
-    "lora-448x256-49f-s42": {"video_mean_db": 26.0, "video_worst_db": 23.0, "logmel_db": 1.3},
+    "lora-448x256-49f-s42": {"video_mean_db": 22.0, "video_worst_db": 18.0, "logmel_db": 2.25},
 }
 
 
@@ -561,10 +565,12 @@ def compare(name: str, r: dict, out: Path, bench: Bench) -> dict:
 # MLX 0.32.4 against the M7 dev goldens (recorded on 0.32.2): bars set just under what it measured (GOTCHAS.md).
 # Measured 2026-11-19 (mean / worst frame dB, log-mel dB): retake 36.06 / 34.50 / 0.248; extend 36.13 / 26.65 / 0.331
 # (the 8 new frames drift most: its worst is the last frame); a2v 24.50 / 20.79 / 0.000 (the source audio is kept
-# as is, so its WAV is identical; the 8-step ancestral stage 1 amplifies the kernel drift as in t2v)
+# as is, so its WAV is identical; the 8-step ancestral stage 1 amplifies the kernel drift as in t2v). Re-set
+# 2026-11-22 after the 0.18 sync (re-recorded on 4b2f609, bit-exact on 0.32.2): retake 35.28 / 33.90 / 0.321; extend
+# 35.36 / 28.09 / 0.340; a2v 27.88 / 24.17 / 0.000.
 DEV_BARS: dict = {
-    "retake-448x256-49f-s42": {"video_mean_db": 35.5, "video_worst_db": 34.0, "logmel_db": 0.35},
-    "extend-448x256-49f+8-s42": {"video_mean_db": 35.5, "video_worst_db": 26.0, "logmel_db": 0.45},
+    "retake-448x256-49f-s42": {"video_mean_db": 35.0, "video_worst_db": 33.5, "logmel_db": 0.35},
+    "extend-448x256-49f+8-s42": {"video_mean_db": 35.0, "video_worst_db": 26.0, "logmel_db": 0.45},
     "a2v-448x256-49f-s42": {"video_mean_db": 24.0, "video_worst_db": 20.0, "logmel_db": 0.1},
 }
 

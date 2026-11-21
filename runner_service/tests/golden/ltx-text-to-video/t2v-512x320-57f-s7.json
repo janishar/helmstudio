@@ -8,6 +8,11 @@
   "prompt": "Ocean waves crash against black volcanic rocks at sunset, white spray in the air, seagulls crying overhead and the wind roaring",
   "pipeline": "DistilledPipeline (ltx-2-mlx generate --distilled)",
   "argv_equivalent": "ltx-2-mlx generate --distilled --model ~/GenAI/models/ltx-2.5 --quantize-on-load 8 --width 512 --height 320 --frames 57 --frame-rate 25 --seed 7 --prompt '...' -o t2v-512x320-57f-s7.mp4",
+  "images": null,
+  "image_preprocess": null,
+  "image_conditionings": null,
+  "prompt_relay": null,
+  "lora": null,
   "quantize_on_load": 8,
   "quant_group_size": 64,
   "low_ram": false,
@@ -21,7 +26,8 @@
     "stage1_video": 7,
     "stage1_audio": 8,
     "stage1_ancestral_loop": 10007,
-    "stage2_video_and_audio": 9
+    "stage2_video_and_audio": 9,
+    "stage2_ancestral_loop": 20007
   },
   "prompt_embeds": {
     "video": {
@@ -107,6 +113,66 @@
         57,
         1
       ],
+      "video_tokens_total": 320,
+      "video_clean_in": {
+        "shape": [
+          1,
+          320,
+          128
+        ],
+        "dtype": "bfloat16",
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "abs_mean": 0.0,
+        "sha256_f32": "6cdd259c8ecbe61fbc369f3293c1961541386954a223b17a37899d7fd9ad42da"
+      },
+      "video_denoise_mask": {
+        "shape": [
+          1,
+          320,
+          1
+        ],
+        "dtype": "bfloat16",
+        "mean": 1.0,
+        "std": 0.0,
+        "min": 1.0,
+        "max": 1.0,
+        "abs_mean": 1.0,
+        "sha256_f32": "5c9d51f4ee957e788ddbff3b0583fdbf2196b3aae4afecd7b198a54f6a211379"
+      },
+      "video_keyframes_mask": {
+        "shape": [
+          1,
+          320,
+          1
+        ],
+        "dtype": "bfloat16",
+        "mean": 0.125,
+        "std": 0.330719,
+        "min": 0.0,
+        "max": 1.0,
+        "abs_mean": 0.125,
+        "sha256_f32": "6e28cb94848ee0b8cbc68636333018cb8afda20b6f9262fba756b0be4cc62eeb"
+      },
+      "video_attention_mask": null,
+      "video_positions_stats": {
+        "shape": [
+          1,
+          320,
+          3
+        ],
+        "dtype": "float32",
+        "mean": 69.672501,
+        "std": 72.219025,
+        "min": 0.02,
+        "max": 240.0,
+        "abs_mean": 69.672501,
+        "sha256_f32": "668f6310edb2a1dba3ec543f1efc3d2b5a032a047932f3265ab890448b17d27d"
+      },
+      "video_cross_attention_mask": null,
+      "audio_cross_attention_mask": null,
       "video_out_tokens": {
         "shape": [
           1,
@@ -144,8 +210,8 @@
         0.421875,
         0.0
       ],
-      "ancestral": false,
-      "loop_noise_seed": null,
+      "ancestral": true,
+      "loop_noise_seed": 20007,
       "video_in": {
         "shape": [
           1,
@@ -184,6 +250,66 @@
         57,
         1
       ],
+      "video_tokens_total": 1280,
+      "video_clean_in": {
+        "shape": [
+          1,
+          1280,
+          128
+        ],
+        "dtype": "bfloat16",
+        "mean": -0.04085,
+        "std": 0.926669,
+        "min": -3.859375,
+        "max": 3.546875,
+        "abs_mean": 0.730792,
+        "sha256_f32": "5074e7c3f3399df30b5ff73c01fe3b0d2d1c5b2d312cf13aebc89fa84eec1605"
+      },
+      "video_denoise_mask": {
+        "shape": [
+          1,
+          1280,
+          1
+        ],
+        "dtype": "bfloat16",
+        "mean": 1.0,
+        "std": 0.0,
+        "min": 1.0,
+        "max": 1.0,
+        "abs_mean": 1.0,
+        "sha256_f32": "0e215617962f8aa75206886eda748d50113742ea479a5e2e52340427bd54bb0f"
+      },
+      "video_keyframes_mask": {
+        "shape": [
+          1,
+          1280,
+          1
+        ],
+        "dtype": "bfloat16",
+        "mean": 0.125,
+        "std": 0.330719,
+        "min": 0.0,
+        "max": 1.0,
+        "abs_mean": 0.125,
+        "sha256_f32": "7cbf193b05afc49071e2314b93681db493366dc50edc0d2447f36b44b46beb71"
+      },
+      "video_attention_mask": null,
+      "video_positions_stats": {
+        "shape": [
+          1,
+          1280,
+          3
+        ],
+        "dtype": "float32",
+        "mean": 139.005829,
+        "std": 145.347473,
+        "min": 0.02,
+        "max": 496.0,
+        "abs_mean": 139.005829,
+        "sha256_f32": "73d609b4b974bf9e88c40f6bb87c72c688431270ecb012731799da67af8de074"
+      },
+      "video_cross_attention_mask": null,
+      "audio_cross_attention_mask": null,
       "video_upscaled": {
         "shape": [
           1,
@@ -219,12 +345,12 @@
           128
         ],
         "dtype": "bfloat16",
-        "mean": -0.036219,
-        "std": 0.954502,
-        "min": -4.125,
-        "max": 4.0625,
-        "abs_mean": 0.754235,
-        "sha256_f32": "b5f1c66725be6d34f37eddec4fd7d13894711f428486dfbcebb6f3b073c306a1"
+        "mean": -0.037463,
+        "std": 0.915504,
+        "min": -4.09375,
+        "max": 3.53125,
+        "abs_mean": 0.720081,
+        "sha256_f32": "16300068d8aed79bb3ecc51e4b2807c3c1f1fdbaa159ca641261fae60b33ed5a"
       },
       "audio_out_tokens": {
         "shape": [
@@ -233,12 +359,12 @@
           128
         ],
         "dtype": "bfloat16",
-        "mean": 0.224352,
-        "std": 0.865528,
-        "min": -5.9375,
-        "max": 5.0625,
-        "abs_mean": 0.712006,
-        "sha256_f32": "797528cee846228f1c39cbd4d62111385e1a4cfe34be73e724a2dd279fde8616"
+        "mean": 0.217113,
+        "std": 0.893373,
+        "min": -6.25,
+        "max": 4.5625,
+        "abs_mean": 0.726676,
+        "sha256_f32": "8b9c4a7d231a07e9d44b97ca376d3ca864ae3c572cb7a975208ee7537303ba1a"
       }
     }
   ],
@@ -251,12 +377,12 @@
       16
     ],
     "dtype": "bfloat16",
-    "mean": -0.036219,
-    "std": 0.954502,
-    "min": -4.125,
-    "max": 4.0625,
-    "abs_mean": 0.754235,
-    "sha256_f32": "4dbdc057675a69555edc2aef841107aa798869546e3d4dfcd7f49f3ef81defb0"
+    "mean": -0.037463,
+    "std": 0.915504,
+    "min": -4.09375,
+    "max": 3.53125,
+    "abs_mean": 0.720081,
+    "sha256_f32": "b46f10d0953d3f3a591245a8aace896be169aba972542147cbd91fdd07eb5699"
   },
   "final_audio_latent": {
     "shape": [
@@ -266,12 +392,12 @@
       16
     ],
     "dtype": "bfloat16",
-    "mean": 0.224352,
-    "std": 0.865528,
-    "min": -5.9375,
-    "max": 5.0625,
-    "abs_mean": 0.712006,
-    "sha256_f32": "46086bbca5a26a2f5867df277842ccdcd97af2aeb6b133c7422d874422b6c51c"
+    "mean": 0.217113,
+    "std": 0.893373,
+    "min": -6.25,
+    "max": 4.5625,
+    "abs_mean": 0.726676,
+    "sha256_f32": "25e48b32444c2fcc7cfc5bbaf3e96f92bc9b886bfa009d1411b69938ca1c1fa2"
   },
   "waveform": {
     "shape": [
@@ -280,12 +406,12 @@
       108000
     ],
     "dtype": "bfloat16",
-    "mean": -2.6e-05,
-    "std": 0.026757,
-    "min": -0.15918,
-    "max": 0.197266,
-    "abs_mean": 0.019942,
-    "sha256_f32": "94311992bb83b837697cce2b876c7a6d2fd1e6250d86b335c1599899c665fc2f"
+    "mean": -0.000111,
+    "std": 0.024659,
+    "min": -0.154297,
+    "max": 0.167969,
+    "abs_mean": 0.017982,
+    "sha256_f32": "e11ca6aec52b5695d60007a91893caea2e90fb9e8ed151cdee88556af3399569"
   },
   "wav": {
     "sample_rate": 48000,
@@ -308,7 +434,7 @@
   },
   "mp4": {
     "file": "t2v-512x320-57f-s7.mp4",
-    "bytes": 198852,
+    "bytes": 196805,
     "ffprobe": {
       "programs": [],
       "stream_groups": [],
@@ -339,83 +465,83 @@
       ],
       "format": {
         "duration": "2.280000",
-        "bit_rate": "697726"
+        "bit_rate": "690543"
       }
     },
-    "sha256": "d3fa4611e1d6eb803275c56c5f10dac4160a143c5da648038161b50cce4edd6a"
+    "sha256": "c34523cbd847bc85cb26aded6e127810eea8bc7553c0fd43369bd4790fe61559"
   },
   "timing_s": {
-    "pipeline_init": 0.01,
-    "text_encoder_load": 4.35,
-    "text_encode": 2.23,
-    "dit_vae_encoder_upsampler_load": 4.96,
-    "stage1_denoise": 8.22,
-    "stage2_denoise": 8.16,
-    "generate_two_stage_total": 28.46,
-    "decoders_load": 0.06,
-    "audio_decode": 0.44,
-    "decode_video_audio_mux": 2.01,
-    "total_wall": 30.8
+    "pipeline_init": 0.02,
+    "text_encoder_load": 7.94,
+    "text_encode": 3.67,
+    "dit_vae_encoder_upsampler_load": 7.58,
+    "stage1_denoise": 10.17,
+    "stage2_denoise": 10.06,
+    "generate_two_stage_total": 40.5,
+    "decoders_load": 0.09,
+    "audio_decode": 0.48,
+    "decode_video_audio_mux": 3.57,
+    "total_wall": 44.5
   },
   "memory": {
     "phases": {
       "text_encoder_load": {
-        "s": 4.35,
+        "s": 7.94,
         "peak_gib": 12.73,
         "calls": 2,
         "active_after_gib": 12.66
       },
       "text_encode": {
-        "s": 2.23,
+        "s": 3.67,
         "peak_gib": 20.28,
         "calls": 1,
         "active_after_gib": 18.59
       },
       "dit_vae_encoder_upsampler_load": {
-        "s": 4.96,
-        "peak_gib": 19.35,
+        "s": 7.58,
+        "peak_gib": 19.29,
         "calls": 1,
         "active_after_gib": 19.19
       },
       "stage1_denoise": {
-        "s": 8.22,
+        "s": 10.17,
         "peak_gib": 20.76,
         "calls": 1,
         "active_after_gib": 19.19
       },
       "stage2_denoise": {
-        "s": 8.16,
+        "s": 10.06,
         "peak_gib": 21.05,
         "calls": 1,
         "active_after_gib": 19.19
       },
       "generate_two_stage_total": {
-        "s": 28.46,
+        "s": 40.5,
         "peak_gib": 21.05,
         "calls": 1,
         "active_after_gib": 19.18
       },
       "decoders_load": {
-        "s": 0.06,
+        "s": 0.09,
         "peak_gib": 0.0,
         "calls": 1,
         "active_after_gib": 0.0
       },
       "audio_decode": {
-        "s": 0.44,
-        "peak_gib": 3.1,
+        "s": 0.48,
+        "peak_gib": 3.05,
         "calls": 1,
         "active_after_gib": 0.54
       },
       "decode_video_audio_mux": {
-        "s": 2.01,
+        "s": 3.57,
         "peak_gib": 8.16,
         "calls": 1,
         "active_after_gib": 1.3
       }
     },
     "mlx_peak_gib_whole_run": 21.05,
-    "process_max_rss_gib": 9.3
+    "process_max_rss_gib": 6.76
   },
   "env": {
     "LTX_MLX_CACHE_DIR": "<scratch>",
@@ -426,7 +552,7 @@
     "python": "3.13.14",
     "numpy": "2.4.3",
     "ffmpeg": "ffmpeg version 9.0.2 Copyright (c) 2000-2026 the FFmpeg developers",
-    "ltx_pipelines_mlx": "0.15.4 (ltx-2-studio lockfile)",
+    "ltx_pipelines_mlx": "0.18.0 (ltx-2-studio main 4b2f609, upstream ltx-2-mlx 747b30e)",
     "machine": "Darwin 27.2.0 arm64",
     "metal": {
       "memory_size": 68719476736,

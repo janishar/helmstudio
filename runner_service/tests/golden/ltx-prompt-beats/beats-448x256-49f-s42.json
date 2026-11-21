@@ -8,6 +8,7 @@
   "seed": 42,
   "relay_epsilon": 0.001,
   "relay_strength": 1.0,
+  "relay_audio_strength": 0.0,
   "segments": [
     {
       "text": "the puppy sits still and looks at the camera",
@@ -20,7 +21,7 @@
   ],
   "prompt": "A golden retriever puppy on a sunny park lawn, birds chirping in the trees behind it",
   "pipeline": "DistilledPipeline (ltx-2-mlx generate --distilled)",
-  "argv_equivalent": "ltx-2-mlx generate --distilled --model ~/GenAI/models/ltx-2.5 --quantize-on-load 8 --width 448 --height 256 --frames 49 --frame-rate 24 --seed 42 --prompt '...' --segment 'the puppy sits still and looks at the camera' 3 --segment 'the puppy jumps up and runs away to the left, barking' --relay-epsilon 0.001 --relay-strength 1 -o beats-448x256-49f-s42.mp4",
+  "argv_equivalent": "ltx-2-mlx generate --distilled --model ~/GenAI/models/ltx-2.5 --quantize-on-load 8 --width 448 --height 256 --frames 49 --frame-rate 24 --seed 42 --prompt '...' --segment 'the puppy sits still and looks at the camera' 3 --segment 'the puppy jumps up and runs away to the left, barking' --relay-epsilon 0.001 --relay-strength 1 --relay-audio-strength 0 -o beats-448x256-49f-s42.mp4",
   "images": null,
   "image_preprocess": null,
   "image_conditionings": null,
@@ -51,7 +52,8 @@
     "stage1_video": 42,
     "stage1_audio": 43,
     "stage1_ancestral_loop": 10042,
-    "stage2_video_and_audio": 44
+    "stage2_video_and_audio": 44,
+    "stage2_ancestral_loop": 20042
   },
   "prompt_embeds": {
     "video": {
@@ -210,6 +212,7 @@
         "abs_mean": 3.914795,
         "sha256_f32": "5dd3957030f58aa15f2b60d534e2bc1181fdfd30e9c3acc097806e79eb7546c6"
       },
+      "audio_cross_attention_mask": null,
       "video_out_tokens": {
         "shape": [
           1,
@@ -247,8 +250,8 @@
         0.421875,
         0.0
       ],
-      "ancestral": false,
-      "loop_noise_seed": null,
+      "ancestral": true,
+      "loop_noise_seed": 20042,
       "video_in": {
         "shape": [
           1,
@@ -360,6 +363,7 @@
         "abs_mean": 3.914795,
         "sha256_f32": "98ced587ae19c9421f99558714fe1d8f25830318bc96c9e2677e3e91ffea4ebe"
       },
+      "audio_cross_attention_mask": null,
       "video_upscaled": {
         "shape": [
           1,
@@ -395,12 +399,12 @@
           128
         ],
         "dtype": "bfloat16",
-        "mean": -0.026111,
-        "std": 1.280445,
-        "min": -6.15625,
-        "max": 5.34375,
-        "abs_mean": 1.019816,
-        "sha256_f32": "06ba679abdaaee0bd29f113b8818ee3a335859f29deb3cd77d048da5b1e23b9f"
+        "mean": -0.02686,
+        "std": 1.21002,
+        "min": -5.65625,
+        "max": 4.875,
+        "abs_mean": 0.968198,
+        "sha256_f32": "5f6881b9667e6d66e75142b2dfbe90ff8a1a9040eec8e1f7a4c8969db6d56379"
       },
       "audio_out_tokens": {
         "shape": [
@@ -409,12 +413,12 @@
           128
         ],
         "dtype": "bfloat16",
-        "mean": -0.525905,
-        "std": 1.784386,
-        "min": -6.40625,
-        "max": 7.40625,
-        "abs_mean": 1.567994,
-        "sha256_f32": "22bcbcaf2bda48945db5047148a5525399a26fc038332857c700a2cd83e68d4f"
+        "mean": -0.50912,
+        "std": 1.737405,
+        "min": -6.03125,
+        "max": 5.625,
+        "abs_mean": 1.523084,
+        "sha256_f32": "1bc182a6ee98b18f0fd42924ec4c91b29129968dacfe7417ab75959cff4c1d44"
       }
     }
   ],
@@ -427,12 +431,12 @@
       14
     ],
     "dtype": "bfloat16",
-    "mean": -0.026111,
-    "std": 1.280445,
-    "min": -6.15625,
-    "max": 5.34375,
-    "abs_mean": 1.019816,
-    "sha256_f32": "0df3daa1a4ec242d6eec1f7a09a467812cab1b47f81e075f5741641854917f4e"
+    "mean": -0.02686,
+    "std": 1.21002,
+    "min": -5.65625,
+    "max": 4.875,
+    "abs_mean": 0.968198,
+    "sha256_f32": "3a7318414c404460ee99e516617642262ecdc1d599fedca03745f2637bdae49d"
   },
   "final_audio_latent": {
     "shape": [
@@ -442,12 +446,12 @@
       16
     ],
     "dtype": "bfloat16",
-    "mean": -0.525905,
-    "std": 1.784386,
-    "min": -6.40625,
-    "max": 7.40625,
-    "abs_mean": 1.567994,
-    "sha256_f32": "26c2f2779c8a783a66898814e4ee829717c7036cac72ed4b652e0d53d5056b3f"
+    "mean": -0.50912,
+    "std": 1.737405,
+    "min": -6.03125,
+    "max": 5.625,
+    "abs_mean": 1.523084,
+    "sha256_f32": "8741d18e0cee7575182d1efbddedac688e6eb90065d43f0a28ed539641212661"
   },
   "waveform": {
     "shape": [
@@ -456,12 +460,12 @@
       96480
     ],
     "dtype": "bfloat16",
-    "mean": 7.8e-05,
-    "std": 0.108763,
-    "min": -0.683594,
-    "max": 0.683594,
-    "abs_mean": 0.038792,
-    "sha256_f32": "2b9adf2ea49a06909dfbb84c5e6452eedd31c07a883209c8dd767f5e83b56bd3"
+    "mean": -0.000263,
+    "std": 0.101946,
+    "min": -0.566406,
+    "max": 0.652344,
+    "abs_mean": 0.036817,
+    "sha256_f32": "800cf4f26b85a76b2e97de38be7e23aa09a16a88f70c31e2727de21b8b6f4bd0"
   },
   "wav": {
     "sample_rate": 48000,
@@ -484,7 +488,7 @@
   },
   "mp4": {
     "file": "beats-448x256-49f-s42.mp4",
-    "bytes": 269583,
+    "bytes": 281470,
     "ffprobe": {
       "programs": [],
       "stream_groups": [],
@@ -515,83 +519,83 @@
       ],
       "format": {
         "duration": "2.041667",
-        "bit_rate": "1056325"
+        "bit_rate": "1102902"
       }
     },
-    "sha256": "0601d4e988c55b28af8f31191437e4647372aa6b73279295c9cca92332788746"
+    "sha256": "71b6cf86604e94f17a8aa1e090bf61f430814d43a620ba42f1030d4b333d0d7c"
   },
   "timing_s": {
-    "pipeline_init": 0.01,
-    "text_encoder_load": 4.26,
-    "text_encode": 2.15,
-    "dit_vae_encoder_upsampler_load": 4.68,
-    "stage1_denoise": 6.38,
-    "stage2_denoise": 5.5,
-    "generate_two_stage_total": 23.29,
-    "decoders_load": 0.05,
-    "audio_decode": 0.39,
-    "decode_video_audio_mux": 1.52,
-    "total_wall": 25.0
+    "pipeline_init": 0.02,
+    "text_encoder_load": 5.97,
+    "text_encode": 5.57,
+    "dit_vae_encoder_upsampler_load": 13.19,
+    "stage1_denoise": 18.73,
+    "stage2_denoise": 7.43,
+    "generate_two_stage_total": 52.87,
+    "decoders_load": 0.09,
+    "audio_decode": 0.42,
+    "decode_video_audio_mux": 2.34,
+    "total_wall": 55.6
   },
   "memory": {
     "phases": {
       "text_encoder_load": {
-        "s": 4.26,
+        "s": 5.97,
         "peak_gib": 12.73,
         "calls": 3,
         "active_after_gib": 12.66
       },
       "text_encode": {
-        "s": 2.15,
+        "s": 5.57,
         "peak_gib": 20.28,
         "calls": 1,
         "active_after_gib": 18.59
       },
       "dit_vae_encoder_upsampler_load": {
-        "s": 4.68,
+        "s": 13.19,
         "peak_gib": 19.35,
         "calls": 1,
         "active_after_gib": 19.19
       },
       "stage1_denoise": {
-        "s": 6.38,
+        "s": 18.73,
         "peak_gib": 20.79,
         "calls": 1,
         "active_after_gib": 19.19
       },
       "stage2_denoise": {
-        "s": 5.5,
+        "s": 7.43,
         "peak_gib": 20.9,
         "calls": 1,
         "active_after_gib": 19.19
       },
       "generate_two_stage_total": {
-        "s": 23.29,
+        "s": 52.87,
         "peak_gib": 20.9,
         "calls": 1,
         "active_after_gib": 19.18
       },
       "decoders_load": {
-        "s": 0.05,
+        "s": 0.09,
         "peak_gib": 0.0,
         "calls": 1,
         "active_after_gib": 0.0
       },
       "audio_decode": {
-        "s": 0.39,
-        "peak_gib": 3.13,
+        "s": 0.42,
+        "peak_gib": 3.3,
         "calls": 1,
         "active_after_gib": 0.54
       },
       "decode_video_audio_mux": {
-        "s": 1.52,
+        "s": 2.34,
         "peak_gib": 8.24,
         "calls": 1,
         "active_after_gib": 1.3
       }
     },
     "mlx_peak_gib_whole_run": 20.9,
-    "process_max_rss_gib": 9.74
+    "process_max_rss_gib": 7.46
   },
   "env": {
     "LTX_MLX_CACHE_DIR": "<scratch>",
@@ -602,7 +606,7 @@
     "python": "3.13.14",
     "numpy": "2.4.3",
     "ffmpeg": "ffmpeg version 9.0.2 Copyright (c) 2000-2026 the FFmpeg developers",
-    "ltx_pipelines_mlx": "0.15.4 (ltx-2-studio lockfile)",
+    "ltx_pipelines_mlx": "0.18.0 (ltx-2-studio main 4b2f609, upstream ltx-2-mlx 747b30e)",
     "machine": "Darwin 27.2.0 arm64",
     "metal": {
       "memory_size": 68719476736,

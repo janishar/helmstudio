@@ -267,6 +267,7 @@ def test_audio_to_video_freezes_the_sound_and_stage_2_runs_the_share_owners_tran
     ctx.asked.clear()
     lat = ltx.sample(ctx, {"role": "stage2", "steps": 3}, {"model": distilled, "cond": cond, "seed": 5, "latent": lat})["latent"]  # fmt: skip
     assert ctx.asked == [("distilled-fp8", "transformer")]
+    assert torch.equal(lat.audio, a.audio)  # stage 2 keeps it frozen too (a2vid_two_stage)
     out = ltx.decode(ctx, {"audio": True}, {"model": dev, "latent": lat})["video"]
     info = clip(out["mp4"], tmp_path, 9)
     assert out["source_map"] == {
@@ -436,7 +437,14 @@ f, h, w = (int(v) for v in x["fhw"].tolist())
 vx0, ax0 = X0Model(dit)(video_latent=x["video"], audio_latent=x["audio"], sigma=x["sigma"],
     video_text_embeds=x["vctx"], audio_text_embeds=x["actx"], video_positions=compute_video_positions(f, h, w, 24.0),
     audio_positions=compute_audio_positions(x["audio"].shape[1]), video_keyframes_mask=x["keyframes"])
-mx.save_safetensors(str(tmp / "out.safetensors"), {"video": vx0, "audio": ax0,
+t = x["audio"].shape[1]
+video = m.LatentState(latent=x["video"], clean_latent=x["video"], denoise_mask=mx.ones((1, f * h * w, 1)), positions=None)
+frozen = m._audio_state(x["audio"], mx.zeros((1, t, 1)), frozen=True)
+vf, af = X0Model(dit)(video_latent=x["video"], audio_latent=x["audio"], sigma=x["sigma"],
+    video_text_embeds=x["vctx"], audio_text_embeds=x["actx"], video_positions=compute_video_positions(f, h, w, 24.0),
+    audio_positions=frozen.positions, video_keyframes_mask=x["keyframes"], audio_timesteps=mx.zeros((1, t)),
+    **m._frozen(video, frozen, 1))
+mx.save_safetensors(str(tmp / "out.safetensors"), {"video": vx0, "audio": ax0, "video_frozen": vf, "audio_frozen": af,
     "vpos": compute_video_positions(f, h, w, 24.0), "apos": compute_audio_positions(x["audio"].shape[1]),
     "kpos": _compute_keyframe_positions(7, h, w, 24.0)})
 (tmp / "schedule.json").write_text(json.dumps(m.ltx2_schedule(30, 1234)))
@@ -476,7 +484,16 @@ def test_the_torch_port_matches_mlx_on_the_same_tiny_weights(tmp_path):
         vx0, ax0 = ltx._pass(
             ltx.X0Model(module), x["video"], x["audio"], video, audio, 0.5, x["vctx"], x["actx"]
         )
-    for got, want, noisy in ((vx0, mlx["video"], x["video"]), (ax0, mlx["audio"], x["audio"])):
+    # the audio frozen (a2v): sigma 0 in its AdaLN and the video's A->V gate, mask 0 (its x0 is its input)
+    frozen = ltx.State(x["audio"], x["audio"], torch.zeros(1, t, 1), audio.positions, frozen=True)
+    with torch.no_grad():
+        vf, af = ltx._pass(
+            ltx.X0Model(module), x["video"], x["audio"], video, frozen, 0.5, x["vctx"], x["actx"]
+        )
+    assert torch.equal(af, x["audio"]) and torch.equal(mlx["audio_frozen"], x["audio"])
+    assert (mlx["video_frozen"] - mlx["video"]).norm() > 0  # the gate's sigma moved the video
+    for got, want, noisy in ((vx0, mlx["video"], x["video"]), (ax0, mlx["audio"], x["audio"]),
+                             (vf, mlx["video_frozen"], x["video"])):  # fmt: skip
         # against the model's own term (x − x0 = v·σ), not x0, which the input dominates: measured 0.17 %
         assert (got.float() - want).norm() / (noisy - want).norm() < 1e-2
     assert ltx.ltx2_schedule(30, 1234) == pytest.approx(

@@ -114,6 +114,7 @@ class VideoConditionByKeyframeIndex:
         self.frame_idx = frame_idx
         self.keyframe_latent = keyframe_latent
         self.strength = strength
+        self.num_pixel_frames = num_pixel_frames
 
         # Compute positions matching reference: single-frame positions with
         # frame_idx offset, NOT extracted from the full video grid.
@@ -167,4 +168,10 @@ class VideoConditionByKeyframeIndex:
             keyframes_mask=extend_keyframes_mask(
                 state, num_new_tokens=new_latent.shape[1] - state.latent.shape[1], marked=False
             ),
+            # Carried, not owned: appending after generated keyframe slots must not erase
+            # the layout that locates them. Keyframe tokens go after the existing ones, so
+            # the recorded slot range stays valid.
+            generated_keyframe_layout=state.generated_keyframe_layout,
+            generated_keyframes=state.generated_keyframes,
+            frozen=state.frozen,
         )

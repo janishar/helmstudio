@@ -1,10 +1,14 @@
 # Vendored: ltx-core-mlx
 
-`ltx_core_mlx/` here is a subset of the package `ltx-core-mlx` 0.15.4 from ltx-2-studio
-(`packages/ltx-core-mlx/src/ltx_core_mlx`), commit `b63613e0a896e6809ec989af7c533fc11aed924c` (2026-09-24), copied
-**unchanged** (byte for byte): the 61 modules that the ltx pack (`../mlx.py`) imports and everything they import, found
-by walking their imports. Nothing else of the package (pipelines, trainer, CLI, web) is copied: the pipeline itself is
-re-written in `../mlx.py`, following `ltx_pipelines_mlx.distilled` and its helpers.
+`ltx_core_mlx/` here is a subset of the package `ltx-core-mlx` 0.18.0 from ltx-2-studio
+(`packages/ltx-core-mlx/src/ltx_core_mlx`), commit `4b2f609bd96d299c741bf446203b5b2cd3cb7da5` (2026-11-22: the fork's
+sync to upstream ltx-2-mlx 747b30e), copied **unchanged** (byte for byte): the 69 modules that the ltx pack
+(`../mlx.py`) imports and everything they import, found by walking their imports. Nothing else of the package
+(pipelines, trainer, CLI, web) is copied: the pipeline itself is re-written in `../mlx.py`, following
+`ltx_pipelines_mlx.distilled` and its helpers.
+
+`model/transformer/sparse_attention.py` is from the fork's `e6e15b7` (2026-11-22: the sparse kernel's self-check
+compares against exact fp32; inert unless `LTX2_SOL_TAU` is set). Every other module is unchanged at `e6e15b7`.
 
 - Licence: MIT, `LICENSE` next to this file (Copyright (c) 2025 dgrauet, (c) 2026 Janishar Ali). It is a port of
   Lightricks' LTX-2 reference code.
@@ -25,7 +29,16 @@ retake source's sound and audio-to-video's input). The retake / extend / audio-t
 (`ltx_pipelines_mlx.retake`, `a2vid_two_stage`, `utils.samplers.guided_denoise_loop`, `scheduler.ltx2_schedule`,
 `utils.constants.DEFAULT_NEGATIVE_PROMPT`, `ltx_core_mlx.utils.image.load_video_frames`) are re-written in `../mlx.py`.
 
-To refresh: copy the same files from a newer commit, re-run `tests/golden/compare_ltx.py` and update this note.
+0.18 refresh (from `b63613e`, 2026-11-22): 16 modules re-copied (transformer `model.py` / `transformer.py` /
+`attention.py` / `feed_forward.py`, the four conditioning types, `prompt_relay.py`, `duration_head.py`,
+`fuse_loras.py`, `loader/__init__.py`, `video_vae.py` / `tiling.py`, `diffusion_steps.py`, `guidance/__init__.py`) and
+4 added because they import them (`guidance/nag.py`, `model/transformer/sparse_attention.py`, `loader/helpers.py`,
+`loader/lora_adapters.py`). Their new switches (NAG, `LTX2_COMPUTE_DTYPE`, `LTX2_SOL_TAU`, `LTX2_LORA_MODE`, the audio
+Prompt Relay mask) are inert unless set or passed; the pack passes none. What the pack ported by hand is in
+GOTCHAS.md ("0.18 sync").
+
+To refresh: copy the same files from a newer commit (re-walk the imports), re-record the goldens on the fork
+(`tests/golden/record_ltx.py`), re-run `tests/test_ltx_golden.py` and update this note.
 
 # Vendored: ltx-core (M9 phase 3, the NVIDIA variants)
 

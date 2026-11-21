@@ -18,6 +18,7 @@ Top-level weight keys (after stripping ``transformer.`` prefix):
 from __future__ import annotations
 
 import os as _os
+import sys
 from dataclasses import dataclass
 from enum import Enum
 
@@ -25,8 +26,10 @@ import mlx.core as mx
 import mlx.nn as nn
 import numpy as _np
 
+from ltx_core_mlx.guidance.nag import NAGGuidance
 from ltx_core_mlx.guidance.perturbations import BatchedPerturbationConfig
 from ltx_core_mlx.model.transformer.adaln import AdaLayerNormSingle, PerTokenAdaLNParams
+from ltx_core_mlx.model.transformer.sparse_attention import SparseAttentionState
 from ltx_core_mlx.model.transformer.timestep_embedding import get_timestep_embedding
 from ltx_core_mlx.model.transformer.transformer import BasicAVTransformerBlock
 
@@ -40,6 +43,45 @@ from ltx_core_mlx.model.transformer.transformer import BasicAVTransformerBlock
 # Set to 0 to disable (full lazy graph, original behaviour).
 _DIT_EVAL_EVERY = int(_os.environ.get("LTX2_DIT_EVAL_EVERY", "8"))
 _mx_eval = getattr(mx, "eval")  # noqa: B009
+
+# LTX2_COMPUTE_DTYPE: dtype for the inside of every DiT attention / feed-forward
+# module (projections, q/k norms, RoPE, the attention kernel). Unset or
+# "float32" keeps the default path, which runs the blocks in float32: the F32
+# AdaLN tables promote the modulated activations. "float16" runs those
+# internals in float16 while the residual stream and the AdaLN modulation stay
+# float32 -- on an M1 GPU, which has no native bfloat16, float16 is the fast type.
+# "bfloat16" is the precision upstream PyTorch computes in. Pipelines apply it
+# when they load a DiT; LTXModel.set_compute_dtype is the Python API.
+_COMPUTE_DTYPES: dict[str, mx.Dtype | None] = {
+    "": None,
+    "float32": None,
+    "fp32": None,
+    "float16": mx.float16,
+    "fp16": mx.float16,
+    "bfloat16": mx.bfloat16,
+    "bf16": mx.bfloat16,
+}
+
+
+def compute_dtype_from_env() -> mx.Dtype | None:
+    """Parse ``LTX2_COMPUTE_DTYPE``.
+
+    Returns:
+        The requested dtype, or ``None`` (unset / ``float32``) to leave the DiT as loaded.
+
+    Raises:
+        ValueError: On a value other than float32, float16 or bfloat16 (or their short forms).
+    """
+    value = _os.environ.get("LTX2_COMPUTE_DTYPE", "").strip().lower()
+    if value not in _COMPUTE_DTYPES:
+        raise ValueError(f"LTX2_COMPUTE_DTYPE={value!r}: expected float32, float16 or bfloat16")
+    return _COMPUTE_DTYPES[value]
+
+
+def _all_finite(*arrays: mx.array | None) -> bool:
+    """True when every given array is finite; ``None`` (an absent stream, e.g. video-only audio) is skipped."""
+    return all(bool(mx.all(mx.isfinite(a)).item()) for a in arrays if a is not None)
+
 
 # ---------------------------------------------------------------------------
 # AdaLN per-token dedupe + deferred per-block gather
@@ -547,6 +589,54 @@ class LTXModel(nn.Module):
         # so backprop through the dev model fits on 64 GB. No effect on inference.
         self.gradient_checkpointing = False
 
+        # Inner dtype of the attention / feed-forward modules; None = input dtype.
+        self._compute_dtype: mx.Dtype | None = None
+
+        # Block-sparse video self-attention (Sol routing); None = dense. See set_sparse_attention.
+        self._sparse_attention: SparseAttentionState | None = None
+
+    @property
+    def compute_dtype(self) -> mx.Dtype | None:
+        """Dtype the attention / feed-forward internals run in (``None``: input dtype)."""
+        return self._compute_dtype
+
+    def set_compute_dtype(self, dtype: mx.Dtype | None) -> None:
+        """Run the attention and feed-forward internals of every block in ``dtype``.
+
+        The residual stream and the AdaLN modulation are untouched (float32 with the
+        shipped F32 tables); see ``BasicAVTransformerBlock.set_compute_dtype``. The
+        affected parameters are cast here, one block at a time, so the bfloat16
+        originals are released as each block is done.
+
+        Overflow guard: a forward whose output is not finite is recomputed without
+        the setting, which is then dropped for the rest of the run. ``None`` stops
+        casting activations; parameters already cast keep their new dtype, so on a
+        resident model the recompute uses float16-rounded parameters with
+        full-precision activations (not the float32 path). A streamed model rebinds
+        its stored weights instead.
+        """
+        for block in self.transformer_blocks:
+            block.set_compute_dtype(dtype)
+            _mx_eval(block.parameters())
+        self._compute_dtype = dtype
+
+    @property
+    def sparse_attention(self) -> SparseAttentionState | None:
+        """The block-sparse video self-attention state while it is on (``None``: dense)."""
+        return self._sparse_attention
+
+    def set_sparse_attention(self, state: SparseAttentionState | None) -> None:
+        """Run the video self-attention (``attn1``) of blocks 1 and up block-sparse, or dense again with ``None``.
+
+        Block 0 stays dense, as in NVIDIA's LTX-2.5 config. Each forward selects its tau from its timestep
+        (:meth:`SparseAttentionState.prepare`); calls with a mask or an STG perturbation, and sequences shorter than
+        ``state.min_tokens``, stay dense. Under ``--low-ram``, ``StreamingLTXModel.set_sparse_attention`` attaches the
+        state to whichever block is bound.
+        """
+        for i, block in enumerate(self.transformer_blocks):
+            block.attn1.sparse_attention = state if i >= 1 else None
+        self._sparse_attention = state
+
     def _embed_timestep_scalar(
         self,
         timestep: mx.array,
@@ -558,6 +648,29 @@ class LTXModel(nn.Module):
         """
         t_scaled = timestep * self.config.timestep_scale_multiplier
         return get_timestep_embedding(t_scaled, self.config.timestep_embedding_dim)
+
+    def _embed_modality_sigma(
+        self,
+        sigma: mx.array,
+        av_ca_factor: float,
+    ) -> tuple[mx.array, mx.array]:
+        """Embed a modality's scalar sigma for its prompt AdaLN and the cross gate.
+
+        Same casts and scaling as the global ``timestep`` path of ``__call__``.
+
+        Args:
+            sigma: (B,) modality sigma.
+            av_ca_factor: ``av_ca_timestep_scale_multiplier / timestep_scale_multiplier``.
+
+        Returns:
+            ``(prompt_emb, gate_emb)``, each (B, timestep_embedding_dim).
+        """
+        sigma = sigma.astype(mx.bfloat16)
+        gate_emb = get_timestep_embedding(
+            sigma * self.config.timestep_scale_multiplier * av_ca_factor,
+            self.config.timestep_embedding_dim,
+        )
+        return self._embed_timestep_scalar(sigma), gate_emb
 
     def _embed_timestep_per_token(
         self,
@@ -662,7 +775,7 @@ class LTXModel(nn.Module):
     def __call__(
         self,
         video_latent: mx.array,
-        audio_latent: mx.array,
+        audio_latent: mx.array | None,
         timestep: mx.array,
         video_text_embeds: mx.array | None = None,
         audio_text_embeds: mx.array | None = None,
@@ -671,6 +784,7 @@ class LTXModel(nn.Module):
         video_attention_mask: mx.array | None = None,
         audio_attention_mask: mx.array | None = None,
         video_cross_attention_mask: mx.array | None = None,
+        audio_cross_attention_mask: mx.array | None = None,
         video_keyframes_mask: mx.array | None = None,
         video_timesteps: mx.array | None = None,
         audio_timesteps: mx.array | None = None,
@@ -678,6 +792,9 @@ class LTXModel(nn.Module):
         tap: callable | None = None,
         block_stack_override: callable | None = None,
         block_provider: callable | None = None,
+        video_sigma: mx.array | None = None,
+        audio_sigma: mx.array | None = None,
+        nag: NAGGuidance | None = None,
     ) -> tuple[mx.array, mx.array]:
         """Forward pass.
 
@@ -694,6 +811,9 @@ class LTXModel(nn.Module):
             video_cross_attention_mask: Optional additive bias for the video→text
                 cross-attention (Prompt Relay temporal prompt gating). Same array
                 is broadcast to every block.
+            audio_cross_attention_mask: Optional additive bias for the audio→text
+                cross-attention (Prompt Relay on ``audio_attn2``). Same array is
+                broadcast to every block; ignored on the video-only path.
             video_timesteps: Optional (B, Nv) per-token timesteps for video.
                 When provided, AdaLN parameters are computed per-token instead
                 of per-batch, enabling preserved tokens (mask=0) to receive
@@ -719,25 +839,48 @@ class LTXModel(nn.Module):
                 a single shared block module, capping resident memory
                 at ~1 block instead of ~num_layers blocks. Mutually
                 exclusive with ``block_stack_override``.
+            video_sigma: Optional (B,) sigma of the video modality (upstream
+                ``Modality.sigma``). Drives the video prompt AdaLN and the
+                V->A cross-attention gate. ``None`` = ``timestep``. A frozen
+                video stream passes 0.
+            audio_sigma: Optional (B,) sigma of the audio modality. Drives the
+                audio prompt AdaLN and the A->V cross-attention gate. ``None``
+                = ``timestep``. A frozen audio stream passes 0.
+            nag: Optional Normalized Attention Guidance (negative prompt without CFG): its
+                negative contexts are cast like the positive ones and broadcast to every
+                block's ``attn2`` / ``audio_attn2``. ``None`` (default) is the plain forward.
+                The audio context is unused on the video-only path (no ``audio_attn2`` runs).
 
         Returns:
             Tuple of (video_velocity, audio_velocity), same shapes as inputs.
         """
+        # Arguments kept for the overflow guard's recompute (compute dtype only).
+        call_args = {k: v for k, v in locals().items() if k != "self"} if self._compute_dtype is not None else None
+        if self._sparse_attention is not None:
+            # Before the bfloat16 cast below: the tau is picked by matching this sigma against the step table.
+            self._sparse_attention.prepare(timestep, video_positions)
         # Cast inputs to bfloat16 to match weight dtype and avoid mixed-precision
         # accumulation errors over 48 transformer blocks
         video_latent = video_latent.astype(mx.bfloat16)
-        audio_latent = audio_latent.astype(mx.bfloat16)
+        if audio_latent is not None:
+            audio_latent = audio_latent.astype(mx.bfloat16)
         if video_text_embeds is not None:
             video_text_embeds = video_text_embeds.astype(mx.bfloat16)
         if audio_text_embeds is not None:
             audio_text_embeds = audio_text_embeds.astype(mx.bfloat16)
+        if nag is not None:
+            nag_audio = nag.audio_text_embeds
+            nag = nag._replace(
+                video_text_embeds=nag.video_text_embeds.astype(mx.bfloat16),
+                audio_text_embeds=None if nag_audio is None else nag_audio.astype(mx.bfloat16),
+            )
 
         # Embed patches
         video_hidden = self.patchify_proj(video_latent)
         video_hidden = apply_keyframes_absolute_embedding(
             video_hidden, video_keyframes_mask, getattr(self, "keyframes_abs_pos_embedding", None)
         )
-        audio_hidden = self.audio_patchify_proj(audio_latent)
+        audio_hidden = self.audio_patchify_proj(audio_latent) if audio_latent is not None else None
 
         # --- Timestep embeddings ---
         timestep = timestep.astype(mx.bfloat16)
@@ -751,6 +894,19 @@ class LTXModel(nn.Module):
             self.config.timestep_embedding_dim,
         )
 
+        # Per-modality sigma (upstream ``Modality.sigma``): the prompt AdaLN of a
+        # modality reads its own sigma, the cross-attention gate reads the *other*
+        # modality's sigma (``transformer_args.py``: ``cross_modality_sigma``).
+        # Frozen streams pass 0; ``None`` reuses the global embeddings as is.
+        video_t_emb, video_t_emb_av_gate = t_emb, t_emb_av_gate
+        if video_sigma is not None:
+            video_t_emb, video_t_emb_av_gate = self._embed_modality_sigma(video_sigma, av_ca_factor)
+        audio_t_emb, audio_t_emb_av_gate = t_emb, t_emb_av_gate
+        if audio_latent is None:
+            audio_t_emb, audio_t_emb_av_gate = None, None
+        elif audio_sigma is not None:
+            audio_t_emb, audio_t_emb_av_gate = self._embed_modality_sigma(audio_sigma, av_ca_factor)
+
         # Video AdaLN: per-token or scalar
         # Note: prompt AdaLN always uses scalar timestep — text embeddings
         # don't correspond to individual latent tokens, so per-token
@@ -758,28 +914,38 @@ class LTXModel(nn.Module):
         if video_timesteps is not None:
             vt_emb = self._embed_timestep_per_token(video_timesteps)
             video_adaln_emb, video_embedded_ts = self._adaln_per_token(self.adaln_single, vt_emb)
-            av_ca_video_emb, _ = self._adaln_per_token(self.av_ca_video_scale_shift_adaln_single, vt_emb)
+            av_ca_video_emb = None
+            if audio_latent is not None:
+                av_ca_video_emb, _ = self._adaln_per_token(self.av_ca_video_scale_shift_adaln_single, vt_emb)
         else:
             video_adaln_emb, video_embedded_ts = self.adaln_single(t_emb)
-            av_ca_video_emb, _ = self.av_ca_video_scale_shift_adaln_single(t_emb)
+            av_ca_video_emb = None
+            if audio_latent is not None:
+                av_ca_video_emb, _ = self.av_ca_video_scale_shift_adaln_single(t_emb)
         # AV cross-attention gate always uses scalar timestep at av_ca scale,
-        # even in per-token mode. Reference: gate_adaln receives sigma * av_ca_factor (scalar).
-        av_ca_a2v_gate_emb, _ = self.av_ca_a2v_gate_adaln_single(t_emb_av_gate)
-        # Prompt AdaLN: always scalar (from global timestep)
-        video_prompt_emb, _ = self.prompt_adaln_single(t_emb)
+        # even in per-token mode. Reference: gate_adaln receives the cross
+        # modality's sigma * av_ca_factor (scalar) -- here the audio sigma.
+        av_ca_a2v_gate_emb = None
+        if audio_latent is not None:
+            av_ca_a2v_gate_emb, _ = self.av_ca_a2v_gate_adaln_single(audio_t_emb_av_gate)
+        # Prompt AdaLN: always scalar (from the video sigma)
+        video_prompt_emb, _ = self.prompt_adaln_single(video_t_emb)
 
-        # Audio AdaLN: per-token or scalar
-        if audio_timesteps is not None:
-            at_emb = self._embed_timestep_per_token(audio_timesteps)
-            audio_adaln_emb, audio_embedded_ts = self._adaln_per_token(self.audio_adaln_single, at_emb)
-            av_ca_audio_emb, _ = self._adaln_per_token(self.av_ca_audio_scale_shift_adaln_single, at_emb)
-        else:
-            audio_adaln_emb, audio_embedded_ts = self.audio_adaln_single(t_emb)
-            av_ca_audio_emb, _ = self.av_ca_audio_scale_shift_adaln_single(t_emb)
-        # AV cross-attention gate always uses scalar timestep at av_ca scale
-        av_ca_v2a_gate_emb, _ = self.av_ca_v2a_gate_adaln_single(t_emb_av_gate)
-        # Audio prompt AdaLN: always scalar (from global timestep)
-        audio_prompt_emb, _ = self.audio_prompt_adaln_single(t_emb)
+        # Audio AdaLN: per-token or scalar (skipped entirely for a video-only pass)
+        audio_adaln_emb = audio_embedded_ts = av_ca_audio_emb = None
+        av_ca_v2a_gate_emb = audio_prompt_emb = None
+        if audio_latent is not None:
+            if audio_timesteps is not None:
+                at_emb = self._embed_timestep_per_token(audio_timesteps)
+                audio_adaln_emb, audio_embedded_ts = self._adaln_per_token(self.audio_adaln_single, at_emb)
+                av_ca_audio_emb, _ = self._adaln_per_token(self.av_ca_audio_scale_shift_adaln_single, at_emb)
+            else:
+                audio_adaln_emb, audio_embedded_ts = self.audio_adaln_single(t_emb)
+                av_ca_audio_emb, _ = self.av_ca_audio_scale_shift_adaln_single(t_emb)
+            # AV cross-attention gate always uses scalar timestep at av_ca scale (video sigma)
+            av_ca_v2a_gate_emb, _ = self.av_ca_v2a_gate_adaln_single(video_t_emb_av_gate)
+            # Audio prompt AdaLN: always scalar (from the audio sigma)
+            audio_prompt_emb, _ = self.audio_prompt_adaln_single(audio_t_emb)
 
         # RoPE frequencies (per-head, using reference log-spaced grid)
         video_rope_freqs = None
@@ -790,7 +956,7 @@ class LTXModel(nn.Module):
                 self.config.video_num_heads,
                 self.config.video_head_dim,
             )
-        if audio_positions is not None:
+        if audio_latent is not None and audio_positions is not None:
             audio_rope_freqs = self._compute_rope_freqs(
                 audio_positions,
                 self.config.audio_num_heads,
@@ -807,14 +973,14 @@ class LTXModel(nn.Module):
             self.config.positional_embedding_max_pos[0],
             self.config.audio_positional_embedding_max_pos[0],
         )
-        if video_positions is not None:
+        if audio_latent is not None and video_positions is not None:
             video_cross_rope_freqs = self._compute_rope_freqs(
                 video_positions[:, :, 0:1],  # temporal dimension only
                 self.config.av_cross_num_heads,
                 self.config.av_cross_head_dim,
                 max_pos_override=[cross_pe_max_pos],
             )
-        if audio_positions is not None:
+        if audio_latent is not None and audio_positions is not None:
             audio_cross_rope_freqs = self._compute_rope_freqs(
                 audio_positions[:, :, 0:1],  # temporal dimension only
                 self.config.av_cross_num_heads,
@@ -834,6 +1000,9 @@ class LTXModel(nn.Module):
                 block = block_provider(block_idx) if block_provider is not None else self.transformer_blocks[block_idx]
 
                 if self.gradient_checkpointing:
+                    if audio_latent is None:
+                        raise NotImplementedError("video-only training is not supported")
+
                     # Recompute this block in the backward pass to cap activation
                     # memory. The block's trainable params MUST be passed as an
                     # explicit mx.checkpoint input (and rebound via update inside),
@@ -864,8 +1033,10 @@ class LTXModel(nn.Module):
                             video_attention_mask=video_attention_mask,
                             audio_attention_mask=audio_attention_mask,
                             video_cross_attention_mask=video_cross_attention_mask,
+                            audio_cross_attention_mask=audio_cross_attention_mask,
                             perturbations=perturbations,
                             block_idx=_bidx,
+                            nag=nag,
                         )
 
                     video_hidden, audio_hidden = mx.checkpoint(_run_block)(
@@ -893,27 +1064,46 @@ class LTXModel(nn.Module):
                     video_attention_mask=video_attention_mask,
                     audio_attention_mask=audio_attention_mask,
                     video_cross_attention_mask=video_cross_attention_mask,
+                    audio_cross_attention_mask=audio_cross_attention_mask,
                     perturbations=perturbations,
                     block_idx=block_idx,
+                    nag=nag,
                 )
                 if block_provider is not None:
                     # Streaming: force MLX graph materialization between
                     # blocks so the previous block's weights become
                     # evictable.
-                    _mx_eval(video_hidden, audio_hidden)
+                    _mx_eval(video_hidden, *([] if audio_hidden is None else [audio_hidden]))
                 elif _DIT_EVAL_EVERY > 0 and (block_idx + 1) % _DIT_EVAL_EVERY == 0:
                     # Watchdog guard: flush accumulated lazy graph every N blocks
                     # so no single Metal command buffer exceeds the ~10 s deadline.
-                    _mx_eval(video_hidden, audio_hidden)
+                    _mx_eval(video_hidden, *([] if audio_hidden is None else [audio_hidden]))
 
         if tap is not None:
-            tap(video_hidden - block_input_v, audio_hidden - block_input_a)
+            tap(video_hidden - block_input_v, None if audio_hidden is None else audio_hidden - block_input_a)
 
         # Output: AdaLN with scale_shift_table + embedded_timestep + proj
         video_out = self._output_block(video_hidden, video_embedded_ts, self.scale_shift_table, self.proj_out)
-        audio_out = self._output_block(
-            audio_hidden, audio_embedded_ts, self.audio_scale_shift_table, self.audio_proj_out
-        )
+        audio_out = None
+        if audio_hidden is not None:
+            audio_out = self._output_block(
+                audio_hidden, audio_embedded_ts, self.audio_scale_shift_table, self.audio_proj_out
+            )
+
+        if call_args is not None and not _all_finite(video_out, audio_out):
+            print(
+                f"warning: DiT output is not finite with compute dtype {self._compute_dtype}; "
+                "recomputing this step and running the rest of the generation without it. "
+                "A resident model keeps the parameters already cast, so this is not the full-precision "
+                "path; a streamed model rebinds its stored weights.",
+                file=sys.stderr,
+            )
+            # A StreamingLTXModel owns the setting (it casts each block as it binds it): drop it
+            # there so later binds stop casting and the compiled block is retraced.
+            owner_ref = getattr(self, "_compute_dtype_owner", None)
+            owner = owner_ref() if owner_ref is not None else None
+            (owner if owner is not None else self).set_compute_dtype(None)
+            return self(**call_args)
 
         return video_out, audio_out
 
@@ -998,7 +1188,7 @@ class X0Model(nn.Module):
     def __call__(
         self,
         video_latent: mx.array,
-        audio_latent: mx.array,
+        audio_latent: mx.array | None,
         sigma: mx.array,
         video_timesteps: mx.array | None = None,
         audio_timesteps: mx.array | None = None,
@@ -1006,7 +1196,7 @@ class X0Model(nn.Module):
         tap: callable | None = None,
         block_stack_override: callable | None = None,
         **kwargs,
-    ) -> tuple[mx.array, mx.array]:
+    ) -> tuple[mx.array, mx.array | None]:
         """Predict x0 from noisy input.
 
         Uses per-token timesteps when available so preserved tokens (timestep=0)
@@ -1014,7 +1204,7 @@ class X0Model(nn.Module):
 
         Args:
             video_latent: Noisy video latent.
-            audio_latent: Noisy audio latent.
+            audio_latent: Noisy audio latent, or None to run the DiT video-only.
             sigma: Current noise level (B,).
             video_timesteps: Optional per-token timesteps (B, Nv).
             audio_timesteps: Optional per-token timesteps (B, Na).
@@ -1024,7 +1214,7 @@ class X0Model(nn.Module):
             **kwargs: Passed to inner model.
 
         Returns:
-            Tuple of (video_x0, audio_x0).
+            Tuple of (video_x0, audio_x0); audio_x0 is None when ``audio_latent`` is None.
         """
         video_v, audio_v = self.model(
             video_latent=video_latent,
@@ -1046,14 +1236,16 @@ class X0Model(nn.Module):
         else:
             video_sigma = sigma[:, None, None].astype(mx.float32)
 
+        video_x0 = (video_latent.astype(mx.float32) - video_sigma * video_v.astype(mx.float32)).astype(
+            video_latent.dtype
+        )
+        if audio_v is None:
+            return video_x0, None
+
         if audio_timesteps is not None:
             audio_sigma = audio_timesteps[:, :, None].astype(mx.float32)
         else:
             audio_sigma = sigma[:, None, None].astype(mx.float32)
-
-        video_x0 = (video_latent.astype(mx.float32) - video_sigma * video_v.astype(mx.float32)).astype(
-            video_latent.dtype
-        )
         audio_x0 = (audio_latent.astype(mx.float32) - audio_sigma * audio_v.astype(mx.float32)).astype(
             audio_latent.dtype
         )

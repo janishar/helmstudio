@@ -32,28 +32,28 @@
         "abs_mean": 0.360005,
         "sha256_f32": "b7d058e8c1d5da842902897491d268da8fc0b28b3edff92472042c34fc70b2e2"
       },
-      "encode_s": 2.17,
+      "encode_s": 2.27,
       "predictions": [
         {
           "fps": 24.0,
           "min_s": 1.0,
           "max_s": 20.0,
-          "raw_seconds": 2.890625,
+          "raw_seconds": 2.921875,
           "frames": 65
         },
         {
           "fps": 24.0,
           "min_s": 1.0,
           "max_s": 8.0,
-          "raw_seconds": 2.890625,
+          "raw_seconds": 2.921875,
           "frames": 65
         },
         {
           "fps": 25.0,
           "min_s": 1.0,
           "max_s": 20.0,
-          "raw_seconds": 2.890625,
-          "frames": 65
+          "raw_seconds": 2.921875,
+          "frames": 73
         }
       ]
     },
@@ -87,7 +87,7 @@
         "abs_mean": 0.35696,
         "sha256_f32": "21a635cecdc3ba3401ab16c20d7850598ceda78818f686d99f666078951d3769"
       },
-      "encode_s": 1.83,
+      "encode_s": 2.03,
       "predictions": [
         {
           "fps": 24.0,
@@ -142,27 +142,27 @@
         "abs_mean": 0.351429,
         "sha256_f32": "3d33b07fad8ec3ee110c8ae96158c2259f1974493e5d98e1620a06d00406a04b"
       },
-      "encode_s": 1.83,
+      "encode_s": 1.86,
       "predictions": [
         {
           "fps": 24.0,
           "min_s": 1.0,
           "max_s": 20.0,
-          "raw_seconds": 3.828125,
+          "raw_seconds": 3.796875,
           "frames": 89
         },
         {
           "fps": 24.0,
           "min_s": 1.0,
           "max_s": 8.0,
-          "raw_seconds": 3.828125,
+          "raw_seconds": 3.796875,
           "frames": 89
         },
         {
           "fps": 25.0,
           "min_s": 1.0,
           "max_s": 20.0,
-          "raw_seconds": 3.828125,
+          "raw_seconds": 3.796875,
           "frames": 89
         }
       ]
@@ -197,39 +197,39 @@
         "abs_mean": 0.363883,
         "sha256_f32": "c41a26ec453c06eb916df03fe015682e852ac30589e442b55bac08c59c5d7e73"
       },
-      "encode_s": 1.82,
+      "encode_s": 1.93,
       "predictions": [
         {
           "fps": 24.0,
           "min_s": 1.0,
           "max_s": 20.0,
-          "raw_seconds": 14.9375,
-          "frames": 353
+          "raw_seconds": 15.1875,
+          "frames": 361
         },
         {
           "fps": 24.0,
           "min_s": 1.0,
           "max_s": 8.0,
-          "raw_seconds": 14.9375,
+          "raw_seconds": 15.1875,
           "frames": 185
         },
         {
           "fps": 25.0,
           "min_s": 1.0,
           "max_s": 20.0,
-          "raw_seconds": 14.9375,
-          "frames": 369
+          "raw_seconds": 15.1875,
+          "frames": 377
         }
       ]
     }
   ],
   "timing_s": {
-    "text_encoder_load": 4.62,
-    "total_wall": 12.5
+    "text_encoder_load": 5.11,
+    "total_wall": 13.4
   },
   "memory": {
     "mlx_peak_gib_whole_run": 21.88,
-    "process_max_rss_gib": 9.8
+    "process_max_rss_gib": 9.48
   },
   "versions": {
     "mlx": "0.32.2",

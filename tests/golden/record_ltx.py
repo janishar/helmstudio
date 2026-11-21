@@ -50,8 +50,10 @@ import numpy as np
 from ltx_pipelines_mlx import distilled as distilled_mod
 from ltx_pipelines_mlx.utils import _orchestration, blocks, media_io
 from ltx_pipelines_mlx.utils._orchestration import save_waveform
+from ltx_pipelines_mlx.utils.constants import detect_params
 
 REPO = Path(__file__).resolve().parents[2]
+STUDIO = "0.18.0 (ltx-2-studio main 4b2f609, upstream ltx-2-mlx 747b30e)"
 GOLDEN = REPO / "runner_service" / "tests" / "golden"
 OUT = GOLDEN / "ltx-text-to-video"
 MODELS = Path(os.environ.get("HELMSTUDIO_MODELS", "~/GenAI/models")).expanduser()
@@ -75,7 +77,7 @@ CASES = [
      "prompt": "A red ball and a blue cube slide past each other and swap places on a smooth pastel gradient "
                "floor, soft electronic hum"},
     {"name": "beats-448x256-49f-s42", "out": "ltx-prompt-beats", "width": 448, "height": 256, "frames": 49,
-     "fps": 24.0, "seed": 42, "relay_epsilon": 1e-3, "relay_strength": 1.0,
+     "fps": 24.0, "seed": 42, "relay_epsilon": 1e-3, "relay_strength": 1.0, "relay_audio_strength": 0.0,
      "segments": [{"text": "the puppy sits still and looks at the camera", "length": 3},
                   {"text": "the puppy jumps up and runs away to the left, barking", "length": None}],
      "prompt": "A golden retriever puppy on a sunny park lawn, birds chirping in the trees behind it"},
@@ -162,18 +164,20 @@ def record(case: dict, out: Path, scratch: Path) -> dict:
     from ltx_pipelines_mlx.utils.args import ImageConditioningInput
 
     images, image_meta = None, []
+    crf = detect_params(model / "diffusion_models" / "ltx-2.5-22b-distilled-transformer-bf16.safetensors").default_image_crf  # fmt: skip
     for i, im in enumerate(case.get("images", [])):
         png = out / f"{case['name']}-image{i}.png"
         sha = ltx_inputs.test_image(png, variant=im["variant"])
         image_meta.append({**im, "file": png.name, "rgb_sha256": sha, "source_size": [640, 400],
-                           "png_sha256": hashlib.sha256(png.read_bytes()).hexdigest(), "crf": media_io.DEFAULT_IMAGE_CRF})  # fmt: skip
-        images = (images or []) + [ImageConditioningInput(path=str(png), frame_idx=im["frame_idx"], strength=im["strength"])]  # fmt: skip
+                           "png_sha256": hashlib.sha256(png.read_bytes()).hexdigest(), "crf": crf})  # fmt: skip
+        images = (images or []) + [ImageConditioningInput.at(str(png), im["frame_idx"], im["strength"])]  # --image, auto binding
     relay = None
     if case.get("segments"):
         lengths = [s["length"] for s in case["segments"]]
         relay = PromptRelayInput(local_prompts=[s["text"] for s in case["segments"]],
                                  segment_lengths=lengths if any(n is not None for n in lengths) else None,
-                                 epsilon=case["relay_epsilon"], strength=case["relay_strength"])  # fmt: skip
+                                 epsilon=case["relay_epsilon"], strength=case["relay_strength"],
+                                 audio_strength=case["relay_audio_strength"])  # fmt: skip
     lora_meta = None
     if "lora_strength" in case:
         lora_path = scratch / "ltx-synthetic-lora-r8.safetensors"
@@ -196,7 +200,7 @@ def record(case: dict, out: Path, scratch: Path) -> dict:
     # Stage B observers (call through unchanged)
     raw_prep = media_io.load_image_and_preprocess
 
-    def prep(path, height, width, crf=media_io.DEFAULT_IMAGE_CRF):
+    def prep(path, height, width, crf):
         t = raw_prep(path, height, width, crf=crf)
         seen.setdefault("image_preprocess", []).append({"file": Path(path).name, "height": height, "width": width,
                                                         "crf": crf, "pixels": stats(t)})  # fmt: skip
@@ -275,14 +279,15 @@ def record(case: dict, out: Path, scratch: Path) -> dict:
         n = len(seen["stages"]) + 1
         vs, as_ = kw["video_state"], kw["audio_state"]
         row = {"stage": n, "sigmas": [float(s) for s in kw["sigmas"]], "ancestral": kw["ancestral"],
-               "loop_noise_seed": kw["seed"] + distilled_mod.ANCESTRAL_NOISE_SEED_OFFSET if kw["ancestral"] else None,
+               "loop_noise_seed": kw["seed"] + kw["noise_seed_offset"] if kw["ancestral"] else None,
                "video_in": stats(vs.latent), "audio_in": stats(as_.latent),
                "video_positions": list(vs.positions.shape), "audio_positions": list(as_.positions.shape),
                "video_tokens_total": vs.latent.shape[1], "video_clean_in": stats(vs.clean_latent),
                "video_denoise_mask": stats(vs.denoise_mask), "video_keyframes_mask": mask_stats(vs.keyframes_mask),
                "video_attention_mask": None if vs.attention_mask is None else list(vs.attention_mask.shape),
                "video_positions_stats": stats(vs.positions),
-               "video_cross_attention_mask": mask_stats(kw["video_cross_attention_mask"])}  # fmt: skip
+               "video_cross_attention_mask": mask_stats(kw["video_cross_attention_mask"]),
+               "audio_cross_attention_mask": mask_stats(kw.get("audio_cross_attention_mask"))}  # fmt: skip
         if n == 2:  # clean_latent of stage 2 is the upscaled, renormalised stage-1 latent (and stage-1 audio)
             row["video_upscaled"], row["audio_from_stage1"] = stats(vs.clean_latent), stats(as_.clean_latent)
         res = ph.wrap(f"stage{n}_denoise", raw_loop)(**kw)
@@ -328,7 +333,8 @@ def record(case: dict, out: Path, scratch: Path) -> dict:
     for sg in case.get("segments", []):
         extra += f" --segment '{sg['text']}'" + (f" {sg['length']}" if sg["length"] is not None else "")
     if relay:
-        extra += f" --relay-epsilon {case['relay_epsilon']:g} --relay-strength {case['relay_strength']:g}"
+        extra += (f" --relay-epsilon {case['relay_epsilon']:g} --relay-strength {case['relay_strength']:g}"
+                  f" --relay-audio-strength {case['relay_audio_strength']:g}")  # fmt: skip
     if lora_meta:
         extra += f" --lora {lora_meta['file']} {case['lora_strength']:g}"
     meta = {
@@ -345,7 +351,8 @@ def record(case: dict, out: Path, scratch: Path) -> dict:
         "generate_audio": True, "stage1_steps": None, "stage2_steps": None, "is_ltx25": pipe._is_25,
         "noise_seeds": {"stage1_video": case["seed"], "stage1_audio": case["seed"] + 1,
                         "stage1_ancestral_loop": case["seed"] + distilled_mod.ANCESTRAL_NOISE_SEED_OFFSET,
-                        "stage2_video_and_audio": case["seed"] + 2},
+                        "stage2_video_and_audio": case["seed"] + 2,
+                        "stage2_ancestral_loop": case["seed"] + distilled_mod.ANCESTRAL_STAGE_2_NOISE_SEED_OFFSET},
         "prompt_embeds": {"video": seen.get("video_embeds"), "audio": seen.get("audio_embeds")},
         "stages": seen["stages"],
         "final_video_latent": seen.get("final_video_latent"),
@@ -361,7 +368,7 @@ def record(case: dict, out: Path, scratch: Path) -> dict:
         "env": {k: v for k, v in os.environ.items() if k.startswith(("LTX2_", "LTX_MLX_", "LTX_MODEL"))},
         "versions": {"mlx": mx.__version__, "python": platform.python_version(), "numpy": np.__version__,
                      "ffmpeg": subprocess.run(["ffmpeg", "-version"], check=True, capture_output=True, text=True).stdout.split("\n")[0],
-                     "ltx_pipelines_mlx": "0.15.4 (ltx-2-studio lockfile)",
+                     "ltx_pipelines_mlx": STUDIO,
                      "machine": f"{platform.system()} {platform.release()} {platform.machine()}",
                      "metal": {k: v for k, v in mx.device_info().items() if k in ("architecture", "memory_size")}},
     }  # fmt: skip
@@ -442,8 +449,8 @@ def record_dev(case: dict, out: Path) -> dict:
     # Observers (call through unchanged)
     raw_text = pipe._encode_text_with_negative
 
-    def text(prompt):
-        r = raw_text(prompt)
+    def text(prompt, negative_prompt=None):
+        r = raw_text(prompt, negative_prompt)
         seen["embeds"] = dict(zip(("video", "audio", "neg_video", "neg_audio"), (stats(x) for x in r)))
         return r
 
@@ -579,7 +586,7 @@ def record_dev(case: dict, out: Path) -> dict:
         "env": {k: v_ for k, v_ in os.environ.items() if k.startswith(("LTX2_", "LTX_MLX_", "LTX_MODEL"))},
         "versions": {"mlx": mx.__version__, "python": platform.python_version(), "numpy": np.__version__,
                      "ffmpeg": subprocess.run(["ffmpeg", "-version"], check=True, capture_output=True, text=True).stdout.split("\n")[0],
-                     "ltx_pipelines_mlx": "0.15.4 (ltx-2-studio lockfile)",
+                     "ltx_pipelines_mlx": STUDIO,
                      "machine": f"{platform.system()} {platform.release()} {platform.machine()}"},
     }  # fmt: skip
     meta["env"]["LTX_MLX_CACHE_DIR"] = "<scratch>"
