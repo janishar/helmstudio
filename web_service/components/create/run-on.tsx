@@ -1,8 +1,8 @@
 "use client";
 // The Run on chip (docs/mock/RunOn.dc.html): right after the model chip on every Create composer. Auto is today's
 // placement; a host row is greyed with why it cannot take the run; a chosen host that went offline warns.
-import { TriangleAlert } from "lucide-react";
-import { machineReason, runOnText, type Machine } from "@/lib/run-on";
+import { Monitor, TriangleAlert } from "lucide-react";
+import { machineReason, type Machine } from "@/lib/run-on";
 import type { S } from "@/lib/api";
 
 export function RunOnChip({
@@ -25,6 +25,7 @@ export function RunOnChip({
   onPick: (host: string) => void;
 }) {
   const offline = !!chosen && !chosen.live;
+  const label = chosen?.label ?? "Auto";
   const pick = (host: string) => {
     onPick(host);
     document.getElementById(id)?.hidePopover?.();
@@ -35,15 +36,23 @@ export function RunOnChip({
         type="button"
         popoverTarget={id}
         className={`chip bevel rounded-[10px] ${offline ? "warn" : "bg-s4"}`}
+        // the chip says only the machine ("Auto", "NVIDIA"); its name and tooltip say Run on
+        aria-label={`Run on ${label}`}
         title={
           offline
             ? `${chosen.host} is offline. Pick Auto, or wait for it to come back.`
-            : "Run on: Auto picks a free machine"
+            : chosen
+              ? `Run on: ${chosen.sub}`
+              : "Run on: Auto picks a free machine"
         }
         style={{ anchorName: `--${id}` } as React.CSSProperties}
       >
-        {offline && <TriangleAlert size={14} aria-hidden />}
-        {runOnText(chosen)}
+        {offline ? (
+          <TriangleAlert size={14} aria-hidden />
+        ) : (
+          <Monitor size={14} strokeWidth={1.75} aria-hidden />
+        )}
+        {label}
       </button>
       <div
         id={id}

@@ -18,7 +18,7 @@ import { clipOf } from "@/lib/video";
 import {
   buildInputs,
   fields as fieldsOf,
-  pretty,
+  prettyModel,
   queueInputs,
   rawsFrom,
   toRaw,
@@ -172,10 +172,10 @@ export function ShotComposer({
   const promptField = fields.find((f) => f.param.type === "text");
   const framesField = fields.find((f) => f.param.type === "frames");
   const seedField = fields.find((f) => f.param.type === "seed");
-  // the workflow chip names the model: "LTX-2.5 · Distilled" (its model node's title and variant), else the title
-  const variant = fields.find((f) => f.model && f.param.name === "variant");
-  const modelText = variant
-    ? `${variant.nodeTitle} · ${pretty(String(raws[variant.key] ?? variant.initial))}`
+  // the workflow chip names the model's choices: "Distilled · int8" (its tooltip the workflow), else the title
+  const model = fields.filter((f) => f.model && f.param.type === "enum");
+  const modelText = model.length
+    ? prettyModel(model.map((f) => String(raws[f.key] ?? f.initial))).join(" · ")
     : (workflow?.title ?? "Workflow");
   // the start / end frame options: this workflow's keyframes, else its family's template that has them
   const kfw = workflow?.keyframes
@@ -454,10 +454,10 @@ export function ShotComposer({
             Open in Create
           </Link>
         )}
-        <div className="grow" />
+        {/* bottom right even when the row wraps */}
         <button
           type="button"
-          className="key h-12 rounded-xl px-[22px] text-sm"
+          className="key ml-auto h-12 rounded-xl px-[22px] text-sm"
           disabled={busy || !workflow || runOnOffline}
           onClick={() => void generate()}
         >

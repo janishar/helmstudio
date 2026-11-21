@@ -640,8 +640,8 @@ export function Create({
     const audio = !m[1].accepts?.includes("video");
     return [`${n} ${audio ? "audio" : `video${n === 1 ? "" : "s"}`}`];
   });
-  // the family's title ("LTX-2.5": the palette's, else its model node's): the model chip and the top bar's label
-  // lead with it
+  // the family's title ("LTX-2.5": the palette's, else its model node's): the top bar's label and the model chip's
+  // tooltip lead with it
   const familyName =
     palette?.groups.find((g) => g.family === workflow?.family)?.title ??
     all.find((f) => f.model)?.nodeTitle;
@@ -669,15 +669,8 @@ export function Create({
           ]
             .filter(Boolean)
             .join(" · ");
-  // the model choices outside the inspector's sections (quick ones or unplaced): the model chip names them
-  const chipModels = layout
-    ? all.filter(
-        (f) =>
-          f.model &&
-          f.param.type === "enum" &&
-          !layout.groups.some((g) => g.title !== "Quick" && g.fields.some((x) => x.key === f.key)),
-      )
-    : [];
+  // the workflow's model choices: the model chip names them all ("Base · int8"), its menu picks a placed variant
+  const chipModels = all.filter((f) => f.model && f.param.type === "enum");
   // the composer holds the quick switches and one-value choices; a quick rows editor is its own inspector section
   const quick =
     layout?.groups.find((g) => g.title === "Quick")?.fields.filter((f) => fields.includes(f)) ?? [];
@@ -1672,10 +1665,7 @@ export function Create({
                 show={show}
                 compact={video || audio}
                 toggles={toggles}
-                models={
-                  // the model choices outside the inspector's sections (quick ones or unplaced)
-                  chipModels.length ? chipModels : undefined
-                }
+                models={chipModels}
                 family={familyName}
                 spoken={audio}
                 versions={(f, o) => versionRow(modelList, runOn, f, o)}
@@ -1727,13 +1717,13 @@ export function Create({
                   </button>
                 </div>
               )}
-              {/* the Seeds stepper sits with the chips, Generate at the end (docs/mock/Direct.dc.html) */}
-              <div className="grow" />
+              {/* the Seeds stepper sits with the chips, Generate at the end, bottom right even when the row wraps
+                  (docs/mock/Direct.dc.html) */}
               <button
                 type="submit"
                 title="Generate (⌘ or Ctrl + Enter)"
                 // a video workflow's key is the second accent (docs/mock/TextToVideo.dc.html)
-                className={`key flex h-14 flex-col items-center justify-center gap-px px-6 ${video || audio ? "bg-a2 text-[var(--on2)]" : ""}`}
+                className={`key ml-auto flex h-14 flex-col items-center justify-center gap-px px-6 ${video || audio ? "bg-a2 text-[var(--on2)]" : ""}`}
                 disabled={
                   !workflow ||
                   busy ||

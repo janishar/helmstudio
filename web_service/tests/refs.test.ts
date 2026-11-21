@@ -155,6 +155,20 @@ describe("canvas auto in an edit", () => {
     expect(Object.keys(minimax.studio!.presets!)).toEqual(["Plain", "Enhanced", "Enhanced, think"]);
   });
 
+  it("lays out the qwen-image template as its studio block places it, every param reachable", () => {
+    const fs = fields(qwen);
+    const v = studioView(qwen, fs)!;
+    expect(v.text.map((f) => f.key)).toEqual(["prompt.text"]);
+    expect(v.groups.map((g) => [g.title, g.fields.map((f) => f.key)])).toEqual([
+      ["Quick", ["encode.refs", "model.variant", "seed.seed"]],
+      ["Canvas", ["canvas.mode", "canvas.width", "canvas.height"]],
+      ["Quality", ["model.precision", "sample.steps", "decode.tiled"]],
+      ["LoRA", ["lora.rows"]],
+      ["Options", ["encode.transparent"]],
+    ]);
+    expect(v.shown.map((f) => f.key).sort()).toEqual(fs.map((f) => f.key).sort());
+  });
+
   it("lays out the three minimax-h3 video templates (API 1.21) from their node schemas and studio blocks", () => {
     const schemas = Object.fromEntries(h3Nodes.nodes.map((n) => [n.kind, n]));
     const [t2v, i2v, refs] = h3Workflows.workflows.map(

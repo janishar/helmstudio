@@ -129,7 +129,8 @@ describe("ShotComposer", () => {
   it("names the model on the workflow chip and draws no Close", () => {
     serve();
     mount();
-    expect(screen.getByRole("button", { name: "LTX-2.5 · Distilled" })).toBeTruthy();
+    // the fixture's model node has only a variant: no precision to name
+    expect(screen.getByRole("button", { name: "Distilled" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
     expect(screen.getByRole("group", { name: "Seeds to queue" }).textContent).toContain("1 / 4");
   });

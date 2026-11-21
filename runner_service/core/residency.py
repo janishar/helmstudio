@@ -91,9 +91,29 @@ def _cpu_name() -> str:
     return out.strip()[:80] or "cpu"
 
 
+@functools.cache
+def _gpu() -> dict | None:
+    """The first NVIDIA GPU as torch's env reports it (name, VRAM, driver), read with nvidia-smi (the NVIDIA runtime
+    mounts it: capability `utility`); None without one."""
+    try:
+        out = subprocess.run(["nvidia-smi", "--query-gpu=name,memory.total,driver_version",
+                              "--format=csv,noheader,nounits", "-i", "0"],
+                             capture_output=True, text=True, timeout=5, check=False).stdout  # fmt: skip
+        name, mib, driver = (x.strip() for x in out.splitlines()[0].split(","))
+        return {
+            "name": name[:80],
+            "memory_total_gb": round(float(mib) / 1024, 1),
+            "driver": driver[:40],
+        }
+    except OSError, subprocess.TimeoutExpired, IndexError, ValueError:
+        return None
+
+
 def host_device(kind: str) -> dict:
-    """The hosts key's `device` without a device of its own memory (mps: unified RAM; cpu): the chip, RAM."""
-    return {"kind": kind, "name": _cpu_name(), "memory_total_gb": round(ram_gb(), 1)}
+    """The hosts key's `device` without a runtime that measures it: on cuda the GPU (as the torch env names it), else
+    (mps: unified RAM; cpu) the chip and RAM."""
+    gpu = _gpu() if kind == "cuda" else None
+    return {"kind": kind, **(gpu or {"name": _cpu_name(), "memory_total_gb": round(ram_gb(), 1)})}
 
 
 class Residency:

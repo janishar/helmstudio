@@ -87,6 +87,51 @@
             "media": "decode.image"
           }
         }
+      },
+      "studio": {
+        "composer": [
+          "prompt.text",
+          "encode.refs"
+        ],
+        "quick": [
+          "elements",
+          "look:film",
+          "look:camera",
+          "look:colour",
+          "look:lighting",
+          "model.variant",
+          "seed.seed"
+        ],
+        "inspector": [
+          {
+            "title": "Canvas",
+            "items": [
+              "canvas.mode",
+              "canvas.width",
+              "canvas.height"
+            ]
+          },
+          {
+            "title": "Quality",
+            "items": [
+              "model.precision",
+              "sample.steps",
+              "decode.tiled"
+            ]
+          },
+          {
+            "title": "LoRA",
+            "items": [
+              "lora.rows"
+            ]
+          },
+          {
+            "title": "Options",
+            "items": [
+              "encode.transparent"
+            ]
+          }
+        ]
       }
     },
     {

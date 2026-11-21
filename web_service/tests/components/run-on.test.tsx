@@ -85,7 +85,7 @@ const host = (name: string, kind: string, device: string, state: string) => ({
   device: { kind, name: device, memory_total_gb: 96 },
 });
 
-function start(gcp = "idle") {
+function start(gcp = "idle", wf = workflow) {
   let gcpState = gcp;
   const runs: Record<string, unknown>[] = [];
   const plans: Record<string, unknown>[] = [];
@@ -128,7 +128,7 @@ function start(gcp = "idle") {
     },
   });
   render(
-    <Create initial={{ sessions: [], workflows: [workflow], sessionId: "s1", runs: [], takes: [] }} />,
+    <Create initial={{ sessions: [], workflows: [wf], sessionId: "s1", runs: [], takes: [] }} />,
   );
   return {
     runs,
@@ -162,6 +162,8 @@ describe("Create: Run on", () => {
     const { runs, plans, composer } = start("offline");
     const chip = await within(composer).findByRole("button", { name: "Run on Auto" });
     expect(chip.previousElementSibling?.id).toBe("model-pick"); // right after the model chip and its menu
+    // the short label, with Run on in its tooltip
+    expect([chip.textContent, chip.title]).toEqual(["Auto", "Run on: Auto picks a free machine"]);
     await waitFor(() => expect(rows()).toHaveLength(3));
     expect(rows()).toEqual([
       { text: "Autopicks a free machine", checked: true, disabled: false },
@@ -199,7 +201,8 @@ describe("Create: Run on", () => {
     expect(rows()[1].text).toBe("Macmac · Apple M5 ProDistilled fp8 is NVIDIA only");
     expect(rows()[2].disabled).toBe(false);
     fireEvent.click(menu().querySelectorAll("button")[2]);
-    expect(within(composer).getByRole("button", { name: "Run on NVIDIA" })).toBeTruthy();
+    const pinned = within(composer).getByRole("button", { name: "Run on NVIDIA" });
+    expect([pinned.textContent, pinned.title]).toEqual(["NVIDIA", "Run on: gcp · RTX PRO 6000"]);
     expect(versions()).toEqual([
       "Distillednot on NVIDIA (dim)",
       "Devnot on NVIDIA (dim)",
@@ -215,7 +218,15 @@ describe("Create: Run on", () => {
     pickVersion("Dev");
     expect(within(composer).getByRole("button", { name: "Run on Auto" })).toBeTruthy();
     expect(screen.getByText("Run on set to Auto: Dev is Mac only")).toBeTruthy();
-    expect(within(composer).getByRole("button", { name: "LTX-2.5 · Dev" })).toBeTruthy();
+    expect(within(composer).getByRole("button", { name: "Dev · int8" })).toBeTruthy();
+  });
+
+  it("a workflow without a studio block: the version chip opens the same rows", async () => {
+    const { studio: _, ...plain } = workflow;
+    const { composer } = start("idle", plain as S<"Workflow">);
+    await waitFor(() => expect(versions()).toHaveLength(4));
+    const chip = within(composer).getByRole("button", { name: "Distilled · int8" });
+    expect(chip.getAttribute("popovertarget")).toBe("model-pick");
   });
 
   it("the chosen host went offline: the chip warns, Generate says so and queues nothing", async () => {

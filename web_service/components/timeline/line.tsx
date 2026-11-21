@@ -405,10 +405,10 @@ export function LineComposer({
             Open in Create
           </Link>
         )}
-        <div className="grow" />
+        {/* bottom right even when the row wraps */}
         <button
           type="button"
-          className="key flex h-12 flex-col items-center justify-center gap-px rounded-xl px-[22px] text-sm"
+          className="key ml-auto flex h-12 flex-col items-center justify-center gap-px rounded-xl px-[22px] text-sm"
           disabled={busy || !workflow || !track || !text.trim() || (!!voiceField && !voices)}
           onClick={() => void generate()}
         >

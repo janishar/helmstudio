@@ -359,6 +359,25 @@ def test_the_native_runner_starts_on_cuda(monkeypatch):
     assert ram["budget_gb"] > 0 and ram["used_gb"] >= 0
 
 
+def test_the_native_runner_names_the_gpu_on_cuda(monkeypatch):
+    """On a CUDA host the native env's device is the GPU (nvidia-smi), as the torch env's, not the CPU."""
+    import subprocess
+
+    from core import loaders_native, residency
+
+    out = "NVIDIA RTX PRO 6000 Blackwell Server Edition, 97887, 595.58.03\n"
+    monkeypatch.setattr(residency.subprocess, "run",
+                        lambda *a, **k: subprocess.CompletedProcess(a, 0, stdout=out))  # fmt: skip
+    monkeypatch.setattr(loaders_native, "device", lambda: "cuda")
+    residency._gpu.cache_clear()
+    try:
+        dev = loaders_native.device_info()
+    finally:
+        residency._gpu.cache_clear()
+    assert dev["kind"] == "cuda" and dev["name"] == "NVIDIA RTX PRO 6000 Blackwell Server Edition"
+    assert dev["memory_total_gb"] == 95.6 and dev["driver"] == "595.58.03"
+
+
 def test_a_native_pack_publishes_only_on_its_runtime_devices(monkeypatch):
     from core import models
 

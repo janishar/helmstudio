@@ -124,9 +124,6 @@ export function clashNote(mc: Machine, m: Model, v: Variant): string | null {
   return `Run on set to Auto: ${why.device ? why.text : `${v.title} is ${why.text}`}`;
 }
 
-/** The chip's text: "Run on Auto", "Run on NVIDIA". */
-export const runOnText = (mc: Machine | undefined) => `Run on ${mc?.label ?? "Auto"}`;
-
 /** The machine Run on is set to ("" = Auto: undefined); a host no longer connected stays chosen, offline. */
 export function pinnedMachine(list: Machine[], host: string): Machine | undefined {
   if (!host) return undefined;

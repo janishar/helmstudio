@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // Create on an LTX video workflow (docs/mock/TextToVideo.dc.html, ImageToVideo.dc.html, VideoSource.dc.html): the
-// composer's card tiles, + and @, the model chip "<family> · <variant>", the Seeds stepper, the Inspector without a
+// composer's card tiles, + and @, the model chip "<variant> · <precision>", the Seeds stepper, the Inspector without a
 // Model or Frame rate tile, the canvas line with stage 1's size, and Retake's chips and switch line.
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -84,9 +84,9 @@ describe("Create on LTX video", () => {
     serve();
     start(ltx("ltx-text-to-video"));
     const composer = screen.getByRole("form", { name: "Composer" });
-    // the family leads the model chip and the top bar's label
+    // the model chip names the variant and precision; the family leads the top bar's label
     expect(
-      await within(composer).findByRole("button", { name: "LTX-2.5 · Distilled" }),
+      await within(composer).findByRole("button", { name: "Distilled · int8" }),
     ).toBeTruthy();
     expect(
       screen.getByRole("button", {
@@ -182,7 +182,7 @@ describe("Create on LTX video", () => {
     serve();
     start(ltx("ltx-retake"));
     const composer = screen.getByRole("form", { name: "Composer" });
-    const chip = await within(composer).findByText("LTX-2.5 · Dev");
+    const chip = await within(composer).findByText("Dev · int8");
     expect(chip.getAttribute("title")).toBe("This workflow runs on Dev only");
     // a label without its state looks pressed, and clicking it lets go
     const regen = within(composer).getByRole("button", { name: "Regenerate audio" });

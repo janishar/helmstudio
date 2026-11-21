@@ -1198,18 +1198,19 @@ export function Chips({
   compact?: boolean;
   /** bool params placed on the composer (`studio.quick`): a chip each that switches it ("Audio on") */
   toggles?: Field[];
-  /** a Studio block's model choices outside the inspector's sections: the chip names them
-   * (docs/mock/CreateEnhance.dc.html); one placed in `fields` with several values is picked from the chip's menu */
+  /** the workflow's model choices (variant, precision): the chip names them all ("Base · int8"); a placed variant
+   * with several values is picked from the chip's menu, as rows (docs/mock/RunOn.dc.html, 2); the rest are the
+   * inspector's tiles (Quality) */
   models?: Field[];
-  /** the family's title: a chip naming one choice leads with it ("LTX-2.5 · Distilled") */
+  /** the family's title: the chip's tooltip leads with it (the chip itself does not repeat it) */
   family?: string;
-  /** an audio workflow (docs/mock/CreateAudio.dc.html): the chip leaves out one-value choices ("Qwen3-TTS · Custom
-   * voice", not "Custom voice · bf16") */
+  /** an audio workflow (docs/mock/CreateAudio.dc.html): the chip leaves out one-value choices ("Custom voice", not
+   * "Custom voice · bf16") */
   spoken?: boolean;
   /** the Run on chip, right after the model chip (docs/mock/RunOn.dc.html) */
   runOn?: React.ReactNode;
   /** a variant value's row in the model chip's menu: its title, note ("NVIDIA only") and dim text under Run on a
-   * host ("not on Mac"); given, the variant choice is rows, not buttons (docs/mock/RunOn.dc.html, 2) */
+   * host ("not on Mac") */
   versions?: (
     f: Field,
     o: string,
@@ -1223,22 +1224,28 @@ export function Chips({
   const frames = s.duration.filter((f) => f.param.type === "frames");
   const chip = "chip bevel rounded-[10px] bg-s4";
   const random = seed && rawOf(seed, raws) === "";
-  // the chip's menu: the choices placed in the form that have more than one value
-  const pickable = (models ?? []).filter(
-    (f) => fields.some((x) => x.key === f.key) && (f.param.enum?.length ?? 0) > 1,
+  // the chip's menu: the placed variants that have more than one value
+  const pickable = model.filter(
+    (f) =>
+      f.param.name === "variant" &&
+      fields.some((x) => x.key === f.key) &&
+      (f.param.enum?.length ?? 0) > 1,
   );
   const choosable = model.filter((f) => (f.param.enum?.length ?? 0) > 1 || f === first);
   const named = prettyModel((spoken ? choosable : model).map((f) => String(rawOf(f, raws))));
-  const modelText = (named.length === 1 && family ? [family, ...named] : named).join(" · ");
+  const modelText = named.join(" · ");
+  const modelTitle = [family, ...model.map((f) => f.param.label ?? f.param.name)]
+    .filter(Boolean)
+    .join(" · ");
   return (
     <>
-      {first && models && pickable.length > 0 && (
+      {first && pickable.length > 0 && (
         <>
           <button
             type="button"
             popoverTarget="model-pick"
             className={chip}
-            title={model.map((f) => f.param.label ?? f.param.name).join(" · ")}
+            title={modelTitle}
             style={{ anchorName: "--model-pick" } as React.CSSProperties}
           >
             {modelText}
@@ -1257,88 +1264,51 @@ export function Chips({
               } as React.CSSProperties
             }
           >
-            {pickable.map((f) =>
-              versions && f.param.name === "variant" ? (
-                <div
-                  key={f.key}
-                  role="group"
-                  aria-label={display(f, "").label}
-                  className="mb-2.5 flex flex-col gap-0.5"
-                >
-                  <span className="flex items-center pb-1 text-[12px] text-t2">
-                    {display(f, "").label}
-                    {f.param.help && <Info>{f.param.help}</Info>}
-                  </span>
-                  {f.param.enum?.map((o) => {
-                    const r = versions(f, o);
-                    const end = r?.dim ?? r?.note;
-                    return (
-                      <button
-                        key={o}
-                        type="button"
-                        role="menuitemradio"
-                        aria-checked={rawOf(f, raws) === o}
-                        className={`mi ${r?.dim ? "dim" : ""}`}
-                        onClick={() => onChange(f.key, o)}
-                      >
-                        <span>{r?.title ?? pretty(o)}</span>
-                        {end && <em>{end}</em>}
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : (
+            {pickable.map((f) => (
               <div
                 key={f.key}
                 role="group"
                 aria-label={display(f, "").label}
-                className="flex flex-col gap-1.5"
+                className="mb-2.5 flex flex-col gap-0.5"
               >
-                <span className="flex items-center text-[12px] text-t2">
+                <span className="flex items-center pb-1 text-[12px] text-t2">
                   {display(f, "").label}
                   {f.param.help && <Info>{f.param.help}</Info>}
                 </span>
-                <div className="flex flex-wrap gap-1.5">
-                  {f.param.enum?.map((o) => (
+                {f.param.enum?.map((o) => {
+                  const r = versions?.(f, o);
+                  const end = r?.dim ?? r?.note;
+                  return (
                     <button
                       key={o}
                       type="button"
-                      className="opt bevel min-w-16 px-3 text-[13px]"
-                      aria-pressed={rawOf(f, raws) === o}
+                      role="menuitemradio"
+                      aria-checked={rawOf(f, raws) === o}
+                      className={`mi ${r?.dim ? "dim" : ""}`}
                       onClick={() => onChange(f.key, o)}
                     >
-                      {pretty(o)}
+                      <span>{r?.title ?? pretty(o)}</span>
+                      {end && <em>{end}</em>}
                     </button>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
-              ),
-            )}
+            ))}
           </div>
         </>
       )}
-      {first && models && !pickable.length && (
+      {first && !pickable.length && (
         <span
           className={`${chip} inline-flex items-center`}
           title={
             // a workflow that allows one variant (its `only`, docs/mock/VideoSource.dc.html)
-            models.length === 1 && models[0].param.enum?.length === 1
+            first.param.name === "variant" && first.param.enum?.length === 1
               ? `This workflow runs on ${named[0]} only`
-              : model.map((f) => f.param.label ?? f.param.name).join(" · ")
+              : modelTitle
           }
         >
           {modelText}
         </span>
-      )}
-      {first && !models && (
-        <button
-          type="button"
-          className={chip}
-          title={model.map((f) => f.param.label ?? f.param.name).join(" · ")}
-          onClick={() => show(first.key)}
-        >
-          {prettyModel(model.map((f) => String(rawOf(f, raws)))).join(" · ")}
-        </button>
       )}
       {runOn}
       {c && (
