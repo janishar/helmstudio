@@ -42,3 +42,10 @@ Notes from the owner while using the app. Not scheduled; each is picked up when 
   cause is inside h3.c, not found; the goldens use PSNR bars.
 - **Create header wraps with a long session title** (M7 pack 3). The memory chip drops to a second line; the board
   shows one row. Let the title and the top label truncate (web_service/components/create/create.tsx).
+- **Enter a remote provider's API key in Admin › Model providers** (owner, 2026-11-21: "add to the todo"). Today the
+  form takes only a key file name, and the admin puts the key in `deploy/secrets/providers/` and restarts pipelines.
+  Proposed: a write-only API key field (after saving it shows only "key set" and the last 4 characters, never the
+  key, not even to an admin; a Replace key button), the key stored encrypted in the pipelines database under a master
+  key file in `deploy/secrets/`, never logged; the key-file option stays. Needs the owner's yes on relaxing the
+  secrets-are-files rule (keys would then also be in database backups), a write-only field in the contract, the
+  board updated first, and tests that the key never comes back through the API or logs. About half a day to a day.
