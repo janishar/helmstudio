@@ -5548,8 +5548,10 @@ export interface components {
             id: string;
             /** @example Turbo */
             title: string;
-            /** @description first = as stored; the rest load-time quantizations (`int8 at load`); one only = stored quantized (`no load-time quantization`) */
+            /** @description what it loads at (one only: whatever the model node asks, studio's RunsAt). With its components' `stored` (from 1.34) a precision other than the stored dtype is made at load (`bf16 · int8 at load`) and a stored quantized dtype loads as it is (`fp8 · stored quantized`); without, first = as stored and the rest load-time quantizations */
             precisions: components["schemas"]["Precision"][];
+            /** @description from 1.34: the only devices it runs on (registry variant `devices`, from the freshest key publishing it; the board's per-variant `NVIDIA only`); absent = every device of the model's runtimes */
+            devices?: ("cuda" | "mps" | "cpu")[];
             /** @description its folder under each host's models root */
             dir: string | null;
             /** @description its source's licence (an id of `licences`); null = no download source */
@@ -5567,6 +5569,11 @@ export interface components {
                 /** @description the variant whose folder holds it: itself, or the owner of a shared component (the board's `shared with Base`) */
                 from_variant: string;
                 precisions: components["schemas"]["Precision"][];
+                /**
+                 * @description from 1.34: the dtype most of its weight bytes have on disk (registry component `stored`), from the freshest key that reports it; absent when no host does (its files on no disk, or a format that does not say: GGUF, packed 4-bit)
+                 * @enum {string}
+                 */
+                stored?: "bf16" | "fp16" | "fp32" | "fp8" | "int8";
                 /** @description on disk, from the freshest key where it is present; null when on no host */
                 bytes: number | null;
             }[];

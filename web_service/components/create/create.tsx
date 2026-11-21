@@ -97,6 +97,7 @@ import {
 import { docOf, graphProblems, paletteOf, type Palette, type Problem } from "@/lib/graph";
 import { presetNames, studioView } from "@/lib/studio";
 import { ApiError, api, message, ok, okOr, type S } from "@/lib/api";
+import { downloaded, precisionPins } from "@/lib/models";
 import { safeUrl } from "@/lib/format";
 import { mediaKinds, mediaOf, secondsText, workflowFor, type MediaKind } from "@/lib/media";
 import {
@@ -223,7 +224,12 @@ export function Create({
   const [workflows, setWorkflows] = useState<S<"Workflow">[] | null>(initial?.workflows ?? null);
   // the workflow picked here or by a reuse; "" follows the session's newest run
   const [chosen, setChosen] = useState("");
-  const [raws, setRaws] = useState<Record<string, Raw>>({});
+  const [held, setRaws] = useState<Record<string, Raw>>({});
+  // which variants are on a host and what each loads at: the precision pins and "Not downloaded" (GET models)
+  const [modelList, setModelList] = useState<S<"ModelList"> | null>(null);
+  useEffect(() => {
+    ok(api.GET("/v1/studio/models")).then(setModelList, () => undefined);
+  }, []);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [runs, setRuns] = useState<Run[] | null>(initial?.runs ?? null);
   const [takes, setTakes] = useState<Take[]>(initial?.takes ?? []);
@@ -464,7 +470,15 @@ export function Create({
     known(chosen) ??
     (runs === null && sessionId ? "" : (known(runs?.[0]?.workflow_id) ?? workflows?.[0]?.id ?? ""));
   const workflow = workflows?.find((w) => w.id === workflowId);
-  const all = useMemo(() => (workflow ? fieldsOf(workflow) : []), [workflow]);
+  const unpinned = useMemo(() => (workflow ? fieldsOf(workflow) : []), [workflow]);
+  // a variant that loads at one precision (fp8) fixes the Precision tile to it, and the run sends it
+  const pins = useMemo(() => precisionPins(unpinned, held, modelList), [unpinned, held, modelList]);
+  const all = useMemo(
+    () =>
+      unpinned.map((f) => (pins[f.key] ? { ...f, param: { ...f.param, enum: [pins[f.key]] } } : f)),
+    [unpinned, pins],
+  );
+  const raws = Object.keys(pins).length ? { ...held, ...pins } : held;
   // what the form held in each workflow when it was left: a value that did not suit the next one comes back
   const left = useRef<Record<string, Record<string, Raw>>>({});
   // a workflow with a Studio block shows exactly what it places (lib/studio.ts)
@@ -503,6 +517,8 @@ export function Create({
   // a workflow of one's own runs only without problems (studio refuses it with 422); templates are not checked
   const problems = lifted && lifted.id === workflow?.id ? lifted.problems : own;
   const blocked = workflow?.source === "mine" ? problems.length : 0;
+  // no variant of its model on a live host: nothing can run it (the picker says "Not downloaded · Models")
+  const notDownloaded = !!workflow && !downloaded(modelList, workflow.family);
   const onProblems = useCallback(
     (id: string, ps: Problem[]) => setLifted({ id, problems: ps }),
     [],
@@ -878,7 +894,7 @@ export function Create({
   const sending = useRef(false);
   async function generate(e: React.FormEvent) {
     e.preventDefault();
-    if (workflow && !blocked) await send(workflow, fields);
+    if (workflow && !blocked && !notDownloaded) await send(workflow, fields);
   }
   /** Queues runs of `w` (Graph view passes the version it just saved) with the form's settings for it. */
   async function send(w: S<"Workflow">, fields: Field[]) {
@@ -1141,6 +1157,7 @@ export function Create({
             if (chosen === id) setChosen("");
           }}
           onError={setError}
+          available={(w) => downloaded(modelList, w.family)}
         />
       )}
       {/* a family with a voice-over and a dialogue template: the switch between them (docs/mock/CreateAudio.dc.html) */}
@@ -1660,20 +1677,24 @@ export function Create({
                 title="Generate (⌘ or Ctrl + Enter)"
                 // a video workflow's key is the second accent (docs/mock/TextToVideo.dc.html)
                 className={`key flex h-14 flex-col items-center justify-center gap-px px-6 ${video || audio ? "bg-a2 text-[var(--on2)]" : ""}`}
-                disabled={!workflow || busy || blocked > 0 || noVoice || badLine > 0}
+                disabled={
+                  !workflow || busy || blocked > 0 || noVoice || badLine > 0 || notDownloaded
+                }
               >
                 <span className="text-sm">
                   {busy
                     ? "Sending…"
-                    : blocked
-                      ? `${blocked} problem${blocked === 1 ? "" : "s"}`
-                      : noVoice
-                        ? "Pick a voice"
-                        : badLine
-                          ? "Generate"
-                          : anyActive
-                            ? "Add to queue"
-                            : "Generate"}
+                    : notDownloaded
+                      ? "Not downloaded"
+                      : blocked
+                        ? `${blocked} problem${blocked === 1 ? "" : "s"}`
+                        : noVoice
+                          ? "Pick a voice"
+                          : badLine
+                            ? "Generate"
+                            : anyActive
+                              ? "Add to queue"
+                              : "Generate"}
                 </span>
                 {badLine > 0 && !busy ? (
                   <span className="mono text-[11px] font-medium">Fix line {badLine} first</span>

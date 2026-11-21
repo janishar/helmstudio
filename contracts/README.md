@@ -2774,6 +2774,15 @@ an **extra variant** of the pack. model.yaml per variant, all optional:
   as `source` is (LFS hashes, sizes, unsafe names); a path two of them list fails the plan (`… twice`). The licence,
   `must_accept`, `gated` and `bytes` of the whole download are `source`'s. Published as the variant's `sources`.
 
+From API 1.34 (the Models screen's truth): each component of a variant in the models key carries `stored`, the dtype
+most of its weight bytes have on disk, read from its safetensors headers (absent while its files are on no disk of
+the host, or for a format that does not say: GGUF, packed 4-bit). GET /v1/studio/models passes it on (from the
+freshest key that reports it) with the variant's `devices`. The screen derives everything from them: a variant's
+note is `Mac only` when its devices (else its model's runtimes' devices) hold mps and not cuda, `NVIDIA only` for
+cuda and not mps, none for both; its tags are the stored dtype, then each precision other than it as `<p> at load`
+(MiniMax H3 Image Base: `bf16 · int8 at load`), or `stored quantized` when it loads only at its stored quantized
+dtype (`fp8 · stored quantized`). Without `stored` the first precision stands for the stored dtype, as before.
+
 The runner loads a Linear whose stored weight is float8 (read from the headers, not the `quantize` globs) as an FP8
 Linear: on CUDA `torch._scaled_mm` with the input quantized per row (dequantize per layer when the GPU refuses it,
 decided once per process; `RUNNER_FP8_MATMUL=dequant` forces that); elsewhere dequantize per layer. A LoRA bakes into

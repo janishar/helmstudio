@@ -695,3 +695,25 @@ def test_shares_from_names_the_lender_for_load_download_and_delete(pack):
         [],
         None,
     )  # turbo has no files: nothing kept for it
+
+
+def test_a_component_publishes_the_dtype_most_of_its_bytes_are_stored_in(tmp_path):
+    def st(name: str, tensors: dict) -> object:
+        offs, h = 0, {}
+        for k, (dtype, n) in tensors.items():
+            h[k] = {"dtype": dtype, "shape": [n], "data_offsets": [offs, offs + n]}
+            offs += n
+        raw = json.dumps(h).encode()
+        p = tmp_path / name
+        p.write_bytes(len(raw).to_bytes(8, "little") + raw + b"\0" * offs)
+        return p
+
+    bf16 = st("a.safetensors", {"w": ("BF16", 100), "norm": ("F32", 8)})
+    fp8 = st("b.safetensors", {"w": ("F8_E4M3", 100), "scale": ("F32", 8)})
+    (gguf := tmp_path / "c.gguf").write_bytes(b"GGUF" + b"\xff" * 64)
+    (empty := tmp_path / "d.safetensors").write_bytes(b"")
+    assert models.stored_dtype([bf16]) == "bf16" and models.stored_dtype([fp8, empty]) == "fp8"
+    assert models.stored_dtype([gguf, empty]) is None
+    assert (
+        models.stored_dtype([st("e.safetensors", {"w": ("U8", 50)})]) is None
+    )  # NVFP4 says nothing

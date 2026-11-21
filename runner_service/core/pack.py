@@ -302,6 +302,8 @@ def header(path: Path) -> dict:
     """A safetensors file's header: key → {dtype, shape, ...}."""
     with path.open("rb") as f:
         (n,) = struct.unpack("<Q", f.read(8))
+        if n > path.stat().st_size:  # not a safetensors file (a test stub, a truncated download)
+            raise ValueError(f"{path.name}: header longer than the file")
         h = json.loads(f.read(n))
     h.pop("__metadata__", None)
     return h

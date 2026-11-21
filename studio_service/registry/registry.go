@@ -429,6 +429,7 @@ type Variant struct {
 	Source     *Source     `json:"source,omitempty"`
 	Components []Component `json:"components,omitempty"`
 	Mismatch   []string    `json:"mismatch,omitempty"`
+	Devices    []string    `json:"devices,omitempty"` // API 1.34: the only devices it runs on
 }
 
 // Source is where a download fetches a variant's own files; nil: not downloadable.
@@ -448,6 +449,7 @@ type Component struct {
 	Precisions  []string `json:"precisions"`
 	Bytes       *int64   `json:"bytes,omitempty"`
 	Separate    bool     `json:"separate,omitempty"`
+	Stored      string   `json:"stored,omitempty"` // API 1.34: the dtype most of its bytes have on disk
 }
 
 // Licence is one licence text a models key publishes (API 1.16).

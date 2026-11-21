@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import fixture from "../../contracts/fixtures/http/ModelList.valid.json";
 import type { S } from "@/lib/api";
+import type { Field } from "@/lib/workflow";
 import {
   anyDownloading,
   bytesText,
@@ -9,7 +10,10 @@ import {
   folderOf,
   forHost,
   jobOpen,
-  macOnly,
+  deviceNote,
+  downloaded,
+  precisionPins,
+  variantStored,
   mediaText,
   percent,
   precisionTags,
@@ -22,6 +26,8 @@ import {
 const list = fixture as S<"ModelList">;
 const [qwen, ltx] = list.models;
 const [base, turbo] = qwen.variants;
+type Model = S<"Model">;
+type Variant = S<"ModelVariant">;
 const on = (v: S<"ModelVariant">, host: string) => v.hosts.find((h) => h.host === host)!;
 
 describe("model state per host", () => {
@@ -74,10 +80,46 @@ describe("progress and sizes", () => {
 describe("variant tags", () => {
   it("names stored and load-time precisions", () => {
     expect(precisionTags(["bf16", "int8"]).map((t) => t.text)).toEqual(["bf16", "int8 at load"]);
-    expect(precisionTags(["int8"]).map((t) => t.text)).toEqual([
-      "int8",
-      "no load-time quantization",
-    ]);
+    // official bf16 files quantized to int8 at load (MiniMax H3 Image Base) vs a stored fp8 build
+    expect(precisionTags(["int8"], "bf16").map((t) => t.text)).toEqual(["bf16", "int8 at load"]);
+    expect(precisionTags(["fp8"], "fp8").map((t) => t.text)).toEqual(["fp8", "stored quantized"]);
+    expect(precisionTags(["int8"]).map((t) => t.text)).toEqual(["int8", "stored quantized"]);
+    expect(precisionTags(["bf16"], "bf16").map((t) => t.text)).toEqual(["bf16"]);
+    expect(precisionTags(["bf16", "int8", "int4"], "bf16")[1].text).toBe("int8 · int4 at load");
+  });
+  it("takes the variant's stored dtype from its largest component", () => {
+    const c = (component: string, stored: string | undefined, bytes: number) =>
+      ({
+        component,
+        from_variant: "base",
+        precisions: ["int8"],
+        stored,
+        bytes,
+      }) as Variant["components"][number];
+    const v = {
+      ...base,
+      components: [
+        c("text_encoder", "int8", 10),
+        c("transformer", "bf16", 99),
+        c("vae", undefined, 500),
+      ],
+    } as Variant;
+    expect(variantStored(v)).toBe("bf16");
+    expect(variantStored({ ...base, components: [] })).toBeUndefined();
+    // one precision: the component stored at it wins over a larger one (MiniMax fp8 DiT beside an int8 text encoder)
+    const fp8 = {
+      ...base,
+      precisions: ["fp8"],
+      components: [c("text_encoder", "int8", 27), c("transformer", "fp8", 20)],
+    } as Variant;
+    expect(variantStored(fp8)).toBe("fp8");
+    // one precision none is stored at: the largest (official bf16 files quantized to int8 at load)
+    const official = {
+      ...base,
+      precisions: ["int8"],
+      components: [c("text_encoder", "bf16", 66), c("transformer", "bf16", 66)],
+    } as Variant;
+    expect(variantStored(official)).toBe("bf16");
   });
   it("counts shared components per owner variant", () => {
     expect(sharesText(qwen, turbo)).toEqual(["shares 2 with Base"]);
@@ -86,11 +128,19 @@ describe("variant tags", () => {
   it("describes the model", () => {
     expect(mediaText(ltx)).toBe("video + audio");
     expect(runtimeTags(ltx)).toEqual(["MLX"]);
-    expect(macOnly(ltx)).toBe(true);
-    expect(macOnly(qwen)).toBe(false);
+    expect(deviceNote(ltx, ltx.variants[0])).toBe("Mac only");
+    expect(deviceNote(qwen, base)).toBeNull();
     const h3 = { ...ltx, runtimes: [{ runtime: "native", env: "native" }] };
     expect(runtimeTags(h3)).toEqual(["Native"]);
-    expect(macOnly(h3)).toBe(true);
+    expect(deviceNote(h3, ltx.variants[0])).toBe("Mac only");
+    // per variant: MiniMax H3's base on Metal, base-fp8 on CUDA, one model with both runtimes' devices
+    const both = {
+      ...ltx,
+      runtimes: [{ runtime: "native", env: "native", devices: ["mps", "cuda"] }],
+    } as Model;
+    expect(deviceNote(both, { ...base, devices: ["mps"] })).toBe("Mac only");
+    expect(deviceNote(both, { ...base, devices: ["cuda"] })).toBe("NVIDIA only");
+    expect(deviceNote(both, base)).toBeNull();
     expect(folderOf(list, turbo, "mac")).toBe("~/GenAI/models/Qwen-Image-2.1-Turbo");
   });
 });
@@ -118,5 +168,39 @@ describe("download plan", () => {
   it("needs no accept for a licence that does not ask", () => {
     const p = downloadPlan(list, base, "gpu1");
     expect([p.licence?.id, p.mustAccept, p.blocked]).toEqual(["apache-2.0", false, null]);
+  });
+});
+
+describe("Create's model data", () => {
+  const fp8 = { ...base, id: "base-fp8", precisions: ["fp8"] } as Variant;
+  const withFp8 = { ...list, models: [{ ...qwen, variants: [base, fp8] }] } as S<"ModelList">;
+  const fieldOf = (name: string, enumv: string[], initial: string) =>
+    ({
+      key: `model.${name}`,
+      node: "model",
+      nodeTitle: "Model",
+      param: { name, type: "enum", enum: enumv, default: initial },
+      initial,
+      canvas: false,
+      model: true,
+      family: qwen.family,
+    }) as Field;
+  const fs = [
+    fieldOf("variant", ["base", "base-fp8"], "base"),
+    fieldOf("precision", ["bf16", "int8", "fp8"], "int8"),
+  ];
+  it("pins the precision of a variant that loads at one", () => {
+    expect(precisionPins(fs, {}, withFp8)).toEqual({}); // base: bf16 or int8, a choice
+    expect(precisionPins(fs, { "model.variant": "base-fp8" }, withFp8)).toEqual({
+      "model.precision": "fp8",
+    });
+    expect(precisionPins(fs, { "model.variant": "base-fp8" }, null)).toEqual({}); // list not known yet
+  });
+  it("knows a family with no variant present on a live host", () => {
+    expect(downloaded(list, qwen.family)).toBe(true); // base present on the live mac
+    const dead = { ...list, hosts: list.hosts.map((h) => ({ ...h, live: false })) };
+    expect(downloaded(dead, qwen.family)).toBe(false);
+    expect(downloaded(null, qwen.family)).toBe(true);
+    expect(downloaded(list, null)).toBe(true); // a core workflow
   });
 });

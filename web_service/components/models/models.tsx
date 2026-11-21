@@ -19,10 +19,11 @@ import {
   folderOf,
   forHost,
   jobOpen,
-  macOnly,
+  deviceNote,
   mediaText,
   percent,
   precisionTags,
+  variantStored,
   runtimeTags,
   sharesText,
   stateText,
@@ -218,23 +219,13 @@ function ModelSection({
         ))}
         <span className="mono text-[12px] text-t2">{m.id}</span>
         <div className="grow" />
-        {macOnly(m) ? (
+        {licences.size > 1 && (
           <span className="flex items-center text-[12px] text-t2">
-            Mac only
+            Licence per variant
             <Info>
-              Only {runtimeTags(m).includes("MLX") ? "an MLX" : "a Native"} runtime exists for this
-              model, so hosts without Apple silicon cannot run it.
+              Each variant carries its own licence. It is shown before an admin downloads it.
             </Info>
           </span>
-        ) : (
-          licences.size > 1 && (
-            <span className="flex items-center text-[12px] text-t2">
-              Licence per variant
-              <Info>
-                Each variant carries its own licence. It is shown before an admin downloads it.
-              </Info>
-            </span>
-          )
         )}
       </div>
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
@@ -266,7 +257,8 @@ function VariantCard({
   picked: boolean;
   onPick: () => void;
 }) {
-  const tags = precisionTags(v.precisions);
+  const tags = precisionTags(v.precisions, variantStored(v));
+  const note = deviceNote(m, v);
   return (
     <div
       onClick={onPick}
@@ -288,6 +280,16 @@ function VariantCard({
           {v.licence?.id ?? "no download source"}
         </span>
         <div className="grow" />
+        {note && (
+          <span className="flex shrink-0 items-center text-[12px] text-t2">
+            {note}
+            <Info>
+              {note === "Mac only"
+                ? "This variant runs only on Apple silicon hosts."
+                : "This variant runs only on NVIDIA (CUDA) hosts."}
+            </Info>
+          </span>
+        )}
         <span className="mono text-[12px]">{bytesText(variantBytes(v))}</span>
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
@@ -303,11 +305,14 @@ function VariantCard({
         ))}
         {tags[1]?.q ? (
           <Info>
-            Stored in {tags[0].text}. It can be quantized to {v.precisions.slice(1).join(" or ")}{" "}
-            while loading, with no second copy on disk.
+            Stored in {tags[0].text}. It is quantized to{" "}
+            {v.precisions.filter((p) => p !== tags[0].text).join(" or ")} while loading, with no
+            second copy on disk.
           </Info>
-        ) : (
+        ) : tags[1] ? (
           <Info>This variant is stored already quantized, so it loads as it is.</Info>
+        ) : (
+          <Info>This variant loads as it is stored.</Info>
         )}
       </div>
       <div className="flex flex-wrap gap-1.5">
@@ -449,7 +454,7 @@ function VariantPanel({
                 <span className="mono text-[12px] text-t2">{bytesText(c.bytes) || "–"}</span>
               </div>
               <div className="flex flex-wrap gap-1.5">
-                {precisionTags(c.precisions).map((t) =>
+                {precisionTags(c.precisions, c.stored).map((t) =>
                   t.dim ? null : (
                     <span key={t.text} className={t.q ? TAG_Q : "tag"}>
                       {t.text}

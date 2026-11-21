@@ -142,7 +142,7 @@ func buildModels(values []registry.Host, published map[string]registry.Published
 				}
 			}
 			variant := dto.ModelVariant{ID: vid, Title: cmp.Or(desc.Title, vid), Precisions: orEmpty(desc.Precisions),
-				Components: []dto.VariantComponent{}, Hosts: []dto.ModelVariantHost{}}
+				Devices: desc.Devices, Components: []dto.VariantComponent{}, Hosts: []dto.ModelVariantHost{}}
 			if desc.Dir != "" {
 				variant.Dir = &desc.Dir
 			}
@@ -152,10 +152,17 @@ func buildModels(values []registry.Host, published map[string]registry.Published
 			}
 			for _, c := range desc.Components {
 				component := dto.VariantComponent{Component: c.Component, FromVariant: c.FromVariant, Precisions: c.Precisions}
-				for _, source := range sources { // its size from the freshest key where it is present
+				for _, source := range sources { // its size and stored dtype, each from the freshest key that has it
 					v, _, _ := find(source, id, vid)
-					if i := slices.IndexFunc(v.Components, func(o registry.Component) bool { return o.Component == c.Component }); i >= 0 && v.Components[i].Bytes != nil {
-						component.Bytes = v.Components[i].Bytes
+					if i := slices.IndexFunc(v.Components, func(o registry.Component) bool { return o.Component == c.Component }); i >= 0 {
+						if component.Bytes == nil {
+							component.Bytes = v.Components[i].Bytes
+						}
+						if component.Stored == nil && v.Components[i].Stored != "" {
+							component.Stored = &v.Components[i].Stored
+						}
+					}
+					if component.Bytes != nil && component.Stored != nil {
 						break
 					}
 				}

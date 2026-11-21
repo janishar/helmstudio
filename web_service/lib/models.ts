@@ -1,6 +1,7 @@
 // The Models screen's logic (docs/mock/Models.dc.html, ModelDownload.dc.html; contracts/README.md "Models and model
 // jobs"): what a variant shows per host, its tags and sizes, and what a download must ask before it starts.
 import type { S } from "@/lib/api";
+import type { Field } from "@/lib/workflow";
 
 type Model = S<"Model">;
 type Variant = S<"ModelVariant">;
@@ -37,19 +38,56 @@ export function stateText(h: VariantHost): string {
   }
 }
 
-/** The precision tags: as stored, then the load-time quantizations ("int8 at load"), or "no load-time
- * quantization" when it is stored already quantized and nothing else applies. */
-export function precisionTags(p: readonly string[]): { text: string; q: boolean; dim?: boolean }[] {
-  const [stored, ...rest] = p;
-  if (!rest.length)
+const QUANTIZED = ["int8", "int4", "fp8"];
+
+/** The precision tags (contracts/README.md, Quantized variants): the stored dtype, then the other precisions made
+ * at load ("int8 at load"), or "stored quantized" when it loads only at its stored quantized dtype. Without `stored`
+ * the first precision stands for it. */
+export function precisionTags(
+  p: readonly string[],
+  stored?: string | null,
+): { text: string; q: boolean; dim?: boolean }[] {
+  const s = stored ?? p[0];
+  const rest = p.filter((x) => x !== s);
+  if (rest.length)
     return [
-      { text: stored, q: false },
-      { text: "no load-time quantization", q: false, dim: true },
+      { text: s, q: false },
+      { text: `${rest.join(" · ")} at load`, q: true },
     ];
-  return [
-    { text: stored, q: false },
-    { text: `${rest.join(" · ")} at load`, q: true },
-  ];
+  return QUANTIZED.includes(s)
+    ? [
+        { text: s, q: false },
+        { text: "stored quantized", q: false, dim: true },
+      ]
+    : [{ text: s, q: false }];
+}
+
+/** A variant's stored dtype: for a variant of one precision, a component stored at that precision (the fp8 DiT
+ * beside a larger int8 text encoder); else that of its largest component that reports one; else undefined. */
+export function variantStored(v: Variant): string | undefined {
+  const known = v.components
+    .filter((c) => c.stored)
+    .sort((a, b) => (b.bytes ?? 0) - (a.bytes ?? 0));
+  const one = v.precisions.length === 1 ? v.precisions[0] : undefined;
+  return (known.find((c) => c.stored === one) ?? known[0])?.stored;
+}
+
+/** Where a variant runs: its `devices`, else its model's runtimes' (an mlx or native one without devices: mps). */
+export function variantDevices(m: Model, v: Variant): string[] {
+  return (
+    v.devices ??
+    m.runtimes.flatMap(
+      (r) => r.devices ?? (MAC_RUNTIMES.includes(r.runtime) ? ["mps"] : ["mps", "cuda"]),
+    )
+  );
+}
+
+/** The variant's note: "Mac only", "NVIDIA only", or null when it runs on both. */
+export function deviceNote(m: Model, v: Variant): "Mac only" | "NVIDIA only" | null {
+  const d = variantDevices(m, v);
+  const mac = d.includes("mps");
+  const nv = d.includes("cuda");
+  return mac && !nv ? "Mac only" : nv && !mac ? "NVIDIA only" : null;
 }
 
 /** "shares 2 with Base": the components this variant loads from another variant's folder (one per owner). */
@@ -75,10 +113,6 @@ export const MAC_RUNTIMES = ["mlx", "native"];
 export const runtimeTags = (m: Model) => [
   ...new Set(m.runtimes.map((r) => RUNTIME_LABELS[r.runtime] ?? r.runtime)),
 ];
-
-/** Only MLX or native runtimes exist: only Apple silicon hosts can run it (the board's "Mac only"). */
-export const macOnly = (m: Model) =>
-  m.runtimes.length > 0 && m.runtimes.every((r) => MAC_RUNTIMES.includes(r.runtime));
 
 /** The size the variant card shows: the expected download, else its files on the host (or the largest seen). */
 export function variantBytes(v: Variant, host?: string): number | null {
@@ -152,4 +186,42 @@ export function jobOpen(jobs: S<"ModelJob">[], id: string): boolean {
 export function canDelete(v: Variant, host: string): boolean {
   const s = v.hosts.find((x) => x.host === host)?.state;
   return s === "present" || s === "partial" || s === "mismatch";
+}
+
+/** Create's model node pins (API 1.33 RunsAt): each precision field whose node's chosen variant loads at exactly
+ * one precision → that precision (shown fixed and sent). `raws` is what the form holds; a field it lacks keeps the
+ * workflow's value. */
+export function precisionPins(
+  fields: readonly Field[],
+  raws: Record<string, unknown>,
+  list: S<"ModelList"> | null,
+): Record<string, string> {
+  const pins: Record<string, string> = {};
+  if (!list) return pins;
+  for (const f of fields) {
+    if (!f.model || f.param.name !== "precision") continue;
+    const vf = fields.find((x) => x.node === f.node && x.param.name === "variant");
+    const vid = String((vf && raws[vf.key]) ?? vf?.initial ?? f.siblings?.variant ?? "");
+    const v = list.models
+      .filter((m) => m.family === f.family)
+      .flatMap((m) => m.variants)
+      .find((x) => x.id === vid);
+    const p = v?.precisions.length === 1 ? v.precisions[0] : undefined;
+    if (p && f.param.enum?.includes(p)) pins[f.key] = p;
+  }
+  return pins;
+}
+
+/** Whether some model of the family has a variant present on a live host (Create greys a workflow without one:
+ * "Not downloaded"). True while the list is not known, for a core workflow, or a family the list does not hold. */
+export function downloaded(
+  list: S<"ModelList"> | null,
+  family: string | null | undefined,
+): boolean {
+  const ms = list?.models.filter((m) => m.family === family) ?? [];
+  if (!ms.length) return true;
+  const live = new Set(list!.hosts.filter((h) => h.live).map((h) => h.host));
+  return ms.some((m) =>
+    m.variants.some((v) => v.hosts.some((h) => h.state === "present" && live.has(h.host))),
+  );
 }

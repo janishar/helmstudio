@@ -56,6 +56,7 @@
               "precisions": [
                 "bf16"
               ],
+              "stored": "bf16",
               "bytes": 3833402552
             },
             {
@@ -64,6 +65,7 @@
               "precisions": [
                 "bf16"
               ],
+              "stored": "fp32",
               "bytes": 682293092
             }
           ],
@@ -124,6 +126,7 @@
               "precisions": [
                 "bf16"
               ],
+              "stored": "bf16",
               "bytes": 3833402552
             },
             {
@@ -132,6 +135,7 @@
               "precisions": [
                 "bf16"
               ],
+              "stored": "fp32",
               "bytes": 682293092,
               "separate": true
             }

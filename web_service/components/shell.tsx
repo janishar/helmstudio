@@ -2,7 +2,7 @@
 // The frame of every signed-in page: the floating dock on the left, the page beside it.
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { createContext, use } from "react";
+import { createContext, use, useEffect, useState } from "react";
 import {
   Boxes,
   Clapperboard,
@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { ThemeSelect } from "@/components/kit";
 import { signout } from "@/app/(auth)/actions";
-import type { S } from "@/lib/api";
+import { ApiError, api, ok, type S } from "@/lib/api";
 
 /** The signed-in user (null when auth can't be reached). */
 const UserContext = createContext<S<"User"> | null>(null);
@@ -61,7 +61,30 @@ const ADMIN = {
 export const isCurrent = (href: string, path: string) =>
   href === "/" ? path === "/" : path === href || path.startsWith(href + "/");
 
-/** Frame around every signed-in page. */
+/** The user the layout loaded; when it could not (auth restarting), /auth/me is asked again at 1, 2, 4, 8 and 16 s
+ * (about 30 s in all) until it answers. A 401 goes to /signin (`ok`). */
+export function useMe(user: S<"User"> | null): S<"User"> | null {
+  const [late, setLate] = useState<S<"User"> | null>(null);
+  useEffect(() => {
+    if (user) return;
+    let wait = 1000;
+    let timer: ReturnType<typeof setTimeout>;
+    const ask = () =>
+      ok(api.GET("/auth/me")).then(setLate, (e) => {
+        if (!(e instanceof ApiError && e.status === 401) && (wait *= 2) <= 16000)
+          timer = setTimeout(ask, wait);
+      });
+    timer = setTimeout(ask, wait);
+    return () => {
+      clearTimeout(timer);
+      wait = Infinity; // a failure after unmount asks no more
+    };
+  }, [user]);
+  return user ?? late;
+}
+
+/** Frame around every signed-in page. The layout renders it with no user when /auth/me failed (auth restarting): it
+ * asks again for about 30 s, so the admin items appear without a reload. */
 export function AppShell({
   user,
   children,
@@ -70,9 +93,10 @@ export function AppShell({
   children: React.ReactNode;
 }) {
   const path = usePathname();
-  const items = user?.roles.includes("admin") ? [...ITEMS, ADMIN] : ITEMS;
+  const me = useMe(user);
+  const items = me?.roles.includes("admin") ? [...ITEMS, ADMIN] : ITEMS;
   return (
-    <UserContext value={user}>
+    <UserContext value={me}>
       <div className="flex min-h-dvh flex-col md:flex-row lg:h-dvh lg:overflow-hidden">
         <nav
           aria-label="Sections"

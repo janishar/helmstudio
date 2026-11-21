@@ -57,6 +57,7 @@ type ModelVariant struct {
 	ID            string             `json:"id"`
 	Title         string             `json:"title"`
 	Precisions    []string           `json:"precisions"`
+	Devices       []string           `json:"devices,omitempty"`
 	Dir           *string            `json:"dir"`
 	Licence       *VariantLicence    `json:"licence"`
 	Gated         bool               `json:"gated"`
@@ -76,6 +77,7 @@ type VariantComponent struct {
 	Component   string   `json:"component"`
 	FromVariant string   `json:"from_variant"`
 	Precisions  []string `json:"precisions"`
+	Stored      *string  `json:"stored,omitempty"`
 	Bytes       *int64   `json:"bytes"`
 }
 

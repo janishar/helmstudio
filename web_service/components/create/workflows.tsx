@@ -1,6 +1,7 @@
 "use client";
 // The workflow picker in Create's top bar: the templates and the user's own, with Rename, Duplicate and Delete for
 // their own (contracts/README.md, User workflows).
+import Link from "next/link";
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { Modal } from "@/components/kit";
@@ -17,6 +18,7 @@ export function WorkflowPicker({
   onChanged,
   onDeleted,
   onError,
+  available = () => true,
 }: {
   workflows: Workflow[];
   current?: Workflow;
@@ -26,6 +28,8 @@ export function WorkflowPicker({
   onChanged: (w: Workflow) => void;
   onDeleted: (id: string) => void;
   onError: (msg: string) => void;
+  /** false: no variant of its model is on a live host (greyed, "Not downloaded · Models"; still opens) */
+  available?: (w: Workflow) => boolean;
 }) {
   const [renaming, setRenaming] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<Workflow | null>(null);
@@ -43,20 +47,34 @@ export function WorkflowPicker({
       setBusy(false);
     }
   };
-  const item = (w: Workflow) => (
-    <button
-      type="button"
-      role="menuitemradio"
-      aria-checked={w.id === current?.id}
-      className="min-w-0 flex-1 truncate rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-s3 aria-checked:bg-s4 aria-checked:font-semibold"
-      onClick={() => {
-        hide();
-        onPick(w.id);
-      }}
-    >
-      {w.title}
-    </button>
-  );
+  const item = (w: Workflow) => {
+    const pick = (
+      <button
+        type="button"
+        role="menuitemradio"
+        aria-checked={w.id === current?.id}
+        className={`min-w-0 flex-1 truncate rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-s3 aria-checked:bg-s4 aria-checked:font-semibold ${available(w) ? "" : "text-t2"}`}
+        onClick={() => {
+          hide();
+          onPick(w.id);
+        }}
+      >
+        {w.title}
+      </button>
+    );
+    if (available(w)) return pick;
+    return (
+      <div className="flex min-w-0 flex-1 flex-col">
+        {pick}
+        <span className="px-3 pb-1.5 text-[11px] text-t2">
+          Not downloaded ·{" "}
+          <Link href="/models" className="underline" onClick={hide}>
+            Models
+          </Link>
+        </span>
+      </div>
+    );
+  };
   return (
     <>
       <button

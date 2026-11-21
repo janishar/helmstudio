@@ -24,6 +24,7 @@ import logging
 import os
 import re
 import shutil
+import struct
 import sys
 import threading
 from fnmatch import fnmatchcase
@@ -255,6 +256,37 @@ def runs_here(pack, vid: str) -> bool:
     return not want or device(pack) in want
 
 
+# a safetensors dtype as a precision (API 1.34 component `stored`); U8 (NVFP4) and U32 (MLX packed: int4 or int8) say nothing
+DTYPES = {
+    "BF16": "bf16",
+    "F16": "fp16",
+    "F32": "fp32",
+    "F8_E4M3": "fp8",
+    "F8_E5M2": "fp8",
+    "I8": "int8",
+}
+_dtypes: dict = {}
+
+
+def stored_dtype(files: list[Path]) -> str | None:
+    """The dtype most of the files' tensor bytes are stored in (their safetensors headers), as a precision; None
+    when none is a readable safetensors file or that dtype is not one (a GGUF, NVFP4, MLX packed)."""
+    by: dict[str, int] = {}
+    for p in files:
+        if p.suffix != ".safetensors":
+            continue
+        try:
+            st = p.stat()
+            k = (p, st.st_size, st.st_mtime_ns)
+            if k not in _dtypes:
+                _dtypes[k] = [(t["dtype"], t["data_offsets"][1] - t["data_offsets"][0]) for t in packs.header(p).values()]  # fmt: skip
+        except OSError, ValueError, KeyError, TypeError, struct.error:
+            continue
+        for d, n in _dtypes[k]:
+            by[d] = by.get(d, 0) + n
+    return DTYPES.get(max(by, key=by.get)) if by else None
+
+
 def variant_entry(pack, vid: str) -> dict:
     """One variant of the models key (registry.schema.json `models[].variants[]`)."""
     spec, v = pack.spec, pack.spec["variants"][vid]
@@ -275,6 +307,8 @@ def variant_entry(pack, vid: str) -> dict:
         unfinished = unfinished or (folder(pack, owner) / MARKER).exists()
         item = {"component": c, "from_variant": owner,
                 "precisions": packs.component_precisions(pack, vid, c)}  # fmt: skip
+        if d := stored_dtype(found):
+            item["stored"] = d
         if found:
             item["bytes"] = sum(f.stat().st_size for f in found if counted[f] == c)
         if owner == vid and c in v.get("shares", []):

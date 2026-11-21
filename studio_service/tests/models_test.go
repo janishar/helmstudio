@@ -27,7 +27,11 @@ import (
 // to accept; turbo loads base's text encoder and vae.
 func qwenModels(turbo string) []byte {
 	component := func(name, from string, bytes int) map[string]any {
-		return map[string]any{"component": name, "from_variant": from, "precisions": []string{"bf16", "int8"}, "bytes": bytes}
+		c := map[string]any{"component": name, "from_variant": from, "precisions": []string{"bf16", "int8"}, "bytes": bytes}
+		if turbo != "missing" || from == "base" { // API 1.34: read from the files on disk
+			c["stored"] = "bf16"
+		}
+		return c
 	}
 	value, _ := json.Marshal(map[string]any{"schema_version": 1, "host": "mac", "env": "torch",
 		"published_at": time.Now().UTC(), "published_by": "test",
@@ -40,7 +44,7 @@ func qwenModels(turbo string) []byte {
 					"dir": "Qwen-Image-2.1", "source": map[string]any{"repo": "Qwen/Qwen-Image-2.1", "revision": "main",
 						"allow_patterns": []string{"*"}, "licence": "apache-2.0", "must_accept": false, "gated": false, "bytes": 300},
 					"components": []any{component("transformer", "base", 100), component("text_encoder", "base", 150), component("vae", "base", 50)}},
-				{"id": "turbo", "title": "Turbo", "presence": turbo, "precisions": []string{"bf16", "int8"},
+				{"id": "turbo", "title": "Turbo", "presence": turbo, "precisions": []string{"bf16", "int8"}, "devices": []string{"mps"},
 					"dir": "Qwen-Image-2.1-Turbo", "source": map[string]any{"repo": "Qwen/Qwen-Image-2.1-Turbo", "revision": "main",
 						"allow_patterns": []string{"*"}, "licence": "qwen-turbo", "must_accept": true, "gated": true, "bytes": 90},
 					"components": []any{component("transformer", "turbo", 90), component("text_encoder", "base", 150), component("vae", "base", 50)}},
@@ -176,6 +180,16 @@ func TestModelJobs(t *testing.T) {
 	list := e.call(userA, "GET", "/v1/studio/models", nil, 200)
 	dump(t, "ModelList", list)
 	dump(t, "ModelList", e.call(admin, "GET", "/v1/studio/models", nil, 200))
+	models := list["models"].([]any)
+	qwen := models[slices.IndexFunc(models, func(m any) bool { return m.(map[string]any)["id"] == "qwen-image-2.1" })]
+	variants := qwen.(map[string]any)["variants"].([]any)
+	baseV, turboV := variants[0].(map[string]any), variants[1].(map[string]any)
+	if _, ok := baseV["devices"]; ok || !slices.Equal(turboV["devices"].([]any), []any{"mps"}) {
+		t.Fatal(baseV["devices"], turboV["devices"]) // API 1.34: devices passed on, absent when the key has none
+	}
+	if tc := turboV["components"].([]any); tc[0].(map[string]any)["stored"] != nil || tc[1].(map[string]any)["stored"] != "bf16" {
+		t.Fatal(tc) // turbo's own transformer is on no disk: no stored; base's text encoder is
+	}
 	hosts := list["hosts"].([]any)
 	if len(hosts) != 2 || hosts[1].(map[string]any)["live"] != true || hosts[1].(map[string]any)["models_root"] != "~/GenAI/models" {
 		t.Fatal(hosts) // fake, then mac

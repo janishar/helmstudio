@@ -355,7 +355,11 @@ export function Inspector({
         open={open === f.key}
         setOpen={setOpen}
         onChange={onChange}
-        choices={allowedInts(f, raws)?.map(String)}
+        choices={
+          allowedInts(f, raws)?.map(String) ??
+          // a model param with one value left (a variant that loads at one precision): a fixed readout
+          (f.model && f.param.enum?.length === 1 ? [display(f, f.param.enum[0]).value] : undefined)
+        }
         pair={cfg && stg && f === cfg ? { f: stg, raw: rawOf(stg, raws) } : undefined}
       />
     );
@@ -863,7 +867,9 @@ function Tile({
     return (
       <div id={id + "-ed"} className="set flex flex-col gap-0.5" title={f.param.help}>
         <span className="text-[12px] text-t2">{d.label}</span>
-        <span className="font-semibold">{choices[0]}</span>
+        <span className={`font-semibold ${f.param.type === "enum" ? "text-t2" : ""}`}>
+          {choices[0]}
+        </span>
         {error && (
           <span id={id + "-err"} className="text-[12px] text-bad">
             {error}
