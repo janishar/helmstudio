@@ -3,6 +3,7 @@ package main
 // Models, model jobs, the Hosts admin and API keys (API 1.16; contracts/README.md, Models and model jobs, Hosts admin).
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -17,15 +18,17 @@ import (
 
 type modelList struct {
 	Licences []struct {
-		ID    string `json:"id"`
-		Title string `json:"title"`
-		Text  string `json:"text"`
+		ID    string  `json:"id"`
+		Title string  `json:"title"`
+		URL   *string `json:"url"`
+		Text  string  `json:"text"`
 	} `json:"licences"`
 	Models []struct {
 		ID       string `json:"id"`
 		Title    string `json:"title"`
 		Variants []struct {
 			ID         string   `json:"id"`
+			Title      string   `json:"title"`
 			Precisions []string `json:"precisions"`
 			Licence    *struct {
 				ID         string `json:"id"`
@@ -470,4 +473,137 @@ func keysCmd(args []string, stdout io.Writer) error {
 		return nil
 	}
 	return errors.New(use)
+}
+
+// modelPick: helm model pick --host <h> [--all-missing]. Lists the variants the host publishes, asks on stdin which to
+// download, and asks for each licence that must be accepted: a licence is only accepted on a typed "y".
+func modelPick(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
+	const use = "usage: helm model pick --host <h> [--all-missing]"
+	fs := flag.NewFlagSet("model pick", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	host := fs.String("host", "", "the host")
+	allMissing := fs.Bool("all-missing", false, "pick every missing or partial variant")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *host == "" || fs.NArg() > 0 {
+		return errors.New(use)
+	}
+	c, err := loggedIn()
+	if err != nil {
+		return err
+	}
+	var l modelList
+	if err := c.call(http.MethodGet, "/v1/studio/models", nil, http.StatusOK, &l); err != nil {
+		return err
+	}
+	type row struct{ model, variant, title, state, licence string }
+	var rows []row
+	for _, m := range l.Models {
+		for _, v := range m.Variants {
+			for _, h := range v.Hosts {
+				if h.Host != *host {
+					continue
+				}
+				r := row{model: m.ID, variant: v.ID, title: m.Title + " " + v.Title, state: h.State}
+				size, lic := "-", "-"
+				if v.DownloadBytes != nil {
+					size = fmt.Sprintf("%.1f GB", float64(*v.DownloadBytes)/1e9)
+				}
+				if v.Licence != nil {
+					lic = v.Licence.ID
+					if v.Licence.MustAccept {
+						r.licence = v.Licence.ID
+						lic += " (accept needed)"
+					}
+				}
+				rows = append(rows, r)
+				fmt.Fprintf(stdout, "%3d  %-16s %-28s %-14s %9s  %-30s %s\n", len(rows), m.ID, r.title,
+					strings.Join(v.Precisions, "|"), size, lic, h.State)
+			}
+		}
+	}
+	if len(rows) == 0 {
+		return fmt.Errorf("host %s publishes no models", *host)
+	}
+	if stdin == nil {
+		stdin = strings.NewReader("")
+	}
+	in := bufio.NewReader(stdin)
+	ask := func(prompt string) string {
+		fmt.Fprint(stderr, prompt)
+		line, _ := in.ReadString('\n') // EOF = an empty answer
+		return strings.TrimSpace(line)
+	}
+	var picked []int
+	if *allMissing {
+		for i, r := range rows {
+			if r.state == "missing" || r.state == "partial" {
+				picked = append(picked, i+1)
+			}
+		}
+	} else if picked, err = parseNumbers(ask("Numbers to download (e.g. 1,3,5-7; empty = none): "), len(rows)); err != nil {
+		return err
+	}
+	if len(picked) == 0 {
+		fmt.Fprintln(stdout, "nothing picked; nothing queued")
+		return nil
+	}
+	for _, n := range picked {
+		r := rows[n-1]
+		if r.state == "present" || r.state == "downloading" {
+			fmt.Fprintf(stdout, "%d %s %s: already %s, skipped\n", n, r.model, r.variant, r.state)
+			continue
+		}
+		body := map[string]any{"host": *host, "variant": r.variant}
+		if r.licence != "" {
+			title, link := r.licence, "(no URL; text: helm models)"
+			for _, t := range l.Licences {
+				if t.ID == r.licence {
+					title = t.Title
+					if t.URL != nil {
+						link = *t.URL
+					}
+				}
+			}
+			fmt.Fprintf(stderr, "%s %s needs the licence %s: %s\n", r.model, r.variant, title, link)
+			if ask("Accept "+title+"? [y/N] ") != "y" {
+				fmt.Fprintf(stdout, "%d %s %s: licence not accepted, skipped\n", n, r.model, r.variant)
+				continue
+			}
+			body["accept_licence"] = true
+		}
+		if err := c.callJob(http.MethodPost, "/v1/studio/admin/models/"+url.PathEscape(r.model)+"/download", body, stdout); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// parseNumbers reads "1,3,5-7" (1..max, each once, in the order given); empty = none.
+func parseNumbers(s string, max int) ([]int, error) {
+	var out []int
+	seen := map[int]bool{}
+	for _, part := range strings.Split(s, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		lo, hi, isRange := strings.Cut(part, "-")
+		a, err1 := strconv.Atoi(strings.TrimSpace(lo))
+		b, err2 := a, error(nil)
+		if isRange {
+			b, err2 = strconv.Atoi(strings.TrimSpace(hi))
+		}
+		if err1 != nil || err2 != nil || a < 1 || b > max || a > b {
+			return nil, fmt.Errorf("bad number %q: use 1-%d, e.g. 1,3,5-7", part, max)
+		}
+		for i := a; i <= b; i++ {
+			if !seen[i] {
+				seen[i] = true
+				out = append(out, i)
+			}
+		}
+	}
+	return out, nil
 }

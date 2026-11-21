@@ -81,6 +81,8 @@ A prompt may mention your elements as @handle (@@ is a literal @): helm sends it
   helm models                         every model variant: precisions, size, state per host
   helm model download <model> --host <h> [--variant v] [--accept-licence]   (admin) a queued job; prints the job
   helm model rm <model> --host <h> [--variant v]   (admin) delete its files there (no variant: every one)
+  helm model pick --host <h> [--all-missing]   (admin) list the host's variants, ask which to download (numbers,
+             e.g. 1,3,5-7) and ask for each licence that must be accepted; --all-missing picks every missing/partial
   helm keys list | new <client> | revoke <id>   (admin) application API keys; a new key is shown once
   helm import <path> --user <email> [--dry-run] [--limit n]   (admin) an old helmstudio gallery (~/.helmstudio,
              read only) into the user's gallery; idempotent; --dry-run only counts
@@ -159,6 +161,10 @@ func helm(args []string, stdin io.Reader, stdout, stderr io.Writer, stop <-chan 
 	case "models":
 		err = modelsCmd(stdout)
 	case "model":
+		if len(args) > 1 && args[1] == "pick" {
+			err = modelPick(args[2:], stdin, stdout, stderr)
+			break
+		}
 		err = modelCmd(args[1:], stdout, stderr)
 	case "keys":
 		err = keysCmd(args[1:], stdout)
