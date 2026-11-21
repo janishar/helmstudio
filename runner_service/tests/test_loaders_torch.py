@@ -340,6 +340,16 @@ def test_fp8_linear_dequantizes_to_its_bf16_reference():
     assert ((got.float() - exact).abs().max() / exact.abs().max()) < 0.08
 
 
+def test_fp8_linear_takes_scaled_mm_only_for_inputs_of_many_rows():
+    from types import SimpleNamespace
+
+    m = lt.Fp8Linear(nn.Linear(64, 32))
+    cuda = lambda rows: SimpleNamespace(is_cuda=True, numel=lambda: rows * 64)
+    assert m.takes_scaled_mm(cuda(lt.FP8_MIN_ROWS)) and m.takes_scaled_mm(cuda(4096))
+    assert not m.takes_scaled_mm(cuda(2))  # adaLN modulation: one row per image, dequantized
+    assert not m.takes_scaled_mm(torch.zeros(4096, 64))  # not CUDA
+
+
 def test_load_makes_fp8_linears_from_the_headers_and_keeps_them_as_stored(tmp_path):
     torch.manual_seed(0)
     ref = Tiny()

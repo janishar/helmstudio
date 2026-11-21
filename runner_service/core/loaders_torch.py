@@ -218,6 +218,7 @@ class Int8Linear(nn.Module):
 
 
 E4M3_MAX = 448.0
+FP8_MIN_ROWS = 16  # an input with fewer rows takes the dequant path (Fp8Linear.takes_scaled_mm)
 # whether torch._scaled_mm works here: decided at the first CUDA forward of the process (RUNNER_FP8_MATMUL)
 _scaled_mm_ok: bool | None = None
 
@@ -242,11 +243,20 @@ class Fp8Linear(nn.Module):
     def dequantized(self, dtype: torch.dtype) -> torch.Tensor:
         return self.qweight.to(dtype) * self.scale.to(dtype)
 
+    def takes_scaled_mm(self, x: torch.Tensor) -> bool:
+        """FP8 matmul on CUDA for shapes it takes, unless RUNNER_FP8_MATMUL=dequant or the kernel was refused. An
+        input of fewer than FP8_MIN_ROWS rows (the adaLN modulations and timestep MLPs: one row per image) is
+        dequantized: an FP8 error there shifts every token of the image (measured on the VM: +2 to +11 dB against
+        the int8 golden at the same speed); use_fast_accum makes no difference to the row-wise kernel on sm_120."""
+        fits = self.in_features % 16 == 0 and self.out_features % 16 == 0
+        rows = x.numel() // self.in_features
+        return (x.is_cuda and fits and rows >= FP8_MIN_ROWS and _scaled_mm_ok is not False
+                and config.FP8_MATMUL != "dequant")  # fmt: skip
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         global _scaled_mm_ok
         bias = None if self.bias is None else self.bias.to(x.dtype)
-        fits = self.in_features % 16 == 0 and self.out_features % 16 == 0
-        if x.is_cuda and fits and _scaled_mm_ok is not False and config.FP8_MATMUL != "dequant":
+        if self.takes_scaled_mm(x):
             try:
                 x2 = x.reshape(-1, self.in_features)
                 xs = (x2.abs().amax(-1, keepdim=True).float() / E4M3_MAX).clamp_(min=1e-12)

@@ -1,0 +1,26 @@
+[
+ {
+  "tag": "nofast",
+  "case": "base-768-s42",
+  "variant": "base-fp8",
+  "precision": "fp8",
+  "total_s": 17.2,
+  "s": {
+   "encode": 3.1,
+   "sample": 13.4,
+   "decode": 0.5,
+   "output": 0.2
+  },
+  "peak_gb": {
+   "encode": 9.88,
+   "sample": 17.21,
+   "decode": 21.46,
+   "output": 21.46
+  },
+  "torch_peak_alloc_gb": 19.73,
+  "steps": 40,
+  "step_s": 0.113,
+  "psnr_vs_png": 25.41,
+  "psnr_vs_cuda.png": 25.38
+ }
+]

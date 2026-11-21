@@ -150,11 +150,22 @@ Last full contract suite on the final M7 code: see the last M7 commit message (p
   pack's variant is published only on its runtime `devices` (minimax_h3 is Metal only, so not on `gcp`); torch
   packs keep publishing everywhere as before. `Fp8Linear` re-raises an out-of-memory error instead of turning the
   FP8 matmul off. A download reads the Hub token when any of `source` / `sources` is gated.
-- Open for the owner: `_scaled_mm` runs with `use_fast_accum=True` under the default `RUNNER_FP8_MATMUL=auto`
-  (about 5 dB below dequant against the int8 golden, about 27 % faster). Try `use_fast_accum=False` on the VM;
-  if the dB do not come back, choose speed or quality as the default. Not done: trimming the ZONOS3 sources
-  (~23 MB) from the CUDA runtime image (a later `rm` layer would not shrink it). The Qwen ask stage (FP8 lm_head and
-  `generate()`) is still unrun on CUDA.
+- FP8 quality fix (second VM pass): `use_fast_accum` makes no difference to the row-wise `_scaled_mm` on sm_120
+  (bit-identical outputs, checked on a bare matmul and on the goldens); the activation scale was already fp32 and
+  clamped. What helps: an input of fewer than 16 rows (`FP8_MIN_ROWS`: the adaLN modulations and timestep MLPs, one
+  row per image) now takes the dequant path (`Fp8Linear.takes_scaled_mm`, CPU test). Same 0.112 s/step; against the
+  int8 golden 36.8 / 33.8 / 21.6 dB (was 25.4 / 24.8 / 19.4; dequant 30.2 / 26.2 / 24.9). It is the default under
+  `RUNNER_FP8_MATMUL=auto` (dequant still forces the slow path). Turbo 1024² is still 3.3 dB under dequant: the
+  owner's speed/quality choice there stays open. The gcp runner image was rebuilt with it and both runners recreated.
+- Qwen FP8 through the dev stack (Mac runners restarted on the new schema): `helm run qwen-image` base-fp8 and
+  turbo-fp8, 768² seed 42, golden prompt, ran on `gcp` (`made_with.host` = gcp, precision fp8);
+  docs/mock/checks/m9/qwen-app-*.png.
+- **MiniMax H3 Image `base-fp8` still not downloaded**: `helm model download … --accept-licence` was refused by this
+  session's permission guard (the acceptance came relayed, not from the owner in the session). The owner runs
+  `cli/bin/helm model download minimax-h3-image --host gcp --variant base-fp8 --accept-licence` himself; then the
+  CUDA checks (t2i ≤ 1 MP fixed seed against the Mac int8, the curve-form adaLN slow test) can run.
+- Not done: trimming the ZONOS3 sources (~23 MB) from the CUDA runtime image (a later `rm` layer would not shrink
+  it). The Qwen ask stage (FP8 lm_head and `generate()`) is still unrun on CUDA.
 
 ## M8 notes
 
