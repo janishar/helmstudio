@@ -317,6 +317,14 @@ separate API versions and can ship in either order.
 
 ### 24.10 Open points for the owner
 
+**Decided by the owner, 2026-11-22** (one by one): 1. image cap **8192, as derived**; 2. render size **keeps the
+Full / 75% / 62.5% labels**; 3. templates open on **Default**; 4. saved H3 workflows with `speed` are **re-saved**
+(no mapping); 5. Advanced is a **plain section**; 6. the original's size shows **only while uploading**; 7. **no**
+"upload original" option; 8. **video uploads: later (backlog)** — part B covers images and audio only, so no
+`video/mp4` upload type, no `poster_url`, no Mediabunny now; 9. **voice clips stay WAV**: audio uploaded for voice
+cloning (the voice picker's "clone from a clip", ZONOS3 and Qwen3-TTS) is never converted; other audio (MiniMax H3
+audio references, LTX audio to video sources) becomes AAC. The board's video-upload frames are not built.
+
 1. **Image cap**: the derived value is **8192** (MiniMax H3 Image's canvas), not ~4096. Take 8192 (no model ever
    loses pixels), or cap at what a model *reads* from an input image (Qwen ~1 MP, video first frames at the canvas),
    which needs a new per-input `reads_max_side` in model.yaml? Recommended: 8192.

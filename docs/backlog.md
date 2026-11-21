@@ -20,6 +20,9 @@ Notes from the owner while using the app. Not scheduled; each is picked up when 
   rule); more aspects (4:3, 3:4, 2:3, 21:9), Match input and the first-frame aspect warning (every family); memory
   options (SSD streaming, zero-copy off for external drives, Qwen prefetch); `--ref-image-size match|max`; prompt
   scaffold and history, a per-phase timing view, browser notifications when a run ends.
+- **Video uploads from the browser** (owner: later, 2026-11-22; plan 20 §24.5): upload a video, converted in the
+  browser to H.264 MP4 (≤ 1920 px, ≤ 60 fps, ≤ 2 GB, ≤ 10 min) with Mediabunny + WebCodecs, a poster, `video/mp4` in
+  `UploadCreate`. Today video only enters through runs, imports and `helm import`.
 - **LTX Enhance prompt** (owner: "Not now", 2026-11-22). LTX has no enhance step. On NVIDIA the vendored ltx-core
   has a Gemma 4 enhancer for 2.5 (`enhance_t2v` / `enhance_i2v`, gemma4 system prompts), no new download; check the
   DmitryDB int8 text encoder can generate. On the Mac the ltx-2-mlx port enhances only 2.3 (Gemma 3).
