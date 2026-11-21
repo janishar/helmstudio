@@ -23,22 +23,27 @@ start)
   echo $! >"$pidf"
   echo "tunnel to $2 ($3) started ($!); log $log"
   ;;
-loop) # the supervisor: one ssh at a time in its own process group, so stop ends gcloud and its ssh together
+loop) # the supervisor: one ssh pair at a time, each in its own process group, so stop ends gcloud and its ssh together
   set -m
-  c=
-  trap '[ -z "$c" ] || { kill -TERM -"$c" 2>/dev/null; wait "$c" 2>/dev/null; }; exit 143' TERM INT
+  n= s=
+  trap '[ -z "$n" ] || { kill -TERM -"$n" -"$s" 2>/dev/null; wait 2>/dev/null; }; exit 143' TERM INT
   while :; do
     echo "$(date '+%F %T') connecting"
     # a dropped link leaves the old sshd session holding the GPU host's 4222/8333 until its TCP times out (sshd has
     # no ClientAliveInterval by default), so every reconnect fails "remote port forwarding failed" (M6): free them
     gcloud compute ssh "$2" --zone "$3" ${GCLOUD_PROJECT:+--project "$GCLOUD_PROJECT"} -- \
       'sudo -n fuser -k 4222/tcp 8333/tcp >/dev/null 2>&1; true' || :
-    gcloud compute ssh "$2" --zone "$3" ${GCLOUD_PROJECT:+--project "$GCLOUD_PROJECT"} -- -N \
-      -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 \
-      -R "127.0.0.1:4222:127.0.0.1:${NATS_HOST_PORT:-4322}" \
-      -R "127.0.0.1:8333:127.0.0.1:${S3_TLS_HOST_PORT:-8443}" &
-    c=$!
-    wait "$c" || :
+    # one SSH connection per port: in a shared one, an output upload queues every NATS frame behind megabytes of S3
+    # data (one TCP stream), the hosts key's puts time out and the host looks offline
+    fwd() {
+      gcloud compute ssh "$2" --zone "$3" ${GCLOUD_PROJECT:+--project "$GCLOUD_PROJECT"} -- -N \
+        -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -R "$1" &
+    }
+    fwd "127.0.0.1:4222:127.0.0.1:${NATS_HOST_PORT:-4322}" "$2" "$3"; n=$!
+    fwd "127.0.0.1:8333:127.0.0.1:${S3_TLS_HOST_PORT:-8443}" "$2" "$3"; s=$!
+    while kill -0 "$n" 2>/dev/null && kill -0 "$s" 2>/dev/null; do sleep 2; done
+    kill -TERM -"$n" -"$s" 2>/dev/null || :
+    wait 2>/dev/null || :
     echo "$(date '+%F %T') tunnel exited; reconnecting in 10 s"
     sleep 10
   done

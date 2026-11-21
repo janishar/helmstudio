@@ -1,9 +1,12 @@
 """A run end to end on fakes: the events it publishes (order, seq, Nats-Msg-Id, contract), the PNG, the ack."""
 
+import asyncio
 import hashlib
 import io
+import itertools
 import json
 import threading
+import time
 
 import pytest
 from conftest import IMPLS, FakeJS, FakeKV, FakeMsg, FakeQwen, command, consumer
@@ -16,6 +19,7 @@ from core.pack import Node
 from core.residency import Residency
 from messaging import schemas
 from messaging.hosts import Host
+from storage import Store
 
 RUN = "3c9a7e21-5d4b-4f6a-8b1c-9e2d7f0a4b35"
 SESSION = "0b5c1f8e-7a2d-4c1e-9a4f-3d6f2b1c9e10"
@@ -515,3 +519,60 @@ async def test_budget_gb_caps_the_run_and_ends_with_it(tmp_path, monkeypatch):
     assert kinds(js) == ["running", "failed"]
     assert js.events()[-1]["data"]["error"].endswith("budget 1.0 GB")
     assert c.residency.cap is None and c.residency.limit == 52
+
+
+class SlowS3:
+    """boto3's client stand-in whose put_object blocks its thread for `seconds` (an upload through a slow link)."""
+
+    def __init__(self, seconds: float) -> None:
+        self.seconds, self.objects = seconds, {}
+
+    def put_object(self, *, Bucket, Key, Body, ContentType):
+        time.sleep(self.seconds)
+        self.objects[Key] = Body
+
+
+async def test_a_slow_upload_keeps_the_hosts_key_fresh_and_reports_saving(monkeypatch):
+    monkeypatch.setattr("messaging.hosts.HEARTBEAT", 0.05)
+    monkeypatch.setattr("consumer.SAVING", 0.05)
+    store = Store.__new__(Store)  # the real Store (its thread), on a slow client
+    store.s3 = SlowS3(0.6)
+    js = FakeJS()
+    c = consumer(js)
+    c.store = store
+    beats = []
+    put = c.host.kv.put
+
+    async def timed(key, value):
+        beats.append(time.monotonic())
+        await put(key, value)
+
+    c.host.kv.put = timed
+    stop = asyncio.Event()
+    beat = asyncio.create_task(c.host.beat(stop))
+    await c.handle(FakeMsg(command(steps=1), js))
+    stop.set()
+    await beat
+    assert len(beats) > 10 and max(b - a for a, b in itertools.pairwise(beats)) < 0.2
+    assert kinds(js) == ["running", "progress", "progress", "output", "succeeded"]
+    check_events(js)
+    assert {k: js.events()[2]["data"][k] for k in ("node", "step", "of", "phase")} == {
+        "node": "output", "step": 1, "of": 1, "phase": "saving"}  # fmt: skip
+    assert list(store.s3.objects) == [PREFIX + "0.png"]
+
+
+async def test_a_slow_hosts_put_does_not_stretch_the_beat(monkeypatch):
+    monkeypatch.setattr("messaging.hosts.HEARTBEAT", 0.1)
+    host, beats = Host(FakeKV()), []
+
+    async def slow(key, value):  # the put's ack waits behind a saturated link
+        beats.append(time.monotonic())
+        await asyncio.sleep(0.08)
+
+    host.kv.put = slow
+    stop = asyncio.Event()
+    beat = asyncio.create_task(host.beat(stop))
+    await asyncio.sleep(0.55)
+    stop.set()
+    await beat
+    assert len(beats) >= 5 and max(b - a for a, b in itertools.pairwise(beats)) < 0.13

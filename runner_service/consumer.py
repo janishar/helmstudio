@@ -33,6 +33,7 @@ ACK_WAIT = 30  # seconds
 HEARTBEAT = 10  # seconds between in_progress() while a run executes
 SHUTDOWN = "the runner shut down during the run"
 STALLED = 70  # exit status after a stall
+SAVING = 2  # seconds an output upload runs before its progress says "saving"
 CONTENT_TYPES = {"wav": "audio/wav"}  # the contract's type (mimetypes says audio/x-wav)
 
 
@@ -160,17 +161,29 @@ class Consumer:
                 index: int, body: bytes, *, ext: str, poster=None, last=None, **meta
             ) -> None:
                 key = f"{data['output_prefix']}{index}.{ext}"
-                # a video: its poster and last frame first, <prefix><n>.{poster,last}.png at the video's size
-                for name, png in (("poster", poster), ("last", last)):
-                    if png is not None:
-                        pkey = f"{data['output_prefix']}{index}.{name}.png"
-                        await self.store.put(pkey, png, "image/png")
-                        meta["video"] = meta["video"] | {name: {"key": pkey, "width": meta["width"],
-                                                                "height": meta["height"], "bytes": len(png)}}  # fmt: skip
-                await self.store.put(
-                    key, body, CONTENT_TYPES.get(ext) or mimetypes.types_map[f".{ext}"]
-                )
-                etag = hashlib.md5(body).hexdigest()  # the S3 ETag of this single-part PUT
+
+                async def upload() -> None:
+                    # a video: its poster and last frame first, <prefix><n>.{poster,last}.png at the video's size
+                    for name, png in (("poster", poster), ("last", last)):
+                        if png is not None:
+                            pkey = f"{data['output_prefix']}{index}.{name}.png"
+                            await self.store.put(pkey, png, "image/png")
+                            meta["video"] = meta["video"] | {name: {"key": pkey, "width": meta["width"],
+                                                                    "height": meta["height"], "bytes": len(png)}}  # fmt: skip
+                    await self.store.put(
+                        key, body, CONTENT_TYPES.get(ext) or mimetypes.types_map[f".{ext}"]
+                    )
+
+                # an upload still going after SAVING s says so: progress step 1 of 1, phase "saving" (a slow link)
+                up = asyncio.create_task(upload())
+                if not (await asyncio.wait({up}, timeout=SAVING))[0]:
+                    try:
+                        await events.progress(ctx.node, 1, 1, "saving")
+                    except Exception:
+                        log.warning("run %s: could not report saving", run_id, exc_info=True)
+                await up
+                # the S3 ETag of this single-part PUT, off the loop (a large body takes a while)
+                etag = await asyncio.to_thread(lambda: hashlib.md5(body).hexdigest())
                 await events.output(
                     index=index, key=key, bytes=len(body), etag=etag, seed=ctx.seed, **meta
                 )

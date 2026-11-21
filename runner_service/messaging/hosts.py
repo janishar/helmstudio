@@ -58,11 +58,14 @@ class Host:
         return value
 
     async def beat(self, stop: asyncio.Event) -> None:
-        """Rewrite the key every HEARTBEAT seconds until `stop` is set."""
+        """Rewrite the key every HEARTBEAT seconds until `stop` is set: a slow put (a saturated link) does not stretch
+        the period, the next one starts HEARTBEAT after the last one started."""
+        loop = asyncio.get_running_loop()
         while not stop.is_set():
+            started = loop.time()
             await self.put()
             with contextlib.suppress(TimeoutError):
-                await asyncio.wait_for(stop.wait(), HEARTBEAT)
+                await asyncio.wait_for(stop.wait(), max(0.0, HEARTBEAT - (loop.time() - started)))
 
     async def offline(self) -> None:
         """Delete the key: the host is offline."""

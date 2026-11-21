@@ -86,9 +86,10 @@ make gpu-host-tunnel VM=<vm> ZONE=<zone>     # background; restarts after a drop
 make gpu-host-tunnel-stop
 ```
 
-It runs `gcloud compute ssh <vm> --zone <zone> -- -N -R 127.0.0.1:4222:127.0.0.1:4322 -R
-127.0.0.1:8333:127.0.0.1:8443` (`NATS_HOST_PORT`, `S3_TLS_HOST_PORT`): no firewall rule, no IAM change, no public
-port. On the GPU host, `ss -ltn | grep -E ':(4222|8333) '` shows both on 127.0.0.1.
+It runs `gcloud compute ssh <vm> --zone <zone> -- -N -R 127.0.0.1:4222:127.0.0.1:4322` and, as a second SSH
+connection, `-R 127.0.0.1:8333:127.0.0.1:8443` (`NATS_HOST_PORT`, `S3_TLS_HOST_PORT`): no firewall rule, no IAM change,
+no public port. Two connections, not one: in a shared one an output upload queues every NATS frame behind it and the
+hosts key's writes time out (the host looks offline mid-upload). On the GPU host, `ss -ltn | grep -E ':(4222|8333) '` shows both on 127.0.0.1.
 
 ## 5. Build and start
 
