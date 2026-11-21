@@ -23,6 +23,13 @@ Notes from the owner while using the app. Not scheduled; each is picked up when 
 - **Video uploads from the browser** (owner: later, 2026-11-22; plan 20 §24.5): upload a video, converted in the
   browser to H.264 MP4 (≤ 1920 px, ≤ 60 fps, ≤ 2 GB, ≤ 10 min) with Mediabunny + WebCodecs, a poster, `video/mp4` in
   `UploadCreate`. Today video only enters through runs, imports and `helm import`.
+- **LTX on NVIDIA from Create** (owner: backlog, 2026-11-22). The NVIDIA path works (VM renders 2026-11-22:
+  distilled-fp8 t2v 91 s, dev-int8 a2v 216 s; docs/mock/checks/m9/ltx/), but the LTX workflows are `env: mlx`, the
+  torch runner publishes none of them, and studio only sends a run to a host with the workflow's env, so Run on
+  NVIDIA cannot run LTX from Create. Fix: a workflow runs on whichever env a host serves its pack in (env picked per
+  host by the family's runtime), with the MLX-only nodes (ltx/lora-stack) spliced out on torch, as the registry's
+  memory plan already does (e4a32e8). Contract change first (Several hosts eligibility, Workflow.env). The VM check
+  used two owner-data copies set to env torch.
 - **LTX Enhance prompt** (owner: "Not now", 2026-11-22). LTX has no enhance step. On NVIDIA the vendored ltx-core
   has a Gemma 4 enhancer for 2.5 (`enhance_t2v` / `enhance_i2v`, gemma4 system prompts), no new download; check the
   DmitryDB int8 text encoder can generate. On the Mac the ltx-2-mlx port enhances only 2.3 (Gemma 3).
