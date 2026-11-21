@@ -562,6 +562,13 @@ prompt on the Dev paths: **yes**, with phase 2. 10. Spatial and temporal upscali
 Deblur). 11 stays a download check: each IC-LoRA repo the build uses (now only the pixel upscaler) must be accepted
 by the host's token.
 
+**Changed by the owner, 2026-11-22, later the same night:** point 4 becomes an **optional add-on**, not part of
+Distilled; the same for the 8.9 GB distilled LoRA. One shared, model.yaml-driven rule for optional add-on parts
+(also used for the Qwen Image and MiniMax H3 Image enhancers): a variant without its add-on is still present; only
+the controls that need the add-on are shown greyed and disabled ("Detailer not downloaded"; per host through Run on,
+"… not downloaded on gcp"), and a run that needs it is refused by the run check before it starts. Without the
+distilled LoRA only the Dev fast-distill paths are greyed; Distilled keeps working.
+
 So the build is phases **1, 2, 3, 4, 4b and 5** (about 49–61 h as estimated above; NVIDIA follows). The board's
 Deblur, Refine details and HDR frames are not built.
 
