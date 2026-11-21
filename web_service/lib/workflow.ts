@@ -87,9 +87,9 @@ export const pretty = (v: string) =>
   /^[a-z]+(_[a-z]+)*$/.test(v) ? v[0].toUpperCase() + v.slice(1).replaceAll("_", " ") : v;
 
 /** A param's enum value as shown: a `language` param's tag as its language ("en" → "English"; "auto" stays a
- * word), else `pretty`. */
-export const optionText = (p: Pick<Param, "name">, v: string) =>
-  p.name === "language" && v !== "auto" ? languageName(v) : pretty(v);
+ * word; named as the node kind's family names it), else `pretty`. */
+export const optionText = (p: Pick<Param, "name">, v: string, kind?: string) =>
+  p.name === "language" && v !== "auto" ? languageName(v, kind?.split("/")[0]) : pretty(v);
 
 /** A tile's label and value as shown. The model node's variant is "Model"; a label ending in its node's title
  * ("Tiled decode" on Decode) becomes that title, its first words leading the value ("Tiled · auto"); other enum
@@ -104,7 +104,7 @@ export function display(f: Field, raw: Raw): { label: string; value: string } {
     return { label: f.nodeTitle, value: `${pretty(label.slice(0, -t.length - 1))} · ${v}` };
   // a whole float keeps one decimal, so it reads as a float ("CFG 3.0", docs/mock/VideoSource.dc.html)
   if (f.param.type === "float" && /^-?\d+$/.test(v)) return { label, value: `${v}.0` };
-  return { label, value: f.param.type === "enum" ? optionText(f.param, v) : v };
+  return { label, value: f.param.type === "enum" ? optionText(f.param, v, f.kind) : v };
 }
 
 type ExprValue = string | number | boolean | null | undefined;

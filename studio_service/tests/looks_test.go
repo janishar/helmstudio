@@ -99,7 +99,7 @@ func TestLooksLibrary(t *testing.T) {
 		"loras: a look has at most 4 LoRAs":          body(map[string]any{"loras": five}),
 		"loras[2]: LoRA ink-wash is listed twice":    body(map[string]any{"loras": []any{lora(inkWash, 1), lora(inkWash, 0.5)}}),
 		"loras[1].strength: must be between 0 and 2": body(map[string]any{"loras": []any{lora(inkWash, 5)}}),
-		"from_take makes looks only": with(body(map[string]any{"kind": "element", "handle": "x", "group": "prop",
+		"from_take makes looks and voices only": with(body(map[string]any{"kind": "element", "handle": "x", "group": "prop",
 			"images": []any{map[string]any{"take_id": one}}}), map[string]any{"from_take": map[string]any{"take_id": one}}),
 	} {
 		if got := e.call(userA, "POST", library, b, 422); got["detail"] != want {

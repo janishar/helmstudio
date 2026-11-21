@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.30.0
+  version: 1.31.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -27,7 +27,7 @@ servers:
 security:
   - {ApiKey: [], BearerJWT: []}
 tags:
-  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media); from 1.23 LoRA strengths 0..2 (looks saved before are clamped when read; contracts/README.md, Looks); from 1.24 the model component a node loads (NodeSchema.component); from 1.25 an inspector section''s help, the presets'' order (StudioLayout.preset_order) and a run''s planned peak before it is sent (POST /v1/studio/runs/plan); from 1.26 an inspector section''s choice tiles (LTX''s Recipe: two-stage or one-stage); from 1.28 a judge''s branch without `then` (Ask me) and a judge test on picked takes (POST /v1/studio/pipelines/{pipeline_id}/judge-tests); from 1.29 a V1 clip''s shot number (TimelineClip.number: "Shot 4"); from 1.30 voices: audio takes made by runs (the `Audio` port, `Workflow.media` audio), the `voice` param, saved voices in the library (designed voices and the packs'' starter voices; contracts/README.md, Voices)'}
+  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media); from 1.23 LoRA strengths 0..2 (looks saved before are clamped when read; contracts/README.md, Looks); from 1.24 the model component a node loads (NodeSchema.component); from 1.25 an inspector section''s help, the presets'' order (StudioLayout.preset_order) and a run''s planned peak before it is sent (POST /v1/studio/runs/plan); from 1.26 an inspector section''s choice tiles (LTX''s Recipe: two-stage or one-stage); from 1.28 a judge''s branch without `then` (Ask me) and a judge test on picked takes (POST /v1/studio/pipelines/{pipeline_id}/judge-tests); from 1.29 a V1 clip''s shot number (TimelineClip.number: "Shot 4"); from 1.30 voices: audio takes made by runs (the `Audio` port, `Workflow.media` audio), the `voice` param, saved voices in the library (designed voices and the packs'' starter voices; contracts/README.md, Voices); from 1.31 cloned voices (a 3–30 s clip of an audio take or a video''s sound, with consent), designed voices that keep a clip, Save as voice (`from_take` with `kind: voice`) and the zonos3 family (contracts/README.md, Voices: cloned voices)'}
   - {name: files, description: signed file downloads and uploads}
   - name: auth
     description: 'auth_service: users, sessions (JWT access + rotating refresh tokens), roles, client API keys'
@@ -442,13 +442,13 @@ paths:
     post:
       tags: [studio]
       operationId: studioCreateLibraryItem
-      summary: Make an element from 1 to 4 of the caller's gallery images, or a look (also "Save as look" on a take)
+      summary: Make an element from 1 to 4 of the caller's gallery images, a look (also "Save as look" on a take) or a voice (also "Save as voice")
       description: |
         Looks (`kind: look`, contracts/README.md, Looks: own looks): `group` film|camera|colour|lighting, no handle,
         0-4 images (checked as an element's), 0-4 `loras`, at least one of text, an image, a LoRA. 422 `group <g> is
         not a look group` (or `… is not an element group`), `a look has no handle`, `a look needs text, an image or a
         LoRA`, `loras: a look has at most 4 LoRAs`, `loras[2]: LoRA <name> is listed twice`, `loras: an element has
-        no LoRAs`, `from_take makes looks only`, `from_take: take <id> was not made by a run` (an upload); 404
+        no LoRAs`, `from_take makes looks and voices only`, `from_take: take <id> was not made by a run` (an upload); 404
         `loras[2].lora: LoRA <id> not found` (unknown, another user's, deleted, pending, rejected, or shared and
         listed by no live host), `from_take: take <id> not found` (unknown, another user's, deleted). `from_take`
         fills `text` (option `prompt`) and `loras` (option `loras`) when the body leaves them out, then every rule
@@ -471,7 +471,24 @@ paths:
         `voice: a designed voice needs voice.design`, `voice.design must be 1-2000 characters`, `voice.language: <tag>
         is not a BCP 47 language tag`, `voice.style must be at most 500 characters`, `voice.design must not contain
         control characters other than newlines and tabs`, `voice: only a voice has voice fields` (an element or look
-        with `voice`); `from_take makes looks only` holds for voices too.
+        with `voice`).
+
+        From 1.31 (contracts/README.md, Voices: cloned voices) `group: cloned` makes a voice from a clip: `voice {clip:
+        MediaRef, consent: true, language?, style?}`; a designed voice may carry a clip too (then it also needs
+        `consent`). The clip is checked like a `media` param with `accepts: [audio]`, `trim`, `min_s` 3, `max_s` 30 (in /
+        out snapped, missing in = 0, out = min(duration, 30)) and stored as the take id with the snapped in / out; the
+        voice's `from_take_id` is that take. "Save as voice" = `from_take {take_id, in?, out?}` with `kind: voice`: the
+        take (an audio take or a video with sound, an upload included) is the clip; with `group: designed` and no
+        `voice.design` the design, language and style are copied from the first designed voice in the take's
+        `made_with.voices`. 404 `voice.clip: take <id> not found` / `from_take: take <id> not found` (unknown, another
+        user's, deleted, pending). 422 `cloned voices are not available yet` is gone; new: `voice: a cloned voice needs
+        voice.clip`, `voice.design: a cloned voice has no design`, `voice.clip: give the clip or from_take, not both`,
+        `voice.consent: tick "I have the right to use this voice"` (a clip without `consent: true`), `from_take: take
+        <id> was not made with a designed voice` (group designed, no `voice.design`, none in `made_with.voices`), `from_take:
+        voice <name> was deleted` (that designed voice is gone), `from_take: a look takes the whole take (no in or out)`,
+        and the media texts under `voice.clip: ` or `from_take: ` (`take <id> has no sound`, `take <id> lasts <d> s;
+        this input takes at least 3.0 s`, `in must be before out`, `out <x> is past the take's end <d>`, `the part lasts
+        <d> s; this input takes at most 30.0 s`, `the part lasts <d> s; this input takes at least 3.0 s`).
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/LibraryItemCreate'}}}
@@ -500,7 +517,8 @@ paths:
       description: |
         Optimistic concurrency like workflows: `version` is the one the edit started from; stale = 409 `element changed
         since you opened it (now version <n>)` (a look: `look changed since you opened it (now version <n>)`), nothing
-        changes. A look is checked like POST with `kind: look` (no `from_take`; `from_take_id` stays). Checked like POST (the handle may stay its own). On
+        changes. A look is checked like POST with `kind: look` (no `from_take`; `from_take_id` stays). From 1.31 a voice's
+        clip may be changed (checked like POST; `from_take_id` follows it; a clip needs `consent` again). Checked like POST (the handle may stay its own). On
         success `version` + 1, `updated_at` now. Takes made before keep their resolved graph; their reuse answers this
         element `changed`. `kind` never changes. From 1.30 a designed voice is checked like POST with `kind: voice` (its
         `voice` required; stale = 409 `voice changed since you opened it (now version <n>)`); takes made before keep the
@@ -723,7 +741,9 @@ paths:
         of dev`. From 1.30 voice values (`VoiceRef`) are resolved as the caller (contracts/README.md, Voices): 422
         `speak.voice: a voice is required`, `speak.voice: voice <id> not found` (unknown, another user's, deleted, not a
         voice, or a starter voice no live host publishes), `speak.voice: this workflow cannot use a designed voice` (the
-        voice fit's reason for that param), `speak.voice: voice <name> is for <family>`; in a workflow whose media is
+        voice fit's reason for that param), `speak.voice: voice <name> is for <family>`; from 1.31 a voice with a clip
+        sends its clip, resolved like a media value even after its take was deleted (`speak.voice: the clip of voice
+        <name> is gone` when its object is missing); in a workflow whose media is
         audio a mention in a prompt param is `prompt.text: mentions are not read aloud; use a dialogue script`. When no host is eligible (none live with the env and the workflow),
         the run is created already `failed` with error `no live host for env <env>` (still 202) and nothing is sent.
         From 1.18 a host is eligible only with the run's model variant present at its precision and room for its
@@ -967,7 +987,9 @@ paths:
       summary: Delete a take (soft)
       description: |
         The take leaves the gallery at once (GET is 404, it is in no list, its run's `outputs` drop it, takes made from
-        it leave it out of `parents`); a sweep removes the object later. Deleting again is 404. A run that already
+        it leave it out of `parents`); a sweep removes the object later, except (from 1.31) while one of the owner's
+        voices keeps it as its clip: the voice still plays and runs, and deleting that voice frees it (contracts/README.md,
+        Voices: cloned voices). Deleting again is 404. A run that already
         references it and has not read it yet may fail (`input image <take_id> is gone`; a video or audio take: `input
         take <take_id> is gone`). Never refused for an
         element that uses it: the image drops out of that element (contracts/README.md, Elements).
@@ -2803,7 +2825,7 @@ components:
         field) the most seconds the items read together; `not_with` (rows) names optional inputs of the node: while one
         is wired the rows stay empty (mentions add none, "Use in…" skips them).
         From 1.30 (contracts/README.md, Voices): `voice`: one saved voice (`VoiceRef`, default null; a run needs one) of
-        the sources in `accepts` (`preset`: a starter voice of the node's family; `clip`: a cloned voice, from 1.31;
+        the sources in `accepts` (`preset`: a starter voice of the node's family; `clip`: a voice with a clip, cloned or designed, from 1.31;
         `design`: a voice described in words); the UI draws the voice picker. It takes no wire and is never a rows item
         field.
       required: [name, type, default]
@@ -4174,7 +4196,7 @@ components:
     LibraryGroup:
       type: string
       enum: [character, location, prop, film, camera, colour, lighting, preset, cloned, designed]
-      description: 'an element''s group (character, location, prop), a look''s (film, camera, colour, lighting) or, from 1.30, a voice''s (preset: a pack''s starter voice; cloned: from a clip, from 1.31; designed: from a description)'
+      description: 'an element''s group (character, location, prop), a look''s (film, camera, colour, lighting) or, from 1.30, a voice''s (preset: a pack''s starter voice; cloned: from a clip, from 1.31; designed: from a description, from 1.31 maybe with a clip)'
     LibrarySource:
       type: string
       enum: [mine, starter]
@@ -4186,12 +4208,12 @@ components:
     VoiceSource:
       type: string
       enum: [preset, cloned, designed]
-      description: 'from 1.30: where a saved voice comes from (= its group): preset (a pack''s speaker, a starter voice), cloned (a clip; from 1.31), designed (a description in words)'
+      description: 'from 1.30: where a saved voice comes from (= its group): preset (a pack''s speaker, a starter voice), cloned (a clip of a take; from 1.31), designed (a description in words; from 1.31 it may also keep a clip)'
     VoiceInfo:
       type: object
       required: [source]
       additionalProperties: false
-      description: 'from 1.30, a voice''s own fields (contracts/README.md, Voices). preset: `family`, `speaker`, `language` (and `style`) from the pack; designed: `design`, optional `language` and `style` from the caller'
+      description: 'from 1.30, a voice''s own fields (contracts/README.md, Voices). preset: `family`, `speaker`, `language` (and `style`) from the pack; designed: `design`, optional `language` and `style` from the caller; from 1.31 cloned: `clip` and `consent`, optional `language` and `style`; a designed voice may also have `clip` and `consent`'
       properties:
         source: {$ref: '#/components/schemas/VoiceSource'}
         family: {type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,63}$', description: 'preset only: the family whose voice params take it'}
@@ -4199,19 +4221,40 @@ components:
         design: {type: string, minLength: 1, maxLength: 2000, description: 'designed only: the voice in words ("male, 17, tenor, nervous")'}
         language: {type: string, pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8}){0,3}$', description: 'a BCP 47 tag (en, en-US, zh, pt-BR); absent = none (the node''s own language param decides)'}
         style: {type: string, minLength: 1, maxLength: 500, description: 'how it speaks, in words; absent = none'}
+        clip: {$ref: '#/components/schemas/VoiceClip', description: 'from 1.31, cloned (required) or designed (optional): the part of a take it clones'}
+        consent: {const: true, description: 'from 1.31, with `clip` (required then): the owner ticked "I have the right to use this voice"'}
       allOf:
         - if: {properties: {source: {const: preset}}, required: [source]}
-          then: {required: [family, speaker, language], not: {required: [design]}}
+          then: {required: [family, speaker, language], not: {anyOf: [{required: [design]}, {required: [clip]}, {required: [consent]}]}}
           else: {not: {anyOf: [{required: [family]}, {required: [speaker]}]}}
         - if: {properties: {source: {const: designed}}, required: [source]}
           then: {required: [design]}
+        - if: {properties: {source: {const: cloned}}, required: [source]}
+          then: {required: [clip], not: {required: [design]}}
+        - if: {required: [clip]}
+          then: {required: [consent]}
+          else: {not: {required: [consent]}}
+    VoiceClip:
+      type: object
+      required: [take_id, in, out]
+      additionalProperties: false
+      description: |
+        From 1.31: a voice's clip as stored (contracts/README.md, Voices: cloned voices): one of the owner's takes (an
+        audio take, or a video take's sound) and the part in..out, snapped and 3-30 s long. The take is kept while the
+        voice exists: deleted from the gallery it is hidden everywhere else, but its object is not swept, so the voice
+        keeps playing and running.
+      properties:
+        take_id: {type: string, format: uuid}
+        in: {type: number, minimum: 0, maximum: 86400}
+        out: {type: number, exclusiveMinimum: 0, maximum: 86400}
     VoiceDesign:
       type: object
-      required: [design]
       additionalProperties: false
-      description: 'from 1.30: a designed voice''s fields as the caller writes them (POST and PUT of a `kind: voice`, group designed); trimmed'
+      description: 'from 1.30: a voice''s fields as the caller writes them (POST and PUT of a `kind: voice`); trimmed. Designed: `design` (required unless Save as voice copies it), from 1.31 optional `clip` and `consent`; cloned (1.31): `clip` (or `from_take`) and `consent`, no `design`'
       properties:
-        design: {type: string, maxLength: 4000, description: 'trimmed; must then be 1-2000 characters'}
+        design: {type: string, maxLength: 4000, description: 'trimmed; must then be 1-2000 characters; a designed voice only'}
+        clip: {$ref: '#/components/schemas/MediaRef', description: 'from 1.31: the part of a take to clone (checked as a media param with trim, accepts audio, 3-30 s); not with `from_take`'}
+        consent: {type: boolean, description: 'from 1.31, required true with a clip: the owner has the right to use this voice'}
         language: {type: [string, 'null'], maxLength: 35, description: 'a BCP 47 tag; null or absent = none'}
         style: {type: string, maxLength: 1000, description: 'trimmed; must then be at most 500 characters; "" or absent = none'}
     LibraryImage:
@@ -4248,7 +4291,7 @@ components:
         handle: {type: [string, 'null'], pattern: '^[a-z](?:[a-z0-9_-]{0,38}[a-z0-9])?$', description: 'what `@` mentions; always set for an element, always null for a look'}
         text: {type: string, maxLength: 2000, description: 'an element: appended where it is mentioned; a look: appended to the prompt when chosen; empty = none'}
         images: {type: array, maxItems: 4, items: {$ref: '#/components/schemas/LibraryImage'}, description: 'an element 1-4 when saved, a look 0-4; a starter look none (its picture is only `thumb_url`)'}
-        thumb_url: {oneOf: [{$ref: '#/components/schemas/SignedUrl'}, {type: 'null'}], description: 'the first image''s thumb_url; else (a look) the thumb of the take it was saved from (`from_take_id`), or a starter look''s pack image; from 1.30 a voice: a starter voice''s preview clip (a WAV: the picker draws a sound tile); else null'}
+        thumb_url: {oneOf: [{$ref: '#/components/schemas/SignedUrl'}, {type: 'null'}], description: 'the first image''s thumb_url; else (a look) the thumb of the take it was saved from (`from_take_id`), or a starter look''s pack image; from 1.30 a voice: a starter voice''s preview clip (a WAV: the picker draws a sound tile); from 1.31 a voice with a clip: its take''s file (also after the take was deleted; the picker plays `voice.clip` in..out); else null'}
         version: {type: integer, minimum: 1, description: '1 on create, +1 on every PUT; send it back in LibraryItemUpdate. A starter look or voice: the pack''s `version`'}
         created_at: {type: string, format: date-time, description: 'a starter look: the oldest `published_at` of the live hosts publishing it'}
         updated_at: {type: string, format: date-time, description: 'a starter look: = created_at'}
@@ -4256,7 +4299,7 @@ components:
         family: {type: [string, 'null'], pattern: '^[a-z0-9][a-z0-9_-]{0,63}$', description: 'a starter look: its pack''s family (where it comes from; whether it fits is `fits`); own items: null (any family)'}
         loras: {type: array, maxItems: 4, items: {$ref: '#/components/schemas/LookLora'}, description: 'a look''s LoRAs in order; always empty for an element'}
         needs: {type: array, uniqueItems: true, maxItems: 3, items: {$ref: '#/components/schemas/LibraryNeed'}, description: 'computed, in the order text, images, lora: non-empty text, at least one image, at least one LoRA'}
-        from_take_id: {type: [string, 'null'], format: uuid, description: 'a look made with "Save as look": the take (null once deleted, and for every other item)'}
+        from_take_id: {type: [string, 'null'], format: uuid, description: 'a look made with "Save as look": the take; from 1.31 a voice with a clip: the clip''s take (null once that take is deleted, though `voice.clip` keeps it; null for every other item)'}
         fits: {type: boolean, description: 'only with `GET /library?workflow=`: whether the item can be applied to that workflow now (contracts/README.md, Looks: fit)'}
         reason: {type: [string, 'null'], description: 'with `fits`: why not (`this workflow has no LoRA stack`, a voice: `voice Ryan is for qwen3-tts`); null when it fits'}
         voice: {$ref: '#/components/schemas/VoiceInfo', description: 'from 1.30, kind voice only (required then, absent otherwise)'}
@@ -4289,16 +4332,18 @@ components:
       type: object
       required: [take_id]
       additionalProperties: false
-      description: '"Save as look": fill the fields the body leaves out from a take the caller made with a run (contracts/README.md, Looks: Save as look)'
+      description: '"Save as look": fill the fields the body leaves out from a take the caller made with a run (contracts/README.md, Looks: Save as look); from 1.31 "Save as voice" (`kind: voice`): the take, an audio take or a video with sound, is the voice''s clip (contracts/README.md, Voices: cloned voices)'
       properties:
         take_id: {type: string, format: uuid}
+        in: {type: number, minimum: 0, maximum: 86400, description: 'from 1.31, a voice only: the clip''s start (snapped; default 0)'}
+        out: {type: number, exclusiveMinimum: 0, maximum: 86400, description: 'from 1.31, a voice only: the clip''s end (snapped; default min(duration, 30))'}
         prompt: {type: boolean, default: true, description: 'when `text` is absent: copy the take''s `made_with.prompt` as typed with `@@` turned into `@` (trimmed, cut to 2000 code points)'}
         loras: {type: boolean, default: true, description: 'when `loras` is absent: copy the take''s `made_with.loras` the caller can use now, `{lora, strength}`, first per id, at most 4'}
     LibraryItemCreate:
       type: object
       required: [kind, group, name]
       additionalProperties: false
-      description: 'an element needs `handle` and 1-4 `images`; a look has no `handle`, 0-4 images, 0-4 `loras`, and needs text, an image or a LoRA; from 1.30 a voice (group designed only) has no handle, text, images or LoRAs and needs `voice`'
+      description: 'an element needs `handle` and 1-4 `images`; a look has no `handle`, 0-4 images, 0-4 `loras`, and needs text, an image or a LoRA; from 1.30 a voice (group designed only) has no handle, text, images or LoRAs and needs `voice`; from 1.31 also group cloned, and `from_take` makes a voice of a take''s part (Save as voice)'
       properties:
         kind: {$ref: '#/components/schemas/LibraryKind'}
         group: {$ref: '#/components/schemas/LibraryGroup'}
@@ -4308,7 +4353,7 @@ components:
         images: {type: array, maxItems: 10, items: {$ref: '#/components/schemas/LibraryImageRef'}, description: 'takes of the caller, images, distinct, in order (the first is the thumbnail): an element 1-4, a look 0-4; missing = []'}
         loras: {type: array, maxItems: 8, items: {$ref: '#/components/schemas/LookLoraRef'}, description: 'a look only: 0-4 LoRAs the caller can use now, distinct; missing = [] (with from_take: copied)'}
         from_take: {$ref: '#/components/schemas/LibraryFromTake'}
-        voice: {$ref: '#/components/schemas/VoiceDesign', description: 'from 1.30, a voice only (required then): its description, language and style'}
+        voice: {$ref: '#/components/schemas/VoiceDesign', description: 'from 1.30, a voice only (required then): its description, language and style; from 1.31 its clip and consent'}
       allOf:
         - if: {properties: {kind: {const: element}}, required: [kind]}
           then: {required: [handle, images], properties: {group: {enum: [character, location, prop]}, handle: {type: string}, loras: {maxItems: 0}}, not: {required: [from_take]}}
@@ -4326,7 +4371,7 @@ components:
         text: {type: string, maxLength: 4000}
         images: {type: array, maxItems: 10, items: {$ref: '#/components/schemas/LibraryImageRef'}}
         loras: {type: array, maxItems: 8, items: {$ref: '#/components/schemas/LookLoraRef'}, description: 'a look only; missing = []'}
-        voice: {$ref: '#/components/schemas/VoiceDesign', description: 'from 1.30, a designed voice only (required then)'}
+        voice: {$ref: '#/components/schemas/VoiceDesign', description: 'from 1.30, a designed voice only (required then); from 1.31 any own voice (a cloned one: its clip and consent)'}
         version: {type: integer, minimum: 1, description: 'the version the edit started from (409 when stale)'}
     UploadCreate:
       type: object

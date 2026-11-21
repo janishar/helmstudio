@@ -1,10 +1,13 @@
-"""Voices (API 1.30) on the fake runner's `echo-voice-over` (contracts/README.md, Voices: the echo family): an audio
+"""Voices (API 1.30, 1.31) on the fake runner's `echo-voice-over` (contracts/README.md, Voices: the echo family): an audio
 take from a starter voice (a 24 kHz PCM 16-bit mono WAV lasting characters / 15 s), the voice param's 422s, designed
 voice CRUD and every validation text, starter voices read-only, the voice fit in `GET /library?workflow=`, the
-spoken prompt (mentions refused, literal `@` as typed, looks never fit), `?media=audio`, isolation. Skipped when the
-fake runner has no `echo-voice-over` (before API 1.30).
+spoken prompt (mentions refused, literal `@` as typed, looks never fit), `?media=audio`, isolation; from 1.31 cloned
+voices (a 3-30 s clip of an echo audio take, consent, every clip text), Save as voice (an audio take, a take a designed
+voice made), runs with a clip (lineage, the take deleted), the fit and isolation. Skipped when the fake runner has no
+`echo-voice-over` (before API 1.30); the runs with a clip skip while echo/speak does not take `clip`.
 
-Not covered: cloned voices (1.31: only refused here), the message schemas (cmd.run.execute's `voice`,
+Not covered: a video's sound as a clip (the fake runner makes no video with sound), the sweep keeping a clip's
+object (studio_service's Go tests: an hour's grace), the message schemas (cmd.run.execute's `voice`,
 evt.run.output's `audio`: not visible over HTTP, check.py validates their fixtures), a preset of another family
 (the fake runner publishes echo voices only; the test runs when some host publishes one)."""
 
@@ -281,7 +284,7 @@ def test_voice_rules(uv, anon):
     for body, want in (
         (base | {"group": "film"}, "group film is not a voice group"),
         (base | {"group": "preset"}, "preset voices come from packs"),
-        (base | {"group": "cloned"}, "cloned voices are not available yet"),
+        (base | {"group": "cloned"}, "voice.design: a cloned voice has no design"),
         (base | {"handle": "rule"}, "a voice has no handle"),
         (base | {"text": "hello"}, "a voice has no text; describe it in voice.design"),
         (base | {"images": [{"take_id": pic}]}, "images: a voice has no images"),
@@ -295,7 +298,7 @@ def test_voice_rules(uv, anon):
         (base | {"voice": d | {"language": "english"}},
          "voice.language: english is not a BCP 47 language tag"),
         (base | {"voice": d | {"style": "x" * 501}}, "voice.style must be at most 500 characters"),
-        (base | {"from_take": {"take_id": pic}}, "from_take makes looks only"),
+        (base | {"from_take": {"take_id": pic}}, f"from_take: take {pic} has no sound"),
     ):  # fmt: skip
         assert detail(uv.post(LIB, json=body), 422) == want, body
     for name in ("", "   ", "x" * 81):
@@ -374,6 +377,204 @@ def test_isolation(uv, api_b):
     assert ok(uv.get(path)) == x  # untouched
     assert x["id"] not in by_id(api_b, kind="voice")
     b_sid = new_session(api_b, "Contract B voices")["id"]
+    assert refused(api_b, b_sid, {"prompt.text": TEXT, "speak.voice": voice(x["id"])}) == (
+        f"speak.voice: voice {x['id']} not found"
+    )
+
+
+# ---------------------------------------------------------------- cloned voices (API 1.31)
+
+SECONDS = "One two three four five six seven, eight nine ten, eleven twelve, thirteen."  # 75: 5 s
+CONSENT = 'voice.consent: tick "I have the right to use this voice"'
+
+
+def cloned(client, take_id: str, name: str = "Jon", status: int = 201, **clip):
+    body = {"kind": "voice", "group": "cloned", "name": name}
+    body["voice"] = {"clip": {"take_id": take_id} | clip, "consent": True}
+    r = client.post(LIB, json=body)
+    return ok(r, status) if status < 300 else detail(r, status)
+
+
+def clones(voice_over: dict) -> bool:
+    return (
+        "clip"
+        in next(
+            p for p in voice_over["node_schemas"]["echo/speak"]["params"] if p["name"] == "voice"
+        )["accepts"]
+    )
+
+
+@pytest.fixture(scope="module")
+def five(uv, sid) -> dict:
+    """A 5 s audio take of user V."""
+    take = speak(uv, sid, ADA, SECONDS)
+    assert math.isclose(take["audio"]["duration_s"], 5.0, abs_tol=1e-3)
+    return take
+
+
+def test_a_cloned_voice_from_an_audio_take(uv, five):
+    x = cloned(uv, five["id"], **{"in": 1.25})
+    schemas.check_value(x, "#/components/schemas/LibraryItem", "a cloned voice")
+    assert x["voice"] == {
+        "source": "cloned",
+        "clip": {"take_id": five["id"], "in": 1.25, "out": 5.0},
+        "consent": True,
+    }
+    assert (x["group"], x["from_take_id"], x["handle"], x["text"], x["images"]) == (
+        "cloned",
+        five["id"],
+        None,
+        "",
+        [],
+    )
+    assert urlsplit(x["thumb_url"]).path == urlsplit(five["url"]).path  # the take's file
+    assert ok(uv.get(f"{LIB}/{x['id']}")) == x
+    whole = cloned(uv, five["id"], "Whole")
+    assert whole["voice"]["clip"] == {
+        "take_id": five["id"],
+        "in": 0,
+        "out": 5.0,
+    }  # in 0, out min(d, 30)
+
+
+def test_clip_rules(uv, anon, sid, five):
+    tid, pic = five["id"], upload(uv, anon, png_bytes(5, 5))["id"]
+    short = speak(uv, sid, ADA, TEXT)  # 1.4 s
+    base = {"kind": "voice", "group": "cloned", "name": "Rule"}
+    clip = {"clip": {"take_id": tid}, "consent": True}
+    for body, want in (
+        (base | {"voice": {"consent": True}}, "voice: a cloned voice needs voice.clip"),
+        (base | {"voice": clip | {"design": "deep"}}, "voice.design: a cloned voice has no design"),
+        (base | {"voice": clip, "from_take": {"take_id": tid}}, "voice.clip: give the clip or from_take, not both"),
+        (base | {"voice": {"clip": {"take_id": tid}}}, CONSENT),
+        (base | {"voice": {"clip": {"take_id": tid}, "consent": False}}, CONSENT),
+        (base | {"voice": clip | {"clip": {"take_id": tid, "in": 3, "out": 2}}}, "voice.clip: in must be before out"),
+        (base | {"voice": clip | {"clip": {"take_id": tid, "out": 6}}}, "voice.clip: out 6.0 is past the take's end 5.0"),
+        (base | {"voice": clip | {"clip": {"take_id": tid, "in": 1, "out": 3.5}}},
+         "voice.clip: the part lasts 2.5 s; this input takes at least 3.0 s"),
+        (base | {"voice": clip | {"clip": {"take_id": short["id"]}}},
+         f"voice.clip: take {short['id']} lasts 1.4 s; this input takes at least 3.0 s"),
+        (base | {"voice": clip | {"clip": {"take_id": pic}}}, f"voice.clip: take {pic} has no sound"),
+        (base | {"voice": clip | {"language": "english"}}, "voice.language: english is not a BCP 47 language tag"),
+        (base | {"voice": clip, "name": " "}, "name must be 1-80 characters"),
+    ):  # fmt: skip
+        assert detail(uv.post(LIB, json=body), 422) == want, body
+    for take_id in (NO_SUCH_ID,):
+        assert cloned(uv, take_id, status=404) == f"voice.clip: take {take_id} not found"
+    assert cloned(uv, tid, **{"in": 1, "out": 4})["voice"]["clip"] == {
+        "take_id": tid,
+        "in": 1,
+        "out": 4,
+    }  # 3 s
+
+
+def test_a_part_over_30_s(uv, sid):
+    long = speak(uv, sid, ADA, "x" * 465)  # 31 s
+    assert cloned(uv, long["id"], status=422, **{"in": 0, "out": 31}) == (
+        "voice.clip: the part lasts 31.0 s; this input takes at most 30.0 s"
+    )
+    assert cloned(uv, long["id"], "Capped")["voice"]["clip"] == {
+        "take_id": long["id"],
+        "in": 0,
+        "out": 30,
+    }
+
+
+def test_save_as_voice(uv, sid, five):
+    save = {"kind": "voice", "group": "cloned", "name": "Saved", "voice": {"consent": True}}
+    x = ok(
+        uv.post(LIB, json=save | {"from_take": {"take_id": five["id"], "in": 0.5, "out": 4.5}}), 201
+    )
+    assert x["voice"] == {
+        "source": "cloned",
+        "clip": {"take_id": five["id"], "in": 0.5, "out": 4.5},
+        "consent": True,
+    }
+    assert x["from_take_id"] == five["id"]
+    assert (
+        detail(
+            uv.post(
+                LIB,
+                json={k: v for k, v in save.items() if k != "voice"}
+                | {"from_take": {"take_id": five["id"]}},
+            ),
+            422,
+        )
+        == CONSENT
+    )
+    assert detail(uv.post(LIB, json=save | {"from_take": {"take_id": NO_SUCH_ID}}), 404) == (
+        f"from_take: take {NO_SUCH_ID} not found"
+    )
+    look_body = {
+        "kind": "look",
+        "group": "film",
+        "name": "L",
+        "from_take": {"take_id": five["id"], "in": 1},
+    }
+    assert (
+        detail(uv.post(LIB, json=look_body), 422)
+        == "from_take: a look takes the whole take (no in or out)"
+    )
+    # a take a designed voice made: its design, language and style copied, the take its clip
+    teen = designed(uv, "Teen", design="male, 17", language="en", style="shy")
+    made = speak(uv, sid, teen["id"], SECONDS)
+    body = save | {"group": "designed", "name": "Teen clip", "from_take": {"take_id": made["id"]}}
+    y = ok(uv.post(LIB, json=body), 201)
+    assert y["voice"] == {"source": "designed", "design": "male, 17", "language": "en", "style": "shy",
+                          "clip": {"take_id": made["id"], "in": 0, "out": 5.0}, "consent": True}  # fmt: skip
+    own = ok(uv.post(LIB, json=body | {"voice": {"design": "female", "consent": True}}), 201)
+    assert own["voice"]["design"] == "female" and "language" not in own["voice"]
+    preset = body | {"from_take": {"take_id": five["id"]}}
+    assert detail(uv.post(LIB, json=preset), 422) == (
+        f"from_take: take {five['id']} was not made with a designed voice"
+    )
+    assert ok(uv.delete(f"{LIB}/{teen['id']}"), 204) is None
+    assert detail(uv.post(LIB, json=body), 422) == "from_take: voice Teen was deleted"
+
+
+def test_a_cloned_voice_fits_and_is_refused_where_it_cannot_clone(uv, five, voice_over):
+    x = cloned(uv, five["id"], "Fits")
+    got = by_id(uv, kind="voice", workflow=WF)[x["id"]]
+    want = (True, None) if clones(voice_over) else (False, "this workflow cannot clone a voice")
+    assert (got["fits"], got["reason"]) == want
+    image = by_id(uv, kind="voice", workflow="echo")[x["id"]]
+    assert (image["fits"], image["reason"]) == (False, "this workflow takes no voice")
+
+
+def test_a_run_with_a_cloned_voice(uv, sid, voice_over):
+    if not clones(voice_over):
+        pytest.skip("echo/speak does not take a clip yet")
+    clip = speak(uv, sid, ADA, SECONDS)
+    x = cloned(uv, clip["id"], "Runs", **{"in": 1})
+    take = speak(uv, sid, x["id"])
+    assert take["kind"] == "audio" and clip["id"] in take["parents"]
+    assert take["made_with"]["voices"] == [
+        {"id": x["id"], "name": "Runs", "version": 1, "source": "cloned"}
+    ]
+    # the clip's take deleted: hidden, but the voice still plays and runs
+    assert ok(uv.delete(f"{STUDIO}/takes/{clip['id']}"), 204) is None
+    again = ok(uv.get(f"{LIB}/{x['id']}"))
+    assert (
+        again["from_take_id"] is None
+        and again["voice"]["clip"]["take_id"] == clip["id"]
+        and again["thumb_url"]
+    )
+    assert speak(uv, sid, x["id"])["kind"] == "audio"
+    assert cloned(uv, clip["id"], status=404) == f"voice.clip: take {clip['id']} not found"
+    # a designed voice with a clip (a 5 s take: the run above is too short for one) speaks by its design on echo/speak
+    keep = designed(uv, "Both", clip={"take_id": speak(uv, sid, ADA, SECONDS)["id"]}, consent=True)
+    assert speak(uv, sid, keep["id"])["made_with"]["voices"][0]["source"] == "designed"
+
+
+def test_cloned_voice_isolation(uv, api_b, five):
+    x = cloned(uv, five["id"], "Mine")
+    assert cloned(api_b, five["id"], status=404) == f"voice.clip: take {five['id']} not found"
+    save = {"kind": "voice", "group": "cloned", "name": "B", "voice": {"consent": True}}
+    assert detail(api_b.post(LIB, json=save | {"from_take": {"take_id": five["id"]}}), 404) == (
+        f"from_take: take {five['id']} not found"
+    )
+    assert api_b.get(f"{LIB}/{x['id']}").status_code == 404
+    b_sid = new_session(api_b, "Contract B clones")["id"]
     assert refused(api_b, b_sid, {"prompt.text": TEXT, "speak.voice": voice(x["id"])}) == (
         f"speak.voice: voice {x['id']} not found"
     )

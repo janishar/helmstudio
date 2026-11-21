@@ -1,0 +1,26 @@
+# Derived from Slovak money.py; Copyright 2026 Zyphra, Inc., Apache-2.0.
+€|EUR|eur|euro	euro	eurá	eur	eura	n	cent	centy	centov	m	c|ct|cent|centy|centov
+$|USD|US$	dolár	doláre	dolárov	dolára	m	cent	centy	centov	m	c|ct|cent|centy|centov
+£|GBP	libra	libry	libier	libry	f	penny	pence	pencí	f	p|pence|penny
+¥|JPY	jen	jeny	jenov	jenu	m	cent	centy	centov	m	c|ct
+₽|RUB	ruský rubeľ	ruské ruble	ruských rubľov	ruského rubľa	m	kopejka	kopejky	kopejok	f	коп.|коп|kop.|kop
+руб.|руб|rub.|rub	rubeľ	ruble	rubľov	rubľa	m	kopejka	kopejky	kopejok	f	коп.|коп|kop.|kop
+CZK|Kč	česká koruna	české koruny	českých korún	českej koruny	f	halier	haliere	halierov	m	h|hal.|hal
+PLN|zł	poľský zlotý	poľské zloté	poľských zlotých	poľského zlotého	m	cent	centy	centov	m	gr|gr.
+CHF	švajčiarsky frank	švajčiarske franky	švajčiarskych frankov	švajčiarskeho franku	m	cent	centy	centov	m	c|ct
+CAD|CA$	kanadský dolár	kanadské doláre	kanadských dolárov	kanadského dolára	m	cent	centy	centov	m	c|ct
+AUD|A$	austrálsky dolár	austrálske doláre	austrálskych dolárov	austrálskeho dolára	m	cent	centy	centov	m	c|ct
+BRL|R$	brazílsky real	brazílske realy	brazílskych realov	brazílskeho realu	m	cent	centy	centov	m	c|ct
+MXN|MX$	mexické peso	mexické pesos	mexických pesos	mexického pesa	m	cent	centy	centov	m	c|ct
+KRW|₩	juhokórejský won	juhokórejské wony	juhokórejských wonov	juhokórejského wonu	m	cent	centy	centov	m	c|ct
+ILS|₪	izraelský šekel	izraelské šekely	izraelských šekelov	izraelského šekela	m	cent	centy	centov	m	c|ct
+UAH|₴	ukrajinská hrivna	ukrajinské hrivny	ukrajinských hrivien	ukrajinskej hrivny	f	cent	centy	centov	m	коп.|коп
+VND|₫	vietnamský dong	vietnamské dongy	vietnamských dongov	vietnamského dongu	m	cent	centy	centov	m	c|ct
+BDT|৳	bangladéšska taka	bangladéšske taky	bangladéšskych ták	bangladéšskej taky	f	cent	centy	centov	m	p|poisha
+NGN|₦	nigérijská naira	nigérijské nairy	nigérijských nair	nigérijskej nairy	f	kobo	kobo	kobo	n	k
+PHP|₱	filipínske peso	filipínske pesos	filipínskych pesos	filipínskeho pesa	m	cent	centy	centov	m	c|ct
+THB|฿	thajský baht	thajské bahty	thajských bahtov	thajského bahtu	m	satang	satangy	satangov	m	satang
+AMD|֏	arménsky dram	arménske dramy	arménskych dramov	arménskeho dramu	m	luma	lumy	lum	f	luma
+TRY|₺	turecká líra	turecké líry	tureckých lír	tureckej líry	f	kuruš	kuruše	kurušov	m	kr
+INR|₹|Rs.|Rs	indická rupia	indické rupie	indických rupií	indickej rupie	f	paisa	paisy	páis	f	p|paise
+¢	cent	centy	centov	centa	m	cent	centy	centov	m	c|ct

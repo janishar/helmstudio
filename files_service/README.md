@@ -14,7 +14,7 @@ docker compose -f ../deploy/docker-compose.yml up -d --build files   # on the he
 ```
 
 Env: `.env.example`. `FILE_URL_SECRET` and the S3 keys are read from `<NAME>_FILE` when set (compose `secrets:`), else
-from `<NAME>`. A bad or expired signature, a key outside `u/` (GET also serves the starter look thumbnails `packs/<family>/looks/<id>-<16 hex>.<png|jpg|webp>`, nothing else under `packs/`), a `..` or a missing object is 403; objects go out with
+from `<NAME>`. A bad or expired signature, a key outside `u/` (GET also serves the starter look thumbnails `packs/<family>/looks/<id>-<16 hex>.<png|jpg|webp>` and voice previews `packs/<family>/voices/<id>-<16 hex>.wav`, nothing else under `packs/`), a `..` or a missing object is 403; objects go out with
 `Content-Security-Policy: sandbox` and `nosniff`, the stored `Content-Type` and `Accept-Ranges: bytes`. A single
 `Range: bytes=…` gets 206 with `Content-Range` (a `<video>` seeks); one starting past the end is 416; several ranges
 or a malformed one get the whole file (200). The store has no range read yet, so the bytes before the range are read

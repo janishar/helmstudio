@@ -1,0 +1,124 @@
+{
+  "schema_version": 1,
+  "host": "mac",
+  "env": "native",
+  "published_at": "2026-11-21T10:00:00Z",
+  "published_by": "runner native 0.3.0",
+  "workflows": [
+    {
+      "id": "zonos3-voice-over",
+      "title": "ZONOS3 Voice-over",
+      "family": "zonos3",
+      "env": "native",
+      "media": "audio",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "seed": {
+          "kind": "seed",
+          "params": {
+            "seed": -1
+          }
+        },
+        "model": {
+          "kind": "zonos3/model",
+          "params": {
+            "variant": "mini",
+            "precision": "int8"
+          }
+        },
+        "speak": {
+          "kind": "zonos3/speak",
+          "in": {
+            "model": "model.model",
+            "text": "prompt.text",
+            "seed": "seed.seed"
+          },
+          "params": {
+            "voice": null,
+            "language": "en-US",
+            "emotion": 0.5,
+            "energy": 0.5,
+            "whisper": 0,
+            "speaking_rate": 1,
+            "guidance": 2
+          },
+          "only": {
+            "voice": [
+              "preset",
+              "clip"
+            ]
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "speak.audio"
+          }
+        }
+      },
+      "studio": {
+        "composer": [
+          "prompt.text"
+        ],
+        "quick": [
+          "speak.voice",
+          "speak.language",
+          "seed.seed"
+        ],
+        "inspector": [
+          {
+            "title": "Delivery",
+            "items": [
+              "speak.emotion",
+              "speak.energy",
+              "speak.whisper",
+              "speak.speaking_rate",
+              "speak.guidance"
+            ]
+          }
+        ],
+        "presets": {
+          "Neutral": {
+            "speak.emotion": 0.5,
+            "speak.energy": 0.5,
+            "speak.whisper": 0,
+            "speak.speaking_rate": 1,
+            "speak.guidance": 2
+          },
+          "Warm": {
+            "speak.emotion": 0.7,
+            "speak.energy": 0.45,
+            "speak.whisper": 0,
+            "speak.speaking_rate": 0.95,
+            "speak.guidance": 2
+          },
+          "Tense": {
+            "speak.emotion": 0.3,
+            "speak.energy": 0.75,
+            "speak.whisper": 0,
+            "speak.speaking_rate": 1.1,
+            "speak.guidance": 2.5
+          },
+          "Whisper": {
+            "speak.emotion": 0.5,
+            "speak.energy": 0.25,
+            "speak.whisper": 0.9,
+            "speak.speaking_rate": 0.9,
+            "speak.guidance": 2
+          }
+        },
+        "preset_order": [
+          "Neutral",
+          "Warm",
+          "Tense",
+          "Whisper"
+        ]
+      }
+    }
+  ]
+}

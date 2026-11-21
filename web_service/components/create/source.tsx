@@ -250,7 +250,7 @@ function Readout({ label, value, sub }: { label: string; value: string; sub?: st
 
 /** A range over a take: the selection with an in and an out handle (drag them, or focus one and use ← → to move
  * it by `step`, Shift for ten), on a frame grid (`cells`) or a waveform. `snap`: the stretch it snaps to. */
-function RangeBar({
+export function RangeBar({
   label,
   duration,
   value,

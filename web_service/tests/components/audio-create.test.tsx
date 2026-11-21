@@ -169,10 +169,15 @@ describe("Create on an audio workflow", () => {
     fireEvent.click(tile);
     const dialog = await screen.findByRole("dialog", { name: "Voice" });
     expect(within(dialog).getByRole("tab", { name: "Presets · 2" })).toBeTruthy();
-    expect(within(dialog).getByRole("tab", { name: "Mine · 0" })).toBeTruthy();
+    expect(within(dialog).getByRole("tab", { name: "Mine · 0 fit" })).toBeTruthy();
     // grouped by family, each with its count; Ryan greyed with the reason, his preview playable
     expect(within(dialog).getByText("echo · 1 preset")).toBeTruthy();
     expect(within(dialog).getByText("qwen3-tts · 1 preset")).toBeTruthy();
+    // a family none of whose voices fit is folded to one line with the reason (VoicePickerZonos3.dc.html)
+    const fold = within(dialog).getByRole("button", { name: /^qwen3-tts · 1 preset/ });
+    expect(fold.getAttribute("aria-expanded")).toBe("false");
+    expect(fold.textContent).toContain("Ryan is for qwen3-tts · none of these fit echo");
+    fireEvent.click(fold);
     const r = within(dialog).getByRole("button", { name: /^Ryan/ });
     // greyed, still focusable, its reason read with it; a click picks nothing
     expect(r.getAttribute("aria-disabled")).toBe("true");
@@ -394,7 +399,7 @@ describe("Create on an audio workflow", () => {
       within(inspector)
         .getAllByRole("heading")
         .map((h) => h.textContent),
-    ).toEqual(["Preset", "Quick", "Voice"]); // the board's Voice section leads with the voice
+    ).toEqual(["Preset", "Voice"]); // the board's Voice section leads; Language and Seed are composer tiles only
     expect(within(inspector).getByRole("button", { name: /^Voice/ }).textContent).toMatch(/^Voice/);
     expect(
       within(inspector).getByRole("button", { name: "Steady" }).getAttribute("aria-pressed"),
@@ -407,9 +412,10 @@ describe("Create on an audio workflow", () => {
     expect(
       within(inspector).getByRole("button", { name: "Lively" }).getAttribute("aria-pressed"),
     ).toBe("true");
-    // the language's editor names its languages
+    // the language's tile opens its editor, under its own name, which names its languages
     fireEvent.click(within(composer).getByRole("button", { name: /^Language/ }));
     expect(await within(inspector).findByRole("button", { name: "English" })).toBeTruthy();
+    expect(within(inspector).getByRole("heading", { name: "Language" })).toBeTruthy();
   });
 });
 
@@ -536,7 +542,7 @@ describe("Design a voice: closing and tries", () => {
     );
     fireEvent.click(await screen.findByRole("button", { name: "Voice: Pick a voice" }));
     const dialog = await screen.findByRole("dialog", { name: "Voice" });
-    fireEvent.click(await within(dialog).findByRole("tab", { name: "Mine · 1" }));
+    fireEvent.click(await within(dialog).findByRole("tab", { name: "Mine · 1 fit" }));
     const more = within(dialog).getByRole("button", { name: "More for Old captain" });
     fireEvent.click(more);
     const menu = within(dialog).getByRole("menu", { name: "Old captain" });

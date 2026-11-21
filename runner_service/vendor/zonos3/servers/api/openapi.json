@@ -1,0 +1,4066 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ZONOS3 HTTP API",
+    "version": "2.0.0",
+    "description": "The HTTP API of both ZONOS3 servers: the CUDA server (`servers/sgl`, `python -m zonos3_sgl`) and the ggml server\n(`servers/ggml`, `zonos3-server`). The native API lives under `/v2/`; the OpenAI-compatible routes stay under\n`/v1/`. Every other path belongs to Zonos Voice Studio.\n\n**Studio serving rule.** It applies to requests whose path matches no API route (the servers register it after\nevery API route).\n- `GET|HEAD /` returns the studio's `index.html` (the page that offers the Voice Studio and the lite page) with\n  `Cache-Control: no-store, max-age=0`. A missing `index.html` is a 404\n  `{\"detail\": \"The studio is not built (pnpm --dir studio build).\"}`.\n- `GET|HEAD /<path>` returns the file `<studio dir>/<path>` when it resolves inside the studio dir and is a\n  file; else the page `<studio dir>/<path>.html` when that is a file (`/studio` is `studio.html`, the Voice\n  Studio; `/lite` is `lite.html`); otherwise a 404 `{\"detail\": \"Not Found\"}`. The file's path inside the studio dir\n  picks its cache header: under `assets/` (content-hashed) `Cache-Control: public, max-age=31536000, immutable`;\n  a page (`*.html`), `sw.js` or `manifest.webmanifest` `Cache-Control: no-store, max-age=0`; any other file\n  (icons, the in-browser engine, `theme-boot.js`) `Cache-Control: no-cache`.\n- Paths under `/v1/` and `/v2/` are never served from the studio dir. There is no SPA fallback (the studio routes\n  with the URL hash). Any other method on such a path is a 404 `{\"detail\": \"Not Found\"}`.\n\n**Status codes.** Anything expressible in a request schema (types, enums, ranges, required and unknown fields) is\na 422 `ValidationError`. State- or semantics-dependent errors (unknown voice, a feature this server or checkpoint\nlacks, a CFG combination, LACI without heads, `stream: true` with `format: \"wav\"`, ...) are a 400 `Error`.\nUnknown resources on resource paths are a 404. Project errors may add `missing`, `revision` or `sha256` to the\n`Error` body.\n\n**Sessions.** `X-TTS-Session-ID` scopes the speaker cache: `POST /v2/speakers` writes into the session, and\n`GET /v2/speakers` and every `speaker_*_id` field read the session's voices (default voices are always visible).\n\n**Keepalive.** `X-Keepalive: 1` on `POST /v2/edit`, `/v2/edit/transcribe`, `/v2/edit/align` and the POST paths a\nplugin lists answers 200 at once with `x-keepalive: 1`, sends a space byte every 10 s while the request runs, then\nthe JSON body (leading whitespace is valid JSON). An error arrives in that body as\n`{\"detail\": ..., \"status_code\": <status>}`.\n\n**Access.** When the server runs with `ZONOS3_ACCESS_TOKEN`, every request needs the token: `Authorization:\nBearer <token>`, the HttpOnly cookie `zonos3_access`, or once `GET /?access_token=<token>`, which answers 303 to\n`/` and sets that cookie. A failure is a 403 `text/plain` `Access denied`. Then `/v2/media/*` successes carry\n`Cache-Control: private, max-age=31536000, immutable`, every other response `Cache-Control: no-store`, and all\nresponses `Referrer-Policy: no-referrer`.\n\n**CORS.** Every origin is allowed (`*`); the exposed response headers are `X-Audio-Sample-Rate`,\n`X-Audio-Channels`, `X-Audio-Format`, `X-Control-Span-Follow`, `X-Seed` and `X-Decoder`.\n\n**Plugins.** A server started with `--plugins N...` mounts each plugin's routes (listed in\n`Capabilities.plugins`). Plugin `N` serves only `/v2/N/*` and `/N`, `/N/*` (ahead of the studio serving rule);\nthose paths are documented in the plugin's own repository, e.g. https://github.com/Zyphra/ZONOS3-dub.\n"
+  },
+  "paths": {
+    "/v2/health": {
+      "get": {
+        "operationId": "health",
+        "summary": "Liveness",
+        "responses": {
+          "200": {
+            "description": "The server is up.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/models": {
+      "get": {
+        "operationId": "listModels",
+        "summary": "OpenAI-compatible model list",
+        "responses": {
+          "200": {
+            "description": "The one served model.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelList"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/audio/speech": {
+      "post": {
+        "operationId": "createSpeech",
+        "summary": "OpenAI-compatible speech",
+        "description": "`pcm` streams raw float32 PCM; `wav` is buffered. A non-null `voice` must be a speaker id of\n`GET /v2/speakers` and is used as `speaker_embedding_id` (unknown: 400 `unknown voice '<v>'`); it cannot be\ncombined with any `speaker_*` input field (400).\n",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SessionId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpeechRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Audio"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    },
+    "/v2/generate": {
+      "post": {
+        "operationId": "generate",
+        "summary": "Synthesize speech",
+        "description": "`format: \"pcm\"` returns float32 little-endian mono PCM at 44100 Hz, chunked when `stream` is true.\n`format: \"wav\"` returns a buffered 16-bit PCM mono WAV (samples clipped to [-1, 1]) and needs\n`stream: false` (else 400). `X-Seed` echoes the seed used (drawn uniformly in 0..2^31-1 when `seed` is null).\n`X-Control-Span-Follow` says which schedule placed `control_spans` (`rate` or `reading`) and is sent when\n`control_spans` is set.\n",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SessionId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Audio"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    },
+    "/v2/capabilities": {
+      "get": {
+        "operationId": "capabilities",
+        "summary": "Feature flags of the loaded checkpoint and server",
+        "responses": {
+          "200": {
+            "description": "Capabilities.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Capabilities"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/controls": {
+      "get": {
+        "operationId": "controls",
+        "summary": "The steering bundle's controls document",
+        "responses": {
+          "200": {
+            "description": "Controls document.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlsDocument"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/v2/speakers": {
+      "get": {
+        "operationId": "listSpeakers",
+        "summary": "Default voices and the session's cached voices",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SessionId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Speakers.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpeakerList"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createSpeaker",
+        "summary": "Cache a voice in the session",
+        "description": "Exactly one of `speaker_audio_base64` (a clip) or `speaker_embedding_base64` (a `.npy`/`.npz` embedding) is\nrequired (else 400). `X-TTS-Session-ID` is required (400 without it).\n",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SessionId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpeakerCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The cached voice.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Speaker"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    },
+    "/v2/speakers/{speaker_id}/preview": {
+      "get": {
+        "operationId": "speakerPreview",
+        "summary": "A voice's preview audio",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SpeakerId"
+          },
+          {
+            "$ref": "#/components/parameters/SessionId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The voice's audio.",
+            "content": {
+              "audio/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    },
+    "/v2/speakers/{speaker_id}/embedding": {
+      "get": {
+        "operationId": "speakerEmbedding",
+        "summary": "A voice's speaker embedding",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SpeakerId"
+          },
+          {
+            "$ref": "#/components/parameters/SessionId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The embedding (values rounded to 6 decimals).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpeakerEmbedding"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    },
+    "/v2/phonemize": {
+      "post": {
+        "operationId": "phonemize",
+        "summary": "Gold-lexicon IPA for the words of a text",
+        "description": "With `guess`, espeak-ng fills ambiguous and unknown words of the `phonemize_guess_languages`. On a\nphoneme-token checkpoint, a pronunciation with a symbol outside its inventory is returned as `unsupported`\nwith no `ipa`. 404 when the server has no lexicon.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PhonemizeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Segments whose texts concatenate to the input.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhonemizeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          }
+        }
+      }
+    },
+    "/v2/edit/transcribe": {
+      "post": {
+        "operationId": "editTranscribe",
+        "summary": "Qwen3-ASR transcript of the audio to edit and its FuseAlign word timings",
+        "description": "Needs speech recognition (capabilities `edit_transcribe`). Without it the server answers 503 with the detail\n\"Speech recognition is not available on this server: send the transcript to /v2/edit/align instead\".\n",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Keepalive"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditTranscribeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Transcript.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditTranscript"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/v2/edit/align": {
+      "post": {
+        "operationId": "editAlign",
+        "summary": "FuseAlign forced alignment of the audio to a text",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Keepalive"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditAlignRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Word timings.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditTranscript"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/v2/edit": {
+      "post": {
+        "operationId": "edit",
+        "summary": "Edit recorded speech so it says target_text",
+        "description": "Regions come from `spans` ([start, end] seconds) when given, otherwise from a word diff between\n`original_text` (Qwen3-ASR recognition when omitted) and `target_text` over a FuseAlign alignment. Each region is one\nspan-end-terminated generation; unedited codec frames are kept exactly. A server without speech recognition\n(capabilities `edit_transcribe` false) needs `original_text` whenever the clip's words are read (no `spans`, or a\nclip longer than `max_context_seconds`) and refuses `verify`: 503 \"Speech recognition is not available on this\nserver: ...\" (the detail names the fix), before any generation.\n",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Keepalive"
+          },
+          {
+            "$ref": "#/components/parameters/SessionId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The edit and its takes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/v2/projects": {
+      "get": {
+        "operationId": "listProjects",
+        "summary": "Studio projects stored on the server",
+        "description": "Sorted by `updated_at` descending, then `id`. 404 when server-side projects are disabled.",
+        "responses": {
+          "200": {
+            "description": "Project summaries.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ProjectSummary"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/v2/projects/gc": {
+      "post": {
+        "operationId": "gcProjects",
+        "summary": "Delete media no project references",
+        "parameters": [
+          {
+            "name": "min_age_seconds",
+            "in": "query",
+            "required": false,
+            "description": "Only blobs whose last write is older than this are removed.",
+            "schema": {
+              "type": "number",
+              "minimum": 0,
+              "default": 3600
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "GC result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectGcResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    },
+    "/v2/projects/{project_id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectId"
+        }
+      ],
+      "get": {
+        "operationId": "getProject",
+        "summary": "A stored project",
+        "responses": {
+          "200": {
+            "description": "The project.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "put": {
+        "operationId": "putProject",
+        "summary": "Save a project",
+        "description": "`base_revision` must equal the stored revision (null for a new project), else 409 with the stored\n`revision`. Every `data.media` key must be uploaded first (else 400 with `missing`).\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectPutRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Saved.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectSaved"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteProject",
+        "summary": "Delete a project",
+        "responses": {
+          "200": {
+            "description": "Deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDeleted"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/v2/media/{sha256}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/Sha256"
+        }
+      ],
+      "get": {
+        "operationId": "getMedia",
+        "summary": "A content-addressed media blob",
+        "description": "`ETag: \"<sha256>\"`; an `If-None-Match` naming the hash answers 304. `Cache-Control: public,\nmax-age=31536000, immutable` (`private, ...` with an access token).\n",
+        "responses": {
+          "200": {
+            "description": "The blob, with its stored media type.",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified."
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "head": {
+        "operationId": "headMedia",
+        "summary": "Whether a media blob is stored",
+        "responses": {
+          "200": {
+            "description": "Stored."
+          },
+          "304": {
+            "description": "Not modified."
+          },
+          "400": {
+            "description": "Invalid hash."
+          },
+          "404": {
+            "description": "Not stored."
+          }
+        }
+      },
+      "put": {
+        "operationId": "putMedia",
+        "summary": "Upload a media blob addressed by its SHA-256",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "description": "Media type to store (default the request's Content-Type).",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "*/*": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Already stored (the body is not read).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaStored"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Stored.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaStored"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "413": {
+            "$ref": "#/components/responses/TooLarge"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "SessionId": {
+        "name": "X-TTS-Session-ID",
+        "in": "header",
+        "required": false,
+        "description": "Scopes speaker-cache writes and reads.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "Keepalive": {
+        "name": "X-Keepalive",
+        "in": "header",
+        "required": false,
+        "description": "`1`: answer 200 at once and send a space every 10 s until the JSON body (errors as `{detail, status_code}`).",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "1"
+          ]
+        }
+      },
+      "SpeakerId": {
+        "name": "speaker_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "ProjectId": {
+        "name": "project_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        }
+      },
+      "Sha256": {
+        "name": "sha256",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "headers": {
+      "SampleRate": {
+        "description": "44100",
+        "schema": {
+          "type": "integer"
+        }
+      },
+      "Channels": {
+        "description": "1 (mono)",
+        "schema": {
+          "type": "integer"
+        }
+      },
+      "AudioFormat": {
+        "description": "`float32` (pcm) or `pcm16` (wav).",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "Seed": {
+        "description": "The seed used.",
+        "schema": {
+          "type": "integer"
+        }
+      },
+      "Decoder": {
+        "description": "The id of the decoder that made the audio (`Capabilities.decoders`).",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "SpanFollow": {
+        "description": "Which schedule placed `control_spans`.",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "rate",
+            "reading"
+          ]
+        }
+      }
+    },
+    "responses": {
+      "Audio": {
+        "description": "Audio.",
+        "headers": {
+          "X-Audio-Sample-Rate": {
+            "$ref": "#/components/headers/SampleRate"
+          },
+          "X-Audio-Channels": {
+            "$ref": "#/components/headers/Channels"
+          },
+          "X-Audio-Format": {
+            "$ref": "#/components/headers/AudioFormat"
+          },
+          "X-Seed": {
+            "$ref": "#/components/headers/Seed"
+          },
+          "X-Decoder": {
+            "$ref": "#/components/headers/Decoder"
+          },
+          "X-Control-Span-Follow": {
+            "$ref": "#/components/headers/SpanFollow"
+          }
+        },
+        "content": {
+          "audio/pcm": {
+            "schema": {
+              "type": "string",
+              "format": "binary",
+              "description": "float32 little-endian mono at 44100 Hz"
+            }
+          },
+          "audio/wav": {
+            "schema": {
+              "type": "string",
+              "format": "binary",
+              "description": "16-bit PCM mono WAV at 44100 Hz"
+            }
+          }
+        }
+      },
+      "BadRequest": {
+        "description": "A state- or semantics-dependent error.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Unknown resource, or a feature this server does not serve.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "The stored revision differs from `base_revision`.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "TooLarge": {
+        "description": "The upload exceeds the server's limit.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Unprocessable": {
+        "description": "The request does not match its schema.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ValidationError"
+            }
+          }
+        }
+      },
+      "ServerError": {
+        "description": "The request failed inside the server.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Unavailable": {
+        "description": "A helper worker (Qwen3-ASR, FuseAlign, a plugin's worker, the ggml server's Python host) is unavailable, or the\nrequest needs speech recognition on a server without it (detail \"Speech recognition is not available on this\nserver: \" followed by the fix, e.g. \"send the clip's transcript as original_text\").\n",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "properties": {
+          "detail": {
+            "type": "string"
+          },
+          "missing": {
+            "description": "PUT /v2/projects: media hashes not uploaded yet.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "revision": {
+            "description": "409: the stored revision (null when the project does not exist).",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "sha256": {
+            "description": "PUT /v2/media: the hash of the content actually sent.",
+            "type": "string"
+          }
+        }
+      },
+      "ValidationError": {
+        "type": "object",
+        "required": [
+          "detail"
+        ],
+        "properties": {
+          "detail": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "loc",
+                "msg",
+                "type"
+              ],
+              "properties": {
+                "loc": {
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "string",
+                      "integer"
+                    ]
+                  }
+                },
+                "msg": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "Health": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok"
+            ]
+          }
+        }
+      },
+      "ModelList": {
+        "type": "object",
+        "required": [
+          "object",
+          "data"
+        ],
+        "properties": {
+          "object": {
+            "type": "string",
+            "enum": [
+              "list"
+            ]
+          },
+          "data": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1,
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "object",
+                "created",
+                "owned_by",
+                "root"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "enum": [
+                    "zonos3"
+                  ]
+                },
+                "object": {
+                  "type": "string",
+                  "enum": [
+                    "model"
+                  ]
+                },
+                "created": {
+                  "type": "integer",
+                  "enum": [
+                    0
+                  ]
+                },
+                "owned_by": {
+                  "type": "string",
+                  "enum": [
+                    "zyphra"
+                  ]
+                },
+                "root": {
+                  "type": "string",
+                  "description": "The served checkpoint's base name (its directory or GGUF file name)."
+                }
+              }
+            }
+          }
+        }
+      },
+      "ControlSpan": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "start",
+          "end",
+          "controls"
+        ],
+        "description": "Hidden-space controls over the characters [start, end) of the request's text.",
+        "properties": {
+          "start": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "end": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "controls": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            }
+          }
+        }
+      },
+      "ConditionBuckets": {
+        "description": "Condition-row bucket ids per name (`loudness`, `fmax`, `speaking_rate`: 0..n-1 with n =\ncondition_tokens.bucket_counts[name], null = unknown) as an object, or a list in the checkpoint's order.\nRefused (400) on checkpoints without condition rows.\n",
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "ConditionValues": {
+        "description": "Raw condition values (LUFS / Hz / UTF-8 bytes per second) mapped through the checkpoint's edges; bucket ids\nin `condition_buckets` win per name.\n",
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "GenerationOptions": {
+        "description": "The generation fields shared by GenerateRequest and SpeechRequest.",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "language": {
+            "type": "string",
+            "default": "en_us"
+          },
+          "text_normalization": {
+            "type": "boolean",
+            "default": true
+          },
+          "silence_prefill_frames": {
+            "description": "Codec-matched silence frames prefilled into the audio stream (null = the server default; 0 = off).",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "start_immediately": {
+            "description": "Put the checkpoint's start marker (U+E002) in front of the text: speech from the first generated frame. The silence prefill then defaults to 0 (an explicit silence_prefill_frames still applies). 400 on a checkpoint without a start token (Capabilities.start_token null).",
+            "type": "boolean",
+            "default": false
+          },
+          "decode_context": {
+            "description": "Decode the generated frames behind the last decode_context_frames of the reference prompt.",
+            "type": "boolean",
+            "default": false
+          },
+          "decode_context_frames": {
+            "type": "integer",
+            "default": 30
+          },
+          "temperature": {
+            "type": "number",
+            "default": 0.75
+          },
+          "topk": {
+            "type": "integer",
+            "default": 80
+          },
+          "top_p": {
+            "type": "number",
+            "default": 0.69
+          },
+          "min_p": {
+            "type": "number",
+            "default": 0.0
+          },
+          "max_tokens": {
+            "description": "Frame budget (null = the checkpoint's limit).",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "fade_out_ms": {
+            "type": "number",
+            "default": 0.0
+          },
+          "repetition_window": {
+            "type": "integer",
+            "default": 96
+          },
+          "repetition_penalty": {
+            "type": "number",
+            "default": 2.4
+          },
+          "repetition_codebooks": {
+            "type": "integer",
+            "default": 6
+          },
+          "seed": {
+            "description": "Sampling seed (null = drawn by the server; echoed in X-Seed).",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 4294967295,
+            "default": null
+          },
+          "stream_decode": {
+            "description": "Streaming decode: `prefix` streams chunks of an incremental decode as frames arrive, `whole` sends one exact chunk at EOS (null = the server default).",
+            "enum": [
+              "prefix",
+              "whole",
+              null
+            ],
+            "default": null
+          },
+          "stream_codebooks": {
+            "description": "Prefix decode: decode a frame once this many of its codebooks arrived (codebook j of frame f arrives with row f + j), the missing residual codebooks left out (a coarser RVQ decode, the frame never re-decoded); first audio comes up to n_codebooks - 1 rows earlier. n_codebooks = complete frames only; above it: 400. Default: the generation registry's `stream_codebooks.default`.",
+            "type": "integer",
+            "minimum": 1,
+            "default": 1
+          },
+          "stream_codebooks_scope": {
+            "description": "Which prefix chunks `stream_codebooks` applies to: the `first` only (later chunks wait for complete frames), or `all`. Default: the generation registry's `stream_codebooks.scope`.",
+            "enum": [
+              "first",
+              "all"
+            ],
+            "default": "first"
+          },
+          "speaker_mode": {
+            "description": "Speaker path on checkpoints that carry both (null = the checkpoint default).",
+            "enum": [
+              "embedding",
+              "reference",
+              null
+            ],
+            "default": null
+          },
+          "condition_buckets": {
+            "$ref": "#/components/schemas/ConditionBuckets"
+          },
+          "condition_values": {
+            "$ref": "#/components/schemas/ConditionValues"
+          },
+          "headroom_db": {
+            "description": "Output gain -headroom_db (null = the decoder's registry value), followed by the soft limiter above the generation registry's output_limit_dbfs (-1 dBFS).",
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 24,
+            "default": null
+          },
+          "decoder": {
+            "description": "The audio decoder, by id (`Capabilities.decoders`; null = the server default, `Capabilities.decoder`). An id the server does not serve is a 400.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "speaker_audio_base64": {
+            "description": "A reference clip (any container ffmpeg reads; data URLs accepted).",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "speaker_audio_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "speaker_reference_codes": {
+            "description": "Pre-encoded reference prefix codes [[cb0..cbN], ...] for raw-reference checkpoints.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "minItems": 1,
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "default": null
+          },
+          "speaker_embedding_base64": {
+            "description": "A saved `.npy`/`.npz` speaker embedding.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "speaker_embedding_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "speaker_embedding_id": {
+            "description": "A speaker id of GET /v2/speakers.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "speaker_blend_embedding_id_a": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "speaker_blend_embedding_id_b": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "speaker_blend_t": {
+            "description": "Slerp position between blend voices a (0) and b (1).",
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1,
+            "default": null
+          },
+          "controls_cfg_scale": {
+            "description": "Guidance on the hidden-space delta of `controls` / `control_spans`: the twin is the same prompt without it, uncond + scale * (cond - uncond) (1 = off; needs speaker_mode=embedding).",
+            "type": "number",
+            "default": 1.0
+          },
+          "speaker_cfg_scale": {
+            "description": "Reference CFG: uncond + scale * (cond - uncond) (1 = off).",
+            "type": "number",
+            "minimum": 0,
+            "default": 1.0
+          },
+          "accent": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "accent_strength": {
+            "type": "number",
+            "default": 1.0
+          },
+          "controls": {
+            "description": "Steering-bundle controls \"<set>.<direction>\" -> dose (see GET /v2/controls).",
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "type": "number"
+            },
+            "default": null
+          },
+          "control_spans": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ControlSpan"
+            },
+            "default": null
+          },
+          "control_span_rate": {
+            "description": "Frames per character of the rate schedule (null = 1.0).",
+            "type": [
+              "number",
+              "null"
+            ],
+            "exclusiveMinimum": 0,
+            "default": null
+          },
+          "control_span_follow": {
+            "description": "`reading` makes the spans follow the alignment heads' reading position.",
+            "type": "string",
+            "enum": [
+              "rate",
+              "reading"
+            ],
+            "default": "rate"
+          },
+          "control_span_lead": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 8,
+            "default": null
+          },
+          "control_span_lag": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": -4,
+            "maximum": 8,
+            "default": null
+          },
+          "steer_hold": {
+            "description": "Steer then hold: the request-level hidden `controls` run at full dose for `steer_onset_seconds` of generated speech, ramp linearly to `steer_hold` x dose over `steer_ramp_seconds`, then stay there. Null = the server default (Capabilities `steer_release`); 1 = constant. control_spans, speaker-embedding (raw) controls and the bundle's exempt directions stay constant. Below 1 on a server whose steering bundle has no `steer_release`: 400.",
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1,
+            "default": null
+          },
+          "steer_onset_seconds": {
+            "description": "Steer then hold: seconds of generated speech at full dose (null = the server default).",
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 600,
+            "default": null
+          },
+          "steer_ramp_seconds": {
+            "description": "Steer then hold: seconds of the linear ramp from full dose to `steer_hold` (null = the server default; 0 = a step).",
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 600,
+            "default": null
+          },
+          "laci": {
+            "description": "Guard against skips, hallucinations and truncation (servers with LACI heads). With the progressive decode (`stream_decode` prefix on a streamed response) rows reach the decoder once no rollback can change them, about one text bin behind generation (a rare deeper rollback restarts at the first row already sent). With the whole decode (`stream: false` or `stream_decode: whole`) the take is held until it is final and every rollback restarts at its own row.",
+            "type": "boolean",
+            "default": false
+          },
+          "short_text": {
+            "description": "A text of one or two words (few tokens next to its language's filler sentence) is generated with a 0.5 s pause marker and a filler sentence after it under LACI, on servers with the language's LACI heads and pause tokens, and cut at the first silent frame once the reading reaches the filler; nothing past the cut is sent. A take that runs into the filler is retaken (twice), then cut where the reading reached it. `auto` applies it to a text that qualifies (no start, pause or phoneme markers, no CFG, control spans or speech edit), `off` generates the text alone.",
+            "type": "string",
+            "enum": [
+              "auto",
+              "off"
+            ],
+            "default": "auto"
+          }
+        }
+      },
+      "GenerateRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "language": {
+            "type": "string",
+            "default": "en_us"
+          },
+          "text_normalization": {
+            "type": "boolean",
+            "default": true
+          },
+          "silence_prefill_frames": {
+            "description": "Codec-matched silence frames prefilled into the audio stream (null = the server default; 0 = off).",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "start_immediately": {
+            "description": "Put the checkpoint's start marker (U+E002) in front of the text: speech from the first generated frame. The silence prefill then defaults to 0 (an explicit silence_prefill_frames still applies). 400 on a checkpoint without a start token (Capabilities.start_token null).",
+            "type": "boolean",
+            "default": false
+          },
+          "decode_context": {
+            "description": "Decode the generated frames behind the last decode_context_frames of the reference prompt.",
+            "type": "boolean",
+            "default": false
+          },
+          "decode_context_frames": {
+            "type": "integer",
+            "default": 30
+          },
+          "temperature": {
+            "type": "number",
+            "default": 0.75
+          },
+          "topk": {
+            "type": "integer",
+            "default": 80
+          },
+          "top_p": {
+            "type": "number",
+            "default": 0.69
+          },
+          "min_p": {
+            "type": "number",
+            "default": 0.0
+          },
+          "max_tokens": {
+            "description": "Frame budget (null = the checkpoint's limit).",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "fade_out_ms": {
+            "type": "number",
+            "default": 0.0
+          },
+          "repetition_window": {
+            "type": "integer",
+            "default": 96
+          },
+          "repetition_penalty": {
+            "type": "number",
+            "default": 2.4
+          },
+          "repetition_codebooks": {
+            "type": "integer",
+            "default": 6
+          },
+          "seed": {
+            "description": "Sampling seed (null = drawn by the server; echoed in X-Seed).",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 4294967295,
+            "default": null
+          },
+          "stream_decode": {
+            "description": "Streaming decode: `prefix` streams chunks of an incremental decode as frames arrive, `whole` sends one exact chunk at EOS (null = the server default).",
+            "enum": [
+              "prefix",
+              "whole",
+              null
+            ],
+            "default": null
+          },
+          "stream_codebooks": {
+            "description": "Prefix decode: decode a frame once this many of its codebooks arrived (codebook j of frame f arrives with row f + j), the missing residual codebooks left out (a coarser RVQ decode, the frame never re-decoded); first audio comes up to n_codebooks - 1 rows earlier. n_codebooks = complete frames only; above it: 400. Default: the generation registry's `stream_codebooks.default`.",
+            "type": "integer",
+            "minimum": 1,
+            "default": 1
+          },
+          "stream_codebooks_scope": {
+            "description": "Which prefix chunks `stream_codebooks` applies to: the `first` only (later chunks wait for complete frames), or `all`. Default: the generation registry's `stream_codebooks.scope`.",
+            "enum": [
+              "first",
+              "all"
+            ],
+            "default": "first"
+          },
+          "speaker_mode": {
+            "description": "Speaker path on checkpoints that carry both (null = the checkpoint default).",
+            "enum": [
+              "embedding",
+              "reference",
+              null
+            ],
+            "default": null
+          },
+          "condition_buckets": {
+            "$ref": "#/components/schemas/ConditionBuckets"
+          },
+          "condition_values": {
+            "$ref": "#/components/schemas/ConditionValues"
+          },
+          "headroom_db": {
+            "description": "Output gain -headroom_db (null = the decoder's registry value), followed by the soft limiter above the generation registry's output_limit_dbfs (-1 dBFS).",
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 24,
+            "default": null
+          },
+          "decoder": {
+            "description": "The audio decoder, by id (`Capabilities.decoders`; null = the server default, `Capabilities.decoder`). An id the server does not serve is a 400.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "speaker_audio_base64": {
+            "description": "A reference clip (any container ffmpeg reads; data URLs accepted).",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "speaker_audio_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "speaker_reference_codes": {
+            "description": "Pre-encoded reference prefix codes [[cb0..cbN], ...] for raw-reference checkpoints.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "minItems": 1,
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "default": null
+          },
+          "speaker_embedding_base64": {
+            "description": "A saved `.npy`/`.npz` speaker embedding.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "speaker_embedding_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "speaker_embedding_id": {
+            "description": "A speaker id of GET /v2/speakers.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "speaker_blend_embedding_id_a": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "speaker_blend_embedding_id_b": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "speaker_blend_t": {
+            "description": "Slerp position between blend voices a (0) and b (1).",
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1,
+            "default": null
+          },
+          "controls_cfg_scale": {
+            "description": "Guidance on the hidden-space delta of `controls` / `control_spans`: the twin is the same prompt without it, uncond + scale * (cond - uncond) (1 = off; needs speaker_mode=embedding).",
+            "type": "number",
+            "default": 1.0
+          },
+          "speaker_cfg_scale": {
+            "description": "Reference CFG: uncond + scale * (cond - uncond) (1 = off).",
+            "type": "number",
+            "minimum": 0,
+            "default": 1.0
+          },
+          "accent": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "accent_strength": {
+            "type": "number",
+            "default": 1.0
+          },
+          "controls": {
+            "description": "Steering-bundle controls \"<set>.<direction>\" -> dose (see GET /v2/controls).",
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "type": "number"
+            },
+            "default": null
+          },
+          "control_spans": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ControlSpan"
+            },
+            "default": null
+          },
+          "control_span_rate": {
+            "description": "Frames per character of the rate schedule (null = 1.0).",
+            "type": [
+              "number",
+              "null"
+            ],
+            "exclusiveMinimum": 0,
+            "default": null
+          },
+          "control_span_follow": {
+            "description": "`reading` makes the spans follow the alignment heads' reading position.",
+            "type": "string",
+            "enum": [
+              "rate",
+              "reading"
+            ],
+            "default": "rate"
+          },
+          "control_span_lead": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 8,
+            "default": null
+          },
+          "control_span_lag": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": -4,
+            "maximum": 8,
+            "default": null
+          },
+          "steer_hold": {
+            "description": "Steer then hold: the request-level hidden `controls` run at full dose for `steer_onset_seconds` of generated speech, ramp linearly to `steer_hold` x dose over `steer_ramp_seconds`, then stay there. Null = the server default (Capabilities `steer_release`); 1 = constant. control_spans, speaker-embedding (raw) controls and the bundle's exempt directions stay constant. Below 1 on a server whose steering bundle has no `steer_release`: 400.",
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1,
+            "default": null
+          },
+          "steer_onset_seconds": {
+            "description": "Steer then hold: seconds of generated speech at full dose (null = the server default).",
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 600,
+            "default": null
+          },
+          "steer_ramp_seconds": {
+            "description": "Steer then hold: seconds of the linear ramp from full dose to `steer_hold` (null = the server default; 0 = a step).",
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 600,
+            "default": null
+          },
+          "laci": {
+            "description": "Guard against skips, hallucinations and truncation (servers with LACI heads). With the progressive decode (`stream_decode` prefix on a streamed response) rows reach the decoder once no rollback can change them, about one text bin behind generation (a rare deeper rollback restarts at the first row already sent). With the whole decode (`stream: false` or `stream_decode: whole`) the take is held until it is final and every rollback restarts at its own row.",
+            "type": "boolean",
+            "default": false
+          },
+          "short_text": {
+            "description": "A text of one or two words (few tokens next to its language's filler sentence) is generated with a 0.5 s pause marker and a filler sentence after it under LACI, on servers with the language's LACI heads and pause tokens, and cut at the first silent frame once the reading reaches the filler; nothing past the cut is sent. A take that runs into the filler is retaken (twice), then cut where the reading reached it. `auto` applies it to a text that qualifies (no start, pause or phoneme markers, no CFG, control spans or speech edit), `off` generates the text alone.",
+            "type": "string",
+            "enum": [
+              "auto",
+              "off"
+            ],
+            "default": "auto"
+          },
+          "text": {
+            "type": "string"
+          },
+          "stream": {
+            "type": "boolean",
+            "default": true
+          },
+          "format": {
+            "description": "`pcm`: float32 PCM; `wav`: buffered 16-bit WAV (needs stream=false).",
+            "type": "string",
+            "enum": [
+              "pcm",
+              "wav"
+            ],
+            "default": "pcm"
+          }
+        }
+      },
+      "SpeechRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "model",
+          "input"
+        ],
+        "properties": {
+          "language": {
+            "type": "string",
+            "default": "en_us"
+          },
+          "text_normalization": {
+            "type": "boolean",
+            "default": true
+          },
+          "silence_prefill_frames": {
+            "description": "Codec-matched silence frames prefilled into the audio stream (null = the server default; 0 = off).",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "start_immediately": {
+            "description": "Put the checkpoint's start marker (U+E002) in front of the text: speech from the first generated frame. The silence prefill then defaults to 0 (an explicit silence_prefill_frames still applies). 400 on a checkpoint without a start token (Capabilities.start_token null).",
+            "type": "boolean",
+            "default": false
+          },
+          "decode_context": {
+            "description": "Decode the generated frames behind the last decode_context_frames of the reference prompt.",
+            "type": "boolean",
+            "default": false
+          },
+          "decode_context_frames": {
+            "type": "integer",
+            "default": 30
+          },
+          "temperature": {
+            "type": "number",
+            "default": 0.75
+          },
+          "topk": {
+            "type": "integer",
+            "default": 80
+          },
+          "top_p": {
+            "type": "number",
+            "default": 0.69
+          },
+          "min_p": {
+            "type": "number",
+            "default": 0.0
+          },
+          "max_tokens": {
+            "description": "Frame budget (null = the checkpoint's limit).",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "fade_out_ms": {
+            "type": "number",
+            "default": 0.0
+          },
+          "repetition_window": {
+            "type": "integer",
+            "default": 96
+          },
+          "repetition_penalty": {
+            "type": "number",
+            "default": 2.4
+          },
+          "repetition_codebooks": {
+            "type": "integer",
+            "default": 6
+          },
+          "seed": {
+            "description": "Sampling seed (null = drawn by the server; echoed in X-Seed).",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 4294967295,
+            "default": null
+          },
+          "stream_decode": {
+            "description": "Streaming decode: `prefix` streams chunks of an incremental decode as frames arrive, `whole` sends one exact chunk at EOS (null = the server default).",
+            "enum": [
+              "prefix",
+              "whole",
+              null
+            ],
+            "default": null
+          },
+          "stream_codebooks": {
+            "description": "Prefix decode: decode a frame once this many of its codebooks arrived (codebook j of frame f arrives with row f + j), the missing residual codebooks left out (a coarser RVQ decode, the frame never re-decoded); first audio comes up to n_codebooks - 1 rows earlier. n_codebooks = complete frames only; above it: 400. Default: the generation registry's `stream_codebooks.default`.",
+            "type": "integer",
+            "minimum": 1,
+            "default": 1
+          },
+          "stream_codebooks_scope": {
+            "description": "Which prefix chunks `stream_codebooks` applies to: the `first` only (later chunks wait for complete frames), or `all`. Default: the generation registry's `stream_codebooks.scope`.",
+            "enum": [
+              "first",
+              "all"
+            ],
+            "default": "first"
+          },
+          "speaker_mode": {
+            "description": "Speaker path on checkpoints that carry both (null = the checkpoint default).",
+            "enum": [
+              "embedding",
+              "reference",
+              null
+            ],
+            "default": null
+          },
+          "condition_buckets": {
+            "$ref": "#/components/schemas/ConditionBuckets"
+          },
+          "condition_values": {
+            "$ref": "#/components/schemas/ConditionValues"
+          },
+          "headroom_db": {
+            "description": "Output gain -headroom_db (null = the decoder's registry value), followed by the soft limiter above the generation registry's output_limit_dbfs (-1 dBFS).",
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 24,
+            "default": null
+          },
+          "decoder": {
+            "description": "The audio decoder, by id (`Capabilities.decoders`; null = the server default, `Capabilities.decoder`). An id the server does not serve is a 400.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "speaker_audio_base64": {
+            "description": "A reference clip (any container ffmpeg reads; data URLs accepted).",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "speaker_audio_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "speaker_reference_codes": {
+            "description": "Pre-encoded reference prefix codes [[cb0..cbN], ...] for raw-reference checkpoints.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "minItems": 1,
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "default": null
+          },
+          "speaker_embedding_base64": {
+            "description": "A saved `.npy`/`.npz` speaker embedding.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "speaker_embedding_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "speaker_embedding_id": {
+            "description": "A speaker id of GET /v2/speakers.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "speaker_blend_embedding_id_a": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "speaker_blend_embedding_id_b": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "speaker_blend_t": {
+            "description": "Slerp position between blend voices a (0) and b (1).",
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1,
+            "default": null
+          },
+          "controls_cfg_scale": {
+            "description": "Guidance on the hidden-space delta of `controls` / `control_spans`: the twin is the same prompt without it, uncond + scale * (cond - uncond) (1 = off; needs speaker_mode=embedding).",
+            "type": "number",
+            "default": 1.0
+          },
+          "speaker_cfg_scale": {
+            "description": "Reference CFG: uncond + scale * (cond - uncond) (1 = off).",
+            "type": "number",
+            "minimum": 0,
+            "default": 1.0
+          },
+          "accent": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "accent_strength": {
+            "type": "number",
+            "default": 1.0
+          },
+          "controls": {
+            "description": "Steering-bundle controls \"<set>.<direction>\" -> dose (see GET /v2/controls).",
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "type": "number"
+            },
+            "default": null
+          },
+          "control_spans": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ControlSpan"
+            },
+            "default": null
+          },
+          "control_span_rate": {
+            "description": "Frames per character of the rate schedule (null = 1.0).",
+            "type": [
+              "number",
+              "null"
+            ],
+            "exclusiveMinimum": 0,
+            "default": null
+          },
+          "control_span_follow": {
+            "description": "`reading` makes the spans follow the alignment heads' reading position.",
+            "type": "string",
+            "enum": [
+              "rate",
+              "reading"
+            ],
+            "default": "rate"
+          },
+          "control_span_lead": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 8,
+            "default": null
+          },
+          "control_span_lag": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": -4,
+            "maximum": 8,
+            "default": null
+          },
+          "steer_hold": {
+            "description": "Steer then hold: the request-level hidden `controls` run at full dose for `steer_onset_seconds` of generated speech, ramp linearly to `steer_hold` x dose over `steer_ramp_seconds`, then stay there. Null = the server default (Capabilities `steer_release`); 1 = constant. control_spans, speaker-embedding (raw) controls and the bundle's exempt directions stay constant. Below 1 on a server whose steering bundle has no `steer_release`: 400.",
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1,
+            "default": null
+          },
+          "steer_onset_seconds": {
+            "description": "Steer then hold: seconds of generated speech at full dose (null = the server default).",
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 600,
+            "default": null
+          },
+          "steer_ramp_seconds": {
+            "description": "Steer then hold: seconds of the linear ramp from full dose to `steer_hold` (null = the server default; 0 = a step).",
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 600,
+            "default": null
+          },
+          "laci": {
+            "description": "Guard against skips, hallucinations and truncation (servers with LACI heads). With the progressive decode (`stream_decode` prefix on a streamed response) rows reach the decoder once no rollback can change them, about one text bin behind generation (a rare deeper rollback restarts at the first row already sent). With the whole decode (`stream: false` or `stream_decode: whole`) the take is held until it is final and every rollback restarts at its own row.",
+            "type": "boolean",
+            "default": false
+          },
+          "short_text": {
+            "description": "A text of one or two words (few tokens next to its language's filler sentence) is generated with a 0.5 s pause marker and a filler sentence after it under LACI, on servers with the language's LACI heads and pause tokens, and cut at the first silent frame once the reading reaches the filler; nothing past the cut is sent. A take that runs into the filler is retaken (twice), then cut where the reading reached it. `auto` applies it to a text that qualifies (no start, pause or phoneme markers, no CFG, control spans or speech edit), `off` generates the text alone.",
+            "type": "string",
+            "enum": [
+              "auto",
+              "off"
+            ],
+            "default": "auto"
+          },
+          "model": {
+            "type": "string",
+            "description": "Any value."
+          },
+          "input": {
+            "type": "string"
+          },
+          "voice": {
+            "description": "A speaker id of GET /v2/speakers (used as speaker_embedding_id).",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "response_format": {
+            "type": "string",
+            "enum": [
+              "pcm",
+              "wav"
+            ],
+            "default": "pcm"
+          }
+        }
+      },
+      "Speaker": {
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "source_type",
+          "scope",
+          "is_default",
+          "original_name",
+          "created_at",
+          "has_preview",
+          "speaker_modes",
+          "embedding_dim",
+          "transcript",
+          "disabled_controls"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "source_type": {
+            "type": "string",
+            "enum": [
+              "audio",
+              "embedding"
+            ]
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "default",
+              "session"
+            ]
+          },
+          "is_default": {
+            "type": "boolean"
+          },
+          "original_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "number"
+          },
+          "has_preview": {
+            "type": "boolean"
+          },
+          "speaker_modes": {
+            "description": "The speaker modes this voice supports (an embedding voice supports `embedding` only).",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "embedding",
+                "reference"
+              ]
+            }
+          },
+          "embedding_dim": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "transcript": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "disabled_controls": {
+            "description": "Control ids (`<set>.<direction>`, or `<set>.<direction>-` for the negative pole alone) whose set calibration gives this voice dose 0 (the UI greys them out).",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "SpeakerList": {
+        "type": "object",
+        "required": [
+          "speakers"
+        ],
+        "properties": {
+          "speakers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Speaker"
+            }
+          }
+        }
+      },
+      "SpeakerCreateRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "speaker_audio_base64": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "speaker_audio_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "speaker_embedding_base64": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "speaker_embedding_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        }
+      },
+      "SpeakerEmbedding": {
+        "type": "object",
+        "required": [
+          "id",
+          "embedding"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "embedding": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          }
+        }
+      },
+      "TextTokenizerSpec": {
+        "description": "The checkpoint's text tokenizer (SuperBPE), with its extra rows when it has any.",
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "vocab_size": {
+            "type": "integer"
+          },
+          "offset": {
+            "type": "integer"
+          },
+          "bos": {
+            "type": "integer"
+          },
+          "eos": {
+            "type": "integer"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "phonemes": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "open_marker": {
+                "type": "string"
+              },
+              "close_marker": {
+                "type": "string"
+              },
+              "symbols": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "start": {
+            "description": "The start token (U+E002 first in the text) when the checkpoint has one.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "marker": {
+                "type": "string"
+              }
+            }
+          },
+          "pauses": {
+            "description": "The pause tokens (U+E003 + bucket after a word) when the checkpoint has them.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "ids": {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
+              },
+              "markers": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "seconds": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                }
+              }
+            }
+          }
+        }
+      },
+      "SilencePrefill": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "available",
+              "default_frames",
+              "default_on",
+              "default_seconds",
+              "frame_seconds",
+              "codec",
+              "note"
+            ],
+            "properties": {
+              "available": {
+                "type": "boolean",
+                "enum": [
+                  true
+                ]
+              },
+              "default_frames": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "default_on": {
+                "type": "boolean"
+              },
+              "default_seconds": {
+                "type": "number"
+              },
+              "frame_seconds": {
+                "type": "number"
+              },
+              "codec": {
+                "type": "string"
+              },
+              "note": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "available",
+              "default_frames",
+              "codec"
+            ],
+            "properties": {
+              "available": {
+                "type": "boolean",
+                "enum": [
+                  false
+                ]
+              },
+              "default_frames": {
+                "type": "null"
+              },
+              "codec": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "DecodeContext": {
+        "type": "object",
+        "required": [
+          "available",
+          "default_frames",
+          "max_frames",
+          "note"
+        ],
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "default_frames": {
+            "type": "integer"
+          },
+          "max_frames": {
+            "type": "integer"
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      },
+      "DecoderInfo": {
+        "description": "An audio decoder of the matched codec. `id` is the decoder head (`keep2_plain`: the default, two layers per transformer stage; `full_mr`: the full-size head).",
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "label",
+          "checkpoint",
+          "expect_step",
+          "headroom_db",
+          "causal",
+          "codec"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "checkpoint": {
+            "type": "string"
+          },
+          "expect_step": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "headroom_db": {
+            "type": "number"
+          },
+          "causal": {
+            "type": "boolean"
+          },
+          "codec": {
+            "type": "string"
+          }
+        }
+      },
+      "Decoder": {
+        "description": "The default audio decoder behind the matched codec (null when the codec has none).",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/DecoderInfo"
+          },
+          {
+            "type": "object",
+            "required": [
+              "codec",
+              "error"
+            ],
+            "properties": {
+              "codec": {
+                "type": "string"
+              },
+              "error": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "ConditionTokens": {
+        "description": "The checkpoint's condition rows (null when it has none).",
+        "type": [
+          "object",
+          "null"
+        ],
+        "required": [
+          "enabled",
+          "names",
+          "flags",
+          "count",
+          "bucket_counts",
+          "unknown_ids",
+          "edges",
+          "units",
+          "layout"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "names": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "flags": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          },
+          "count": {
+            "type": "integer"
+          },
+          "bucket_counts": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "Buckets per condition name (ids 0..n-1; n = unknown)"
+          },
+          "unknown_ids": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "The unknown id per condition name (= its bucket count)"
+          },
+          "edges": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            }
+          },
+          "units": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "layout": {
+            "type": "string"
+          }
+        }
+      },
+      "PhonemeTokens": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "required": [
+          "open_marker",
+          "close_marker",
+          "symbols"
+        ],
+        "properties": {
+          "open_marker": {
+            "type": "string"
+          },
+          "close_marker": {
+            "type": "string"
+          },
+          "symbols": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "StartToken": {
+        "description": "The checkpoint's start token (null without one): the marker as the first character of the text, once, asks for speech from the first generated frame (GenerationOptions.start_immediately adds it).",
+        "type": [
+          "object",
+          "null"
+        ],
+        "required": [
+          "marker"
+        ],
+        "properties": {
+          "marker": {
+            "type": "string"
+          }
+        }
+      },
+      "PauseTokens": {
+        "description": "The checkpoint's pause tokens (null without them): marker j after a word and its glued punctuation asks for a pause of about seconds[j].",
+        "type": [
+          "object",
+          "null"
+        ],
+        "required": [
+          "markers",
+          "seconds"
+        ],
+        "properties": {
+          "markers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "seconds": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          }
+        }
+      },
+      "ProjectsCapability": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "enabled",
+              "max_media_bytes",
+              "max_project_bytes"
+            ],
+            "properties": {
+              "enabled": {
+                "type": "boolean",
+                "enum": [
+                  true
+                ]
+              },
+              "max_media_bytes": {
+                "type": "integer"
+              },
+              "max_project_bytes": {
+                "type": "integer"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "enabled"
+            ],
+            "properties": {
+              "enabled": {
+                "type": "boolean",
+                "enum": [
+                  false
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "Capabilities": {
+        "type": "object",
+        "required": [
+          "text_tokenizer_spec",
+          "text_normalization_enabled",
+          "text_norm_languages",
+          "accents",
+          "speaker_enabled",
+          "speaker_conditioning_type",
+          "speaker_embedding_dim",
+          "speaker_embedding_codec",
+          "n_codebooks",
+          "codebook_sizes",
+          "audio_codec",
+          "max_tokens",
+          "stream_decode_modes",
+          "stream_decode_default",
+          "silence_prefill",
+          "decode_context",
+          "speaker_modes",
+          "speaker_mode_default",
+          "decoder",
+          "decoders",
+          "condition_tokens",
+          "speaker_audio_upload",
+          "speaker_cfg_supported",
+          "speaker_cfg_modes",
+          "speaker_cfg_unconditional",
+          "speaker_cfg_formula",
+          "laci_languages",
+          "plugins",
+          "speaker_embedding_upload",
+          "speaker_embedding_cache",
+          "speaker_embedding_blend",
+          "default_voices_enabled",
+          "speech_editing",
+          "edit_transcribe",
+          "edit_max_spans",
+          "edit_frame_rate",
+          "edit_max_seconds",
+          "edit_align_max_seconds",
+          "phoneme_tokens",
+          "start_token",
+          "pause_tokens",
+          "phonemize_enabled",
+          "phonemize_languages",
+          "phonemize_guess_languages",
+          "projects",
+          "steer_release"
+        ],
+        "properties": {
+          "text_tokenizer_spec": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TextTokenizerSpec"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "text_normalization_enabled": {
+            "type": "boolean"
+          },
+          "text_norm_languages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "accents": {
+            "description": "Accent adapters a request can pick with `accent`.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "speaker_enabled": {
+            "type": "boolean"
+          },
+          "speaker_conditioning_type": {
+            "type": "string",
+            "enum": [
+              "raw_reference_prefix",
+              "embedding",
+              "none"
+            ]
+          },
+          "speaker_embedding_dim": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "speaker_embedding_codec": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "n_codebooks": {
+            "type": "integer"
+          },
+          "codebook_sizes": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "audio_codec": {
+            "type": "string"
+          },
+          "max_tokens": {
+            "type": "integer"
+          },
+          "stream_decode_modes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "prefix",
+                "whole"
+              ]
+            }
+          },
+          "stream_decode_default": {
+            "enum": [
+              "prefix",
+              "whole",
+              null
+            ]
+          },
+          "silence_prefill": {
+            "$ref": "#/components/schemas/SilencePrefill"
+          },
+          "decode_context": {
+            "$ref": "#/components/schemas/DecodeContext"
+          },
+          "speaker_modes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "embedding",
+                "reference"
+              ]
+            }
+          },
+          "speaker_mode_default": {
+            "enum": [
+              "embedding",
+              "reference",
+              null
+            ]
+          },
+          "decoder": {
+            "$ref": "#/components/schemas/Decoder"
+          },
+          "decoders": {
+            "description": "Every decoder a request may pick with `decoder`, the default (`decoder`) first; empty when the codec has none.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DecoderInfo"
+            }
+          },
+          "condition_tokens": {
+            "$ref": "#/components/schemas/ConditionTokens"
+          },
+          "speaker_audio_upload": {
+            "type": "boolean"
+          },
+          "speaker_cfg_supported": {
+            "type": "boolean"
+          },
+          "speaker_cfg_modes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "embedding",
+                "reference"
+              ]
+            }
+          },
+          "speaker_cfg_unconditional": {
+            "type": "string"
+          },
+          "speaker_cfg_formula": {
+            "type": "string"
+          },
+          "laci_languages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "plugins": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Server plugins mounted with --plugins; plugin N serves /v2/N/* and /N (its own spec)."
+          },
+          "speaker_embedding_upload": {
+            "type": "boolean"
+          },
+          "speaker_embedding_cache": {
+            "type": "boolean"
+          },
+          "speaker_embedding_blend": {
+            "type": "boolean"
+          },
+          "default_voices_enabled": {
+            "type": "boolean"
+          },
+          "speech_editing": {
+            "type": "boolean",
+            "description": "The checkpoint edits speech (span-end and marker rows) and the server has FuseAlign and the reference encoder: /v2/edit/align and /v2/edit with the clip's transcript. Speech recognition is not required (edit_transcribe)."
+          },
+          "edit_transcribe": {
+            "type": "boolean",
+            "description": "The server also has speech recognition (Qwen3-ASR): /v2/edit/transcribe, /v2/edit without original_text and verify. Always false when speech_editing is false; without it those answer 503."
+          },
+          "edit_max_spans": {
+            "type": "integer"
+          },
+          "edit_frame_rate": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "edit_max_seconds": {
+            "type": "number"
+          },
+          "edit_align_max_seconds": {
+            "type": "number",
+            "description": "The longest clip /v2/edit/align and the alignment inside /v2/edit accept (seconds)."
+          },
+          "phoneme_tokens": {
+            "$ref": "#/components/schemas/PhonemeTokens"
+          },
+          "start_token": {
+            "$ref": "#/components/schemas/StartToken"
+          },
+          "pause_tokens": {
+            "$ref": "#/components/schemas/PauseTokens"
+          },
+          "phonemize_enabled": {
+            "type": "boolean"
+          },
+          "phonemize_languages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "phonemize_guess_languages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "projects": {
+            "$ref": "#/components/schemas/ProjectsCapability"
+          },
+          "steer_release": {
+            "description": "The server defaults of the request fields steer_hold / steer_onset_seconds / steer_ramp_seconds (the steering bundle's `steer_release`); null: the request-level controls are constant and steer_hold below 1 is refused.",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SteerRelease"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "SteerRelease": {
+        "description": "Steer then hold: the request-level hidden controls at full dose for `onset_seconds`, a linear ramp to `hold` x dose over `ramp_seconds`, `hold` after; `exempt` directions stay constant.",
+        "type": "object",
+        "required": [
+          "onset_seconds",
+          "ramp_seconds",
+          "hold",
+          "exempt"
+        ],
+        "properties": {
+          "onset_seconds": {
+            "type": "number",
+            "minimum": 0
+          },
+          "ramp_seconds": {
+            "type": "number",
+            "minimum": 0
+          },
+          "hold": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "exempt": {
+            "description": "Hidden-space control ids that never release.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ControlSet": {
+        "type": "object",
+        "required": [
+          "space",
+          "modes"
+        ],
+        "properties": {
+          "space": {
+            "type": "string"
+          },
+          "modes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "embedding",
+                "reference"
+              ]
+            }
+          },
+          "source_index": {
+            "type": "integer",
+            "description": "The Full AttnRes bank source a hidden-space set steers."
+          },
+          "calibration": {
+            "$ref": "#/components/schemas/ControlCalibration"
+          }
+        }
+      },
+      "ControlCalibration": {
+        "description": "The set's calibration.json: per-direction doses chosen offline, keyed by direction name (a `<name>-` key: the negative pole's own dose). Controls stay raw doses; a client scales its sliders by these. Absent when the set has no calibration.",
+        "type": "object",
+        "required": [
+          "default",
+          "by_speaker",
+          "global_default"
+        ],
+        "properties": {
+          "default": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            }
+          },
+          "by_speaker": {
+            "description": "Per speaker id overrides of `default`; dose 0 disables the direction for that voice.",
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "number"
+              }
+            }
+          },
+          "global_default": {
+            "type": "number",
+            "description": "The dose of a direction neither `by_speaker` nor `default` names."
+          }
+        }
+      },
+      "ControlDirection": {
+        "type": "object",
+        "required": [
+          "set",
+          "space",
+          "kind",
+          "norm"
+        ],
+        "properties": {
+          "set": {
+            "type": "string"
+          },
+          "space": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "axis",
+              "named"
+            ]
+          },
+          "norm": {
+            "type": "number"
+          },
+          "vector": {
+            "description": "Raw-space directions only.",
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          }
+        }
+      },
+      "ControlsDocument": {
+        "type": "object",
+        "required": [
+          "bundle",
+          "embedding_dim",
+          "sets",
+          "directions",
+          "timing",
+          "ui",
+          "steer_release"
+        ],
+        "properties": {
+          "bundle": {
+            "type": "string"
+          },
+          "embedding_dim": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "sets": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ControlSet"
+            }
+          },
+          "directions": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ControlDirection"
+            }
+          },
+          "timing": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 2,
+                "items": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "ui": {
+            "description": "The bundle's studio UI metadata, passed through.",
+            "type": "object"
+          },
+          "steer_release": {
+            "description": "The bundle's steer-then-hold defaults (as Capabilities `steer_release`); null without them.",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SteerRelease"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "PhonemizeRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 5000
+          },
+          "language": {
+            "type": "string",
+            "default": "en_us"
+          },
+          "guess": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      },
+      "PhonemeSegment": {
+        "type": "object",
+        "required": [
+          "text",
+          "ipa",
+          "status"
+        ],
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "ipa": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "description": "null: non-word text.",
+            "enum": [
+              "ok",
+              "ambiguous",
+              "unknown",
+              "guessed",
+              "skipped",
+              "unsupported",
+              null
+            ]
+          }
+        }
+      },
+      "PhonemizeResponse": {
+        "type": "object",
+        "required": [
+          "language",
+          "segments"
+        ],
+        "properties": {
+          "language": {
+            "type": "string"
+          },
+          "segments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PhonemeSegment"
+            }
+          }
+        }
+      },
+      "EditWordIn": {
+        "description": "One word of the original with its timing (seconds), as /v2/edit/align returns it.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "word",
+          "start",
+          "end"
+        ],
+        "properties": {
+          "word": {
+            "type": "string"
+          },
+          "start": {
+            "type": "number"
+          },
+          "end": {
+            "type": "number"
+          },
+          "tokens": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "default": null
+          },
+          "confidence": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "default": null
+          }
+        }
+      },
+      "EditWord": {
+        "description": "One aligned word: a whitespace word of the text (one character or Latin run in ja/cmn), its FuseAlign\ninterval in seconds (a word FuseAlign did not place keeps its fallback interval; an overlap with the previous\nword is split at its midpoint), `confidence` = FuseAlign's presence probability, and `tokens` = its edit\ntokens (upper-cased; letters, digits and `'` of any script kept, everything else a word break). Punctuation-only\nwords are left out.\n",
+        "type": "object",
+        "required": [
+          "word",
+          "start",
+          "end",
+          "confidence",
+          "tokens"
+        ],
+        "properties": {
+          "word": {
+            "type": "string"
+          },
+          "start": {
+            "type": "number"
+          },
+          "end": {
+            "type": "number"
+          },
+          "confidence": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "tokens": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "EditTranscribeRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "audio_base64"
+        ],
+        "properties": {
+          "audio_base64": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string",
+            "default": "en_us",
+            "description": "The audio's language (server code): the Qwen3-ASR recognition language and FuseAlign's tokenization."
+          }
+        }
+      },
+      "EditAlignRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "audio_base64",
+          "text"
+        ],
+        "properties": {
+          "audio_base64": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string",
+            "default": "en_us"
+          }
+        }
+      },
+      "EditTranscript": {
+        "type": "object",
+        "required": [
+          "text",
+          "duration",
+          "words"
+        ],
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "duration": {
+            "type": "number"
+          },
+          "words": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EditWord"
+            }
+          }
+        }
+      },
+      "EditRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "audio_base64",
+          "target_text"
+        ],
+        "properties": {
+          "audio_base64": {
+            "type": "string"
+          },
+          "target_text": {
+            "type": "string"
+          },
+          "original_text": {
+            "description": "The clip's transcript. Omitted, it is recognized with Qwen3-ASR when the clip's words are needed; a server without speech recognition (edit_transcribe false) then answers 503.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "original_words": {
+            "description": "Checked word timings of original_text, used instead of the server's alignment.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/EditWordIn"
+            },
+            "default": null
+          },
+          "spans": {
+            "description": "Explicit regions [start, end] in seconds.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": {
+                "type": "number"
+              }
+            },
+            "default": null
+          },
+          "margin_seconds": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0.08
+          },
+          "max_span_seconds": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 120,
+            "default": 30.0
+          },
+          "language": {
+            "type": "string",
+            "default": "en_us"
+          },
+          "text_normalization": {
+            "type": "boolean",
+            "default": true
+          },
+          "temperature": {
+            "type": "number",
+            "default": 0.75
+          },
+          "topk": {
+            "type": "integer",
+            "default": 80
+          },
+          "top_p": {
+            "type": "number",
+            "default": 0.69
+          },
+          "min_p": {
+            "type": "number",
+            "default": 0.0
+          },
+          "repetition_window": {
+            "type": "integer",
+            "default": 96
+          },
+          "repetition_penalty": {
+            "type": "number",
+            "default": 2.4
+          },
+          "repetition_codebooks": {
+            "type": "integer",
+            "default": 6
+          },
+          "seed": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 4294967295,
+            "default": null
+          },
+          "num_takes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4,
+            "default": 1
+          },
+          "speaker_embedding": {
+            "description": "Embed the original clip into the speaker row (null = on when the checkpoint has the row).",
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "default": null
+          },
+          "condition_buckets": {
+            "$ref": "#/components/schemas/ConditionBuckets"
+          },
+          "condition_values": {
+            "$ref": "#/components/schemas/ConditionValues"
+          },
+          "controls": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "type": "number"
+            },
+            "default": null
+          },
+          "region_controls": {
+            "description": "One entry per `spans` entry; region k uses controls + region_controls[k].",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "additionalProperties": {
+                "type": "number"
+              }
+            },
+            "default": null
+          },
+          "steer_hold": {
+            "description": "Steer then hold of every region's hidden controls, as GenerateRequest; a fill's frames count from its first one.",
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1,
+            "default": null
+          },
+          "steer_onset_seconds": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 600,
+            "default": null
+          },
+          "steer_ramp_seconds": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 600,
+            "default": null
+          },
+          "max_context_seconds": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 20,
+            "default": 16.0
+          },
+          "context_seconds": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10,
+            "default": 4.0
+          },
+          "min_fill_ratio": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0.7
+          },
+          "verify": {
+            "description": "Transcribe each take with Qwen3-ASR and report WER/CER against target_text and the take's words. Needs edit_transcribe (else 503).",
+            "type": "boolean",
+            "default": false
+          },
+          "decoder": {
+            "description": "The audio decoder of the edited clip, by id (`Capabilities.decoders`; null = the server default). An id the server does not serve is a 400.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        }
+      },
+      "EditVerify": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "required": [
+          "asr_text",
+          "wer",
+          "cer"
+        ],
+        "properties": {
+          "asr_text": {
+            "type": "string"
+          },
+          "wer": {
+            "type": "number"
+          },
+          "cer": {
+            "type": "number"
+          },
+          "groups": {
+            "type": "array",
+            "description": "Per pronunciation group of the target, its IPA and the word heard in its place (present when the target has groups).",
+            "items": {
+              "type": "object",
+              "required": [
+                "ipa",
+                "heard"
+              ],
+              "properties": {
+                "ipa": {
+                  "type": "string"
+                },
+                "heard": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "EditTake": {
+        "type": "object",
+        "required": [
+          "seed",
+          "audio_base64",
+          "duration",
+          "edited_regions",
+          "fill_seconds",
+          "stopped",
+          "verify",
+          "words"
+        ],
+        "properties": {
+          "seed": {
+            "type": "integer"
+          },
+          "audio_base64": {
+            "type": "string",
+            "description": "16-bit PCM mono WAV at 44100 Hz."
+          },
+          "duration": {
+            "type": "number"
+          },
+          "edited_regions": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": {
+                "type": "number"
+              }
+            }
+          },
+          "fill_seconds": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "stopped": {
+            "description": "Per region, whether its fill ended on the span-end token.",
+            "type": "array",
+            "items": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "verify": {
+            "$ref": "#/components/schemas/EditVerify"
+          },
+          "words": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/EditWord"
+            }
+          }
+        }
+      },
+      "EditResponse": {
+        "type": "object",
+        "required": [
+          "sample_rate",
+          "original_text",
+          "target_text",
+          "words",
+          "spans",
+          "contexts",
+          "expected_seconds",
+          "takes"
+        ],
+        "properties": {
+          "sample_rate": {
+            "type": "integer"
+          },
+          "original_text": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "target_text": {
+            "type": "string"
+          },
+          "words": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/EditWord"
+            }
+          },
+          "spans": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": {
+                "type": "number"
+              }
+            }
+          },
+          "contexts": {
+            "description": "The audio the model saw per window (null when the clip was edited whole).",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": {
+                "type": "number"
+              }
+            }
+          },
+          "expected_seconds": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          },
+          "takes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EditTake"
+            }
+          }
+        }
+      },
+      "ProjectSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "updated_at",
+          "revision",
+          "bytes",
+          "media_bytes",
+          "summary"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "updated_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Epoch milliseconds."
+          },
+          "revision": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "bytes": {
+            "type": "integer",
+            "description": "Size of the stored document."
+          },
+          "media_bytes": {
+            "type": "integer"
+          },
+          "summary": {
+            "description": "The project's `data.summary`, passed through."
+          }
+        }
+      },
+      "Project": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "revision",
+          "updated_at",
+          "media_bytes",
+          "data"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "updated_at": {
+            "type": "integer",
+            "description": "Epoch milliseconds."
+          },
+          "media_bytes": {
+            "type": "integer"
+          },
+          "data": {
+            "type": "object"
+          }
+        }
+      },
+      "ProjectPutRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "data"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "data": {
+            "description": "The studio document, stored verbatim. `data.media` maps each referenced media hash to {type, size}.",
+            "type": "object",
+            "properties": {
+              "media": {
+                "type": "object",
+                "propertyNames": {
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              }
+            }
+          },
+          "base_revision": {
+            "description": "The revision this save is based on (null for a new project).",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          }
+        }
+      },
+      "ProjectSaved": {
+        "type": "object",
+        "required": [
+          "id",
+          "revision",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer"
+          },
+          "updated_at": {
+            "type": "integer"
+          }
+        }
+      },
+      "ProjectDeleted": {
+        "type": "object",
+        "required": [
+          "deleted"
+        ],
+        "properties": {
+          "deleted": {
+            "type": "string"
+          }
+        }
+      },
+      "ProjectGcResult": {
+        "type": "object",
+        "required": [
+          "removed",
+          "freed_bytes",
+          "kept"
+        ],
+        "properties": {
+          "removed": {
+            "type": "integer"
+          },
+          "freed_bytes": {
+            "type": "integer"
+          },
+          "kept": {
+            "type": "integer"
+          }
+        }
+      },
+      "MediaStored": {
+        "type": "object",
+        "required": [
+          "sha256",
+          "size",
+          "created"
+        ],
+        "properties": {
+          "sha256": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer"
+          },
+          "created": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  }
+}

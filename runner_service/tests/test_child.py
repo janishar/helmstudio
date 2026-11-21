@@ -1,9 +1,11 @@
 """core.child (the native runtime's child process) with a fake child: progress lines (split on \\r, mapped, glued
 log text ignored), cancel kills the whole process group, a non-zero exit's last `h3: ` line without paths, the idle
-limit, the stale-child sweep, and an environment without the runner's secrets."""
+limit, the stale-child sweep, an environment without the runner's secrets, and serve(): the ready line's port, its
+timeout, an exit before it, a server dying under the body, and the group killed at the end."""
 
 import contextlib
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -68,7 +70,7 @@ w("odd 3/x line\n")
 w("h3: wrote /tmp/out.mp4\n")
 """
     ctx = Ctx()
-    child.run(ctx, py(code), cwd=tmp_path, phases={"denoise": "sampling"}, idle_s=10)
+    child.run(ctx, py(code), cwd=tmp_path, name="h3", phases={"denoise": "sampling"}, idle_s=10)
     assert (4, 4, "sampling") in ctx.seen and ctx.calls > 0
     assert all(p in ("tokenizer", "sampling") for _, _, p in ctx.seen)
     assert all(n >= 1 for n, _, _ in ctx.seen)  # `0/N` opens a phase; progress counts from 1
@@ -91,7 +93,7 @@ sys.stderr.write("\rdenoise                      1/4   "); sys.stderr.flush(); t
     with pytest.raises(
         Cancelled
     ):  # late: no line is ever parsed, so the idle limit fails it instead
-        child.run(ctx, py(code), cwd=tmp_path, phases={"denoise": "sampling"}, idle_s=3)
+        child.run(ctx, py(code), cwd=tmp_path, name="h3", phases={"denoise": "sampling"}, idle_s=3)
     assert ctx.seen == [(1, 4, "sampling")]
 
 
@@ -106,7 +108,7 @@ while True:
 """
     ctx = Ctx(cancel_after=20)
     with pytest.raises(Cancelled):
-        child.run(ctx, py(code), cwd=tmp_path, phases={}, idle_s=10)
+        child.run(ctx, py(code), cwd=tmp_path, name="h3", phases={}, idle_s=10)
     assert grand.is_file() and gone(
         int(grand.read_text())
     )  # the child's own child (h3's ffmpeg) too
@@ -117,7 +119,7 @@ def test_a_child_ignoring_sigterm_is_killed(tmp_path):
     code = "import signal, time\nsignal.signal(signal.SIGTERM, signal.SIG_IGN)\ntime.sleep(60)"
     t = time.monotonic()
     with pytest.raises(Cancelled):
-        child.run(Ctx(cancel_after=10), py(code), cwd=tmp_path, phases={}, idle_s=10)
+        child.run(Ctx(cancel_after=10), py(code), cwd=tmp_path, name="h3", phases={}, idle_s=10)
     assert time.monotonic() - t < 5
 
 
@@ -130,12 +132,14 @@ sys.stderr.write("some trailing noise\n")
 sys.exit(1)
 """
     with pytest.raises(RunError) as e:
-        child.run(Ctx(), py(code), cwd=tmp_path, phases={}, idle_s=10)
+        child.run(Ctx(), py(code), cwd=tmp_path, name="h3", phases={}, idle_s=10)
     assert str(e.value) == "gen: h3: cannot open <file>: No such file"
     with pytest.raises(RunError, match=r"^gen: exited with status 2$"):
-        child.run(Ctx(), py("import sys; sys.exit(2)"), cwd=tmp_path, phases={}, idle_s=10)
+        child.run(
+            Ctx(), py("import sys; sys.exit(2)"), cwd=tmp_path, name="h3", phases={}, idle_s=10
+        )
     with pytest.raises(RunError, match=r"^gen: killed by signal 9$"):
-        child.run(Ctx(), py("import os, signal; os.kill(os.getpid(), signal.SIGKILL)"), cwd=tmp_path,
+        child.run(Ctx(), py("import os, signal; os.kill(os.getpid(), signal.SIGKILL)"), cwd=tmp_path, name="h3",
                   phases={}, idle_s=10)  # fmt: skip
 
 
@@ -143,7 +147,7 @@ def test_a_silent_child_fails_at_the_idle_limit(tmp_path):
     pidf = tmp_path / "me.pid"
     code = f"import os, time\nopen({str(pidf)!r}, 'w').write(str(os.getpid()))\ntime.sleep(60)"
     with pytest.raises(RunError, match=r"^gen: the child made no progress for \d+ s$"):
-        child.run(Ctx(), py(code), cwd=tmp_path, phases={}, idle_s=0.5)
+        child.run(Ctx(), py(code), cwd=tmp_path, name="h3", phases={}, idle_s=0.5)
     assert gone(int(pidf.read_text()))
 
 
@@ -184,6 +188,92 @@ def test_the_child_gets_no_secrets(monkeypatch):
     monkeypatch.setenv("NATS_URL", "nats://runner:secret@nats:4222")
     monkeypatch.setenv("S3_SECRET_ACCESS_KEY", "x")
     monkeypatch.setenv("H3_ZERO_COPY_WEIGHTS", "0")
-    env = child.child_env()
+    env = child.child_env("h3")
     assert "NATS_URL" not in env and "S3_SECRET_ACCESS_KEY" not in env
     assert env["H3_ZERO_COPY_WEIGHTS"] == "0" and "PATH" in env
+    monkeypatch.setenv("ZONOS3_FFMPEG", "/opt/ffmpeg")
+    env = child.child_env("zonos3")
+    assert env["ZONOS3_FFMPEG"] == "/opt/ffmpeg" and "H3_ZERO_COPY_WEIGHTS" not in env
+
+
+READY = re.compile(r"zonos3-server: listening on http://127\.0\.0\.1:(\d+)")
+
+
+def server(tmp_path, ready: bool = True, then: str = "time.sleep(60)") -> list[str]:
+    """A fake zonos3-server: Metal noise, the ready line (or not), then `then`; its pid in me.pid."""
+    line = (
+        'w("zonos3-server: listening on http://127.0.0.1:4321  (studio: not built)\\n")'
+        if ready
+        else "pass"
+    )
+    return py(f"""
+import os, sys, time
+open({str(tmp_path / "me.pid")!r}, "w").write(str(os.getpid()))
+w = sys.stderr.write
+w("ggml_metal_init: found device\\n"); w("zonos3: backend = MTL0\\n"); sys.stderr.flush(); time.sleep(0.3)
+{line}; sys.stderr.flush()
+{then}
+""")
+
+
+def serve(tmp_path, ctx=None, ready_s: float = 10, **kw):
+    return child.serve(ctx or Ctx(), server(tmp_path, **kw), cwd=tmp_path, name="zonos3", ready=READY,
+                       ready_s=ready_s)  # fmt: skip
+
+
+def last_pid(tmp_path) -> int:
+    return int((tmp_path / "me.pid").read_text())
+
+
+def test_serve_yields_the_port_and_kills_the_server_at_the_end(tmp_path):
+    with serve(tmp_path) as port:
+        pid = last_pid(tmp_path)
+        assert port == 4321 and child.LIVE["pid"] == pid and not gone(pid, 0.2)
+    assert gone(pid) and child.LIVE["pid"] is None and not child.pid_file().exists()
+    with pytest.raises(Cancelled), serve(tmp_path):  # cancel inside the body: the server goes too
+        raise Cancelled
+    assert gone(last_pid(tmp_path))
+
+
+def test_serve_without_a_ready_line_times_out_or_is_cancelled(tmp_path):
+    with pytest.raises(RunError, match=r"^gen: the server was not ready within 1 s$"), serve(tmp_path, ready_s=1,
+                                                                                             ready=False):  # fmt: skip
+        pytest.fail("no body without a ready line")
+    assert gone(last_pid(tmp_path))
+    with pytest.raises(Cancelled), serve(tmp_path, Ctx(cancel_after=3), ready=False):
+        pass
+    assert gone(last_pid(tmp_path)) and child.LIVE["pid"] is None
+
+
+def test_serve_reports_the_servers_last_line_when_it_dies(tmp_path):
+    die = 'w("zonos3: cannot open /Users/me/models/zac-keep2.gguf\\n"); sys.stderr.flush(); sys.exit(1)'
+    why = r"^gen: zonos3: cannot open <file>$"
+    with (
+        pytest.raises(RunError, match=why),
+        serve(tmp_path, ready=False, then=die),
+    ):  # before the ready line
+        pass
+    with (
+        pytest.raises(RunError, match=why),
+        serve(tmp_path, then=die),
+    ):  # under the body: a refused request
+        time.sleep(1)
+        raise ConnectionRefusedError
+
+
+def test_a_server_fails_with_its_error_line_not_its_load_report(tmp_path):
+    die = (
+        'w("failed to load model /Users/me/x.gguf\\n"); '
+        'w("error: backbone-f16.gguf not found (tried: /Users/me/x.gguf)\\n"); '
+        'w("zonos3: backend = MTL0 | CPU; loaded 812 tensors, 1.20 GiB\\n"); '
+        'w("zonos3: MTL0 weights: 811 tensors, 1200.0 MiB\\n"); sys.stderr.flush(); sys.exit(1)'
+    )
+    with pytest.raises(RunError) as e, serve(tmp_path, ready=False, then=die):
+        pass
+    assert str(e.value) == "gen: error: backbone-f16.gguf not found (tried: <file>"
+
+
+def test_h3_keeps_only_its_own_lines(tmp_path):
+    code = 'import sys; sys.stderr.write("error: boom\\nfailed x\\n"); sys.exit(3)'
+    with pytest.raises(RunError, match=r"^gen: exited with status 3$"):
+        child.run(Ctx(), py(code), cwd=tmp_path, name="h3", phases={}, idle_s=10)

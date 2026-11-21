@@ -281,12 +281,15 @@ def test_a_file_two_components_read_counts_once(tmp_path, monkeypatch):
 
 def test_minimax_h3_pack_publishes_the_canonical_fixtures():
     values, _, packs = registry.build("native")
-    assert [p.name for p in packs] == ["minimax_h3"]
-    assert values["nodes"]["nodes"] == fixture("minimax-h3.nodes.valid.json")["nodes"]
-    assert (
-        values["workflows"]["workflows"] == fixture("minimax-h3.workflows.valid.json")["workflows"]
-    )
-    got, want = values["models"]["models"][0], fixture("minimax-h3.models.valid.json")["models"][0]
+    assert [p.name for p in packs] == ["minimax_h3", "zonos3"]  # zonos3: tests/test_zonos3.py
+    want_nodes = fixture("minimax-h3.nodes.valid.json")["nodes"]
+    kinds = {n["kind"] for n in want_nodes}
+    assert [n for n in values["nodes"]["nodes"] if n["kind"] in kinds] == want_nodes
+    assert [w for w in values["workflows"]["workflows"] if w["family"] == "minimax-h3"] == fixture(
+        "minimax-h3.workflows.valid.json"
+    )["workflows"]
+    (got,) = [m for m in values["models"]["models"] if m["family"] == "minimax-h3"]
+    want = fixture("minimax-h3.models.valid.json")["models"][0]
     assert {k: got[k] for k in ("id", "family", "title", "media", "runtimes")} == {
         k: want[k] for k in ("id", "family", "title", "media", "runtimes")}  # fmt: skip
     variant = got["variants"][0]

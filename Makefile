@@ -14,7 +14,7 @@ TEST := KONG_HTTP_PORT=8390 POSTGRES_HOST_PORT=5464 NATS_HOST_PORT=4323 S3_HOST_
 # the test admin set by deploy/compose/fake.yml
 TEST_ADMIN := ADMIN_EMAIL=admin@helm.test ADMIN_PASSWORD="$${HELM_TEST_ADMIN_PASSWORD:-helm test admin pass 1}"
 
-.PHONY: secrets envs build up dev down logs ps contracts-check test resilience test-down runners runner-torch runner-mlx runner-native runners-stop h3 \
+.PHONY: secrets envs build up dev down logs ps contracts-check test resilience test-down runners runner-torch runner-mlx runner-native runners-stop h3 zonos3 \
         gpu-host-secrets gpu-host-reload gpu-host-tunnel gpu-host-tunnel-stop
 
 secrets:          ## deploy/secrets/ (git-ignored); never overwrites
@@ -93,11 +93,15 @@ HEALTH_PORT_native := 8093
 
 runners: runner-torch runner-mlx runner-native  ## the native runners in the background (needs make up); make runners-stop stops them
 
-# the native env runs the vendored h3 (runner_service/vendor/h3c, pinned h3.c): make rebuilds it only when a source changed
-runner-native: h3
+# the native env runs the vendored h3 (runner_service/vendor/h3c, pinned h3.c) and zonos3-server
+# (runner_service/vendor/zonos3): make rebuilds them only when a source changed
+runner-native: h3 zonos3
 
 h3:               ## build the vendored h3 binary (Command Line Tools clang; about 1 s)
 	$(MAKE) -C runner_service/vendor/h3c -j8 h3
+
+zonos3:           ## build the vendored zonos3-server (cmake, offline; under 2 minutes from clean)
+	$(MAKE) -C runner_service zonos3
 
 runner-torch runner-mlx runner-native: runner-%: secrets  ## one native runner (env torch, mlx or native) in the background
 	@mkdir -p $(RUN_DIR); pid=$$(cat $(RUN_DIR)/runner-mac-$*.pid 2>/dev/null); \

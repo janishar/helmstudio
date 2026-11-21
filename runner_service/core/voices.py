@@ -66,7 +66,7 @@ def _preview(name, where: str, folder) -> dict:
         raise ValueError(
             f"{where}: preview {name} must be mono or stereo, 8-96 kHz, up to {MAX_PREVIEW_S} s"
         )
-    return {"data": data, "sha256": hashlib.sha256(data).hexdigest(), "duration_s": frames / rate,
+    return {"data": data, "sha256": hashlib.sha256(data).hexdigest(), "duration_s": round(frames / rate, 3),
             "sample_rate": rate}  # fmt: skip
 
 

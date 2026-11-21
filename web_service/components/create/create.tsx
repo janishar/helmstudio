@@ -37,7 +37,14 @@ import { AddToTimeline } from "@/components/timeline/add";
 import { LooksPicker, LooksSection, QuickTiles } from "@/components/create/looks";
 import { MentionChips, insertAtCaret } from "@/components/create/prompt";
 import { WavePlayer } from "@/components/create/audio";
-import { VoiceTile, designWorkflow, type VoiceCtx } from "@/components/create/voices";
+import {
+  SaveAsVoice,
+  VoiceTile,
+  cloneWorkflow,
+  designWorkflow,
+  designedOf,
+  type VoiceCtx,
+} from "@/components/create/voices";
 import { useLibrary, useLooks } from "@/lib/library";
 import {
   chosenFrom,
@@ -620,16 +627,28 @@ export function Create({
       ...(ext ? [{ title: ext.seconds.nodeTitle, fields: extFields }] : []),
     ];
   });
-  // an audio workflow (docs/mock/CreateAudio.dc.html): the voice heads the Voice section (also a composer tile);
-  // Quick keeps Language and Seed, which the composer tiles open (VoicePicker.dc.html)
+  // an audio workflow (docs/mock/CreateAudio.dc.html): the voice heads the Voice section (also a composer tile),
+  // the first section (before Delivery, CreateAudioZonos3.dc.html)
   const spokenVoices = fields.filter((f) => f.param.type === "voice");
   const groups =
     audio && placed && spokenVoices.length
-      ? placed.some((g) => g.title === "Voice")
-        ? placed.map((g) =>
-            g.title === "Voice" ? { ...g, fields: [...spokenVoices, ...g.fields] } : g,
-          )
-        : [...placed, { title: "Voice", fields: spokenVoices }]
+      ? [
+          {
+            title: "Voice",
+            fields: [...spokenVoices, ...(placed.find((g) => g.title === "Voice")?.fields ?? [])],
+          },
+          // Quick's Language and Seed are composer tiles: no Quick section (CreateAudio.dc.html); a tile opened
+          // shows its one editor, under its own name
+          ...placed.flatMap((g) =>
+            g.title === "Voice"
+              ? []
+              : g.title === "Quick"
+                ? g.fields
+                    .filter((f) => f.key === openKey)
+                    .map((f) => ({ title: f.param.label ?? f.param.name, fields: [f] }))
+                : [g],
+          ),
+        ]
       : placed;
   // media inputs (API 1.19): composer tiles, the source on the stage, the family's frame grid for the readouts
   const mediaFields = fields.filter((f) => f.param.type === "media");
@@ -725,19 +744,25 @@ export function Create({
   const familyTitle = (f: string) => palette?.groups.find((g) => g.family === f)?.title ?? f;
   const designSession = useRef<string | null>(null);
   const designWf = audio && workflows ? designWorkflow(workflows, workflow?.family) : undefined;
-  const voiceCtx: VoiceCtx | undefined = workflow && {
-    workflow,
-    familyTitle,
-    design: designWf && {
-      workflow: designWf,
-      label: videoTitle(designWf, familyTitle(designWf.family)),
+  // Clone from a clip's Hear it (API 1.31): the template that clones a clip (ZONOS3's voice-over)
+  const cloneWf = audio && workflows ? cloneWorkflow(workflows, workflow?.family) : undefined;
+  const tries = (w: S<"Workflow">) =>
+    workflow && {
+      workflow: w,
+      label: videoTitle(w, familyTitle(w.family)),
+      // the tries of both go to the open session, else one "Voice design" session made once
       session: async () =>
         sessionId ??
         (designSession.current ??= (
           await ok(api.POST("/v1/studio/sessions", { body: { title: "Voice design" } }))
         ).id),
       stay: () => setChosen(workflow.id),
-    },
+    };
+  const voiceCtx: VoiceCtx | undefined = workflow && {
+    workflow,
+    familyTitle,
+    design: designWf && tries(designWf),
+    clone: cloneWf && tries(cloneWf),
   };
   const paramCards = audio
     ? [
@@ -1222,6 +1247,20 @@ export function Create({
                 className="chip bevel h-11 shrink-0 rounded-[10px]"
               />
             )}
+            {/* Save as voice (API 1.31): a cloned voice where a workflow clones, or the designed voice the take was
+                made with, kept with its clip */}
+            {shownTake?.kind === "audio" &&
+              voiceCtx &&
+              (voiceCtx.clone || designedOf(shownTake)) && (
+                <SaveAsVoice
+                  key={shownTake.id}
+                  take={shownTake}
+                  ctx={voiceCtx}
+                  onPick={
+                    voiceFields[0] && ((voice_id) => change(voiceFields[0].key, { voice_id }))
+                  }
+                />
+              )}
             {offers && <UseIn offers={offers} onUse={applyOffer} />}
           </div>
         )}
@@ -1414,6 +1453,12 @@ export function Create({
                 family={familyName}
                 spoken={audio}
               />
+              {/* the shown take's sample rate (docs/mock/CreateAudio.dc.html: "24 kHz"; none before a take) */}
+              {audio && shownTake?.kind === "audio" && shownTake.audio?.sample_rate && (
+                <span className="chip bevel rounded-[10px] bg-s4">
+                  {+(shownTake.audio.sample_rate / 1000).toFixed(1)} kHz
+                </span>
+              )}
               {seedField && (
                 <div
                   role="group"

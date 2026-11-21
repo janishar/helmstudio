@@ -158,9 +158,10 @@ export function mediaValueError(p: Param, v: S<"MediaRef">, t: Facts | null): st
   const [a, b] = partOf(v, d, p);
   if (a >= b) return "in must be before out";
   if (b > d) return `out ${s1(b)} is past the take's end ${s1(d)}`;
-  if (p.max_s && b - a > p.max_s)
+  // within 1e-9 s of a limit is at it (studio's snapMedia: 4.1 − 1.1 is 2.9999999999999996)
+  if (p.max_s && b - a > p.max_s + 1e-9)
     return `the part lasts ${s1(b - a)} s; this input takes at most ${s1(p.max_s)} s`;
-  if (p.min_s && b - a < p.min_s)
+  if (p.min_s && b - a < p.min_s - 1e-9)
     return `the part lasts ${s1(b - a)} s; this input takes at least ${s1(p.min_s)} s`;
   return null;
 }

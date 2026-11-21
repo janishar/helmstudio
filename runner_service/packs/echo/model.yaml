@@ -188,8 +188,8 @@ stages:
     inputs: {text: Text}
     outputs: {audio: Audio}
     params:
-      voice: {type: voice, label: Voice, default: null, accepts: [preset, design],
-              help: "The saved voice it speaks in: an echo starter voice or a designed voice."}
+      voice: {type: voice, label: Voice, default: null, accepts: [preset, clip, design],
+              help: "The saved voice it speaks in: an echo starter voice, a voice with a clip (API 1.31) or a designed voice."}
       seed: {type: seed, label: Seed, default: -1, min: -1, max: 9007199254740991, step: 1}
       delay_ms: {type: int, label: Delay per step (ms), default: 300, min: 0, max: 10000}
   ask:

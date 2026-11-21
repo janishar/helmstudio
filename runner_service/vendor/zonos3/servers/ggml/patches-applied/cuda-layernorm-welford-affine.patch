@@ -1,0 +1,219 @@
+diff --git a/src/ggml-cuda/ggml-cuda.cu b/src/ggml-cuda/ggml-cuda.cu
+index 31a5ab2e..5e4b3aab 100644
+--- a/src/ggml-cuda/ggml-cuda.cu
++++ b/src/ggml-cuda/ggml-cuda.cu
+@@ -3503,6 +3503,23 @@ static bool ggml_cuda_can_fuse(const struct ggml_cgraph *                cgraph,
+         return false;
+     }
+ 
++    if (ops.size() == 3 && ops.begin()[0] == GGML_OP_NORM && ops.begin()[1] == GGML_OP_MUL && ops.begin()[2] == GGML_OP_ADD) {
++        const ggml_tensor * norm = cgraph->nodes[node_idx];
++        const ggml_tensor * mul = cgraph->nodes[node_idx+1];
++        const ggml_tensor * add = cgraph->nodes[node_idx+2];
++        const ggml_tensor * gamma = mul->src[mul->src[0] == norm ? 1 : 0];
++        const ggml_tensor * beta = add->src[add->src[0] == mul ? 1 : 0];
++        const int out_nodes[] = { node_idx + 2 };
++        return norm->src[0]->type == GGML_TYPE_F32 && norm->type == GGML_TYPE_F32 &&
++               mul->type == GGML_TYPE_F32 && add->type == GGML_TYPE_F32 &&
++               gamma->type == GGML_TYPE_F32 && beta->type == GGML_TYPE_F32 &&
++               ggml_is_contiguous_rows(norm->src[0]) && ggml_is_contiguous(gamma) && ggml_is_contiguous(beta) &&
++               ggml_is_contiguous(add) &&
++               gamma->ne[0] == norm->ne[0] && beta->ne[0] == norm->ne[0] &&
++               ggml_nelements(gamma) == norm->ne[0] && ggml_nelements(beta) == norm->ne[0] &&
++               ggml_cuda_check_fusion_memory_ranges(cgraph, node_idx, (int) ops.size(), out_nodes, 1);
++    }
++
+     if ((ops.size() == 2 || ops.size() == 3) && ops.begin()[0] == GGML_OP_RMS_NORM && ops.begin()[1] == GGML_OP_MUL) {
+         const ggml_tensor *rms_norm = cgraph->nodes[node_idx];
+         const ggml_tensor *mul      = cgraph->nodes[node_idx+1];
+@@ -4424,6 +4441,11 @@ static int ggml_cuda_try_fuse(ggml_backend_cuda_context * cuda_ctx, ggml_cgraph
+         return 2;
+     }
+ 
++    if (ggml_cuda_can_fuse(cgraph, i, { GGML_OP_NORM, GGML_OP_MUL, GGML_OP_ADD }, {})) {
++        ggml_cuda_op_norm_fused_add(*cuda_ctx, node, cgraph->nodes[i + 1], cgraph->nodes[i + 2]);
++        return 2;
++    }
++
+     if (ggml_cuda_can_fuse(cgraph, i, { GGML_OP_RMS_NORM, GGML_OP_MUL, GGML_OP_ADD }, {})) {
+         ggml_cuda_op_rms_norm_fused_add(*cuda_ctx, node, cgraph->nodes[i + 1], cgraph->nodes[i + 2]);
+         return 2;
+diff --git a/src/ggml-cuda/norm.cu b/src/ggml-cuda/norm.cu
+index d804b933..c9152c8a 100644
+--- a/src/ggml-cuda/norm.cu
++++ b/src/ggml-cuda/norm.cu
+@@ -1,15 +1,34 @@
+ #include "norm.cuh"
+ #include <cstdint>
+ 
+-template <int block_size>
++// Four consecutive values per thread and four warps per row match the stable
++// vectorized Welford reduction used by PyTorch CUDA LayerNorm. E[x*x]-E[x]^2
++// loses significant bits on high-mean, low-variance rows (including SSL features).
++struct norm_welford_data {
++    float mean, m2, count;
++};
++
++static __device__ norm_welford_data norm_welford_combine(norm_welford_data b, norm_welford_data a) {
++    const float count = a.count + b.count;
++    if (count == 0.0f) return {0.0f, 0.0f, 0.0f};
++    const float delta = b.mean - a.mean;
++    const float inv_count = 1.0f / count;
++    const float na = a.count * inv_count;
++    const float nb = b.count * inv_count;
++    return {na*a.mean + nb*b.mean, a.m2 + b.m2 + delta*delta*a.count*nb, count};
++}
++
++// launch with block_dims (WARP_SIZE, nwarps, 1) and (nwarps + nwarps/2)*sizeof(float) bytes of shared memory
+ static __global__ void norm_f32(
+         const float * x, float * dst, const int ncols, const int nchannels, const int nsamples,
+-        const int64_t stride_row, const int64_t stride_channel, const int64_t stride_sample, const float eps) {
+-    const int nrows = gridDim.x;
+-    const int row   = blockIdx.x;
+-    const int tid   = threadIdx.x;
++        const int64_t stride_row, const int64_t stride_channel, const int64_t stride_sample, const float eps,
++        const float * gamma, const float * beta) {
++    const int nrows    = gridDim.x;
++    const int row      = blockIdx.x;
++    const int tid      = threadIdx.x + threadIdx.y*blockDim.x;
++    const int nthreads = blockDim.x*blockDim.y;
+ 
+-    extern __shared__ float2 s_sum2[];
++    extern __shared__ float stats[];
+ 
+     ggml_cuda_pdl_sync();
+ 
+@@ -19,28 +38,57 @@ static __global__ void norm_f32(
+             const float * xc   = x   + sample*stride_sample + channel*stride_channel + row*stride_row;
+             float       * dstc = dst + ((sample*nchannels + channel)*nrows + row)*ncols;
+ 
+-            float2 mean_var = make_float2(0.0f, 0.0f);
+-
+-            for (int col = tid; col < ncols; col += block_size) {
+-                const float xi = xc[col];
+-                mean_var.x += xi;
+-                mean_var.y += xi * xi;
++            norm_welford_data wd = {0.0f, 0.0f, 0.0f};
++            for (int base = 4*tid; base < ncols; base += 4*nthreads) {
++                #pragma unroll
++                for (int j = 0; j < 4; ++j) {
++                    if (base+j < ncols) {
++                        const float value = xc[base+j];
++                        const float delta = value - wd.mean;
++                        const float count = wd.count + 1.0f;
++                        const float mean = wd.mean + delta*(1.0f/count);
++                        wd = {mean, wd.m2 + delta*(value-mean), count};
++                    }
++                }
+             }
+-
+-            // sum up partial sums
+-            mean_var = block_reduce<block_reduce_method::SUM, block_size>(mean_var, s_sum2);
+-
+-            const float mean = mean_var.x / ncols;
+-            const float var = mean_var.y / ncols - mean * mean;
+-            const float inv_std = rsqrtf(var + eps);
+-
+-            for (int col = tid; col < ncols; col += block_size) {
+-                dstc[col] = (xc[col] - mean) * inv_std;
++            for (int offset = WARP_SIZE/2; offset > 0; offset /= 2) {
++                const int lane = threadIdx.x+offset < WARP_SIZE ? threadIdx.x+offset : threadIdx.x;
++                norm_welford_data other = {
++                    __shfl_sync(0xffffffff, wd.mean, lane, WARP_SIZE),
++                    __shfl_sync(0xffffffff, wd.m2, lane, WARP_SIZE),
++                    __shfl_sync(0xffffffff, wd.count, lane, WARP_SIZE)
++                };
++                wd = norm_welford_combine(wd, other);
+             }
+-
+-            if constexpr (block_size > WARP_SIZE) {
+-                // sync is needed as we reuse s_sum2 across block_reduce invocations, see #26385
++            for (int offset = blockDim.y/2; offset > 0; offset /= 2) {
++                if (threadIdx.x == 0 && threadIdx.y >= offset && threadIdx.y < 2*offset) {
++                    const int warp = threadIdx.y-offset;
++                    stats[2*warp] = wd.mean;
++                    stats[2*warp+1] = wd.m2;
++                    stats[blockDim.y+warp] = wd.count;
++                }
+                 __syncthreads();
++                if (threadIdx.x == 0 && threadIdx.y < offset) {
++                    norm_welford_data other = {stats[2*threadIdx.y], stats[2*threadIdx.y+1], stats[blockDim.y+threadIdx.y]};
++                    wd = norm_welford_combine(wd, other);
++                }
++                __syncthreads();
++            }
++            if (threadIdx.x == 0 && threadIdx.y == 0) {
++                stats[0] = wd.mean;
++                stats[1] = wd.m2/float(ncols);
++            }
++            __syncthreads();
++            const float mean = stats[0];
++            const float inv_std = rsqrtf(stats[1] + eps);
++            // stats is overwritten by the next channel/sample iteration
++            __syncthreads();
++
++            for (int col = tid; col < ncols; col += nthreads) {
++                const float normalized = inv_std*(xc[col]-mean);
++                // Fuse affine arithmetic before storing its F32 output, as LayerNorm
++                // does; a separate mul/add would lose the final multiply-add fusion.
++                dstc[col] = gamma ? gamma[col]*normalized + beta[col] : normalized;
+             }
+         }
+     }
+@@ -310,15 +358,14 @@ static __global__ void l2_norm_f32(
+ 
+ static void norm_f32_cuda(
+         const float * x, float * dst, const int ncols, const int nrows, const int nchannels, const int nsamples,
+-        const int64_t stride_row, const int64_t stride_channel, const int64_t stride_sample, const float eps, cudaStream_t stream) {
++        const int64_t stride_row, const int64_t stride_channel, const int64_t stride_sample, const float eps, cudaStream_t stream,
++        const float * gamma = nullptr, const float * beta = nullptr) {
+     const dim3 blocks_num(nrows, MIN(nchannels, UINT16_MAX), MIN(nsamples, UINT16_MAX));
+-    if (ncols < 1024) {
+-        const dim3 block_dims(WARP_SIZE, 1, 1);
+-        norm_f32<WARP_SIZE><<<blocks_num, block_dims, 0, stream>>>(x, dst, ncols, nchannels, nsamples, stride_row, stride_channel, stride_sample, eps);
+-    } else {
+-        const dim3 block_dims(1024, 1, 1);
+-        norm_f32<1024><<<blocks_num, block_dims, block_dims.x > WARP_SIZE ? 32 * sizeof(float2): 0, stream>>>(x, dst, ncols, nchannels, nsamples, stride_row, stride_channel, stride_sample, eps);
+-    }
++    constexpr int nwarps = 4;
++    const dim3 block_dims(WARP_SIZE, nwarps, 1);
++    const ggml_cuda_kernel_launch_params launch_params = {blocks_num, block_dims, (nwarps + nwarps/2)*sizeof(float), stream};
++    ggml_cuda_kernel_launch(norm_f32, launch_params,
++        x, dst, ncols, nchannels, nsamples, stride_row, stride_channel, stride_sample, eps, gamma, beta);
+ }
+ 
+ static void group_norm_f32_cuda(
+@@ -489,6 +536,20 @@ void ggml_cuda_op_norm(ggml_backend_cuda_context & ctx, ggml_tensor * dst) {
+     norm_f32_cuda(src0_d, dst_d, ne00, ne01, ne02, ne03, s01, s02, s03, eps, stream);
+ }
+ 
++void ggml_cuda_op_norm_fused_add(ggml_backend_cuda_context & ctx, ggml_tensor * norm,
++                                 ggml_tensor * mul, ggml_tensor * add) {
++    const ggml_tensor * x = norm->src[0];
++    const ggml_tensor * gamma = mul->src[mul->src[0] == norm ? 1 : 0];
++    const ggml_tensor * beta = add->src[add->src[0] == mul ? 1 : 0];
++    float eps;
++    memcpy(&eps, norm->op_params, sizeof(float));
++    GGML_ASSERT(eps >= 0.0f);
++    norm_f32_cuda((const float *) x->data, (float *) add->data,
++                  x->ne[0], x->ne[1], x->ne[2], x->ne[3],
++                  x->nb[1]/sizeof(float), x->nb[2]/sizeof(float), x->nb[3]/sizeof(float), eps, ctx.stream(),
++                  (const float *) gamma->data, (const float *) beta->data);
++}
++
+ void ggml_cuda_op_group_norm(ggml_backend_cuda_context & ctx, ggml_tensor * dst) {
+     const ggml_tensor * src0 = dst->src[0];
+     const float * src0_d = (const float *)src0->data;
+diff --git a/src/ggml-cuda/norm.cuh b/src/ggml-cuda/norm.cuh
+index 95618df5..f93a1fdd 100644
+--- a/src/ggml-cuda/norm.cuh
++++ b/src/ggml-cuda/norm.cuh
+@@ -2,6 +2,8 @@
+ 
+ void ggml_cuda_op_norm(ggml_backend_cuda_context & ctx, ggml_tensor * dst);
+ 
++void ggml_cuda_op_norm_fused_add(ggml_backend_cuda_context & ctx, ggml_tensor * norm, ggml_tensor * mul, ggml_tensor * add);
++
+ void ggml_cuda_op_group_norm(ggml_backend_cuda_context & ctx, ggml_tensor * dst);
+ 
+ void ggml_cuda_op_rms_norm(ggml_backend_cuda_context & ctx, ggml_tensor * dst);

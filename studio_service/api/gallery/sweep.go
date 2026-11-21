@@ -34,7 +34,8 @@ func NewSweeper(pool *pgxpool.Pool, store storage.Store) *Sweeper {
 
 // Sweep removes one batch as System and returns how many takes it removed. It only ever deletes a key under its own
 // take's owner prefix u/<owner_id>/ (anything else is logged and left, row included) and never a key another live
-// take still points at. A video's poster goes with its MP4, and the LLM thumbnails a judge made of it
+// take still points at, nor (API 1.31) a take one of its owner's voices keeps as its clip (deleting the voice frees it
+// for a later sweep; contracts/README.md, Voices: cloned voices). A video's poster goes with its MP4, and the LLM thumbnails a judge made of it
 // (u/<owner_id>/llm/thumbs/, a copy of the take) unless a live take's decision shows the same one. The objects go
 // first: a failure keeps the rows for the next sweep.
 func (s *Sweeper) Sweep(ctx context.Context) (int, error) {
@@ -45,6 +46,8 @@ func (s *Sweeper) Sweep(ctx context.Context) (int, error) {
 				OR (NOT t.ready AND t.created_at < clock_timestamp() - make_interval(secs =>
 					CASE WHEN t.source = 'import' THEN $4::float8 ELSE $2::float8 END)))
 			AND NOT EXISTS (SELECT 1 FROM takes o WHERE o.key = t.key AND o.id <> t.id AND o.deleted_at IS NULL)
+			AND NOT EXISTS (SELECT 1 FROM library_items l WHERE l.owner_id = t.owner_id AND l.kind = 'voice'
+				AND l.voice->'clip'->>'take_id' = t.id::text)
 			ORDER BY t.created_at LIMIT $3 FOR UPDATE SKIP LOCKED`, Grace.Seconds(), UploadTTL.Seconds(), sweepBatch,
 			ImportLink.Seconds())
 		found, err := pgx.CollectRows(rows, pgx.RowToStructByPos[struct {

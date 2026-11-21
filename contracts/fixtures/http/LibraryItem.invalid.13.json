@@ -1,0 +1,29 @@
+{
+  "id": "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a22",
+  "kind": "voice",
+  "group": "cloned",
+  "name": "Jon (cloned)",
+  "handle": null,
+  "text": "",
+  "images": [],
+  "thumb_url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/uploads/2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8.wav?exp=1767225600&sig=ab12",
+  "version": 1,
+  "created_at": "2026-11-21T10:00:00Z",
+  "updated_at": "2026-11-21T10:00:00Z",
+  "source": "mine",
+  "family": null,
+  "loras": [],
+  "needs": [],
+  "from_take_id": "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8",
+  "voice": {
+    "source": "cloned",
+    "clip": {
+      "take_id": "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8",
+      "in": 4.0,
+      "out": 16.0
+    },
+    "consent": true,
+    "language": "en",
+    "design": "male"
+  }
+}

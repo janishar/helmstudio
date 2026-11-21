@@ -1,4 +1,4 @@
-.PHONY: dev test test-torch lint gen image image-cuda h3
+.PHONY: dev test test-torch lint gen image image-cuda h3 zonos3
 # uv 0.13.8 is required (pyproject [tool.uv] required-version); `uvx --from uv==0.13.8 uv` stands in for an older uv
 UV ?= $(shell uv --version 2>/dev/null | grep -q '^uv 0.13.8' && echo uv || echo 'uvx --from uv==0.13.8 uv')
 
@@ -30,6 +30,15 @@ gen:
 # with cwd = vendor/h3c (h3_shaders.metal is compiled at run time). Needs Metal: macOS only.
 h3:
 	$(MAKE) -C vendor/h3c -j8 h3
+
+# the env native's zonos3-server (packs/zonos3): the pinned ZONOS3 ggml server in vendor/zonos3 (VERSION), CMake +
+# Apple clang + cargo (the textnorm library), static, Metal library embedded, offline (no crates.io, no git fetch);
+# about 2 min from clean (cargo's fat LTO is most of it). Out: vendor/zonos3/build/zonos3-server. macOS only.
+ZONOS3_BUILD := vendor/zonos3/build
+zonos3:
+	cmake -S vendor/zonos3/servers/ggml -B $(ZONOS3_BUILD) -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
+		-DBUILD_TESTING=OFF -DGGML_METAL_EMBED_LIBRARY=ON -DGGML_CCACHE=OFF
+	CARGO_NET_OFFLINE=true cmake --build $(ZONOS3_BUILD) -j8 --target zonos3-server
 
 image:
 	docker build -t helmstudio/runner:dev .

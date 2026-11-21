@@ -271,7 +271,8 @@ export function Inspector({
     !groups?.some((g) => g.fields.length || g.choices?.length)
   )
     return <p className="text-[13px] text-t2">Nothing to set.</p>;
-  const control = (f: Field) => {
+  /** `alone`: the only control of its section (a Voice section of its own draws its param's help under it) */
+  const control = (f: Field, alone = false) => {
     const raw = rawOf(f, raws);
     const shared = { fields, raws, error: errors[f.key], grid };
     if (f.param.type === "media")
@@ -308,6 +309,7 @@ export function Inspector({
             onChange={onChange}
             ctx={voice}
             error={errors[f.key]}
+            help={alone ? f.param.help : undefined}
           />
         )
       );
@@ -427,7 +429,7 @@ export function Inspector({
         {(fs.length > 0 || choices.length > 0) && (
           <div className="grid grid-flow-row-dense grid-cols-2 gap-2">
             {choices.map(choiceTile)}
-            {fs.map(control)}
+            {fs.map((f) => control(f, fs.length === 1))}
           </div>
         )}
       </section>
@@ -977,7 +979,7 @@ function Editor({
               aria-pressed={raw === o}
               onClick={() => onChange(f.key, o)}
             >
-              {optionText(p, o)}
+              {optionText(p, o, f.kind)}
             </button>
           ))}
         </div>
@@ -1083,7 +1085,12 @@ function Slider({
     <div id={id + "-ed"} className="col-span-2 flex flex-col gap-2.5">
       <label htmlFor={id} className="flex justify-between gap-2">
         <span>{p.label ?? p.name}</span>
-        <span className="mono text-[12px] text-t2">{display(f, raw).value}</span>
+        {/* the board's plain number ("0.45", "2"), not a tile's "2.0"; a speaking rate as "0.95×"
+            (CreateAudioZonos3.dc.html) */}
+        <span className="mono text-[12px] text-t2">
+          {String(Math.round((Number(raw) || p.min!) * 100) / 100)}
+          {p.name === "speaking_rate" && "×"}
+        </span>
       </label>
       <input
         id={id}

@@ -64,6 +64,24 @@ Last full contract suite on the final M7 code: see the last M7 commit message (p
   - Step 3: Generate is disabled and reads "Pick a voice" while the voice is empty.
   - Step 3, left as built: presets sorted by name (the contract's order, the board shows pack order); no
     "24 kHz" chip before a take exists.
+  - Step 4: a cloned voice keeps its clip take instead of a copy: deleting the take hides it everywhere, but the
+    sweep keeps its object while one of the owner's voices uses it. Why: the same guarantee as the plan's copy
+    (a voice never breaks) with no copy job or pending state.
+  - Step 4: Delivery is drawn as the boards' 0..1 sliders, mapped in the pack to ZONOS3 doses (emotion and energy
+    −4..4, whisper ×1.5, speaking rate 1 = none, guidance = speaker cfg, default 2); presets Neutral, Warm, Tense,
+    Whisper carry the boards' values.
+  - Step 4: `zonos3-server` runs with two slots (`--batch 2`) because speaker cfg needs a second slot; seeds go
+    as the run's seed mod 2^32 (the server takes 32-bit seeds).
+  - Step 4: the vendored ZONOS3 source is about 20 MB (servers/ggml, ggml with only the CPU, Metal and BLAS
+    backends, the trimmed textnorm crate, licences); `make zonos3` builds one static `zonos3-server` offline.
+  - Step 4: the 27 preset previews are cut to 4 s mono 24 kHz in the pack (about 5 MB) instead of the full
+    clips (30 MB).
+  - Step 4: Clone from a clip's Hear it saves the voice first (consent ticked) and runs the ZONOS3 voice-over on
+    a sample line, as Design a voice does; Save voice needs one try first.
+  - Step 4: the clone golden's clip is cut from the Qwen3-TTS Uncle Fu preview (the Qwen goldens are under 3 s).
+  - Step 4: files serves the starter voice previews (`packs/<family>/voices/<id>-<16 hex>.wav`) as it serves look
+    thumbnails; it refused them (403), so no preset preview played since step 2. ZONOS3's `zh` reads "Mandarin"
+    (its board), Qwen3-TTS's stays "Chinese"; the Voice section leads the inspector (the boards).
   - Keep-awake for the overnight run: denied once by the app's auto-mode check, then granted when the owner asked
     (until the session is idle for about 5 minutes).
 

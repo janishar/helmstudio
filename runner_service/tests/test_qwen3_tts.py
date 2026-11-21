@@ -91,9 +91,9 @@ def test_languages_are_the_param_enum_mapped_to_the_checkpoints_names():
 
 
 def test_pieces_split_long_text_on_sentences():
-    assert tts.pieces("  Good morning, everyone.  ") == ["Good morning, everyone."]
+    assert tts.pieces("  Good morning, everyone.  ", tts.PIECE_CHARS) == ["Good morning, everyone."]
     text = " ".join(f"Sentence number {i} is here." for i in range(40))
-    parts = tts.pieces(text)
+    parts = tts.pieces(text, tts.PIECE_CHARS)
     assert len(parts) > 1 and all(len(p) <= tts.PIECE_CHARS for p in parts)
     assert " ".join(parts) == text  # no word lost, none split
     assert tts.pieces("你好。今天天气很好！我们走吧。", limit=8) == [

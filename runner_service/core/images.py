@@ -119,7 +119,8 @@ def media(specs: list[dict], params: dict) -> list[str]:
     """The names of the `media` params of `params` that hold a take, and of the rows params with a `media` item
     field (API 1.22, README Media inputs: rows of media) that hold items."""
     return [s["name"] for s in specs if (s["type"] == "media" and isinstance(params.get(s["name"]), dict))
-            or (s["type"] == "rows" and params.get(s["name"]) and media_fields(s))]  # fmt: skip
+            or (s["type"] == "rows" and params.get(s["name"]) and media_fields(s))
+            or (s["type"] == "voice" and isinstance((params.get(s["name"]) or {}).get("clip"), dict))]  # fmt: skip
 
 
 def media_fields(spec: dict) -> list[str]:
@@ -137,6 +138,12 @@ async def load(specs: list[dict], params: dict, owner: str, fetch) -> dict:
         if s["type"] == "media":
             params[s["name"]] = params[s["name"]] | {
                 "data": await read(params[s["name"]], owner, fetch, True)
+            }
+            continue
+        if s["type"] == "voice":  # API 1.31: a voice's clip is read like a media input
+            v = params[s["name"]]
+            params[s["name"]] = v | {
+                "clip": v["clip"] | {"data": await read(v["clip"], owner, fetch, True)}
             }
             continue
         rows = []

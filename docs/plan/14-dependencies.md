@@ -64,6 +64,8 @@ This section owns version numbers; other sections name libraries without them.
 | mlx-vlm | ≥ 0.7.12 (Mac-only: the mlx env's extra `llm`, with llguidance for constrained JSON; `make runners` syncs it) |
 | numpy, pillow | ≥ 2.5.4, ≥ 13.0.0 |
 | h3.c (env native) | vendored at commit 4cafd17 in `runner_service/vendor/h3c/` (MIT; built by `make h3` with the Command Line Tools clang); a new pin means new goldens |
+| ZONOS3 ggml server (env native) | vendored at commit 96d9e0e in `runner_service/vendor/zonos3/` (MIT; ggml a05c992 with ZONOS3's 11 patches applied, zyphra-textnorm 170c571 trimmed to the library: no crates); a new pin means new goldens |
+| CMake, cargo (build tools of `make zonos3`) | CMake ≥ 3.18 (4.5.0 here), cargo / rustc ≥ 1.88 (1.99.1 here, Homebrew), with the Command Line Tools clang; offline, nothing fetched |
 
 **Web** (exact for framework and compiler, ranges for the rest; lockfile committed)
 

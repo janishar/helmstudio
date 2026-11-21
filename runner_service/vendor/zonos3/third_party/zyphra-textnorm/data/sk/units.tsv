@@ -1,0 +1,35 @@
+# Derived from Slovak measure.py; Copyright 2026 Zyphra, Inc., Apache-2.0.
+kg	kilogram	kilogramy	kilogramov	kilogramu	m
+g	gram	gramy	gramov	gramu	m
+mg	miligram	miligramy	miligramov	miligramu	m
+µg|μg	mikrogram	mikrogramy	mikrogramov	mikrogramu	m
+t	tona	tony	ton	tony	f
+m	meter	metre	metrov	metra	m
+km	kilometer	kilometre	kilometrov	kilometra	m
+cm	centimeter	centimetre	centimetrov	centimetra	m
+mm	milimeter	milimetre	milimetrov	milimetra	m
+µm|μm	mikrometer	mikrometre	mikrometrov	mikrometra	m
+l|L	liter	litre	litrov	litra	m
+ml|mL	mililiter	mililitre	mililitrov	mililitra	m
+m²|m2	štvorcový meter	štvorcové metre	štvorcových metrov	štvorcového metra	m
+m³|m3	kubický meter	kubické metre	kubických metrov	kubického metra	m
+km/h|km/hr	kilometer za hodinu	kilometre za hodinu	kilometrov za hodinu	kilometra za hodinu	m
+m/s	meter za sekundu	metre za sekundu	metrov za sekundu	metra za sekundu	m
+°C|℃	stupeň Celzia	stupne Celzia	stupňov Celzia	stupňa Celzia	m
+°F|℉	stupeň Fahrenheita	stupne Fahrenheita	stupňov Fahrenheita	stupňa Fahrenheita	m
+°	stupeň	stupne	stupňov	stupňa	m
+%	percento	percentá	percent	percenta	n
+‰	promile	promile	promile	promile	n
+GB	gigabajt	gigabajty	gigabajtov	gigabajtu	m
+MB	megabajt	megabajty	megabajtov	megabajtu	m
+TB	terabajt	terabajty	terabajtov	terabajtu	m
+Hz	hertz	hertze	hertzov	hertza	m
+GHz	gigahertz	gigahertze	gigahertzov	gigahertza	m
+Gbps	gigabit za sekundu	gigabity za sekundu	gigabitov za sekundu	gigabitu za sekundu	m
+Mbps	megabit za sekundu	megabity za sekundu	megabitov za sekundu	megabitu za sekundu	m
+mAh	miliampérhodina	miliampérhodiny	miliampérhodín	miliampérhodiny	f
+kWh	kilowatthodina	kilowatthodiny	kilowatthodín	kilowatthodiny	f
+hPa	hektopascal	hektopascaly	hektopascalov	hektopascalu	m
+kcal	kilokalória	kilokalórie	kilokalórií	kilokalórie	f
+dB	decibel	decibely	decibelov	decibelu	m
+Ω|Ω	ohm	ohmy	ohmov	ohmu	m

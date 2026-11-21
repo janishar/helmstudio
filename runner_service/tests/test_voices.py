@@ -76,26 +76,44 @@ def test_output_writes_pcm_or_a_mono_wav_and_refuses_stereo():
             nodes.output(ctx, {}, {"media": {"wav": pcm, "sample_rate": rate, "duration_s": 0}})
 
 
-def run_nodes(voice) -> dict:
+def run_nodes(voice, extra: dict | None = None) -> dict:
     nodes = json.loads(json.dumps(speak_command()["data"]["workflow"]["nodes"]))
     nodes["speak"]["params"]["voice"] = voice
+    nodes["speak"] |= extra or {}
     return nodes
 
 
+CLIP = {"item_id": "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a21", "version": 1, "source": "clip",
+        "clip": {"take_id": "t1", "key": "u/o/takes/t1.wav", "bytes": 10, "etag": "e1", "kind": "audio", "in": 0,
+                 "out": 3}}  # fmt: skip
+
+
 @pytest.mark.parametrize(
-    ("voice", "why"),
+    ("voice", "why", "extra"),
     [
-        (ADA, None),
-        ({"item_id": "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a21", "version": 2, "source": "design", "text": "low"}, None),
-        (None, "speak.voice: a voice is required"),
-        ({"voice_id": "echo/ada"}, "speak.voice must be a voice"),  # unresolved: studio resolves it
-        ({"item_id": "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a21", "version": 1, "source": "clip"},
-         "speak.voice: this workflow cannot clone a voice"),
-        (ADA | {"item_id": "qwen3-tts/ryan", "family": "qwen3-tts"}, "speak.voice: voice qwen3-tts/ryan is for qwen3-tts"),
+        (ADA, None, None),
+        ({"item_id": "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a21", "version": 2, "source": "design", "text": "low"}, None, None),
+        (None, "speak.voice: a voice is required", None),
+        ({"voice_id": "echo/ada"}, "speak.voice must be a voice", None),  # unresolved: studio resolves it
+        (CLIP, None, None),  # API 1.31: echo/speak takes a clip
+        (ADA | {"item_id": "qwen3-tts/ryan", "family": "qwen3-tts"}, "speak.voice: voice qwen3-tts/ryan is for qwen3-tts", None),
     ],
 )  # fmt: skip
-def test_a_run_needs_a_resolved_voice_that_fits(voice, why):
-    assert graph.validate(run_nodes(voice), SCHEMAS) == ([why] if why else [])
+def test_a_run_needs_a_resolved_voice_that_fits(voice, why, extra):
+    assert graph.validate(run_nodes(voice, extra), SCHEMAS) == ([why] if why else [])
+
+
+def test_echo_speaks_a_clip_voice_in_a_pitch_from_its_etag():
+    ctx = types.SimpleNamespace(node="speak", check=lambda: None, progress=lambda *a: None)
+    say = lambda v: fake.speak(ctx, {"voice": v, "seed": 1, "delay_ms": 0}, {"text": "hello"})[
+        "audio"
+    ]["wav"]
+    other = CLIP | {"clip": CLIP["clip"] | {"etag": "e2"}}
+    assert (
+        say(CLIP)
+        == say(CLIP | {"clip": CLIP["clip"] | {"data": b"x", "take_id": "t9"}})
+        != say(other)
+    )
 
 
 def test_a_registry_workflow_holds_a_null_voice():

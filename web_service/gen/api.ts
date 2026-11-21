@@ -332,12 +332,12 @@ export interface paths {
         get: operations["studioListLibrary"];
         put?: never;
         /**
-         * Make an element from 1 to 4 of the caller's gallery images, or a look (also "Save as look" on a take)
+         * Make an element from 1 to 4 of the caller's gallery images, a look (also "Save as look" on a take) or a voice (also "Save as voice")
          * @description Looks (`kind: look`, contracts/README.md, Looks: own looks): `group` film|camera|colour|lighting, no handle,
          *     0-4 images (checked as an element's), 0-4 `loras`, at least one of text, an image, a LoRA. 422 `group <g> is
          *     not a look group` (or `… is not an element group`), `a look has no handle`, `a look needs text, an image or a
          *     LoRA`, `loras: a look has at most 4 LoRAs`, `loras[2]: LoRA <name> is listed twice`, `loras: an element has
-         *     no LoRAs`, `from_take makes looks only`, `from_take: take <id> was not made by a run` (an upload); 404
+         *     no LoRAs`, `from_take makes looks and voices only`, `from_take: take <id> was not made by a run` (an upload); 404
          *     `loras[2].lora: LoRA <id> not found` (unknown, another user's, deleted, pending, rejected, or shared and
          *     listed by no live host), `from_take: take <id> not found` (unknown, another user's, deleted). `from_take`
          *     fills `text` (option `prompt`) and `loras` (option `loras`) when the body leaves them out, then every rule
@@ -360,7 +360,24 @@ export interface paths {
          *     `voice: a designed voice needs voice.design`, `voice.design must be 1-2000 characters`, `voice.language: <tag>
          *     is not a BCP 47 language tag`, `voice.style must be at most 500 characters`, `voice.design must not contain
          *     control characters other than newlines and tabs`, `voice: only a voice has voice fields` (an element or look
-         *     with `voice`); `from_take makes looks only` holds for voices too.
+         *     with `voice`).
+         *
+         *     From 1.31 (contracts/README.md, Voices: cloned voices) `group: cloned` makes a voice from a clip: `voice {clip:
+         *     MediaRef, consent: true, language?, style?}`; a designed voice may carry a clip too (then it also needs
+         *     `consent`). The clip is checked like a `media` param with `accepts: [audio]`, `trim`, `min_s` 3, `max_s` 30 (in /
+         *     out snapped, missing in = 0, out = min(duration, 30)) and stored as the take id with the snapped in / out; the
+         *     voice's `from_take_id` is that take. "Save as voice" = `from_take {take_id, in?, out?}` with `kind: voice`: the
+         *     take (an audio take or a video with sound, an upload included) is the clip; with `group: designed` and no
+         *     `voice.design` the design, language and style are copied from the first designed voice in the take's
+         *     `made_with.voices`. 404 `voice.clip: take <id> not found` / `from_take: take <id> not found` (unknown, another
+         *     user's, deleted, pending). 422 `cloned voices are not available yet` is gone; new: `voice: a cloned voice needs
+         *     voice.clip`, `voice.design: a cloned voice has no design`, `voice.clip: give the clip or from_take, not both`,
+         *     `voice.consent: tick "I have the right to use this voice"` (a clip without `consent: true`), `from_take: take
+         *     <id> was not made with a designed voice` (group designed, no `voice.design`, none in `made_with.voices`), `from_take:
+         *     voice <name> was deleted` (that designed voice is gone), `from_take: a look takes the whole take (no in or out)`,
+         *     and the media texts under `voice.clip: ` or `from_take: ` (`take <id> has no sound`, `take <id> lasts <d> s;
+         *     this input takes at least 3.0 s`, `in must be before out`, `out <x> is past the take's end <d>`, `the part lasts
+         *     <d> s; this input takes at most 30.0 s`, `the part lasts <d> s; this input takes at least 3.0 s`).
          */
         post: operations["studioCreateLibraryItem"];
         delete?: never;
@@ -381,7 +398,8 @@ export interface paths {
          * Replace an item's group, name, handle, text and images
          * @description Optimistic concurrency like workflows: `version` is the one the edit started from; stale = 409 `element changed
          *     since you opened it (now version <n>)` (a look: `look changed since you opened it (now version <n>)`), nothing
-         *     changes. A look is checked like POST with `kind: look` (no `from_take`; `from_take_id` stays). Checked like POST (the handle may stay its own). On
+         *     changes. A look is checked like POST with `kind: look` (no `from_take`; `from_take_id` stays). From 1.31 a voice's
+         *     clip may be changed (checked like POST; `from_take_id` follows it; a clip needs `consent` again). Checked like POST (the handle may stay its own). On
          *     success `version` + 1, `updated_at` now. Takes made before keep their resolved graph; their reuse answers this
          *     element `changed`. `kind` never changes. From 1.30 a designed voice is checked like POST with `kind: voice` (its
          *     `voice` required; stale = 409 `voice changed since you opened it (now version <n>)`); takes made before keep the
@@ -557,7 +575,9 @@ export interface paths {
          *     of dev`. From 1.30 voice values (`VoiceRef`) are resolved as the caller (contracts/README.md, Voices): 422
          *     `speak.voice: a voice is required`, `speak.voice: voice <id> not found` (unknown, another user's, deleted, not a
          *     voice, or a starter voice no live host publishes), `speak.voice: this workflow cannot use a designed voice` (the
-         *     voice fit's reason for that param), `speak.voice: voice <name> is for <family>`; in a workflow whose media is
+         *     voice fit's reason for that param), `speak.voice: voice <name> is for <family>`; from 1.31 a voice with a clip
+         *     sends its clip, resolved like a media value even after its take was deleted (`speak.voice: the clip of voice
+         *     <name> is gone` when its object is missing); in a workflow whose media is
          *     audio a mention in a prompt param is `prompt.text: mentions are not read aloud; use a dialogue script`. When no host is eligible (none live with the env and the workflow),
          *     the run is created already `failed` with error `no live host for env <env>` (still 202) and nothing is sent.
          *     From 1.18 a host is eligible only with the run's model variant present at its precision and room for its
@@ -802,7 +822,9 @@ export interface paths {
         /**
          * Delete a take (soft)
          * @description The take leaves the gallery at once (GET is 404, it is in no list, its run's `outputs` drop it, takes made from
-         *     it leave it out of `parents`); a sweep removes the object later. Deleting again is 404. A run that already
+         *     it leave it out of `parents`); a sweep removes the object later, except (from 1.31) while one of the owner's
+         *     voices keeps it as its clip: the voice still plays and runs, and deleting that voice frees it (contracts/README.md,
+         *     Voices: cloned voices). Deleting again is 404. A run that already
          *     references it and has not read it yet may fail (`input image <take_id> is gone`; a video or audio take: `input
          *     take <take_id> is gone`). Never refused for an
          *     element that uses it: the image drops out of that element (contracts/README.md, Elements).
@@ -2568,7 +2590,7 @@ export interface components {
          *     field) the most seconds the items read together; `not_with` (rows) names optional inputs of the node: while one
          *     is wired the rows stay empty (mentions add none, "Use in…" skips them).
          *     From 1.30 (contracts/README.md, Voices): `voice`: one saved voice (`VoiceRef`, default null; a run needs one) of
-         *     the sources in `accepts` (`preset`: a starter voice of the node's family; `clip`: a cloned voice, from 1.31;
+         *     the sources in `accepts` (`preset`: a starter voice of the node's family; `clip`: a voice with a clip, cloned or designed, from 1.31;
          *     `design`: a voice described in words); the UI draws the voice picker. It takes no wire and is never a rows item
          *     field.
          */
@@ -4123,7 +4145,7 @@ export interface components {
          */
         LibraryKind: "element" | "look" | "voice";
         /**
-         * @description an element's group (character, location, prop), a look's (film, camera, colour, lighting) or, from 1.30, a voice's (preset: a pack's starter voice; cloned: from a clip, from 1.31; designed: from a description)
+         * @description an element's group (character, location, prop), a look's (film, camera, colour, lighting) or, from 1.30, a voice's (preset: a pack's starter voice; cloned: from a clip, from 1.31; designed: from a description, from 1.31 maybe with a clip)
          * @enum {string}
          */
         LibraryGroup: "character" | "location" | "prop" | "film" | "camera" | "colour" | "lighting" | "preset" | "cloned" | "designed";
@@ -4138,11 +4160,11 @@ export interface components {
          */
         LibraryNeed: "text" | "images" | "lora";
         /**
-         * @description from 1.30: where a saved voice comes from (= its group): preset (a pack's speaker, a starter voice), cloned (a clip; from 1.31), designed (a description in words)
+         * @description from 1.30: where a saved voice comes from (= its group): preset (a pack's speaker, a starter voice), cloned (a clip of a take; from 1.31), designed (a description in words; from 1.31 it may also keep a clip)
          * @enum {string}
          */
         VoiceSource: "preset" | "cloned" | "designed";
-        /** @description from 1.30, a voice's own fields (contracts/README.md, Voices). preset: `family`, `speaker`, `language` (and `style`) from the pack; designed: `design`, optional `language` and `style` from the caller */
+        /** @description from 1.30, a voice's own fields (contracts/README.md, Voices). preset: `family`, `speaker`, `language` (and `style`) from the pack; designed: `design`, optional `language` and `style` from the caller; from 1.31 cloned: `clip` and `consent`, optional `language` and `style`; a designed voice may also have `clip` and `consent` */
         VoiceInfo: {
             source: components["schemas"]["VoiceSource"];
             /** @description preset only: the family whose voice params take it */
@@ -4155,11 +4177,34 @@ export interface components {
             language?: string;
             /** @description how it speaks, in words; absent = none */
             style?: string;
-        } & (unknown & unknown);
-        /** @description from 1.30: a designed voice's fields as the caller writes them (POST and PUT of a `kind: voice`, group designed); trimmed */
+            /** @description from 1.31, cloned (required) or designed (optional): the part of a take it clones */
+            clip?: components["schemas"]["VoiceClip"];
+            /**
+             * @description from 1.31, with `clip` (required then): the owner ticked "I have the right to use this voice"
+             * @constant
+             */
+            consent?: true;
+        } & (unknown & unknown & unknown & unknown);
+        /**
+         * @description From 1.31: a voice's clip as stored (contracts/README.md, Voices: cloned voices): one of the owner's takes (an
+         *     audio take, or a video take's sound) and the part in..out, snapped and 3-30 s long. The take is kept while the
+         *     voice exists: deleted from the gallery it is hidden everywhere else, but its object is not swept, so the voice
+         *     keeps playing and running.
+         */
+        VoiceClip: {
+            /** Format: uuid */
+            take_id: string;
+            in: number;
+            out: number;
+        };
+        /** @description from 1.30: a voice's fields as the caller writes them (POST and PUT of a `kind: voice`); trimmed. Designed: `design` (required unless Save as voice copies it), from 1.31 optional `clip` and `consent`; cloned (1.31): `clip` (or `from_take`) and `consent`, no `design` */
         VoiceDesign: {
-            /** @description trimmed; must then be 1-2000 characters */
-            design: string;
+            /** @description trimmed; must then be 1-2000 characters; a designed voice only */
+            design?: string;
+            /** @description from 1.31: the part of a take to clone (checked as a media param with trim, accepts audio, 3-30 s); not with `from_take` */
+            clip?: components["schemas"]["MediaRef"];
+            /** @description from 1.31, required true with a clip: the owner has the right to use this voice */
+            consent?: boolean;
             /** @description a BCP 47 tag; null or absent = none */
             language?: string | null;
             /** @description trimmed; must then be at most 500 characters; "" or absent = none */
@@ -4199,7 +4244,7 @@ export interface components {
             text: string;
             /** @description an element 1-4 when saved, a look 0-4; a starter look none (its picture is only `thumb_url`) */
             images: components["schemas"]["LibraryImage"][];
-            /** @description the first image's thumb_url; else (a look) the thumb of the take it was saved from (`from_take_id`), or a starter look's pack image; from 1.30 a voice: a starter voice's preview clip (a WAV: the picker draws a sound tile); else null */
+            /** @description the first image's thumb_url; else (a look) the thumb of the take it was saved from (`from_take_id`), or a starter look's pack image; from 1.30 a voice: a starter voice's preview clip (a WAV: the picker draws a sound tile); from 1.31 a voice with a clip: its take's file (also after the take was deleted; the picker plays `voice.clip` in..out); else null */
             thumb_url: components["schemas"]["SignedUrl"] | null;
             /** @description 1 on create, +1 on every PUT; send it back in LibraryItemUpdate. A starter look or voice: the pack's `version` */
             version: number;
@@ -4222,7 +4267,7 @@ export interface components {
             needs?: components["schemas"]["LibraryNeed"][];
             /**
              * Format: uuid
-             * @description a look made with "Save as look": the take (null once deleted, and for every other item)
+             * @description a look made with "Save as look": the take; from 1.31 a voice with a clip: the clip's take (null once that take is deleted, though `voice.clip` keeps it; null for every other item)
              */
             from_take_id?: string | null;
             /** @description only with `GET /library?workflow=`: whether the item can be applied to that workflow now (contracts/README.md, Looks: fit) */
@@ -4244,10 +4289,14 @@ export interface components {
             /** @description the strength the look applies it at (from 1.23 0..2) */
             strength: number;
         };
-        /** @description "Save as look": fill the fields the body leaves out from a take the caller made with a run (contracts/README.md, Looks: Save as look) */
+        /** @description "Save as look": fill the fields the body leaves out from a take the caller made with a run (contracts/README.md, Looks: Save as look); from 1.31 "Save as voice" (`kind: voice`): the take, an audio take or a video with sound, is the voice's clip (contracts/README.md, Voices: cloned voices) */
         LibraryFromTake: {
             /** Format: uuid */
             take_id: string;
+            /** @description from 1.31, a voice only: the clip's start (snapped; default 0) */
+            in?: number;
+            /** @description from 1.31, a voice only: the clip's end (snapped; default min(duration, 30)) */
+            out?: number;
             /**
              * @description when `text` is absent: copy the take's `made_with.prompt` as typed with `@@` turned into `@` (trimmed, cut to 2000 code points)
              * @default true
@@ -4259,7 +4308,7 @@ export interface components {
              */
             loras?: boolean;
         };
-        /** @description an element needs `handle` and 1-4 `images`; a look has no `handle`, 0-4 images, 0-4 `loras`, and needs text, an image or a LoRA; from 1.30 a voice (group designed only) has no handle, text, images or LoRAs and needs `voice` */
+        /** @description an element needs `handle` and 1-4 `images`; a look has no `handle`, 0-4 images, 0-4 `loras`, and needs text, an image or a LoRA; from 1.30 a voice (group designed only) has no handle, text, images or LoRAs and needs `voice`; from 1.31 also group cloned, and `from_take` makes a voice of a take's part (Save as voice) */
         LibraryItemCreate: {
             kind: components["schemas"]["LibraryKind"];
             group: components["schemas"]["LibraryGroup"];
@@ -4274,7 +4323,7 @@ export interface components {
             /** @description a look only: 0-4 LoRAs the caller can use now, distinct; missing = [] (with from_take: copied) */
             loras?: components["schemas"]["LookLoraRef"][];
             from_take?: components["schemas"]["LibraryFromTake"];
-            /** @description from 1.30, a voice only (required then): its description, language and style */
+            /** @description from 1.30, a voice only (required then): its description, language and style; from 1.31 its clip and consent */
             voice?: components["schemas"]["VoiceDesign"];
         } & (unknown & unknown);
         /** @description every field (checked like LibraryItemCreate for the item's kind); an element also needs `handle` */
@@ -4286,7 +4335,7 @@ export interface components {
             images: components["schemas"]["LibraryImageRef"][];
             /** @description a look only; missing = [] */
             loras?: components["schemas"]["LookLoraRef"][];
-            /** @description from 1.30, a designed voice only (required then) */
+            /** @description from 1.30, a designed voice only (required then); from 1.31 any own voice (a cloned one: its clip and consent) */
             voice?: components["schemas"]["VoiceDesign"];
             /** @description the version the edit started from (409 when stale) */
             version: number;

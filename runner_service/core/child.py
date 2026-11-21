@@ -1,5 +1,9 @@
 """A stage's child process (the native runtime, contracts/README.md "The native runtime"): a binary that loads its
-own weights (h3) runs in its own session while the GPU thread waits on it.
+own weights (h3, zonos3) runs in its own session while the GPU thread waits on it. `name` is the binary's own
+prefix: its stderr lines `<name>: ` are its diagnostics, its environment knobs `<NAME>_*` pass through.
+
+- `run()` waits for the child to exit (h3: one take per process); `serve()` starts a server child, waits for its ready
+  line and hands the stage its port for the body of a `with` (zonos3-server: many lines in one load);
 
 - its stderr is read by a thread, split on \\r and \\n; a line `<phase> <n>/<total>` (anything after it is ignored:
   macOS 27 can glue a system log line on) is progress, mapped through the pack's `phases` (h3 phase → runner phase;
@@ -8,7 +12,8 @@ own weights (h3) runs in its own session while the GPU thread waits on it.
   group gets SIGTERM, SIGKILL after KILL_S, and the exception goes on;
 - it has its own idle limit: polling feeds the stall watchdog, so a hung child is failed here when no progress line
   came for `idle_s`;
-- a non-zero exit fails the run with the child's last `h3: ` line (paths replaced, as core.media.last_line);
+- a non-zero exit fails the run with the child's last `<name>: ` line (paths replaced, as core.media.last_line); a
+  server (serve(), zonos3) also its last `error: …` or `failed …` line, never a load report;
 - the live child's pid is in LIVE (loaders_native.measure_gb adds its footprint) and in a pid file under
   RUNNER_CACHE; `sweep()` at start kills a child a killed runner left behind (macOS has no parent-death signal),
   only when that pid still runs the same binary and has lost its runner (parent pid 1: never a live runner's child,
@@ -25,7 +30,7 @@ import time
 from pathlib import Path
 
 import config
-from core.graph import RunError
+from core.graph import Cancelled, RunError
 from core.media import last_line
 
 log = logging.getLogger("child")
@@ -33,6 +38,9 @@ log = logging.getLogger("child")
 POLL = 0.5  # seconds between cancel points and progress forwards
 KILL_S = 3.0  # SIGTERM → SIGKILL
 PROGRESS = re.compile(r"^(.*?)\s+(\d+)/(\d+)(?:\s|$)")
+INFO = re.compile(
+    r"\b(weights|loaded)\b.*\btensors\b"
+)  # a loose child's load report, never a reason
 LIVE: dict = {"pid": None}  # the running child, read by loaders_native.measure_gb
 # the child's environment: what a native binary needs, never the runner's secrets (NATS_URL, S3 keys)
 KEEP = ("PATH", "HOME", "TMPDIR", "LANG", "LC_ALL", "USER")
@@ -42,9 +50,10 @@ def pid_file() -> Path:
     return config.CACHE / f"child-{config.ENV}.pid"
 
 
-def child_env() -> dict[str, str]:
-    """The runner's environment cut to KEEP plus the binary's own knobs (H3_*)."""
-    return {k: v for k, v in os.environ.items() if k in KEEP or k.startswith("H3_")}
+def child_env(name: str) -> dict[str, str]:
+    """The runner's environment cut to KEEP plus the binary's own knobs (<NAME>_*: H3_*, ZONOS3_*)."""
+    knobs = f"{name.upper()}_"
+    return {k: v for k, v in os.environ.items() if k in KEEP or k.startswith(knobs)}
 
 
 def _kill(pid: int, wait) -> None:
@@ -85,81 +94,149 @@ def sweep() -> None:
     f.unlink(missing_ok=True)
 
 
-def run(ctx, argv: list[str], *, cwd: Path, phases: dict[str, str], idle_s: float) -> None:
-    """Run `argv` (argv[0] an absolute binary path) in `cwd` until it exits 0; RunError otherwise (see the module
-    doc). Every path in `argv` must be absolute (cwd is the binary's folder)."""
-    proc = subprocess.Popen(argv, cwd=cwd, env=child_env(), stdin=subprocess.DEVNULL,
-                            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, start_new_session=True)  # fmt: skip
-    LIVE["pid"] = proc.pid
-    with contextlib.suppress(OSError):
-        pid_file().parent.mkdir(parents=True, exist_ok=True)
-        pid_file().write_text(f"{proc.pid} {argv[0]}")
-    state = {"seen": time.monotonic(), "progress": None, "diag": []}
-    lock = threading.Lock()
+class _Child:
+    """A started child: its process (own session), a thread reading its stderr into progress, diagnostics and the
+    ready line, LIVE and the pid file set; stop() kills the group (if still running) and clears them."""
 
-    def take(line: str) -> None:
+    def __init__(self, argv: list[str], cwd: Path, name: str, phases: dict[str, str] | None = None,
+                 ready: re.Pattern | None = None, loose: bool = False) -> None:  # fmt: skip
+        self.proc = subprocess.Popen(argv, cwd=cwd, env=child_env(name), stdin=subprocess.DEVNULL,
+                                     stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, start_new_session=True)  # fmt: skip
+        LIVE["pid"] = self.proc.pid
+        with contextlib.suppress(OSError):
+            pid_file().parent.mkdir(parents=True, exist_ok=True)
+            pid_file().write_text(f"{self.proc.pid} {argv[0]}")
+        self.name, self.diag_prefix, self.phases, self.ready_re = (
+            name,
+            f"{name}: ",
+            phases or {},
+            ready,
+        )
+        self.seen, self.progress, self.diag, self.ready = time.monotonic(), None, [], None
+        self.loose = loose
+        self.lock = threading.Lock()
+        self.reader = threading.Thread(target=self.read, name="child-stderr", daemon=True)
+        self.reader.start()
+
+    def take(self, line: str) -> None:
         m = PROGRESS.match(line)
-        with lock:
-            if m and not line.startswith("h3"):
+        with self.lock:
+            if m and not line.startswith(self.name):
                 phase = m.group(1).strip()
                 # `<phase> 0/N` only opens a phase: evt.run.progress counts from 1
                 if int(m.group(2)) >= 1:
-                    state["progress"] = (int(m.group(2)), int(m.group(3)), phases.get(phase, phase))
-                state["seen"] = time.monotonic()
-            elif line.startswith("h3: ") and not line.startswith("h3: warning"):
-                state["diag"] = [*state["diag"][-9:], line]
+                    self.progress = (
+                        int(m.group(2)),
+                        int(m.group(3)),
+                        self.phases.get(phase, phase),
+                    )
+                self.seen = time.monotonic()
+            elif self.diagnostic(line):
+                self.diag = [*self.diag[-9:], line]
+            if self.ready is None and self.ready_re and (r := self.ready_re.search(line)):
+                self.ready = r
 
-    def read() -> None:
+    def diagnostic(self, line: str) -> bool:
+        """A line that can say why the child failed: `<name>: ` (not a warning); a loose child (a server: zonos3)
+        also `error: …` and `failed …`, but not its load reports (`<name>: backend = …`, `… N tensors …`)."""
+        if self.loose and (line.startswith(f"{self.name}: backend = ") or INFO.search(line)):
+            return False
+        if line.startswith(self.diag_prefix):
+            return not line.startswith(f"{self.name}: warning")
+        return self.loose and line.lower().startswith(("error:", "failed"))
+
+    def read(self) -> None:
         buf = b""
-        while chunk := proc.stderr.read1(4096):
+        while chunk := self.proc.stderr.read1(4096):
             parts = re.split(rb"[\r\n]", buf + chunk)
             buf = parts.pop()
             for raw in parts:
-                take(raw.decode(errors="replace").strip())
+                self.take(raw.decode(errors="replace").strip())
             # h3 writes "\r<phase> %4d/%-4d" (\r first, total padded): a padded update left in buf is whole, so it
             # counts now, not when the next one comes; buf stays (that \r re-reads it, the same progress)
             tail = buf.decode(errors="replace")
-            if tail[-1:].isspace() and not tail.lstrip().startswith("h3"):
-                take(tail.strip())
+            if tail[-1:].isspace() and not tail.lstrip().startswith(self.name):
+                self.take(tail.strip())
 
-    reader = threading.Thread(target=read, name="child-stderr", daemon=True)
-    reader.start()
-
-    def gone(timeout: float | None) -> bool:
+    def gone(self, timeout: float | None) -> bool:
         try:
-            proc.wait(timeout)
+            self.proc.wait(timeout)
         except subprocess.TimeoutExpired:
             return False
         return True
 
+    def stop(self) -> None:
+        if self.proc.poll() is None:
+            _kill(self.proc.pid, self.gone)
+        self.reader.join(5)
+        self.proc.stderr.close()
+        LIVE["pid"] = None
+        with contextlib.suppress(OSError):
+            pid_file().unlink(missing_ok=True)
+
+    def why(self) -> str:
+        """The failure of an exited child: killed by a signal, its last diagnostic line, or its status."""
+        self.reader.join(5)  # its last lines first (the pipe ends with it)
+        code = self.proc.returncode
+        if code < 0:
+            return f"killed by signal {-code}"  # jetsam or another process: no line of its own
+        with self.lock:
+            diag = self.diag
+        return last_line("\n".join(diag)) if diag else f"exited with status {code}"
+
+
+def run(
+    ctx, argv: list[str], *, cwd: Path, name: str, phases: dict[str, str], idle_s: float
+) -> None:
+    """Run `argv` (argv[0] an absolute binary path) in `cwd` until it exits 0; RunError otherwise (see the module
+    doc). Every path in `argv` must be absolute (cwd is the binary's folder)."""
+    c = _Child(argv, cwd, name, phases)
     sent = None
     try:
-        while not gone(POLL):
+        while not c.gone(POLL):
             ctx.check()
-            with lock:
-                progress, quiet = state["progress"], time.monotonic() - state["seen"]
+            with c.lock:
+                progress, quiet = c.progress, time.monotonic() - c.seen
             if progress is not None and progress != sent:
                 ctx.progress(*progress)
                 sent = progress
             if quiet > idle_s:
                 raise RunError(f"{ctx.node}: the child made no progress for {quiet:.0f} s")
     finally:  # Cancelled, RunError or anything else on the way out: the whole group goes
-        if proc.poll() is None:
-            _kill(proc.pid, gone)
-        reader.join(5)
-        proc.stderr.close()
-        LIVE["pid"] = None
-        with contextlib.suppress(OSError):
-            pid_file().unlink(missing_ok=True)
-    if not proc.returncode:
-        if state["progress"] not in (None, sent):  # the last line before a quick exit
-            ctx.progress(*state["progress"])
+        c.stop()
+    if not c.proc.returncode:
+        if c.progress not in (None, sent):  # the last line before a quick exit
+            ctx.progress(*c.progress)
         return
-    with lock:
-        diag = state["diag"]
-    why = last_line("\n".join(diag)) if diag else f"exited with status {proc.returncode}"
-    if proc.returncode < 0:
-        why = (
-            f"killed by signal {-proc.returncode}"  # jetsam or another process: no line of its own
-        )
-    raise RunError(f"{ctx.node}: {why}")
+    raise RunError(f"{ctx.node}: {c.why()}")
+
+
+@contextlib.contextmanager
+def serve(ctx, argv: list[str], *, cwd: Path, name: str, ready: re.Pattern, ready_s: float):
+    """Start the server `argv` (as run(): absolute paths) and wait for its ready line, `ready` with the port as its
+    group 1 (polling ctx.check() meanwhile), then yield the port for the body; the process group is killed when the
+    body ends, raises or is cancelled. No ready line within `ready_s`, or an exit before it: RunError. The body's
+    error when the server died under it: RunError with the server's reason instead."""
+    c = _Child(argv, cwd, name, ready=ready, loose=True)
+    try:
+        until = time.monotonic() + ready_s
+        while True:
+            with c.lock:
+                m = c.ready
+            if m:
+                break
+            if c.gone(POLL):
+                raise RunError(f"{ctx.node}: {c.why()}")
+            ctx.check()
+            if time.monotonic() > until:
+                raise RunError(f"{ctx.node}: the server was not ready within {ready_s:.0f} s")
+        try:
+            yield int(m.group(1))
+        except Exception as e:
+            # the server died under the body (a refused connection, a timeout the stage turned into a RunError):
+            # its own reason, not the body's; a cancel stays a cancel
+            if c.proc.poll() is not None and not isinstance(e, Cancelled):
+                raise RunError(f"{ctx.node}: {c.why()}") from e
+            raise
+    finally:
+        c.stop()

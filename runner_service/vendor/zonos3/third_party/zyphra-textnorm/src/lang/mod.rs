@@ -1,0 +1,186 @@
+//! Per-language grammar ports. Each submodule mirrors `text_normalization/<lang>/` file for file and exposes
+//! `pub fn grammar() -> &'static dyn Grammar`. See `PORTING.md`.
+
+pub mod common;
+
+#[cfg(feature = "lang-ar")]
+pub mod ar;
+#[cfg(feature = "lang-bg")]
+pub mod bg;
+#[cfg(feature = "lang-bn")]
+pub mod bn;
+#[cfg(feature = "lang-cs")]
+pub mod cs;
+#[cfg(feature = "lang-da")]
+pub mod da;
+#[cfg(feature = "lang-de")]
+pub mod de;
+#[cfg(feature = "lang-el")]
+pub mod el;
+#[cfg(feature = "lang-en")]
+pub mod en;
+#[cfg(feature = "lang-es")]
+pub mod es;
+#[cfg(feature = "lang-fi")]
+pub mod fi;
+#[cfg(feature = "lang-fr")]
+pub mod fr;
+#[cfg(feature = "lang-gu")]
+pub mod gu;
+#[cfg(feature = "lang-he")]
+pub mod he;
+#[cfg(feature = "lang-hi")]
+pub mod hi;
+#[cfg(feature = "lang-hu")]
+pub mod hu;
+#[cfg(feature = "lang-id")]
+pub mod id;
+#[cfg(feature = "lang-it")]
+pub mod it;
+#[cfg(feature = "lang-ja")]
+pub mod ja;
+#[cfg(feature = "lang-ka")]
+pub mod ka;
+#[cfg(feature = "lang-kn")]
+pub mod kn;
+#[cfg(feature = "lang-ko")]
+pub mod ko;
+#[cfg(feature = "lang-ml")]
+pub mod ml;
+#[cfg(feature = "lang-mr")]
+pub mod mr;
+#[cfg(feature = "lang-ms")]
+pub mod ms;
+#[cfg(feature = "lang-nb")]
+pub mod nb;
+#[cfg(feature = "lang-nl")]
+pub mod nl;
+#[cfg(feature = "lang-or")]
+pub mod or;
+#[cfg(feature = "lang-pa")]
+pub mod pa;
+#[cfg(feature = "lang-pl")]
+pub mod pl;
+#[cfg(feature = "lang-pt")]
+pub mod pt;
+#[cfg(feature = "lang-ro")]
+pub mod ro;
+#[cfg(feature = "lang-ru")]
+pub mod ru;
+#[cfg(feature = "lang-sk")]
+pub mod sk;
+#[cfg(feature = "lang-sv")]
+pub mod sv;
+#[cfg(feature = "lang-ta")]
+pub mod ta;
+#[cfg(feature = "lang-te")]
+pub mod te;
+#[cfg(feature = "lang-th")]
+pub mod th;
+#[cfg(feature = "lang-tl")]
+pub mod tl;
+#[cfg(feature = "lang-tr")]
+pub mod tr;
+#[cfg(feature = "lang-uk")]
+pub mod uk;
+#[cfg(feature = "lang-ur")]
+pub mod ur;
+#[cfg(feature = "lang-vi")]
+pub mod vi;
+#[cfg(feature = "lang-zh")]
+pub mod zh;
+
+use crate::pipeline::Grammar;
+
+/// The grammar of a NeMo language code (`None` when the code is unknown or its feature is off).
+pub fn grammar(nemo: &str) -> Option<&'static dyn Grammar> {
+    match nemo {
+        #[cfg(feature = "lang-en")]
+        "en" => Some(en::grammar()),
+        #[cfg(feature = "lang-de")]
+        "de" => Some(de::grammar()),
+        #[cfg(feature = "lang-es")]
+        "es" => Some(es::grammar()),
+        #[cfg(feature = "lang-fr")]
+        "fr" => Some(fr::grammar()),
+        #[cfg(feature = "lang-it")]
+        "it" => Some(it::grammar()),
+        #[cfg(feature = "lang-pt")]
+        "pt" => Some(pt::grammar()),
+        #[cfg(feature = "lang-ja")]
+        "ja" => Some(ja::grammar()),
+        #[cfg(feature = "lang-zh")]
+        "zh" => Some(zh::grammar()),
+        #[cfg(feature = "lang-ko")]
+        "ko" => Some(ko::grammar()),
+        #[cfg(feature = "lang-nl")]
+        "nl" => Some(nl::grammar()),
+        #[cfg(feature = "lang-pl")]
+        "pl" => Some(pl::grammar()),
+        #[cfg(feature = "lang-tr")]
+        "tr" => Some(tr::grammar()),
+        #[cfg(feature = "lang-uk")]
+        "uk" => Some(uk::grammar()),
+        #[cfg(feature = "lang-cs")]
+        "cs" => Some(cs::grammar()),
+        #[cfg(feature = "lang-da")]
+        "da" => Some(da::grammar()),
+        #[cfg(feature = "lang-fi")]
+        "fi" => Some(fi::grammar()),
+        #[cfg(feature = "lang-el")]
+        "el" => Some(el::grammar()),
+        #[cfg(feature = "lang-nb")]
+        "nb" => Some(nb::grammar()),
+        #[cfg(feature = "lang-ro")]
+        "ro" => Some(ro::grammar()),
+        #[cfg(feature = "lang-sk")]
+        "sk" => Some(sk::grammar()),
+        #[cfg(feature = "lang-bg")]
+        "bg" => Some(bg::grammar()),
+        #[cfg(feature = "lang-he")]
+        "he" => Some(he::grammar()),
+        #[cfg(feature = "lang-th")]
+        "th" => Some(th::grammar()),
+        #[cfg(feature = "lang-tl")]
+        "tl" => Some(tl::grammar()),
+        #[cfg(feature = "lang-ms")]
+        "ms" => Some(ms::grammar()),
+        #[cfg(feature = "lang-ka")]
+        "ka" => Some(ka::grammar()),
+        #[cfg(feature = "lang-ta")]
+        "ta" => Some(ta::grammar()),
+        #[cfg(feature = "lang-gu")]
+        "gu" => Some(gu::grammar()),
+        #[cfg(feature = "lang-kn")]
+        "kn" => Some(kn::grammar()),
+        #[cfg(feature = "lang-ml")]
+        "ml" => Some(ml::grammar()),
+        #[cfg(feature = "lang-pa")]
+        "pa" => Some(pa::grammar()),
+        #[cfg(feature = "lang-or")]
+        "or" => Some(or::grammar()),
+        #[cfg(feature = "lang-ru")]
+        "ru" => Some(ru::grammar()),
+        #[cfg(feature = "lang-sv")]
+        "sv" => Some(sv::grammar()),
+        #[cfg(feature = "lang-hu")]
+        "hu" => Some(hu::grammar()),
+        #[cfg(feature = "lang-ar")]
+        "ar" => Some(ar::grammar()),
+        #[cfg(feature = "lang-vi")]
+        "vi" => Some(vi::grammar()),
+        #[cfg(feature = "lang-id")]
+        "id" => Some(id::grammar()),
+        #[cfg(feature = "lang-hi")]
+        "hi" => Some(hi::grammar()),
+        #[cfg(feature = "lang-bn")]
+        "bn" => Some(bn::grammar()),
+        #[cfg(feature = "lang-te")]
+        "te" => Some(te::grammar()),
+        #[cfg(feature = "lang-mr")]
+        "mr" => Some(mr::grammar()),
+        #[cfg(feature = "lang-ur")]
+        "ur" => Some(ur::grammar()),
+        _ => None,
+    }
+}

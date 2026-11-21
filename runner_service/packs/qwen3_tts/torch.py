@@ -10,7 +10,6 @@ step every generated frame."""
 import dataclasses
 import json
 import math
-import re
 from functools import lru_cache
 
 import accelerate
@@ -19,6 +18,7 @@ import torch
 from torch import nn
 
 from core.graph import RunError
+from core.media import pieces
 from packs.qwen3_tts.vendor.qwen3_tts.codec import CodecConfig, CodecDecoder
 from packs.qwen3_tts.vendor.qwen3_tts.synthesizer import (
     FRAMES_PER_SECOND,
@@ -37,8 +37,6 @@ LANGUAGES = {"auto": "auto", "en": "english", "zh": "chinese", "ja": "japanese",
              "de": "german", "fr": "french", "ru": "russian", "pt": "portuguese", "es": "spanish",
              "it": "italian"}  # fmt: skip
 VARIANT_OF = {"preset": "custom_voice", "design": "voice_design"}
-_SENTENCE = re.compile(r"(?<=[.!?…。！？])\s+|(?<=[。！？])")
-_CUTS = ",，、;；:："  # a long sentence is cut after one of these (or at a space): Chinese and Japanese have no spaces
 
 
 # --- components
@@ -103,30 +101,6 @@ def check_speak(params: dict, wired: set, models: dict | None = None) -> str | N
     if need and model.variant != need:
         return f": voice {voice.get('item_id')} needs model variant {need}"
     return None
-
-
-def pieces(text: str, limit: int = PIECE_CHARS) -> list[str]:
-    """The text split on sentence ends and packed into pieces of at most `limit` characters; a longer sentence is cut
-    at its last space (or comma, semicolon or colon, CJK ones too) before the limit, else hard."""
-    out, cur = [], ""
-    for sentence in (s.strip() for s in _SENTENCE.split(text.strip())):
-        if len(sentence) > limit:
-            out, cur = [*out, cur] if cur else out, ""
-            while len(sentence) > limit:
-                cut = max(
-                    sentence.rfind(" ", 0, limit),
-                    *(sentence.rfind(c, 0, limit - 1) + 1 for c in _CUTS),
-                )
-                cut = cut if cut > 0 else limit
-                out.append(sentence[:cut].strip())
-                sentence = sentence[cut:].strip()
-        if not sentence:
-            continue
-        if cur and len(cur) + 1 + len(sentence) > limit:
-            out, cur = [*out, cur], sentence
-        else:
-            cur = f"{cur} {sentence}" if cur else sentence
-    return [*out, cur] if cur else out
 
 
 def say(
@@ -199,7 +173,7 @@ def speak(ctx, params: dict, inputs: dict) -> dict:
     tts = synthesizer(model, talker, codec, float(params["temperature"]))
     speaker, instruct = voice_args(ctx.node, voice, params.get("style", ""), tts._speaker_ids)
     language = language_of(params["language"], voice)
-    parts = pieces(text)
+    parts = pieces(text, PIECE_CHARS)
     planned = max(1, math.ceil(len(text) / CHARS_PER_S * FRAMES_PER_SECOND))
     done, audio = [0], []
 

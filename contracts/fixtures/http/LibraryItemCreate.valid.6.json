@@ -1,0 +1,14 @@
+{
+  "kind": "voice",
+  "group": "cloned",
+  "name": "Jon",
+  "voice": {
+    "clip": {
+      "take_id": "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8",
+      "in": 4.0,
+      "out": 16.0
+    },
+    "consent": true,
+    "language": "en"
+  }
+}

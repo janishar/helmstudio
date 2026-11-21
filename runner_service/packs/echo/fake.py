@@ -246,7 +246,12 @@ def speak(ctx, params: dict, inputs: dict) -> dict:
     text = inputs["text"]
     if not text:
         raise RunError(f"{ctx.node}: nothing to say")
-    voice = zlib.crc32(json.dumps(params["voice"], sort_keys=True).encode())
+    v = params["voice"]  # a clip voice: the clip's etag (its bytes are read as a media input)
+    voice = zlib.crc32(
+        v["clip"]["etag"].encode()
+        if v.get("source") == "clip"
+        else json.dumps(v, sort_keys=True).encode()
+    )
     phase = params["seed"] % 1000 / 1000 * 2 * math.pi
     tones: dict[str, bytes] = {}
     steps = math.ceil(len(text) / CHARS_PER_STEP)

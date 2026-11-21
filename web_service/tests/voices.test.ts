@@ -5,7 +5,16 @@ import type { S } from "@/lib/api";
 import { paletteOf } from "@/lib/graph";
 import { reasonOf } from "@/lib/looks";
 import { peaksOf } from "@/components/create/audio";
-import { presetGroups, voiceFit, voiceLine, voiceTileText } from "@/lib/voices";
+import {
+  clipError,
+  languageName,
+  presetGroups,
+  voiceBody,
+  voiceFit,
+  voiceLine,
+  voiceSources,
+  voiceTileText,
+} from "@/lib/voices";
 
 type Item = S<"LibraryItem">;
 const schemas = paletteOf(palette as unknown as S<"NodePalette">);
@@ -72,6 +81,73 @@ describe("voice words", () => {
       ["qwen3-tts", 1],
       ["echo", 1],
     ]);
+  });
+});
+
+describe("voices with a clip (API 1.31)", () => {
+  const clip = { take_id: "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8", in: 4, out: 16 };
+  const designed = voice("5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a21", {
+    name: "Teen",
+    group: "designed",
+    source: "mine",
+    voice: { source: "designed", design: "Male, 17", language: "en", clip, consent: true },
+  });
+  const cloned = voice("5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a22", {
+    name: "Jon",
+    group: "cloned",
+    source: "mine",
+    voice: { source: "cloned", clip, consent: true },
+  });
+  it("sources, lines, the PUT body and the board's language words", () => {
+    expect(voiceSources(designed)).toEqual(["design", "clip"]);
+    expect(voiceSources(cloned)).toEqual(["clip"]);
+    expect(voiceLine(cloned)).toBe("0:04–0:16");
+    expect(voiceBody(designed)).toEqual({
+      design: "Male, 17",
+      clip,
+      consent: true,
+      language: "en",
+    });
+    expect(voiceBody(cloned)).toEqual({ clip, consent: true });
+    expect(languageName("en-US")).toBe("English (US)");
+    // ZONOS3 names zh Mandarin (its board); Qwen3-TTS keeps Chinese
+    expect([languageName("zh", "zonos3"), languageName("zh", "qwen3_tts")]).toEqual([
+      "Mandarin",
+      "Chinese",
+    ]);
+    expect(
+      voiceTileText(
+        voice("zonos3/savannah", {
+          name: "Savannah",
+          voice: { source: "preset", family: "zonos3", speaker: "x", language: "en-US" },
+        }),
+        true,
+      ),
+    ).toBe("Savannah · preset · English (US)");
+  });
+  it("a clip's limits: 3–30 s of a take with sound", () => {
+    const t = { id: "t", kind: "audio", duration_s: 40 };
+    expect(clipError({ take_id: "t", in: 4, out: 16 }, t)).toBeNull();
+    // 4.1 − 1.1 is a hair under 3 in floating point: still 3 s, as studio snaps it
+    expect(clipError({ take_id: "t", in: 1.1, out: 4.1 }, t)).toBeNull();
+    expect(clipError({ take_id: "t", in: 4, out: 6 }, t)).toBe(
+      "clip: the part lasts 2.0 s; a voice needs 3 to 30 s",
+    );
+    expect(clipError({ take_id: "t", in: 0, out: 31 }, t)).toBe(
+      "clip: the part lasts 31.0 s; a voice needs 3 to 30 s",
+    );
+    expect(clipError({ take_id: "t", in: 5, out: 5 }, t)).toBe("in must be before out");
+    // a whole take too short says so in the same words, never by its id
+    expect(clipError({ take_id: "s", in: 0, out: 1.3 }, { ...t, id: "s", duration_s: 1.3 })).toBe(
+      "clip: the part lasts 1.3 s; a voice needs 3 to 30 s",
+    );
+    expect(
+      clipError(
+        { take_id: "v", in: 0, out: 5 },
+        { id: "v", kind: "video", duration_s: 8, has_audio: false },
+      ),
+    ).toBe("take v has no sound");
+    expect(clipError({ take_id: "x" }, null)).toBe("take x not found");
   });
 });
 

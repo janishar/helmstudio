@@ -1,0 +1,21 @@
+ZONOS3 ggml server, pinned copy (MIT, Zyphra; third-party notices in NOTICE and third_party/licenses/)
+source: ~/GenAI/duplex/zonos3 (Zyphra ZONOS3), read-only; copied with git archive, never built there
+commit: 96d9e0ec1e39083ed336ac78f24e3dbc93721c0f (2026-11-13, "Web deployment: the models redirect sends no Referer to the Hub")
+submodules:
+  servers/ggml/ggml           ggml a05c9922613c6a2230dbb1d0de679519ecafb4f0 (v0.27.0, 2026-10-15)
+  third_party/zyphra-textnorm 170c571e75034c9a9f3bece9885c36d8dae77df2 (v0.2.0, 2026-11-13)
+copied (same layout as upstream, so CMake's ../api and ../../model paths hold):
+  LICENSE, NOTICE, third_party/licenses/
+  servers/ggml: CMakeLists.txt, README.md, src/, vendor/ (httplib, json, json-schema-validator, lmdb, pocketfft),
+    tests/ffmpeg-decode-smoke.cpp (named by an EXCLUDE_FROM_ALL target, never built)
+  servers/api/openapi.json; model/src/zonos3/registries/{languages,generation,short_text}.json (embedded at configure)
+  servers/ggml/ggml: CMakeLists.txt, cmake/, include/, src/ with only the cpu, metal and blas backends; ggml-cpu
+    without arch/{loongarch,powerpc,riscv,s390,wasm} and spacemit; LICENSE, AUTHORS, ggml.pc.in
+  third_party/zyphra-textnorm: Cargo.toml, src/, data/, include/, LICENSE, NOTICE, licenses/, README.md
+changed:
+  - ggml has servers/ggml/patches/*.patch (11) applied at copy time; they sit in patches-applied/ for the record, not
+    patches/, so CMake's configure-time `git apply` finds nothing to do (no git work inside this repository)
+  - zyphra-textnorm/Cargo.toml: workspace member python/ (pyo3), [dev-dependencies], [[bench]] and [[test]] removed,
+    so the library (no dependencies) builds offline; Cargo.lock regenerated (one entry) so `--locked` holds
+  nothing else; same WAV bytes as a build of the untouched commit (tests/golden/record_zonos3.py, 2026-11-21)
+build:  make -C runner_service zonos3   -> runner_service/vendor/zonos3/build/zonos3-server (static, Metal embedded)

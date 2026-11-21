@@ -188,7 +188,7 @@ def generate(ctx, params: dict, inputs: dict) -> dict:
         cmd = argv(inputs["model"].folder().resolve(), inputs["prompt"], out, width=w, height=h, frames=d["frames"],
                    steps=params["steps"], seed=inputs["seed"], speed=params["speed"], images=images)  # fmt: skip
         ctx.progress(1, 1, "starting h3")  # a phase without steps: 1 of 1
-        child.run(ctx, cmd, cwd=H3C, phases=PHASES, idle_s=IDLE_S)
+        child.run(ctx, cmd, cwd=H3C, name="h3", phases=PHASES, idle_s=IDLE_S)
         if not out.is_file():
             raise RunError(f"{ctx.node}: h3 wrote no video")
         return {"video": video_value(out, tmp)}

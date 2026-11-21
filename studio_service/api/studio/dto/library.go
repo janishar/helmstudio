@@ -38,21 +38,40 @@ type LibraryItem struct {
 }
 
 // VoiceInfo is a voice's own fields (API 1.30, contracts/README.md "Voices"): source preset (family, speaker,
-// language, style from the pack) or designed (design, language, style from the caller); cloned from 1.31.
+// language, style from the pack) or designed (design, language, style from the caller); from 1.31 cloned (clip,
+// consent, language, style), and a designed voice may keep a clip too.
 type VoiceInfo struct {
-	Source   string `json:"source"`
-	Family   string `json:"family,omitempty"`
-	Speaker  string `json:"speaker,omitempty"`
-	Design   string `json:"design,omitempty"`
-	Language string `json:"language,omitempty"`
-	Style    string `json:"style,omitempty"`
+	Source   string     `json:"source"`
+	Family   string     `json:"family,omitempty"`
+	Speaker  string     `json:"speaker,omitempty"`
+	Design   string     `json:"design,omitempty"`
+	Language string     `json:"language,omitempty"`
+	Style    string     `json:"style,omitempty"`
+	Clip     *VoiceClip `json:"clip,omitempty"`
+	Consent  bool       `json:"consent,omitempty"`
 }
 
-// VoiceDesign is a designed voice's fields as the caller writes them (POST and PUT of a voice); Check trims them.
+// VoiceClip is a voice's clip as stored (API 1.31): one of the owner's takes and the snapped part in..out.
+type VoiceClip struct {
+	TakeID string  `json:"take_id"`
+	In     float64 `json:"in"`
+	Out    float64 `json:"out"`
+}
+
+// ClipRef is a clip as the caller writes it ({take_id, in?, out?}, a MediaRef).
+type ClipRef struct {
+	TakeID string   `json:"take_id"`
+	In     *float64 `json:"in"`
+	Out    *float64 `json:"out"`
+}
+
+// VoiceDesign is a voice's fields as the caller writes them (POST and PUT of a voice); the checks trim them.
 type VoiceDesign struct {
-	Design   *string `json:"design"`
-	Language *string `json:"language"`
-	Style    *string `json:"style"`
+	Design   *string  `json:"design"`
+	Language *string  `json:"language"`
+	Style    *string  `json:"style"`
+	Clip     *ClipRef `json:"clip"`    // API 1.31
+	Consent  *bool    `json:"consent"` // API 1.31: true with a clip
 }
 
 // HandleOr is the handle, "" for a look.
@@ -81,11 +100,14 @@ type LookLoraRef struct {
 	Strength *float64 `json:"strength"`
 }
 
-// LibraryFromTake is "Save as look": fill what the body leaves out from a take the caller made with a run.
+// LibraryFromTake is "Save as look": fill what the body leaves out from a take the caller made with a run; from
+// API 1.31 "Save as voice" (kind voice): the take's part in..out is the voice's clip.
 type LibraryFromTake struct {
-	TakeID string `json:"take_id"`
-	Prompt *bool  `json:"prompt"`
-	Loras  *bool  `json:"loras"`
+	TakeID string   `json:"take_id"`
+	In     *float64 `json:"in"`  // a voice only
+	Out    *float64 `json:"out"` // a voice only
+	Prompt *bool    `json:"prompt"`
+	Loras  *bool    `json:"loras"`
 	// set by Validate: the body left text / loras out, so the take fills them (unless its option is false)
 	FillText  bool `json:"-"`
 	FillLoras bool `json:"-"`
@@ -165,10 +187,8 @@ func (f *LibraryFields) Check(kind string) string {
 	}
 	*f.Text = strings.TrimSpace(*f.Text)
 	look, elem := kind == "look", kind == "element"
-	if kind == "voice" { // first: a voice's bad group is "not a voice group", whatever it is
-		if detail := f.checkVoice(); detail != "" {
-			return detail
-		}
+	if kind == "voice" { // first: a voice's bad group is "not a voice group", whatever it is; the service checks the rest
+		return f.checkVoice()
 	} else if !slices.Contains(AllGroups(), f.Group) {
 		return "group must be one of " + strings.Join(AllGroups(), ", ")
 	} else if f.Voice != nil {
@@ -212,17 +232,15 @@ func (f *LibraryFields) Check(kind string) string {
 	return f.checkLoras()
 }
 
-// checkVoice checks a voice's fields in the contract's order (API 1.30): only a designed voice is made here, with no
-// handle, text, images or LoRAs, and its design (1-2000 characters, no control characters but newlines and tabs),
-// language (a BCP 47 tag) and style (at most 500 characters), trimmed.
+// checkVoice checks a voice's shape in the contract's order (API 1.30, 1.31): a designed or cloned voice, with no
+// handle, text, images or LoRAs, a cloned one without a design, a clip's take_id a uuid (lower-cased). The service
+// checks the rest in order (its clip, then CheckDesign, the clip's part, consent, then CheckTail).
 func (f *LibraryFields) checkVoice() string {
 	switch {
 	case !slices.Contains(VoiceGroups, f.Group):
 		return "group " + f.Group + " is not a voice group"
 	case f.Group == "preset":
 		return "preset voices come from packs"
-	case f.Group == "cloned":
-		return "cloned voices are not available yet"
 	case f.Handle != nil:
 		return "a voice has no handle"
 	case *f.Text != "":
@@ -231,33 +249,63 @@ func (f *LibraryFields) checkVoice() string {
 		return "images: a voice has no images"
 	case len(f.Loras) > 0:
 		return "loras: a voice has no LoRAs"
-	case f.Voice == nil || f.Voice.Design == nil:
-		return "voice: a designed voice needs voice.design"
+	case f.Voice == nil:
+		return ""
+	case f.Group == "cloned" && f.Voice.Design != nil:
+		return "voice.design: a cloned voice has no design"
+	case f.Voice.Clip != nil && !utility.IsUUID(f.Voice.Clip.TakeID):
+		return "voice.clip.take_id must be a uuid"
 	}
-	v := f.Voice
+	if f.Voice.Clip != nil {
+		f.Voice.Clip.TakeID = strings.ToLower(f.Voice.Clip.TakeID)
+	}
+	return ""
+}
+
+// CheckDesign trims a designed voice's design and checks it (1-2000 characters, no control characters but newlines
+// and tabs); "" when there is none.
+func (v *VoiceDesign) CheckDesign() string {
+	if v.Design == nil {
+		return ""
+	}
 	*v.Design = strings.TrimSpace(*v.Design)
+	switch n := utf8.RuneCountInString(*v.Design); {
+	case n < 1 || n > 2000:
+		return "voice.design must be 1-2000 characters"
+	case strings.ContainsFunc(*v.Design, func(r rune) bool { return unicode.IsControl(r) && !strings.ContainsRune("\n\r\t", r) }):
+		return "voice.design must not contain control characters other than newlines and tabs"
+	}
+	return ""
+}
+
+// CheckTail trims and checks a voice's language (a BCP 47 tag) and style (at most 500 characters), then its name.
+func (f *LibraryFields) CheckTail() string {
+	v := f.Voice
 	if v.Style != nil {
 		*v.Style = strings.TrimSpace(*v.Style)
 	}
 	if v.Language != nil {
 		*v.Language = strings.TrimSpace(*v.Language)
 	}
-	switch n := utf8.RuneCountInString(*v.Design); {
-	case n < 1 || n > 2000:
-		return "voice.design must be 1-2000 characters"
-	case strings.ContainsFunc(*v.Design, func(r rune) bool { return unicode.IsControl(r) && !strings.ContainsRune("\n\r\t", r) }):
-		return "voice.design must not contain control characters other than newlines and tabs"
+	switch n := utf8.RuneCountInString(f.Name); {
 	case v.Language != nil && !Language.MatchString(*v.Language):
 		return "voice.language: " + *v.Language + " is not a BCP 47 language tag"
 	case v.Style != nil && utf8.RuneCountInString(*v.Style) > 500:
 		return "voice.style must be at most 500 characters"
+	case n < 1 || n > 80:
+		return "name must be 1-80 characters"
+	case strings.ContainsFunc(f.Name, unicode.IsControl):
+		return "name must not contain control characters"
 	}
 	return ""
 }
 
-// Designed is the stored VoiceInfo of a checked designed voice.
-func (v *VoiceDesign) Designed() VoiceInfo {
-	out := VoiceInfo{Source: "designed", Design: *v.Design}
+// Info is the stored VoiceInfo of a checked voice of group (its clip, if any, set by the service).
+func (v *VoiceDesign) Info(group string) VoiceInfo {
+	out := VoiceInfo{Source: group}
+	if v.Design != nil {
+		out.Design = *v.Design
+	}
 	if v.Language != nil {
 		out.Language = *v.Language
 	}
@@ -295,13 +343,17 @@ func (b *LibraryItemCreate) Validate() string {
 	switch {
 	case b.Kind != "element" && b.Kind != "look" && b.Kind != "voice":
 		return "kind must be element, look or voice"
-	case b.FromTake != nil && b.Kind != "look":
-		return "from_take makes looks only"
+	case b.FromTake != nil && b.Kind == "element":
+		return "from_take makes looks and voices only"
+	case b.FromTake != nil && b.Kind == "look" && (b.FromTake.In != nil || b.FromTake.Out != nil):
+		return "from_take: a look takes the whole take (no in or out)"
 	case b.FromTake != nil && !utility.IsUUID(b.FromTake.TakeID):
 		return "from_take.take_id must be a uuid"
 	}
 	if b.FromTake != nil {
 		b.FromTake.TakeID = strings.ToLower(b.FromTake.TakeID)
+	}
+	if b.FromTake != nil && b.Kind == "look" {
 		b.FromTake.FillText = b.Text == nil && (b.FromTake.Prompt == nil || *b.FromTake.Prompt)
 		b.FromTake.FillLoras = b.Loras == nil && (b.FromTake.Loras == nil || *b.FromTake.Loras)
 	}

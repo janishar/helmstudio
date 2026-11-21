@@ -1,0 +1,32 @@
+diff --git a/src/ggml-cuda/ggml-cuda.cu b/src/ggml-cuda/ggml-cuda.cu
+index 7c45d0d1..5640e656 100644
+--- a/src/ggml-cuda/ggml-cuda.cu
++++ b/src/ggml-cuda/ggml-cuda.cu
+@@ -1551,11 +1551,15 @@ static void ggml_cuda_mul_mat_cublas_impl(ggml_backend_cuda_context & ctx, const
+     const void * beta = traits::get_beta();
+ 
+     const int cc = ggml_cuda_info().devices[ctx.device].cc;
++    const ggml_prec prec = (ggml_prec) ggml_get_op_params_i32(dst, 0);
+     bool prefer_f32_output = false;
+     if (compute_type == GGML_TYPE_F16) {
+         prefer_f32_output = cc == GGML_CUDA_CC_VOLTA || GGML_CUDA_CC_IS_RDNA4(cc) || GGML_CUDA_CC_IS_CDNA(cc);
+     } else if (compute_type == GGML_TYPE_BF16) {
+-        prefer_f32_output = !GGML_CUDA_CC_IS_RDNA3(cc) && !GGML_CUDA_CC_IS_CDNA(cc);
++        // Keep BF16 tensor-core operands, but honor an F32 output request. A
++        // caller may need to add a bias before its final BF16 rounding; rounding
++        // the unbiased GEMM here would introduce an extra tensor boundary.
++        prefer_f32_output = prec == GGML_PREC_F32 || (!GGML_CUDA_CC_IS_RDNA3(cc) && !GGML_CUDA_CC_IS_CDNA(cc));
+     }
+ 
+     if (prefer_f32_output) {
+@@ -1682,7 +1686,9 @@ static void ggml_cuda_mul_mat_cublas(ggml_backend_cuda_context & ctx, const ggml
+     // F16 is the only compute type that can not satisfy a request for BF16
+     if (prec == GGML_PREC_BF16 && compute_type == GGML_TYPE_F16) {
+         compute_type = fast_bf16_hardware_available(cc) ? GGML_TYPE_BF16 : GGML_TYPE_F32;
+-    } else if (prec == GGML_PREC_F32) {
++    } else if (prec == GGML_PREC_F32 && compute_type != GGML_TYPE_BF16) {
++        // Genuine BF16 operands stay BF16 (F32 accumulation and F32 output, see
++        // ggml_cuda_mul_mat_cublas_impl); only F16/quantized compute is promoted.
+         compute_type = GGML_TYPE_F32;
+     }
+ 

@@ -132,13 +132,19 @@ func (c *counter) Read(p []byte) (int, error) {
 // lookThumb is a starter look thumbnail's key (contracts/registry.schema.json, looks: thumb.key).
 var lookThumb = regexp.MustCompile(`^packs/[a-z0-9][a-z0-9_-]{0,63}/looks/[a-z0-9][a-z0-9-]{0,63}-[0-9a-f]{16}\.(png|jpg|webp)$`)
 
+// voicePreview is a starter voice's preview clip (contracts/registry.schema.json, voices: preview.key), served as the
+// look thumbnails are (contracts/README.md, Voices).
+var voicePreview = regexp.MustCompile(`^packs/[a-z0-9][a-z0-9_-]{0,63}/voices/[a-z0-9][a-z0-9-]{0,63}-[0-9a-f]{16}\.wav$`)
+
 // serveHandler streams one object, or one byte range of it (Range: 206 with Content-Range; past the end: 416), so a
-// <video> can seek. A bad link, a key outside u/ and the starter look thumbnails (packs/<family>/looks/) or a missing
+// <video> can seek. A bad link, a key outside u/, the starter look thumbnails (packs/<family>/looks/) and the starter
+// voice previews (packs/<family>/voices/), or a missing
 // object is 403; a Stat that fails for any other reason is 500. HEAD answers the headers only.
 func (c *controller) serveHandler(ctx *gin.Context) {
 	key := strings.TrimPrefix(ctx.Param("path"), "/") // Gin keeps the leading slash of a *path value
-	// u/<owner>/… and the packs' starter look thumbnails (packs/<family>/looks/…, PUT by the runners, never by a link)
-	servable := strings.HasPrefix(key, "u/") || lookThumb.MatchString(key)
+	// u/<owner>/… and the packs' starter look thumbnails and voice previews (packs/<family>/{looks,voices}/…, PUT by the
+	// runners, never by a link)
+	servable := strings.HasPrefix(key, "u/") || lookThumb.MatchString(key) || voicePreview.MatchString(key)
 	if strings.Contains(key, "..") || !servable || !c.signer.Verify(key, ctx.Query("exp"), ctx.Query("sig")) {
 		network.SendError(ctx, http.StatusForbidden, "invalid or expired link")
 		return

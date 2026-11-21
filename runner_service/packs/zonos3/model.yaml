@@ -1,0 +1,65 @@
+# ZONOS3-Mini speech (plan 15-voices 19.4), run by the native zonos3-server (the pinned ggml build in vendor/zonos3,
+# `make zonos3`) as a child process of the native runner (core.child.serve; docs/reference-notes/voices.md): one
+# server per run on 127.0.0.1, which normalizes the text and speaks every piece of it in one load, killed after. The
+# runner loads no component (`uses: []`); peak_gb is the child's whole peak. Generates exactly the canonical zonos3
+# fixtures (contracts/fixtures/registry/zonos3.*.valid.json; tests/test_packs.py, tests/test_zonos3.py). GOTCHAS.md.
+id: zonos3-mini
+family: zonos3
+title: ZONOS3
+media: [audio]
+runtimes:
+  native: {env: native, devices: [mps]}   # Metal only (the static build embeds its Metal library)
+licences:
+  apache-2.0: {title: Apache License 2.0, url: https://www.apache.org/licenses/LICENSE-2.0}
+model:
+  help: "ZONOS3-Mini: the backbone, the keep2 decoder, the speaker encoder and the steering table, run by zonos3-server."
+  variant: {label: Variant}
+  precision:
+    label: Precision
+    default: int8
+    help: "Stored quantized (q8_0 and q4_0 with f16 in backbone-ptq.gguf); loaded as it is. Not a choice."
+variants:
+  mini:
+    dir: ZONOS3-Mini
+    title: Mini
+    # only these files of the 9.3 GB repo (edit, f16, raw-reference and the 2 GB zac.gguf are left out); revision from
+    # the .cache/huggingface sidecars of the downloaded files
+    source: {repo: Zyphra/ZONOS3-Mini, revision: d2d142a86b1e6aeb4252679673c86ecd86177bf8,
+             allow_patterns: [gguf/backbone-ptq.gguf, gguf/zac-keep2.gguf, gguf/spk-encoder.gguf, gguf/steer.gguf,
+                              "gguf/voices/*/*", gguf/voices/README.md],
+             licence: apache-2.0, must_accept: false, gated: false}
+# presence, bytes and downloads only: the server child loads them (the speaker encoder embeds a clip voice)
+components:
+  backbone: {files: gguf/backbone-ptq.gguf, dtype: stored, precision: [int8]}
+  decoder: {files: gguf/zac-keep2.gguf, dtype: stored, precision: [int8]}
+  speaker_encoder: {files: gguf/spk-encoder.gguf, dtype: stored, precision: [int8]}
+  steer: {files: gguf/steer.gguf, dtype: stored, precision: [int8]}
+stages:
+  speak:
+    title: Speak
+    component: whole model
+    help: "Reads the text in one voice, a preset or a clip it clones, at 44.1 kHz. Long text is split on sentences and joined; at most 900 characters (about 60 s)."
+    uses: []
+    inputs: {model: Model, text: Text, seed: Seed}
+    outputs: {audio: Audio}
+    params:
+      voice: {type: voice, label: Voice, default: null, accepts: [preset, clip],
+              help: "One of the 27 ZONOS3 presets, or any saved voice with a clip (cloned, or designed and saved with its clip)."}
+      language: {type: enum, label: Language, default: en-US,
+                 enum: [en-US, en-GB, fr, de, es, it, pt-BR, ja, zh, ko, ar, bn, bg, cs, da, nl, fi, ka, el, gu, he, hi,
+                        hu, id, kn, ms, ml, mr, "no", or, pl, pa, ro, ru, sk, sv, tl, ta, te, th, tr, uk, ur, vi],
+                 help: "The language of the text: it decides how numbers and abbreviations are read."}
+      emotion: {type: float, label: Emotion, default: 0.5, min: 0, max: 1, step: 0.05,
+                help: "Valence: low sounds sad, high sounds happy; 0.5 adds nothing."}
+      energy: {type: float, label: Energy, default: 0.5, min: 0, max: 1, step: 0.05,
+               help: "Arousal: low is calm and soft, high is excited; 0.5 adds nothing."}
+      whisper: {type: float, label: Whisper, default: 0, min: 0, max: 1, step: 0.05,
+                help: "0 speaks out loud; 1 whispers every word."}
+      speaking_rate: {type: float, label: Speaking rate, default: 1, min: 0.5, max: 1.5, step: 0.05,
+                      help: "1× is the voice's own pace."}
+      guidance: {type: float, label: Guidance, default: 2, min: 1, max: 5, step: 0.1,
+                 help: "How closely it keeps to the voice; 1 is off, high strains."}
+    # the scout measured the CLI child at 1.53-1.56 GB, flat in length (2.6-4.8 s); the server child with only
+    # zac-keep2: see GOTCHAS.md for this pack's own measure
+    peak_gb: "2.0"
+    max_seconds: 60

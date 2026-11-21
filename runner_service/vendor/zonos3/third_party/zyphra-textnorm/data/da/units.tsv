@@ -1,0 +1,92 @@
+kilometer	kilometer	kilometer	c
+km	kilometer	kilometer	c
+meter	meter	meter	c
+m	meter	meter	c
+centimeter	centimeter	centimeter	c
+cm	centimeter	centimeter	c
+millimeter	millimeter	millimeter	c
+mm	millimeter	millimeter	c
+mikrometer	mikrometer	mikrometer	c
+µm	mikrometer	mikrometer	c
+μm	mikrometer	mikrometer	c
+kilogram	kilogram	kilogram	n
+kg	kilogram	kilogram	n
+kilo	kilo	kilo	n
+gram	gram	gram	n
+g	gram	gram	n
+milligram	milligram	milligram	n
+mg	milligram	milligram	n
+mikrogram	mikrogram	mikrogram	n
+µg	mikrogram	mikrogram	n
+μg	mikrogram	mikrogram	n
+ton	ton	ton	n
+t	ton	ton	n
+liter	liter	liter	c
+l	liter	liter	c
+deciliter	deciliter	deciliter	c
+dl	deciliter	deciliter	c
+milliliter	milliliter	milliliter	c
+ml	milliliter	milliliter	c
+km/t	kilometer i timen	kilometer i timen	c
+km/h	kilometer i timen	kilometer i timen	c
+m/s	meter i sekundet	meter i sekundet	c
+°C	grad celsius	grader celsius	c
+°F	grad fahrenheit	grader fahrenheit	c
+°	grad	grader	c
+K	kelvin	kelvin	c
+grader	grad	grader	c
+sekunder	sekund	sekunder	n
+sekund	sekund	sekunder	n
+sek	sekund	sekunder	n
+s	sekund	sekunder	n
+minutter	minut	minutter	n
+minut	minut	minutter	n
+min	minut	minutter	n
+timer	time	timer	c
+time	time	timer	c
+tim	time	timer	c
+h	time	timer	c
+dage	dag	dage	c
+dag	dag	dage	c
+år	år	år	n
+Gbps	gigabit i sekundet	gigabit i sekundet	c
+Mbps	megabit i sekundet	megabit i sekundet	c
+kbps	kilobit i sekundet	kilobit i sekundet	c
+bps	bit i sekundet	bit i sekundet	c
+GB	gigabyte	gigabyte	c
+MB	megabyte	megabyte	c
+kB	kilobyte	kilobyte	c
+KB	kilobyte	kilobyte	c
+TB	terabyte	terabyte	c
+B	byte	byte	c
+GHz	gigahertz	gigahertz	c
+MHz	megahertz	megahertz	c
+kHz	kilohertz	kilohertz	c
+Hz	hertz	hertz	c
+mAh	milliamperetime	milliamperetimer	c
+Ah	amperetime	amperetimer	c
+kWh	kilowatt-time	kilowatt-timer	c
+Wh	watt-time	watt-timer	c
+hPa	hektopascal	hektopascal	c
+Pa	pascal	pascal	c
+bar	bar	bar	c
+kcal	kilokalori	kilokalorier	c
+cal	kalori	kalorier	c
+J	joule	joule	c
+kJ	kilojoule	kilojoule	c
+dB	decibel	decibel	c
+Ω	ohm	ohm	c
+Ω	ohm	ohm	c
+W	watt	watt	c
+kW	kilowatt	kilowatt	c
+MW	megawatt	megawatt	c
+m²	kvadratmeter	kvadratmeter	c
+km²	kvadratkilometer	kvadratkilometer	c
+cm²	kvadratcentimeter	kvadratcentimeter	c
+mm²	kvadratmillimeter	kvadratmillimeter	c
+m³	kubikmeter	kubikmeter	c
+cm³	kubikcentimeter	kubikcentimeter	c
+%	procent	procent	c
+‰	promille	promille	c
+pct.	procent	procent	c
+pct	procent	procent	c

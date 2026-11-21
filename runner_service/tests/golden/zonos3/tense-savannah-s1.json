@@ -1,0 +1,72 @@
+{
+  "name": "tense-savannah-s1",
+  "text": "Nobody leaves this room until I say so.",
+  "seed": 1,
+  "voice": {
+    "item_id": "zonos3/savannah",
+    "version": 1,
+    "source": "preset",
+    "family": "zonos3",
+    "speaker": "default_de4d191ca7574982",
+    "language": "en-US"
+  },
+  "params": {
+    "language": "en-US",
+    "emotion": 0.3,
+    "energy": 0.75,
+    "whisper": 0,
+    "speaking_rate": 1.1,
+    "guidance": 2.5
+  },
+  "wav": "tense-savannah-s1.wav",
+  "wav_sha256": "10a5e0552e4a9cf2d006721d205127ab4281191c1cd5e82f28c06344daff376d",
+  "sample_rate": 44100,
+  "channels": 1,
+  "sample_bytes": 2,
+  "duration_s": 2.133,
+  "ready_s": 0.28,
+  "speak_s": 0.22,
+  "headers": {
+    "X-Seed": "1",
+    "X-Decoder": "keep2_plain",
+    "X-Audio-Channels": "1",
+    "X-Audio-Sample-Rate": "44100",
+    "X-Audio-Format": "pcm16"
+  },
+  "request": {
+    "text": "Nobody leaves this room until I say so.",
+    "stream": false,
+    "format": "wav",
+    "seed": 1,
+    "language": "en_us",
+    "controls": {
+      "mood.valence": -1.6,
+      "mood.arousal": 2.0
+    },
+    "condition_values": {
+      "speaking_rate": 16.5
+    },
+    "speaker_cfg_scale": 2.5,
+    "speaker_mode": "embedding"
+  },
+  "argv": [
+    "zonos3-server",
+    "backbone-ptq.gguf",
+    "--zac",
+    "zac-keep2.gguf",
+    "--spk-encoder",
+    "spk-encoder.gguf",
+    "--steer",
+    "steer.gguf",
+    "--tts-default-voices-dir",
+    "",
+    "--batch",
+    "2",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    "0"
+  ],
+  "binary_sha256": "4b8a83458afa0d72fef4971ad752431cb9f7a17fdba76a892cf577e4d45f67e8",
+  "zonos3": "96d9e0ec1e39083ed336ac78f24e3dbc93721c0f"
+}

@@ -3038,7 +3038,7 @@
     },
     "voice": {
       "type": "object",
-      "description": "a voice value as studio resolves it for cmd.run.execute (API 1.30): the library item's facts at run creation, so the runner reads no library. source preset: a pack's speaker (`family`, `speaker`); design: a voice described in words (`text`); clip (from API 1.31: a cloned voice; studio sends none in 1.30). The runner's cache key is (item_id, version) plus the fields",
+      "description": "a voice value as studio resolves it for cmd.run.execute (API 1.30): the library item's facts at run creation, so the runner reads no library. source preset: a pack's speaker (`family`, `speaker`); design: a voice described in words (`text`); clip (API 1.31): a voice with a clip, cloned or designed (`clip`). Studio sends the first of the voice's own source and then `clip` that the param takes (a designed voice with a clip on a [preset, clip] param: source clip), with only that source's field. The runner's cache key is (item_id, version) plus the fields (a clip: owner, key, etag, in, out)",
       "required": [
         "item_id",
         "version",
@@ -3087,6 +3087,14 @@
           "minLength": 1,
           "maxLength": 500,
           "description": "how it speaks, in words; absent = none"
+        },
+        "clip": {
+          "$ref": "#/$defs/media",
+          "required": [
+            "in",
+            "out"
+          ],
+          "description": "API 1.31, source clip only (required then): the clip as a media value with the claim-check rules of Media inputs (key under u/<owner_id>/, bytes and etag checked, `in` / `out` always present); the take may be deleted from the gallery (its object is kept while the voice uses it)"
         }
       },
       "allOf": [
@@ -3107,8 +3115,17 @@
               "speaker"
             ],
             "not": {
-              "required": [
-                "text"
+              "anyOf": [
+                {
+                  "required": [
+                    "text"
+                  ]
+                },
+                {
+                  "required": [
+                    "clip"
+                  ]
+                }
               ]
             }
           },
@@ -3144,6 +3161,35 @@
             "required": [
               "text"
             ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "source": {
+                "const": "clip"
+              }
+            },
+            "required": [
+              "source"
+            ]
+          },
+          "then": {
+            "required": [
+              "clip"
+            ],
+            "not": {
+              "required": [
+                "text"
+              ]
+            }
+          },
+          "else": {
+            "not": {
+              "required": [
+                "clip"
+              ]
+            }
           }
         }
       ]

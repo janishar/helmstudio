@@ -1,0 +1,5 @@
+# Derived from Slovak money.py; Copyright 2026 Zyphra, Inc., Apache-2.0.
+k|K|tis.	tisíc	tisíc	tisíc	tisíca	m
+m|M|mil.|mil|mln|млн	milión	milióny	miliónov	milióna	m
+b|B|mld.|mld|млрд	miliarda	miliardy	miliárd	miliardy	f
+t|T|bil.	bilión	bilióny	biliónov	bilióna	m

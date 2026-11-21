@@ -1,0 +1,182 @@
+diff --git a/src/ggml-metal/ggml-metal-device.cpp b/src/ggml-metal/ggml-metal-device.cpp
+index 2c7972b0..4dd3c7e6 100644
+--- a/src/ggml-metal/ggml-metal-device.cpp
++++ b/src/ggml-metal/ggml-metal-device.cpp
+@@ -2304,25 +2304,24 @@ ggml_metal_pipeline_with_params ggml_metal_library_get_pipeline_rope(ggml_metal_
+     const bool is_vision = mode == GGML_ROPE_TYPE_VISION;
+ 
+     if (is_neox) {
+-        snprintf(base, 256, "kernel_rope_neox_%s", ggml_type_name(op->src[0]->type));
++        snprintf(base, 256, "kernel_rope_neox%s_%s", is_back ? "_back" : "", ggml_type_name(op->src[0]->type));
+     } else if ((is_mrope || is_imrope) && !is_vision) {
+         GGML_ASSERT(op->src[1]->ne[0]*4 >= op->src[0]->ne[2]); // need at least 4 pos per token
+-        snprintf(base, 256, "kernel_rope_multi_%s", ggml_type_name(op->src[0]->type));
++        snprintf(base, 256, "kernel_rope_multi%s_%s", is_back ? "_back" : "", ggml_type_name(op->src[0]->type));
+     } else if (is_vision) {
+         GGML_ASSERT(op->src[1]->ne[0]*4 >= op->src[0]->ne[2]); // need at least 4 pos per token
+-        snprintf(base, 256, "kernel_rope_vision_%s", ggml_type_name(op->src[0]->type));
++        snprintf(base, 256, "kernel_rope_vision%s_%s", is_back ? "_back" : "", ggml_type_name(op->src[0]->type));
+     } else {
+-        snprintf(base, 256, "kernel_rope_norm_%s", ggml_type_name(op->src[0]->type));
++        snprintf(base, 256, "kernel_rope_norm%s_%s", is_back ? "_back" : "", ggml_type_name(op->src[0]->type));
+     }
+ 
+-    snprintf(name, 256, "%s_imrope=%d_is_back=%d", base, is_imrope ? 1 : 0, is_back ? 1 : 0);
++    snprintf(name, 256, "%s_imrope=%d", base, is_imrope ? 1 : 0);
+ 
+     ggml_metal_pipeline_with_params res = ggml_metal_library_get_pipeline(lib, name);
+     if (!res.pipeline) {
+         ggml_metal_cv_t cv = ggml_metal_cv_init();
+ 
+         ggml_metal_cv_set_bool(cv, is_imrope, FC_ROPE + 0);
+-        ggml_metal_cv_set_bool(cv, is_back,   FC_ROPE + 1);
+ 
+         res = ggml_metal_library_compile_pipeline(lib, base, name, cv);
+ 
+diff --git a/src/ggml-metal/kernels/rope.metal b/src/ggml-metal/kernels/rope.metal
+index 401ceacb..43460eee 100644
+--- a/src/ggml-metal/kernels/rope.metal
++++ b/src/ggml-metal/kernels/rope.metal
+@@ -1,7 +1,6 @@
+ #include "common.h"
+ 
+ constant bool FC_rope_is_imrope [[function_constant(FC_ROPE + 0)]];
+-constant bool FC_rope_is_back   [[function_constant(FC_ROPE + 1)]];
+ 
+ static float rope_yarn_ramp(const float low, const float high, const int i0) {
+     const float y = (i0 / 2 - low) / max(0.001f, high - low);
+@@ -10,6 +9,9 @@ static float rope_yarn_ramp(const float low, const float high, const int i0) {
+ 
+ // YaRN algorithm based on LlamaYaRNScaledRotaryEmbedding.py from https://github.com/jquesnelle/yarn
+ // MIT licensed. Copyright (c) 2023 Jeffrey Quesnelle and Bowen Peng.
++// is_back is a template parameter, not a function constant: a function-constant branch here
++// changes the forward kernels' sin/cos codegen (~1 ulp) even when the constant is false.
++template<bool is_back>
+ static void rope_yarn(
+     float theta_extrap, float freq_scale, float corr_dims[2], int i0, float ext_factor, float mscale,
+     thread float * cos_theta, thread float * sin_theta) {
+@@ -25,7 +27,7 @@ static void rope_yarn(
+     }
+     *cos_theta = cos(theta) * mscale;
+     *sin_theta = sin(theta) * mscale;
+-    if (FC_rope_is_back) {
++    if (is_back) {
+         *sin_theta *= -1.0f;
+     }
+ }
+@@ -44,7 +46,7 @@ static void rope_yarn_corr_dims(
+     dims[1] = min(n_dims - 1.0f, ceil(rope_yarn_corr_factor(n_dims, n_ctx_orig, beta_slow, freq_base)));
+ }
+ 
+-template<typename T>
++template<typename T, bool is_back>
+ kernel void kernel_rope_norm(
+         constant ggml_metal_kargs_rope & args,
+         device const char * src0,
+@@ -78,7 +80,7 @@ kernel void kernel_rope_norm(
+ 
+             const float freq_factor = args.src2 ? ((device const float *) src2)[ic] : 1.0f;
+ 
+-            rope_yarn(theta/freq_factor, args.freq_scale, corr_dims, iw, args.ext_factor, args.attn_factor, &cos_theta, &sin_theta);
++            rope_yarn<is_back>(theta/freq_factor, args.freq_scale, corr_dims, iw, args.ext_factor, args.attn_factor, &cos_theta, &sin_theta);
+ 
+             device const T * const src = (device T *)(src0 + i3*args.nb03 + i2*args.nb02 + i1*args.nb01 + i0*args.nb00);
+             device       T * dst_data  = (device T *)( dst + i3*args.nb3  + i2*args.nb2  + i1*args.nb1  + i0*args.nb0);
+@@ -102,7 +104,7 @@ kernel void kernel_rope_norm(
+     }
+ }
+ 
+-template<typename T>
++template<typename T, bool is_back>
+ kernel void kernel_rope_neox(
+         constant ggml_metal_kargs_rope & args,
+         device const char * src0,
+@@ -136,7 +138,7 @@ kernel void kernel_rope_neox(
+ 
+             const float freq_factor = args.src2 ? ((device const float *) src2)[ic] : 1.0f;
+ 
+-            rope_yarn(theta/freq_factor, args.freq_scale, corr_dims, iw, args.ext_factor, args.attn_factor, &cos_theta, &sin_theta);
++            rope_yarn<is_back>(theta/freq_factor, args.freq_scale, corr_dims, iw, args.ext_factor, args.attn_factor, &cos_theta, &sin_theta);
+ 
+             device const T * const src = (device T *)(src0 + i3*args.nb03 + i2*args.nb02 + i1*args.nb01 + (args.n_offs + ic)*args.nb00);
+             device       T * dst_data  = (device T *)( dst + i3*args.nb3  + i2*args.nb2  + i1*args.nb1  + (args.n_offs + ic)*args.nb0);
+@@ -160,7 +162,7 @@ kernel void kernel_rope_neox(
+     }
+ }
+ 
+-template<typename T>
++template<typename T, bool is_back>
+ kernel void kernel_rope_multi(
+         constant ggml_metal_kargs_rope & args,
+         device const char * src0,
+@@ -224,7 +226,7 @@ kernel void kernel_rope_multi(
+ 
+             const float freq_factor = args.src2 ? ((device const float *) src2)[ic] : 1.0f;
+ 
+-            rope_yarn(theta/freq_factor, args.freq_scale, corr_dims, iw, args.ext_factor, args.attn_factor, &cos_theta, &sin_theta);
++            rope_yarn<is_back>(theta/freq_factor, args.freq_scale, corr_dims, iw, args.ext_factor, args.attn_factor, &cos_theta, &sin_theta);
+ 
+             device const T * const src = (device T *)(src0 + i3*args.nb03 + i2*args.nb02 + i1*args.nb01 + (args.n_offs + ic)*args.nb00);
+             device       T * dst_data  = (device T *)( dst + i3*args.nb3  + i2*args.nb2  + i1*args.nb1  + (args.n_offs + ic)*args.nb0);
+@@ -248,7 +250,7 @@ kernel void kernel_rope_multi(
+     }
+ }
+ 
+-template<typename T>
++template<typename T, bool is_back>
+ kernel void kernel_rope_vision(
+         constant ggml_metal_kargs_rope & args,
+         device const char * src0,
+@@ -295,7 +297,7 @@ kernel void kernel_rope_vision(
+ 
+             const float freq_factor = args.src2 ? ((device const float *) src2)[ic] : 1.0f;
+ 
+-            rope_yarn(theta/freq_factor, args.freq_scale, corr_dims, i0, args.ext_factor, args.attn_factor, &cos_theta, &sin_theta);
++            rope_yarn<is_back>(theta/freq_factor, args.freq_scale, corr_dims, i0, args.ext_factor, args.attn_factor, &cos_theta, &sin_theta);
+ 
+             device const T * const src = (device T *)(src0 + i3*args.nb03 + i2*args.nb02 + i1*args.nb01 + ic*args.nb00);
+             device       T * dst_data  = (device T *)( dst + i3*args.nb3  + i2*args.nb2  + i1*args.nb1  + ic*args.nb0);
+@@ -315,19 +317,27 @@ kernel void kernel_rope_vision(
+     }
+ }
+ 
+-typedef decltype(kernel_rope_norm<float>) kernel_rope_norm_t;
+-typedef decltype(kernel_rope_neox<float>) kernel_rope_neox_t;
+-typedef decltype(kernel_rope_multi<float>) kernel_rope_multi_t;
+-typedef decltype(kernel_rope_vision<float>) kernel_rope_vision_t;
+-
+-template [[host_name("kernel_rope_norm_f32")]] kernel kernel_rope_norm_t kernel_rope_norm<float>;
+-template [[host_name("kernel_rope_norm_f16")]] kernel kernel_rope_norm_t kernel_rope_norm<half>;
+-
+-template [[host_name("kernel_rope_neox_f32")]] kernel kernel_rope_neox_t kernel_rope_neox<float>;
+-template [[host_name("kernel_rope_neox_f16")]] kernel kernel_rope_neox_t kernel_rope_neox<half>;
+-
+-template [[host_name("kernel_rope_multi_f32")]] kernel kernel_rope_multi_t kernel_rope_multi<float>;
+-template [[host_name("kernel_rope_multi_f16")]] kernel kernel_rope_multi_t kernel_rope_multi<half>;
+-
+-template [[host_name("kernel_rope_vision_f32")]] kernel kernel_rope_vision_t kernel_rope_vision<float>;
+-template [[host_name("kernel_rope_vision_f16")]] kernel kernel_rope_vision_t kernel_rope_vision<half>;
++typedef decltype(kernel_rope_norm<float, false>) kernel_rope_norm_t;
++typedef decltype(kernel_rope_neox<float, false>) kernel_rope_neox_t;
++typedef decltype(kernel_rope_multi<float, false>) kernel_rope_multi_t;
++typedef decltype(kernel_rope_vision<float, false>) kernel_rope_vision_t;
++
++template [[host_name("kernel_rope_norm_f32")]] kernel kernel_rope_norm_t kernel_rope_norm<float, false>;
++template [[host_name("kernel_rope_norm_f16")]] kernel kernel_rope_norm_t kernel_rope_norm<half, false>;
++template [[host_name("kernel_rope_norm_back_f32")]] kernel kernel_rope_norm_t kernel_rope_norm<float, true>;
++template [[host_name("kernel_rope_norm_back_f16")]] kernel kernel_rope_norm_t kernel_rope_norm<half, true>;
++
++template [[host_name("kernel_rope_neox_f32")]] kernel kernel_rope_neox_t kernel_rope_neox<float, false>;
++template [[host_name("kernel_rope_neox_f16")]] kernel kernel_rope_neox_t kernel_rope_neox<half, false>;
++template [[host_name("kernel_rope_neox_back_f32")]] kernel kernel_rope_neox_t kernel_rope_neox<float, true>;
++template [[host_name("kernel_rope_neox_back_f16")]] kernel kernel_rope_neox_t kernel_rope_neox<half, true>;
++
++template [[host_name("kernel_rope_multi_f32")]] kernel kernel_rope_multi_t kernel_rope_multi<float, false>;
++template [[host_name("kernel_rope_multi_f16")]] kernel kernel_rope_multi_t kernel_rope_multi<half, false>;
++template [[host_name("kernel_rope_multi_back_f32")]] kernel kernel_rope_multi_t kernel_rope_multi<float, true>;
++template [[host_name("kernel_rope_multi_back_f16")]] kernel kernel_rope_multi_t kernel_rope_multi<half, true>;
++
++template [[host_name("kernel_rope_vision_f32")]] kernel kernel_rope_vision_t kernel_rope_vision<float, false>;
++template [[host_name("kernel_rope_vision_f16")]] kernel kernel_rope_vision_t kernel_rope_vision<half, false>;
++template [[host_name("kernel_rope_vision_back_f32")]] kernel kernel_rope_vision_t kernel_rope_vision<float, true>;
++template [[host_name("kernel_rope_vision_back_f16")]] kernel kernel_rope_vision_t kernel_rope_vision<half, true>;

@@ -1,0 +1,107 @@
+[package]
+name = "zyphra-textnorm"
+version.workspace = true
+description = "Text normalization for TTS in 43 languages: native Rust ports of NeMo and ZONOS3 grammars, no FST runtime"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+keywords = ["tts", "text-normalization", "speech", "nemo"]
+categories = ["text-processing", "internationalization"]
+# The oracle, its corpus and goldens (≈ 15 MB) stay in the repository: the crate ships the library, its tables and
+# the tests that need no golden.
+include = [
+    "/src/**",
+    "/data/**",
+    "/include/**",
+    "/examples/**",
+    "/benches/**",
+    "/tests/wrapper.rs",
+    "/README.md",
+    "/LICENSE",
+    "/NOTICE",
+    "/licenses/**",
+]
+
+[workspace]
+
+[workspace.package]
+version = "0.2.0"
+edition = "2024"
+# let chains
+rust-version = "1.88"
+license = "MIT AND Apache-2.0 AND Unicode-3.0"
+repository = "https://github.com/Zyphra/zyphra-textnorm"
+
+[lib]
+name = "zyphra_textnorm"
+
+[features]
+# One feature per grammar package; a port is built and tested alone with `--no-default-features --features lang-<l>`.
+default = [
+    "lang-en", "lang-de", "lang-es", "lang-fr", "lang-it", "lang-pt", "lang-ja", "lang-zh", "lang-ko",
+    "lang-nl", "lang-pl", "lang-tr", "lang-uk", "lang-cs", "lang-da", "lang-fi", "lang-el", "lang-nb",
+    "lang-ro", "lang-sk", "lang-bg", "lang-he", "lang-th", "lang-tl", "lang-ms", "lang-ka", "lang-ta",
+    "lang-gu", "lang-kn", "lang-ml", "lang-pa", "lang-or",
+    "lang-ru", "lang-sv", "lang-hu", "lang-ar", "lang-vi", "lang-id", "lang-hi", "lang-bn", "lang-te",
+    "lang-mr", "lang-ur",
+]
+lang-en = []
+lang-de = []
+lang-es = []
+lang-fr = []
+lang-it = []
+lang-pt = []
+lang-ja = []
+lang-zh = []
+lang-ko = []
+lang-nl = []
+lang-pl = []
+lang-tr = []
+lang-uk = []
+lang-cs = []
+lang-da = []
+lang-fi = []
+lang-el = []
+lang-nb = []
+lang-ro = []
+lang-sk = []
+lang-bg = []
+lang-he = []
+lang-th = []
+lang-tl = []
+lang-ms = []
+lang-ka = []
+lang-ta = []
+lang-gu = []
+lang-kn = []
+lang-ml = []
+lang-pa = []
+lang-or = []
+lang-ru = []
+lang-sv = []
+lang-hu = []
+lang-ar = []
+lang-vi = []
+lang-id = []
+lang-hi = []
+lang-bn = []
+lang-te = []
+lang-mr = []
+lang-ur = []
+# The C ABI (include/zyphra_textnorm.h). Build the static library with
+# `cargo rustc --release --lib --features capi --crate-type staticlib`.
+capi = []
+
+[dependencies]
+
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+opt-level = 3
+# unwind, not abort: a grammar panic becomes a grammar failure (the sentence kept as typed). Under panic = "abort" it
+# aborts the process instead.
+panic = "unwind"
+

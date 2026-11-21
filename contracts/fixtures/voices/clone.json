@@ -1,0 +1,781 @@
+{
+  "description": "API 1.31 (contracts/README.md, Voices: cloned voices): check.py save_voice and sweep. takes: the caller's live takes (a deleted one is absent), with made_with.voices as `voices`; voices: the caller's voices. expect: the stored voice fields and from_take_id, or {status, detail}.",
+  "takes": {
+    "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8": {
+      "id": "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8",
+      "kind": "audio",
+      "duration_s": 16.0
+    },
+    "4c5d6e7f-8091-4a2b-8c3d-4e5f60718293": {
+      "id": "4c5d6e7f-8091-4a2b-8c3d-4e5f60718293",
+      "kind": "video",
+      "duration_s": 40.0,
+      "has_audio": true
+    },
+    "6e7f8091-a2b3-4c4d-9e5f-60718293a4b5": {
+      "id": "6e7f8091-a2b3-4c4d-9e5f-60718293a4b5",
+      "kind": "image",
+      "duration_s": 0
+    },
+    "9a0b1c2d-3e4f-4a5b-8c6d-7e8f9a0b1c2d": {
+      "id": "9a0b1c2d-3e4f-4a5b-8c6d-7e8f9a0b1c2d",
+      "kind": "video",
+      "duration_s": 8.0,
+      "has_audio": false
+    },
+    "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d": {
+      "id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+      "kind": "audio",
+      "duration_s": 2.5
+    },
+    "8091a2b3-c4d5-4e6f-8a7b-8c9d0e1f2a3b": {
+      "id": "8091a2b3-c4d5-4e6f-8a7b-8c9d0e1f2a3b",
+      "kind": "audio",
+      "duration_s": 3.2,
+      "voices": [
+        {
+          "id": "qwen3-tts/ryan",
+          "name": "Ryan",
+          "version": 1,
+          "source": "preset"
+        },
+        {
+          "id": "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a21",
+          "name": "Nervous teen",
+          "version": 2,
+          "source": "designed"
+        }
+      ]
+    },
+    "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e": {
+      "id": "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e",
+      "kind": "audio",
+      "duration_s": 3.0,
+      "voices": [
+        {
+          "id": "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a29",
+          "name": "Old voice",
+          "version": 1,
+          "source": "designed"
+        }
+      ]
+    },
+    "c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e7f": {
+      "id": "c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e7f",
+      "kind": "audio",
+      "duration_s": 45.0,
+      "voices": [
+        {
+          "id": "zonos3/savannah",
+          "name": "Savannah",
+          "version": 1,
+          "source": "preset"
+        }
+      ]
+    }
+  },
+  "voices": {
+    "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a21": {
+      "id": "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a21",
+      "kind": "voice",
+      "group": "designed",
+      "name": "Nervous teen",
+      "voice": {
+        "source": "designed",
+        "design": "male, 17, tenor, nervous",
+        "language": "en"
+      }
+    }
+  },
+  "cases": [
+    {
+      "description": "a clip of an audio take",
+      "body": {
+        "kind": "voice",
+        "group": "cloned",
+        "name": "Jon",
+        "voice": {
+          "clip": {
+            "take_id": "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8",
+            "in": 4.0,
+            "out": 16.0
+          },
+          "consent": true,
+          "language": "en"
+        }
+      },
+      "expect": {
+        "voice": {
+          "source": "cloned",
+          "language": "en",
+          "clip": {
+            "take_id": "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8",
+            "in": 4.0,
+            "out": 16.0
+          },
+          "consent": true
+        },
+        "from_take_id": "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8"
+      }
+    },
+    {
+      "description": "in and out filled: 0 and min(duration, 30)",
+      "body": {
+        "kind": "voice",
+        "group": "cloned",
+        "name": "Jon",
+        "voice": {
+          "clip": {
+            "take_id": "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8"
+          },
+          "consent": true
+        }
+      },
+      "expect": {
+        "voice": {
+          "source": "cloned",
+          "clip": {
+            "take_id": "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8",
+            "in": 0,
+            "out": 16.0
+          },
+          "consent": true
+        },
+        "from_take_id": "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8"
+      }
+    },
+    {
+      "description": "a video's sound, out capped at 30 s",
+      "body": {
+        "kind": "voice",
+        "group": "cloned",
+        "name": "Jon",
+        "voice": {
+          "clip": {
+            "take_id": "4c5d6e7f-8091-4a2b-8c3d-4e5f60718293",
+            "in": 10.0
+          },
+          "consent": true
+        }
+      },
+      "expect": {
+        "voice": {
+          "source": "cloned",
+          "clip": {
+            "take_id": "4c5d6e7f-8091-4a2b-8c3d-4e5f60718293",
+            "in": 10.0,
+            "out": 30
+          },
+          "consent": true
+        },
+        "from_take_id": "4c5d6e7f-8091-4a2b-8c3d-4e5f60718293"
+      }
+    },
+    {
+      "description": "a part over 30 s",
+      "body": {
+        "kind": "voice",
+        "group": "cloned",
+        "name": "Jon",
+        "voice": {
+          "clip": {
+            "take_id": "4c5d6e7f-8091-4a2b-8c3d-4e5f60718293",
+            "in": 0,
+            "out": 31.0
+          },
+          "consent": true
+        }
+      },
+      "expect": {
+        "status": 422,
+        "detail": "voice.clip: the part lasts 31.0 s; this input takes at most 30.0 s"
+      }
+    },
+    {
+      "description": "a part under 3 s",
+      "body": {
+        "kind": "voice",
+        "group": "cloned",
+        "name": "Jon",
+        "voice": {
+          "clip": {
+            "take_id": "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8",
+            "in": 4.0,
+            "out": 6.5
+          },
+          "consent": true
+        }
+      },
+      "expect": {
+        "status": 422,
+        "detail": "voice.clip: the part lasts 2.5 s; this input takes at least 3.0 s"
+      }
+    },
+    {
+      "description": "a take under 3 s",
+      "body": {
+        "kind": "voice",
+        "group": "cloned",
+        "name": "Jon",
+        "voice": {
+          "clip": {
+            "take_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"
+          },
+          "consent": true
+        }
+      },
+      "expect": {
+        "status": 422,
+        "detail": "voice.clip: take a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d lasts 2.5 s; this input takes at least 3.0 s"
+      }
+    },
+    {
+      "description": "in after out",
+      "body": {
+        "kind": "voice",
+        "group": "cloned",
+        "name": "Jon",
+        "voice": {
+          "clip": {
+            "take_id": "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8",
+            "in": 9.0,
+            "out": 5.0
+          },
+          "consent": true
+        }
+      },
+      "expect": {
+        "status": 422,
+        "detail": "voice.clip: in must be before out"
+      }
+    },
+    {
+      "description": "out past the end",
+      "body": {
+        "kind": "voice",
+        "group": "cloned",
+        "name": "Jon",
+        "voice": {
+          "clip": {
+            "take_id": "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8",
+            "in": 0,
+            "out": 17.0
+          },
+          "consent": true
+        }
+      },
+      "expect": {
+        "status": 422,
+        "detail": "voice.clip: out 17.0 is past the take's end 16.0"
+      }
+    },
+    {
+      "description": "an image has no sound",
+      "body": {
+        "kind": "voice",
+        "group": "cloned",
+        "name": "Jon",
+        "voice": {
+          "clip": {
+            "take_id": "6e7f8091-a2b3-4c4d-9e5f-60718293a4b5"
+          },
+          "consent": true
+        }
+      },
+      "expect": {
+        "status": 422,
+        "detail": "voice.clip: take 6e7f8091-a2b3-4c4d-9e5f-60718293a4b5 has no sound"
+      }
+    },
+    {
+      "description": "a silent video has no sound",
+      "body": {
+        "kind": "voice",
+        "group": "cloned",
+        "name": "Jon",
+        "voice": {
+          "clip": {
+            "take_id": "9a0b1c2d-3e4f-4a5b-8c6d-7e8f9a0b1c2d"
+          },
+          "consent": true
+        }
+      },
+      "expect": {
+        "status": 422,
+        "detail": "voice.clip: take 9a0b1c2d-3e4f-4a5b-8c6d-7e8f9a0b1c2d has no sound"
+      }
+    },
+    {
+      "description": "an unknown, deleted or another user's take",
+      "body": {
+        "kind": "voice",
+        "group": "cloned",
+        "name": "Jon",
+        "voice": {
+          "clip": {
+            "take_id": "00000000-0000-4000-8000-000000000000"
+          },
+          "consent": true
+        }
+      },
+      "expect": {
+        "status": 404,
+        "detail": "voice.clip: take 00000000-0000-4000-8000-000000000000 not found"
+      }
+    },
+    {
+      "description": "no consent",
+      "body": {
+        "kind": "voice",
+        "group": "cloned",
+        "name": "Jon",
+        "voice": {
+          "clip": {
+            "take_id": "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8"
+          }
+        }
+      },
+      "expect": {
+        "status": 422,
+        "detail": "voice.consent: tick \"I have the right to use this voice\""
+      }
+    },
+    {
+      "description": "consent false",
+      "body": {
+        "kind": "voice",
+        "group": "cloned",
+        "name": "Jon",
+        "voice": {
+          "clip": {
+            "take_id": "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8"
+          },
+          "consent": false
+        }
+      },
+      "expect": {
+        "status": 422,
+        "detail": "voice.consent: tick \"I have the right to use this voice\""
+      }
+    },
+    {
+      "description": "a cloned voice needs a clip",
+      "body": {
+        "kind": "voice",
+        "group": "cloned",
+        "name": "Jon",
+        "voice": {
+          "consent": true
+        }
+      },
+      "expect": {
+        "status": 422,
+        "detail": "voice: a cloned voice needs voice.clip"
+      }
+    },
+    {
+      "description": "a cloned voice has no design",
+      "body": {
+        "kind": "voice",
+        "group": "cloned",
+        "name": "Jon",
+        "voice": {
+          "design": "male",
+          "clip": {
+            "take_id": "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8"
+          },
+          "consent": true
+        }
+      },
+      "expect": {
+        "status": 422,
+        "detail": "voice.design: a cloned voice has no design"
+      }
+    },
+    {
+      "description": "clip and from_take",
+      "body": {
+        "kind": "voice",
+        "group": "cloned",
+        "name": "Jon",
+        "voice": {
+          "clip": {
+            "take_id": "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8"
+          },
+          "consent": true
+        },
+        "from_take": {
+          "take_id": "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8"
+        }
+      },
+      "expect": {
+        "status": 422,
+        "detail": "voice.clip: give the clip or from_take, not both"
+      }
+    },
+    {
+      "description": "Save as voice: an audio take's part",
+      "body": {
+        "kind": "voice",
+        "group": "cloned",
+        "name": "Jon",
+        "voice": {
+          "consent": true
+        },
+        "from_take": {
+          "take_id": "c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e7f",
+          "in": 2.0,
+          "out": 12.0
+        }
+      },
+      "expect": {
+        "voice": {
+          "source": "cloned",
+          "clip": {
+            "take_id": "c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e7f",
+            "in": 2.0,
+            "out": 12.0
+          },
+          "consent": true
+        },
+        "from_take_id": "c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e7f"
+      }
+    },
+    {
+      "description": "Save as voice: the whole take is too long, so out is 30",
+      "body": {
+        "kind": "voice",
+        "group": "cloned",
+        "name": "Jon",
+        "voice": {
+          "consent": true
+        },
+        "from_take": {
+          "take_id": "c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e7f"
+        }
+      },
+      "expect": {
+        "voice": {
+          "source": "cloned",
+          "clip": {
+            "take_id": "c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e7f",
+            "in": 0,
+            "out": 30
+          },
+          "consent": true
+        },
+        "from_take_id": "c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e7f"
+      }
+    },
+    {
+      "description": "Save as voice: media texts under from_take",
+      "body": {
+        "kind": "voice",
+        "group": "cloned",
+        "name": "Jon",
+        "voice": {
+          "consent": true
+        },
+        "from_take": {
+          "take_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"
+        }
+      },
+      "expect": {
+        "status": 422,
+        "detail": "from_take: take a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d lasts 2.5 s; this input takes at least 3.0 s"
+      }
+    },
+    {
+      "description": "Save as voice: an unknown take",
+      "body": {
+        "kind": "voice",
+        "group": "cloned",
+        "name": "Jon",
+        "voice": {
+          "consent": true
+        },
+        "from_take": {
+          "take_id": "00000000-0000-4000-8000-000000000000"
+        }
+      },
+      "expect": {
+        "status": 404,
+        "detail": "from_take: take 00000000-0000-4000-8000-000000000000 not found"
+      }
+    },
+    {
+      "description": "Save as voice: consent still required",
+      "body": {
+        "kind": "voice",
+        "group": "cloned",
+        "name": "Jon",
+        "from_take": {
+          "take_id": "c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e7f"
+        }
+      },
+      "expect": {
+        "status": 422,
+        "detail": "voice.consent: tick \"I have the right to use this voice\""
+      }
+    },
+    {
+      "description": "Save as voice from a design take: the design copied, the take its clip",
+      "body": {
+        "kind": "voice",
+        "group": "designed",
+        "name": "Teen",
+        "voice": {
+          "consent": true
+        },
+        "from_take": {
+          "take_id": "8091a2b3-c4d5-4e6f-8a7b-8c9d0e1f2a3b"
+        }
+      },
+      "expect": {
+        "voice": {
+          "source": "designed",
+          "design": "male, 17, tenor, nervous",
+          "language": "en",
+          "clip": {
+            "take_id": "8091a2b3-c4d5-4e6f-8a7b-8c9d0e1f2a3b",
+            "in": 0,
+            "out": 3.2
+          },
+          "consent": true
+        },
+        "from_take_id": "8091a2b3-c4d5-4e6f-8a7b-8c9d0e1f2a3b"
+      }
+    },
+    {
+      "description": "the body's own design wins",
+      "body": {
+        "kind": "voice",
+        "group": "designed",
+        "name": "Teen",
+        "voice": {
+          "design": "female, 40, alto",
+          "consent": true
+        },
+        "from_take": {
+          "take_id": "c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e7f",
+          "in": 0,
+          "out": 5.0
+        }
+      },
+      "expect": {
+        "voice": {
+          "source": "designed",
+          "design": "female, 40, alto",
+          "clip": {
+            "take_id": "c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e7f",
+            "in": 0,
+            "out": 5.0
+          },
+          "consent": true
+        },
+        "from_take_id": "c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e7f"
+      }
+    },
+    {
+      "description": "a designed voice from a take made without one",
+      "body": {
+        "kind": "voice",
+        "group": "designed",
+        "name": "Teen",
+        "voice": {
+          "consent": true
+        },
+        "from_take": {
+          "take_id": "c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e7f"
+        }
+      },
+      "expect": {
+        "status": 422,
+        "detail": "from_take: take c3d4e5f6-a7b8-4c9d-8e0f-2a3b4c5d6e7f was not made with a designed voice"
+      }
+    },
+    {
+      "description": "its designed voice was deleted",
+      "body": {
+        "kind": "voice",
+        "group": "designed",
+        "name": "Teen",
+        "voice": {
+          "consent": true
+        },
+        "from_take": {
+          "take_id": "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e"
+        }
+      },
+      "expect": {
+        "status": 422,
+        "detail": "from_take: voice Old voice was deleted"
+      }
+    },
+    {
+      "description": "a designed voice keeps a clip of its own too",
+      "body": {
+        "kind": "voice",
+        "group": "designed",
+        "name": "Kai",
+        "voice": {
+          "design": "male, 30",
+          "clip": {
+            "take_id": "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8",
+            "in": 0,
+            "out": 3.0
+          },
+          "consent": true
+        }
+      },
+      "expect": {
+        "voice": {
+          "source": "designed",
+          "design": "male, 30",
+          "clip": {
+            "take_id": "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8",
+            "in": 0,
+            "out": 3.0
+          },
+          "consent": true
+        },
+        "from_take_id": "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8"
+      }
+    },
+    {
+      "description": "a designed voice without a clip needs no consent (1.30)",
+      "body": {
+        "kind": "voice",
+        "group": "designed",
+        "name": "Kai",
+        "voice": {
+          "design": "male, 30"
+        }
+      },
+      "expect": {
+        "voice": {
+          "source": "designed",
+          "design": "male, 30"
+        },
+        "from_take_id": null
+      }
+    },
+    {
+      "description": "a designed voice needs a design",
+      "body": {
+        "kind": "voice",
+        "group": "designed",
+        "name": "Kai",
+        "voice": {
+          "consent": true
+        }
+      },
+      "expect": {
+        "status": 422,
+        "detail": "voice: a designed voice needs voice.design"
+      }
+    }
+  ],
+  "sweep": [
+    {
+      "description": "a deleted take a voice keeps is not swept; a live take never is",
+      "takes": [
+        {
+          "id": "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8",
+          "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+          "deleted": true
+        },
+        {
+          "id": "4c5d6e7f-8091-4a2b-8c3d-4e5f60718293",
+          "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+          "deleted": true
+        },
+        {
+          "id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+          "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+          "deleted": false
+        }
+      ],
+      "voices": [
+        {
+          "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+          "voice": {
+            "source": "cloned",
+            "clip": {
+              "take_id": "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8",
+              "in": 0,
+              "out": 3.0
+            },
+            "consent": true
+          }
+        }
+      ],
+      "expect": [
+        "4c5d6e7f-8091-4a2b-8c3d-4e5f60718293"
+      ]
+    },
+    {
+      "description": "deleting the voice frees it",
+      "takes": [
+        {
+          "id": "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8",
+          "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+          "deleted": true
+        }
+      ],
+      "voices": [],
+      "expect": [
+        "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8"
+      ]
+    },
+    {
+      "description": "only the owner's own voices count",
+      "takes": [
+        {
+          "id": "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8",
+          "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+          "deleted": true
+        }
+      ],
+      "voices": [
+        {
+          "owner_id": "1e2d3c4b-5a69-4878-9a8b-7c6d5e4f3a21",
+          "voice": {
+            "source": "cloned",
+            "clip": {
+              "take_id": "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8",
+              "in": 0,
+              "out": 3.0
+            },
+            "consent": true
+          }
+        }
+      ],
+      "expect": [
+        "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8"
+      ]
+    },
+    {
+      "description": "a voice without a clip keeps nothing",
+      "takes": [
+        {
+          "id": "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8",
+          "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+          "deleted": true
+        }
+      ],
+      "voices": [
+        {
+          "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+          "voice": {
+            "source": "designed",
+            "design": "male"
+          }
+        }
+      ],
+      "expect": [
+        "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8"
+      ]
+    }
+  ]
+}

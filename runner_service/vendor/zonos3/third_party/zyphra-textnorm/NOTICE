@@ -1,0 +1,43 @@
+zyphra-textnorm
+Copyright (c) 2026 Zyphra, Inc.
+
+The original code of this project is under the MIT License (LICENSE). It includes the third-party components below;
+the full text of each license is in licenses/.
+
+================================================================================
+1. NVIDIA NeMo-text-processing
+   https://github.com/NVIDIA/NeMo-text-processing
+   Copyright (c) 2020-2026 NVIDIA CORPORATION & AFFILIATES
+   Portions Copyright 2015 and onwards Google, Inc.
+   SPDX-License-Identifier: Apache-2.0
+   Full license: licenses/nemo-Apache-2.0.txt
+
+   The original nine Rust grammar packages and their tables port the r1.2.0
+   text_normalization grammars. The additional 34 packages port Zyphra's production
+   locale grammars, retaining the NeMo-derived architecture and Apache-2.0
+   source notices. Both reference sources are vendored under
+   oracle/nemo_text_processing/ (the differential-test oracle; not part of
+   the library or its packages). oracle/upstream_cases/ holds reference
+   inputs.
+
+================================================================================
+2. sacremoses
+   https://github.com/hplt-project/sacremoses
+   Copyright (c) 2020 alvations
+   SPDX-License-Identifier: MIT
+   Full license: licenses/sacremoses-MIT.txt
+
+   MosesDetokenizer and the perluniprops IsAlpha/IsSc tables are ported in
+   src/moses.rs and data/perluniprops/.
+================================================================================
+
+3. Unicode Common Locale Data Repository (CLDR), release 49
+   https://github.com/unicode-org/cldr/tree/release-49
+   Copyright © 2001–2026 Unicode, Inc.
+   SPDX-License-Identifier: Unicode-3.0
+   Full license: licenses/unicode-3.0.txt
+
+   The added locale number vocabularies, morphology and lexical tables
+   derive from CLDR RBNF and locale data. Source data and provenance notices
+   are retained in the corresponding data/ and oracle/ packages.
+================================================================================

@@ -1,0 +1,33 @@
+// Copyright (c) 2026 Zyphra, Inc. Licensed under Apache-2.0.
+pub fn whitelist(s: &str) -> Option<&'static str> {
+    Some(match s {
+        "Dr." | "Dr" | "dr." => "doctor",
+        "Dna." | "Dna" | "D-na" | "dna." => "doamna",
+        "Dl." | "Dl" | "D-l" | "dl." => "domnul",
+        "Dra." | "Dra" | "D-ra" | "dra." => "domnișoara",
+        "Prof." | "prof." | "Prof" => "profesor",
+        "Ing." | "ing." => "inginer",
+        "Av." | "av." | "avv." => "avocat",
+        "Nr." | "nr." | "Nr" | "nr" | "No." | "no." | "n." => "numărul",
+        "etc." | "etc" => "și așa mai departe",
+        "str." | "Str." => "strada",
+        "bd." | "Bd." | "b-dul" | "B-dul" => "bulevardul",
+        "ap." | "Ap." => "apartamentul",
+        "tel." | "Tel." => "telefon",
+        "pag." => "pagina",
+        "vol." => "volumul",
+        "cap." => "capitolul",
+        "art." => "articolul",
+        "alin." => "alineatul",
+        "sf." | "Sf." => "sfântul",
+        "&" => "și",
+        "©" => "copyright",
+        "§" => "paragraful",
+        "®" => "marcă înregistrată",
+        "™" => "marcă comercială",
+        "~" => "aproximativ",
+        "±" => "plus-minus",
+        "=" => "egal",
+        _ => return None,
+    })
+}

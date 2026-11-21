@@ -47,7 +47,7 @@ REQ_REPLY = [
     n for p in SCHEMA_FILES if (n := p.name.removesuffix(".schema.json")).startswith("req.")
 ]
 # Canonical registries a runner publishes verbatim: fixtures/registry/<prefix>{nodes,workflows}.valid.json
-CANONICAL = ["", "qwen-image.", "ltx.", "llm.", "server.", "minimax-h3-image.", "minimax-h3."]
+CANONICAL = ["", "qwen-image.", "ltx.", "llm.", "server.", "minimax-h3-image.", "minimax-h3.", "qwen3-tts.", "zonos3."]
 REGISTRY_KEYS = [
     "nodes",
     "workflows",
@@ -1982,11 +1982,23 @@ def voice_params(nodes: dict, palette: dict) -> list[tuple[str, dict]]:
             and not nodes[nid].get("bypass") for p in s["params"] if p["type"] == "voice"]
 
 
+def voice_sources(item: dict) -> list[str]:
+    """What a saved voice offers a voice param, its own source first; from 1.31 a designed voice with a clip also
+    offers `clip` (README, Voices: cloned voices)."""
+    own = VOICE_SOURCE[item["group"]]
+    return [own] + (["clip"] if own != "clip" and "clip" in item["voice"] else [])
+
+
+def voice_source(param: dict, item: dict) -> str | None:
+    """The defs voice `source` studio sends for this param: the first of voice_sources it accepts (None: it refuses)."""
+    return next((x for x in voice_sources(item) if x in param["accepts"]), None)
+
+
 def voice_reason(kind: str, param: dict, item: dict) -> str | None:
     """Why one voice param cannot take this saved voice (item: a LibraryItem of kind voice), None when it can. Studio's
     run 422 is `<node>.<param>: <reason>`."""
     src = VOICE_SOURCE[item["group"]]
-    if src not in param["accepts"]:
+    if voice_source(param, item) is None:
         return VOICE_REFUSED[src]
     if src == "preset" and item["voice"]["family"] != family(kind):
         return f"voice {item['name']} is for {item['voice']['family']}"
@@ -2000,6 +2012,54 @@ def voice_fit(nodes: dict, palette: dict, item: dict) -> str | None:
         return "this workflow takes no voice"
     reasons = [voice_reason(nodes[nid]["kind"], p, item) for nid, p in params]
     return None if None in reasons else reasons[0]
+
+
+VOICE_CLIP = {"accepts": ["audio"], "trim": True, "min_s": 3, "max_s": 30}  # a voice's clip, checked as this media param
+CONSENT = 'voice.consent: tick "I have the right to use this voice"'
+
+
+def save_voice(body: dict, takes: dict, voices: dict) -> dict:
+    """POST /library with kind voice, the 1.31 part (README, Voices: cloned voices), after the 1.30 checks up to
+    `loras: a voice has no LoRAs` and before language, style and name: {status, detail} or {voice, from_take_id}.
+    takes: the caller's live takes by id ({id, kind, duration_s, has_audio?, voices?: made_with.voices}); voices: the
+    caller's voices by id (LibraryItems). In / out are taken as already snapped."""
+    g, v, ft = body["group"], dict(body.get("voice") or {}), body.get("from_take")
+    err = lambda d, status=422: {"status": status, "detail": d}
+    if g == "cloned" and "design" in v:
+        return err("voice.design: a cloned voice has no design")
+    if "clip" in v and ft:
+        return err("voice.clip: give the clip or from_take, not both")
+    path, ref = ("voice.clip", v.pop("clip")) if "clip" in v else \
+        ("from_take", {k: ft[k] for k in ("take_id", "in", "out") if k in ft}) if ft else (None, None)
+    if g == "cloned" and ref is None:
+        return err("voice: a cloned voice needs voice.clip")
+    if ref is not None and (take := takes.get(ref["take_id"])) is None:
+        return err(f"{path}: take {ref['take_id']} not found", 404)
+    if g == "designed" and "design" not in v:
+        if not ft:
+            return err("voice: a designed voice needs voice.design")
+        made = next((x for x in take.get("voices", []) if x["source"] == "designed"), None)
+        if made is None:
+            return err(f"from_take: take {take['id']} was not made with a designed voice")
+        if (src := voices.get(made["id"])) is None:
+            return err(f"from_take: voice {made['name']} was deleted")
+        v |= {k: src["voice"][k] for k in ("design", "language", "style") if k in src["voice"] and k not in v}
+    out = {k: v[k] for k in ("design", "language", "style") if v.get(k)}
+    if ref is not None:
+        e, ref = media_value(VOICE_CLIP, ref, take)
+        if e:
+            return err(f"{path}: {e}")
+        if v.get("consent") is not True:
+            return err(CONSENT)
+        out |= {"clip": ref, "consent": True}
+    return {"voice": {"source": g} | out, "from_take_id": ref["take_id"] if ref else None}
+
+
+def sweep(takes: list[dict], voices: list[dict]) -> list[str]:
+    """The deleted takes whose objects the sweep may delete now: none that one of the same owner's voices keeps as its
+    clip (README, Voices: cloned voices)."""
+    kept = {(x["owner_id"], x["voice"]["clip"]["take_id"]) for x in voices if "clip" in x["voice"]}
+    return [t["id"] for t in takes if t["deleted"] and (t["owner_id"], t["id"]) not in kept]
 
 
 def speech_seconds(nodes: dict, palette: dict, stage: str, max_seconds: float | None = None) -> float:
@@ -2044,20 +2104,37 @@ def check_voices(registry: Registry, palette: dict) -> None:
                     continue
                 item = case["item"]
                 got = voice_fit(nodes, palette, item) if item["kind"] == "voice" else look_fit(nodes, palette, item, {})
+                if "sends" in case:  # 1.31: the defs voice source of the first param that takes it
+                    sent = next((voice_source(p, item) for nid, p in voice_params(nodes, palette)
+                                 if voice_reason(nodes[nid]["kind"], p, item) is None), None)
+                    if sent != case["sends"]:
+                        fail(f"fixtures/voices/fit.json {case['description']!r}: sends {sent!r}, want {case['sends']!r}")
             else:
                 got = speech_seconds(nodes, palette, case["stage"], case.get("max_seconds"))
             if got != case["expect"]:
                 fail(f"fixtures/voices/{name} {case['description']!r}: got {got!r}, want {case['expect']!r}")
         print(f"ok   fixtures/voices/{name}")
+    fx = json.loads((g / "clone.json").read_text())  # 1.31: cloned voices, Save as voice, the sweep
+    body_v = Draft202012Validator({"$ref": f"{OPENAPI}#/components/schemas/LibraryItemCreate"}, registry=registry)
+    for case in fx["cases"]:
+        if errs := list(body_v.iter_errors(case["body"])):
+            fail(f"fixtures/voices/clone.json {case['description']!r}: body: {errs[0].message}")
+        elif (got := save_voice(case["body"], fx["takes"], fx["voices"])) != case["expect"]:
+            fail(f"fixtures/voices/clone.json {case['description']!r}: got {got!r}, want {case['expect']!r}")
+    for case in fx["sweep"]:
+        if (got := sweep(case["takes"], case["voices"])) != case["expect"]:
+            fail(f"fixtures/voices/clone.json sweep {case['description']!r}: got {got!r}, want {case['expect']!r}")
+    print("ok   fixtures/voices/clone.json")
     # starter voices: a family's voice ids are not its look ids (they share the /library/<family>/<id> URL)
     reg = HERE / "fixtures" / "registry"
     looks = {x["id"] for x in json.loads((reg / "looks.valid.json").read_text())["looks"]}
-    voices = json.loads((reg / "voices.valid.json").read_text())["voices"]
-    if clash := sorted({v["id"] for v in voices} & looks) or [v["id"] for v in voices
-                                                               if v["id"].split("/")[0] != v["family"]]:
-        fail(f"fixtures/registry/voices.valid.json: ids clash with looks or name another family: {clash}")
-    else:
-        print("ok   fixtures/registry/voices.valid.json ids")
+    for f in sorted(reg.glob("*voices.valid.json")):
+        voices = json.loads(f.read_text())["voices"]
+        if clash := sorted({v["id"] for v in voices} & looks) or [v["id"] for v in voices
+                                                                   if v["id"].split("/")[0] != v["family"]]:
+            fail(f"fixtures/registry/{f.name}: ids clash with looks or name another family: {clash}")
+        else:
+            print(f"ok   fixtures/registry/{f.name} ids")
 
 
 # ---------------------------------------------------------------- timeline rules (README, "Timeline rules")

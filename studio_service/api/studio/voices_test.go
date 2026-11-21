@@ -2,11 +2,16 @@ package studio
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
 
+	"github.com/helmstudio/helmgo/network"
+
+	"github.com/helmstudio/studio_service/api/gallery"
+	gallerydto "github.com/helmstudio/studio_service/api/gallery/dto"
 	"github.com/helmstudio/studio_service/api/studio/dto"
 	"github.com/helmstudio/studio_service/registry"
 )
@@ -62,6 +67,7 @@ func TestVoiceFitFixtures(t *testing.T) {
 		Description, Workflow string
 		Item                  json.RawMessage
 		Expect                *string
+		Sends                 *string // 1.31: the defs voice source of the first param that takes it
 	}](t, "fit.json")
 	for _, c := range cases {
 		var item dto.LibraryItem
@@ -81,10 +87,22 @@ func TestVoiceFitFixtures(t *testing.T) {
 		if got != want {
 			t.Errorf("%s: got %q, want %q", c.Description, got, want)
 		}
+		if c.Sends != nil {
+			sent := ""
+			for _, p := range voiceParams(nodes, schemas, nodes) {
+				if voiceReason(nodes[p.Node].Kind, p.Param, voiceOf(item)) == "" {
+					sent = sentSource(p.Param, voiceOf(item))
+					break
+				}
+			}
+			if sent != *c.Sends {
+				t.Errorf("%s: sends %q, want %q", c.Description, sent, *c.Sends)
+			}
+		}
 	}
 }
 
-// A designed voice's checks, in the contract's order (README, Voices: designed).
+// A voice's checks, in the contract's order (README, Voices: designed): the shape by Validate, the rest by saveVoice.
 func TestVoiceChecks(t *testing.T) {
 	text := func(s string) *string { return &s }
 	body := func(edit func(*dto.LibraryItemCreate)) *dto.LibraryItemCreate {
@@ -93,11 +111,22 @@ func TestVoiceChecks(t *testing.T) {
 		edit(b)
 		return b
 	}
+	check := func(b *dto.LibraryItemCreate) (dto.VoiceInfo, string) {
+		if detail := b.Validate(); detail != "" {
+			return dto.VoiceInfo{}, detail
+		}
+		none := func(string) (*clipFacts, error) { return nil, nil }
+		info, err := saveVoice(&b.LibraryFields, b.FromTake, none, func(string) (*voiceItem, error) { return nil, nil })
+		if err != nil {
+			return info, err.Error()
+		}
+		return info, ""
+	}
 	for want, b := range map[string]*dto.LibraryItemCreate{
 		"group film is not a voice group":                  body(func(b *dto.LibraryItemCreate) { b.Group = "film" }),
 		"group nonsense is not a voice group":              body(func(b *dto.LibraryItemCreate) { b.Group = "nonsense" }),
 		"preset voices come from packs":                    body(func(b *dto.LibraryItemCreate) { b.Group = "preset" }),
-		"cloned voices are not available yet":              body(func(b *dto.LibraryItemCreate) { b.Group = "cloned" }),
+		"voice.design: a cloned voice has no design":       body(func(b *dto.LibraryItemCreate) { b.Group = "cloned" }),
 		"a voice has no handle":                            body(func(b *dto.LibraryItemCreate) { b.Handle = text("x") }),
 		"a voice has no text; describe it in voice.design": body(func(b *dto.LibraryItemCreate) { b.Text = text("x") }),
 		"images: a voice has no images":                    body(func(b *dto.LibraryItemCreate) { b.Images = []dto.LibraryImageRef{{}} }),
@@ -108,18 +137,101 @@ func TestVoiceChecks(t *testing.T) {
 		"voice.style must be at most 500 characters":       body(func(b *dto.LibraryItemCreate) { b.Voice.Style = text(string(make([]byte, 501))) }),
 		"name must be 1-80 characters":                     body(func(b *dto.LibraryItemCreate) { b.Name = "" }),
 		"voice: only a voice has voice fields":             body(func(b *dto.LibraryItemCreate) { b.Kind, b.Group = "look", "film" }),
+		"from_take makes looks and voices only": body(func(b *dto.LibraryItemCreate) {
+			b.Kind, b.FromTake = "element", &dto.LibraryFromTake{TakeID: "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8"}
+		}),
+		"from_take: a look takes the whole take (no in or out)": body(func(b *dto.LibraryItemCreate) {
+			b.Kind, b.FromTake = "look", &dto.LibraryFromTake{TakeID: "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8", In: new(float64)}
+		}),
 		"voice.design must not contain control characters other than newlines and tabs": body(func(b *dto.LibraryItemCreate) {
 			b.Voice.Design = text("a\x00b")
 		}),
 	} {
-		if got := b.Validate(); got != want {
+		if _, got := check(b); got != want {
 			t.Errorf("got %q, want %q", got, want)
 		}
 	}
 	b := body(func(*dto.LibraryItemCreate) {})
-	if got := b.Validate(); got != "" || b.Name != "Teen" || b.Voice.Designed() != (dto.VoiceInfo{Source: "designed",
+	if info, got := check(b); got != "" || b.Name != "Teen" || !reflect.DeepEqual(info, dto.VoiceInfo{Source: "designed",
 		Design: "male, 17", Language: "en-US"}) {
-		t.Fatal(got, b.Voice.Designed())
+		t.Fatal(got, info)
+	}
+}
+
+// clone.json: cloned voices, Save as voice and the sweep's rule (check.py save_voice, sweep).
+func TestVoiceCloneFixtures(t *testing.T) {
+	var fixture struct {
+		Takes map[string]struct {
+			ID, Kind  string
+			DurationS float64 `json:"duration_s"`
+			HasAudio  bool    `json:"has_audio"`
+			Voices    []gallerydto.MadeWithVoice
+		}
+		Voices map[string]dto.LibraryItem
+		Cases  []struct {
+			Description string
+			Body        json.RawMessage
+			Expect      struct {
+				Status     int
+				Detail     string
+				Voice      json.RawMessage
+				FromTakeID *string `json:"from_take_id"`
+			}
+		}
+	}
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "contracts", "fixtures", "voices", "clone.json"))
+	if err == nil {
+		err = json.Unmarshal(data, &fixture)
+	}
+	if err != nil || len(fixture.Cases) < 20 {
+		t.Fatal(err)
+	}
+	take := func(id string) (*clipFacts, error) {
+		x, ok := fixture.Takes[id]
+		if !ok {
+			return nil, nil
+		}
+		return &clipFacts{Media: gallery.MediaTake{ID: x.ID, Kind: x.Kind, DurationS: x.DurationS,
+			HasAudio: x.HasAudio || x.Kind == "audio"}, Voices: x.Voices}, nil
+	}
+	voice := func(id string) (*voiceItem, error) {
+		if x, ok := fixture.Voices[id]; ok {
+			item := voiceOf(x)
+			return &item, nil
+		}
+		return nil, nil
+	}
+	for _, c := range fixture.Cases {
+		var b dto.LibraryItemCreate
+		if err := json.Unmarshal(c.Body, &b); err != nil {
+			t.Fatal(c.Description, err)
+		}
+		status, detail, got := 0, b.Validate(), ""
+		if detail != "" {
+			status = 422
+		} else if info, err := saveVoice(&b.LibraryFields, b.FromTake, take, voice); err != nil {
+			var api *network.APIError
+			errors.As(err, &api)
+			status, detail = api.Code, api.Message
+		} else {
+			data, _ := json.Marshal(info)
+			got = string(data)
+			if (clipTake(&info) == nil) != (c.Expect.FromTakeID == nil) {
+				t.Errorf("%s: from_take_id %v", c.Description, clipTake(&info))
+			}
+		}
+		if c.Expect.Status != 0 {
+			if status != c.Expect.Status || detail != c.Expect.Detail {
+				t.Errorf("%s: got %d %q, want %d %q", c.Description, status, detail, c.Expect.Status, c.Expect.Detail)
+			}
+			continue
+		}
+		var want, have any
+		_ = json.Unmarshal(c.Expect.Voice, &want)
+		_ = json.Unmarshal([]byte(got), &have)
+		if detail != "" || !reflect.DeepEqual(have, want) {
+			t.Errorf("%s: got %s %q, want %s", c.Description, got, detail, c.Expect.Voice)
+		}
 	}
 }
 

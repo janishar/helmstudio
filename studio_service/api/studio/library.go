@@ -46,6 +46,7 @@ type libraryRow struct {
 	FromTakeID            *string
 	FromTakeKey           *string
 	Voice                 json.RawMessage // API 1.30, kind voice: its VoiceInfo
+	ClipKey               *string         // API 1.31: the key of a voice's clip take, deleted or not
 }
 
 // libraryCols are the columns libraryRow scans from library_items l, in order.
@@ -54,7 +55,8 @@ const libraryCols = `l.id::text, l.kind, l.item_group, l.name, l.handle, l.text,
 		ORDER BY u.o) FROM unnest(l.images) WITH ORDINALITY AS u(i, o) JOIN takes t ON t.id = u.i AND t.owner_id = l.owner_id
 		AND t.deleted_at IS NULL AND t.ready AND t.width IS NOT NULL AND t.height IS NOT NULL), '[]'), l.loras,
 	(SELECT t.id::text FROM takes t WHERE t.id = l.from_take_id AND t.owner_id = l.owner_id AND t.deleted_at IS NULL AND t.ready),
-	(SELECT coalesce(t.video->'poster'->>'key', t.key) FROM takes t WHERE t.id = l.from_take_id AND t.owner_id = l.owner_id AND t.deleted_at IS NULL AND t.ready), l.voice`
+	(SELECT coalesce(t.video->'poster'->>'key', t.key) FROM takes t WHERE t.id = l.from_take_id AND t.owner_id = l.owner_id AND t.deleted_at IS NULL AND t.ready), l.voice,
+	(SELECT t.key FROM takes t WHERE t.id = (l.voice->'clip'->>'take_id')::uuid AND t.owner_id = l.owner_id)`
 
 // itemDTO maps a row, signing its images' keys (the original is its own thumbnail, as in the gallery); names are the
 // LoRA names now (a LoRA gone keeps the name it was saved with).
@@ -80,6 +82,8 @@ func (s *Service) itemDTO(row libraryRow, names map[string]string) dto.LibraryIt
 	switch {
 	case len(out.Images) > 0:
 		out.ThumbURL = &out.Images[0].ThumbURL
+	case row.Kind == "voice": // API 1.31: a voice with a clip plays its take's file, also after the take was deleted
+		out.ThumbURL = s.signer.SignPtr(row.ClipKey)
 	case row.FromTakeKey != nil:
 		out.ThumbURL = s.signer.SignPtr(row.FromTakeKey)
 	}
@@ -389,7 +393,15 @@ func (s *Service) CreateLibraryItem(ctx context.Context, caller common.Caller, b
 	var out dto.LibraryItem
 	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
 		var fromTake *string
-		if body.FromTake != nil {
+		var voice *dto.VoiceInfo
+		switch {
+		case body.Kind == "voice": // API 1.31: Save as voice, clips; from_take_id is the clip's take
+			info, err := s.checkVoice(ctx, tx, caller.ID, &body.LibraryFields, body.FromTake, "")
+			if err != nil {
+				return err
+			}
+			voice, fromTake = &info, clipTake(&info)
+		case body.FromTake != nil:
 			if err := s.fillFromTake(ctx, tx, caller.ID, body); err != nil {
 				return err
 			}
@@ -411,7 +423,7 @@ func (s *Service) CreateLibraryItem(ctx context.Context, caller common.Caller, b
 		id := utility.NewID()
 		if _, err := tx.Exec(ctx, `INSERT INTO library_items (id, owner_id, kind, item_group, name, handle, text, images,
 			loras, from_take_id, voice) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::uuid[], $9, $10, $11)`, id, caller.ID, body.Kind,
-			body.Group, body.Name, body.Handle, *body.Text, takeIDs(body.Images), loras, fromTake, voiceJSON(body.Voice)); err != nil {
+			body.Group, body.Name, body.Handle, *body.Text, takeIDs(body.Images), loras, fromTake, voiceJSON(voice)); err != nil {
 			return err
 		}
 		out, err = s.readItem(ctx, tx, caller.ID, id)
@@ -493,9 +505,9 @@ func (s *Service) ReplaceLibraryItem(ctx context.Context, caller common.Caller, 
 	var out dto.LibraryItem
 	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
 		var version int
-		var kind string
-		if err := tx.QueryRow(ctx, `SELECT version, kind FROM library_items WHERE id = $1 FOR UPDATE`, id).Scan(&version,
-			&kind); errors.Is(err, pgx.ErrNoRows) {
+		var kind, kept string
+		if err := tx.QueryRow(ctx, `SELECT version, kind, coalesce(voice->'clip'->>'take_id', '') FROM library_items
+			WHERE id = $1 FOR UPDATE`, id).Scan(&version, &kind, &kept); errors.Is(err, pgx.ErrNoRows) {
 			return errNotFound
 		} else if err != nil {
 			return err
@@ -511,6 +523,14 @@ func (s *Service) ReplaceLibraryItem(ctx context.Context, caller common.Caller, 
 				return err
 			}
 		}
+		var voice *dto.VoiceInfo
+		if kind == "voice" { // API 1.31: its clip may change (from_take_id follows it) or stay, its take deleted or not
+			info, err := s.checkVoice(ctx, tx, caller.ID, &body.LibraryFields, nil, kept)
+			if err != nil {
+				return err
+			}
+			voice = &info
+		}
 		if err := s.checkItem(ctx, tx, caller.ID, id, kind, body.LibraryFields); err != nil {
 			return err
 		}
@@ -519,8 +539,9 @@ func (s *Service) ReplaceLibraryItem(ctx context.Context, caller common.Caller, 
 			return err
 		}
 		if _, err := tx.Exec(ctx, `UPDATE library_items l SET item_group = $2, name = $3, handle = $4, text = $5,
-			images = $6::uuid[], loras = $7, voice = $8, version = version + 1, updated_at = clock_timestamp() WHERE l.id = $1`,
-			id, body.Group, body.Name, body.Handle, *body.Text, takeIDs(body.Images), loras, voiceJSON(body.Voice)); err != nil {
+			images = $6::uuid[], loras = $7, voice = $8, version = version + 1, updated_at = clock_timestamp(),
+			from_take_id = CASE WHEN l.kind = 'voice' THEN $9::uuid ELSE l.from_take_id END WHERE l.id = $1`,
+			id, body.Group, body.Name, body.Handle, *body.Text, takeIDs(body.Images), loras, voiceJSON(voice), clipTake(voice)); err != nil {
 			return err
 		}
 		out, err = s.readItem(ctx, tx, caller.ID, id)
@@ -600,13 +621,21 @@ func (s *Service) checkItem(ctx context.Context, tx pgx.Tx, ownerID, id, kind st
 	return nil
 }
 
-// voiceJSON is library_items.voice for a checked designed voice, null for any other item.
-func voiceJSON(v *dto.VoiceDesign) []byte {
+// voiceJSON is library_items.voice for a checked voice, null for any other item.
+func voiceJSON(v *dto.VoiceInfo) []byte {
 	if v == nil {
 		return nil
 	}
-	data, _ := json.Marshal(v.Designed())
+	data, _ := json.Marshal(v)
 	return data
+}
+
+// clipTake is a voice's from_take_id: its clip's take, nil without one (or for any other item).
+func clipTake(v *dto.VoiceInfo) *string {
+	if v == nil || v.Clip == nil {
+		return nil
+	}
+	return &v.Clip.TakeID
 }
 
 // takeIDs are the refs' take ids.

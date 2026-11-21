@@ -34,6 +34,7 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `fixtures/registry/qwen-image.{nodes,workflows}.valid.json` | **canonical** torch-runner values (qwen-image family, host `mac`, env `torch`): published verbatim; `qwen-image.models.valid.json` is an example (presence and sizes are measured), so are `qwen-image.{loras,looks}.valid.json` |
 | `fixtures/registry/minimax-h3-image.{nodes,workflows}.valid.json` | (API 1.20) **canonical** torch-runner values of the minimax-h3-image family (workflow `minimax-h3-image`), published with the qwen-image values (the core kinds they share are identical); `minimax-h3-image.models.valid.json` is an example (bytes and sizes measured) |
 | `fixtures/registry/minimax-h3.{nodes,workflows}.valid.json` | (API 1.21) **canonical** native-runner values (minimax-h3 family, host `mac`, env `native`, workflows `minimax-h3-text-to-video`, `minimax-h3-image-to-video`, `minimax-h3-references`): published verbatim; `minimax-h3.models.valid.json` is an example (bytes measured, `peak_gb` a placeholder until measured; `components: []` in its memory item: the native runtime) |
+| `fixtures/registry/zonos3.{nodes,workflows,models,voices}.valid.json` | (API 1.31, M8 step 4) **canonical** native-runner values of the zonos3 pack (family `zonos3`, host `mac`, env `native`, workflow `zonos3-voice-over`, the 27 starter voices; Voices: the zonos3 family): published verbatim; the models value's sizes are measured on the owner's Mac |
 | `fixtures/registry/ltx.{nodes,workflows}.valid.json` | **canonical** mlx-runner values (ltx family, host `mac`, env `mlx`, workflows `ltx-text-to-video`, `ltx-image-to-video`): published verbatim; `ltx.models.valid.json` (with the canonical ltx `lora` block; its `prefused` id is a placeholder the runner fills from its index) and `host.valid.6.json` are examples (sizes measured) |
 | `fixtures/registry/llm.{nodes,workflows}.valid.json` | **canonical** mlx-runner values of the llm pack (API 1.14; family `llm`, workflow `llm-ask`), published with the ltx values; `llm.models.valid.json` is an example (sizes measured, peak extrapolated). `qwen-image.*` add `qwen-image/ask`, `answer`, `qwen-image-ask`; the echo values add `echo/ask`, `answer`, `echo-ask` |
 | `fixtures/registry/server.{nodes,workflows}.valid.json` | (API 1.15) **canonical** values pipelines_service's server executor publishes for each host it serves (host `mac` here, env `server`: kind `server/ask`, workflow `server-ask`; Model sources) |
@@ -770,7 +771,8 @@ or presigned URLs, which the claim-check rule (never signed URLs in messages) ru
   with the event's `seed` in place of a random one, the `prompt` node's text, the `<family>/model` node) and puts
   its id in the output (`RunOutput.take_id`). The take keeps the object key; the API shows only signed links.
 - **Lineage**: see Image inputs: `parents` and, on `GET /v1/studio/takes/{id}`, `children`, stored as edges.
-- **Deleting** a take is soft (gone from every answer at once); a sweep deletes the object later. Deleting a session
+- **Deleting** a take is soft (gone from every answer at once); a sweep deletes the object later, except (API 1.31)
+  while one of the owner's voices keeps it as its clip (Voices: cloned voices; `sweep`). Deleting a session
   keeps its takes (`session_id`, `run_id` → null).
 - **Uploads**: `POST /v1/studio/uploads` stores a pending take and returns `upload_url`, a signed `PUT` link to
   files_service for `u/<owner>/uploads/<take_id>.<png|jpg|webp>` (15 minutes). The browser PUTs the bytes through Kong
@@ -1162,10 +1164,10 @@ unchanged; a video never fills them.
 ## Voices (API 1.30, M8 step 2; plan 15-voices 19.3; normative)
 
 Speech as a made take, the `voice` param and saved voices (docs/plan/15-voices.md). Cloning (`clip` voices, Save as
-voice) is 1.31; scripts, dialogue, voices on elements, cues and audio takes on the Timeline are 1.32. studio_service,
+voice, the zonos3 family) is 1.31 (below: cloned voices); scripts, dialogue, voices on elements, cues and audio takes on the Timeline are 1.32. studio_service,
 the web and the runner core implement these rules and test against `fixtures/voices/` (and `fixtures/mentions/
 resolve.audio-*.json`); `check.py` holds the reference (`workflow_media`, `voice_reason`, `voice_fit`, `look_fit`,
-`resolve_mentions`, `speech_seconds`).
+`resolve_mentions`, `speech_seconds`; 1.31 `voice_sources`, `voice_source`, `save_voice`, `sweep`).
 
 - **Port `Audio`** (registry `portType`, openapi `PortType`): a plain value, speech as PCM samples with
   `sample_rate` and `duration_s`, never a handle. The core `output` node's `media` input (type `Media`) also accepts
@@ -1178,7 +1180,7 @@ resolve.audio-*.json`); `check.py` holds the reference (`workflow_media`, `voice
   output is wired from an `Audio` and none from a `Video` or an `Image` (Video: a workflow's media); `GET /v1/studio/workflows?media=audio`. A model's
   `media` lists `audio` (Models and model jobs).
 - **Param `voice`** (registry `paramSchema`): one saved voice, default null, `accepts` (required, 1–3 distinct of
-  `preset` | `clip` | `design`: the voice sources it takes; `clip` from 1.31). It takes no wire, is never a rows item
+  `preset` | `clip` | `design`: the voice sources it takes; `clip` from 1.31: a voice with a clip). It takes no wire, is never a rows item
   field (1.32) and a workflow or preset holds null (`param_invalid` otherwise, as an image or media param). HTTP
   value: `VoiceRef {voice_id}` (defs `voiceRef`): an own voice's UUID or a starter voice's `<family>/<id>`. A run
   needs one: `<node>.<param>: a voice is required`. **Studio resolves it** as the caller after the values are merged
@@ -1200,13 +1202,13 @@ resolve.audio-*.json`); `check.py` holds the reference (`workflow_media`, `voice
   each pack maps tags to its model's codes. Voices count in the 200 items per user.
   - **designed** (own, `source: mine`, id a UUID): `POST /v1/studio/library` `{kind: voice, group: designed, name,
     voice: {design, language?, style?}}` (`VoiceDesign`; trimmed). 422 texts, in this order: `group <g> is not a
-    voice group`; `preset voices come from packs` (group preset); `cloned voices are not available yet` (group
-    cloned, until 1.31); `a voice has no handle`; `a voice has no text; describe it in voice.design`; `images: a
+    voice group`; `preset voices come from packs` (group preset); (1.30 only: `cloned voices are not available yet`; from
+    1.31 group cloned is made as below); `a voice has no handle`; `a voice has no text; describe it in voice.design`; `images: a
     voice has no images`; `loras: a voice has no LoRAs`; `voice: a designed voice needs voice.design` (absent);
     `voice.design must be 1-2000 characters` (code points, after trimming); `voice.design must not contain control
     characters other than newlines and tabs`; `voice.language: <tag> is not a BCP 47 language tag`; `voice.style
     must be at most 500 characters`; the name rules of elements. `voice` on an element or a look is 422 `voice:
-    only a voice has voice fields`; `from_take` stays `from_take makes looks only`. PUT checks the same with
+    only a voice has voice fields`; `from_take` makes a voice from 1.31 (Save as voice, below). PUT checks the same with
     `version` (stale: 409 `voice changed since you opened it (now version <n>)`); DELETE is never refused (past
     takes keep `made_with.voices`).
   - **preset** (starter, read-only, `source: starter`, id `<family>/<id>`): published by packs, below. PUT and
@@ -1253,12 +1255,92 @@ resolve.audio-*.json`); `check.py` holds the reference (`workflow_media`, `voice
   memory items) evaluates it on the canonical workflow's default text, except that a stage with `max_seconds` is
   planned at `max_seconds` (the default prompt is empty, and a plan at 0 s would understate every real run); so
   speech stages should declare `max_seconds`. `planned_at` does not count `speech_seconds`.
-- **The echo family (fake)**: `echo/speak` (Text → Audio; params `voice` accepts `[preset, design]`, `seed`,
+- **The echo family (fake)**: `echo/speak` (Text → Audio; params `voice` accepts `[preset, design]`, from 1.31 `[preset, clip, design]`, `seed`,
   `delay_ms`) writes a WAV at 24 kHz, PCM 16-bit, mono: one sine tone per character, 1/15 s each (so the take lasts
   exactly `speech_seconds`), its pitch from the character and the voice, its phase from the seed; one progress step per 15
   characters; an empty text fails `<node>: nothing to say`. Template `echo-voice-over` (`prompt` → `speak` →
   `output`, `media: audio`); starter voices `echo/ada` (en) and `echo/bo` (zh, a style), no previews. So the contract
   suite covers audio takes, voice resolution, fit, the library and the mention rule without a GPU.
+
+### Cloned voices (API 1.31, M8 step 4; normative)
+
+A voice may hold a **clip**: a 3–30 s part of one of the owner's takes (an audio take, an upload included, or a video
+take's sound). A `cloned` voice is only that clip; a `designed` voice may keep one too (Save as voice from a take its
+design made), so it also fits a param that takes `clip` (ZONOS3 clones that clip, not the words). References:
+`voice_sources`, `voice_source`, `save_voice`, `sweep`; fixtures `fixtures/voices/fit.json` (cases may carry `sends`)
+and `fixtures/voices/clone.json`.
+
+- **Stored** as `VoiceInfo.clip {take_id, in, out}` (in / out snapped as Media inputs: Values, always present) and
+  `consent: true`; never a key or a URL in the API. `from_take_id` = the clip's take (null once that take is
+  deleted; `voice.clip` keeps it). `thumb_url` = a signed GET of the clip take's file, also after the take was
+  deleted (the picker plays in..out). A preset never has a clip.
+- **The clip's take is kept, not copied** (this replaces plan 19.3's "a voice keeps its own clip" copy to
+  `u/<owner>/voices/`; decided 2026-11-21 for step 4): deleting the take still hides it everywhere (gallery, `GET
+  /takes/{id}` 404, lineage, offers; it can no longer be picked as a new clip), but the sweep does not delete its
+  object while any voice **of the same owner** (RLS: the sweep matches owner and take id) has it as `voice.clip`;
+  deleting the voice, or a PUT that changes its clip, frees it for the next sweep. So a voice never breaks, nothing is
+  copied, and a clip costs no extra storage.
+- **POST /library** (`kind: voice`). `group: cloned`: `voice {clip: MediaRef, consent: true, language?, style?}`;
+  `group: designed`: 1.30's fields plus optional `clip` and `consent`. Order, after `loras: a voice has no LoRAs`:
+  `voice.design: a cloned voice has no design`; `voice.clip: give the clip or from_take, not both`; `voice: a cloned
+  voice needs voice.clip` (no clip and no `from_take`); the clip's take: 404 `voice.clip: take <id> not found`
+  (unknown, another user's, deleted, a pending upload) or `from_take: take <id> not found`; then (designed, no
+  `voice.design`) the Save as voice copy below, else `voice: a designed voice needs voice.design`; 1.30's design
+  texts; the clip checked exactly like a `media` param `{accepts: [audio], trim, min_s: 3, max_s: 30}` (`media_value`:
+  in 0, out min(duration, 30) when missing), each text under `voice.clip: ` or `from_take: ` (`take <id> has no
+  sound`, `take <id> lasts <d> s; this input takes at least 3.0 s`, `in must be before out`, `out <x> is past the
+  take's end <d>`, `the part lasts <d> s; this input takes at most 30.0 s`, `the part lasts <d> s; this input takes
+  at least 3.0 s`); then with a clip `voice.consent: tick "I have the right to use this voice"` unless `consent` is
+  `true`; then language, style and the name rules. PUT checks the same (no `from_take`; a new clip needs `consent`
+  again; `from_take_id` follows the clip).
+- **Save as voice** = POST with `kind: voice` and `from_take {take_id, in?, out?}` (in / out are voice-only; on a look
+  422 `from_take: a look takes the whole take (no in or out)`; `prompt` / `loras` are look-only and ignored). The take
+  (any of the caller's live takes with sound: made by a run or uploaded) is the clip, checked as above. `group:
+  cloned` takes nothing else from it. `group: designed` without `voice.design`: the first entry of the take's
+  `made_with.voices` with source `designed` gives `design`, and `language` / `style` when the body leaves them out,
+  read from that voice now (none: `from_take: take <id> was not made with a designed voice`; it was deleted since:
+  `from_take: voice <name> was deleted`). `name` and `consent` come from the body as always.
+- **Fit**: a voice offers its own source, then `clip` when it has one (`voice_sources`); a param takes it when one is
+  in its (narrowed) `accepts`, else the reason is its own source's (`this workflow cannot use a designed voice`).
+- **Runs**: studio sends defs `voice` with `source` = the first offered source the param takes (`voice_source`: a
+  designed voice with a clip is `design` on Qwen's design template and on `echo/speak`, `clip` on ZONOS3) and only that
+  source's field: `clip` is a defs `media` value (`in` / `out` always) resolved like a media param (as the caller, the
+  object HEADed, its ETag) except that a **deleted take still resolves** for the voice that keeps it; its object missing
+  is 422 `<node>.<param>: the clip of voice <name> is gone`. The claim-check rules of Media inputs hold (the runner
+  reads the key under `u/<owner_id>/`, checks bytes and etag). **Lineage**: `parents` add the clip's take when a clip
+  was sent (after the media values, node then param order); `made_with.voices` is unchanged. The runner's cache key
+  is the resolved value (owner, key, etag, in, out); ZONOS3's speaker embedding of a clip is the node cache's, never
+  stored. The fake `echo/speak` reads a clip like a media input and takes its pitch from the clip's etag.
+
+### The zonos3 family (API 1.31; plan 15-voices 19.4; normative for the canonical values)
+
+`fixtures/registry/zonos3.{nodes,workflows,models,voices}.valid.json`, published verbatim by the native runner
+(`runner_service/packs/zonos3`, env `native`, `zonos3-server` as a core.child, facts in docs/reference-notes/voices.md):
+
+- `zonos3/model`: `variant` `mini` (dir `ZONOS3-Mini`; components backbone `gguf/backbone-ptq.gguf`, decoder
+  `gguf/zac-keep2.gguf`, speaker_encoder `gguf/spk-encoder.gguf`, steer `gguf/steer.gguf`; `source` Zyphra/ZONOS3-Mini
+  at d2d142a8 with those four files and `gguf/voices/`, Apache-2.0, not gated), `precision` `int8` only (stored
+  quantized: q8_0 and q4_0 with f16; no choice). Memory: one flat item, `peak_gb` 2.0 (1.56 measured, flat in
+  length), no resident components; model.yaml `max_seconds` 60.
+- `zonos3/speak` (Model, Text, Seed → Audio, 44.1 kHz mono): `voice` accepts `[preset, clip]`; `language` enum of 44
+  BCP 47 tags, the server codes of ZONOS3's `registries/languages.json` in its order (`en-US` en_us, `en-GB` en_gb,
+  `fr` fr_fr, `pt-BR` pt_br, `zh` cmn, the rest the same two letters), default `en-US`; **Delivery** floats as the
+  board draws them, each mapped by the pack: `emotion` 0..1 (0.5; `mood.valence` = (v − 0.5) × 8, so −4..4, the
+  safe range; 0 sends no control), `energy` 0..1 (0.5; `mood.arousal` the same way), `whisper` 0..1 (0;
+  `delivery.whisper` = v × 1.5), `speaking_rate` 0.5..1.5 (1; the speaking-rate condition: 1 sends none, the voice's
+  own pace; else `--speaking-rate` 15 × v UTF-8 bytes/s), `guidance` 1..5 step 0.1 (2; `--cfg-scale`, 1 = off).
+  Component `whole model`. Long text is split on sentences (one CLI line is at most 450 frames, 30 s) and joined.
+- Workflow `zonos3-voice-over` (`only {voice: [preset, clip]}`): studio composer `[prompt.text]`, quick
+  `[speak.voice, speak.language, seed.seed]`, inspector `Delivery` (emotion, energy, whisper, speaking_rate,
+  guidance), presets in order **Neutral** (0.5, 0.5, 0, 1, 2), **Warm** (0.7, 0.45, 0, 0.95, 2), **Tense** (0.3, 0.75,
+  0, 1.1, 2.5), **Whisper** (0.5, 0.25, 0.9, 0.9, 2) as the board `CreateAudioZonos3.dc.html`. Dialogue is 1.32.
+- **Starter voices**: the 27 of the weights' `gguf/voices/README.md` (owner, Q11), id = the name lower-cased, `speaker`
+  = the README's id (`default_<16 hex>`: the pack reads `<voices>/<Language>/<Name>_*.embedding.npy`), `language` by
+  folder (English: `en-GB` Imogen and Rupert, `en-IE` Cillian, else `en-US`; `fr`, `de`, `hi`, `it`, `ko`, `zh`,
+  `pt-BR`, `es`, `te`), `style` as the board VoicePickerZonos3. Previews: the clip's first 4 s (wav, mp3 or ogg) converted
+  once into the pack by `ffmpeg -t 4 -ac 1 -ar 24000 -c:a pcm_s16le -map_metadata -1 -fflags +bitexact -flags +bitexact`
+  (192 KB each, about 5 MB for the 27); the fixture's keys and sizes are that output from ffmpeg 9.0.2 on the owner's
+  Mac, so the pack's test pins them (another ffmpeg may change the bytes: update the fixture with it).
 
 ## User workflows (API 1.5)
 
@@ -2210,7 +2292,7 @@ range.
 **Save as look** (the take's action, plan 06-platform.md 9.1) = `POST /v1/studio/library` with `kind: look` and
 `from_take {take_id, prompt = true, loras = true}`. The take must be the caller's, not deleted (else 404 `from_take:
 take <id> not found`), made by a run (an upload: 422 `from_take: take <id> was not made by a run`); `from_take` on an
-element is 422 `from_take makes looks only`. It fills only what the body leaves out: `text` (when `prompt`) =
+element is 422 `from_take makes looks and voices only` (before 1.31 `from_take makes looks only`; a voice: Voices, Save as voice). It fills only what the body leaves out: `text` (when `prompt`) =
 `made_with.prompt` as typed with each `@@` turned into `@` (as the prompt reached the runner; other mentions stay literal
 text: look text is never scanned), trimmed, cut to 2000
 code points (null prompt = `""`); `loras` (when `loras`) = `made_with.loras` in order whose LoRA the caller can use now,

@@ -1,0 +1,98 @@
+{
+  "schema_version": 1,
+  "host": "mac",
+  "env": "native",
+  "published_at": "2026-11-21T10:00:00Z",
+  "published_by": "runner native 0.3.0",
+  "models": [
+    {
+      "id": "zonos3-mini",
+      "family": "zonos3",
+      "title": "ZONOS3",
+      "media": [
+        "audio"
+      ],
+      "runtimes": [
+        {
+          "runtime": "native",
+          "env": "native",
+          "devices": [
+            "mps"
+          ]
+        }
+      ],
+      "variants": [
+        {
+          "id": "mini",
+          "presence": "present",
+          "bytes": 1182627886,
+          "precisions": [
+            "int8"
+          ],
+          "title": "Mini",
+          "dir": "ZONOS3-Mini",
+          "source": {
+            "repo": "Zyphra/ZONOS3-Mini",
+            "revision": "d2d142a86b1e6aeb4252679673c86ecd86177bf8",
+            "allow_patterns": [
+              "gguf/backbone-ptq.gguf",
+              "gguf/zac-keep2.gguf",
+              "gguf/spk-encoder.gguf",
+              "gguf/steer.gguf",
+              "gguf/voices/*/*",
+              "gguf/voices/README.md"
+            ],
+            "licence": "apache-2.0",
+            "must_accept": false,
+            "gated": false
+          },
+          "components": [
+            {
+              "component": "backbone",
+              "from_variant": "mini",
+              "precisions": [
+                "int8"
+              ],
+              "bytes": 663150624
+            },
+            {
+              "component": "decoder",
+              "from_variant": "mini",
+              "precisions": [
+                "int8"
+              ],
+              "bytes": 452325440
+            },
+            {
+              "component": "speaker_encoder",
+              "from_variant": "mini",
+              "precisions": [
+                "int8"
+              ],
+              "bytes": 45385728
+            },
+            {
+              "component": "steer",
+              "from_variant": "mini",
+              "precisions": [
+                "int8"
+              ],
+              "bytes": 204960
+            }
+          ],
+          "memory": [
+            {
+              "precision": "int8",
+              "peak_gb": 2.0,
+              "planned_at": {
+                "mp": 0.0,
+                "frames": 0
+              },
+              "components": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

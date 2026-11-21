@@ -53,13 +53,29 @@ func TestServe(t *testing.T) {
 		t.Fatalf("POST: %d", w.Code)
 	}
 	// a starter look's thumbnail (packs/<family>/looks/<id>-<16 hex>.<ext>) is served; any other key outside u/ never is, even signed
+	// and so is a starter voice's preview (packs/<family>/voices/<id>-<16 hex>.wav)
 	for k, want := range map[string]int{"packs/echo/looks/grain-0123456789abcdef.png": 200, "x/a.png": 403,
-		"packs/echo/other.bin": 403, "packs/echo/looks/grain.bin": 403} {
+		"packs/echo/other.bin": 403, "packs/echo/looks/grain.bin": 403,
+		"packs/zonos3/voices/savannah-0123456789abcdef.wav": 200, "packs/zonos3/voices/savannah.wav": 403,
+		// exactly as narrow as the looks rule: .wav only, the voices folder of a family, 16 lowercase hex
+		"packs/zonos3/voices/savannah-0123456789abcdef.mp3": 403, "packs/zonos3/voice/savannah-0123456789abcdef.wav": 403,
+		"packs/zonos3/voices/savannah-0123456789ABCDEF.wav": 403, "packs/zonos3/voices/a/b-0123456789abcdef.wav": 403,
+		"packs/Zonos3/voices/savannah-0123456789abcdef.wav": 403, "xpacks/zonos3/voices/savannah-0123456789abcdef.wav": 403} {
 		if err := store.Put(context.Background(), k, strings.NewReader("png"), 3, "image/png"); err != nil {
 			t.Fatal(err)
 		}
 		if w := serve(http.MethodGet, link(k)); w.Code != want {
 			t.Fatalf("%s: %d, want %d", k, w.Code, want)
+		}
+	}
+	// GET and HEAD only: a preview is PUT by the runners straight to the store, never through a link
+	voice := "packs/zonos3/voices/savannah-0123456789abcdef.wav"
+	if w := serve(http.MethodHead, link(voice)); w.Code != 200 {
+		t.Fatalf("HEAD %s: %d", voice, w.Code)
+	}
+	for _, m := range []string{http.MethodPut, http.MethodPost, http.MethodDelete} {
+		if w := serve(m, link(voice)); w.Code == 200 || w.Code == 201 || w.Code == 204 {
+			t.Fatalf("%s %s: %d", m, voice, w.Code)
 		}
 	}
 }

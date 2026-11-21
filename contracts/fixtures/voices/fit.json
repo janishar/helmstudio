@@ -146,6 +146,292 @@
           }
         }
       }
+    },
+    "zonos3-voice-over": {
+      "title": "ZONOS3 Voice-over",
+      "family": "zonos3",
+      "env": "native",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "seed": {
+          "kind": "seed",
+          "params": {
+            "seed": -1
+          }
+        },
+        "model": {
+          "kind": "zonos3/model",
+          "params": {
+            "variant": "mini",
+            "precision": "int8"
+          }
+        },
+        "speak": {
+          "kind": "zonos3/speak",
+          "in": {
+            "model": "model.model",
+            "text": "prompt.text",
+            "seed": "seed.seed"
+          },
+          "params": {
+            "voice": null,
+            "language": "en-US",
+            "emotion": 0.5,
+            "energy": 0.5,
+            "whisper": 0,
+            "speaking_rate": 1,
+            "guidance": 2
+          },
+          "only": {
+            "voice": [
+              "preset",
+              "clip"
+            ]
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "speak.audio"
+          }
+        }
+      },
+      "studio": {
+        "composer": [
+          "prompt.text"
+        ],
+        "quick": [
+          "speak.voice",
+          "speak.language",
+          "seed.seed"
+        ],
+        "inspector": [
+          {
+            "title": "Delivery",
+            "items": [
+              "speak.emotion",
+              "speak.energy",
+              "speak.whisper",
+              "speak.speaking_rate",
+              "speak.guidance"
+            ]
+          }
+        ],
+        "presets": {
+          "Neutral": {
+            "speak.emotion": 0.5,
+            "speak.energy": 0.5,
+            "speak.whisper": 0,
+            "speak.speaking_rate": 1,
+            "speak.guidance": 2
+          },
+          "Warm": {
+            "speak.emotion": 0.7,
+            "speak.energy": 0.45,
+            "speak.whisper": 0,
+            "speak.speaking_rate": 0.95,
+            "speak.guidance": 2
+          },
+          "Tense": {
+            "speak.emotion": 0.3,
+            "speak.energy": 0.75,
+            "speak.whisper": 0,
+            "speak.speaking_rate": 1.1,
+            "speak.guidance": 2.5
+          },
+          "Whisper": {
+            "speak.emotion": 0.5,
+            "speak.energy": 0.25,
+            "speak.whisper": 0.9,
+            "speak.speaking_rate": 0.9,
+            "speak.guidance": 2
+          }
+        },
+        "preset_order": [
+          "Neutral",
+          "Warm",
+          "Tense",
+          "Whisper"
+        ]
+      }
+    },
+    "qwen3-tts-voice-over": {
+      "title": "Qwen3-TTS Voice-over",
+      "family": "qwen3-tts",
+      "env": "torch",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "seed": {
+          "kind": "seed",
+          "params": {
+            "seed": -1
+          }
+        },
+        "model": {
+          "kind": "qwen3-tts/model",
+          "params": {
+            "variant": "custom_voice",
+            "precision": "bf16"
+          },
+          "only": {
+            "variant": [
+              "custom_voice"
+            ]
+          }
+        },
+        "speak": {
+          "kind": "qwen3-tts/speak",
+          "in": {
+            "model": "model.model",
+            "text": "prompt.text",
+            "seed": "seed.seed"
+          },
+          "params": {
+            "voice": null,
+            "language": "auto",
+            "style": "",
+            "temperature": 0.3
+          },
+          "only": {
+            "voice": [
+              "preset"
+            ]
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "speak.audio"
+          }
+        }
+      },
+      "studio": {
+        "composer": [
+          "prompt.text"
+        ],
+        "quick": [
+          "speak.voice",
+          "speak.language",
+          "seed.seed"
+        ],
+        "inspector": [
+          {
+            "title": "Voice",
+            "items": [
+              "speak.style",
+              "speak.temperature"
+            ]
+          }
+        ],
+        "presets": {
+          "Steady": {
+            "speak.temperature": 0.3
+          },
+          "Lively": {
+            "speak.temperature": 0.9
+          }
+        },
+        "preset_order": [
+          "Steady",
+          "Lively"
+        ]
+      }
+    },
+    "qwen3-tts-design-voice": {
+      "title": "Qwen3-TTS Voice design",
+      "family": "qwen3-tts",
+      "env": "torch",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "seed": {
+          "kind": "seed",
+          "params": {
+            "seed": -1
+          }
+        },
+        "model": {
+          "kind": "qwen3-tts/model",
+          "params": {
+            "variant": "voice_design",
+            "precision": "bf16"
+          },
+          "only": {
+            "variant": [
+              "voice_design"
+            ]
+          }
+        },
+        "speak": {
+          "kind": "qwen3-tts/speak",
+          "in": {
+            "model": "model.model",
+            "text": "prompt.text",
+            "seed": "seed.seed"
+          },
+          "params": {
+            "voice": null,
+            "language": "auto",
+            "style": "",
+            "temperature": 0.3
+          },
+          "only": {
+            "voice": [
+              "design"
+            ]
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "speak.audio"
+          }
+        }
+      },
+      "studio": {
+        "composer": [
+          "prompt.text"
+        ],
+        "quick": [
+          "speak.voice",
+          "speak.language",
+          "seed.seed"
+        ],
+        "inspector": [
+          {
+            "title": "Voice",
+            "items": [
+              "speak.temperature"
+            ]
+          }
+        ],
+        "presets": {
+          "Steady": {
+            "speak.temperature": 0.3
+          },
+          "Lively": {
+            "speak.temperature": 0.9
+          }
+        },
+        "preset_order": [
+          "Steady",
+          "Lively"
+        ]
+      }
     }
   },
   "cases": [
@@ -289,8 +575,8 @@
       "expect": "voice Ryan is for qwen3-tts"
     },
     {
-      "description": "echo/speak does not clone (accepts no clip)",
-      "workflow": "echo-voice-over",
+      "description": "a voice-over pinned to presets does not clone",
+      "workflow": "echo-presets-only",
       "item": {
         "id": "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a22",
         "kind": "voice",
@@ -308,7 +594,13 @@
         "loras": [],
         "needs": [],
         "voice": {
-          "source": "cloned"
+          "source": "cloned",
+          "clip": {
+            "take_id": "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8",
+            "in": 4.0,
+            "out": 16.0
+          },
+          "consent": true
         }
       },
       "expect": "this workflow cannot clone a voice"
@@ -495,6 +787,316 @@
         ]
       },
       "expect": null
+    },
+    {
+      "description": "1.31: echo/speak clones (accepts clip)",
+      "workflow": "echo-voice-over",
+      "item": {
+        "id": "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a22",
+        "kind": "voice",
+        "group": "cloned",
+        "name": "Mara (clip)",
+        "handle": null,
+        "text": "",
+        "images": [],
+        "thumb_url": null,
+        "version": 1,
+        "created_at": "2026-11-21T10:00:00Z",
+        "updated_at": "2026-11-21T10:00:00Z",
+        "source": "mine",
+        "family": null,
+        "loras": [],
+        "needs": [],
+        "voice": {
+          "source": "cloned",
+          "clip": {
+            "take_id": "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8",
+            "in": 4.0,
+            "out": 16.0
+          },
+          "consent": true
+        }
+      },
+      "expect": null,
+      "sends": "clip"
+    },
+    {
+      "description": "a cloned voice fits ZONOS3",
+      "workflow": "zonos3-voice-over",
+      "item": {
+        "id": "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a22",
+        "kind": "voice",
+        "group": "cloned",
+        "name": "Mara (clip)",
+        "handle": null,
+        "text": "",
+        "images": [],
+        "thumb_url": null,
+        "version": 1,
+        "created_at": "2026-11-21T10:00:00Z",
+        "updated_at": "2026-11-21T10:00:00Z",
+        "source": "mine",
+        "family": null,
+        "loras": [],
+        "needs": [],
+        "voice": {
+          "source": "cloned",
+          "clip": {
+            "take_id": "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8",
+            "in": 4.0,
+            "out": 16.0
+          },
+          "consent": true
+        }
+      },
+      "expect": null,
+      "sends": "clip"
+    },
+    {
+      "description": "a ZONOS3 preset fits ZONOS3",
+      "workflow": "zonos3-voice-over",
+      "item": {
+        "id": "zonos3/savannah",
+        "kind": "voice",
+        "group": "preset",
+        "name": "Savannah",
+        "handle": null,
+        "text": "",
+        "images": [],
+        "thumb_url": null,
+        "version": 1,
+        "created_at": "2026-11-21T10:00:00Z",
+        "updated_at": "2026-11-21T10:00:00Z",
+        "source": "starter",
+        "family": "zonos3",
+        "loras": [],
+        "needs": [],
+        "voice": {
+          "source": "preset",
+          "family": "zonos3",
+          "speaker": "default_de4d191ca7574982",
+          "language": "en-US"
+        }
+      },
+      "expect": null,
+      "sends": "preset"
+    },
+    {
+      "description": "a Qwen3-TTS preset does not",
+      "workflow": "zonos3-voice-over",
+      "item": {
+        "id": "qwen3-tts/ryan",
+        "kind": "voice",
+        "group": "preset",
+        "name": "Ryan",
+        "handle": null,
+        "text": "",
+        "images": [],
+        "thumb_url": null,
+        "version": 1,
+        "created_at": "2026-11-21T10:00:00Z",
+        "updated_at": "2026-11-21T10:00:00Z",
+        "source": "starter",
+        "family": "qwen3-tts",
+        "loras": [],
+        "needs": [],
+        "voice": {
+          "source": "preset",
+          "family": "qwen3-tts",
+          "speaker": "ryan",
+          "language": "en",
+          "style": "lively"
+        }
+      },
+      "expect": "voice Ryan is for qwen3-tts"
+    },
+    {
+      "description": "a designed voice with its clip fits ZONOS3, which clones the clip",
+      "workflow": "zonos3-voice-over",
+      "item": {
+        "id": "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a21",
+        "kind": "voice",
+        "group": "designed",
+        "name": "Nervous teen",
+        "handle": null,
+        "text": "",
+        "images": [],
+        "thumb_url": null,
+        "version": 1,
+        "created_at": "2026-11-21T10:00:00Z",
+        "updated_at": "2026-11-21T10:00:00Z",
+        "source": "mine",
+        "family": null,
+        "loras": [],
+        "needs": [],
+        "voice": {
+          "source": "designed",
+          "design": "male, 17, tenor, nervous",
+          "language": "en",
+          "clip": {
+            "take_id": "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8",
+            "in": 0,
+            "out": 3.2
+          },
+          "consent": true
+        }
+      },
+      "expect": null,
+      "sends": "clip"
+    },
+    {
+      "description": "a designed voice without a clip does not",
+      "workflow": "zonos3-voice-over",
+      "item": {
+        "id": "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a21",
+        "kind": "voice",
+        "group": "designed",
+        "name": "Nervous teen",
+        "handle": null,
+        "text": "",
+        "images": [],
+        "thumb_url": null,
+        "version": 1,
+        "created_at": "2026-11-21T10:00:00Z",
+        "updated_at": "2026-11-21T10:00:00Z",
+        "source": "mine",
+        "family": null,
+        "loras": [],
+        "needs": [],
+        "voice": {
+          "source": "designed",
+          "design": "male, 17, tenor, nervous",
+          "language": "en"
+        }
+      },
+      "expect": "this workflow cannot use a designed voice"
+    },
+    {
+      "description": "the Qwen voice design template takes a designed voice with a clip by its design",
+      "workflow": "qwen3-tts-design-voice",
+      "item": {
+        "id": "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a21",
+        "kind": "voice",
+        "group": "designed",
+        "name": "Nervous teen",
+        "handle": null,
+        "text": "",
+        "images": [],
+        "thumb_url": null,
+        "version": 1,
+        "created_at": "2026-11-21T10:00:00Z",
+        "updated_at": "2026-11-21T10:00:00Z",
+        "source": "mine",
+        "family": null,
+        "loras": [],
+        "needs": [],
+        "voice": {
+          "source": "designed",
+          "design": "male, 17, tenor, nervous",
+          "language": "en",
+          "clip": {
+            "take_id": "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8",
+            "in": 0,
+            "out": 3.2
+          },
+          "consent": true
+        }
+      },
+      "expect": null,
+      "sends": "design"
+    },
+    {
+      "description": "echo/speak takes a designed voice with a clip by its own source first",
+      "workflow": "echo-voice-over",
+      "item": {
+        "id": "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a21",
+        "kind": "voice",
+        "group": "designed",
+        "name": "Nervous teen",
+        "handle": null,
+        "text": "",
+        "images": [],
+        "thumb_url": null,
+        "version": 1,
+        "created_at": "2026-11-21T10:00:00Z",
+        "updated_at": "2026-11-21T10:00:00Z",
+        "source": "mine",
+        "family": null,
+        "loras": [],
+        "needs": [],
+        "voice": {
+          "source": "designed",
+          "design": "male, 17, tenor, nervous",
+          "language": "en",
+          "clip": {
+            "take_id": "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8",
+            "in": 0,
+            "out": 3.2
+          },
+          "consent": true
+        }
+      },
+      "expect": null,
+      "sends": "design"
+    },
+    {
+      "description": "Qwen3-TTS cannot clone",
+      "workflow": "qwen3-tts-voice-over",
+      "item": {
+        "id": "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a22",
+        "kind": "voice",
+        "group": "cloned",
+        "name": "Mara (clip)",
+        "handle": null,
+        "text": "",
+        "images": [],
+        "thumb_url": null,
+        "version": 1,
+        "created_at": "2026-11-21T10:00:00Z",
+        "updated_at": "2026-11-21T10:00:00Z",
+        "source": "mine",
+        "family": null,
+        "loras": [],
+        "needs": [],
+        "voice": {
+          "source": "cloned",
+          "clip": {
+            "take_id": "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8",
+            "in": 4.0,
+            "out": 16.0
+          },
+          "consent": true
+        }
+      },
+      "expect": "this workflow cannot clone a voice"
+    },
+    {
+      "description": "a ZONOS3 preset is not a Qwen3-TTS one",
+      "workflow": "qwen3-tts-voice-over",
+      "item": {
+        "id": "zonos3/savannah",
+        "kind": "voice",
+        "group": "preset",
+        "name": "Savannah",
+        "handle": null,
+        "text": "",
+        "images": [],
+        "thumb_url": null,
+        "version": 1,
+        "created_at": "2026-11-21T10:00:00Z",
+        "updated_at": "2026-11-21T10:00:00Z",
+        "source": "starter",
+        "family": "zonos3",
+        "loras": [],
+        "needs": [],
+        "voice": {
+          "source": "preset",
+          "family": "zonos3",
+          "speaker": "default_de4d191ca7574982",
+          "language": "en-US"
+        }
+      },
+      "expect": "voice Savannah is for zonos3"
     }
   ]
 }

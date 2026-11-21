@@ -4,14 +4,19 @@
 package tests
 
 import (
+	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
 	"testing"
 
 	"github.com/pressly/goose/v3"
+
+	"github.com/helmstudio/studio_service/api/gallery"
 )
 
 // voices publishes the fake runner's starter voices (echo/ada, echo/bo).
@@ -43,12 +48,11 @@ func TestVoicesLibrary(t *testing.T) {
 	}
 	for want, b := range map[string]map[string]any{
 		"preset voices come from packs":                    designed(map[string]any{"group": "preset"}),
-		"cloned voices are not available yet":              designed(map[string]any{"group": "cloned"}),
+		"voice.design: a cloned voice has no design":       designed(map[string]any{"group": "cloned"}),
 		"a voice has no text; describe it in voice.design": designed(map[string]any{"text": "hi"}),
 		"voice: a designed voice needs voice.design":       designed(map[string]any{"voice": map[string]any{}}),
 		"unknown field speaker":                            designed(map[string]any{"voice": map[string]any{"design": "x", "speaker": "Ryan"}}),
 		"voice: only a voice has voice fields":             designed(map[string]any{"kind": "look", "group": "film", "text": "x"}),
-		"from_take makes looks only":                       designed(map[string]any{"from_take": map[string]any{"take_id": id}}),
 	} {
 		if got := e.call(userA, "POST", library, b, 422); got["detail"] != want {
 			t.Errorf("%v, want %s", got["detail"], want)
@@ -167,6 +171,151 @@ func TestRunWithVoice(t *testing.T) {
 	run(map[string]any{"voice_id": mine}, "hello", 202)
 	if v, _ := json.Marshal(e.command()["speak"].Params["voice"]); string(v) != `{"item_id":"`+mine+`","source":"design","style":"calm","text":"low and slow","version":1}` {
 		t.Fatal(string(v))
+	}
+}
+
+// voiceTake ends a run of echo-voice-over with one WAV output of seconds (its object put in the store) and returns
+// its take.
+func (e *env) voiceTake(owner, sessionID, runID string, seconds float64) string {
+	e.t.Helper()
+	key, data := "u/"+owner+"/runs/"+runID+"/1/0.wav", []byte("RIFF wav of "+runID)
+	if err := e.store.Put(context.Background(), key, bytes.NewReader(data), int64(len(data)), "audio/wav"); err != nil {
+		e.t.Fatal(err)
+	}
+	e.emit(owner, sessionID, runID, "status", 1, map[string]any{"status": "running", "host": "fake"})
+	e.emit(owner, sessionID, runID, "output", 2, map[string]any{"index": 0, "key": key, "kind": "audio",
+		"bytes": len(data), "audio": map[string]any{"duration_s": seconds, "sample_rate": 24000}})
+	e.emit(owner, sessionID, runID, "status", 3, map[string]any{"status": "succeeded", "host": "fake"})
+	return e.call(owner, "GET", "/v1/studio/runs/"+runID, nil, 200)["outputs"].([]any)[0].(map[string]any)["take_id"].(string)
+}
+
+// API 1.31 (README, Voices: cloned voices): a voice from a clip of a take, Save as voice, runs that send the clip
+// (also after its take was deleted), lineage, and the sweep keeping the take's object while the voice keeps it.
+func TestClonedVoices(t *testing.T) {
+	e := setup(t)
+	e.voices()
+	sessionID := e.call(userA, "POST", "/v1/studio/sessions", nil, 201)["id"].(string)
+	runs := "/v1/studio/sessions/" + sessionID + "/runs"
+	run := func(voice string, want int) map[string]any {
+		return e.call(userA, "POST", runs, map[string]any{"workflow_id": "echo-voice-over",
+			"inputs": map[string]any{"prompt.text": "hello there", "speak.voice": map[string]any{"voice_id": voice}}}, want)
+	}
+	runID := run("echo/ada", 202)["id"].(string)
+	e.relay()
+	takeID := e.voiceTake(userA, sessionID, runID, 5.0)
+	key := "u/" + userA + "/runs/" + runID + "/1/0.wav"
+	cloned := func(clip map[string]any, consent any) map[string]any {
+		v := map[string]any{"clip": clip}
+		if consent != nil {
+			v["consent"] = consent
+		}
+		return map[string]any{"kind": "voice", "group": "cloned", "name": "Jon", "voice": v}
+	}
+	for want, b := range map[string]map[string]any{
+		`voice.consent: tick "I have the right to use this voice"`:          cloned(map[string]any{"take_id": takeID}, false),
+		"voice.clip: the part lasts 2.0 s; this input takes at least 3.0 s": cloned(map[string]any{"take_id": takeID, "in": 1, "out": 3}, true),
+		"voice.clip: out 6.0 is past the take's end 5.0":                    cloned(map[string]any{"take_id": takeID, "out": 6}, true),
+		"voice: a cloned voice needs voice.clip":                            {"kind": "voice", "group": "cloned", "name": "Jon", "voice": map[string]any{"consent": true}},
+		"voice.clip: give the clip or from_take, not both":                  with(cloned(map[string]any{"take_id": takeID}, true), map[string]any{"from_take": map[string]any{"take_id": takeID}}),
+		"from_take: a look takes the whole take (no in or out)":             {"kind": "look", "group": "film", "name": "L", "from_take": map[string]any{"take_id": takeID, "in": 1}},
+		"from_take: take " + takeID + " was not made with a designed voice": {"kind": "voice", "group": "designed", "name": "D", "voice": map[string]any{"consent": true}, "from_take": map[string]any{"take_id": takeID}},
+	} {
+		if got := e.call(userA, "POST", library, b, 422); got["detail"] != want {
+			t.Errorf("%v, want %s", got["detail"], want)
+		}
+	}
+	// another user's take is not found
+	if got := e.call(userB, "POST", library, cloned(map[string]any{"take_id": takeID}, true), 404); got["detail"] != "voice.clip: take "+takeID+" not found" {
+		t.Fatal(got)
+	}
+	jon := e.call(userA, "POST", library, cloned(map[string]any{"take_id": takeID, "in": 0.5}, true), 201)
+	voiceID := jon["id"].(string)
+	if v, _ := json.Marshal(jon["voice"]); string(v) != `{"clip":{"in":0.5,"out":5,"take_id":"`+takeID+`"},"consent":true,"source":"cloned"}` ||
+		jon["from_take_id"] != takeID || jon["thumb_url"] == nil {
+		t.Fatal(jon)
+	}
+	e.call(userB, "GET", library+"/"+voiceID, nil, 404)
+	if got := e.call(userB, "POST", runs[:0]+"/v1/studio/sessions/"+e.call(userB, "POST", "/v1/studio/sessions", nil, 201)["id"].(string)+"/runs",
+		map[string]any{"workflow_id": "echo-voice-over", "inputs": map[string]any{"prompt.text": "hi",
+			"speak.voice": map[string]any{"voice_id": voiceID}}}, 422); got["detail"] != "speak.voice: voice "+voiceID+" not found" {
+		t.Fatal(got)
+	}
+
+	// a run sends the clip as a media value; the take's lineage adds the clip's take
+	clipped := run(voiceID, 202)["id"].(string)
+	speak := e.command()["speak"].Params["voice"].(map[string]any)
+	clip, _ := speak["clip"].(map[string]any)
+	if speak["source"] != "clip" || speak["text"] != nil || clip["take_id"] != takeID || clip["key"] != key ||
+		clip["in"] != 0.5 || clip["out"] != 5.0 || clip["etag"] == "" || clip["kind"] != "audio" {
+		t.Fatal(speak)
+	}
+	made := e.voiceTake(userA, sessionID, clipped, 3.2)
+	if parents, _ := json.Marshal(e.call(userA, "GET", "/v1/studio/takes/"+made, nil, 200)["parents"]); !bytes.Contains(parents, []byte(takeID)) {
+		t.Fatal(string(parents))
+	}
+
+	// the take deleted: hidden, from_take_id null, but the voice still plays and runs; the sweep keeps its object
+	e.call(userA, "DELETE", "/v1/studio/takes/"+takeID, nil, 204)
+	if got := e.call(userA, "GET", library+"/"+voiceID, nil, 200); got["from_take_id"] != nil || got["thumb_url"] == nil {
+		t.Fatal(got)
+	}
+	again := run(voiceID, 202)["id"].(string)
+	if e.command()["speak"].Params["voice"].(map[string]any)["clip"].(map[string]any)["take_id"] != takeID {
+		t.Fatal("the deleted take's clip is not sent")
+	}
+	e.voiceTake(userA, sessionID, again, 3.0)
+	if got := e.call(userA, "POST", library, cloned(map[string]any{"take_id": takeID}, true), 404); got["detail"] != "voice.clip: take "+takeID+" not found" {
+		t.Fatal(got)
+	}
+	// a PUT keeping its clip is fine, though the take is deleted
+	put := map[string]any{"group": "cloned", "name": "Jon 2", "text": "", "images": []any{}, "version": 1,
+		"voice": map[string]any{"clip": map[string]any{"take_id": takeID, "in": 0.5}, "consent": true}}
+	if got := e.call(userA, "PUT", library+"/"+voiceID, put, 200); got["name"] != "Jon 2" {
+		t.Fatal(got)
+	}
+	e.exec(`UPDATE takes SET deleted_at = now() - interval '2 hours' WHERE id = $1`, takeID)
+	sweeper := gallery.NewSweeper(e.pool, e.store)
+	if n, err := sweeper.Sweep(context.Background()); err != nil || n != 0 {
+		t.Fatal(n, err)
+	}
+	// its object gone: the run is refused
+	data, _ := e.store.Get(context.Background(), key)
+	body, _ := io.ReadAll(data)
+	_ = e.store.Delete(context.Background(), key)
+	if got := run(voiceID, 422); got["detail"] != "speak.voice: the clip of voice Jon 2 is gone" {
+		t.Fatal(got)
+	}
+	_ = e.store.Put(context.Background(), key, bytes.NewReader(body), int64(len(body)), "audio/wav")
+	// deleting the voice frees the take for the next sweep
+	e.call(userA, "DELETE", library+"/"+voiceID, nil, 204)
+	if n, err := sweeper.Sweep(context.Background()); err != nil || n != 1 {
+		t.Fatal(n, err)
+	}
+	if _, err := e.store.Stat(context.Background(), key); err == nil {
+		t.Fatal("the clip's object is left behind")
+	}
+
+	// Save as voice from a take a designed voice made: the design copied, the take its clip; echo/speak takes it by
+	// its design first
+	teen := e.call(userA, "POST", library, map[string]any{"kind": "voice", "group": "designed", "name": "Teen",
+		"voice": map[string]any{"design": "male, 17", "language": "en"}}, 201)["id"].(string)
+	designRun := run(teen, 202)["id"].(string)
+	e.relay()
+	designTake := e.voiceTake(userA, sessionID, designRun, 4.0)
+	saved := e.call(userA, "POST", library, map[string]any{"kind": "voice", "group": "designed", "name": "Teen 2",
+		"voice": map[string]any{"consent": true}, "from_take": map[string]any{"take_id": designTake, "out": 3.5}}, 201)
+	if v, _ := json.Marshal(saved["voice"]); string(v) != `{"clip":{"in":0,"out":3.5,"take_id":"`+designTake+`"},"consent":true,"design":"male, 17","language":"en","source":"designed"}` ||
+		saved["from_take_id"] != designTake {
+		t.Fatal(saved)
+	}
+	run(saved["id"].(string), 202)
+	if v := e.command()["speak"].Params["voice"].(map[string]any); v["source"] != "design" || v["clip"] != nil || v["text"] != "male, 17" {
+		t.Fatal(v)
+	}
+	e.call(userA, "DELETE", library+"/"+teen, nil, 204)
+	if got := e.call(userA, "POST", library, map[string]any{"kind": "voice", "group": "designed", "name": "Teen 3",
+		"voice": map[string]any{"consent": true}, "from_take": map[string]any{"take_id": designTake}}, 422); got["detail"] != "from_take: voice Teen was deleted" {
+		t.Fatal(got)
 	}
 }
 

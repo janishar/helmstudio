@@ -1,0 +1,414 @@
+{
+  "schema_version": 1,
+  "host": "mac",
+  "env": "native",
+  "published_at": "2026-11-21T10:00:00Z",
+  "published_by": "runner native 0.3.0",
+  "voices": [
+    {
+      "id": "zonos3/cillian",
+      "family": "zonos3",
+      "name": "Cillian",
+      "speaker": "default_2c5123a959875341",
+      "language": "en-IE",
+      "style": "Irish male",
+      "version": 1,
+      "preview": {
+        "key": "packs/zonos3/voices/cillian-c76c18df405805ee.wav",
+        "bytes": 192044,
+        "duration_s": 4.0,
+        "sample_rate": 24000
+      }
+    },
+    {
+      "id": "zonos3/imogen",
+      "family": "zonos3",
+      "name": "Imogen",
+      "speaker": "default_b78b28baf5c31a1d",
+      "language": "en-GB",
+      "style": "British female",
+      "version": 1,
+      "preview": {
+        "key": "packs/zonos3/voices/imogen-8f51b07666ea81c5.wav",
+        "bytes": 192044,
+        "duration_s": 4.0,
+        "sample_rate": 24000
+      }
+    },
+    {
+      "id": "zonos3/jett",
+      "family": "zonos3",
+      "name": "Jett",
+      "speaker": "default_c95cf57259ed7313",
+      "language": "en-US",
+      "style": "Energetic male",
+      "version": 1,
+      "preview": {
+        "key": "packs/zonos3/voices/jett-842634dda33604f8.wav",
+        "bytes": 192044,
+        "duration_s": 4.0,
+        "sample_rate": 24000
+      }
+    },
+    {
+      "id": "zonos3/morgana",
+      "family": "zonos3",
+      "name": "Morgana",
+      "speaker": "default_40a3ba1017bfb68a",
+      "language": "en-US",
+      "style": "Witch, female",
+      "version": 1,
+      "preview": {
+        "key": "packs/zonos3/voices/morgana-c3d3b2852c0fbdae.wav",
+        "bytes": 192044,
+        "duration_s": 4.0,
+        "sample_rate": 24000
+      }
+    },
+    {
+      "id": "zonos3/rupert",
+      "family": "zonos3",
+      "name": "Rupert",
+      "speaker": "default_3765f0d1140c05c0",
+      "language": "en-GB",
+      "style": "British male",
+      "version": 1,
+      "preview": {
+        "key": "packs/zonos3/voices/rupert-0179a8d050999019.wav",
+        "bytes": 192044,
+        "duration_s": 4.0,
+        "sample_rate": 24000
+      }
+    },
+    {
+      "id": "zonos3/sakura",
+      "family": "zonos3",
+      "name": "Sakura",
+      "speaker": "default_c5e098c322aae901",
+      "language": "en-US",
+      "style": "Anime, female",
+      "version": 1,
+      "preview": {
+        "key": "packs/zonos3/voices/sakura-e329bbdab296e062.wav",
+        "bytes": 192044,
+        "duration_s": 4.0,
+        "sample_rate": 24000
+      }
+    },
+    {
+      "id": "zonos3/savannah",
+      "family": "zonos3",
+      "name": "Savannah",
+      "speaker": "default_de4d191ca7574982",
+      "language": "en-US",
+      "style": "American female",
+      "version": 1,
+      "preview": {
+        "key": "packs/zonos3/voices/savannah-dc6d12c17c55c544.wav",
+        "bytes": 192044,
+        "duration_s": 4.0,
+        "sample_rate": 24000
+      }
+    },
+    {
+      "id": "zonos3/thaddeus",
+      "family": "zonos3",
+      "name": "Thaddeus",
+      "speaker": "default_3c00e421e684f949",
+      "language": "en-US",
+      "style": "Announcer male",
+      "version": 1,
+      "preview": {
+        "key": "packs/zonos3/voices/thaddeus-3fb85b7808c9b334.wav",
+        "bytes": 192044,
+        "duration_s": 4.0,
+        "sample_rate": 24000
+      }
+    },
+    {
+      "id": "zonos3/willow",
+      "family": "zonos3",
+      "name": "Willow",
+      "speaker": "default_940eaff39a929da0",
+      "language": "en-US",
+      "style": "ASMR female, soft and close",
+      "version": 1,
+      "preview": {
+        "key": "packs/zonos3/voices/willow-20a93d55728858f3.wav",
+        "bytes": 192044,
+        "duration_s": 4.0,
+        "sample_rate": 24000
+      }
+    },
+    {
+      "id": "zonos3/wyatt",
+      "family": "zonos3",
+      "name": "Wyatt",
+      "speaker": "default_34370fd91e3484ef",
+      "language": "en-US",
+      "style": "American male",
+      "version": 1,
+      "preview": {
+        "key": "packs/zonos3/voices/wyatt-29696bb4a1f931fe.wav",
+        "bytes": 192044,
+        "duration_s": 4.0,
+        "sample_rate": 24000
+      }
+    },
+    {
+      "id": "zonos3/gaspard",
+      "family": "zonos3",
+      "name": "Gaspard",
+      "speaker": "default_517319c805b927e9",
+      "language": "fr",
+      "style": "Male",
+      "version": 1,
+      "preview": {
+        "key": "packs/zonos3/voices/gaspard-a7d67f016e3da9c9.wav",
+        "bytes": 192044,
+        "duration_s": 4.0,
+        "sample_rate": 24000
+      }
+    },
+    {
+      "id": "zonos3/liesel",
+      "family": "zonos3",
+      "name": "Liesel",
+      "speaker": "default_09d206a5b067ae71",
+      "language": "de",
+      "style": "Female",
+      "version": 1,
+      "preview": {
+        "key": "packs/zonos3/voices/liesel-6e88aaea9b122705.wav",
+        "bytes": 192044,
+        "duration_s": 4.0,
+        "sample_rate": 24000
+      }
+    },
+    {
+      "id": "zonos3/wolfgang",
+      "family": "zonos3",
+      "name": "Wolfgang",
+      "speaker": "default_ec650ef042ed1f14",
+      "language": "de",
+      "style": "Male",
+      "version": 1,
+      "preview": {
+        "key": "packs/zonos3/voices/wolfgang-eff81cd31193a82f.wav",
+        "bytes": 192044,
+        "duration_s": 4.0,
+        "sample_rate": 24000
+      }
+    },
+    {
+      "id": "zonos3/ananya",
+      "family": "zonos3",
+      "name": "Ananya",
+      "speaker": "default_f76cf78a50cf8496",
+      "language": "hi",
+      "style": "Female",
+      "version": 1,
+      "preview": {
+        "key": "packs/zonos3/voices/ananya-6a0633d09e630e83.wav",
+        "bytes": 192044,
+        "duration_s": 4.0,
+        "sample_rate": 24000
+      }
+    },
+    {
+      "id": "zonos3/arjun",
+      "family": "zonos3",
+      "name": "Arjun",
+      "speaker": "default_849a62ace1f85759",
+      "language": "hi",
+      "style": "Male",
+      "version": 1,
+      "preview": {
+        "key": "packs/zonos3/voices/arjun-18acb01e604ebf28.wav",
+        "bytes": 192044,
+        "duration_s": 4.0,
+        "sample_rate": 24000
+      }
+    },
+    {
+      "id": "zonos3/ginevra",
+      "family": "zonos3",
+      "name": "Ginevra",
+      "speaker": "default_792987ff6236e50d",
+      "language": "it",
+      "style": "Female",
+      "version": 1,
+      "preview": {
+        "key": "packs/zonos3/voices/ginevra-12bfc29b1b50f31a.wav",
+        "bytes": 192044,
+        "duration_s": 4.0,
+        "sample_rate": 24000
+      }
+    },
+    {
+      "id": "zonos3/lorenzo",
+      "family": "zonos3",
+      "name": "Lorenzo",
+      "speaker": "default_ccb71e6596453e72",
+      "language": "it",
+      "style": "Male",
+      "version": 1,
+      "preview": {
+        "key": "packs/zonos3/voices/lorenzo-4a5f07d25c9945c5.wav",
+        "bytes": 192044,
+        "duration_s": 4.0,
+        "sample_rate": 24000
+      }
+    },
+    {
+      "id": "zonos3/minjun",
+      "family": "zonos3",
+      "name": "Minjun",
+      "speaker": "default_aa6e36b246dc01f9",
+      "language": "ko",
+      "style": "Male",
+      "version": 1,
+      "preview": {
+        "key": "packs/zonos3/voices/minjun-8cfb371323304863.wav",
+        "bytes": 192044,
+        "duration_s": 4.0,
+        "sample_rate": 24000
+      }
+    },
+    {
+      "id": "zonos3/seoyeon",
+      "family": "zonos3",
+      "name": "Seoyeon",
+      "speaker": "default_b7a257a5b1478493",
+      "language": "ko",
+      "style": "Female",
+      "version": 1,
+      "preview": {
+        "key": "packs/zonos3/voices/seoyeon-8b6be3dfa471dbfd.wav",
+        "bytes": 192044,
+        "duration_s": 4.0,
+        "sample_rate": 24000
+      }
+    },
+    {
+      "id": "zonos3/haoran",
+      "family": "zonos3",
+      "name": "Haoran",
+      "speaker": "default_d8a9b688b64e638d",
+      "language": "zh",
+      "style": "Energetic male",
+      "version": 1,
+      "preview": {
+        "key": "packs/zonos3/voices/haoran-44bd46cd5daa8e55.wav",
+        "bytes": 192044,
+        "duration_s": 4.0,
+        "sample_rate": 24000
+      }
+    },
+    {
+      "id": "zonos3/meilin",
+      "family": "zonos3",
+      "name": "Meilin",
+      "speaker": "default_eaee7325255d4783",
+      "language": "zh",
+      "style": "Energetic female",
+      "version": 1,
+      "preview": {
+        "key": "packs/zonos3/voices/meilin-a9a225cb2f2656f4.wav",
+        "bytes": 192044,
+        "duration_s": 4.0,
+        "sample_rate": 24000
+      }
+    },
+    {
+      "id": "zonos3/leonor",
+      "family": "zonos3",
+      "name": "Leonor",
+      "speaker": "default_e11f53895cad62fa",
+      "language": "pt-BR",
+      "style": "Female",
+      "version": 1,
+      "preview": {
+        "key": "packs/zonos3/voices/leonor-2a92e81159e80783.wav",
+        "bytes": 192044,
+        "duration_s": 4.0,
+        "sample_rate": 24000
+      }
+    },
+    {
+      "id": "zonos3/thiago",
+      "family": "zonos3",
+      "name": "Thiago",
+      "speaker": "default_4562e98e005b69cc",
+      "language": "pt-BR",
+      "style": "Male",
+      "version": 1,
+      "preview": {
+        "key": "packs/zonos3/voices/thiago-4d7c4ce4ed101fed.wav",
+        "bytes": 192044,
+        "duration_s": 4.0,
+        "sample_rate": 24000
+      }
+    },
+    {
+      "id": "zonos3/rodrigo",
+      "family": "zonos3",
+      "name": "Rodrigo",
+      "speaker": "default_87250baa043e5bba",
+      "language": "es",
+      "style": "Male",
+      "version": 1,
+      "preview": {
+        "key": "packs/zonos3/voices/rodrigo-4c17ac92da968e6f.wav",
+        "bytes": 192044,
+        "duration_s": 4.0,
+        "sample_rate": 24000
+      }
+    },
+    {
+      "id": "zonos3/ximena",
+      "family": "zonos3",
+      "name": "Ximena",
+      "speaker": "default_43e790fc116fd62a",
+      "language": "es",
+      "style": "Female",
+      "version": 1,
+      "preview": {
+        "key": "packs/zonos3/voices/ximena-3e6d9cdd4321ba54.wav",
+        "bytes": 192044,
+        "duration_s": 4.0,
+        "sample_rate": 24000
+      }
+    },
+    {
+      "id": "zonos3/chaitanya",
+      "family": "zonos3",
+      "name": "Chaitanya",
+      "speaker": "default_26fb443b7759bce0",
+      "language": "te",
+      "style": "Male",
+      "version": 1,
+      "preview": {
+        "key": "packs/zonos3/voices/chaitanya-292121e1ceb7a11e.wav",
+        "bytes": 192044,
+        "duration_s": 4.0,
+        "sample_rate": 24000
+      }
+    },
+    {
+      "id": "zonos3/sravya",
+      "family": "zonos3",
+      "name": "Sravya",
+      "speaker": "default_c3bb44b62cf13a5c",
+      "language": "te",
+      "style": "Female",
+      "version": 1,
+      "preview": {
+        "key": "packs/zonos3/voices/sravya-28bb79ea9592628e.wav",
+        "bytes": 192044,
+        "duration_s": 4.0,
+        "sample_rate": 24000
+      }
+    }
+  ]
+}

@@ -880,9 +880,10 @@
               "default": null,
               "accepts": [
                 "preset",
+                "clip",
                 "design"
               ],
-              "help": "The saved voice it speaks in: an echo starter voice or a designed voice."
+              "help": "The saved voice it speaks in: an echo starter voice, a voice with a clip (API 1.31) or a designed voice."
             },
             {
               "name": "seed",
@@ -3028,6 +3029,195 @@
           "help": "Reads the text in one voice: a preset speaker (Custom voice) or a designed voice (Voice design). Long text is split on sentences and joined; at most 900 characters (about 60 s).",
           "envs": [
             "torch"
+          ]
+        }
+      ]
+    },
+    {
+      "family": "zonos3",
+      "title": "ZONOS3",
+      "nodes": [
+        {
+          "kind": "zonos3/model",
+          "title": "ZONOS3",
+          "family": "zonos3",
+          "params": [
+            {
+              "name": "variant",
+              "type": "enum",
+              "label": "Variant",
+              "enum": [
+                "mini"
+              ],
+              "default": "mini"
+            },
+            {
+              "name": "precision",
+              "type": "enum",
+              "label": "Precision",
+              "enum": [
+                "int8"
+              ],
+              "default": "int8",
+              "help": "Stored quantized (q8_0 and q4_0 with f16 in backbone-ptq.gguf); loaded as it is. Not a choice."
+            }
+          ],
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            }
+          ],
+          "help": "ZONOS3-Mini: the backbone, the keep2 decoder, the speaker encoder and the steering table, run by zonos3-server.",
+          "envs": [
+            "native"
+          ]
+        },
+        {
+          "kind": "zonos3/speak",
+          "title": "Speak",
+          "family": "zonos3",
+          "params": [
+            {
+              "name": "voice",
+              "type": "voice",
+              "label": "Voice",
+              "default": null,
+              "accepts": [
+                "preset",
+                "clip"
+              ],
+              "help": "One of the 27 ZONOS3 presets, or any saved voice with a clip (cloned, or designed and saved with its clip)."
+            },
+            {
+              "name": "language",
+              "type": "enum",
+              "label": "Language",
+              "default": "en-US",
+              "enum": [
+                "en-US",
+                "en-GB",
+                "fr",
+                "de",
+                "es",
+                "it",
+                "pt-BR",
+                "ja",
+                "zh",
+                "ko",
+                "ar",
+                "bn",
+                "bg",
+                "cs",
+                "da",
+                "nl",
+                "fi",
+                "ka",
+                "el",
+                "gu",
+                "he",
+                "hi",
+                "hu",
+                "id",
+                "kn",
+                "ms",
+                "ml",
+                "mr",
+                "no",
+                "or",
+                "pl",
+                "pa",
+                "ro",
+                "ru",
+                "sk",
+                "sv",
+                "tl",
+                "ta",
+                "te",
+                "th",
+                "tr",
+                "uk",
+                "ur",
+                "vi"
+              ],
+              "help": "The language of the text: it decides how numbers and abbreviations are read."
+            },
+            {
+              "name": "emotion",
+              "type": "float",
+              "label": "Emotion",
+              "default": 0.5,
+              "min": 0,
+              "max": 1,
+              "step": 0.05,
+              "help": "Valence: low sounds sad, high sounds happy; 0.5 adds nothing."
+            },
+            {
+              "name": "energy",
+              "type": "float",
+              "label": "Energy",
+              "default": 0.5,
+              "min": 0,
+              "max": 1,
+              "step": 0.05,
+              "help": "Arousal: low is calm and soft, high is excited; 0.5 adds nothing."
+            },
+            {
+              "name": "whisper",
+              "type": "float",
+              "label": "Whisper",
+              "default": 0,
+              "min": 0,
+              "max": 1,
+              "step": 0.05,
+              "help": "0 speaks out loud; 1 whispers every word."
+            },
+            {
+              "name": "speaking_rate",
+              "type": "float",
+              "label": "Speaking rate",
+              "default": 1,
+              "min": 0.5,
+              "max": 1.5,
+              "step": 0.05,
+              "help": "1× is the voice's own pace."
+            },
+            {
+              "name": "guidance",
+              "type": "float",
+              "label": "Guidance",
+              "default": 2,
+              "min": 1,
+              "max": 5,
+              "step": 0.1,
+              "help": "How closely it keeps to the voice; 1 is off, high strains."
+            }
+          ],
+          "inputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            },
+            {
+              "name": "text",
+              "type": "Text"
+            },
+            {
+              "name": "seed",
+              "type": "Seed"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "audio",
+              "type": "Audio"
+            }
+          ],
+          "component": "whole model",
+          "help": "Reads the text in one voice, a preset or a clip it clones, at 44.1 kHz. Long text is split on sentences and joined; at most 900 characters (about 60 s).",
+          "envs": [
+            "native"
           ]
         }
       ]

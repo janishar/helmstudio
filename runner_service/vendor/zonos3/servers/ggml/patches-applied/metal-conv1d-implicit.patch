@@ -1,0 +1,722 @@
+diff --git a/include/ggml.h b/include/ggml.h
+index c37ba947..e4d834de 100644
+--- a/include/ggml.h
++++ b/include/ggml.h
+@@ -553,6 +553,7 @@ extern "C" {
+         GGML_OP_CONV_3D,
+         GGML_OP_CONV_2D_DW,
+         GGML_OP_CONV_TRANSPOSE_2D,
++        GGML_OP_CONV_1D_IMPLICIT,
+         GGML_OP_POOL_1D,
+         GGML_OP_POOL_2D,
+         GGML_OP_POOL_2D_BACK,
+@@ -2143,6 +2144,21 @@ extern "C" {
+             int                   p0,  // padding
+             int                   d0); // dilation
+ 
++    // implicit-GEMM 1D convolution (no im2col buffer)
++    //   w: BF16 [K*IC, OC], contiguous, reduction index r = ic*K + k (tap fastest)
++    //   x: F32  [IC, T],    contiguous, channel fastest (values should be BF16-representable)
++    //   result: F32 [OC, T_out], T_out = (T + pad_left - dilation*(K-1) - 1)/stride + 1
++    //   y[oc, t] = sum_r w[r, oc] * x[ic, t*stride + k*dilation - pad_left] (zero outside [0, T))
++    //   accumulation order matches ggml_mul_mat(w, im2col(...)) with F32 precision
++    GGML_API struct ggml_tensor * ggml_conv_1d_implicit(
++            struct ggml_context * ctx,
++            struct ggml_tensor  * w,
++            struct ggml_tensor  * x,
++            int                   K,
++            int                   stride,
++            int                   dilation,
++            int                   pad_left);
++
+     GGML_API struct ggml_tensor * ggml_conv_2d(
+             struct ggml_context * ctx,
+             struct ggml_tensor  * a,   // convolution kernel
+diff --git a/src/ggml-backend-meta.cpp b/src/ggml-backend-meta.cpp
+index 679d5216..8db2e8da 100644
+--- a/src/ggml-backend-meta.cpp
++++ b/src/ggml-backend-meta.cpp
+@@ -990,6 +990,7 @@ static struct ggml_backend_meta_split_state ggml_backend_meta_get_split_state(
+             case GGML_OP_CONV_3D:
+             case GGML_OP_CONV_2D_DW:
+             case GGML_OP_CONV_TRANSPOSE_2D:
++            case GGML_OP_CONV_1D_IMPLICIT:
+             case GGML_OP_POOL_1D:
+             case GGML_OP_POOL_2D:
+             case GGML_OP_POOL_2D_BACK:
+diff --git a/src/ggml-cpu/ggml-cpu.c b/src/ggml-cpu/ggml-cpu.c
+index ab82e3d6..8ee42eaa 100644
+--- a/src/ggml-cpu/ggml-cpu.c
++++ b/src/ggml-cpu/ggml-cpu.c
+@@ -1938,6 +1938,10 @@ static void ggml_compute_forward(struct ggml_compute_params * params, struct ggm
+             {
+                 ggml_compute_forward_conv_transpose_1d(params, tensor);
+             } break;
++        case GGML_OP_CONV_1D_IMPLICIT:
++            {
++                ggml_compute_forward_conv_1d_implicit(params, tensor);
++            } break;
+         case GGML_OP_IM2COL:
+             {
+                 ggml_compute_forward_im2col(params, tensor);
+@@ -2408,6 +2412,7 @@ static int ggml_get_n_tasks(struct ggml_tensor * node, int n_threads) {
+         case GGML_OP_COL2IM_1D:
+         case GGML_OP_CONV_TRANSPOSE_1D:
+         case GGML_OP_CONV_TRANSPOSE_2D:
++        case GGML_OP_CONV_1D_IMPLICIT:
+             {
+                 n_tasks = n_threads;
+             } break;
+diff --git a/src/ggml-cpu/ops.cpp b/src/ggml-cpu/ops.cpp
+index 7a73e138..cff6fb73 100644
+--- a/src/ggml-cpu/ops.cpp
++++ b/src/ggml-cpu/ops.cpp
+@@ -6782,6 +6782,70 @@ void ggml_compute_forward_conv_transpose_1d(
+     }
+ }
+ 
++// ggml_compute_forward_conv_1d_implicit
++// src0: w   BF16 [K*IC, OC], r = ic*K + k
++// src1: x   F32  [IC, T]
++// dst:  y   F32  [OC, T_out]
++void ggml_compute_forward_conv_1d_implicit(
++        const ggml_compute_params * params,
++              ggml_tensor * dst) {
++
++    const ggml_tensor * src0 = dst->src[0];
++    const ggml_tensor * src1 = dst->src[1];
++
++    GGML_ASSERT(src0->type == GGML_TYPE_BF16);
++    GGML_ASSERT(src1->type == GGML_TYPE_F32);
++    GGML_ASSERT(dst->type  == GGML_TYPE_F32);
++
++    const int32_t K        = ggml_get_op_params_i32(dst, 0);
++    const int32_t stride   = ggml_get_op_params_i32(dst, 1);
++    const int32_t dilation = ggml_get_op_params_i32(dst, 2);
++    const int32_t pad_left = ggml_get_op_params_i32(dst, 3);
++
++    const int64_t IC    = src1->ne[0];
++    const int64_t T     = src1->ne[1];
++    const int64_t KIC   = src0->ne[0];
++    const int64_t OC    = src0->ne[1];
++    const int64_t T_out = dst->ne[1];
++
++    GGML_ASSERT(KIC == IC*K);
++
++    const int ith = params->ith;
++    const int nth = params->nth;
++
++    const int64_t dr  = (OC + nth - 1)/nth;
++    const int64_t ir0 = dr*ith;
++    const int64_t ir1 = MIN(ir0 + dr, OC);
++
++    const float * x = (const float *) src1->data;
++
++    std::vector<float> wf(KIC);
++
++    for (int64_t oc = ir0; oc < ir1; oc++) {
++        const ggml_bf16_t * w = (const ggml_bf16_t *) ((const char *) src0->data + oc*src0->nb[1]);
++        for (int64_t r = 0; r < KIC; r++) {
++            wf[r] = GGML_BF16_TO_FP32(w[r]);
++        }
++
++        for (int64_t t = 0; t < T_out; t++) {
++            float sum = 0.0f;
++            for (int64_t ic = 0; ic < IC; ic++) {
++                const float * wk = wf.data() + ic*K;
++                for (int32_t k = 0; k < K; k++) {
++                    const int64_t ti = t*stride + (int64_t) k*dilation - pad_left;
++                    if (ti < 0 || ti >= T) {
++                        continue;
++                    }
++                    // round to bf16 like the BF16 x F32 matmul path does for src1
++                    const float xv = GGML_BF16_TO_FP32(GGML_FP32_TO_BF16(x[ic + IC*ti]));
++                    sum += wk[k]*xv;
++                }
++            }
++            *(float *) ((char *) dst->data + t*dst->nb[1] + oc*dst->nb[0]) = sum;
++        }
++    }
++}
++
+ // ggml_compute_forward_im2col_f32
+ // src0: kernel [OC, IC, KH, KW]
+ // src1: image [N, IC, IH, IW]
+diff --git a/src/ggml-cpu/ops.h b/src/ggml-cpu/ops.h
+index 2728b08b..584c59d5 100644
+--- a/src/ggml-cpu/ops.h
++++ b/src/ggml-cpu/ops.h
+@@ -64,6 +64,7 @@ void ggml_compute_forward_rope(const struct ggml_compute_params * params, struct
+ void ggml_compute_forward_rope_back(const struct ggml_compute_params * params, struct ggml_tensor * dst);
+ void ggml_compute_forward_clamp(const struct ggml_compute_params * params, struct ggml_tensor * dst);
+ void ggml_compute_forward_conv_transpose_1d(const struct ggml_compute_params * params, struct ggml_tensor * dst);
++void ggml_compute_forward_conv_1d_implicit(const struct ggml_compute_params * params, struct ggml_tensor * dst);
+ void ggml_compute_forward_im2col(const struct ggml_compute_params * params, struct ggml_tensor * dst);
+ void ggml_compute_forward_im2col_back_f32(const struct ggml_compute_params * params, struct ggml_tensor * dst);
+ void ggml_compute_forward_im2col_3d(const struct ggml_compute_params * params, struct ggml_tensor * dst);
+diff --git a/src/ggml-metal/ggml-metal-device.cpp b/src/ggml-metal/ggml-metal-device.cpp
+index 2c7972b0..baf8a060 100644
+--- a/src/ggml-metal/ggml-metal-device.cpp
++++ b/src/ggml-metal/ggml-metal-device.cpp
+@@ -2386,6 +2386,53 @@ ggml_metal_pipeline_with_params ggml_metal_library_get_pipeline_conv_transpose_1
+     return res;
+ }
+ 
++ggml_metal_pipeline_with_params ggml_metal_library_get_pipeline_conv_1d_implicit(ggml_metal_library_t lib, const ggml_tensor * op) {
++    assert(op->op == GGML_OP_CONV_1D_IMPLICIT);
++
++    GGML_ASSERT(ggml_is_contiguous(op->src[0]));
++    GGML_ASSERT(ggml_is_contiguous(op->src[1]));
++    GGML_ASSERT(op->src[0]->type == GGML_TYPE_BF16);
++    GGML_ASSERT(op->src[1]->type == GGML_TYPE_F32);
++    GGML_ASSERT(op->type         == GGML_TYPE_F32);
++
++    const int32_t K        = ggml_get_op_params_i32(op, 0);
++    const int32_t stride   = ggml_get_op_params_i32(op, 1);
++    const int32_t dilation = ggml_get_op_params_i32(op, 2);
++
++    GGML_ASSERT(K <= INT16_MAX && stride <= INT16_MAX && dilation <= INT16_MAX);
++
++    const bool bc_inp = op->src[0]->ne[0] % 32 != 0;
++    const bool bc_out = op->ne[0] % 64 != 0 || op->ne[1] % 32 != 0;
++
++    char base[256];
++    char name[256];
++
++    snprintf(base, 256, "kernel_conv1d_implicit_bf16");
++    snprintf(name, 256, "%s_bci=%d_bco=%d_k=%d_s=%d_d=%d", base, bc_inp, bc_out, K, stride, dilation);
++
++    ggml_metal_pipeline_with_params res = ggml_metal_library_get_pipeline(lib, name);
++    if (!res.pipeline) {
++        ggml_metal_cv_t cv = ggml_metal_cv_init();
++
++        ggml_metal_cv_set_bool (cv, bc_inp,             FC_CONV_1D_IMPLICIT + 0);
++        ggml_metal_cv_set_bool (cv, bc_out,             FC_CONV_1D_IMPLICIT + 1);
++        ggml_metal_cv_set_int16(cv, (int16_t) K,        FC_CONV_1D_IMPLICIT + 2);
++        ggml_metal_cv_set_int16(cv, (int16_t) stride,   FC_CONV_1D_IMPLICIT + 3);
++        ggml_metal_cv_set_int16(cv, (int16_t) dilation, FC_CONV_1D_IMPLICIT + 4);
++
++        res = ggml_metal_library_compile_pipeline(lib, base, name, cv);
++
++        ggml_metal_cv_free(cv);
++    }
++
++    res.nr0  = 64;
++    res.nr1  = 32;
++    res.nsg  = 4;
++    res.smem = 8192;
++
++    return res;
++}
++
+ ggml_metal_pipeline_with_params ggml_metal_library_get_pipeline_col2im_1d(ggml_metal_library_t lib, const ggml_tensor * op) {
+     assert(op->op == GGML_OP_COL2IM_1D);
+ 
+diff --git a/src/ggml-metal/ggml-metal-device.h b/src/ggml-metal/ggml-metal-device.h
+index 4012b9d5..c4b01bbf 100644
+--- a/src/ggml-metal/ggml-metal-device.h
++++ b/src/ggml-metal/ggml-metal-device.h
+@@ -165,6 +165,7 @@ struct ggml_metal_pipeline_with_params ggml_metal_library_get_pipeline_im2col
+ struct ggml_metal_pipeline_with_params ggml_metal_library_get_pipeline_conv_transpose_1d (ggml_metal_library_t lib, const struct ggml_tensor * op);
+ struct ggml_metal_pipeline_with_params ggml_metal_library_get_pipeline_conv_transpose_2d (ggml_metal_library_t lib, const struct ggml_tensor * op);
+ struct ggml_metal_pipeline_with_params ggml_metal_library_get_pipeline_col2im_1d         (ggml_metal_library_t lib, const struct ggml_tensor * op);
++struct ggml_metal_pipeline_with_params ggml_metal_library_get_pipeline_conv_1d_implicit  (ggml_metal_library_t lib, const struct ggml_tensor * op);
+ struct ggml_metal_pipeline_with_params ggml_metal_library_get_pipeline_snake             (ggml_metal_library_t lib, enum ggml_type type);
+ struct ggml_metal_pipeline_with_params ggml_metal_library_get_pipeline_conv_2d           (ggml_metal_library_t lib, const struct ggml_tensor * op);
+ struct ggml_metal_pipeline_with_params ggml_metal_library_get_pipeline_conv_2d_dw        (ggml_metal_library_t lib, const struct ggml_tensor * op, bool tiled);
+diff --git a/src/ggml-metal/ggml-metal-device.m b/src/ggml-metal/ggml-metal-device.m
+index d1bce8ba..fc735fba 100644
+--- a/src/ggml-metal/ggml-metal-device.m
++++ b/src/ggml-metal/ggml-metal-device.m
+@@ -1666,6 +1666,11 @@ bool ggml_metal_device_supports_op(ggml_metal_device_t dev, const struct ggml_te
+                 op->type == op->src[0]->type &&
+                 ggml_is_contiguous(op->src[0]) &&
+                 ggml_is_contiguous(op);
++        case GGML_OP_CONV_1D_IMPLICIT:
++            return has_simdgroup_mm && has_bfloat &&
++                op->src[0]->type == GGML_TYPE_BF16 && ggml_is_contiguous(op->src[0]) &&
++                op->src[1]->type == GGML_TYPE_F32  && ggml_is_contiguous(op->src[1]) &&
++                op->type == GGML_TYPE_F32;
+         case GGML_OP_CONV_3D:
+             return ggml_is_contiguous(op->src[0]) &&
+                    ggml_is_contiguous(op->src[1]) &&
+diff --git a/src/ggml-metal/ggml-metal-impl.h b/src/ggml-metal/ggml-metal-impl.h
+index 4ffb5a77..f082f810 100644
+--- a/src/ggml-metal/ggml-metal-impl.h
++++ b/src/ggml-metal/ggml-metal-impl.h
+@@ -124,6 +124,7 @@
+ #define FC_FLASH_ATTN_EXT_TENSOR       2200
+ #define FC_LIGHTNING_INDEXER           2200
+ #define FC_MUL_MV_MMA                  2300
++#define FC_CONV_1D_IMPLICIT            2400
+ 
+ // op-specific constants
+ #define OP_FLASH_ATTN_EXT_NQPSG 8
+@@ -676,6 +677,19 @@ typedef struct {
+     uint64_t nb1;
+ } ggml_metal_kargs_conv_transpose_1d;
+ 
++typedef struct {
++    int32_t  IC;
++    int32_t  T;
++    int32_t  K;
++    int32_t  stride;
++    int32_t  dilation;
++    int32_t  pad_left;
++    int32_t  ne00;  // K*IC (reduction length)
++    int32_t  ne0;   // OC
++    int32_t  ne1;   // T_out
++    uint64_t nb01;  // weight row stride in bytes
++} ggml_metal_kargs_conv_1d_implicit;
++
+ typedef struct {
+     int32_t  T_in;
+     int32_t  T_out;
+diff --git a/src/ggml-metal/ggml-metal-ops.cpp b/src/ggml-metal/ggml-metal-ops.cpp
+index 53c98161..40b1768a 100644
+--- a/src/ggml-metal/ggml-metal-ops.cpp
++++ b/src/ggml-metal/ggml-metal-ops.cpp
+@@ -438,6 +438,10 @@ static int ggml_metal_op_encode_impl(ggml_metal_op_t ctx, int idx) {
+             {
+                 n_fuse = ggml_metal_op_col2im_1d(ctx, idx);
+             } break;
++        case GGML_OP_CONV_1D_IMPLICIT:
++            {
++                n_fuse = ggml_metal_op_conv_1d_implicit(ctx, idx);
++            } break;
+         case GGML_OP_CONV_3D:
+             {
+                 n_fuse = ggml_metal_op_conv_3d(ctx, idx);
+@@ -4992,6 +4996,45 @@ int ggml_metal_op_conv_transpose_1d(ggml_metal_op_t ctx, int idx) {
+     return 1;
+ }
+ 
++int ggml_metal_op_conv_1d_implicit(ggml_metal_op_t ctx, int idx) {
++    ggml_tensor * op = ctx->node(idx);
++
++    ggml_metal_library_t lib = ctx->lib;
++    ggml_metal_encoder_t enc = ctx->enc;
++
++    GGML_ASSERT(ggml_nelements(op->src[1]) <= UINT32_MAX);
++
++    ggml_metal_kargs_conv_1d_implicit args = {
++        /*.IC       =*/ (int32_t) op->src[1]->ne[0],
++        /*.T        =*/ (int32_t) op->src[1]->ne[1],
++        /*.K        =*/ ggml_get_op_params_i32(op, 0),
++        /*.stride   =*/ ggml_get_op_params_i32(op, 1),
++        /*.dilation =*/ ggml_get_op_params_i32(op, 2),
++        /*.pad_left =*/ ggml_get_op_params_i32(op, 3),
++        /*.ne00     =*/ (int32_t) op->src[0]->ne[0],
++        /*.ne0      =*/ (int32_t) op->ne[0],
++        /*.ne1      =*/ (int32_t) op->ne[1],
++        /*.nb01     =*/ op->src[0]->nb[1],
++    };
++
++    auto pipeline = ggml_metal_library_get_pipeline_conv_1d_implicit(lib, op);
++
++    ggml_metal_encoder_set_pipeline(enc, pipeline);
++    ggml_metal_encoder_set_bytes   (enc, &args, sizeof(args), 0);
++    ggml_metal_encoder_set_buffer  (enc, ggml_metal_get_buffer_id(op->src[0]), 1);
++    ggml_metal_encoder_set_buffer  (enc, ggml_metal_get_buffer_id(op->src[1]), 2);
++    ggml_metal_encoder_set_buffer  (enc, ggml_metal_get_buffer_id(op),         3);
++
++    ggml_metal_encoder_set_threadgroup_memory_size(enc, pipeline.smem, 0);
++
++    const int nr0 = pipeline.nr0;
++    const int nr1 = pipeline.nr1;
++
++    ggml_metal_encoder_dispatch_threadgroups(enc, (args.ne1 + nr1 - 1)/nr1, (args.ne0 + nr0 - 1)/nr0, 1, 32, pipeline.nsg, 1);
++
++    return 1;
++}
++
+ int ggml_metal_op_col2im_1d(ggml_metal_op_t ctx, int idx) {
+     ggml_tensor * op = ctx->node(idx);
+ 
+diff --git a/src/ggml-metal/ggml-metal-ops.h b/src/ggml-metal/ggml-metal-ops.h
+index 583d1156..39489580 100644
+--- a/src/ggml-metal/ggml-metal-ops.h
++++ b/src/ggml-metal/ggml-metal-ops.h
+@@ -88,6 +88,7 @@ int ggml_metal_op_conv_3d           (ggml_metal_op_t ctx, int idx);
+ int ggml_metal_op_conv_transpose_1d (ggml_metal_op_t ctx, int idx);
+ int ggml_metal_op_conv_transpose_2d (ggml_metal_op_t ctx, int idx);
+ int ggml_metal_op_col2im_1d         (ggml_metal_op_t ctx, int idx);
++int ggml_metal_op_conv_1d_implicit  (ggml_metal_op_t ctx, int idx);
+ int ggml_metal_op_snake_fused       (ggml_metal_op_t ctx, int idx);
+ int ggml_metal_op_upscale           (ggml_metal_op_t ctx, int idx);
+ int ggml_metal_op_pad               (ggml_metal_op_t ctx, int idx);
+diff --git a/src/ggml-metal/kernels/conv.metal b/src/ggml-metal/kernels/conv.metal
+index a5d5aa9d..769bb3c6 100644
+--- a/src/ggml-metal/kernels/conv.metal
++++ b/src/ggml-metal/kernels/conv.metal
+@@ -722,3 +722,214 @@ kernel void kernel_conv_3d<half>(
+     device       char  * dst,
+     uint3 tgpig[[threadgroup_position_in_grid]],
+     uint3 tpitg[[thread_position_in_threadgroup]]);
++
++#if defined(GGML_METAL_HAS_BF16)
++constant bool  FC_conv_1d_implicit_bc_inp   [[function_constant(FC_CONV_1D_IMPLICIT + 0)]];
++constant bool  FC_conv_1d_implicit_bc_out   [[function_constant(FC_CONV_1D_IMPLICIT + 1)]];
++constant short FC_conv_1d_implicit_K        [[function_constant(FC_CONV_1D_IMPLICIT + 2)]];
++constant short FC_conv_1d_implicit_stride   [[function_constant(FC_CONV_1D_IMPLICIT + 3)]];
++constant short FC_conv_1d_implicit_dilation [[function_constant(FC_CONV_1D_IMPLICIT + 4)]];
++
++// implicit-GEMM 1D convolution: y[OC, T_out] = w[K*IC, OC]^T * im2col(x)[K*IC, T_out]
++// derived from the simdgroup (non-tensor) kernel_mul_mm instantiated as bf16 x f32:
++// same 64x32 tiles, threadgroup layout, accumulation order and output store; only the
++// src1 (B) tile loader gathers x[IC, T] with stride/dilation/padding instead of reading
++// im2col rows, so the result matches mul_mat(w, im2col(x)) on the same device
++kernel void kernel_conv1d_implicit_bf16(
++        constant ggml_metal_kargs_conv_1d_implicit & args,
++        device const char * src0,
++        device const char * src1,
++        device       char * dst,
++        threadgroup  char * shmem [[threadgroup(0)]],
++        uint3  tgpig[[threadgroup_position_in_grid]],
++        ushort tiitg[[thread_index_in_threadgroup]],
++        ushort sgitg[[simdgroup_index_in_threadgroup]]) {
++
++    threadgroup bfloat * sa = (threadgroup bfloat *)(shmem);
++    threadgroup bfloat * sb = (threadgroup bfloat *)(shmem + 4096);
++
++    constexpr int NR0 = 64;
++    constexpr int NR1 = 32;
++
++    constexpr int NK  = 32;
++    constexpr int NL0 = NK/16;
++    constexpr int NL1 = NK/8;
++
++    const int K        = FC_conv_1d_implicit_K;
++    const int stride   = FC_conv_1d_implicit_stride;
++    const int dilation = FC_conv_1d_implicit_dilation;
++
++    const int r0 = tgpig.y*NR0;
++    const int r1 = tgpig.x*NR1;
++
++    // if this block is of 64x32 shape or smaller
++    const short nr0 = (args.ne0 - r0 < NR0) ? (args.ne0 - r0) : NR0;
++    const short nr1 = (args.ne1 - r1 < NR1) ? (args.ne1 - r1) : NR1;
++
++    // a thread shouldn't load data outside of the matrix
++    const short lr0 = ((short)tiitg/NL0) < nr0 ? ((short)tiitg/NL0) : nr0 - 1; // 0 .. 63
++    const short lr1 = ((short)tiitg/NL1) < nr1 ? ((short)tiitg/NL1) : nr1 - 1; // 0 .. 31
++
++    const short il0 = (tiitg % NL0);
++
++    // weights: 16 consecutive bf16 per thread per K step (bf16 path of kernel_mul_mm, nl = 1)
++    device const bfloat4x4 * x = (device const bfloat4x4 *)(src0 + args.nb01*(r0 + lr0)) + il0;
++
++    const short iy = 8*(tiitg % NL1);
++
++    // output time step handled by this thread's B column
++    device const float * xs = (device const float *) src1;
++    const int tbase = (r1 + lr1)*stride - args.pad_left;
++
++    simdgroup_bfloat8x8 ma[4];
++    simdgroup_bfloat8x8 mb[2];
++
++    simdgroup_float8x8 mc[8];
++
++    for (short i = 0; i < 8; i++){
++        mc[i] = make_filled_simdgroup_matrix<float, 8>(0.f);
++    }
++
++    for (int loop_k = 0; loop_k < args.ne00; loop_k += NK) {
++        // load data and store to threadgroup memory
++        if (FC_conv_1d_implicit_bc_inp) {
++            threadgroup_barrier(mem_flags::mem_threadgroup);
++
++            for (short i = 0; i < 16; i++) {
++                const short sx = 2*il0 + i/8;
++                const short sy = (tiitg/NL0)/8;
++
++                const short lx = (tiitg/NL0)%8;
++                const short ly = i%8;
++
++                const short ib = 8*sx + sy;
++
++                *(sa + 64*ib + 8*ly + lx) = loop_k + 16*il0 + i < args.ne00 ? *((device bfloat *) x + i) : (bfloat) 0;
++            }
++        } else {
++            const bfloat4x4 temp_a = *x;
++
++            threadgroup_barrier(mem_flags::mem_threadgroup);
++
++            FOR_UNROLL (short i = 0; i < 16; i++) {
++                const short sx = 2*il0 + i/8;
++                const short sy = (tiitg/NL0)/8;
++
++                const short lx = (tiitg/NL0)%8;
++                const short ly = i%8;
++
++                const short ib = 8*sx + sy;
++
++                *(sa + 64*ib + 8*ly + lx) = temp_a[i/4][i%4];
++            }
++        }
++
++        {
++            // gather the 8 reduction elements r = loop_k + iy + i, r = ic*K + k
++            const int rb = loop_k + iy;
++
++            int ic = rb / K;
++            int k  = rb - ic*K;
++
++            bfloat2x4 temp_b;
++
++            FOR_UNROLL (short i = 0; i < 8; i++) {
++                const int ti = tbase + k*dilation;
++
++                float v = 0.0f;
++                if (rb + i < args.ne00 && ti >= 0 && ti < args.T) {
++                    v = xs[(uint) ic + (uint) args.IC*(uint) ti];
++                }
++                temp_b[i/4][i%4] = (bfloat) v;
++
++                if (++k == K) {
++                    k = 0;
++                    ++ic;
++                }
++            }
++
++            const short sx = (tiitg%NL1);
++            const short sy = (tiitg/NL1)/8;
++
++            const short ly = (tiitg/NL1)%8;
++
++            const short ib = 4*sx + sy;
++
++            *(threadgroup bfloat2x4 *)(sb + 64*ib + 8*ly) = temp_b;
++        }
++
++        x += 2;
++
++        threadgroup_barrier(mem_flags::mem_threadgroup);
++
++        // load matrices from threadgroup memory and conduct outer products
++        threadgroup const bfloat * lsma = (sa + 4*64*(sgitg%2));
++        threadgroup const bfloat * lsmb = (sb + 2*64*(sgitg/2));
++
++        FOR_UNROLL (short ik = 0; ik < NK/8; ik++) {
++            simdgroup_barrier(mem_flags::mem_none);
++
++            FOR_UNROLL (short i = 0; i < 4; i++) {
++                simdgroup_load(ma[i], lsma + 64*i, 8, 0, false);
++            }
++
++            simdgroup_barrier(mem_flags::mem_none);
++
++            FOR_UNROLL (short i = 0; i < 2; i++) {
++                simdgroup_load(mb[i], lsmb + 64*i, 8, 0, false);
++            }
++
++            simdgroup_barrier(mem_flags::mem_none);
++
++            FOR_UNROLL (short i = 0; i < 8; i++){
++                simdgroup_multiply_accumulate(mc[i], mb[i/4], ma[i%4], mc[i]);
++            }
++
++            lsma += 8*64;
++            lsmb += 4*64;
++        }
++    }
++
++    if (!FC_conv_1d_implicit_bc_out || (r0 + NR0 <= args.ne0 && r1 + NR1 <= args.ne1)) {
++        // if no bounds checks on the output are needed, we can directly write to device memory
++        device float * C = (device float *) dst +
++            (r0 + 32*(sgitg &  1)) + \
++            (uint64_t)(r1 + 16*(sgitg >> 1)) * args.ne0;
++
++        for (short i = 0; i < 8; i++) {
++            simdgroup_store(mc[i], C + 8*(i%4) + 8*args.ne0*(i/4), args.ne0, 0, false);
++        }
++    } else {
++        // block is smaller than 64x32, we should avoid writing data outside of the matrix
++        threadgroup_barrier(mem_flags::mem_threadgroup);
++
++        threadgroup float * temp_str = ((threadgroup float *) shmem) + 32*(sgitg&1) + (16*(sgitg >> 1))*NR0;
++
++        for (short i = 0; i < 8; i++) {
++            simdgroup_store(mc[i], temp_str + 8*(i%4) + 8*NR0*(i/4), NR0, 0, false);
++        }
++
++        threadgroup_barrier(mem_flags::mem_threadgroup);
++
++        if (sgitg == 0) {
++            for (int j = tiitg; j < nr1; j += NR1) {
++                device float  * D  = (device float  *) dst + r0 + (uint64_t)(r1 + j)*args.ne0;
++                device float4 * D4 = (device float4 *) D;
++
++                threadgroup float  * C  = temp_str + (j*NR0);
++                threadgroup float4 * C4 = (threadgroup float4 *) C;
++
++                int i = 0;
++                for (; i < nr0/4; i++) {
++                    *(D4 + i) = *(C4 + i);
++                }
++
++                i *= 4;
++                for (; i < nr0; i++) {
++                    *(D + i) = *(C + i);
++                }
++            }
++        }
++    }
++}
++#endif
+diff --git a/src/ggml.c b/src/ggml.c
+index 01dc8d05..4d9bfbaa 100644
+--- a/src/ggml.c
++++ b/src/ggml.c
+@@ -1063,6 +1063,7 @@ static const char * GGML_OP_NAME[GGML_OP_COUNT] = {
+     "CONV_3D",
+     "CONV_2D_DW",
+     "CONV_TRANSPOSE_2D",
++    "CONV_1D_IMPLICIT",
+     "POOL_1D",
+     "POOL_2D",
+     "POOL_2D_BACK",
+@@ -1112,7 +1113,7 @@ static const char * GGML_OP_NAME[GGML_OP_COUNT] = {
+     "GLU",
+ };
+ 
+-static_assert(GGML_OP_COUNT == 101, "GGML_OP_COUNT != 101");
++static_assert(GGML_OP_COUNT == 102, "GGML_OP_COUNT != 102");
+ 
+ static const char * GGML_OP_SYMBOL[GGML_OP_COUNT] = {
+     "none",
+@@ -1178,6 +1179,7 @@ static const char * GGML_OP_SYMBOL[GGML_OP_COUNT] = {
+     "conv_3d(x)",
+     "conv_2d_dw(x)",
+     "conv_transpose_2d(x)",
++    "conv_1d_implicit(w,x)",
+     "pool_1d(x)",
+     "pool_2d(x)",
+     "pool_2d_back(x)",
+@@ -1227,7 +1229,7 @@ static const char * GGML_OP_SYMBOL[GGML_OP_COUNT] = {
+     "glu(x)",
+ };
+ 
+-static_assert(GGML_OP_COUNT == 101, "GGML_OP_COUNT != 101");
++static_assert(GGML_OP_COUNT == 102, "GGML_OP_COUNT != 102");
+ 
+ static_assert(GGML_OP_POOL_COUNT == 2, "GGML_OP_POOL_COUNT != 2");
+ 
+@@ -5082,6 +5084,39 @@ struct ggml_tensor * ggml_conv_transpose_2d_p0(
+     return result;
+ }
+ 
++// ggml_conv_1d_implicit
++
++struct ggml_tensor * ggml_conv_1d_implicit(
++        struct ggml_context * ctx,
++        struct ggml_tensor  * w,
++        struct ggml_tensor  * x,
++        int                   K,
++        int                   stride,
++        int                   dilation,
++        int                   pad_left) {
++    GGML_ASSERT(w->type == GGML_TYPE_BF16);
++    GGML_ASSERT(x->type == GGML_TYPE_F32);
++    GGML_ASSERT(ggml_is_contiguous(w) && ggml_is_matrix(w));
++    GGML_ASSERT(ggml_is_contiguous(x) && ggml_is_matrix(x));
++    GGML_ASSERT(K > 0 && stride > 0 && dilation > 0 && pad_left >= 0);
++    GGML_ASSERT(x->ne[0] * K == w->ne[0]);
++
++    const int64_t T     = x->ne[1];
++    const int64_t T_out = (T + pad_left - (int64_t) dilation*(K - 1) - 1)/stride + 1;
++    GGML_ASSERT(T_out > 0);
++
++    struct ggml_tensor * result = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, w->ne[1], T_out);
++
++    int32_t params[] = { K, stride, dilation, pad_left };
++    ggml_set_op_params(result, params, sizeof(params));
++
++    result->op     = GGML_OP_CONV_1D_IMPLICIT;
++    result->src[0] = w;
++    result->src[1] = x;
++
++    return result;
++}
++
+ // ggml_pool_*
+ 
+ static int64_t ggml_calc_pool_output_size(int64_t ins, int ks, int s, float p) {
+diff --git a/tests/test-backend-ops.cpp b/tests/test-backend-ops.cpp
+index 5e2db805..9055420d 100644
+--- a/tests/test-backend-ops.cpp
++++ b/tests/test-backend-ops.cpp
+@@ -6509,6 +6509,55 @@ struct test_conv_transpose_1d : public test_case {
+     }
+ };
+ 
++// GGML_OP_CONV_1D_IMPLICIT
++struct test_conv_1d_implicit : public test_case {
++    const int64_t IC;
++    const int64_t OC;
++    const int     K;
++    const int     stride;
++    const int     dilation;
++    const int     pad_left;
++    const int64_t T;
++
++    std::string vars() override {
++        return VARS_TO_STR7(IC, OC, K, stride, dilation, pad_left, T);
++    }
++
++    test_conv_1d_implicit(int64_t IC = 64, int64_t OC = 64, int K = 7, int stride = 1, int dilation = 1, int pad_left = 6, int64_t T = 37)
++        : IC(IC), OC(OC), K(K), stride(stride), dilation(dilation), pad_left(pad_left), T(T) {}
++
++    ggml_tensor * build_graph(ggml_context * ctx) override {
++        ggml_tensor * w = ggml_new_tensor_2d(ctx, GGML_TYPE_BF16, K*IC, OC);
++        ggml_set_name(w, "w");
++
++        ggml_tensor * x = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, IC, T);
++        ggml_set_name(x, "x");
++
++        ggml_tensor * out = ggml_conv_1d_implicit(ctx, w, x, K, stride, dilation, pad_left);
++        ggml_set_name(out, "out");
++
++        return out;
++    }
++
++    void initialize_tensors(ggml_context * ctx) override {
++        std::default_random_engine gen(std::random_device{}());
++        std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
++
++        for (ggml_tensor * t = ggml_get_first_tensor(ctx); t != NULL; t = ggml_get_next_tensor(ctx, t)) {
++            if (t->type == GGML_TYPE_F32) {
++                // x: BF16-representable values, as produced by the codec encoder
++                std::vector<float> data(ggml_nelements(t));
++                for (float & v : data) {
++                    v = ggml_bf16_to_fp32(ggml_fp32_to_bf16(dist(gen)));
++                }
++                ggml_backend_tensor_set(t, data.data(), 0, data.size()*sizeof(float));
++            } else {
++                init_tensor_uniform(t);
++            }
++        }
++    }
++};
++
+ // GGML_OP_COL2IM_1D
+ struct test_col2im_1d : public test_case {
+     const ggml_type type;
+@@ -10184,6 +10233,17 @@ static std::vector<std::unique_ptr<test_case>> make_test_cases_eval() {
+     test_cases.emplace_back(new test_conv_transpose_1d({3,2,1,1}, {3,1,2,1}, 1, 0, 1));
+     test_cases.emplace_back(new test_conv_transpose_1d({2,1,1,1}, {3,1,1,1}, 1, 0, 1));
+ 
++    // codec reference encoder shapes: (IC, OC, K, stride, dilation, pad_left)
++    for (int64_t T : {37, 1000, 4097}) {
++        test_cases.emplace_back(new test_conv_1d_implicit(1, 64, 7, 1, 1, 6, T));
++        for (int d : {1, 3, 9}) {
++            test_cases.emplace_back(new test_conv_1d_implicit( 64,  64, 7, 1, d, 6*d, T));
++            test_cases.emplace_back(new test_conv_1d_implicit(128, 128, 7, 1, d, 6*d, T));
++        }
++        test_cases.emplace_back(new test_conv_1d_implicit( 64, 128, 4, 2, 1, 2, T));
++        test_cases.emplace_back(new test_conv_1d_implicit(128, 256, 8, 4, 1, 4, T));
++    }
++
+     for (ggml_type type : {GGML_TYPE_F32, GGML_TYPE_F16, GGML_TYPE_BF16}) {
+         // ConvTranspose1d expressed as mul_mat + col2im (DAC decoder upsampling)
+         test_cases.emplace_back(new test_col2im_1d(type, 16, 32, 197, 8, 0)); // kernel = 2*stride

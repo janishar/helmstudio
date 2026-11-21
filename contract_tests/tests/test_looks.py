@@ -286,7 +286,7 @@ def test_look_rules(uk, pics, loras):
     r = uk.post(LIB, json=elem | {"loras": [lora_ref(p["id"], 1)]})
     assert detail(r, 422) == "loras: an element has no LoRAs"
     r = uk.post(LIB, json=elem | {"from_take": {"take_id": pics[0]}})
-    assert detail(r, 422) == "from_take makes looks only"
+    assert detail(r, 422) == "from_take makes looks and voices only"
     assert look(uk, "Lora only", loras=[lora_ref(p["id"], 1.5)])["needs"] == ["lora"]
 
 

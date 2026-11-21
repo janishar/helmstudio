@@ -249,3 +249,31 @@ def concat_list(paths: list[Path], durations: list[str | None] | None = None) ->
     included), leaving a gap in the picture's timestamps (an irregular frame rate)."""
     return "".join("file '" + str(p).replace("'", "'\\''") + "'\n" + (f"duration {d}\n" if d else "")
                    for p, d in zip(paths, durations or [None] * len(paths)))  # fmt: skip
+
+
+_SENTENCE = re.compile(r"(?<=[.!?…。！？])\s+|(?<=[。！？])")
+_CUTS = ",，、;；:："  # a long sentence is cut after one of these (or at a space): Chinese and Japanese have no spaces
+
+
+def pieces(text: str, limit: int) -> list[str]:
+    """Speech text (the voice packs) split on sentence ends and packed into pieces of at most `limit` characters; a longer sentence is cut
+    at its last space (or comma, semicolon or colon, CJK ones too) before the limit, else hard."""
+    out, cur = [], ""
+    for sentence in (s.strip() for s in _SENTENCE.split(text.strip())):
+        if len(sentence) > limit:
+            out, cur = [*out, cur] if cur else out, ""
+            while len(sentence) > limit:
+                cut = max(
+                    sentence.rfind(" ", 0, limit),
+                    *(sentence.rfind(c, 0, limit - 1) + 1 for c in _CUTS),
+                )
+                cut = cut if cut > 0 else limit
+                out.append(sentence[:cut].strip())
+                sentence = sentence[cut:].strip()
+        if not sentence:
+            continue
+        if cur and len(cur) + 1 + len(sentence) > limit:
+            out, cur = [*out, cur], sentence
+        else:
+            cur = f"{cur} {sentence}" if cur else sentence
+    return [*out, cur] if cur else out

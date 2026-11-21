@@ -1,0 +1,16 @@
+diff --git a/src/ggml-cuda/CMakeLists.txt b/src/ggml-cuda/CMakeLists.txt
+index 297d9ffc..369f4edc 100644
+--- a/src/ggml-cuda/CMakeLists.txt
++++ b/src/ggml-cuda/CMakeLists.txt
+@@ -193,7 +193,10 @@ if (CUDAToolkit_FOUND)
+ 
+     set(CUDA_CXX_FLAGS "")
+ 
+-    set(CUDA_FLAGS -use_fast_math -extended-lambda)
++    # Frozen BF16 modules still require accurate F32 opmath between casts.
++    # Fast transcendental/division substitutions change BF16 rounding decisions
++    # in SiLU/GLU/Snake and softmax relative to the authentic PyTorch recipe.
++    set(CUDA_FLAGS -extended-lambda)
+ 
+     if (GGML_CUDA_DEBUG)
+         list(APPEND CUDA_FLAGS -lineinfo)
