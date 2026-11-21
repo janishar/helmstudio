@@ -16,7 +16,7 @@
           "precisions": [
             "fp8"
           ],
-          "title": "Base FP8 (NVIDIA)",
+          "title": "Base fp8",
           "dir": "Qwen-Image-2.1-FP8",
           "source": {
             "repo": "Qwen/Qwen-Image-2.1",

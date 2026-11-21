@@ -114,7 +114,7 @@ download (for example `1,3,5-7`; empty means none). For any licence that must be
 and link and asks before queuing; only a typed `y` accepts it. `--all-missing` picks every missing or partial variant
 and still asks for each licence. Progress shows in `helm models`.
 
-The `native` profile and image (SGLang, about 28 GB, the longest build) is only needed for MiniMax H3 video (fp8) and
+The `native` profile and image (SGLang, about 28 GB, the longest build) is only needed for MiniMax H3 video (base-fp8) and
 ZONOS3. If you are not installing either, start with `docker compose up -d` (no `--profile native`).
 
 ## 6. See it in the app
@@ -138,7 +138,7 @@ worse for FP8 than for int8 ConvRot in every case; the variant names say which o
 | Qwen Image 2.1 | `base-fp8` | unsloth FP8 transformer and text encoder, bf16 VAE (configs from the official repo) | 17.2 GB (official bf16: 33.1) |
 | | `turbo-fp8` | unsloth Turbo FP8 transformer; text encoder and VAE shared with `base-fp8` | 7.1 GB more (official: 14.2) |
 | MiniMax H3 Image | `base-fp8` | unsloth FP8 DiT (20.3 GB), Comfy-Org int8 ConvRot text encoder (27.1 GB), the official VAE and configs (2.4 GB); the official NVFP4 prompt enhancer (17.9 GB, downloaded with it into its own folder `MiniMax-H3-Image-PE`, kept on delete) | 67.7 GB (49.8 + 17.9) |
-| MiniMax H3 (video) | `fp8` | Comfy-Org pruned FP8 FL2VA and Ref2VA DiTs (2 × 21.0 GB), Comfy-Org int8 ConvRot text encoder (27.1 GB), the official VAEs, configs and tokenizers of both partitions (22.1 GB), run by SGLang 0.5.23 | 91.2 GB (official: 210.3) |
+| MiniMax H3 (video) | `base-fp8` | Comfy-Org pruned FP8 FL2VA and Ref2VA DiTs (2 × 21.0 GB), Comfy-Org int8 ConvRot text encoder (27.1 GB), the official VAEs, configs and tokenizers of both partitions (22.1 GB), run by SGLang 0.5.23 | 91.2 GB (official: 210.3) |
 | ZONOS3-Mini | `mini` (the official one) | the official GGUF q8_0 set, already int8: the same files on the Mac and here, run by a CUDA build of zonos3-server | 1.2 GB |
 
 A later phase adds LTX-2.5 (FP8, int8 ConvRot for dev). Qwen3-TTS stays on its
@@ -159,7 +159,7 @@ docker compose --profile native up -d        # needs secrets/nats_runner_<h>_nat
 docker compose logs -f runner-native
 ```
 
-**MiniMax H3 video (`fp8`) needs the native runner too**, and the whole card. Its generate starts `sglang serve` (the
+**MiniMax H3 video (`base-fp8`) needs the native runner too**, and the whole card. Its generate starts `sglang serve` (the
 `native` target's `/opt/sglang`, its own Python and torch, never the torch runner's) as a child of the run: one
 server per run on 127.0.0.1, killed after it, so nothing stays in VRAM. It loads the partition the run needs (FL2VA
 for text or frames to video, Ref2VA for references) with the FP8 DiT and the int8 text encoder as weight overrides,

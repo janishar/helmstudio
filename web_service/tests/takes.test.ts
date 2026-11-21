@@ -110,6 +110,11 @@ describe("labels", () => {
     expect(subLine(take({ source: "upload", made_with: null }))).toBe("Upload");
     expect(templateLine(madeWith)).toBe("Qwen Image · Base · int8");
     expect(templateLine({ ...madeWith, workflow_title: "Echo", model: null })).toBe("Echo");
+    const fp8 = {
+      ...madeWith,
+      model: { ...madeWith.model!, variant: "base-fp8", precision: "fp8" },
+    };
+    expect(templateLine(fp8)).toBe("Qwen Image · Base · fp8");
   });
   it("shows size and seed when known", () => {
     expect(sizeSeed(take())).toBe("2752 × 1536 · 43");

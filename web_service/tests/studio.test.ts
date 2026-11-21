@@ -27,6 +27,8 @@ import {
   fields,
   graphOrder,
   megapixelsOf,
+  pretty,
+  prettyModel,
   queueInputs,
   readValue,
   sections,
@@ -568,5 +570,18 @@ describe("the progress strip", () => {
     expect(pinnedNote(run({ status: "running", unloads_pinned }))).toBe("");
     expect(pinnedNote(run({ status: "queued" }))).toBe("");
     expect(pinnedNote(undefined)).toBe("");
+  });
+});
+
+describe("pretty", () => {
+  it("shows enum values as words, ids as they are", () => {
+    expect(
+      ["base", "custom_voice", "int8", "base-fp8", "turbo-fp8", "en-GB", "stage1"].map(pretty),
+    ).toEqual(["Base", "Custom voice", "int8", "Base fp8", "Turbo fp8", "en-GB", "stage1"]);
+  });
+  it("shows a variant's precision once", () => {
+    expect(prettyModel(["base-fp8", "fp8"])).toEqual(["Base", "fp8"]);
+    expect(prettyModel(["base", "int8"])).toEqual(["Base", "int8"]);
+    expect(prettyModel(["turbo-fp8"])).toEqual(["Turbo fp8"]);
   });
 });

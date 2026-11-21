@@ -10,7 +10,7 @@ runtimes:
   torch: {env: torch, devices: [mps, cuda]}   # Linux + NVIDIA from M6 (packs/README.md "CUDA")
 model:
   help: Which weights to load and at what precision.
-  variant: {label: Variant, help: "Turbo: 8 fixed steps, much faster."}
+  variant: {label: Variant, help: "Turbo: 8 fixed steps, much faster. fp8: smaller community weights, NVIDIA hosts only."}
   precision:
     label: Precision
     default: int8
@@ -38,7 +38,7 @@ variants:
   # the official repos. Byte counts from the HF API at these revisions (source: all of the variant's files).
   base-fp8:
     dir: Qwen-Image-2.1-FP8
-    title: Base FP8 (NVIDIA)
+    title: Base fp8
     precision: [fp8]
     component_precision: {transformer: [fp8], text_encoder: [fp8]}
     devices: [cuda]
@@ -55,7 +55,7 @@ variants:
          gated: false, bytes: 17192916808}
   turbo-fp8:
     dir: Qwen-Image-2.1-Turbo-FP8
-    title: Turbo FP8 (NVIDIA)
+    title: Turbo fp8
     precision: [fp8]
     component_precision: {transformer: [fp8], text_encoder: [fp8]}
     devices: [cuda]

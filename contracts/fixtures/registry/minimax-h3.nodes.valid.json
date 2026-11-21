@@ -157,8 +157,9 @@
           "default": "base",
           "enum": [
             "base",
-            "fp8"
-          ]
+            "base-fp8"
+          ],
+          "help": "Base: Macs only. fp8: smaller community weights, NVIDIA hosts only."
         },
         {
           "name": "precision",
@@ -169,7 +170,7 @@
             "int8",
             "fp8"
           ],
-          "help": "Base: stored bf16; the h3 binary quantizes the transformer to int8 at load on M5 (other Macs keep bf16). FP8 (NVIDIA): fp8, as stored."
+          "help": "Base: stored bf16; the h3 binary quantizes the transformer to int8 at load on M5 (other Macs keep bf16). Base fp8: fp8, as stored."
         }
       ],
       "inputs": [],

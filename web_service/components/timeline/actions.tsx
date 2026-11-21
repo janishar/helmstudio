@@ -27,7 +27,7 @@ import {
   fields as fieldsOf,
   isRef,
   isSpan,
-  pretty,
+  prettyModel,
   rawsFrom,
   readValue,
   toRaw,
@@ -371,7 +371,7 @@ function ActionForm({
       <div className="flex flex-wrap items-center gap-2">
         {model.length > 0 && (
           <span className="chip bevel rounded-[10px]" title={model[0].nodeHelp}>
-            {[model[0].nodeTitle, ...model.map((f) => pretty(String(raw(f))))].join(" · ")}
+            {[model[0].nodeTitle, ...prettyModel(model.map((f) => String(raw(f))))].join(" · ")}
           </span>
         )}
         {tl.session_id && (

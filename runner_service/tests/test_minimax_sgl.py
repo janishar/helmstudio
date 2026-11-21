@@ -1,4 +1,4 @@
-"""The minimax_h3 fp8 variant (SGLang on CUDA, packs/minimax_h3/sgl.py) without a GPU: SGLang's canvas and length
+"""The minimax_h3 base-fp8 variant (SGLang on CUDA, packs/minimax_h3/sgl.py) without a GPU: SGLang's canvas and length
 rules, the request a run's inputs map to, and generate against a fake `sglang serve` (a script that serves the
 /v1/videos API on its --port): argv, progress, the MP4, refusals, a failed job and cancel."""
 
@@ -99,15 +99,15 @@ def test_a_runs_inputs_map_onto_the_canonical_request():
 def test_fp8_is_published_on_cuda_only_and_refuses_speed_fast(monkeypatch):
     (p,) = [p for p, _ in pack.for_env("native") if p.spec["id"] == "minimax-h3"]
     monkeypatch.setattr(models, "device", lambda p: "cuda")
-    assert models.runs_here(p, "fp8") and not models.runs_here(p, "base")
+    assert models.runs_here(p, "base-fp8") and not models.runs_here(p, "base")
     monkeypatch.setattr(models, "device", lambda p: "mps")
-    assert models.runs_here(p, "base") and not models.runs_here(p, "fp8")
+    assert models.runs_here(p, "base") and not models.runs_here(p, "base-fp8")
 
     class M:
-        variant = "fp8"
+        variant = "base-fp8"
 
     assert native.check_generate({"speed": "fast"}, {"prompt"}, {"model": M()}) == (
-        ": speed fast is h3's (Mac); the FP8 (NVIDIA) variant runs exact only"
+        ": speed fast is h3's (Mac); the Base fp8 variant runs exact only"
     )
     assert native.check_generate({"speed": "exact"}, {"prompt"}, {"model": M()}) is None
     M.variant = "base"
@@ -129,7 +129,7 @@ def fake(tmp_path, monkeypatch):
     folder = tmp_path / "MiniMax-H3-FP8"
 
     class Model:
-        variant = "fp8"
+        variant = "base-fp8"
 
         def folder(self, component=None):
             return folder
@@ -204,9 +204,7 @@ def test_generate_serves_the_partition_and_returns_its_video(fake, monkeypatch):
 
 def test_generate_refusals_failures_and_cancel(fake, monkeypatch):
     ctx, inputs, params, log, _ = fake
-    with pytest.raises(
-        RunError, match="^generate: the FP8 \\(NVIDIA\\) variant makes 107 to 345 frames"
-    ):
+    with pytest.raises(RunError, match="^generate: the Base fp8 variant makes 107 to 345 frames"):
         native.generate(ctx, params, inputs | {"duration": {"frames": 22, "fps": 24}})
     assert not log.exists()  # refused before the server starts
     monkeypatch.setenv("SGLANG_FAKE_MODE", "refuse")

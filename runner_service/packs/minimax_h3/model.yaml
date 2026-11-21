@@ -12,14 +12,14 @@ id: minimax-h3
 family: minimax-h3
 title: MiniMax H3
 runtimes:
-  native: {env: native, devices: [mps, cuda]}   # base: h3 on Metal (M5, GOTCHAS.md); fp8: SGLang on CUDA (sgl.py)
+  native: {env: native, devices: [mps, cuda]}   # base: h3 on Metal (M5, GOTCHAS.md); base-fp8: SGLang on CUDA (sgl.py)
 model:
   help: "The weights to load: FL2VA for text and frames to video, Ref2VA for references (one folder holds both)."
-  variant: {label: Variant}
+  variant: {label: Variant, help: "Base: Macs only. fp8: smaller community weights, NVIDIA hosts only."}
   precision:
     label: Precision
     default: int8
-    help: "Base: stored bf16; the h3 binary quantizes the transformer to int8 at load on M5 (other Macs keep bf16). FP8 (NVIDIA): fp8, as stored."
+    help: "Base: stored bf16; the h3 binary quantizes the transformer to int8 at load on M5 (other Macs keep bf16). Base fp8: fp8, as stored."
 media: [video, audio]
 licences:
   minimax-h3-community: {title: MiniMax H3 Community License, url: https://huggingface.co/MiniMaxAI/MiniMax-H3}
@@ -30,9 +30,9 @@ variants:
   # Comfy-Org's int8 ConvRot text encoder, over the official repo's skeleton: every config, tokenizer and code file
   # (no safetensors but both partitions' VAEs; SGLang reads the partition by --model-variant). Byte counts from the
   # HF API at these revisions (source: all of the variant's files).
-  fp8:
+  base-fp8:
     dir: MiniMax-H3-FP8
-    title: FP8 (NVIDIA)
+    title: Base fp8
     precision: [fp8]
     component_precision: {transformer_fl2va: [fp8], transformer_ref2va: [fp8]}   # the text encoder stays int8
     devices: [cuda]

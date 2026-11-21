@@ -48,7 +48,7 @@ Last full contract suite on the final M7 code: see the last M7 commit message (p
 
 ## M9 phase 1 notes: Qwen Image FP8 variants
 
-- `base-fp8` / `turbo-fp8` (titles "Base FP8 (NVIDIA)", "Turbo FP8 (NVIDIA)"), `devices: [cuda]`, `precision:
+- `base-fp8` / `turbo-fp8` (titles "Base fp8", "Turbo fp8"), `devices: [cuda]`, `precision:
   [fp8]`, transformer and text encoder `[fp8]`, VAE bf16. base-fp8: configs, processor, scheduler from
   Qwen/Qwen-Image-2.1 @ 790c926 + unsloth/Qwen-Image-2.1-FP8 @ bb21a8b (transformer, text encoder, bf16 VAE).
   turbo-fp8: configs, processor, scheduler from Qwen/Qwen-Image-2.1-Turbo @ fc13ba1 (its `model_index.json` carries
@@ -93,7 +93,7 @@ Last full contract suite on the final M7 code: see the last M7 commit message (p
 
 ## M9 phase 1 notes: MiniMax H3 Image FP8 variant
 
-- `base-fp8` ("Base FP8 (NVIDIA)", `devices: [cuda]`, `precision: [fp8]`, transformer `[fp8]`; the text encoder
+- `base-fp8` ("Base fp8", `devices: [cuda]`, `precision: [fp8]`, transformer `[fp8]`; the text encoder
   keeps its `[int8]`, the VAE fp32, the enhancer the official NVFP4 → int8 in its own dir). Folder
   `MiniMax-H3-Image-FP8`: configs, tokenizer, processor, scheduler, VAE from MiniMaxAI/MiniMax-H3-Image @ 8ced600 +
   unsloth/MiniMax-H3-Image-FP8 @ cae8483 (the DiT) + Comfy-Org/MiniMax-H3-Image @ 89c6350 (the int8 ConvRot text
@@ -222,7 +222,7 @@ Last full contract suite on the final M7 code: see the last M7 commit message (p
 
 ## M9 phase 2 notes: MiniMax H3 video on CUDA (code only, not run on the VM)
 
-- New variant `fp8` ("FP8 (NVIDIA)", `devices: [cuda]`, `precision: [fp8]`, DiTs `[fp8]`, text encoder int8);
+- New variant `base-fp8` ("Base fp8"; `fp8` until the 2026-11-21 label pass), `devices: [cuda]`, `precision: [fp8]`, DiTs `[fp8]`, text encoder int8);
   `base` now says `devices: [mps]` and the runtime `[mps, cuda]`. Folder `MiniMax-H3-FP8` (91.2 GB): the official
   MiniMaxAI/MiniMax-H3 @ 1cc7549 skeleton (every json/txt/py/yaml, both partitions' VAEs; 22.1 GB) + Comfy-Org/MiniMax-H3
   @ 4b53a35 (pruned FP8 FL2VA and Ref2VA DiTs, int8 ConvRot text encoder; 69.1 GB). New licence `minimax-h3-community`
@@ -242,8 +242,8 @@ Last full contract suite on the final M7 code: see the last M7 commit message (p
   of its six aspects, `speed: fast` (check_generate). The h3 path is unchanged. Tests: tests/test_minimax_sgl.py
   (fake server). peak_gb unchanged (host RAM; VRAM not budgeted, GOTCHAS.md).
 - **VM step (not done here):** `docker compose --profile native build` (watch: the JIT ConvRot ops may need nvcc;
-  the lock has the `nvidia-cuda-nvcc` wheel, not on PATH), the owner accepts `minimax-h3-community` and downloads `fp8` (Models or `helm model
-  download minimax-h3 --host gcp --variant fp8`, MODELS_MODE=rw), torch runner unloaded, then runs at small size:
+  the lock has the `nvidia-cuda-nvcc` wheel, not on PATH), the owner accepts `minimax-h3-community` and downloads `base-fp8` (Models or `helm model
+  download minimax-h3 --host gcp --variant base-fp8`, MODELS_MODE=rw), torch runner unloaded, then runs at small size:
   t2v 864 × 480 × 107 frames (≈ 4.5 s, the minimum), 6 steps; FL2VA first frame 512 × 512 × 107; one Ref2VA image
   reference 864 × 480 × 107. Record cold load time, s/step, VRAM peak (`nvidia-smi`), host RAM, and check that
   SGLang accepts the skeleton folder (missing shards, overrides) and the uvicorn ready line. "≤ 3 s clips" cannot
@@ -252,7 +252,7 @@ Last full contract suite on the final M7 code: see the last M7 commit message (p
   evaluation only (the owner: "its not even rnd its just evaluation"). Licence territory note: the MiniMax H3
   licences' "Applicable Territory" excludes the EU, the UK, the Republic of Korea and the US; running there is the
   owner's call, recorded here. The owner accepted both licences in person: the MiniMax-H3-Image Community License
-  (Image, its enhancer included) and the H3 video licence (`minimax-h3-community`); the video `fp8` download was
+  (Image, its enhancer included) and the H3 video licence (`minimax-h3-community`); the video `base-fp8` download was
   queued by the lead.
 
 - Fifth VM pass (2026-11-21): **Enhance on `gcp` works.** `helm run minimax-h3-image`, base-fp8 / fp8, Enhance on
@@ -265,15 +265,15 @@ Last full contract suite on the final M7 code: see the last M7 commit message (p
   docs/mock/checks/m9/minimax-app-enhance-1088x736-s42-fp8.{png,txt} (the caption is in the run's
   `resolved.texts.enhance.text`, not in the take's made_with). The Mac's enhance golden is text only (a different
   sampled caption on MPS), so no image to compare.
-- **H3 video `fp8` download failed** (job 7d45b1e4, 13:01): HF's CDN answered 429 Too Many Requests (unauthenticated,
+- **H3 video `base-fp8` download failed** (job 7d45b1e4, 13:01): HF's CDN answered 429 Too Many Requests (unauthenticated,
   `token: absent`) at 57 of 91.2 GB, 142 of 144 files. On disk: the skeleton and the FL2VA DiT (21 GB); missing the
   Ref2VA DiT and the int8 ConvRot text encoder (`text_encoders/qwen3vl_32b_minimax_h3_int8_convrot.safetensors`), so no
-  video run is possible. A retry needs `helm model download minimax-h3 --host gcp --variant fp8 --accept-licence`
+  video run is possible. A retry needs `helm model download minimax-h3 --host gcp --variant base-fp8 --accept-licence`
   (the API asks again for the licence on every job); this session's permission guard refused the flag, so the owner
   (or a session allowed to pass it) re-queues it. Files already there are kept. A Hub token on the gcp runner would
   avoid the 429. The video runs (t2v, first frame, Ref2VA, Stop) and the SGLang checks are still open.
 
-- Sixth VM pass (2026-11-21): **H3 video `fp8` runs on CUDA through the app.** `HF_HUB_DISABLE_XET=1` is now the
+- Sixth VM pass (2026-11-21): **H3 video `base-fp8` runs on CUDA through the app.** `HF_HUB_DISABLE_XET=1` is now the
   default for both runners (deploy/gpu-host/docker-compose.yml, README; the VM-only override file is gone, runners
   recreated). The owner cut the renders to one: text-to-video 864 × 480 × 107 frames, 6 steps, seed 7, a fox prompt
   with a crow's caw. SGLang needed four fixes (sgl.py, Dockerfile.cuda; tests/test_minimax_sgl.py, runner lint
@@ -284,7 +284,7 @@ Last full contract suite on the final M7 code: see the last M7 commit message (p
   and recreated with them.
 - Numbers. A manual run of sgl.py's argv and request in runner-native: server ready 54 s (30–72 s over the tries,
   page cache warm), denoise 6 steps at 1.5 s/step (8.9 s), decode 4.5 s, request 22 s, 76 s start to MP4, SGLang's
-  own peak 30.0 GB. Through the app (`helm run minimax-h3-text-to-video -p model.variant=fp8 -p
+  own peak 30.0 GB. Through the app (`helm run minimax-h3-text-to-video -p model.variant=base-fp8 -p
   model.precision=fp8 …`, run on gcp.native, so made_with.host = gcp): generate 98.3 s (server start + request),
   output 46.7 s (upload through the tunnel, SeaweedFS just restarted). VRAM peak 32.5 GB (nvidia-smi, whole GPU),
   host RAM used ≤ 68 GB (text encoder offloaded layerwise); after the run the GPU is back to 0.56 GB (the server
@@ -293,10 +293,14 @@ Last full contract suite on the final M7 code: see the last M7 commit message (p
   second. docs/mock/checks/m9/minimax-h3-fp8-app-t2v-864x480x107-s7.mp4.
 - The first two app attempts failed at upload (ConnectionClosedError to S3): the dev stack's SeaweedFS was
   restarted at 14:18 mid-upload (not by this pass); the third succeeded. Before that, studio answered 422 for
-  `fp8` until the lead restarted the Mac's runners (a local host's stale schema outranks gcp's).
+  `base-fp8` until the lead restarted the Mac's runners (a local host's stale schema outranks gcp's).
 - Not done (owner cut them): first frame, Ref2VA, Stop. ConvRot int8's JIT build fails ("CUDA compiler and CUDA
   toolkit headers are incompatible": the nvcc wheel against the venv's cccl headers); SGLang falls back to
   comfy_kitchen for the text encoder, which works. The QK-norm JIT builds. Left as is.
+- Labels (2026-11-21): the video variant `fp8` is now `base-fp8` (same folder `MiniMax-H3-FP8`, so gcp's files stay
+  present); titles "Base fp8" / "Turbo fp8"; each model's Variant help says "fp8: smaller community weights, NVIDIA
+  hosts only." The web shows a hyphenated value word by word ("base-fp8" → "Base fp8") and a summary shows the
+  precision once ("Base · fp8").
 
 ## M8 notes
 

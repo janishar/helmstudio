@@ -81,10 +81,19 @@ export function fields(w: Pick<S<"Workflow">, "nodes" | "node_schemas">): Field[
   });
 }
 
-/** An enum value as shown: plain lowercase words title-cased, underscores as spaces ("base" → "Base",
- * "custom_voice" → "Custom voice"); ids like "int8" stay as they are. */
+/** An enum value as shown: plain lowercase words title-cased, underscores and hyphens as spaces ("base" → "Base",
+ * "custom_voice" → "Custom voice", "base-fp8" → "Base fp8"); ids like "int8" stay as they are. */
 export const pretty = (v: string) =>
-  /^[a-z]+(_[a-z]+)*$/.test(v) ? v[0].toUpperCase() + v.slice(1).replaceAll("_", " ") : v;
+  /^[a-z]+([_-][a-z0-9]+)*$/.test(v) ? v[0].toUpperCase() + v.slice(1).replace(/[_-]/g, " ") : v;
+
+/** Model values as shown together ("Base · fp8"): a value ending in a later one's id ("base-fp8" before "fp8")
+ * drops that ending, so the precision shows once. */
+export const prettyModel = (vs: string[]) =>
+  vs.map((v, i) =>
+    pretty(
+      vs.slice(i + 1).reduce((a, w) => (a.endsWith("-" + w) ? a.slice(0, -w.length - 1) : a), v),
+    ),
+  );
 
 /** A param's enum value as shown: a `language` param's tag as its language ("en" → "English"; "auto" stays a
  * word; named as the node kind's family names it), else `pretty`. */

@@ -134,7 +134,7 @@
             "base-fp8",
             "turbo-fp8"
           ],
-          "help": "Turbo: 8 fixed steps, much faster."
+          "help": "Turbo: 8 fixed steps, much faster. fp8: smaller community weights, NVIDIA hosts only."
         },
         {
           "name": "precision",

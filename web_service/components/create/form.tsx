@@ -39,6 +39,7 @@ import {
   megapixelsOf,
   optionText,
   pretty,
+  prettyModel,
   sections,
   sizeFor,
   toRaw,
@@ -1211,7 +1212,7 @@ export function Chips({
     (f) => fields.some((x) => x.key === f.key) && (f.param.enum?.length ?? 0) > 1,
   );
   const choosable = model.filter((f) => (f.param.enum?.length ?? 0) > 1 || f === first);
-  const named = (spoken ? choosable : model).map((f) => pretty(String(rawOf(f, raws))));
+  const named = prettyModel((spoken ? choosable : model).map((f) => String(rawOf(f, raws))));
   const modelText = (named.length === 1 && family ? [family, ...named] : named).join(" · ");
   return (
     <>
@@ -1289,7 +1290,7 @@ export function Chips({
           title={model.map((f) => f.param.label ?? f.param.name).join(" · ")}
           onClick={() => show(first.key)}
         >
-          {model.map((f) => pretty(String(rawOf(f, raws)))).join(" · ")}
+          {prettyModel(model.map((f) => String(rawOf(f, raws)))).join(" · ")}
         </button>
       )}
       {c && (

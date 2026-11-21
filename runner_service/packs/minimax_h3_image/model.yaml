@@ -11,11 +11,11 @@ runtimes:
   torch: {env: torch, devices: [mps, cuda]}   # base: validated on MPS (CUDA untested, published there as before); base-fp8: cuda
 model:
   help: The weights to load.
-  variant: {label: Variant}
+  variant: {label: Variant, help: "fp8: smaller community weights, NVIDIA hosts only."}
   precision:
     label: Precision
     default: int8
-    help: "Base: stored bf16, always quantized to int8 at load (bf16 is 66 GB per model); its float32 tensors and the VAE stay float32. Base FP8 (NVIDIA): fp8, as stored."
+    help: "Base: stored bf16, always quantized to int8 at load (bf16 is 66 GB per model); its float32 tensors and the VAE stay float32. Base fp8: fp8, as stored."
 media: [image]
 licences:
   minimax-h3-image-community: {title: MiniMax-H3-Image Community License, url: https://huggingface.co/MiniMaxAI/MiniMax-H3-Image}
@@ -28,7 +28,7 @@ variants:
   # Byte counts from the HF API at these revisions (source: all of the download's files, the enhancer's included).
   base-fp8:
     dir: MiniMax-H3-Image-FP8
-    title: Base FP8 (NVIDIA)
+    title: Base fp8
     precision: [fp8]
     component_precision: {transformer: [fp8]}   # the text encoder stays int8 (its own list), the VAE fp32
     devices: [cuda]

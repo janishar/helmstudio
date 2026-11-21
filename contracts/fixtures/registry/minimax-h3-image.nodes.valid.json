@@ -110,7 +110,8 @@
           "enum": [
             "base",
             "base-fp8"
-          ]
+          ],
+          "help": "fp8: smaller community weights, NVIDIA hosts only."
         },
         {
           "name": "precision",
@@ -121,7 +122,7 @@
             "int8",
             "fp8"
           ],
-          "help": "Base: stored bf16, always quantized to int8 at load (bf16 is 66 GB per model); its float32 tensors and the VAE stay float32. Base FP8 (NVIDIA): fp8, as stored."
+          "help": "Base: stored bf16, always quantized to int8 at load (bf16 is 66 GB per model); its float32 tensors and the VAE stay float32. Base fp8: fp8, as stored."
         }
       ],
       "inputs": [],

@@ -8,7 +8,7 @@ Image inputs are written as PNGs into a per-run temp folder, deleted after with 
 reference (API 1.22) is cut there to its in..out with ffmpeg (a video: lossless H.264, its sound as PCM when kept;
 an audio, or a video's sound: a WAV). The Video value is built as
 the ltx pack's: {mp4, poster, last, frames, fps, has_audio, stream} (core.media probe, frames as PNG). No torch.
-The fp8 variant (NVIDIA hosts) takes the same inputs to SGLang instead of h3: sgl.py."""
+The base-fp8 variant (NVIDIA hosts) takes the same inputs to SGLang instead of h3: sgl.py."""
 
 import subprocess
 import tempfile
@@ -100,9 +100,9 @@ def check_generate(params: dict, wired: set, models: dict | None = None) -> str 
         return ": references cannot go with a first or last frame"
     if (
         params.get("speed") == "fast"
-        and getattr((models or {}).get("model"), "variant", None) == "fp8"
+        and getattr((models or {}).get("model"), "variant", None) == "base-fp8"
     ):
-        return ": speed fast is h3's (Mac); the FP8 (NVIDIA) variant runs exact only"
+        return ": speed fast is h3's (Mac); the Base fp8 variant runs exact only"
     return None
 
 
@@ -169,7 +169,7 @@ def generate(ctx, params: dict, inputs: dict) -> dict:
     if why := generate_error(ctx.node, len(refs), first is not None, last is not None, w, h, d["frames"], facts,
                              [part(a) for a in audios]):  # fmt: skip
         raise RunError(why)
-    fp8 = inputs["model"].variant == "fp8"
+    fp8 = inputs["model"].variant == "base-fp8"
     if not fp8 and not BINARY.is_file():
         raise RunError(f"{ctx.node}: the h3 binary is not built (make h3 in runner_service)")
     with tempfile.TemporaryDirectory(prefix="h3-") as tmp:

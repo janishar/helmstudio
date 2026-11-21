@@ -1,4 +1,4 @@
-"""The fp8 variant's generate (NVIDIA hosts, docs/plan/17-nvidia-quantized.md phase 2): MiniMax H3 by SGLang Diffusion
+"""The base-fp8 variant's generate (NVIDIA hosts, docs/plan/17-nvidia-quantized.md phase 2): MiniMax H3 by SGLang Diffusion
 (sglang 0.5.23 in its own venv, SGLANG; Dockerfile.cuda stage `sglang`) as the run's child server (core.child.serve,
 killed after the run, as zonos3-server: nothing stays in VRAM), on 127.0.0.1. One server serves one partition
 (--model-variant): fl2va for text and frames to video, ref2va for references; the variant's Comfy-Org pruned FP8 DiT
@@ -62,14 +62,14 @@ def target(task: str, width: int, height: int, frames: int) -> dict:
     """The request's target for a w × h canvas, or RunError's text as ValueError when SGLang cannot make it."""
     if not MIN_FRAMES <= frames <= MAX_FRAMES:
         raise ValueError(
-            f"the FP8 (NVIDIA) variant makes {MIN_FRAMES} to {MAX_FRAMES} frames (4 to 15 s), not {frames}"
+            f"the Base fp8 variant makes {MIN_FRAMES} to {MAX_FRAMES} frames (4 to 15 s), not {frames}"
         )
     short, g = min(width, height), math.gcd(width, height)
     ratios = RATIOS if task != "fl2va" else (f"{width // g}:{height // g}",)
     for ratio in ratios:
         if shape(short, *map(int, ratio.split(":"))) == (width, height):
             return {"short_edge": short, "aspect_ratio": ratio, "duration_seconds": frames / FPS}
-    raise ValueError(f"the FP8 (NVIDIA) variant makes text-to-video and references only at {', '.join(RATIOS)} "
+    raise ValueError(f"the Base fp8 variant makes text-to-video and references only at {', '.join(RATIOS)} "
                      f"(the canvas is {width} × {height}; 864 × 480 is 16:9)")  # fmt: skip
 
 

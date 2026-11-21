@@ -2,7 +2,7 @@
 import { api, ApiError, errorText, ok, type S } from "@/lib/api";
 import { safeUrl } from "@/lib/format";
 import { audioFormat, secondsText } from "@/lib/media";
-import { pretty } from "@/lib/workflow";
+import { prettyModel } from "@/lib/workflow";
 
 type Take = S<"Take">;
 type Run = S<"Run">;
@@ -76,7 +76,7 @@ export const subLine = (t: Take) =>
 
 /** "Qwen Image · Base · int8": the workflow and the weights it used. */
 export const templateLine = (m: S<"MadeWith">) =>
-  [m.workflow_title, m.model?.variant && pretty(m.model.variant), m.model?.precision]
+  [m.workflow_title, ...prettyModel([m.model?.variant ?? "", m.model?.precision ?? ""])]
     .filter(Boolean)
     .join(" · ");
 

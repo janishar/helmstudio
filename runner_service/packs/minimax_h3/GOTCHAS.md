@@ -51,7 +51,7 @@ The pack runs the pinned h3 binary (`vendor/h3c`, h3.c 4cafd17, `make h3`) as a 
   56 output frames" even at 56 output frames (dev run 0de840b4, 2026-11-19). `generate_error` refuses it first ("needs a
   part of at least 56 frames at 24 fps (video <i> reads <n>)").
 
-## The fp8 variant (SGLang on CUDA, `sgl.py`)
+## The base-fp8 variant (SGLang on CUDA, `sgl.py`)
 
 - **Its own venv.** sglang 0.5.23 pins torch 2.14.1 and has no Python 3.14 wheel: Dockerfile.cuda's `sglang` stage
   builds `/opt/sglang` on a uv Python 3.13 (`/opt/python`) from the lock `runner_service/sglang-requirements.txt`

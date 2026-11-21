@@ -57,7 +57,7 @@ runtimes:
                                   # loads it; devices (API 1.18, optional) = where it runs, published in `runtimes`
 model:                            # the generated <family>/model node (see below)
   help: Which weights to load and at what precision.
-  variant: {label: Variant, help: "Turbo: 8 fixed steps, much faster."}
+  variant: {label: Variant, help: "Turbo: 8 fixed steps, much faster. fp8: smaller community weights, NVIDIA hosts only."}
   precision:
     label: Precision
     default: int8
@@ -527,7 +527,7 @@ component is its own residency entry. There are no MLX adapters.
 ## Native packs (`native.py`, API 1.21)
 
 A stage that runs a **child process** loading its own weights (`minimax_h3`: the `h3` binary, h3.c on Metal, or
-for its `fp8` variant on NVIDIA hosts `sglang serve`, SGLang Diffusion in its own venv, one per run (`sgl.py`);
+for its `base-fp8` variant on NVIDIA hosts `sglang serve`, SGLang Diffusion in its own venv, one per run (`sgl.py`);
 `zonos3`: `zonos3-server`, the ZONOS3 ggml server, one per run)
 instead of components in the runner. The env `native` runs on the runner core's dependencies only (`RUNNER_ENV=native
 uv run python main.py`, health port 8093 from the root Makefile); its loader `core/loaders_native.py` loads nothing:
