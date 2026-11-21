@@ -211,6 +211,46 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 </div>
 </div>
 </aside>
+
+<aside aria-label="Other states" style="flex: 1 1 100%; box-sizing: border-box; padding: 16px 18px 24px; display: flex; flex-direction: column; gap: 14px">
+<h2 style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--t2)">Other states</h2>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; align-items: start">
+
+<div style="display: flex; flex-direction: column; gap: 12px">
+<span style="font-size: 12px; color: var(--t2)">An fp8 variant (on an NVIDIA host): Precision follows it</span>
+<h2 style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--t2)">Quality</h2>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+<button aria-expanded="true" style="text-align: left; padding: 10px 12px; border-radius: 12px; border: 0; background: var(--s2); display: flex; align-items: center; justify-content: space-between; gap: 8px"><span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; color: var(--t2)">Variant</span><span style="font-weight: 600">Base fp8</span></span><svg style="transform: rotate(90deg)" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--t2)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"></path></svg></button>
+<div title="Fixed by the variant: Base fp8 is stored in fp8." style="padding: 10px 12px; border-radius: 12px; background: var(--s2); display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; color: var(--t2)">Precision</span><span style="font-weight: 600; color: var(--t2)">fp8</span></div>
+<div role="group" aria-label="Variant" style="grid-column: span 2; display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 12px; background: var(--s1)">
+<span style="display: flex; align-items: center; font-size: 12px; color: var(--t2)">Variant<button class="i" aria-label="More information" aria-expanded="true">i</button></span>
+<span role="tooltip" style="align-self: flex-start; padding: 6px 10px; border-radius: 10px; background: var(--s4); font-size: 12px">Turbo: 8 fixed steps, much faster. fp8: smaller community weights, NVIDIA hosts only.</span>
+<div style="display: flex; flex-wrap: wrap; gap: 6px"><button aria-pressed="false" style="height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--ln); background: transparent; font-size: 12px">Base</button><button aria-pressed="false" style="height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--ln); background: transparent; font-size: 12px">Turbo</button><button aria-pressed="true" style="height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--a1); background: var(--s1); font-size: 12px">Base fp8</button><button aria-pressed="false" style="height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--ln); background: transparent; font-size: 12px">Turbo fp8</button></div>
+</div>
+<button style="text-align: left; padding: 10px 12px; border-radius: 12px; border: 0; background: var(--s2); display: flex; align-items: center; justify-content: space-between; gap: 8px"><span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; color: var(--t2)">Steps</span><span style="font-weight: 600">40</span></span><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--t2)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"></path></svg></button>
+<button style="text-align: left; padding: 10px 12px; border-radius: 12px; border: 0; background: var(--s2); display: flex; align-items: center; justify-content: space-between; gap: 8px"><span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; color: var(--t2)">Decode</span><span style="font-weight: 600">Tiled · auto</span></span><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--t2)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"></path></svg></button>
+</div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+<button style="height: 36px; padding: 0 12px; border-radius: 10px; border: 0; background: var(--s4); font-size: 13px; font-weight: 500">Base · fp8</button>
+<button style="height: 36px; padding: 0 12px; border-radius: 10px; border: 0; background: var(--s4); font-size: 13px; font-weight: 500">16:9 · 4 MP</button>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 12px">
+<span style="font-size: 12px; color: var(--t2)">The workflow picker open: a model on no host is greyed</span>
+<span style="align-self: flex-start; padding: 4px 10px; border-radius: 999px; background: var(--s2); color: var(--t2); font-size: 12px; font-weight: 500">Qwen Image<svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 6px; vertical-align: -1px"><path d="m6 9 6 6 6-6"></path></svg></span>
+<div role="menu" aria-label="Workflows" style="width: 380px; box-sizing: border-box; padding: 8px; border-radius: 18px 18px 18px 8px; background: var(--s2); border: 1px solid var(--s5); box-shadow: 0 24px 40px -12px color-mix(in srgb, var(--shd) 80%, transparent); display: flex; flex-direction: column; gap: 2px">
+<span style="padding: 4px 12px 2px; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--t2)">Templates</span>
+<button role="menuitemradio" aria-checked="true" style="text-align: left; padding: 8px 12px; border-radius: 10px; border: 0; background: var(--s4); box-shadow: none; font-size: 13px; font-weight: 600">Qwen Image</button>
+<button role="menuitemradio" aria-checked="false" style="text-align: left; padding: 8px 12px; border-radius: 10px; border: 0; background: transparent; box-shadow: none; font-size: 13px">Ask Qwen Image (Qwen3-VL 8B)</button>
+<button role="menuitemradio" aria-checked="false" style="text-align: left; padding: 8px 12px; border-radius: 10px; border: 0; background: transparent; box-shadow: none; font-size: 13px">MiniMax H3 Image</button>
+<button role="menuitemradio" aria-checked="false" aria-disabled="true" style="text-align: left; padding: 8px 12px; border-radius: 10px; border: 0; background: transparent; box-shadow: none; font-size: 13px; color: var(--t2); display: flex; align-items: center; justify-content: space-between; gap: 8px"><span>MiniMax H3 Text to video</span><span style="font-size: 11px; white-space: nowrap">Not downloaded · <span style="text-decoration: underline">Models</span></span></button>
+<button role="menuitemradio" aria-checked="false" style="text-align: left; padding: 8px 12px; border-radius: 10px; border: 0; background: transparent; box-shadow: none; font-size: 13px">LTX-2.5 Text to video</button>
+</div>
+</div>
+
+</div>
+</aside>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":960}}'>

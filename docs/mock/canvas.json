@@ -162,7 +162,7 @@
       "title": "Landing page",
       "w": 1440,
       "x": 0,
-      "y": 1080
+      "y": 1580
     },
     "Looks.dc.html": {
       "expand": "fill",
@@ -184,7 +184,7 @@
     },
     "Main.dc.html": {
       "expand": "fill",
-      "h": 960,
+      "h": 1460,
       "is_interactive": true,
       "title": "Create · Qwen Image",
       "w": 1440,
