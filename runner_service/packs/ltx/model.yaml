@@ -23,13 +23,14 @@ family: ltx
 title: LTX-2.5
 runtimes:
   mlx: {env: mlx}
+  torch: {env: torch, devices: [cuda]}   # the NVIDIA variants: torch.py on the vendored ltx-core (plan 17, 21.6)
 model:
   help: Which weights to load and at what precision.
-  variant: {label: Variant, help: "Distilled: few fixed steps, no guidance (text and image to video). Dev: the full model with guidance, 30 steps (retake, extend, audio to video)."}
+  variant: {label: Variant, help: "Distilled: few fixed steps, no guidance (text and image to video). Dev: the full model with guidance, 30 steps (retake, extend, audio to video). fp8 / int8: smaller community weights, NVIDIA hosts only."}
   precision:
     label: Precision
     default: int8
-    enum: [int8, int4, bf16]
+    enum: [int8, int4, bf16, fp8]
     help: "Quantized at load: int8 about 19 GB for the transformer, bf16 about 38 GB."
 media: [video, audio]
 licences:
@@ -38,6 +39,7 @@ variants:
   distilled:
     dir: ltx-2.5
     title: Distilled
+    devices: [mps]   # the official pair stays the Mac's (MLX) until it has run on CUDA
     source:
       repo: Lightricks/LTX-2.5
       revision: 5e6e71018ee1756ed329b697a7b4aedc934dfce9
@@ -58,6 +60,7 @@ variants:
   dev:
     dir: ltx-2.5
     title: Dev
+    devices: [mps]
     shares: [text_encoder, connector, upscaler, vae, vae_encoder, audio_vae, vocoder, audio_encoder]
     files: {transformer: "diffusion_models/ltx-2.5-22b-dev-transformer-bf16.safetensors"}
     source:
@@ -68,6 +71,44 @@ variants:
       must_accept: true
       gated: false
       bytes: 42018190584
+  # The alternate path for NVIDIA hosts (docs/plan/17-nvidia-quantized.md 21.6): community weights, FP8 where one
+  # exists, else int8 ConvRot, run by torch.py on the vendored ltx-core. distilled-fp8: unsloth's per-row FP8
+  # transformer (the dev one with the distilled LoRA fused at 1) and its bf16 connector shards (projection included),
+  # DmitryDB's int8 ConvRot Gemma text encoder (the official file's layout and tokenizer), the official upscaler,
+  # VAEs and duration head. dev-int8: DmitryDB's int8 ConvRot dev transformer, the rest distilled-fp8's. Byte counts
+  # from the HF API at these revisions (source: all of the variant's files).
+  distilled-fp8:
+    dir: ltx-2.5-nvidia
+    title: Distilled fp8
+    precision: [fp8]
+    component_precision: {transformer: [fp8], text_encoder: [int8]}
+    devices: [cuda]
+    files: {transformer: LTX-2.5-FP8.safetensors, connector: "connectors/*.safetensors",
+            text_encoder: text_encoders/gemma4-12b-with-proj-ltx-2.5-int8.safetensors}
+    source: {repo: Lightricks/LTX-2.5, revision: 5e6e71018ee1756ed329b697a7b4aedc934dfce9,
+             allow_patterns: [latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors,
+                              vae/ltx-2.5-video-vae-conv-bf16.safetensors, vae/ltx-2.5-audio-vae-bf16.safetensors,
+                              model_patches/ltx-2.5-duration-head-bf16.safetensors],
+             licence: ltx-2-community, must_accept: true, gated: false, bytes: 43721932016}
+    sources:
+      - {repo: unsloth/LTX-2.5-FP8, revision: 9001a61f9b788e21ae7e7e2eca2ea2ee66041570,
+         allow_patterns: [LTX-2.5-FP8.safetensors, "connectors/*"], gated: false, bytes: 25400522558}
+      - {repo: DmitryDB/LTX-2.5-ComfyUI-Quants, revision: a7136f485a7a469cbcc4fbacc067cf880766d754,
+         allow_patterns: [text_encoders/gemma4-12b-with-proj-ltx-2.5-int8.safetensors], gated: false,
+         bytes: 15504650554}
+  dev-int8:
+    dir: ltx-2.5-nvidia
+    title: Dev int8
+    precision: [int8]
+    component_precision: {transformer: [int8], text_encoder: [int8]}
+    devices: [cuda]
+    shares_from: distilled-fp8
+    distill_from: distilled-fp8   # ltx/distill: that variant's transformer (the distilled LoRA fused in), no LoRA
+    shares: [text_encoder, connector, upscaler, vae, vae_encoder, audio_vae, vocoder, audio_encoder]
+    files: {transformer: diffusion_models/ltx-2.5-22b-dev-transformer-int8-convrot.safetensors}
+    source: {repo: DmitryDB/LTX-2.5-ComfyUI-Quants, revision: a7136f485a7a469cbcc4fbacc067cf880766d754,
+             allow_patterns: [diffusion_models/ltx-2.5-22b-dev-transformer-int8-convrot.safetensors],
+             licence: ltx-2-community, must_accept: true, gated: false, bytes: 21638185024}
 # memory plans (core/registry.py): a media input is planned at the goldens' size (measured there); audio to video gets
 # its own item (it loads the upscaler and the baked transformer the others do not)
 plan_media:
@@ -101,7 +142,10 @@ components:
   audio_encoder: {files: "vae/ltx-2.5-audio-vae-bf16.safetensors", dtype: stored}  # encodes source sound (16 kHz mel)
 # LoRAs: bake only (the old MLX code fuses every LoRA into the transformer; no adapter exists to copy or prove). The
 # renames are the old LTXV_LORA_COMFY_RENAMING_MAP as end-of-module-part rewrites; kohya files match none: refused.
+# MLX only (runtime: mlx): the torch path (NVIDIA) refuses LoRA rows (no bake into FP8 or ConvRot weights), so the
+# torch runner publishes no lora block and no ltx/lora-stack; the renames are MLX's module names.
 lora:
+  runtime: mlx
   component: transformer
   renames:
     - {from: ".to_out.0", to: ".to_out", at: end}

@@ -222,6 +222,14 @@ func TestLoraFamiliesPreferNonFakeEnvs(t *testing.T) {
 	if !blocks["echo"].Fake || blocks["qwen-image"].Fake || len(blocks["qwen-image"].Modules) == 0 {
 		t.Fatalf("%+v", blocks)
 	}
+	// M9: a torch runner publishes ltx without a lora block (LoRAs are MLX's only): the mlx runner's block is used,
+	// though gcp.torch sorts first
+	_ = r.SetRegistry("gcp.torch.models", []byte(`{"models": [{"id": "ltx-2.5", "family": "ltx", "title": "LTX-2.5"}]}`))
+	_ = r.SetRegistry("mac.mlx.models", fixture(t, "ltx.models"))
+	present(&r, "gcp.torch", "mac.mlx")
+	if b := r.LoraBlocks()["ltx"]; len(b.Renames) == 0 || b.Fake {
+		t.Fatalf("%+v", b)
+	}
 	host := func(name, env string) []byte {
 		return []byte(`{"host": "` + name + `", "env": "` + env + `", "state": "idle", "run_id": null, "updated_at": "` +
 			t0.UTC().Format(time.RFC3339Nano) + `"}`)

@@ -375,6 +375,17 @@ def test_load_makes_fp8_linears_from_the_headers_and_keeps_them_as_stored(tmp_pa
         lt.load(meta_tiny(), [path], dev="cpu", dtype=torch.bfloat16, bake={"blocks.0": []})
 
 
+def test_a_bake_into_a_convrot_linear_fails_the_run(tmp_path):
+    path = tmp_path / "w.safetensors"
+    save_file({"blocks.0.weight": torch.zeros(64, 32, dtype=torch.int8)}, str(path))
+    kw = {"dev": "cpu", "dtype": torch.bfloat16, "quantize": lambda n: n == "blocks.0"}
+    with pytest.raises(lt.RunError, match="not available on int8 ConvRot weights \\(blocks.0\\)"):
+        lt.load(meta_tiny(), [path], rotated=lambda n: 4, bake={"blocks.0": []}, **kw)
+    # unrotated, the bake goes on (here past the guard to the missing head)
+    with pytest.raises(KeyError, match="not in the checkpoint"):
+        lt.load(meta_tiny(), [path], bake={"blocks.0": []}, **kw)
+
+
 def test_fp8_weights_count_one_byte_and_a_scale_per_row(tmp_path):
     q, s = e4m3(torch.randn(64, 32))
     save_file({"l.weight": q, "l.scale": s, "n.weight": torch.ones(64, dtype=torch.bfloat16)}, str(tmp_path / "f.safetensors"))  # fmt: skip

@@ -159,7 +159,8 @@ Keys the core understands; anything else is ignored:
   residency entry and one cache identity across variants; a share made by hand with links into that folder is still
   a share, a real copy in the variant's own folder is `separate`), `shares_from` (API 1.33: the variant `shares`
   load from instead of the first: qwen-image's turbo-fp8 takes base-fp8's FP8 text encoder; a download into a lender
-  that lacks them fetches them, with its configs, from its `source` and `sources`), `title` (the display name; default the id) and
+  that lacks them fetches them, with its configs, from its `source` and `sources`), `distill_from` (M9: the variant
+  whose weights are this one's distilled model, published as is; ltx dev-int8's is distilled-fp8), `title` (the display name; default the id) and
   `source` (where a download fetches it; absent = not downloadable): `{repo, revision, allow_patterns, licence,
   must_accept, gated, bytes?}`. `revision` is best a commit SHA (the one in the folder's
   `.cache/huggingface/download/*.metadata` sidecars when the weights are already on disk); `allow_patterns` are
@@ -184,7 +185,8 @@ Keys the core understands; anything else is ignored:
   prompt enhancer; its files count towards presence, never towards the variant's own files, bytes or delete). Only the keys the module's `rename()` keeps count towards the component's size.
 - **`lora`** (optional; contracts/README.md "LoRAs", "LoRA normaliser"): `component` (the component LoRAs patch),
   `renames` (ordered `{from, to[, at: end]}` rewrites of a key's module part: a prefix, or with `at: end` a suffix,
-  as ltx's `.to_out.0` → `.to_out`), `ignore` (fnmatch globs over raw keys counted as ignored), `modes`
+  as ltx's `.to_out.0` → `.to_out`), `runtime` (optional: the one runtime the block holds for; ltx's is `mlx`, so
+  its torch runner publishes no lora block and no lora-stack node and never meta-builds the model for one), `ignore` (fnmatch globs over raw keys counted as ignored), `modes`
   (`[adapter, bake]`, or `[bake]` for a runtime without adapters: MLX), `max_rows` (8), `strength {min, max,
   default}`, optional `help` / `rows_help` / `mode_help` (the stack node's texts) and `prefused` (`[{file, variant}]`:
   a LoRA already fused into a variant, `file` inside its folder; published with the shared index's id, none when the
@@ -326,7 +328,8 @@ scale to `X.qweight` / `X.scale` (one scale per row), match it by `quantize`, an
   run naming the node; it runs only what an `output` node needs, a kind may appear several times, and each `output`
   node stores its own take (index = the order outputs are stored). A stage only sees its params and inputs.
 - **Results are cached** (the 24 most recently used, across nodes and owners) by a key over the owner, kind, pack
-  code hash (model.yaml + the module), params (a wired one: its upstream instead), each upstream node's key and
+  code hash (model.yaml + every top-level `*.py` of the pack: a runtime's module may import a shared one, ltx's
+  `common.py`), params (a wired one: its upstream instead), each upstream node's key and
   output name (never node ids: a renamed node, or two identical nodes in one graph, share a result), and for a Model
   input only the files (size, mtime) and precision of the components the stage `uses`. A new seed re-runs sample and decode, not encode; base → turbo re-runs sample
   but not encode. An Image param counts as its resolved value, so `(owner, key, etag)`: a changed reference
@@ -370,7 +373,7 @@ scale to `X.qweight` / `X.scale` (one scale per row), match it by `quantize`, an
 
 ## CUDA: the torch runner on Linux + NVIDIA (API 1.18, M6)
 
-v1 runs Qwen Image on CUDA only (LTX and llm stay MLX). The runner is `runner_service/Dockerfile.cuda` (`make
+v1 runs Qwen Image on CUDA only (llm stays MLX; LTX's NVIDIA variants came in M9, below). The runner is `runner_service/Dockerfile.cuda` (`make
 image-cuda`; `deploy/gpu-host/` runs it with the NVIDIA runtime): the slim Python image plus the `torch` extra from
 the same `uv.lock` (on Linux torch 2.15's wheels bundle CUDA 13; the driver comes from the host), ffmpeg, user
 `runner`, weights bind-mounted at `HELMSTUDIO_MODELS=/models` (read-only unless the host takes model jobs: the hosts
@@ -396,6 +399,18 @@ follows these rules.
   never bit-exact, and keep CUDA goldens apart from MPS ones.
 - **Media jobs**: `h264_nvenc` when the container's ffmpeg lists it and a 0.2 s test encode works (it needs
   `NVIDIA_DRIVER_CAPABILITIES` with `video`), else `libx264`.
+
+- **A second runtime** (M9, LTX): a pack may list both `mlx` and `torch` (`torch: {env: torch, devices: [cuda]}`),
+  one module each (`mlx.py`, `torch.py`) and their shared code in another top-level module (`common.py`: in the code
+  hash). A runtime's `devices` holds for every runtime (core/models.py `runs_here`): the Mac's torch runner loads the
+  pack but publishes none of its variants. Both runtimes publish the same node schemas; each workflow is one
+  runtime's (`env`), and the other runtime's runner leaves it out, as it leaves out a `lora` block with another
+  `runtime` (ltx's LoRA Stack is the MLX runner's only). A variant's `distill_from` names the variant whose weights
+  are its distilled model (dev-int8: distilled-fp8): torch.py's `ltx/distill` loads it, and studio routes a distill
+  run to a host that has it.
+  `packs/ltx/torch.py` is mlx.py's stages over the vendored ltx-core with a CPU generator, for the community FP8 and
+  int8 ConvRot files only (`devices: [cuda]` variants); its CPU tests are `tests/test_ltx_torch*.py` (the keys of the
+  real headers, the five workflows on tiny weights, the port against mlx.py through `envs/mlx`).
 
 **Checked only on a real GPU** (the GPU host's checklist; CPU tests cover the rest): `pytest -m gpu` there; the
 pinned staging speed and peak RSS on the real Qwen files; `_weight_int8pack_mm` on CUDA (present or the dequantize

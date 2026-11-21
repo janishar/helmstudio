@@ -303,7 +303,8 @@ consumes `evt.run.>` (durable `studio-projector`) and `evt.pipeline.>` (durable 
 - Shot numbers (API 1.29): `timeline.Number`, run by `clean` on every stored revision against the stored one (a
   stored clip id keeps its number, a free carried one stays, the rest get the highest + 1); migration 00023 numbered
   live sequences by position.
-- Eligibility: a run with `<family>/distill` needs a host whose models key lists the pre-fused distilled LoRA.
+- Eligibility: a run with `<family>/distill` needs a host whose models key lists the pre-fused distilled LoRA, or
+  (M9, torch) whose model variant has `distill_from` with that variant present (dev-int8 → distilled-fp8).
 
 ## Layout
 

@@ -284,6 +284,46 @@ func TestEligibleLoras(t *testing.T) {
 	}
 }
 
+// A run with <family>/distill goes to a host whose lora block lists the distilled LoRA as pre-fused (MLX) or whose
+// model variant has its distilled weights built in (distill_from, torch) with that variant present.
+func TestEligibleDistill(t *testing.T) {
+	reg := &registry.Registry{}
+	set := func(source, models string) {
+		host, env, _ := strings.Cut(source, ".")
+		_ = reg.SetRegistry(source+".workflows", []byte(`{"workflows": [{"id": "ltx-a2v-`+env+`", "env": "`+env+`", "nodes": {}}]}`))
+		_ = reg.SetRegistry(source+".models", []byte(models))
+		_ = reg.SetHost(source, hostValue(host, env, t0, ""))
+	}
+	set("mac.mlx", `{"models": [{"id": "ltx-2.5", "family": "ltx", "variants": [{"id": "dev", "presence": "present",
+		"precisions": ["int8"]}], "lora": {"component": "transformer", "modules": [], "renames": [], "ignore": [],
+		"prefused": [{"lora_id": "d", "variant": "distilled"}]}}]}`)
+	set("old.mlx", `{"models": [{"id": "ltx-2.5", "family": "ltx", "variants": [{"id": "dev", "presence": "present",
+		"precisions": ["int8"]}], "lora": {"component": "transformer", "modules": [], "renames": [], "ignore": []}}]}`)
+	torch := func(fp8 string) string {
+		return `{"models": [{"id": "ltx-2.5", "family": "ltx", "variants": [{"id": "distilled-fp8", "presence": "` + fp8 + `",
+			"precisions": ["fp8"]}, {"id": "dev-int8", "presence": "present", "precisions": ["int8"],
+			"distill_from": "distilled-fp8"}]}]}`
+	}
+	set("gpu.torch", torch("present"))
+	set("bare.torch", torch("missing"))
+	run := func(env, variant string) model.Run {
+		graph, _ := json.Marshal(map[string]registry.Node{
+			"model":   {Kind: "ltx/model", Params: map[string]any{"variant": variant, "precision": "int8"}},
+			"distill": {Kind: "ltx/distill", In: map[string]string{"model": "model.model"}}})
+		return model.Run{WorkflowID: "ltx-a2v-" + env, Env: env, Nodes: graph} // a workflow id is one env's
+	}
+	if slots, _, reason := eligible(reg, reg.Hosts(), run("mlx", "dev"), t0); len(slots) != 1 || slots["mac"] != "mlx" {
+		t.Fatal("mlx: mac lists the pre-fused LoRA, old does not", slots, reason)
+	}
+	if slots, _, reason := eligible(reg, reg.Hosts(), run("torch", "dev-int8"), t0); len(slots) != 1 || slots["gpu"] != "torch" {
+		t.Fatal("torch: gpu has dev-int8's distill_from variant, bare lacks it", slots, reason)
+	}
+	_ = reg.SetRegistry("gpu.torch.models", []byte(torch("partial")))
+	if _, _, reason := eligible(reg, reg.Hosts(), run("torch", "dev-int8"), t0); reason != "no live host for env torch has the distilled LoRA" {
+		t.Fatal(reason)
+	}
+}
+
 // resolveLoras puts the command form in place of each {lora_id}: the own one's key under the run owner's prefix.
 func TestResolveLoras(t *testing.T) {
 	nodes := map[string]registry.Node{"lora": {Kind: "qwen-image/lora-stack", Params: map[string]any{"rows": []any{

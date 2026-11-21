@@ -430,6 +430,8 @@ type Variant struct {
 	Components []Component `json:"components,omitempty"`
 	Mismatch   []string    `json:"mismatch,omitempty"`
 	Devices    []string    `json:"devices,omitempty"` // API 1.34: the only devices it runs on
+	// M9: the variant whose weights are this one's distilled model (ltx dev-int8: distilled-fp8), used by <family>/distill
+	DistillFrom string `json:"distill_from,omitempty"`
 }
 
 // Source is where a download fetches a variant's own files; nil: not downloadable.

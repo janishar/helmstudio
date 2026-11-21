@@ -75,7 +75,7 @@ class Pack:
     spec: dict
     runtime: str  # the runtime key of model.yaml (the module name), e.g. "torch"
     module: object  # the runtime module, or None for a pack without one
-    code: str = ""  # hash of model.yaml and the runtime module
+    code: str = ""  # hash of model.yaml and the pack's top-level *.py
     workflows: list = field(default_factory=list)
     looks: list = field(default_factory=list)  # starter looks (core/looks.py), checked at load
     voices: list = field(default_factory=list)  # starter voices (core/voices.py), checked at load
@@ -122,7 +122,7 @@ class ModelRef:
 
     @property
     def lora_component(self) -> str | None:
-        return (self.pack.spec.get("lora") or {}).get("component")
+        return (lora_spec(self.pack) or {}).get("component")
 
     def baked(self, component: str) -> tuple[LoraUse, ...]:
         """The rows of mode bake that patch `component`, in order, one file twice (chained stacks) merged into its
@@ -494,13 +494,20 @@ def lora_stack(ctx, params: dict, inputs: dict) -> dict:
     return {"model": replace(model, loras=model.loras + tuple(LoraUse.of(r) for r in rows))}
 
 
+def lora_spec(pack: Pack) -> dict | None:
+    """model.yaml `lora` when it holds for the pack's runtime: `lora.runtime` scopes it to one (ltx: mlx; its torch
+    path takes no LoRA, so that runner publishes no block and no lora-stack node); absent, every runtime."""
+    spec = pack.spec.get("lora")
+    return spec if spec and spec.get("runtime", pack.runtime) == pack.runtime else None
+
+
 def lora_block(pack: Pack) -> dict | None:
     """The registry lora block {component, modules, renames, ignore[, prefused]}: modules are the Linear names of
     the component built on the meta device (no weights) from the first present variant, compressed to `{a..b}`
     ranges. None without a `lora` block, a `build()` or a present variant; a model-free pack may list `modules`
     itself. `prefused` starts empty: registry.fill_prefused puts the shared index's ids in. Computed once per pack."""
     if "lora_block" not in pack.cache:
-        spec, block = pack.spec.get("lora"), None
+        spec, block = lora_spec(pack), None
         build = getattr(pack.module, "build", None)
         present = [v for v in pack.spec.get("variants", {}) if all(
             ModelRef(pack, v, "bf16").files(c) for c in pack.spec.get("components", {}))]  # fmt: skip
@@ -592,11 +599,17 @@ def core_nodes() -> dict:
     return _nodes(spec["stages"], None, "core", None, nodes)
 
 
+def code_hash(dir: Path) -> str:
+    """The pack's code in cache keys: model.yaml and every top-level module (a runtime's module may import a shared
+    one: ltx/common.py, minimax_h3/sgl.py), never vendor/."""
+    files = [dir / "model.yaml", *sorted(dir.glob("*.py"))]
+    return hashlib.sha256(b"".join(p.read_bytes() for p in files)).hexdigest()[:16]
+
+
 def load(dir: Path, runtime: str) -> tuple[Pack, dict]:
     """One pack for one runtime: (Pack, kind → (schema, Node)). ValueError when it is inconsistent."""
     spec = yaml.safe_load((dir / "model.yaml").read_text())
-    path = dir / f"{runtime}.py"
-    code = hashlib.sha256((dir / "model.yaml").read_bytes() + path.read_bytes()).hexdigest()[:16]
+    code = code_hash(dir)
     module = importlib.import_module(f"packs.{dir.name}.{runtime}")
     pack = Pack(dir.name, dir, spec, runtime, module, code)
     pack.workflows = [json.loads(p.read_text()) for p in sorted(dir.glob("workflows/*.json"))]
@@ -619,7 +632,7 @@ def load(dir: Path, runtime: str) -> tuple[Pack, dict]:
     }
     schema = model_schema(pack)
     nodes[schema["kind"]] = (schema, Node(model_node(pack), code=code, pack=pack))
-    if "lora" in spec:  # Model → Model: only a family with a model node
+    if lora_spec(pack):  # Model → Model: only a family with a model node
         schema = lora_stack_schema(pack)
         nodes[schema["kind"]] = (schema, Node(lora_stack, code=code, pack=pack))
     return pack, nodes | stages

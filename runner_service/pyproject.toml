@@ -22,6 +22,10 @@ torch = [
     "transformers>=5.23.0,<6",
     "accelerate>=1.15.0",
     "numpy>=2.5.4",
+    # the ltx pack's vendored ltx-core (NVIDIA variants): einops throughout, torchaudio for the audio VAE's mel and
+    # resample (2.11.1: the newest, pure Python, runs on torch 2.15)
+    "einops>=0.8.2",
+    "torchaudio==2.11.1",
 ]
 
 [dependency-groups]

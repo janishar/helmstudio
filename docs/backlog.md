@@ -28,6 +28,9 @@ Notes from the owner while using the app. Not scheduled; each is picked up when 
   - screens left as built until the owner decides: the Gallery "This project only" chip and search placeholder; the
     Pipelines list extras (New pipeline / Rename / Delete; four batches with "All batches"); no landing page (Landing
     board, not in a milestone).
+- **Flaky contract test** `tests/test_queue.py::test_round_robin_between_users` (seen 2026-11-21 and -22, passes on
+  rerun): a queued run's `position` can go back up by one (…5, 4, 5) while runs are released, so the count races with
+  release or retry. Unrelated to the work it failed under; fix the position count, then drop this line.
 
 ## Product
 

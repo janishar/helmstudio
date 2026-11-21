@@ -99,6 +99,8 @@ describe("Create on LTX video", () => {
     expect([...menu.querySelectorAll("[aria-pressed]")].map((b) => b.textContent)).toEqual([
       "Distilled",
       "Dev",
+      "Distilled fp8",
+      "Dev int8",
     ]);
     const inspector = screen.getByRole("complementary", { name: "Inspector" });
     expect(within(inspector).queryByText("Model")).toBeNull();

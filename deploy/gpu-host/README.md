@@ -140,9 +140,13 @@ worse for FP8 than for int8 ConvRot in every case; the variant names say which o
 | MiniMax H3 Image | `base-fp8` | unsloth FP8 DiT (20.3 GB), Comfy-Org int8 ConvRot text encoder (27.1 GB), the official VAE and configs (2.4 GB); the official NVFP4 prompt enhancer (17.9 GB, downloaded with it into its own folder `MiniMax-H3-Image-PE`, kept on delete) | 67.7 GB (49.8 + 17.9) |
 | MiniMax H3 (video) | `base-fp8` | Comfy-Org pruned FP8 FL2VA and Ref2VA DiTs (2 × 21.0 GB), Comfy-Org int8 ConvRot text encoder (27.1 GB), the official VAEs, configs and tokenizers of both partitions (22.1 GB), run by SGLang 0.5.23 | 91.2 GB (official: 210.3) |
 | ZONOS3-Mini | `mini` (the official one) | the official GGUF q8_0 set, already int8: the same files on the Mac and here, run by a CUDA build of zonos3-server | 1.2 GB |
+| LTX-2.5 | `distilled-fp8` | unsloth FP8 distilled transformer (19.1 GB) and bf16 connector shards (6.3 GB), DmitryDB int8 ConvRot Gemma 4 text encoder (15.5 GB), the official upscaler, VAEs and duration head (2.8 GB); run by the torch runner on the vendored ltx-core | 43.7 GB (official pair: 122.0) |
+| | `dev-int8` | DmitryDB int8 ConvRot dev transformer; the rest shared with `distilled-fp8` (it must be downloaded too: `ltx/distill` runs its transformer for stage 2) | 21.6 GB more |
 
-A later phase adds LTX-2.5 (FP8, int8 ConvRot for dev). Qwen3-TTS stays on its
-official bf16 weights.
+LTX on NVIDIA leaves out, for now (the run fails before anything loads): LoRA rows and Prompt Relay beats. Its
+workflow templates stay the Mac's (variant `distilled` / `dev`); a graph picks `distilled-fp8` / `dev-int8` on the
+model node. Both LTX variants are not yet run on the VM (plan 17, 21.6 step 6). Qwen3-TTS stays on its official bf16
+weights.
 
 **Download** with `MODELS_MODE=rw` (section 3): Admin › Models, the variant's Download for this host, or
 `helm model download <model> --host <h> --variant <v>`; or copy the folders into `MODELS_DIR` by hand. Plan the disk

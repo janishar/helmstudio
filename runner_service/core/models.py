@@ -241,19 +241,25 @@ def manifest(pack, variant: str) -> tuple[list[dict], list[str]]:
 
 
 def device(pack) -> str:
-    """This runner's device for the pack's runtime, as the registry names devices (MLX's Metal `gpu` is mps)."""
-    d = importlib.import_module(f"core.loaders_{pack.runtime}").device()
+    """This runner's device for the pack's runtime, as the registry names devices (MLX's Metal `gpu` is mps). In an
+    env without the runtime's framework (a torch pack read in the mlx env's tests) the host's own stands in, so
+    `runs_here` never imports torch there."""
+    try:
+        d = importlib.import_module(f"core.loaders_{pack.runtime}").device()
+    except ModuleNotFoundError:
+        d = "mps" if sys.platform == "darwin" else "cpu"
     return "mps" if d == "gpu" else d
 
 
 def runs_here(pack, vid: str) -> bool:
     """Whether the variant runs on this runner's device (API 1.33 model.yaml `variants.<id>.devices`: a community
     FP8 variant is [cuda]); one that does not is never published here, so it is never offered or sent here."""
-    want = pack.spec["variants"][vid].get("devices")
-    # a native pack's binary is built per device (h3: Metal only): its runtime's devices
-    if not want and pack.runtime == "native":
-        want = pack.spec["runtimes"][pack.runtime].get("devices")
-    return not want or device(pack) in want
+    # and on its runtime's devices (a native binary is built per device; ltx's torch runtime is NVIDIA's only)
+    want = (
+        pack.spec["variants"][vid].get("devices"),
+        pack.spec["runtimes"][pack.runtime].get("devices"),
+    )
+    return all(not w or device(pack) in w for w in want)
 
 
 # a safetensors dtype as a precision (API 1.34 component `stored`); U8 (NVFP4) and U32 (MLX packed: int4 or int8) say nothing
@@ -325,7 +331,7 @@ def variant_entry(pack, vid: str) -> dict:
         out["bytes"] = sum(f["bytes"] for f in files)
     out["precisions"] = packs.variant_precisions(pack, vid)
     out |= {"title": v.get("title", vid), "dir": v["dir"]}
-    for k in ("source", "sources", "devices"):
+    for k in ("source", "sources", "devices", "distill_from"):
         if k in v:
             out[k] = v[k]
     if comps:

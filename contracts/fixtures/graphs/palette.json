@@ -1600,7 +1600,8 @@
             }
           ],
           "envs": [
-            "mlx"
+            "mlx",
+            "torch"
           ]
         },
         {
@@ -1643,7 +1644,8 @@
             }
           ],
           "envs": [
-            "mlx"
+            "mlx",
+            "torch"
           ]
         },
         {
@@ -1659,9 +1661,11 @@
               "default": "distilled",
               "enum": [
                 "distilled",
-                "dev"
+                "dev",
+                "distilled-fp8",
+                "dev-int8"
               ],
-              "help": "Distilled: few fixed steps, no guidance (text and image to video). Dev: the full model with guidance, 30 steps (retake, extend, audio to video)."
+              "help": "Distilled: few fixed steps, no guidance (text and image to video). Dev: the full model with guidance, 30 steps (retake, extend, audio to video). fp8 / int8: smaller community weights, NVIDIA hosts only."
             },
             {
               "name": "precision",
@@ -1671,7 +1675,8 @@
               "enum": [
                 "int8",
                 "int4",
-                "bf16"
+                "bf16",
+                "fp8"
               ],
               "help": "Quantized at load: int8 about 19 GB for the transformer, bf16 about 38 GB."
             }
@@ -1684,7 +1689,8 @@
             }
           ],
           "envs": [
-            "mlx"
+            "mlx",
+            "torch"
           ]
         },
         {
@@ -1791,7 +1797,8 @@
             }
           ],
           "envs": [
-            "mlx"
+            "mlx",
+            "torch"
           ]
         },
         {
@@ -1845,7 +1852,8 @@
             }
           ],
           "envs": [
-            "mlx"
+            "mlx",
+            "torch"
           ]
         },
         {
@@ -1928,7 +1936,8 @@
             }
           ],
           "envs": [
-            "mlx"
+            "mlx",
+            "torch"
           ]
         },
         {
@@ -1955,7 +1964,8 @@
             }
           ],
           "envs": [
-            "mlx"
+            "mlx",
+            "torch"
           ]
         },
         {
@@ -1990,7 +2000,8 @@
             }
           ],
           "envs": [
-            "mlx"
+            "mlx",
+            "torch"
           ]
         },
         {
@@ -2017,7 +2028,8 @@
             }
           ],
           "envs": [
-            "mlx"
+            "mlx",
+            "torch"
           ]
         },
         {
@@ -2053,7 +2065,8 @@
             }
           ],
           "envs": [
-            "mlx"
+            "mlx",
+            "torch"
           ]
         },
         {
@@ -2106,7 +2119,8 @@
             }
           ],
           "envs": [
-            "mlx"
+            "mlx",
+            "torch"
           ]
         },
         {
@@ -2186,7 +2200,8 @@
             }
           ],
           "envs": [
-            "mlx"
+            "mlx",
+            "torch"
           ]
         },
         {
@@ -2272,7 +2287,8 @@
             }
           ],
           "envs": [
-            "mlx"
+            "mlx",
+            "torch"
           ]
         },
         {
@@ -2346,7 +2362,8 @@
             }
           ],
           "envs": [
-            "mlx"
+            "mlx",
+            "torch"
           ]
         },
         {
@@ -2368,7 +2385,8 @@
             }
           ],
           "envs": [
-            "mlx"
+            "mlx",
+            "torch"
           ]
         }
       ]

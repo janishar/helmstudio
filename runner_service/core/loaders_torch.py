@@ -510,7 +510,12 @@ def load(
                     )
                 setattr(parent, child_name, Fp8Linear(child))
             elif type(child) is nn.Linear and quantize(name):
-                setattr(parent, child_name, Int8Linear(child, rotated(name)))
+                # a delta added to a rotated weight would apply as (B A) H: wrong, so it fails as on fp8
+                if (group := rotated(name)) and name in bake:
+                    raise RunError(
+                        f"LoRA bake is not available on int8 ConvRot weights ({name}): use adapter mode"
+                    )
+                setattr(parent, child_name, Int8Linear(child, group))
     modules = dict(module.named_modules())
     wanted = {p: {k for k in h if rename(k) is not None} for p, h in headers.items()}
     total = sum(map(len, wanted.values()))

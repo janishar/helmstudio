@@ -26,3 +26,40 @@ retake source's sound and audio-to-video's input). The retake / extend / audio-t
 `utils.constants.DEFAULT_NEGATIVE_PROMPT`, `ltx_core_mlx.utils.image.load_video_frames`) are re-written in `../mlx.py`.
 
 To refresh: copy the same files from a newer commit, re-run `tests/golden/compare_ltx.py` and update this note.
+
+# Vendored: ltx-core (M9 phase 3, the NVIDIA variants)
+
+`ltx_core/` here is a subset of Lightricks' `ltx-core` 1.6.2 (`packages/ltx-core/src/ltx_core` of
+https://github.com/Lightricks/LTX-2), commit `daa6b16fc7f0f1628f2c9e36a303e3312b333cc6` (2026-11-19), for the torch
+runtime on CUDA (plan 17, section 21.6). 148 modules plus the 4 Gemma system-prompt files
+(`text_encoders/gemma/encoders/prompts/`), found by walking every import (top-level and in-function) from the
+transformer, the connector (embeddings processor), the Gemma text encoder, the video VAE package, the audio VAE and
+vocoder, the upsampler, the duration head, the guiders, diffusion steps, patchifiers, conditioning and perturbations.
+Nothing of ltx-pipelines is copied (its av and openimageio dependencies stay out). The package `__init__` files pull
+in DiffVAE (`model/video_vae/transformer/`) and `color/` although the pack uses the conv VAE; they are copied as they
+are. The two `fallback_na/*triton*` modules import triton and are reached only lazily from DiffVAE.
+
+- Licence: Apache-2.0, `ltx_core/LICENSE` (the repo's root `LICENSE`). The weights are under the LTX-2.x Community
+  License, which this does not cover.
+- Runtime dependencies, in the torch extra: `einops` and `torchaudio` (2.11.1, pure Python, works on torch 2.15:
+  `model/audio_vae/ops.py` mel and resample). Not `colour-science` (`color/`): with no SciPy it puts a MagicMock in
+  `sys.modules["scipy"]`, which breaks transformers' imports; the second patch keeps `color/` unimported. ltx-core's
+  own pin `transformers>=5.8,<5.15` is not followed: the runner keeps 5.23 (first patch).
+
+Copied unchanged (byte for byte) except two patches, marked `helmstudio patch` in the files:
+
+- `text_encoders/gemma/encoders/encoder_configurator.py` `_populate_rotary_v5`: on transformers >= 5.15 the Gemma 4
+  text config is heterogeneous and a global `config.head_dim` read raises `AmbiguousGlobalPerLayerAttributeError`.
+  The rotary buffers are computed from `config.per_layer_config[layer_type]` (whose `head_dim` is already the
+  layer type's, so no `global_head_dim` key), as transformers 5.23's own `Gemma4UnifiedTextRotaryEmbedding` does.
+  Checked: the buffers equal transformers' own CPU init for both layer types, and a tiny random 2-layer model
+  encodes through `LTXGemmaTextEncoder.encode` on CPU. Older transformers (no heterogeneous config) take the old path.
+- `model/video_vae/diffusion_tiling.py`: `from ltx_core.color.yuv import frames_per_yuv_gemm` moved into
+  `emit_convert_bytes`, its one use (DiffVAE's tiling): the video VAE package's `__init__` imports this module, so the
+  conv VAE path no longer imports `color/` and its colour-science.
+
+The pack (`../torch.py`) uses ltx-core's models, configurators and key rules; the pipeline (ltx-pipelines) is
+re-written there after `../mlx.py`.
+
+To refresh: copy the same files from a newer commit (re-walk the imports), re-apply the patch if still needed, re-run
+the key tests (`tests/fixtures/ltx_nvidia_headers/`) and update this note.

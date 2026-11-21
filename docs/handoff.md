@@ -302,6 +302,62 @@ Last full contract suite on the final M7 code: see the last M7 commit message (p
   hosts only." The web shows a hyphenated value word by word ("base-fp8" → "Base fp8") and a summary shows the
   precision once ("Base · fp8").
 
+## M9 phase 3 notes: LTX-2.5 on NVIDIA (code only, not run on the VM)
+
+Plan 17, section 21.6. Steps 0-5 and 7 are done; step 6 (the two VM renders and their `.cuda` goldens) is next.
+
+- **Engine**: `runner_service/packs/ltx/torch.py`, the pack's second runtime `torch: {env: torch, devices: [cuda]}`,
+  over Lightricks' ltx-core vendored at `daa6b16` (`packs/ltx/vendor/ltx_core/`, VENDORED.md: 148 modules unchanged
+  but two patches: Gemma 4's rotary buffers on transformers 5.23, and a lazy `color/` import so colour-science is
+  not needed). It ports mlx.py's stages one for one (sigma tables, seeds and noise order, blends, conditioning order,
+  guiders, decode argv). Noise comes from a CPU generator, so CUDA bytes never match the MLX goldens.
+  `packs/ltx/common.py` holds the runtime-neutral part (a pure move from mlx.py; the Mac golden re-ran once, equal).
+- **Weights** (model.yaml `distilled-fp8`, `dev-int8`, folder `ltx-2.5-nvidia`): `rename` maps the community files
+  onto the official names, then ltx-core's own key rules (`PARTS`). unsloth's FP8 transformer loads as the core
+  Fp8Linear (the layers it keeps bf16 stay dense); its two connector shards are the whole connector (projection
+  included). DmitryDB's int8 ConvRot files (text encoder, dev transformer): `tensor_hook` dequantizes each int8
+  weight with its scale and the loader requantizes it, to the same int8 values, into an Int8Linear rotated per 256
+  (`rotated`, per tensor from `comfy_quant`); the layers they keep bf16 are quantized at load, unrotated. unsloth's
+  file has no LTX config: `packs/ltx/transformer-config.json` (the official files' own, byte-equal in DmitryDB's).
+- **distill** on NVIDIA hands stage 2 the dev variant's `distill_from` (model.yaml: dev-int8 → distilled-fp8), no
+  bake. The checks take a variant with `shares_from` as dev, else as distilled, so the contract's texts stay.
+- **Refused before loading** on NVIDIA: LoRA rows (`: LoRAs are not available on the NVIDIA (fp8 / int8) variants
+  yet`) and Prompt Relay beats (ltx-core has none at the pin; a later port: its `context_mask` takes MLX's
+  `build_relay_mask` as is). Auto length works (ltx-core's duration head).
+- **Core**: `runs_here` honours a runtime's `devices` for every runtime (the Mac's torch runner loads ltx but
+  publishes no ltx variant; in an env without the runtime's framework, as the mlx env's tests reading a torch pack,
+  `models.device` falls back to the host's own and never imports torch); the registry leaves out a two-runtime pack's workflows of the other env (ltx's
+  templates stay MLX's). Palette fixture: the ltx kinds list `mlx` and `torch`, except `ltx/lora-stack` (`mlx`). New torch-extra dependencies:
+  `einops`, `torchaudio==2.11.1` (uv.lock re-locked).
+- **Tests** (CPU, no weights): `tests/test_ltx_torch_keys.py` (the committed header fixtures
+  `tests/fixtures/ltx_nvidia_headers/`, strict key and shape match per component; with the official files on disk,
+  `build` itself on every official component); `tests/test_ltx_torch.py` (the five workflows on tiny weights to an
+  MP4, the int8 ConvRot and FP8 layouts through the core loader, the variants per device, the refusals, the distill
+  swap; the transformer forward against mlx.py through `envs/mlx`: 0.17 % of the model's own term, plus RoPE
+  positions and the guided schedule). No VAE parity test: the MLX decoder is fixed at full width.
+
+Owner decisions, 2026-11-22 (built the same day, code and CPU tests only):
+- **Distill routing is data-driven**: model.yaml `variants.<id>.distill_from` (dev-int8: distilled-fp8), published
+  as the variant's `distill_from` (registry.schema.json; no REST change, API stays 1.34). The dispatcher accepts a
+  host for `<family>/distill` when its `lora.prefused` lists variant distilled (MLX, unchanged) or the run's model
+  variant has `distill_from` and that variant is present there; the error text is unchanged. This unblocks audio to
+  video on gcp. The web had no prefused / distill gate to change (offers come from the dispatcher's eligibility).
+- **No LoRAs on NVIDIA LTX**: model.yaml `lora.runtime: mlx` scopes the whole block (core/pack.py `lora_spec`), so a
+  torch runner publishes no ltx `lora` block and no `ltx/lora-stack`, and the Mac's torch runner no longer builds the
+  22B model on the meta device at start. The per-rename `runtime` keys are gone (the block's covers them). Studio's
+  `LoraBlocks()` then takes mac.mlx's ltx block even though gcp.torch sorts first (registry_test).
+- **CPU-only torch runners stay strict**: a runner whose device is not in a runtime's `devices` publishes none of
+  those variants (contracts/README.md, Quantized variants).
+
+Open, before or on the VM:
+1. (Closed 2026-11-22: distill_from above.)
+2. **No NVIDIA workflow templates**: the five ltx templates pin `variant: [distilled]` / `[dev]` (Mac only); on
+   gcp the model node must pick `distilled-fp8` / `dev-int8` by hand (Graph editor) until templates or presets exist.
+3. Unchecked until the VM: the 12B Gemma forward on CUDA (only a tiny one ran), FP8 quality (`RUNNER_FP8_MATMUL=dequant`
+   is the knob), the guided int8 speed, the untiled VAE decode's memory at large sizes, the `peak_gb` values (MLX
+   measurements) and the torchaudio mel on CUDA.
+4. The source video's frame count comes from `core.media.probe` (packets) where mlx.py reads `nb_frames`.
+
 ## M8 notes
 
 - The owner said "build it" on 2026-11-21 after reviewing [15-voices.md](plan/15-voices.md) and the voice boards

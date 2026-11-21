@@ -27,7 +27,9 @@ quantized path".
 | | prompt enhancer | official NVFP4, as today |
 | MiniMax H3 video | FL2VA, Ref2VA DiTs | community FP8 (phase 2) |
 | LTX-2.5 | distilled transformer | unsloth FP8 (phase 3) |
-| | dev transformer | no FP8 exists: Lightricks' int8 ConvRot (phase 3) |
+| | dev transformer | no FP8 exists: community int8 ConvRot (DmitryDB; phase 3) |
+| | text encoder (Gemma 4 12B, with the projection) | no FP8 exists: community int8 ConvRot (DmitryDB) |
+| | connector | bf16 (unsloth's shards) |
 | ZONOS3-Mini | all | the official GGUF q8_0 set (already int8), built for CUDA |
 
 Qwen3-TTS stays on its official bf16 weights (1.7B: nothing to gain).
@@ -54,7 +56,12 @@ Qwen3-TTS stays on its official bf16 weights (1.7B: nothing to gain).
    76 s start to MP4, 32.5 GB VRAM) after four SGLang fixes (docs/handoff.md, "M9 phase 2 notes", sixth pass). Open:
    Stop, first frame, Ref2VA. MiniMax H3 Image base-fp8 with
    Enhance on ran on gcp.
-3. LTX-2.5 on CUDA (torch port) with community FP8 / int8.
+3. LTX-2.5 on CUDA (torch port) with community FP8 / int8. Code done (2026-11-21, section 21.6 steps 0-5, 7):
+   `packs/ltx/torch.py` on the vendored ltx-core, variants `distilled-fp8` and `dev-int8`; all 5 workflows run on CPU
+   with tiny weights, the port matches mlx.py on the same tiny weights. Not run on the VM yet (step 6). Refused on
+   NVIDIA for now: LoRA rows, Prompt Relay beats (Auto length works: ltx-core has the duration head). 2026-11-22
+   (owner): distill routing from model.yaml `distill_from` (audio to video eligible on gcp), the ltx `lora` block
+   MLX only (`lora.runtime: mlx`: no LoRA Stack on NVIDIA), CPU-only torch runners strict.
 
 ### 21.5 Known issues
 
@@ -68,7 +75,9 @@ Qwen3-TTS stays on its official bf16 weights (1.7B: nothing to gain).
 
 ### 21.6 Phase 3: LTX-2.5 on NVIDIA
 
-Status: design, 2026-11-21. Nothing built yet. It rests on two read-only research passes: HF API metadata, safetensors headers read by range request, and source trees. No weights were downloaded. The scout is [reference-notes/nvidia-quantized.md](../reference-notes/nvidia-quantized.md) section 1. The scratch headers are in the session scratchpad and are not kept.
+Status: built 2026-11-21 except step 6 (the VM renders); the owner's three decisions of 2026-11-22 (distill
+routing by `distill_from`, LoRAs MLX only, CPU-only torch strict) built the same day: docs/handoff.md, "M9 phase 3
+notes". The design below rests on two read-only research passes: HF API metadata, safetensors headers read by range request, and source trees. No weights were downloaded. The scout is [reference-notes/nvidia-quantized.md](../reference-notes/nvidia-quantized.md) section 1. The scratch headers are in the session scratchpad and are not kept.
 
 **Engine: Lightricks' ltx-core, vendored and run in-process in the torch runner.** It is the only engine that covers all 5 workflows (text to video, image to video with keyframes, retake, extend, audio to video) with the Mac pack's behaviour. The vendored `ltx_core_mlx` is a port of this code (packs/ltx/vendor/VENDORED.md), so `mlx.py`'s stages translate nearly line for line. The pack gains a second runtime: `torch: {env: torch, devices: [cuda]}` and a `packs/ltx/torch.py`. Core already loads one module per runtime (core/pack.py `load`). There is no new venv and no child process.
 
@@ -78,7 +87,7 @@ Rejected options:
 - vLLM-Omni: T2V and first-frame I2V only (`recipes/LTX/LTX-2.5.md`). 2 of 5, and not in our stack.
 
 **Coverage.** All 5 workflows run on NVIDIA. Left Mac-only for now:
-- LoRA rows on the NVIDIA variants (refused with a RunError). The pack bakes only. A bake into FP8 already fails in core, and a bake into a ConvRot int8 weight would add an unrotated delta. Adapters on torch are a later step.
+- LoRA rows on the NVIDIA variants (refused with a RunError; owner, 2026-11-22: the torch runner publishes no ltx `lora` block and no `ltx/lora-stack`, model.yaml `lora.runtime: mlx`). The pack bakes only. A bake into FP8 already fails in core, and a bake into a ConvRot int8 weight would add an unrotated delta. Adapters on torch are a later step.
 - Prompt beats (Prompt Relay) and Auto length (duration head), but only if ltx-core at the pin does not have them. Unknown today; the spike below checks. If they are missing, NVIDIA refuses them with a RunError, and porting each one is about 3 h later: `prompt_relay.py` is 269 lines and `duration_head.py` is 307 lines in the MLX vendor.
 
 #### Weights (owner's rule: community FP8, else community int8, else official)
@@ -143,7 +152,7 @@ Two open checks:
    - `torch.py` ports the stages over vendored ltx-core:
      - encode, keyframes, two-stage sample, upscale, decode
      - encode-guided, encode-video, encode-audio, retake, extend, sample-guided
-     - `distill` on CUDA returns the handle of the variant's share owner (distilled-fp8). This is data-driven: dev-int8's `shares_from`, no new key.
+     - `distill` on CUDA returns the handle of the variant's `distill_from` (distilled-fp8). Data-driven: model.yaml `distill_from` (owner, 2026-11-22: a key of its own, published so the dispatcher can route a2v; it replaced the first build's `shares_from` reuse).
    - `rename(component, key)` covers three cases:
      - unsloth to ltx-core: `._weight_qdata`/`._weight_scale` → `.weight`/`.scale`; strip `unsloth_root::`; the inverse of diffusers' `convert_ltx2_transformer_to_diffusers` (loaders/single_file_utils.py:4151) plus `prompt_adaln` → `prompt_adaln_single`, `audio_prompt_adaln` → `audio_prompt_adaln_single`, `time_embed` → `adaln_single`, `audio_time_embed` → `audio_adaln_single`; add the `model.diffusion_model.` prefix. Checked 4091 of 4091 keys, 0 shape mismatches.
      - the connector shards: the inverse of `_convert_non_diffusers_ltx2_lora_to_diffusers` (`aggregate_embed` → `text_proj_in`). Not yet checked.

@@ -1871,13 +1871,18 @@
                             ]
                           },
                           "description": "from API 1.33: the only devices the variant runs on (model.yaml `variants.<id>.devices`: a community FP8 or int8 variant is [cuda]). A runner on another device does not publish the variant at all, so the Models screen never offers it there and the dispatcher never sends it a run of it. Absent: every device of the model's runtimes"
+                        },
+                        "distill_from": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+                          "description": "M9: the variant whose weights are this one's distilled model, built in (model.yaml `variants.<id>.distill_from`: ltx dev-int8's is distilled-fp8, the dev transformer with the distilled LoRA fused in): `<family>/distill` on this variant loads that variant's transformer, no LoRA, so a host qualifies for it when that variant is present there. Absent: the distill bakes the family's pre-fused distilled LoRA (`lora.prefused`, variant distilled)"
                         }
                       }
                     }
                   },
                   "lora": {
                     "$ref": "#/$defs/loraBlock",
-                    "description": "present when the family takes LoRAs (it publishes a <family>/lora-stack node)"
+                    "description": "present when the family takes LoRAs on this runner's runtime (it publishes a <family>/lora-stack node; ltx: the mlx runner only, model.yaml `lora.runtime`)"
                   },
                   "media": {
                     "type": "array",

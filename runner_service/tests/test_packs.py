@@ -182,6 +182,38 @@ def test_lora_stack_node_is_generated_from_the_lora_block(tmp_path, monkeypatch)
     assert schemas.registry_errors("loras", fixture("qwen-image.loras.valid.json")) == []
 
 
+def test_a_lora_block_with_a_runtime_holds_only_for_that_runtime():
+    from types import SimpleNamespace
+
+    spec = {"lora": {"runtime": "mlx", "component": "transformer"}}
+    assert pack.lora_spec(SimpleNamespace(spec=spec, runtime="mlx")) == spec["lora"]
+    assert pack.lora_spec(SimpleNamespace(spec=spec, runtime="torch")) is None
+    assert pack.lora_spec(SimpleNamespace(spec={"lora": {"component": "t"}}, runtime="torch"))
+
+
+def test_the_device_of_a_runtime_whose_framework_is_absent_is_the_hosts(monkeypatch):
+    import sys
+    from types import SimpleNamespace
+
+    from core import models
+
+    # as in the mlx env: no torch to import
+    monkeypatch.setitem(sys.modules, "core.loaders_torch", None)
+    host = "mps" if sys.platform == "darwin" else "cpu"
+    assert models.device(SimpleNamespace(runtime="torch")) == host
+
+
+def test_the_code_hash_covers_every_top_level_module_of_the_pack(tmp_path):
+    (tmp_path / "model.yaml").write_text("id: x\n")
+    (tmp_path / "mlx.py").write_text("")
+    first = pack.code_hash(tmp_path)
+    (tmp_path / "vendor").mkdir()
+    (tmp_path / "vendor/lib.py").write_text("x = 1\n")
+    assert pack.code_hash(tmp_path) == first  # vendored code is pinned by the pack's own modules
+    (tmp_path / "common.py").write_text("x = 1\n")
+    assert pack.code_hash(tmp_path) != first
+
+
 def test_echo_lora_block_fits_the_contract_lora_fixtures():
     """The fake echo block names the modules of the contract LoRA fixtures that fit qwen-image, so they fit echo on
     a fake-only stack (no GPU); where qwen-image is also published, detection prefers it (contracts README)."""

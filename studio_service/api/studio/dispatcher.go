@@ -1053,7 +1053,8 @@ func eligibleIn(reg *registry.Registry, values []registry.Host, reserved map[str
 		return gone("no live host for env " + env + " has " + missing)
 	}
 	// API 1.19: a <family>/distill node fuses the family's distilled LoRA onto another variant: the host's models
-	// key must list it as pre-fused for variant distilled
+	// key must list it as pre-fused for variant distilled (MLX), or (M9, torch) the run's model variant names its
+	// built-in distilled weights (`distill_from`: dev-int8 → distilled-fp8) and that variant is present there
 	for _, id := range slices.Sorted(maps.Keys(graph)) {
 		family, distill := strings.CutSuffix(graph[id].Kind, "/distill")
 		if !distill {
@@ -1061,7 +1062,13 @@ func eligibleIn(reg *registry.Registry, values []registry.Host, reserved map[str
 		}
 		hosts = slices.DeleteFunc(hosts, func(host string) bool {
 			found, _ := reg.Model(host+"."+env, family)
-			return found.Lora == nil || !slices.ContainsFunc(found.Lora.Prefused, func(p registry.Prefused) bool { return p.Variant == "distilled" })
+			if found.Lora != nil && slices.ContainsFunc(found.Lora.Prefused, func(p registry.Prefused) bool { return p.Variant == "distilled" }) {
+				return false
+			}
+			return !slices.ContainsFunc(models, func(m runModel) bool {
+				i := slices.IndexFunc(found.Variants, func(v registry.Variant) bool { return v.ID == m.variant })
+				return m.family == family && i >= 0 && found.Variants[i].DistillFrom != "" && found.Has(found.Variants[i].DistillFrom)
+			})
 		})
 		if len(hosts) == 0 {
 			return gone("no live host for env " + env + " has the distilled LoRA")

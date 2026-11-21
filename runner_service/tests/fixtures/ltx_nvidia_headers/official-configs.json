@@ -1,0 +1,315 @@
+{
+ "source": "Lightricks/LTX-2.5@5e6e71018ee1756ed329b697a7b4aedc934dfce9: each file's __metadata__ without its licence",
+ "files": {
+  "vae/ltx-2.5-video-vae-conv-bf16.safetensors": {
+   "config": {
+    "vae": {
+     "_class_name": "CausalVideoAutoencoder",
+     "dims": 3,
+     "in_channels": 3,
+     "out_channels": 3,
+     "latent_channels": 128,
+     "encoder_blocks": [
+      [
+       "res_x",
+       {
+        "num_layers": 4
+       }
+      ],
+      [
+       "compress_space_res",
+       {
+        "multiplier": 2
+       }
+      ],
+      [
+       "res_x",
+       {
+        "num_layers": 6
+       }
+      ],
+      [
+       "compress_time_res",
+       {
+        "multiplier": 2
+       }
+      ],
+      [
+       "res_x",
+       {
+        "num_layers": 4
+       }
+      ],
+      [
+       "compress_all_res",
+       {
+        "multiplier": 2
+       }
+      ],
+      [
+       "res_x",
+       {
+        "num_layers": 2
+       }
+      ],
+      [
+       "compress_all_res",
+       {
+        "multiplier": 1
+       }
+      ],
+      [
+       "res_x",
+       {
+        "num_layers": 2
+       }
+      ]
+     ],
+     "decoder_blocks": [
+      [
+       "res_x",
+       {
+        "num_layers": 4
+       }
+      ],
+      [
+       "compress_space",
+       {
+        "multiplier": 2
+       }
+      ],
+      [
+       "res_x",
+       {
+        "num_layers": 6
+       }
+      ],
+      [
+       "compress_time",
+       {
+        "multiplier": 2
+       }
+      ],
+      [
+       "res_x",
+       {
+        "num_layers": 4
+       }
+      ],
+      [
+       "compress_all",
+       {
+        "multiplier": 1
+       }
+      ],
+      [
+       "res_x",
+       {
+        "num_layers": 2
+       }
+      ],
+      [
+       "compress_all",
+       {
+        "multiplier": 2
+       }
+      ],
+      [
+       "res_x",
+       {
+        "num_layers": 2
+       }
+      ]
+     ],
+     "scaling_factor": 1.0,
+     "norm_layer": "pixel_norm",
+     "patch_size": 4,
+     "latent_log_var": "uniform",
+     "use_quant_conv": false,
+     "causal_decoder": false,
+     "timestep_conditioning": false,
+     "normalize_latent_channels": false,
+     "encoder_base_channels": 128,
+     "decoder_base_channels": 128,
+     "spatial_padding_mode": "zeros"
+    }
+   },
+   "model_version": "2.5.0"
+  },
+  "vae/ltx-2.5-audio-vae-bf16.safetensors": {
+   "config": {
+    "audio_vae": {
+     "model": {
+      "params": {
+       "ddconfig": {
+        "double_z": true,
+        "mel_bins": 64,
+        "z_channels": 8,
+        "resolution": 256,
+        "downsample_time": false,
+        "in_channels": 2,
+        "out_ch": 2,
+        "ch": 128,
+        "ch_mult": [
+         1,
+         2,
+         4
+        ],
+        "num_res_blocks": 2,
+        "attn_resolutions": [],
+        "dropout": 0.0,
+        "mid_block_add_attention": false,
+        "norm_type": "pixel",
+        "causality_axis": "height"
+       },
+       "sampling_rate": 16000
+      }
+     },
+     "preprocessing": {
+      "audio": {
+       "sampling_rate": 16000,
+       "max_wav_value": 32768.0,
+       "duration": 5.12,
+       "stereo": true,
+       "causal_padding": 3
+      },
+      "stft": {
+       "filter_length": 1024,
+       "hop_length": 160,
+       "win_length": 1024,
+       "causal": true
+      },
+      "mel": {
+       "n_mel_channels": 64,
+       "mel_fmin": 0,
+       "mel_fmax": 8000
+      }
+     }
+    },
+    "vocoder": {
+     "vocoder": {
+      "upsample_initial_channel": 1536,
+      "resblock": "AMP1",
+      "upsample_rates": [
+       5,
+       2,
+       2,
+       2,
+       2,
+       2
+      ],
+      "resblock_kernel_sizes": [
+       3,
+       7,
+       11
+      ],
+      "upsample_kernel_sizes": [
+       11,
+       4,
+       4,
+       4,
+       4,
+       4
+      ],
+      "resblock_dilation_sizes": [
+       [
+        1,
+        3,
+        5
+       ],
+       [
+        1,
+        3,
+        5
+       ],
+       [
+        1,
+        3,
+        5
+       ]
+      ],
+      "stereo": true,
+      "use_tanh_at_final": false,
+      "activation": "snakebeta",
+      "use_bias_at_final": false
+     },
+     "bwe": {
+      "upsample_initial_channel": 512,
+      "resblock": "AMP1",
+      "upsample_rates": [
+       6,
+       5,
+       2,
+       2,
+       2
+      ],
+      "resblock_kernel_sizes": [
+       3,
+       7,
+       11
+      ],
+      "upsample_kernel_sizes": [
+       12,
+       11,
+       4,
+       4,
+       4
+      ],
+      "resblock_dilation_sizes": [
+       [
+        1,
+        3,
+        5
+       ],
+       [
+        1,
+        3,
+        5
+       ],
+       [
+        1,
+        3,
+        5
+       ]
+      ],
+      "stereo": true,
+      "use_tanh_at_final": false,
+      "activation": "snakebeta",
+      "use_bias_at_final": false,
+      "apply_final_activation": false,
+      "input_sampling_rate": 16000,
+      "output_sampling_rate": 48000,
+      "hop_length": 80,
+      "n_fft": 512,
+      "win_size": 512,
+      "num_mels": 64
+     }
+    }
+   },
+   "model_version": "2.5.0"
+  },
+  "latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors": {
+   "config": {
+    "_class_name": "LatentUpsampler",
+    "in_channels": 128,
+    "mid_channels": 1024,
+    "num_blocks_per_stage": 4,
+    "dims": 3,
+    "spatial_upsample": true,
+    "temporal_upsample": false,
+    "spatial_scale": 2.0,
+    "rational_resampler": false
+   }
+  },
+  "model_patches/ltx-2.5-duration-head-bf16.safetensors": {
+   "config": {
+    "transformer": {
+     "cross_attention_dim": 4096,
+     "audio_cross_attention_dim": 2048
+    },
+    "duration_head": {}
+   },
+   "model_version": "2.5.0"
+  }
+ }
+}

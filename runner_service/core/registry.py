@@ -28,7 +28,10 @@ def build(env: str = ENV) -> tuple[dict[str, dict], dict, list]:
     loaded = packs.for_env(env)
     core = packs.core_nodes()
     pack_nodes = {kind: n for _, nodes in loaded for kind, n in nodes.items()}
-    workflows = [w for p, _ in loaded for w in p.workflows]
+    # a pack with two runtimes ships each workflow for one of them (ltx's are MLX's): the other's are not published
+    workflows = [
+        w for p, _ in loaded for w in p.workflows if w["env"] == env or len(p.spec["runtimes"]) == 1
+    ]
     used = {n["kind"] for w in workflows for n in w["nodes"].values()}
     offered = {
         k for p, _ in loaded for k in p.spec.get("publish", [])
