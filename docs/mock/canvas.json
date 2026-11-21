@@ -49,9 +49,9 @@
     },
     "CreateEnhance.dc.html": {
       "expand": "fill",
-      "h": 960,
+      "h": 1660,
       "is_interactive": true,
-      "title": "Create · MiniMax H3 Image: No enhance, Think, the enhanced prompt under the run",
+      "title": "Create · MiniMax H3 Image: No enhance, Think, the enhanced prompt under the run, Enhance is off, enhancer not downloaded",
       "w": 1440,
       "x": -1520,
       "y": 0
@@ -63,7 +63,7 @@
       "title": "Create · MiniMax H3 References: video and audio references, the Last frame tile",
       "w": 1440,
       "x": -1520,
-      "y": 1080
+      "y": 1780
     },
     "Direct.dc.html": {
       "expand": "fill",
@@ -85,7 +85,7 @@
     },
     "Elements.dc.html": {
       "expand": "fill",
-      "h": 1920,
+      "h": 1960,
       "is_interactive": true,
       "title": "Create · elements and @ mentions",
       "w": 1440,
@@ -162,7 +162,7 @@
       "title": "Landing page",
       "w": 1440,
       "x": 0,
-      "y": 1580
+      "y": 2080
     },
     "Looks.dc.html": {
       "expand": "fill",
@@ -175,7 +175,7 @@
     },
     "LoraPicker.dc.html": {
       "expand": "fill",
-      "h": 960,
+      "h": 1120,
       "is_interactive": true,
       "title": "Create · add a LoRA, upload your own",
       "w": 1440,
@@ -184,9 +184,9 @@
     },
     "Main.dc.html": {
       "expand": "fill",
-      "h": 1460,
+      "h": 1960,
       "is_interactive": true,
-      "title": "Create · Qwen Image",
+      "title": "Create · Qwen Image: Enhance prompt (PE-T2I / PE-I2I), enhancer not downloaded",
       "w": 1440,
       "x": 0,
       "y": 0
@@ -202,7 +202,7 @@
     },
     "Models.dc.html": {
       "expand": "fill",
-      "h": 960,
+      "h": 1040,
       "is_interactive": true,
       "title": "Models",
       "w": 1440,
@@ -328,7 +328,7 @@
     },
     "VideoSource.dc.html": {
       "expand": "fill",
-      "h": 2240,
+      "h": 2320,
       "is_interactive": true,
       "title": "Create · LTX retake, extend, audio to video: source, range, audio",
       "w": 1440,
@@ -391,9 +391,9 @@
     },
     "LtxFeatures.dc.html": {
       "expand": "fill",
-      "h": 5080,
+      "h": 6380,
       "is_interactive": true,
-      "title": "Create · LTX studio features: Detail, negative prompt, float16, bindings, distilled actions, Deblur, Refine details, SDR to HDR",
+      "title": "Create · LTX studio features: Detail, negative prompt, float16, bindings, distilled actions, optional add-ons (Deblur, Refine details, SDR to HDR: backlog)",
       "w": 1440,
       "x": 13680,
       "y": 2280

@@ -108,14 +108,20 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 </div>
 
 <div aria-label="Run progress" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px">
-<span style="display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 8px; background: var(--s1); color: var(--t2); text-decoration: line-through">Enhance</span>
+<span style="display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 8px; background: var(--s1)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg>Enhance prompt <span style="font-family: 'JetBrains Mono', monospace; color: var(--t2)">21.6 s</span></span>
 <span style="display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 8px; background: var(--s1)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg>Encode <span style="font-family: 'JetBrains Mono', monospace; color: var(--t2)">4.1 s</span></span>
 <span style="display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 8px; background: var(--s2); border: 1px solid var(--s5); font-weight: 500">Sample<span style="width: 120px; height: 4px; border-radius: 2px; background: var(--s5); display: block"><span style="display: block; width: 30%; height: 4px; border-radius: 2px; background: var(--a1)"></span></span><span style="font-family: 'JetBrains Mono', monospace; font-weight: 400">12 / 40</span></span>
 <span style="padding: 6px 10px; border-radius: 8px; background: var(--s1); color: var(--t2)">Decode</span>
+<span style="padding: 6px 10px; border-radius: 8px; background: var(--s1); color: var(--t2)">Saving</span>
 <div style="flex-grow: 1"></div>
 <span style="font-family: 'JetBrains Mono', monospace; color: var(--t2)">1:52 left</span>
 <button style="height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--s5); background: transparent; font-size: 13px">Stop</button>
 </div>
+
+<details aria-label="Enhance prompt" style="padding: 10px 14px; border-radius: 12px; background: var(--s1); border: 1px solid var(--s3); font-size: 13px">
+<summary style="cursor: pointer; display: flex; align-items: baseline; gap: 8px; list-style: none"><span style="flex: 0 0 auto; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--t2)">Enhance prompt<button class="i" aria-label="More information" title="What PE-I2I wrote (2 references) and the model drew from; the take keeps your prompt.">i</button></span><span style="min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--t1b)">The red fox from &lt;image1&gt; stands in the snow-covered field of &lt;image2&gt; at dusk, body turned three-quarters toward the camera, its breath a pale plume in the cold air.</span></summary>
+<p style="margin: 8px 0 0; color: var(--t1b); line-height: 20px">The red fox from &lt;image1&gt; stands in the snow-covered field of &lt;image2&gt; at dusk, body turned three-quarters toward the camera, its breath a pale plume in the cold air. Low sun behind it rims the fur in warm orange light while the snow falls into cool blue shadow; keep the field, the tree line and the sky of &lt;image2&gt; unchanged, the fox's markings and face from &lt;image1&gt;, sharp focus on its eyes, natural detail, photographic.</p>
+</details>
 
 <div style="display: flex; align-items: center; gap: 10px; overflow-x: auto">
 <button aria-label="Take, seed 42" style="flex: 0 0 auto; width: 112px; height: 63px; border-radius: 8px; border: 2px solid var(--a1); background: var(--s1); color: var(--t2); font-family: 'JetBrains Mono', monospace; font-size: 11px">seed 42</button>
@@ -137,8 +143,9 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <textarea id="prompt" rows="2" style="width: 100%; box-sizing: border-box; resize: none; border: 0; outline: 0; background: transparent; color: var(--t1); font: inherit; font-size: 15px; line-height: 22px">Place the fox from @fox in the field from @snowfield at dusk, soft backlight, breath visible in the cold air</textarea>
 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
 <button style="height: 36px; padding: 0 12px; border-radius: 10px; border: 0; background: var(--s4); font-size: 13px; font-weight: 500">Base · int8</button>
-<button title="Run on: Auto picks a free machine (see Create · Run on)" style="height: 36px; padding: 0 12px; border-radius: 10px; border: 0; background: var(--s4); font-size: 13px; font-weight: 500">Run on Auto</button>
+<button title="Run on: Auto picks a free machine (see Create · Run on)" style="height: 36px; padding: 0 12px; border-radius: 10px; border: 0; background: var(--s4); font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 6px"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 auto"><rect x="4" y="4" width="16" height="16" rx="2"></rect><rect x="9" y="9" width="6" height="6" rx="1"></rect><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"></path></svg>Auto</button>
 <button style="height: 36px; padding: 0 12px; border-radius: 10px; border: 0; background: var(--s4); font-size: 13px; font-weight: 500">16:9 · 4 MP</button>
+<button aria-pressed="false" title="Rewrites the prompt with Qwen-Image-2.1-PE: PE-T2I without references, PE-I2I with them" style="height: 36px; padding: 0 12px; border-radius: 10px; border: 0; background: var(--s4); font-size: 13px; font-weight: 500">No enhance off</button>
 <button style="height: 36px; padding: 0 12px; border-radius: 10px; border: 0; background: var(--s4); font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 6px"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect x="4" y="4" width="16" height="16" rx="3"></rect><circle cx="9" cy="9" r="1"></circle><circle cx="15" cy="15" r="1"></circle></svg>Seed 45</button>
 <div style="flex-grow: 1"></div>
 <div role="group" aria-label="Seeds to queue" style="display: flex; align-items: center; height: 36px; border-radius: 10px; background: var(--s4); font-size: 13px; font-weight: 500">
@@ -152,10 +159,13 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <aside aria-label="Inspector" style="flex: 1 1 320px; box-sizing: border-box; padding: 16px 18px 24px; border-left: 1px solid var(--s3); background: var(--p0); display: flex; flex-direction: column; gap: 22px">
 
 <div style="display: flex; flex-direction: column; gap: 8px">
-<h2 style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--t2)">Preset</h2>
-<div style="display: flex; gap: 8px">
+<h2 style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--t2); display: flex; align-items: center">Preset<button class="i" aria-label="More information" title="A preset sets only the keys it names: Draft and Final the steps, Plain and Enhanced the prompt enhancer.">i</button></h2>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
 <button style="height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--ln); background: transparent; font-size: 13px">Draft</button>
 <button aria-pressed="true" style="height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--a1); background: var(--s1); font-size: 13px">Final</button>
+<button style="height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--ln); background: transparent; font-size: 13px">Plain</button>
+<button aria-pressed="true" style="height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--a1); background: var(--s1); font-size: 13px">Enhanced</button>
+<button style="height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--ln); background: transparent; font-size: 13px">Enhanced, think</button>
 </div>
 </div>
 
@@ -205,11 +215,12 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 </div>
 
 <div style="display: flex; flex-direction: column; gap: 10px">
-<h2 style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--t2)">Prompt<button class="i" aria-label="More information" title="Loads an 18 GB rewriter first; adds minutes">i</button></h2>
+<h2 style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--t2)">Enhance</h2>
 <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px">
-<div style="display: flex; flex-direction: column; gap: 2px"><span>Enhance prompt</span></div>
-<button role="switch" aria-checked="false" aria-label="Enhance prompt" style="flex: 0 0 auto; width: 44px; height: 26px; border-radius: 999px; border: 1px solid var(--ln); background: var(--s1); padding: 2px; display: flex"><span style="width: 20px; height: 20px; border-radius: 999px; background: var(--t2); display: block"></span></button>
+<div style="display: flex; flex-direction: column; gap: 2px"><span>Think<button class="i" aria-label="More information" title="Think longer: better prompts, slower.">i</button></span></div>
+<button role="switch" aria-checked="false" aria-label="Think" style="flex: 0 0 auto; width: 44px; height: 26px; border-radius: 999px; border: 1px solid var(--ln); background: var(--s1); padding: 2px; display: flex"><span style="width: 20px; height: 20px; border-radius: 999px; background: var(--t2); display: block"></span></button>
 </div>
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--t2)">PE-I2I · 2 references (PE-T2I with none)</span>
 </div>
 </aside>
 
@@ -233,7 +244,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 </div>
 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
 <button style="height: 36px; padding: 0 12px; border-radius: 10px; border: 0; background: var(--s4); font-size: 13px; font-weight: 500">Base · fp8</button>
-<button title="Run on: Auto picks a free machine (see Create · Run on)" style="height: 36px; padding: 0 12px; border-radius: 10px; border: 0; background: var(--s4); font-size: 13px; font-weight: 500">Run on Auto</button>
+<button title="Run on: Auto picks a free machine (see Create · Run on)" style="height: 36px; padding: 0 12px; border-radius: 10px; border: 0; background: var(--s4); font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 6px"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 auto"><rect x="4" y="4" width="16" height="16" rx="2"></rect><rect x="9" y="9" width="6" height="6" rx="1"></rect><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"></path></svg>Auto</button>
 <button style="height: 36px; padding: 0 12px; border-radius: 10px; border: 0; background: var(--s4); font-size: 13px; font-weight: 500">16:9 · 4 MP</button>
 </div>
 </div>
@@ -248,6 +259,54 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <button role="menuitemradio" aria-checked="false" style="text-align: left; padding: 8px 12px; border-radius: 10px; border: 0; background: transparent; box-shadow: none; font-size: 13px">MiniMax H3 Image</button>
 <button role="menuitemradio" aria-checked="false" aria-disabled="true" style="text-align: left; padding: 8px 12px; border-radius: 10px; border: 0; background: transparent; box-shadow: none; font-size: 13px; color: var(--t2); display: flex; align-items: center; justify-content: space-between; gap: 8px"><span>MiniMax H3 Text to video</span><span style="font-size: 11px; white-space: nowrap">Not downloaded · <span style="text-decoration: underline">Models</span></span></button>
 <button role="menuitemradio" aria-checked="false" style="text-align: left; padding: 8px 12px; border-radius: 10px; border: 0; background: transparent; box-shadow: none; font-size: 13px">LTX-2.5 Text to video</button>
+</div>
+</div>
+
+<div style="grid-column: 1 / -1; display: flex; flex-direction: column; gap: 12px">
+<span style="font-size: 12px; color: var(--t2)">Enhancer not downloaded on any live host (an optional add-on): the Enhance controls stay visible, greyed, with the reason; the run goes without enhance</span>
+<div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+<div style="flex: 1 1 380px; min-width: 0; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 14px; border-radius: 16px; background: var(--s2); border: 1px solid var(--s5)">
+<button style="height: 36px; padding: 0 12px; border-radius: 10px; border: 0; background: var(--s4); font-size: 13px; font-weight: 500">Base · int8</button>
+<button title="Run on: Auto picks a free machine (see Create · Run on)" style="height: 36px; padding: 0 12px; border-radius: 10px; border: 0; background: var(--s4); font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 6px"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 auto"><rect x="4" y="4" width="16" height="16" rx="2"></rect><rect x="9" y="9" width="6" height="6" rx="1"></rect><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"></path></svg>Auto</button>
+<button aria-pressed="true" aria-disabled="true" title="Enhancer not downloaded. An admin downloads it in Models, under the model's optional add-ons." style="height: 36px; padding: 0 12px; border-radius: 10px; border: 0; background: var(--s4); font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 8px; color: var(--t2); cursor: not-allowed"><span style="opacity: 0.55">No enhance on</span><em style="font-style: normal; font-size: 11px; color: var(--t2); white-space: nowrap">Enhancer not downloaded</em></button>
+</div>
+<div aria-label="Run progress" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px">
+<span style="padding: 6px 10px; border-radius: 8px; background: var(--s1); color: var(--t2); text-decoration: line-through">Enhance prompt</span>
+<span style="padding: 6px 10px; border-radius: 8px; background: var(--s1); color: var(--t2)">Encode</span>
+<span style="padding: 6px 10px; border-radius: 8px; background: var(--s1); color: var(--t2)">Sample</span>
+<span style="padding: 6px 10px; border-radius: 8px; background: var(--s1); color: var(--t2)">Decode</span>
+<span style="padding: 6px 10px; border-radius: 8px; background: var(--s1); color: var(--t2)">Saving</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--t2)">Enhance on, the enhancer only on mac: per host through Run on</span>
+<div role="menu" aria-label="Run on" style="width: 380px; box-sizing: border-box; padding: 8px; border-radius: 18px 18px 18px 8px; background: var(--s2); border: 1px solid var(--s5); box-shadow: 0 24px 40px -12px color-mix(in srgb, var(--shd) 80%, transparent); display: flex; flex-direction: column; gap: 2px">
+<span style="padding: 4px 12px 2px; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--t2)">Run on</span>
+<button role="menuitemradio" aria-checked="true" style="text-align: left; padding: 8px 12px; border-radius: 10px; border: 0; background: var(--s4); font-weight: 600; box-shadow: none; font-size: 13px; display: flex; align-items: center; justify-content: space-between; gap: 8px"><span style="display: flex; flex-direction: column; gap: 1px">Auto<small style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--t2); font-weight: 400">picks a free machine</small></span></button>
+<button role="menuitemradio" aria-checked="false" style="text-align: left; padding: 8px 12px; border-radius: 10px; border: 0; background: transparent; box-shadow: none; font-size: 13px; display: flex; align-items: center; justify-content: space-between; gap: 8px"><span style="display: flex; flex-direction: column; gap: 1px">Mac<small style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--t2); font-weight: 400">mac · Apple M5 Pro</small></span></button>
+<button role="menuitemradio" aria-checked="false" aria-disabled="true" style="text-align: left; padding: 8px 12px; border-radius: 10px; border: 0; background: transparent; box-shadow: none; font-size: 13px; display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--t2); cursor: not-allowed"><span style="display: flex; flex-direction: column; gap: 1px; opacity: 0.55">NVIDIA<small style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--t2)">gcp · RTX PRO 6000</small></span><em style="font-style: normal; font-size: 11px; color: var(--t2); white-space: nowrap">enhancer not downloaded on gcp</em></button>
+</div>
+</div>
+</div>
+<div style="flex: 0 1 320px; min-width: 0; box-sizing: border-box; padding: 16px 18px; border-radius: 14px; background: var(--p0); display: flex; flex-direction: column; gap: 18px">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<h2 style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--t2)">Preset</h2>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<button style="height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--ln); background: transparent; font-size: 13px">Draft</button>
+<button aria-pressed="true" style="height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--a1); background: var(--s1); font-size: 13px">Final</button>
+<button aria-pressed="true" style="height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--a1); background: var(--s1); font-size: 13px">Plain</button>
+<button aria-disabled="true" title="Enhancer not downloaded" style="height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--ln); background: transparent; font-size: 13px; color: var(--t2); cursor: not-allowed"><span style="opacity: 0.55">Enhanced</span></button>
+<button aria-disabled="true" title="Enhancer not downloaded" style="height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--ln); background: transparent; font-size: 13px; color: var(--t2); cursor: not-allowed"><span style="opacity: 0.55">Enhanced, think</span></button>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<h2 style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--t2)">Enhance</h2>
+<div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; color: var(--t2)">
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="opacity: 0.55">Think</span><span style="font-size: 12px">Enhancer not downloaded</span></div>
+<button role="switch" aria-checked="false" aria-label="Think" aria-disabled="true" style="flex: 0 0 auto; width: 44px; height: 26px; border-radius: 999px; border: 1px solid var(--ln); background: var(--s1); padding: 2px; display: flex; cursor: not-allowed"><span style="width: 20px; height: 20px; border-radius: 999px; background: var(--t2); display: block"></span></button>
+</div>
+</div>
+</div>
 </div>
 </div>
 

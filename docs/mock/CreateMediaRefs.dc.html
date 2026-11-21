@@ -133,6 +133,17 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <span style="position: absolute; left: 16px; top: 16px; padding: 6px 10px; border-radius: 8px; background: color-mix(in srgb, var(--s2) 92%, transparent); font-family: 'JetBrains Mono', monospace; font-size: 12px">Ref2VA · 3 references</span>
 </div>
 
+<div aria-label="Run progress" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+<span class="step"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg>Encode <span class="mono">9.8 s</span></span>
+<span class="step" style="background: var(--s2); border: 1px solid var(--s5); font-weight: 500; gap: 10px">Sample<span style="width: 90px; height: 4px; border-radius: 2px; background: var(--s5); display: block"><span style="display: block; width: 66%; height: 4px; border-radius: 2px; background: var(--a2)"></span></span><span class="mono" style="font-weight: 400">4 / 6</span></span>
+<span class="step" style="color: var(--t2)">Decode audio</span>
+<span class="step" style="color: var(--t2)">Decode video</span>
+<span class="step" style="color: var(--t2)">Saving</span>
+<div style="flex-grow: 1"></div>
+<span class="mono" style="font-size: 13px">1:20 left</span>
+<button class="chip">Stop</button>
+</div>
+
 <div style="display: flex; align-items: center; gap: 10px; overflow-x: auto">
 <button aria-label="Take, seed 42, 2.3 seconds" style="flex: 0 0 auto; width: 112px; height: 72px; border-radius: 8px; border: 2px solid var(--a2); background: var(--s1); color: var(--t2); font-family: 'JetBrains Mono', monospace; font-size: 11px">seed 42 · 2.3 s</button>
 <button class="chip" style="flex: 0 0 auto; height: 44px">Add to timeline</button>
@@ -158,7 +169,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <textarea id="refs" rows="2" style="width: 100%; box-sizing: border-box; resize: none; border: 0; outline: 0; background: transparent; color: var(--t1); font: inherit; font-size: 15px; line-height: 22px; padding: 2px 6px">The dancer from &lt;Picture 1&gt; moves like the one in &lt;Video 1&gt;, in time with the drums of &lt;Audio 1&gt;</textarea>
 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
 <button class="chip">Base · int8</button>
-<button class="chip" title="Run on: Auto picks a free machine (see Create · Run on)">Run on Auto</button>
+<button class="chip" title="Run on: Auto picks a free machine (see Create · Run on)" style="display: inline-flex; align-items: center; gap: 6px"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 auto"><rect x="4" y="4" width="16" height="16" rx="2"></rect><rect x="9" y="9" width="6" height="6" rx="1"></rect><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"></path></svg>Auto</button>
 <button class="chip">512 × 512</button>
 <button class="chip">2.3 s · 24 fps</button>
 <div role="group" aria-label="Seeds to queue" style="display: flex; align-items: center; height: 36px; border-radius: 10px; background: var(--s4); font-size: 13px; font-weight: 500">
@@ -179,6 +190,23 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <button class="tile" style="flex: 0 1 150px"><small>Elements</small><b>Add</b></button>
 </div>
 <span style="font-size: 12px; color: var(--t2)">An @element here adds its name and text only: references cannot go with a first or last frame.</span>
+</div>
+<div style="flex: 1 1 520px; min-width: 0; border-radius: 18px; background: var(--s2); border: 1px solid var(--s5); padding: 10px; display: flex; flex-direction: column; gap: 8px">
+<span class="mono" style="font-size: 11px">The same H3 run at its end: Saving while the take uploads, then it keeps its time like every step</span>
+<div aria-label="Run progress, saving" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+<span class="step"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg>Encode <span class="mono">9.8 s</span></span>
+<span class="step"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg>Sample <span class="mono">1:12</span></span>
+<span class="step"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg>Decode audio <span class="mono">3.2 s</span></span>
+<span class="step"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg>Decode video <span class="mono">41.0 s</span></span>
+<span class="step" style="background: var(--s2); border: 1px solid var(--s5); font-weight: 500">Saving…</span>
+</div>
+<div aria-label="Run progress, done" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+<span class="step"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg>Encode <span class="mono">9.8 s</span></span>
+<span class="step"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg>Sample <span class="mono">1:12</span></span>
+<span class="step"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg>Decode audio <span class="mono">3.2 s</span></span>
+<span class="step"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg>Decode video <span class="mono">41.0 s</span></span>
+<span class="step"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg>Saving <span class="mono">4.1 s</span></span>
+</div>
 </div>
 </div>
 </main>
@@ -201,8 +229,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 </div>
 
 <div style="display: flex; flex-direction: column; gap: 10px">
-<h2 class="h" style="display: flex; align-items: center">References<button class="i" aria-label="More information" title="Images the prompt names &lt;Picture 1&gt;, &lt;Picture 2&gt;, …; at most 12 references of every kind in all.">i</button></h2>
-<span class="mono" style="display: flex; justify-content: space-between; font-size: 12px"><span>In the prompt: &lt;Picture 1&gt;, &lt;Picture 2&gt;…</span><span aria-label="1 of 9">1 / 9</span></span>
+<h2 class="h" style="display: flex; align-items: center">References<button class="i" aria-label="More information" title="Images the prompt names &lt;Picture 1&gt;, &lt;Picture 2&gt;, …; at most 12 references of every kind in all.">i</button><span style="flex-grow: 1"></span><span class="mono" style="font-weight: 400" aria-label="1 of 9">1 / 9</span></h2>
 <div role="list" aria-label="References" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
 <div role="listitem" style="position: relative; aspect-ratio: 1; border-radius: 10px; border: 1px dashed var(--dash); background: var(--s1)"><span class="mono" style="position: absolute; left: 4px; bottom: 4px; padding: 1px 4px; border-radius: 4px; background: color-mix(in srgb, var(--s2) 90%, transparent); font-size: 11px; color: var(--t1)">&lt;Picture 1&gt;</span><button aria-label="Remove &lt;Picture 1&gt;" style="position: absolute; right: 4px; top: 4px; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%; background: var(--s3); font-size: 12px">×</button></div>
 </div>
@@ -210,8 +237,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 </div>
 
 <div style="display: flex; flex-direction: column; gap: 10px">
-<h2 class="h" style="display: flex; align-items: center">Video references<button class="i" aria-label="More information" title="Videos the prompt names &lt;Video 1&gt;, &lt;Video 2&gt;, &lt;Video 3&gt;: 2 to 15 s each, 15 s in all.">i</button></h2>
-<span class="mono" style="display: flex; justify-content: space-between; font-size: 12px"><span>In the prompt: &lt;Video 1&gt;, &lt;Video 2&gt;…</span><span aria-label="1 of 3">1 / 3</span></span>
+<h2 class="h" style="display: flex; align-items: center">Video references<button class="i" aria-label="More information" title="Videos the prompt names &lt;Video 1&gt;, &lt;Video 2&gt;, &lt;Video 3&gt;: 2 to 15 s each, 15 s in all.">i</button><span style="flex-grow: 1"></span><span class="mono" style="font-weight: 400" aria-label="1 of 3">1 / 3</span></h2>
 <ol aria-label="Video references, in order" style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px">
 <li class="row">
 <div style="display: flex; align-items: center; gap: 8px"><span class="thumb" aria-hidden="true" style="display: grid; place-items: center; color: var(--t2)"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"></path><rect x="2" y="6" width="14" height="12" rx="2"></rect></svg></span><span style="flex-grow: 1; min-width: 0"><b style="display: block; font-size: 13px">[YOUR VIDEO]</b><span class="mono" style="font-size: 11px">512 × 512 · 72 f · 3.00 s · sound</span></span><span class="mono" style="font-size: 11px; color: var(--t1)">&lt;Video 1&gt;</span><button class="x" aria-label="Remove &lt;Video 1&gt;">×</button></div>
@@ -226,8 +252,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 </div>
 
 <div style="display: flex; flex-direction: column; gap: 10px">
-<h2 class="h" style="display: flex; align-items: center">Audio references<button class="i" aria-label="More information" title="Sounds the prompt names &lt;Audio 1&gt;, &lt;Audio 2&gt;, &lt;Audio 3&gt;: 2 to 15 s each, 15 s in all; needs an image or video reference too.">i</button></h2>
-<span class="mono" style="display: flex; justify-content: space-between; font-size: 12px"><span>In the prompt: &lt;Audio 1&gt;, &lt;Audio 2&gt;…</span><span aria-label="1 of 3">1 / 3</span></span>
+<h2 class="h" style="display: flex; align-items: center">Audio references<button class="i" aria-label="More information" title="Sounds the prompt names &lt;Audio 1&gt;, &lt;Audio 2&gt;, &lt;Audio 3&gt;: 2 to 15 s each, 15 s in all; needs an image or video reference too.">i</button><span style="flex-grow: 1"></span><span class="mono" style="font-weight: 400" aria-label="1 of 3">1 / 3</span></h2>
 <ol aria-label="Audio references, in order" style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px">
 <li class="row">
 <div style="display: flex; align-items: center; gap: 8px"><span class="thumb wave" aria-hidden="true" style="height: 28px"></span><span style="flex-grow: 1; min-width: 0"><b style="display: block; font-size: 13px">[YOUR SOUND]</b><span class="mono" style="font-size: 11px">mp3 · 12.0 s</span></span><span class="mono" style="font-size: 11px; color: var(--t1)">&lt;Audio 1&gt;</span><button class="x" aria-label="Remove &lt;Audio 1&gt;">×</button></div>

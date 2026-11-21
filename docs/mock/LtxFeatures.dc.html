@@ -110,7 +110,15 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 .mi em{font-style:normal;font-size:11px;color:var(--t2);white-space:nowrap}
 .mi[aria-checked="true"]{background:var(--s4);font-weight:600}
 .mi[aria-checked="true"] small{font-weight:400}
-.mi[aria-disabled="true"],.seg button[aria-disabled="true"]{color:var(--t2);opacity:.55;cursor:not-allowed}
+.mi[aria-disabled="true"]{color:var(--t2);cursor:not-allowed}
+.mi[aria-disabled="true"]>span,.seg button[aria-disabled="true"]{opacity:.55}
+.seg button[aria-disabled="true"]{color:var(--t2);cursor:not-allowed}
+.bl{white-space:nowrap;padding:2px 8px;border-radius:999px;background:var(--s3);box-shadow:inset 0 0 0 1px var(--dash);font-family:Inter,sans-serif;font-size:11px;font-weight:600;color:var(--t2)}
+.frame.later>:not(:first-child),.later-x{opacity:.42;filter:saturate(.3)}
+.ao{display:flex;flex-direction:column;gap:8px;padding:10px 12px;border-radius:12px;background:var(--s1);border:1px solid var(--s3)}
+.off{cursor:not-allowed;color:var(--t2)}
+.off>b,.off>.lb{opacity:.55}
+.off em{font-style:normal;font-size:11px;color:var(--t2)}
 .key{height:56px;padding:0 22px;border-radius:14px;border:0;background:var(--a2);color:var(--on2);background-image:linear-gradient(180deg,rgba(255,255,255,.35),rgba(255,255,255,0) 55%);box-shadow:inset 0 1px 0 rgba(255,255,255,.6),inset 0 -5px 0 color-mix(in srgb, var(--shd) 25%, transparent),0 14px 26px -8px color-mix(in srgb, var(--shd) 75%, transparent)!important;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px}
 .cbar .key,.comp .key{margin-left:auto}
 .key b{font-family:'Bricolage Grotesque',Inter,sans-serif;font-weight:700;font-size:14px;letter-spacing:.04em;text-transform:uppercase}
@@ -169,7 +177,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <span style="padding: 4px 10px; border-radius: 999px; background: var(--s2); color: var(--t2); font-size: 12px; font-weight: 500">LTX-2.5 · the new ltx studio options</span>
 </div>
 
-<p class="note" style="display: flex; align-items: center; max-width: 960px; font-size: 13px">Each frame is the existing screen with only the new control added; everything else is as on TextToVideo, ImageToVideo, VideoSource, TakeActions, Gallery and Models. The phase tag is the plan's (19-ltx-studio-features.md 23.10). Every new option is Mac only until the NVIDIA follow-up.<button class="i" aria-label="More information" title="Labels and help come from the templates' params in model.yaml. Red lines are the studio's 422 texts under the input they name, or the run's own failures, verbatim.">i</button></p>
+<p class="note" style="display: flex; align-items: center; max-width: 960px; font-size: 13px">Each frame is the existing screen with only the new control added; everything else is as on TextToVideo, ImageToVideo, VideoSource, TakeActions, Gallery and Models. The phase tag is the plan's (19-ltx-studio-features.md 23.10). Every new option is Mac only until the NVIDIA follow-up. The owner chose phases 1–5 and 4b (23.11): frames tagged "Not now · backlog" stay for the record and are not built. The detailer and the distilled LoRA are optional add-ons (15–17).<button class="i" aria-label="More information" title="Labels and help come from the templates' params in model.yaml. Red lines are the studio's 422 texts under the input they name, or the run's own failures, verbatim.">i</button></p>
 
 <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 32px; align-items: start">
 
@@ -187,16 +195,17 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <span class="step" style="background: var(--s2); border: 1px solid var(--s5); font-weight: 500; gap: 10px">Sample 2 · Detail pass<span style="width: 70px; height: 4px; border-radius: 2px; background: var(--s5); display: block"><span style="display: block; width: 66%; height: 4px; border-radius: 2px; background: var(--a2)"></span></span><span class="mono" style="font-weight: 400">2 / 3</span></span>
 <span class="step" style="color: var(--t2)">Decode video</span>
 <span class="step" style="color: var(--t2)">Decode audio</span>
+<span class="step" style="color: var(--t2)">Saving</span>
 </div>
 <div class="cbar">
-<button class="chip">LTX-2.5 · Distilled</button>
-<button class="chip" title="Run on: Auto picks a free machine (see Create · Run on)">Run on Auto</button>
+<button class="chip">Distilled · int8</button>
+<button class="chip" title="Run on: Auto picks a free machine (see Create · Run on)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 auto"><rect x="4" y="4" width="16" height="16" rx="2"></rect><rect x="9" y="9" width="6" height="6" rx="1"></rect><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"></path></svg>Auto</button>
 <button class="chip">704 × 448</button>
 <button class="chip">2.0 s</button>
 <div style="flex-grow: 1"></div>
 <button class="key"><b>Add to queue</b><span>≈ 54 s · 23 GB</span></button>
 </div>
-<p class="note">Two-stage on the same clip is ≈ 40 s · 21 GB. The detailer is a 0.33 GB adapter on the resident transformer: no second load.</p>
+<p class="note">Two-stage on the same clip is ≈ 40 s · 21 GB. The detailer is a 0.33 GB adapter on the resident transformer: no second load. It is an optional add-on: without it Detail is greyed (16).</p>
 </section>
 
 <!-- 2 -->
@@ -228,7 +237,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <span class="hd">Recipe</span>
 <button role="menuitemradio" aria-checked="false" class="mi"><span>Two-stage<small>half size, then ×2 and 3 refine steps</small></span></button>
 <button role="menuitemradio" aria-checked="false" class="mi"><span>One-stage<small>the full size in one pass, softer</small></span></button>
-<button role="menuitemradio" aria-checked="true" class="mi"><span>Detail<small>Two-stage, then refines stage 2 with Lightricks' detailing LoRA against stage 1: sharper hair, edges and texture, about a third slower. Mac only.</small></span></button>
+<button role="menuitemradio" aria-checked="true" class="mi"><span>Detail<small>Two-stage, then refines stage 2 with Lightricks' detailing LoRA against stage 1: sharper hair, edges and texture, about a third slower. Mac only; needs the Detailer add-on.</small></span></button>
 </div>
 <div role="menu" aria-label="Compute" class="menu">
 <span class="hd">Compute<button class="i" aria-label="More information" title="float16 runs attention and feed-forward in half precision: 10–20 % faster, the picture changes slightly. NVIDIA ignores it.">i</button></span>
@@ -304,16 +313,17 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <section class="frame" aria-label="Refused on NVIDIA and LoRA uploads">
 <p class="note">5 · Where the new options are refused. Run on NVIDIA with them set: Generate refuses before anything loads, under the input it names. <span class="ph">phases 2–5</span></p>
 <div class="cbar">
-<button class="chip">LTX-2.5 · Distilled fp8</button>
-<button class="chip">Run on NVIDIA</button>
+<button class="chip">Distilled · fp8</button>
+<button class="chip" title="Run on: NVIDIA"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 auto"><rect x="4" y="4" width="16" height="16" rx="2"></rect><rect x="9" y="9" width="6" height="6" rx="1"></rect><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"></path></svg>NVIDIA</button>
 <div style="flex-grow: 1"></div>
 <button class="key" aria-disabled="true" style="background: var(--s4); color: var(--t2); background-image: none"><b>Add to queue</b><span>fix 3 inputs</span></button>
 </div>
 <p class="err">encode.negative: NAG is Mac only for now</p>
 <p class="err">sample1.detail: the detail pass is Mac only for now</p>
 <p class="err">keyframes.images[1].binding: Replace and Guide are Mac only for now</p>
-<p class="note">Compute is ignored there (ltx-core runs bf16). The add-on variants (SDR to HDR, Refine details, Deblur) are Mac only, so Run on NVIDIA fails them with the existing text:</p>
-<p class="err">host gcp does not have model ltx-2.5 variant deblur at int8</p>
+<p class="note">Compute is ignored there (ltx-core runs bf16). The optional add-ons are Mac only for now: Run on greys NVIDIA for Detail with the detail pass line above.</p>
+<p class="note" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px"><span class="bl">Not now · backlog</span><span class="later-x">The add-on variants (SDR to HDR, Refine details, Deblur) would be Mac only, so Run on NVIDIA would fail them with the existing text:</span></p>
+<p class="err later-x">host gcp does not have model ltx-2.5 variant deblur at int8</p>
 <p class="note">Add LoRA · Upload: an IC-LoRA file is never listed and its upload is refused (it needs a reference video):</p>
 <p class="err">rejected: an IC-LoRA (it needs a reference video), not a stack LoRA</p>
 </section>
@@ -338,8 +348,8 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 </div>
 </div>
 <div class="cbar">
-<button class="chip" aria-expanded="true">LTX-2.5 · Distilled</button>
-<button class="chip">Run on Auto</button>
+<button class="chip" aria-expanded="true">Distilled · int8</button>
+<button class="chip" title="Run on: Auto picks a free machine (see Create · Run on)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 auto"><rect x="4" y="4" width="16" height="16" rx="2"></rect><rect x="9" y="9" width="6" height="6" rx="1"></rect><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"></path></svg>Auto</button>
 <div style="flex-grow: 1"></div>
 <button class="key"><b>Generate</b><span>≈ 50 s · 21 GB</span></button>
 </div>
@@ -361,7 +371,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 </div>
 </div>
 </div>
-<p class="note">The same chip and menu on Extend and Audio to video. The default model is the owner's call (plan 23.11 point 1); Distilled is drawn.</p>
+<p class="note">The same chip and menu on Extend and Audio to video. Distilled is the default (owner, plan 23.11 point 1); Dev stays pickable. On Audio to video, Dev needs the Distilled LoRA add-on (17).</p>
 </section>
 
 <!-- 7 -->
@@ -445,8 +455,8 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <button role="menuitemradio" aria-checked="true" class="mi"><span>Detail<small>sharper, about a third slower</small></span></button>
 </div>
 <div class="cbar">
-<button class="chip">LTX-2.5 · Distilled</button>
-<button class="chip">Run on Auto</button>
+<button class="chip">Distilled · int8</button>
+<button class="chip" title="Run on: Auto picks a free machine (see Create · Run on)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 auto"><rect x="4" y="4" width="16" height="16" rx="2"></rect><rect x="9" y="9" width="6" height="6" rx="1"></rect><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"></path></svg>Auto</button>
 <div style="flex-grow: 1"></div>
 <button class="key"><b>Generate</b><span>≈ 55 s · 21 GB</span></button>
 </div>
@@ -457,11 +467,11 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 </section>
 
 <!-- ============ Video to video ============ -->
-<h2 class="sec">Gallery and Create · video to video from a take</h2>
+<h2 class="sec">Gallery and Create · video to video from a take <span class="bl">Not now · backlog</span></h2>
 
 <!-- 10 -->
 <section class="frame" aria-label="Use in on a video take">
-<p class="note">10 · Gallery, a video take selected. "Use in…" lists the three new templates after today's actions, by the existing rule (one free video input). <span class="ph">phases 6, 7</span></p>
+<p class="note">10 · Gallery, a video take selected. "Use in…" lists the three new templates after today's actions, by the existing rule (one free video input). <span class="ph">phases 6, 7</span> <span class="bl">Not now · backlog</span></p>
 <div class="card" style="background: var(--p0)">
 <div class="stage" style="height: 140px">Shot 3 · tree line</div>
 <div class="row"><span>Size · frames</span><span>704 × 448 · 121 f · 24 fps</span></div>
@@ -469,16 +479,16 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <button class="act">Retake a section · LTX-2.5 Retake</button>
 <button class="act">Extend · LTX-2.5 Extend</button>
 <button class="act">Audio to video · LTX-2.5 Audio to video</button>
-<button class="act" style="background: var(--a1); color: var(--on1); font-weight: 600">Deblur · LTX-2.5 Deblur</button>
-<button class="act">Refine details · LTX-2.5 Refine details</button>
-<button class="act">Make HDR · LTX-2.5 SDR to HDR</button>
-<p class="note">Each opens Create with this take as the source. A template whose variant is on no live host is not offered (the dispatcher's "variant present" rule).</p>
+<div style="display: flex; align-items: center; gap: 8px"><button class="act later-x" aria-disabled="true" style="flex: 1 1 auto; cursor: not-allowed">Deblur · LTX-2.5 Deblur</button><span class="bl">Not now · backlog</span></div>
+<div style="display: flex; align-items: center; gap: 8px"><button class="act later-x" aria-disabled="true" style="flex: 1 1 auto; cursor: not-allowed">Refine details · LTX-2.5 Refine details</button><span class="bl">Not now · backlog</span></div>
+<div style="display: flex; align-items: center; gap: 8px"><button class="act later-x" aria-disabled="true" style="flex: 1 1 auto; cursor: not-allowed">Make HDR · LTX-2.5 SDR to HDR</button><span class="bl">Not now · backlog</span></div>
+<p class="note">Not built now: Use in… keeps today's three actions. Had they been built, each would open Create with this take as the source; a template whose variant is on no live host is not offered (the dispatcher's "variant present" rule).</p>
 </div>
 </section>
 
 <!-- 11 -->
-<section class="frame" aria-label="Deblur in Create">
-<p class="note">11 · Deblur. The composer holds the Source video and the prompt, pre-filled with Lightricks' DEBLUR caption; one stage at the source's size. <span class="ph">phase 6</span></p>
+<section class="frame later" aria-label="Deblur in Create, not now, backlog">
+<p class="note">11 · Deblur. The composer holds the Source video and the prompt, pre-filled with Lightricks' DEBLUR caption; one stage at the source's size. <span class="ph">phase 6</span> <span class="bl">Not now · backlog</span></p>
 <div class="comp">
 <div style="display: flex; flex-wrap: wrap; gap: 8px">
 <button class="tile" aria-haspopup="dialog" style="flex-basis: 220px; display: flex; align-items: center; gap: 8px"><span class="thumb" aria-hidden="true"></span><span><small>Source video</small><b>Shot 3 · tree line</b></span></button>
@@ -487,8 +497,8 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <label for="db" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%)">Prompt</label>
 <textarea id="db" rows="5" style="font-size: 13px; line-height: 19px">Reference shows the scene, heavily out of focus with soft defocused blur and no fine detail. Edited shows the same scene in sharp focus with crisp detail and clean edges. DEBLUR the scene. Subject identity, framing, and background geometry are identical to the reference; only focus and sharpness differ between reference and edited.</textarea>
 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
-<button class="chip" title="This workflow runs on Deblur only">LTX-2.5 · Deblur</button>
-<button class="chip">Run on Auto</button>
+<button class="chip" title="This workflow runs on Deblur only">Deblur · int8</button>
+<button class="chip" title="Run on: Auto picks a free machine (see Create · Run on)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 auto"><rect x="4" y="4" width="16" height="16" rx="2"></rect><rect x="9" y="9" width="6" height="6" rx="1"></rect><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"></path></svg>Auto</button>
 <button class="chip">704 × 448 · same as source</button>
 <div style="flex-grow: 1"></div>
 <button class="key"><b>Generate</b><span>≈ 1:40 · 26 GB</span></button>
@@ -506,8 +516,8 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 </section>
 
 <!-- 12 -->
-<section class="frame" aria-label="Refine details in Create">
-<p class="note">12 · Refine details (optional). The same screen as Deblur with an Output size and a generic rendering prompt. <span class="ph">phase 6</span></p>
+<section class="frame later" aria-label="Refine details in Create, not now, backlog">
+<p class="note">12 · Refine details (optional). The same screen as Deblur with an Output size and a generic rendering prompt. <span class="ph">phase 6</span> <span class="bl">Not now · backlog</span></p>
 <div class="comp">
 <div style="display: flex; flex-wrap: wrap; gap: 8px">
 <button class="tile" style="flex-basis: 220px; display: flex; align-items: center; gap: 8px"><span class="thumb" aria-hidden="true"></span><span><small>Source video</small><b>Shot 3 · tree line</b></span></button>
@@ -516,8 +526,8 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <label for="rf" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%)">Prompt</label>
 <textarea id="rf" rows="2">sharpness, fine texture, natural film grain, crisp edges</textarea>
 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
-<button class="chip" title="This workflow runs on Refine details only">LTX-2.5 · Refine details</button>
-<button class="chip">Run on Auto</button>
+<button class="chip" title="This workflow runs on Refine details only">Refine details · int8</button>
+<button class="chip" title="Run on: Auto picks a free machine (see Create · Run on)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 auto"><rect x="4" y="4" width="16" height="16" rx="2"></rect><rect x="9" y="9" width="6" height="6" rx="1"></rect><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"></path></svg>Auto</button>
 <div style="flex-grow: 1"></div>
 <button class="key"><b>Generate</b><span>≈ 2:10 · 30 GB</span></button>
 </div>
@@ -532,16 +542,16 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 </section>
 
 <!-- 13 -->
-<section class="frame" aria-label="Make HDR in Create">
-<p class="note">13 · SDR to HDR. No prompt (the LoRA's scene embeddings stand in for it); three settings. <span class="ph">phase 7</span></p>
+<section class="frame later" aria-label="Make HDR in Create, not now, backlog">
+<p class="note">13 · SDR to HDR. No prompt (the LoRA's scene embeddings stand in for it); three settings. <span class="ph">phase 7</span> <span class="bl">Not now · backlog</span></p>
 <div class="comp">
 <div style="display: flex; flex-wrap: wrap; gap: 8px">
 <button class="tile" style="flex-basis: 220px; display: flex; align-items: center; gap: 8px"><span class="thumb" aria-hidden="true"></span><span><small>Source video</small><b>Shot 3 · tree line</b></span></button>
 <button class="tile"><small>Output</small><b>HLG master · EXR frames</b></button>
 </div>
 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
-<button class="chip" title="This workflow runs on SDR to HDR only">LTX-2.5 · SDR to HDR</button>
-<button class="chip">Run on Auto</button>
+<button class="chip" title="This workflow runs on SDR to HDR only">SDR to HDR · int8</button>
+<button class="chip" title="Run on: Auto picks a free machine (see Create · Run on)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 auto"><rect x="4" y="4" width="16" height="16" rx="2"></rect><rect x="9" y="9" width="6" height="6" rx="1"></rect><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"></path></svg>Auto</button>
 <div style="flex-grow: 1"></div>
 <button class="key"><b>Generate</b><span>≈ 2:30 · not measured yet</span></button>
 </div>
@@ -560,8 +570,8 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 </section>
 
 <!-- 14 -->
-<section class="frame" aria-label="An HDR take in the Gallery">
-<p class="note">14 · The HDR take. An HDR badge; it plays a tone-mapped preview; its menu adds the two downloads; inputs and the Timeline refuse it. <span class="ph">phase 7</span></p>
+<section class="frame later" aria-label="An HDR take in the Gallery, not now, backlog">
+<p class="note">14 · The HDR take. An HDR badge; it plays a tone-mapped preview; its menu adds the two downloads; inputs and the Timeline refuse it. <span class="ph">phase 7</span> <span class="bl">Not now · backlog</span></p>
 <div class="card" style="background: var(--p0)">
 <div class="stage" style="height: 140px; position: relative">Shot 3 · tree line · HDR<span class="tag hdr" style="position: absolute; left: 10px; top: 10px">HDR</span><span class="mono" style="position: absolute; left: 10px; bottom: 10px; font-size: 11px">tone-mapped preview</span></div>
 <div class="row"><span>Master</span><span>HLG · BT.2020 · 10-bit HEVC · 704 × 448</span></div>
@@ -577,11 +587,11 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 </section>
 
 <!-- ============ Models ============ -->
-<h2 class="sec">Models · LTX-2.5 add-on variants</h2>
+<h2 class="sec">Models · LTX-2.5 optional add-ons</h2>
 
 <!-- 15 -->
 <section class="frame" aria-label="Models, LTX-2.5 variants" style="grid-column: 1 / -1">
-<p class="note">15 · Models (admin). Distilled grows by the 327 MB detailer (partial on a host until a download completes it). Three add-on variants, each Mac only, sharing the other 9 components with Distilled: download, licence and delete work as for any variant. <span class="ph">phases 4, 6, 7</span></p>
+<p class="note">15 · Models (admin). Distilled and Dev are as today. Two optional add-ons sit under Distilled, each with its size, downloaded and deleted on its own: the 0.33 GB Detailer (Recipe: Detail) and the 8.9 GB Distilled LoRA (Dev's fast-distill stage). A host without one still has the variant; only the controls that need it are greyed (16, 17). <span class="ph">phases 1, 4</span></p>
 <section aria-label="LTX-2.5" style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 16px; display: flex; flex-direction: column; gap: 12px">
 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
 <span aria-hidden="true" class="cube" style="background: linear-gradient(155deg, #ffb07a, #e0457a)"></span>
@@ -593,43 +603,141 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <span style="font-size: 12px; color: var(--t2)">Licence per variant<button class="i" aria-label="More information" title="Each variant carries its own licence. The IC-LoRA repos are gated on Hugging Face: the host's token must have accepted each one.">i</button></span>
 </div>
 <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px">
-<div class="var">
+<div class="var" style="grid-row: span 2">
 <div style="display: flex; align-items: center; gap: 8px"><b style="font-size: 14px">Distilled</b><span class="m" style="color: var(--t2)">ltx-2-community</span><div style="flex-grow: 1"></div><span class="m">[SIZE] GB</span></div>
-<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px"><span class="tag">bf16</span><span class="tag q">int8 at load</span><span class="tag">+ detailer 0.33 GB</span><button class="i" aria-label="More information" title="Lightricks' Pixel-Spatial-Upscaler IC-LoRA, used by Recipe: Detail.">i</button></div>
-<div style="display: flex; flex-wrap: wrap; gap: 6px"><span class="host"><span class="dot" style="background: var(--a1)"></span>mac</span><span class="host" style="color: var(--t2)"><span class="dot" style="background: linear-gradient(90deg, var(--a1) 50%, transparent 50%); box-shadow: inset 0 0 0 1.5px var(--a1)"></span>[OTHER MAC] · partial</span></div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px"><span class="tag">bf16</span><span class="tag q">int8 at load</span></div>
+<div style="display: flex; flex-wrap: wrap; gap: 6px"><span class="host"><span class="dot" style="background: var(--a1)"></span>mac</span><span class="host"><span class="dot" style="background: var(--a1)"></span>[OTHER MAC]</span></div>
+<span class="h" style="display: flex; align-items: center">Optional add-ons<button class="i" aria-label="More information" title="Parts a few controls need. The variant is present without them; those controls are greyed until the add-on is downloaded on the host.">i</button></span>
+<div class="ao">
+<div style="display: flex; align-items: center; gap: 8px"><b style="font-size: 13px">Detailer</b><span class="m" style="color: var(--t2)">IC-LoRA · gated</span><div style="flex-grow: 1"></div><span class="m">0.33 GB</span></div>
+<span style="font-size: 12px; color: var(--t2)">Recipe: Detail. Lightricks' Pixel-Spatial-Upscaler.</span>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px"><span class="host"><span class="dot" style="background: var(--a1)"></span>mac</span><span class="host" style="color: var(--t2)"><span class="dot" style="box-shadow: inset 0 0 0 1.5px var(--t2)"></span>[OTHER MAC]</span><div style="flex-grow: 1"></div><button class="chip" style="height: 28px; font-size: 12px">Download…</button><button class="chip" style="height: 28px; font-size: 12px; color: var(--a2)">Delete</button></div>
+</div>
+<div class="ao">
+<div style="display: flex; align-items: center; gap: 8px"><b style="font-size: 13px">Distilled LoRA</b><span class="m" style="color: var(--t2)">LoRA 450</span><div style="flex-grow: 1"></div><span class="m">8.9 GB</span></div>
+<span style="font-size: 12px; color: var(--t2)">Dev's fast-distill stage (Audio to video on Dev). Distilled has it fused in.</span>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px"><span class="host"><span class="dot" style="background: var(--a1)"></span>mac</span><span class="host" style="color: var(--t2)"><span class="dot" style="box-shadow: inset 0 0 0 1.5px var(--t2)"></span>[OTHER MAC]</span><div style="flex-grow: 1"></div><button class="chip" style="height: 28px; font-size: 12px">Download…</button><button class="chip" style="height: 28px; font-size: 12px; color: var(--a2)">Delete</button></div>
+</div>
 </div>
 <div class="var">
 <div style="display: flex; align-items: center; gap: 8px"><b style="font-size: 14px">Dev</b><span class="m" style="color: var(--t2)">ltx-2-community</span><div style="flex-grow: 1"></div><span class="m">[SIZE] GB</span></div>
 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px"><span class="tag">bf16</span><span class="tag q">int8 at load</span><span class="tag sh">shares 8 with Distilled</span></div>
-<div style="display: flex; flex-wrap: wrap; gap: 6px"><span class="host"><span class="dot" style="background: var(--a1)"></span>mac</span></div>
+<div style="display: flex; flex-wrap: wrap; gap: 6px"><span class="host"><span class="dot" style="background: var(--a1)"></span>mac</span><span class="host"><span class="dot" style="background: var(--a1)"></span>[OTHER MAC]</span></div>
 </div>
-<div class="var">
+<div class="var" aria-label="Deblur, not now, backlog">
+<div style="display: flex; align-items: center; gap: 8px"><span class="bl">Not now · backlog</span></div>
+<div class="later-x" style="display: flex; flex-direction: column; gap: 10px">
 <div style="display: flex; align-items: center; gap: 8px"><b style="font-size: 14px">Deblur</b><span class="m" style="color: var(--t2)">ltx-2-community</span><div style="flex-grow: 1"></div><span style="font-size: 12px; color: var(--t2)">Mac only</span><span class="m">0.91 GB</span></div>
 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px"><span class="tag">IC-LoRA</span><span class="tag sh">shares 9 with Distilled</span><span class="tag">gated</span></div>
 <div style="display: flex; flex-wrap: wrap; gap: 6px"><span class="host"><span class="dot" style="background: var(--a1)"></span>mac</span></div>
 </div>
-<div class="var">
+</div>
+<div class="var" aria-label="Refine details, not now, backlog">
+<div style="display: flex; align-items: center; gap: 8px"><span class="bl">Not now · backlog</span></div>
+<div class="later-x" style="display: flex; flex-direction: column; gap: 10px">
 <div style="display: flex; align-items: center; gap: 8px"><b style="font-size: 14px">Refine details</b><span class="m" style="color: var(--t2)">ltx-2-community</span><div style="flex-grow: 1"></div><span style="font-size: 12px; color: var(--t2)">Mac only</span><span class="m">1.31 GB</span></div>
 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px"><span class="tag">IC-LoRA</span><span class="tag sh">shares 9 with Distilled</span><span class="tag">gated</span></div>
 <div style="display: flex; flex-wrap: wrap; gap: 6px"><span class="host"><span class="dot" style="background: var(--a1)"></span>mac</span></div>
 </div>
-<div class="var">
+</div>
+<div class="var" aria-label="SDR to HDR, not now, backlog">
+<div style="display: flex; align-items: center; gap: 8px"><span class="bl">Not now · backlog</span></div>
+<div class="later-x" style="display: flex; flex-direction: column; gap: 10px">
 <div style="display: flex; align-items: center; gap: 8px"><b style="font-size: 14px">SDR to HDR</b><span class="m" style="color: var(--t2)">ltx-2-community</span><div style="flex-grow: 1"></div><span style="font-size: 12px; color: var(--t2)">Mac only</span><span class="m">2.79 GB</span></div>
 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px"><span class="tag">IC-LoRA + scene 1.32 GB</span><span class="tag">diffusion decoder 1.47 GB</span><span class="tag sh">shares 9 with Distilled</span></div>
 <div style="display: flex; flex-wrap: wrap; gap: 6px"><span class="host" style="color: var(--t2)"><span class="dot" style="box-shadow: inset 0 0 0 1.5px var(--t2)"></span>mac</span><button class="chip" style="height: 28px; font-size: 12px">Download…</button></div>
 </div>
+</div>
 <div class="var" style="background: transparent; box-shadow: none; border: 1px dashed var(--dash)">
-<p class="note">The NVIDIA variants (Distilled fp8, Dev int8) stay as M9 drew them and get no add-ons until the NVIDIA follow-up. Download… opens the existing dialog with the variant's licence and the Hugging Face gate.</p>
+<p class="note">The NVIDIA variants (Distilled fp8, Dev int8) stay as M9 drew them and get no add-ons until the NVIDIA follow-up. Download… opens the existing dialog with the add-on's licence and the Hugging Face gate; Delete removes only the add-on's files. The three variants tagged backlog are not built.</p>
 </div>
 </div>
 </section>
+</section>
+
+<!-- ============ Optional add-ons missing ============ -->
+<h2 class="sec">Create · an optional add-on not downloaded</h2>
+
+<!-- 16 -->
+<section class="frame" aria-label="Detailer not downloaded">
+<p class="note">16 · Text and image to video without the Detailer. Recipe: Detail stays visible, greyed, with its reason; Two-stage and One-stage work as before. Per host through Run on. <span class="ph">phase 4</span></p>
+<div class="pair">
+<div class="insp">
+<div>
+<h2 class="h">Quality<button class="i" aria-label="More information" title="Distilled models run their own steps without guidance.">i</button></h2>
+<div class="g2">
+<button class="set" aria-expanded="true" style="outline: 2px solid var(--a1)"><small>Recipe</small><b>Two-stage</b></button>
+<button class="set"><small>Precision</small><b>int8</b></button>
+<button class="set"><small>Compute</small><b>float16</b></button>
+<button class="set"><small>Stage 1 steps</small><b>8</b></button>
+</div>
+</div>
+</div>
+<div role="menu" aria-label="Recipe" class="menu">
+<span class="hd">Recipe</span>
+<button role="menuitemradio" aria-checked="true" class="mi"><span>Two-stage<small>half size, then ×2 and 3 refine steps</small></span></button>
+<button role="menuitemradio" aria-checked="false" class="mi"><span>One-stage<small>the full size in one pass, softer</small></span></button>
+<button role="menuitemradio" aria-checked="false" aria-disabled="true" class="mi" title="Detailer not downloaded. An admin downloads it in Models, under LTX-2.5 · Distilled."><span>Detail<small>sharper hair, edges and texture</small></span><em>Detailer not downloaded</em></button>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<span class="mono" style="font-size: 11px">Detail picked; the detailer is on mac only</span>
+<div role="menu" aria-label="Run on" class="menu">
+<span class="hd">Run on</span>
+<button role="menuitemradio" aria-checked="true" class="mi"><span>Auto<small>picks a free machine</small></span></button>
+<button role="menuitemradio" aria-checked="false" class="mi"><span>mac<small>mac · Apple M5 Pro</small></span></button>
+<button role="menuitemradio" aria-checked="false" aria-disabled="true" class="mi"><span>[OTHER MAC]<small>[OTHER MAC] · Apple silicon</small></span><em>Detailer not downloaded on [OTHER MAC]</em></button>
+<button role="menuitemradio" aria-checked="false" aria-disabled="true" class="mi"><span>gcp<small>gcp · RTX PRO 6000</small></span><em>the detail pass is Mac only</em></button>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div class="cbar">
+<button class="chip">Distilled · int8</button>
+<button class="chip" title="Run on: Auto picks a free machine (see Create · Run on)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 auto"><rect x="4" y="4" width="16" height="16" rx="2"></rect><rect x="9" y="9" width="6" height="6" rx="1"></rect><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"></path></svg>Auto</button>
+<div style="flex-grow: 1"></div>
+<button class="key"><b>Add to queue</b><span>≈ 40 s · 21 GB</span></button>
+</div>
+<p class="note">Auto places a Detail run only on a host that has the detailer. A request that still asks for Detail where it is missing (the CLI, the API) is refused by the run check before it starts:</p>
+<p class="err">sample1.detail: Detailer not downloaded on any live host</p>
+</div>
+</div>
+</section>
+
+<!-- 17 -->
+<section class="frame" aria-label="Distilled LoRA not downloaded">
+<p class="note">17 · Audio to video without the Distilled LoRA. Distilled keeps working (the LoRA is fused into its transformer); only Dev, whose stage 2 fuses the LoRA, is greyed. <span class="ph">phase 1</span></p>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div role="dialog" aria-label="Model" class="menu" style="padding: 12px; gap: 10px">
+<div role="group" aria-label="Variant" style="display: flex; flex-direction: column; gap: 2px">
+<span class="hd" style="padding: 0 0 4px">Variant<button class="i" aria-label="More information" title="Distilled: 8 steps without guidance, about 10× faster. Dev: guided steps, CFG and STG.">i</button></span>
+<button role="menuitemradio" aria-checked="true" class="mi"><span>Distilled<small>8 steps, about 10× faster</small></span></button>
+<button role="menuitemradio" aria-checked="false" aria-disabled="true" class="mi" title="Distilled LoRA not downloaded. An admin downloads it in Models, under LTX-2.5 · Distilled."><span>Dev<small>guided, 30 steps</small></span><em>Distilled LoRA not downloaded</em></button>
+</div>
+<div role="group" aria-label="Precision" style="display: flex; flex-direction: column; gap: 6px">
+<span class="hd" style="padding: 0">Precision</span>
+<div style="display: flex; flex-wrap: wrap; gap: 6px"><button class="opt" aria-pressed="false" style="height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--ln); background: transparent; font-size: 12px">bf16</button><button class="opt" aria-pressed="true" style="height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--a1); background: var(--s1); font-size: 12px">int8</button></div>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<span class="mono" style="font-size: 11px">Dev picked; the LoRA is on mac only</span>
+<div role="menu" aria-label="Run on" class="menu">
+<span class="hd">Run on</span>
+<button role="menuitemradio" aria-checked="true" class="mi"><span>Auto<small>picks a free machine</small></span></button>
+<button role="menuitemradio" aria-checked="false" class="mi"><span>mac<small>mac · Apple M5 Pro</small></span></button>
+<button role="menuitemradio" aria-checked="false" aria-disabled="true" class="mi"><span>[OTHER MAC]<small>[OTHER MAC] · Apple silicon</small></span><em>Distilled LoRA not downloaded on [OTHER MAC]</em></button>
+</div>
+</div>
+</div>
+<p class="note">Retake and Extend on Dev do not use it and stay pickable. A Dev audio to video sent where the LoRA is missing is the run check's refusal:</p>
+<p class="err">distill: Distilled LoRA not downloaded on any live host</p>
 </section>
 
 </div>
 </main>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":5080}}'>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":6380}}'>
 class Component extends DCLogic {
 state = { theme: null };
 renderVals() {
