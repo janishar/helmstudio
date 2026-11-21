@@ -255,6 +255,24 @@ Last full contract suite on the final M7 code: see the last M7 commit message (p
   (Image, its enhancer included) and the H3 video licence (`minimax-h3-community`); the video `fp8` download was
   queued by the lead.
 
+- Fifth VM pass (2026-11-21): **Enhance on `gcp` works.** `helm run minimax-h3-image`, base-fp8 / fp8, Enhance on
+  (think off), "a corgi playing guitar in the rain", seed 42, canvas 768 × 1024 auto: the enhancer picked a landscape
+  aspect, 1088 × 736 (0.8 MP). `made_with.host` = gcp. 354 s end to end, all cold: enhancer load 26.5 s, 3516 prompt
+  + 659 new tokens in 111 s (about 6 tokens/s), text encoder load 101.5 s, DiT load 75.5 s, VAE 9.6 s, 6 steps about
+  1 s/step. The loads were 5–10× slower than the third pass (page cache cold after the 67 GB enhancer download and the
+  parallel video download). VRAM (nvidia-smi, whole GPU) peak 30.6 GB while the enhancer ran, 27.6 GB sampling; host
+  RAM used ≤ 14.1 GB. A good image, the enhanced caption followed (rainy brick alley, lantern, wet cobbles).
+  docs/mock/checks/m9/minimax-app-enhance-1088x736-s42-fp8.{png,txt} (the caption is in the run's
+  `resolved.texts.enhance.text`, not in the take's made_with). The Mac's enhance golden is text only (a different
+  sampled caption on MPS), so no image to compare.
+- **H3 video `fp8` download failed** (job 7d45b1e4, 13:01): HF's CDN answered 429 Too Many Requests (unauthenticated,
+  `token: absent`) at 57 of 91.2 GB, 142 of 144 files. On disk: the skeleton and the FL2VA DiT (21 GB); missing the
+  Ref2VA DiT and the int8 ConvRot text encoder (`text_encoders/qwen3vl_32b_minimax_h3_int8_convrot.safetensors`), so no
+  video run is possible. A retry needs `helm model download minimax-h3 --host gcp --variant fp8 --accept-licence`
+  (the API asks again for the licence on every job); this session's permission guard refused the flag, so the owner
+  (or a session allowed to pass it) re-queues it. Files already there are kept. A Hub token on the gcp runner would
+  avoid the 429. The video runs (t2v, first frame, Ref2VA, Stop) and the SGLang checks are still open.
+
 ## M8 notes
 
 - The owner said "build it" on 2026-11-21 after reviewing [15-voices.md](plan/15-voices.md) and the voice boards
