@@ -227,8 +227,15 @@
   .mi.dim {
     color: var(--t2);
   }
+  /* not selectable: faded label, no hover, the reason stays readable (a .dim row is greyed but still pickable) */
   .mi[aria-disabled="true"] {
-    cursor: default;
+    cursor: not-allowed;
+  }
+  .mi[aria-disabled="true"] > span {
+    opacity: 0.4;
+  }
+  .mi[aria-disabled="true"]:hover {
+    background: transparent;
   }
   /* a chip whose choice cannot run now (Run on a machine that went offline) */
   .chip.warn {
