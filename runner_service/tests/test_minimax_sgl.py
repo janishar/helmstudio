@@ -159,7 +159,17 @@ def test_generate_serves_the_partition_and_returns_its_video(fake, monkeypatch):
     v = native.generate(ctx, params, inputs)["video"]
     run = json.loads(log.read_text())
     a = run["argv"]
-    assert a[:5] == ["serve", "--model-path", str(folder.resolve()), "--model-variant", "fl2va"]
+    assert a[:9] == [
+        "serve",
+        "--backend",
+        "sglang",
+        "--pipeline-class-name",
+        "MiniMaxH3Pipeline",
+        "--model-path",
+        str(folder.resolve()),
+        "--model-variant",
+        "fl2va",
+    ]
     assert a[a.index("--component-weights-paths.transformer") + 1] == str(
         (folder / "transformer_fl2va.safetensors").resolve()
     )
@@ -186,7 +196,7 @@ def test_generate_serves_the_partition_and_returns_its_video(fake, monkeypatch):
     refs = params | {"refs": [{"image": Image.new("RGB", (8, 8))}]}
     native.generate(ctx, refs, {k: x for k, x in inputs.items() if k != "first"})
     run = json.loads(log.read_text())
-    assert run["argv"][4] == "ref2va" and run["body"]["task"] == "ref2va"
+    assert run["argv"][8] == "ref2va" and run["body"]["task"] == "ref2va"
     assert run["argv"][run["argv"].index("--component-weights-paths.transformer") + 1].endswith(
         "transformer_ref2va.safetensors"
     )

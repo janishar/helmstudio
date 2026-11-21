@@ -23,6 +23,7 @@ services:
       S3_SECRET_ACCESS_KEY_FILE: /run/secrets/s3_runner_${GPU_HOST}_secret_access_key
       S3_CA_FILE: /run/secrets/tls_ca
       RUNNER_HF_TOKEN_FILE: /run/secrets/hf_token    # optional: absent = anonymous downloads
+      HF_HUB_DISABLE_XET: "1"                       # Xet's CDN answered 429 to tokenless downloads; plain HTTP works
       HELMSTUDIO_MODELS: /models
       NVIDIA_DRIVER_CAPABILITIES: compute,utility,video   # video: NVENC for media jobs
     volumes:
@@ -63,6 +64,7 @@ services:
       S3_SECRET_ACCESS_KEY_FILE: /run/secrets/s3_runner_${GPU_HOST}_secret_access_key
       S3_CA_FILE: /run/secrets/tls_ca
       RUNNER_HF_TOKEN_FILE: /run/secrets/hf_token
+      HF_HUB_DISABLE_XET: "1"                       # as runner's
       HELMSTUDIO_MODELS: /models
       NVIDIA_DRIVER_CAPABILITIES: compute,utility,video
     volumes:

@@ -30,6 +30,9 @@ imports unwired) and restarts SeaweedFS.
 
 ## 2. On the GPU host: driver and container toolkit
 
+On a fresh Ubuntu 24.04 VM, `setup.sh` (in this folder) installs all of this; reboot after it:
+`gcloud compute ssh <vm> --zone <zone> --command 'bash -s' < deploy/gpu-host/setup.sh`.
+
 ```sh
 nvidia-smi                                   # the driver sees the GPU
 nvidia-ctk --version                         # NVIDIA Container Toolkit installed
@@ -69,6 +72,8 @@ sudo mkdir -p /mnt/models && sudo chown 10001 /mnt/models   # MODELS_DIR; chown 
 ```
 
 A token for gated Hub repos is optional: put it in `secrets/hf_token` (same owner and mode).
+Both runners set `HF_HUB_DISABLE_XET=1` (plain HTTP downloads): Hugging Face's Xet CDN answered 429 Too Many
+Requests to tokenless downloads twice (M9), and a token alone may not avoid it.
 
 ## 4. The tunnel (test rig only)
 
@@ -96,6 +101,21 @@ docker compose logs -f runner                # the device line: NVIDIA <name>, V
 ```
 
 A `tls://` or `https://` endpoint whose cert does not verify against `secrets/tls_ca` stops the runner at start.
+
+## 5b. Choose models
+
+The install does not download every model. Once the stack is up and the host shows in `helm hosts`, pick what this
+host should have:
+
+    helm model pick --host <h>
+
+It lists every model variant the host publishes, with its size, licence and state there, and asks which numbers to
+download (for example `1,3,5-7`; empty means none). For any licence that must be accepted, it shows the licence title
+and link and asks before queuing; only a typed `y` accepts it. `--all-missing` picks every missing or partial variant
+and still asks for each licence. Progress shows in `helm models`.
+
+The `native` profile and image (SGLang, about 28 GB, the longest build) is only needed for MiniMax H3 video (fp8) and
+ZONOS3. If you are not installing either, start with `docker compose up -d` (no `--profile native`).
 
 ## 6. See it in the app
 

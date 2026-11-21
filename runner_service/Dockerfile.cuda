@@ -42,6 +42,9 @@ ENV UV_PYTHON_INSTALL_DIR=/opt/python UV_LINK_MODE=copy UV_COMPILE_BYTECODE=1
 COPY sglang-requirements.txt /tmp/
 RUN --mount=type=cache,target=/root/.cache/uv uv venv --python 3.12 /opt/sglang \
     && VIRTUAL_ENV=/opt/sglang uv pip sync /tmp/sglang-requirements.txt
+# SGLang's JIT kernels (QK norm, ConvRot int8) link -L<CUDA_HOME>/lib64 -lcudart: the nvcc wheel has lib/ and only
+# libcudart.so.13
+RUN cd /opt/sglang/lib/python3.12/site-packages/nvidia/cu13 && ln -s lib lib64 && ln -s libcudart.so.13 lib/libcudart.so
 
 FROM python:3.14.10-slim-trixie AS runtime
 WORKDIR /app
@@ -69,3 +72,9 @@ CMD ["python", "main.py"]
 FROM runtime AS native
 COPY --from=sglang /opt/python /opt/python
 COPY --from=sglang /opt/sglang /opt/sglang
+# the JIT kernels' build: g++ for nvcc's host side, ninja and nvcc (the venv's wheels) found on PATH (appended: the
+# runner's python stays first; deep_gemm takes CUDA_HOME from nvcc's folder)
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends g++ && rm -rf /var/lib/apt/lists/*
+USER runner
+ENV PATH=$PATH:/opt/sglang/bin:/opt/sglang/lib/python3.12/site-packages/nvidia/cu13/bin

@@ -273,6 +273,31 @@ Last full contract suite on the final M7 code: see the last M7 commit message (p
   (or a session allowed to pass it) re-queues it. Files already there are kept. A Hub token on the gcp runner would
   avoid the 429. The video runs (t2v, first frame, Ref2VA, Stop) and the SGLang checks are still open.
 
+- Sixth VM pass (2026-11-21): **H3 video `fp8` runs on CUDA through the app.** `HF_HUB_DISABLE_XET=1` is now the
+  default for both runners (deploy/gpu-host/docker-compose.yml, README; the VM-only override file is gone, runners
+  recreated). The owner cut the renders to one: text-to-video 864 × 480 × 107 frames, 6 steps, seed 7, a fox prompt
+  with a crow's caw. SGLang needed four fixes (sgl.py, Dockerfile.cuda; tests/test_minimax_sgl.py, runner lint
+  pass): `--backend sglang --pipeline-class-name MiniMaxH3Pipeline` (a folder not named MiniMax-H3 fell back to the
+  diffusers backend, which cannot load H3); ninja and nvcc on PATH (`/opt/sglang/bin` and the nvcc wheel's bin;
+  deep_gemm asserts CUDA_HOME at import); g++ in the native image (nvcc's host side); `lib64 → lib` and
+  `libcudart.so → .so.13` in the nvcc wheel (the JIT links `-L<CUDA_HOME>/lib64 -lcudart`). runner-native rebuilt
+  and recreated with them.
+- Numbers. A manual run of sgl.py's argv and request in runner-native: server ready 54 s (30–72 s over the tries,
+  page cache warm), denoise 6 steps at 1.5 s/step (8.9 s), decode 4.5 s, request 22 s, 76 s start to MP4, SGLang's
+  own peak 30.0 GB. Through the app (`helm run minimax-h3-text-to-video -p model.variant=fp8 -p
+  model.precision=fp8 …`, run on gcp.native, so made_with.host = gcp): generate 98.3 s (server start + request),
+  output 46.7 s (upload through the tunnel, SeaweedFS just restarted). VRAM peak 32.5 GB (nvidia-smi, whole GPU),
+  host RAM used ≤ 68 GB (text encoder offloaded layerwise); after the run the GPU is back to 0.56 GB (the server
+  exits). The app's MP4 is byte-identical to the manual run's: H.264 864 × 480, 107 frames, AAC 32 kHz 4.45 s
+  (max −22 dB: sound present). A good clip: the fox trots right through dawn snow, a crow flies over in the first
+  second. docs/mock/checks/m9/minimax-h3-fp8-app-t2v-864x480x107-s7.mp4.
+- The first two app attempts failed at upload (ConnectionClosedError to S3): the dev stack's SeaweedFS was
+  restarted at 14:18 mid-upload (not by this pass); the third succeeded. Before that, studio answered 422 for
+  `fp8` until the lead restarted the Mac's runners (a local host's stale schema outranks gcp's).
+- Not done (owner cut them): first frame, Ref2VA, Stop. ConvRot int8's JIT build fails ("CUDA compiler and CUDA
+  toolkit headers are incompatible": the nvcc wheel against the venv's cccl headers); SGLang falls back to
+  comfy_kitchen for the text encoder, which works. The QK-norm JIT builds. Left as is.
+
 ## M8 notes
 
 - The owner said "build it" on 2026-11-21 after reviewing [15-voices.md](plan/15-voices.md) and the voice boards

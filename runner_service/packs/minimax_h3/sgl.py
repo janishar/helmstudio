@@ -95,7 +95,10 @@ def request(prompt: str, seed: int, steps: int, size: dict, frames: int, first, 
 def argv(model, partition: str, port: int, tmp: Path) -> list[str]:
     transformer = model.files(f"transformer_{partition}")[0]
     (te,) = model.files("text_encoder")
-    return [str(SGLANG), "serve", "--model-path", str(model.folder().resolve()), "--model-variant", partition,
+    # --backend sglang --pipeline-class-name: SGLang picks its native H3 pipeline only for a folder named MiniMax-H3
+    # (else the root's diffusers model_index.json sends it to the diffusers fallback, which cannot load H3)
+    return [str(SGLANG), "serve", "--backend", "sglang", "--pipeline-class-name", "MiniMaxH3Pipeline",
+            "--model-path", str(model.folder().resolve()), "--model-variant", partition,
             "--component-weights-paths.transformer", str(transformer.resolve()),
             "--component-weights-paths.text_encoder", str(te.resolve()),
             "--layerwise-offload-components", "text_encoder",

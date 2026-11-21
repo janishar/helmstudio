@@ -49,9 +49,10 @@ Qwen3-TTS stays on its official bf16 weights (1.7B: nothing to gain).
    MiniMax H3 Image quantized variants, ZONOS3's CUDA build. Tested on the spot VM: CUDA goldens and PSNR against
    the official path on the same GPU.
 2. MiniMax H3 video on CUDA with community FP8. Code done (2026-11-21): variant `fp8`, SGLang 0.5.23 as a child
-   server (`packs/minimax_h3/sgl.py`), Comfy-Org pruned FP8 DiTs + int8 ConvRot text encoder. Status 2026-11-21: not
-   yet run on the VM; the `fp8` download stopped on an HF 429 (text encoder and Ref2VA DiT missing) and needs a
-   re-queue with `--accept-licence` (docs/handoff.md, "M9 phase 2 notes", fifth pass). MiniMax H3 Image base-fp8 with
+   server (`packs/minimax_h3/sgl.py`), Comfy-Org pruned FP8 DiTs + int8 ConvRot text encoder. Status 2026-11-21: `fp8`
+   downloaded (with `HF_HUB_DISABLE_XET=1`); text-to-video 864 × 480 × 107, 6 steps runs through the app on gcp (1.5 s/step,
+   76 s start to MP4, 32.5 GB VRAM) after four SGLang fixes (docs/handoff.md, "M9 phase 2 notes", sixth pass). Open:
+   Stop, first frame, Ref2VA. MiniMax H3 Image base-fp8 with
    Enhance on ran on gcp.
 3. LTX-2.5 on CUDA (torch port) with community FP8 / int8.
 
