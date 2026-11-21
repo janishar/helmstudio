@@ -409,9 +409,9 @@
     },
     "UploadOptimise.dc.html": {
       "expand": "fill",
-      "h": 1880,
+      "h": 2440,
       "is_interactive": true,
-      "title": "Uploads · optimised in the browser: Optimising… on reference, audio and Gallery tiles, video uploads, fallbacks",
+      "title": "Uploads · optimised in the browser: Optimising… on reference, audio and Gallery tiles, voice clips kept as WAV, fallbacks; video uploads (backlog)",
       "w": 1440,
       "x": -3040,
       "y": 3360

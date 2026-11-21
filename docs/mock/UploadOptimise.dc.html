@@ -178,7 +178,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <span style="padding: 4px 10px; border-radius: 999px; background: var(--s2); color: var(--t2); font-size: 12px; font-weight: 500">Uploads · optimised in the browser</span>
 </div>
 
-<p class="note" style="display: flex; align-items: center; max-width: 960px; font-size: 13px">Every image, audio and video upload is optimised in the browser before it uploads: images to the largest size a model uses, WebP (else JPEG); wav to m4a; video to H.264 + AAC at the video models' largest size and frame rate. Only the pending tile changes; a finished upload is an ordinary take. LoRA uploads are not media and stay as they are. The tag is the item in 20-h3-options-and-uploads.md 24.9.<button class="i" aria-label="More information" title="The limits come from the registry (GET /v1/studio/uploads/limits), not from constants in the web.">i</button></p>
+<p class="note" style="display: flex; align-items: center; max-width: 960px; font-size: 13px">Every image and audio upload is optimised in the browser before it uploads: images to the largest size a model uses, WebP (else JPEG); wav to m4a, except a voice clip for cloning, which stays WAV. Video uploads are not now: frames and rows tagged "Not now · backlog" stay for the record and are not built. Only the pending tile changes; a finished upload is an ordinary take. LoRA uploads are not media and stay as they are. The tag is the item in 20-h3-options-and-uploads.md 24.9.<button class="i" aria-label="More information" title="The limits come from the registry (GET /v1/studio/uploads/limits), not from constants in the web.">i</button></p>
 
 <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 32px; align-items: start">
 
@@ -206,7 +206,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 
 <!-- 2 -->
 <section class="frame" aria-label="Audio reference uploading">
-<p class="note">2 · Add audio (gallery picker, Upload): a wav becomes m4a with a percent; where the browser cannot make AAC it uploads the wav as is. <span class="ph">B3</span></p>
+<p class="note">2 · Add audio (gallery picker, Upload) for H3 audio references and LTX audio to video: a wav becomes m4a with a percent; where the browser cannot make AAC it uploads the wav as is. <span class="ph">B3</span></p>
 <div class="insp">
 <div>
 <h2 class="h" style="display: flex; align-items: center">Audio references<span style="flex-grow: 1"></span><span class="mono" style="font-weight: 400">1 / 3</span></h2>
@@ -227,12 +227,31 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <p class="note">mp3 uploads as it is (it is already small). × cancels the conversion or the upload.</p>
 </section>
 
-<!-- ============ Gallery ============ -->
-<h2 class="sec">Gallery · Upload, with video</h2>
-
 <!-- 3 -->
+<section class="frame" aria-label="Voice clip uploading, kept as WAV">
+<p class="note">3 · The voice picker's Clone from a clip (ZONOS3, Qwen3-TTS), a wav uploaded for cloning: no Optimising step, it uploads as WAV. <span class="ph">B3</span></p>
+<div class="insp">
+<div>
+<h2 class="h" style="display: flex; align-items: center">Clone from a clip<button class="i" aria-label="More information" title="An audio take, or a video's sound. Voice clips are never converted: the clone reads the WAV.">i</button></h2>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px">
+<div class="pk"><i style="flex-direction: column; gap: 6px; padding: 0 10px"><span aria-live="polite" style="color: var(--t1)">Uploading 40%</span><span role="progressbar" aria-label="Uploading [YOUR VOICE]" aria-valuenow="40" aria-valuemin="0" aria-valuemax="100" style="display: block; width: 100%; height: 4px; border-radius: 2px; background: var(--in); overflow: hidden"><span style="display: block; width: 40%; height: 100%; background: var(--a2)"></span></span></i><b>[YOUR VOICE]</b><small>voice clip · kept as WAV</small></div>
+<div class="pk"><i><span class="wave" aria-hidden="true" style="width: 78%; height: 30px; box-sizing: border-box"></span></i><b>Letter reader</b><small>audio · 0:24</small></div>
+<div class="pk"><i><span class="wave" aria-hidden="true" style="width: 78%; height: 30px; box-sizing: border-box"></span></i><b>Fox trots in</b><small>video's sound · 5.2 s</small></div>
+<div class="pk"><i><span class="wave" aria-hidden="true" style="width: 78%; height: 30px; box-sizing: border-box"></span></i><b>[YOUR SONG]</b><small>audio · 3:05</small></div>
+</div>
+<button class="dash">Upload a clip</button>
+<span style="font-size: 12px; color: var(--t2)">wav · 0:18 · 3.4 MB, uploaded as it is.</span>
+</div>
+</div>
+<p class="note">Only this path keeps WAV; the same wav through Add audio (frame 2) or Gallery Upload becomes m4a. mp3 and m4a clips upload as they are.</p>
+</section>
+
+<!-- ============ Gallery ============ -->
+<h2 class="sec">Gallery · Upload <span class="bl">video: Not now · backlog</span></h2>
+
+<!-- 4 -->
 <section class="frame" aria-label="Gallery uploads in progress" style="grid-column: 1 / -1">
-<p class="note">3 · Gallery after dropping five files. Pending uploads lead the grid; a video converts in the browser, then uploads with its poster. Upload now takes video too. <span class="ph">B2</span> <span class="ph">B3</span> <span class="ph">B4</span></p>
+<p class="note">4 · Gallery after dropping five files. Pending uploads lead the grid. Upload takes images and audio; the dimmed video tiles are not now. <span class="ph">B2</span> <span class="ph">B3</span> <span class="ph">B4</span> <span class="bl">Not now · backlog</span></p>
 <div class="card" style="background: var(--s1)">
 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
 <h1 style="margin: 0; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 22px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em">Gallery</h1>
@@ -242,24 +261,24 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <button class="chip" style="border-radius: 12px; height: 40px">Select several</button>
 </div>
 <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px">
-<div class="pk"><i style="flex-direction: column; gap: 6px; padding: 0 10px"><span style="color: var(--t1)">Optimising 37%</span><span role="progressbar" aria-label="Optimising [YOUR VIDEO]" aria-valuenow="37" aria-valuemin="0" aria-valuemax="100" style="display: block; width: 100%; height: 4px; border-radius: 2px; background: var(--in); overflow: hidden"><span style="display: block; width: 37%; height: 100%; background: var(--a2)"></span></span></i><b>[YOUR VIDEO]</b><small>4K 60 fps → 1920 × 1056</small></div>
+<div class="pk"><i class="later-x" style="flex-direction: column; gap: 6px; padding: 0 10px"><span style="color: var(--t1)">Optimising 37%</span><span role="progressbar" aria-label="Optimising [YOUR VIDEO]" aria-valuenow="37" aria-valuemin="0" aria-valuemax="100" style="display: block; width: 100%; height: 4px; border-radius: 2px; background: var(--in); overflow: hidden"><span style="display: block; width: 37%; height: 100%; background: var(--a2)"></span></span></i><b class="later-x">[YOUR VIDEO]</b><small class="later-x">4K 60 fps → 1920 × 1056</small><span class="bl" style="align-self: flex-start">Not now · backlog</span></div>
 <div class="pk"><i style="flex-direction: column; gap: 6px; padding: 0 10px"><span style="color: var(--t1)">Uploading 80%</span><span role="progressbar" aria-label="Uploading snowfield" aria-valuenow="80" aria-valuemin="0" aria-valuemax="100" style="display: block; width: 100%; height: 4px; border-radius: 2px; background: var(--in); overflow: hidden"><span style="display: block; width: 80%; height: 100%; background: var(--a2)"></span></span></i><b>snowfield</b><small>6.1 → 1.2 MB · WebP</small></div>
 <div class="pk"><i style="flex-direction: column; gap: 6px; padding: 0 10px"><span style="color: var(--t1)">Optimising 62%</span><span role="progressbar" aria-label="Optimising [YOUR MUSIC]" aria-valuenow="62" aria-valuemin="0" aria-valuemax="100" style="display: block; width: 100%; height: 4px; border-radius: 2px; background: var(--in); overflow: hidden"><span style="display: block; width: 62%; height: 100%; background: var(--a2)"></span></span></i><b>[YOUR MUSIC]</b><small>48.2 → 7.9 MB · m4a</small></div>
-<div class="pk"><i style="flex-direction: column; gap: 6px; padding: 0 10px; border-color: #ff8a80"><span role="alert" style="color: #ff8a80">This browser can't convert this video. Use Chrome, or convert it to MP4 (H.264).</span></i><b>[YOUR CLIP].mov</b><small><button class="x" aria-label="Dismiss [YOUR CLIP].mov" style="width: auto; padding: 0 8px; height: 20px">Dismiss</button></small></div>
-<div class="pk"><i style="flex-direction: column; gap: 6px; padding: 0 10px"><span style="color: var(--t1)">Uploading 15%</span><span role="progressbar" aria-label="Uploading [YOUR PHONE CLIP]" aria-valuenow="15" aria-valuemin="0" aria-valuemax="100" style="display: block; width: 100%; height: 4px; border-radius: 2px; background: var(--in); overflow: hidden"><span style="display: block; width: 15%; height: 100%; background: var(--a2)"></span></span></i><b>[YOUR PHONE CLIP]</b><small>as is · H.264 already</small></div>
-<div class="pk"><i>video</i><b>[YOUR SHORT]</b><small>Upload</small></div>
+<div class="pk"><i class="later-x" style="flex-direction: column; gap: 6px; padding: 0 10px; border-color: #ff8a80"><span role="alert" style="color: #ff8a80">This browser can't convert this video. Use Chrome, or convert it to MP4 (H.264).</span></i><b class="later-x">[YOUR CLIP].mov</b><small class="later-x"><button class="x" aria-label="Dismiss [YOUR CLIP].mov" style="width: auto; padding: 0 8px; height: 20px">Dismiss</button></small><span class="bl" style="align-self: flex-start">Not now · backlog</span></div>
+<div class="pk"><i class="later-x" style="flex-direction: column; gap: 6px; padding: 0 10px"><span style="color: var(--t1)">Uploading 15%</span><span role="progressbar" aria-label="Uploading [YOUR PHONE CLIP]" aria-valuenow="15" aria-valuemin="0" aria-valuemax="100" style="display: block; width: 100%; height: 4px; border-radius: 2px; background: var(--in); overflow: hidden"><span style="display: block; width: 15%; height: 100%; background: var(--a2)"></span></span></i><b class="later-x">[YOUR PHONE CLIP]</b><small class="later-x">as is · H.264 already</small><span class="bl" style="align-self: flex-start">Not now · backlog</span></div>
+<div class="pk"><i class="later-x">video</i><b class="later-x">[YOUR SHORT]</b><small class="later-x">Upload</small><span class="bl" style="align-self: flex-start">Not now · backlog</span></div>
 <div class="pk"><i>video</i><b>Fox trots in</b><small>LTX · pipeline step 2</small></div>
 <div class="pk"><i>image</i><b>fox reference 1</b><small>Upload</small></div>
 <div class="pk"><i>image</i><b>Fox at dusk · seed 43</b><small>Qwen Image · Create</small></div>
 <div class="pk"><i>audio</i><b>[YOUR SONG]</b><small>Upload</small></div>
 </div>
 </div>
-<p class="note">A video is capped at the video models' largest size and frame rate (1920 px, 60 fps today) and its sides are cropped to the 32 px grid every video input needs. Where the browser cannot convert, an MP4 that is already H.264 within the caps uploads as is; anything else is refused on its tile. The tab must stay open while it converts, as for any upload.</p>
+<p class="note" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px"><span class="bl">Not now · backlog</span><span class="later-x">A video is capped at the video models' largest size and frame rate (1920 px, 60 fps today) and its sides are cropped to the 32 px grid every video input needs. Where the browser cannot convert, an MP4 that is already H.264 within the caps uploads as is; anything else is refused on its tile. The tab must stay open while it converts, as for any upload.</span></p>
 </section>
 
-<!-- 4 -->
-<section class="frame" aria-label="An uploaded video take">
-<p class="note">4 · The uploaded video, selected in the Gallery: an ordinary take. The info row shows what was stored. <span class="ph">B4</span></p>
+<!-- 5 -->
+<section class="frame later" aria-label="An uploaded video take, not now, backlog">
+<p class="note">5 · The uploaded video, selected in the Gallery: an ordinary take. The info row shows what was stored. <span class="ph">B4</span> <span class="bl">Not now · backlog</span></p>
 <div class="insp">
 <div class="stage" style="aspect-ratio: 1920 / 1056; max-height: 220px; position: relative">[YOUR SHORT]<span style="position: absolute; left: 10px; top: 10px; padding: 3px 8px; border-radius: 8px; background: color-mix(in srgb, var(--s2) 92%, transparent); font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--t1)">12.0 s</span></div>
 <div>
@@ -272,17 +291,18 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <p class="note">Its Use in… offers are those of a video take (H3 references, LTX retake and extend). The original's size is not kept.</p>
 </section>
 
-<!-- 5 -->
+<!-- 6 -->
 <section class="frame" aria-label="What each kind becomes">
-<p class="note">5 · What each upload becomes (for the record; not a screen). <span class="ph">B1</span></p>
+<p class="note">6 · What each upload becomes (for the record; not a screen). <span class="ph">B1</span></p>
 <div class="card">
 <div class="row"><span>png, jpeg, webp, opaque</span><span>WebP 90 % (JPEG where WebP can't be made)</span></div>
 <div class="row"><span>png, webp with transparency</span><span>WebP, alpha kept (PNG on Safari)</span></div>
 <div class="row"><span>Long side over the cap</span><span>scaled to the cap (8192 today)</span></div>
 <div class="row"><span>wav</span><span>m4a · AAC 256 kb/s</span></div>
+<div class="row"><span>wav for Clone from a clip</span><span>voice clip · kept as WAV</span></div>
 <div class="row"><span>mp3, m4a</span><span>as is</span></div>
-<div class="row"><span>mp4, mov, webm</span><span>MP4 · H.264 + AAC · ≤ 1920 px · ≤ 60 fps · 32 px grid</span></div>
-<div class="row"><span>Can't convert</span><span>as is when allowed, else refused</span></div>
+<div class="row"><span style="display: flex; align-items: center; gap: 8px"><b class="later-x" style="font-weight: 400">mp4, mov, webm</b><b class="bl">Not now · backlog</b></span><span class="later-x">MP4 · H.264 + AAC · ≤ 1920 px · ≤ 60 fps · 32 px grid</span></div>
+<div class="row"><span>Can't convert</span><span>as is (image, wav)</span></div>
 </div>
 </section>
 
@@ -290,7 +310,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 </main>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":1880}}'>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":2440}}'>
 class Component extends DCLogic {
 state = { theme: null };
 renderVals() {
