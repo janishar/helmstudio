@@ -251,6 +251,39 @@ def test_second_loss_fails_the_run(api, two):
         wait_live(api, *killed)
 
 
+def test_run_set_to_one_host_never_moves(api, two):
+    """API 1.35 (Create's Run on; contracts/README.md "Several hosts", A run set to one host): a run set to a host
+    goes only there, whichever is free; lost there it fails, never moving to the live other host; set to a host that
+    is offline it is a 422 and nothing is stored."""
+    sid = new_session(api, "Contract hosts")["id"]
+    for h in (HOST_B, HOST, HOST_B):
+        assert (
+            ok(api.post(f"{STUDIO}/runs/plan", json={"workflow_id": "echo", "host": h}))["host"]
+            == h
+        )
+        run = wait_run(api, start_run(api, sid, QUICK, host=h)["id"])
+        assert (run["status"], run["host"]) == ("succeeded", h), run
+    rid = start_run(api, sid, LONG, host=HOST_B)["id"]
+    running_on(api, rid)
+    docker("kill", container(HOST_B))
+    try:
+        run = wait_end(api, rid)
+        assert run["status"] == "failed" and run["error"] == (
+            f"host {HOST_B} went offline; a run set to {HOST_B} never moves to another host"
+        ), run
+        wait_for(lambda: not live(api, HOST_B), timeout=60, interval=1, what=f"{HOST_B} offline")
+        before = len(ok(api.get(f"{STUDIO}/sessions/{sid}/runs"))["runs"])
+        body = {"workflow_id": "echo", "inputs": QUICK, "host": HOST_B}
+        r = api.post(f"{STUDIO}/sessions/{sid}/runs", json=body)
+        assert r.status_code == 422 and r.json()["detail"] == f"host {HOST_B} is offline", r.text
+        assert len(ok(api.get(f"{STUDIO}/sessions/{sid}/runs"))["runs"]) == before
+        plan = ok(api.post(f"{STUDIO}/runs/plan", json=body))
+        assert plan == {"host": None, "peak_gb": None, "reason": f"host {HOST_B} is offline"}, plan
+    finally:
+        docker("start", container(HOST_B))
+        wait_live(api, HOST_B)
+
+
 # A probe run inside HOST_B's runner container with that runner's own NATS credentials (NATS_URL_FILE, and
 # NATS_CA_FILE when its URL is tls://): every subject of the other host must be refused, its own allowed.
 PROBE = r"""

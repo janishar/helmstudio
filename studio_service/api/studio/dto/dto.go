@@ -77,13 +77,17 @@ type RunRequest struct {
 	WorkflowID string         `json:"workflow_id"`
 	Inputs     map[string]any `json:"inputs"`
 	Looks      []string       `json:"looks"` // the chosen looks, every group together; a repeat counts once
+	Host       *string        `json:"host"`  // API 1.35 (Run on): run it on this host only; nil = automatic
 	Ask        bool           `json:"-"`     // a judge test's run (API 1.28): it may run a text workflow
 }
 
-// Validate wants a workflow id and at most 8 look ids.
+// Validate wants a workflow id, at most 8 look ids and a host name when one is given.
 func (b *RunRequest) Validate() string {
 	if b.WorkflowID == "" {
 		return "workflow_id is required"
+	}
+	if b.Host != nil && !HostName.MatchString(*b.Host) {
+		return "host: must match ^[a-z0-9]{1,32}$"
 	}
 	return CheckLookIDs("looks", b.Looks)
 }

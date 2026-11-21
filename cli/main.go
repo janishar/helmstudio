@@ -20,6 +20,7 @@ const usage = `usage:
   helm run <workflow_id> [--session <id|new>] [-p node.param=value ...] [--lora <id>:<strength> ...] [-o|--out <dir>]
              saves each output (a PNG, or a video's MP4) as <dir>/<run_id>_<n>.<ext>
              --lora fills the rows of the workflow's LoRA stack, in order
+             [--host <host>]   run it on that host only (Create's Run on); a 422 when it cannot take it now
              [--image <take|file>] [--keyframe <frame>:<take|file> ...] [--duration <frames>|auto]   a video's first
              frame and keyframes (files are uploaded first); auto: the model picks the length (printed when it ends)
              [--media node.param=<take>[:in:out] ...] [--span start:end]   a video or audio take as a media input (in/out:

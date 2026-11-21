@@ -23,7 +23,10 @@ Env: `.env.example`. Secrets are read from `<NAME>_FILE` when set, else from `<N
    `enum` (422 names the key; a `seed` takes null or -1 for random, and `step` / `when` are carried, not checked). It stores the run `queued` (lane
    `interactive`, attempt 1, no host) with the resolved graph, and a `status queued` event. No eligible host (below):
    the run is stored `failed` (`no live host for env <env>`, or the model variant missing on every live host) and
-   nothing is sent. 202 either way; the answer has the host it is lined up for and its `position`.
+   nothing is sent. 202 either way; the answer has the host it is lined up for and its `position`. From API 1.35 a
+   body `host` (Create's Run on) is stored as `runs.pin_host`: the run is eligible on that host only (attempt 2
+   too) and, when that host cannot take it now, the answer is a 422 with the eligibility text and nothing is stored
+   (contracts/README.md "Several hosts", A run set to one host).
 2. The dispatcher (`api/studio/dispatcher.go`, every 500 ms, one pass at a time across replicas by a Postgres
    advisory lock) releases at most one run per host (across envs) while no released run on it has ended. Eligible
    host: hosts key fresher than 30 s, the run's env, its runner publishes the workflow, and the run's model variant is

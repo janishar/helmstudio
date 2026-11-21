@@ -594,6 +594,22 @@ for env <env>`. A run's own LoRA deleted since: `LoRA <name> was deleted`, as be
 concern: media jobs pick hosts by `media` (Media jobs). A host with a released `delete` / `lora_delete` affecting X
 (Model jobs) stays eligible but is not lined up for X while another eligible host exists (else X waits, as before).
 
+**A run set to one host** (API 1.35, Create's Run on; `RunRequest.host`, stored as the run's pin, `runs.pin_host`,
+the column a server-ask run already uses, so its texts are these too): its eligible hosts are only that host H, attempt 2 included. Each step
+above narrows to H and, with H left out, fails with H's own text instead (H's room text is step 4's as it is):
+1. `host <H> is offline` (no fresh hosts key of H in any env: never seen, gone, or older than 30 s); `host <H> cannot
+   run workflow <workflow>` (H is live but has no fresh key of the workflow's env, or does not publish the workflow).
+2. `host <H> does not have model <model> variant <variant> at <precision>` (not downloaded there, or a variant whose
+   `devices` leave out H's device: such a variant is never in H's models key); `host <H> does not have the distilled
+   LoRA` (a `<family>/distill` node H cannot fuse).
+3. `host <H> does not have LoRA <L>` (L: the first shared LoRA, graph order, H lacks).
+At create (POST …/runs, New shot's run) any of these, or step 4, is a 422 with the text and nothing is stored;
+POST /v1/studio/runs/plan answers it as `reason`. A queued run whose H drops fails at the next pass with the text
+(Starting up still exempts). A released run whose H stops responding is lost as before (attempt 2, `lost_host` =
+H): the next pass sends it to H again when H is back and can take it, else it fails `host <H> went offline; a run
+set to <H> never moves to another host` (whatever step left H out); it never goes to another host. Second loss: as
+before. A user's other runs, and the queue, are unchanged; the pin is never shown to other users.
+
 **Line-up** (Placement): X's `host` is the first of its eligible hosts by, in order: (1) **free** first (no run
 released to it is unterminated); (2) **resident** first (The hand-over: Resident, on that host); (3) **fits now**
 first (its admission would release X at once: no victims, no wait); (4) **idle longest** (oldest last terminal run on
@@ -653,10 +669,14 @@ counts as that receipt time. `.tools/make-secrets` refuses `mac` and `fake` as G
 **Fixtures** (`place.*.json`): `{description, hosts: {<name>: {keys (as admit fixtures, plus `ram_budget_gb`),
 workflows: {env: [ids]}, variants: {env: {"<model>/<variant>": [precisions]}} (present ones only), loras: {env: [shared
 LoRA names]}, free, idle_since, reserved_gb?}}, run: {env, workflow, model?, variant?, precision?, loras (shared, graph order),
-peak_gb, ram_peak_gb?, needs, lora_component?, lost_host?}, expect: {host, eligible, error}}`; `eligible` is after the
-`lost_host` rule, by name. Cases: resident-first, fits-first, idle-longest, name-order, free-first, variant-missing,
-no-variant, offline, small-gpu, too-big, host-ram, loras, loras-split, lost-elsewhere, lost-same, lost-none, reserved
-(a local server's reservation leaves the resident host too small: the other host). Admission
+peak_gb, ram_peak_gb?, needs, lora_component?, lost_host?, host?}, expect: {host, eligible, error}}`; `eligible` is
+after the `lost_host` rule, by name; the run's `host` (1.35) is its pin. Cases: resident-first, fits-first,
+idle-longest, name-order, free-first, variant-missing, no-variant, offline, small-gpu, too-big, host-ram, loras,
+loras-split, lost-elsewhere, lost-same, lost-none, reserved (a local server's reservation leaves the resident host too
+small: the other host); from 1.35 pinned (the pinned host though another is free with the model resident),
+pinned-offline, pinned-unknown, pinned-env, pinned-variant (a NVIDIA-only variant pinned to the Mac), pinned-lora,
+pinned-lost (attempt 2 while H is still offline: fails, never the live other host), pinned-lost-back (H is back:
+attempt 2 runs there). Admission
 on a cuda host: `admit.cuda-cpu-entry.json` (a `device: cpu` entry is not counted), `admit.cuda-host-ram.json`.
 
 ## A remote GPU host: credentials and TLS (API 1.18, M6; deployment, normative for names and permissions)

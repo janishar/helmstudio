@@ -146,4 +146,11 @@ func TestRunAndBatchSendLooks(t *testing.T) {
 	if _, ok := lastBody(t, f)["looks"]; ok {
 		t.Fatal("no --look: no looks key")
 	}
+	if _, ok := lastBody(t, f)["host"]; ok {
+		t.Fatal("no --host: automatic, no host key")
+	}
+	helmFails(t, "helm: 422", "run", "echo", "-p", "prompt.text=x", "--host", "gcp")
+	if got := lastBody(t, f)["host"]; got != "gcp" {
+		t.Fatalf("run host: %v", got)
+	}
 }

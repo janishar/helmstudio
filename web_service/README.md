@@ -28,7 +28,9 @@ Typed client: `gen/api.ts` from `contracts/openapi.yaml` (`npm run gen`, committ
   are folded into the runs (`lib/runs.ts`); a run that ends is fetched again. Past runs are the takes strip.
   The takes strip is the session's takes (`GET /v1/studio/sessions/{id}/takes`) plus runs still working or failed;
   a take can be starred on the stage. `?reuse=<take id>` fills the form from `POST /v1/studio/takes/{id}/reuse`;
-  without it the workflow is the session's newest run's.
+  without it the workflow is the session's newest run's. **Run on** (API 1.35, `lib/run-on.ts`,
+  `components/create/run-on.tsx`): the chip after the model chip, Auto or one host from `GET /v1/studio/hosts`
+  greyed by `GET /v1/studio/models`; a pin sends `host` with the run and the plan; Timeline's New shot has it too.
 - **Graph** (Create's Studio | Graph switch, ⌘\\; `components/graph/`, loaded by `next/dynamic` with `@xyflow/react`
   and elkjs only when opened): the workflow as typed cards and wires (laid out by elkjs when it has no positions),
   add nodes from `GET /v1/studio/nodes` (Add node, A, double- or right-click; auto-wiring), connect by drag (invalid

@@ -58,14 +58,12 @@ def new_session(client: httpx.Client, title: str = "Contract session") -> dict:
     return ok(client.post(f"{STUDIO}/sessions", json={"title": title}), 201)
 
 
-def start_run(client: httpx.Client, sid: str, inputs: dict, workflow_id: str = "echo") -> dict:
-    """POST .../runs: 202 and still queued (a failed run here means no live fake runner)."""
-    run = ok(
-        client.post(
-            f"{STUDIO}/sessions/{sid}/runs", json={"workflow_id": workflow_id, "inputs": inputs}
-        ),
-        202,
-    )
+def start_run(
+    client: httpx.Client, sid: str, inputs: dict, workflow_id: str = "echo", host: str | None = None
+) -> dict:
+    """POST .../runs: 202 and still queued (a failed run here means no live fake runner); `host`: Run on (1.35)."""
+    body = {"workflow_id": workflow_id, "inputs": inputs} | ({"host": host} if host else {})
+    run = ok(client.post(f"{STUDIO}/sessions/{sid}/runs", json=body), 202)
     assert run["status"] == "queued", f"run not queued (is the fake runner up?): {run}"
     return run
 

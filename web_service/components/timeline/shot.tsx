@@ -8,6 +8,9 @@ import { Minus, Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ErrorNote } from "@/components/kit";
 import { PromptArea } from "@/components/create/prompt";
+import { useHosts } from "@/components/create/memory-chip";
+import { RunOnChip } from "@/components/create/run-on";
+import { chosenVariants, machines, pinnedMachine } from "@/lib/run-on";
 import { useLibrary } from "@/lib/library";
 import { api, message, ok, type S } from "@/lib/api";
 import { mediaOf, snapFrames, gridOf } from "@/lib/media";
@@ -134,6 +137,16 @@ export function ShotComposer({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const library = useLibrary();
+  // Run on, as Create's (docs/mock/Timeline.dc.html, RunOn.dc.html): "" = Auto
+  const hosts = useHosts();
+  const [runOnHost, setRunOnHost] = useState("");
+  const [modelList, setModelList] = useState<S<"ModelList"> | null>(null);
+  useEffect(() => {
+    ok(api.GET("/v1/studio/models")).then(setModelList, () => undefined);
+  }, []);
+  const machineList = useMemo(() => machines(hosts), [hosts]);
+  const runOn = pinnedMachine(machineList, runOnHost);
+  const runOnOffline = !!runOn && !runOn.live;
 
   // "from this clip": the clip's own workflow and settings
   const redoTake = "clip" in slot && slot.redo ? here?.take_id : null;
@@ -205,7 +218,7 @@ export function ShotComposer({
   };
 
   async function generate() {
-    if (!workflow) return;
+    if (!workflow || runOnOffline) return;
     setBusy(true);
     setError("");
     try {
@@ -232,7 +245,10 @@ export function ShotComposer({
       const queued = queueInputs(fields, built.inputs, seedField ? count : 1);
       const bad = Object.entries({ ...built.errors, ...queued.errors })[0];
       if (bad) throw new Error(`${bad[0]}: ${bad[1]}`);
-      const looks = tl.defaults.looks.length ? { looks: tl.defaults.looks } : {};
+      const looks = {
+        ...(tl.defaults.looks.length && { looks: tl.defaults.looks }),
+        ...(runOn && { host: runOn.host }),
+      };
       const shotSlot: S<"TimelineSlot"> =
         "clip" in slot
           ? { clip: slot.clip }
@@ -373,6 +389,14 @@ export function ShotComposer({
             ))}
           </div>
         </div>
+        <RunOnChip
+          id="shot-run-on"
+          list={machineList}
+          chosen={runOn}
+          env={workflow?.env}
+          picks={chosenVariants(fields, raws, modelList)}
+          onPick={setRunOnHost}
+        />
         {framesField && nFrames && (
           <>
             <label htmlFor="shot-length" className="sr-only">
@@ -434,10 +458,19 @@ export function ShotComposer({
         <button
           type="button"
           className="key h-12 rounded-xl px-[22px] text-sm"
-          disabled={busy || !workflow}
+          disabled={busy || !workflow || runOnOffline}
           onClick={() => void generate()}
         >
-          {busy ? "Starting…" : "Generate shot"}
+          {busy ? (
+            "Starting…"
+          ) : runOnOffline ? (
+            <span className="flex flex-col items-center gap-px">
+              Generate shot
+              <span className="mono text-[11px] font-medium">{runOn.label} is offline</span>
+            </span>
+          ) : (
+            "Generate shot"
+          )}
         </button>
       </div>
       {!video.length && <p className="m-0 text-[13px] text-t2">No video workflow is installed.</p>}

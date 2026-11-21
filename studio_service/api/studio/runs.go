@@ -90,15 +90,17 @@ func (s *Service) createRun(ctx context.Context, tx pgx.Tx, caller common.Caller
 			return err
 		}
 		status, failure := "queued", (*string)(nil)
-		if _, _, reason := eligible(s.registry, s.registry.Hosts(), probe, time.Now()); reason != "" {
+		if _, _, reason := eligible(s.registry, s.registry.Hosts(), probe, time.Now()); reason != "" && probe.PinHost != nil {
+			return network.NewUnprocessableError(reason, nil) // API 1.35: a run set to a host that cannot take it is never stored
+		} else if reason != "" {
 			status, failure = "failed", &reason
 		}
 		inputs, _ := json.Marshal(body.Inputs)
 		run, err := one[model.Run](ctx, tx, `INSERT INTO runs (id, owner_id, session_id, workflow_id, env, inputs, status, error,
-			nodes, finished_at, workflow_version, workflow_title, mentions, loras, looks, media_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
-			CASE WHEN $7 = 'failed' THEN clock_timestamp() END, $10, $11, $12, $13, $14, $15)
+			nodes, finished_at, workflow_version, workflow_title, mentions, loras, looks, media_at, pin_host) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
+			CASE WHEN $7 = 'failed' THEN clock_timestamp() END, $10, $11, $12, $13, $14, $15, $16)
 			RETURNING `+model.RunCols, utility.NewID(), caller.ID, sessionID, workflow.ID, workflow.Env, inputs, status, failure,
-			probe.Nodes, probe.WorkflowVersion, workflow.Title, expansion, probe.Loras, looksJSON(body.Looks), probe.MediaAt)
+			probe.Nodes, probe.WorkflowVersion, workflow.Title, expansion, probe.Loras, looksJSON(body.Looks), probe.MediaAt, probe.PinHost)
 		if err != nil {
 			return err
 		}
@@ -140,7 +142,7 @@ func (s *Service) probeRun(ctx context.Context, tx pgx.Tx, caller common.Caller,
 		return workflow, model.Run{}, nil, err
 	}
 	probe := model.Run{WorkflowID: workflow.ID, Env: workflow.Env, Nodes: graph, WorkflowVersion: version,
-		Loras: lorasJSON(graphs[0].Loras), MediaAt: media}
+		Loras: lorasJSON(graphs[0].Loras), MediaAt: media, PinHost: body.Host}
 	return workflow, probe, mentionsJSON(graphs[0].Expansion), nil
 }
 

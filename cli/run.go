@@ -194,6 +194,7 @@ func runCmd(args []string, stdout, stderr io.Writer, stop <-chan os.Signal) erro
 	fs.Var(&loras, "lora", "<lora_id>:<strength> (repeatable): the rows of the workflow's LoRA stack, in order")
 	var looks params
 	fs.Var(&looks, "look", "look id (repeatable): a look to run with (helm looks lists them)")
+	host := fs.String("host", "", "run it on this host only (helm hosts lists them); a run set to a host never moves to another")
 	image := fs.String("image", "", "first frame: a take id or an image file (uploaded first)")
 	var keyframes params
 	fs.Var(&keyframes, "keyframe", "<frame>:<take id or file> (repeatable): an image pinned at that frame")
@@ -263,6 +264,9 @@ func runCmd(args []string, stdout, stderr io.Writer, stop <-chan os.Signal) erro
 	body := map[string]any{"workflow_id": wfID, "inputs": inputs}
 	if len(looks) > 0 {
 		body["looks"] = looks
+	}
+	if *host != "" {
+		body["host"] = *host
 	}
 	if err := c.call(http.MethodPost, "/v1/studio/sessions/"+url.PathEscape(sid)+"/runs", body, http.StatusAccepted, &r); err != nil {
 		return err

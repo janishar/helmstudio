@@ -288,3 +288,64 @@ func TestWaitingHostLetsAFreeHostTakeItsOtherRuns(t *testing.T) {
 		t.Fatal(run)
 	}
 }
+
+// API 1.35 (Create's Run on): a run set to gcp goes only to gcp, though mac is free with its model resident; the plan
+// follows the host; when gcp stops responding attempt 2 never moves to mac but fails; a run set to a host that cannot
+// take it is a 422 and nothing is stored.
+func TestRunSetToOneHost(t *testing.T) {
+	e := setup(t)
+	e.twoEnvs()
+	e.mac("torch", qwenResident)
+	e.gcp(time.Now(), nil, nil)
+	sessionID := e.call(userA, "POST", "/v1/studio/sessions", nil, 201)["id"].(string)
+	body := map[string]any{"workflow_id": "qwen-image", "inputs": turbo, "host": "gcp"}
+	if plan := e.call(userA, "POST", "/v1/studio/runs/plan", body, 200); plan["host"] != "gcp" || plan["reason"] != nil {
+		t.Fatal(plan)
+	}
+	if plan := e.call(userA, "POST", "/v1/studio/runs/plan", map[string]any{"workflow_id": "qwen-image", "inputs": turbo},
+		200); plan["host"] != "gcp" { // automatic: the first eligible by name, as before
+		t.Fatal(plan)
+	}
+	runID := e.call(userA, "POST", "/v1/studio/sessions/"+sessionID+"/runs", body, 202)["id"].(string)
+	d := studio.NewDispatcher(e.pool, e.registry, func(context.Context, string) error { return nil }, nil)
+	now := time.Now()
+	if got := e.gatePass(d, now); !slices.Equal(got, []string{"cmd.run.gcp.torch " + runID}) {
+		t.Fatal("set to gcp, not the resident mac:", got)
+	}
+	// an mlx workflow set to gcp: gcp is live but has no mlx runner
+	ltx := map[string]any{"workflow_id": "ltx-text-to-video", "inputs": map[string]any{"prompt.text": "a fox"}, "host": "gcp"}
+	if got := e.call(userA, "POST", "/v1/studio/sessions/"+sessionID+"/runs", ltx, 422); got["detail"] != "host gcp cannot run workflow ltx-text-to-video" {
+		t.Fatal(got)
+	}
+	e.emit(userA, sessionID, runID, "status", 1, map[string]any{"status": "running", "host": "gcp"})
+	e.gcp(now.Add(-2*time.Minute), nil, nil) // preempted
+	e.gatePass(d, now)
+	e.gatePass(d, now.Add(studio.Confirm)) // lost: attempt 2 queued for gcp only
+	if got := e.gatePass(d, now.Add(studio.Confirm)); len(got) != 0 {
+		t.Fatal("never moves to mac:", got)
+	}
+	run := e.call(userA, "GET", "/v1/studio/runs/"+runID, nil, 200)
+	if run["status"] != "failed" || run["error"] != "host gcp went offline; a run set to gcp never moves to another host" {
+		t.Fatal(run)
+	}
+	// gcp offline, lab unknown: 422, nothing stored; the plan answers the same text
+	before := e.count(`SELECT count(*) FROM runs`)
+	for host, detail := range map[string]string{"gcp": "host gcp is offline", "lab": "host lab is offline",
+		"GCP": "host: must match ^[a-z0-9]{1,32}$"} {
+		body["host"] = host
+		if got := e.call(userA, "POST", "/v1/studio/sessions/"+sessionID+"/runs", body, 422); got["detail"] != detail {
+			t.Fatal(host, got)
+		}
+	}
+	if after := e.count(`SELECT count(*) FROM runs`); after != before {
+		t.Fatal("stored:", before, after)
+	}
+	body["host"] = "gcp"
+	if plan := e.call(userA, "POST", "/v1/studio/runs/plan", body, 200); plan["host"] != nil || plan["reason"] != "host gcp is offline" {
+		t.Fatal(plan)
+	}
+	body["host"] = "mac" // mac can: queued, and released there
+	if run := e.call(userA, "POST", "/v1/studio/sessions/"+sessionID+"/runs", body, 202); run["status"] != "queued" {
+		t.Fatal(run)
+	}
+}

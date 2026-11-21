@@ -302,6 +302,29 @@ Last full contract suite on the final M7 code: see the last M7 commit message (p
   hosts only." The web shows a hyphenated value word by word ("base-fp8" → "Base fp8") and a summary shows the
   precision once ("Base · fp8").
 
+## Create · Run on (API 1.35, owner-approved 2026-11-22; board docs/mock/RunOn.dc.html)
+
+- **Contract**: `RunRequest.host` (pattern `^[a-z0-9]{1,32}$`, absent = automatic), so POST …/runs, New shot's run
+  and POST /v1/studio/runs/plan all take it. contracts/README.md "Several hosts", A run set to one host: eligible hosts
+  are only that host, attempt 2 included; texts `host <H> is offline`, `host <H> cannot run workflow <id>`, `host <H>
+  does not have model <m> variant <v> at <p>`, `… the distilled LoRA`, `… LoRA <L>`, and lost mid-run `host <H> went
+  offline; a run set to <H> never moves to another host`. At create any of them is a 422 and nothing is stored (an
+  Auto run still fails at once with 202 as before). Fixtures `place.pinned*.json` (8), check.py `place` takes `host`.
+- **studio_service**: the pin is the existing `runs.pin_host` column (a server ask's provider pin), so no migration;
+  `eligibleIn` names the pinned host in its texts, `lose` already re-queues attempt 2 with `lost_host`, which can only
+  go back to the pin. Server asks get the same pinned texts now (they said `no live host for env server` before).
+- **web_service**: `lib/run-on.ts` (machines from GET /hosts: mps → Mac, cuda → NVIDIA, host name when two share a
+  device or it is neither; greyed reasons from GET /models: offline, `<Version> is NVIDIA only` / `Mac only`, `not
+  downloaded on <host>`, `cannot run this workflow` for a host without the workflow's env), `components/create/run-on.tsx`
+  (the chip and menu, `.mi` rows and `.chip.warn` in globals.css). Create: the chip after the model chip; the model
+  chip's Variant group is rows with each version's note, dimmed `not on <Mac>` under a host and still pickable (Run on
+  back to Auto with `Run on set to Auto: …`); an offline pin warns and Generate reads `<label> is offline`; the plan
+  and the last-run time follow the pin. Timeline New shot has the chip too (every seed sends the host). The choice is
+  per screen state like the rest of the composer (not stored).
+- **cli**: `helm run --host <h>`.
+- Not done: the pipeline studio (Pipelines › Studio) has no Run on (not a Create composer); the plan under Auto still
+  names the first eligible host by name, not the line-up's pick (as before).
+
 ## M9 phase 3 notes: LTX-2.5 on NVIDIA (code only, not run on the VM)
 
 Plan 17, section 21.6. Steps 0-5 and 7 are done; step 6 (the two VM renders and their `.cuda` goldens) is next.

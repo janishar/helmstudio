@@ -1190,6 +1190,8 @@ export function Chips({
   models,
   family,
   spoken,
+  runOn,
+  versions,
 }: Omit<FormProps, "errors"> & {
   show: (key: string) => void;
   /** a video workflow's chips (docs/mock/TextToVideo.dc.html): the size as w × h, no seed chip */
@@ -1204,6 +1206,14 @@ export function Chips({
   /** an audio workflow (docs/mock/CreateAudio.dc.html): the chip leaves out one-value choices ("Qwen3-TTS · Custom
    * voice", not "Custom voice · bf16") */
   spoken?: boolean;
+  /** the Run on chip, right after the model chip (docs/mock/RunOn.dc.html) */
+  runOn?: React.ReactNode;
+  /** a variant value's row in the model chip's menu: its title, note ("NVIDIA only") and dim text under Run on a
+   * host ("not on Mac"); given, the variant choice is rows, not buttons (docs/mock/RunOn.dc.html, 2) */
+  versions?: (
+    f: Field,
+    o: string,
+  ) => { title: string; note: string | null; dim: string | null } | null;
 }) {
   const s = sections(fields);
   const model = (models ?? s.tiles).filter((f) => f.model && f.param.type === "enum");
@@ -1238,7 +1248,7 @@ export function Chips({
             popover="auto"
             role="dialog"
             aria-label="Model"
-            className="pop w-64"
+            className="pop w-72"
             style={
               {
                 positionAnchor: "--model-pick",
@@ -1247,7 +1257,37 @@ export function Chips({
               } as React.CSSProperties
             }
           >
-            {pickable.map((f) => (
+            {pickable.map((f) =>
+              versions && f.param.name === "variant" ? (
+                <div
+                  key={f.key}
+                  role="group"
+                  aria-label={display(f, "").label}
+                  className="mb-2.5 flex flex-col gap-0.5"
+                >
+                  <span className="flex items-center pb-1 text-[12px] text-t2">
+                    {display(f, "").label}
+                    {f.param.help && <Info>{f.param.help}</Info>}
+                  </span>
+                  {f.param.enum?.map((o) => {
+                    const r = versions(f, o);
+                    const end = r?.dim ?? r?.note;
+                    return (
+                      <button
+                        key={o}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={rawOf(f, raws) === o}
+                        className={`mi ${r?.dim ? "dim" : ""}`}
+                        onClick={() => onChange(f.key, o)}
+                      >
+                        <span>{r?.title ?? pretty(o)}</span>
+                        {end && <em>{end}</em>}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
               <div
                 key={f.key}
                 role="group"
@@ -1272,7 +1312,8 @@ export function Chips({
                   ))}
                 </div>
               </div>
-            ))}
+              ),
+            )}
           </div>
         </>
       )}
@@ -1299,6 +1340,7 @@ export function Chips({
           {prettyModel(model.map((f) => String(rawOf(f, raws)))).join(" · ")}
         </button>
       )}
+      {runOn}
       {c && (
         <button type="button" className={chip} onClick={() => show("canvas")}>
           {compact

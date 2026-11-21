@@ -97,11 +97,14 @@ export function lastDuration(
   runs: Run[],
   workflowId: string,
   bypass: Record<string, boolean> = {},
+  host?: string,
 ): number | null {
-  // with `bypass` (a choice's switches, LTX One-stage): only a run that switched the same nodes off
+  // with `bypass` (a choice's switches, LTX One-stage): only a run that switched the same nodes off; with `host`
+  // (Run on): only a run on it
   const r = runs.find(
     (x) =>
       x.workflow_id === workflowId &&
+      (!host || x.host === host) &&
       x.status === "succeeded" &&
       x.started_at &&
       x.finished_at &&

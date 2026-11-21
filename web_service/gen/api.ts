@@ -590,7 +590,10 @@ export interface paths {
          *     audio a mention in a prompt param is `prompt.text: mentions are not read aloud; use a dialogue script`. When no host is eligible (none live with the env and the workflow),
          *     the run is created already `failed` with error `no live host for env <env>` (still 202) and nothing is sent.
          *     From 1.18 a host is eligible only with the run's model variant present at its precision and room for its
-         *     planned peak; the other failure texts are in contracts/README.md, Several hosts: eligibility.
+         *     planned peak; the other failure texts are in contracts/README.md, Several hosts: eligibility. From 1.35 a
+         *     body with `host` (Create's Run on) is eligible on that host only: when it cannot take the run now the answer
+         *     is 422 with the eligibility text (`host gcp is offline`, `host mac does not have model <model> variant
+         *     <variant> at <precision>`, …; contracts/README.md, Several hosts: a run set to one host) and nothing is stored.
          *     409 when the caller already has 100 runs queued or running (any session): `You have 100 runs queued or
          *     running; wait for some to finish.`
          *
@@ -681,7 +684,9 @@ export interface paths {
          *     eligible on (the first by name) and its planned peak there: the plan of its model variant at its precision
          *     and workflow (registry `models[].variants[].memory`, contracts/README.md "The hand-over") plus its LoRA
          *     files. `peak_gb` is null when the run has no plan (larger than the plan's `planned_at`: it is admitted at the
-         *     whole host budget); both are null when no host is eligible (`reason` says why, as the run would fail).
+         *     whole host budget); both are null when no host is eligible (`reason` says why, as the run would fail). From
+         *     1.35 a body with `host` plans the run on that host only (Generate's estimate follows Run on); `reason` is then
+         *     the text POST …/runs answers with its 422 (contracts/README.md, Several hosts: a run set to one host).
          */
         post: operations["studioPlanRun"];
         delete?: never;
@@ -3544,10 +3549,12 @@ export interface components {
             inputs?: components["schemas"]["RunInputs"];
             /** @description the chosen looks, every group together, in the order the composer's tiles list them (tile order, then pick order); missing = []. Resolved with the mentions (contracts/README.md, Looks) */
             looks?: components["schemas"]["LookIds"];
+            /** @description from 1.35 (Create's Run on): run it on this host only, attempt 2 included; absent = automatic (contracts/README.md, Several hosts: a run set to one host). A host that cannot take it now is a 422 at create (the plan answers it as `reason`) */
+            host?: string;
         };
         /** @description from 1.25: POST /v1/studio/runs/plan */
         RunPlan: {
-            /** @description the host the run would be eligible on, the first by name; null = none */
+            /** @description the host the run would be eligible on, the first by name (from 1.35 with RunRequest.host: that host); null = none */
             host: string | null;
             /** @description its planned peak there in GB (the plan's peak_gb + its LoRA files); null = no plan (the whole host budget) or no host */
             peak_gb: number | null;

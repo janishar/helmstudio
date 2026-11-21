@@ -8,6 +8,7 @@ import {
   AtSign,
   Check,
   ChevronDown,
+  Info as InfoIcon,
   Maximize,
   Minus,
   Pause,
@@ -118,7 +119,9 @@ import {
 } from "@/lib/runs";
 import { rememberProject, stripItems } from "@/lib/takes";
 import { hostMemory } from "@/lib/hosts";
-import { estimateText, Memory, useHosts, usePlannedPeak } from "@/components/create/memory-chip";
+import { estimateText, Memory, useHosts, usePlan } from "@/components/create/memory-chip";
+import { RunOnChip } from "@/components/create/run-on";
+import { chosenVariants, clashNote, machines, pinnedMachine, versionRow } from "@/lib/run-on";
 import {
   TAKE_MIME,
   capacity,
@@ -268,6 +271,10 @@ export function Create({
   // the graph's problems for the document it holds (its own check merged with studio's)
   const [lifted, setLifted] = useState<{ id: string; problems: Problem[] } | null>(null);
   const hosts = useHosts();
+  // Run on (docs/mock/RunOn.dc.html): the host every run is set to, "" = Auto; kept across workflows like the form
+  const [runOnHost, setRunOnHost] = useState("");
+  // why a version pick set Run on back to Auto ("Run on set to Auto: Base fp8 is NVIDIA only")
+  const [runNote, setRunNote] = useState("");
   // the run list as the event handler last left it, so an event and a fetch never fold onto a stale copy, and the
   // open session, so a late answer about another one is dropped
   const runsRef = useRef<Run[]>(initial?.runs ?? []);
@@ -542,7 +549,21 @@ export function Create({
   )?.[0];
   // the Seeds stepper whenever the workflow has a seed, placed or not (docs/mock/TextToVideo.dc.html)
   const seedField = all.find((f) => f.param.type === "seed");
+  const machineList = useMemo(() => machines(hosts), [hosts]);
+  const runOn = pinnedMachine(machineList, runOnHost);
+  // the chosen host is gone: nothing is queued (Generate says so), the chip warns
+  const runOnOffline = !!runOn && !runOn.live;
   const change = (key: string, u: Update) => {
+    // a version Run on's host cannot run is still picked: Run on goes back to Auto and says why, never the version
+    const vf = all.find((x) => x.key === key && x.model && x.param.name === "variant");
+    const clash =
+      runOn && vf && typeof u === "string"
+        ? chosenVariants([vf], { [key]: u }, modelList).map(({ m, v }) => clashNote(runOn, m, v))[0]
+        : null;
+    if (clash) {
+      setRunOnHost("");
+      setRunNote(clash);
+    }
     setRaws((r) => {
       const v = typeof u === "function" ? u(r[key]) : u;
       // an image added to rows with a time on the clip (keyframes) goes on a free frame
@@ -894,7 +915,7 @@ export function Create({
   const sending = useRef(false);
   async function generate(e: React.FormEvent) {
     e.preventDefault();
-    if (workflow && !blocked && !notDownloaded) await send(workflow, fields);
+    if (workflow && !blocked && !notDownloaded && !runOnOffline) await send(workflow, fields);
   }
   /** Queues runs of `w` (Graph view passes the version it just saved) with the form's settings for it. */
   async function send(w: S<"Workflow">, fields: Field[]) {
@@ -932,7 +953,12 @@ export function Create({
         const run = await ok(
           api.POST("/v1/studio/sessions/{session_id}/runs", {
             params: { path: { session_id: sid } },
-            body: { workflow_id: w.id, inputs: each, ...(ids.length && { looks: ids }) },
+            body: {
+              workflow_id: w.id,
+              inputs: each,
+              ...(ids.length && { looks: ids }),
+              ...(runOn && { host: runOn.host }),
+            },
           }),
         );
         if (sid === sessionRef.current) put(mergeRuns(runsRef.current, [run]));
@@ -1071,15 +1097,24 @@ export function Create({
       : undefined;
   const anyActive = !!runs?.some((r) => isActive(r.status));
   const bypass = choiceBypass(groups, fields, raws);
-  const took = workflow && runs ? lastDuration(runs, workflow.id, bypass) : null;
-  const peak = usePlannedPeak(
-    workflow && !blocked
-      ? { workflow_id: workflow.id, inputs: formInputs, ...(lookIds.length && { looks: lookIds }) }
+  // the estimate follows Run on: the plan there and the last run on that host (under Auto, the host the plan picks)
+  const plan = usePlan(
+    workflow && !blocked && !runOnOffline
+      ? {
+          workflow_id: workflow.id,
+          inputs: formInputs,
+          ...(lookIds.length && { looks: lookIds }),
+          ...(runOn && { host: runOn.host }),
+        }
       : null,
   );
+  const took =
+    workflow && runs
+      ? lastDuration(runs, workflow.id, bypass, runOn?.host ?? plan.host ?? undefined)
+      : null;
   const estimate = estimateText(
     took != null ? clock(took) : null,
-    peak,
+    plan.gb,
     Object.values(bypass).some(Boolean),
   );
   const pinned = pinnedNote(runs?.find((r) => r.id === lastRun));
@@ -1087,7 +1122,7 @@ export function Create({
   const host = hostMemory(
     hosts,
     workflow?.env,
-    (runs?.find((r) => isActive(r.status) && r.host) ?? shown)?.host,
+    runOn?.host ?? (runs?.find((r) => isActive(r.status) && r.host) ?? shown)?.host,
   );
   const session = sessions?.find((s) => s.id === sessionId);
 
@@ -1568,6 +1603,15 @@ export function Create({
                 {reuseNote}
               </p>
             )}
+            {runNote && (
+              <p
+                role="status"
+                className="m-0 flex items-center gap-2 self-start rounded-[10px] bg-s4 px-2.5 py-1.5 text-[12px]"
+              >
+                <InfoIcon size={14} aria-hidden />
+                {runNote}
+              </p>
+            )}
             {blocked > 0 && (
               <p role="status" className="text-[12px] text-bad">
                 This workflow has {blocked} problem{blocked === 1 ? "" : "s"}: open Graph to fix{" "}
@@ -1634,6 +1678,19 @@ export function Create({
                 }
                 family={familyName}
                 spoken={audio}
+                versions={(f, o) => versionRow(modelList, runOn, f, o)}
+                runOn={
+                  <RunOnChip
+                    list={machineList}
+                    chosen={runOn}
+                    env={workflow?.env}
+                    picks={chosenVariants(all, raws, modelList)}
+                    onPick={(h) => {
+                      setRunOnHost(h);
+                      setRunNote("");
+                    }}
+                  />
+                }
               />
               {/* the shown take's sample rate (docs/mock/CreateAudio.dc.html: "24 kHz"; none before a take) */}
               {audio && rateTake?.audio?.sample_rate && (
@@ -1678,7 +1735,13 @@ export function Create({
                 // a video workflow's key is the second accent (docs/mock/TextToVideo.dc.html)
                 className={`key flex h-14 flex-col items-center justify-center gap-px px-6 ${video || audio ? "bg-a2 text-[var(--on2)]" : ""}`}
                 disabled={
-                  !workflow || busy || blocked > 0 || noVoice || badLine > 0 || notDownloaded
+                  !workflow ||
+                  busy ||
+                  blocked > 0 ||
+                  noVoice ||
+                  badLine > 0 ||
+                  notDownloaded ||
+                  runOnOffline
                 }
               >
                 <span className="text-sm">
@@ -1698,6 +1761,8 @@ export function Create({
                 </span>
                 {badLine > 0 && !busy ? (
                   <span className="mono text-[11px] font-medium">Fix line {badLine} first</span>
+                ) : runOnOffline && !busy ? (
+                  <span className="mono text-[11px] font-medium">{runOn.label} is offline</span>
                 ) : pinned && !busy ? (
                   <span className="mono text-[11px] font-medium" title={`The queued run ${pinned}`}>
                     {pinned}
@@ -1712,7 +1777,7 @@ export function Create({
                       className="mono text-[11px] font-medium"
                       title={[
                         took != null && `The last run of this workflow took ${clock(took)}`,
-                        peak != null && `Planned peak ${peak} GB`,
+                        plan.gb != null && `Planned peak ${plan.gb} GB`,
                       ]
                         .filter(Boolean)
                         .join("; ")}

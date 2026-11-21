@@ -34,24 +34,33 @@ export function useHosts() {
  * form settles; the workflow's last answer stays until the next. Null before one, with no plan (the whole host budget) and when
  * the form does not resolve yet (its 422s are Generate's to show). */
 export function usePlannedPeak(body: S<"RunRequest"> | null) {
+  return usePlan(body).gb;
+}
+
+/** usePlannedPeak with the host the plan is for (Auto's host when `body` has none; null = none or no answer yet). */
+export function usePlan(body: S<"RunRequest"> | null): { gb: number | null; host: string | null } {
   const key = body && JSON.stringify(body);
   // the answer and the workflow it was for: another workflow's never shows while this one's is asked
-  const [got, setGot] = useState<{ wf: string; gb: number | null } | null>(null);
+  const [got, setGot] = useState<{
+    wf: string;
+    gb: number | null;
+    host: string | null;
+  } | null>(null);
   useEffect(() => {
     if (!key) return;
     const req = JSON.parse(key) as S<"RunRequest">;
     let stop = false;
     const t = setTimeout(() => {
       ok(api.POST("/v1/studio/runs/plan", { body: req }))
-        .then((p) => !stop && setGot({ wf: req.workflow_id, gb: p.peak_gb }))
-        .catch(() => !stop && setGot({ wf: req.workflow_id, gb: null }));
+        .then((p) => !stop && setGot({ wf: req.workflow_id, gb: p.peak_gb, host: p.host }))
+        .catch(() => !stop && setGot({ wf: req.workflow_id, gb: null, host: null }));
     }, 400);
     return () => {
       stop = true;
       clearTimeout(t);
     };
   }, [key]);
-  return body && got?.wf === body.workflow_id ? got.gb : null;
+  return body && got?.wf === body.workflow_id ? got : { gb: null, host: null };
 }
 
 /** The Generate button's estimate (docs/mock/TextToVideo.dc.html "≈ 40 s · 21 GB"): the last run's time, then the

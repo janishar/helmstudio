@@ -1009,9 +1009,19 @@ func eligibleIn(reg *registry.Registry, values []registry.Host, reserved map[str
 	models := runModels(graph)
 	used := runUsed(run.Loras)
 	bake := baked(used, graph)
-	env := run.Env
+	env, pin := run.Env, run.PinHost
+	// API 1.35: a run set to one host (a user's Run on, or a server ask's provider) names that host in its texts
+	// (contracts/README.md "Several hosts", A run set to one host) and, lost, never moves
+	pinned := func(text, auto string) string {
+		if pin != nil {
+			return "host " + *pin + " " + text
+		}
+		return auto
+	}
 	gone := func(reason string) (map[string]string, map[string]bool, string) {
-		if run.LostHost != nil {
+		if run.LostHost != nil && pin != nil {
+			reason = "host " + *pin + " went offline; a run set to " + *pin + " never moves to another host"
+		} else if run.LostHost != nil {
 			reason = "runner on host " + *run.LostHost + " stopped responding; no other live host for env " + env
 		}
 		return nil, nil, reason
@@ -1030,7 +1040,10 @@ func eligibleIn(reg *registry.Registry, values []registry.Host, reserved map[str
 		hosts = append(hosts, value.Host)
 	}
 	if len(hosts) == 0 {
-		return gone("no live host for env " + env)
+		if pin != nil && !slices.ContainsFunc(values, func(v registry.Host) bool { return v.Host == *pin && v.Live(now) }) {
+			return gone("host " + *pin + " is offline")
+		}
+		return gone(pinned("cannot run workflow "+run.WorkflowID, "no live host for env "+env))
 	}
 	missing := "" // the first model node the first host lacks
 	hosts = slices.DeleteFunc(hosts, func(host string) bool {
@@ -1050,7 +1063,7 @@ func eligibleIn(reg *registry.Registry, values []registry.Host, reserved map[str
 		return false
 	})
 	if len(hosts) == 0 {
-		return gone("no live host for env " + env + " has " + missing)
+		return gone(pinned("does not have "+missing, "no live host for env "+env+" has "+missing))
 	}
 	// API 1.19: a <family>/distill node fuses the family's distilled LoRA onto another variant: the host's models
 	// key must list it as pre-fused for variant distilled (MLX), or (M9, torch) the run's model variant names its
@@ -1071,7 +1084,7 @@ func eligibleIn(reg *registry.Registry, values []registry.Host, reserved map[str
 			})
 		})
 		if len(hosts) == 0 {
-			return gone("no live host for env " + env + " has the distilled LoRA")
+			return gone(pinned("does not have the distilled LoRA", "no live host for env "+env+" has the distilled LoRA"))
 		}
 	}
 	has := func(host string, u lora.Used) bool { return u.Source != "shared" || reg.HasLora(host+"."+env, u.ID) }
@@ -1080,6 +1093,9 @@ func eligibleIn(reg *registry.Registry, values []registry.Host, reserved map[str
 	})
 	if len(withAll) == 0 {
 		first := used[slices.IndexFunc(used, func(u lora.Used) bool { return !has(hosts[0], u) })]
+		if pin != nil {
+			return gone("host " + *pin + " does not have LoRA " + first.Name)
+		}
 		if !slices.ContainsFunc(hosts, func(host string) bool { return has(host, first) }) {
 			return gone("no live host for env " + env + " has LoRA " + first.Name)
 		}

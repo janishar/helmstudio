@@ -3162,25 +3162,35 @@ def place(fx: dict) -> dict:
     fails with. hosts: name -> {keys (as admit fixtures), workflows: {env: [ids]}, variants: {env: {"model/variant":
     [precisions]}} (present ones only), loras: {env: [shared LoRA names]}, free, idle_since (null = never ran), reserved_gb? (enabled local servers)};
     run: {env, workflow, model?, variant?, precision?, loras (shared, graph order), peak_gb, ram_peak_gb?, needs,
-    lora_component?, lost_host?}."""
+    lora_component?, lost_host?, host? (1.35: the run is set to that host only)}."""
     run, hosts = fx["run"], fx["hosts"]
-    env = run["env"]
-    gone = lambda m: (f"runner on host {run['lost_host']} stopped responding; no other live host for env {env}"
-                      if run.get("lost_host") else m)
-    cand = sorted(h for h, x in hosts.items() if x["keys"].get(env, {}).get("state") == "fresh")
+    env, pin = run["env"], run.get("host")
+    if pin and run.get("lost_host"):
+        gone = lambda m: f"host {pin} went offline; a run set to {pin} never moves to another host"
+    else:
+        gone = lambda m: (f"runner on host {run['lost_host']} stopped responding; no other live host for env {env}"
+                          if run.get("lost_host") else m)
+    cand = sorted(h for h, x in hosts.items() if x["keys"].get(env, {}).get("state") == "fresh" and pin in (None, h))
     cand = [h for h in cand if run["workflow"] in hosts[h]["workflows"].get(env, [])]
     if not cand:
+        if pin:
+            live = any(k.get("state") == "fresh" for k in hosts.get(pin, {"keys": {}})["keys"].values())
+            return {"host": None, "eligible": [], "error": gone(
+                f"host {pin} cannot run workflow {run['workflow']}" if live else f"host {pin} is offline")}
         return {"host": None, "eligible": [], "error": gone(f"no live host for env {env}")}
     if run.get("model"):
         mv = f"{run['model']}/{run['variant']}"
         cand = [h for h in cand if run["precision"] in hosts[h]["variants"].get(env, {}).get(mv, [])]
         if not cand:
+            want = f"model {run['model']} variant {run['variant']} at {run['precision']}"
             return {"host": None, "eligible": [], "error": gone(
-                f"no live host for env {env} has model {run['model']} variant {run['variant']} at {run['precision']}")}
+                f"host {pin} does not have {want}" if pin else f"no live host for env {env} has {want}")}
     has = lambda h, n: n in hosts[h]["loras"].get(env, [])
     with_loras = [h for h in cand if all(has(h, n) for n in run.get("loras", []))]
     if not with_loras:
         first = next(n for n in run["loras"] if not has(cand[0], n))
+        if pin:
+            return {"host": None, "eligible": [], "error": gone(f"host {pin} does not have LoRA {first}")}
         if not any(has(h, first) for h in cand):
             return {"host": None, "eligible": [], "error": gone(f"no live host for env {env} has LoRA {first}")}
         return {"host": None, "eligible": [], "error": gone(

@@ -385,6 +385,7 @@ func TestPlaceFixtures(t *testing.T) {
 				Needs                                    []message.Component `json:"needs"`
 				LoraComponent                            string              `json:"lora_component"`
 				LostHost                                 *string             `json:"lost_host"`
+				Host                                     *string             `json:"host"` // API 1.35: the run's pin
 			} `json:"run"`
 			Expect struct {
 				Host     *string  `json:"host"`
@@ -468,7 +469,7 @@ func TestPlaceFixtures(t *testing.T) {
 		for _, n := range run.Loras {
 			used = append(used, lora.Used{Node: "lora", ID: n, Source: "shared", Name: n, Strength: 1, Mode: "adapter"})
 		}
-		x := model.Run{ID: "x", WorkflowID: run.Workflow, Env: run.Env, Nodes: nodes, Loras: lorasJSON(used), LostHost: run.LostHost}
+		x := model.Run{ID: "x", WorkflowID: run.Workflow, Env: run.Env, Nodes: nodes, Loras: lorasJSON(used), LostHost: run.LostHost, PinHost: run.Host}
 		slots, resident, reason := eligibleIn(reg, reg.Hosts(), reserved, x, now)
 		got := struct {
 			Host     *string  `json:"host"`

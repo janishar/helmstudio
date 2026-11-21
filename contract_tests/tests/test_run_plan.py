@@ -4,7 +4,7 @@ and the Studio block's section help and preset order (StudioLayout.inspector[].h
 import json
 from pathlib import Path
 
-from helpers import NO_SUCH_ID, QUICK, STUDIO, ok
+from helpers import NO_SUCH_ID, QUICK, STUDIO, new_session, ok, start_run, wait_run
 
 PLAN = f"{STUDIO}/runs/plan"
 WF = f"{STUDIO}/workflows"
@@ -21,6 +21,26 @@ def test_plan_names_the_host_and_stores_nothing(api):
     plan = ok(api.post(PLAN, json={"workflow_id": "echo", "inputs": QUICK}))
     assert plan == {"host": "fake", "peak_gb": None, "reason": None}
     assert queued(api) == before
+
+
+def test_run_set_to_a_host(api):
+    """API 1.35 (Run on): the plan and the run on that host only; a host that is not connected is a 422 at create
+    (nothing stored) and the plan's reason; a malformed name is a 422 on both."""
+    assert ok(api.post(PLAN, json={"workflow_id": "echo", "host": "fake"}))["host"] == "fake"
+    sid = new_session(api, "Contract Run on")["id"]
+    run = wait_run(api, start_run(api, sid, QUICK, host="fake")["id"])
+    assert (run["status"], run["host"]) == ("succeeded", "fake"), run
+    body = {"workflow_id": "echo", "inputs": QUICK, "host": "nosuchhost"}
+    assert ok(api.post(PLAN, json=body)) == {
+        "host": None,
+        "peak_gb": None,
+        "reason": "host nosuchhost is offline",
+    }
+    r = api.post(f"{STUDIO}/sessions/{sid}/runs", json=body)
+    assert r.status_code == 422 and r.json()["detail"] == "host nosuchhost is offline", r.text
+    assert len(ok(api.get(f"{STUDIO}/sessions/{sid}/runs"))["runs"]) == 1
+    for url in (PLAN, f"{STUDIO}/sessions/{sid}/runs"):
+        assert api.post(url, json=body | {"host": "Fake"}).status_code == 422
 
 
 def test_plan_answers_the_runs_422s(api):

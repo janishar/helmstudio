@@ -78,8 +78,20 @@ const tl = {
   ...doc,
 } as unknown as S<"Timeline">;
 
-function serve() {
-  answer("GET", { "/v1/studio/library": () => ({ data: { items: [] } }) });
+function serve(gcp = "idle") {
+  const host = (name: string, kind: string, state: string) => ({
+    host: name,
+    env: "mlx",
+    state,
+    updated_at: "2026-11-22T00:00:00Z",
+    device: { kind, name: kind === "mps" ? "Apple M5 Pro" : "RTX PRO 6000", memory_total_gb: 96 },
+  });
+  answer("GET", {
+    "/v1/studio/library": () => ({ data: { items: [] } }),
+    "/v1/studio/hosts": () => ({
+      data: { hosts: [host("mac", "mps", "idle"), host("gcp", "cuda", gcp)] },
+    }),
+  });
   const shots: { run: S<"RunRequest"> }[] = [];
   const runs: { session: string; body: S<"RunRequest"> }[] = [];
   answer("POST", {
@@ -145,5 +157,28 @@ describe("ShotComposer", () => {
       [SID, 44],
       [SID, 45],
     ]);
+  });
+
+  it("Run on after the workflow chip: a pick sends the host with every seed; offline queues nothing", async () => {
+    const { shots, runs } = serve();
+    const { done } = mount();
+    const chip = screen.getByRole("button", { name: "Run on Auto" });
+    expect(chip.previousElementSibling?.id).toBe("shot-workflow");
+    const pick = () => document.querySelectorAll<HTMLElement>("#shot-run-on [role=menuitemradio]");
+    await waitFor(() => expect(pick()).toHaveLength(3));
+    fireEvent.click(pick()[2]);
+    expect(screen.getByRole("button", { name: "Run on NVIDIA" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "More seeds" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Generate shot/ }));
+    await waitFor(() => expect(done).toHaveBeenCalled());
+    expect([shots[0].run.host, runs[0].body.host]).toEqual(["gcp", "gcp"]);
+  });
+
+  it("Run on a host that is offline: greyed in the menu", async () => {
+    serve("offline");
+    mount();
+    const pick = () => document.querySelectorAll<HTMLElement>("#shot-run-on [role=menuitemradio]");
+    await waitFor(() => expect(pick()[2]?.getAttribute("aria-disabled")).toBe("true"));
+    expect(pick()[2].textContent).toBe("NVIDIAgcp · RTX PRO 6000offline");
   });
 });

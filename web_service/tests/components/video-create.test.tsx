@@ -93,10 +93,10 @@ describe("Create on LTX video", () => {
         name: /^Workflow: LTX-2\.5 · Text to video · add a first frame/,
       }),
     ).toBeTruthy();
-    // the chip's menu picks the variant (no Model tile in the Inspector)
+    // the chip's menu picks the variant (no Model tile in the Inspector), as rows (docs/mock/RunOn.dc.html)
     const menu = composer.querySelector<HTMLElement>("#model-pick")!;
     expect(menu.getAttribute("aria-label")).toBe("Model");
-    expect([...menu.querySelectorAll("[aria-pressed]")].map((b) => b.textContent)).toEqual([
+    expect([...menu.querySelectorAll("[role=menuitemradio]")].map((b) => b.textContent)).toEqual([
       "Distilled",
       "Dev",
       "Distilled fp8",
