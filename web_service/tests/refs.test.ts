@@ -141,10 +141,10 @@ describe("canvas auto in an edit", () => {
     const v = studioView(minimax, fs)!;
     expect(v.text.map((f) => f.key)).toEqual(["prompt.text"]);
     expect(v.groups.map((g) => [g.title, g.fields.map((f) => f.key)])).toEqual([
-      ["Quick", ["encode.refs", "enhance.bypass", "canvas.mode", "seed.seed"]],
+      ["Quick", ["encode.refs", "enhance.bypass", "canvas.mode", "model.variant", "seed.seed"]],
       ["Canvas", ["canvas.width", "canvas.height"]],
       ["Enhance", ["enhance.think"]],
-      ["Quality", ["sample.sampler"]],
+      ["Quality", ["model.precision", "sample.sampler"]],
     ]);
     expect(v.groups[0].fields[1].param.label).toBe("No enhance");
     expect(v.groups[0].fields[1].initial).toBe(true);
@@ -167,22 +167,32 @@ describe("canvas auto in an edit", () => {
     const rest = [
       ["Canvas", ["canvas.width", "canvas.height"]],
       ["Duration", ["duration.frames"]],
-      ["Quality", ["generate.steps"]],
+      ["Quality", ["model.precision", "generate.steps"]],
     ];
     expect(layout(t2v)).toEqual([
       ["prompt.text"],
-      [["Quick", ["generate.speed", "seed.seed"]], ...rest],
+      [["Quick", ["generate.speed", "model.variant", "seed.seed"]], ...rest],
     ]);
     expect(layout(i2v)).toEqual([
       ["prompt.text"],
-      [["Quick", ["first.image", "last.image", "generate.speed", "seed.seed"]], ...rest],
+      [
+        ["Quick", ["first.image", "last.image", "generate.speed", "model.variant", "seed.seed"]],
+        ...rest,
+      ],
     ]);
     expect(layout(refs)).toEqual([
       ["prompt.text"],
       [
         [
           "Quick",
-          ["generate.refs", "generate.videos", "generate.audios", "generate.speed", "seed.seed"],
+          [
+            "generate.refs",
+            "generate.videos",
+            "generate.audios",
+            "generate.speed",
+            "model.variant",
+            "seed.seed",
+          ],
         ],
         ...rest,
       ],

@@ -72,6 +72,7 @@
     "quick": [
       "elements",
       "generate.speed",
+      "model.variant",
       "seed.seed"
     ],
     "inspector": [
@@ -91,6 +92,7 @@
       {
         "title": "Quality",
         "items": [
+          "model.precision",
           "generate.steps"
         ]
       }

@@ -96,6 +96,7 @@
           "elements",
           "enhance.bypass",
           "canvas.mode",
+          "model.variant",
           "seed.seed"
         ],
         "inspector": [
@@ -115,6 +116,7 @@
           {
             "title": "Quality",
             "items": [
+              "model.precision",
               "sample.sampler"
             ]
           }
