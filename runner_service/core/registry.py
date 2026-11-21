@@ -142,12 +142,24 @@ def memory_plans(pack, variant: str, precision: str, impls: dict, node_schemas: 
     return [p for p in plans if p["components"] or p["peak_gb"] > 0.01]
 
 
+def spliced(nodes: dict, impls: dict) -> dict:
+    """nodes without the kinds this runner lacks (another runtime's Model -> Model node: ltx/lora-stack on torch,
+    model.yaml `lora.runtime: mlx`), each consumer wired to that node's same-named input, as studio splices a
+    bypassed node."""
+    for nid in [n for n, x in nodes.items() if x["kind"] not in impls]:
+        ins = nodes.pop(nid).get("in", {})
+        for x in nodes.values():
+            x["in"] = {p: ins.get(r.partition(".")[2], r) if r.partition(".")[0] == nid else r
+                       for p, r in x.get("in", {}).items()}  # fmt: skip
+    return nodes
+
+
 def allows(
     pack, workflow: dict, variant: str, precision: str, impls: dict, node_schemas: dict
 ) -> bool:
     """Whether a workflow is planned at (variant, precision): its model node's `only` (README, Media inputs) allows
     both and no stage's pack check refuses that model (LTX text to video needs the distilled variant)."""
-    nodes = json.loads(json.dumps(workflow["nodes"]))
+    nodes = spliced(json.loads(json.dumps(workflow["nodes"])), impls)
     for n in nodes.values():
         if n["kind"] == f"{pack.family}/model":
             only = n.get("only", {})
@@ -186,7 +198,7 @@ def memory_plan(
         workflows = [w for w in pack.workflows if w.get("media") != "text"]
     asks = any(w.get("media") == "text" for w in workflows)
     for w in workflows:
-        nodes = json.loads(json.dumps(w["nodes"]))
+        nodes = spliced(json.loads(json.dumps(w["nodes"])), impls)
         for node in nodes.values():
             params = node.setdefault("params", {})
             for spec in node_schemas[node["kind"]]["params"]:
