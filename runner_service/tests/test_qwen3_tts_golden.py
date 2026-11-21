@@ -102,7 +102,20 @@ class TTSBench(Bench):
         return r
 
 
+def stem(bench: TTSBench, name: str) -> str:
+    """A golden's file stem on this device: sampling diverges on another device, so CUDA has its own goldens
+    (<name>.cuda.*, recorded on the VM by tests/golden/record_qwen3_tts.py from the vendored port)."""
+    if bench.lt.device() != "cuda":
+        return name
+    if not (GOLDEN / f"{name}.cuda.json").is_file():
+        pytest.fail(
+            f"no CUDA golden for {name}: run tests/golden/record_qwen3_tts.py on this host first"
+        )
+    return f"{name}.cuda"
+
+
 def case(bench: TTSBench, name: str) -> dict:
+    name = stem(bench, name)
     s = json.loads((GOLDEN / f"{name}.json").read_text())
     t = time.monotonic()
     r = bench.speak(s)

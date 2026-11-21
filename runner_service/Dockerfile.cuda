@@ -4,8 +4,9 @@
 # CUDA base image would carry a second copy; only the driver comes from the host, mounted by the NVIDIA runtime.
 # Weights are never in the image: the host's models folder is bind-mounted at HELMSTUDIO_MODELS (read-only unless
 # this host takes model jobs); RUNNER_CACHE (the LoRA cache, model hashes, download temp files) and TMPDIR are
-# writable volumes. The same image runs the native runner (RUNNER_ENV=native: ZONOS3 by its CUDA zonos3-server, built
-# in the zonos3 stage; Dockerfile.cuda.dockerignore lets its sources in). Health check: `python health.py` (exit 0
+# writable volumes. The `native` target (the last) runs the native runner (RUNNER_ENV=native: ZONOS3 by its CUDA
+# zonos3-server, built in the zonos3 stage, Dockerfile.cuda.dockerignore lets its sources in; MiniMax H3 fp8 by
+# SGLang, the sglang stage). Health check: `python health.py` (exit 0
 # while NATS is connected).
 FROM python:3.14.10-slim-trixie AS build
 RUN pip install --no-cache-dir uv==0.13.8
@@ -31,6 +32,17 @@ RUN make zonos3-cuda && mkdir vendor/zonos3/build/lib \
     && cp -P /usr/local/cuda/lib64/libcudart.so.13* /usr/local/cuda/lib64/libcublas.so.13* \
         /usr/local/cuda/lib64/libcublasLt.so.13* vendor/zonos3/build/lib/
 
+# The native runner's SGLang Diffusion (packs/minimax_h3 sgl.py, the fp8 variant): its own venv in /opt/sglang on a
+# uv-managed Python 3.13 in /opt/python (sglang has no 3.14 wheel and pins torch 2.14.1, the torch runner 2.15), so
+# neither env sees the other's packages; comfy-kitchen for int8 embeddings a ConvRot text encoder may carry; locked in
+# sglang-requirements.txt. Several GB: only the `native` target below carries it.
+FROM python:3.14.10-slim-trixie AS sglang
+RUN pip install --no-cache-dir uv==0.13.8
+ENV UV_PYTHON_INSTALL_DIR=/opt/python UV_LINK_MODE=copy UV_COMPILE_BYTECODE=1
+COPY sglang-requirements.txt /tmp/
+RUN --mount=type=cache,target=/root/.cache/uv uv venv --python 3.13 /opt/sglang \
+    && VIRTUAL_ENV=/opt/sglang uv pip sync /tmp/sglang-requirements.txt
+
 FROM python:3.14.10-slim-trixie AS runtime
 WORKDIR /app
 # compute for torch, video for NVENC (libnvidia-encode), utility for the driver version
@@ -51,3 +63,9 @@ VOLUME ["/cache"]
 EXPOSE 8081
 HEALTHCHECK --interval=15s --timeout=5s --start-period=120s --retries=3 CMD ["python", "health.py"]
 CMD ["python", "main.py"]
+
+# The native runner on a GPU host (deploy/gpu-host runner-native): the runtime plus SGLang. `--target runtime` builds
+# the torch runner's image without it.
+FROM runtime AS native
+COPY --from=sglang /opt/python /opt/python
+COPY --from=sglang /opt/sglang /opt/sglang

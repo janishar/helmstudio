@@ -21,3 +21,5 @@
   same wherever it sits in the script; presets only (`check_dialogue` refuses voice_design). The golden
   `dialogue-ryan-aiden-s1` equals AI-EXP's own `Synthesizer.speak` per line, joined by `core.media.stitch`, byte for
   byte (tests/golden/record_qwen3_tts.py).
+- **CUDA (M9)**: the same bf16 code path; sampling diverges from MPS, so CUDA has its own goldens
+  (`tests/golden/qwen3-tts/<case>.cuda.*`, recorded on the VM by `tests/golden/record_qwen3_tts.py`).

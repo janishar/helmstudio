@@ -525,7 +525,8 @@ component is its own residency entry. There are no MLX adapters.
 
 ## Native packs (`native.py`, API 1.21)
 
-A stage that runs a **child process** loading its own weights (`minimax_h3`: the `h3` binary, h3.c on Metal;
+A stage that runs a **child process** loading its own weights (`minimax_h3`: the `h3` binary, h3.c on Metal, or
+for its `fp8` variant on NVIDIA hosts `sglang serve`, SGLang Diffusion in its own venv, one per run (`sgl.py`);
 `zonos3`: `zonos3-server`, the ZONOS3 ggml server, one per run)
 instead of components in the runner. The env `native` runs on the runner core's dependencies only (`RUNNER_ENV=native
 uv run python main.py`, health port 8093 from the root Makefile); its loader `core/loaders_native.py` loads nothing:

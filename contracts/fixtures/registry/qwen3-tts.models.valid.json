@@ -17,7 +17,8 @@
           "runtime": "torch",
           "env": "torch",
           "devices": [
-            "mps"
+            "mps",
+            "cuda"
           ]
         }
       ],

@@ -54,4 +54,4 @@ image:
 
 # the torch runner for Linux + NVIDIA (deploy/gpu-host/): linux/amd64, torch's CUDA 13 wheels from uv.lock (several GB)
 image-cuda:
-	docker build --platform linux/amd64 -f Dockerfile.cuda -t helmstudio/runner-cuda:dev .
+	docker build --platform linux/amd64 -f Dockerfile.cuda --target runtime -t helmstudio/runner-cuda:dev .

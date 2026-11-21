@@ -48,11 +48,15 @@ Qwen3-TTS stays on its official bf16 weights (1.7B: nothing to gain).
 1. Shared: the contract (`fp8`, multi-repo source, variant precision), `Fp8Linear`, ConvRot int8. Qwen Image and
    MiniMax H3 Image quantized variants, ZONOS3's CUDA build. Tested on the spot VM: CUDA goldens and PSNR against
    the official path on the same GPU.
-2. MiniMax H3 video on CUDA with community FP8.
+2. MiniMax H3 video on CUDA with community FP8. Code done (2026-11-21): variant `fp8`, SGLang 0.5.23 as a child
+   server (`packs/minimax_h3/sgl.py`), Comfy-Org pruned FP8 DiTs + int8 ConvRot text encoder; not yet run on the VM
+   (docs/handoff.md, "M9 phase 2 notes").
 3. LTX-2.5 on CUDA (torch port) with community FP8 / int8.
 
 ### 21.5 Known issues
 
+- The MiniMax H3 licence excludes the EU, the UK, the Republic of Korea and the US (its "Applicable Territory"):
+  the spot VM's region must be outside them to run either MiniMax pack (owner's call).
 - Publisher-measured quality (LPIPS against bf16) is worse for FP8 than for int8 ConvRot in every case; the
   platform shows the variant names plainly so the choice stays visible.
 - The Qwen Image weights are under the Qwen Research licence upstream, not Apache 2.0 as our pack says (found by

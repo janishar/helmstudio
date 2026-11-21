@@ -7,7 +7,8 @@ per kind in that order), a first and/or last frame → FL2VA, neither → text t
 Image inputs are written as PNGs into a per-run temp folder, deleted after with the MP4; each video or audio
 reference (API 1.22) is cut there to its in..out with ffmpeg (a video: lossless H.264, its sound as PCM when kept;
 an audio, or a video's sound: a WAV). The Video value is built as
-the ltx pack's: {mp4, poster, last, frames, fps, has_audio, stream} (core.media probe, frames as PNG). No torch."""
+the ltx pack's: {mp4, poster, last, frames, fps, has_audio, stream} (core.media probe, frames as PNG). No torch.
+The fp8 variant (NVIDIA hosts) takes the same inputs to SGLang instead of h3: sgl.py."""
 
 import subprocess
 import tempfile
@@ -17,6 +18,8 @@ from PIL import Image
 
 from core import child, media
 from core.graph import RunError
+
+from . import sgl
 
 H3C = Path(__file__).resolve().parents[2] / "vendor/h3c"
 BINARY = H3C / "h3"
@@ -95,6 +98,11 @@ def check_generate(params: dict, wired: set, models: dict | None = None) -> str 
     canvas is checked in generate: it may come from another node)."""
     if any(params.get(k) for k in ("refs", "videos", "audios")) and wired & {"first", "last"}:
         return ": references cannot go with a first or last frame"
+    if (
+        params.get("speed") == "fast"
+        and getattr((models or {}).get("model"), "variant", None) == "fp8"
+    ):
+        return ": speed fast is h3's (Mac); the FP8 (NVIDIA) variant runs exact only"
     return None
 
 
@@ -161,7 +169,8 @@ def generate(ctx, params: dict, inputs: dict) -> dict:
     if why := generate_error(ctx.node, len(refs), first is not None, last is not None, w, h, d["frames"], facts,
                              [part(a) for a in audios]):  # fmt: skip
         raise RunError(why)
-    if not BINARY.is_file():
+    fp8 = inputs["model"].variant == "fp8"
+    if not fp8 and not BINARY.is_file():
         raise RunError(f"{ctx.node}: the h3 binary is not built (make h3 in runner_service)")
     with tempfile.TemporaryDirectory(prefix="h3-") as tmp:
         tmp = Path(tmp).resolve()
@@ -185,6 +194,16 @@ def generate(ctx, params: dict, inputs: dict) -> dict:
             path = cut(ctx.node, row["video"], tmp / f"video-{i}.mkv", picture=True, audio=keep)
             images.append(("--ref-video" if keep else "--ref-silent-video", path))
         out = tmp / "out.mp4"
+        if fp8:
+            by = lambda *flags: [p for f, p in images if f in flags]
+            try:
+                body = sgl.request(inputs["prompt"], inputs["seed"], params["steps"], size, d["frames"],
+                                   (by("--first-frame") or [None])[0], (by("--last-frame") or [None])[0],
+                                   by("--ref-image"), by("--ref-audio"), by("--ref-video", "--ref-silent-video"))  # fmt: skip
+            except ValueError as e:
+                raise RunError(f"{ctx.node}: {e}") from None
+            sgl.generate(ctx, inputs["model"], body, out, tmp)
+            return {"video": video_value(out, tmp)}
         cmd = argv(inputs["model"].folder().resolve(), inputs["prompt"], out, width=w, height=h, frames=d["frames"],
                    steps=params["steps"], seed=inputs["seed"], speed=params["speed"], images=images)  # fmt: skip
         ctx.progress(1, 1, "starting h3")  # a phase without steps: 1 of 1

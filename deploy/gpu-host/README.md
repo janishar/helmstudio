@@ -118,9 +118,10 @@ worse for FP8 than for int8 ConvRot in every case; the variant names say which o
 | Qwen Image 2.1 | `base-fp8` | unsloth FP8 transformer and text encoder, bf16 VAE (configs from the official repo) | 17.2 GB (official bf16: 33.1) |
 | | `turbo-fp8` | unsloth Turbo FP8 transformer; text encoder and VAE shared with `base-fp8` | 7.1 GB more (official: 14.2) |
 | MiniMax H3 Image | `base-fp8` | unsloth FP8 DiT (20.3 GB), Comfy-Org int8 ConvRot text encoder (27.1 GB), the official VAE and configs (2.4 GB); the official NVFP4 prompt enhancer (17.9 GB, its own folder `MiniMax-H3-Image-PE`, copied by hand) | 49.8 GB + 17.9 |
+| MiniMax H3 (video) | `fp8` | Comfy-Org pruned FP8 FL2VA and Ref2VA DiTs (2 × 21.0 GB), Comfy-Org int8 ConvRot text encoder (27.1 GB), the official VAEs, configs and tokenizers of both partitions (22.1 GB), run by SGLang 0.5.23 | 91.2 GB (official: 210.3) |
 | ZONOS3-Mini | `mini` (the official one) | the official GGUF q8_0 set, already int8: the same files on the Mac and here, run by a CUDA build of zonos3-server | 1.2 GB |
 
-Later phases add MiniMax H3 video (community FP8) and LTX-2.5 (FP8, int8 ConvRot for dev). Qwen3-TTS stays on its
+A later phase adds LTX-2.5 (FP8, int8 ConvRot for dev). Qwen3-TTS stays on its
 official bf16 weights.
 
 **Download** with `MODELS_MODE=rw` (section 3): Admin › Models, the variant's Download for this host, or
@@ -133,9 +134,21 @@ for sm_120, CUDA 13.2). It needs its own NATS user `runner_<h>_native` (contract
 is behind a profile:
 
 ```sh
+docker compose --profile native build        # the image's native target: + SGLang's venv (several GB)
 docker compose --profile native up -d        # needs secrets/nats_runner_<h>_native_url
 docker compose logs -f runner-native
 ```
+
+**MiniMax H3 video (`fp8`) needs the native runner too**, and the whole card. Its generate starts `sglang serve` (the
+`native` target's `/opt/sglang`, its own Python and torch, never the torch runner's) as a child of the run: one
+server per run on 127.0.0.1, killed after it, so nothing stays in VRAM. It loads the partition the run needs (FL2VA
+for text or frames to video, Ref2VA for references) with the FP8 DiT and the int8 text encoder as weight overrides,
+the text encoder layerwise offloaded to host RAM; a cold start reads about 70 GB. SGLang's limits apply: 107 to 345
+frames (4 to 15 s), and text-to-video or references only at 21:9, 16:9, 4:3, 1:1, 3:4 or 9:16 (864 × 480 is 16:9);
+first/last frame runs take any canvas; `speed: fast` is h3's only. VRAM is not budgeted for the native runner (its
+budget is host RAM): SGLang measured 95.8 GB peak on this card at 1344 × 768 × 345 with a 33 GB FP8 DiT, so keep the
+torch runner empty while it runs (`after_run: unload`, no pins). The licence (`minimax-h3-community`, accepted by the
+admin on download) excludes the EU, the UK, the Republic of Korea and the US: check where the host runs.
 
 ## Stopping, preemption, revoking
 

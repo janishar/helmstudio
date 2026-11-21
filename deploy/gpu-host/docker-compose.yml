@@ -9,7 +9,7 @@ name: helmstudio-gpu
 
 services:
   runner:
-    build: {context: ../../runner_service, dockerfile: Dockerfile.cuda}
+    build: {context: ../../runner_service, dockerfile: Dockerfile.cuda, target: runtime}
     image: helmstudio/runner-cuda:${IMAGE_TAG:-dev}
     restart: unless-stopped
     network_mode: host
@@ -42,11 +42,13 @@ services:
       retries: 30
       start_period: 60s
 
-  # The native runner (M9, ZONOS3 by its CUDA zonos3-server): the same image, env native, its own NATS user
-  # runner_<h>_native and health port; same GPU. Opt-in until .tools/make-secrets makes that user:
-  #   docker compose --profile native up -d
+  # The native runner (M9: ZONOS3 by its CUDA zonos3-server; MiniMax H3 fp8 by SGLang): the image's `native` target
+  # (the torch runner's plus SGLang's venv), env native, its own NATS user runner_<h>_native and health port; same
+  # GPU. Opt-in until .tools/make-secrets makes that user:
+  #   docker compose --profile native build && docker compose --profile native up -d
   runner-native:
-    image: helmstudio/runner-cuda:${IMAGE_TAG:-dev}
+    build: {context: ../../runner_service, dockerfile: Dockerfile.cuda, target: native}
+    image: helmstudio/runner-cuda-native:${IMAGE_TAG:-dev}
     profiles: [native]
     restart: unless-stopped
     network_mode: host

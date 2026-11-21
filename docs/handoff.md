@@ -190,6 +190,38 @@ Last full contract suite on the final M7 code: see the last M7 commit message (p
 - Not done: trimming the ZONOS3 sources (~23 MB) from the CUDA runtime image (a later `rm` layer would not shrink
   it). The Qwen ask stage (FP8 lm_head and `generate()`) is still unrun on CUDA.
 
+## M9 phase 2 notes: MiniMax H3 video on CUDA (code only, not run on the VM)
+
+- New variant `fp8` ("FP8 (NVIDIA)", `devices: [cuda]`, `precision: [fp8]`, DiTs `[fp8]`, text encoder int8);
+  `base` now says `devices: [mps]` and the runtime `[mps, cuda]`. Folder `MiniMax-H3-FP8` (91.2 GB): the official
+  MiniMaxAI/MiniMax-H3 @ 1cc7549 skeleton (every json/txt/py/yaml, both partitions' VAEs; 22.1 GB) + Comfy-Org/MiniMax-H3
+  @ 4b53a35 (pruned FP8 FL2VA and Ref2VA DiTs, int8 ConvRot text encoder; 69.1 GB). New licence `minimax-h3-community`
+  (must_accept). Fixtures: `minimax-h3.nodes.valid` + `graphs/palette` (variant and precision enums, help),
+  `minimax-h3.models.valid` (runtime devices).
+- Engine: SGLang Diffusion 0.5.23 (first release with MiniMax H3 serving, pins torch 2.14.1) in its own venv
+  `/opt/sglang` on a uv Python 3.13, Dockerfile.cuda stage `sglang`, only in the new last target `native`
+  (compose: `runner` builds `target: runtime`, `runner-native` `target: native`, image `runner-cuda-native`).
+  Why: no clash with the torch runner's torch 2.15 / Python 3.14, and the torch image stays small.
+  Locked in `runner_service/sglang-requirements.txt` (237 exact pins, Linux x86_64 / Python 3.13, `uv pip sync`;
+  review fix: it was an unlocked `uv pip install`); `make image-cuda` now builds `--target runtime`.
+- `packs/minimax_h3/sgl.py`: one `sglang serve` per run (core.child.serve, ready = uvicorn's line), partition by the
+  inputs, DiT and text encoder as `--component-weights-paths.*`, `--layerwise-offload-components text_encoder`,
+  `text_encoder=torch_sdpa`, `--warmup-mode off`; POST /v1/videos with SGLang's canonical request (task, conditions,
+  target, seed, steps), poll `progress` → `sampling`, cancel = kill (SGLang has no abort), its MP4 → the Video value.
+  Refused before the server starts: frames outside 107-345 (SGLang's 4-15 s), a t2va / ref2va canvas not exactly one
+  of its six aspects, `speed: fast` (check_generate). The h3 path is unchanged. Tests: tests/test_minimax_sgl.py
+  (fake server). peak_gb unchanged (host RAM; VRAM not budgeted, GOTCHAS.md).
+- **VM step (not done here):** `docker compose --profile native build` (watch: the JIT ConvRot ops may need nvcc;
+  the lock has the `nvidia-cuda-nvcc` wheel, not on PATH), the owner accepts `minimax-h3-community` and downloads `fp8` (Models or `helm model
+  download minimax-h3 --host gcp --variant fp8`, MODELS_MODE=rw), torch runner unloaded, then runs at small size:
+  t2v 864 × 480 × 107 frames (≈ 4.5 s, the minimum), 6 steps; FL2VA first frame 512 × 512 × 107; one Ref2VA image
+  reference 864 × 480 × 107. Record cold load time, s/step, VRAM peak (`nvidia-smi`), host RAM, and check that
+  SGLang accepts the skeleton folder (missing shards, overrides) and the uvicorn ready line. "≤ 3 s clips" cannot
+  run: SGLang's minimum is 4 s.
+- **Owner:** the MiniMax H3 licence's Applicable Territory excludes the EU, the UK, Korea and the US; the spot VM is
+  in europe-north1 (EU). Running either MiniMax pack there needs the owner's decision (another region, or MiniMax's
+  licence), besides accepting the licence in person.
+
 ## M8 notes
 
 - The owner said "build it" on 2026-11-21 after reviewing [15-voices.md](plan/15-voices.md) and the voice boards

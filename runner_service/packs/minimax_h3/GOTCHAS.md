@@ -50,3 +50,27 @@ The pack runs the pinned h3 binary (`vendor/h3c`, h3.c 4cafd17, `make h3`) as a 
   s part keeps 39 frames (1.6 s of sound) and h3 fails "video soundtrack 1 requires at least 2 seconds; request at least
   56 output frames" even at 56 output frames (dev run 0de840b4, 2026-11-19). `generate_error` refuses it first ("needs a
   part of at least 56 frames at 24 fps (video <i> reads <n>)").
+
+## The fp8 variant (SGLang on CUDA, `sgl.py`)
+
+- **Its own venv.** sglang 0.5.23 pins torch 2.14.1 and has no Python 3.14 wheel: Dockerfile.cuda's `sglang` stage
+  builds `/opt/sglang` on a uv Python 3.13 (`/opt/python`) from the lock `runner_service/sglang-requirements.txt`
+  (`uv pip sync`; its header has the regenerate command), only in the `native` target. The child gets the cut env
+  (`SGLANG_*` passes).
+- **The folder is the official repo's skeleton** (every json/txt/py/yaml, both partitions' VAEs, no other
+  safetensors) plus the Comfy-Org files; `--model-variant fl2va|ref2va` picks the partition, the DiT and text encoder
+  come in as `--component-weights-paths.*` (formats detected from the files: Comfy static FP8 with the curve adaLN,
+  ConvRot int8). Unverified on the VM: that SGLang loads a partition whose transformer and text encoder shards are
+  missing (their `model.safetensors.index.json` are there) once the overrides are given.
+- **Ready** is uvicorn's start line (SGLang starts the HTTP server after the workers loaded); `--warmup-mode off`.
+- **SGLang's shape rules** (sgl.target): length from `duration_seconds` (4-15 s → 107-345 frames; we send frames / 24,
+  so the clip is exactly the frames asked); canvas from short edge + aspect (adapt_shape_v1, sgl.shape), aspect one
+  of six for t2va / ref2va, any for fl2va. Anything it would resize is refused, never silently changed.
+- **No abort in SGLang** (`DELETE /v1/videos/{id}` only forgets the job): cancel kills the server's process group.
+- **Speed.** SGLang's `quality` (exact / lossless / high) is not h3's reuse; `high` is audited for 4×H200 only. The
+  run sends no quality (SGLang's default) and refuses `speed: fast` (check_generate).
+- **Memory.** The native measure counts the child's pid only; SGLang's scheduler worker is a grandchild, so `used_gb`
+  under-reads during a run. VRAM is not budgeted (the native budget is host RAM): keep the torch runner empty.
+- **Unmeasured:** peak (VRAM and host RAM), load time, s/step, and whether the int8 text encoder runs with layerwise
+  offload on SM120; the JIT ConvRot kernels may need nvcc: the lock carries the
+  `nvidia-cuda-nvcc` 13.5 wheel (via humming-kernels), but it is not on PATH.

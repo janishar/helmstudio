@@ -7,7 +7,7 @@ family: qwen3-tts
 title: Qwen3-TTS
 media: [audio]
 runtimes:
-  torch: {env: torch, devices: [mps]}   # measured on MPS only; CUDA is untested
+  torch: {env: torch, devices: [mps, cuda]}   # official bf16 on both (M9: no quantized variant, 1.7B gains nothing)
 licences:
   apache-2.0: {title: Apache License 2.0, url: https://www.apache.org/licenses/LICENSE-2.0}
 model:

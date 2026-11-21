@@ -12,17 +12,43 @@ id: minimax-h3
 family: minimax-h3
 title: MiniMax H3
 runtimes:
-  native: {env: native, devices: [mps]}   # Metal only; validated on M5 (int8 TensorOps), GOTCHAS.md
+  native: {env: native, devices: [mps, cuda]}   # base: h3 on Metal (M5, GOTCHAS.md); fp8: SGLang on CUDA (sgl.py)
 model:
   help: "The weights to load: FL2VA for text and frames to video, Ref2VA for references (one folder holds both)."
   variant: {label: Variant}
   precision:
     label: Precision
     default: int8
-    help: "Stored bf16; the h3 binary quantizes the transformer to int8 at load on M5 (other Macs keep bf16). Not a choice."
+    help: "Base: stored bf16; the h3 binary quantizes the transformer to int8 at load on M5 (other Macs keep bf16). FP8 (NVIDIA): fp8, as stored."
 media: [video, audio]
+licences:
+  minimax-h3-community: {title: MiniMax H3 Community License, url: https://huggingface.co/MiniMaxAI/MiniMax-H3}
 variants:
-  base: {dir: MiniMax-H3, title: Base}   # h3 takes this folder (FL2VA/ links its shared parts into Ref2VA/)
+  base: {dir: MiniMax-H3, title: Base, devices: [mps]}   # h3 takes this folder (FL2VA/ links its shared parts into Ref2VA/)
+  # The alternate path for NVIDIA hosts (docs/plan/17-nvidia-quantized.md, phase 2): SGLang Diffusion as a child
+  # server (sgl.py) with Comfy-Org's pruned FP8 DiTs (static FP8, curve adaLN; SGLang detects both from the file) and
+  # Comfy-Org's int8 ConvRot text encoder, over the official repo's skeleton: every config, tokenizer and code file
+  # (no safetensors but both partitions' VAEs; SGLang reads the partition by --model-variant). Byte counts from the
+  # HF API at these revisions (source: all of the variant's files).
+  fp8:
+    dir: MiniMax-H3-FP8
+    title: FP8 (NVIDIA)
+    precision: [fp8]
+    component_precision: {transformer_fl2va: [fp8], transformer_ref2va: [fp8]}   # the text encoder stays int8
+    devices: [cuda]
+    files: {transformer_fl2va: diffusion_models/minimax_h3_fl2va_pruned_fp8_scaled.safetensors,
+            transformer_ref2va: diffusion_models/minimax_h3_ref2va_pruned_fp8_scaled.safetensors,
+            text_encoder: text_encoders/qwen3vl_32b_minimax_h3_int8_convrot.safetensors}
+    source: {repo: MiniMaxAI/MiniMax-H3, revision: 1cc7549f2cf0af8ff2f09b24f3c57303c8aa6317,
+             allow_patterns: ["*.json", "*.txt", "*.py", "*.yaml", LICENSE, README.md,
+                              "*/video_vae/source/model.safetensors", "*/audio_vae/model.safetensors"],
+             licence: minimax-h3-community, must_accept: true, gated: false, bytes: 91204179812}
+    sources:
+      - {repo: Comfy-Org/MiniMax-H3, revision: 4b53a35191437de05370da548e59aeabe2a5a09a,
+         allow_patterns: [diffusion_models/minimax_h3_fl2va_pruned_fp8_scaled.safetensors,
+                          diffusion_models/minimax_h3_ref2va_pruned_fp8_scaled.safetensors,
+                          text_encoders/qwen3vl_32b_minimax_h3_int8_convrot.safetensors],
+         gated: false, bytes: 69057753368}
 # presence, bytes and downloads only: the child loads them. The precisions only shape the model node's enum ([int8]);
 # Ref2VA/text_encoder is also MiniMax-H3-Image's text encoder (its folder links here): never delete it alone.
 components:
@@ -103,5 +129,8 @@ stages:
     # (360 frames at 24 fps): counted as 1.04 MP each (the peak is in the denoise, measure.md). ponytail: the largest
     # size per video; use each take's own size if this ever refuses runs that fit
     peak_gb: "24 + 0.05 * (mp * frames + 1.04 * min(len(videos) * frames, 360))"
+    # fp8 (SGLang, CUDA): the formula is the native budget's, host RAM, unmeasured there (the text encoder's ~27 GB
+    # sit in pinned host RAM, layerwise offload); VRAM is not budgeted: SGLang measured 95.8 GB at 1344 x 768 x 345
+    # with its own 33 GB FP8 DiT, so this 21 GB pruned one fits the 96 GB card at every size (GOTCHAS.md)
     # the child is watched by its own idle limit (native.py IDLE_S); this stage passes a cancel point every 0.5 s
     stall_s: 900

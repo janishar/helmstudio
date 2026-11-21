@@ -182,3 +182,13 @@ def test_speak_fails_when_no_speech_comes_out(monkeypatch):
     params = {"voice": PRESET, "temperature": 0.3, "language": "auto", "style": ""}
     with pytest.raises(RunError, match=r"^speak: no speech came out$"):
         tts.speak(ctx, params, {"model": model("custom_voice"), "text": "Hi.", "seed": 1})
+
+
+def test_both_variants_publish_on_cuda(monkeypatch):
+    """M9: the official bf16 variants run on NVIDIA hosts too (no `devices` per variant: every host)."""
+    from core import models, pack
+
+    (p,) = [p for p, _ in pack.for_env("torch") if p.family == "qwen3-tts"]
+    assert p.spec["runtimes"]["torch"]["devices"] == ["mps", "cuda"]
+    monkeypatch.setattr(models, "device", lambda _p: "cuda")
+    assert [v["id"] for v in models.entry(p)["variants"]] == ["custom_voice", "voice_design"]

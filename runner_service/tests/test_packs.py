@@ -389,6 +389,8 @@ def test_minimax_h3_generate_runs_the_binary_and_returns_a_video(tmp_path, monke
     monkeypatch.setenv("NATS_URL", "nats://runner:secret@nats:4222")
 
     class Model:
+        variant = "base"
+
         def folder(self, component=None):
             return tmp_path / "MiniMax-H3"
 
