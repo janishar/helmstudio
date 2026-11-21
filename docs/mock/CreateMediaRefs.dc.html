@@ -158,6 +158,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <textarea id="refs" rows="2" style="width: 100%; box-sizing: border-box; resize: none; border: 0; outline: 0; background: transparent; color: var(--t1); font: inherit; font-size: 15px; line-height: 22px; padding: 2px 6px">The dancer from &lt;Picture 1&gt; moves like the one in &lt;Video 1&gt;, in time with the drums of &lt;Audio 1&gt;</textarea>
 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
 <button class="chip">Base · int8</button>
+<button class="chip" title="Run on: Auto picks a free machine (see Create · Run on)">Run on Auto</button>
 <button class="chip">512 × 512</button>
 <button class="chip">2.3 s · 24 fps</button>
 <div role="group" aria-label="Seeds to queue" style="display: flex; align-items: center; height: 36px; border-radius: 10px; background: var(--s4); font-size: 13px; font-weight: 500">
@@ -189,6 +190,13 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
 <button class="set"><small>Speed</small><b>Exact</b></button>
 <button class="set"><small>Seed</small><b>Random</b></button>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<h2 class="h">Quality</h2>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+<button class="set"><small>Precision</small><b>int8</b></button>
 </div>
 </div>
 
