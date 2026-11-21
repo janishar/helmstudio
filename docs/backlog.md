@@ -11,6 +11,9 @@ Notes from the owner while using the app. Not scheduled; each is picked up when 
   natively through the `iris` binary (iris.c, Metal); if M7 pack 3 adds a runner path for a native binary (h3.c),
   iris can reuse it.
 - **Wan 2.2 on MLX** (moved out of M7 by the owner, 2026-11-19). A second video family in the mlx env.
+- **LTX studio features not built now** (owner, 2026-11-22; plan 19 §23.11): Deblur and Refine details
+  (control-video IC-LoRAs; Deblur already on the Mac), SDR to HDR (HLG master, EXR, preview; needs an API version),
+  the diffusion decode for Detail, spatial upscalings 2, temporal upscalings (48 fps) and distilled extend's anchors.
 - **LTX Enhance prompt** (owner: "Not now", 2026-11-22). LTX has no enhance step. On NVIDIA the vendored ltx-core
   has a Gemma 4 enhancer for 2.5 (`enhance_t2v` / `enhance_i2v`, gemma4 system prompts), no new download; check the
   DmitryDB int8 text encoder can generate. On the Mac the ltx-2-mlx port enhances only 2.3 (Gemma 3).

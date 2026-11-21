@@ -551,6 +551,20 @@ Order: phases 1–3 can ship one at a time. Phase 4 needs 3; 4b needs 1 and 4. P
 
 ### 23.11 Open points for the owner
 
+**Decided by the owner, 2026-11-22** (one by one):
+1. Retake, Extend and Audio to video default to **Distilled** (Dev stays pickable). 2. float16 **only in the Fast
+preset**. 3. LTX LoRAs default to **Adapter**. 4. The 327 MB detailer is **part of the Distilled download**.
+5. Refine details and Deblur: **skip both** (phase 6 out; backlog). 6. SDR to HDR: **skip** (phase 7 out; backlog).
+7. Diffusion decode for Detail: **backlog**. 8. Detail on Audio to video: **yes** (phase 4b). 9. A typed negative
+prompt on the Dev paths: **yes**, with phase 2. 10. Spatial and temporal upscalings, distilled extend's anchors:
+**backlog**. 13. Replace off the latent grid: **refuse, naming the nearest grid frame**. Extend on Distilled:
+**Before shown faded with "Before needs Dev"** (the cross-node `values_by` contract extension). 12 is moot (no
+Deblur). 11 stays a download check: each IC-LoRA repo the build uses (now only the pixel upscaler) must be accepted
+by the host's token.
+
+So the build is phases **1, 2, 3, 4, 4b and 5** (about 49–61 h as estimated above; NVIDIA follows). The board's
+Deblur, Refine details and HDR frames are not built.
+
 1. **Default model for Retake, Extend and Audio to video** (and so for the Timeline's actions): Distilled
    (recommended: 5–20× faster) or Dev, as today.
 2. **float16 compute**: only in the Fast preset (recommended), or the default for everything (−11 % here, pixels
