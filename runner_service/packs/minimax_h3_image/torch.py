@@ -10,7 +10,17 @@ decode, the float32 VAE always tiled with the two MPS patches. Refs are RGB; the
 
 The enhancer (MiniMax-H3-Image-PE, Qwen3.5 27B) ships only as NVFP4: `tensor_hook` dequantizes each NVFP4 Linear on
 the device as it streams in, then the core loader quantizes it to int8. Thinking is always on (think: effort xhigh,
-else low); the answer is the JSON after the last </think>."""
+else low); the answer is the JSON after the last </think>.
+
+The variant base-fp8 (API 1.33, NVIDIA only: docs/plan/17-nvidia-quantized.md) loads community pre-quantized files:
+- the DiT is unsloth's FP8 build: torchao per-row FP8 Linears (`X._weight_qdata` + `X._weight_scale`, renamed to the
+  core Fp8Linear's `X.weight` / `X.scale`), with context_embedder and token_refiner dequantized to bf16 at load (its
+  card: FP8 there costs quality), and the adaLN in curve form: the time MLP is a table [1025, 8] read at t (diffusers'
+  timestep, 1 - sigma in [0, 1], the t ComfyUI's curve form reads), linearly between the two nearest rows, and every
+  adaLN projection (8 inputs) takes it with no SiLU (`curve_form`);
+- the text encoder is Comfy-Org's int8 ConvRot build: per-row int8 Linears whose input axis was rotated per 256 by a
+  block Hadamard matrix (core Int8Linear `rot_group`), bare Qwen3-VL names, 50 text layers, no final norm and no head:
+  its last hidden state is the official stack's hidden_states[50]."""
 
 import hashlib
 import json
@@ -18,6 +28,7 @@ import logging
 import math
 import re
 import time
+import types
 from dataclasses import dataclass
 from functools import lru_cache
 
@@ -26,6 +37,7 @@ import torch
 from PIL import Image
 from transformers import StoppingCriteria, StoppingCriteriaList
 
+from core import pack as packs
 from core.graph import RunError
 from core.pack import default_model
 
@@ -40,6 +52,18 @@ MAX_MP = 20  # the old CLI's --mp cap, in MiB of pixels
 PE_IMAGE_PIXELS = 1 << 20  # an edit's references reach the enhancer at about 1 MP (enhance.py)
 PE_TOKENS = 4096  # thinking included, as released
 _LAYER = re.compile(r"\.layers\.(\d+)\.")
+# base-fp8 (module docstring)
+FP8_FORMAT = "unsloth_prequant_transformer_state_dict_v1"  # its DiT's __metadata__ unsloth_format: another is refused
+CURVE = (1025, 8)  # the curve form's table: grid rows x the adaLN projections' inputs
+DENSE = ("context_embedder.", "token_refiner.")  # FP8 in the file, bf16 at load
+CONVROT_GROUP = 256
+CONVROT_LAYERS = 50  # the Comfy text encoder's layers
+CONVROT_TE = {
+    "num_hidden_layers": 50,
+    "output": "unnormalized_hidden_after_layer_50",
+}  # its __metadata__
+COMFY_TE = (("model.layers.", "model.language_model.layers."),
+            ("model.embed_tokens.", "model.language_model.embed_tokens."), ("visual.", "model.visual."))  # fmt: skip
 
 # E2M1 values by 4-bit code (bit 3 is the sign), and by packed byte: low nibble is the first element.
 FP4 = torch.tensor([0, 0.5, 1, 1.5, 2, 3, 4, 6, -0.0, -0.5, -1, -1.5, -2, -3, -4, -6])
@@ -62,8 +86,32 @@ class Latent:
 # --- components
 
 
+def community(model) -> bool:
+    """Whether the model is the community build (base-fp8): its transformer loads at fp8."""
+    return model.precision_of("transformer") == "fp8"
+
+
 def rename(component: str, key: str) -> str | None:
-    """The text encoder keeps 51 layers and no LM head; the enhancer's NVFP4 scales are read by tensor_hook."""
+    """The text encoder keeps 51 layers and no LM head; the enhancer's NVFP4 scales are read by tensor_hook. The
+    community files (their keys never occur in the official ones): the Comfy text encoder's bare Qwen3-VL names, its
+    int8 weights into Int8Linear.qweight and its scales into .scale (its comfy_quant tags are read by tensor_hook);
+    unsloth's FP8 suffixes into Fp8Linear's (the dense modules' scales are read by tensor_hook)."""
+    if component == "text_encoder":
+        if key.endswith(".comfy_quant"):
+            return None
+        for old, new in COMFY_TE:
+            if key.startswith(old):
+                key = new + key.removeprefix(old)
+                if old == "model.layers." and key.endswith("_proj.weight"):
+                    key = key.removesuffix("weight") + "qweight"
+                elif key.endswith(".weight_scale"):
+                    key = key.removesuffix("weight_scale") + "scale"
+    if component == "transformer":
+        if key.startswith(DENSE) and key.endswith("._weight_scale"):
+            return None
+        for suffix, attr in (("._weight_qdata", ".weight"), ("._weight_scale", ".scale")):
+            if key.endswith(suffix):
+                return key.removesuffix(suffix) + attr
     if component == "text_encoder" and (
         key.startswith("lm_head.")
         or ((m := _LAYER.search(key)) and "language_model" in key and int(m[1]) >= TEXT_LAYERS)
@@ -129,6 +177,12 @@ def build(component: str, model):
         with accelerate.init_empty_weights(include_buffers=False):
             out = Qwen3VLForConditionalGeneration(config)
         out.lm_head = torch.nn.Identity()  # the pipeline reads text_encoder.model's hidden states
+        if community(model):
+            # 50 layers and no norm: the last hidden state (hidden_states[50], tied to the norm's output) is then the
+            # 51-layer stack's hidden_states[50]; the config keeps 51 for the pipeline's "more than 50" check
+            text_model = out.model.language_model
+            text_model.layers = text_model.layers[:CONVROT_LAYERS]
+            text_model.norm = torch.nn.Identity()
         return out
     from diffusers import AutoencoderKLMiniMaxH3Image, MiniMaxH3ImageTransformer2DModel
 
@@ -139,12 +193,60 @@ def build(component: str, model):
         cls, sub = AutoencoderKLMiniMaxH3Image, folder / "vae_diffusers"
     with accelerate.init_empty_weights(include_buffers=False):
         out = cls.from_config(cls.load_config(sub))
+    if component == "transformer" and community(model):
+        curve_form(out)
     if component == "vae" and torch.backends.mps.is_available():
         # Python queues every tile before the GPU runs the first, and MPS keeps each queued tile's buffers (121 tiles
         # of a 2048 px reference held 38 GB): wait after each
         for part in (out.encoder, out.decoder):
             part.register_forward_hook(lambda *_: torch.mps.synchronize())
     return out
+
+
+class CurveTable(torch.nn.Module):
+    """The curve form's time embedding: the table row at t in [0, 1] (row 0 at t = 0, the last at t = 1), linear
+    between the two rows either side."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.register_buffer("table", torch.empty(*CURVE, device="meta"))
+
+    def forward(self, t: torch.Tensor) -> torch.Tensor:
+        last = self.table.shape[0] - 1
+        pos = t.float().clamp(0, 1) * last
+        lo = pos.floor().long().clamp(max=last - 1)  # t = 1 reads the last interval's end
+        return torch.lerp(self.table[lo], self.table[lo + 1], (pos - lo)[:, None])
+
+
+class Dense(torch.nn.Linear):
+    """A Linear the loader keeps dense: it swaps only exact nn.Linear (tensor_hook dequantizes its FP8 weight)."""
+
+
+def _modulation(self, temb: torch.Tensor) -> tuple[torch.Tensor, ...]:
+    """MiniMaxH3ImageAdaLayerNormModulation.forward in curve form: no SiLU, float32, the bf16 stack's dtype out."""
+    temb = self.linear(temb.float()).to(torch.bfloat16).view(-1, 6 * self.hidden_size)
+    return temb.chunk(6, dim=-1)
+
+
+def _norm_out(self, hidden_states, temb, timestep_indices) -> torch.Tensor:
+    """MiniMaxH3ImageAdaLayerNormOut.forward in curve form (as _modulation)."""
+    shift, scale = self.linear(temb.float()).to(torch.bfloat16).chunk(2, dim=-1)
+    hidden_states = self.norm(hidden_states)
+    return hidden_states * (1.0 + scale.index_select(0, timestep_indices)) + shift.index_select(
+        0, timestep_indices
+    )
+
+
+def curve_form(dit) -> None:
+    """The meta DiT → unsloth's layout: the curve table for time_proj + time_embedder, 8-input float32 adaLN
+    projections without the SiLU, context_embedder and token_refiner's Linears kept dense."""
+    dit.time_proj, dit.time_embedder = torch.nn.Identity(), CurveTable()
+    for m in [b.adaln_proj for b in dit.transformer_blocks] + [dit.norm_out]:
+        m.linear = torch.nn.Linear(CURVE[1], m.linear.out_features, device="meta")
+        m.forward = types.MethodType(_modulation if m is not dit.norm_out else _norm_out, m)
+    for name, m in dit.named_modules():
+        if f"{name}.".startswith(DENSE) and type(m) is torch.nn.Linear:
+            m.__class__ = Dense
 
 
 def nvfp4_dequant(packed: torch.Tensor, scale: torch.Tensor, scale_2: torch.Tensor) -> torch.Tensor:
@@ -156,9 +258,61 @@ def nvfp4_dequant(packed: torch.Tensor, scale: torch.Tensor, scale_2: torch.Tens
     return (w.float() * scale_2.float()).to(torch.bfloat16).view(out, -1)
 
 
+def community_hook(component: str, model):
+    """base-fp8: refuses files of another layout before the first tensor; then dequantizes the DiT's dense modules'
+    FP8 weights to bf16 (their scales read here)."""
+    from safetensors import safe_open
+
+    files = model.files(component)
+    handles = [safe_open(p, "pt", device="cpu") for p in files]
+    where = {k: f for p, f in zip(files, handles) for k in packs.header(p)}
+    for path, f in zip(files, handles):
+        meta = f.metadata() or {}
+        if component == "transformer" and meta.get("unsloth_format") != FP8_FORMAT:
+            raise RunError(f"{path.name}: unsloth_format {meta.get('unsloth_format')!r}, not {FP8_FORMAT}: "
+                           "not a file this pack reads")  # fmt: skip
+        if component == "text_encoder":
+            tags = {
+                bytes(f.get_tensor(k).tolist()).decode()
+                for k in packs.header(path)
+                if k.endswith(".comfy_quant")
+            }
+            want = {
+                "format": "int8_tensorwise",
+                "convrot": True,
+                "convrot_groupsize": CONVROT_GROUP,
+            }
+            if json.loads(meta.get("minimax_h3_te", "{}")) != CONVROT_TE or any(
+                json.loads(t) != want for t in tags
+            ):
+                raise RunError(
+                    f"{path.name}: not the 50-layer int8 ConvRot text encoder this pack reads"
+                )
+    if component == "text_encoder":
+        return None
+
+    def hook(name: str, tensor: torch.Tensor) -> torch.Tensor:
+        if not (name.startswith(DENSE) and tensor.dtype == torch.float8_e4m3fn):
+            return tensor
+        key = name.removesuffix("weight") + "_weight_scale"
+        scale = where[key].get_tensor(key)
+        return (tensor.float() * scale.to(tensor.device)).to(torch.bfloat16)
+
+    return hook
+
+
+def rotated(component: str, model):
+    """The Comfy text encoder's quantized Linears are ConvRot, group 256 (core Int8Linear `rot_group`)."""
+    group = CONVROT_GROUP if component == "text_encoder" and community(model) else None
+    return lambda name: group
+
+
 def tensor_hook(component: str, model):
     """The enhancer's NVFP4 weights → bf16 on the device as they arrive (the core loader then quantizes them to
-    int8); their scales are read from the CPU here (MPS has no float8: e4m3 → bf16, exactly, before moving)."""
+    int8); their scales are read from the CPU here (MPS has no float8: e4m3 → bf16, exactly, before moving). The
+    community files: community_hook."""
+    if component in ("transformer", "text_encoder") and community(model):
+        return community_hook(component, model)
     if component != "enhancer":
         return None
     from safetensors import safe_open

@@ -1505,10 +1505,11 @@
                               "bf16",
                               "fp16",
                               "int8",
-                              "int4"
+                              "int4",
+                              "fp8"
                             ]
                           },
-                          "description": "what it can load as, first = native. A full-precision variant lists its dtype then the load-time quantizations (bf16, int8; MLX also int4); an already-quantized one lists only its own (int8): no choice, nothing quantized at load"
+                          "description": "what it can load as, first = native. A full-precision variant lists its dtype then the load-time quantizations (bf16, int8; MLX also int4); an already-quantized one lists only its own (int8; from API 1.33 fp8: a community pre-quantized variant, model.yaml `variants.<id>.precision`): no choice, nothing quantized at load"
                         },
                         "memory": {
                           "type": "array",
@@ -1527,7 +1528,8 @@
                                   "bf16",
                                   "fp16",
                                   "int8",
-                                  "int4"
+                                  "int4",
+                                  "fp8"
                                 ],
                                 "description": "the model node's precision param"
                               },
@@ -1588,6 +1590,7 @@
                                         "fp16",
                                         "int8",
                                         "int4",
+                                        "fp8",
                                         "fp32"
                                       ],
                                       "description": "what it is loaded at (a vae stays bf16 in an int8 run): the resident entry's precision"
@@ -1646,7 +1649,7 @@
                             "gated"
                           ],
                           "additionalProperties": false,
-                          "description": "from API 1.16: where a download fetches the variant's own files (model.yaml `variants.<id>.source`): huggingface_hub.snapshot_download(repo_id=repo, revision=revision, allow_patterns=allow_patterns, local_dir=<models root>/<dir>). Absent: the variant cannot be downloaded (put its files there by hand)",
+                          "description": "from API 1.16: where a download fetches the variant's own files (model.yaml `variants.<id>.source`): huggingface_hub.snapshot_download(repo_id=repo, revision=revision, allow_patterns=allow_patterns, local_dir=<models root>/<dir>). Absent: the variant cannot be downloaded (put its files there by hand); from API 1.33 a variant may also fetch from `sources` into the same folder: `bytes` then counts them too, and `gated` is true when any of them is",
                           "properties": {
                             "repo": {
                               "type": "string",
@@ -1722,6 +1725,7 @@
                                     "fp16",
                                     "int8",
                                     "int4",
+                                    "fp8",
                                     "fp32"
                                   ]
                                 },
@@ -1790,6 +1794,66 @@
                             }
                           },
                           "description": "from API 1.16, presence mismatch only: the files (relative to `dir`) whose SHA-256 on disk differs from the recorded one, sorted"
+                        },
+                        "sources": {
+                          "type": "array",
+                          "minItems": 1,
+                          "maxItems": 4,
+                          "description": "from API 1.33: more repos a download fetches after `source`, into the same folder (`dir`), in order (a community pre-quantized variant: configs from the official repo, weights from the community one). Each is planned as `source` is; a path two of them list fails the plan. The licence, must_accept and gated of the whole download are `source`'s. Absent: `source` alone",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "repo",
+                              "revision",
+                              "allow_patterns"
+                            ],
+                            "additionalProperties": false,
+                            "properties": {
+                              "repo": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,95}/[A-Za-z0-9][A-Za-z0-9._-]{0,95}$",
+                                "description": "a Hub model repo, owner/name"
+                              },
+                              "revision": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]{0,79}$",
+                                "description": "a commit SHA (preferred: pinned), tag or branch"
+                              },
+                              "allow_patterns": {
+                                "type": "array",
+                                "minItems": 1,
+                                "maxItems": 64,
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 200
+                                },
+                                "description": "fnmatch globs over that repo's paths"
+                              },
+                              "gated": {
+                                "type": "boolean",
+                                "description": "the repo needs a Hub token: the runner reads it from the host's secrets file (RUNNER_HF_TOKEN_FILE); never in a message, the API or a log"
+                              },
+                              "bytes": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "description": "the expected download size of this repo's files (counted again in the variant's `source.bytes`)"
+                              }
+                            }
+                          }
+                        },
+                        "devices": {
+                          "type": "array",
+                          "minItems": 1,
+                          "uniqueItems": true,
+                          "items": {
+                            "enum": [
+                              "cuda",
+                              "mps",
+                              "cpu"
+                            ]
+                          },
+                          "description": "from API 1.33: the only devices the variant runs on (model.yaml `variants.<id>.devices`: a community FP8 or int8 variant is [cuda]). A runner on another device does not publish the variant at all, so the Models screen never offers it there and the dispatcher never sends it a run of it. Absent: every device of the model's runtimes"
                         }
                       }
                     }
@@ -2141,6 +2205,7 @@
                   "fp16",
                   "int8",
                   "int4",
+                  "fp8",
                   "fp32"
                 ]
               },
@@ -2918,6 +2983,7 @@
             "fp16",
             "int8",
             "int4",
+            "fp8",
             "fp32"
           ]
         },

@@ -34,3 +34,6 @@ other sections point to it rather than restate it.
 | [Service architecture](plan/13-services.md) | §17 | Services, users, databases, messaging, dispatcher, deployment, contracts |
 | [Dependencies](plan/14-dependencies.md) | §18 | Version pins, what moves together, how they stay current |
 | [Voices](plan/15-voices.md) | §19 | Qwen3-TTS and ZONOS3 packs, saved voices, dialogue, audio takes (a plan, not in a milestone) |
+| [MCP server](plan/16-mcp.md) | §20 | `helm mcp`: the platform as MCP tools for agents (a plan, not in a milestone) |
+| [NVIDIA quantized path](plan/17-nvidia-quantized.md) | §21 | Community FP8 / int8 variants for NVIDIA hosts (M9) |
+| [In-app assistant](plan/18-assistant.md) | §22 | An AI assistant panel that works every screen, confirms costly actions, sees takes (a plan, not in a milestone) |

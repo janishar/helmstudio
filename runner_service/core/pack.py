@@ -19,7 +19,7 @@ import yaml
 from core import looks, voices
 
 PACKS = Path(__file__).resolve().parent.parent / "packs"
-PRECISIONS = ("bf16", "fp16", "int8", "int4")
+PRECISIONS = ("bf16", "fp16", "int8", "int4", "fp8")  # fp8 (API 1.33): stored only, a variant's own
 BYTES = {"bf16": 2, "fp16": 2, "fp32": 4, "int8": 1}
 STORED = {
     "BF16": 2,
@@ -33,6 +33,8 @@ STORED = {
     "I32": 4,
     "I64": 8,
     "BOOL": 1,
+    "F8_E4M3": 1,  # a community FP8 build (API 1.33): loaded as is, an Fp8Linear
+    "F8_E5M2": 1,
 }
 QUANT_GROUP = 64  # the MLX loader's quantization group
 STALL_S = 600  # a stage's default stall limit: seconds without a cancel point
@@ -143,16 +145,16 @@ class ModelRef:
         return out
 
     def owner(self, component: str) -> str:
-        """The variant whose folder holds `component`'s files: the first variant when this one shares it, unless
-        this one holds its own copy (a download found the owner's hashes differ: `separate`)."""
+        """The variant whose folder holds `component`'s files: its lender (`share_owner`) when this one shares it,
+        unless this one holds its own copy (a download found the owner's hashes differ: `separate`)."""
         shares = self.pack.spec["variants"][self.variant].get("shares", [])
         if component in shares and not owns_copy(self.pack, self.variant, component):
-            return next(iter(self.pack.spec["variants"]))
+            return share_owner(self.pack, self.variant)
         return self.variant
 
     def precision_of(self, component: str) -> str:
         """The precision `component` loads at: the model's, when the component offers it, else its first."""
-        offered = self.pack.component(component).get("precision", ["bf16"])
+        offered = component_precisions(self.pack, self.variant, component)
         return self.precision if self.precision in offered else offered[0]
 
     def key(self, component: str) -> tuple:
@@ -233,10 +235,34 @@ def default_model(pack: Pack) -> ModelRef:
     )
 
 
+def component_precisions(pack: Pack, variant: str, component: str) -> list[str]:
+    """What `component` can load at in `variant`: the variant's `component_precision` for it (API 1.33: a community
+    FP8 variant's transformer is [fp8]), else the component's `precision`."""
+    own = pack.spec["variants"][variant].get("component_precision", {}).get(component)
+    return own or pack.component(component).get("precision", ["bf16"])
+
+
+def variant_precisions(pack: Pack, variant: str) -> list[str]:
+    """What the model node offers for `variant` (the models key's `precisions`, first = native): the variant's own
+    `precision` (API 1.33: an already-quantized variant lists only its own, [fp8]), else what its components offer."""
+    if own := pack.spec["variants"][variant].get("precision"):
+        return list(own)
+    offered = {
+        p for c in pack.spec.get("components", {}) for p in component_precisions(pack, variant, c)
+    }
+    return [p for p in PRECISIONS if p in offered]
+
+
 def models_root() -> Path:
     import config
 
     return config.MODELS
+
+
+def share_owner(pack: Pack, variant: str) -> str:
+    """The variant a variant's `shares` load from: its `shares_from` (API 1.33: turbo-fp8 shares base-fp8's text
+    encoder and VAE), else the first variant."""
+    return pack.spec["variants"][variant].get("shares_from") or next(iter(pack.spec["variants"]))
 
 
 def owns_copy(pack: Pack, variant: str, component: str) -> bool:
@@ -244,12 +270,10 @@ def owns_copy(pack: Pack, variant: str, component: str) -> bool:
     owner's folder, as a hand-made share) is not a copy."""
     from core.models import linked
 
-    first = next(iter(pack.spec["variants"]))
+    first = share_owner(pack, variant)
     root = models_root() / pack.spec["variants"][variant]["dir"]
     if variant != first and root == models_root() / pack.spec["variants"][first]["dir"]:
-        return (
-            False  # one folder for both (LTX dev beside distilled): one copy, the first variant's
-        )
+        return False  # one folder for both (LTX dev beside distilled): one copy, the lender's
     globs = component_globs(pack, variant, component)
     return any(p.is_file() and not p.is_symlink() and not linked(root, p.relative_to(root).as_posix())
                for g in ([globs] if isinstance(globs, str) else globs) for p in root.glob(g))  # fmt: skip
@@ -298,10 +322,12 @@ def size_gb(pack: Pack, key: tuple, files: tuple[Path, ...]) -> tuple[float, flo
     """Resident GB at the target dtype and the transient: the largest tensor in fp32. Only the keys the pack's
     `rename(component, key)` keeps count, under their new names; `dtype: stored` counts each tensor's own dtype. A
     quantized weight: torch int8 is 1 byte + a bf16 scale per row; MLX is bits / 8 per value + a bf16 scale and
-    bias per group of 64."""
+    bias per group of 64. An F8 weight of a module the pack's `DENSE` prefixes name loads bf16 (its tensor_hook
+    dequantizes it: MiniMax's context_embedder)."""
     if (key, files) not in _sizes:
         component, precision = key[2], key[3]
         spec, rename = pack.component(component), getattr(pack.module, "rename", None)
+        dense = getattr(pack.module, "DENSE", ())
         dtype = spec.get("dtype", "bf16")
         total = largest = 0
         for p in files:
@@ -314,7 +340,10 @@ def size_gb(pack: Pack, key: tuple, files: tuple[Path, ...]) -> tuple[float, flo
                     numel *= d
                 largest = max(largest, numel * 4)
                 module, _, attr = name.rpartition(".")
-                if attr == "weight" and len(t["shape"]) == 2 and quantized(spec, precision, module):
+                linear = attr == "weight" and len(t["shape"]) == 2
+                if linear and t["dtype"].startswith("F8"):  # an Fp8Linear: + an fp32 scale per row
+                    total += numel * 2 if name.startswith(dense) else numel + t["shape"][0] * 4
+                elif linear and quantized(spec, precision, module):
                     if pack.runtime == "mlx":
                         total += (
                             numel * (8 if precision == "int8" else 4) // 8
@@ -388,7 +417,7 @@ def model_schema(pack: Pack) -> dict:
     what its components offer; labels, help and defaults from model.yaml `model`."""
     spec, extra = pack.spec, pack.spec.get("model", {})
     variants = list(spec["variants"])
-    offered = {p for c in spec.get("components", {}).values() for p in c.get("precision", ["bf16"])}
+    offered = {p for v in variants for p in variant_precisions(pack, v)}
     precisions = [p for p in PRECISIONS if p in offered]
     schema = {
         "kind": f"{pack.family}/model",

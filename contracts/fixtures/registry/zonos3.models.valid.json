@@ -17,7 +17,8 @@
           "runtime": "native",
           "env": "native",
           "devices": [
-            "mps"
+            "mps",
+            "cuda"
           ]
         }
       ],

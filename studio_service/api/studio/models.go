@@ -162,33 +162,28 @@ func buildModels(values []registry.Host, published map[string]registry.Published
 				variant.Components = append(variant.Components, component)
 			}
 			for _, name := range hostNames {
-				var on *registry.Variant
-				listed := false
+				var on *registry.Variant // nil: the host does not publish this variant (API 1.33: base-fp8 off CUDA)
 				for _, k := range byHost[name] {
 					if v, ok, has := find(k.Host+"."+k.Env, id, vid); has {
-						listed = true
 						if ok {
 							on = &v
 						}
 						break
 					}
 				}
-				if !listed {
+				if on == nil {
 					continue
 				}
-				state := dto.ModelVariantHost{Host: name, State: "missing"}
-				if on != nil {
-					state.State = cmp.Or(on.Presence, "missing")
-					if state.State != "missing" {
-						state.Bytes = on.Bytes
-					}
-					if state.State == "mismatch" {
-						state.Mismatch = on.Mismatch
-					}
-					for _, c := range on.Components {
-						if c.Separate {
-							state.Separate = append(state.Separate, c.Component)
-						}
+				state := dto.ModelVariantHost{Host: name, State: cmp.Or(on.Presence, "missing")}
+				if state.State != "missing" {
+					state.Bytes = on.Bytes
+				}
+				if state.State == "mismatch" {
+					state.Mismatch = on.Mismatch
+				}
+				for _, c := range on.Components {
+					if c.Separate {
+						state.Separate = append(state.Separate, c.Component)
 					}
 				}
 				if job, ok := downloading[name+" "+id+" "+vid]; ok {

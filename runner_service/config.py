@@ -59,6 +59,9 @@ RAM_RESERVE_GB = float(
 DEVICE = os.environ.get(
     "RUNNER_DEVICE", ""
 )  # torch: force mps | cuda | cpu; empty = the first present
+# torch, CUDA: how an Fp8Linear multiplies (API 1.33): auto = torch._scaled_mm when this GPU takes it, else dequant
+# per layer; dequant = always dequant (the reference for PSNR checks)
+FP8_MATMUL = os.environ.get("RUNNER_FP8_MATMUL", "auto")
 AFTER_RUN = os.environ.get("RUNNER_AFTER_RUN", "keep_warm")  # unload | keep_warm | keep_pinned
 IDLE_UNLOAD_S = float(
     os.environ.get("RUNNER_IDLE_UNLOAD_S", "600")

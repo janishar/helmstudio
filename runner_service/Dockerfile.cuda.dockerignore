@@ -1,0 +1,10 @@
+.venv
+.env
+.pytest_cache
+.ruff_cache
+**/__pycache__
+tests
+.run
+vendor/*
+!vendor/zonos3
+vendor/zonos3/build

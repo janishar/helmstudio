@@ -315,6 +315,15 @@ def test_the_native_runner_imports_no_runtime_library():
     assert out == "[] mps core.loaders_native"
 
 
+def test_a_native_pack_publishes_only_on_its_runtime_devices(monkeypatch):
+    from core import models
+
+    by_id = {p.spec["id"]: p for p, _ in pack.for_env("native")}
+    monkeypatch.setattr(models, "device", lambda p: "cuda")
+    assert not models.runs_here(by_id["minimax-h3"], "base")  # the h3 binary is Metal only
+    assert models.runs_here(by_id["zonos3-mini"], "mini")
+
+
 def test_minimax_h3_refusals_equal_the_contract_fixture():
     from packs.minimax_h3 import native
 

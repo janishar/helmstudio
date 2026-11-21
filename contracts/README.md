@@ -718,9 +718,10 @@ runner reads them through `X_FILE` as every service does.
 
 **Object store.** One S3 identity per remote host, `runner-<h>`, with no actions of its own and the policy `runner`
 (SeaweedFS `-s3.config` `policies` and `policyNames`, `.tools/make-secrets`; the stack's own key stays the admin one):
-`s3:GetObject` on `<bucket>/u/*` and `<bucket>/packs/*/looks/*` (a command's inputs, LoRAs, the HEAD after its own upload,
-the looks' thumbnails), `s3:PutObject` (with the multipart parts) only on `<bucket>/u/*/runs/*`, `u/*/exports/*`,
-`u/*/frames/*`, `u/*/llm/thumbs/*` and `packs/*/looks/*`. No delete, list (ListBuckets answers an empty list),
+`s3:GetObject` on `<bucket>/u/*`, `<bucket>/packs/*/looks/*` and (API 1.33) `<bucket>/packs/*/voices/*` (a command's
+inputs, LoRAs, the HEAD after its own upload, the looks' thumbnails, the voice previews), `s3:PutObject` (with the
+multipart parts) only on `<bucket>/u/*/runs/*`, `u/*/exports/*`, `u/*/frames/*`, `u/*/llm/thumbs/*`, `packs/*/looks/*`
+and `packs/*/voices/*`. No delete, list (ListBuckets answers an empty list),
 tagging, admin or other bucket; revocable on its own (a SeaweedFS restart). **Enforced by the store**: the bucket,
 the verbs, the prefixes, per-host revocation. **Not enforced by the store**: the owner and the run (keys are per owner
 and per run, made at dispatch; a static identity cannot name them): the identity can read any object under `u/` and
@@ -2747,6 +2748,34 @@ hashes, `HEAD` / `GET /<repo>/resolve/<rev>/<path>` with `ETag`, `X-Repo-Commit`
 `Range` → 206; a gated repo answering 401 without its test token, a licence, small files) is selected with
 `HF_ENDPOINT` in runner tests and the fake compose overlay. Deletes run on a throwaway folder under a scratch models
 root, never `~/GenAI/models`.
+
+### Quantized variants for NVIDIA hosts (API 1.33, M9; plan 17-nvidia-quantized 21; normative)
+
+The official weights stay every pack's default; a community pre-quantized build (FP8 where one exists, else int8) is
+an **extra variant** of the pack. model.yaml per variant, all optional:
+- `precision: [fp8]`: what the model node offers for it (the models key's `precisions`); an already-quantized variant
+  lists only its own. Absent: what its components offer, as before. `fp8` (stored float8 e4m3, a scale per output
+  row; never made at load) joins every precision enum: the models key, memory plans, the hosts key's `resident`,
+  `req.runner.unload`, openapi `Precision`.
+- `component_precision: {<component>: [..]}`: a component's precisions in this variant (`transformer: [fp8]`); the
+  others keep the component's. A run at the model's precision loads each component at it when offered, else at the
+  component's first (a VAE stays bf16 in an fp8 run).
+- `devices: [cuda]`: the only devices it runs on. A runner on another device leaves the variant out of its models key
+  altogether, so the Models screen never offers it on that host and the dispatcher never sends a run of it there
+  (eligibility already needs the variant present in the host's key). Published as the variant's `devices`. A native
+  pack's variant without `devices` takes its runtime's (its binary is built per device); a torch one runs anywhere.
+- A variant listing one precision (`[fp8]`) loads at it whatever the node's `precision` asks (the node's default is
+  the union's, int8): studio uses that precision for eligibility, the memory plan and the resident match.
+- `sources: [{repo, revision, allow_patterns, gated?, bytes?}]`: more repos the download fetches after `source`, into
+  the same folder (configs from the official repo in `source`, weights from the community one). Planned and checked
+  as `source` is (LFS hashes, sizes, unsafe names); a path two of them list fails the plan (`… twice`). The licence,
+  `must_accept`, `gated` and `bytes` of the whole download are `source`'s. Published as the variant's `sources`.
+
+The runner loads a Linear whose stored weight is float8 (read from the headers, not the `quantize` globs) as an FP8
+Linear: on CUDA `torch._scaled_mm` with the input quantized per row (dequantize per layer when the GPU refuses it,
+decided once per process; `RUNNER_FP8_MATMUL=dequant` forces that); elsewhere dequantize per layer. A LoRA bakes into
+no FP8 weight (a run asking it fails; adapters work). An int8 ConvRot build (the input axis rotated by a 256-wide
+block Hadamard) runs as int8 with the input rotated the same way first.
 
 ## Hosts admin (API 1.16, M5a; plan 03-runtime 6.2; normative)
 

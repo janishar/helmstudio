@@ -1,5 +1,6 @@
 # A remote GPU host's runner (contracts/README.md, Hosts with a discrete GPU and A remote GPU host; README.md here has
-# the steps): runner_service as a container with the NVIDIA runtime, host <GPU_HOST>, env torch (Qwen Image on CUDA),
+# the steps): runner_service as a container with the NVIDIA runtime, host <GPU_HOST>, env torch (Qwen Image on CUDA;
+# runner-native, opt-in: env native, ZONOS3),
 # device 0. It connects only to the stack's NATS (tls://) and object store (https://), never to Postgres; with the test
 # rig's SSH tunnel both are on this host's loopback, so the container uses host networking. Run from this folder:
 #   docker compose build && docker compose up -d && docker compose ps
@@ -41,5 +42,42 @@ services:
       retries: 30
       start_period: 60s
 
+  # The native runner (M9, ZONOS3 by its CUDA zonos3-server): the same image, env native, its own NATS user
+  # runner_<h>_native and health port; same GPU. Opt-in until .tools/make-secrets makes that user:
+  #   docker compose --profile native up -d
+  runner-native:
+    image: helmstudio/runner-cuda:${IMAGE_TAG:-dev}
+    profiles: [native]
+    restart: unless-stopped
+    network_mode: host
+    env_file: [.env]
+    environment:
+      RUNNER_HOST: ${GPU_HOST:?set GPU_HOST in .env}
+      RUNNER_ENV: native
+      HEALTH_PORT: ${NATIVE_HEALTH_PORT:-8082}        # host networking: not the torch runner's
+      NATS_URL_FILE: /run/secrets/nats_runner_${GPU_HOST}_native_url
+      NATS_CA_FILE: /run/secrets/tls_ca
+      S3_ACCESS_KEY_ID_FILE: /run/secrets/s3_runner_${GPU_HOST}_access_key_id
+      S3_SECRET_ACCESS_KEY_FILE: /run/secrets/s3_runner_${GPU_HOST}_secret_access_key
+      S3_CA_FILE: /run/secrets/tls_ca
+      RUNNER_HF_TOKEN_FILE: /run/secrets/hf_token
+      HELMSTUDIO_MODELS: /models
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility,video
+    volumes:
+      - ./secrets:/run/secrets:ro
+      - ${MODELS_DIR:?set MODELS_DIR in .env}:/models:${MODELS_MODE:-ro}
+      - native-cache:/cache                           # its own: download temp files never meet the torch runner's
+    deploy:
+      resources:
+        reservations:
+          devices: [{driver: nvidia, device_ids: ["0"], capabilities: [gpu]}]
+    healthcheck:
+      test: [CMD, python, health.py]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
 volumes:
   runner-cache:
+  native-cache:

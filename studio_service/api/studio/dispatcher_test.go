@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -129,11 +130,12 @@ func TestEligible(t *testing.T) {
 		return []byte(`{"workflows": [{"id": "` + id + `", "env": "` + env + `", "nodes": {}}]}`)
 	}
 	models := `{"models": [{"id": "qwen-2", "family": "qwen-image", "variants": [{"id": "base", "presence": "present",
-		"precisions": ["bf16"]}, {"id": "turbo", "presence": "missing", "precisions": ["bf16"]}]}]}`
+		"precisions": ["bf16", "int8"]}, {"id": "turbo", "presence": "missing", "precisions": ["bf16"]}]}]}`
 	_ = reg.SetRegistry("mac.torch.workflows", workflows("qwen-image", "torch"))
 	_ = reg.SetRegistry("mac.torch.models", []byte(models))
 	_ = reg.SetRegistry("gpu.torch.workflows", workflows("qwen-image", "torch"))
-	_ = reg.SetRegistry("gpu.torch.models", []byte(strings.ReplaceAll(models, "missing", "present")))
+	_ = reg.SetRegistry("gpu.torch.models", []byte(strings.ReplaceAll(strings.ReplaceAll(models, "missing", "present"),
+		`]}]}]}`, `]}, {"id": "base-fp8", "presence": "present", "precisions": ["fp8"]}]}]}`)))
 	_ = reg.SetRegistry("old.torch.workflows", workflows("qwen-image", "torch"))
 	_ = reg.SetRegistry("fake.fake.workflows", workflows("echo", "fake"))
 	_ = reg.SetHost("mac.torch", hostValue("mac", "torch", t0, `, "resident": [{"component": "transformer", "model": "qwen-2",
@@ -151,9 +153,13 @@ func TestEligible(t *testing.T) {
 	if reason != "" || len(slots) != 2 || slots["mac"] != "torch" || slots["gpu"] != "torch" || !resident["mac"] || resident["gpu"] {
 		t.Fatal(slots, resident, reason) // old is stale; gpu: eligible, nothing resident
 	}
-	if _, _, reason := eligible(reg, reg.Hosts(), run("qwen-image", "torch", "base", "int8"), t0); reason !=
-		"no live host for env torch has model qwen-2 variant base at int8" {
+	if _, _, reason := eligible(reg, reg.Hosts(), run("qwen-image", "torch", "base", "fp8"), t0); reason !=
+		"no live host for env torch has model qwen-2 variant base at fp8" {
 		t.Fatal("a precision not listed:", reason)
+	}
+	// API 1.33: a stored-quantized variant (one precision) runs at its own whatever the node asks (the default int8)
+	if slots, _, reason := eligible(reg, reg.Hosts(), run("qwen-image", "torch", "base-fp8", "int8"), t0); len(slots) != 1 || slots["gpu"] == "" {
+		t.Fatal("base-fp8 at the default int8: gpu", slots, reason)
 	}
 	if slots, _, _ := eligible(reg, reg.Hosts(), run("qwen-image", "torch", "turbo", "bf16"), t0); len(slots) != 1 || slots["gpu"] == "" {
 		t.Fatal("mac lacks turbo", slots)
@@ -615,8 +621,11 @@ func TestNativeHandoverWithThreeEnvs(t *testing.T) {
 	}
 	d := NewDispatcher(nil, reg, nil, nil)
 	var asked []string
+	var mu sync.Mutex // the two envs are asked concurrently
 	d.Unload = func(_ context.Context, subject string, _ []byte) ([]byte, error) {
+		mu.Lock()
 		asked = append(asked, subject)
+		mu.Unlock()
 		return []byte(`{"error": "a run is in progress", "code": "busy"}`), nil
 	}
 	qwen := `{"component": "transformer", "model": "qwen-image-2.1", "variant": "base", "precision": "bf16", "gb": 38.1, "pinned": false}`

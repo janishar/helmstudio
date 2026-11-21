@@ -533,7 +533,7 @@ func planOf(reg *registry.Registry, host string, run model.Run) plan {
 	if !ok {
 		return out
 	}
-	memory, ok := found.Plan(models[0].variant, models[0].precision, run.WorkflowID)
+	memory, ok := found.Plan(models[0].variant, found.RunsAt(models[0].variant, models[0].precision), run.WorkflowID)
 	if !ok {
 		return out
 	}
@@ -1036,7 +1036,7 @@ func eligibleIn(reg *registry.Registry, values []registry.Host, reserved map[str
 	hosts = slices.DeleteFunc(hosts, func(host string) bool {
 		for _, m := range models {
 			found, listed := reg.Model(host+"."+env, m.family)
-			if !listed || !found.Has(m.variant) || !found.HasPrecision(m.variant, m.precision) {
+			if !listed || !found.Has(m.variant) || !found.HasPrecision(m.variant, found.RunsAt(m.variant, m.precision)) {
 				if missing == "" {
 					id := m.family
 					if listed {
@@ -1110,7 +1110,7 @@ func eligibleIn(reg *registry.Registry, values []registry.Host, reserved map[str
 		for _, m := range models {
 			found, _ := reg.Model(host+"."+env, m.family)
 			all = all && slices.ContainsFunc(value.Resident, func(r registry.Resident) bool {
-				return r.Model == found.ID && r.Variant == m.variant && r.Precision == m.precision && sameBaked(r.Loras, bake) &&
+				return r.Model == found.ID && r.Variant == m.variant && r.Precision == found.RunsAt(m.variant, m.precision) && sameBaked(r.Loras, bake) &&
 					(found.Lora == nil || r.Component == found.Lora.Component) && registry.OnDevice(r.Device)
 			})
 		}

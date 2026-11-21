@@ -1,0 +1,50 @@
+[
+ {
+  "tag": "official2",
+  "case": "turbo-768-s42",
+  "variant": "turbo",
+  "precision": "int8",
+  "total_s": 17.6,
+  "s": {
+   "encode": 12.3,
+   "sample": 4.6,
+   "decode": 0.4,
+   "output": 0.2
+  },
+  "peak_gb": {
+   "encode": 16.3,
+   "sample": 17.78,
+   "decode": 22.31,
+   "output": 22.31
+  },
+  "torch_peak_alloc_gb": 20.38,
+  "steps": 8,
+  "step_s": 0.155,
+  "psnr_vs_png": 42.44,
+  "psnr_vs_cuda.png": Infinity
+ },
+ {
+  "tag": "official2",
+  "case": "turbo-1024-s7",
+  "variant": "turbo",
+  "precision": "int8",
+  "total_s": 2.7,
+  "s": {
+   "encode": 0.1,
+   "sample": 2.1,
+   "decode": 0.2,
+   "output": 0.3
+  },
+  "peak_gb": {
+   "encode": 24.65,
+   "sample": 24.65,
+   "decode": 26.33,
+   "output": 26.33
+  },
+  "torch_peak_alloc_gb": 23.25,
+  "steps": 8,
+  "step_s": 0.265,
+  "psnr_vs_png": 37.81,
+  "psnr_vs_cuda.png": Infinity
+ }
+]

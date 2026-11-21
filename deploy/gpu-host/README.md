@@ -104,6 +104,39 @@ GB`); Models shows each variant's presence per host. A Qwen Image run goes to wh
 lines up, and the run records it (`made_with.host`). Download Qwen Image onto this host from Models (needs
 `MODELS_MODE=rw`) or copy the files into `MODELS_DIR`.
 
+## The quantized path
+
+An alternate path for NVIDIA hosts (M9, [plan 17](../../docs/plan/17-nvidia-quantized.md)): community
+pre-quantized weights, FP8 where the community publishes it, else int8. The official weights stay the default
+everywhere and nothing about them changes; the quantized ones are **extra variants** of the same packs, marked
+`devices: [cuda]`, so the Mac never offers them. They are smaller to download and keep (about 145 GB for every pack
+instead of about 466 GB) and FP8 runs natively on Blackwell. Publisher-measured quality (LPIPS against bf16) is
+worse for FP8 than for int8 ConvRot in every case; the variant names say which one a run used.
+
+| Pack | Variant | Weights | Download |
+|---|---|---|---|
+| Qwen Image 2.1 | `base-fp8` | unsloth FP8 transformer and text encoder, bf16 VAE (configs from the official repo) | 17.2 GB (official bf16: 33.1) |
+| | `turbo-fp8` | unsloth Turbo FP8 transformer; text encoder and VAE shared with `base-fp8` | 7.1 GB more (official: 14.2) |
+| MiniMax H3 Image | `base-fp8` | unsloth FP8 DiT (20.3 GB), Comfy-Org int8 ConvRot text encoder (27.1 GB), the official VAE and configs (2.4 GB); the official NVFP4 prompt enhancer (17.9 GB, its own folder `MiniMax-H3-Image-PE`, copied by hand) | 49.8 GB + 17.9 |
+| ZONOS3-Mini | `mini` (the official one) | the official GGUF q8_0 set, already int8: the same files on the Mac and here, run by a CUDA build of zonos3-server | 1.2 GB |
+
+Later phases add MiniMax H3 video (community FP8) and LTX-2.5 (FP8, int8 ConvRot for dev). Qwen3-TTS stays on its
+official bf16 weights.
+
+**Download** with `MODELS_MODE=rw` (section 3): Admin › Models, the variant's Download for this host, or
+`helm model download <model> --host <h> --variant <v>`; or copy the folders into `MODELS_DIR` by hand. Plan the disk
+from the table (and the official variants' sizes if this host keeps both).
+
+**ZONOS3 needs the native runner.** It is a second service from the same image (`runner-native`: `RUNNER_ENV=native`,
+health port `NATIVE_HEALTH_PORT`, 8082), built in `Dockerfile.cuda`'s zonos3 stage (`make zonos3-cuda`: ggml-cuda
+for sm_120, CUDA 13.2). It needs its own NATS user `runner_<h>_native` (contracts/README.md, A remote GPU host), so it
+is behind a profile:
+
+```sh
+docker compose --profile native up -d        # needs secrets/nats_runner_<h>_native_url
+docker compose logs -f runner-native
+```
+
 ## Stopping, preemption, revoking
 
 - `docker compose down` here is a clean exit: the runner deletes its hosts key. Then `make gpu-host-tunnel-stop`.

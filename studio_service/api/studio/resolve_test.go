@@ -122,7 +122,7 @@ func TestCheck(t *testing.T) {
 // The qwen-image graph: seed, enum, int with step and bool params; when and step are carried, null seed stays null.
 func TestResolveQwen(t *testing.T) {
 	workflow := qwen(t)
-	if param, _ := findParam(workflow, "sample.steps"); param.When != "model.variant != 'turbo'" || *param.Step != 1 {
+	if param, _ := findParam(workflow, "sample.steps"); param.When != "model.variant != 'turbo' && model.variant != 'turbo-fp8'" || *param.Step != 1 {
 		t.Fatalf("when and step are carried: %+v", param)
 	}
 	nodes, detail := resolve(workflow, inputs(t, `{"prompt.text": "a fox", "seed.seed": null, "model.variant": "turbo",
@@ -146,7 +146,7 @@ func TestResolveQwen(t *testing.T) {
 		`{"seed.seed": 1.5}`:              "seed.seed: must be null, -1 or a whole number from 0 to 9007199254740991",
 		`{"seed.seed": "7"}`:              "seed.seed: must be null, -1 or a whole number from 0 to 9007199254740991",
 		`{"seed.seed": 9007199254740992}`: "seed.seed: must be null, -1 or a whole number from 0 to 9007199254740991",
-		`{"model.variant": "large"}`:      "model.variant: must be one of base, turbo",
+		`{"model.variant": "large"}`:      "model.variant: must be one of base, turbo, base-fp8, turbo-fp8",
 		`{"canvas.width": 100}`:           "canvas.width: must be between 256 and 4096",
 		`{"canvas.width": null}`:          "canvas.width: must be a whole number",
 		`{"encode.transparent": 1}`:       "encode.transparent: must be true or false",

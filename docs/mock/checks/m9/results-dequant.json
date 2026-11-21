@@ -1,0 +1,72 @@
+[
+ {
+  "tag": "dequant",
+  "case": "base-768-s42",
+  "variant": "base-fp8",
+  "precision": "fp8",
+  "total_s": 18.8,
+  "s": {
+   "encode": 10.2,
+   "sample": 7.9,
+   "decode": 0.4,
+   "output": 0.2
+  },
+  "peak_gb": {
+   "encode": 10.14,
+   "sample": 17.17,
+   "decode": 21.64,
+   "output": 21.64
+  },
+  "torch_peak_alloc_gb": 19.73,
+  "steps": 40,
+  "step_s": 0.155,
+  "psnr_vs_png": 30.19,
+  "psnr_vs_cuda.png": 30.15
+ },
+ {
+  "tag": "dequant",
+  "case": "turbo-768-s42",
+  "variant": "turbo-fp8",
+  "precision": "fp8",
+  "total_s": 3.2,
+  "s": {
+   "sample": 2.9,
+   "decode": 0.1,
+   "output": 0.2
+  },
+  "peak_gb": {
+   "sample": 24.5,
+   "decode": 28.41,
+   "output": 28.41
+  },
+  "torch_peak_alloc_gb": 26.37,
+  "steps": 8,
+  "step_s": 0.155,
+  "psnr_vs_png": 26.12,
+  "psnr_vs_cuda.png": 26.22
+ },
+ {
+  "tag": "dequant",
+  "case": "turbo-1024-s7",
+  "variant": "turbo-fp8",
+  "precision": "fp8",
+  "total_s": 2.7,
+  "s": {
+   "encode": 0.1,
+   "sample": 2.1,
+   "decode": 0.2,
+   "output": 0.3
+  },
+  "peak_gb": {
+   "encode": 30.74,
+   "sample": 30.74,
+   "decode": 32.43,
+   "output": 32.43
+  },
+  "torch_peak_alloc_gb": 29.24,
+  "steps": 8,
+  "step_s": 0.266,
+  "psnr_vs_png": 24.92,
+  "psnr_vs_cuda.png": 24.91
+ }
+]

@@ -8,6 +8,7 @@ import pytest
 from conftest import FakeQwen
 
 torch = pytest.importorskip("torch")
+import torch.nn.functional as F
 from safetensors.torch import save_file
 from torch import nn
 
@@ -313,3 +314,89 @@ def test_int8_kernel_is_used_only_where_torch_has_it():
     assert lt._int8_kernel("cuda") == torch._C._dispatch_has_kernel_for_dispatch_key(
         "aten::_weight_int8pack_mm", "CUDA"
     )
+
+
+# --- API 1.33: community FP8 and int8 ConvRot weights
+
+
+def e4m3(w: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """Per-row FP8 as the community files store it: qweight e4m3 [out, in], scale fp32 [out, 1]."""
+    scale = w.abs().amax(1, keepdim=True).float() / lt.E4M3_MAX
+    return (w.float() / scale).to(torch.float8_e4m3fn), scale
+
+
+def test_fp8_linear_dequantizes_to_its_bf16_reference():
+    torch.manual_seed(0)
+    linear = nn.Linear(64, 32, bias=True)
+    m = lt.Fp8Linear(linear)
+    m.qweight, m.scale = e4m3(linear.weight.data)
+    x = torch.randn(5, 64, dtype=torch.bfloat16)
+    ref = F.linear(
+        x, (m.qweight.float() * m.scale).to(torch.bfloat16), linear.bias.to(torch.bfloat16)
+    )
+    got = m(x)
+    assert got.dtype == torch.bfloat16 and ((got - ref).abs().max() / ref.abs().max()) < 0.01
+    exact = linear(x.float())  # e4m3 keeps 3 mantissa bits: a few percent from the float weights
+    assert ((got.float() - exact).abs().max() / exact.abs().max()) < 0.08
+
+
+def test_load_makes_fp8_linears_from_the_headers_and_keeps_them_as_stored(tmp_path):
+    torch.manual_seed(0)
+    ref = Tiny()
+    q, s = e4m3(ref.blocks[0].weight.data)
+    path = tmp_path / "fp8.safetensors"
+    save_file({"blocks.0.weight": q, "blocks.0.scale": s, "blocks.0.bias": ref.blocks[0].bias.data,
+               "head.weight": e4m3(ref.head.weight.data)[0], "head.bias": ref.head.bias.data}, str(path))  # fmt: skip
+    m = lt.load(meta_tiny(), [path], dev="cpu", dtype=torch.bfloat16, quantize=lambda n: True)
+    b, h = m.blocks[0], m.head
+    assert isinstance(b, lt.Fp8Linear) and isinstance(
+        h, lt.Fp8Linear
+    )  # header-driven, never Int8Linear
+    assert (
+        b.qweight.dtype == torch.float8_e4m3fn
+        and b.scale.dtype == torch.float32
+        and torch.equal(b.scale, s)
+    )
+    assert (
+        torch.equal(h.scale, torch.ones(4, 1)) and b.bias.dtype == torch.bfloat16
+    )  # a plain cast: ones
+    assert "blocks.0" in lt.linears(m)
+    with pytest.raises(lt.RunError, match="LoRA bake is not available on fp8"):
+        lt.load(meta_tiny(), [path], dev="cpu", dtype=torch.bfloat16, bake={"blocks.0": []})
+
+
+def test_fp8_weights_count_one_byte_and_a_scale_per_row(tmp_path):
+    q, s = e4m3(torch.randn(64, 32))
+    save_file({"l.weight": q, "l.scale": s, "n.weight": torch.ones(64, dtype=torch.bfloat16)}, str(tmp_path / "f.safetensors"))  # fmt: skip
+    p = pack.Pack(
+        "t",
+        tmp_path,
+        {"components": {"c": {"files": "*.safetensors", "dtype": "bf16"}}},
+        "torch",
+        None,
+    )
+    gb, _ = pack.size_gb(p, ("t", "v", "c", "fp8"), (tmp_path / "f.safetensors",))
+    assert (
+        round(gb * 2**30) == 64 * 32 + 64 * 4 + 64 * 2 + 64 * 2
+    )  # weight + its row scale; the scale key; the norm
+    p.module = type("M", (), {"DENSE": ("l.",)})  # the pack keeps l dense: its F8 weight loads bf16
+    pack._sizes.clear()
+    gb, _ = pack.size_gb(p, ("t", "v", "c", "fp8"), (tmp_path / "f.safetensors",))
+    assert round(gb * 2**30) == 64 * 32 * 2 + 64 * 2 + 64 * 2
+
+
+def test_convrot_rotating_w_offline_and_x_at_run_time_gives_x_wt():
+    torch.manual_seed(0)
+    h = lt.hadamard(256, "cpu", torch.float64)
+    assert torch.allclose(h @ h, torch.eye(256, dtype=torch.float64)) and torch.equal(h, h.T)
+    w, x = torch.randn(48, 512, dtype=torch.float64), torch.randn(3, 512, dtype=torch.float64)
+    w_rot = (w.view(48, 2, 256) @ h).view(48, 512)  # what the community file stores (before int8)
+    assert torch.allclose((x.view(3, 2, 256) @ h).view(3, 512) @ w_rot.T, x @ w.T)
+    linear = nn.Linear(512, 48, bias=False)
+    m = lt.Int8Linear(linear, rot_group=256)
+    m.quantize(w_rot.float())
+    xb = x.to(torch.bfloat16)
+    ref = xb.double() @ w.T
+    assert ((m(xb).double() - ref).abs().max() / ref.abs().max()) < 0.03
+    with pytest.raises(ValueError, match="not a multiple of 256"):
+        lt.Int8Linear(nn.Linear(100, 4), rot_group=256)

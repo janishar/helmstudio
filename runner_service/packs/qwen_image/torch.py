@@ -14,6 +14,11 @@ write or decide node asks it after a still without loading anything (docs/refere
 core.ask.SEED, the stock chat template (no thinking in this instruct model); no constrained decoding in this env:
 the schema is in the prompt and core.ask checks the answer (one more try).
 
+FP8 (API 1.33, the variants base-fp8 / turbo-fp8, NVIDIA only): unsloth's torchao files keep diffusers' names but
+store a Linear as `X._weight_qdata` (e4m3) + `X._weight_scale` (fp32 per row): `rename` maps them to the core
+Fp8Linear's `X.weight` / `X.scale`. The text encoder is a plain FP8 cast (no scales: ones; its FP8 biases are cast
+to bf16 by the loader). `tensor_hook` refuses a file of another unsloth format.
+
 Not ported: the prompt enhancer, CFG."""
 
 import hashlib
@@ -61,6 +66,37 @@ AREA = (
 SCALE = 16  # the VAE compresses 16x; sizes are floored to multiples of 32
 # tiled: auto tiles above this many MP (the studio tiled only when asked; the goldens are <= 1 MP)
 AUTO_TILE_MP = 2.5
+
+
+# the unsloth files' __metadata__ unsloth_format each FP8 component is read as (a later format may lay keys out
+# otherwise: refused, not guessed)
+FP8_FORMATS = {
+    "transformer": "unsloth_prequant_transformer_state_dict_v1",
+    "text_encoder": "unsloth_prequant_text_encoder_state_dict_v1",
+}
+
+
+def rename(component: str, key: str) -> str:
+    """torchao's FP8 Linear keys → the core Fp8Linear's; every other key as is."""
+    for suffix, attr in (("._weight_qdata", ".weight"), ("._weight_scale", ".scale")):
+        if key.endswith(suffix):
+            return key[: -len(suffix)] + attr
+    return key
+
+
+def tensor_hook(component: str, model):
+    """No tensor changes: checks, before the first tensor, that an FP8 component's files are of the format `rename`
+    reads."""
+    if model.precision_of(component) != "fp8":
+        return
+    from safetensors import safe_open
+
+    for path in model.files(component):
+        with safe_open(path, "pt") as f:
+            got = (f.metadata() or {}).get("unsloth_format")
+        if got != FP8_FORMATS[component]:
+            raise RunError(f"{path.name}: unsloth_format {got!r}, not {FP8_FORMATS[component]}: "
+                           "not a file this pack reads")  # fmt: skip
 
 
 @dataclass

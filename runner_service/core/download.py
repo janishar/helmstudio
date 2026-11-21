@@ -134,9 +134,12 @@ def matching(paths, patterns: list[str]) -> list[str]:
     return sorted(p for p in paths if any(fnmatch.fnmatchcase(p, g) for g in patterns))
 
 
-def component_patterns(pack, component: str) -> list[str]:
-    """A component's files with their configs: every file under its globs' folders."""
-    return [g.rsplit("/", 1)[0] + "/*" if "/" in g else g for g in models.globs(pack, component)]
+def component_patterns(pack, component: str, variant: str | None = None) -> list[str]:
+    """A component's files with their configs: every file under its globs' (the variant's) folders."""
+    return [
+        g.rsplit("/", 1)[0] + "/*" if "/" in g else g
+        for g in models.globs(pack, component, variant)
+    ]
 
 
 def file_sha(root: Path, rel: str, check=lambda: None) -> str:
@@ -147,38 +150,49 @@ def file_sha(root: Path, rel: str, check=lambda: None) -> str:
 
 
 def plan(pack, vid: str, api, progress: Progress) -> tuple[list[Item], list[str], list[str]]:
-    """(the files to have on disk, shared components reused, shared components fetched separately)."""
+    """(the files to have on disk, shared components reused, shared components fetched separately). The variant's
+    `source`, then each of its `sources` (API 1.33: weights from a community repo beside the official configs), all
+    into its folder."""
     spec = pack.spec
-    v, first = spec["variants"][vid], next(iter(spec["variants"]))
+    v = spec["variants"][vid]
+    first = packs.share_owner(pack, vid)  # the lender of its shares
     src = v["source"]
     commit, tree = listing(api, src["repo"], src["revision"])
     own = models.folder(pack, vid)
     items = [
         Item(src["repo"], commit, p, *tree[p], own) for p in matching(tree, src["allow_patterns"])
     ]
-    reused, separate = [], []
+    for more in v.get("sources", []):
+        try:
+            mcommit, mtree = listing(api, more["repo"], more["revision"])
+        except Exception as e:  # noqa: BLE001 (named by its own repo)
+            raise classify(e, more["repo"], more["revision"], api.token or None) from None
+        items += [Item(more["repo"], mcommit, p, *mtree[p], own)
+                  for p in matching(mtree, more["allow_patterns"])]  # fmt: skip
+    reused, separate, lacking = [], [], []
+    owner = models.folder(pack, first)
+    have = {r.as_posix() for r in models.own_files(owner)} if first != vid else set()
     for c in v.get("shares", []):
-        pats = component_patterns(pack, c)
-        owner = models.folder(pack, first)
-        have = {r.as_posix() for r in models.own_files(owner)} if first != vid else set()
-        theirs = {p: tree[p] for p in matching(tree, pats)}
+        theirs = {p: tree[p] for p in matching(tree, component_patterns(pack, c, first))}
         lfs = {p: sha for p, (_, sha) in theirs.items() if sha}
         if packs.owns_copy(pack, vid, c) or (lfs and set(lfs) <= have and any(
                 file_sha(owner, p, progress.check) != sha for p, sha in lfs.items())):  # fmt: skip
             separate.append(c)  # the owner's copy differs: this variant's own, in its folder
             items += [Item(src["repo"], commit, p, *theirs[p], own) for p in sorted(theirs)]
-        elif matching(have, models.globs(pack, c)):
+        elif matching(have, models.globs(pack, c, first)):
             reused.append(c)
-        else:  # the owner lacks it: from the owner's source into the owner's folder
-            osrc = spec["variants"][first].get("source")
-            if osrc is None:
-                raise JobError(
-                    "not_downloadable", f"{spec['title']} {first} has no download source"
-                )
+        else:
+            lacking.append(c)
+    # the owner lacks them: what its sources fetch of them, with its configs, into its folder
+    if lacking:
+        lv = spec["variants"][first]
+        if "source" not in lv:
+            raise JobError("not_downloadable", f"{spec['title']} {first} has no download source")
+        for osrc in [lv["source"], *lv.get("sources", [])]:
             ocommit, otree = listing(api, osrc["repo"], osrc["revision"])
-            items += [
-                Item(osrc["repo"], ocommit, p, *otree[p], owner) for p in matching(otree, pats)
-            ]
+            items += [Item(osrc["repo"], ocommit, p, *otree[p], owner)
+                      for p in matching(otree, osrc["allow_patterns"])
+                      if models.component_of(pack, p, first) in (None, *lacking)]  # fmt: skip
     seen = set()
     for it in items:
         if not models.is_safe(it.path):

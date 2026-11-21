@@ -506,6 +506,15 @@ func (m Model) HasPrecision(variant, precision string) bool {
 	})
 }
 
+// RunsAt is the precision variant loads at when the model node asks for precision: a stored-quantized variant (API
+// 1.33: one precision, the community base-fp8's [fp8]) loads at its own whatever the node asks, as the runner does.
+func (m Model) RunsAt(variant, precision string) string {
+	if i := slices.IndexFunc(m.Variants, func(v Variant) bool { return v.ID == variant }); i >= 0 && len(m.Variants[i].Precisions) == 1 {
+		return m.Variants[i].Precisions[0]
+	}
+	return precision
+}
+
 // Plan returns the memory plan of variant at precision for a run of workflow, if the runner publishes one: the item
 // naming that workflow, else the one naming none.
 func (m Model) Plan(variant, precision, workflow string) (MemoryPlan, bool) {

@@ -1036,7 +1036,9 @@
               "default": "base",
               "enum": [
                 "base",
-                "turbo"
+                "turbo",
+                "base-fp8",
+                "turbo-fp8"
               ],
               "help": "Turbo: 8 fixed steps, much faster."
             },
@@ -1047,7 +1049,8 @@
               "default": "int8",
               "enum": [
                 "bf16",
-                "int8"
+                "int8",
+                "fp8"
               ],
               "help": "int8 quantizes the transformer and text encoder at load: about half the memory."
             }
@@ -1179,7 +1182,7 @@
               "min": 1,
               "max": 200,
               "step": 1,
-              "when": "model.variant != 'turbo'",
+              "when": "model.variant != 'turbo' && model.variant != 'turbo-fp8'",
               "help": "Turbo uses its own 8-step schedule and ignores this."
             }
           ],
@@ -2544,7 +2547,8 @@
               "label": "Variant",
               "default": "base",
               "enum": [
-                "base"
+                "base",
+                "base-fp8"
               ]
             },
             {
@@ -2553,9 +2557,10 @@
               "label": "Precision",
               "default": "int8",
               "enum": [
-                "int8"
+                "int8",
+                "fp8"
               ],
-              "help": "Stored bf16, always quantized to int8 at load (bf16 is 66 GB per model); its float32 tensors and the VAE stay float32."
+              "help": "Base: stored bf16, always quantized to int8 at load (bf16 is 66 GB per model); its float32 tensors and the VAE stay float32. Base FP8 (NVIDIA): fp8, as stored."
             }
           ],
           "inputs": [],

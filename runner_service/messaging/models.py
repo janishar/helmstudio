@@ -170,7 +170,8 @@ class ModelJobs:
             want = hashlib.sha256(models.licence_text(p, src["licence"]).encode()).hexdigest()
             if data.get("licence") != {"id": src["licence"], "sha256": want}:
                 raise JobError("licence", f"licence {src['licence']} changed since it was accepted")
-        token = download.read_token(self.token_file) if src["gated"] else None
+        gated = src["gated"] or any(s["gated"] for s in p.spec["variants"][vid].get("sources", []))
+        token = download.read_token(self.token_file) if gated else None
         log.info("model job %s: %s %s from %s, token: %s", job_id, p.spec["id"], vid, src["repo"],
                  "present" if token else "absent")  # fmt: skip
         progress = download.Progress()
@@ -212,10 +213,10 @@ class ModelJobs:
             raise JobError("not_found", f"{p.spec['title']} has no variant {v}")
         deleted = {v} if v else set(variants)
         kept, only = models.kept_components(p, deleted)
-        first = next(iter(variants))
-        # residency names a shared component by its owner variant: one kept on disk stays loadable (studio's rule)
+        # residency names a shared component by its owner variant: one kept on disk stays loadable (studio's rule;
+        # kept is not empty only when the one deleted variant is a lender)
         if loaded := self._loaded(lambda k: k[0] == p.spec["id"] and k[1] in deleted
-                                  and not (k[1] == first and k[2] in kept)):  # fmt: skip
+                                  and k[2] not in kept):  # fmt: skip
             raise JobError("in_use", f"{p.spec['title']} {loaded[0][1]} {loaded[0][2]} is loaded on "
                                      f"{HOST}.{ENV}: unload it first")  # fmt: skip
         res = self.consumer.residency
@@ -226,9 +227,10 @@ class ModelJobs:
             files = freed = 0
             for vid in variants:
                 if vid in deleted:
-                    # a variant in the first's folder deletes only its own files (models.own_globs)
+                    # a variant in the first's folder deletes only its own files (models.own_globs); a lender
+                    # (a folder of its own) keeps what others still load (`only`)
                     own = models.own_globs(p, vid)
-                    f, b = models.delete_variant(p, vid, only if vid == first else own)
+                    f, b = models.delete_variant(p, vid, only if own is None else own)
                     files, freed = files + f, freed + b
             return files, freed
 

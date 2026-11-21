@@ -259,3 +259,8 @@ def test_a_voices_clip_is_read_like_a_media_input():
     assert images.media(spec, {"voice": {"source": "preset"}}) == []
     with pytest.raises(RunError, match="is not the run owner's"):
         asyncio.run(images.load(spec, {"voice": v}, "someone-else", fetch))
+
+
+def test_argv_asks_for_the_gpu():
+    """Off Apple the server defaults to the CPU (zonos3.h ZONOS3_DEFAULT_USE_GPU): --gpu makes it CUDA there."""
+    assert "--gpu" in native.argv(Path("/w/gguf"), Path("/b/zonos3-server"))

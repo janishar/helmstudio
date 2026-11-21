@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "host": "gcp",
+  "env": "torch",
+  "published_at": "2026-11-21T10:00:00Z",
+  "published_by": "runner torch 0.2.0",
+  "models": [
+    {
+      "id": "qwen-image-2.1",
+      "family": "qwen-image",
+      "title": "Qwen Image 2.1",
+      "variants": [
+        {
+          "id": "base-fp8",
+          "presence": "missing",
+          "precisions": [
+            "fp8"
+          ],
+          "title": "Base FP8 (NVIDIA)",
+          "dir": "Qwen-Image-2.1-FP8",
+          "source": {
+            "repo": "Qwen/Qwen-Image-2.1",
+            "revision": "790c92633540aa0cb11d9abf19eb46d861714758",
+            "allow_patterns": [
+              "model_index.json",
+              "*/config.json",
+              "processor/*",
+              "scheduler/*"
+            ],
+            "licence": "apache-2.0",
+            "must_accept": false,
+            "gated": false,
+            "bytes": 17192916808
+          },
+          "sources": [
+            {
+              "repo": "unsloth/Qwen-Image-2.1-FP8",
+              "revision": "bb21a8ba7f0371c19ad1f72c82a5e8fc10f39939",
+              "gated": false,
+              "bytes": 17192916808
+            }
+          ],
+          "devices": [
+            "cuda"
+          ],
+          "components": [
+            {
+              "component": "transformer",
+              "from_variant": "base-fp8",
+              "precisions": [
+                "fp8"
+              ]
+            },
+            {
+              "component": "text_encoder",
+              "from_variant": "base-fp8",
+              "precisions": [
+                "fp8"
+              ]
+            },
+            {
+              "component": "vae",
+              "from_variant": "base-fp8",
+              "precisions": [
+                "bf16"
+              ]
+            }
+          ]
+        }
+      ],
+      "media": [
+        "image"
+      ],
+      "runtimes": [
+        {
+          "runtime": "torch",
+          "env": "torch",
+          "devices": [
+            "mps",
+            "cuda"
+          ]
+        }
+      ]
+    }
+  ],
+  "licences": [
+    {
+      "id": "apache-2.0",
+      "title": "Apache License 2.0",
+      "text": "Apache License, Version 2.0"
+    }
+  ]
+}

@@ -33,6 +33,41 @@ variants:
     source: {repo: Qwen/Qwen-Image-2.1-Turbo, revision: fc13ba1986fcb905854dc8de2f52eee395f49b5b,
              allow_patterns: [model_index.json, "transformer/*", "processor/*", "scheduler/*"],
              licence: apache-2.0, must_accept: false, gated: false, bytes: 14241746072}
+  # The alternate path for NVIDIA hosts (docs/plan/17-nvidia-quantized.md): unsloth's pre-quantized FP8 weights (torchao
+  # per-row FP8: X._weight_qdata + X._weight_scale; the text encoder a plain FP8 cast; the VAE bf16), configs from
+  # the official repos. Byte counts from the HF API at these revisions (source: all of the variant's files).
+  base-fp8:
+    dir: Qwen-Image-2.1-FP8
+    title: Base FP8 (NVIDIA)
+    precision: [fp8]
+    component_precision: {transformer: [fp8], text_encoder: [fp8]}
+    devices: [cuda]
+    files: {transformer: Qwen-Image-2.1-FP8.safetensors, text_encoder: Qwen-Image-2.1-text_encoder-FP8.safetensors,
+            vae: vae/qwen_image_2.1_vae_bf16.safetensors}
+    source: {repo: Qwen/Qwen-Image-2.1, revision: 790c92633540aa0cb11d9abf19eb46d861714758,
+             allow_patterns: [model_index.json, "*/config.json", text_encoder/generation_config.json, "processor/*",
+                              "scheduler/*"],
+             licence: apache-2.0, must_accept: false, gated: false, bytes: 17208806915}
+    sources:
+      - {repo: unsloth/Qwen-Image-2.1-FP8, revision: bb21a8ba7f0371c19ad1f72c82a5e8fc10f39939,
+         allow_patterns: [Qwen-Image-2.1-FP8.safetensors, Qwen-Image-2.1-text_encoder-FP8.safetensors,
+                          vae/qwen_image_2.1_vae_bf16.safetensors],
+         gated: false, bytes: 17192916808}
+  turbo-fp8:
+    dir: Qwen-Image-2.1-Turbo-FP8
+    title: Turbo FP8 (NVIDIA)
+    precision: [fp8]
+    component_precision: {transformer: [fp8], text_encoder: [fp8]}
+    devices: [cuda]
+    shares: [text_encoder, vae]   # unsloth's Turbo card: base's FP8 text encoder and bf16 VAE (Turbo's VAE, same SHA)
+    shares_from: base-fp8
+    files: {transformer: Qwen-Image-2.1-Turbo-FP8.safetensors}
+    source: {repo: Qwen/Qwen-Image-2.1-Turbo, revision: fc13ba1986fcb905854dc8de2f52eee395f49b5b,
+             allow_patterns: [model_index.json, transformer/config.json, "processor/*", "scheduler/*"],
+             licence: apache-2.0, must_accept: false, gated: false, bytes: 7134331373}
+    sources:
+      - {repo: unsloth/Qwen-Image-2.1-Turbo-FP8, revision: 3162aea250af0c50101b75f454aa54ed49832292,
+         allow_patterns: [Qwen-Image-2.1-Turbo-FP8.safetensors], gated: false, bytes: 7122899992}
 components:
   transformer:
     files: "transformer/*.safetensors"
@@ -78,7 +113,7 @@ stages:
     outputs: {latent: Latent}
     params:
       steps: {type: int, label: Steps, default: 40, min: 1, max: 200, step: 1,
-              when: "model.variant != 'turbo'",
+              when: "model.variant != 'turbo' && model.variant != 'turbo-fp8'",
               help: Turbo uses its own 8-step schedule and ignores this.}
     # each reference adds ~4k latent tokens (1 MP / 16²) to the sequence: measured at 1024², 1.0 GB text only,
     # 3.0 with one reference, 5.0 with two (the edit goldens, tests/test_qwen_golden.py)

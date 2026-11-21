@@ -561,3 +561,110 @@ async def test_an_off_contract_job_is_dead_lettered(pack, tmp_path):
     msg = FakeMsg(b"{}", js, "cmd.model.t.fake")
     await jobs.handle(msg)
     assert js.sent[0][0] == "dlq.cmd.model.t.fake" and msg.log[0][0] == "term"
+
+
+# --- API 1.33: a community pre-quantized variant (configs from the official repo, weights from the community one)
+
+
+def fp8_variant(pack, **more) -> dict:
+    v = {"dir": "Tiny-FP8", "title": "FP8", "precision": ["fp8"], "component_precision": {"transformer": ["fp8"]},
+         "source": source("t/tiny", ["model_index.json", "vae/config.json"]),
+         "sources": [{"repo": "t/tiny-fp8", "revision": "main", "allow_patterns": ["transformer/*", "vae/*.safetensors"]}]} | more  # fmt: skip
+    pack.spec["variants"]["fp8"] = v
+    return v
+
+
+def community() -> dict[str, bytes]:
+    return {
+        "transformer/a.safetensors": BLOB[:777],
+        "vae/v.safetensors": BLOB[:999],
+        "README.md": b"x",
+    }
+
+
+def test_a_variant_downloads_from_two_repos_into_one_folder(pack):
+    fp8_variant(pack)
+    with hub_of(t_tiny=Repo(files()), t_tiny_fp8=Repo(community())) as hub:
+        result = run(pack, "fp8", hub=hub)
+    root = config.MODELS / "Tiny-FP8"
+    assert result["files"] == 4 and (root / "transformer/a.safetensors").read_bytes() == BLOB[:777]
+    assert (root / "vae/config.json").read_bytes() == b"{}" and not (
+        root / "transformer/b.safetensors"
+    ).exists()
+    entry = models.entry(pack)
+    fp8 = next(v for v in entry["variants"] if v["id"] == "fp8")
+    assert (
+        fp8["presence"] == "present"
+        and fp8["precisions"] == ["fp8"]
+        and fp8["sources"][0]["repo"] == "t/tiny-fp8"
+    )
+    assert {c["component"]: c["precisions"] for c in fp8["components"]} == {
+        "transformer": ["fp8"],
+        "vae": ["bf16"],
+    }
+    assert entry["variants"][0]["precisions"] == ["bf16"]  # the official variants keep theirs
+    value = {"schema_version": 1, "host": "t", "env": "fake", "published_at": "2026-11-21T10:00:00Z",
+             "published_by": "t", "models": [entry], "licences": models.licences([pack])}  # fmt: skip
+    assert schemas.registry_errors("models", value) == []
+
+
+def test_a_second_source_is_refused_by_its_own_name_and_may_not_repeat_a_path(pack):
+    v = fp8_variant(pack)
+    with hub_of(
+        t_tiny=Repo(files()), t_tiny_fp8=Repo(community() | {"vae/config.json": b"{}"})
+    ) as hub:
+        v["sources"][0]["revision"] = "v9"
+        with pytest.raises(JobError, match="repo t/tiny-fp8 has no revision v9"):
+            run(pack, "fp8", hub=hub)
+        v["sources"][0] |= {
+            "revision": "main",
+            "allow_patterns": ["vae/*"],
+        }  # vae/config.json: in both
+        with pytest.raises(JobError, match="lists vae/config.json twice"):
+            run(pack, "fp8", hub=hub)
+
+
+def test_a_variant_for_other_devices_is_never_published(pack, monkeypatch):
+    fp8_variant(pack, devices=["cuda"])
+    monkeypatch.setattr(models, "device", lambda p: "mps")
+    assert [v["id"] for v in models.entry(pack)["variants"]] == ["base", "turbo"]
+    monkeypatch.setattr(models, "device", lambda p: "cuda")
+    assert models.entry(pack)["variants"][2]["devices"] == ["cuda"]
+
+
+def test_a_variants_own_precision_reaches_the_model_node_and_its_components(pack):
+    fp8_variant(pack)
+    schema = packs.model_schema(pack)["params"][1]
+    assert schema["enum"] == ["bf16", "fp8"]
+    ref = packs.ModelRef(pack, "fp8", "fp8")
+    assert (ref.precision_of("transformer"), ref.precision_of("vae")) == ("fp8", "bf16")
+    assert (
+        packs.ModelRef(pack, "base", "fp8").precision_of("transformer") == "bf16"
+    )  # not offered: its first
+
+
+def test_shares_from_names_the_lender_for_load_download_and_delete(pack):
+    """turbo-fp8's case: a variant that shares from another than the first. A download of it first fetches the
+    lender's shared files and configs (never its own transformer) from the lender's sources; delete of the lender
+    keeps them."""
+    fp8_variant(pack)
+    pack.spec["variants"]["fp8t"] = {
+        "dir": "Tiny-FP8-Turbo", "title": "FP8 Turbo", "precision": ["fp8"], "shares": ["vae"], "shares_from": "fp8",
+        "source": source("t/tiny-turbo", ["model_index.json"]),
+        "sources": [{"repo": "t/tiny-fp8-turbo", "revision": "main", "allow_patterns": ["transformer/*"]}]}  # fmt: skip
+    repos = {"t_tiny": Repo(files()), "t_tiny_turbo": Repo(turbo_files()), "t_tiny_fp8": Repo(community()),
+             "t_tiny_fp8_turbo": Repo({"transformer/a.safetensors": BLOB[:555]})}  # fmt: skip
+    with hub_of(**repos) as hub:
+        run(pack, "fp8t", hub=hub)
+        lender = config.MODELS / "Tiny-FP8"
+        assert sorted(p.as_posix() for p in models.own_files(lender)) == [
+            "model_index.json", "vae/config.json", "vae/v.safetensors"]  # fmt: skip
+        assert packs.ModelRef(pack, "fp8t", "fp8").owner("vae") == "fp8"
+        assert presence(pack)["fp8t"] == "present" and presence(pack)["fp8"] == "partial"
+        run(pack, "fp8", hub=hub)
+        assert run(pack, "fp8t", hub=hub)["reused"] == ["vae"]
+    assert models.kept_components(pack, {"fp8"}) == (["vae"], ["transformer/"])
+    assert models.kept_components(pack, {"base"}) == (
+        [],
+        None,
+    )  # turbo has no files: nothing kept for it

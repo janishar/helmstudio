@@ -3819,10 +3819,10 @@ export interface components {
                 model: string;
                 variant: string;
                 /**
-                 * @description fp32 from 1.20: a component kept at its stored float32 (the MiniMax H3 Image VAE)
+                 * @description fp8 from 1.33 (NVIDIA hosts: a community pre-quantized variant). fp32 from 1.20: a component kept at its stored float32 (the MiniMax H3 Image VAE)
                  * @enum {string}
                  */
-                precision: "bf16" | "fp16" | "int8" | "int4" | "fp32";
+                precision: "bf16" | "fp16" | "int8" | "int4" | "fp8" | "fp32";
                 gb: number;
                 pinned: boolean;
                 /**
@@ -5493,10 +5493,10 @@ export interface components {
             nodes: components["schemas"]["CustomNode"][];
         };
         /**
-         * @description fp32 from 1.20, components only: kept at its stored float32 (the MiniMax H3 Image VAE)
+         * @description fp8 from 1.33: a community pre-quantized variant on NVIDIA hosts (stored float8 e4m3, a scale per row). fp32 from 1.20, components only: kept at its stored float32 (the MiniMax H3 Image VAE)
          * @enum {string}
          */
-        Precision: "bf16" | "fp16" | "int8" | "int4" | "fp32";
+        Precision: "bf16" | "fp16" | "int8" | "int4" | "fp8" | "fp32";
         ModelList: {
             hosts: components["schemas"]["ModelHost"][];
             /** @description every licence a listed variant names, each once (the text shown before a download) */

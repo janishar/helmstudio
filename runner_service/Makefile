@@ -1,4 +1,4 @@
-.PHONY: dev test test-torch lint gen image image-cuda h3 zonos3
+.PHONY: dev test test-torch lint gen image image-cuda h3 zonos3 zonos3-cuda
 # uv 0.13.8 is required (pyproject [tool.uv] required-version); `uvx --from uv==0.13.8 uv` stands in for an older uv
 UV ?= $(shell uv --version 2>/dev/null | grep -q '^uv 0.13.8' && echo uv || echo 'uvx --from uv==0.13.8 uv')
 
@@ -33,12 +33,21 @@ h3:
 
 # the env native's zonos3-server (packs/zonos3): the pinned ZONOS3 ggml server in vendor/zonos3 (VERSION), CMake +
 # Apple clang + cargo (the textnorm library), static, Metal library embedded, offline (no crates.io, no git fetch);
-# about 2 min from clean (cargo's fat LTO is most of it). Out: vendor/zonos3/build/zonos3-server. macOS only.
+# about 2 min from clean (cargo's fat LTO is most of it). Out: vendor/zonos3/build/zonos3-server. macOS (Linux + CUDA: zonos3-cuda).
 ZONOS3_BUILD := vendor/zonos3/build
 zonos3:
 	cmake -S vendor/zonos3/servers/ggml -B $(ZONOS3_BUILD) -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
 		-DBUILD_TESTING=OFF -DGGML_METAL_EMBED_LIBRARY=ON -DGGML_CCACHE=OFF
 	CARGO_NET_OFFLINE=true cmake --build $(ZONOS3_BUILD) -j8 --target zonos3-server
+
+# the same server for Linux + NVIDIA (M9; Dockerfile.cuda's zonos3 stage runs it): nvcc from CUDA 12.8 or later for
+# sm_120 (RTX PRO 6000), ggml-cuda for 120a-real only, no Metal, no OpenMP (as the Mac build); cudart and cuBLAS are
+# linked shared and found in lib/ beside the binary (the Dockerfile copies them there) through the RUNPATH $ORIGIN/lib
+zonos3-cuda:
+	cmake -S vendor/zonos3/servers/ggml -B $(ZONOS3_BUILD) -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
+		-DBUILD_TESTING=OFF -DGGML_CCACHE=OFF -DGGML_OPENMP=OFF -DGGML_CUDA=ON \
+		-DCMAKE_CUDA_ARCHITECTURES=120a-real '-DCMAKE_BUILD_RPATH=$$ORIGIN/lib'
+	CARGO_NET_OFFLINE=true cmake --build $(ZONOS3_BUILD) -j$$(nproc) --target zonos3-server
 
 image:
 	docker build -t helmstudio/runner:dev .

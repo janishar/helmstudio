@@ -13,9 +13,12 @@ variant (its folder's manifest, components, presence), the hash index, the host'
   component another variant still loads.
 - **One folder, two variants** (LTX: the dev transformer beside the distilled files, read in place): a variant with
   `shares` whose `dir` is the first variant's owns only its components' files there (`own_globs`); the first owns
-  the rest."""
+  the rest.
+- **Shares** load from the first variant, or from the variant `shares_from` names (API 1.33: turbo-fp8 from
+  base-fp8): core.pack.share_owner."""
 
 import hashlib
+import importlib
 import json
 import logging
 import os
@@ -236,7 +239,23 @@ def manifest(pack, variant: str) -> tuple[list[dict], list[str]]:
     return files, mismatch
 
 
-def variant_entry(pack, vid: str, offered: set[str]) -> dict:
+def device(pack) -> str:
+    """This runner's device for the pack's runtime, as the registry names devices (MLX's Metal `gpu` is mps)."""
+    d = importlib.import_module(f"core.loaders_{pack.runtime}").device()
+    return "mps" if d == "gpu" else d
+
+
+def runs_here(pack, vid: str) -> bool:
+    """Whether the variant runs on this runner's device (API 1.33 model.yaml `variants.<id>.devices`: a community
+    FP8 variant is [cuda]); one that does not is never published here, so it is never offered or sent here."""
+    want = pack.spec["variants"][vid].get("devices")
+    # a native pack's binary is built per device (h3: Metal only): its runtime's devices
+    if not want and pack.runtime == "native":
+        want = pack.spec["runtimes"][pack.runtime].get("devices")
+    return not want or device(pack) in want
+
+
+def variant_entry(pack, vid: str) -> dict:
     """One variant of the models key (registry.schema.json `models[].variants[]`)."""
     spec, v = pack.spec, pack.spec["variants"][vid]
     ref = packs.ModelRef(pack, vid, "bf16")
@@ -249,12 +268,13 @@ def variant_entry(pack, vid: str, offered: set[str]) -> dict:
     for c, found in sorted(found_by.items(), key=lambda kv: len(kv[1])):
         for f in found:
             counted.setdefault(f, c)
-    for c, cs in spec.get("components", {}).items():
+    for c in spec.get("components", {}):
         owner = ref.owner(c)
         found = found_by[c]
         ok = ok and bool(found)
         unfinished = unfinished or (folder(pack, owner) / MARKER).exists()
-        item = {"component": c, "from_variant": owner, "precisions": cs.get("precision", ["bf16"])}
+        item = {"component": c, "from_variant": owner,
+                "precisions": packs.component_precisions(pack, vid, c)}  # fmt: skip
         if found:
             item["bytes"] = sum(f.stat().st_size for f in found if counted[f] == c)
         if owner == vid and c in v.get("shares", []):
@@ -269,10 +289,11 @@ def variant_entry(pack, vid: str, offered: set[str]) -> dict:
     out = {"id": vid, "presence": presence}
     if files:
         out["bytes"] = sum(f["bytes"] for f in files)
-    out["precisions"] = [p for p in packs.PRECISIONS if p in offered]
+    out["precisions"] = packs.variant_precisions(pack, vid)
     out |= {"title": v.get("title", vid), "dir": v["dir"]}
-    if "source" in v:
-        out["source"] = v["source"]
+    for k in ("source", "sources", "devices"):
+        if k in v:
+            out[k] = v[k]
     if comps:
         out["components"] = comps
     if files:
@@ -291,10 +312,9 @@ def entry(pack) -> dict:
             out["media"] = spec["media"]
         out["runtimes"] = [{"runtime": r, "env": x["env"]} | ({"devices": x["devices"]} if "devices" in x else {})
                            for r, x in spec["runtimes"].items()]  # fmt: skip
-        offered = {
-            p for c in spec.get("components", {}).values() for p in c.get("precision", ["bf16"])
-        }
-        out["variants"] = [variant_entry(pack, vid, offered) for vid in spec["variants"]]
+        out["variants"] = [
+            variant_entry(pack, vid) for vid in spec["variants"] if runs_here(pack, vid)
+        ]
     if block := packs.lora_block(pack):
         out["lora"] = block
     return out
@@ -353,25 +373,32 @@ class InUse(Exception):
 
 
 def kept_components(pack, deleted: set[str]) -> tuple[list[str], list[str] | None]:
-    """(kept components, what to delete of the first variant's folder: None = all, else the folders or globs of
-    its components not kept) when deleting the variants `deleted`. A component is kept when another variant not
-    deleted shares it and still has files of its own; then only the other components' files go (the folder's
-    configs, processor and scheduler stay: the sharing variant reads them)."""
-    first = next(iter(pack.spec["variants"]))
+    """(kept components, what to delete of the lender's folder: None = all, else the folders or globs of its
+    components not kept) when deleting the variants `deleted` (one, or all). A component is kept when another
+    variant not deleted shares it from a deleted one (packs.share_owner: its lender) and still has files of its
+    own; then only the lender's other components' files go (the folder's configs, processor and scheduler stay:
+    the sharing variant reads them)."""
     kept: list[str] = []
-    if first in deleted:
-        for vid, v in pack.spec["variants"].items():
-            if vid not in deleted and variant_files(pack, vid):
-                kept += [c for c in v.get("shares", [])
-                         if c not in kept and not packs.owns_copy(pack, vid, c)]  # fmt: skip
+    owner = None
+    for vid, v in pack.spec["variants"].items():
+        lender = packs.share_owner(pack, vid)
+        if (
+            vid not in deleted
+            and lender in deleted
+            and v.get("shares")
+            and variant_files(pack, vid)
+        ):
+            owner = lender
+            kept += [c for c in v["shares"]
+                     if c not in kept and not packs.owns_copy(pack, vid, c)]  # fmt: skip
     if not kept:
         return [], None
     # a folder shared with a kept variant: only these files (its own ones stay); else their folders
     same = any(
-        folder(pack, v) == folder(pack, first) for v in pack.spec["variants"] if v not in deleted
+        folder(pack, v) == folder(pack, owner) for v in pack.spec["variants"] if v not in deleted
     )
     only = [g if same else (g.rsplit("/", 1)[0] + "/" if "/" in g else g)
-            for c in pack.spec["components"] if c not in kept for g in globs(pack, c)]  # fmt: skip
+            for c in pack.spec["components"] if c not in kept for g in globs(pack, c, owner)]  # fmt: skip
     return kept, only
 
 

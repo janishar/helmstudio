@@ -81,10 +81,11 @@ def delivery(params: dict) -> dict:
 
 def argv(gguf: Path, binary: Path = BINARY) -> list[str]:
     """The server's command line: only the files this pack downloads (never zac.gguf, the raw-reference encoders or
-    the default voices folder), two slots (speaker CFG runs a twin in the second), a free port (read back from its ready line)."""
+    the default voices folder), two slots (speaker CFG runs a twin in the second), a free port (read back from its ready line),
+    and --gpu (the server's default is the CPU off Apple; Metal on a Mac, CUDA device 0 on a GPU host)."""
     return [str(binary), str(gguf / "backbone-ptq.gguf"), "--zac", str(gguf / "zac-keep2.gguf"),
             "--spk-encoder", str(gguf / "spk-encoder.gguf"), "--steer", str(gguf / "steer.gguf"),
-            "--tts-default-voices-dir", "", "--batch", "2", "--host", "127.0.0.1", "--port", "0"]  # fmt: skip
+            "--tts-default-voices-dir", "", "--batch", "2", "--gpu", "--host", "127.0.0.1", "--port", "0"]  # fmt: skip
 
 
 def body(text: str, seed: int, params: dict, voice: dict) -> dict:

@@ -8,7 +8,7 @@ family: zonos3
 title: ZONOS3
 media: [audio]
 runtimes:
-  native: {env: native, devices: [mps]}   # Metal only (the static build embeds its Metal library)
+  native: {env: native, devices: [mps, cuda]}   # Metal (`make zonos3`) or CUDA (`make zonos3-cuda`, Dockerfile.cuda)
 licences:
   apache-2.0: {title: Apache License 2.0, url: https://www.apache.org/licenses/LICENSE-2.0}
 model:

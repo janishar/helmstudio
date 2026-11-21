@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.32.0
+  version: 1.33.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -3905,7 +3905,7 @@ components:
               component: {type: string}
               model: {type: string}
               variant: {type: string}
-              precision: {type: string, enum: [bf16, fp16, int8, int4, fp32], description: 'fp32 from 1.20: a component kept at its stored float32 (the MiniMax H3 Image VAE)'}
+              precision: {type: string, enum: [bf16, fp16, int8, int4, fp8, fp32], description: 'fp8 from 1.33 (NVIDIA hosts: a community pre-quantized variant). fp32 from 1.20: a component kept at its stored float32 (the MiniMax H3 Image VAE)'}
               gb: {type: number}
               pinned: {type: boolean}
               last_used: {type: string, format: date-time, description: 'from 1.13: when the runner last used it; absent from older runners'}
@@ -5345,7 +5345,7 @@ components:
         nodes: {type: array, maxItems: 64, items: {$ref: '#/components/schemas/CustomNode'}}
 
     # ---------------------------------------------------------- studio: models and model jobs (1.16)
-    Precision: {type: string, enum: [bf16, fp16, int8, int4, fp32], description: 'fp32 from 1.20, components only: kept at its stored float32 (the MiniMax H3 Image VAE)'}
+    Precision: {type: string, enum: [bf16, fp16, int8, int4, fp8, fp32], description: 'fp8 from 1.33: a community pre-quantized variant on NVIDIA hosts (stored float8 e4m3, a scale per row). fp32 from 1.20, components only: kept at its stored float32 (the MiniMax H3 Image VAE)'}
     ModelList:
       type: object
       required: [hosts, licences, models]

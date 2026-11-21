@@ -20,7 +20,7 @@ var (
 	ModelID       = regexp.MustCompile(`^[a-z0-9][a-z0-9_.-]{0,63}$`)
 	ComponentName = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 	pinLoraID     = regexp.MustCompile(`^([0-9a-f]{64}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$`)
-	precisions    = map[string]bool{"bf16": true, "fp16": true, "int8": true, "int4": true, "fp32": true}
+	precisions    = map[string]bool{"bf16": true, "fp16": true, "int8": true, "int4": true, "fp8": true, "fp32": true}
 	afterRuns     = map[string]bool{"unload": true, "keep_warm": true, "keep_pinned": true}
 )
 
@@ -194,7 +194,7 @@ func (p PinRef) Validate() string {
 	case !VariantID.MatchString(p.Variant):
 		return "variant must be a variant id"
 	case !precisions[p.Precision]:
-		return "precision must be bf16, fp16, int8, int4 or fp32"
+		return "precision must be bf16, fp16, int8, int4, fp8 or fp32"
 	case len(p.Loras) > 32:
 		return "loras: at most 32"
 	}

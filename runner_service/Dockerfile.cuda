@@ -4,13 +4,32 @@
 # CUDA base image would carry a second copy; only the driver comes from the host, mounted by the NVIDIA runtime.
 # Weights are never in the image: the host's models folder is bind-mounted at HELMSTUDIO_MODELS (read-only unless
 # this host takes model jobs); RUNNER_CACHE (the LoRA cache, model hashes, download temp files) and TMPDIR are
-# writable volumes. Health check: `python health.py` (exit 0 while NATS is connected).
+# writable volumes. The same image runs the native runner (RUNNER_ENV=native: ZONOS3 by its CUDA zonos3-server, built
+# in the zonos3 stage; Dockerfile.cuda.dockerignore lets its sources in). Health check: `python health.py` (exit 0
+# while NATS is connected).
 FROM python:3.14.10-slim-trixie AS build
 RUN pip install --no-cache-dir uv==0.13.8
 WORKDIR /app
 ENV UV_PROJECT_ENVIRONMENT=/app/.venv UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
 COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv uv sync --frozen --no-dev --no-install-project --extra torch
+
+# The native runner's zonos3-server (packs/zonos3, `make zonos3-cuda`): built with nvcc 13.2 (sm_120 needs 12.8 or
+# later; 13.2 is the CUDA of torch's wheels) on Ubuntu 24.04, whose glibc and libstdc++ are older than trixie's, so the
+# binary runs in the runtime stage; cargo 1.88 (textnorm's rust-version) from the official image. Only cudart and
+# cuBLAS go into the runtime stage, beside the binary (its RUNPATH $ORIGIN/lib); libcuda comes from the driver.
+FROM rust:1.88.0-slim-trixie AS rust
+FROM nvidia/cuda:13.2.1-devel-ubuntu24.04 AS zonos3
+RUN apt-get update && apt-get install -y --no-install-recommends cmake make g++ git && rm -rf /var/lib/apt/lists/*
+COPY --from=rust /usr/local/cargo /usr/local/cargo
+COPY --from=rust /usr/local/rustup /usr/local/rustup
+ENV CARGO_HOME=/usr/local/cargo RUSTUP_HOME=/usr/local/rustup PATH=/usr/local/cargo/bin:$PATH
+WORKDIR /src
+COPY Makefile ./
+COPY vendor/zonos3 vendor/zonos3
+RUN make zonos3-cuda && mkdir vendor/zonos3/build/lib \
+    && cp -P /usr/local/cuda/lib64/libcudart.so.13* /usr/local/cuda/lib64/libcublas.so.13* \
+        /usr/local/cuda/lib64/libcublasLt.so.13* vendor/zonos3/build/lib/
 
 FROM python:3.14.10-slim-trixie AS runtime
 WORKDIR /app
@@ -25,6 +44,8 @@ RUN useradd --system --create-home --uid 10001 runner \
 RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
 COPY --from=build /app/.venv /app/.venv
 COPY . .
+COPY --from=zonos3 /src/vendor/zonos3/build/zonos3-server /app/vendor/zonos3/build/
+COPY --from=zonos3 /src/vendor/zonos3/build/lib /app/vendor/zonos3/build/lib
 USER runner
 VOLUME ["/cache"]
 EXPOSE 8081

@@ -120,7 +120,7 @@ def test_pin_precision_fp32(admin, tiny):
     assert plain(s["pins"]) == [PIN | {"precision": "fp32"}], s
     r = admin.put(f"{ADMIN}/hosts/{HOST}/pins", json={"pins": [PIN | {"precision": "fp64"}]})
     assert r.status_code == 422 and r.json()["detail"] == (
-        "pins[0]: precision must be bf16, fp16, int8, int4 or fp32"
+        "pins[0]: precision must be bf16, fp16, int8, int4, fp8 or fp32"
     ), r.text
     put_pins(admin, [])
 

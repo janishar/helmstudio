@@ -65,6 +65,9 @@ model:                            # the generated <family>/model node (see below
 variants:                         # first one = the default variant and the owner of shared components
   base: {dir: Qwen-Image-2.1}     # dir: a folder under HELMSTUDIO_MODELS (default ~/GenAI/models)
   turbo: {dir: Qwen-Image-2.1-Turbo, shares: [text_encoder, vae]}   # these load from the first variant's dir
+  base-fp8: {dir: Qwen-Image-2.1-FP8, precision: [fp8], devices: [cuda]}   # community FP8 weights: NVIDIA only
+  turbo-fp8: {dir: Qwen-Image-2.1-Turbo-FP8, precision: [fp8], devices: [cuda],
+              shares: [text_encoder, vae], shares_from: base-fp8}          # from base-fp8's dir, not the first's
 components:                       # weight components the residency manager loads, evicts and reports
   transformer:
     files: "transformer/*.safetensors"   # glob inside the variant's dir
@@ -108,7 +111,7 @@ stages:                           # one node kind each: <family>/<stage>; the fu
     outputs: {latent: Latent}
     params:
       steps: {type: int, label: Steps, default: 40, min: 1, max: 200, step: 1,
-              when: "model.variant != 'turbo'",
+              when: "model.variant != 'turbo' && model.variant != 'turbo-fp8'",
               help: Turbo uses its own 8-step schedule and ignores this.}
     peak_gb: "0.9 + 5.1 * mp"     # placeholders: fit the real numbers from measured runs
     stall_s: 600                  # optional: seconds without a cancel point before the run is failed
@@ -154,7 +157,9 @@ Keys the core understands; anything else is ignored:
   `workflow`).
 - **`variants.<id>`**: `dir`, `shares` (component names loaded from the first variant's folder, so they are one
   residency entry and one cache identity across variants; a share made by hand with links into that folder is still
-  a share, a real copy in the variant's own folder is `separate`), `title` (the display name; default the id) and
+  a share, a real copy in the variant's own folder is `separate`), `shares_from` (API 1.33: the variant `shares`
+  load from instead of the first: qwen-image's turbo-fp8 takes base-fp8's FP8 text encoder; a download into a lender
+  that lacks them fetches them, with its configs, from its `source` and `sources`), `title` (the display name; default the id) and
   `source` (where a download fetches it; absent = not downloadable): `{repo, revision, allow_patterns, licence,
   must_accept, gated, bytes?}`. `revision` is best a commit SHA (the one in the folder's
   `.cache/huggingface/download/*.metadata` sidecars when the weights are already on disk); `allow_patterns` are
@@ -163,7 +168,12 @@ Keys the core understands; anything else is ignored:
   text; `gated` makes the runner send the host's Hub token (RUNNER_HF_TOKEN_FILE). `files` (`{<component>:
   glob}`) gives a component other files for this variant: ltx's `dev` keeps its transformer beside the distilled
   files, in the first variant's `dir` (one folder, two variants: such a variant owns only its own components' files
-  there, for its manifest, bytes and delete; every shared component stays the first variant's).
+  there, for its manifest, bytes and delete; every shared component stays the first variant's). From API 1.33 (a
+  community pre-quantized variant for NVIDIA hosts, contracts/README.md "Quantized variants for NVIDIA hosts"):
+  `precision` (the model node's precisions for it: `[fp8]`), `component_precision` (`{<component>: [..]}`, its
+  components' precisions in this variant: `transformer: [fp8]`), `devices` (`[cuda]`: a runner on another device
+  never publishes it) and `sources` (`[{repo, revision, allow_patterns, gated?, bytes?}]`, more repos fetched after
+  `source` into the same `dir`: weights from the community repo, configs from the official one).
 - **`components.<name>`**: `files` (a glob, or a list of globs: one component may take keys from several files),
   `dtype` (`bf16` | `fp16` | `fp32`, default bf16; `stored` keeps each tensor's own dtype, MLX and torch: MiniMax's
   float32 tensors), `precision` (default `[bf16]`; `int8`, and `int4` on MLX; `fp32` from API 1.20, a component that
@@ -272,7 +282,15 @@ def rename(component: str, key: str) -> str | None:     # optional: checkpoint k
 
 def tensor_hook(component: str, model):                  # optional: None, or hook(name, tensor) -> tensor, run on
     return None                                           # the device before the cast (MiniMax: NVFP4 → bf16)
+
+def rotated(component: str, model):                       # optional (API 1.33): None, or rotated(module name) ->
+    return None                                           # its ConvRot group (256) or None, for int8 Linears
 ```
+
+A Linear whose stored weight (after `rename`) is float8 loads as `Fp8Linear` (`qweight` e4m3 [out, in] as stored,
+`scale` fp32 [out, 1] from the key `<module>.scale`, ones when the file has none): rename a torchao file's
+`X._weight_qdata` to `X.weight` and `X._weight_scale` to `X.scale`. An int8 ConvRot Linear: rename its weight and
+scale to `X.qweight` / `X.scale` (one scale per row), match it by `quantize`, and name its group in `rotated`.
 
 - **`params`**: the node's params, resolved and validated against its schema (a `seed` param arrives as an
   int: null and -1 were replaced by a random 0..2^53-1, reported as the run's `resolved.seed` and each output's

@@ -127,6 +127,8 @@ func (w workflow) value(key, val string) (any, error) {
 		return media(key, val)
 	case "span": // start:end, seconds of the workflow's video source
 		return span(key, val)
+	case "voice": // a voice id (helm voices lists them): the VoiceRef {"voice_id": <id>}
+		return map[string]any{"voice_id": val}, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("%s: not a valid %s", key, typ)

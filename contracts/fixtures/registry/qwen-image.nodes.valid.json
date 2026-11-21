@@ -130,7 +130,9 @@
           "default": "base",
           "enum": [
             "base",
-            "turbo"
+            "turbo",
+            "base-fp8",
+            "turbo-fp8"
           ],
           "help": "Turbo: 8 fixed steps, much faster."
         },
@@ -141,7 +143,8 @@
           "default": "int8",
           "enum": [
             "bf16",
-            "int8"
+            "int8",
+            "fp8"
           ],
           "help": "int8 quantizes the transformer and text encoder at load: about half the memory."
         }
@@ -264,7 +267,7 @@
           "min": 1,
           "max": 200,
           "step": 1,
-          "when": "model.variant != 'turbo'",
+          "when": "model.variant != 'turbo' && model.variant != 'turbo-fp8'",
           "help": "Turbo uses its own 8-step schedule and ignores this."
         }
       ],

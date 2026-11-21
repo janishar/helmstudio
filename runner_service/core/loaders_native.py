@@ -1,8 +1,9 @@
 """The native runtime's loader hooks (contracts/README.md "The native runtime"), imported by the env `native`: a
 stage runs a child process (core.child) that loads its own weights, so the runner loads nothing. Only what the
-residency manager and the hosts key need: the device (Metal, `mps`), the memory the budget is cut from (unified
+residency manager and the hosts key need: the device (Metal `mps`, else `cuda`), the memory the budget is cut from (unified
 RAM), and the measure, which counts the live child (its phys_footprint) with the runner's own. No torch, no MLX."""
 
+import sys
 from pathlib import Path
 
 from core import child
@@ -12,7 +13,9 @@ H3C = Path(__file__).resolve().parent.parent / "vendor/h3c"
 
 
 def device() -> str:
-    return "mps"
+    """Metal on a Mac, else CUDA (the gpu-host image's zonos3-server). ponytail: the budget stays host RAM
+    (total_gb), not VRAM; read nvidia-smi if a CUDA native pack ever gets near it."""
+    return "mps" if sys.platform == "darwin" else "cuda"
 
 
 def total_gb() -> float:
@@ -29,7 +32,7 @@ def device_info() -> dict:
         )
     except OSError, StopIteration, IndexError:
         commit = "unknown"
-    return host_device("mps") | {"runtime": f"h3 {commit[:7]}"}
+    return host_device(device()) | {"runtime": f"h3 {commit[:7]}"}
 
 
 def free() -> None:

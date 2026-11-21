@@ -108,7 +108,8 @@
           "label": "Variant",
           "default": "base",
           "enum": [
-            "base"
+            "base",
+            "base-fp8"
           ]
         },
         {
@@ -117,9 +118,10 @@
           "label": "Precision",
           "default": "int8",
           "enum": [
-            "int8"
+            "int8",
+            "fp8"
           ],
-          "help": "Stored bf16, always quantized to int8 at load (bf16 is 66 GB per model); its float32 tensors and the VAE stay float32."
+          "help": "Base: stored bf16, always quantized to int8 at load (bf16 is 66 GB per model); its float32 tensors and the VAE stay float32. Base FP8 (NVIDIA): fp8, as stored."
         }
       ],
       "inputs": [],

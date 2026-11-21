@@ -153,7 +153,9 @@ describe("the form derived from the qwen-image workflow", () => {
       ]),
     );
     expect(fs.find((f) => f.key === "canvas.width")!.param.step).toBe(32);
-    expect(fs.find((f) => f.key === "sample.steps")!.param.when).toBe("model.variant != 'turbo'");
+    expect(fs.find((f) => f.key === "sample.steps")!.param.when).toBe(
+      "model.variant != 'turbo' && model.variant != 'turbo-fp8'",
+    );
   });
 
   it("reads a seed: blank or -1 is random, else a whole number in range", () => {

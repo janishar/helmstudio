@@ -23,6 +23,139 @@ has one or more commits per stage.
 
 Last full contract suite on the final M7 code: see the last M7 commit message (pack 3 step 2, API 1.22).
 
+## M9 phase 1 notes: shared core and contract (API 1.33)
+
+- Contract 1.33 ([contracts/README.md](../contracts/README.md), "Quantized variants for NVIDIA hosts"): `fp8` in
+  every precision enum (models key, memory plans, hosts `resident`, `req.runner.unload`, openapi `Precision`); per
+  variant `devices`, `sources` (more repos after `source`, same folder) published in the models key. Fixtures
+  `qwen-image.models.valid.5` / `invalid.8`, `invalid.9`.
+- model.yaml per variant: `precision: [fp8]` (the node's offer), `component_precision: {transformer: [fp8]}` (what
+  each component loads at in it; others keep the component's list), `devices: [cuda]`, `sources`. Why two precision
+  keys: a variant's run at fp8 still loads a VAE at bf16, or MiniMax's text encoder at int8.
+- `devices` is enforced at the source: a runner on another device leaves the variant out of its models key, so the
+  Models screen never lists that host for it and the dispatcher's existing "variant present in the host's key" rule
+  never sends it there. No studio change was needed. The model node's variant enum still lists the variant on every
+  host (a Mac run of it fails eligibility: "no live host … has model … variant …").
+- Loader: a Linear whose stored weight is F8 (headers, after `rename`) becomes `Fp8Linear` (qweight e4m3 + fp32 scale
+  [out, 1], ones when absent; never cast); a pack renames `X._weight_qdata` → `X.weight`, `X._weight_scale` →
+  `X.scale`. CUDA tries row-wise `torch._scaled_mm` (input quantized per row) once per process, else dequant per layer
+  (`RUNNER_FP8_MATMUL=dequant` forces it). LoRA bake on an fp8 Linear fails with a RunError (adapters work). ConvRot:
+  `Int8Linear(rot_group=256)` through a new optional pack hook `rotated(component, model) -> fn(name) -> group|None`;
+  a stored int8 build's `X.scale` is reshaped to [out] bf16 by the loader.
+- `size_gb` counts an F8 2-D weight at 1 byte + 4 per row (the file's own scale tensor is counted too: a few MB over).
+- Not done here: `shares` naming an owner other than the first variant (done since: `shares_from`, below);
+  the `_scaled_mm` path is untested (no CUDA here): check it on the VM first.
+
+## M9 phase 1 notes: Qwen Image FP8 variants
+
+- `base-fp8` / `turbo-fp8` (titles "Base FP8 (NVIDIA)", "Turbo FP8 (NVIDIA)"), `devices: [cuda]`, `precision:
+  [fp8]`, transformer and text encoder `[fp8]`, VAE bf16. base-fp8: configs, processor, scheduler from
+  Qwen/Qwen-Image-2.1 @ 790c926 + unsloth/Qwen-Image-2.1-FP8 @ bb21a8b (transformer, text encoder, bf16 VAE).
+  turbo-fp8: configs, processor, scheduler from Qwen/Qwen-Image-2.1-Turbo @ fc13ba1 (its `model_index.json` carries
+  the 8 sigmas) + unsloth/Qwen-Image-2.1-Turbo-FP8 @ 3162aea (transformer only). Byte counts from the HF API.
+- New model.yaml key `shares_from` (core `pack.share_owner`): turbo-fp8 shares base-fp8's text encoder and VAE (one
+  residency entry, 10 GB less disk). The lender is used for load, download (reuse / fetch into the lender), delete
+  (`kept_components` keeps what a sharer loads) and the residency check of a delete. Why: Turbo's card says to
+  use base's FP8 text encoder; the unsloth VAE file has Turbo's own VAE SHA.
+- A download of a sharer whose lender lacks a shared component now fetches, from the lender's `source` and
+  `sources`, its allowed files of that component plus its configs (component-less files: model_index, processor,
+  scheduler, configs), never its other weights. Why: the FP8 text encoder is a root file, so the old "folder of the
+  glob" rule fetched no `text_encoder/config.json`; it also fixes the bf16 Turbo-first download that left Base's
+  folder without `processor/` (encode reads the processor from the text encoder's folder).
+- Pack: `rename` maps `X._weight_qdata` / `X._weight_scale` to `X.weight` / `X.scale`; `tensor_hook` refuses an fp8
+  component file whose `unsloth_format` is not `unsloth_prequant_{transformer,text_encoder}_state_dict_v1`.
+  LoRA: adapters (a bake on fp8 fails with the loader's RunError).
+- Model node: variant enum + `base-fp8`, `turbo-fp8`; precision enum + `fp8`; Steps `when` hides for turbo-fp8 too
+  (fixtures `qwen-image.nodes.valid`, `graphs/palette`, packs/README example, a web and a studio test). Studio's pin
+  ref accepted no `fp8` (openapi `Precision` has it since 1.33): added.
+- Studio: a variant listing one precision (stored-quantized: base-fp8's [fp8]; also MiniMax base's [int8]) runs at
+  it whatever the node asks (`registry.Model.RunsAt`, used for eligibility, the plan and the resident match), as
+  the runner's `precision_of` already did: the node's int8 default works for base-fp8. Official Qwen base at fp8
+  still has no host (a clear "no live host … at fp8"). The Models screen lists a host under a variant only when
+  the host publishes that variant (no "missing" base-fp8 on the Mac). The licence stays apache-2.0 like the bf16 variants (upstream says
+  Qwen Research; to fix separately for all four). No CUDA run yet: goldens and PSNR on the VM.
+
+## M9 phase 1 notes: ZONOS3 on CUDA
+
+- ZONOS3 keeps its one official variant (`mini`, GGUF q8_0, already int8) on the CUDA path too; only the server is
+  built for CUDA. `runtimes.native.devices` is now `[mps, cuda]` (fixture `zonos3.models.valid.json` updated).
+- `vendor/zonos3/.../ggml-cuda` copied from the duplex submodule (ggml a05c9922, clean) with the six cuda patches
+  (clean `git apply`; still UNVERIFIED upstream). `make zonos3-cuda`: sm_120 (`120a-real`) only, no OpenMP, cudart and
+  cuBLAS shared, found in `build/lib` via RUNPATH `$ORIGIN/lib`. Why: one GPU target keeps the build short; shared
+  libs avoid `GGML_STATIC`'s whole-binary `-static`.
+- `Dockerfile.cuda` stage `zonos3`: `nvidia/cuda:13.2.1-devel-ubuntu24.04` (the CUDA of torch's wheels), cargo from
+  `rust:1.88.0-slim-trixie` (textnorm's rust-version; Ubuntu's cargo is too old). `Dockerfile.cuda.dockerignore`
+  lets `vendor/zonos3` (not its Mac `build/`) into this image's context only.
+- `native.argv` always passes `--gpu` (default on Apple anyway; off Apple the server would pick the CPU).
+- `deploy/gpu-host`: a second service `runner-native` (same image, env native, health port 8082, own cache volume)
+  behind the compose profile `native`, because `.tools/make-secrets` makes only `runner_<h>_torch` today.
+- Not yet verified: the CUDA build itself and CUDA goldens (the VM step).
+
+## M9 phase 1 notes: MiniMax H3 Image FP8 variant
+
+- `base-fp8` ("Base FP8 (NVIDIA)", `devices: [cuda]`, `precision: [fp8]`, transformer `[fp8]`; the text encoder
+  keeps its `[int8]`, the VAE fp32, the enhancer the official NVFP4 → int8 in its own dir). Folder
+  `MiniMax-H3-Image-FP8`: configs, tokenizer, processor, scheduler, VAE from MiniMaxAI/MiniMax-H3-Image @ 8ced600 +
+  unsloth/MiniMax-H3-Image-FP8 @ cae8483 (the DiT) + Comfy-Org/MiniMax-H3-Image @ 89c6350 (the int8 ConvRot text
+  encoder); 49.8 GB, bytes from the HF API. No `pdd_config.json`: nothing reads it (the PDD heads are in the DiT).
+- `runtimes.torch.devices` is now `[mps, cuda]`; `base` has no `devices`, so it is published on every host as
+  before (runtime devices were never enforced for torch; review fix) and a CUDA host lists base and base-fp8. New licence `minimax-h3-image-community` (must_accept: the
+  upstream card; the community repos say the same licence).
+- Curve-form adaLN (`torch.py` `curve_form`): `time_proj` → Identity, `time_embedder` → `CurveTable` (table [1025, 8]
+  read at diffusers' `timestep`, which is already t = 1 − σ, ComfyUI's t; linear between rows), every adaLN and
+  `norm_out` projection an 8-input float32 Linear with no SiLU, its output cast to bf16 like the official bf16
+  projections. Checked on the real tensors by range reads (block 0 and norm_out, the six sampling t and t = 1):
+  relative error ≤ 9e-4 against the official dense W·silu(MLP(t)); reading the table at 1 − t is 2–37 % off. The
+  same check is `tests/test_minimax_fp8.py` last test (skipped without both files).
+- `context_embedder` and `token_refiner` stay bf16 (unsloth's card): build marks their Linears `Dense` (an
+  nn.Linear subclass the loader does not swap), `rename` drops their `_weight_scale`, `tensor_hook` dequantizes the
+  FP8 weight with it. The other 300 FP8 Linears are core `Fp8Linear`.
+- Text encoder: Comfy names renamed (`model.layers.` / `model.embed_tokens.` / `visual.` → ours), `*_proj.weight`
+  → `qweight`, `weight_scale` → `scale`, `comfy_quant` dropped; `rotated` gives group 256. Build keeps the config at
+  51 layers (diffusers refuses ≤ 50) but cuts the stack to the file's 50 and sets the norm to Identity: the last
+  hidden state, hidden_states[50], is then the official stack's un-normed hidden_states[50]. `tensor_hook` refuses
+  a DiT file of another `unsloth_format` and a text encoder whose `minimax_h3_te` metadata or any `comfy_quant` tag
+  is not 50-layer int8 ConvRot group 256. Key sets and shapes were checked against the real headers (no gaps).
+- `size_gb` counts an F8 weight under the pack's `DENSE` prefixes at 2 bytes (it loads bf16), so the plan is no
+  longer ~0.8 GB under. The ConvRot `hadamard()` is checked on the real file: an opt-in test (`RUNNER_NET_TESTS=1`,
+  5 MB range read) dequantizes Comfy's layer-0 k_proj to the official bf16 weight, cosine 1.0000 (0.06 without H).
+- Open: the stored int8 scales are rounded to bf16 by the core loader; the enhancer on CUDA (NVFP4 dequant, then int8)
+  and everything else is unrun on CUDA (goldens, PSNR, `_scaled_mm` on the VM); peaks in model.yaml are MPS measurements.
+
+## M9 phase 1 notes: brought up on the spot VM (`helm-gpu`, RTX PRO 6000, driver 615)
+
+- Joined as host `gcp` to the dev stack (STACK_TLS on, tunnel), source copied from the working tree, `docker compose
+  build` clean first time (CUDA torch image and the ZONOS3 `make zonos3-cuda` stage), both runners healthy
+  (`--profile native` too). Models dir `/srv/helm/models`, `MODELS_MODE=rw`.
+- `.tools/make-secrets` now makes `runner_<h>_native` too (one account per host holding a user per env; a host's own
+  subjects imported and exported once), and the runner S3 policy allows `packs/*/voices/*` (get, put): without it a
+  remote native runner died at start writing the ZONOS3 voice previews (contracts/README.md, A remote GPU host, says
+  so now). CLI: a `voice` param takes a voice id (`-p speak.voice=zonos3/cillian`).
+- Row-wise `torch._scaled_mm` works on sm_120 (torch 2.15.0+cu132): `Fp8Linear` takes the FP8 matmul path.
+- Downloads through the platform (`helm model download`): Qwen `base-fp8`, `turbo-fp8` (shares base-fp8's text
+  encoder and VAE: worked), ZONOS3 `mini`, and the official Qwen `base` and `turbo` for comparison; none gated.
+  **MiniMax `base-fp8` not downloaded**: its new licence `minimax-h3-image-community` needs `--accept-licence`, which is
+  the owner's to give; its CUDA run is still open.
+- Qwen measured with tests/test_qwen_golden.py's bench in a one-off container (same image, same GPU), the golden
+  cases' settings with the variant swapped; numbers in reference-notes/nvidia-quantized.md, Measured. The official
+  int8 path reproduces the CUDA goldens bit for bit on driver 615. FP8 with `_scaled_mm` is about 27 % faster per
+  step than int8 or FP8 dequant, at the same memory, but 25 dB against the int8 golden at 768 (19.4 at 1024 Turbo);
+  `RUNNER_FP8_MATMUL=dequant` is 30 / 26 / 25 dB. The per-row FP8 quantization of the input costs about 5 dB.
+  Images look the same (docs/mock/checks/m9/).
+- ZONOS3 ran through the dev stack on `gcp.native`: zonos3-server on `CUDA0`, 1.6–1.9 s clips, 2.3 s per clip warm.
+- **Not run through the platform: Qwen FP8.** Studio takes the `qwen-image/model` schema from the Mac's torch runner
+  (local hosts rank first), which was started before the FP8 variants and rejects `precision: fp8` (422). Restart
+  `make runners` on the Mac, then `helm run qwen-image -p model.variant=base-fp8 -p model.precision=fp8 …`.
+- Review fixes: the native runner reports `cuda` off a Mac (its budget is still host RAM, not VRAM), and a native
+  pack's variant is published only on its runtime `devices` (minimax_h3 is Metal only, so not on `gcp`); torch
+  packs keep publishing everywhere as before. `Fp8Linear` re-raises an out-of-memory error instead of turning the
+  FP8 matmul off. A download reads the Hub token when any of `source` / `sources` is gated.
+- Open for the owner: `_scaled_mm` runs with `use_fast_accum=True` under the default `RUNNER_FP8_MATMUL=auto`
+  (about 5 dB below dequant against the int8 golden, about 27 % faster). Try `use_fast_accum=False` on the VM;
+  if the dB do not come back, choose speed or quality as the default. Not done: trimming the ZONOS3 sources
+  (~23 MB) from the CUDA runtime image (a later `rm` layer would not shrink it). The Qwen ask stage (FP8 lm_head and
+  `generate()`) is still unrun on CUDA.
+
 ## M8 notes
 
 - The owner said "build it" on 2026-11-21 after reviewing [15-voices.md](plan/15-voices.md) and the voice boards

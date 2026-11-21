@@ -156,12 +156,34 @@ def _int8_kernel(device_type: str) -> bool:
     )
 
 
-class Int8Linear(nn.Module):
-    """nn.Linear with an int8 weight and one bf16 scale per output row."""
+@cache
+def hadamard(n: int, device: str, dtype: torch.dtype) -> torch.Tensor:
+    """The normalized block Hadamard matrix of ConvRot (n = 4^k): kron(H4, ..., H4) / sqrt(n), symmetric and
+    orthogonal (H @ H = I)."""
+    h4 = torch.tensor(
+        [[1, 1, 1, -1], [1, 1, -1, 1], [1, -1, 1, 1], [-1, 1, 1, 1]], dtype=torch.float64
+    )
+    h = torch.ones(1, 1, dtype=torch.float64)
+    while h.shape[0] < n:
+        h = torch.kron(h, h4)
+    if h.shape[0] != n:
+        raise ValueError(f"ConvRot group {n} is not a power of 4")
+    return (h / n**0.5).to(device=device, dtype=dtype)
 
-    def __init__(self, linear: nn.Linear) -> None:
+
+class Int8Linear(nn.Module):
+    """nn.Linear with an int8 weight and one bf16 scale per output row. `rot_group` (ConvRot, API 1.33: a community
+    int8 build): the stored weight's input axis was rotated offline per group of 256 by the block Hadamard matrix H
+    (W_rot = W @ H per group), so the input is rotated the same way first: (x H)(W H)^T = x W^T."""
+
+    def __init__(self, linear: nn.Linear, rot_group: int | None = None) -> None:
         super().__init__()
         self.in_features, self.out_features = linear.in_features, linear.out_features
+        if rot_group and self.in_features % rot_group:
+            raise ValueError(
+                f"ConvRot: {self.in_features} input features are not a multiple of {rot_group}"
+            )
+        self.rot_group = rot_group
         shape = (self.out_features, self.in_features)
         self.register_buffer("qweight", torch.empty(shape, dtype=torch.int8, device="meta"))
         self.register_buffer(
@@ -180,6 +202,10 @@ class Int8Linear(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         shape = x.shape
+        if g := self.rot_group:
+            x = (
+                x.reshape(-1, self.in_features // g, g) @ hadamard(g, str(x.device), x.dtype)
+            ).reshape(shape)
         small = x.numel() // self.in_features <= SMALL_BATCH
         if small and self.kernel and x.dtype == torch.bfloat16 and _int8_kernel(x.device.type):
             out = torch._weight_int8pack_mm(
@@ -189,6 +215,57 @@ class Int8Linear(nn.Module):
             return out if self.bias is None else out + self.bias.to(out.dtype)
         weight = self.qweight.to(x.dtype) * self.scale.to(x.dtype)[:, None]
         return F.linear(x, weight, None if self.bias is None else self.bias.to(x.dtype))
+
+
+E4M3_MAX = 448.0
+# whether torch._scaled_mm works here: decided at the first CUDA forward of the process (RUNNER_FP8_MATMUL)
+_scaled_mm_ok: bool | None = None
+
+
+class Fp8Linear(nn.Module):
+    """nn.Linear with a stored float8 e4m3 weight [out, in] and an fp32 scale per output row [out, 1] (a community
+    FP8 build, API 1.33: w = qweight * scale; a plain FP8 cast has no scale: ones). On CUDA it multiplies in FP8
+    with torch._scaled_mm, the input quantized per row on the fly (the checkpoints' recipe); when that is refused
+    (once per process, logged) and on any other device it dequantizes one layer at a time to the input's dtype."""
+
+    def __init__(self, linear: nn.Linear) -> None:
+        super().__init__()
+        self.in_features, self.out_features = linear.in_features, linear.out_features
+        shape = (self.out_features, self.in_features)
+        self.register_buffer(
+            "qweight", torch.empty(shape, dtype=torch.float8_e4m3fn, device="meta")
+        )
+        # ones on the CPU (a plain FP8 cast has no scale); load() moves it with the rest
+        self.register_buffer("scale", torch.ones(self.out_features, 1))
+        self.bias = linear.bias
+
+    def dequantized(self, dtype: torch.dtype) -> torch.Tensor:
+        return self.qweight.to(dtype) * self.scale.to(dtype)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        global _scaled_mm_ok
+        bias = None if self.bias is None else self.bias.to(x.dtype)
+        fits = self.in_features % 16 == 0 and self.out_features % 16 == 0
+        if x.is_cuda and fits and _scaled_mm_ok is not False and config.FP8_MATMUL != "dequant":
+            try:
+                x2 = x.reshape(-1, self.in_features)
+                xs = (x2.abs().amax(-1, keepdim=True).float() / E4M3_MAX).clamp_(min=1e-12)
+                xq = (x2.float() / xs).clamp_(-E4M3_MAX, E4M3_MAX).to(torch.float8_e4m3fn)
+                out = torch._scaled_mm(xq, self.qweight.t(), scale_a=xs, scale_b=self.scale.t(),
+                                       out_dtype=x.dtype, use_fast_accum=True)  # fmt: skip
+                _scaled_mm_ok = True
+                out = out.reshape(*x.shape[:-1], self.out_features)
+                return out if bias is None else out + bias
+            except torch.OutOfMemoryError:
+                raise  # out of memory is not a missing kernel: keep the FP8 matmul
+            except RuntimeError as e:
+                if _scaled_mm_ok:  # it worked before: a real failure, not a missing kernel
+                    raise
+                _scaled_mm_ok = False
+                log.warning(
+                    "fp8: row-wise torch._scaled_mm refused here (%s); dequantizing per layer", e
+                )
+        return F.linear(x, self.dequantized(x.dtype), bias)
 
 
 class LoraLinear(nn.Module):
@@ -222,7 +299,8 @@ class LoraLinear(nn.Module):
 
 
 def linears(module: nn.Module) -> list[str]:
-    """The names of the Linear layers of `module` a LoRA may patch (nn.Linear, Int8Linear, an adapted one)."""
+    """The names of the Linear layers of `module` a LoRA may patch (nn.Linear, Int8Linear, Fp8Linear, an adapted
+    one)."""
     return list(_linears(module))
 
 
@@ -230,7 +308,8 @@ def _linears(module: nn.Module) -> dict[str, nn.Module]:
     """name → the Linear (a LoraLinear, not its inner base)."""
     out = {}
     for name, m in module.named_modules():
-        if isinstance(m, (nn.Linear, Int8Linear, LoraLinear)) and not name.endswith(".base"):
+        linear = isinstance(m, (nn.Linear, Int8Linear, Fp8Linear, LoraLinear))
+        if linear and not name.endswith(".base"):
             out[name] = m
     return out
 
@@ -266,14 +345,15 @@ def lora_tensors(model, use, path, shapes: dict, dev: str, dtype: torch.dtype) -
 
 
 def _dtype(m: nn.Module) -> torch.dtype:
-    """The compute dtype of a Linear: its weight's; an Int8Linear's is bf16 (fp16 where bf16 is not native)."""
+    """The compute dtype of a Linear: its weight's; an Int8Linear's or Fp8Linear's is bf16 (fp16 where bf16 is not
+    native)."""
     m = m.base if isinstance(m, LoraLinear) else m
-    return dtype_of("bf16") if isinstance(m, Int8Linear) else m.weight.dtype
+    return dtype_of("bf16") if isinstance(m, (Int8Linear, Fp8Linear)) else m.weight.dtype
 
 
 def _device(m: nn.Module) -> torch.device:
     m = m.base if isinstance(m, LoraLinear) else m
-    return m.scale.device if isinstance(m, Int8Linear) else m.weight.device
+    return m.scale.device if isinstance(m, (Int8Linear, Fp8Linear)) else m.weight.device
 
 
 def activate(model, component: str, module: nn.Module, ctx) -> float:
@@ -391,25 +471,38 @@ def load(
     dev: str,
     dtype: torch.dtype | None,
     quantize=lambda name: False,
+    rotated=lambda name: None,
     rename=lambda key: key,
     hook=None,
     bake=None,
     check=lambda: None,
     progress=lambda done, total: None,
 ) -> nn.Module:
-    """Fill `module` (parameters on meta) from `files`. `quantize(module name)` picks the Linears stored int8;
+    """Fill `module` (parameters on meta) from `files`. `quantize(module name)` picks the Linears stored int8
+    (`rotated(module name)`: their ConvRot group, or None); a Linear whose stored weight is float8 becomes an
+    Fp8Linear (from the headers: API 1.33, a community FP8 build; its weight and scale are never cast);
     `rename(key)` maps a checkpoint key to the module's name for it, or None to skip it (it is not read); `hook(name,
     tensor)` may replace a tensor on the device before the cast; `dtype` None keeps stored dtypes. `bake` (module name →
     [(A, B, s)], LoRA bake) merges W + sum s * (B @ A) in fp32 into those Linears' weights after the cast and before
     quantization. `check` runs before each tensor (a cancel point); `progress(done, total)` after each."""
     bake, baked = bake or {}, set()
+    headers = {p: packs.header(p) for p in files}
+    fp8 = {name.rpartition(".")[0] for h in headers.values() for k, t in h.items()
+           if t["dtype"].startswith("F8") and len(t["shape"]) == 2
+           and (name := rename(k)) is not None and name.endswith(".weight")}  # fmt: skip
     for parent_name, parent in list(module.named_modules()):
         for child_name, child in list(parent.named_children()):
             name = f"{parent_name}.{child_name}" if parent_name else child_name
-            if type(child) is nn.Linear and quantize(name):
-                setattr(parent, child_name, Int8Linear(child))
+            if type(child) is nn.Linear and name in fp8:
+                if name in bake:
+                    raise RunError(
+                        f"LoRA bake is not available on fp8 weights ({name}): use adapter mode"
+                    )
+                setattr(parent, child_name, Fp8Linear(child))
+            elif type(child) is nn.Linear and quantize(name):
+                setattr(parent, child_name, Int8Linear(child, rotated(name)))
     modules = dict(module.named_modules())
-    wanted = {p: {k for k in packs.header(p) if rename(k) is not None} for p in files}
+    wanted = {p: {k for k in h if rename(k) is not None} for p, h in headers.items()}
     total = sum(map(len, wanted.values()))
     done, read = 0, 0
     for path in files:
@@ -424,7 +517,13 @@ def load(
                     raise KeyError(f"{path.name}: {key} has no place in {type(module).__name__}")
                 if hook is not None:
                     tensor = hook(name, tensor)
-                if dtype is not None and tensor.is_floating_point() and tensor.dtype != dtype:
+                # an Fp8Linear's weight and scale stay as stored; a stored int8 build's scale is [out] bf16
+                if isinstance(owner, Fp8Linear) and attr in ("weight", "scale"):
+                    attr = "qweight" if attr == "weight" else "scale"
+                    tensor = tensor if attr == "qweight" else tensor.float().reshape(-1, 1)
+                elif isinstance(owner, Int8Linear) and attr == "scale":
+                    tensor = tensor.reshape(-1).to(torch.bfloat16)
+                elif dtype is not None and tensor.is_floating_point() and tensor.dtype != dtype:
                     tensor = tensor.to(dtype)
                 if attr == "weight" and owner_name in bake:
                     merged = tensor.float()
@@ -481,6 +580,7 @@ def load_component(model, component: str, ctx):
                 bake.setdefault(name, []).append((a, b, use.strength * factor))
     rename = getattr(model.pack.module, "rename", None)
     hook = getattr(model.pack.module, "tensor_hook", None)
+    rotated = getattr(model.pack.module, "rotated", None)  # API 1.33: ConvRot groups by module
     phase, last = f"loading {component}", [0.0]
 
     def progress(done: int, total: int) -> None:
@@ -495,6 +595,7 @@ def load_component(model, component: str, ctx):
         dev=ctx.device,
         dtype=dtype_of(spec.get("dtype", "bf16")),
         quantize=lambda name: packs.quantized(spec, precision, name),
+        rotated=rotated(component, model) if rotated else (lambda name: None),
         rename=(lambda key: rename(component, key)) if rename else (lambda key: key),
         hook=hook(component, model) if hook else None,
         bake=bake,
