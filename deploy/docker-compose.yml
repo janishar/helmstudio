@@ -130,6 +130,7 @@ services:
   seaweedfs:
     image: chrislusf/seaweedfs:4.53
     profiles: [s3local]
+    restart: unless-stopped   # it gets OOM-killed when Docker's VM is short of memory; every upload fails until it is back
     # identities from -s3.config (secret s3_config, .tools/make-secrets): the admin key of the s3_* secrets (also
     # exported, as before) and runner-<h> per remote GPU host, Read and Write on the bucket only; a new host's identity
     # needs a seaweedfs restart (make gpu-host-reload). S3_TLS_ARGS (compose/tls.yml) adds https on 8334; 8333 stays http.
