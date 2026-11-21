@@ -1,0 +1,10 @@
+{
+  "slot": {
+    "clip": "s",
+    "exact": true
+  },
+  "run": {
+    "workflow_id": "ltx-audio-to-video",
+    "inputs": {}
+  }
+}

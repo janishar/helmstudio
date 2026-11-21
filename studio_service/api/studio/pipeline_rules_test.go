@@ -163,3 +163,15 @@ func mustJSON(v any) string {
 	data, _ := json.Marshal(v)
 	return string(data)
 }
+
+// A bound take list into rows of one media field (API 1.32: H3's audios) takes that field, not `image`.
+func TestMediaRowItems(t *testing.T) {
+	item, _ := json.Marshal(map[string]any{"type": "media", "accepts": []string{"audio"}})
+	wf := registry.Workflow{Nodes: map[string]registry.Node{"generate": {Kind: "k"}}, NodeSchemas: map[string]registry.NodeSchema{
+		"k": {Params: []registry.Param{{Name: "audios", Type: "rows", Item: map[string]json.RawMessage{"audio": item}}}}}}
+	inputs := map[string]any{"generate.audios": []any{map[string]any{"image": map[string]any{"take_id": "t"}}}}
+	mediaRowItems(wf, inputs)
+	if got, _ := json.Marshal(inputs); string(got) != `{"generate.audios":[{"audio":{"take_id":"t"}}]}` {
+		t.Fatal(string(got))
+	}
+}

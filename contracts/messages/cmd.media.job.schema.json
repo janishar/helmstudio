@@ -51,12 +51,13 @@
               "kind": {
                 "enum": [
                   "video",
-                  "image"
+                  "image",
+                  "audio"
                 ]
               }
             }
           },
-          "description": "every distinct object the job reads, once each (the runner downloads each into a 0700 temp dir); args name them by index. An export of empty slots only (black and silence) reads none; a frame job reads exactly one"
+          "description": "every distinct object the job reads, once each (the runner downloads each into a 0700 temp dir); args name them by index. An export of empty slots only (black and silence) reads none; a frame job reads exactly one; (1.32) an audio take on an audio track is kind audio: a WAV, mixed as a video's sound is (resampled to target.sample_rate, stereo, gain, mute, at / in / out)"
         },
         "output_prefix": {
           "allOf": [

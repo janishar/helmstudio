@@ -37,6 +37,7 @@ export function PromptArea({
   className,
   wrapClassName,
   onKeyDown,
+  onBlur,
   ...rest
 }: Props) {
   const known = useKnown();
@@ -165,9 +166,10 @@ export function PromptArea({
         }}
         onSelect={(e) => setCaret(e.currentTarget.selectionStart)}
         onFocus={(e) => setCaret(e.currentTarget.selectionStart)}
-        onBlur={() => {
+        onBlur={(e) => {
           setCaret(null);
           setDismissed(null);
+          onBlur?.(e);
         }}
         onScroll={(e) => {
           if (back.current) back.current.scrollTop = e.currentTarget.scrollTop;

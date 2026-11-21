@@ -193,7 +193,7 @@
           "min": 0.5,
           "max": 1.5,
           "step": 0.05,
-          "help": "1× is the voice's own pace."
+          "help": "1× is a normal pace."
         },
         {
           "name": "guidance",
@@ -228,6 +228,195 @@
       ],
       "component": "whole model",
       "help": "Reads the text in one voice, a preset or a clip it clones, at 44.1 kHz. Long text is split on sentences and joined; at most 900 characters (about 60 s)."
+    },
+    {
+      "kind": "zonos3/dialogue",
+      "title": "Dialogue",
+      "family": "zonos3",
+      "params": [
+        {
+          "name": "script",
+          "type": "text",
+          "script": true,
+          "label": "Script",
+          "default": "",
+          "min": 0,
+          "max": 8000,
+          "help": "One line each: @name: text or @name (style): text. An empty line is a longer pause. Each @name speaks in its element's voice."
+        },
+        {
+          "name": "lines",
+          "type": "rows",
+          "label": "Lines",
+          "default": [],
+          "min": 1,
+          "max": 40,
+          "item": {
+            "voice": {
+              "type": "voice",
+              "label": "Voice",
+              "default": null,
+              "accepts": [
+                "preset",
+                "clip"
+              ]
+            },
+            "text": {
+              "type": "string",
+              "label": "Line",
+              "default": "",
+              "max": 600
+            },
+            "style": {
+              "type": "string",
+              "label": "Style",
+              "default": "",
+              "max": 200
+            },
+            "pause_s": {
+              "type": "float",
+              "label": "Pause after",
+              "default": 0.35,
+              "min": 0,
+              "max": 5,
+              "step": 0.05,
+              "help": "Silence after the line, before the next (the last line's is not used)."
+            }
+          },
+          "help": "One item per spoken line, in order. Studio writes them from the script; the Graph view and agents may set them instead."
+        },
+        {
+          "name": "pause",
+          "type": "float",
+          "label": "Pause between lines",
+          "default": 0.35,
+          "min": 0,
+          "max": 2,
+          "step": 0.05,
+          "help": "The silence between two lines; each empty line in the script adds it once more."
+        },
+        {
+          "name": "language",
+          "type": "enum",
+          "label": "Language",
+          "default": "en-US",
+          "enum": [
+            "en-US",
+            "en-GB",
+            "fr",
+            "de",
+            "es",
+            "it",
+            "pt-BR",
+            "ja",
+            "zh",
+            "ko",
+            "ar",
+            "bn",
+            "bg",
+            "cs",
+            "da",
+            "nl",
+            "fi",
+            "ka",
+            "el",
+            "gu",
+            "he",
+            "hi",
+            "hu",
+            "id",
+            "kn",
+            "ms",
+            "ml",
+            "mr",
+            "no",
+            "or",
+            "pl",
+            "pa",
+            "ro",
+            "ru",
+            "sk",
+            "sv",
+            "tl",
+            "ta",
+            "te",
+            "th",
+            "tr",
+            "uk",
+            "ur",
+            "vi"
+          ],
+          "help": "The language of the text: it decides how numbers and abbreviations are read."
+        },
+        {
+          "name": "emotion",
+          "type": "float",
+          "label": "Emotion",
+          "default": 0.5,
+          "min": 0,
+          "max": 1,
+          "step": 0.05,
+          "help": "Valence: low sounds sad, high sounds happy; 0.5 adds nothing."
+        },
+        {
+          "name": "energy",
+          "type": "float",
+          "label": "Energy",
+          "default": 0.5,
+          "min": 0,
+          "max": 1,
+          "step": 0.05,
+          "help": "Arousal: low is calm and soft, high is excited; 0.5 adds nothing."
+        },
+        {
+          "name": "whisper",
+          "type": "float",
+          "label": "Whisper",
+          "default": 0,
+          "min": 0,
+          "max": 1,
+          "step": 0.05,
+          "help": "0 speaks out loud; 1 whispers every word."
+        },
+        {
+          "name": "speaking_rate",
+          "type": "float",
+          "label": "Speaking rate",
+          "default": 1,
+          "min": 0.5,
+          "max": 1.5,
+          "step": 0.05,
+          "help": "1× is a normal pace."
+        },
+        {
+          "name": "guidance",
+          "type": "float",
+          "label": "Guidance",
+          "default": 2,
+          "min": 1,
+          "max": 5,
+          "step": 0.1,
+          "help": "How closely it keeps to the voice; 1 is off, high strains."
+        }
+      ],
+      "inputs": [
+        {
+          "name": "model",
+          "type": "Model"
+        },
+        {
+          "name": "seed",
+          "type": "Seed"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "audio",
+          "type": "Audio"
+        }
+      ],
+      "component": "whole model",
+      "help": "Speaks each line in its speaker's voice (a preset, or a clip it clones) at 44.1 kHz, with pauses, as one take; reports each line's start and end."
     },
     {
       "kind": "output",

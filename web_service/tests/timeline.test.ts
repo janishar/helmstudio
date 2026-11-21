@@ -93,3 +93,22 @@ describe("editor helpers", () => {
     ]);
   });
 });
+
+describe("audio trim (API 1.32)", () => {
+  it("an audio clip's out stops at its take's end on the sample grid", () => {
+    const doc: Doc = {
+      target: { width: 256, height: 128, fps: 24, sample_rate: 48000 },
+      tracks: [
+        { name: "V1", kind: "video", clips: [{ id: "g", take_id: null, hold: 10 }] },
+        {
+          name: "A2",
+          kind: "audio",
+          clips: [{ id: "a", take_id: "t", in: 0, out: 2, at: 0 }],
+        },
+      ],
+    };
+    const takes: Takes = { t: { kind: "audio", duration_s: 2.5, has_audio: true } };
+    const r = apply(doc, { op: "trim", clip: "a", edge: "out", delta: 3 }, takes);
+    expect("document" in r && r.document.tracks[1].clips[0].out).toBe(2.5);
+  });
+});

@@ -1237,6 +1237,400 @@
           }
         ]
       }
+    },
+    {
+      "description": "1.32 Make shot: the line l (an audio-track clip, named) re-renders first and the shot made from it binds a2v.source to its new take",
+      "document": {
+        "target": {
+          "width": 256,
+          "height": 128,
+          "fps": 24,
+          "sample_rate": 48000
+        },
+        "tracks": [
+          {
+            "name": "V1",
+            "kind": "video",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "s",
+                "take_id": "55555555-0000-4000-8000-000000000001",
+                "in": 0.0,
+                "out": 1.0416666666666667,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "55555555-0000-4000-8000-000000000001"
+                ],
+                "at": 0.0
+              },
+              {
+                "id": "g",
+                "take_id": null,
+                "hold": 2.0,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [],
+                "at": 1.0416666666666667
+              }
+            ]
+          },
+          {
+            "name": "A2",
+            "kind": "audio",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "l",
+                "take_id": "55555555-0000-4000-8000-000000000002",
+                "in": 0.0,
+                "out": 1.0,
+                "at": 0.0,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "55555555-0000-4000-8000-000000000002"
+                ]
+              },
+              {
+                "id": "u",
+                "take_id": "55555555-0000-4000-8000-000000000003",
+                "in": 0.0,
+                "out": 1.0,
+                "at": 1.0,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "55555555-0000-4000-8000-000000000003"
+                ]
+              }
+            ]
+          }
+        ],
+        "duration_s": 3.0416666666666665,
+        "frames": 73
+      },
+      "takes": {
+        "55555555-0000-4000-8000-000000000001": {
+          "kind": "video",
+          "duration_s": 1.0416666666666667,
+          "fps": 24,
+          "frames": 25,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 400000,
+          "made_with": {
+            "workflow_id": "echo-a2v",
+            "inputs": {
+              "prompt.text": "x",
+              "a2v.source": {
+                "take_id": "55555555-0000-4000-8000-000000000002",
+                "in": 0,
+                "out": 1.0
+              }
+            }
+          }
+        },
+        "55555555-0000-4000-8000-000000000002": {
+          "kind": "audio",
+          "duration_s": 1.5,
+          "has_audio": true,
+          "bytes": 72044,
+          "sample_rate": 24000,
+          "made_with": {
+            "workflow_id": "echo-voice-over",
+            "inputs": {
+              "prompt.text": "Night came early."
+            }
+          }
+        },
+        "55555555-0000-4000-8000-000000000003": {
+          "kind": "audio",
+          "duration_s": 1.0,
+          "has_audio": true,
+          "bytes": 48044,
+          "sample_rate": 24000
+        }
+      },
+      "clips": [
+        "s",
+        "l"
+      ],
+      "expect": {
+        "steps": [
+          {
+            "step": "clip_l",
+            "clip": "l",
+            "binds": {}
+          },
+          {
+            "step": "clip_s",
+            "clip": "s",
+            "binds": {
+              "a2v.source": "clip_l.takes"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "description": "1.32: absent clips = V1 only, as before (no edge: the line is not selected)",
+      "document": {
+        "target": {
+          "width": 256,
+          "height": 128,
+          "fps": 24,
+          "sample_rate": 48000
+        },
+        "tracks": [
+          {
+            "name": "V1",
+            "kind": "video",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "s",
+                "take_id": "55555555-0000-4000-8000-000000000001",
+                "in": 0.0,
+                "out": 1.0416666666666667,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "55555555-0000-4000-8000-000000000001"
+                ],
+                "at": 0.0
+              },
+              {
+                "id": "g",
+                "take_id": null,
+                "hold": 2.0,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [],
+                "at": 1.0416666666666667
+              }
+            ]
+          },
+          {
+            "name": "A2",
+            "kind": "audio",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "l",
+                "take_id": "55555555-0000-4000-8000-000000000002",
+                "in": 0.0,
+                "out": 1.0,
+                "at": 0.0,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "55555555-0000-4000-8000-000000000002"
+                ]
+              },
+              {
+                "id": "u",
+                "take_id": "55555555-0000-4000-8000-000000000003",
+                "in": 0.0,
+                "out": 1.0,
+                "at": 1.0,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "55555555-0000-4000-8000-000000000003"
+                ]
+              }
+            ]
+          }
+        ],
+        "duration_s": 3.0416666666666665,
+        "frames": 73
+      },
+      "takes": {
+        "55555555-0000-4000-8000-000000000001": {
+          "kind": "video",
+          "duration_s": 1.0416666666666667,
+          "fps": 24,
+          "frames": 25,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 400000,
+          "made_with": {
+            "workflow_id": "echo-a2v",
+            "inputs": {
+              "prompt.text": "x",
+              "a2v.source": {
+                "take_id": "55555555-0000-4000-8000-000000000002",
+                "in": 0,
+                "out": 1.0
+              }
+            }
+          }
+        },
+        "55555555-0000-4000-8000-000000000002": {
+          "kind": "audio",
+          "duration_s": 1.5,
+          "has_audio": true,
+          "bytes": 72044,
+          "sample_rate": 24000,
+          "made_with": {
+            "workflow_id": "echo-voice-over",
+            "inputs": {
+              "prompt.text": "Night came early."
+            }
+          }
+        },
+        "55555555-0000-4000-8000-000000000003": {
+          "kind": "audio",
+          "duration_s": 1.0,
+          "has_audio": true,
+          "bytes": 48044,
+          "sample_rate": 24000
+        }
+      },
+      "expect": {
+        "steps": [
+          {
+            "step": "clip_s",
+            "clip": "s",
+            "binds": {}
+          }
+        ]
+      }
+    },
+    {
+      "description": "1.32: an audio clip whose take was not made by a workflow (an upload) is refused like a V1 one",
+      "document": {
+        "target": {
+          "width": 256,
+          "height": 128,
+          "fps": 24,
+          "sample_rate": 48000
+        },
+        "tracks": [
+          {
+            "name": "V1",
+            "kind": "video",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "s",
+                "take_id": "55555555-0000-4000-8000-000000000001",
+                "in": 0.0,
+                "out": 1.0416666666666667,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "55555555-0000-4000-8000-000000000001"
+                ],
+                "at": 0.0
+              },
+              {
+                "id": "g",
+                "take_id": null,
+                "hold": 2.0,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [],
+                "at": 1.0416666666666667
+              }
+            ]
+          },
+          {
+            "name": "A2",
+            "kind": "audio",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "l",
+                "take_id": "55555555-0000-4000-8000-000000000002",
+                "in": 0.0,
+                "out": 1.0,
+                "at": 0.0,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "55555555-0000-4000-8000-000000000002"
+                ]
+              },
+              {
+                "id": "u",
+                "take_id": "55555555-0000-4000-8000-000000000003",
+                "in": 0.0,
+                "out": 1.0,
+                "at": 1.0,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "55555555-0000-4000-8000-000000000003"
+                ]
+              }
+            ]
+          }
+        ],
+        "duration_s": 3.0416666666666665,
+        "frames": 73
+      },
+      "takes": {
+        "55555555-0000-4000-8000-000000000001": {
+          "kind": "video",
+          "duration_s": 1.0416666666666667,
+          "fps": 24,
+          "frames": 25,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 400000,
+          "made_with": {
+            "workflow_id": "echo-a2v",
+            "inputs": {
+              "prompt.text": "x",
+              "a2v.source": {
+                "take_id": "55555555-0000-4000-8000-000000000002",
+                "in": 0,
+                "out": 1.0
+              }
+            }
+          }
+        },
+        "55555555-0000-4000-8000-000000000002": {
+          "kind": "audio",
+          "duration_s": 1.5,
+          "has_audio": true,
+          "bytes": 72044,
+          "sample_rate": 24000,
+          "made_with": {
+            "workflow_id": "echo-voice-over",
+            "inputs": {
+              "prompt.text": "Night came early."
+            }
+          }
+        },
+        "55555555-0000-4000-8000-000000000003": {
+          "kind": "audio",
+          "duration_s": 1.0,
+          "has_audio": true,
+          "bytes": 48044,
+          "sample_rate": 24000
+        }
+      },
+      "clips": [
+        "s",
+        "u"
+      ],
+      "expect": {
+        "error": "not_made",
+        "clip": "u"
+      }
     }
   ],
   "media": {
@@ -1245,6 +1639,12 @@
     ],
     "ltx-retake": [
       "source.source"
+    ],
+    "echo-a2v": [
+      "a2v.source"
+    ],
+    "ltx-audio-to-video": [
+      "audio.source"
     ]
   }
 }

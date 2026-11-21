@@ -1,0 +1,951 @@
+{
+  "description": "API 1.32 dialogue scripts (README, Dialogue and Timeline audio: scripts; check.py expand_script, echo_dialogue, script_check). `library` holds the caller's elements as studio reads them (a deleted voice already null), `voices` the voices it can use now (own and live starter ones, LibraryItems). Each case lays `params` over the workflow and expands it; `take` is what the fake echo/dialogue makes of the lines. `checks` are write-script/v1 answers checked against a cast",
+  "workflows": {
+    "echo-dialogue": {
+      "title": "Echo dialogue",
+      "family": "echo",
+      "env": "fake",
+      "nodes": {
+        "dialogue": {
+          "kind": "echo/dialogue",
+          "params": {
+            "script": "",
+            "lines": [],
+            "pause": 0.35,
+            "seed": -1,
+            "delay_ms": 300
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "dialogue.audio"
+          }
+        }
+      }
+    },
+    "echo-dialogue-pinned": {
+      "title": "Echo dialogue, presets and clips only",
+      "family": "echo",
+      "env": "fake",
+      "nodes": {
+        "dialogue": {
+          "kind": "echo/dialogue",
+          "params": {
+            "script": "",
+            "lines": [],
+            "pause": 0.35,
+            "seed": -1,
+            "delay_ms": 300
+          },
+          "only": {
+            "lines": [
+              "preset",
+              "clip"
+            ]
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "dialogue.audio"
+          }
+        }
+      }
+    },
+    "qwen3-tts-dialogue": {
+      "title": "Qwen3-TTS Dialogue",
+      "family": "qwen3-tts",
+      "env": "torch",
+      "nodes": {
+        "seed": {
+          "kind": "seed",
+          "params": {
+            "seed": -1
+          }
+        },
+        "model": {
+          "kind": "qwen3-tts/model",
+          "params": {
+            "variant": "custom_voice",
+            "precision": "bf16"
+          },
+          "only": {
+            "variant": [
+              "custom_voice"
+            ]
+          }
+        },
+        "dialogue": {
+          "kind": "qwen3-tts/dialogue",
+          "in": {
+            "model": "model.model",
+            "seed": "seed.seed"
+          },
+          "params": {
+            "script": "",
+            "lines": [],
+            "pause": 0.35,
+            "language": "auto",
+            "temperature": 0.3
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "dialogue.audio"
+          }
+        }
+      }
+    },
+    "zonos3-dialogue": {
+      "title": "ZONOS3 Dialogue",
+      "family": "zonos3",
+      "env": "native",
+      "nodes": {
+        "seed": {
+          "kind": "seed",
+          "params": {
+            "seed": -1
+          }
+        },
+        "model": {
+          "kind": "zonos3/model",
+          "params": {
+            "variant": "mini",
+            "precision": "int8"
+          }
+        },
+        "dialogue": {
+          "kind": "zonos3/dialogue",
+          "in": {
+            "model": "model.model",
+            "seed": "seed.seed"
+          },
+          "params": {
+            "script": "",
+            "lines": [],
+            "pause": 0.35,
+            "language": "en-US",
+            "emotion": 0.5,
+            "energy": 0.5,
+            "whisper": 0,
+            "speaking_rate": 1,
+            "guidance": 2
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "dialogue.audio"
+          }
+        }
+      }
+    }
+  },
+  "library": [
+    {
+      "id": "7e1d0c2b-0000-4000-8000-000000000001",
+      "handle": "mara",
+      "name": "Mara",
+      "version": 1,
+      "voice_id": "echo/ada"
+    },
+    {
+      "id": "7e1d0c2b-0000-4000-8000-000000000002",
+      "handle": "jon",
+      "name": "Jon",
+      "version": 3,
+      "voice_id": "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a22"
+    },
+    {
+      "id": "7e1d0c2b-0000-4000-8000-000000000003",
+      "handle": "kai",
+      "name": "Kai",
+      "version": 1,
+      "voice_id": "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a21"
+    },
+    {
+      "id": "7e1d0c2b-0000-4000-8000-000000000004",
+      "handle": "harbour",
+      "name": "Harbour",
+      "version": 1,
+      "voice_id": null
+    },
+    {
+      "id": "7e1d0c2b-0000-4000-8000-000000000005",
+      "handle": "wren",
+      "name": "Wren",
+      "version": 1,
+      "voice_id": "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a23"
+    },
+    {
+      "id": "7e1d0c2b-0000-4000-8000-000000000006",
+      "handle": "bo",
+      "name": "Bo",
+      "version": 1,
+      "voice_id": "echo/bo"
+    },
+    {
+      "id": "7e1d0c2b-0000-4000-8000-000000000007",
+      "handle": "ryan",
+      "name": "Ryan",
+      "version": 1,
+      "voice_id": "qwen3-tts/ryan"
+    },
+    {
+      "id": "7e1d0c2b-0000-4000-8000-000000000008",
+      "handle": "sav",
+      "name": "Sav",
+      "version": 1,
+      "voice_id": "zonos3/savannah"
+    },
+    {
+      "id": "7e1d0c2b-0000-4000-8000-000000000009",
+      "handle": "serena",
+      "name": "Serena",
+      "version": 1,
+      "voice_id": "qwen3-tts/serena"
+    },
+    {
+      "id": "7e1d0c2b-0000-4000-8000-000000000010",
+      "handle": "ned",
+      "name": "Ned",
+      "version": 1,
+      "voice_id": null
+    }
+  ],
+  "voices": {
+    "echo/ada": {
+      "id": "echo/ada",
+      "kind": "voice",
+      "group": "preset",
+      "name": "Ada",
+      "handle": null,
+      "text": "",
+      "images": [],
+      "thumb_url": null,
+      "version": 1,
+      "created_at": "2026-11-21T10:00:00Z",
+      "updated_at": "2026-11-21T10:00:00Z",
+      "source": "starter",
+      "family": "echo",
+      "loras": [],
+      "needs": [],
+      "voice": {
+        "source": "preset",
+        "family": "echo",
+        "speaker": "ada",
+        "language": "en"
+      }
+    },
+    "echo/bo": {
+      "id": "echo/bo",
+      "kind": "voice",
+      "group": "preset",
+      "name": "Bo",
+      "handle": null,
+      "text": "",
+      "images": [],
+      "thumb_url": null,
+      "version": 1,
+      "created_at": "2026-11-21T10:00:00Z",
+      "updated_at": "2026-11-21T10:00:00Z",
+      "source": "starter",
+      "family": "echo",
+      "loras": [],
+      "needs": [],
+      "voice": {
+        "source": "preset",
+        "family": "echo",
+        "speaker": "bo",
+        "language": "zh",
+        "style": "calm"
+      }
+    },
+    "qwen3-tts/ryan": {
+      "id": "qwen3-tts/ryan",
+      "kind": "voice",
+      "group": "preset",
+      "name": "Ryan",
+      "handle": null,
+      "text": "",
+      "images": [],
+      "thumb_url": null,
+      "version": 1,
+      "created_at": "2026-11-21T10:00:00Z",
+      "updated_at": "2026-11-21T10:00:00Z",
+      "source": "starter",
+      "family": "qwen3-tts",
+      "loras": [],
+      "needs": [],
+      "voice": {
+        "source": "preset",
+        "family": "qwen3-tts",
+        "speaker": "ryan",
+        "language": "en"
+      }
+    },
+    "qwen3-tts/serena": {
+      "id": "qwen3-tts/serena",
+      "kind": "voice",
+      "group": "preset",
+      "name": "Serena",
+      "handle": null,
+      "text": "",
+      "images": [],
+      "thumb_url": null,
+      "version": 1,
+      "created_at": "2026-11-21T10:00:00Z",
+      "updated_at": "2026-11-21T10:00:00Z",
+      "source": "starter",
+      "family": "qwen3-tts",
+      "loras": [],
+      "needs": [],
+      "voice": {
+        "source": "preset",
+        "family": "qwen3-tts",
+        "speaker": "serena",
+        "language": "zh"
+      }
+    },
+    "zonos3/savannah": {
+      "id": "zonos3/savannah",
+      "kind": "voice",
+      "group": "preset",
+      "name": "Savannah",
+      "handle": null,
+      "text": "",
+      "images": [],
+      "thumb_url": null,
+      "version": 1,
+      "created_at": "2026-11-21T10:00:00Z",
+      "updated_at": "2026-11-21T10:00:00Z",
+      "source": "starter",
+      "family": "zonos3",
+      "loras": [],
+      "needs": [],
+      "voice": {
+        "source": "preset",
+        "family": "zonos3",
+        "speaker": "default_0123456789abcdef",
+        "language": "en-US"
+      }
+    },
+    "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a21": {
+      "id": "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a21",
+      "kind": "voice",
+      "group": "designed",
+      "name": "Kai design",
+      "handle": null,
+      "text": "",
+      "images": [],
+      "thumb_url": null,
+      "version": 1,
+      "created_at": "2026-11-21T10:00:00Z",
+      "updated_at": "2026-11-21T10:00:00Z",
+      "source": "mine",
+      "family": null,
+      "loras": [],
+      "needs": [],
+      "voice": {
+        "source": "designed",
+        "design": "male, 30, gravelly, tired",
+        "language": "en"
+      }
+    },
+    "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a22": {
+      "id": "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a22",
+      "kind": "voice",
+      "group": "cloned",
+      "name": "Jon (cloned)",
+      "handle": null,
+      "text": "",
+      "images": [],
+      "thumb_url": null,
+      "version": 2,
+      "created_at": "2026-11-21T10:00:00Z",
+      "updated_at": "2026-11-21T10:00:00Z",
+      "source": "mine",
+      "family": null,
+      "loras": [],
+      "needs": [],
+      "voice": {
+        "source": "cloned",
+        "clip": {
+          "take_id": "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8",
+          "in": 4.0,
+          "out": 16.0
+        },
+        "consent": true
+      }
+    },
+    "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a23": {
+      "id": "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a23",
+      "kind": "voice",
+      "group": "designed",
+      "name": "Wren",
+      "handle": null,
+      "text": "",
+      "images": [],
+      "thumb_url": null,
+      "version": 1,
+      "created_at": "2026-11-21T10:00:00Z",
+      "updated_at": "2026-11-21T10:00:00Z",
+      "source": "mine",
+      "family": null,
+      "loras": [],
+      "needs": [],
+      "voice": {
+        "source": "designed",
+        "design": "female, 60, warm",
+        "clip": {
+          "take_id": "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f9",
+          "in": 0.0,
+          "out": 5.0
+        },
+        "consent": true
+      }
+    }
+  },
+  "cases": [
+    {
+      "description": "the board's script on echo: a style, a capital handle, an empty line doubles the pause before line 3; the script goes empty, typed keeps it; Jon's cloned clip is a parent",
+      "workflow": "echo-dialogue",
+      "params": {
+        "dialogue.script": "@mara (quiet): You said you'd be back by noon.\n@Jon: I know. The road was closed.\n\n@mara: Then you should have called."
+      },
+      "expect": {
+        "inputs": {
+          "dialogue.script": "",
+          "dialogue.lines": [
+            {
+              "voice": {
+                "voice_id": "echo/ada"
+              },
+              "text": "You said you'd be back by noon.",
+              "style": "quiet",
+              "pause_s": 0.35
+            },
+            {
+              "voice": {
+                "voice_id": "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a22"
+              },
+              "text": "I know. The road was closed.",
+              "style": "",
+              "pause_s": 0.7
+            },
+            {
+              "voice": {
+                "voice_id": "echo/ada"
+              },
+              "text": "Then you should have called.",
+              "style": "",
+              "pause_s": 0
+            }
+          ]
+        },
+        "typed": {
+          "dialogue.script": "@mara (quiet): You said you'd be back by noon.\n@Jon: I know. The road was closed.\n\n@mara: Then you should have called.",
+          "dialogue.lines": []
+        },
+        "elements": [
+          {
+            "id": "7e1d0c2b-0000-4000-8000-000000000001",
+            "handle": "mara",
+            "name": "Mara",
+            "version": 1
+          },
+          {
+            "id": "7e1d0c2b-0000-4000-8000-000000000002",
+            "handle": "jon",
+            "name": "Jon",
+            "version": 3
+          }
+        ],
+        "voices": [
+          {
+            "id": "echo/ada",
+            "name": "Ada",
+            "version": 1,
+            "source": "preset"
+          },
+          {
+            "id": "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a22",
+            "name": "Jon (cloned)",
+            "version": 2,
+            "source": "cloned"
+          }
+        ],
+        "parents": [
+          "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8"
+        ]
+      },
+      "take": {
+        "duration_s": 6.85,
+        "cues": [
+          {
+            "line": 1,
+            "start_s": 0.0,
+            "end_s": 2.066666666666667,
+            "voice_id": "echo/ada",
+            "text": "You said you'd be back by noon."
+          },
+          {
+            "line": 2,
+            "start_s": 2.4166666666666665,
+            "end_s": 4.283333333333333,
+            "voice_id": "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a22",
+            "text": "I know. The road was closed."
+          },
+          {
+            "line": 3,
+            "start_s": 4.983333333333333,
+            "end_s": 6.85,
+            "voice_id": "echo/ada",
+            "text": "Then you should have called."
+          }
+        ]
+      }
+    },
+    {
+      "description": "Pause between lines 0.5: 0.5 between lines, 1.0 after an empty line; leading and trailing empty lines are ignored; \\r\\n line ends",
+      "workflow": "echo-dialogue",
+      "params": {
+        "dialogue.script": "\n\n@bo: One.\r\n\r\n@bo: Two.\n@mara: Three.\n\n",
+        "dialogue.pause": 0.5
+      },
+      "expect": {
+        "inputs": {
+          "dialogue.script": "",
+          "dialogue.lines": [
+            {
+              "voice": {
+                "voice_id": "echo/bo"
+              },
+              "text": "One.",
+              "style": "",
+              "pause_s": 1.0
+            },
+            {
+              "voice": {
+                "voice_id": "echo/bo"
+              },
+              "text": "Two.",
+              "style": "",
+              "pause_s": 0.5
+            },
+            {
+              "voice": {
+                "voice_id": "echo/ada"
+              },
+              "text": "Three.",
+              "style": "",
+              "pause_s": 0
+            }
+          ]
+        },
+        "typed": {
+          "dialogue.script": "\n\n@bo: One.\r\n\r\n@bo: Two.\n@mara: Three.\n\n",
+          "dialogue.lines": []
+        },
+        "elements": [
+          {
+            "id": "7e1d0c2b-0000-4000-8000-000000000006",
+            "handle": "bo",
+            "name": "Bo",
+            "version": 1
+          },
+          {
+            "id": "7e1d0c2b-0000-4000-8000-000000000001",
+            "handle": "mara",
+            "name": "Mara",
+            "version": 1
+          }
+        ],
+        "voices": [
+          {
+            "id": "echo/bo",
+            "name": "Bo",
+            "version": 1,
+            "source": "preset"
+          },
+          {
+            "id": "echo/ada",
+            "name": "Ada",
+            "version": 1,
+            "source": "preset"
+          }
+        ],
+        "parents": []
+      },
+      "take": {
+        "duration_s": 2.433333333333333,
+        "cues": [
+          {
+            "line": 1,
+            "start_s": 0.0,
+            "end_s": 0.26666666666666666,
+            "voice_id": "echo/bo",
+            "text": "One."
+          },
+          {
+            "line": 2,
+            "start_s": 1.2666666666666666,
+            "end_s": 1.5333333333333334,
+            "voice_id": "echo/bo",
+            "text": "Two."
+          },
+          {
+            "line": 3,
+            "start_s": 2.033333333333333,
+            "end_s": 2.433333333333333,
+            "voice_id": "echo/ada",
+            "text": "Three."
+          }
+        ]
+      }
+    },
+    {
+      "description": "every problem of each line, line order: the form, nothing to say, an unknown element, a place without a voice, a character without one",
+      "workflow": "echo-dialogue",
+      "params": {
+        "dialogue.script": "mara: hi\n@mara:\n@jonny: hey\n@harbour: waves\n@ned (calm): ok\n@mara: fine"
+      },
+      "expect": {
+        "errors": [
+          "dialogue.script line 1: write @name: text or @name (style): text",
+          "dialogue.script line 2: nothing to say",
+          "dialogue.script line 3: unknown element @jonny",
+          "dialogue.script line 4: @harbour has no voice",
+          "dialogue.script line 5: @ned has no voice"
+        ]
+      }
+    },
+    {
+      "description": "a line over 600 characters, a style over 200",
+      "workflow": "echo-dialogue",
+      "params": {
+        "dialogue.script": "@mara: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n@mara (bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb): hi"
+      },
+      "expect": {
+        "errors": [
+          "dialogue.script line 1: at most 600 characters (601)",
+          "dialogue.script line 2: the style is at most 200 characters (201)"
+        ]
+      }
+    },
+    {
+      "description": "an empty script (blank lines only) and no lines",
+      "workflow": "echo-dialogue",
+      "params": {
+        "dialogue.script": " \n\n"
+      },
+      "expect": {
+        "errors": [
+          "dialogue.script: the script is empty"
+        ]
+      }
+    },
+    {
+      "description": "41 lines: at most 40",
+      "workflow": "echo-dialogue",
+      "params": {
+        "dialogue.script": "@mara: hi\n@mara: hi\n@mara: hi\n@mara: hi\n@mara: hi\n@mara: hi\n@mara: hi\n@mara: hi\n@mara: hi\n@mara: hi\n@mara: hi\n@mara: hi\n@mara: hi\n@mara: hi\n@mara: hi\n@mara: hi\n@mara: hi\n@mara: hi\n@mara: hi\n@mara: hi\n@mara: hi\n@mara: hi\n@mara: hi\n@mara: hi\n@mara: hi\n@mara: hi\n@mara: hi\n@mara: hi\n@mara: hi\n@mara: hi\n@mara: hi\n@mara: hi\n@mara: hi\n@mara: hi\n@mara: hi\n@mara: hi\n@mara: hi\n@mara: hi\n@mara: hi\n@mara: hi\n@mara: hi"
+      },
+      "expect": {
+        "errors": [
+          "dialogue.lines: at most 40 lines"
+        ]
+      }
+    },
+    {
+      "description": "the script and lines both given",
+      "workflow": "echo-dialogue",
+      "params": {
+        "dialogue.script": "@mara: hi",
+        "dialogue.lines": [
+          {
+            "voice": {
+              "voice_id": "echo/ada"
+            },
+            "text": "hi",
+            "style": "",
+            "pause_s": 0.35
+          }
+        ]
+      },
+      "expect": {
+        "errors": [
+          "dialogue.lines: give the script or the lines, not both"
+        ]
+      }
+    },
+    {
+      "description": "lines given without a script are left for the voice resolution (nothing expanded)",
+      "workflow": "echo-dialogue",
+      "params": {
+        "dialogue.lines": [
+          {
+            "voice": {
+              "voice_id": "echo/ada"
+            },
+            "text": "hi",
+            "style": "",
+            "pause_s": 0.35
+          }
+        ]
+      },
+      "expect": {
+        "inputs": {},
+        "typed": {},
+        "elements": [],
+        "voices": [],
+        "parents": []
+      }
+    },
+    {
+      "description": "only {lines: [preset, clip]}: a designed voice does not fit; a designed voice with a clip does, by its clip (a parent)",
+      "workflow": "echo-dialogue-pinned",
+      "params": {
+        "dialogue.script": "@kai: Both of you, inside.\n@wren: Now."
+      },
+      "expect": {
+        "errors": [
+          "dialogue.script line 1: voice Kai design does not fit this workflow (this workflow cannot use a designed voice)"
+        ]
+      }
+    },
+    {
+      "description": "Qwen3-TTS dialogue takes its own presets only: a cloned voice, a designed one and an echo preset do not fit",
+      "workflow": "qwen3-tts-dialogue",
+      "params": {
+        "dialogue.script": "@ryan: Hello.\n@jon: Hi.\n@kai: Hey.\n@mara: Yo.\n@serena (bright): Morning."
+      },
+      "expect": {
+        "errors": [
+          "dialogue.script line 2: voice Jon (cloned) does not fit this workflow (this workflow cannot clone a voice)",
+          "dialogue.script line 3: voice Kai design does not fit this workflow (this workflow cannot use a designed voice)",
+          "dialogue.script line 4: voice Ada does not fit this workflow (voice Ada is for echo)"
+        ]
+      }
+    },
+    {
+      "description": "Qwen3-TTS dialogue with two presets",
+      "workflow": "qwen3-tts-dialogue",
+      "params": {
+        "dialogue.script": "@serena (quiet): You said noon.\n@ryan: The road was closed."
+      },
+      "expect": {
+        "inputs": {
+          "dialogue.script": "",
+          "dialogue.lines": [
+            {
+              "voice": {
+                "voice_id": "qwen3-tts/serena"
+              },
+              "text": "You said noon.",
+              "style": "quiet",
+              "pause_s": 0.35
+            },
+            {
+              "voice": {
+                "voice_id": "qwen3-tts/ryan"
+              },
+              "text": "The road was closed.",
+              "style": "",
+              "pause_s": 0
+            }
+          ]
+        },
+        "typed": {
+          "dialogue.script": "@serena (quiet): You said noon.\n@ryan: The road was closed.",
+          "dialogue.lines": []
+        },
+        "elements": [
+          {
+            "id": "7e1d0c2b-0000-4000-8000-000000000009",
+            "handle": "serena",
+            "name": "Serena",
+            "version": 1
+          },
+          {
+            "id": "7e1d0c2b-0000-4000-8000-000000000007",
+            "handle": "ryan",
+            "name": "Ryan",
+            "version": 1
+          }
+        ],
+        "voices": [
+          {
+            "id": "qwen3-tts/serena",
+            "name": "Serena",
+            "version": 1,
+            "source": "preset"
+          },
+          {
+            "id": "qwen3-tts/ryan",
+            "name": "Ryan",
+            "version": 1,
+            "source": "preset"
+          }
+        ],
+        "parents": []
+      }
+    },
+    {
+      "description": "ZONOS3 dialogue: a ZONOS3 preset and a cloned voice fit; a designed voice without a clip does not (the board's line 4)",
+      "workflow": "zonos3-dialogue",
+      "params": {
+        "dialogue.script": "@sav (quiet): You said noon.\n@jon: The road was closed.\n@sav: Then call.\n@kai: Both of you, inside. Now."
+      },
+      "expect": {
+        "errors": [
+          "dialogue.script line 4: voice Kai design does not fit this workflow (this workflow cannot use a designed voice)"
+        ]
+      }
+    },
+    {
+      "description": "ZONOS3 dialogue: the board's first three lines",
+      "workflow": "zonos3-dialogue",
+      "params": {
+        "dialogue.script": "@sav (quiet): You said noon.\n@jon: The road was closed.\n@sav: Then call."
+      },
+      "expect": {
+        "inputs": {
+          "dialogue.script": "",
+          "dialogue.lines": [
+            {
+              "voice": {
+                "voice_id": "zonos3/savannah"
+              },
+              "text": "You said noon.",
+              "style": "quiet",
+              "pause_s": 0.35
+            },
+            {
+              "voice": {
+                "voice_id": "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a22"
+              },
+              "text": "The road was closed.",
+              "style": "",
+              "pause_s": 0.35
+            },
+            {
+              "voice": {
+                "voice_id": "zonos3/savannah"
+              },
+              "text": "Then call.",
+              "style": "",
+              "pause_s": 0
+            }
+          ]
+        },
+        "typed": {
+          "dialogue.script": "@sav (quiet): You said noon.\n@jon: The road was closed.\n@sav: Then call.",
+          "dialogue.lines": []
+        },
+        "elements": [
+          {
+            "id": "7e1d0c2b-0000-4000-8000-000000000008",
+            "handle": "sav",
+            "name": "Sav",
+            "version": 1
+          },
+          {
+            "id": "7e1d0c2b-0000-4000-8000-000000000002",
+            "handle": "jon",
+            "name": "Jon",
+            "version": 3
+          }
+        ],
+        "voices": [
+          {
+            "id": "zonos3/savannah",
+            "name": "Savannah",
+            "version": 1,
+            "source": "preset"
+          },
+          {
+            "id": "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a22",
+            "name": "Jon (cloned)",
+            "version": 2,
+            "source": "cloned"
+          }
+        ],
+        "parents": [
+          "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8"
+        ]
+      }
+    }
+  ],
+  "checks": [
+    {
+      "description": "a good script",
+      "script": "@mara (quiet): Noon.\n\n@jon: Closed.",
+      "cast": [
+        "mara",
+        "jon"
+      ],
+      "expect": null
+    },
+    {
+      "description": "a handle not in the cast",
+      "script": "@mara: Noon.\n@kai: Hm.",
+      "cast": [
+        "mara",
+        "jon"
+      ],
+      "expect": "line 2: @kai is not in the cast"
+    },
+    {
+      "description": "a line in prose",
+      "script": "@mara: Noon.\nThey look away.",
+      "cast": [
+        "mara"
+      ],
+      "expect": "line 2: write @name: text or @name (style): text"
+    },
+    {
+      "description": "nothing",
+      "script": "\n",
+      "cast": [
+        "mara"
+      ],
+      "expect": "the script is empty"
+    },
+    {
+      "description": "41 lines",
+      "script": "@mara: a\n@mara: a\n@mara: a\n@mara: a\n@mara: a\n@mara: a\n@mara: a\n@mara: a\n@mara: a\n@mara: a\n@mara: a\n@mara: a\n@mara: a\n@mara: a\n@mara: a\n@mara: a\n@mara: a\n@mara: a\n@mara: a\n@mara: a\n@mara: a\n@mara: a\n@mara: a\n@mara: a\n@mara: a\n@mara: a\n@mara: a\n@mara: a\n@mara: a\n@mara: a\n@mara: a\n@mara: a\n@mara: a\n@mara: a\n@mara: a\n@mara: a\n@mara: a\n@mara: a\n@mara: a\n@mara: a\n@mara: a",
+      "cast": [
+        "mara"
+      ],
+      "expect": "more than 40 lines"
+    },
+    {
+      "description": "a line with nothing to say",
+      "script": "@mara: Noon.\n@jon:   ",
+      "cast": [
+        "mara",
+        "jon"
+      ],
+      "expect": "line 2: nothing to say"
+    },
+    {
+      "description": "a line over 600 characters",
+      "script": "@mara: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "cast": [
+        "mara"
+      ],
+      "expect": "line 1: at most 600 characters (601)"
+    },
+    {
+      "description": "a style over 200 characters",
+      "script": "@mara (bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb): Hi.",
+      "cast": [
+        "mara"
+      ],
+      "expect": "line 1: the style is at most 200 characters (201)"
+    }
+  ]
+}

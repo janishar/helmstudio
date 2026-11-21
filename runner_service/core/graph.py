@@ -355,10 +355,10 @@ def media_fit(spec: dict, v: dict) -> str | None:
 def _check_rows(spec: dict, value) -> str | None:
     if not isinstance(value, list):
         return "must be a list"
-    if value == [] and any(t in images.TAKES for t in spec["item"].values()):
-        return (
-            None  # a workflow holds no takes: [] even under min; `validate` needs min items at run
-        )
+    if value == [] and (
+        any(t in images.TAKES for t in spec["item"].values()) or voice_fields(spec)
+    ):
+        return None  # a workflow holds no takes or voices: [] even under min; `validate` needs min take items at run
     if not spec.get("min", 0) <= len(value) <= spec["max"]:
         return f"must have {spec.get('min', 0)} to {spec['max']} items"
     for i, row in enumerate(value, 1):
@@ -376,9 +376,22 @@ def _check_rows(spec: dict, value) -> str | None:
                     return f"item {i}.{f}: a LoRA is required"
             elif isinstance(item, dict) and item["type"] == "media" and not _image(row.get(f)):
                 return f"item {i}.{f}: a take is required"  # API 1.22: never left out
+            elif (
+                isinstance(item, dict)
+                and item["type"] == "voice"
+                and not isinstance(row.get(f), dict)
+            ):
+                return f"item {i}.{f}: a voice is required"  # API 1.32: a dialogue line's speaker
             elif f in row and (why := _check_param(item, row[f])):
                 return f"item {i}.{f} {why}"
     return None
+
+
+def voice_fields(spec: dict) -> list[str]:
+    """A rows param's item fields that are `voice` params (API 1.32: a dialogue's lines)."""
+    return [
+        f for f, t in spec.get("item", {}).items() if isinstance(t, dict) and t["type"] == "voice"
+    ]
 
 
 LORA_ID = re.compile(
@@ -618,6 +631,13 @@ def validate(nodes: dict, schemas: dict[str, dict], run: bool = True) -> list[st
                 errs.append(f"{nid}.{spec['name']}: {REQUIRED[spec['type']]} is required")
             elif spec["type"] == "voice" and isinstance(value, dict) and "source" in value and (why := voice_reason(spec, n["kind"], value)):  # fmt: skip
                 errs.append(f"{nid}.{spec['name']}: {why}")
+            for i, row in enumerate(
+                value if spec["type"] == "rows" and isinstance(value, list) else [], 1
+            ):
+                for f in voice_fields(spec):  # API 1.32: each line's voice, as a voice param's
+                    v = row.get(f) if isinstance(row, dict) else None
+                    if isinstance(v, dict) and "source" in v and (why := voice_reason(spec["item"][f], n["kind"], v)):  # fmt: skip
+                        errs.append(f"{nid}.{spec['name']}[{i}].{f}: {why}")
     # a registry workflow may leave params at their defaults (the ask fixtures give only max_tokens); a run has all
     return errs + [p[4] for p in problems(nodes, schemas) if run or p[0] != "param_missing"]
 
@@ -650,11 +670,30 @@ def voice_reason(spec: dict, kind: str, v: dict) -> str | None:
     return None
 
 
+def script_target(schema: dict) -> dict | None:
+    """The rows param `lines` a dialogue stage speaks (check.py script_target): item fields exactly voice (voice),
+    text and style (string) and pause_s (float); else None."""
+    p = next((q for q in schema["params"] if q["name"] == "lines" and q["type"] == "rows"), None)
+    it = p["item"] if p else {}
+    typ = lambda k: it[k]["type"] if isinstance(it.get(k), dict) else None
+    ok = p and voice_fields(p) == ["voice"] and set(it) == {"voice", "text", "style", "pause_s"} and \
+        (typ("text"), typ("style"), typ("pause_s")) == ("string", "string", "float")  # fmt: skip
+    return p if ok else None
+
+
 def speech_seconds(nodes: dict, schemas: dict, nid: str, max_seconds: float | None = None) -> float:
     """peak_gb's `speech_seconds` at `nid` (README, Voices: memory; check.py speech_seconds): the code points of the text
     reaching its first wired Text input (a prompt's text; through any other node, the nearest upstream prompt's),
     else of its nearest upstream prompt (fewest wires, then node id), / 15, capped at `max_seconds`; 0 without."""
     s = schemas[nodes[nid]["kind"]]
+    if script_target(
+        s
+    ):  # API 1.32, a dialogue: its lines' text and the pauses between them (README, Dialogue)
+        rows = nodes[nid].get("params", {}).get("lines", [])
+        sec = sum(len(r.get("text", "")) for r in rows) / SPEECH_CPS + sum(
+            r.get("pause_s", 0) for r in rows[:-1]
+        )
+        return min(sec, max_seconds) if max_seconds is not None else sec
     wires = nodes[nid].get("in", {})
     port = next(
         (i["name"] for i in s["inputs"] if i["type"] == "Text" and i["name"] in wires), None

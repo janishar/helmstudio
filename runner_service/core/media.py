@@ -9,6 +9,7 @@ import re
 import shutil
 import subprocess
 import sys
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 
 FFMPEG, FFPROBE = shutil.which("ffmpeg"), shutil.which("ffprobe")
@@ -122,9 +123,11 @@ IMAGE_CODECS = {"png", "mjpeg", "webp", "bmp", "tiff"}
 
 def check_kind(info: dict, kind: str) -> None:
     """Refuse (input) a file that is not the media type the command says: a video = mp4/mov with a video stream
-    that is not an image codec; an image = one still picture."""
+    that is not an image codec; an image = one still picture; (1.32) an audio = a WAV with a sound and no picture."""
     v = info["video"]
-    if kind == "video":
+    if kind == "audio":
+        ok = v is None and info["audio"] is not None and info["container"] == "wav"
+    elif kind == "video":
         ok = (
             v is not None
             and info["container"] in ("mp4", "mov")
@@ -277,3 +280,39 @@ def pieces(text: str, limit: int) -> list[str]:
         else:
             cur = f"{cur} {sentence}" if cur else sentence
     return [*out, cur] if cur else out
+
+
+def rnd(x: float) -> int:
+    """Round half away from zero, exactly (contracts check.py rnd)."""
+    return int(Decimal(x).quantize(Decimal(1), rounding=ROUND_HALF_UP))
+
+
+def stitch(lines: list[dict], spoken: list[bytes], rate: int) -> tuple[bytes, list[dict]]:
+    """A dialogue's take (contracts/README.md, Dialogue: cues; check.py echo_dialogue): each line's PCM 16-bit
+    samples, then rnd(pause_s × rate) samples of silence before the next line (none after the last), and one cue per
+    line {line, start_s, end_s, voice_id, text: the trimmed text spoken} in the take's seconds."""
+    out, cues, at = [], [], 0
+    for i, (row, pcm) in enumerate(zip(lines, spoken, strict=True), 1):
+        end = at + len(pcm) // 2
+        cues.append({"line": i, "start_s": at / rate, "end_s": end / rate,
+                     "voice_id": row["voice"]["item_id"], "text": row["text"].strip()})  # fmt: skip
+        gap = rnd(row["pause_s"] * rate) if i < len(lines) else 0
+        out += [pcm[: len(pcm) // 2 * 2], bytes(2 * gap)]
+        at = end + gap
+    return b"".join(out), cues
+
+
+MAX_TAKE_S = 600  # the longest audio take the output node stores (core.nodes._wav)
+
+
+def lines_problem(lines: list[dict]) -> str | None:
+    """A dialogue stage's check before loading (`check_<stage>` text, after the node id): its lines planned as
+    speech_seconds plans them (15 characters a second plus the pauses), refused above MAX_TAKE_S."""
+    planned = sum(len(r.get("text", "")) for r in lines) / 15 + sum(
+        r.get("pause_s", 0) for r in lines[:-1]
+    )
+    return (
+        f": about {planned:.0f} s of speech; a take is at most {MAX_TAKE_S} s"
+        if planned > MAX_TAKE_S
+        else None
+    )

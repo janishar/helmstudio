@@ -240,18 +240,20 @@ def _tone(hz: float, phase: float) -> bytes:
                              for i in range(CHAR_SAMPLES))).tobytes()  # fmt: skip
 
 
+def _voice(v: dict) -> int:
+    """A voice's pitch offset: a clip voice's from the clip's etag (its bytes are read as a media input), any other's
+    from its resolved value."""
+    data = v["clip"]["etag"] if v.get("source") == "clip" else json.dumps(v, sort_keys=True)
+    return zlib.crc32(data.encode())
+
+
 def speak(ctx, params: dict, inputs: dict) -> dict:
     """PCM 16-bit mono at 24 kHz: one 1/15 s sine per character, its pitch from the character and the voice (defs
     voice, as studio resolved it), its phase from the seed; deterministic, one progress step per 15 characters."""
     text = inputs["text"]
     if not text:
         raise RunError(f"{ctx.node}: nothing to say")
-    v = params["voice"]  # a clip voice: the clip's etag (its bytes are read as a media input)
-    voice = zlib.crc32(
-        v["clip"]["etag"].encode()
-        if v.get("source") == "clip"
-        else json.dumps(v, sort_keys=True).encode()
-    )
+    voice = _voice(params["voice"])
     phase = params["seed"] % 1000 / 1000 * 2 * math.pi
     tones: dict[str, bytes] = {}
     steps = math.ceil(len(text) / CHARS_PER_STEP)
@@ -268,6 +270,29 @@ def speak(ctx, params: dict, inputs: dict) -> dict:
     }
 
 
+def dialogue(ctx, params: dict, inputs: dict) -> dict:
+    """echo_dialogue (contracts check.py): per line one 1/15 s sine per character, its pitch from the character and
+    the line's voice, its phase from the seed, then rnd(pause_s × 24000) samples of silence before the next line;
+    one progress step per line; the cues from those sample counts."""
+    lines = params["lines"]
+    if not lines:
+        raise RunError(f"{ctx.node}: nothing to say")
+    phase, spoken = params["seed"] % 1000 / 1000 * 2 * math.pi, []
+    for i, row in enumerate(lines, 1):
+        ctx.check()
+        time.sleep(params["delay_ms"] / 1000)
+        voice, tones = _voice(row["voice"]), {}
+        text = row["text"].strip()  # what is spoken, as the real packs (the cue's text too)
+        for c in text:
+            if c not in tones:
+                tones[c] = _tone(110 + (ord(c) * 37 + voice) % 770, phase)
+        spoken.append(b"".join(tones[c] for c in text))
+        ctx.progress(i, len(lines), "speaking")
+    pcm, cues = media.stitch(lines, spoken, SPEECH_RATE)
+    return {"audio": {"wav": pcm, "sample_rate": SPEECH_RATE, "duration_s": len(pcm) / 2 / SPEECH_RATE,
+                      "cues": cues}}  # fmt: skip
+
+
 def lora_stack(ctx, params: dict, inputs: dict) -> dict:
     """The text with the LoRAs it received named: `<text> [LoRA <name> x<strength>, ...]`; no rows: the text as it is
     (an empty stack is the identity). The fake runner applies nothing."""
@@ -279,6 +304,7 @@ def lora_stack(ctx, params: dict, inputs: dict) -> dict:
 
 
 ANSWER, RETRY = "ECHO-ANSWER:", "ECHO-RETRY:"
+REASKED = "Your answer was invalid:"  # pipelines_service agents.REASK
 
 
 def scripted(prompt: str, marker: str) -> str | None:
@@ -316,7 +342,8 @@ def ask(ctx, params: dict, inputs: dict) -> dict:
         tries.append(prompt)
         original = params["prompt"]
         text = (
-            (len(tries) > 1 and scripted(original, RETRY))
+            # a retry here, or (1.32) a pipelines re-ask (a node's check failed a valid answer): the ECHO-RETRY one
+            ((len(tries) > 1 or REASKED in original) and scripted(original, RETRY))
             or turn(original)
             or scripted(original, ANSWER)
         )

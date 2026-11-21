@@ -1,0 +1,13 @@
+{
+  "slot": {
+    "track": "V1",
+    "at": 15.0,
+    "length": 4.5
+  },
+  "run": {
+    "workflow_id": "echo-dialogue",
+    "inputs": {
+      "dialogue.script": "@mara (quiet): You said you'd be back by noon.\n@jon: I know. The road was closed."
+    }
+  }
+}

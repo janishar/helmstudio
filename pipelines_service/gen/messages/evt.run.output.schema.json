@@ -225,6 +225,15 @@
               "minimum": 8000,
               "maximum": 96000,
               "description": "the model's own rate (Qwen3-TTS, echo: 24000; ZONOS3: 44100)"
+            },
+            "cues": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 40,
+              "items": {
+                "$ref": "defs.schema.json#/$defs/cue"
+              },
+              "description": "API 1.32, a dialogue's take only (a stage with `lines`): one cue per line, in order, each [start_s, end_s) inside [0, duration_s] and after the previous one's end; absent for one voice"
             }
           }
         }

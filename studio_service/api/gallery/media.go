@@ -131,13 +131,23 @@ func Offers(t MediaTake, workflows []registry.Workflow, rng *[2]float64) []dto.T
 					continue
 				}
 				_, image := p.ImageInput()
+				_, field, rows := registry.MediaRowsField(p)
 				if (t.Kind == "image" && image) || (t.Kind != "image" && p.Type == "media" &&
-					(slices.Contains(p.Accepts, t.Kind) || (t.Kind == "video" && slices.Contains(p.Accepts, "audio")))) {
+					(slices.Contains(p.Accepts, t.Kind) || (t.Kind == "video" && slices.Contains(p.Accepts, "audio")))) ||
+					// API 1.32: rows of one media field, by the take's own kind only
+					(t.Kind != "image" && rows && slices.Contains(field.Accepts, t.Kind)) {
 					found = append(found, at{id, p})
 				}
 			}
 		}
-		if len(found) != 1 || (t.Kind != "image" && MediaFit(found[0].p, t) != "") {
+		if len(found) != 1 {
+			continue
+		}
+		spec := found[0].p
+		if _, field, rows := registry.MediaRowsField(spec); rows {
+			spec = field
+		}
+		if t.Kind != "image" && MediaFit(spec, t) != "" {
 			continue
 		}
 		p, path := found[0].p, found[0].node+"."+found[0].p.Name
@@ -184,12 +194,30 @@ func mediaInputs(t MediaTake, wf registry.Workflow, p registry.Param, path strin
 	switch field, _ := p.ImageInput(); {
 	case p.Type == "image":
 		return map[string]any{path: ref}, true
-	case p.Type == "rows":
+	case p.Type == "rows" && field != "":
 		return map[string]any{path: []any{map[string]any{field: ref}}}, true
 	}
 	a, b := 0.0, t.DurationS
 	if rng != nil {
 		a, b = rng[0], rng[1]
+	}
+	if name, spec, rows := registry.MediaRowsField(p); rows { // API 1.32: the take as item 1
+		n := b - a // the part offered (a Timeline range) must hold the field's min_s and max_s
+		if spec.Trim {
+			longest := math.Inf(1)
+			if spec.MaxS > 0 {
+				longest = spec.MaxS
+			}
+			if p.MaxTotalS > 0 {
+				longest = min(longest, p.MaxTotalS)
+			}
+			ref["in"], ref["out"] = a, min(b, a+longest)
+			n = min(b, a+longest) - a
+		}
+		if n < spec.MinS-1e-9 || (spec.MaxS > 0 && n > spec.MaxS+1e-9) {
+			return nil, false
+		}
+		return map[string]any{path: []any{map[string]any{name: ref}}}, true
 	}
 	if p.Trim {
 		end := b

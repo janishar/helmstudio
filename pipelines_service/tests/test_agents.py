@@ -7,7 +7,7 @@ import json
 import uuid
 
 import pytest
-from conftest import CONTRACTS, OWNER, FakeJS, FakeStudio, command, engine, idle
+from conftest import CONTRACTS, OWNER, FakeJS, FakeStudio, FakeTools, command, engine, idle
 
 import agents
 import memory
@@ -136,6 +136,17 @@ def test_answers_are_parsed_from_the_outermost_object():
     _, err = agents.parse('{"route": "maybe", "reason": ""}', agents.decide_schema(["a", "b"]))
     assert err.startswith("answer did not match the schema: route:")
     assert agents.mentions("@rex meets @@not and mail@x.com @Tom-") == ["rex", "tom"]
+
+
+def test_script_check_and_the_cast_match_the_fixtures():
+    for c in json.loads((CONTRACTS / "fixtures/voices/scripts.json").read_text())["checks"]:
+        assert agents.script_check(c["script"], c["cast"]) == c["expect"], c["description"]
+    items = [{"kind": "element", "handle": "mara", "name": "Mara", "voice": "Savannah"},
+             {"kind": "element", "handle": "jon", "name": "Jon", "voice": None}]  # fmt: skip
+    cast = agents.cast_lines(items)
+    assert cast == ["@mara \u2014 Mara, voice Savannah"]
+    p = agents.script_prompt("Two lines.", [("$brief", "a harbour at noon")], cast)
+    assert "brief:\n<<<\na harbour at noon\n>>>" in p and f"cast:\n<<<\n{cast[0]}\n>>>" in p
 
 
 # --- the engine
@@ -633,3 +644,41 @@ async def test_judge_test_fills_the_template_with_memory_and_derives_the_verdict
     assert bad["code"] == "answer" and bad["error"].startswith("answer did not match")
     nope = await judge_test.answer(e.store, json.dumps(v | {"keep": 0}).encode())
     assert nope["code"] == "invalid"
+
+
+async def test_a_script_write_reads_the_cast_rechecks_once_and_records_the_script(pool):
+    studio, js, b, tools = FakeStudio(), FakeJS(), str(uuid.uuid4()), FakeTools()
+    good = "@rex (calm): Hello.\n\n@rex: Bye."
+    studio.answer_for = Script(judge=[FAIL, PASS3], rewrite=['{"script": "@bob: hi"}',
+                                                             json.dumps({"script": good})])  # fmt: skip
+    rewrite = doc()["nodes"]["rewrite"] | {"from": ["$prompt"], "form": "script"}
+    e = engine(pool, studio, js, tool=tools)
+    await run_to_judge(e, studio, js, b, doc("auto", rewrite=rewrite))
+    await finish(e, studio, "judge")
+    await finish(e, studio, "rewrite")
+    await finish(e, studio, "rewrite")
+    ask = next(r for r in tools.asked if r["node"] == "rewrite")
+    assert ask["args"] == {"kind": "element", "limit": 20, "offset": 0}
+    prompt = studio.runs[f"{b}:1:1:rewrite:0:0"]["req"]["inputs"]["ask.prompt"]
+    assert "cast:\n<<<\n@rex \u2014 Rex, voice Savannah\n>>>" in prompt
+    apply = [x for x in steps(js) if x["part"] == "apply"][-1]
+    assert apply["decision"]["template"] == agents.WRITE_SCRIPT
+    assert apply["decision"]["write"]["after"] == good
+    assert apply["decision"]["answers"][0]["error"] == "line 1: @bob is not in the cast"
+
+
+async def test_a_script_cast_pages_through_the_library(pool):
+    studio, js, b, tools = FakeStudio(), FakeJS(), str(uuid.uuid4()), FakeTools()
+    tools.library_pages = (
+        3  # 3 pages: every element with a voice is in the cast, not only the first 20
+    )
+    studio.answer_for = Script(judge=[FAIL, PASS3], rewrite=[json.dumps({"script": "@rex2: Hi."})])
+    rewrite = doc()["nodes"]["rewrite"] | {"from": ["$prompt"], "form": "script"}
+    e = engine(pool, studio, js, tool=tools)
+    await run_to_judge(e, studio, js, b, doc("auto", rewrite=rewrite))
+    await finish(e, studio, "judge")
+    await finish(e, studio, "rewrite")
+    asks = [r["args"]["offset"] for r in tools.asked if r["node"] == "rewrite"]
+    assert asks == [0, 20, 40]
+    prompt = studio.runs[f"{b}:1:1:rewrite:0:0"]["req"]["inputs"]["ask.prompt"]
+    assert "@rex2 \u2014 Rex" in prompt

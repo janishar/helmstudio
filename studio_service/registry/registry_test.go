@@ -72,9 +72,9 @@ func TestWorkflows(t *testing.T) {
 	for _, w := range r.Workflows() {
 		ids = append(ids, w.ID)
 	}
-	if list := r.Workflows(); !slices.Equal(ids, []string{"echo", "echo-a2v", "echo-ask", "echo-extend", "echo-image-to-video",
+	if list := r.Workflows(); !slices.Equal(ids, []string{"echo", "echo-a2v", "echo-ask", "echo-dialogue", "echo-extend", "echo-image-to-video",
 		"echo-retake", "echo-tiny", "echo-video", "echo-voice-over"}) || list[2].Media != "text" || !IsText(list[2].Nodes) || IsText(list[0].Nodes) ||
-		list[5].NodeSchemas["echo/retake"].Params[0].Accepts[0] != "video" {
+		list[6].NodeSchemas["echo/retake"].Params[0].Accepts[0] != "video" {
 		t.Fatalf("the echo workflows (echo-ask text), no lost: %v", ids)
 	}
 	if _, ok := r.Workflow("lost"); ok {

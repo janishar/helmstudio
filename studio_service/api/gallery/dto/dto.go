@@ -147,6 +147,17 @@ type Take struct {
 type AudioInfo struct {
 	DurationS  float64 `json:"duration_s"`
 	SampleRate *int    `json:"sample_rate,omitempty"`
+	// API 1.32, a dialogue's take only: one cue per line, in order, in the take's own seconds
+	Cues []AudioCue `json:"cues,omitempty"`
+}
+
+// AudioCue is one dialogue line's place in its take (API 1.32, defs cue).
+type AudioCue struct {
+	Line    int     `json:"line"`
+	StartS  float64 `json:"start_s"`
+	EndS    float64 `json:"end_s"`
+	VoiceID string  `json:"voice_id"`
+	Text    string  `json:"text"`
 }
 
 // SourceMap is evt.run.output's source_map, stored as takes.source_map: output time = source time + OffsetS; the

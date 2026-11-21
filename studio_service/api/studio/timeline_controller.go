@@ -65,6 +65,7 @@ func (c *controller) mountTimelines(group *gin.RouterGroup) {
 	group.POST("/timelines/:id/undo", timelineIDBody(c.service.UndoTimeline, http.StatusOK))
 	group.POST("/timelines/:id/redo", timelineIDBody(c.service.RedoTimeline, http.StatusOK))
 	group.POST("/timelines/:id/shots", timelineIDBody(c.service.CreateShot, http.StatusAccepted))
+	group.POST("/timelines/:id/lines", timelineIDBody(c.service.CreateLine, http.StatusAccepted))
 	group.POST("/timelines/:id/rerender", timelineIDBody(c.service.RerenderTimeline, http.StatusAccepted))
 	group.POST("/timelines/:id/export/plan", func(ctx *gin.Context) {
 		body, err := optionalBody[dto.TimelineExportCreate](ctx)

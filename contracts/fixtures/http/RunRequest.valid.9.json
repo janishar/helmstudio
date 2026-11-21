@@ -1,0 +1,23 @@
+{
+  "workflow_id": "echo-dialogue",
+  "inputs": {
+    "dialogue.lines": [
+      {
+        "voice": {
+          "voice_id": "echo/ada"
+        },
+        "text": "You said you'd be back by noon.",
+        "style": "quiet",
+        "pause_s": 0.35
+      },
+      {
+        "voice": {
+          "voice_id": "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a22"
+        },
+        "text": "I know. The road was closed.",
+        "style": "",
+        "pause_s": 0
+      }
+    ]
+  }
+}

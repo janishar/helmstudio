@@ -124,7 +124,8 @@ func resolve(workflow registry.Workflow, inputs map[string]any) (map[string]regi
 				return nil, id + "." + param.Name + ": a range is required"
 			case param.Type == "voice" && value == nil:
 				return nil, id + "." + param.Name + ": a voice is required"
-			case param.Type == "rows" && param.Min != nil:
+			case param.Type == "rows" && param.Min != nil && !(param.Name == "lines" && hasScript(schema)):
+				// API 1.32: a dialogue's lines may come from its script (expandScript checks them then)
 				if items, _ := value.([]any); float64(len(items)) < *param.Min {
 					return nil, fmt.Sprintf("%s.%s: at least %s items", id, param.Name, format(*param.Min))
 				}
@@ -142,6 +143,11 @@ func resolve(workflow registry.Workflow, inputs map[string]any) (map[string]regi
 	}
 	splice(nodes, workflow.NodeSchemas)
 	return nodes, ""
+}
+
+// hasScript reports whether a node schema has a script param (API 1.32, Dialogue: expanded into its lines).
+func hasScript(schema registry.NodeSchema) bool {
+	return slices.ContainsFunc(schema.Params, func(p registry.Param) bool { return p.Script })
 }
 
 // join puts a key before a check's detail: "encode.refs: at most 10 items", "encode.refs[2].image: …".
@@ -357,7 +363,9 @@ func checkRows(param registry.Param, value any) (any, string) {
 	if param.Max != nil && float64(len(items)) > *param.Max {
 		return nil, fmt.Sprintf("at most %s items", format(*param.Max))
 	}
-	takesImages := slices.ContainsFunc(slices.Collect(maps.Values(param.Item)), registry.IsTakeField)
+	takesImages := slices.ContainsFunc(slices.Collect(maps.Values(param.Item)), func(raw json.RawMessage) bool {
+		return registry.IsTakeField(raw) || registry.IsVoiceField(raw) // API 1.32: nor a voice
+	})
 	// a workflow holds no takes: a rows param of takes may be [] under its min; the run needs min items (resolve)
 	if param.Min != nil && float64(len(items)) < *param.Min && (len(items) > 0 || !takesImages) {
 		return nil, fmt.Sprintf("at least %s items", format(*param.Min))
@@ -409,6 +417,9 @@ func checkRows(param registry.Param, value any) (any, string) {
 			}
 			if itemParam.Type == "media" && field == nil { // API 1.22: a video or audio take, required in every item
 				return nil, at + "." + name + ": a take is required"
+			}
+			if itemParam.Type == "voice" && field == nil { // API 1.32: a saved voice, required in every item
+				return nil, at + "." + name + ": a voice is required"
 			}
 			checked, detail := check(itemParam, field)
 			if detail != "" {

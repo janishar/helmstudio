@@ -176,7 +176,11 @@ func (s *Service) plan(ctx context.Context, tx pgx.Tx, row timelineRow, revision
 	out := dto.ExportPlan{Revision: revision, StreamCopy: p.StreamCopy, Reasons: []dto.ExportReason{}, Blocked: []dto.ExportReason{},
 		Frames: doc.Frames, DurationS: g.S(doc.Frames), EstimatedBytes: p.EstimatedBytes,
 		Output: dto.ExportOutput{Width: doc.Target.Width, Height: doc.Target.Height, FPS: doc.Target.FPS,
-			SampleRate: doc.Target.SampleRate, Container: "mp4", VideoCodec: "h264", AudioCodec: "aac", VideoBitrate: p.VideoBitrate}}
+			SampleRate: doc.Target.SampleRate, Container: "mp4", VideoCodec: "h264", AudioCodec: "aac", VideoBitrate: p.VideoBitrate},
+		Sounds: p.Sounds}
+	if out.Sounds == nil {
+		out.Sounds = []timeline.PlanSound{}
+	}
 	for _, r := range p.Reasons {
 		out.Reasons = append(out.Reasons, exportReason(r, doc, rules))
 	}

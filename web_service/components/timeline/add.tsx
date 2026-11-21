@@ -4,7 +4,8 @@
 // Create import it, the editor stays lazy.
 import Link from "next/link";
 import { useState } from "react";
-import { api, message, ok } from "@/lib/api";
+import { api, message, ok, type S } from "@/lib/api";
+import { edit, factsOf, writable, type Doc } from "@/lib/timeline";
 
 const LAST = "helm.timeline";
 
@@ -24,11 +25,40 @@ export function rememberTimeline(id: string) {
   }
 }
 
-/** Adds the takes (in order) to the last opened sequence, else the newest, else a new one made from them. */
-export async function addToTimeline(takeIds: string[]): Promise<{ id: string; name: string }> {
+/** Adds the takes (in order) to the last opened sequence, else the newest, else a new one made from them. Audio
+ * takes (API 1.32) go on its first audio track, at its end; a sequence without one gets A2 first. */
+export async function addToTimeline(
+  takeIds: string[],
+  audio = false,
+): Promise<{ id: string; name: string }> {
   const { timelines } = await ok(api.GET("/v1/studio/timelines"));
   const last = lastTimeline();
   const to = timelines.find((t) => t.id === last) ?? timelines[0];
+  if (audio) {
+    const path = (id: string) => ({ params: { path: { timeline_id: id } } });
+    let tl = to
+      ? await ok(api.GET("/v1/studio/timelines/{timeline_id}", path(to.id)))
+      : await ok(api.POST("/v1/studio/timelines", { body: {} }));
+    let track = tl.tracks.find((t) => t.kind === "audio")?.name;
+    if (!track) {
+      const d = edit(tl as Doc, { op: "add_track" }, factsOf(tl.takes)) as Doc;
+      tl = await ok(
+        api.PUT("/v1/studio/timelines/{timeline_id}", {
+          ...path(tl.id),
+          body: { revision: tl.revision, ...writable(d) } as S<"TimelineUpdate">,
+        }),
+      );
+      track = tl.tracks.find((t) => t.kind === "audio")!.name;
+    }
+    tl = await ok(
+      api.POST("/v1/studio/timelines/{timeline_id}/clips", {
+        ...path(tl.id),
+        body: { take_ids: takeIds, track },
+      }),
+    );
+    rememberTimeline(tl.id);
+    return { id: tl.id, name: tl.name };
+  }
   const tl = to
     ? await ok(
         api.POST("/v1/studio/timelines/{timeline_id}/clips", {
@@ -45,9 +75,12 @@ export async function addToTimeline(takeIds: string[]): Promise<{ id: string; na
 export function AddToTimeline({
   takeIds,
   className = "act",
+  audio = false,
 }: {
   takeIds: string[];
   className?: string;
+  /** audio takes: onto an audio track */
+  audio?: boolean;
 }) {
   const [state, setState] = useState<
     { busy: true } | { id: string; name: string; n: number } | { error: string } | null
@@ -61,7 +94,7 @@ export function AddToTimeline({
         onClick={() => {
           const n = takeIds.length;
           setState({ busy: true });
-          addToTimeline(takeIds)
+          addToTimeline(takeIds, audio)
             .then((r) => setState({ ...r, n }))
             .catch((e) => setState({ error: message(e) }));
         }}

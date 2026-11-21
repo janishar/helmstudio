@@ -18,6 +18,7 @@ import (
 
 	"github.com/helmstudio/helmgo/utility"
 
+	"github.com/helmstudio/studio_service/api/studio/dto"
 	"github.com/helmstudio/studio_service/api/studio/message"
 	"github.com/helmstudio/studio_service/common"
 )
@@ -93,7 +94,8 @@ func (s *Service) Tool(ctx context.Context, req *message.ToolsRequest) message.T
 	}
 	node, known := stored.Doc.Nodes[req.Node]
 	switch {
-	case !known || node.Kind != "agent" || !slices.Contains(node.Tools, req.Tool):
+	// (1.32) a write node of form script reads its cast with library.read (contracts/README.md, Agents and pipelines)
+	case !known || !(node.Kind == "agent" && slices.Contains(node.Tools, req.Tool) || scriptCast(node, req.Tool)):
 		return toolErr("invalid", "%s does not declare %s", req.Node, req.Tool)
 	case req.Row == 0 && !node.IsDirector():
 		return toolErr("invalid", "row 0 is the director's chat")
@@ -233,10 +235,11 @@ func likeEscape(text string) string {
 // libraryRead is library.read: the owner's elements and the looks the owner can use, by kind, group and name.
 func (s *Service) libraryRead(ctx context.Context, caller common.Caller, raw json.RawMessage) (message.ToolsReply, error) {
 	var args struct {
-		Kind  *string `json:"kind"`
-		Group *string `json:"group"`
-		Text  *string `json:"text"`
-		Limit *int    `json:"limit"`
+		Kind   *string `json:"kind"`
+		Group  *string `json:"group"`
+		Text   *string `json:"text"`
+		Limit  *int    `json:"limit"`
+		Offset *int    `json:"offset"` // API 1.32: page with offset += limit while more
 	}
 	if err := strictArgs(raw, &args); err != nil {
 		return toolErr("invalid", "args: %v", err), nil
@@ -251,7 +254,14 @@ func (s *Service) libraryRead(ctx context.Context, caller common.Caller, raw jso
 	if args.Text != nil && utf8.RuneCountInString(*args.Text) > 100 {
 		return toolErr("invalid", "text: at most 100 characters"), nil
 	}
-	query, detail := ParseLibraryQuery(deref(args.Kind), deref(args.Group), deref(args.Text), fmt.Sprint(limit+1))
+	offset := 0
+	if args.Offset != nil {
+		if *args.Offset < 0 || *args.Offset > MaxLibraryList {
+			return toolErr("invalid", "offset must be 0 to %d", MaxLibraryList), nil
+		}
+		offset = *args.Offset
+	}
+	query, detail := ParseLibraryQuery(deref(args.Kind), deref(args.Group), deref(args.Text), "")
 	if detail != "" {
 		return toolErr("invalid", "%s", detail), nil
 	}
@@ -259,17 +269,48 @@ func (s *Service) libraryRead(ctx context.Context, caller common.Caller, raw jso
 	if err != nil {
 		return message.ToolsReply{}, err
 	}
+	list.Items = list.Items[min(offset, len(list.Items)):] // ponytail: reads the whole list (≤ 200 items a user)
+	list.Items = list.Items[:min(len(list.Items), limit+1)]
+	var voiceIDs []string // API 1.32: an element names its voice, so a write or the director knows who can speak
+	for _, item := range list.Items {
+		var id *string
+		if item.Kind == "element" && json.Unmarshal(item.VoiceID, &id) == nil && id != nil {
+			voiceIDs = append(voiceIDs, *id)
+		}
+	}
+	voices := map[string]voiceItem{}
+	if len(voiceIDs) > 0 {
+		if err := s.tx(ctx, caller, func(tx pgx.Tx) error {
+			voices, err = readVoices(ctx, tx, s.registry, caller.ID, voiceIDs)
+			return err
+		}); err != nil {
+			return message.ToolsReply{}, err
+		}
+	}
 	items := []map[string]any{}
 	for i, item := range list.Items {
 		if i == limit {
 			break
 		}
 		handle := item.Handle
-		if item.Kind == "look" {
+		if item.Kind != "element" {
 			handle = nil
 		}
-		items = append(items, map[string]any{"id": item.ID, "kind": item.Kind, "group": item.Group, "name": cutRunes(item.Name, 80),
-			"handle": handle, "text": cutRunes(item.Text, 500)})
+		out := map[string]any{"id": item.ID, "kind": item.Kind, "group": item.Group, "name": cutRunes(item.Name, 80),
+			"handle": handle, "text": cutRunes(item.Text, 500)}
+		switch item.Kind {
+		case "element":
+			var id *string
+			out["voice"] = nil
+			if json.Unmarshal(item.VoiceID, &id) == nil && id != nil {
+				if v, ok := voices[*id]; ok {
+					out["voice"] = cutRunes(v.Name, 80)
+				}
+			}
+		case "voice":
+			out["family"] = item.Family
+		}
+		items = append(items, out)
 	}
 	return message.ToolsReply{Result: map[string]any{"items": items, "more": len(list.Items) > limit}}, nil
 }
@@ -419,4 +460,9 @@ func (s *Service) checkRow(ctx context.Context, tx pgx.Tx, stored storedPipeline
 		return "batch inputs are too large; use a shorter row", nil
 	}
 	return "", nil
+}
+
+// scriptCast: a write node of form script may call library.read (its cast), nothing else.
+func scriptCast(node dto.PipelineNode, tool string) bool {
+	return node.Kind == "write" && node.Form != nil && *node.Form == "script" && tool == "library.read"
 }

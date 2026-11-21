@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.31.0
+  version: 1.32.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -27,7 +27,7 @@ servers:
 security:
   - {ApiKey: [], BearerJWT: []}
 tags:
-  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media); from 1.23 LoRA strengths 0..2 (looks saved before are clamped when read; contracts/README.md, Looks); from 1.24 the model component a node loads (NodeSchema.component); from 1.25 an inspector section''s help, the presets'' order (StudioLayout.preset_order) and a run''s planned peak before it is sent (POST /v1/studio/runs/plan); from 1.26 an inspector section''s choice tiles (LTX''s Recipe: two-stage or one-stage); from 1.28 a judge''s branch without `then` (Ask me) and a judge test on picked takes (POST /v1/studio/pipelines/{pipeline_id}/judge-tests); from 1.29 a V1 clip''s shot number (TimelineClip.number: "Shot 4"); from 1.30 voices: audio takes made by runs (the `Audio` port, `Workflow.media` audio), the `voice` param, saved voices in the library (designed voices and the packs'' starter voices; contracts/README.md, Voices); from 1.31 cloned voices (a 3–30 s clip of an audio take or a video''s sound, with consent), designed voices that keep a clip, Save as voice (`from_take` with `kind: voice`) and the zonos3 family (contracts/README.md, Voices: cloned voices)'}
+  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media); from 1.23 LoRA strengths 0..2 (looks saved before are clamped when read; contracts/README.md, Looks); from 1.24 the model component a node loads (NodeSchema.component); from 1.25 an inspector section''s help, the presets'' order (StudioLayout.preset_order) and a run''s planned peak before it is sent (POST /v1/studio/runs/plan); from 1.26 an inspector section''s choice tiles (LTX''s Recipe: two-stage or one-stage); from 1.28 a judge''s branch without `then` (Ask me) and a judge test on picked takes (POST /v1/studio/pipelines/{pipeline_id}/judge-tests); from 1.29 a V1 clip''s shot number (TimelineClip.number: "Shot 4"); from 1.30 voices: audio takes made by runs (the `Audio` port, `Workflow.media` audio), the `voice` param, saved voices in the library (designed voices and the packs'' starter voices; contracts/README.md, Voices); from 1.31 cloned voices (a 3–30 s clip of an audio take or a video''s sound, with consent), designed voices that keep a clip, Save as voice (`from_take` with `kind: voice`) and the zonos3 family (contracts/README.md, Voices: cloned voices); from 1.32 dialogue and Timeline audio: dialogue scripts (`script` text params expanded into `lines` rows whose items carry a voice), an element''s `voice_id`, cues on a dialogue''s take, audio takes on the audio tracks, New line (POST /v1/studio/timelines/{timeline_id}/lines), Make shot (a slot `exact` at an audio clip''s time), an export plan''s `sounds`, offers and pipeline binds into rows of one media field, `library.read` voices and the write node''s `form: script` (contracts/README.md, Dialogue and Timeline audio)'}
   - {name: files, description: signed file downloads and uploads}
   - name: auth
     description: 'auth_service: users, sessions (JWT access + rotating refresh tokens), roles, client API keys'
@@ -473,6 +473,12 @@ paths:
         control characters other than newlines and tabs`, `voice: only a voice has voice fields` (an element or look
         with `voice`).
 
+        From 1.32 a character element may carry `voice_id` (contracts/README.md, Dialogue: elements carry a voice): one
+        of the caller's voices or a starter voice a live host publishes, resolved as the caller. 422 `voice_id: only a
+        character has a voice` (a location, prop, look or voice with a non-null `voice_id`); 404 `voice_id: voice <id>
+        not found` (unknown, another user's, deleted, an element or look, or a starter voice no live host publishes).
+        Its fit is not checked here (a dialogue's run checks it per line). PUT checks the same.
+
         From 1.31 (contracts/README.md, Voices: cloned voices) `group: cloned` makes a voice from a clip: `voice {clip:
         MediaRef, consent: true, language?, style?}`; a designed voice may carry a clip too (then it also needs
         `consent`). The clip is checked like a `media` param with `accepts: [audio]`, `trim`, `min_s` 3, `max_s` 30 (in /
@@ -518,7 +524,8 @@ paths:
         Optimistic concurrency like workflows: `version` is the one the edit started from; stale = 409 `element changed
         since you opened it (now version <n>)` (a look: `look changed since you opened it (now version <n>)`), nothing
         changes. A look is checked like POST with `kind: look` (no `from_take`; `from_take_id` stays). From 1.31 a voice's
-        clip may be changed (checked like POST; `from_take_id` follows it; a clip needs `consent` again). Checked like POST (the handle may stay its own). On
+        clip may be changed (checked like POST; `from_take_id` follows it; a clip needs `consent` again). From 1.32 an
+        element's `voice_id` is checked like POST (a stored one that is gone since may be sent back: it saves null). Checked like POST (the handle may stay its own). On
         success `version` + 1, `updated_at` now. Takes made before keep their resolved graph; their reuse answers this
         element `changed`. `kind` never changes. From 1.30 a designed voice is checked like POST with `kind: voice` (its
         `voice` required; stale = 409 `voice changed since you opened it (now version <n>)`); takes made before keep the
@@ -539,7 +546,9 @@ paths:
       operationId: studioDeleteLibraryItem
       summary: Delete an item (always allowed)
       description: |
-        Hard delete, never refused: past takes keep their resolved graph and `made_with.elements` / `made_with.looks`;
+        Hard delete, never refused: past takes keep their resolved graph and `made_with.elements` / `made_with.looks`
+        (from 1.32 a deleted voice leaves every element that named it reading `voice_id` null; its script lines then
+        refuse `@<handle> has no voice`);
         their reuse answers this item `deleted`; a batch already submitted keeps its copy (contracts/README.md, Elements). A prompt that
         still mentions the handle is 422 at its next run. Deleting again is 404.
       parameters: [{$ref: '#/components/parameters/LibraryItemId'}]
@@ -802,6 +811,18 @@ paths:
         input takes at most 15.0 s`, `… in must be before out`, `… out <x> is past the take's end <d>`; a missing media
         field `generate.videos[1].video: a take is required`; then the items together: `generate.videos: the takes
         last 16.5 s in all; at most 15.0 s`. The counts are the rows `max` (`generate.videos: at most 3 items`).
+
+        From 1.32 (contracts/README.md, Dialogue: scripts) a `script` param is expanded into its node's `lines` after
+        the rows of media and before the voices are resolved, against the caller's elements and voices now; 422, each
+        line's first problem, line order, joined by `; `: `dialogue.script line 3: write @name: text or @name
+        (style): text`, `… line 3: nothing to say`, `… line 3: at most 600 characters (612)`, `… line 3: the style is
+        at most 200 characters (215)`, `… line 3: unknown element @jon`, `… line 3: @jon has no voice` (none, or one
+        gone since), `… line 4: voice Kai does not fit this workflow (this workflow cannot use a designed voice)` (the
+        voice fit of the lines' voice field, narrowed by `only`); then `dialogue.script: the script is empty` (no line,
+        and no `lines` given), `dialogue.lines: at most 40 lines`, `dialogue.lines: give the script or the lines, not
+        both`. Lines given directly (the Graph view, an agent) are resolved item by item like a voice param:
+        `dialogue.lines[2].voice: a voice is required`, `… voice <id> not found`, `… this workflow cannot use a designed
+        voice`, `… voice <name> is for <family>`.
       parameters: [{$ref: '#/components/parameters/SessionId'}]
       requestBody:
         required: true
@@ -1075,8 +1096,11 @@ paths:
         video or audio take: a `media` param whose `accepts`, `grid`, `max_s`, `min_s` and `max_frames` it passes), each with `inputs` as
         `POST …/use` answers them. From 1.22 an input counts only when the workflow's `studio` block places it (no
         block: every input), not on an `optional` node, and not a rows param excluded by a wired `not_with` input
-        (MiniMax H3: an image goes to Image to video's first frame and References, not Text to video). Rows of media
-        are never offered into. Empty when none fits. 404 for a take that is unknown, another user's, deleted or a
+        (MiniMax H3: an image goes to Image to video's first frame and References, not Text to video). From 1.32 a
+        rows param with exactly one media field counts too, by the take's own kind only (a video into `videos`, an
+        audio take into `audios`; a video's sound never into audio rows by offer), with the take as item 1 (`in` 0,
+        `out` = min(duration, the field's `max_s`, the rows' `max_total_s`) on `trim`): an audio take offers MiniMax H3
+        References, whose run still needs an image or video reference. Empty when none fits. 404 for a take that is unknown, another user's, deleted or a
         pending upload.
       parameters: [{$ref: '#/components/parameters/TakeId'}]
       responses:
@@ -2083,8 +2107,9 @@ paths:
       description: |
         Applies the `add` edit to the current revision (so a gallery action never holds a revision) and stores revision
         + 1. V1 (default): a video take whole (`in` 0, `out` its length), an image take held 3 s. An audio track
-        (`track: A2`…): a video take's sound, whole, at the track's end. 422 `take_ids[2]: take <id> not found`,
-        `take_ids[1]: take <id> has no sound` (on an audio track), `take_ids[1]: an image cannot go on an audio track`, (1.19) `take_ids[1]: an audio take cannot go on the timeline yet`,
+        (`track: A2`…): a video take's sound or (from 1.32) an audio take, whole, at the track's end. 422 `take_ids[2]: take <id> not found`,
+        `take_ids[1]: take <id> has no sound` (on an audio track), `take_ids[1]: an image cannot go on an audio track`, (1.32, replacing 1.19's
+        `… an audio take cannot go on the timeline yet`) `take_ids[1]: an audio take goes on an audio track` (on V1),
         `unknown track A4`, or a rule (`TimelineError`, e.g. `too_many_clips`).
       parameters: [{$ref: '#/components/parameters/TimelineId'}]
       requestBody:
@@ -2101,7 +2126,7 @@ paths:
     get:
       tags: [studio]
       operationId: studioListClipActions
-      summary: 'A V1 clip''s take actions (from 1.19, plan 15.3): Extend, Retake…, with inputs pre-filled from the clip'
+      summary: 'A clip''s take actions (from 1.19, plan 15.3): Extend, Retake…, with inputs pre-filled from the clip; from 1.32 an audio clip''s Make shot'
       description: |
         contracts/README.md, Timeline: take actions. The clip's take's offers (`…/takes/{take_id}/uses`) restricted to
         templates of the family of the workflow that made the take (an upload, import or export: every family), with
@@ -2111,11 +2136,17 @@ paths:
         the take's end (within one frame), else `before` when it starts at 0, else not offered. Run one with
         `POST …/shots` (`slot {clip}` = replace; insert: `slot {after: <clip>}`, an extend before `slot {at: <clip's
         at>}`). Empty for an empty slot, an offline
-        clip or a take nothing fits. 404 unknown sequence; 422 `unknown clip <id>`, `clip <id> is not on V1`, `start
-        must be before end`.
+        clip or a take nothing fits. 404 unknown sequence; 422 `unknown clip <id>`, `start must be before end`.
+
+        From 1.32 an audio-track clip (contracts/README.md, Timeline: Make shot) answers its take's offers of **every**
+        family into one `media` param (not rows) of a workflow whose media is video (Audio to video: `ltx-audio-to-video`,
+        `echo-a2v`), with the range = the selection or the clip's in..out (an audio take snapped to whole ms, a video's
+        sound to its frames; the offer caps the part at the param's `max_s`, 13.375 s) and `slot {at: <the clip's
+        at>, length: <out − in>, exact: true}`: run it with `POST …/shots` and that slot. 422 `clip <id> is not on V1`
+        is gone (A1 is V1's own sound, not a track: it has no clips of its own).
       parameters:
         - {$ref: '#/components/parameters/TimelineId'}
-        - {name: clip_id, in: path, required: true, schema: {type: string}, description: 'a V1 slot id'}
+        - {name: clip_id, in: path, required: true, schema: {type: string}, description: 'a slot id: V1, or (1.32) an audio track''s clip'}
         - {name: start, in: query, required: false, schema: {type: number, minimum: 0}, description: 'the selection''s start, sequence seconds'}
         - {name: end, in: query, required: false, schema: {type: number, exclusiveMinimum: 0}, description: 'the selection''s end, sequence seconds'}
       responses:
@@ -2171,7 +2202,10 @@ paths:
         edit at that clip's end cut) as revision + 1, applied to the current revision. The run's first take fills the
         slot (the `fill` edit, by studio; a take with `source_map` is placed by it: contracts/README.md, Timeline: take
         actions). 409 `clip <id> already has a shot running` (`slot {clip}`); 422 `unknown clip <id>`, `clip <id> is
-        not on V1`, `length is required to insert a slot`.
+        not on V1`, `length is required to insert a slot`. From 1.32 `slot {at, length, exact: true}` (Make shot) is
+        the `place` edit instead of `insert`: the slot starts at exactly frames(at) on V1 (past V1's end after an empty
+        gap; inside an empty slot by splitting it; inside a take's clip at the nearest cut, as `insert`); `run` is the
+        action's Audio to video run (contracts/README.md, Timeline: Make shot).
       parameters: [{$ref: '#/components/parameters/TimelineId'}]
       requestBody:
         required: true
@@ -2184,6 +2218,35 @@ paths:
         '422': {$ref: '#/components/responses/Unprocessable'}
         '503': {$ref: '#/components/responses/Unavailable'}
 
+  /v1/studio/timelines/{timeline_id}/lines:
+    post:
+      tags: [studio]
+      operationId: studioCreateTimelineLine
+      summary: 'New line (from 1.32): a voice run whose take fills a slot on an audio track'
+      description: |
+        contracts/README.md, Timeline: New line. The audio-track twin of New shot. `run` is checked and created exactly
+        as `POST /v1/studio/sessions/{session_id}/runs` (same 422 texts, scripts and voices included; same 409 at 100
+        runs) in the sequence's session, and its workflow's media must be audio (422 `New line needs a workflow whose
+        media is audio`). `slot {track, at, length}` puts a placeholder `{take_id: null, at, hold: length, shot
+        {run_id}}` on that audio track at `at` (the playhead, snapped to a frame); `slot {clip}` redoes an audio
+        clip (its take is replaced when the run succeeds; "Generate from this clip"). Revision + 1, applied to the
+        current revision. The run's first take fills it (the `fill` edit on an audio track: the whole take at the
+        slot's `at`, cut at the next clip on the track or the sequence's end); a failed run keeps the placeholder
+        (`status: failed`, `error`), a cancelled one removes it. 409 `clip <id> already has a line running` (`slot
+        {clip}`); 422 `unknown clip <id>`, `unknown track A4`, `clip <id> is not on an audio track`, `New line needs an
+        audio track` (track V1), or a rule (`TimelineError`: `overlap` with a clip already there, `too_many_clips`).
+      parameters: [{$ref: '#/components/parameters/TimelineId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/TimelineLineCreate'}}}
+      responses:
+        '202': {description: 'the sequence with the placeholder, and the run (queued, or failed at once)', content: {application/json: {schema: {$ref: '#/components/schemas/TimelineShot'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/TimelineUnprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
   /v1/studio/timelines/{timeline_id}/rerender:
     post:
       tags: [studio]
@@ -2194,7 +2257,9 @@ paths:
         batch limit (`You have 5 unfinished batches; …`). 422 `clip <id> is an empty slot`, `clip <id> is offline`,
         `clip <id>: its take was not made by a workflow`, `clip <id>: workflow <wid> has no preset <p>`, `clip <id>:
         workflow <wid> no longer exists`, `at most 22 clips per re-render`, `clips <a> and <b> start from each other`,
-        `unknown clip <id>`.
+        `unknown clip <id>`. From 1.32 `clips` may name audio-track clips made by a workflow (a line): each is a step,
+        and a V1 clip made from such a clip's take (Make shot) re-renders after it, on its new take
+        (contracts/README.md, Timeline: Make shot).
       parameters: [{$ref: '#/components/parameters/TimelineId'}]
       requestBody:
         required: true
@@ -2783,8 +2848,8 @@ components:
         end: {type: number, exclusiveMinimum: 0, maximum: 86400}
     RowItem:
       type: object
-      description: 'one item of a rows value: field (the param''s `item`) → value; from 1.22 a media field''s value is a MediaRef'
-      additionalProperties: {anyOf: [{$ref: '#/components/schemas/ScalarValue'}, {$ref: '#/components/schemas/ImageRef'}, {$ref: '#/components/schemas/MediaRef'}, {$ref: '#/components/schemas/LoraRef'}]}
+      description: 'one item of a rows value: field (the param''s `item`) → value; from 1.22 a media field''s value is a MediaRef; from 1.32 a voice field''s (a dialogue line''s speaker) a VoiceRef'
+      additionalProperties: {anyOf: [{$ref: '#/components/schemas/ScalarValue'}, {$ref: '#/components/schemas/ImageRef'}, {$ref: '#/components/schemas/MediaRef'}, {$ref: '#/components/schemas/LoraRef'}, {$ref: '#/components/schemas/VoiceRef'}]}
     ParamValue:
       description: 'a scalar; an `image` param: ImageRef or null; a `rows` param: an ordered list of items; from 1.19 a `media` param: MediaRef or null, a `span` param: SpanValue or null; from 1.30 a `voice` param: VoiceRef or null'
       anyOf:
@@ -2826,12 +2891,17 @@ components:
         is wired the rows stay empty (mentions add none, "Use in…" skips them).
         From 1.30 (contracts/README.md, Voices): `voice`: one saved voice (`VoiceRef`, default null; a run needs one) of
         the sources in `accepts` (`preset`: a starter voice of the node's family; `clip`: a voice with a clip, cloned or designed, from 1.31;
-        `design`: a voice described in words); the UI draws the voice picker. It takes no wire and is never a rows item
-        field.
+        `design`: a voice described in words); the UI draws the voice picker. It takes no wire; from 1.32 it may be a
+        rows item field (a dialogue's `lines`: each line's speaker, required in every item).
+        From 1.32 (contracts/README.md, Dialogue and Timeline audio): a `text` param may declare `script: true`: a
+        dialogue script (`@handle: text` or `@handle (style): text` per line, an empty line a longer pause) that studio
+        expands at create time into the same node's rows param `lines` (items `{voice, text, style, pause_s}`, each
+        voice the element's `voice_id`); the composer draws it as the script editor with each line's speaker.
       required: [name, type, default]
       properties:
         name: {type: string}
         type: {type: string, enum: [int, float, bool, string, text, enum, seed, image, rows, frames, media, span, voice]}
+        script: {type: boolean, const: true, description: 'from 1.32, text only: a dialogue script expanded into the node''s `lines` (contracts/README.md, Dialogue: scripts)'}
         accepts: {type: array, minItems: 1, maxItems: 3, uniqueItems: true, items: {type: string, enum: [video, audio, preset, clip, design]}, description: 'media only: the take kinds it takes (video, audio); video: a video take; audio: an audio take, or a video take''s sound. From 1.30, voice only: the voice sources it takes (preset, clip, design)'}
         trim: {type: boolean, description: 'media only: true = the value may carry in / out (the part read); absent = the whole take'}
         grid: {type: integer, description: 'media only: a video take''s width and height must be multiples of it'}
@@ -2864,7 +2934,7 @@ components:
         when: {type: string, description: visibility expression; absent = always shown}
         item:
           type: object
-          description: 'rows only: field → a ref kind (`Image`: an image take, from 1.14 `Media`: an image or video take (an ask node''s `media`), `Lora`: a LoRA; required in every item) or a param schema without name (from 1.22 a `media` param: required in every item)'
+          description: 'rows only: field → a ref kind (`Image`: an image take, from 1.14 `Media`: an image or video take (an ask node''s `media`), `Lora`: a LoRA; required in every item) or a param schema without name (from 1.22 a `media` param: required in every item; from 1.32 a `voice` param: required in every item)'
           additionalProperties: {anyOf: [{type: string, const: Image}, {type: string, const: Media}, {type: string, const: Lora}, {type: object, description: 'a ParamSchema without name (registry.schema.json itemParam); a float may add `position: seconds` (a time on the clip)'}]}
         mention: {type: string, description: 'rows only: the prompt''s name for item n, with `{n}` from 1', examples: ['<image{n}>']}
     NodeSchema:
@@ -2892,7 +2962,7 @@ components:
         only: {$ref: '#/components/schemas/ParamOnly'}
     ParamOnly:
       type: object
-      description: 'from 1.19: enum param → the values this workflow allows (a subset of its `enum` holding the node''s value); the form offers only those, another value is 422 `<node>.<param>: must be one of <values>` (LTX dev templates pin `model.variant` to dev). From 1.30 also a voice param → the voice sources this workflow takes (a subset of its `accepts`; the workflow holds null): the voice fit reads the narrowed set, a voice outside it is 422 `<node>.<param>: this workflow cannot use a designed voice` (or `a preset voice`, `clone a voice`; contracts/README.md, Media inputs: only)'
+      description: 'from 1.19: enum param → the values this workflow allows (a subset of its `enum` holding the node''s value); the form offers only those, another value is 422 `<node>.<param>: must be one of <values>` (LTX dev templates pin `model.variant` to dev). From 1.32 also a rows param with one voice field (a dialogue''s `lines`) → the voice sources its lines take. From 1.30 also a voice param → the voice sources this workflow takes (a subset of its `accepts`; the workflow holds null): the voice fit reads the narrowed set, a voice outside it is 422 `<node>.<param>: this workflow cannot use a designed voice` (or `a preset voice`, `clone a voice`; contracts/README.md, Media inputs: only)'
       propertyNames: {pattern: '^[a-z][a-z0-9_]{0,63}$'}
       additionalProperties: {type: array, minItems: 1, uniqueItems: true, items: {type: string}}
     NodePosition:
@@ -3254,6 +3324,7 @@ components:
         to: {type: string, pattern: '^\$[a-z][a-z0-9_]{0,63}$', description: 'the Text input it overwrites (`$prompt`): later binds of it read the new text. Required without `list`, absent with it (write_target)'}
         list: {$ref: '#/components/schemas/PipelineListSpec'}
         instruction: {type: string, minLength: 1, maxLength: 1000, default: 'Fix what the reviewer found; keep everything else.'}
+        form: {type: string, enum: [text, script], default: text, description: 'from 1.32: script = the answer is a dialogue script (`@handle (style): text` lines, template write-script/v1) for a `$<input>` bound to a `script` param; not with `list` (write_target; contracts/README.md, Dialogue: agents)'}
         model: {$ref: '#/components/schemas/PipelineModel'}
         position: {$ref: '#/components/schemas/NodePosition'}
     PipelineDecideNode:
@@ -3986,6 +4057,18 @@ components:
       properties:
         duration_s: {type: number, exclusiveMinimum: 0, maximum: 600, description: 'an upload: as the client declared it (contracts/README.md, Media inputs: audio uploads); from 1.30 a run''s audio take: from evt.run.output `audio` (samples / rate)'}
         sample_rate: {type: integer, minimum: 8000, maximum: 96000, description: 'from 1.30: the WAV''s rate (Hz), from evt.run.output `audio`; absent for an upload (studio does not decode it)'}
+        cues: {type: array, minItems: 1, maxItems: 40, items: {$ref: '#/components/schemas/AudioCue'}, description: 'from 1.32, a dialogue''s take only (from evt.run.output `audio.cues`): one per line, in order; the stage draws them as line markers, the Timeline as ticks on the clip (sequence time = clip `at` + cue − clip `in`)'}
+    AudioCue:
+      type: object
+      description: 'from 1.32: one dialogue line in its take (defs `cue`): line from 1, [start_s, end_s) in the take''s own seconds, the speaker''s voice id (a deleted voice''s id stays), the text as spoken'
+      required: [line, start_s, end_s, voice_id, text]
+      additionalProperties: false
+      properties:
+        line: {type: integer, minimum: 1, maximum: 40}
+        start_s: {type: number, minimum: 0, maximum: 600}
+        end_s: {type: number, exclusiveMinimum: 0, maximum: 600}
+        voice_id: {type: string, pattern: '^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9-]{0,63})$'}
+        text: {type: string, maxLength: 600}
     SourceMap:
       type: object
       description: 'from 1.19 (evt.run.output `source_map`): output time t = source time t + `offset_s`; the generated part is [`new_in_s`, `new_out_s`) of the output. A Timeline fill places the result by it (contracts/README.md, Timeline: take actions)'
@@ -4100,6 +4183,7 @@ components:
         media: {$ref: '#/components/schemas/WorkflowMedia'}
         param: {type: string, description: 'the input that holds the take (`<node id>.<param>`)', examples: [source.source]}
         inputs: {$ref: '#/components/schemas/RunInputs', description: 'as POST …/use answers (a clip action: the clip''s range); merge over the form'}
+        slot: {$ref: '#/components/schemas/TimelineSlot', description: 'from 1.32, an audio clip''s action only (Make shot): the slot to send with `POST …/shots`, `{at, length, exact: true}`'}
     TakeUses:
       type: object
       required: [uses]
@@ -4303,9 +4387,11 @@ components:
         fits: {type: boolean, description: 'only with `GET /library?workflow=`: whether the item can be applied to that workflow now (contracts/README.md, Looks: fit)'}
         reason: {type: [string, 'null'], description: 'with `fits`: why not (`this workflow has no LoRA stack`, a voice: `voice Ryan is for qwen3-tts`); null when it fits'}
         voice: {$ref: '#/components/schemas/VoiceInfo', description: 'from 1.30, kind voice only (required then, absent otherwise)'}
+        voice_id: {type: [string, 'null'], pattern: '^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9-]{0,63})$', description: 'from 1.32, an element only (always sent for one, absent otherwise): the voice its @handle speaks in a dialogue script, one of the caller''s voices or a starter voice; null = none (always null for a location or prop, and on read once that voice is deleted or no live host publishes it)'}
       allOf:
         - if: {properties: {kind: {const: element}}, required: [kind]}
           then: {properties: {group: {enum: [character, location, prop]}, handle: {type: string}}}
+          else: {not: {required: [voice_id]}}
         - if: {properties: {kind: {const: look}}, required: [kind]}
           then: {properties: {group: {enum: [film, camera, colour, lighting]}, handle: {type: 'null'}}}
         - if: {properties: {kind: {const: voice}}, required: [kind]}
@@ -4354,6 +4440,7 @@ components:
         loras: {type: array, maxItems: 8, items: {$ref: '#/components/schemas/LookLoraRef'}, description: 'a look only: 0-4 LoRAs the caller can use now, distinct; missing = [] (with from_take: copied)'}
         from_take: {$ref: '#/components/schemas/LibraryFromTake'}
         voice: {$ref: '#/components/schemas/VoiceDesign', description: 'from 1.30, a voice only (required then): its description, language and style; from 1.31 its clip and consent'}
+        voice_id: {type: [string, 'null'], maxLength: 130, description: 'from 1.32, an element of group character only: its voice (`{voice_id}` of VoiceRef: an own voice''s UUID or a starter voice''s `<family>/<id>`); missing or null = none'}
       allOf:
         - if: {properties: {kind: {const: element}}, required: [kind]}
           then: {required: [handle, images], properties: {group: {enum: [character, location, prop]}, handle: {type: string}, loras: {maxItems: 0}}, not: {required: [from_take]}}
@@ -4372,6 +4459,7 @@ components:
         images: {type: array, maxItems: 10, items: {$ref: '#/components/schemas/LibraryImageRef'}}
         loras: {type: array, maxItems: 8, items: {$ref: '#/components/schemas/LookLoraRef'}, description: 'a look only; missing = []'}
         voice: {$ref: '#/components/schemas/VoiceDesign', description: 'from 1.30, a designed voice only (required then); from 1.31 any own voice (a cloned one: its clip and consent)'}
+        voice_id: {type: [string, 'null'], maxLength: 130, description: 'from 1.32, a character element only; missing or null = none (PUT replaces it)'}
         version: {type: integer, minimum: 1, description: 'the version the edit started from (409 when stale)'}
     UploadCreate:
       type: object
@@ -5601,13 +5689,13 @@ components:
       type: object
       required: [id, take_id]
       additionalProperties: false
-      description: 'a slot: a take (video: in/out; image: hold), or an empty slot (`take_id` null, `hold`): black and silence'
+      description: 'a slot: a take (video: in/out; image: hold; from 1.32 an audio take on an audio track: in/out), or an empty slot (`take_id` null, `hold`): black and silence; on an audio track only a New line''s placeholder (with `shot`, from 1.32)'
       properties:
         id: {$ref: '#/components/schemas/TimelineClipId'}
         take_id: {type: [string, 'null'], format: uuid}
         in: {$ref: '#/components/schemas/TimelineSeconds', description: 'a video take: the source time it starts at (default 0)'}
         out: {$ref: '#/components/schemas/TimelineSeconds', description: 'a video take: the source time it ends at (default its length)'}
-        hold: {type: number, exclusiveMinimum: 0, maximum: 3600, description: 'an image take or an empty slot: its length in seconds'}
+        hold: {type: number, exclusiveMinimum: 0, maximum: 3600, description: 'an image take or an empty slot: its length in seconds; from 1.32 also a New line''s placeholder on an audio track (`take_id` null, `at`, `shot`)'}
         at: {$ref: '#/components/schemas/TimelineSeconds', description: 'an audio track: where it starts on the sequence (required there); V1: computed, ignored in a write'}
         gain_db: {type: number, minimum: -60, maximum: 12, default: 0}
         mute: {type: boolean, default: false, description: 'V1: the clip''s own sound is off'}
@@ -5698,6 +5786,7 @@ components:
         width: {type: [integer, 'null'], minimum: 1}
         height: {type: [integer, 'null'], minimum: 1}
         video: {$ref: '#/components/schemas/VideoInfo'}
+        audio: {$ref: '#/components/schemas/AudioInfo', description: 'from 1.32, kind audio only: its length, rate and a dialogue''s cues (ticks on the clip)'}
         seed: {type: [integer, 'null'], minimum: 0, description: '`made_with.seed` (the board''s "seed 42"); null without one'}
         workflow_id: {type: [string, 'null'], description: '`made_with.workflow_id`; null for an upload, import, frame or export (no "from this clip", no re-render)'}
         workflow_title: {type: [string, 'null']}
@@ -5751,7 +5840,20 @@ components:
       oneOf:
         - {type: object, required: [clip], additionalProperties: false, properties: {clip: {$ref: '#/components/schemas/TimelineClipId'}}}
         - {type: object, required: [after, length], additionalProperties: false, properties: {after: {$ref: '#/components/schemas/TimelineClipId'}, length: {type: number, exclusiveMinimum: 0, maximum: 3600, description: 'the placeholder''s length until the take fills it (the client''s estimate)'}, id: {$ref: '#/components/schemas/TimelineClipId', description: 'the new slot''s id; absent = studio makes one'}}}
-        - {type: object, required: [at, length], additionalProperties: false, properties: {at: {$ref: '#/components/schemas/TimelineSeconds'}, length: {type: number, exclusiveMinimum: 0, maximum: 3600}, id: {$ref: '#/components/schemas/TimelineClipId', description: 'the new slot''s id; absent = studio makes one'}}}
+        - {type: object, required: [at, length], additionalProperties: false, properties: {at: {$ref: '#/components/schemas/TimelineSeconds'}, length: {type: number, exclusiveMinimum: 0, maximum: 3600}, id: {$ref: '#/components/schemas/TimelineClipId', description: 'the new slot''s id; absent = studio makes one'}, exact: {type: boolean, const: true, description: 'from 1.32 (Make shot): the `place` edit, the slot at exactly frames(at), not the nearest cut (contracts/README.md, Timeline: Make shot)'}}}
+    TimelineLineSlot:
+      description: 'from 1.32, where a New line goes: a placeholder on audio track `track` at `at` (the playhead) of `length` seconds (the client''s estimate, the template''s planned seconds), or an existing audio clip to redo'
+      oneOf:
+        - {type: object, required: [clip], additionalProperties: false, properties: {clip: {$ref: '#/components/schemas/TimelineClipId'}}}
+        - {type: object, required: [track, at, length], additionalProperties: false, properties: {track: {type: string, pattern: '^A[2-9]$'}, at: {$ref: '#/components/schemas/TimelineSeconds'}, length: {type: number, exclusiveMinimum: 0, maximum: 600}, id: {$ref: '#/components/schemas/TimelineClipId', description: 'the placeholder''s id; absent = studio makes one'}}}
+    TimelineLineCreate:
+      type: object
+      required: [slot, run]
+      additionalProperties: false
+      description: 'from 1.32: New line (POST …/timelines/{id}/lines)'
+      properties:
+        slot: {$ref: '#/components/schemas/TimelineLineSlot'}
+        run: {$ref: '#/components/schemas/RunRequest', description: 'the docked voice composer''s run: a voice-over or dialogue template (media audio), prefilled with the sequence''s cast as a script'}
     TimelineShotCreate:
       type: object
       required: [slot, run]
@@ -5771,7 +5873,7 @@ components:
       additionalProperties: false
       properties:
         revision: {type: integer, minimum: 1}
-        clips: {type: array, minItems: 1, maxItems: 22, uniqueItems: true, items: {$ref: '#/components/schemas/TimelineClipId'}, description: 'V1 clips to re-render; absent = every V1 clip with a take'}
+        clips: {type: array, minItems: 1, maxItems: 22, uniqueItems: true, items: {$ref: '#/components/schemas/TimelineClipId'}, description: 'V1 clips (from 1.32 also audio-track clips made by a workflow) to re-render; absent = every V1 clip with a take'}
         preset: {type: string, minLength: 1, maxLength: 40, description: 'a preset every selected clip''s workflow has in `studio.presets` (for example final); applied over the clip''s own settings; absent = the clip''s own settings and seed'}
     TimelineRerenderAnswer:
       type: object
@@ -5815,6 +5917,18 @@ components:
         frames: {type: integer, minimum: 0}
         duration_s: {type: number, minimum: 0}
         estimated_bytes: {type: integer, minimum: 0}
+        sounds:
+          type: array
+          maxItems: 1000
+          description: 'from 1.32 (always sent): every sound the mix reads, V1 then the audio tracks in order (V1 video clips with sound and audio-track clips with a take; not muted, not offline), with the facts each is resampled from: every one is resampled to `output.sample_rate` and up-mixed to stereo before the mix (contracts/README.md, Timeline: export)'
+          items:
+            type: object
+            required: [clip, track, sample_rate, channels]
+            properties:
+              clip: {$ref: '#/components/schemas/TimelineClipId'}
+              track: {type: string, pattern: '^(V1|A[2-9])$'}
+              sample_rate: {type: [integer, 'null'], description: 'an audio take''s own rate (`audio.sample_rate`: 24000, 44100); null when studio does not know it (a video''s sound, an upload): ffmpeg reads it'}
+              channels: {type: [integer, 'null'], description: '1 for an audio take made by a run (mono WAV); null when not known'}
         host: {type: [string, 'null'], description: 'the env that would run it now (automatic choice, or the named host''s); null when none'}
         env: {type: [string, 'null']}
         hardware: {type: [boolean, 'null'], description: 'true: a hardware encoder (VideoToolbox or, from 1.18, NVENC); false: software (libx264); null without a host'}

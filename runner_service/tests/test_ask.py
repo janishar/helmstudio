@@ -194,6 +194,10 @@ async def test_a_bad_scripted_answer_fails_twice_and_a_retry_script_passes_the_s
     end, _ = await run(ask_command('ECHO-ANSWER: {"pick": 0} ECHO-RETRY: {"pick": 1}'))
     assert end["status"] == "succeeded"
     assert [t["text"] for t in end["answer"]["tries"]] == ['{"pick":0}', '{"pick":1}']
+    # 1.32: a pipelines re-ask (a valid answer a node's check failed) answers the ECHO-RETRY one at once
+    reask = 'ECHO-ANSWER: {"pick": 1} ECHO-RETRY: {"pick": 2}\n\nYour answer was invalid: x. Answer again.'
+    end, _ = await run(ask_command(reask))
+    assert [t["text"] for t in end["answer"]["tries"]] == ['{"pick":2}']
 
 
 async def test_media_takes_are_read_and_checked_and_a_repeat_is_a_cache_hit():

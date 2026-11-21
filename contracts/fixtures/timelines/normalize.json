@@ -1529,7 +1529,7 @@
       }
     },
     {
-      "description": "an audio take is not a clip yet (1.19): wrong_track on any track",
+      "description": "1.32: an audio take is a clip on an audio track: in / out on the sample grid (out defaults to its end), at on a frame, gain and alternatives as any clip",
       "document": {
         "target": {
           "width": 256,
@@ -1554,6 +1554,127 @@
                 "id": "m",
                 "take_id": "ffffffff-0000-4000-8000-000000000001",
                 "in": 0,
+                "out": 1.00001,
+                "at": 0.25
+              },
+              {
+                "id": "n",
+                "take_id": "ffffffff-0000-4000-8000-000000000001",
+                "at": 1.25,
+                "in": 2.5
+              }
+            ]
+          }
+        ]
+      },
+      "takes": {
+        "ffffffff-0000-4000-8000-000000000001": {
+          "kind": "audio",
+          "duration_s": 3.0,
+          "has_audio": true,
+          "bytes": 144044,
+          "sample_rate": 24000
+        }
+      },
+      "expect": {
+        "document": {
+          "target": {
+            "width": 256,
+            "height": 128,
+            "fps": 24,
+            "sample_rate": 48000
+          },
+          "tracks": [
+            {
+              "name": "V1",
+              "kind": "video",
+              "gain_db": 0,
+              "mute": false,
+              "clips": [
+                {
+                  "id": "a",
+                  "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+                  "in": 0.0,
+                  "out": 2.0416666666666665,
+                  "gain_db": 0,
+                  "mute": false,
+                  "alternatives": [
+                    "aaaaaaaa-0000-4000-8000-000000000001"
+                  ],
+                  "at": 0.0
+                }
+              ]
+            },
+            {
+              "name": "A2",
+              "kind": "audio",
+              "gain_db": 0,
+              "mute": false,
+              "clips": [
+                {
+                  "id": "m",
+                  "take_id": "ffffffff-0000-4000-8000-000000000001",
+                  "in": 0.0,
+                  "out": 1.0,
+                  "at": 0.25,
+                  "gain_db": 0,
+                  "mute": false,
+                  "alternatives": [
+                    "ffffffff-0000-4000-8000-000000000001"
+                  ]
+                },
+                {
+                  "id": "n",
+                  "take_id": "ffffffff-0000-4000-8000-000000000001",
+                  "in": 2.5,
+                  "out": 3.0,
+                  "at": 1.25,
+                  "gain_db": 0,
+                  "mute": false,
+                  "alternatives": [
+                    "ffffffff-0000-4000-8000-000000000001"
+                  ]
+                }
+              ]
+            }
+          ],
+          "duration_s": 2.0416666666666665,
+          "frames": 49
+        }
+      }
+    },
+    {
+      "description": "1.32: an audio take on V1 is wrong_track (it has no picture); past V1's end on A2 is past_end, as any sound",
+      "document": {
+        "target": {
+          "width": 256,
+          "height": 128,
+          "fps": 24,
+          "sample_rate": 48000
+        },
+        "tracks": [
+          {
+            "kind": "video",
+            "clips": [
+              {
+                "id": "a",
+                "take_id": "aaaaaaaa-0000-4000-8000-000000000001"
+              },
+              {
+                "id": "v",
+                "take_id": "ffffffff-0000-4000-8000-000000000001",
+                "in": 0,
+                "out": 1.0
+              }
+            ]
+          },
+          {
+            "kind": "audio",
+            "clips": [
+              {
+                "id": "m",
+                "take_id": "ffffffff-0000-4000-8000-000000000001",
+                "in": 0,
                 "out": 3.0,
                 "at": 0
               }
@@ -1566,15 +1687,318 @@
           "kind": "audio",
           "duration_s": 3.0,
           "has_audio": true,
-          "bytes": 576044
+          "bytes": 144044,
+          "sample_rate": 24000
         }
       },
       "expect": {
         "problems": [
           [
-            "wrong_track",
+            "past_end",
             "A2",
             "m"
+          ],
+          [
+            "wrong_track",
+            "V1",
+            "v"
+          ]
+        ]
+      }
+    },
+    {
+      "description": "1.32: a New line's placeholder on an audio track (no take, at, hold, the stored revision's shot): its at and hold on frames; it plays nothing",
+      "document": {
+        "target": {
+          "width": 256,
+          "height": 128,
+          "fps": 24,
+          "sample_rate": 48000
+        },
+        "tracks": [
+          {
+            "kind": "video",
+            "clips": [
+              {
+                "id": "a",
+                "take_id": "aaaaaaaa-0000-4000-8000-000000000001"
+              }
+            ]
+          },
+          {
+            "kind": "audio",
+            "clips": [
+              {
+                "id": "l",
+                "take_id": null,
+                "at": 0.51,
+                "hold": 1.0,
+                "shot": {
+                  "run_id": "0c0c0c0c-0000-4000-8000-000000000001"
+                }
+              },
+              {
+                "id": "m",
+                "take_id": "ffffffff-0000-4000-8000-000000000001",
+                "at": 1.5,
+                "in": 0,
+                "out": 0.5
+              }
+            ]
+          }
+        ]
+      },
+      "previous": {
+        "target": {
+          "width": 256,
+          "height": 128,
+          "fps": 24,
+          "sample_rate": 48000
+        },
+        "tracks": [
+          {
+            "kind": "video",
+            "clips": [
+              {
+                "id": "a",
+                "take_id": "aaaaaaaa-0000-4000-8000-000000000001"
+              }
+            ]
+          },
+          {
+            "kind": "audio",
+            "clips": [
+              {
+                "id": "l",
+                "take_id": null,
+                "at": 0.51,
+                "hold": 1.0,
+                "shot": {
+                  "run_id": "0c0c0c0c-0000-4000-8000-000000000001"
+                }
+              },
+              {
+                "id": "m",
+                "take_id": "ffffffff-0000-4000-8000-000000000001",
+                "at": 1.5,
+                "in": 0,
+                "out": 0.5
+              }
+            ]
+          }
+        ]
+      },
+      "takes": {
+        "ffffffff-0000-4000-8000-000000000001": {
+          "kind": "audio",
+          "duration_s": 3.0,
+          "has_audio": true,
+          "bytes": 144044,
+          "sample_rate": 24000
+        }
+      },
+      "expect": {
+        "document": {
+          "target": {
+            "width": 256,
+            "height": 128,
+            "fps": 24,
+            "sample_rate": 48000
+          },
+          "tracks": [
+            {
+              "name": "V1",
+              "kind": "video",
+              "gain_db": 0,
+              "mute": false,
+              "clips": [
+                {
+                  "id": "a",
+                  "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+                  "in": 0.0,
+                  "out": 2.0416666666666665,
+                  "gain_db": 0,
+                  "mute": false,
+                  "alternatives": [
+                    "aaaaaaaa-0000-4000-8000-000000000001"
+                  ],
+                  "at": 0.0
+                }
+              ]
+            },
+            {
+              "name": "A2",
+              "kind": "audio",
+              "gain_db": 0,
+              "mute": false,
+              "clips": [
+                {
+                  "id": "l",
+                  "take_id": null,
+                  "at": 0.5,
+                  "hold": 1.0,
+                  "gain_db": 0,
+                  "mute": false,
+                  "alternatives": [],
+                  "shot": {
+                    "run_id": "0c0c0c0c-0000-4000-8000-000000000001"
+                  }
+                },
+                {
+                  "id": "m",
+                  "take_id": "ffffffff-0000-4000-8000-000000000001",
+                  "in": 0.0,
+                  "out": 0.5,
+                  "at": 1.5,
+                  "gain_db": 0,
+                  "mute": false,
+                  "alternatives": [
+                    "ffffffff-0000-4000-8000-000000000001"
+                  ]
+                }
+              ]
+            }
+          ],
+          "duration_s": 2.0416666666666665,
+          "frames": 49
+        }
+      }
+    },
+    {
+      "description": "1.32: an empty slot without a shot on an audio track is still wrong_track; a placeholder needs at and must not overlap",
+      "document": {
+        "target": {
+          "width": 256,
+          "height": 128,
+          "fps": 24,
+          "sample_rate": 48000
+        },
+        "tracks": [
+          {
+            "kind": "video",
+            "clips": [
+              {
+                "id": "a",
+                "take_id": "aaaaaaaa-0000-4000-8000-000000000001"
+              }
+            ]
+          },
+          {
+            "kind": "audio",
+            "clips": [
+              {
+                "id": "e",
+                "take_id": null,
+                "at": 0,
+                "hold": 1.0
+              },
+              {
+                "id": "l",
+                "take_id": null,
+                "at": 0.5,
+                "hold": 1.5,
+                "shot": {
+                  "run_id": "0c0c0c0c-0000-4000-8000-000000000001"
+                }
+              },
+              {
+                "id": "q",
+                "take_id": null,
+                "hold": 0.5,
+                "shot": {
+                  "run_id": "0c0c0c0c-0000-4000-8000-000000000001"
+                }
+              },
+              {
+                "id": "m",
+                "take_id": "ffffffff-0000-4000-8000-000000000001",
+                "at": 1.0,
+                "in": 0,
+                "out": 0.5
+              }
+            ]
+          }
+        ]
+      },
+      "previous": {
+        "target": {
+          "width": 256,
+          "height": 128,
+          "fps": 24,
+          "sample_rate": 48000
+        },
+        "tracks": [
+          {
+            "kind": "video",
+            "clips": [
+              {
+                "id": "a",
+                "take_id": "aaaaaaaa-0000-4000-8000-000000000001"
+              }
+            ]
+          },
+          {
+            "kind": "audio",
+            "clips": [
+              {
+                "id": "e",
+                "take_id": null,
+                "at": 0,
+                "hold": 1.0
+              },
+              {
+                "id": "l",
+                "take_id": null,
+                "at": 0.5,
+                "hold": 1.5,
+                "shot": {
+                  "run_id": "0c0c0c0c-0000-4000-8000-000000000001"
+                }
+              },
+              {
+                "id": "q",
+                "take_id": null,
+                "hold": 0.5,
+                "shot": {
+                  "run_id": "0c0c0c0c-0000-4000-8000-000000000001"
+                }
+              },
+              {
+                "id": "m",
+                "take_id": "ffffffff-0000-4000-8000-000000000001",
+                "at": 1.0,
+                "in": 0,
+                "out": 0.5
+              }
+            ]
+          }
+        ]
+      },
+      "takes": {
+        "ffffffff-0000-4000-8000-000000000001": {
+          "kind": "audio",
+          "duration_s": 3.0,
+          "has_audio": true,
+          "bytes": 144044,
+          "sample_rate": 24000
+        }
+      },
+      "expect": {
+        "problems": [
+          [
+            "at_required",
+            "A2",
+            "q"
+          ],
+          [
+            "overlap",
+            "A2",
+            "m"
+          ],
+          [
+            "wrong_track",
+            "A2",
+            "e"
           ]
         ]
       }

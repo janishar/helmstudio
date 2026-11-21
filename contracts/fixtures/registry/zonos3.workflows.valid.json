@@ -119,6 +119,119 @@
           "Whisper"
         ]
       }
+    },
+    {
+      "id": "zonos3-dialogue",
+      "title": "ZONOS3 Dialogue",
+      "family": "zonos3",
+      "env": "native",
+      "media": "audio",
+      "nodes": {
+        "seed": {
+          "kind": "seed",
+          "params": {
+            "seed": -1
+          }
+        },
+        "model": {
+          "kind": "zonos3/model",
+          "params": {
+            "variant": "mini",
+            "precision": "int8"
+          }
+        },
+        "dialogue": {
+          "kind": "zonos3/dialogue",
+          "in": {
+            "model": "model.model",
+            "seed": "seed.seed"
+          },
+          "params": {
+            "script": "",
+            "lines": [],
+            "pause": 0.35,
+            "language": "en-US",
+            "emotion": 0.5,
+            "energy": 0.5,
+            "whisper": 0,
+            "speaking_rate": 1,
+            "guidance": 2
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "dialogue.audio"
+          }
+        }
+      },
+      "studio": {
+        "composer": [
+          "dialogue.script"
+        ],
+        "quick": [
+          "dialogue.lines",
+          "dialogue.language",
+          "seed.seed"
+        ],
+        "inspector": [
+          {
+            "title": "Delivery",
+            "items": [
+              "dialogue.emotion",
+              "dialogue.energy",
+              "dialogue.whisper",
+              "dialogue.speaking_rate",
+              "dialogue.guidance"
+            ]
+          },
+          {
+            "title": "Cast",
+            "items": [
+              "dialogue.pause"
+            ]
+          }
+        ],
+        "labels": {
+          "dialogue.lines": "Cast"
+        },
+        "presets": {
+          "Neutral": {
+            "dialogue.emotion": 0.5,
+            "dialogue.energy": 0.5,
+            "dialogue.whisper": 0,
+            "dialogue.speaking_rate": 1,
+            "dialogue.guidance": 2
+          },
+          "Warm": {
+            "dialogue.emotion": 0.7,
+            "dialogue.energy": 0.45,
+            "dialogue.whisper": 0,
+            "dialogue.speaking_rate": 0.95,
+            "dialogue.guidance": 2
+          },
+          "Tense": {
+            "dialogue.emotion": 0.3,
+            "dialogue.energy": 0.75,
+            "dialogue.whisper": 0,
+            "dialogue.speaking_rate": 1.1,
+            "dialogue.guidance": 2.5
+          },
+          "Whisper": {
+            "dialogue.emotion": 0.5,
+            "dialogue.energy": 0.25,
+            "dialogue.whisper": 0.9,
+            "dialogue.speaking_rate": 0.9,
+            "dialogue.guidance": 2
+          }
+        },
+        "preset_order": [
+          "Neutral",
+          "Warm",
+          "Tense",
+          "Whisper"
+        ]
+      }
     }
   ]
 }

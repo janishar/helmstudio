@@ -645,6 +645,15 @@ func (s *Service) useMedia(ctx context.Context, caller common.Caller, row model.
 				keys = append(keys, nodeID+"."+p.Name)
 				params[nodeID+"."+p.Name] = p
 			}
+			// API 1.32: rows of one media field, picked by the take's own kind (a video's sound only when named)
+			if _, field, rows := registry.MediaRowsField(p); rows && Counts(workflow, nodeID, p) {
+				if slices.Contains(field.Accepts, take.Kind) {
+					keys = append(keys, nodeID+"."+p.Name)
+				}
+				if slices.Contains(field.Accepts, take.Kind) || (take.Kind == "video" && slices.Contains(field.Accepts, "audio")) {
+					params[nodeID+"."+p.Name] = p
+				}
+			}
 		}
 	}
 	unprocessable := func(detail string) (dto.TakeReuse, error) {
@@ -660,7 +669,11 @@ func (s *Service) useMedia(ctx context.Context, caller common.Caller, row model.
 	case len(keys) > 1:
 		return unprocessable("workflow " + workflow.ID + " has several " + take.Kind + " inputs; name one in param")
 	}
-	if detail := MediaFit(params[keys[0]], take); detail != "" {
+	spec := params[keys[0]]
+	if _, field, rows := registry.MediaRowsField(spec); rows {
+		spec = field
+	}
+	if detail := MediaFit(spec, take); detail != "" {
 		return unprocessable(detail)
 	}
 	inputs, ok := mediaInputs(take, workflow, params[keys[0]], keys[0], nil)

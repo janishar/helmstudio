@@ -7,7 +7,8 @@
 # The kinds of API 1.11 equal the canonical contract fixtures; keyframes, sample and `auto` (1.12) have none yet.
 # echo/retake, echo/a2v and echo/extend (API 1.19, workflows echo-retake, echo-a2v, echo-extend) take a video or audio take as a media
 # input (the core reads and checks it) and report the output's source_map.
-# echo/speak (API 1.30, workflow echo-voice-over) is the fake speech model; starter voices in voices/.
+# echo/speak (API 1.30, workflow echo-voice-over) is the fake speech model; starter voices in voices/. echo/dialogue
+# (API 1.32, workflow echo-dialogue) speaks a script's lines with cues.
 # echo/ask (API 1.14, workflow echo-ask) is the fake llm: it answers what the prompt scripts (fake.py `ask`).
 id: echo
 family: echo
@@ -190,6 +191,26 @@ stages:
     params:
       voice: {type: voice, label: Voice, default: null, accepts: [preset, clip, design],
               help: "The saved voice it speaks in: an echo starter voice, a voice with a clip (API 1.31) or a designed voice."}
+      seed: {type: seed, label: Seed, default: -1, min: -1, max: 9007199254740991, step: 1}
+      delay_ms: {type: int, label: Delay per step (ms), default: 300, min: 0, max: 10000}
+  # dialogue (API 1.32, workflow echo-dialogue): a script's lines, voice rows and cues without a GPU (fake.py dialogue)
+  dialogue:
+    title: Echo dialogue
+    help: "Fake dialogue: per line one sine tone per character (1/15 s each, 24 kHz mono), then its pause_s of silence; cues per line; one progress step per line. No line fails `<node>: nothing to say`."
+    source: false                 # no inputs, but listed after echo/speak (the canonical palette's order)
+    outputs: {audio: Audio}
+    params:
+      script: {type: text, script: true, label: Script, default: "", min: 0, max: 8000,
+               help: "One line each: @name: text or @name (style): text. An empty line is a longer pause. Each @name speaks in its element's voice."}
+      lines: {type: rows, label: Lines, default: [], min: 1, max: 40,
+              item: {voice: {type: voice, label: Voice, default: null, accepts: [preset, clip, design]},
+                     text: {type: string, label: Line, default: "", max: 600},
+                     style: {type: string, label: Style, default: "", max: 200},
+                     pause_s: {type: float, label: Pause after, default: 0.35, min: 0, max: 5, step: 0.05,
+                               help: "Silence after the line, before the next (the last line's is not used)."}},
+              help: "One item per spoken line, in order. Studio writes them from the script; the Graph view and agents may set them instead."}
+      pause: {type: float, label: Pause between lines, default: 0.35, min: 0, max: 2, step: 0.05,
+              help: "The silence between two lines; each empty line in the script adds it once more."}
       seed: {type: seed, label: Seed, default: -1, min: -1, max: 9007199254740991, step: 1}
       delay_ms: {type: int, label: Delay per step (ms), default: 300, min: 0, max: 10000}
   ask:

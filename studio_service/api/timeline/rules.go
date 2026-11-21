@@ -164,14 +164,15 @@ func (d Doc) Clone() Doc {
 // Take is what the rules know of a take the document names (the caller's: one that is missing is offline or not
 // found).
 type Take struct {
-	Kind      string     `json:"kind"`
-	DurationS float64    `json:"duration_s"`
-	HasAudio  bool       `json:"has_audio"`
-	Bytes     int64      `json:"bytes"`
-	Stream    *Stream    `json:"stream,omitempty"`
-	MadeWith  *MadeWith  `json:"made_with,omitempty"`
-	FrameOf   *FrameOf   `json:"frame_of,omitempty"`
-	SourceMap *SourceMap `json:"source_map,omitempty"`
+	Kind       string     `json:"kind"`
+	DurationS  float64    `json:"duration_s"`
+	HasAudio   bool       `json:"has_audio"`
+	Bytes      int64      `json:"bytes"`
+	SampleRate *int       `json:"sample_rate,omitempty"` // an audio take's own rate (API 1.32), nil unknown
+	Stream     *Stream    `json:"stream,omitempty"`
+	MadeWith   *MadeWith  `json:"made_with,omitempty"`
+	FrameOf    *FrameOf   `json:"frame_of,omitempty"`
+	SourceMap  *SourceMap `json:"source_map,omitempty"`
 }
 
 // SourceMap is how a take made from a media take lines up with it (API 1.19, Take.source_map): output time = source
@@ -235,7 +236,8 @@ func val(p *float64) float64 {
 	return *p
 }
 
-// Kind is a clip's kind: slot (an empty slot), video or image; an offline clip by its fields (hold = image).
+// Kind is a clip's kind: slot (an empty slot, or from 1.32 a New line's placeholder on an audio track), video, image
+// or (1.32) audio; an offline clip by its fields (hold = image).
 func Kind(c Clip, takes map[string]Take) string {
 	tid := c.Take()
 	if tid == "" {
@@ -253,12 +255,28 @@ func Kind(c Clip, takes map[string]Take) string {
 // Len is a clip's length in frames on the sequence (an audio-track clip: its end's frame minus its start's).
 func Len(c Clip, kind string, g Grid, audio bool) int {
 	if audio {
-		return g.F(val(c.At)+val(c.Out)-val(c.In)) - g.F(val(c.At))
+		return g.F(val(c.At)+audioS(c)) - g.F(val(c.At))
 	}
 	if kind == "video" {
 		return g.F(val(c.Out)) - g.F(val(c.In))
 	}
 	return g.F(val(c.Hold))
+}
+
+// audioS is an audio-track clip's length in seconds: out − in, or (1.32) a line placeholder's hold.
+func audioS(c Clip) float64 {
+	if c.Hold != nil {
+		return *c.Hold
+	}
+	return val(c.Out) - val(c.In)
+}
+
+// aLen is an audio-track clip's length in target samples (a_len).
+func aLen(c Clip, g Grid) int {
+	if c.Hold != nil {
+		return g.Smp(*c.Hold)
+	}
+	return g.Smp(val(c.Out)) - g.Smp(val(c.In))
 }
 
 // Normalize checks, snaps and fills a written document (t_normalize). takes: the caller's takes it names; a missing
@@ -324,7 +342,7 @@ func Normalize(doc Doc, takes map[string]Take, previous *Doc) (*Doc, []Problem) 
 				add("duplicate_clip", name, cid)
 			}
 			ids[cid] = true
-			if kind == "audio" { // an audio take is not a clip in this version (API 1.19)
+			if kind == "audio" && video { // 1.32: an audio take goes on A2-A9 only
 				add("wrong_track", name, cid)
 				continue
 			}
@@ -342,7 +360,7 @@ func Normalize(doc Doc, takes map[string]Take, previous *Doc) (*Doc, []Problem) 
 			}
 			n := Clip{ID: cid, TakeID: c.TakeID}
 			switch {
-			case kind == "video":
+			case kind == "video" || kind == "audio":
 				if c.Hold != nil {
 					add("hold_on_video", name, cid)
 				}
@@ -365,7 +383,7 @@ func Normalize(doc Doc, takes map[string]Take, previous *Doc) (*Doc, []Problem) 
 					if has && !(0 <= i && i < o && o <= g.Smp(tk.DurationS)) {
 						add("trim", name, cid)
 					}
-					if has && !tk.HasAudio {
+					if has && kind == "video" && !tk.HasAudio {
 						add("no_audio", name, cid)
 					}
 					if c.At == nil {
@@ -374,9 +392,25 @@ func Normalize(doc Doc, takes map[string]Take, previous *Doc) (*Doc, []Problem) 
 					}
 					n.In, n.Out, n.At = f64(float64(i)/float64(g.sr)), f64(float64(o)/float64(g.sr)), f64(g.Snap(*c.At))
 				}
-			case !video:
+			case !video && !(kind == "slot" && c.Shot != nil): // 1.32: a New line placeholder is the exception
 				add("wrong_track", name, cid)
 				continue
+			case !video:
+				if c.In != nil || c.Out != nil {
+					add("image_trim", name, cid)
+				}
+				if c.Hold == nil {
+					add("hold_required", name, cid)
+					continue
+				}
+				if c.At == nil {
+					add("at_required", name, cid)
+					continue
+				}
+				if g.F(*c.Hold) < 1 {
+					add("hold", name, cid)
+				}
+				n.At, n.Hold = f64(g.Snap(*c.At)), f64(g.Snap(*c.Hold))
 			default:
 				if c.In != nil || c.Out != nil {
 					add("image_trim", name, cid)
@@ -462,7 +496,7 @@ func Normalize(doc Doc, takes map[string]Take, previous *Doc) (*Doc, []Problem) 
 			prevEnd, seen := 0, false
 			for _, c := range clips {
 				a := g.Smp(*c.n.At)
-				e := a + g.Smp(*c.n.Out) - g.Smp(*c.n.In)
+				e := a + aLen(c.n, g)
 				if seen && a < prevEnd {
 					add("overlap", name, c.n.ID)
 				}

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Pause, Play, Volume2, VolumeX } from "lucide-react";
 import { clock } from "@/lib/runs";
 import { ErrorNote } from "@/components/kit";
+import type { S } from "@/lib/api";
 
 /** How many bars the stage's waveform draws. */
 const BARS = 100;
@@ -48,9 +49,25 @@ function usePeaks(url?: string) {
   return { bars: mine?.bars ?? null, failed: !!mine && !mine.bars };
 }
 
+/** A dialogue's speakers' colours, by first appearance (docs/mock/CreateAudio.dc.html: Mara a2, Jon a1). */
+export const cueColor = (cues: S<"AudioCue">[], c: S<"AudioCue">) =>
+  [...new Set(cues.map((x) => x.voice_id))].indexOf(c.voice_id) % 2 ? "var(--a1)" : "var(--a2)";
+
 /** The stage's player of an audio take: the waveform (played bars in the accent, the playhead), then play / pause,
- * "0:03 / 0:07", the scrubber, Loop and the sound switch. */
-export function WavePlayer({ url, duration }: { url?: string; duration?: number }) {
+ * "0:03 / 0:07", the scrubber, Loop and the sound switch. A dialogue (API 1.32) draws its cues: a marker per line
+ * above the waveform (a click seeks to it), and each line's bars in its speaker's colour. */
+export function WavePlayer({
+  url,
+  duration,
+  cues,
+  nameOf,
+}: {
+  url?: string;
+  duration?: number;
+  cues?: S<"AudioCue">[];
+  /** a cue's speaker ("Mara"), from its voice */
+  nameOf?: (voiceId: string) => string;
+}) {
   const ref = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
   const [pos, setPos] = useState(0);
@@ -60,6 +77,11 @@ export function WavePlayer({ url, duration }: { url?: string; duration?: number 
   const { bars, failed: noPeaks } = usePeaks(url);
   const [broken, setBroken] = useState(false);
   const at = len > 0 ? Math.min(1, pos / len) : 0;
+  const seek = (t: number) => {
+    setPos(t);
+    if (ref.current) ref.current.currentTime = t;
+  };
+  const lineAt = (t: number) => cues?.find((c) => c.start_s <= t && t < c.end_s);
   return (
     <div className="flex w-full max-w-[860px] flex-col items-center gap-3.5">
       <audio
@@ -77,22 +99,57 @@ export function WavePlayer({ url, duration }: { url?: string; duration?: number 
         onEnded={() => setPlaying(false)}
         onError={() => setBroken(true)}
       />
+      {!!cues?.length && len > 0 && (
+        <div aria-label="Line cues" className="relative h-7 w-full">
+          {cues.map((c) => {
+            const who = nameOf?.(c.voice_id) ?? "";
+            return (
+              <button
+                key={c.line}
+                type="button"
+                title="Jump to this line"
+                aria-label={`Line ${c.line}${who ? `, ${who}` : ""}, from ${c.start_s.toFixed(1)} s to ${c.end_s.toFixed(1)} s`}
+                onClick={() => seek(c.start_s)}
+                className="mono absolute top-0 h-7 truncate rounded border-t-[3px] bg-[color-mix(in_srgb,var(--s2)_85%,transparent)] px-1.5 text-left text-[11px] text-t1"
+                style={{
+                  left: `${(c.start_s / len) * 100}%`,
+                  width: `${Math.max(0, ((c.end_s - c.start_s) / len) * 100 - 0.6)}%`,
+                  borderTopColor: cueColor(cues, c),
+                }}
+              >
+                {c.line} {who}
+              </button>
+            );
+          })}
+        </div>
+      )}
       <div
         role="group"
         aria-label="Waveform of the take"
         className="relative flex h-[168px] w-full items-center gap-[2px] rounded-xl bg-s1 px-[2px]"
       >
-        {Array.from({ length: BARS }, (_, i) => (
-          <span
-            key={i}
-            aria-hidden
-            className="min-w-[2px] flex-1 rounded-[2px]"
-            style={{
-              height: `${bars ? Math.max(3, Math.round(bars[i] * 94)) : 3}%`,
-              background: pos > 0 && (i + 0.5) / BARS <= at ? "var(--a2)" : "var(--dash)",
-            }}
-          />
-        ))}
+        {Array.from({ length: BARS }, (_, i) => {
+          const played = pos > 0 && (i + 0.5) / BARS <= at;
+          const line = cues?.length ? lineAt(((i + 0.5) / BARS) * len) : undefined;
+          return (
+            <span
+              key={i}
+              aria-hidden
+              className="min-w-[2px] flex-1 rounded-[2px]"
+              style={{
+                height: `${bars ? Math.max(3, Math.round(bars[i] * 94)) : 3}%`,
+                background: cues?.length
+                  ? line
+                    ? cueColor(cues, line)
+                    : "var(--dash)"
+                  : played
+                    ? "var(--a2)"
+                    : "var(--dash)",
+                opacity: cues?.length && !played ? 0.55 : 1,
+              }}
+            />
+          );
+        })}
         <span
           aria-hidden
           className="absolute top-1.5 bottom-1.5 -ml-px w-0.5 rounded-[1px] bg-t1"
@@ -128,11 +185,7 @@ export function WavePlayer({ url, duration }: { url?: string; duration?: number 
           max={len || 0}
           step={0.01}
           value={Math.min(pos, len)}
-          onChange={(e) => {
-            const t = Number(e.target.value);
-            setPos(t);
-            if (ref.current) ref.current.currentTime = t;
-          }}
+          onChange={(e) => seek(Number(e.target.value))}
           className="flex-[1_1_240px] accent-a2"
         />
         <button

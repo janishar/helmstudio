@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -273,8 +274,19 @@ func badAudio(data message.Output) bool {
 	if data.Kind != "audio" {
 		return a != nil
 	}
-	return a == nil || !strings.HasSuffix(data.Key, ".wav") || data.Width != nil || data.Height != nil || a.DurationS <= 0 ||
-		a.DurationS > 600 || a.SampleRate == nil || *a.SampleRate < 8000 || *a.SampleRate > 96000
+	if a == nil || !strings.HasSuffix(data.Key, ".wav") || data.Width != nil || data.Height != nil || a.DurationS <= 0 ||
+		a.DurationS > 600 || a.SampleRate == nil || *a.SampleRate < 8000 || *a.SampleRate > 96000 || len(a.Cues) > 40 {
+		return true
+	}
+	end := 0.0 // API 1.32: cues from line 1 in order, each inside the take and after the one before
+	for i, c := range a.Cues {
+		if c.Line != i+1 || c.StartS < end || c.EndS <= c.StartS || c.EndS > a.DurationS+1e-6 || c.VoiceID == "" ||
+			utf8.RuneCountInString(c.Text) > 600 {
+			return true
+		}
+		end = c.EndS
+	}
+	return false
 }
 
 // eventTime is when a stored event happened; the zero time (a malformed envelope) is now.

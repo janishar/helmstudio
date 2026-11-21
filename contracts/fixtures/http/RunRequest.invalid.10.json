@@ -1,0 +1,13 @@
+{
+  "workflow_id": "echo-dialogue",
+  "inputs": {
+    "dialogue.lines": [
+      {
+        "voice": {
+          "voice_id": "Ada"
+        },
+        "text": "hi"
+      }
+    ]
+  }
+}

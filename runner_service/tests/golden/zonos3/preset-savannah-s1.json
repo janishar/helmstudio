@@ -19,13 +19,13 @@
     "guidance": 2
   },
   "wav": "preset-savannah-s1.wav",
-  "wav_sha256": "ab2e51ef7a1fc0556df1e77314fc5fccbbbd88900ee0a7bef490dedd3d248004",
+  "wav_sha256": "044ef6fedd551b3c4f950194a89c70400400cc7ae49407c43dc1cac2c151f199",
   "sample_rate": 44100,
   "channels": 1,
   "sample_bytes": 2,
-  "duration_s": 3.667,
-  "ready_s": 0.3,
-  "speak_s": 0.3,
+  "duration_s": 2.6,
+  "ready_s": 0.27,
+  "speak_s": 0.25,
   "headers": {
     "X-Seed": "1",
     "X-Decoder": "keep2_plain",
@@ -39,6 +39,9 @@
     "format": "wav",
     "seed": 1,
     "language": "en_us",
+    "condition_values": {
+      "speaking_rate": 15
+    },
     "speaker_cfg_scale": 2,
     "speaker_mode": "embedding"
   },

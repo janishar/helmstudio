@@ -266,6 +266,7 @@ type TimelineSlot struct {
 	Length *float64 `json:"length"`
 	ID     string   `json:"id"`
 	After  string   `json:"after"`
+	Exact  bool     `json:"exact"` // API 1.32 (Make shot): the place edit at exactly frames(at)
 }
 
 // TimelineShotCreate is POST /timelines/{id}/shots.
@@ -287,12 +288,55 @@ func (b *TimelineShotCreate) Validate() string {
 		return "unknown clip " + s.Clip
 	case s.After != "" && !ClipID.MatchString(s.After):
 		return "unknown clip " + s.After
+	case s.Exact && (s.At == nil || s.After != ""):
+		return "slot.exact needs {at, length}"
 	case s.Clip == "" && s.At == nil && s.After == "":
 		return "slot.clip, slot.at or slot.after is required"
 	case s.Clip == "" && s.Length == nil:
 		return "length is required to insert a slot"
 	case s.Clip == "" && (*s.Length <= 0 || *s.Length > 3600 || (s.At != nil && (*s.At < 0 || *s.At > 86400))):
 		return "slot.at must be seconds from 0 and slot.length more than 0 and at most 3600"
+	case s.ID != "" && !ClipID.MatchString(s.ID):
+		return "slot.id must be 1-16 lowercase letters or digits"
+	}
+	return b.Run.Validate()
+}
+
+// TimelineLineSlot is where a New line goes (API 1.32): a placeholder on audio track Track at At of Length seconds,
+// or audio clip Clip to redo.
+type TimelineLineSlot struct {
+	Clip   string   `json:"clip"`
+	Track  string   `json:"track"`
+	At     *float64 `json:"at"`
+	Length *float64 `json:"length"`
+	ID     string   `json:"id"`
+}
+
+// TimelineLineCreate is POST /timelines/{id}/lines (API 1.32, New line).
+type TimelineLineCreate struct {
+	Slot *TimelineLineSlot `json:"slot"`
+	Run  *RunRequest       `json:"run"`
+}
+
+// Validate checks the slot's form and the run's.
+func (b *TimelineLineCreate) Validate() string {
+	switch s := b.Slot; {
+	case s == nil:
+		return "slot is required"
+	case b.Run == nil:
+		return "run is required"
+	case s.Clip != "" && (s.Track != "" || s.At != nil || s.Length != nil || s.ID != ""):
+		return "slot is {clip} or {track, at, length, id?}"
+	case s.Clip != "" && !ClipID.MatchString(s.Clip):
+		return "unknown clip " + s.Clip
+	case s.Clip == "" && (s.Track == "" || s.At == nil || s.Length == nil):
+		return "slot.clip or slot.track, slot.at and slot.length are required"
+	case s.Clip == "" && s.Track == "V1":
+		return "New line needs an audio track"
+	case s.Clip == "" && !TrackName.MatchString(s.Track):
+		return "slot.track must be A2-A9"
+	case s.Clip == "" && (*s.Length <= 0 || *s.Length > 600 || *s.At < 0 || *s.At > 86400):
+		return "slot.at must be seconds from 0 and slot.length more than 0 and at most 600"
 	case s.ID != "" && !ClipID.MatchString(s.ID):
 		return "slot.id must be 1-16 lowercase letters or digits"
 	}
@@ -372,6 +416,7 @@ type TimelineTake struct {
 	Width         *int                  `json:"width"`
 	Height        *int                  `json:"height"`
 	Video         *gallerydto.VideoInfo `json:"video,omitempty"`
+	Audio         *gallerydto.AudioInfo `json:"audio,omitempty"` // API 1.32: an audio take's length, rate and cues
 	Seed          *int64                `json:"seed"`
 	WorkflowID    *string               `json:"workflow_id"`
 	WorkflowTitle *string               `json:"workflow_title"`
@@ -453,17 +498,18 @@ type ExportOutput struct {
 
 // ExportPlan is POST …/export/plan.
 type ExportPlan struct {
-	Revision       int            `json:"revision"`
-	StreamCopy     bool           `json:"stream_copy"`
-	Reasons        []ExportReason `json:"reasons"`
-	Blocked        []ExportReason `json:"blocked"`
-	Output         ExportOutput   `json:"output"`
-	Frames         int            `json:"frames"`
-	DurationS      float64        `json:"duration_s"`
-	EstimatedBytes int            `json:"estimated_bytes"`
-	Host           *string        `json:"host"`
-	Env            *string        `json:"env"`
-	Hardware       *bool          `json:"hardware"`
+	Revision       int                  `json:"revision"`
+	StreamCopy     bool                 `json:"stream_copy"`
+	Reasons        []ExportReason       `json:"reasons"`
+	Blocked        []ExportReason       `json:"blocked"`
+	Output         ExportOutput         `json:"output"`
+	Frames         int                  `json:"frames"`
+	DurationS      float64              `json:"duration_s"`
+	EstimatedBytes int                  `json:"estimated_bytes"`
+	Sounds         []timeline.PlanSound `json:"sounds"` // API 1.32: always sent
+	Host           *string              `json:"host"`
+	Env            *string              `json:"env"`
+	Hardware       *bool                `json:"hardware"`
 }
 
 // MediaJob is an export or frame job.
@@ -499,5 +545,5 @@ type TakeFrame struct {
 
 // ClipActions is GET /timelines/{id}/clips/{clip_id}/actions (API 1.19).
 type ClipActions struct {
-	Actions []gallerydto.TakeOffer `json:"actions"`
+	Actions []timeline.Action `json:"actions"` // API 1.32: an audio clip's carry a slot (Make shot)
 }

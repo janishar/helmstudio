@@ -10,6 +10,7 @@ replay key changes with the prompt."""
 import functools
 import hashlib
 import json
+import re
 from pathlib import Path
 
 from jsonschema import Draft202012Validator
@@ -22,7 +23,7 @@ REASK = "Your answer was invalid: {error}. Answer again with JSON only."
 # max_tokens: a decide's; a judge's grows with its takes and criteria; a write's holds 4000 chars of text
 MAX_TOKENS = 800
 WRITE_TOKENS = 1400
-JUDGE, WRITE, DECIDE = "judge/v2", "write/v2", "decide/v2"
+JUDGE, WRITE, DECIDE, WRITE_SCRIPT = "judge/v2", "write/v2", "decide/v2", "write-script/v1"
 PROMPT_MAX = 32768
 # room kept for the re-ask suffix ("\n\n" + REASK with an error of at most 2000 chars), so it is never cut off
 RESERVE = len(REASK) + 2002
@@ -77,6 +78,17 @@ WRITE_SCHEMA = {
     "required": ["text"],
     "properties": {
         "text": {"type": "string", "minLength": 1, "maxLength": 4000},
+        "note": {"type": "string", "maxLength": 300},
+    },
+}
+
+
+SCRIPT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["script"],
+    "properties": {
+        "script": {"type": "string", "minLength": 1, "maxLength": 4000},
         "note": {"type": "string", "maxLength": 300},
     },
 }
@@ -159,6 +171,27 @@ def write_prompt(instruction: str, text: str, context: list[tuple[str, str]], al
         return out + f"\n\nAllowed mentions (keep them exactly; add no others): {mentions}"
 
     return _assemble(render, [text] + [v for _, v in context])
+
+
+def cast_lines(items: list[dict]) -> list[str]:
+    """write-script/v1's cast from a library.read reply's items: one line per element with a voice."""
+    return [f"@{i['handle']} \u2014 {i['name']}, voice {i['voice']}" for i in items
+            if i.get("kind") == "element" and i.get("handle") and i.get("voice")]  # fmt: skip
+
+
+def script_prompt(instruction: str, texts: list[tuple[str, str]], cast: list[str]) -> str:
+    """write-script/v1: the instruction, the `from` texts (the first as the brief) and the cast, fenced."""
+
+    def render(*values):
+        labels = ["brief"] + [_label(name) for name, _ in texts[1:]] + ["cast"]
+        out = f"Write a dialogue script. {instruction}\n\n{DATA}"
+        out += "".join(_block(k, v) for k, v in zip(labels, values))
+        return out + (
+            "\n\nWrite one spoken line per line, as @handle: text or @handle (style): text; a blank line is a"
+            " pause. Use only the cast's handles, at most 40 lines."
+        )
+
+    return _assemble(render, [v for _, v in texts] + ["\n".join(cast) or "(no one)"])
 
 
 def decide_prompt(question: str, context: list[tuple[str, str]], routes: dict) -> str:
@@ -245,6 +278,40 @@ def mentions(text: str) -> list[str]:
                 continue
         i += 1
     return out
+
+
+# --- scripts (contracts/README.md "Dialogue and Timeline audio"; check.py script_lines, script_check)
+
+SCRIPT_LINE = re.compile(r"^@([A-Za-z][A-Za-z0-9_-]*)\s*(?:\(([^()]*)\))?\s*:(.*)$")
+SCRIPT_FORM = "write @name: text or @name (style): text"
+HANDLE = re.compile(r"^[a-z](?:[a-z0-9_-]{0,38}[a-z0-9])?$")
+
+
+def script_check(
+    script: str, cast: list[str], max_lines: int = 40, text_max: int = 600, style_max: int = 200
+) -> str | None:
+    """A write-script/v1 answer's check: None, or the first failure (re-asked once), in studio's expand_script order:
+    a malformed line, nothing to say, text over text_max, style over style_max, a handle not in the cast; then no
+    line, too many lines. Blank lines are pauses."""
+    n = 0
+    for k, raw in enumerate(script.replace("\r\n", "\n").split("\n"), 1):
+        if not (t := raw.strip()):
+            continue
+        m, n = SCRIPT_LINE.match(t), n + 1
+        if not m or not HANDLE.match(m.group(1).lower()):
+            return f"line {k}: {SCRIPT_FORM}"
+        text, style = m.group(3).strip(), (m.group(2) or "").strip()
+        if not text:
+            return f"line {k}: nothing to say"
+        if len(text) > text_max:
+            return f"line {k}: at most {text_max} characters ({len(text)})"
+        if len(style) > style_max:
+            return f"line {k}: the style is at most {style_max} characters ({len(style)})"
+        if m.group(1).lower() not in cast:
+            return f"line {k}: @{m.group(1).lower()} is not in the cast"
+    if not n:
+        return "the script is empty"
+    return f"more than {max_lines} lines" if n > max_lines else None
 
 
 # --- agents (contracts/README.md "Agents, fan-out, model sources and custom nodes"; check.py offered, turn_schema,

@@ -1,6 +1,7 @@
 package dto
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -35,6 +36,8 @@ type LibraryItem struct {
 	Fits       *bool           `json:"fits,omitempty"`   // only with ?workflow=
 	Reason     json.RawMessage `json:"reason,omitempty"` // with fits: a string, or null when it fits
 	Voice      *VoiceInfo      `json:"voice,omitempty"`  // API 1.30, kind voice only
+	// API 1.32, an element only (always sent for one: a JSON string or null, absent otherwise): its voice
+	VoiceID json.RawMessage `json:"voice_id,omitempty"`
 }
 
 // VoiceInfo is a voice's own fields (API 1.30, contracts/README.md "Voices"): source preset (family, speaker,
@@ -141,6 +144,8 @@ type LibraryFields struct {
 	Images []LibraryImageRef `json:"images"`
 	Loras  []LookLoraRef     `json:"loras"`
 	Voice  *VoiceDesign      `json:"voice"` // API 1.30, a voice only
+	// API 1.32, a character element only: one of the caller's voices or a starter voice; nil or "" = none
+	VoiceID *string `json:"voice_id"`
 }
 
 // LibraryGroups are an element's groups; VoiceGroups a voice's (= its voice.source).
@@ -188,7 +193,7 @@ func (f *LibraryFields) Check(kind string) string {
 	*f.Text = strings.TrimSpace(*f.Text)
 	look, elem := kind == "look", kind == "element"
 	if kind == "voice" { // first: a voice's bad group is "not a voice group", whatever it is; the service checks the rest
-		return f.checkVoice()
+		return cmp.Or(f.checkVoice(), f.checkVoiceID(kind))
 	} else if !slices.Contains(AllGroups(), f.Group) {
 		return "group must be one of " + strings.Join(AllGroups(), ", ")
 	} else if f.Voice != nil {
@@ -229,7 +234,23 @@ func (f *LibraryFields) Check(kind string) string {
 			}
 		}
 	}
-	return f.checkLoras()
+	return cmp.Or(f.checkLoras(), f.checkVoiceID(kind))
+}
+
+// checkVoiceID (API 1.32): only a character names a voice; an own voice's UUID is lower-cased. The service resolves it.
+func (f *LibraryFields) checkVoiceID(kind string) string {
+	if f.VoiceID == nil || *f.VoiceID == "" {
+		f.VoiceID = nil
+		return ""
+	}
+	if kind != "element" || f.Group != "character" {
+		return "voice_id: only a character has a voice"
+	}
+	if utility.IsUUID(*f.VoiceID) {
+		lower := strings.ToLower(*f.VoiceID)
+		f.VoiceID = &lower
+	}
+	return ""
 }
 
 // checkVoice checks a voice's shape in the contract's order (API 1.30, 1.31): a designed or cloned voice, with no

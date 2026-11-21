@@ -16,7 +16,7 @@ import (
 // MediaInput is one object a media job reads (cmd.media.job inputs).
 type MediaInput struct {
 	Key  string `json:"key"`
-	Kind string `json:"kind"` // video | image
+	Kind string `json:"kind"` // video | image | (1.32) audio
 }
 
 // ExportTarget is cmd.media.job's export.target.
@@ -194,7 +194,7 @@ func buildArgs(doc Doc, takes map[string]Take, index map[string]int, g Grid, cop
 	}
 	for _, t := range doc.Tracks[1:] {
 		for _, c := range t.Clips {
-			if c.Offline || *c.Mute || *t.Mute {
+			if c.Take() == "" || c.Offline || *c.Mute || *t.Mute { // a line placeholder reads nothing
 				continue
 			}
 			args = append(args, "-i", in(index[c.Take()]))

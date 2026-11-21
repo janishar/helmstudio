@@ -237,7 +237,14 @@ export function Inspector({
     voice?: VoiceCtx;
     uploads: RefUploads;
     /** the Studio block's sections; `help` is the section's (i) text (API 1.25) */
-    groups?: { title: string; help?: string; fields: Field[]; choices?: Choice[] }[];
+    groups?: {
+      title: string;
+      help?: string;
+      fields: Field[];
+      choices?: Choice[];
+      /** drawn under the title, before the fields (a dialogue's cast, its style per line) */
+      head?: React.ReactNode;
+    }[];
     familyTitle?: string;
     /** the canvas as Aspect and Size tiles (a video workflow, docs/mock/TextToVideo.dc.html) */
     compact?: boolean;
@@ -457,8 +464,9 @@ export function Inspector({
           `sec-g${i}`,
           g.title,
           rest,
-          (refs.length > 0 || loras.length > 0 || canvas) && (
+          (refs.length > 0 || loras.length > 0 || canvas || !!g.head) && (
             <>
+              {g.head}
               {loras.map((f) => (
                 <Loras key={f.key} f={f} raws={raws} errors={errors} onChange={onChange} />
               ))}

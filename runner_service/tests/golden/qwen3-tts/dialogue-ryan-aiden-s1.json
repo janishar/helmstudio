@@ -1,0 +1,62 @@
+{
+  "name": "dialogue-ryan-aiden-s1",
+  "variant": "custom_voice",
+  "seed": 1,
+  "language": "auto",
+  "temperature": 0.3,
+  "pause": 0.35,
+  "lines": [
+    {
+      "voice": {
+        "item_id": "qwen3-tts/ryan",
+        "version": 1,
+        "source": "preset",
+        "family": "qwen3-tts",
+        "speaker": "ryan",
+        "language": "en"
+      },
+      "text": "Are you coming?",
+      "style": "",
+      "pause_s": 0.35
+    },
+    {
+      "voice": {
+        "item_id": "qwen3-tts/aiden",
+        "version": 1,
+        "source": "preset",
+        "family": "qwen3-tts",
+        "speaker": "aiden",
+        "language": "en"
+      },
+      "text": "I know. The road was closed.",
+      "style": "quietly",
+      "pause_s": 0.35
+    }
+  ],
+  "cues": [
+    {
+      "line": 1,
+      "start_s": 0.0,
+      "end_s": 1.04,
+      "voice_id": "qwen3-tts/ryan",
+      "text": "Are you coming?"
+    },
+    {
+      "line": 2,
+      "start_s": 1.39,
+      "end_s": 3.63,
+      "voice_id": "qwen3-tts/aiden",
+      "text": "I know. The road was closed."
+    }
+  ],
+  "wav": "dialogue-ryan-aiden-s1.wav",
+  "wav_sha256": "51161e581f6676bd7227f27a813a50eaa12b80a3d767c8b923d0c2bc704f67aa",
+  "duration_s": 3.63,
+  "load_s": 1.82,
+  "speak_s": 2.15,
+  "versions": {
+    "torch": "2.15.0",
+    "python": "3.14.10",
+    "port": "AI-EXP 16b31cc3 src/qwen3_tts"
+  }
+}

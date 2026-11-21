@@ -176,6 +176,7 @@ class FakeTools:
         self.asked: list[dict] = []
         self.rows = 1  # the batch's last row number
         self.refuse: str | None = None  # rows.add / rows.edit: Submit's reason
+        self.library_pages = 1  # library.read: pages of one element each (page n > 0: @rex<n>)
 
     async def __call__(self, req: dict) -> dict:
         assert not schemas.tools_errors("request", req), schemas.tools_errors("request", req)
@@ -189,8 +190,10 @@ class FakeTools:
                                            "width": 64, "height": 64, "collection": None, "starred": False,
                                            "created_at": now()}], "more": False}}  # fmt: skip
         elif t == "library.read":
-            reply = {"result": {"items": [{"id": "e1", "kind": "element", "group": "character", "name": "Rex",
-                                           "handle": "rex", "text": "a red fox"}], "more": False}}  # fmt: skip
+            page = a.get("offset", 0) // a.get("limit", 10)
+            reply = {"result": {"items": [{"id": f"e{page}", "kind": "element", "group": "character", "name": "Rex",
+                                           "handle": f"rex{page or ''}", "text": "a red fox", "voice": "Savannah"}],
+                                "more": page + 1 < self.library_pages}}  # fmt: skip
         elif self.refuse:
             reply = {"error": self.refuse, "code": "invalid"}
         else:

@@ -166,6 +166,121 @@
       "help": "Reads the text in one voice: a preset speaker (Custom voice) or a designed voice (Voice design). Long text is split on sentences and joined; at most 900 characters (about 60 s)."
     },
     {
+      "kind": "qwen3-tts/dialogue",
+      "title": "Dialogue",
+      "family": "qwen3-tts",
+      "params": [
+        {
+          "name": "script",
+          "type": "text",
+          "script": true,
+          "label": "Script",
+          "default": "",
+          "min": 0,
+          "max": 8000,
+          "help": "One line each: @name: text or @name (style): text. An empty line is a longer pause. Each @name speaks in its element's voice."
+        },
+        {
+          "name": "lines",
+          "type": "rows",
+          "label": "Lines",
+          "default": [],
+          "min": 1,
+          "max": 40,
+          "item": {
+            "voice": {
+              "type": "voice",
+              "label": "Voice",
+              "default": null,
+              "accepts": [
+                "preset"
+              ]
+            },
+            "text": {
+              "type": "string",
+              "label": "Line",
+              "default": "",
+              "max": 600
+            },
+            "style": {
+              "type": "string",
+              "label": "Style",
+              "default": "",
+              "max": 200
+            },
+            "pause_s": {
+              "type": "float",
+              "label": "Pause after",
+              "default": 0.35,
+              "min": 0,
+              "max": 5,
+              "step": 0.05,
+              "help": "Silence after the line, before the next (the last line's is not used)."
+            }
+          },
+          "help": "One item per spoken line, in order. Studio writes them from the script; the Graph view and agents may set them instead."
+        },
+        {
+          "name": "pause",
+          "type": "float",
+          "label": "Pause between lines",
+          "default": 0.35,
+          "min": 0,
+          "max": 2,
+          "step": 0.05,
+          "help": "The silence between two lines; each empty line in the script adds it once more."
+        },
+        {
+          "name": "language",
+          "type": "enum",
+          "label": "Language",
+          "default": "auto",
+          "enum": [
+            "auto",
+            "en",
+            "zh",
+            "ja",
+            "ko",
+            "de",
+            "fr",
+            "ru",
+            "pt",
+            "es",
+            "it"
+          ],
+          "help": "The language of the text; auto lets the model tell."
+        },
+        {
+          "name": "temperature",
+          "type": "float",
+          "label": "Variation",
+          "default": 0.3,
+          "min": 0.1,
+          "max": 1.2,
+          "step": 0.05,
+          "help": "Low keeps each voice steady; high is livelier and drifts."
+        }
+      ],
+      "inputs": [
+        {
+          "name": "model",
+          "type": "Model"
+        },
+        {
+          "name": "seed",
+          "type": "Seed"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "audio",
+          "type": "Audio"
+        }
+      ],
+      "component": "talker",
+      "help": "Speaks each line in its speaker's voice (presets only: a designed voice drifts between lines), with its style and pauses, as one take; reports each line's start and end."
+    },
+    {
       "kind": "output",
       "title": "Output",
       "family": null,

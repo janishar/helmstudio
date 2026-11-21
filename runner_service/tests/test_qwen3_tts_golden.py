@@ -1,7 +1,8 @@
 """The qwen3_tts pack against the reference port's goldens (runner_service/tests/golden/qwen3-tts/, recorded by
-tests/golden/record_qwen3_tts.py from AI-EXP's own Synthesizer on this torch env): runs the pack's workflows
+tests/golden/record_qwen3_tts.py from AI-EXP's own Synthesizer on this torch env; a dialogue's lines joined as the
+contract says): runs the pack's workflows
 in-process (graph.run with a real residency manager, test_qwen_golden.Bench) with a golden's settings and compares the
-codec codes exactly and the WAV bytes exactly, else by SNR (bar 40 dB: another torch or device). Loads real weights
+codec codes (a dialogue: its cues) exactly and the WAV bytes exactly, else by SNR (bar 40 dB: another torch or device). Loads real weights
 (about 4.5 GB a variant): never alongside another process that holds a model.
 
     uv run --extra torch python tests/test_qwen3_tts_golden.py [preset-ryan-calm-s7 design-s7]
@@ -27,7 +28,11 @@ sys.path.insert(0, str(HERE.parent))
 from test_qwen_golden import Bench
 
 GOLDEN = HERE / "golden" / "qwen3-tts"
-CASES = ["preset-ryan-calm-s7", "design-s7"]
+CASES = [
+    "preset-ryan-calm-s7",
+    "design-s7",
+    "dialogue-ryan-aiden-s1",
+]  # a dialogue: record_qwen3_tts.py
 WORKFLOW = {"custom_voice": "qwen3-tts-voice-over", "voice_design": "qwen3-tts-design-voice"}
 DESIGN_ID = "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a21"
 BAR = 40
@@ -64,6 +69,14 @@ class TTSBench(Bench):
         tts.say = tapped
 
     def nodes(self, case: dict) -> dict:
+        if "lines" in case:  # API 1.32: the dialogue template
+            wf = next(w for p in self.packs for w in p.workflows if w["id"] == "qwen3-tts-dialogue")
+            nodes = json.loads(json.dumps(wf["nodes"]))
+            nodes["seed"]["params"]["seed"] = case["seed"]
+            nodes["dialogue"]["params"] |= {
+                k: case[k] for k in ("lines", "language", "temperature", "pause")
+            }
+            return nodes
         wf = next(
             w for p in self.packs for w in p.workflows if w["id"] == WORKFLOW[case["variant"]]
         )
@@ -94,9 +107,16 @@ def case(bench: TTSBench, name: str) -> dict:
     t = time.monotonic()
     r = bench.speak(s)
     r["total_s"] = round(time.monotonic() - t, 2)
-    want_codes = np.load(GOLDEN / f"{name}.codes.npy")
     want_wav = (GOLDEN / f"{name}.wav").read_bytes()
-    r["codes_exact"] = len(r["codes"]) == 1 and np.array_equal(r["codes"][0].numpy(), want_codes)
+    if (
+        "lines" in s
+    ):  # a dialogue: the reference's codes are not kept; its WAV and cues are the golden
+        r["codes_exact"] = r["meta"]["audio"].get("cues") == s["cues"]
+    else:
+        want_codes = np.load(GOLDEN / f"{name}.codes.npy")
+        r["codes_exact"] = len(r["codes"]) == 1 and np.array_equal(
+            r["codes"][0].numpy(), want_codes
+        )
     r["wav_exact"] = r["wav"] == want_wav
     r["snr_db"] = snr(samples(want_wav), samples(r["wav"]))
     r["ok"] = r["codes_exact"] and (r["wav_exact"] or r["snr_db"] >= BAR)

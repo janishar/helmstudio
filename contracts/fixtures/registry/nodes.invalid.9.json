@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "host": "fake",
+  "env": "fake",
+  "published_at": "2026-11-14T10:00:00Z",
+  "published_by": "runner fake 0.1.0",
+  "nodes": [
+    {
+      "kind": "echo/dialogue",
+      "title": "Echo dialogue",
+      "family": "echo",
+      "params": [
+        {
+          "name": "script",
+          "type": "text",
+          "script": true,
+          "label": "Script",
+          "default": "",
+          "min": 0,
+          "max": 8000,
+          "help": "One line each: @name: text or @name (style): text. An empty line is a longer pause. Each @name speaks in its element's voice."
+        },
+        {
+          "name": "lines",
+          "type": "rows",
+          "label": "Lines",
+          "default": [],
+          "min": 1,
+          "max": 40,
+          "item": {
+            "voice": {
+              "type": "voice",
+              "label": "Voice",
+              "default": null,
+              "accepts": [
+                "video"
+              ]
+            },
+            "text": {
+              "type": "string",
+              "label": "Line",
+              "default": "",
+              "max": 600
+            },
+            "style": {
+              "type": "string",
+              "label": "Style",
+              "default": "",
+              "max": 200
+            },
+            "pause_s": {
+              "type": "float",
+              "label": "Pause after",
+              "default": 0.35,
+              "min": 0,
+              "max": 5,
+              "step": 0.05,
+              "help": "Silence after the line, before the next (the last line's is not used)."
+            }
+          },
+          "help": "One item per spoken line, in order. Studio writes them from the script; the Graph view and agents may set them instead."
+        },
+        {
+          "name": "pause",
+          "type": "float",
+          "label": "Pause between lines",
+          "default": 0.35,
+          "min": 0,
+          "max": 2,
+          "step": 0.05,
+          "help": "The silence between two lines; each empty line in the script adds it once more."
+        },
+        {
+          "name": "seed",
+          "type": "seed",
+          "label": "Seed",
+          "default": -1,
+          "min": -1,
+          "max": 9007199254740991,
+          "step": 1
+        },
+        {
+          "name": "delay_ms",
+          "type": "int",
+          "label": "Delay per step (ms)",
+          "default": 300,
+          "min": 0,
+          "max": 10000
+        }
+      ],
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "audio",
+          "type": "Audio"
+        }
+      ],
+      "help": "Fake dialogue: per line one sine tone per character (1/15 s each, 24 kHz mono), then its pause_s of silence; cues per line; one progress step per line. No line fails `<node>: nothing to say`."
+    }
+  ]
+}

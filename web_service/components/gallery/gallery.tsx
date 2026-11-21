@@ -836,8 +836,8 @@ function TakePanel({
       )}
 
       <div className="grid grid-cols-2 gap-2">
-        {/* audio is not a timeline clip yet (contracts/README.md, Media inputs: audio uploads) */}
-        {t.kind !== "audio" && <AddToTimeline key={t.id} takeIds={[t.id]} />}
+        {/* an audio take goes on an audio track (API 1.32) */}
+        <AddToTimeline key={t.id} takeIds={[t.id]} audio={t.kind === "audio"} />
         {m && (
           <Link href={`/?${session}reuse=${encodeURIComponent(t.id)}`} className="act">
             Reuse settings

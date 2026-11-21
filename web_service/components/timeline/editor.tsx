@@ -15,6 +15,12 @@ import { LooksPicker } from "@/components/create/looks";
 import { GalleryPicker } from "@/components/gallery/picker";
 import { Lanes, clipText, shotName } from "@/components/timeline/lanes";
 import { ShotComposer, type ShotSlot } from "@/components/timeline/shot";
+import { LineComposer } from "@/components/timeline/line";
+import { VoicePicker, type VoiceCtx } from "@/components/create/voices";
+import { speakerOf } from "@/components/create/dialogue";
+import { useTakes, useUses } from "@/lib/take-cache";
+import { offerLabel } from "@/lib/source";
+import Link from "next/link";
 import { lastTimeline, rememberTimeline } from "@/components/timeline/add";
 import {
   BatchLink,
@@ -26,7 +32,7 @@ import {
 } from "@/components/timeline/dialogs";
 import { ApiError, api, message, ok, type S } from "@/lib/api";
 import { safeUrl } from "@/lib/format";
-import { useLibrary, useLooks } from "@/lib/library";
+import { useLibrary, useLooks, useVoices } from "@/lib/library";
 import { MAX_LOOKS, chosenFrom, type Chosen } from "@/lib/looks";
 import { followSession } from "@/lib/runs";
 import { Preview } from "@/lib/timeline-preview";
@@ -92,6 +98,11 @@ export function TimelineEditor({ id }: { id?: string }) {
   >(null);
   const [picker, setPicker] = useState<{ track: string } | null>(null);
   const [shot, setShot] = useState<ShotSlot | null>(null);
+  // New line docked at the playhead (API 1.32); an audio clip's ⋯ menu; what its menu opened in the inspector
+  const [line, setLine] = useState(false);
+  const [menuFor, setMenuFor] = useState<string | null>(null);
+  const [opened, setOpened] = useState<"make" | "use" | null>(null);
+  const [voiceTake, setVoiceTake] = useState<string | null>(null);
   const [replacing, setReplacing] = useState(false);
   const [workflows, setWorkflows] = useState<S<"Workflow">[]>([]);
   const [runProgress, setRunProgress] = useState<Record<string, string>>({});
@@ -314,7 +325,8 @@ export function TimelineEditor({ id }: { id?: string }) {
       .catch((e) => setError(message(e)));
 
   // ------------------------------------------------------------------ shots: progress and fills
-  const shots = (tl?.tracks[0].clips ?? []).filter(shotBusy);
+  // V1's shots and (1.32) the audio tracks' lines
+  const shots = (tl?.tracks ?? []).flatMap((t) => t.clips).filter(shotBusy);
   const live = shots.length > 0;
   useEffect(() => {
     if (!live) return;
@@ -368,6 +380,19 @@ export function TimelineEditor({ id }: { id?: string }) {
   const one = selected.length === 1 ? selected[0] : null;
   const v1 = doc?.tracks[0].clips ?? [];
   const at = g ? g.s(frame) : 0;
+  const menuClip = all.find((x) => x.c.id === menuFor && x.ti > 0)?.c;
+  // New line's track: the selected audio track, else the first with nothing under the playhead
+  const lineTrack = (() => {
+    if (!doc || !g) return null;
+    const free = (t: Track) =>
+      t.clips.every((c) => {
+        const [a, b] = span(c, 1, facts, g);
+        return at < a || at >= b;
+      });
+    const audio = doc.tracks.slice(1);
+    const picked = audio.find((t) => t.name === track);
+    return (picked && free(picked) ? picked : audio.find(free))?.name ?? null;
+  })();
 
   function splitHere() {
     if (!doc || !g) return;
@@ -689,6 +714,17 @@ export function TimelineEditor({ id }: { id?: string }) {
             <button
               type="button"
               className="chip bevel rounded-[10px]"
+              aria-expanded={line}
+              onClick={() => {
+                setShot(null);
+                setLine((x) => !x);
+              }}
+            >
+              New line
+            </button>
+            <button
+              type="button"
+              className="chip bevel rounded-[10px]"
               title="Mark in (I)"
               aria-keyshortcuts="I"
               onClick={() => mark("in")}
@@ -724,6 +760,22 @@ export function TimelineEditor({ id }: { id?: string }) {
           )}
         </div>
 
+        {line && (
+          <LineComposer
+            tl={tl}
+            doc={doc}
+            at={at}
+            track={lineTrack}
+            workflows={workflows}
+            onClose={() => setLine(false)}
+            onDone={(nt) => {
+              tlRef.current = nt;
+              setTl(nt);
+              setDraft(null);
+              setLine(false);
+            }}
+          />
+        )}
         {shot && (
           <ShotComposer
             key={JSON.stringify(shot)}
@@ -770,6 +822,23 @@ export function TimelineEditor({ id }: { id?: string }) {
           onAddTrack={() => commit({ op: "add_track" })}
           onRemoveTrack={askRemove}
           range={range}
+          onMenu={setMenuFor}
+          nameOf={(v) => speakerOf(library, v)}
+        />
+        <ClipMenu
+          clip={menuClip}
+          title={menuClip ? clipText(menuClip, true, tl.takes, facts, g!).title : ""}
+          onPick={(what) => {
+            const c = menuClip;
+            document.getElementById("clip-menu")?.hidePopover?.();
+            if (!c) return;
+            if (what === "remove") return commit({ op: "remove", clip: c.id });
+            if (what === "voice") return setVoiceTake(c.take_id);
+            setTrack(null);
+            setSel([c.id]);
+            setReplacing(what === "replace");
+            setOpened(what === "make" ? "make" : what === "use" ? "use" : null);
+          }}
         />
       </main>
 
@@ -798,6 +867,9 @@ export function TimelineEditor({ id }: { id?: string }) {
             onShot={(s) => setShot(s)}
             onRerender={() => setDialog("rerender")}
             onDeselect={() => setSel([])}
+            opened={opened}
+            onOpened={setOpened}
+            onSaveVoice={setVoiceTake}
           />
         ) : selected.length > 1 ? (
           <div className="flex flex-col gap-2">
@@ -867,13 +939,16 @@ export function TimelineEditor({ id }: { id?: string }) {
         </div>
       </aside>
 
+      <SaveVoice takeId={voiceTake} onClose={() => setVoiceTake(null)} />
       <GalleryPicker
         open={!!picker}
         onClose={() => setPicker(null)}
         max={50}
-        kind={picker && picker.track !== "V1" ? "video" : null}
-        // audio is not a timeline clip yet (contracts/README.md, Media inputs: audio uploads)
-        only={(x) => x.kind !== "audio"}
+        kind={null}
+        // V1 takes pictures; an audio track a video's sound or (API 1.32) an audio take
+        only={(x) =>
+          picker?.track === "V1" ? x.kind !== "audio" : x.kind === "audio" || !!x.video?.has_audio
+        }
         onPick={(ts) => {
           const to = picker?.track ?? "V1";
           setPicker(null);
@@ -1005,6 +1080,9 @@ function ClipPanel({
   onShot,
   onRerender,
   onDeselect,
+  opened,
+  onOpened,
+  onSaveVoice,
 }: {
   tl: Timeline;
   doc: Norm;
@@ -1022,6 +1100,10 @@ function ClipPanel({
   onShot: (s: ShotSlot) => void;
   onRerender: () => void;
   onDeselect: () => void;
+  /** what an audio clip's menu opened: its Make shot form, or Use in… */
+  opened: "make" | "use" | null;
+  onOpened: (o: "make" | "use" | null) => void;
+  onSaveVoice: (takeId: string) => void;
 }) {
   const facts = factsOf(tl.takes);
   const g = new Grid(doc.target);
@@ -1039,6 +1121,7 @@ function ClipPanel({
         `From take ${take.seed != null ? `seed ${take.seed}` : take.title}`,
         take.workflow_title,
         take.video && `${take.video.frames} frames`, // docs/mock/TakeActions.dc.html
+        take.audio?.cues?.length && `${take.audio.cues.length} lines`, // docs/mock/TimelineAudio.dc.html
       ]
         .filter(Boolean)
         .join(" · ")
@@ -1064,7 +1147,49 @@ function ClipPanel({
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-        {kind === "video" ? (
+        {kind === "audio" ? (
+          // an audio take (API 1.32, docs/mock/TimelineAudio.dc.html): in / out to the ms with their samples; its
+          // model and sound first (TimelineAudioZonos3.dc.html)
+          <>
+            {take?.workflow_title && (
+              <Cell label="Model">
+                <span className="font-semibold">{take.workflow_title}</span>
+              </Cell>
+            )}
+            {take?.audio?.sample_rate && (
+              <Cell label="Sound">
+                <span className="font-semibold">
+                  {+(take.audio.sample_rate / 1000).toFixed(1)} kHz mono
+                </span>
+              </Cell>
+            )}
+            <Cell label="In">
+              <span className="mono font-medium">{ms(c.in ?? 0)}</span>
+              <span className="mono block text-[11px] text-t2">
+                sample {samples(g.smp(c.in ?? 0))}
+              </span>
+            </Cell>
+            <Cell label="Out">
+              <span className="mono font-medium">{ms(c.out ?? 0)}</span>
+              <span className="mono block text-[11px] text-t2">
+                sample {samples(g.smp(c.out ?? 0))}
+              </span>
+            </Cell>
+            <Cell label="At">
+              <span className="mono font-medium">{timecode(c.at ?? 0)}</span>
+            </Cell>
+            <Cell label="Track">
+              <span className="font-semibold">{doc.tracks[ti]?.name}</span>
+            </Cell>
+            <span className="col-span-2 text-[12px] text-t2">
+              Trim snaps to the {+(doc.target.sample_rate / 1000).toFixed(1)} kHz sample grid
+              {take?.audio?.sample_rate && take.audio.sample_rate !== doc.target.sample_rate
+                ? `; the ${+(take.audio.sample_rate / 1000).toFixed(1)} kHz take is resampled on export`
+                : ""}
+              .
+            </span>
+          </>
+        ) : kind === "video" ? (
           <>
             <Cell label="In">
               <span className="mono font-medium">{timecode(c.in ?? 0)}</span>
@@ -1154,6 +1279,26 @@ function ClipPanel({
           </Cell>
         )}
       </div>
+
+      {ti > 0 && (
+        <AudioClip
+          tl={tl}
+          doc={doc}
+          clip={c}
+          kind={kind}
+          busy={busy}
+          others={others}
+          replacing={replacing}
+          onReplacing={onReplacing}
+          workflows={workflows}
+          opened={opened}
+          onOpened={onOpened}
+          onShotStarted={onShotStarted}
+          onSaveVoice={onSaveVoice}
+          onCommit={onCommit}
+          onDeselect={onDeselect}
+        />
+      )}
 
       {ti === 0 && (
         <div className="flex flex-col gap-2">
@@ -1270,6 +1415,273 @@ function ClipPanel({
           </button>
         </div>
       </div>
+    </>
+  );
+}
+
+/** "0:05.200": seconds to the ms (an audio clip's in and out). */
+const ms = (t: number) => `${Math.floor(t / 60)}:${(t % 60).toFixed(3).padStart(6, "0")}`;
+/** "432 000": a sample index, grouped. */
+const samples = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+
+/** The voice picker outside a workflow (Save as voice on a timeline clip): every voice, none greyed. */
+const ANY: VoiceCtx = {
+  workflow: { id: "", title: "", family: "", nodes: {}, node_schemas: {} },
+  familyTitle: (f) => f,
+};
+
+/** Save as voice… on an audio clip (docs/mock/TimelineAudio.dc.html): Clone from a clip with its take. */
+function SaveVoice({ takeId, onClose }: { takeId: string | null; onClose: () => void }) {
+  const take = useTakes(takeId ? [takeId] : [])(takeId ?? "");
+  return (
+    <VoicePicker
+      open={!!takeId && !!take}
+      onClose={onClose}
+      value=""
+      onPick={() => undefined}
+      ctx={ANY}
+      take={take ?? undefined}
+    />
+  );
+}
+
+/** An audio clip's ⋯ menu (docs/mock/TimelineAudio.dc.html): Make shot, Replace with another take, Use in…, Save as
+ * voice…, Remove clip. */
+function ClipMenu({
+  clip,
+  title,
+  onPick,
+}: {
+  clip?: Clip;
+  title: string;
+  onPick: (what: "make" | "replace" | "use" | "voice" | "remove") => void;
+}) {
+  const item = "act h-8 bg-transparent text-left";
+  return (
+    <div
+      id="clip-menu"
+      popover="auto"
+      role="menu"
+      aria-label={title || "Clip"}
+      className="pop w-[210px] p-1.5"
+      style={
+        {
+          positionAnchor: clip ? `--menu-${clip.id}` : undefined,
+          positionArea: "bottom span-left",
+          marginTop: 4,
+        } as React.CSSProperties
+      }
+    >
+      <div className="flex flex-col gap-0.5">
+        <span className="truncate px-3 pb-0.5 text-[12px] font-semibold text-t2">{title}</span>
+        <button type="button" role="menuitem" className={item} onClick={() => onPick("make")}>
+          Make shot
+        </button>
+        {(clip?.alternatives?.length ?? 0) > 1 && (
+          <button type="button" role="menuitem" className={item} onClick={() => onPick("replace")}>
+            Replace with another take
+          </button>
+        )}
+        <button type="button" role="menuitem" className={item} onClick={() => onPick("use")}>
+          Use in…
+        </button>
+        <button type="button" role="menuitem" className={item} onClick={() => onPick("voice")}>
+          Save as voice…
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          className={`${item} text-bad`}
+          onClick={() => onPick("remove")}
+        >
+          Remove clip
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** An audio-track clip's own parts of the inspector (API 1.32): a dialogue's lines on the sequence, a line's
+ * placeholder (Retry, Remove), and Generate from this clip (Make shot, Replace, Use in…, Save as voice…). */
+function AudioClip({
+  tl,
+  doc,
+  clip: c,
+  kind,
+  busy,
+  others,
+  replacing,
+  onReplacing,
+  workflows,
+  opened,
+  onOpened,
+  onShotStarted,
+  onSaveVoice,
+  onCommit,
+  onDeselect,
+}: {
+  tl: Timeline;
+  doc: Norm;
+  clip: Clip;
+  kind: string;
+  busy: boolean;
+  others: boolean;
+  replacing: boolean;
+  onReplacing: (on: boolean) => void;
+  workflows: S<"Workflow">[];
+  opened: "make" | "use" | null;
+  onOpened: (o: "make" | "use" | null) => void;
+  onShotStarted: (t: Timeline) => void;
+  onSaveVoice: (takeId: string) => void;
+  onCommit: (op: Op) => void;
+  onDeselect: () => void;
+}) {
+  const library = useLibrary();
+  const voices = useVoices();
+  const take = c.take_id ? tl.takes[c.take_id] : undefined;
+  const offers = useUses(c.take_id && !c.offline ? c.take_id : undefined);
+  const [error, setError] = useState("");
+  const cues = (take?.audio?.cues ?? []).filter(
+    (q) => q.start_s >= (c.in ?? 0) && q.start_s < (c.out ?? 0),
+  );
+  const onSeq = (t: number) => timecode((c.at ?? 0) + t - (c.in ?? 0));
+  const who = (v: string) => {
+    const el = library?.find((e) => e.voice_id === v);
+    const vo = voices?.find((x) => x.id === v);
+    return [el ? `@${el.handle}` : "", vo ? (vo.group === "preset" ? vo.name : vo.group) : ""]
+      .filter(Boolean)
+      .join(" · ");
+  };
+  async function retry() {
+    setError("");
+    try {
+      const run = await ok(
+        api.GET("/v1/studio/runs/{run_id}", { params: { path: { run_id: c.shot!.run_id! } } }),
+      );
+      const r = await ok(
+        api.POST("/v1/studio/timelines/{timeline_id}/lines", {
+          params: { path: { timeline_id: tl.id } },
+          body: { slot: { clip: c.id }, run: { workflow_id: run.workflow_id, inputs: run.inputs } },
+        }),
+      );
+      onShotStarted(r.timeline);
+    } catch (e) {
+      setError(message(e));
+    }
+  }
+  if (!c.take_id)
+    return (
+      c.shot?.status === "failed" && (
+        <div className="flex flex-col gap-2">
+          <span className="mono text-[12px] text-bad">{c.shot.error ?? "The run failed."}</span>
+          <div className="flex gap-2">
+            {c.shot.run_id && (
+              <button type="button" className="chip bevel" onClick={() => void retry()}>
+                Retry
+              </button>
+            )}
+            <button
+              type="button"
+              className="chip bevel"
+              onClick={() => {
+                onCommit({ op: "remove", clip: c.id });
+                onDeselect();
+              }}
+            >
+              Remove
+            </button>
+          </div>
+          {error && <ErrorNote>{error}</ErrorNote>}
+        </div>
+      )
+    );
+  return (
+    <>
+      {kind === "audio" && (
+        <div className="flex flex-col gap-2">
+          <h3 className="heading">Lines</h3>
+          {cues.map((q) => (
+            <div key={q.line} className="flex flex-col gap-0.5 rounded-xl bg-s2 px-3 py-2">
+              <div className="flex justify-between gap-2 text-[13px]">
+                <span>
+                  <b>{q.line}</b>
+                  {who(q.voice_id) ? ` · ${who(q.voice_id)}` : ""}
+                </span>
+                <span className="mono text-[12px] text-t2">
+                  {onSeq(q.start_s)}–{onSeq(Math.min(q.end_s, c.out ?? q.end_s))}
+                </span>
+              </div>
+              <span className="text-[12px] text-t2">{q.text}</span>
+            </div>
+          ))}
+          <span className="text-[12px] text-t2">
+            {cues.length
+              ? "Times on the sequence. The cues move with the clip."
+              : "A voice-over is one line: no cues."}
+          </span>
+        </div>
+      )}
+      {!c.offline && (
+        <div className="flex flex-col gap-2">
+          <h3 className="heading flex items-center">
+            Generate from this clip
+            <Info>
+              Each one queues a normal run. The result drops into the sequence and keeps its lineage
+              to this clip.
+            </Info>
+          </h3>
+          <ClipActions
+            key={opened ?? ""}
+            tl={tl}
+            doc={doc}
+            clip={c}
+            range={null}
+            workflows={workflows}
+            disabled={busy}
+            onDone={onShotStarted}
+            openFirst={opened === "make"}
+          />
+          {others && (
+            <button
+              type="button"
+              className="act"
+              aria-expanded={replacing}
+              disabled={busy}
+              onClick={() => onReplacing(!replacing)}
+            >
+              Replace with another take
+            </button>
+          )}
+          {!!offers?.length && (
+            <button
+              type="button"
+              className="act"
+              aria-expanded={opened === "use"}
+              onClick={() => onOpened(opened === "use" ? null : "use")}
+            >
+              Use in…
+            </button>
+          )}
+          {opened === "use" &&
+            offers?.map((o) => (
+              <Link
+                key={`${o.workflow_id} ${o.param}`}
+                href={`/?${tl.session_id ? `s=${encodeURIComponent(tl.session_id)}&` : ""}use=${encodeURIComponent(c.take_id!)}&w=${encodeURIComponent(o.workflow_id)}`}
+                className="act ml-3"
+              >
+                {offerLabel(o)}
+              </Link>
+            ))}
+          <button
+            type="button"
+            className="act"
+            title="Opens Clone from a clip with this clip's take (3 – 30 s)"
+            onClick={() => onSaveVoice(c.take_id!)}
+          >
+            Save as voice…
+          </button>
+        </div>
+      )}
     </>
   );
 }

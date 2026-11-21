@@ -40,6 +40,7 @@
     "echo/ask",
     "echo/echo",
     "echo/a2v",
+    "echo/dialogue",
     "echo/extend",
     "echo/retake",
     "echo/sample",

@@ -98,7 +98,7 @@ func valueBad(param registry.Param, value any) bool {
 	case "rows":
 		if items, ok := value.([]any); ok && len(items) > 0 {
 			for _, raw := range param.Item {
-				if registry.IsTakeField(raw) {
+				if registry.IsTakeField(raw) || registry.IsVoiceField(raw) {
 					return true
 				}
 			}
@@ -317,12 +317,15 @@ func onlyProblems(schema registry.NodeSchema, only map[string][]string, values m
 	for name, allowed := range only {
 		param, ok := paramOf(schema, name)
 		known := param.Enum
+		_, field, rowsVoice := voiceField(param)
 		if param.Type == "voice" { // API 1.30: a voice param's only narrows its accepts (the fit rule reads it)
 			known = param.Accepts
+		} else if rowsVoice { // API 1.32: a rows param's one voice field (a dialogue's lines)
+			known = field.Accepts
 		}
-		if !ok || (param.Type != "enum" && param.Type != "voice") ||
+		if !ok || (param.Type != "enum" && param.Type != "voice" && !rowsVoice) ||
 			slices.ContainsFunc(allowed, func(v string) bool { return !slices.Contains(known, v) }) {
-			out[name] = "only must name an enum or voice param and values of it"
+			out[name] = "only must name an enum, voice or voice rows param and values of it"
 		} else if detail := onlyDetail(only, name, values); detail != "" {
 			out[name] = detail
 		}
@@ -337,6 +340,12 @@ func invalidReason(param registry.Param, value any) string {
 	}
 	if param.Type == "media" {
 		return "a workflow holds no take; leave it empty"
+	}
+	if param.Type == "voice" {
+		return "a workflow holds no voice; leave it empty"
+	}
+	if _, _, ok := voiceField(param); ok && param.Type == "rows" {
+		return "a workflow holds no voice; leave it empty"
 	}
 	return "a workflow holds no image; leave it empty"
 }

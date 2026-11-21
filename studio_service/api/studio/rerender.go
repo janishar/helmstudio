@@ -1,6 +1,7 @@
 package studio
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -24,7 +25,8 @@ import (
 // (its take's workflow and settings, a preset laid over them), an edge where a clip starts from another's frame,
 // submitted through the batch path as one row; each step's take fills its slot.
 
-// RerenderTimeline builds and submits the re-render of the selected clips (absent: every V1 clip with a take).
+// RerenderTimeline builds and submits the re-render of the selected clips (absent: every V1 clip with a take; from 1.32
+// also named audio-track clips made by a workflow, whose new take fills them by the audio fill).
 func (s *Service) RerenderTimeline(ctx context.Context, caller common.Caller, id string, body *dto.TimelineRerender) (dto.TimelineRerenderAnswer, error) {
 	if !s.registry.Ready() {
 		return dto.TimelineRerenderAnswer{}, network.NewServiceUnavailableError("studio is starting; try again", nil)
@@ -43,7 +45,7 @@ func (s *Service) RerenderTimeline(ctx context.Context, caller common.Caller, id
 			doc = *n
 		}
 		for _, c := range body.Clips {
-			if indexOf(doc.Tracks[0].Clips, c) < 0 {
+			if ti, _ := findClip(doc, c); ti < 0 {
 				return network.NewUnprocessableError("unknown clip "+c, nil)
 			}
 		}
@@ -54,9 +56,11 @@ func (s *Service) RerenderTimeline(ctx context.Context, caller common.Caller, id
 		workflows, versions, keyframes := map[string]registry.Workflow{}, map[string]int{}, map[string]*timeline.Keyframes{}
 		media := map[string][]string{} // workflow id → its media param paths (API 1.19)
 		selected := map[string]timeline.Clip{}
-		for _, c := range doc.Tracks[0].Clips {
-			if (body.Clips == nil && c.Take() != "") || slices.Contains(body.Clips, c.ID) {
-				selected[c.ID] = c
+		for ti, t := range doc.Tracks { // API 1.32: named audio-track clips (lines) too
+			for _, c := range t.Clips {
+				if (body.Clips == nil && ti == 0 && c.Take() != "") || slices.Contains(body.Clips, c.ID) {
+					selected[c.ID] = c
+				}
 			}
 		}
 		for _, c := range selected {
@@ -151,8 +155,8 @@ func (s *Service) RerenderTimeline(ctx context.Context, caller common.Caller, id
 			return err
 		}
 		for _, step := range steps {
-			k := indexOf(doc.Tracks[0].Clips, step.Clip)
-			doc.Tracks[0].Clips[k].Shot = &timeline.ShotRef{BatchID: out.Batch.ID, Step: step.Step}
+			ti, k := findClip(doc, step.Clip)
+			doc.Tracks[ti].Clips[k].Shot = &timeline.ShotRef{BatchID: out.Batch.ID, Step: step.Step}
 			if _, err := tx.Exec(ctx, `INSERT INTO timeline_shots (owner_id, timeline_id, clip, batch_id, step)
 				VALUES ($1, $2, $3, $4, $5)`, caller.ID, row.ID, step.Clip, out.Batch.ID, step.Step); err != nil {
 				return err
@@ -186,9 +190,8 @@ func rerenderError(e timeline.RerenderError, doc timeline.Doc, takes map[string]
 		return network.NewUnprocessableError("clip "+e.Clip+": its take was not made by a workflow", nil)
 	case "rerender_cycle":
 		other := e.Clip
-		k := indexOf(doc.Tracks[0].Clips, e.Clip)
-		if fo := firstFrameSource(doc.Tracks[0].Clips[k], doc, takes); fo != "" {
-			other = fo
+		if ti, k := findClip(doc, e.Clip); ti >= 0 {
+			other = cmp.Or(firstFrameSource(doc.Tracks[ti].Clips[k], doc, takes), other)
 		}
 		return network.NewUnprocessableError(fmt.Sprintf("clips %s and %s start from each other", e.Clip, other), nil)
 	}

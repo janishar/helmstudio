@@ -13,7 +13,7 @@
   request at a time).
 - **Delivery doses are raw.** The server applies no calibration: `mood.valence` / `mood.arousal` = (v - 0.5) * 8
   (the safe -4..4 at the slider's ends), `delivery.whisper` = 1.5 v, speaking rate as the condition value 15 v UTF-8
-  bytes/s (not a control), guidance as speaker CFG. A value at its neutral point sends nothing.
+  bytes/s (not a control), guidance as speaker CFG. A control at its neutral point sends nothing; the speaking rate is always sent.
 - **Seeds are 32-bit** on the server: the run's seed is sent modulo 2^32.
 - **A preset is its embedding file**, found by name (`voices/<Language>/<Name>_*.embedding.npy`, the voice id lower
   case), sent inline; a clip voice's in..out is cut by ffmpeg to a bit-exact mono WAV and embedded by the server's
@@ -25,3 +25,17 @@
   length: `peak_gb` 2.0. The first run after a build or a boot compiles the Metal libraries (~4 s more).
 - **Previews are pinned bytes.** The 27 `voices/*.wav` are the weights' clips converted once with ffmpeg 9.0.2
   (`voices/defaults.yaml`); their sha256 is in the fixture's keys, so tests/test_zonos3.py fails if they change.
+- **Dialogue (API 1.32): one server, a line's style as Delivery.** `zonos3/dialogue` starts one server for all lines,
+  makes each voice's fields once and speaks every line at the run's seed. A line's `(style)` is read as words
+  (lower-cased letters); each word `native.STYLE` knows sets sliders of that line's Delivery, **replacing** the run's
+  values of those sliders for that line only (the others keep the run's; the next line starts from the run's again),
+  later words winning:
+  whisper(ing) → whisper 0.9, energy 0.25, rate 0.9 (the Whisper preset); quiet / soft / calm / gentle → energy 0.3;
+  warm / kind / tender → emotion 0.7, energy 0.45 (Warm); happy / cheerful → emotion 0.8; sad / tired → emotion 0.25,
+  energy 0.35; tense / urgent / nervous / scared → emotion 0.3, energy 0.75, rate 1.1 (Tense); angry / shouting /
+  loud → emotion 0.2, energy 0.9; excited / eager → emotion 0.7, energy 0.8; slow(ly) → rate 0.85; fast / quick(ly)
+  / hurried → rate 1.15. Any other word is ignored (`with a shrug` speaks as the run's Delivery).
+- **A short line without a speaking rate runs long, so the rate is always sent.** With no rate condition (the
+  bucket unknown) two- or three-word lines at seed 1 came out 2.4-8 s (`Ready when you are.` 8.0 s on Savannah); with
+  one they are 0.7-1.5 s. Rate 1 sends 15 bytes/s, which falls in bucket 14 of the checkpoint's 30 (edges 14.89 and
+  15.19: the middle, a normal pace).

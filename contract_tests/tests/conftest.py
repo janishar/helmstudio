@@ -4,7 +4,10 @@ Env: BASE_URL, API_KEY (sent as X-API-Key), CONTRACT_SCHEMAS=1 to validate JSON 
 contracts/openapi.yaml (see schemas.py). There is no sign-up, so the test stack's root admin (ADMIN_EMAIL /
 ADMIN_PASSWORD) creates users A and B with fresh e-mails on every run."""
 
+import base64
+import json
 import os
+import time
 import uuid
 
 import httpx
@@ -23,9 +26,44 @@ def headers(token: str = "") -> dict:
     return h | ({"Authorization": f"Bearer {token}"} if token else {})
 
 
+# access token → (email, password) of a session signed in here, and an expired token → its fresh one: the suite
+# takes longer than ACCESS_TTL (15 min), so a session-scoped client signs in again when its token has expired
+CREDS: dict[str, tuple[str, str]] = {}
+FRESH: dict[str, str] = {}
+
+
+def expired(token: str) -> bool:
+    """The JWT's exp has passed (read, not verified: the server decides; this only says when to sign in again)."""
+    try:
+        body = token.split(".")[1]
+        return (
+            json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))["exp"]
+            <= time.time() + 5
+        )
+    except IndexError, ValueError, KeyError:
+        return False
+
+
+class Relogin(httpx.Auth):
+    """Sends the newest token of the request's session; an expired one is signed in again first. A token this suite
+    did not sign in, or one that is not expired (revoked, forged), is sent as it is, so 401 tests still see 401."""
+
+    def auth_flow(self, request):
+        auth = request.headers.get("Authorization", "")
+        if auth.startswith("Bearer "):
+            token = auth[7:]
+            while token in FRESH:
+                token = FRESH[token]
+            if token in CREDS and expired(token):
+                new = sign_in(*CREDS[token])["access_token"]
+                FRESH[token], token = new, new
+            request.headers["Authorization"] = f"Bearer {token}"
+        yield request
+
+
 def make_client(h: dict) -> httpx.Client:
     hooks = {"response": [schemas.check]} if schemas.ENABLED else {}
-    return httpx.Client(base_url=BASE_URL, headers=h, timeout=30, event_hooks=hooks)
+    return httpx.Client(base_url=BASE_URL, headers=h, timeout=30, event_hooks=hooks, auth=Relogin())
 
 
 def raw_client(h: dict) -> httpx.Client:
@@ -36,7 +74,9 @@ def raw_client(h: dict) -> httpx.Client:
 def sign_in(email: str, password: str) -> dict:
     """A Session (tokens and user)."""
     with make_client(headers()) as c:
-        return ok(signin(c, email, password))
+        session = ok(signin(c, email, password))
+    CREDS[session["access_token"]] = (email, password)
+    return session
 
 
 @pytest.fixture(scope="session")

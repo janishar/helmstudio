@@ -758,6 +758,7 @@ func (s *Service) CreateBatchRun(ctx context.Context, req *message.RunsCreate) (
 		run, err := one[model.Run](ctx, tx, `SELECT `+model.RunCols+` FROM runs WHERE idempotency_key = $1`, req.IdempotencyKey)
 		created := errors.Is(err, errNotFound)
 		if created {
+			mediaRowItems(workflow, req.Inputs)
 			if detail, err := s.resolveFrames(ctx, tx, req.OwnerID, req.Inputs); err != nil || detail != "" {
 				if detail != "" {
 					refused = invalid(detail)

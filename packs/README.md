@@ -186,7 +186,8 @@ Keys the core understands; anything else is ignored:
 - **`model`**: `help`, and `variant` / `precision`, merged over the generated params (`label`, `help`, `default`).
   The generated node is `<family>/model` with param `variant` (enum: the variant ids, default the first) and
   `precision` (enum: every precision a component offers, in the order bf16, fp16, int8, int4; `model.precision.enum`
-  may reorder it), output `model: Model`. A model pack's source stages (no inputs: `ltx/canvas`) come before it.
+  may reorder it), output `model: Model`. A model pack's source stages (no inputs: `ltx/canvas`) come before it,
+  unless the stage says `source: false` (API 1.32: `echo/dialogue` keeps its place after `echo/speak`).
 - **`stages.<name>`**: `title`, `help`, `component` (API 1.24: the model component it loads, in words, as the Graph
   inspector shows it: `uses the text encoder`; absent = none), `params`, `inputs`, `outputs`, `uses`, `unload_after` (components of `uses`
   unloaded as soon as the stage has run: ltx's Gemma never sits beside its DiT), `peak_gb`, `stall_s`, and (API 1.20,
@@ -234,7 +235,8 @@ Keys the core understands; anything else is ignored:
     prompt's (fewest wires, then node id), else of the stage's nearest upstream prompt, / 15, capped at the stage's
     optional key `max_seconds` (a number > 0, not published); 0 without text; memory plans evaluate it on the
     workflow's default text, except that a stage with `max_seconds` is planned at `max_seconds`, so a speech stage
-    should declare it) and the
+    should declare it; API 1.32, a stage with a script's `lines` rows: Σ its lines' text / 15 + Σ their `pause_s` but
+    the last line's, capped the same way) and the
     stage's own params (not named `mp`, `mp_in` or `speech_seconds`: the pack fails at load; a `frames`, `fps` or
     `images` param feeds the size of its name): numbers, arithmetic, comparisons, `and`/`or`/`not`, `a if cond else b`, `min()`,
     `max()`. Anything else fails at start. The value is GB the stage holds at its peak above the components resident

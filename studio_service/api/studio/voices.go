@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -44,14 +45,34 @@ type voiceItem struct {
 	Voice           dto.VoiceInfo
 }
 
-// voiceParam is one voice param of a graph.
+// voiceParam is one voice param of a graph, or (API 1.32) a rows param's one voice field (Rows: the rows param,
+// Field: the item field; Param.Name is "<rows>.<field>", as the fit rule names it).
 type voiceParam struct {
-	Node  string
-	Param registry.Param
+	Node        string
+	Param       registry.Param
+	Rows, Field string
+}
+
+// voiceField is a rows param's one voice field and its item param (API 1.32: a dialogue's lines), ok false otherwise.
+func voiceField(param registry.Param) (string, registry.Param, bool) {
+	if param.Type != "rows" {
+		return "", registry.Param{}, false
+	}
+	var name string
+	var field registry.Param
+	n := 0
+	for _, k := range slices.Sorted(maps.Keys(param.Item)) {
+		var item registry.Param
+		if json.Unmarshal(param.Item[k], &item) == nil && item.Type == "voice" {
+			name, field, n = k, item, n+1
+		}
+	}
+	return name, field, n == 1
 }
 
 // voiceParams are the voice params of the known, not bypassed nodes, node id then schema order, each param's accepts
-// narrowed to the workflow node's only (pins: the workflow's own nodes, which hold only; README, Media inputs: only).
+// narrowed to the workflow node's only (pins: the workflow's own nodes, which hold only; README, Media inputs: only);
+// from API 1.32 a rows param's one voice field counts as one, narrowed by only on the rows param.
 func voiceParams(nodes map[string]registry.Node, schemas map[string]registry.NodeSchema, pins map[string]registry.Node) []voiceParam {
 	var out []voiceParam
 	for _, id := range slices.Sorted(maps.Keys(nodes)) {
@@ -60,11 +81,50 @@ func voiceParams(nodes map[string]registry.Node, schemas map[string]registry.Nod
 			continue
 		}
 		for _, p := range schema.Params {
-			if p.Type == "voice" {
-				if allowed, pinned := pins[id].Only[p.Name]; pinned {
-					p.Accepts = slices.DeleteFunc(slices.Clone(p.Accepts), func(a string) bool { return !slices.Contains(allowed, a) })
-				}
-				out = append(out, voiceParam{id, p})
+			vp := voiceParam{Node: id, Param: p}
+			if name, field, ok := voiceField(p); ok {
+				field.Name = p.Name + "." + name
+				vp = voiceParam{Node: id, Param: field, Rows: p.Name, Field: name}
+			} else if p.Type != "voice" {
+				continue
+			}
+			if allowed, pinned := pins[id].Only[p.Name]; pinned {
+				vp.Param.Accepts = slices.DeleteFunc(slices.Clone(vp.Param.Accepts), func(a string) bool { return !slices.Contains(allowed, a) })
+			}
+			out = append(out, vp)
+		}
+	}
+	return out
+}
+
+// voiceAt is one voice value of a graph: its path ("<node>.<param>", or "<node>.<rows>[<i>].<field>" from 1), the
+// param it is checked against and the voice id it names.
+type voiceAt struct {
+	Path, ID string
+	Param    voiceParam
+}
+
+// voiceRefs are the voice values params hold, param order then item order (a null voice is left out: resolve and
+// checkRows refuse it).
+func voiceRefs(params []voiceParam, nodes map[string]registry.Node) []voiceAt {
+	var out []voiceAt
+	idOf := func(v any) (string, bool) {
+		ref, ok := v.(map[string]any)
+		id, _ := ref["voice_id"].(string)
+		return id, ok && id != ""
+	}
+	for _, p := range params {
+		if p.Rows == "" {
+			if id, ok := idOf(nodes[p.Node].Params[p.Param.Name]); ok {
+				out = append(out, voiceAt{p.Node + "." + p.Param.Name, id, p})
+			}
+			continue
+		}
+		items, _ := nodes[p.Node].Params[p.Rows].([]any)
+		for i, item := range items {
+			fields, _ := item.(map[string]any)
+			if id, ok := idOf(fields[p.Field]); ok {
+				out = append(out, voiceAt{fmt.Sprintf("%s.%s[%d].%s", p.Node, p.Rows, i+1, p.Field), id, p})
 			}
 		}
 	}
@@ -195,12 +255,10 @@ func readVoices(ctx context.Context, tx pgx.Tx, reg *registry.Registry, ownerID 
 // the 422 details.
 func runVoices(ctx context.Context, tx pgx.Tx, store storage.Store, reg *registry.Registry, ownerID string, nodes,
 	pins map[string]registry.Node, schemas map[string]registry.NodeSchema) (map[string]voiceValue, []gallerydto.MadeWithVoice, []string, error) {
-	params := voiceParams(nodes, schemas, pins)
+	refs := voiceRefs(voiceParams(nodes, schemas, pins), nodes)
 	var ids []string
-	for _, p := range params {
-		if ref, ok := nodes[p.Node].Params[p.Param.Name].(map[string]any); ok {
-			ids = append(ids, ref["voice_id"].(string))
-		}
+	for _, r := range refs {
+		ids = append(ids, r.ID)
 	}
 	if len(ids) == 0 {
 		return nil, nil, nil, nil
@@ -209,17 +267,13 @@ func runVoices(ctx context.Context, tx pgx.Tx, store storage.Store, reg *registr
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	clips, err := voiceClips(ctx, tx, store, ownerID, params, nodes, found)
+	clips, err := voiceClips(ctx, tx, store, ownerID, refs, found)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	values, made, errs := map[string]voiceValue{}, []gallerydto.MadeWithVoice{}, []string(nil)
-	for _, p := range params {
-		ref, ok := nodes[p.Node].Params[p.Param.Name].(map[string]any)
-		if !ok {
-			continue
-		}
-		id, path := ref["voice_id"].(string), p.Node+"."+p.Param.Name
+	for _, r := range refs {
+		id, path, p := r.ID, r.Path, r.Param
 		item, ok := found[strings.ToLower(id)]
 		if !ok {
 			errs = append(errs, fmt.Sprintf("%s: voice %s not found", path, id))
@@ -255,13 +309,11 @@ func runVoices(ctx context.Context, tx pgx.Tx, store storage.Store, reg *registr
 // voiceClips reads the clip takes of the voices params send by their clip (found: the voices by id), deleted or not,
 // with an explicit owner check, and keeps those whose object is there (HEADed; a take recorded without its etag gets
 // it now, as checkMedia).
-func voiceClips(ctx context.Context, tx pgx.Tx, store storage.Store, ownerID string, params []voiceParam,
-	nodes map[string]registry.Node, found map[string]voiceItem) (map[string]inputTake, error) {
+func voiceClips(ctx context.Context, tx pgx.Tx, store storage.Store, ownerID string, refs []voiceAt,
+	found map[string]voiceItem) (map[string]inputTake, error) {
 	var ids []string
-	for _, p := range params {
-		ref, _ := nodes[p.Node].Params[p.Param.Name].(map[string]any)
-		id, _ := ref["voice_id"].(string)
-		if item, ok := found[strings.ToLower(id)]; ok && sentSource(p.Param, item) == "clip" {
+	for _, r := range refs {
+		if item, ok := found[strings.ToLower(r.ID)]; ok && sentSource(r.Param.Param, item) == "clip" {
 			ids = append(ids, item.Voice.Clip.TakeID)
 		}
 	}
@@ -319,12 +371,25 @@ func runParents(graph, mentions []byte) []string {
 	if len(mentions) == 0 || json.Unmarshal(mentions, &exp) != nil {
 		return out
 	}
-	for _, path := range slices.Sorted(maps.Keys(exp.VoiceValues)) {
+	for _, path := range slices.SortedFunc(maps.Keys(exp.VoiceValues), comparePaths) {
 		if id, ok := exp.VoiceValues[path].Clip["take_id"].(string); ok && !slices.Contains(out, id) {
 			out = append(out, id)
 		}
 	}
 	return out
+}
+
+// comparePaths orders voice paths by node and param, then (API 1.32) a rows field's items by number: lines[2] before
+// lines[10].
+func comparePaths(a, b string) int {
+	pa, ia, _ := strings.Cut(a, "[")
+	pb, ib, _ := strings.Cut(b, "[")
+	if pa != pb {
+		return strings.Compare(pa, pb)
+	}
+	na, _ := strconv.Atoi(strings.Split(ia, "]")[0])
+	nb, _ := strconv.Atoi(strings.Split(ib, "]")[0])
+	return na - nb
 }
 
 // voiceClipParam is how a voice's clip is checked: as this media param (README, Voices: cloned voices).
@@ -462,8 +527,21 @@ func sendVoices(nodes map[string]registry.Node, mentions []byte) {
 	}
 	for path, v := range exp.VoiceValues {
 		id, name, _ := strings.Cut(path, ".")
-		if node, ok := nodes[id]; ok && node.Params != nil {
+		node, ok := nodes[id]
+		if !ok || node.Params == nil {
+			continue
+		}
+		rows, rest, isRow := strings.Cut(name, "[") // API 1.32: "<rows>[<i>].<field>"
+		if !isRow {
 			node.Params[name] = v
+			continue
+		}
+		n, field, _ := strings.Cut(rest, "].")
+		i, _ := strconv.Atoi(n)
+		if items, _ := node.Params[rows].([]any); i >= 1 && i <= len(items) {
+			if fields, ok := items[i-1].(map[string]any); ok {
+				fields[field] = v
+			}
 		}
 	}
 }

@@ -1,0 +1,10 @@
+{
+  "slot": {
+    "track": "A2",
+    "at": 15.0
+  },
+  "run": {
+    "workflow_id": "echo-dialogue",
+    "inputs": {}
+  }
+}

@@ -314,6 +314,31 @@
       }
     },
     {
+      "id": "echo-dialogue",
+      "title": "Echo dialogue",
+      "family": "echo",
+      "env": "fake",
+      "media": "audio",
+      "nodes": {
+        "dialogue": {
+          "kind": "echo/dialogue",
+          "params": {
+            "script": "",
+            "lines": [],
+            "pause": 0.35,
+            "seed": -1,
+            "delay_ms": 300
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "dialogue.audio"
+          }
+        }
+      }
+    },
+    {
       "id": "echo-ask",
       "title": "Ask (fake)",
       "family": "echo",

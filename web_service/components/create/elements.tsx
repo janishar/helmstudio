@@ -3,7 +3,7 @@
 // insert at the caret, New element, edit, delete with confirm) and the editor (name, handle, group, text, 1-4
 // images from the gallery picker). Saved through /v1/studio/library.
 import { useEffect, useState } from "react";
-import { Pencil, UsersRound, X } from "lucide-react";
+import { Mic, Pencil, UsersRound, X } from "lucide-react";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { VisualPicker } from "@/components/create/visual-picker";
 import { GalleryPicker } from "@/components/gallery/picker";
@@ -16,8 +16,11 @@ import {
   reloadLibrary,
   useLibrary,
   useLooks,
+  useVoices,
 } from "@/lib/library";
 import { HANDLE, handleFrom } from "@/lib/mentions";
+import { VoicePicker, type VoiceCtx } from "@/components/create/voices";
+import { voiceLine } from "@/lib/voices";
 
 type Item = S<"LibraryItem">;
 type Img = { take_id: string; thumb_url: string };
@@ -357,6 +360,8 @@ function Editor({
     item?.images ?? fromTakes((takes ?? []).filter((t) => t.kind === "image").slice(0, MAX_IMAGES)),
   );
   const [picking, setPicking] = useState(false);
+  // a character's voice (API 1.32): who speaks its script lines
+  const [voiceId, setVoiceId] = useState<string | null>(item?.voice_id ?? null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const h = touched ? handle : handleFrom(name);
@@ -378,6 +383,8 @@ function Editor({
       handle: h,
       text: text.trim(),
       images: images.map((i) => ({ take_id: i.take_id })),
+      // PUT replaces it: only a character has one
+      voice_id: group === "character" ? voiceId : null,
     };
     try {
       await ok(
@@ -482,6 +489,14 @@ function Editor({
           )}
         </ol>
       </div>
+      {group === "character" && (
+        <ElementVoice
+          value={voiceId}
+          onChange={setVoiceId}
+          handle={h}
+          name={name.trim() || "Name"}
+        />
+      )}
       <label className="label flex flex-col gap-1.5">
         <span className="flex justify-between">
           Text
@@ -530,5 +545,98 @@ function Editor({
         }
       />
     </form>
+  );
+}
+
+/** The voice picker outside a workflow: every voice, none greyed (no fit to read). */
+const ANY: VoiceCtx = {
+  workflow: { id: "", title: "", family: "", nodes: {}, node_schemas: {} },
+  familyTitle: (f) => f,
+};
+
+/** A character's Voice tile (docs/mock/VoicePicker.dc.html, Edit element): its voice with Change and remove, else
+ * Pick a voice; in a dialogue script its @handle speaks in it. */
+function ElementVoice({
+  value,
+  onChange,
+  handle,
+  name,
+}: {
+  value: string | null;
+  onChange: (id: string | null) => void;
+  handle: string;
+  name: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const voices = useVoices();
+  const v = value ? voices?.find((x) => x.id === value) : undefined;
+  const fam = v?.voice?.family ?? v?.family;
+  const sub = [fam && `${fam} ${v?.group}`, v && v.voice?.source !== "designed" && voiceLine(v)]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <div className="label flex flex-col gap-1.5">
+      <span className="flex items-center">
+        Voice
+        <Info>
+          Characters only. In a dialogue script, each @handle line is spoken in its element&apos;s
+          voice. A deleted voice leaves the element with none.
+        </Info>
+      </span>
+      {value ? (
+        <div className="flex items-center gap-2 rounded-xl bg-s3 px-3 py-1.5 text-t1">
+          <span
+            aria-hidden
+            className="h-7 w-11 shrink-0 rounded-md border border-s5 bg-[repeating-linear-gradient(90deg,transparent_0_3px,var(--s1)_3px_5px),linear-gradient(180deg,var(--s1)_22%,var(--s4)_22%_78%,var(--s1)_78%)]"
+          />
+          <span className="flex min-w-0 flex-1 flex-col">
+            <small className="mono text-[10px] text-t2">Voice</small>
+            <b className="truncate text-[13px] font-semibold">
+              {name} · {v ? v.name : voices ? "gone" : "…"}
+            </b>
+            {sub && <small className="truncate text-[11px] text-t2">{sub}</small>}
+          </span>
+          <button
+            type="button"
+            aria-haspopup="dialog"
+            className="chip h-7 rounded-lg"
+            onClick={() => setOpen(true)}
+          >
+            Change
+          </button>
+          <button
+            type="button"
+            aria-label="Remove the voice"
+            className="grid size-7 place-items-center rounded-lg text-t2"
+            onClick={() => onChange(null)}
+          >
+            <X size={16} aria-hidden />
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          aria-haspopup="dialog"
+          onClick={() => setOpen(true)}
+          className="flex h-12 items-center justify-center gap-2 rounded-xl border border-dashed border-dash text-[13px] text-t1"
+        >
+          <Mic size={16} aria-hidden />
+          Pick a voice
+        </button>
+      )}
+      <p className="m-0 text-[12px] text-t2">
+        In a dialogue script, @{handle} speaks in this voice:
+      </p>
+      <p className="mono m-0 rounded-[10px] bg-s1 px-2.5 py-2 text-[12px] leading-[18px] text-t1">
+        @{handle} (quiet): You said you&apos;d be back by noon.
+      </p>
+      <VoicePicker
+        open={open}
+        onClose={() => setOpen(false)}
+        value={value ?? ""}
+        onPick={(id) => onChange(id)}
+        ctx={ANY}
+      />
+    </div>
   );
 }

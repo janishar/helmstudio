@@ -120,7 +120,8 @@ def media(specs: list[dict], params: dict) -> list[str]:
     field (API 1.22, README Media inputs: rows of media) that hold items."""
     return [s["name"] for s in specs if (s["type"] == "media" and isinstance(params.get(s["name"]), dict))
             or (s["type"] == "rows" and params.get(s["name"]) and media_fields(s))
-            or (s["type"] == "voice" and isinstance((params.get(s["name"]) or {}).get("clip"), dict))]  # fmt: skip
+            or (s["type"] == "voice" and isinstance((params.get(s["name"]) or {}).get("clip"), dict))
+            or (s["type"] == "rows" and params.get(s["name"]) and graph.voice_fields(s))]  # fmt: skip
 
 
 def media_fields(spec: dict) -> list[str]:
@@ -128,9 +129,20 @@ def media_fields(spec: dict) -> list[str]:
     return [f for f, t in spec["item"].items() if isinstance(t, dict) and t["type"] == "media"]
 
 
+async def _clip(v, owner: str, fetch, seen: dict):
+    """A resolved voice with its clip's bytes as `data` (read once per key in `seen`); any other voice as it is."""
+    if not isinstance(v, dict) or not isinstance(v.get("clip"), dict):
+        return v
+    key = v["clip"]["key"]
+    if key not in seen:
+        seen[key] = await read(v["clip"], owner, fetch, True)
+    return v | {"clip": v["clip"] | {"data": seen[key]}}
+
+
 async def load(specs: list[dict], params: dict, owner: str, fetch) -> dict:
     """`params` with every Image value replaced by its PIL image, every Media value by {take_id, image | mp4}
-    (each key read once) and every `media` value (a param or a rows item's field) given its `data`."""
+    (each key read once), every `media` value (a param or a rows item's field) and every voice clip (a param or,
+    API 1.32, a dialogue line's voice) given its `data`."""
     params = dict(params)
     for s in specs:
         if s["name"] not in media(specs, params):
@@ -141,12 +153,9 @@ async def load(specs: list[dict], params: dict, owner: str, fetch) -> dict:
             }
             continue
         if s["type"] == "voice":  # API 1.31: a voice's clip is read like a media input
-            v = params[s["name"]]
-            params[s["name"]] = v | {
-                "clip": v["clip"] | {"data": await read(v["clip"], owner, fetch, True)}
-            }
+            params[s["name"]] = await _clip(params[s["name"]], owner, fetch, {})
             continue
-        rows = []
+        rows, clips = [], {}  # API 1.32: a line's voice clip, each voice's read once
         for row in params[s["name"]]:
             rows.append(
                 row
@@ -154,6 +163,7 @@ async def load(specs: list[dict], params: dict, owner: str, fetch) -> dict:
                     f: row[f] | {"data": await read(row[f], owner, fetch, True)}
                     for f in media_fields(s)
                 }
+                | {f: await _clip(row[f], owner, fetch, clips) for f in graph.voice_fields(s)}
             )
         params[s["name"]] = rows
     pics = {}

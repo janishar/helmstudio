@@ -1,0 +1,18 @@
+{
+  "slot": {
+    "at": 5.0,
+    "length": 9.0,
+    "exact": true
+  },
+  "run": {
+    "workflow_id": "ltx-audio-to-video",
+    "inputs": {
+      "prompt.text": "@mara and @jon argue at the @harbour rail at dusk",
+      "audio.source": {
+        "take_id": "6b7c8d9e-0f1a-4b2c-8d3e-4f5a6b7c8d92",
+        "in": 0,
+        "out": 9.0
+      }
+    }
+  }
+}

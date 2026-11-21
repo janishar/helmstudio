@@ -131,8 +131,8 @@ func TestRunWithVoice(t *testing.T) {
 			t.Errorf("%v, want %s", got["detail"], want)
 		}
 	}
-	if got := e.call(userA, "GET", "/v1/studio/workflows?media=audio", nil, 200)["workflows"].([]any); len(got) != 1 ||
-		got[0].(map[string]any)["id"] != "echo-voice-over" {
+	if got := e.call(userA, "GET", "/v1/studio/workflows?media=audio", nil, 200)["workflows"].([]any); len(got) != 2 ||
+		got[0].(map[string]any)["id"] != "echo-dialogue" || got[1].(map[string]any)["id"] != "echo-voice-over" {
 		t.Fatal(got)
 	}
 

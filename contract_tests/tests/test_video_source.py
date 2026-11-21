@@ -10,8 +10,8 @@ mapped through a trimmed clip, the 422s, empty for an empty slot or an offline c
 window kept, checked against check.py's t_apply fill), Extend after (the clip grows, later clips ripple, one
 revision, undo) and Extend before (inserted at the clip), Insert after, the slot {at} insert an extend before uses,
 placeholder states and cancel, Replace among alternatives, undo, Re-render binding a retaken clip to its source's
-clip, an audio take refused on the timeline, remove_track; isolation. Off-grid and too-long videos are admin imports
-with those facts (the fake makes neither). Skipped when the fake runner has no echo-retake / echo-a2v."""
+clip, an audio take refused on V1 (1.32), a video's sound's Make shot offer (1.32), remove_track; isolation.
+Off-grid and too-long videos are admin imports with those facts (the fake makes neither). Skipped when the fake runner has no echo-retake / echo-a2v."""
 
 import io
 import uuid
@@ -666,8 +666,13 @@ def test_clip_actions_map_the_range(api, src, src2, echo_wfs, pal):
     tl = edit(api, tl, {"op": "add_track"}, takes)
     tl = ok(api.post(f"{TL}/{tl['id']}/clips", json={"take_ids": [src["id"]], "track": "A2"}))
     (m,) = clips(tl, 1)
-    r = api.get(f"{TL}/{tl['id']}/clips/{m['id']}/actions")
-    assert (r.status_code, r.json()["detail"]) == (422, f"clip {m['id']} is not on V1")
+    # 1.32 (Make shot): a video's sound on an audio track answers Audio to video at its time, on its frames
+    got = [a for a in actions(api, tl, m["id"]) if a["workflow_id"] in ECHO]
+    want = check.make_shot(
+        doc(tl), m["id"], {k: v | {"id": k} for k, v in takes.items()}, echo_wfs, pal
+    )
+    assert got == want["actions"] and [a["workflow_id"] for a in got] == [A2V]
+    assert got[0]["slot"] == {"at": m["at"], "length": m["out"] - m["in"], "exact": True}
     tl = edit(api, tl, {"op": "lift", "clip": cb}, takes)  # an empty slot
     assert actions(api, tl, cb) == []
     assert api.get(f"{TL}/{NO_SUCH_ID}/clips/{ca}/actions").status_code == 404
@@ -905,12 +910,13 @@ def test_rerender_binds_a_retaken_clip_to_its_source(api, src, retaken):
 # ---------------------------------------------------------------- Timeline: audio takes and tracks
 
 
-def test_an_audio_take_is_not_a_clip(api, src, sound):
+def test_an_audio_take_is_not_a_v1_clip(api, src, sound):
+    """1.32: an audio take goes on an audio track only (test_timeline_audio covers the audio track)."""
     tl = create(api, take_ids=[src["id"]])
     r = api.post(f"{TL}/{tl['id']}/clips", json={"take_ids": [src["id"], sound["id"]]})
     assert (r.status_code, r.json()["detail"]) == (
         422,
-        "take_ids[1]: an audio take cannot go on the timeline yet",
+        "take_ids[1]: an audio take goes on an audio track",
     )
     written = {"target": tl["target"], "tracks": [
         {"kind": "video", "clips": [{"id": "s", "take_id": sound["id"], "in": 0, "out": 1}]},

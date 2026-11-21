@@ -95,7 +95,8 @@ const tk = (takes: Takes, id: string | null | undefined) => (id ? takes[id] : un
 /** A clip whose shot is queued or running: it cannot be edited until the shot ends (a failed one can, and retried). */
 export const shotBusy = (c: Clip) => !!c.shot && c.shot.status !== "failed";
 
-/** slot (no take), video, image or audio (never a clip yet); an offline clip by its fields (hold = image). */
+/** slot (no take: an empty slot, or from 1.32 a New line's placeholder on an audio track), video, image or (1.32)
+ * audio; an offline clip by its fields (hold = image). */
 export function kindOf(c: Clip, takes: Takes): Kind {
   if (!c.take_id) return "slot";
   const t = takes[c.take_id];
@@ -105,9 +106,13 @@ export function kindOf(c: Clip, takes: Takes): Kind {
 
 /** A clip's length in frames on the sequence (an audio-track clip: its end's frame minus its start's). */
 export function lenOf(c: Clip, kind: Kind, g: Grid, audio = false): number {
-  if (audio) return g.f(c.at! + c.out! - c.in!) - g.f(c.at!);
+  if (audio) return g.f(c.at! + ("hold" in c ? c.hold! : c.out! - c.in!)) - g.f(c.at!);
   return kind === "video" ? g.f(c.out!) - g.f(c.in!) : g.f(c.hold!);
 }
+
+/** An audio-track clip's length in target samples: out − in, or (1.32) a line placeholder's hold. */
+export const aLen = (c: Clip, g: Grid) =>
+  "hold" in c ? g.smp(c.hold!) : g.smp(c.out!) - g.smp(c.in!);
 
 const shotKey = (s: ShotRef) => JSON.stringify([s.run_id, s.batch_id, s.step]);
 const shotRef = (s: ShotRef): ShotRef => {
@@ -163,8 +168,8 @@ export function normalize(
       const kind = kindOf(c, takes);
       if (ids.has(cid)) add("duplicate_clip", name, cid);
       ids.add(cid);
-      if (kind === "audio") {
-        add("wrong_track", name, cid); // an audio take is not a clip in this version
+      if (kind === "audio" && video) {
+        add("wrong_track", name, cid); // 1.32: an audio take goes on A2-A9 only
         continue;
       }
       if (
@@ -173,7 +178,7 @@ export function normalize(
         add("take_not_found", name, cid);
       if (c.shot && shots[cid] !== shotKey(c.shot)) add("shot_invalid", name, cid);
       const n: Clip = { id: cid, take_id: tid };
-      if (kind === "video") {
+      if (kind === "video" || kind === "audio") {
         if ("hold" in c) add("hold_on_video", name, cid);
         const end = "out" in c ? c.out : take ? take.duration_s : undefined;
         if (end === undefined) {
@@ -192,7 +197,7 @@ export function normalize(
           const o_ = g.smp(end);
           if (take && !(0 <= i_ && i_ < o_ && o_ <= g.smp(take.duration_s!)))
             add("trim", name, cid);
-          if (take && !take.has_audio) add("no_audio", name, cid);
+          if (take && kind === "video" && !take.has_audio) add("no_audio", name, cid);
           if (!("at" in c)) {
             add("at_required", name, cid);
             continue;
@@ -201,9 +206,18 @@ export function normalize(
           n.out = o_ / g.sr;
           n.at = g.snap(c.at!);
         }
-      } else if (!video) {
-        add("wrong_track", name, cid);
+      } else if (!video && !(kind === "slot" && c.shot)) {
+        add("wrong_track", name, cid); // 1.32: a New line placeholder is the exception
         continue;
+      } else if (!video) {
+        if ("in" in c || "out" in c) add("image_trim", name, cid);
+        if (!("hold" in c) || !("at" in c)) {
+          add(!("hold" in c) ? "hold_required" : "at_required", name, cid);
+          continue;
+        }
+        if (g.f(c.hold!) < 1) add("hold", name, cid);
+        n.at = g.snap(c.at!);
+        n.hold = g.snap(c.hold!);
       } else {
         if ("in" in c || "out" in c) add("image_trim", name, cid);
         if (!("hold" in c)) {
@@ -260,7 +274,7 @@ export function normalize(
       let prevEnd: number | null = null;
       for (const [n] of clips) {
         const a = g.smp(n.at!);
-        const e = a + g.smp(n.out!) - g.smp(n.in!);
+        const e = a + aLen(n, g);
         if (prevEnd !== null && a < prevEnd) add("overlap", name, n.id);
         prevEnd = Math.max(e, prevEnd ?? 0);
         ends.push([name, n.id, e]);
@@ -312,6 +326,7 @@ export type Op =
     }
   | { op: "add"; take_ids: string[]; track?: string; ids: string[] }
   | { op: "insert"; at: number; hold: number; id: string }
+  | { op: "place"; at: number; hold: number; id: string; gap_id: string }
   | { op: "fill"; clip: string; take_id: string }
   | { op: "add_track" }
   | { op: "remove_track"; track: string }
@@ -336,7 +351,7 @@ export function edit(doc: Doc, op: Op, takes: Takes): Doc | string {
       const take = takes[tid];
       if (t.name !== "V1") {
         // at the first frame at or after the track's end (in samples): never an overlap
-        const end = Math.max(0, ...t.clips.map((c) => g.smp(c.at!) + g.smp(c.out!) - g.smp(c.in!)));
+        const end = Math.max(0, ...t.clips.map((c) => g.smp(c.at!) + aLen(c, g)));
         let f = g.f(end / g.sr);
         if (g.smp(g.s(f)) < end) f += 1;
         t.clips.push({ id: cid, take_id: tid, in: 0, out: take.duration_s, at: g.s(f) });
@@ -345,9 +360,39 @@ export function edit(doc: Doc, op: Op, takes: Takes): Doc | string {
     });
     return d;
   }
+  const cuts = [0];
+  for (const c of v1) cuts.push(cuts[cuts.length - 1] + lenOf(c, kindOf(c, takes), g));
+  if (op.op === "place") {
+    // 1.32, Make shot: an empty slot at exactly frames(at) (README, Timeline: Make shot)
+    const [f, n, end] = [g.f(op.at), g.f(op.hold), cuts[cuts.length - 1]];
+    const made: Clip = { id: op.id, take_id: null, hold: g.s(n) };
+    if (f >= end) {
+      if (f > end) v1.push({ id: op.gap_id, take_id: null, hold: g.s(f - end) });
+      v1.push(made);
+      return d;
+    }
+    let k = 0;
+    cuts.forEach((c, i) => {
+      if (i < v1.length && c <= f) k = i;
+    });
+    const gap = v1[k];
+    if (gap.take_id || gap.shot)
+      return edit(doc, { op: "insert", at: op.at, hold: g.s(n), id: op.id }, takes);
+    const [left, right] = [f - cuts[k], cuts[k + 1] - f - n];
+    const parts: Clip[] = [
+      ...(left ? [{ ...gap, hold: g.s(left) }] : []),
+      made,
+      ...(right > 0 ? [{ id: left ? op.gap_id : gap.id, take_id: null, hold: g.s(right) }] : []),
+    ];
+    v1.splice(k, 1, ...parts);
+    cutAt(k + parts.length);
+    // longer than the gap: an insert of what overflows, every track moving on together (V1 rippled; the audio too)
+    if (right < 0)
+      for (const t of d.tracks.slice(1))
+        for (const c of t.clips) if (g.f(c.at!) >= cuts[k + 1]) c.at = g.s(g.f(c.at!) - right);
+    return d;
+  }
   if (op.op === "insert") {
-    const cuts = [0];
-    for (const c of v1) cuts.push(cuts[cuts.length - 1] + lenOf(c, kindOf(c, takes), g));
     const f = g.f(op.at);
     let i = 0;
     cuts.forEach((c, k) => {
@@ -410,6 +455,8 @@ export function edit(doc: Doc, op: Op, takes: Takes): Doc | string {
         c.in = g.s(i_);
         c.out = g.s(o_);
       } else c.hold = g.s(Math.max(g.f(c.hold!) + (op.edge === "out" ? df : -df), least));
+    } else if (kind === "slot") {
+      c.hold = g.s(Math.max(g.f(c.hold!) + (op.edge === "out" ? df : -df), 1)); // 1.32: a line placeholder
     } else {
       const i_ = g.smp(c.in!);
       const o_ = g.smp(c.out!);
@@ -421,7 +468,9 @@ export function edit(doc: Doc, op: Op, takes: Takes): Doc | string {
         c.in = ni / g.sr;
       } else {
         const no = Math.max(o_ + g.smp(g.s(df)), i_ + frame);
-        c.out = (src === null ? no : Math.min(no, g.smp(take!.duration_s!))) / g.sr;
+        // a video's sound or an audio take: out never past the take's end, on the sample grid
+        const end = take?.duration_s != null && (kind === "video" || kind === "audio");
+        c.out = (end ? Math.min(no, g.smp(take.duration_s!)) : no) / g.sr;
       }
     }
   } else if (op.op === "remove" || op.op === "lift") {
@@ -434,7 +483,7 @@ export function edit(doc: Doc, op: Op, takes: Takes): Doc | string {
     const take = takes[op.take_id];
     if (!take) return "take_not_found";
     const ln = lenOf(c, kind, g, !onV1);
-    const oldIn = kind === "video" ? g.f(c.in!) : 0;
+    const oldIn = kind === "video" || kind === "audio" ? g.f(c.in!) : 0;
     delete c.in;
     delete c.out;
     delete c.hold;
@@ -462,7 +511,11 @@ export function edit(doc: Doc, op: Op, takes: Takes): Doc | string {
     delete c.out;
     delete c.hold;
     delete c.shot;
-    if (take.kind === "image") c.hold = g.s(ln);
+    if (!onV1) {
+      // 1.32, an audio track (New line, a line's re-render): the whole take at the slot's start
+      c.in = 0;
+      c.out = take.duration_s;
+    } else if (take.kind === "image") c.hold = g.s(ln);
     else if (sm) {
       // the generated part; replacing its source (or a take made from it): the clip's window, grown on a side only
       // where the generated part lies outside the source (extend), never by the 8-frame snap (retake)
@@ -543,8 +596,18 @@ export function apply(doc: Doc, op: Op, takes: Takes): Applied {
         .filter((p) => p[0] === "dissolve_handles" || p[0] === "dissolve_length")
         .map((p) => p[2]),
     );
-    const past = new Set(r.problems.filter((p) => p[0] === "past_end").map((p) => p[2]));
+    const probs = r.problems;
+    const past = new Set(probs.filter((p) => p[0] === "past_end").map((p) => p[2]));
     const g = new Grid(raw.target);
+    for (const t of raw.tracks.slice(1)) {
+      // 1.32: a filled line running into the next clip of its track is cut at its start
+      const order = [...t.clips].sort((a, b) => g.smp(a.at!) - g.smp(b.at!));
+      order.slice(1).forEach((c, k) => {
+        const prev = order[k];
+        if (probs.some((p) => p[0] === "overlap" && p[2] === c.id) && "out" in prev)
+          prev.out = (g.smp(prev.in!) + g.smp(c.at!) - g.smp(prev.at!)) / g.sr;
+      });
+    }
     let frames = 0;
     for (const c of raw.tracks[0].clips) {
       if (bad.has(c.id)) delete c.transition_in;
@@ -554,7 +617,10 @@ export function apply(doc: Doc, op: Op, takes: Takes): Applied {
     for (const t of raw.tracks.slice(1)) {
       t.clips = t.clips.filter((c) => !past.has(c.id) || g.smp(c.at!) < end);
       for (const c of t.clips)
-        if (past.has(c.id)) c.out = (g.smp(c.in!) + end - g.smp(c.at!)) / g.sr;
+        if (!past.has(c.id)) continue;
+        else if ("hold" in c)
+          c.hold = Math.min(g.smp(c.hold!), end - g.smp(c.at!)) / g.sr; // 1.32: a line placeholder
+        else c.out = Math.min(g.smp(c.out!), g.smp(c.in!) + end - g.smp(c.at!)) / g.sr; // never longer
     }
     r = normalize(raw, takes, doc);
   }
@@ -570,7 +636,9 @@ export function cuts(doc: Doc, takes: Takes, exclude?: string): number[] {
       if (c.id !== exclude) {
         out.add(c.at!);
         out.add(
-          ti === 0 ? g.s(g.f(c.at!) + lenOf(c, kindOf(c, takes), g)) : c.at! + c.out! - c.in!,
+          ti === 0
+            ? g.s(g.f(c.at!) + lenOf(c, kindOf(c, takes), g))
+            : c.at! + ("hold" in c ? c.hold! : c.out! - c.in!),
         );
       }
   });
@@ -642,7 +710,14 @@ export function frameAt(
   for (const t of doc.tracks.slice(1))
     for (const c of t.clips) {
       const a = g.f(c.at!);
-      if (a <= f && f < a + lenOf(c, "video", g, true) && !c.offline && !c.mute && !t.mute)
+      if (
+        c.take_id &&
+        a <= f &&
+        f < a + lenOf(c, "video", g, true) &&
+        !c.offline &&
+        !c.mute &&
+        !t.mute
+      )
         sounds.push({
           clip: c.id,
           t: c.in! + g.s(f - a),
@@ -660,7 +735,11 @@ export function factsOf(takes: Record<string, S<"TimelineTake">>): Takes {
   return Object.fromEntries(
     Object.entries(takes).map(([id, t]) => [
       id,
-      { kind: t.kind, duration_s: t.video?.duration_s, has_audio: t.video?.has_audio ?? false },
+      {
+        kind: t.kind,
+        duration_s: t.video?.duration_s ?? t.audio?.duration_s,
+        has_audio: t.kind === "audio" || (t.video?.has_audio ?? false),
+      },
     ]),
   );
 }

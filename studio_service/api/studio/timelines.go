@@ -88,7 +88,7 @@ var problemText = map[string]string{
 	"image_trim":       "an image or an empty slot has no in or out",
 	"hold_required":    "an image or an empty slot needs hold",
 	"hold":             "hold is under one frame",
-	"wrong_track":      "an image or an empty slot cannot go on an audio track",
+	"wrong_track":      "an image or an empty slot cannot go on an audio track, nor an audio take on V1",
 	"no_audio":         "its take has no sound",
 	"at_required":      "an audio clip needs at",
 	"overlap":          "it overlaps the clip before it",
@@ -199,6 +199,10 @@ func ruleTake(row gallerymodel.Take) timeline.Take {
 	_ = json.Unmarshal(row.SourceMap, &out.SourceMap)
 	if row.Kind == "audio" {
 		out.DurationS, out.HasAudio = gallery.FactsOf(row).DurationS, true
+		var audio gallerydto.AudioInfo
+		if json.Unmarshal(row.Audio, &audio) == nil {
+			out.SampleRate = audio.SampleRate // API 1.32: the export plan's sounds
+		}
 	}
 	return out
 }
@@ -207,7 +211,7 @@ func ruleTake(row gallerymodel.Take) timeline.Take {
 func (s *Service) timelineTake(row gallerymodel.Take) dto.TimelineTake {
 	t := gallery.TakeDTO(s.signer, row)
 	out := dto.TimelineTake{ID: t.ID, Kind: t.Kind, Source: t.Source, Title: t.Title, URL: t.URL, ThumbURL: t.ThumbURL,
-		Width: t.Width, Height: t.Height, Video: t.Video}
+		Width: t.Width, Height: t.Height, Video: t.Video, Audio: t.Audio}
 	if m := t.MadeWith; m != nil {
 		out.Seed, out.WorkflowID, out.WorkflowTitle = m.Seed, &m.WorkflowID, &m.WorkflowTitle
 	}
@@ -469,8 +473,8 @@ func checkAdd(doc timeline.Doc, track string, takeIDs []string, takes map[string
 		switch {
 		case !ok:
 			return network.NewUnprocessableError(fmt.Sprintf("take_ids[%d]: take %s not found", i, id), nil)
-		case tk.Kind == "audio": // API 1.19: not a clip in this version
-			return network.NewUnprocessableError(fmt.Sprintf("take_ids[%d]: an audio take cannot go on the timeline yet", i), nil)
+		case track == "V1" && tk.Kind == "audio": // API 1.32: audio takes go on A2-A9
+			return network.NewUnprocessableError(fmt.Sprintf("take_ids[%d]: an audio take goes on an audio track", i), nil)
 		case track != "V1" && tk.Kind == "image":
 			return network.NewUnprocessableError(fmt.Sprintf("take_ids[%d]: an image cannot go on an audio track", i), nil)
 		case track != "V1" && !tk.HasAudio:
@@ -816,6 +820,7 @@ func reconcile(ctx context.Context, tx pgx.Tx, ownerID string, doc timeline.Doc)
 			}
 		}
 	}
+	doc = dropPlaceholders(doc)
 	ids := docTakeIDs(doc)
 	for _, f := range fills {
 		ids = append(ids, f.take)
@@ -871,7 +876,11 @@ func (s *Service) CreateShot(ctx context.Context, caller common.Caller, id strin
 				}
 				at = &end
 			}
-			if doc, err = apply(doc, timeline.Op{Op: "insert", At: at, Hold: *body.Slot.Length, ID: clip}, rules); err != nil {
+			op := timeline.Op{Op: "insert", At: at, Hold: *body.Slot.Length, ID: clip}
+			if body.Slot.Exact { // API 1.32, Make shot: the slot at exactly frames(at)
+				op.Op, op.GapID = "place", newClipID(doc, clip)
+			}
+			if doc, err = apply(doc, op, rules); err != nil {
 				return err
 			}
 		}
@@ -898,6 +907,79 @@ func (s *Service) CreateShot(ctx context.Context, caller common.Caller, id strin
 			return err
 		}
 		doc.Tracks[0].Clips[at].Shot = &timeline.ShotRef{RunID: out.Run.ID}
+		if _, err := tx.Exec(ctx, `INSERT INTO timeline_shots (owner_id, timeline_id, clip, run_id) VALUES ($1, $2, $3, $4)`,
+			caller.ID, row.ID, clip, out.Run.ID); err != nil {
+			return err
+		}
+		return storeUser(ctx, tx, row, doc)
+	})
+	if err != nil {
+		return dto.TimelineShot{}, err
+	}
+	out.Timeline = tl
+	return out, s.placeQueued(ctx, &out.Run)
+}
+
+// ------------------------------------------------------------------ New line (API 1.32)
+
+// CreateLine is New line: the voice run in the sequence's session, its shot on a new placeholder on an audio track
+// (slot {track, at, length, id?}) or on an audio clip to redo (slot {clip}).
+func (s *Service) CreateLine(ctx context.Context, caller common.Caller, id string, body *dto.TimelineLineCreate) (dto.TimelineShot, error) {
+	if !s.registry.Ready() {
+		return dto.TimelineShot{}, network.NewServiceUnavailableError("studio is starting; try again", nil)
+	}
+	var out dto.TimelineShot
+	tl, err := s.editTimeline(ctx, caller, id, func(tx pgx.Tx, row *timelineRow) error {
+		if wf, _, err := s.runnable(ctx, tx, body.Run.WorkflowID); err == nil && wf.Media != "audio" {
+			return network.NewUnprocessableError("New line needs a workflow whose media is audio", nil)
+		} // an unknown workflow: createRun's own 422
+		doc := row.doc()
+		rules, _, err := loadTakes(ctx, tx, caller.ID, docTakeIDs(doc))
+		if err != nil {
+			return err
+		}
+		sl, clip := body.Slot, body.Slot.Clip
+		if clip != "" {
+			ti, k := findClip(doc, clip)
+			switch {
+			case ti < 0:
+				return network.NewUnprocessableError("unknown clip "+clip, nil)
+			case ti == 0:
+				return network.NewUnprocessableError("clip "+clip+" is not on an audio track", nil)
+			}
+			if shot := doc.Tracks[ti].Clips[k].Shot; shot != nil {
+				status, _, _, err := shotState(ctx, tx, caller.ID, *shot)
+				if err != nil {
+					return err
+				} else if status == "queued" || status == "running" {
+					return network.NewConflictError("clip "+clip+" already has a line running", nil)
+				}
+			}
+		} else {
+			ti := slices.IndexFunc(doc.Tracks, func(t timeline.Track) bool { return t.Name == sl.Track })
+			if ti < 1 {
+				return network.NewUnprocessableError("unknown track "+sl.Track, nil)
+			}
+			if clip = cmp.Or(sl.ID, newClipID(doc)); slices.Contains(clipIDs(doc), clip) {
+				return network.NewUnprocessableError("clip "+clip+" already exists", nil)
+			}
+			pending := &timeline.ShotRef{RunID: "pending"} // studio's shot: the run id once it exists
+			doc.Tracks[ti].Clips = append(doc.Tracks[ti].Clips, timeline.Clip{ID: clip, At: sl.At, Hold: sl.Length, Shot: pending})
+			n, probs := timeline.Normalize(doc, rules, &doc)
+			if probs != nil {
+				return problemsError(probs)
+			}
+			doc = *n
+		}
+		sessionID, err := s.timelineSession(ctx, tx, row)
+		if err != nil {
+			return err
+		}
+		if out.Run, err = s.createRun(ctx, tx, caller, sessionID, body.Run); err != nil {
+			return err
+		}
+		ti, k := findClip(doc, clip)
+		doc.Tracks[ti].Clips[k].Shot = &timeline.ShotRef{RunID: out.Run.ID}
 		if _, err := tx.Exec(ctx, `INSERT INTO timeline_shots (owner_id, timeline_id, clip, run_id) VALUES ($1, $2, $3, $4)`,
 			caller.ID, row.ID, clip, out.Run.ID); err != nil {
 			return err
@@ -995,10 +1077,7 @@ func settleShot(ctx context.Context, tx pgx.Tx, run model.Run, extra []string,
 			return err
 		}
 		doc := row.doc()
-		k := slices.IndexFunc(doc.Tracks[0].Clips, func(c timeline.Clip) bool {
-			return c.ID == clips[i] && c.Shot != nil && c.Shot.Ref() == refs[i]
-		})
-		if k < 0 {
+		if ti, _ := findClip(doc, clips[i]); ti < 0 || !hasShot(doc, clips[i], refs[i]) {
 			continue // the slot was removed or redone meanwhile: the take stays in the gallery
 		}
 		rules, _, err := loadTakes(ctx, tx, run.OwnerID, append(docTakeIDs(doc), extra...))
@@ -1024,14 +1103,15 @@ func fillShot(ctx context.Context, tx pgx.Tx, run model.Run, takeID string) erro
 		}
 		log.Printf("timelines: fill of clip %s with take %s: %v %v", clip, takeID, r.Error, r.Problems)
 		next := doc.Clone()
-		k := slices.IndexFunc(next.Tracks[0].Clips, func(c timeline.Clip) bool { return c.ID == clip })
-		next.Tracks[0].Clips[k].Shot = nil
-		next.Tracks[0].Clips[k].Alternatives = append(next.Tracks[0].Clips[k].Alternatives, takeID)
+		ti, k := findClip(next, clip)
+		c := &next.Tracks[ti].Clips[k]
+		c.Shot = nil
+		c.Alternatives = append(c.Alternatives, takeID)
 		if n, probs := timeline.Normalize(next, takes, &doc); probs == nil {
 			return *n, true
 		}
-		next.Tracks[0].Clips[k].Alternatives = doc.Tracks[0].Clips[k].Alternatives
-		return next, true
+		c.Alternatives = doc.Tracks[ti].Clips[k].Alternatives
+		return dropPlaceholders(next), true
 	})
 }
 
@@ -1060,20 +1140,18 @@ func batchShotsEnded(ctx context.Context, tx pgx.Tx, batchID, ownerID string) er
 		doc, changed := row.doc(), false
 		for _, sl := range slots[i:j] {
 			ref := timeline.ShotRef{BatchID: batchID, Step: sl.Step}
-			k := slices.IndexFunc(doc.Tracks[0].Clips, func(c timeline.Clip) bool {
-				return c.ID == sl.Clip && c.Shot != nil && c.Shot.Ref() == ref
-			})
-			if k < 0 {
+			if !hasShot(doc, sl.Clip, ref) {
 				continue
 			}
 			if status, _, _, err := shotState(ctx, tx, ownerID, ref); err != nil {
 				return err
 			} else if status == "cancelled" {
-				doc.Tracks[0].Clips[k].Shot, changed = nil, true
+				ti, k := findClip(doc, sl.Clip)
+				doc.Tracks[ti].Clips[k].Shot, changed = nil, true
 			}
 		}
 		if changed {
-			if err := storeStudio(ctx, tx, &row, doc); err != nil {
+			if err := storeStudio(ctx, tx, &row, dropPlaceholders(doc)); err != nil {
 				return err
 			}
 		}
@@ -1082,56 +1160,87 @@ func batchShotsEnded(ctx context.Context, tx pgx.Tx, batchID, ownerID string) er
 	return nil
 }
 
-// shotEnded drops a cancelled run's shot from its slots (an empty slot stays as it is); a failed one keeps it.
+// shotEnded drops a cancelled run's shot from its slots (an empty slot on V1 stays as it is, a New line's placeholder
+// goes); a failed one keeps it.
 func shotEnded(ctx context.Context, tx pgx.Tx, run model.Run) error {
 	if run.Status != "cancelled" || run.BatchID != nil {
 		return nil
 	}
 	return settleShot(ctx, tx, run, nil, func(doc timeline.Doc, clip string, takes map[string]timeline.Take) (timeline.Doc, bool) {
-		k := slices.IndexFunc(doc.Tracks[0].Clips, func(c timeline.Clip) bool { return c.ID == clip })
-		doc.Tracks[0].Clips[k].Shot = nil
-		return doc, true
+		ti, k := findClip(doc, clip)
+		doc.Tracks[ti].Clips[k].Shot = nil
+		return dropPlaceholders(doc), true
 	})
+}
+
+// findClip is clip id's track and index in doc, (-1, -1) when it has none.
+func findClip(doc timeline.Doc, id string) (int, int) {
+	for ti, t := range doc.Tracks {
+		if k := indexOf(t.Clips, id); k >= 0 {
+			return ti, k
+		}
+	}
+	return -1, -1
+}
+
+// hasShot reports whether clip id of doc waits on ref.
+func hasShot(doc timeline.Doc, id string, ref timeline.ShotRef) bool {
+	ti, k := findClip(doc, id)
+	return ti >= 0 && doc.Tracks[ti].Clips[k].Shot != nil && doc.Tracks[ti].Clips[k].Shot.Ref() == ref
+}
+
+// dropPlaceholders removes the New line placeholders whose shot is gone (API 1.32: an empty slot cannot stay on an
+// audio track).
+func dropPlaceholders(doc timeline.Doc) timeline.Doc {
+	for ti := 1; ti < len(doc.Tracks); ti++ {
+		doc.Tracks[ti].Clips = slices.DeleteFunc(doc.Tracks[ti].Clips, func(c timeline.Clip) bool {
+			return c.Take() == "" && c.Shot == nil
+		})
+	}
+	return doc
 }
 
 // ------------------------------------------------------------------ take actions (API 1.19)
 
-// ClipActions is a V1 clip's take actions (contracts/README.md, Timeline: take actions): its take's offers among the
+// ClipActions is a clip's take actions (contracts/README.md, Timeline: take actions): its take's offers among the
 // templates of the family of the workflow that made it (an upload, import or export: every family), with the range
 // (sequence seconds, absent = the clip's extent, clamped to the clip) mapped to the take's own time t − at + in and
-// snapped to its frames. Empty for an empty slot or an offline clip.
+// snapped to its frames. An audio-track clip answers Make shot instead (API 1.32, timeline.MakeShot). Empty for an
+// empty slot, a placeholder or an offline clip.
 func (s *Service) ClipActions(ctx context.Context, caller common.Caller, id, clip string, start, end *float64) (dto.ClipActions, error) {
-	out := dto.ClipActions{Actions: []gallerydto.TakeOffer{}}
+	out := dto.ClipActions{Actions: []timeline.Action{}}
 	if start != nil && end != nil && *start >= *end {
 		return out, network.NewUnprocessableError("start must be before end", nil)
 	}
 	var row gallerymodel.Take
 	var rng [2]float64
+	var doc timeline.Doc
+	audio := false
 	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
 		tl, err := readTimeline(ctx, tx, id, false)
 		if err != nil {
 			return err
 		}
-		doc := tl.doc()
-		k := indexOf(doc.Tracks[0].Clips, clip)
-		switch {
-		case k < 0 && slices.Contains(clipIDs(doc), clip):
-			return network.NewUnprocessableError("clip "+clip+" is not on V1", nil)
-		case k < 0:
+		doc = tl.doc()
+		ti, k := findClip(doc, clip)
+		if ti < 0 {
 			return network.NewUnprocessableError("unknown clip "+clip, nil)
 		}
-		c := doc.Tracks[0].Clips[k]
+		c := doc.Tracks[ti].Clips[k]
 		if c.Take() == "" {
-			return nil // an empty slot: no actions
+			return nil // an empty slot or a line placeholder: no actions
 		}
 		rules, rows, err := loadTakes(ctx, tx, caller.ID, []string{c.Take()})
 		if err != nil {
 			return err
 		}
-		row = rows[c.Take()] // offline: none
+		row, audio = rows[c.Take()], ti > 0 // offline: none
 		g := timeline.NewGrid(doc.Target)
 		from := deref(c.At)
 		to := g.S(g.F(from) + timeline.Len(c, timeline.Kind(c, rules), g, false))
+		if audio { // API 1.32, Make shot: the clip's in..out in the take's own time
+			to = from + deref(c.Out) - deref(c.In)
+		}
 		a, b := max(from, deref(cmp.Or(start, &from))), min(to, deref(cmp.Or(end, &to)))
 		if a >= b {
 			return network.NewUnprocessableError("start must be before end", nil)
@@ -1143,6 +1252,14 @@ func (s *Service) ClipActions(ctx context.Context, caller common.Caller, id, cli
 		return out, err
 	}
 	take := gallery.FactsOf(row)
+	if audio {
+		workflows, err := s.offerable(ctx, caller, false)
+		if err != nil {
+			return out, err
+		}
+		out.Actions = timeline.MakeShot(doc, clip, map[string]gallery.MediaTake{row.ID: take}, workflows, &rng)
+		return out, nil
+	}
 	if take.Kind == "video" && take.FPS > 0 {
 		snap := func(t float64) float64 { return math.Round(t*take.FPS) / take.FPS }
 		rng = [2]float64{snap(rng[0]), min(snap(rng[1]), take.DurationS)}
@@ -1158,6 +1275,8 @@ func (s *Service) ClipActions(ctx context.Context, caller common.Caller, id, cli
 			workflows = slices.DeleteFunc(workflows, func(w registry.Workflow) bool { return w.Family != workflow.Family })
 		}
 	}
-	out.Actions = gallery.Offers(take, workflows, &rng)
+	for _, o := range gallery.Offers(take, workflows, &rng) {
+		out.Actions = append(out.Actions, timeline.Action{TakeOffer: o})
+	}
 	return out, nil
 }

@@ -824,7 +824,29 @@ def _decision_id(state, nid: str, visit: int) -> str:
     return f"{state['batch_id']}:{state['row']}:{state['attempt']}:{nid}:{visit}"
 
 
-def _ask_call(plan, state, ctx, nid, spec) -> tuple[dict | None, str | None]:
+async def _cast(state, ctx, nid: str, visit: int) -> tuple[list[str] | None, str | None]:
+    """write-script/v1's cast: every element of the batch's owner with a voice (library.read {element, 20, offset},
+    paged while `more`, at most 1000), one line each (agents.cast_lines); or the error that fails the row."""
+    if ctx.tool is None:
+        return None, "library.read is not available here"
+    items: list[dict] = []
+    for page in range(CAST_PAGES):
+        req = {"owner_id": ctx.owner_id, "batch_id": state["batch_id"], "row": state["row"], "node": nid,
+               "call_id": f"{_decision_id(state, nid, visit)}:t0:{page}", "tool": "library.read",
+               "args": {"kind": "element", "limit": 20, "offset": 20 * page}}  # fmt: skip
+        reply = await ctx.tool(req)
+        if "error" in reply:
+            return None, f"library.read: {reply['error']}"
+        items += reply["result"]["items"]
+        if not reply["result"]["more"]:
+            break
+    return agents.cast_lines(items), None
+
+
+CAST_PAGES = 50  # 20 a page: the library's 1000 at most
+
+
+def _ask_call(plan, state, ctx, nid, spec, cast=None) -> tuple[dict | None, str | None]:
     """This visit's call: {inputs, hashed (the replay hash's inputs), template, memory_read, candidates | allowed};
     or the error that fails the row. Every read of memory is the batch's snapshot (ctx.memory, state.notes)."""
     wf = _wf(plan, spec)
@@ -864,7 +886,14 @@ def _ask_call(plan, state, ctx, nid, spec) -> tuple[dict | None, str | None]:
             # only the user's own texts (the row's inputs) may bring mentions in, never model-written reasons/notes
             own = [t for s, t in zip(spec["from"], texts) if s.startswith("$")]
             allowed = list(dict.fromkeys(h for t in own for h in agents.mentions(t)))
-            if "list" in spec:  # write-list/v1: a shot list a step fans out over
+            if spec.get("form") == "script":  # write-script/v1: the mention rule does not apply
+                prompt = agents.script_prompt(
+                    spec["instruction"], list(zip(spec["from"], texts)), cast
+                )
+                schema, template = agents.SCRIPT_SCHEMA, agents.WRITE_SCRIPT
+                tokens = agents.WRITE_TOKENS
+                allowed = [line[1:].split(" ", 1)[0] for line in cast]
+            elif "list" in spec:  # write-list/v1: a shot list a step fans out over
                 n = spec["list"]["max"]
                 prompt = agents.write_list_prompt(spec["instruction"], list(zip(spec["from"], texts)), n,
                                                   allowed)  # fmt: skip
@@ -911,7 +940,10 @@ def _ask_submit_node(plan, nid, spec, check):
         else:
             visit = state.get("visits", {}).get(nid, 0) + 1
             up = {"visits": state.get("visits", {}) | {nid: visit}}
-            built, error = _ask_call(plan, state, ctx, nid, spec)
+            cast, error = None, None
+            if kind == "write" and spec.get("form") == "script":
+                cast, error = await _cast(state, ctx, nid, visit)
+            built, error = (None, error) if error else _ask_call(plan, state, ctx, nid, spec, cast)
             if error:
                 cell = {"visit": visit, "status": "failed", "error": error}
                 return (
@@ -1287,6 +1319,10 @@ def _apply_node(plan, nid, spec):
         allowed = set(call["allowed"])
 
         def check(text):
+            if spec.get("form") == "script":  # the cast's handles are the call's `allowed`
+                value, err = agents.parse(text, agents.SCRIPT_SCHEMA)
+                err = err or agents.script_check(value["script"], allowed)
+                return (None, err) if err else ({"text": value["script"]} | value, None)
             value, err = agents.parse(text, agents.WRITE_SCHEMA)
             extra = [h for h in agents.mentions(value["text"]) if h not in allowed] if value else []
             if extra:

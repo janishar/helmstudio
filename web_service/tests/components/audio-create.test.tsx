@@ -207,7 +207,7 @@ describe("Create on an audio workflow", () => {
     });
   });
 
-  it("an audio take: the waveform stage, its badge, the sound tile, no Add to timeline", async () => {
+  it("an audio take: the waveform stage, its badge, the sound tile, Add to timeline (API 1.32)", async () => {
     serve();
     const t = audio(2, {
       run_id: "r1",
@@ -225,7 +225,7 @@ describe("Create on an audio workflow", () => {
     expect(within(strip).getByRole("button", { name: "Take, seed 12, 0:02" }).textContent).toBe(
       "seed 12 · 0:02",
     );
-    expect(screen.queryByRole("button", { name: /Add to timeline/ })).toBeNull();
+    expect(screen.getAllByRole("button", { name: /Add to timeline/ }).length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: "Full screen" })).toBeNull();
     const inspector = screen.getByRole("complementary", { name: "Inspector" });
     expect(within(inspector).getByText("24 kHz · mono · wav")).toBeTruthy();

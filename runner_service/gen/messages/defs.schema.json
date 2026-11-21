@@ -227,7 +227,7 @@
       }
     },
     "inputValue": {
-      "description": "a value in the client form (RunRequest.inputs, batch rows, made_with): a scalar, an Image as {take_id}, or a rows value (an ordered list of items, field → scalar, {take_id} or, for a Lora field, {lora_id}); from API 1.17 a frameRef in place of an Image (pipelines → studio.runs.create only); from API 1.19 a Media value as mediaRef and a span as spanValue; from API 1.22 a rows item's media field as mediaRef; from API 1.30 a voice param's value as voiceRef (never a rows item field)",
+      "description": "a value in the client form (RunRequest.inputs, batch rows, made_with): a scalar, an Image as {take_id}, or a rows value (an ordered list of items, field → scalar, {take_id} or, for a Lora field, {lora_id}); from API 1.17 a frameRef in place of an Image (pipelines → studio.runs.create only); from API 1.19 a Media value as mediaRef and a span as spanValue; from API 1.22 a rows item's media field as mediaRef; from API 1.30 a voice param's value as voiceRef; from API 1.32 a rows item's voice field (a dialogue line) as voiceRef",
       "anyOf": [
         {
           "$ref": "#/$defs/scalarValue"
@@ -271,6 +271,9 @@
                 },
                 {
                   "$ref": "#/$defs/loraRef"
+                },
+                {
+                  "$ref": "#/$defs/voiceRef"
                 }
               ]
             }
@@ -279,7 +282,7 @@
       ]
     },
     "resolvedValue": {
-      "description": "a value in cmd.run.execute: like inputValue, with every Image resolved to `image` and every Lora to `lora`; from API 1.19 every Media value resolved to `media` (from API 1.22 a rows item's media field too); from API 1.30 every voice value resolved to `voice`",
+      "description": "a value in cmd.run.execute: like inputValue, with every Image resolved to `image` and every Lora to `lora`; from API 1.19 every Media value resolved to `media` (from API 1.22 a rows item's media field too); from API 1.30 every voice value resolved to `voice`; from API 1.32 a rows item's voice field too",
       "anyOf": [
         {
           "$ref": "#/$defs/scalarValue"
@@ -317,6 +320,9 @@
                 },
                 {
                   "$ref": "#/$defs/lora"
+                },
+                {
+                  "$ref": "#/$defs/voice"
                 }
               ]
             }
@@ -325,7 +331,7 @@
       ]
     },
     "paramValue": {
-      "description": "a param value in a graph: inputValue (registry workflows, snapshots) or resolvedValue (cmd.run.execute). See registry.schema.json paramSchema for the types. From API 1.19 a `media` param: mediaRef (resolved: media); a `span` param: spanValue; from API 1.22 a rows item's media field: mediaRef (resolved: media); from API 1.30 a `voice` param: voiceRef (resolved: voice)",
+      "description": "a param value in a graph: inputValue (registry workflows, snapshots) or resolvedValue (cmd.run.execute). See registry.schema.json paramSchema for the types. From API 1.19 a `media` param: mediaRef (resolved: media); a `span` param: spanValue; from API 1.22 a rows item's media field: mediaRef (resolved: media); from API 1.30 a `voice` param: voiceRef (resolved: voice); from API 1.32 a rows item's voice field: voiceRef (resolved: voice)",
       "anyOf": [
         {
           "$ref": "#/$defs/scalarValue"
@@ -381,6 +387,12 @@
                 },
                 {
                   "$ref": "#/$defs/lora"
+                },
+                {
+                  "$ref": "#/$defs/voiceRef"
+                },
+                {
+                  "$ref": "#/$defs/voice"
                 }
               ]
             }
@@ -969,6 +981,13 @@
             },
             "list": {
               "$ref": "#/$defs/listSpec"
+            },
+            "form": {
+              "enum": [
+                "text",
+                "script"
+              ],
+              "description": "from API 1.32: script = the answer is a dialogue script (template write-script/v1, contracts/README.md, Dialogue: agents); absent = text"
             }
           },
           "description": "from API 1.15 a write with `list` has no `to`: it answers a list (its `<write>.items`)"
@@ -2006,7 +2025,7 @@
         },
         "template": {
           "type": "string",
-          "pattern": "^(judge|write|decide|agent|write-list)/v[1-9][0-9]{0,2}$",
+          "pattern": "^(judge|write|decide|agent|write-list|write-script)/v[1-9][0-9]{0,2}$",
           "description": "the prompt template and its version"
         },
         "system": {
@@ -3193,6 +3212,43 @@
           }
         }
       ]
+    },
+    "cue": {
+      "type": "object",
+      "description": "API 1.32: one dialogue line's place in the take it is part of (evt.run.output audio.cues, Take.audio.cues): lines from 1 in the `lines` rows order, times in the take's own seconds, the line's speaker by voice id and its text as spoken",
+      "required": [
+        "line",
+        "start_s",
+        "end_s",
+        "voice_id",
+        "text"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "line": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 40
+        },
+        "start_s": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 600
+        },
+        "end_s": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 600
+        },
+        "voice_id": {
+          "type": "string",
+          "pattern": "^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9-]{0,63})$"
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 600
+        }
+      }
     }
   }
 }

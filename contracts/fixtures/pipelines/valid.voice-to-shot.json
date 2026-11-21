@@ -1,0 +1,100 @@
+{
+  "description": "API 1.32 (README, Dialogue: agents and pipelines): a Write node writes a script (form script, write-script/v1) into $script, bound to the dialogue's script; a line → voice → shot chain binds the voice step's one take into echo audio to video's media param (audio.source) and into MiniMax H3's audio references (a rows param of one media field, the take as item 1)",
+  "pipeline": {
+    "title": "Scene to shots",
+    "nodes": {
+      "inputs": {
+        "kind": "inputs",
+        "inputs": [
+          {
+            "name": "brief",
+            "type": "Text"
+          },
+          {
+            "name": "script",
+            "type": "Text"
+          },
+          {
+            "name": "line",
+            "type": "Text"
+          }
+        ]
+      },
+      "writer": {
+        "kind": "write",
+        "from": [
+          "$brief"
+        ],
+        "to": "$script",
+        "form": "script",
+        "instruction": "Write the scene as a short dialogue for the cast."
+      },
+      "scene": {
+        "kind": "step",
+        "workflow": "echo-dialogue",
+        "seeds": 1,
+        "bind": {
+          "dialogue.script": "$script"
+        }
+      },
+      "voice": {
+        "kind": "step",
+        "workflow": "echo-voice-over",
+        "seeds": 1,
+        "bind": {
+          "prompt.text": "$line"
+        }
+      },
+      "shot": {
+        "kind": "step",
+        "workflow": "echo-a2v",
+        "seeds": 1,
+        "bind": {
+          "prompt.text": "$line",
+          "a2v.source": "voice.takes"
+        }
+      },
+      "refs": {
+        "kind": "step",
+        "workflow": "minimax-h3-references",
+        "seeds": 1,
+        "bind": {
+          "prompt.text": "$line",
+          "generate.audios": "voice.takes"
+        }
+      },
+      "out": {
+        "kind": "output",
+        "from": "shot.takes",
+        "collection": "Scene"
+      }
+    },
+    "edges": [
+      [
+        "inputs",
+        "writer"
+      ],
+      [
+        "writer",
+        "scene"
+      ],
+      [
+        "scene",
+        "voice"
+      ],
+      [
+        "voice",
+        "shot"
+      ],
+      [
+        "shot",
+        "refs"
+      ],
+      [
+        "refs",
+        "out"
+      ]
+    ]
+  },
+  "problems": []
+}

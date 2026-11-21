@@ -45,8 +45,8 @@ stages:
     params:
       voice: {type: voice, label: Voice, default: null, accepts: [preset, design],
               help: "A Qwen3-TTS preset speaker (Custom voice) or a designed voice (Voice design)."}
-      language: {type: enum, label: Language, default: auto, enum: [auto, en, zh, ja, ko, de, fr, ru, pt, es, it],
-                 help: "The language of the text; auto lets the model tell."}
+      language: &language {type: enum, label: Language, default: auto, enum: [auto, en, zh, ja, ko, de, fr, ru, pt, es, it],
+                           help: "The language of the text; auto lets the model tell."}
       style: {type: string, label: Style, default: "", max: 500, when: "model.variant == 'custom_voice'",
               help: "How to say it, in words: calm, angry, whispering."}
       temperature: {type: float, label: Variation, default: 0.3, min: 0.1, max: 1.2, step: 0.05,
@@ -57,3 +57,30 @@ stages:
     peak_gb: "1.3 + 0.01 * speech_seconds"
     max_seconds: 60
     stall_s: 120                  # a cancel point every generated frame (80 ms of speech) and every loaded tensor
+  # API 1.32 (contracts/README.md "Dialogue and Timeline audio"): a script's lines, each in its preset voice and style,
+  # one take with cues; one line at a time, so memory is speak's
+  dialogue:
+    title: Dialogue
+    component: talker
+    help: "Speaks each line in its speaker's voice (presets only: a designed voice drifts between lines), with its style and pauses, as one take; reports each line's start and end."
+    uses: [talker, speech_tokenizer]
+    inputs: {model: Model, seed: Seed}
+    outputs: {audio: Audio}
+    params:
+      script: {type: text, script: true, label: Script, default: "", min: 0, max: 8000,
+               help: "One line each: @name: text or @name (style): text. An empty line is a longer pause. Each @name speaks in its element's voice."}
+      lines: {type: rows, label: Lines, default: [], min: 1, max: 40,
+              item: {voice: {type: voice, label: Voice, default: null, accepts: [preset]},
+                     text: {type: string, label: Line, default: "", max: 600},
+                     style: {type: string, label: Style, default: "", max: 200},
+                     pause_s: {type: float, label: Pause after, default: 0.35, min: 0, max: 5, step: 0.05,
+                               help: "Silence after the line, before the next (the last line's is not used)."}},
+              help: "One item per spoken line, in order. Studio writes them from the script; the Graph view and agents may set them instead."}
+      pause: {type: float, label: Pause between lines, default: 0.35, min: 0, max: 2, step: 0.05,
+              help: "The silence between two lines; each empty line in the script adds it once more."}
+      language: *language
+      temperature: {type: float, label: Variation, default: 0.3, min: 0.1, max: 1.2, step: 0.05,
+                    help: "Low keeps each voice steady; high is livelier and drifts."}
+    peak_gb: "1.3 + 0.01 * speech_seconds"
+    max_seconds: 60
+    stall_s: 120

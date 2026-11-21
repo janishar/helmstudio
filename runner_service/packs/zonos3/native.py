@@ -8,8 +8,11 @@ the run's seed with the same voice and Delivery, joined with PAUSE_S of silence.
 voice's embedding (<weights>/gguf/voices/<Language>/<Name>_*.embedding.npy); a clip voice sends its in..out part as a
 WAV (ffmpeg) for the server's speaker encoder to embed. Delivery (contracts/README.md "zonos3"): emotion and energy →
 mood.valence / mood.arousal = (v - 0.5) * 8, whisper → delivery.whisper = v * 1.5 (each left out at its neutral
-value), speaking_rate → the speaking-rate condition 15 × v UTF-8 bytes/s (1: none), guidance → speaker CFG (1: off).
-Output: 16-bit PCM, 44.1 kHz mono. No torch."""
+value), speaking_rate → the speaking-rate condition 15 × v UTF-8 bytes/s, always sent (1 = 15, the checkpoint's middle bucket), guidance → speaker CFG (1: off).
+Output: 16-bit PCM, 44.1 kHz mono. No torch.
+
+dialogue (API 1.32): one server for every line, each spoken as speak speaks a text (utter) in its own voice, its style
+words mapped onto its Delivery (STYLE), then its pause_s of silence, with a cue per line."""
 
 import base64
 import io
@@ -60,7 +63,8 @@ def piece_chars(params: dict) -> int:
 
 
 def delivery(params: dict) -> dict:
-    """The /v2/generate fields of the Delivery params; a param at its neutral value sends nothing."""
+    """The /v2/generate fields of the Delivery params; a control at its neutral value sends nothing, the speaking rate
+    is always sent."""
     controls = {}
     for name, control in (("emotion", "mood.valence"), ("energy", "mood.arousal")):
         if dose := round((params[name] - 0.5) * 8, 6):
@@ -68,8 +72,8 @@ def delivery(params: dict) -> dict:
     if dose := round(params["whisper"] * 1.5, 6):
         controls["delivery.whisper"] = dose
     out: dict = {"controls": controls} if controls else {}
-    if params["speaking_rate"] != 1:
-        out["condition_values"] = {"speaking_rate": round(15 * params["speaking_rate"], 6)}
+    # always a rate: without one the bucket is unknown and short lines ran 2-8 s; 1 is 15 bytes/s, the middle bucket
+    out["condition_values"] = {"speaking_rate": round(15 * params["speaking_rate"], 6)}
     if params["guidance"] != 1:
         out["speaker_cfg_scale"] = params["guidance"]
     return out
@@ -199,6 +203,34 @@ def pcm(node: str, wav: bytes) -> bytes:
     return frames
 
 
+def utter(ctx, port: int, text: str, seed: int, params: dict, voice: dict, step=None) -> bytes:
+    """`text` split on sentences into pieces (piece_chars), each spoken at `seed` with the voice's fields and the
+    params' language and Delivery, joined with PAUSE_S of silence: 16-bit PCM samples. step(i, n) after piece i."""
+    out, parts = [], media.pieces(text, piece_chars(params))
+    for i, part in enumerate(parts):
+        ctx.check()
+        samples = pcm(ctx.node, generate(ctx.node, port, body(part, seed, params, voice)))
+        if not samples:
+            raise RunError(f"{ctx.node}: no speech came out")
+        out += [bytes(2 * round(PAUSE_S * SAMPLE_RATE))] if i else []
+        out.append(samples)
+        if step:
+            step(i + 1, len(parts))
+    return b"".join(out)
+
+
+def _ready(node: str) -> None:
+    if not BINARY.is_file():
+        raise RunError(f"{node}: zonos3-server is not built (make zonos3 in runner_service)")
+
+
+def _serve(ctx, gguf: Path):
+    ctx.progress(1, 1, "starting zonos3")  # a phase without steps: 1 of 1
+    return child.serve(
+        ctx, argv(gguf), cwd=BINARY.parent, name="zonos3", ready=READY, ready_s=READY_S
+    )
+
+
 def speak(ctx, params: dict, inputs: dict) -> dict:
     text = inputs["text"].strip()
     if not text:
@@ -207,28 +239,13 @@ def speak(ctx, params: dict, inputs: dict) -> dict:
         raise RunError(
             f"{ctx.node}: at most {MAX_CHARS} characters (about 60 s of speech), not {len(text)}"
         )
-    if not BINARY.is_file():
-        raise RunError(f"{ctx.node}: zonos3-server is not built (make zonos3 in runner_service)")
+    _ready(ctx.node)
     gguf = inputs["model"].folder().resolve() / "gguf"
-    parts = media.pieces(text, piece_chars(params))
-    out = []
     with tempfile.TemporaryDirectory(prefix="zonos3-") as tmp:
         voice = speaker(ctx.node, params["voice"], gguf, Path(tmp).resolve())
-        ctx.progress(1, 1, "starting zonos3")  # a phase without steps: 1 of 1
-        with child.serve(
-            ctx, argv(gguf), cwd=BINARY.parent, name="zonos3", ready=READY, ready_s=READY_S
-        ) as port:
-            for i, part in enumerate(parts):
-                ctx.check()
-                samples = pcm(
-                    ctx.node, generate(ctx.node, port, body(part, inputs["seed"], params, voice))
-                )
-                if not samples:
-                    raise RunError(f"{ctx.node}: no speech came out")
-                out += [bytes(2 * round(PAUSE_S * SAMPLE_RATE))] if i else []
-                out.append(samples)
-                ctx.progress(i + 1, len(parts), "speaking")
-    data = b"".join(out)
+        with _serve(ctx, gguf) as port:
+            data = utter(ctx, port, text, inputs["seed"], params, voice,
+                         lambda i, n: ctx.progress(i, n, "speaking"))  # fmt: skip
     return {
         "audio": {
             "wav": data,
@@ -236,3 +253,65 @@ def speak(ctx, params: dict, inputs: dict) -> dict:
             "duration_s": len(data) / 2 / SAMPLE_RATE,
         }
     }
+
+
+# --- dialogue (API 1.32, contracts/README.md "Dialogue and Timeline audio")
+
+# A line's (style) words → that line's Delivery (the values of the workflow's presets: Warm, Tense, Whisper); a word
+# not here is ignored, a later word overrides an earlier one on the same slider (GOTCHAS.md)
+STYLE = {
+    word: delivery
+    for words, delivery in (
+        ("whisper whispers whispering whispered hushed", {"whisper": 0.9, "energy": 0.25, "speaking_rate": 0.9}),
+        ("quiet quietly soft softly calm calmly gentle gently", {"energy": 0.3}),
+        ("warm warmly kind kindly tender tenderly", {"emotion": 0.7, "energy": 0.45}),
+        ("happy cheerful cheerfully glad bright", {"emotion": 0.8}),
+        ("sad sadly gloomy tired wearily", {"emotion": 0.25, "energy": 0.35}),
+        ("tense tensely urgent urgently nervous nervously afraid scared",
+         {"emotion": 0.3, "energy": 0.75, "speaking_rate": 1.1}),
+        ("angry angrily furious shouting shouts loud loudly", {"emotion": 0.2, "energy": 0.9}),
+        ("excited excitedly eager eagerly", {"emotion": 0.7, "energy": 0.8}),
+        ("slow slowly", {"speaking_rate": 0.85}),
+        ("fast quick quickly hurried hurriedly rushed", {"speaking_rate": 1.15}),
+    )
+    for word in words.split()
+}  # fmt: skip
+
+
+def styled(params: dict, style: str) -> dict:
+    """The run's params with a line's style words mapped onto its Delivery (STYLE)."""
+    out = dict(params)
+    for word in re.findall(r"[a-z]+", style.lower()):
+        out |= STYLE.get(word, {})
+    return out
+
+
+def check_dialogue(params: dict, wired: set, models: dict | None = None) -> str | None:
+    return media.lines_problem(params.get("lines") or [])
+
+
+def dialogue(ctx, params: dict, inputs: dict) -> dict:
+    """One server for the whole dialogue: each line as speak says it, in its voice (a preset's embedding or a clip
+    the server embeds; each voice's fields made once), at the one seed, with the run's Delivery and the line's style
+    mapped onto it (styled), then its pause_s of silence; one take with a cue per line (core.media.stitch)."""
+    lines = params["lines"]
+    if not lines:
+        raise RunError(f"{ctx.node}: nothing to say")
+    _ready(ctx.node)
+    gguf, spoken, voices = inputs["model"].folder().resolve() / "gguf", [], {}
+    with tempfile.TemporaryDirectory(prefix="zonos3-") as tmp:
+        # every voice first (a bad one fails before the server starts); one id is one resolved voice in a run
+        for i, row in enumerate(lines, 1):
+            if not row["text"].strip():
+                raise RunError(f"{ctx.node}.lines[{i}]: nothing to say")
+            if (vid := row["voice"]["item_id"]) not in voices:
+                (folder := Path(tmp).resolve() / str(i)).mkdir()
+                voices[vid] = speaker(f"{ctx.node}.lines[{i}]", row["voice"], gguf, folder)
+        with _serve(ctx, gguf) as port:
+            for i, row in enumerate(lines, 1):
+                line, voice = styled(params, row.get("style", "")), voices[row["voice"]["item_id"]]
+                spoken.append(utter(ctx, port, row["text"].strip(), inputs["seed"], line, voice))
+                ctx.progress(i, len(lines), "speaking")
+    wav, cues = media.stitch(lines, spoken, SAMPLE_RATE)
+    return {"audio": {"wav": wav, "sample_rate": SAMPLE_RATE, "duration_s": len(wav) / 2 / SAMPLE_RATE,
+                      "cues": cues}}  # fmt: skip

@@ -250,7 +250,21 @@
         "reasons": [],
         "blocked": [],
         "video_bitrate": null,
-        "estimated_bytes": 878000
+        "estimated_bytes": 878000,
+        "sounds": [
+          {
+            "clip": "a",
+            "track": "V1",
+            "sample_rate": null,
+            "channels": null
+          },
+          {
+            "clip": "b",
+            "track": "V1",
+            "sample_rate": null,
+            "channels": null
+          }
+        ]
       }
     },
     {
@@ -317,7 +331,21 @@
         ],
         "blocked": [],
         "video_bitrate": 1000000,
-        "estimated_bytes": 1055417
+        "estimated_bytes": 1055417,
+        "sounds": [
+          {
+            "clip": "a",
+            "track": "V1",
+            "sample_rate": null,
+            "channels": null
+          },
+          {
+            "clip": "b",
+            "track": "V1",
+            "sample_rate": null,
+            "channels": null
+          }
+        ]
       }
     },
     {
@@ -416,7 +444,21 @@
         ],
         "blocked": [],
         "video_bitrate": 1000000,
-        "estimated_bytes": 751208
+        "estimated_bytes": 751208,
+        "sounds": [
+          {
+            "clip": "a",
+            "track": "V1",
+            "sample_rate": null,
+            "channels": null
+          },
+          {
+            "clip": "b",
+            "track": "V1",
+            "sample_rate": null,
+            "channels": null
+          }
+        ]
       }
     },
     {
@@ -507,7 +549,33 @@
         ],
         "blocked": [],
         "video_bitrate": 1000000,
-        "estimated_bytes": 1210625
+        "estimated_bytes": 1210625,
+        "sounds": [
+          {
+            "clip": "a",
+            "track": "V1",
+            "sample_rate": null,
+            "channels": null
+          },
+          {
+            "clip": "n",
+            "track": "V1",
+            "sample_rate": null,
+            "channels": null
+          },
+          {
+            "clip": "e",
+            "track": "V1",
+            "sample_rate": null,
+            "channels": null
+          },
+          {
+            "clip": "u",
+            "track": "V1",
+            "sample_rate": null,
+            "channels": null
+          }
+        ]
       }
     },
     {
@@ -581,7 +649,21 @@
         "reasons": [],
         "blocked": [],
         "video_bitrate": null,
-        "estimated_bytes": 878000
+        "estimated_bytes": 878000,
+        "sounds": [
+          {
+            "clip": "b",
+            "track": "V1",
+            "sample_rate": null,
+            "channels": null
+          },
+          {
+            "clip": "m",
+            "track": "A2",
+            "sample_rate": null,
+            "channels": null
+          }
+        ]
       }
     },
     {
@@ -641,7 +723,15 @@
           ]
         ],
         "video_bitrate": 1000000,
-        "estimated_bytes": 453208
+        "estimated_bytes": 453208,
+        "sounds": [
+          {
+            "clip": "a",
+            "track": "V1",
+            "sample_rate": null,
+            "channels": null
+          }
+        ]
       }
     },
     {
@@ -675,7 +765,8 @@
           ]
         ],
         "video_bitrate": 1000000,
-        "estimated_bytes": 0
+        "estimated_bytes": 0,
+        "sounds": []
       }
     },
     {
@@ -729,7 +820,15 @@
           ]
         ],
         "video_bitrate": 1000000,
-        "estimated_bytes": 298000
+        "estimated_bytes": 298000,
+        "sounds": [
+          {
+            "clip": "m",
+            "track": "A2",
+            "sample_rate": null,
+            "channels": null
+          }
+        ]
       }
     },
     {
@@ -810,7 +909,8 @@
           ]
         ],
         "video_bitrate": 1000000,
-        "estimated_bytes": 1206900000
+        "estimated_bytes": 1206900000,
+        "sounds": []
       }
     },
     {
@@ -902,7 +1002,187 @@
           ]
         ],
         "video_bitrate": 1000000,
-        "estimated_bytes": 1043000
+        "estimated_bytes": 1043000,
+        "sounds": [
+          {
+            "clip": "a",
+            "track": "V1",
+            "sample_rate": null,
+            "channels": null
+          },
+          {
+            "clip": "b",
+            "track": "V1",
+            "sample_rate": null,
+            "channels": null
+          }
+        ]
+      }
+    },
+    {
+      "description": "1.32: audio takes on audio tracks: each sound the mix reads with its own rate (24 kHz Qwen, 44.1 kHz ZONOS3; an upload's unknown), all resampled to 48 kHz stereo; a muted clip and a line placeholder read nothing; sound never stops a copy",
+      "document": {
+        "target": {
+          "width": 256,
+          "height": 128,
+          "fps": 24,
+          "sample_rate": 48000
+        },
+        "tracks": [
+          {
+            "name": "V1",
+            "kind": "video",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "a",
+                "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+                "in": 0.0,
+                "out": 2.0416666666666665,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "aaaaaaaa-0000-4000-8000-000000000001"
+                ],
+                "at": 0.0
+              },
+              {
+                "id": "b",
+                "take_id": "aaaaaaaa-0000-4000-8000-000000000002",
+                "in": 0.0,
+                "out": 2.0416666666666665,
+                "gain_db": 0,
+                "mute": true,
+                "alternatives": [
+                  "aaaaaaaa-0000-4000-8000-000000000002"
+                ],
+                "at": 2.0416666666666665
+              }
+            ]
+          },
+          {
+            "name": "A2",
+            "kind": "audio",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "d",
+                "take_id": "ffffffff-0000-4000-8000-000000000001",
+                "in": 0.0,
+                "out": 3.0,
+                "at": 0.5,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "ffffffff-0000-4000-8000-000000000001"
+                ]
+              }
+            ]
+          },
+          {
+            "name": "A3",
+            "kind": "audio",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "z",
+                "take_id": "ffffffff-0000-4000-8000-000000000002",
+                "in": 0.5,
+                "out": 2.0,
+                "at": 0.0,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "ffffffff-0000-4000-8000-000000000002"
+                ]
+              },
+              {
+                "id": "u",
+                "take_id": "ffffffff-0000-4000-8000-000000000003",
+                "in": 0.0,
+                "out": 1.0,
+                "at": 2.0,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "ffffffff-0000-4000-8000-000000000003"
+                ]
+              },
+              {
+                "id": "l",
+                "take_id": null,
+                "at": 3.5,
+                "hold": 0.5,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [],
+                "shot": {
+                  "run_id": "0c0c0c0c-0000-4000-8000-000000000001"
+                }
+              }
+            ]
+          }
+        ],
+        "duration_s": 4.083333333333333,
+        "frames": 98
+      },
+      "takes": {
+        "ffffffff-0000-4000-8000-000000000001": {
+          "kind": "audio",
+          "duration_s": 3.0,
+          "has_audio": true,
+          "bytes": 144044,
+          "sample_rate": 24000
+        },
+        "ffffffff-0000-4000-8000-000000000002": {
+          "kind": "audio",
+          "duration_s": 2.0,
+          "has_audio": true,
+          "bytes": 176444,
+          "sample_rate": 44100
+        },
+        "ffffffff-0000-4000-8000-000000000003": {
+          "kind": "audio",
+          "duration_s": 1.0,
+          "has_audio": true,
+          "bytes": 96000
+        }
+      },
+      "expect": {
+        "stream_copy": true,
+        "reasons": [],
+        "blocked": [],
+        "video_bitrate": null,
+        "estimated_bytes": 878000,
+        "sounds": [
+          {
+            "clip": "a",
+            "track": "V1",
+            "sample_rate": null,
+            "channels": null
+          },
+          {
+            "clip": "d",
+            "track": "A2",
+            "sample_rate": 24000,
+            "channels": 1
+          },
+          {
+            "clip": "z",
+            "track": "A3",
+            "sample_rate": 44100,
+            "channels": 1
+          },
+          {
+            "clip": "u",
+            "track": "A3",
+            "sample_rate": null,
+            "channels": 1
+          }
+        ]
       }
     }
   ]

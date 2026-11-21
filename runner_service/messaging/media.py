@@ -172,7 +172,7 @@ class MediaJobs:
             media.check_kind(info, it["kind"])
             ext = (
                 info["container"]
-                if it["kind"] == "video"
+                if it["kind"] in ("video", "audio")
                 else IMAGE_EXT[info["video"]["codec_name"]]
             )
             paths.append(raw.rename(tmp / f"in{n}.{ext}"))

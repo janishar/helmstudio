@@ -1,7 +1,7 @@
 """The zonos3 pack against the reference build's goldens (tests/golden/zonos3/, recorded by
 tests/golden/record_zonos3.py from a zonos3-server built from the duplex checkout at the vendored commit): runs the
-pack's speak (native.speak with the vendored build, `make zonos3`) with each golden's case and compares the samples
-byte for byte. Prints the run's wall time and the server child's peak footprint (sampled every 50 ms). Loads real
+pack's speak (native.speak with the vendored build, `make zonos3`) or, for a case with lines, its dialogue with each
+golden's case and compares the samples byte for byte (and a dialogue's cues exactly). Prints the run's wall time and the server child's peak footprint (sampled every 50 ms). Loads real
 weights (~0.6 GB, 1.6 GB child): stop nothing, it is small, but never run it on the dev stack's runner.
 
     .venv/bin/python tests/test_zonos3_golden.py [preset-savannah-s1 tense-savannah-s1 clone-uncle-fu-s1]
@@ -71,18 +71,24 @@ def run(name: str) -> dict:
         config.CACHE = Path(cache)  # the pid file: never the dev runner's
         threading.Thread(target=sample, daemon=True).start()
         t0 = time.monotonic()
-        params = case["params"] | {"voice": voice_value(case["voice"])}
         try:
-            out = native.speak(
-                ctx, params, {"model": model, "text": case["text"], "seed": case["seed"]}
-            )
+            if "lines" in case:  # API 1.32: a dialogue, one server for its lines
+                lines = [x | {"voice": voice_value(x["voice"])} for x in case["lines"]]
+                out = native.dialogue(
+                    ctx, case["params"] | {"lines": lines}, {"model": model, "seed": case["seed"]}
+                )
+            else:
+                params = case["params"] | {"voice": voice_value(case["voice"])}
+                out = native.speak(
+                    ctx, params, {"model": model, "text": case["text"], "seed": case["seed"]}
+                )
         finally:
             config.CACHE = keep
             done.set()
         wall = time.monotonic() - t0
     want = frames((GOLDEN / case["wav"]).read_bytes())
     audio = out["audio"]
-    return {"name": name, "same": audio["wav"] == want, "duration_s": round(audio["duration_s"], 3),
+    return {"name": name, "same": audio["wav"] == want and audio.get("cues") == case.get("cues"), "duration_s": round(audio["duration_s"], 3),
             "wall_s": round(wall, 2), "peak_gb": round(ctx.peak, 2), "sample_rate": audio["sample_rate"]}  # fmt: skip
 
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import fitFixture from "../../contracts/fixtures/voices/fit.json";
+import scriptsFixture from "../../contracts/fixtures/voices/scripts.json";
 import palette from "../../contracts/fixtures/graphs/palette.json";
 import type { S } from "@/lib/api";
 import { paletteOf } from "@/lib/graph";
@@ -7,6 +8,8 @@ import { reasonOf } from "@/lib/looks";
 import { peaksOf } from "@/components/create/audio";
 import {
   clipError,
+  expandScript,
+  scriptErrors,
   languageName,
   presetGroups,
   voiceBody,
@@ -173,5 +176,40 @@ describe("designWorkflow", () => {
     })) as unknown as S<"Workflow">[];
     expect(designWorkflow(ws, "qwen3-tts")?.id).toBe("qwen3-tts-design-voice");
     expect(designWorkflow([...ws].reverse(), "qwen3-tts")?.id).toBe("qwen3-tts-design-voice");
+  });
+});
+
+describe("dialogue scripts (fixtures/voices/scripts.json)", () => {
+  const fx = scriptsFixture as unknown as {
+    workflows: Record<
+      string,
+      { nodes: Record<string, { kind: string; params?: Record<string, unknown> }> }
+    >;
+    library: Parameters<typeof expandScript>[2];
+    voices: Record<string, Item>;
+    cases: {
+      description: string;
+      workflow: string;
+      params?: Record<string, unknown>;
+      expect: unknown;
+    }[];
+  };
+  it.each(fx.cases)("$description", (c) => {
+    const nodes = structuredClone(fx.workflows[c.workflow].nodes);
+    for (const [k, v] of Object.entries(c.params ?? {})) {
+      const [n, p] = k.split(".");
+      nodes[n].params = { ...nodes[n].params, [p]: v };
+    }
+    expect(expandScript(nodes, schemas, fx.library, fx.voices)).toEqual(c.expect);
+  });
+  it("reads studio's 422 by line", () => {
+    expect(
+      scriptErrors(
+        "dialogue.script line 3: unknown element @jon; dialogue.script line 4: @kai has no voice; dialogue.lines: at most 40 lines",
+      ),
+    ).toEqual({
+      lines: { 3: "unknown element @jon", 4: "@kai has no voice" },
+      other: ["dialogue.lines: at most 40 lines"],
+    });
   });
 });

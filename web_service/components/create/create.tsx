@@ -4,7 +4,18 @@
 // can't be held).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { AtSign, Check, ChevronDown, Maximize, Minus, Pause, Play, Plus, Star } from "lucide-react";
+import {
+  AtSign,
+  Check,
+  ChevronDown,
+  Maximize,
+  Minus,
+  Pause,
+  Play,
+  Plus,
+  Star,
+  X,
+} from "lucide-react";
 import { FullScreen, Media, Thumb, useFullScreenKey } from "@/components/media";
 import { ErrorNote, Info } from "@/components/kit";
 import {
@@ -37,6 +48,20 @@ import { AddToTimeline } from "@/components/timeline/add";
 import { LooksPicker, LooksSection, QuickTiles } from "@/components/create/looks";
 import { MentionChips, insertAtCaret } from "@/components/create/prompt";
 import { WavePlayer } from "@/components/create/audio";
+import {
+  CastRows,
+  CastTile,
+  ElementVoicePicker,
+  ScriptEditor,
+  StylePerLine,
+  linesKeyOf,
+  scriptFieldOf,
+  speakerOf,
+  speechModes,
+  useCast,
+  useLocalErrors,
+} from "@/components/create/dialogue";
+import { scriptErrors } from "@/lib/voices";
 import {
   SaveAsVoice,
   VoiceTile,
@@ -213,6 +238,13 @@ export function Create({
   const [count, setCount] = useState(1);
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [elementsOpen, setElementsOpen] = useState(false);
+  // studio's 422 on a dialogue script (API 1.32): its lines' errors, for the script they were about
+  const [scriptErrs, setScriptErrs] = useState<{
+    script: string;
+    lines: Record<number, string>;
+  } | null>(null);
+  // the element whose voice the picker sets (a script line's chip, the cast, a line's fix)
+  const [voiceFor, setVoiceFor] = useState<S<"LibraryItem"> | null>(null);
   // the chosen looks per group (the composer's look tiles), and the group whose picker is open
   const [looksPicked, setLooksChosen] = useState<Chosen>({});
   const [lookGroup, setLookGroup] = useState<S<"LibraryGroup"> | null>(null);
@@ -439,6 +471,17 @@ export function Create({
   const layout = useMemo(() => (workflow ? studioView(workflow, all) : null), [workflow, all]);
   // the params whose `when` holds now: the others are neither shown nor sent
   const fields = visible(layout ? layout.shown : all, raws, all);
+  // a dialogue's script (API 1.32) and the rows it writes, which no editor of their own shows
+  const scriptField = scriptFieldOf(fields);
+  const linesKey = linesKeyOf(fields);
+  const script = scriptField
+    ? String(raws[scriptField.key] ?? toRaw(scriptField.initial, scriptField.param))
+    : "";
+  const cast = useCast(script, workflow);
+  const modes = workflows ? speechModes(workflows, workflow) : null;
+  const castTake = useTakes(
+    cast.flatMap((c) => (c.voice?.voice?.clip ? [c.voice.voice.clip.take_id] : [])),
+  );
   // an audio workflow reads it too: the voice picker names each family's starter voices by its title
   const palette = usePalette(
     view === "graph"
@@ -569,7 +612,12 @@ export function Create({
   const workflowLabel = !workflow
     ? ""
     : audio
-      ? videoTitle(workflow, familyName)
+      ? [
+          videoTitle(workflow, familyName),
+          scriptField && cast.length && `${cast.length} speaker${cast.length === 1 ? "" : "s"}`,
+        ]
+          .filter(Boolean)
+          .join(" · ")
       : !video
         ? editLabel(workflow.title, refs)
         : [
@@ -613,6 +661,7 @@ export function Create({
       (f) =>
         f.param.type !== "bool" &&
         f.param.type !== "voice" &&
+        f.key !== linesKey &&
         !(f.param.type === "enum" && (f.param.enum?.length ?? 0) < 2) &&
         !(f.model && f.param.type === "enum"),
     );
@@ -630,23 +679,48 @@ export function Create({
   // an audio workflow (docs/mock/CreateAudio.dc.html): the voice heads the Voice section (also a composer tile),
   // the first section (before Delivery, CreateAudioZonos3.dc.html)
   const spokenVoices = fields.filter((f) => f.param.type === "voice");
+  // a dialogue (API 1.32): its Cast section lists the speakers, its Voice section each line's style
+  const castHead = scriptField && (
+    <CastRows
+      cast={cast}
+      onVoice={setVoiceFor}
+      familyTitle={(f) => palette?.groups.find((g) => g.family === f)?.title ?? f}
+      takeTitle={(id) => castTake(id)?.title}
+    />
+  );
+  const styleHead = scriptField && (
+    <StylePerLine value={script} onChange={(v) => change(scriptField.key, v)} />
+  );
   const groups =
-    audio && placed && spokenVoices.length
+    audio && placed && (spokenVoices.length || scriptField)
       ? [
-          {
-            title: "Voice",
-            fields: [...spokenVoices, ...(placed.find((g) => g.title === "Voice")?.fields ?? [])],
-          },
+          ...(spokenVoices.length
+            ? [
+                {
+                  title: "Voice",
+                  fields: [
+                    ...spokenVoices,
+                    ...(placed.find((g) => g.title === "Voice")?.fields ?? []),
+                  ],
+                },
+              ]
+            : []),
           // Quick's Language and Seed are composer tiles: no Quick section (CreateAudio.dc.html); a tile opened
           // shows its one editor, under its own name
           ...placed.flatMap((g) =>
-            g.title === "Voice"
+            g.title === "Voice" && spokenVoices.length
               ? []
               : g.title === "Quick"
                 ? g.fields
                     .filter((f) => f.key === openKey)
                     .map((f) => ({ title: f.param.label ?? f.param.name, fields: [f] }))
-                : [g],
+                : [
+                    {
+                      ...g,
+                      head:
+                        g.title === "Cast" ? castHead : g.title === "Voice" ? styleHead : undefined,
+                    },
+                  ],
           ),
         ]
       : placed;
@@ -688,8 +762,9 @@ export function Create({
       looks ? lookIdsOf(w) : [],
       loraFamilies,
     );
+  // a script is not a prompt: its own editor, no mentions scanned (contracts/README.md, Dialogue: scripts)
   const textFields = (layout ? fields.filter((f) => layout.text.includes(f)) : fields).filter(
-    (f) => f.param.type === "text",
+    (f) => f.param.type === "text" && !f.param.script,
   );
   const texts = textFields.map((f) => String(raws[f.key] ?? toRaw(f.initial, f.param)));
   const handles = [...new Set(texts.flatMap(mentioned))];
@@ -741,6 +816,21 @@ export function Create({
   const voiceFields = fields.filter((f) => f.param.type === "voice");
   // a run needs a voice (studio's `a voice is required`): Generate waits for one and says so, as the tile does
   const noVoice = voiceFields.some((f) => !isVoice(raws[f.key]));
+  // a dialogue's line errors: studio's for this script, else the same check here (check.py expand_script)
+  const localLines = useLocalErrors(scriptField ? workflow : undefined, formInputs);
+  const lineErrors =
+    scriptErrs && scriptErrs.script === script
+      ? { ...localLines, ...scriptErrs.lines }
+      : localLines;
+  // "Fix line 4 first": the first wrong line, counted as the script's spoken lines are
+  const badLine = (() => {
+    const first = Math.min(...Object.keys(lineErrors).map(Number));
+    if (!Number.isFinite(first)) return 0;
+    return script
+      .split("\n")
+      .slice(0, first)
+      .filter((l) => l.trim()).length;
+  })();
   const familyTitle = (f: string) => palette?.groups.find((g) => g.family === f)?.title ?? f;
   const designSession = useRef<string | null>(null);
   const designWf = audio && workflows ? designWorkflow(workflows, workflow?.family) : undefined;
@@ -835,16 +925,24 @@ export function Create({
       }
       setReuseNote("");
     } catch (err) {
+      // a dialogue's line errors go on its lines (API 1.32), the rest as before
+      const sc =
+        scriptField && err instanceof ApiError && err.status === 422
+          ? scriptErrors(err.message)
+          : null;
+      if (sc && Object.keys(sc.lines).length) setScriptErrs({ script, lines: sc.lines });
+      const detail = sc ? sc.other.join("; ") : err instanceof Error ? err.message : "";
       // a 422 naming the form's fields (an unknown @handle, the references cap) goes on them
       const on =
         err instanceof ApiError &&
         err.status === 422 &&
+        !!detail &&
         fieldErrors(
-          err.message,
+          detail,
           fields.map((f) => f.key),
         );
       if (on) setErrors(on);
-      else setError(message(err));
+      else if (!sc || detail) setError(sc ? detail : message(err));
     } finally {
       sending.current = false;
       setBusy(false);
@@ -901,8 +999,11 @@ export function Create({
     !inspect &&
     !fields.some((f) => f.param.type !== "text" && errors[f.key]);
   const insert = (h: string) =>
-    textFields[0] &&
-    insertAtCaret(idOf(textFields[0].key), texts[0], h, (v) => change(textFields[0].key, v));
+    scriptField
+      ? // a new line for the element at the script's end (the board's @ chip by the model chip)
+        change(scriptField.key, `${script.trimEnd()}${script.trim() ? "\n" : ""}@${h}: `)
+      : textFields[0] &&
+        insertAtCaret(idOf(textFields[0].key), texts[0], h, (v) => change(textFields[0].key, v));
   // the reference control and the prompt's @mentions: in the tiles row, or on the empty screen in the bottom row
   // by Generate, as the board's + and @ (docs/mock/Direct.dc.html)
   // a video workflow's composer tiles are cards, label over value (docs/mock/TextToVideo.dc.html)
@@ -946,6 +1047,12 @@ export function Create({
   const shownWorkflow =
     workflows?.find((w) => w.id === (shown?.workflow_id ?? shownTake?.made_with?.workflow_id)) ??
     workflow;
+  // the shown take's sample rate is the model's only while that take is this family's (another model's take stays
+  // on the stage after a switch: Qwen3-TTS speaks 24 kHz, ZONOS3 44.1 kHz)
+  const rateTake =
+    shownTake?.kind === "audio" && shownWorkflow?.family === workflow?.family
+      ? shownTake
+      : undefined;
   const anyActive = !!runs?.some((r) => isActive(r.status));
   const bypass = choiceBypass(groups, fields, raws);
   const took = workflow && runs ? lastDuration(runs, workflow.id, bypass) : null;
@@ -1035,6 +1142,26 @@ export function Create({
           }}
           onError={setError}
         />
+      )}
+      {/* a family with a voice-over and a dialogue template: the switch between them (docs/mock/CreateAudio.dc.html) */}
+      {modes && (
+        <div role="group" aria-label="Template" className="seg">
+          {(
+            [
+              ["Voice-over", modes.voice],
+              ["Dialogue", modes.dialogue],
+            ] as const
+          ).map(([label, w]) => (
+            <button
+              key={label}
+              type="button"
+              aria-pressed={workflow?.id === w.id}
+              onClick={() => workflow?.id !== w.id && switchTo(w.id)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       )}
       <div className="grow" />
       {workflow && (
@@ -1240,10 +1367,11 @@ export function Create({
                 Extend
               </button>
             )}
-            {shownTake && shownTake.kind !== "audio" && (
+            {shownTake && (
               <AddToTimeline
-                key={shownTake.id}
+                key={`add-${shownTake.id}`}
                 takeIds={[shownTake.id]}
+                audio={shownTake.kind === "audio"}
                 className="chip bevel h-11 shrink-0 rounded-[10px]"
               />
             )}
@@ -1253,7 +1381,7 @@ export function Create({
               voiceCtx &&
               (voiceCtx.clone || designedOf(shownTake)) && (
                 <SaveAsVoice
-                  key={shownTake.id}
+                  key={`voice-${shownTake.id}`}
                   take={shownTake}
                   ctx={voiceCtx}
                   onPick={
@@ -1261,7 +1389,14 @@ export function Create({
                   }
                 />
               )}
-            {offers && <UseIn offers={offers} onUse={applyOffer} />}
+            {offers && (
+              <UseIn
+                offers={offers}
+                onUse={applyOffer}
+                seed={shownTake?.made_with?.seed}
+                familyTitle={(f) => palette?.groups.find((g) => g.family === f)?.title ?? f}
+              />
+            )}
           </div>
         )}
 
@@ -1293,6 +1428,7 @@ export function Create({
               mediaFields.length > 0 ||
               mediaRowFields.length > 0 ||
               voiceFields.length > 0 ||
+              !!scriptField ||
               paramCards.length > 0) && (
               // the empty screen's big tiles: equal columns, so a tile that wraps keeps their width
               <div
@@ -1302,6 +1438,13 @@ export function Create({
                     : "flex flex-wrap items-center gap-2"
                 }
               >
+                {scriptField && linesKey && (
+                  <CastTile
+                    cast={cast}
+                    label={fields.find((f) => f.key === linesKey)?.param.label ?? "Cast"}
+                    onVoice={setVoiceFor}
+                  />
+                )}
                 {voiceCtx &&
                   voiceFields.map((f) => (
                     <VoiceTile
@@ -1376,8 +1519,20 @@ export function Create({
                 />
               </div>
             )}
+            {scriptField && (
+              <ScriptEditor
+                f={scriptField}
+                value={script}
+                onChange={(v) => change(scriptField.key, v)}
+                errors={lineErrors}
+                cast={cast}
+                onVoice={setVoiceFor}
+              />
+            )}
             <TextFields
-              fields={layout ? fields.filter((f) => layout.text.includes(f)) : fields}
+              fields={(layout ? fields.filter((f) => layout.text.includes(f)) : fields).filter(
+                (f) => !f.param.script,
+              )}
               raws={raws}
               errors={errors}
               onChange={change}
@@ -1439,6 +1594,16 @@ export function Create({
                   )}
                 </>
               )}
+              {scriptField && (
+                <button
+                  type="button"
+                  className="chip bevel rounded-[10px] bg-s4"
+                  aria-label="Insert element"
+                  onClick={() => setElementsOpen(true)}
+                >
+                  <AtSign size={14} aria-hidden />
+                </button>
+              )}
               <Chips
                 fields={fields}
                 raws={raws}
@@ -1454,9 +1619,9 @@ export function Create({
                 spoken={audio}
               />
               {/* the shown take's sample rate (docs/mock/CreateAudio.dc.html: "24 kHz"; none before a take) */}
-              {audio && shownTake?.kind === "audio" && shownTake.audio?.sample_rate && (
+              {audio && rateTake?.audio?.sample_rate && (
                 <span className="chip bevel rounded-[10px] bg-s4">
-                  {+(shownTake.audio.sample_rate / 1000).toFixed(1)} kHz
+                  {+(rateTake.audio.sample_rate / 1000).toFixed(1)} kHz
                 </span>
               )}
               {seedField && (
@@ -1495,7 +1660,7 @@ export function Create({
                 title="Generate (⌘ or Ctrl + Enter)"
                 // a video workflow's key is the second accent (docs/mock/TextToVideo.dc.html)
                 className={`key flex h-14 flex-col items-center justify-center gap-px px-6 ${video || audio ? "bg-a2 text-[var(--on2)]" : ""}`}
-                disabled={!workflow || busy || blocked > 0 || noVoice}
+                disabled={!workflow || busy || blocked > 0 || noVoice || badLine > 0}
               >
                 <span className="text-sm">
                   {busy
@@ -1504,11 +1669,15 @@ export function Create({
                       ? `${blocked} problem${blocked === 1 ? "" : "s"}`
                       : noVoice
                         ? "Pick a voice"
-                        : anyActive
-                          ? "Add to queue"
-                          : "Generate"}
+                        : badLine
+                          ? "Generate"
+                          : anyActive
+                            ? "Add to queue"
+                            : "Generate"}
                 </span>
-                {pinned && !busy ? (
+                {badLine > 0 && !busy ? (
+                  <span className="mono text-[11px] font-medium">Fix line {badLine} first</span>
+                ) : pinned && !busy ? (
                   <span className="mono text-[11px] font-medium" title={`The queued run ${pinned}`}>
                     {pinned}
                   </span>
@@ -1544,12 +1713,20 @@ export function Create({
             prompt={texts[0] ?? ""}
           />
         )}
-        {textFields[0] && (
+        {(textFields[0] || scriptField) && (
           <ElementsPicker
             open={elementsOpen}
             onClose={() => setElementsOpen(false)}
-            inPrompt={handles}
+            inPrompt={scriptField ? cast.map((c) => c.handle) : handles}
             onInsert={insert}
+          />
+        )}
+        {voiceCtx && (
+          <ElementVoicePicker
+            el={voiceFor}
+            ctx={voiceCtx}
+            onClose={() => setVoiceFor(null)}
+            onError={setError}
           />
         )}
         {current && (
@@ -1598,7 +1775,7 @@ export function Create({
             voice={audio ? voiceCtx : undefined}
           />
         )}
-        {audio && !elementsAside && <SpeechOutput take={shownTake} text={texts[0] ?? ""} />}
+        {audio && !elementsAside && <SpeechOutput take={rateTake} text={texts[0] ?? ""} />}
       </aside>
     </>
   );
@@ -1651,6 +1828,7 @@ function Stage({
   onDrop?: (dt: DataTransfer) => boolean;
 }) {
   const [over, setOver] = useState(false);
+  const library = useLibrary();
   const out = take ?? run?.outputs[0];
   // the prompt the run was made with: its input, else the workflow's (inputs hold only what differs)
   const text = workflow && fieldsOf(workflow).find((f) => f.param.type === "text");
@@ -1671,6 +1849,9 @@ function Stage({
     sound && (!run || run.status === "succeeded")
       ? [
           outSeed != null && `seed ${outSeed}`,
+          // a dialogue's length and lines (docs/mock/CreateAudio.dc.html: "seed 7 · 0:09 · 3 lines")
+          out.audio?.cues?.length && clock(out.audio.duration_s),
+          out.audio?.cues?.length && `${out.audio.cues.length} lines`,
           out.audio?.sample_rate && `${+(out.audio.sample_rate / 1000).toFixed(1)} kHz mono`,
         ]
           .filter(Boolean)
@@ -1804,7 +1985,13 @@ function Stage({
         {!run && !take ? null : compare ? (
           compare
         ) : out?.kind === "audio" ? (
-          <WavePlayer key={outKey} url={safeUrl(out.url)} duration={out.audio?.duration_s} />
+          <WavePlayer
+            key={outKey}
+            url={safeUrl(out.url)}
+            duration={out.audio?.duration_s}
+            cues={out.audio?.cues}
+            nameOf={(v) => speakerOf(library, v)}
+          />
         ) : out?.kind === "image" || out?.kind === "video" ? (
           <Media
             key={outKey}
@@ -2127,9 +2314,14 @@ function MediaSwitch({
 function UseIn({
   offers,
   onUse,
+  seed,
+  familyTitle,
 }: {
   offers: S<"TakeOffer">[];
   onUse: (o: S<"TakeOffer">) => void;
+  /** the take's seed: the header "Use seed 12 in…" (docs/mock/CreateAudio.dc.html, TakeActions.dc.html) */
+  seed?: number | null;
+  familyTitle: (family: string) => string;
 }) {
   if (!offers.length) return null;
   return (
@@ -2158,18 +2350,31 @@ function UseIn({
         }
       >
         <div className="flex flex-col gap-1">
+          <div className="flex items-center justify-between px-1 pb-1 text-[12px] text-t2">
+            <span>{seed != null ? `Use ${seedLabel(seed)} in…` : "Use in…"}</span>
+            <button
+              type="button"
+              aria-label="Close"
+              className="grid size-6 place-items-center rounded-md"
+              onClick={() => document.getElementById("use-in")?.hidePopover()}
+            >
+              <X size={14} aria-hidden />
+            </button>
+          </div>
           {offers.map((o) => (
             <button
               key={`${o.workflow_id} ${o.param}`}
               type="button"
               role="menuitem"
-              className="rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-s3"
+              aria-label={offerLabel(o)}
+              className="flex items-center justify-between gap-3 rounded-[10px] bg-s3 px-3 py-2 text-left text-[13px] hover:bg-s4"
               onClick={() => {
                 document.getElementById("use-in")?.hidePopover();
                 onUse(o);
               }}
             >
-              {offerLabel(o)}
+              <span className="font-semibold">{o.action ?? o.title}</span>
+              <span className="mono text-[11px] text-t2">{familyTitle(o.family)}</span>
             </button>
           ))}
         </div>

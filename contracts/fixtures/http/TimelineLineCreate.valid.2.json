@@ -1,0 +1,14 @@
+{
+  "slot": {
+    "clip": "l"
+  },
+  "run": {
+    "workflow_id": "echo-voice-over",
+    "inputs": {
+      "prompt.text": "Night came early to the harbour.",
+      "speak.voice": {
+        "voice_id": "echo/bo"
+      }
+    }
+  }
+}

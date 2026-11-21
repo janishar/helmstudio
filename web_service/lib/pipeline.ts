@@ -63,6 +63,15 @@ export function imageField(p: Param): string | null {
   return fs.length === 1 ? fs[0] : null;
 }
 
+/** A rows param's one media field (API 1.22: video or audio references), else null. */
+export function mediaField(p: Param): string | null {
+  if (p.type !== "rows") return null;
+  const fs = Object.entries(p.item ?? {})
+    .filter(([, v]) => typeof v === "object" && (v as unknown as Param).type === "media")
+    .map(([k]) => k);
+  return fs.length === 1 ? fs[0] : null;
+}
+
 /** Whether a rows param's item has a `position: seconds` field (README, `bind_type`: only one take fits). */
 const timed = (p: Param) =>
   Object.values(p.item ?? {}).some(
@@ -485,7 +494,8 @@ export function fits(p: Param, src: Source): boolean {
   if ("input" in src)
     return INPUT_FITS[src.input].includes(p.type) || (src.input === "Image" && !!imageField(p));
   return (
-    (p.type === "image" && src.takes === 1) ||
+    ((p.type === "image" || p.type === "media") && src.takes === 1) ||
+    (!!mediaField(p) && src.takes === 1) || // 1.32: one take as item 1 (H3 audios)
     (!!imageField(p) && src.takes <= (p.max ?? 100) && (src.takes === 1 || !timed(p)))
   );
 }
@@ -685,7 +695,11 @@ export function pipelineProblems(
   }
   for (const id of of("write")) {
     const w = nodes[id] as S<"PipelineWriteNode">;
-    if (!!w.list === (w.to !== undefined) || (w.to && a.inputs[w.to.slice(1)] !== "Text"))
+    if (
+      !!w.list === (w.to !== undefined) ||
+      (w.to && a.inputs[w.to.slice(1)] !== "Text") ||
+      (w.form === "script" && w.list) // 1.32: a script is one text
+    )
       add(
         "write_target",
         `${name(id)}: it writes a Text input, or answers a list (one of the two)`,

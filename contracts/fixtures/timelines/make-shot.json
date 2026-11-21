@@ -1,0 +1,887 @@
+{
+  "description": "API 1.32 Make shot (README, Timeline: Make shot; check.py make_shot): an audio-track clip's actions against the echo and ltx templates",
+  "takes": {
+    "aaaaaaaa-0000-4000-8000-000000000001": {
+      "kind": "video",
+      "duration_s": 2.0416666666666665,
+      "fps": 24,
+      "frames": 49,
+      "has_audio": true,
+      "width": 256,
+      "height": 128,
+      "bytes": 400000
+    },
+    "aaaaaaaa-0000-4000-8000-000000000002": {
+      "kind": "video",
+      "duration_s": 2.0416666666666665,
+      "fps": 24,
+      "frames": 49,
+      "has_audio": true,
+      "width": 256,
+      "height": 128,
+      "bytes": 380000
+    },
+    "ffffffff-0000-4000-8000-000000000011": {
+      "kind": "audio",
+      "duration_s": 3.0,
+      "has_audio": true,
+      "bytes": 144044,
+      "sample_rate": 24000
+    },
+    "ffffffff-0000-4000-8000-000000000013": {
+      "kind": "audio",
+      "duration_s": 20.0,
+      "has_audio": true,
+      "bytes": 960044,
+      "sample_rate": 24000
+    }
+  },
+  "cases": [
+    {
+      "description": "an audio take on A2: Audio to video of every family (echo, LTX), the clip's in..out to the ms, the slot at its at with its length, exact",
+      "document": {
+        "target": {
+          "width": 256,
+          "height": 128,
+          "fps": 24,
+          "sample_rate": 48000
+        },
+        "tracks": [
+          {
+            "name": "V1",
+            "kind": "video",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "a",
+                "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+                "in": 0.0,
+                "out": 2.0416666666666665,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "aaaaaaaa-0000-4000-8000-000000000001"
+                ],
+                "at": 0.0
+              },
+              {
+                "id": "g",
+                "take_id": null,
+                "hold": 24.0,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [],
+                "at": 2.0416666666666665
+              }
+            ]
+          },
+          {
+            "name": "A2",
+            "kind": "audio",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "d",
+                "take_id": "ffffffff-0000-4000-8000-000000000011",
+                "in": 0.5,
+                "out": 2.25,
+                "at": 0.25,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "ffffffff-0000-4000-8000-000000000011"
+                ]
+              },
+              {
+                "id": "w",
+                "take_id": "aaaaaaaa-0000-4000-8000-000000000002",
+                "in": 0.25,
+                "out": 1.5,
+                "at": 2.5,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "aaaaaaaa-0000-4000-8000-000000000002"
+                ]
+              }
+            ]
+          },
+          {
+            "name": "A3",
+            "kind": "audio",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "z",
+                "take_id": "ffffffff-0000-4000-8000-000000000013",
+                "in": 1.0,
+                "out": 20.0,
+                "at": 0.0,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "ffffffff-0000-4000-8000-000000000013"
+                ]
+              },
+              {
+                "id": "o",
+                "take_id": "ffffffff-0000-4000-8000-0000000000ff",
+                "in": 0.0,
+                "out": 1.0,
+                "at": 19.5,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "ffffffff-0000-4000-8000-0000000000ff"
+                ],
+                "offline": true
+              }
+            ]
+          }
+        ],
+        "duration_s": 26.041666666666668,
+        "frames": 625
+      },
+      "clip": "d",
+      "expect": {
+        "actions": [
+          {
+            "workflow_id": "echo-a2v",
+            "title": "Echo audio to video",
+            "action": "Audio to video",
+            "family": "echo",
+            "media": "video",
+            "param": "a2v.source",
+            "inputs": {
+              "a2v.source": {
+                "take_id": "ffffffff-0000-4000-8000-000000000011",
+                "in": 0.5,
+                "out": 2.25
+              }
+            },
+            "slot": {
+              "at": 0.25,
+              "length": 1.75,
+              "exact": true
+            }
+          },
+          {
+            "workflow_id": "ltx-audio-to-video",
+            "title": "LTX-2.5 Audio to video",
+            "action": "Audio to video",
+            "family": "ltx",
+            "media": "video",
+            "param": "audio.source",
+            "inputs": {
+              "audio.source": {
+                "take_id": "ffffffff-0000-4000-8000-000000000011",
+                "in": 0.5,
+                "out": 2.25
+              }
+            },
+            "slot": {
+              "at": 0.25,
+              "length": 1.75,
+              "exact": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "description": "a video's sound on A2: only the Audio to video templates (their media param takes audio; Retake and Extend are not Make shot), in / out on the video's frames",
+      "document": {
+        "target": {
+          "width": 256,
+          "height": 128,
+          "fps": 24,
+          "sample_rate": 48000
+        },
+        "tracks": [
+          {
+            "name": "V1",
+            "kind": "video",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "a",
+                "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+                "in": 0.0,
+                "out": 2.0416666666666665,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "aaaaaaaa-0000-4000-8000-000000000001"
+                ],
+                "at": 0.0
+              },
+              {
+                "id": "g",
+                "take_id": null,
+                "hold": 24.0,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [],
+                "at": 2.0416666666666665
+              }
+            ]
+          },
+          {
+            "name": "A2",
+            "kind": "audio",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "d",
+                "take_id": "ffffffff-0000-4000-8000-000000000011",
+                "in": 0.5,
+                "out": 2.25,
+                "at": 0.25,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "ffffffff-0000-4000-8000-000000000011"
+                ]
+              },
+              {
+                "id": "w",
+                "take_id": "aaaaaaaa-0000-4000-8000-000000000002",
+                "in": 0.25,
+                "out": 1.5,
+                "at": 2.5,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "aaaaaaaa-0000-4000-8000-000000000002"
+                ]
+              }
+            ]
+          },
+          {
+            "name": "A3",
+            "kind": "audio",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "z",
+                "take_id": "ffffffff-0000-4000-8000-000000000013",
+                "in": 1.0,
+                "out": 20.0,
+                "at": 0.0,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "ffffffff-0000-4000-8000-000000000013"
+                ]
+              },
+              {
+                "id": "o",
+                "take_id": "ffffffff-0000-4000-8000-0000000000ff",
+                "in": 0.0,
+                "out": 1.0,
+                "at": 19.5,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "ffffffff-0000-4000-8000-0000000000ff"
+                ],
+                "offline": true
+              }
+            ]
+          }
+        ],
+        "duration_s": 26.041666666666668,
+        "frames": 625
+      },
+      "clip": "w",
+      "expect": {
+        "actions": [
+          {
+            "workflow_id": "echo-a2v",
+            "title": "Echo audio to video",
+            "action": "Audio to video",
+            "family": "echo",
+            "media": "video",
+            "param": "a2v.source",
+            "inputs": {
+              "a2v.source": {
+                "take_id": "aaaaaaaa-0000-4000-8000-000000000002",
+                "in": 0.25,
+                "out": 1.5
+              }
+            },
+            "slot": {
+              "at": 2.5,
+              "length": 1.25,
+              "exact": true
+            }
+          },
+          {
+            "workflow_id": "ltx-audio-to-video",
+            "title": "LTX-2.5 Audio to video",
+            "action": "Audio to video",
+            "family": "ltx",
+            "media": "video",
+            "param": "audio.source",
+            "inputs": {
+              "audio.source": {
+                "take_id": "aaaaaaaa-0000-4000-8000-000000000002",
+                "in": 0.25,
+                "out": 1.5
+              }
+            },
+            "slot": {
+              "at": 2.5,
+              "length": 1.25,
+              "exact": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "description": "a 19 s line: the part is capped at the param's max_s (13.375 s) from its in, and so is the slot",
+      "document": {
+        "target": {
+          "width": 256,
+          "height": 128,
+          "fps": 24,
+          "sample_rate": 48000
+        },
+        "tracks": [
+          {
+            "name": "V1",
+            "kind": "video",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "a",
+                "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+                "in": 0.0,
+                "out": 2.0416666666666665,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "aaaaaaaa-0000-4000-8000-000000000001"
+                ],
+                "at": 0.0
+              },
+              {
+                "id": "g",
+                "take_id": null,
+                "hold": 24.0,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [],
+                "at": 2.0416666666666665
+              }
+            ]
+          },
+          {
+            "name": "A2",
+            "kind": "audio",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "d",
+                "take_id": "ffffffff-0000-4000-8000-000000000011",
+                "in": 0.5,
+                "out": 2.25,
+                "at": 0.25,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "ffffffff-0000-4000-8000-000000000011"
+                ]
+              },
+              {
+                "id": "w",
+                "take_id": "aaaaaaaa-0000-4000-8000-000000000002",
+                "in": 0.25,
+                "out": 1.5,
+                "at": 2.5,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "aaaaaaaa-0000-4000-8000-000000000002"
+                ]
+              }
+            ]
+          },
+          {
+            "name": "A3",
+            "kind": "audio",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "z",
+                "take_id": "ffffffff-0000-4000-8000-000000000013",
+                "in": 1.0,
+                "out": 20.0,
+                "at": 0.0,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "ffffffff-0000-4000-8000-000000000013"
+                ]
+              },
+              {
+                "id": "o",
+                "take_id": "ffffffff-0000-4000-8000-0000000000ff",
+                "in": 0.0,
+                "out": 1.0,
+                "at": 19.5,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "ffffffff-0000-4000-8000-0000000000ff"
+                ],
+                "offline": true
+              }
+            ]
+          }
+        ],
+        "duration_s": 26.041666666666668,
+        "frames": 625
+      },
+      "clip": "z",
+      "expect": {
+        "actions": [
+          {
+            "workflow_id": "echo-a2v",
+            "title": "Echo audio to video",
+            "action": "Audio to video",
+            "family": "echo",
+            "media": "video",
+            "param": "a2v.source",
+            "inputs": {
+              "a2v.source": {
+                "take_id": "ffffffff-0000-4000-8000-000000000013",
+                "in": 1.0,
+                "out": 14.375
+              }
+            },
+            "slot": {
+              "at": 0.0,
+              "length": 13.375,
+              "exact": true
+            }
+          },
+          {
+            "workflow_id": "ltx-audio-to-video",
+            "title": "LTX-2.5 Audio to video",
+            "action": "Audio to video",
+            "family": "ltx",
+            "media": "video",
+            "param": "audio.source",
+            "inputs": {
+              "audio.source": {
+                "take_id": "ffffffff-0000-4000-8000-000000000013",
+                "in": 1.0,
+                "out": 14.375
+              }
+            },
+            "slot": {
+              "at": 0.0,
+              "length": 13.375,
+              "exact": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "description": "a V1 clip has no Make shot (its actions are the take actions)",
+      "document": {
+        "target": {
+          "width": 256,
+          "height": 128,
+          "fps": 24,
+          "sample_rate": 48000
+        },
+        "tracks": [
+          {
+            "name": "V1",
+            "kind": "video",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "a",
+                "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+                "in": 0.0,
+                "out": 2.0416666666666665,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "aaaaaaaa-0000-4000-8000-000000000001"
+                ],
+                "at": 0.0
+              },
+              {
+                "id": "g",
+                "take_id": null,
+                "hold": 24.0,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [],
+                "at": 2.0416666666666665
+              }
+            ]
+          },
+          {
+            "name": "A2",
+            "kind": "audio",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "d",
+                "take_id": "ffffffff-0000-4000-8000-000000000011",
+                "in": 0.5,
+                "out": 2.25,
+                "at": 0.25,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "ffffffff-0000-4000-8000-000000000011"
+                ]
+              },
+              {
+                "id": "w",
+                "take_id": "aaaaaaaa-0000-4000-8000-000000000002",
+                "in": 0.25,
+                "out": 1.5,
+                "at": 2.5,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "aaaaaaaa-0000-4000-8000-000000000002"
+                ]
+              }
+            ]
+          },
+          {
+            "name": "A3",
+            "kind": "audio",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "z",
+                "take_id": "ffffffff-0000-4000-8000-000000000013",
+                "in": 1.0,
+                "out": 20.0,
+                "at": 0.0,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "ffffffff-0000-4000-8000-000000000013"
+                ]
+              },
+              {
+                "id": "o",
+                "take_id": "ffffffff-0000-4000-8000-0000000000ff",
+                "in": 0.0,
+                "out": 1.0,
+                "at": 19.5,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "ffffffff-0000-4000-8000-0000000000ff"
+                ],
+                "offline": true
+              }
+            ]
+          }
+        ],
+        "duration_s": 26.041666666666668,
+        "frames": 625
+      },
+      "clip": "a",
+      "expect": {
+        "actions": []
+      }
+    },
+    {
+      "description": "an offline audio clip: none",
+      "document": {
+        "target": {
+          "width": 256,
+          "height": 128,
+          "fps": 24,
+          "sample_rate": 48000
+        },
+        "tracks": [
+          {
+            "name": "V1",
+            "kind": "video",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "a",
+                "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+                "in": 0.0,
+                "out": 2.0416666666666665,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "aaaaaaaa-0000-4000-8000-000000000001"
+                ],
+                "at": 0.0
+              },
+              {
+                "id": "g",
+                "take_id": null,
+                "hold": 24.0,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [],
+                "at": 2.0416666666666665
+              }
+            ]
+          },
+          {
+            "name": "A2",
+            "kind": "audio",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "d",
+                "take_id": "ffffffff-0000-4000-8000-000000000011",
+                "in": 0.5,
+                "out": 2.25,
+                "at": 0.25,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "ffffffff-0000-4000-8000-000000000011"
+                ]
+              },
+              {
+                "id": "w",
+                "take_id": "aaaaaaaa-0000-4000-8000-000000000002",
+                "in": 0.25,
+                "out": 1.5,
+                "at": 2.5,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "aaaaaaaa-0000-4000-8000-000000000002"
+                ]
+              }
+            ]
+          },
+          {
+            "name": "A3",
+            "kind": "audio",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "z",
+                "take_id": "ffffffff-0000-4000-8000-000000000013",
+                "in": 1.0,
+                "out": 20.0,
+                "at": 0.0,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "ffffffff-0000-4000-8000-000000000013"
+                ]
+              },
+              {
+                "id": "o",
+                "take_id": "ffffffff-0000-4000-8000-0000000000ff",
+                "in": 0.0,
+                "out": 1.0,
+                "at": 19.5,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "ffffffff-0000-4000-8000-0000000000ff"
+                ],
+                "offline": true
+              }
+            ]
+          }
+        ],
+        "duration_s": 26.041666666666668,
+        "frames": 625
+      },
+      "clip": "o",
+      "expect": {
+        "actions": []
+      }
+    },
+    {
+      "description": "a selection inside the audio clip (0.5 s after its in to 0.25 s before its out): the slot starts 0.5 s after the clip's at and is as long as the selection",
+      "document": {
+        "target": {
+          "width": 256,
+          "height": 128,
+          "fps": 24,
+          "sample_rate": 48000
+        },
+        "tracks": [
+          {
+            "name": "V1",
+            "kind": "video",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "a",
+                "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+                "in": 0.0,
+                "out": 2.0416666666666665,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "aaaaaaaa-0000-4000-8000-000000000001"
+                ],
+                "at": 0.0
+              },
+              {
+                "id": "g",
+                "take_id": null,
+                "hold": 24.0,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [],
+                "at": 2.0416666666666665
+              }
+            ]
+          },
+          {
+            "name": "A2",
+            "kind": "audio",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "d",
+                "take_id": "ffffffff-0000-4000-8000-000000000011",
+                "in": 0.5,
+                "out": 2.25,
+                "at": 0.25,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "ffffffff-0000-4000-8000-000000000011"
+                ]
+              },
+              {
+                "id": "w",
+                "take_id": "aaaaaaaa-0000-4000-8000-000000000002",
+                "in": 0.25,
+                "out": 1.5,
+                "at": 2.5,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "aaaaaaaa-0000-4000-8000-000000000002"
+                ]
+              }
+            ]
+          },
+          {
+            "name": "A3",
+            "kind": "audio",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "z",
+                "take_id": "ffffffff-0000-4000-8000-000000000013",
+                "in": 1.0,
+                "out": 20.0,
+                "at": 0.0,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "ffffffff-0000-4000-8000-000000000013"
+                ]
+              },
+              {
+                "id": "o",
+                "take_id": "ffffffff-0000-4000-8000-0000000000ff",
+                "in": 0.0,
+                "out": 1.0,
+                "at": 19.5,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "ffffffff-0000-4000-8000-0000000000ff"
+                ],
+                "offline": true
+              }
+            ]
+          }
+        ],
+        "duration_s": 26.041666666666668,
+        "frames": 625
+      },
+      "clip": "d",
+      "expect": {
+        "actions": [
+          {
+            "workflow_id": "echo-a2v",
+            "title": "Echo audio to video",
+            "action": "Audio to video",
+            "family": "echo",
+            "media": "video",
+            "param": "a2v.source",
+            "inputs": {
+              "a2v.source": {
+                "take_id": "ffffffff-0000-4000-8000-000000000011",
+                "in": 1.0,
+                "out": 2.0
+              }
+            },
+            "slot": {
+              "at": 0.75,
+              "length": 1.0,
+              "exact": true
+            }
+          },
+          {
+            "workflow_id": "ltx-audio-to-video",
+            "title": "LTX-2.5 Audio to video",
+            "action": "Audio to video",
+            "family": "ltx",
+            "media": "video",
+            "param": "audio.source",
+            "inputs": {
+              "audio.source": {
+                "take_id": "ffffffff-0000-4000-8000-000000000011",
+                "in": 1.0,
+                "out": 2.0
+              }
+            },
+            "slot": {
+              "at": 0.75,
+              "length": 1.0,
+              "exact": true
+            }
+          }
+        ]
+      },
+      "range": [
+        1.0,
+        2.0
+      ]
+    }
+  ]
+}

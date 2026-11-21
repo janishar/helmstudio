@@ -5,7 +5,7 @@ Written when the work moved from one Claude session to another. Read this, [CLAU
 
 ## What is built
 
-Milestones M0 to M7 are built, verified and committed on branch `main` (local git, no remote). `git log --oneline`
+Milestones M0 to M8 are built, verified and committed on branch `main` (local git, no remote). `git log --oneline`
 has one or more commits per stage.
 
 | Milestone | What it added |
@@ -19,7 +19,7 @@ has one or more commits per stage.
 | M5b | Timeline: sequences, editing with revisions, preview, New shot, Replace, Re-render, export jobs |
 | M6 | CUDA runner in an NVIDIA container, a second GPU host joining the stack, Qwen Image validated on a GCP spot VM |
 | M7 | Three packs: LTX-2.5 retake / extend / audio to video; MiniMax H3 Image (torch); MiniMax H3 video through the native `h3` binary (text, first/last frame, image / video / audio references) |
-| M8 (in progress) | Voices: Qwen3-TTS and ZONOS3 packs, saved voices, dialogue, audio takes on the Timeline ([plan](plan/15-voices.md)) |
+| M8 | Voices: Qwen3-TTS and ZONOS3 packs, saved voices, dialogue, audio takes on the Timeline ([plan](plan/15-voices.md)) |
 
 Last full contract suite on the final M7 code: see the last M7 commit message (pack 3 step 2, API 1.22).
 
@@ -68,7 +68,7 @@ Last full contract suite on the final M7 code: see the last M7 commit message (p
     sweep keeps its object while one of the owner's voices uses it. Why: the same guarantee as the plan's copy
     (a voice never breaks) with no copy job or pending state.
   - Step 4: Delivery is drawn as the boards' 0..1 sliders, mapped in the pack to ZONOS3 doses (emotion and energy
-    −4..4, whisper ×1.5, speaking rate 1 = none, guidance = speaker cfg, default 2); presets Neutral, Warm, Tense,
+    −4..4, whisper ×1.5, speaking rate 15 × v bytes/s (step 5: always sent, 1 = the middle bucket), guidance = speaker cfg, default 2); presets Neutral, Warm, Tense,
     Whisper carry the boards' values.
   - Step 4: `zonos3-server` runs with two slots (`--batch 2`) because speaker cfg needs a second slot; seeds go
     as the run's seed mod 2^32 (the server takes 32-bit seeds).
@@ -82,6 +82,46 @@ Last full contract suite on the final M7 code: see the last M7 commit message (p
   - Step 4: files serves the starter voice previews (`packs/<family>/voices/<id>-<16 hex>.wav`) as it serves look
     thumbnails; it refused them (403), so no preset preview played since step 2. ZONOS3's `zh` reads "Mandarin"
     (its board), Qwen3-TTS's stays "Chinese"; the Voice section leads the inspector (the boards).
+  - Step 5 (API 1.32): a script expands at create time into the node's `lines`; the runner gets the lines and an
+    empty script, `made_with.typed` keeps it. A blank line adds one more pause (0.35 s each); the last line has
+    none. Why: one checker (studio), and reuse shows the script as typed.
+  - Step 5: dialogue workflow ids are `qwen3-tts-dialogue` and `zonos3-dialogue` (the `<family>-<name>` pattern;
+    the numbered names are file names). Qwen dialogue takes presets only (19.4).
+  - Step 5: "Use in…" offers into a rows param with one media field by the take's own kind only, so an audio
+    take offers MiniMax H3 References; a video take of 2 s or more now offers it too. Why: a video with sound
+    would otherwise match two inputs and be offered nowhere.
+  - Step 5: Make shot lists the Audio to video templates of every family and fills an exact slot on V1 at the
+    audio clip's time and length (capped 13.4 s). A cancelled New line removes its placeholder.
+  - Step 5: audio in/out stay on the sequence's sample grid (48 kHz), not the take's own 44.1 kHz grid that the
+    ZONOS3 Timeline board's note mentions. Why: one grid for every audio track, as the Timeline rules have it.
+  - Step 5 integration: an audio clip's out clamps to its take's end on the sample grid in check.py too (Go and
+    TS already did; a fixture added); ZONOS3 always sends the speaking-rate condition (1 = 15 bytes/s, the
+    checkpoint's middle bucket of 30; the preset and clone goldens re-recorded from the reference build);
+    `cmd.media.job` inputs may be kind `audio` (a WAV, checked by the runner, mixed by studio's filter graph);
+    `take_ids[<i>]` counts from 0 in the README as in the code since 1.17. Why: each was a mismatch between the
+    reference, the services or the README.
+  - Step 5 web: a nested Modal's close no longer closes its parent (the voice picker closed the element editor
+    unsaved); the Create strip's buttons had the shown take's key twice (duplicate keys piled up "Add to
+    timeline"); the composer's kHz chip and Output show only a take of the chosen family; an audio clip's
+    inspector leads with Model and Sound (TimelineAudioZonos3 board).
+  - Step 5 suite fixes: a write node of form script may call `library.read` (its cast) though it declares no
+    tools (studio refused it, so every script write failed); the fake ask answers `ECHO-RETRY:` on a pipelines
+    re-ask too (README, the fake: a contract text change, since a valid answer failing a node's check could not
+    be scripted "bad once, then good"); two new tests fixed (a `library.read` text is a name prefix; B's voice
+    is deleted so test_elements' count of B's items holds).
+  - Step 5 fixer pass: a fill's past-end cut never lengthens a clip already cut at the next one; a rows media
+    offer is dropped when the part offered (a Timeline range) breaks the field's min_s / max_s; script_check makes
+    expand_script's line checks (nothing to say, 600 / 200 characters) so the write is re-asked; the script cast
+    pages through `library.read` (new arg `offset`, a contract change) for every element with a voice, not 20
+    characters; Make shot's slot starts at the selection's sound (`at + start − in`); a `place` longer than its gap
+    moves the audio tracks on with V1; a cue's text is the trimmed text spoken. Web: New line opens in Voice-over
+    and shows "≈ time · N GB"; Use in… has the boards' header and family names (the audio note under it is not
+    drawn). Track names ("A2 · Dialogue") are not built: the API has no track name, only its position.
+  - The contract suite signs in again when a session's access token has expired (ACCESS_TTL 15 min; the suite
+    takes about 15), so its last files no longer fail on 401.
+  - The step 5 browser check used the owner's dev sequence "M5b UI check": a ZONOS3 dialogue take on A2 and a New
+    line (Qwen, "The road was closed.") were added there; Undo in the Timeline, or removing the two A2 clips,
+    takes them out. It also made elements Mara, Jon, Ada and Bo (dev library).
   - Keep-awake for the overnight run: denied once by the app's auto-mode check, then granted when the owner asked
     (until the session is idle for about 5 minutes).
 

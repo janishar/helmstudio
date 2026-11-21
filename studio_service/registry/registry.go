@@ -53,6 +53,9 @@ type Param struct {
 	MinS      float64  `json:"min_s,omitempty"`
 	MaxTotalS float64  `json:"max_total_s,omitempty"`
 	NotWith   []string `json:"not_with,omitempty"`
+	// text only (API 1.32, contracts/README.md "Dialogue and Timeline audio"): a dialogue script, expanded into the
+	// node's `lines` rows at create time
+	Script bool `json:"script,omitempty"`
 }
 
 // Auto is a frames param's auto length bounds in seconds.
@@ -77,6 +80,30 @@ func IsMediaField(raw json.RawMessage) bool { return string(raw) == `"Media"` }
 func IsTakeField(raw json.RawMessage) bool {
 	var item Param
 	return IsImageField(raw) || IsMediaField(raw) || (json.Unmarshal(raw, &item) == nil && item.Type == "media")
+}
+
+// MediaRowsField is a rows param's one media item field (API 1.22: video or audio references) and its item param, ok
+// false for any other param.
+func MediaRowsField(p Param) (string, Param, bool) {
+	if p.Type != "rows" {
+		return "", Param{}, false
+	}
+	var name string
+	var field Param
+	n := 0
+	for k, raw := range p.Item {
+		var item Param
+		if json.Unmarshal(raw, &item) == nil && item.Type == "media" {
+			name, field, n = k, item, n+1
+		}
+	}
+	return name, field, n == 1
+}
+
+// IsVoiceField reports whether a rows item field holds a saved voice (API 1.32: a dialogue's lines).
+func IsVoiceField(raw json.RawMessage) bool {
+	var item Param
+	return json.Unmarshal(raw, &item) == nil && item.Type == "voice"
 }
 
 // IsLoraField reports whether a rows item field holds a Lora ({lora_id}).

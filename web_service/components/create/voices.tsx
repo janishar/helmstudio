@@ -411,7 +411,8 @@ function VoiceList({
   const load = () =>
     ok(
       api.GET("/v1/studio/library", {
-        params: { query: { kind: "voice", workflow: wf.id } },
+        // no workflow (an element's Voice tile): every voice, none greyed
+        params: { query: wf.id ? { kind: "voice", workflow: wf.id } : { kind: "voice" } },
       }),
     )
       .then((r) => {
@@ -425,7 +426,7 @@ function VoiceList({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wf.id]);
   const all = items ?? [];
-  const reason = (x: Item) => reasonFor(wf, x);
+  const reason = (x: Item) => (wf.id ? reasonFor(wf, x) : null);
   // the families with a voice that fits first (the open workflow's own), each in the list's order
   const groups = presetGroups(all)
     .map((g, i) => ({ ...g, i, fits: g.voices.some((x) => !reason(x)) }))

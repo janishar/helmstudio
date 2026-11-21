@@ -1,0 +1,86 @@
+{
+  "id": "qwen3-tts-dialogue",
+  "title": "Qwen3-TTS Dialogue",
+  "family": "qwen3-tts",
+  "env": "torch",
+  "media": "audio",
+  "nodes": {
+    "seed": {
+      "kind": "seed",
+      "params": {
+        "seed": -1
+      }
+    },
+    "model": {
+      "kind": "qwen3-tts/model",
+      "params": {
+        "variant": "custom_voice",
+        "precision": "bf16"
+      },
+      "only": {
+        "variant": [
+          "custom_voice"
+        ]
+      }
+    },
+    "dialogue": {
+      "kind": "qwen3-tts/dialogue",
+      "in": {
+        "model": "model.model",
+        "seed": "seed.seed"
+      },
+      "params": {
+        "script": "",
+        "lines": [],
+        "pause": 0.35,
+        "language": "auto",
+        "temperature": 0.3
+      }
+    },
+    "output": {
+      "kind": "output",
+      "in": {
+        "media": "dialogue.audio"
+      }
+    }
+  },
+  "studio": {
+    "composer": [
+      "dialogue.script"
+    ],
+    "quick": [
+      "dialogue.lines",
+      "dialogue.language",
+      "seed.seed"
+    ],
+    "inspector": [
+      {
+        "title": "Cast",
+        "items": [
+          "dialogue.pause"
+        ]
+      },
+      {
+        "title": "Voice",
+        "items": [
+          "dialogue.temperature"
+        ]
+      }
+    ],
+    "labels": {
+      "dialogue.lines": "Cast"
+    },
+    "presets": {
+      "Steady": {
+        "dialogue.temperature": 0.3
+      },
+      "Lively": {
+        "dialogue.temperature": 0.9
+      }
+    },
+    "preset_order": [
+      "Steady",
+      "Lively"
+    ]
+  }
+}

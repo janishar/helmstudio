@@ -1,7 +1,7 @@
 // The run form, derived from a workflow's node schemas (contracts/openapi.yaml `Workflow`).
 import type { S } from "@/lib/api";
 import { frameError } from "@/lib/media";
-import { languageName, narrowed } from "@/lib/voices";
+import { languageName, narrowed, voiceField } from "@/lib/voices";
 import { allowedInts, clipOf, positionErrors, positionOf } from "@/lib/video";
 
 type Param = S<"ParamSchema">;
@@ -216,7 +216,9 @@ export function readValue(p: Param, raw: Raw): { value: Value } | { error: strin
   if (p.type === "rows") {
     const items = Array.isArray(raw) ? raw : [];
     if (p.max != null && items.length > p.max) return { error: `at most ${p.max} items` };
-    if (p.min != null && items.length < p.min) return { error: `at least ${p.min} items` };
+    // a dialogue's lines (API 1.32) are written by its script at create time: none here is fine
+    if (p.min != null && items.length < p.min && !(!items.length && voiceField(p)))
+      return { error: `at least ${p.min} items` };
     const need = Object.keys(p.item ?? {}).filter((k) => p.item?.[k] === "Image");
     const bad = items.findIndex((it) => need.some((k) => !isRef(it[k])));
     if (bad >= 0) return { error: `item ${bad + 1}: an image is required` };

@@ -1,0 +1,101 @@
+{
+  "id": "6b7c8d9e-0f1a-4b2c-8d3e-4f5a6b7c8d92",
+  "kind": "audio",
+  "source": "create",
+  "title": "@mara (quiet): You said you'd be back by noon.",
+  "url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9d2b1a-4e5f-4a6b-8c7d-9e0f1a2b3c41/1/0.wav?exp=1767225600&sig=ab12",
+  "thumb_url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/runs/3c9d2b1a-4e5f-4a6b-8c7d-9e0f1a2b3c41/1/0.wav?exp=1767225600&sig=ab12",
+  "content_type": "audio/wav",
+  "width": null,
+  "height": null,
+  "bytes": 205644,
+  "created_at": "2026-11-21T10:00:06Z",
+  "starred": false,
+  "session_id": "1f2e3d4c-5b6a-4978-8a9b-0c1d2e3f4a51",
+  "run_id": "3c9d2b1a-4e5f-4a6b-8c7d-9e0f1a2b3c41",
+  "made_with": {
+    "workflow_id": "echo-dialogue",
+    "workflow_title": "Echo dialogue",
+    "inputs": {
+      "dialogue.script": "",
+      "dialogue.lines": [
+        {
+          "voice": {
+            "voice_id": "echo/ada"
+          },
+          "text": "You said you'd be back by noon.",
+          "style": "quiet",
+          "pause_s": 0.35
+        },
+        {
+          "voice": {
+            "voice_id": "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a22"
+          },
+          "text": "I know. The road was closed.",
+          "style": "",
+          "pause_s": 0
+        }
+      ],
+      "dialogue.pause": 0.35,
+      "dialogue.seed": 7,
+      "dialogue.delay_ms": 300
+    },
+    "typed": {
+      "dialogue.script": "@mara (quiet): You said you'd be back by noon.\n@jon: I know. The road was closed.",
+      "dialogue.lines": []
+    },
+    "prompt": "@mara (quiet): You said you'd be back by noon.\n@jon: I know. The road was closed.",
+    "seed": 7,
+    "model": null,
+    "elements": [
+      {
+        "id": "7e1d0c2b-0000-4000-8000-000000000001",
+        "handle": "mara",
+        "name": "Mara",
+        "version": 1
+      },
+      {
+        "id": "7e1d0c2b-0000-4000-8000-000000000002",
+        "handle": "jon",
+        "name": "Jon",
+        "version": 3
+      }
+    ],
+    "voices": [
+      {
+        "id": "echo/ada",
+        "name": "Ada",
+        "version": 1,
+        "source": "preset"
+      },
+      {
+        "id": "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a22",
+        "name": "Jon (cloned)",
+        "version": 2,
+        "source": "cloned"
+      }
+    ]
+  },
+  "parents": [
+    "2b3c4d5e-6f70-4a81-9b92-a3b4c5d6e7f8"
+  ],
+  "audio": {
+    "duration_s": 4.283333333333333,
+    "sample_rate": 24000,
+    "cues": [
+      {
+        "line": 1,
+        "start_s": 0.0,
+        "end_s": 2.066666666666667,
+        "text": "You said you'd be back by noon."
+      },
+      {
+        "line": 2,
+        "start_s": 2.4166666666666665,
+        "end_s": 4.283333333333333,
+        "voice_id": "5a0c1e2f-3b4d-4e5f-8a6b-7c8d9e0f1a22",
+        "text": "I know. The road was closed."
+      }
+    ]
+  }
+}

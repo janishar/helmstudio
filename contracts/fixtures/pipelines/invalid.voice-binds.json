@@ -1,0 +1,95 @@
+{
+  "description": "API 1.32 bind_type: a rows param of one media field takes one take (a step of 2 seeds does not fit generate.audios); a voice rows param (dialogue.lines) takes no takes; a script write with a list is write_target",
+  "pipeline": {
+    "title": "Voice binds",
+    "nodes": {
+      "inputs": {
+        "kind": "inputs",
+        "inputs": [
+          {
+            "name": "line",
+            "type": "Text"
+          }
+        ]
+      },
+      "lister": {
+        "kind": "write",
+        "from": [
+          "$line"
+        ],
+        "list": {
+          "max": 3
+        },
+        "form": "script"
+      },
+      "voice": {
+        "kind": "step",
+        "workflow": "echo-voice-over",
+        "seeds": 2,
+        "bind": {
+          "prompt.text": "$line"
+        }
+      },
+      "refs": {
+        "kind": "step",
+        "workflow": "minimax-h3-references",
+        "seeds": 1,
+        "bind": {
+          "prompt.text": "$line",
+          "generate.audios": "voice.takes"
+        }
+      },
+      "scene": {
+        "kind": "step",
+        "workflow": "echo-dialogue",
+        "seeds": 1,
+        "bind": {
+          "dialogue.lines": "voice.takes"
+        }
+      },
+      "out": {
+        "kind": "output",
+        "from": "refs.takes",
+        "collection": "x"
+      }
+    },
+    "edges": [
+      [
+        "inputs",
+        "lister"
+      ],
+      [
+        "lister",
+        "voice"
+      ],
+      [
+        "voice",
+        "refs"
+      ],
+      [
+        "refs",
+        "scene"
+      ],
+      [
+        "scene",
+        "out"
+      ]
+    ]
+  },
+  "problems": [
+    {
+      "code": "bind_type",
+      "node": "refs",
+      "port": "generate.audios"
+    },
+    {
+      "code": "bind_type",
+      "node": "scene",
+      "port": "dialogue.lines"
+    },
+    {
+      "code": "write_target",
+      "node": "lister"
+    }
+  ]
+}

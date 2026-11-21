@@ -129,8 +129,12 @@ export function valueError(
   if (t === "rows") {
     if (!Array.isArray(v)) return "not a list";
     const item = (p.item ?? {}) as Record<string, unknown>;
-    // a workflow holds no takes: [] even under min; the run needs min items (README, Video)
-    if (!v.length && Object.values(item).some((x) => x === "Image" || x === "Media")) return null;
+    // a workflow holds no takes or (1.32) voices: [] even under min; the run needs min items (README, Video)
+    const held = (x: unknown) =>
+      x === "Image" ||
+      x === "Media" ||
+      (typeof x === "object" && ["media", "voice"].includes((x as Param).type));
+    if (!v.length && Object.values(item).some(held)) return null;
     if (v.length < (min ?? 0) || (max != null && v.length > max))
       return `${v.length} items is outside ${min ?? 0}..${max}`;
     for (let i = 0; i < v.length; i++) {
@@ -141,6 +145,8 @@ export function valueError(
       for (const [f, spec] of Object.entries(item)) {
         if (spec === "Image" || spec === "Media")
           return `item ${i + 1}.${f}: a workflow cannot fill an image`;
+        if (typeof spec === "object" && (spec as Param).type === "voice")
+          return `item ${i + 1}.${f}: a workflow cannot fill a voice field`;
         if (spec === "Lora") {
           const l = (row as Record<string, unknown>)[f] as Record<string, unknown> | undefined;
           const ok =

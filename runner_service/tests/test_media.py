@@ -78,6 +78,12 @@ def clips(tmp_path_factory) -> dict[str, bytes]:
     return {n: (d / f"{n}.{'png' if n == 'd' else 'mp4'}").read_bytes() for n in "acdt"}
 
 
+def pcm16(path: Path) -> bytes:
+    """A file's sound as 16-bit stereo samples."""
+    return subprocess.run(["ffmpeg", "-v", "error", "-i", str(path), "-f", "s16le", "-ac", "2", "-"],
+                          capture_output=True, check=True).stdout  # fmt: skip
+
+
 def store_of(clips, **named) -> FakeStore:
     s = FakeStore()
     for key, clip in named.items():
@@ -211,6 +217,55 @@ async def test_conform_with_an_image_a_dissolve_gain_and_an_extra_audio_track(cl
     assert v["poster"]["key"].endswith("export.poster.png") and v["last"]["width"] == 256
     last = Image.open(io.BytesIO(store.objects[v["last"]["key"]][0]))
     assert last.convert("RGB").getpixel((128, 64))[2] < 80  # the image (orange) ends it
+
+
+async def test_an_audio_take_on_an_audio_track_is_mixed_resampled_to_stereo_at_its_start(
+    clips, tmp_path
+):
+    """1.32: an input of kind audio (a mono 24 kHz WAV, sine at 1/8 scale) mixed as studio's buildArgs mixes a sound: in 0.1..0.4 laid
+    at 0.5 s, resampled to 48 kHz stereo, -6 dB; silence before it."""
+    ff(
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=f=1000:d=1:r=24000",
+        "-ac",
+        "1",
+        "-c:a",
+        "pcm_s16le",
+        str(tmp_path / "w.wav"),
+    )
+    store = store_of(clips, **{"runs/t/1/0.mp4": "t"})
+    store.objects[f"{U}runs/w/1/0.wav"] = ((tmp_path / "w.wav").read_bytes(), "audio/wav")
+    silence = "anullsrc=r=48000:cl=stereo"
+    graph = (f"[0:v:0]trim=start=0:end=1,setpts=PTS-STARTPTS,{CONFORM}[vout];"
+             f"{silence},atrim=duration=1,asetpts=N/SR/TB[abase];"
+             "[1:a:0]atrim=start=0.1:end=0.4,asetpts=N/SR/TB,aresample=48000:async=1:first_pts=0,"
+             "aformat=sample_fmts=fltp:channel_layouts=stereo,apad,atrim=duration=0.3,volume=-6dB,asetpts=N/SR/TB[a0b];"
+             f"{silence},atrim=duration=0.5,asetpts=N/SR/TB[a0p];[a0p][a0b]concat=n=2:v=0:a=1[a0];"
+             "[abase][a0]amix=inputs=2:normalize=0:duration=longest,atrim=duration=1,asetpts=N/SR/TB[aout]")  # fmt: skip
+    ex = {"mode": "conform", "frames": 24, "samples": 48000,
+          "args": [*HEAD, "-i", "{in:0}", "-i", "{in:1}", "-filter_complex", graph, "-map", "[vout]", "-map", "[aout]",
+                   "{venc}", *TAIL]}  # fmt: skip
+    cmd = command([("runs/t/1/0.mp4", "video"), ("runs/w/1/0.wav", "audio")], ex)
+    end = (await run(cmd, store))[-1]["data"]
+    assert end["status"] == "succeeded", end
+    assert end["result"]["video"]["has_audio"]
+    (tmp_path / "out.mp4").write_bytes(store.objects[PREFIX + "export.mp4"][0])
+    samples = memoryview(pcm16(tmp_path / "out.mp4")).cast("h")
+    level = lambda a, b: max(abs(x) for x in samples[int(a * 48000) * 2 : int(b * 48000) * 2])
+    assert level(0.05, 0.45) < 300 and level(0.55, 0.85) > 1000 and level(0.95, 1.0) < 300
+    assert media.probe(tmp_path / "out.mp4")["audio"]["channels"] == 2
+
+
+async def test_an_audio_input_that_is_not_a_wav_fails_input(clips):
+    store = store_of(clips, **{"runs/t/1/0.mp4": "t", "runs/w/1/0.wav": "a"})
+    ex = {"mode": "conform", "frames": 24, "samples": 48000,
+          "args": [*HEAD, "-i", "{in:0}", "-i", "{in:1}", "-map", "0:v:0", "{venc}", *TAIL]}  # fmt: skip
+    end = (
+        await run(command([("runs/t/1/0.mp4", "video"), ("runs/w/1/0.wav", "audio")], ex), store)
+    )[-1]["data"]
+    assert end["status"] == "failed" and end["failure"]["detail"] == "an input is not a audio", end
 
 
 async def test_videotoolbox_encodes_when_the_host_has_it(clips):

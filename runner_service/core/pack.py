@@ -579,9 +579,13 @@ def load(dir: Path, runtime: str) -> tuple[Pack, dict]:
     stages = _nodes(spec.get("stages", {}), pack.family, code, pack, module)
     if "variants" not in spec:
         return pack, stages
+    # sources (canvas, ...) first, then the model; `source: false` keeps a stage without inputs in its place
+    # (echo/dialogue, after echo/speak: the canonical palette's order)
     nodes = {
-        k: v for k, v in stages.items() if not v[0]["inputs"]
-    }  # sources (canvas, ...) first, then the model
+        k: v
+        for k, v in stages.items()
+        if not v[0]["inputs"] and spec["stages"][k.split("/", 1)[1]].get("source", True)
+    }
     schema = model_schema(pack)
     nodes[schema["kind"]] = (schema, Node(model_node(pack), code=code, pack=pack))
     if "lora" in spec:  # Model → Model: only a family with a model node

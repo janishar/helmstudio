@@ -46,6 +46,36 @@ func imageField(param registry.Param) (string, bool) {
 	return param.ImageInput()
 }
 
+// isMediaRows reports whether param is a rows param of exactly one media field (API 1.32: binds as item 1).
+func isMediaRows(param registry.Param) bool {
+	_, _, ok := registry.MediaRowsField(param)
+	return ok
+}
+
+// mediaRowItems renames a bound take's item field for rows of one media field (API 1.32, bind_type: a voice step's
+// take into H3's generate.audios): pipelines binds a take list into any rows param as [{image: {take_id}}] (its
+// snapshot holds no node schemas), so an item holding only `image` gets the param's media field instead.
+// ponytail: pipelines cannot name the field; a contract field for it would replace this.
+func mediaRowItems(workflow registry.Workflow, inputs map[string]any) {
+	for key, value := range inputs {
+		param, ok := findParam(workflow, key)
+		name, _, rows := registry.MediaRowsField(param)
+		items, list := value.([]any)
+		if !ok || !rows || !list {
+			continue
+		}
+		if _, hasImage := param.Item["image"]; hasImage {
+			continue
+		}
+		for _, item := range items {
+			if fields, ok := item.(map[string]any); ok && len(fields) == 1 && fields["image"] != nil {
+				fields[name] = fields["image"]
+				delete(fields, "image")
+			}
+		}
+	}
+}
+
 // timed reports whether a rows param's item has a `position: seconds` field: every bound row would take its default
 // time, so only one take fits.
 func timed(param registry.Param) bool {
@@ -459,7 +489,8 @@ func pipelineProblems(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc,
 	}
 	for _, id := range of("write") {
 		n := nodes[id]
-		if (n.List != nil) == (n.To != "") || (n.To != "" && inputs[strings.TrimPrefix(n.To, "$")] != "Text") {
+		script := n.Form != nil && *n.Form == "script" // API 1.32: a script is one text
+		if (n.List != nil) == (n.To != "") || (n.To != "" && inputs[strings.TrimPrefix(n.To, "$")] != "Text") || (script && n.List != nil) {
 			add("write_target", id, "", "", "%s: a write sets one Text input (to), or answers a list without to", id)
 		}
 	}
@@ -626,7 +657,8 @@ func pipelineProblems(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc,
 				fits = slices.Contains(inputFits[src.typ], param.Type) || (src.typ == "Image" && rowsOfImages)
 			} else {
 				fits = ((param.Type == "image" || param.Type == "media") && src.n == 1) ||
-					(rowsOfImages && (param.Max == nil || float64(src.n) <= *param.Max) && (src.n == 1 || !timed(param)))
+					(rowsOfImages && (param.Max == nil || float64(src.n) <= *param.Max) && (src.n == 1 || !timed(param))) ||
+					(isMediaRows(param) && src.n == 1) // API 1.32: one take as item 1 (H3's audios)
 			}
 			if !fits {
 				add("bind_type", id, key, "", "%s.bind.%s: %s does not fit a %s param", id, key, n.Bind[key], param.Type)

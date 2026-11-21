@@ -124,7 +124,7 @@ class Bench:
                     ).start()
 
         async def output(index, data, **meta):
-            out["png"] = data
+            out["png"], out["meta"] = data, meta
 
         def check():
             if "at" in flag:

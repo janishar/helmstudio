@@ -20,6 +20,7 @@ type Op struct {
 	TakeIDs []string `json:"take_ids"`
 	IDs     []string `json:"ids"`
 	Hold    float64  `json:"hold"`
+	GapID   string   `json:"gap_id"`
 	Set     map[string]json.RawMessage
 }
 
@@ -74,7 +75,7 @@ func Edit(doc Doc, op Op, takes map[string]Take) (Doc, string) {
 			case t.Name != "V1": // at the first frame at or after the track's end (in samples): never an overlap
 				e := 0
 				for _, c := range t.Clips {
-					e = max(e, g.Smp(val(c.At))+g.Smp(val(c.Out))-g.Smp(val(c.In)))
+					e = max(e, g.Smp(val(c.At))+aLen(c, g))
 				}
 				f := g.F(float64(e) / float64(g.sr))
 				if g.Smp(g.S(f)) < e {
@@ -88,11 +89,60 @@ func Edit(doc Doc, op Op, takes map[string]Take) (Doc, string) {
 			}
 		}
 		return d, ""
-	case "insert": // an empty slot at the V1 cut nearest the playhead (a tie: the later cut)
+	case "insert", "place":
 		cuts := []int{0}
 		for _, c := range *v1 {
 			cuts = append(cuts, cuts[len(cuts)-1]+Len(c, Kind(c, takes), g, false))
 		}
+		if op.Op == "place" { // 1.32, Make shot: an empty slot at exactly frames(at)
+			f, n := g.F(val(op.At)), g.F(op.Hold)
+			last := cuts[len(cuts)-1]
+			slot := Clip{ID: op.ID, Hold: f64(g.S(n))}
+			if f >= last { // past V1's end: a gap up to it first
+				if f > last {
+					*v1 = append(*v1, Clip{ID: op.GapID, Hold: f64(g.S(f - last))})
+				}
+				*v1 = append(*v1, slot)
+				return d, ""
+			}
+			k := 0
+			for i := range *v1 {
+				if cuts[i] <= f {
+					k = i
+				}
+			}
+			gap := (*v1)[k]
+			if gap.Take() == "" && gap.Shot == nil { // inside an empty slot: split it around the new slot
+				left, right := f-cuts[k], cuts[k+1]-f-n
+				var parts []Clip
+				if left > 0 {
+					gap.Hold = f64(g.S(left))
+					parts = append(parts, gap)
+				}
+				parts = append(parts, slot)
+				if right > 0 {
+					id := gap.ID
+					if left > 0 {
+						id = op.GapID
+					}
+					parts = append(parts, Clip{ID: id, Hold: f64(g.S(right))})
+				}
+				*v1 = slices.Replace(*v1, k, k+1, parts...)
+				cutAt(k + len(parts))
+				if right < 0 { // longer than the gap: an insert of what overflows, every track moving on together
+					for ti := 1; ti < len(d.Tracks); ti++ {
+						for i, c := range d.Tracks[ti].Clips {
+							if g.F(val(c.At)) >= cuts[k+1] {
+								d.Tracks[ti].Clips[i].At = f64(g.S(g.F(val(c.At)) - right))
+							}
+						}
+					}
+				}
+				return d, ""
+			}
+			op.Hold = g.S(n) // inside a take's clip or a running shot: the insert edit
+		}
+		// insert: an empty slot at the V1 cut nearest the playhead (a tie: the later cut)
 		f, best := g.F(val(op.At)), 0
 		for k := range cuts {
 			if abs(cuts[k]-f) <= abs(cuts[best]-f) {
@@ -182,7 +232,8 @@ func Edit(doc Doc, op Op, takes map[string]Take) (Doc, string) {
 	case "trim":
 		df := g.F(op.Delta)
 		src, hasSrc := 0, false
-		if tk, ok := takes[c.Take()]; ok && kind == "video" {
+		// a video's frames; (1.32) an audio take's end clamps an audio-track clip's out too (on the sample grid)
+		if tk, ok := takes[c.Take()]; ok && (kind == "video" || kind == "audio") {
 			src, hasSrc = g.F(tk.DurationS), true
 		}
 		if onV1 {
@@ -205,6 +256,11 @@ func Edit(doc Doc, op Op, takes map[string]Take) (Doc, string) {
 				}
 				c.Hold = f64(g.S(max(g.F(val(c.Hold))+df, least)))
 			}
+		} else if kind == "slot" { // 1.32: a line placeholder's hold, its start kept
+			if op.Edge != "out" {
+				df = -df
+			}
+			c.Hold = f64(g.S(max(g.F(val(c.Hold))+df, 1)))
 		} else {
 			in, out, frame := g.Smp(val(c.In)), g.Smp(val(c.Out)), g.Smp(g.S(1))
 			sr := float64(g.sr)
@@ -242,7 +298,7 @@ func Edit(doc Doc, op Op, takes map[string]Take) (Doc, string) {
 			return d, "take_not_found"
 		}
 		ln, oldIn := Len(*c, kind, g, !onV1), 0
-		if kind == "video" {
+		if kind == "video" || kind == "audio" {
 			oldIn = g.F(val(c.In))
 		}
 		c.In, c.Out, c.Hold = nil, nil, nil
@@ -284,7 +340,9 @@ func Edit(doc Doc, op Op, takes map[string]Take) (Doc, string) {
 	case "fill": // studio: a shot's take fills its slot (README, Timeline: New shot; take actions)
 		tk, ln, in0, out0 := takes[op.TakeID], Len(*c, kind, g, false), c.In, c.Out
 		c.In, c.Out, c.Hold, c.Shot = nil, nil, nil, nil
-		if sm := tk.SourceMap; tk.Kind == "image" {
+		if sm := tk.SourceMap; !onV1 { // 1.32, an audio track (New line, a line's re-render): the whole take at its start
+			c.In, c.Out = f64(0), f64(tk.DurationS)
+		} else if tk.Kind == "image" {
 			c.Hold = f64(g.S(ln))
 		} else if sm != nil {
 			// the generated part; replacing its source (or a take made from it): the clip's window, grown on a side
@@ -378,6 +436,24 @@ func Apply(doc Doc, op Op, takes map[string]Take) Result {
 				past[p.Clip] = true
 			}
 		}
+		overlap := map[string]bool{}
+		for _, p := range probs {
+			if p.Code == "overlap" {
+				overlap[p.Clip] = true
+			}
+		}
+		for ti := 1; ti < len(raw.Tracks); ti++ { // 1.32: a filled line running into the next clip is cut at its start
+			order := make([]*Clip, 0, len(raw.Tracks[ti].Clips))
+			for i := range raw.Tracks[ti].Clips {
+				order = append(order, &raw.Tracks[ti].Clips[i])
+			}
+			slices.SortStableFunc(order, func(a, b *Clip) int { return g.Smp(val(a.At)) - g.Smp(val(b.At)) })
+			for k := 1; k < len(order); k++ {
+				if prev, c := order[k-1], order[k]; overlap[c.ID] && prev.Out != nil {
+					prev.Out = f64(float64(g.Smp(val(prev.In))+g.Smp(val(c.At))-g.Smp(val(prev.At))) / float64(g.sr))
+				}
+			}
+		}
 		frames := 0
 		for i, c := range raw.Tracks[0].Clips {
 			if bad[c.ID] {
@@ -390,8 +466,10 @@ func Apply(doc Doc, op Op, takes map[string]Take) Result {
 			t := &raw.Tracks[ti]
 			t.Clips = slices.DeleteFunc(t.Clips, func(c Clip) bool { return past[c.ID] && g.Smp(val(c.At)) >= end })
 			for i, c := range t.Clips {
-				if past[c.ID] {
-					t.Clips[i].Out = f64(float64(g.Smp(val(c.In))+end-g.Smp(val(c.At))) / float64(g.sr))
+				if past[c.ID] && c.Hold != nil { // 1.32: a line placeholder, never longer than it is
+					t.Clips[i].Hold = f64(float64(min(g.Smp(val(c.Hold)), end-g.Smp(val(c.At)))) / float64(g.sr))
+				} else if past[c.ID] { // never past its out (a line already cut at the next clip stays cut)
+					t.Clips[i].Out = f64(float64(min(g.Smp(val(c.Out)), g.Smp(val(c.In))+end-g.Smp(val(c.At)))) / float64(g.sr))
 				}
 			}
 		}

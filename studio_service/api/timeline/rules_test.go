@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/helmstudio/studio_service/api/gallery"
 	"github.com/helmstudio/studio_service/registry"
 )
 
@@ -46,6 +47,7 @@ type fixtureCase struct {
 	Mid         float64         `json:"mid"`
 	Frame       int             `json:"frame"`
 	Clips       []string        `json:"clips"`
+	Range       *[2]float64     `json:"range"` // make-shot (1.32): a selection inside the clip
 	Workflow    struct {
 		Nodes map[string]registry.Node `json:"nodes"`
 	} `json:"workflow"`
@@ -234,5 +236,71 @@ func TestNumber(t *testing.T) {
 	Number(&d, &stored)
 	if !reflect.DeepEqual(nums(d), []int{2, 1, 8, 7, 9}) {
 		t.Fatal("stored", nums(d))
+	}
+}
+
+// TestMakeShotFixtures runs make-shot.json against the echo and ltx templates and the shared palette (make_shot).
+func TestMakeShotFixtures(t *testing.T) {
+	var palette struct {
+		Groups []struct {
+			Nodes []registry.PaletteNode `json:"nodes"`
+		} `json:"groups"`
+	}
+	data, _ := os.ReadFile(filepath.Join(fixtures, "..", "graphs", "palette.json"))
+	if err := json.Unmarshal(data, &palette); err != nil {
+		t.Fatal(err)
+	}
+	schemas := map[string]registry.NodeSchema{}
+	for _, g := range palette.Groups {
+		for _, n := range g.Nodes {
+			schemas[n.Kind] = n.NodeSchema
+		}
+	}
+	var workflows []registry.Workflow
+	for _, pre := range []string{"", "ltx."} {
+		var reg struct{ Workflows []registry.Workflow }
+		data, err := os.ReadFile(filepath.Join(fixtures, "..", "registry", pre+"workflows.valid.json"))
+		if err == nil {
+			err = json.Unmarshal(data, &reg)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, w := range reg.Workflows {
+			w.NodeSchemas = schemas
+			workflows = append(workflows, w)
+		}
+	}
+	var fx struct {
+		Takes map[string]gallery.MediaTake `json:"takes"`
+		Cases []fixtureCase                `json:"cases"`
+	}
+	data, err := os.ReadFile(filepath.Join(fixtures, "make-shot.json"))
+	if err == nil {
+		err = json.Unmarshal(data, &fx)
+	}
+	if err != nil || len(fx.Cases) == 0 {
+		t.Fatal(err)
+	}
+	for id, tk := range fx.Takes {
+		tk.ID = id
+		fx.Takes[id] = tk
+	}
+	for _, c := range fx.Cases {
+		check(t, "make-shot", c, map[string]any{"actions": MakeShot(c.Document, c.Clip, fx.Takes, workflows, c.Range)})
+	}
+}
+
+// An audio take on an audio track cannot be trimmed past its end (out clamps to its length on the sample grid).
+func TestTrimAudioTakeClamps(t *testing.T) {
+	f := func(v float64) *float64 { return &v }
+	id := "a1"
+	doc := Doc{Target: Target{Width: 640, Height: 360, FPS: 24, SampleRate: 48000}, Tracks: []Track{
+		{Name: "V1", Kind: "video", Clips: []Clip{}},
+		{Name: "A2", Kind: "audio", Clips: []Clip{{ID: "c", TakeID: &id, In: f(0), Out: f(1.5), At: f(0), Alternatives: []string{}}}}}}
+	takes := map[string]Take{id: {Kind: "audio", DurationS: 2, HasAudio: true}}
+	got, code := Edit(doc, Op{Op: "trim", Clip: "c", Edge: "out", Delta: 5}, takes)
+	if code != "" || *got.Tracks[1].Clips[0].Out != 2 {
+		t.Fatalf("%s %+v", code, got.Tracks[1].Clips[0])
 	}
 }

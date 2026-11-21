@@ -47,6 +47,7 @@ type libraryRow struct {
 	FromTakeKey           *string
 	Voice                 json.RawMessage // API 1.30, kind voice: its VoiceInfo
 	ClipKey               *string         // API 1.31: the key of a voice's clip take, deleted or not
+	VoiceID               *string         // API 1.32, an element: its voice while that is the owner's (elementVoiceCol)
 }
 
 // libraryCols are the columns libraryRow scans from library_items l, in order.
@@ -56,7 +57,12 @@ const libraryCols = `l.id::text, l.kind, l.item_group, l.name, l.handle, l.text,
 		AND t.deleted_at IS NULL AND t.ready AND t.width IS NOT NULL AND t.height IS NOT NULL), '[]'), l.loras,
 	(SELECT t.id::text FROM takes t WHERE t.id = l.from_take_id AND t.owner_id = l.owner_id AND t.deleted_at IS NULL AND t.ready),
 	(SELECT coalesce(t.video->'poster'->>'key', t.key) FROM takes t WHERE t.id = l.from_take_id AND t.owner_id = l.owner_id AND t.deleted_at IS NULL AND t.ready), l.voice,
-	(SELECT t.key FROM takes t WHERE t.id = (l.voice->'clip'->>'take_id')::uuid AND t.owner_id = l.owner_id)`
+	(SELECT t.key FROM takes t WHERE t.id = (l.voice->'clip'->>'take_id')::uuid AND t.owner_id = l.owner_id), ` + elementVoiceCol
+
+// elementVoiceCol is an element's voice_id as read (API 1.32): a starter voice's id as stored (the caller checks it
+// is published), an own voice's while it is the owner's voice, else null.
+const elementVoiceCol = `(CASE WHEN l.voice_id LIKE '%/%' THEN l.voice_id ELSE (SELECT v.id::text FROM library_items v
+	WHERE v.owner_id = l.owner_id AND v.kind = 'voice' AND v.id::text = l.voice_id) END)`
 
 // itemDTO maps a row, signing its images' keys (the original is its own thumbnail, as in the gallery); names are the
 // LoRA names now (a LoRA gone keeps the name it was saved with).
@@ -91,7 +97,38 @@ func (s *Service) itemDTO(row libraryRow, names map[string]string) dto.LibraryIt
 	if row.Kind == "voice" {
 		_ = json.Unmarshal(row.Voice, &out.Voice)
 	}
+	if row.Kind == "element" { // API 1.32: null once its voice is deleted or no live host publishes it
+		out.VoiceID = json.RawMessage("null")
+		if id := row.VoiceID; id != nil && (utility.IsUUID(*id) || s.starterVoiceLive(*id)) {
+			out.VoiceID, _ = json.Marshal(*id)
+		}
+	}
 	return out
+}
+
+// starterVoiceLive reports whether a live host publishes the starter voice id.
+func (s *Service) starterVoiceLive(id string) bool {
+	_, ok := s.registry.Voices(time.Now())[id]
+	return ok
+}
+
+// elementVoice is the voice_id an element saves (API 1.32): nil, or one of the owner's voices or a live starter
+// voice, else 404 "voice_id: voice <id> not found"; a PUT sending back its stored id that is gone since saves nil.
+func (s *Service) elementVoice(ctx context.Context, tx pgx.Tx, ownerID string, id *string, stored *string) (*string, error) {
+	if id == nil {
+		return nil, nil
+	}
+	found, err := readVoices(ctx, tx, s.registry, ownerID, []string{*id})
+	if err != nil {
+		return nil, err
+	}
+	if _, ok := found[*id]; ok {
+		return id, nil
+	}
+	if stored != nil && *stored == *id {
+		return nil, nil
+	}
+	return nil, network.NewNotFoundError("voice_id: voice "+*id+" not found", nil)
 }
 
 // rowLoras are a row's stored LoRAs.
@@ -410,6 +447,10 @@ func (s *Service) CreateLibraryItem(ctx context.Context, caller common.Caller, b
 		if err := s.checkItem(ctx, tx, caller.ID, "", body.Kind, body.LibraryFields); err != nil {
 			return err
 		}
+		voiceID, err := s.elementVoice(ctx, tx, caller.ID, body.VoiceID, nil)
+		if err != nil {
+			return err
+		}
 		var count int
 		if err := tx.QueryRow(ctx, `SELECT count(*) FROM library_items`).Scan(&count); err != nil {
 			return err
@@ -422,8 +463,8 @@ func (s *Service) CreateLibraryItem(ctx context.Context, caller common.Caller, b
 		}
 		id := utility.NewID()
 		if _, err := tx.Exec(ctx, `INSERT INTO library_items (id, owner_id, kind, item_group, name, handle, text, images,
-			loras, from_take_id, voice) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::uuid[], $9, $10, $11)`, id, caller.ID, body.Kind,
-			body.Group, body.Name, body.Handle, *body.Text, takeIDs(body.Images), loras, fromTake, voiceJSON(voice)); err != nil {
+			loras, from_take_id, voice, voice_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::uuid[], $9, $10, $11, $12)`, id, caller.ID,
+			body.Kind, body.Group, body.Name, body.Handle, *body.Text, takeIDs(body.Images), loras, fromTake, voiceJSON(voice), voiceID); err != nil {
 			return err
 		}
 		out, err = s.readItem(ctx, tx, caller.ID, id)
@@ -506,8 +547,9 @@ func (s *Service) ReplaceLibraryItem(ctx context.Context, caller common.Caller, 
 	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
 		var version int
 		var kind, kept string
-		if err := tx.QueryRow(ctx, `SELECT version, kind, coalesce(voice->'clip'->>'take_id', '') FROM library_items
-			WHERE id = $1 FOR UPDATE`, id).Scan(&version, &kind, &kept); errors.Is(err, pgx.ErrNoRows) {
+		var storedVoice *string
+		if err := tx.QueryRow(ctx, `SELECT version, kind, coalesce(voice->'clip'->>'take_id', ''), voice_id FROM library_items
+			WHERE id = $1 FOR UPDATE`, id).Scan(&version, &kind, &kept, &storedVoice); errors.Is(err, pgx.ErrNoRows) {
 			return errNotFound
 		} else if err != nil {
 			return err
@@ -534,14 +576,19 @@ func (s *Service) ReplaceLibraryItem(ctx context.Context, caller common.Caller, 
 		if err := s.checkItem(ctx, tx, caller.ID, id, kind, body.LibraryFields); err != nil {
 			return err
 		}
+		voiceID, err := s.elementVoice(ctx, tx, caller.ID, body.VoiceID, storedVoice)
+		if err != nil {
+			return err
+		}
 		loras, err := s.storedLoras(ctx, tx, caller.ID, body.Loras)
 		if err != nil {
 			return err
 		}
 		if _, err := tx.Exec(ctx, `UPDATE library_items l SET item_group = $2, name = $3, handle = $4, text = $5,
 			images = $6::uuid[], loras = $7, voice = $8, version = version + 1, updated_at = clock_timestamp(),
-			from_take_id = CASE WHEN l.kind = 'voice' THEN $9::uuid ELSE l.from_take_id END WHERE l.id = $1`,
-			id, body.Group, body.Name, body.Handle, *body.Text, takeIDs(body.Images), loras, voiceJSON(voice), clipTake(voice)); err != nil {
+			from_take_id = CASE WHEN l.kind = 'voice' THEN $9::uuid ELSE l.from_take_id END, voice_id = $10 WHERE l.id = $1`,
+			id, body.Group, body.Name, body.Handle, *body.Text, takeIDs(body.Images), loras, voiceJSON(voice), clipTake(voice),
+			voiceID); err != nil {
 			return err
 		}
 		out, err = s.readItem(ctx, tx, caller.ID, id)

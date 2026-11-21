@@ -2,7 +2,7 @@
 
 [← Plan index](../README.md)
 
-Status: draft 2 · 2026-11-21 · M8, being built (owner: "build it", 2026-11-21); the answers in 19.9 are decided. Scouted from the weights on disk, the
+Status: built as M8 (2026-11-21/22, API 1.30–1.32; owner: "build it", 2026-11-21); the answers in 19.9 are decided; decisions taken while building are in docs/handoff.md (M8 notes). Scouted from the weights on disk, the
 Qwen3-TTS model card, the old AI-EXP port (`~/GenAI/AI-EXP/src/qwen3_tts/`) and the ZONOS3 checkout
 (`~/GenAI/duplex/zonos3`, commit 96d9e0e). Nothing was downloaded or built.
 

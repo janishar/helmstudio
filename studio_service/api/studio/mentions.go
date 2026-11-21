@@ -36,6 +36,8 @@ type element struct {
 	Version int      `json:"version"`
 	Text    string   `json:"text"`
 	Images  []string `json:"images"`
+	// API 1.32: a character's voice (null: none, or its voice is gone); a batch's copy keeps it
+	VoiceID *string `json:"voice_id,omitempty"`
 }
 
 // expansion is what the mentions changed: each changed path's resolved value and its value as set, and the elements.
@@ -116,7 +118,8 @@ type prompt struct {
 	Parts []part
 }
 
-// prompts are the unwired text params of the known, not bypassed nodes, node id then schema order.
+// prompts are the unwired text params of the known, not bypassed nodes, node id then schema order; (API 1.32) never a
+// script, which expandScript reads.
 func prompts(nodes map[string]registry.Node, schemas map[string]registry.NodeSchema) []prompt {
 	var out []prompt
 	for _, id := range slices.Sorted(maps.Keys(nodes)) {
@@ -126,7 +129,7 @@ func prompts(nodes map[string]registry.Node, schemas map[string]registry.NodeSch
 			continue
 		}
 		for _, param := range schema.Params {
-			if _, wired := node.In[param.Name]; param.Type != "text" || wired {
+			if _, wired := node.In[param.Name]; param.Type != "text" || param.Script || wired {
 				continue
 			}
 			value, _ := valueOf(node, param).(string)
@@ -525,19 +528,11 @@ func (s *Service) runGraphs(ctx context.Context, tx pgx.Tx, ownerID string, work
 		}
 		return chosen[i]
 	}
-	voices := make([]expansion, len(rows))
 	for i, inputs := range rows {
 		nodes, detail := resolve(workflow, inputs)
-		if detail == "" { // API 1.30: voices next, as the owner (before mentions and looks)
-			values, made, errs, err := runVoices(ctx, tx, s.store, s.registry, ownerID, nodes, workflow.Nodes, workflow.NodeSchemas)
-			if err != nil {
-				return nil, nil, libraryCopy{}, err
-			}
-			detail, voices[i] = strings.Join(errs, "; "), expansion{Voices: made, VoiceValues: values}
-		}
 		out[i].Nodes, details[i] = nodes, detail
-		if detail == "" {
-			for _, handle := range mentionedHandles(nodes, workflow.NodeSchemas) {
+		if detail == "" { // API 1.32: the handles a script names are read with the mentioned ones
+			for _, handle := range slices.Concat(mentionedHandles(nodes, workflow.NodeSchemas), scriptHandles(nodes, workflow.NodeSchemas)) {
 				if !slices.Contains(handles, handle) {
 					handles = append(handles, handle)
 				}
@@ -559,12 +554,63 @@ func (s *Service) runGraphs(ctx context.Context, tx pgx.Tx, ownerID string, work
 	if lib.Elements, err = readElements(ctx, tx, ownerID, handles, copiedElements); err != nil {
 		return nil, nil, lib, err
 	}
+	if copied != nil { // API 1.32: a pipeline's written script may name a speaker the batch's copy lacks: read it now
+		var missing []string
+		for i := range out {
+			if details[i] != "" {
+				continue
+			}
+			for _, h := range scriptHandles(out[i].Nodes, workflow.NodeSchemas) {
+				if !slices.ContainsFunc(lib.Elements, func(e element) bool { return e.Handle == h }) && !slices.Contains(missing, h) {
+					missing = append(missing, h)
+				}
+			}
+		}
+		now, err := readElements(ctx, tx, ownerID, missing, nil)
+		if err != nil {
+			return nil, nil, lib, err
+		}
+		lib.Elements = append(lib.Elements, now...)
+	}
 	if lib.Looks, err = readLooks(ctx, tx, s.registry, ownerID, ids, copiedLooks); err != nil {
 		return nil, nil, lib, err
 	}
 	families, err := loraFamilies(ctx, tx, s.registry, ownerID, workflow.Env, lookLoraIDs(lib.Looks))
 	if err != nil {
 		return nil, nil, lib, err
+	}
+	// API 1.32: each row's scripts expand into their lines (after the values are checked, before the voices), then the
+	// voices are resolved as the owner (API 1.30: before mentions and looks)
+	var voiceIDs []string
+	for _, e := range lib.Elements {
+		if e.VoiceID != nil {
+			voiceIDs = append(voiceIDs, *e.VoiceID)
+		}
+	}
+	speakers, err := readVoices(ctx, tx, s.registry, ownerID, voiceIDs)
+	if err != nil {
+		return nil, nil, lib, err
+	}
+	scripts, voices := make([]scriptResult, len(rows)), make([]expansion, len(rows))
+	for i := range out {
+		if details[i] != "" {
+			continue
+		}
+		res, errs := expandScript(out[i].Nodes, workflow.NodeSchemas, workflow.Nodes, lib.Elements, speakers)
+		if len(errs) > 0 {
+			details[i] = strings.Join(errs, "; ")
+			continue
+		}
+		for path, value := range res.Inputs {
+			id, name, _ := strings.Cut(path, ".")
+			out[i].Nodes[id].Params[name] = value
+		}
+		scripts[i] = res
+		values, made, errs, err := runVoices(ctx, tx, s.store, s.registry, ownerID, out[i].Nodes, workflow.Nodes, workflow.NodeSchemas)
+		if err != nil {
+			return nil, nil, lib, err
+		}
+		details[i], voices[i] = strings.Join(errs, "; "), expansion{Voices: made, VoiceValues: values}
 	}
 	var takeIDs []string
 	for i := range out {
@@ -610,6 +656,17 @@ func (s *Service) runGraphs(ctx context.Context, tx pgx.Tx, ownerID string, work
 			continue
 		}
 		exp.Voices, exp.VoiceValues = voices[i].Voices, voices[i].VoiceValues
+		if len(scripts[i].Typed) > 0 { // API 1.32: the script as typed, its speakers
+			if exp.Typed == nil {
+				exp.Typed = map[string]any{}
+			}
+			maps.Copy(exp.Typed, scripts[i].Typed)
+			for _, e := range scripts[i].Elements {
+				if !slices.ContainsFunc(exp.Elements, func(m gallerydto.MadeWithElement) bool { return m.ID == e.ID }) {
+					exp.Elements = append(exp.Elements, e)
+				}
+			}
+		}
 		out[i].Expansion = exp
 	}
 	if err := runLoras(ctx, tx, s.registry, ownerID, workflow.Env, out, workflow.NodeSchemas, details); err != nil {
@@ -628,7 +685,7 @@ func readElements(ctx context.Context, tx pgx.Tx, ownerID string, handles []stri
 	if copied == nil {
 		return collect[element](ctx, tx, `SELECT l.id::text, l.handle, l.name, l.version, l.text,
 			ARRAY(SELECT i::text FROM unnest(l.images) WITH ORDINALITY AS u(i, o) JOIN takes t ON t.id = u.i
-				AND t.owner_id = l.owner_id AND t.deleted_at IS NULL AND t.ready ORDER BY u.o)
+				AND t.owner_id = l.owner_id AND t.deleted_at IS NULL AND t.ready ORDER BY u.o), `+elementVoiceCol+`
 			FROM library_items l WHERE l.owner_id = $1 AND l.handle = ANY($2::text[]) ORDER BY l.handle`, ownerID, handles)
 	}
 	var ids []string

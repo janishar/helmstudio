@@ -18,7 +18,7 @@ func Cuts(doc Doc, takes map[string]Take, exclude string) []float64 {
 			if c.ID == exclude {
 				continue
 			}
-			e := val(c.At) + val(c.Out) - val(c.In)
+			e := val(c.At) + audioS(c)
 			if ti == 0 {
 				e = g.S(g.F(val(c.At)) + Len(c, Kind(c, takes), g, false))
 			}
@@ -124,7 +124,7 @@ func FrameAt(doc Doc, f int, takes map[string]Take) Frame {
 	for _, t := range doc.Tracks[1:] {
 		for _, c := range t.Clips {
 			a := g.F(val(c.At))
-			if a <= f && f < a+Len(c, "video", g, true) && !c.Offline && !*c.Mute && !*t.Mute {
+			if c.Take() != "" && a <= f && f < a+Len(c, "video", g, true) && !c.Offline && !*c.Mute && !*t.Mute {
 				out.Sounds = append(out.Sounds, Sound{Clip: c.ID, T: val(c.In) + g.S(f-a), GainDB: *t.GainDB + *c.GainDB, Fade: 1})
 			}
 		}
@@ -145,12 +145,22 @@ func (r Reason) MarshalJSON() ([]byte, error) {
 
 // Plan is an export plan's rule part (export_plan).
 type Plan struct {
-	StreamCopy     bool     `json:"stream_copy"`
-	Reasons        []Reason `json:"reasons"`
-	Blocked        []Reason `json:"blocked"`
-	VideoBitrate   *int     `json:"video_bitrate"`
-	EstimatedBytes int      `json:"estimated_bytes"`
-	Bitrate        int      `json:"-"` // the conform bitrate, also for a copy plan's fallback
+	StreamCopy     bool        `json:"stream_copy"`
+	Reasons        []Reason    `json:"reasons"`
+	Blocked        []Reason    `json:"blocked"`
+	VideoBitrate   *int        `json:"video_bitrate"`
+	EstimatedBytes int         `json:"estimated_bytes"`
+	Sounds         []PlanSound `json:"sounds"`
+	Bitrate        int         `json:"-"` // the conform bitrate, also for a copy plan's fallback
+}
+
+// PlanSound is one sound the mix reads (API 1.32): its clip, track and the facts it is resampled from (nil: unknown,
+// ffmpeg reads them).
+type PlanSound struct {
+	Clip       string `json:"clip"`
+	Track      string `json:"track"`
+	SampleRate *int   `json:"sample_rate"`
+	Channels   *int   `json:"channels"`
 }
 
 func ratio(s string) (int, int) {
@@ -263,6 +273,21 @@ func ExportPlan(doc Doc, takes map[string]Take) Plan {
 	if dur > MaxExportS || p.EstimatedBytes > MaxExportBytes || inputs > MaxExportInputs {
 		p.Blocked = append(p.Blocked, Reason{Code: "too_large"})
 	}
+	p.Sounds = []PlanSound{}
+	for ti, t := range doc.Tracks {
+		for _, c := range t.Clips {
+			tk, ok := takes[c.Take()]
+			if !ok || c.Offline || *c.Mute || *t.Mute || (ti == 0 && !(tk.Kind == "video" && tk.HasAudio)) {
+				continue
+			}
+			s := PlanSound{Clip: c.ID, Track: t.Name, SampleRate: tk.SampleRate}
+			if tk.Kind == "audio" {
+				one := 1
+				s.Channels = &one
+			}
+			p.Sounds = append(p.Sounds, s)
+		}
+	}
 	return p
 }
 
@@ -342,10 +367,12 @@ type RerenderError struct{ Code, Clip string }
 // workflow id → its ShotKeyframes (absent: none); media: workflow id → its media param paths (API 1.19): a media input
 // holding a take of another selected clip binds `<param>` ← `clip_<other>.takes` and runs after it.
 func RerenderSteps(doc Doc, takes map[string]Take, clips []string, keyframes map[string]*Keyframes, media map[string][]string) ([]Step, *RerenderError) {
-	var v1 []Clip
-	for _, c := range doc.Tracks[0].Clips {
-		if (clips != nil && slices.Contains(clips, c.ID)) || (clips == nil && c.Take() != "") {
-			v1 = append(v1, c)
+	var v1 []Clip // 1.32: named audio-track clips (lines) too
+	for ti, t := range doc.Tracks {
+		for _, c := range t.Clips {
+			if (clips != nil && slices.Contains(clips, c.ID)) || (clips == nil && ti == 0 && c.Take() != "") {
+				v1 = append(v1, c)
+			}
 		}
 	}
 	if len(v1) > MaxRerender {

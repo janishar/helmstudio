@@ -185,9 +185,9 @@ func TestAudioUpload(t *testing.T) {
 		t.Fatal(got)
 	}
 
-	// not a timeline clip yet
+	// API 1.32: an audio take goes on an audio track, not V1
 	tl := e.call(userA, "POST", "/v1/studio/timelines", map[string]any{"name": "S"}, 201)["id"].(string)
-	if got := e.call(userA, "POST", "/v1/studio/timelines/"+tl+"/clips", map[string]any{"take_ids": []string{id}, "track": "V1"}, 422); got["detail"] != "take_ids[0]: an audio take cannot go on the timeline yet" {
+	if got := e.call(userA, "POST", "/v1/studio/timelines/"+tl+"/clips", map[string]any{"take_ids": []string{id}, "track": "V1"}, 422); got["detail"] != "take_ids[0]: an audio take goes on an audio track" {
 		t.Fatal(got)
 	}
 }

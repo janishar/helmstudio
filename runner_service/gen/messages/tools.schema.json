@@ -143,12 +143,13 @@
     "libraryReadArgs": {
       "type": "object",
       "additionalProperties": false,
-      "description": "the owner's elements and the looks the owner can use, by name",
+      "description": "the owner's elements, the looks and (API 1.32) the voices the owner can use, by name",
       "properties": {
         "kind": {
           "enum": [
             "element",
-            "look"
+            "look",
+            "voice"
           ]
         },
         "group": {
@@ -159,7 +160,10 @@
             "film",
             "camera",
             "colour",
-            "lighting"
+            "lighting",
+            "preset",
+            "cloned",
+            "designed"
           ]
         },
         "text": {
@@ -170,6 +174,12 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 20
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000,
+          "description": "(1.32) skip this many items first: page with offset += limit while `more`"
         }
       }
     },
@@ -203,7 +213,8 @@
               "kind": {
                 "enum": [
                   "element",
-                  "look"
+                  "look",
+                  "voice"
                 ]
               },
               "group": {
@@ -218,12 +229,28 @@
                   "string",
                   "null"
                 ],
-                "description": "an element's: what `@<handle>` mentions; null for a look"
+                "description": "an element's: what `@<handle>` mentions; null for a look or a voice"
               },
               "text": {
                 "type": "string",
                 "maxLength": 500,
                 "description": "cut to 500"
+              },
+              "voice": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 80,
+                "description": "API 1.32, an element only (always sent for one): the name of its voice (`voice_id`), null when it has none, so a write or the director knows which characters can speak"
+              },
+              "family": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 64,
+                "description": "API 1.32, a voice only (always sent for one): a starter voice's family (`qwen3-tts`, `zonos3`), null for the owner's own"
               }
             }
           }

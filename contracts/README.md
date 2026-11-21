@@ -41,12 +41,12 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `fixtures/registry/pipelines.custom.valid.json` | (API 1.15) **canonical** custom-node registry value with the one shipped example `text/prefix` (Custom nodes) |
 | `fixtures/decisions/` | the **shared decision fixtures** (API 1.14): `verdict.json` (a judge answer → `judge_verdict`), `replay.json` (a call → `inputs_hash`); (API 1.15) `agent-turn.json` (a turn's answer, local or native, → `agent_turn`: the calls to run, final, route, or the re-ask error), `agent-schema.json` (a node → the canonical turn schema `turn_schema`). pipelines_service runs them |
 | `fixtures/dispatch/` | the **shared dispatcher fixtures** (Two envs on one host: the hand-over): `admit.*.json` (one admission decision: the host's keys, the run, the other queued runs → `{decision, unload, budget_gb, error}`), `order.*.json` (a simulated queue on one host: plans, runs, batches → `{releases, unloads, loads}`), (API 1.18) `place.*.json` (several hosts: a run's eligible hosts and the one it is lined up on, or its error; Several hosts). studio_service's Go tests run them |
-| `fixtures/timelines/` | the **shared timeline fixtures** (API 1.17, Timeline rules, below): `rates.json`, `normalize.json`, `edits.json`, `snap.json`, `frame-at.json`, `plan.json`, `shot-keyframes.json`, `rerender.json`, each `{description, takes?, cases: [{description, …, expect}]}`. studio_service (Go) and the web (TypeScript) both run them |
+| `fixtures/timelines/` | the **shared timeline fixtures** (API 1.17, Timeline rules, below): `rates.json`, `normalize.json`, `edits.json`, `snap.json`, `frame-at.json`, `plan.json`, `shot-keyframes.json`, `rerender.json`, each `{description, takes?, cases: [{description, …, expect}]}`. studio_service (Go) and the web (TypeScript) both run them | (API 1.32) `make-shot.json` (an audio clip → `make_shot`)
 | `fixtures/video/` | the **shared video-rule fixtures** (Video, below): `auto-frames.json` (predicted seconds → frames), `keyframes.json` (a graph with merged values → the keyframe position errors); `sources.json` and `uses.json` (Media inputs); (API 1.21) `minimax-h3.json` (minimax-h3/generate's refusals → the run's error text: the native runner runs it; 1.22 adds the reference cases); (API 1.22) `media-rows.json` (rows of media, `not_with`, optional nodes → studio's 422 text or the values it sends). studio_service, the web and the mlx runner run them |
 | `fixtures/graphs/` | the **shared graph-rule fixtures** (Graph rules, below): `palette.json` (a `NodePalette`), `valid.*` / `invalid.*` (a `WorkflowDoc` and its expected problems), `autowire.*`, `wiredrop.*`. studio_service (Go) and the web editor (TypeScript) both run them |
 | `fixtures/pipelines/` | the **shared pipeline-rule fixtures** (Pipeline rules, below): `workflows.json` (the workflows the caller can run), `valid.*` / `invalid.*` `{description, pipeline, problems}`, optionally `looks` and `loras` (the caller's usable looks and LoRAs, as the look fixtures take them), (API 1.15) `providers` (the enabled providers: `{name, kind, models, default_model, host?, memory_gb?}`), `remote_deployment` (the deployment's remote switch, absent = off), `custom` (the registered custom nodes, absent = `pipelines.custom.valid.json`'s) and the expected `bounds`, `models`, `egress`, `reserved`. studio_service and the web editor both run them |
 | `fixtures/mentions/` | the **shared mention and look fixtures** (Mentions, Looks, below): `scan.json` (prompt → parts), `fit.json` (an item and a workflow → the fit reason), `resolve.*.json` (a graph with merged values, a library, chosen looks → the expanded inputs, `typed`, `elements`, `looks`, or `errors`), against `fixtures/graphs/palette.json`. studio_service and the web editor both run them |
-| `fixtures/voices/` | (API 1.30) the **shared voice fixtures** (Voices, below): `media.json` (a graph → `Workflow.media`, audio included), `fit.json` (a LibraryItem and a workflow → the voice fit's reason; looks and elements in an audio workflow), `seconds.json` (a graph and a stage → the `peak_gb` variable `speech_seconds`), each `{description, workflows: {name: WorkflowDoc}, cases: [{description, workflow, …, expect}]}` against `fixtures/graphs/palette.json`. studio_service, the web and the runner core run them |
+| `fixtures/voices/` | (API 1.30) the **shared voice fixtures** (Voices, below): `media.json` (a graph → `Workflow.media`, audio included), `fit.json` (a LibraryItem and a workflow → the voice fit's reason; looks and elements in an audio workflow), `seconds.json` (a graph and a stage → the `peak_gb` variable `speech_seconds`), each `{description, workflows: {name: WorkflowDoc}, cases: [{description, workflow, …, expect}]}` against `fixtures/graphs/palette.json`. studio_service, the web and the runner core run them | (API 1.32) `scripts.json` (a dialogue graph, the caller's elements and voices → `expand_script`; the fake take → `echo_dialogue`; write-script answers → `script_check`)
 | `fixtures/loras/` | the **shared LoRA fixtures** (LoRA normaliser, below): header-only files `{description, name, family?, metadata, tensors: {key: {dtype, shape}}, values: {alpha key: number}, ignore?, expect}` that runner_service and studio_service tests turn into synthetic safetensors (random A/B values, `values` for the alphas); `expect` = `{key_style, rank, total, applied, ignored, unapplied, error, family, licence}` against the canonical lora block of `family` (absent = qwen-image; `ltx`: `ltx.models.valid.json`'s) (`ignore`, when present, replaces its ignore list); `detect/families.json`: family detection cases (families with their envs and blocks, a LoRA fixture, the detected family) |
 | `check.py` | validates every fixture (a registry fixture may carry a family prefix, `<family>.<key>.…`), checks each canonical workflow against its node schemas (kinds, params, wire types by `fits`, values and defaults in range, `media`; a `frames` param's `fps` names an int/float param), runs the graph fixtures through its reference implementation of the graph rules (`graph_problems`, `autowire`, `wire_drop`), the pipeline fixtures through `pipeline_problems` (and their `bounds` / `models` / `egress` / `reserved`), the decision fixtures through `judge_verdict` / `inputs_hash` / `agent_turn` / `turn_schema`, the mention and look fixtures through `scan` / `look_fit` / `resolve_mentions`, (API 1.30) the voice fixtures through `workflow_media` / `voice_fit` (`voice_reason` per param) / `look_fit` / `speech_seconds`, the LoRA fixtures through `normalise`, the video fixtures through `auto_frames` / `position_errors` (and `retake_map` / `extend_map` / `audio_map`, `take_uses` / `media_fit`, `h3_generate_error`), the timeline fixtures through `t_normalize` / `t_apply` / `snap_point` / `drop_index` / `frame_at` / `export_plan` / `shot_keyframes` / `rerender_steps`, the dispatch fixtures through `admit` / `simulate` / `place`, node schemas' `values` / `values_by` / `auto`, lints `openapi.yaml` and the house rules |
 
@@ -1062,8 +1062,9 @@ unchanged; a video never fills them.
   tag or an MPEG audio frame sync) and stores `kind: audio`, `width` / `height` null, `audio {duration_s}` as
   declared, `thumb_url` = the file. The runner reads the file itself (a declared length that lies fails the run, never
   more). From 1.30 an audio take made by a run (Voices: `<output_prefix><n>.wav`) goes everywhere an audio upload
-  does: media params and rows accepting audio, offers ("Use in…"), `media_fit`. Audio takes are not timeline clips in this version (`wrong_track`; `POST …/clips`: 422 `take_ids[1]: an
-  audio take cannot go on the timeline yet`).
+  does: media params and rows accepting audio, offers ("Use in…"), `media_fit`. From 1.32 audio takes are clips on the audio tracks A2–A9 (Timeline rules; on V1 `wrong_track`, `POST
+  …/clips`: 422 `take_ids[0]: an audio take goes on an audio track` for the first take: `take_ids[<i>]` counts from 0, as
+  every `…/clips` and `…/shots` text since 1.17 does; a rows item's `[<i>]` and a script's `line <n>` count from 1); 1.19's `… cannot go on the timeline yet` is gone.
 - **Rows of media** (API 1.22, M7 pack 3 step 2; `media_rows`, `fixtures/video/media-rows.json`). A `rows` item field
   may be a `media` param (registry `itemParam`; required in every item, never a wire): each item holds one video or
   audio take as a `MediaRef` (`{take_id, in?, out?}`), next to the item's other fields (MiniMax H3: `videos`
@@ -1099,8 +1100,14 @@ unchanged; a video never fills them.
   an `image` or Image rows param; a video or audio take: a `media` param accepting it) that it fits; from 1.22 an
   input counts only when the workflow's `studio` block places it (composer, quick or inspector; no block: every
   input), not on an `optional` node, and not a rows param excluded by a wired `not_with` input (`placed_paths`,
-  `excluded`); rows of media are never offered into; `inputs` = that
-  input with the take (rows: as reference 1; trim: `in` 0, `out` = min(its duration, `max_s`)) and every span param =
+  `excluded`); from 1.32 a rows param with exactly one media field counts too (a workflow holds no item: the take
+  goes in as item 1), by the take's **own kind** only (a video into `videos`, an audio take into `audios`; a video's
+  sound fills audio rows only when the user picks it, else a video with sound would match two inputs and be offered
+  nowhere), so an audio take offers MiniMax H3 References and so does every video of 2 s or more (before 1.32 rows of
+  media were never offered into); `inputs` = that
+  input with the take (rows: as reference 1; trim: `in` 0, `out` = min(its duration, `max_s`, for rows also the
+  rows' `max_total_s`); a rows field's part offered, a Timeline range included, must hold its `min_s` and `max_s`, else
+  the template is not offered) and every span param =
   the whole take. A template with a `<family>/extend` node (`ltx/extend`, the fake `echo/extend`; `extend_room`) is offered only when one 8-frame step still fits under
   321 frames (ltx_floor(frames) + 8 ≤ 321); when its default 2 s does not fit, `extend.seconds` = the most whole steps
   that fit, as seconds rounded down to 0.1.
@@ -1164,7 +1171,7 @@ unchanged; a video never fills them.
 ## Voices (API 1.30, M8 step 2; plan 15-voices 19.3; normative)
 
 Speech as a made take, the `voice` param and saved voices (docs/plan/15-voices.md). Cloning (`clip` voices, Save as
-voice, the zonos3 family) is 1.31 (below: cloned voices); scripts, dialogue, voices on elements, cues and audio takes on the Timeline are 1.32. studio_service,
+voice, the zonos3 family) is 1.31 (below: cloned voices); scripts, dialogue, voices on elements, cues and audio takes on the Timeline are 1.32 (Dialogue and Timeline audio, below). studio_service,
 the web and the runner core implement these rules and test against `fixtures/voices/` (and `fixtures/mentions/
 resolve.audio-*.json`); `check.py` holds the reference (`workflow_media`, `voice_reason`, `voice_fit`, `look_fit`,
 `resolve_mentions`, `speech_seconds`; 1.31 `voice_sources`, `voice_source`, `save_voice`, `sweep`).
@@ -1180,8 +1187,8 @@ resolve.audio-*.json`); `check.py` holds the reference (`workflow_media`, `voice
   output is wired from an `Audio` and none from a `Video` or an `Image` (Video: a workflow's media); `GET /v1/studio/workflows?media=audio`. A model's
   `media` lists `audio` (Models and model jobs).
 - **Param `voice`** (registry `paramSchema`): one saved voice, default null, `accepts` (required, 1–3 distinct of
-  `preset` | `clip` | `design`: the voice sources it takes; `clip` from 1.31: a voice with a clip). It takes no wire, is never a rows item
-  field (1.32) and a workflow or preset holds null (`param_invalid` otherwise, as an image or media param). HTTP
+  `preset` | `clip` | `design`: the voice sources it takes; `clip` from 1.31: a voice with a clip). It takes no wire, may from 1.32 be a rows
+  item field (a dialogue's `lines`: Dialogue and Timeline audio) and a workflow or preset holds null (`param_invalid` otherwise, as an image or media param). HTTP
   value: `VoiceRef {voice_id}` (defs `voiceRef`): an own voice's UUID or a starter voice's `<family>/<id>`. A run
   needs one: `<node>.<param>: a voice is required`. **Studio resolves it** as the caller after the values are merged
   and checked (before mentions and looks): an own item of kind voice, or a starter voice a live host of the
@@ -1327,8 +1334,8 @@ and `fixtures/voices/clone.json`.
   `fr` fr_fr, `pt-BR` pt_br, `zh` cmn, the rest the same two letters), default `en-US`; **Delivery** floats as the
   board draws them, each mapped by the pack: `emotion` 0..1 (0.5; `mood.valence` = (v − 0.5) × 8, so −4..4, the
   safe range; 0 sends no control), `energy` 0..1 (0.5; `mood.arousal` the same way), `whisper` 0..1 (0;
-  `delivery.whisper` = v × 1.5), `speaking_rate` 0.5..1.5 (1; the speaking-rate condition: 1 sends none, the voice's
-  own pace; else `--speaking-rate` 15 × v UTF-8 bytes/s), `guidance` 1..5 step 0.1 (2; `--cfg-scale`, 1 = off).
+  `delivery.whisper` = v × 1.5), `speaking_rate` 0.5..1.5 (1; always sent as the speaking-rate condition 15 × v UTF-8
+  bytes/s, never unknown: 1 is 15, in the checkpoint's middle bucket of 30, a normal pace), `guidance` 1..5 step 0.1 (2; `--cfg-scale`, 1 = off).
   Component `whole model`. Long text is split on sentences (one CLI line is at most 450 frames, 30 s) and joined.
 - Workflow `zonos3-voice-over` (`only {voice: [preset, clip]}`): studio composer `[prompt.text]`, quick
   `[speak.voice, speak.language, seed.seed]`, inspector `Delivery` (emotion, energy, whisper, speaking_rate,
@@ -1341,6 +1348,106 @@ and `fixtures/voices/clone.json`.
   once into the pack by `ffmpeg -t 4 -ac 1 -ar 24000 -c:a pcm_s16le -map_metadata -1 -fflags +bitexact -flags +bitexact`
   (192 KB each, about 5 MB for the 27); the fixture's keys and sizes are that output from ffmpeg 9.0.2 on the owner's
   Mac, so the pack's test pins them (another ffmpeg may change the bytes: update the fixture with it).
+
+## Dialogue and Timeline audio (API 1.32, M8 step 5; plan 15-voices 19.3, 19.5; normative)
+
+Scripts, dialogue stages, cues, voices on elements, audio takes on the Timeline (Timeline: New line, Make shot and
+Timeline rules), offers and binds into rows of one media field (Media inputs: offers; Pipeline rules: `bind_type`),
+`library.read` voices and the write node's script form. Decided for the owner (plan 19.9): the script lives in the
+dialogue composer (3); one take per scene with per-line cues (4); a character carries one voice (5); New line is the
+timeline's fifth generating action (9). References in `check.py`: `script_lines`, `expand_script`, `echo_dialogue`,
+`script_check`, `voice_params` (rows voice fields), `speech_seconds` (lines), `make_shot`, `take_uses`, `t_edit`,
+`export_plan`, `rerender_steps`; fixtures `fixtures/voices/scripts.json`, `seconds.json`, `fixtures/timelines/`,
+`fixtures/video/uses.json`, `fixtures/pipelines/{valid.voice-to-shot,invalid.voice-binds}.json`.
+
+- **A voice rows field** (registry `itemParam` type `voice`, `accepts` ⊆ preset | clip | design, default null): a rows
+  item may hold one saved voice, required in every item, as a media field may (1.22). Values: `VoiceRef` in the
+  client form (`RowItem`, defs `inputValue`), defs `voice` in `cmd.run.execute` (`resolvedValue`), resolved exactly as
+  a voice param (as the caller; `<node>.<param>[<i>].<field>: ` before the texts: `dialogue.lines[2].voice: a voice is
+  required`, `… voice <id> not found`, `… this workflow cannot use a designed voice`, `… voice <name> is for <family>`).
+  A workflow holds `[]` (even under `min`). `only` on such a rows param narrows its voice field's `accepts` (as for a
+  voice param); the voice fit (`voice_params`, `GET /library?workflow=`) counts the field as one voice param named
+  `<param>.<field>`. Lineage, `made_with.voices` and the claim check as for voice params, in item order.
+- **Scripts** (`script_lines`, `expand_script`). A `text` param may declare `script: true` (registry and openapi
+  `ParamSchema`); its node must then have a rows param `lines` with exactly the fields `voice` (voice), `text`
+  (string), `style` (string), `pause_s` (float) (`check.py` refuses a pack schema without it), and may have a float
+  param `pause` ("Pause between lines"; without one the item's `pause_s` default is used). A script is not scanned for
+  mentions and takes no wire. Grammar: the text split on `\n` (a `\r` before it dropped), each line trimmed, numbered
+  from 1; a blank line is a pause; any other line is `@handle: text` or `@handle (style): text`
+  (`^@([A-Za-z][A-Za-z0-9_-]*)\s*(?:\(([^()]*)\))?\s*:(.*)$`, the handle lower-cased and an element handle, style and
+  text trimmed). **Expansion** at create time, where mentions are expanded (Create, a batch row at Submit against the
+  batch's element copy, which keeps `voice_id`; a pipeline step's run), after the values are merged and type-checked
+  and the rows of media checked, before the voices are resolved: for each known, not bypassed node (node id order)
+  whose script is not blank: given `lines` too is `<node>.lines: give the script or the lines, not both`; else each
+  line becomes `{voice: {voice_id: <the element's voice_id>}, text, style, pause_s}`. Per line the first problem, all
+  lines in order, joined by `; `: `<node>.script line <k>: write @name: text or @name (style): text`, `… nothing to
+  say` (empty text), `… at most 600 characters (<n>)` (code points over the text field's `max`), `… the style is at
+  most 200 characters (<n>)`, `… unknown element @<h>`, `… @<h> has no voice` (`voice_id` null: none, a location or
+  prop, or a voice deleted or no longer published since), `… voice <name> does not fit this workflow (<reason>)`
+  (`voice_reason` of the lines' voice field, narrowed by `only`: `voice Kai does not fit this workflow (this workflow
+  cannot use a designed voice)`). Then `<node>.script: the script is empty` (no spoken line, and none given) and
+  `<node>.lines: at most 40 lines` (the rows `max`). **Pauses**: a line's `pause_s` = silence after it = `pause` × (1 +
+  the blank lines right after it), `rnd(x × 1000) / 1000`, at most the field's `max` (5); the last line's is 0;
+  leading and trailing blank lines are ignored. **Result** (Mentions' shape): `inputs` `{<node>.script: "",
+  <node>.lines: rows}` (the runner reads the lines only; the script never reaches it), `typed` `{<node>.script: the
+  script, <node>.lines: the value before ([])}` (so `made_with.typed` keeps the script and reuse re-expands it against
+  the voices then), `made_with.elements` the speakers `{id, handle, name, version}` in first-line order,
+  `made_with.voices` `{id, name, version, source}` in first-line order, `parents` add each clip a line sends (Voices:
+  cloned voices), first use. 422 `detail` = the errors joined by `; ` (a batch row prefixes `row <n>: `).
+- **Elements carry a voice** (`LibraryItem.voice_id`, `LibraryItemCreate` / `LibraryItemUpdate.voice_id`): a
+  character element may name one of the caller's voices or a starter voice a live host publishes (`VoiceRef`'s id);
+  null = none. POST and PUT: 422 `voice_id: only a character has a voice` (any other group or kind with a non-null
+  one), 404 `voice_id: voice <id> not found` (unknown, another user's, deleted, not a voice, an unpublished starter
+  voice); fit is not checked there (a run checks it per line). Read: every element carries `voice_id`; one whose voice
+  is deleted (or no longer published) reads null, as a deleted take drops out of an element; deleting a voice never
+  touches elements. A PUT may send back a stored id that is gone since: it saves null. The element editor's Voice tile
+  (VoicePicker board) sets it; the dialogue composer's cast shows each speaker's voice from it.
+- **Cues** (defs `cue`, openapi `AudioCue`): a stage with `lines` reports `evt.run.output` `audio.cues` = one per line
+  `{line (from 1, the lines' order), start_s, end_s, voice_id, text}` (`text`: the line's text trimmed, as spoken), in the take's own seconds, in order, each inside
+  the take; studio stores them as `Take.audio.cues` (and `TimelineTake.audio`). Create's stage draws them as line
+  markers; the Timeline draws ticks at `at` + cue − `in` on the clip (a trimmed-out cue is not drawn). A voice-over
+  has none.
+- **The dialogue stages** (canonical `fixtures/registry/{qwen3-tts,zonos3}.{nodes,workflows}.valid.json`):
+  `qwen3-tts/dialogue` (Model, Seed → Audio; params `script`, `lines` (voice `accepts [preset]`: Qwen dialogue takes
+  presets only, a designed voice drifts between lines, plan 19.4), `pause`, `language`, `temperature`; component
+  talker) and `zonos3/dialogue` (`lines` voice `accepts [preset, clip]`; `pause`, `language`, Delivery: `emotion`,
+  `energy`, `whisper`, `speaking_rate`, `guidance`; component whole model; a line's `style` is mapped by the pack onto
+  that line's Delivery where it knows the word, else ignored: its GOTCHAS). Both at most 40 lines of 600 characters;
+  model.yaml gives them `peak_gb` and `max_seconds` as their `speak`. **`speech_seconds`** of a stage with `lines` = Σ
+  the lines' text (code points) / 15 + Σ `pause_s` but the last line's, capped at `max_seconds` (the memory plan's
+  default lines are empty: planned at `max_seconds`). Templates (file names give pack order): `qwen3-tts-dialogue`
+  (`workflows/3-qwen3-tts-dialogue.json`: model `only {variant: [custom_voice]}`; studio composer `[dialogue.script]`,
+  quick `[dialogue.lines, dialogue.language, seed.seed]` with `labels {dialogue.lines: Cast}` (the cast tile: each
+  speaker and voice from the script), inspector **Cast** (`dialogue.pause`) and **Voice** (`dialogue.temperature`;
+  "Style per line" is each line's `(style)`, drawn from the lines), presets **Steady** (0.3) and **Lively** (0.9);
+  the board CreateAudio's Dialogue mode) and `zonos3-dialogue` (`workflows/2-zonos3-dialogue.json`: inspector
+  **Delivery** then **Cast**, presets Neutral, Warm, Tense, Whisper as its voice-over; the board CreateAudioZonos3,
+  bottom). The ids are the voice-over's pattern (`<family>-dialogue`), not the file names.
+- **Echo** (fake): `echo/dialogue` (no inputs; `script`, `lines` voice `accepts [preset, clip, design]`, `pause`, `seed`,
+  `delay_ms` → Audio) writes a WAV at 24 kHz, PCM 16-bit, mono: per line one sine tone per character, 1600 samples each
+  (its pitch from the character and the line's voice, its phase from the seed), then rnd(pause_s × 24000) samples of
+  silence before the next line; cues from those sample counts (`echo_dialogue`); one progress step per line; no line
+  fails `<node>: nothing to say`. Template `echo-dialogue` (`dialogue` → `output`, `media: audio`). So the suite covers
+  scripts, voice rows, cues, New line and Make shot without a GPU.
+- **Agents and pipelines** (plan 19.5). `library.read` (Tools) lists voices (`kind: voice`, `group`, `name`, `family`)
+  and an element's `voice` name, so a Write node or the director knows who can speak. A **write node with `form:
+  script`** (`PipelineWriteNode.form`, defs `pipelineNode`; not with `list`: `write_target`) writes a dialogue script into
+  its `to` input (bound by a step to a `script` param, `dialogue.script` ← `$script`) with template **`write-script/v1`**
+  (the llm pack's prompts, beside `write/v2`; decision `template` `write-script/v1`): system as `write/v2`; the prompt
+  holds the instruction, the `from` texts fenced as `write/v2` does (`brief:`), and the **cast** fenced (`cast:`): one line
+  per character element with a voice, `@<handle> — <name>, voice <voice name>`, from `library.read {kind: element,
+  limit: 20, offset}` as the batch's owner, paged while `more` (every element, at most 1000); elements without a voice
+  are left out. Answer schema
+  `{script: string 1..4000, note: string ≤ 300}` (`max_tokens` 1400, as a write); the checks after the run
+  (`script_check`, re-asked once like any write): `line <k>: write @name: text or @name (style): text`, then as studio's
+  expansion checks a line `line <k>: nothing to say`, `line <k>: at most 600 characters (<n>)`, `line <k>: the style is
+  at most 200 characters (<n>)`, then `line <k>: @<h> is not in the cast`, `the script is empty`, `more than 40
+  lines` (so a script the expansion would refuse is re-asked, not failed at the step). The decision's `write {to, before, after,
+  note}` holds the script as `after`. The write's mention rule (answer mentions among the `from` texts') does not apply
+  to a script; studio expands the script at `studio.runs.create` as above. A fan-out over a shot list makes one
+  voice-over per shot (`each`, unchanged); the director can add rows with a script input (`rows.add`). Binds: a voice
+  step's one take fits a `media` param (`audio.source`) or a rows param of one media field (`generate.audios`) as item
+  1 (`bind_type`). No new pipeline node kinds.
 
 ## User workflows (API 1.5)
 
@@ -1578,7 +1685,7 @@ without exactly one inputs node. A **capped edge** is a branch's fail edge.
 | `unknown_preset` | run | node | `preset` is not in the workflow's `studio.presets` |
 | `step_input_invalid` | run | node, param | an `inputs` key that is not a settable param (`<node>.<param>` of a known kind, not wired; or `<node>.bypass` of a bypassable node, a bool), or a value that is `param_invalid` (a take included) |
 | `bind_unknown` | run | node, port | a bind key that is not a settable param of the workflow |
-| `bind_type` | run | node, port | the source does not fit: `$x` of type T fits a param whose wire type is T (Text: string/text, Int: int, Float: float, Seed: seed, Image: image), or an Image into a rows param with exactly one Image field (a one-item list); a takes/picked source of at most n takes fits an `image` param when n = 1, or such a rows param when n ≤ its `max`, and n = 1 when its item has a `position: seconds` field (each bound row takes the field's default time, so a second row would repeat a frame) |
+| `bind_type` | run | node, port | the source does not fit: `$x` of type T fits a param whose wire type is T (Text: string/text, Int: int, Float: float, Seed: seed, Image: image), or an Image into a rows param with exactly one Image field (a one-item list); a takes/picked source of at most n takes fits an `image` param when n = 1, or such a rows param when n ≤ its `max`, and n = 1 when its item has a `position: seconds` field (each bound row takes the field's default time, so a second row would repeat a frame); a `media` param when n = 1 (1.19); (1.32) a rows param with exactly one media field when n = 1 (the take as item 1, its other fields their defaults: a voice step's take into H3's `generate.audios`); a voice rows param (`lines`) takes no takes source |
 | `unbound_input` | run | node, port | an `image` param, or a rows param with one Image field and `min` ≥ 1, that is not bound (the workflow holds no take, so it has no default); (1.22) never a param of an `optional` node |
 | `step_seeds` | run | node | `seeds` > 1 and the workflow has no unwired `seed` param |
 | `unknown_look` | run | node, param `looks` | a step `looks` id that is not a look the caller can use now (Looks: unknown look) |
@@ -1698,7 +1805,9 @@ project memory, saved checklists, thumbnails for server or remote models.
 - **The fake** (`echo/ask`): answers the first JSON value after the last `ECHO-ANSWER:` in `prompt` (Python
   `raw_decode`; a JSON string is the text itself), else `{}` with a schema and `echo` without; it validates and
   retries like the real one (a bad scripted answer exercises both; the retry answers the JSON after the last
-  `ECHO-RETRY:` when the prompt has one, so "bad once, then good" is scriptable), `seen: []`, tokens and seconds 0.
+  `ECHO-RETRY:` when the prompt has one, so "bad once, then good" is scriptable; from 1.32 a pipelines re-ask, whose
+  prompt carries `Your answer was invalid:`, answers it too, so an answer that passes the schema but fails a node's
+  check, such as a script's cast, can be scripted bad once, then good), `seen: []`, tokens and seconds 0.
 
 **Node kinds** (`PipelineDoc`, openapi `PipelineJudgeNode`, `PipelineWriteNode`, `PipelineDecideNode`,
 `PipelineMemoryNode`; snapshot defs `pipelineNode`, where studio fills every default and adds `workflow`):
@@ -1709,7 +1818,8 @@ project memory, saved checklists, thumbnails for server or remote models.
   in Suggest, fail the row in Auto); On retry = `fail` (the step again, or a write that rewrites the prompt); Then =
   `then` (absent: Ask me).
 - `write`: `from` 1–4 text sources, `to` a `$<Text input>`, `instruction` (default `Fix what the reviewer found;
-  keep everything else.`), `model`. It sets that input's value for the rest of the row attempt (later `$<input>`
+  keep everything else.`), `model`, from 1.32 `form` text | script (default text; script: Dialogue and Timeline
+  audio, agents). It sets that input's value for the rest of the row attempt (later `$<input>`
   binds read the new text); the answer's `@` mentions must be among the handles the `from` texts mention (`scan`),
   else it is a failed check; studio expands them at `studio.runs.create` as for any prompt. Looks are chosen, never
   typed: a write adds none. One plain edge.
@@ -1912,7 +2022,7 @@ Every tool acts as the batch's owner, and nothing else is reachable. Args and re
 | Tool | Served by | Authority and caps |
 |---|---|---|
 | `gallery.search` | studio (`studio.tools`) | read-only: the owner's completed, not deleted takes (RLS), `text` a case-insensitive substring of title or prompt, `kind`, `collection`, `starred`; newest first, `limit` ≤ 20 (default 10), each `{take_id, kind, title, prompt ≤ 500, width, height, collection, starred, created_at}`, `more`. No URLs, no keys, no media |
-| `library.read` | studio (`studio.tools`) | read-only: the owner's elements and the looks the owner can use, by `kind`, `group`, `text` (name), `limit` ≤ 20; `{id, kind, group, name, handle, text ≤ 500}`, `more` |
+| `library.read` | studio (`studio.tools`) | read-only: the owner's elements, the looks and (1.32) the voices the owner can use, by `kind` (element, look, voice), `group`, `text` (name), `limit` ≤ 20, (1.32) `offset` (skip that many: page while `more`); `{id, kind, group, name, handle, text ≤ 500}`, `more`; from 1.32 an element adds `voice` (its voice's name, null without one: who can speak) and a voice adds `family` (a starter voice's, null for the owner's own) |
 | `memory.read` | pipelines (its store) | a row's agent: the batch's snapshot (so results do not depend on row order); only the director's chat reads live (`from: live`). `key`, `kind`, `limit` ≤ 16 (default 8), newest first |
 | `memory.write` | pipelines (its store) | a note in `<owner_id>/pipeline/<pipeline_id>`, key and text ≤ 2000; keyed by (batch, row, node, visit, call index) so a re-run overwrites; the director's chat by (batch, node, wake, call index), row null; source kind `node`; at most 4 per visit or wake; refused once the namespace is deleted or holds 500 items; seen from the next batch (the chat sees its own) |
 | `rows.add` | studio (`studio.tools`) | appends one row to the running batch: `inputs` by input name (Text a string, Int/Float/Seed a number, Image `{take_id}`); Submit's checks for that row (every input, types, the owner's takes, mentions' handles, 768 KB); row number = the last + 1, seeds drawn; at most 100 rows added per batch and 500 rows in all (`cap`); the stored row is in the reply and pipelines starts its thread (row 1 first is already past; it joins the window) |
@@ -2179,7 +2289,7 @@ lower-cased (case-insensitive: `@Fox` = `@fox`); any other `@` is literal text (
 A mention is never a partial handle: `@fox-cub` mentions `fox-cub`, not `fox`. The scan answers parts
 `{text}` (raw, `@@` kept) and `{mention, raw}`; adjacent text is one part; the raw parts join to the input.
 
-**Where.** Every param of type `text` (not `string`) of a known, not bypassed node, not wired, in a workflow whose media is not `audio` (API 1.30: spoken text is never expanded; Voices): today exactly
+**Where.** Every param of type `text` (not `string`) of a known, not bypassed node, not wired, not a `script` (1.32: Dialogue and Timeline audio), in a workflow whose media is not `audio` (API 1.30: spoken text is never expanded; Voices): today exactly
 `prompt.text` (Create's composer, the graph view's prompt param, a batch row's or line's prompt, a pipeline input
 bound to it, a step's fixed `inputs`). Params are taken in node-id order (code points), then schema order.
 
@@ -2725,7 +2835,8 @@ saved_at)` (the last 100: `revision <= current - 100` is pruned), and a shot ind
   lane of V1's own sound). A clip is a **slot** `{id, take_id, in, out | hold, at, gain_db, mute, transition_in,
   alternatives, shot}`: a video take uses `in`/`out` (source seconds), an image take and an **empty slot** (`take_id:
   null`: black and silence) use `hold`. V1 is laid end to end from 0 (its `at` is computed: a gap is an empty slot);
-  audio-track clips are a video take's sound placed at `at`. One video track only: no compositing in M5b (the board
+  audio-track clips are a video take's sound or (1.32) an audio take placed at `at`, or (1.32) a New line's
+  placeholder (`take_id` null, `at`, `hold`, `shot`). One video track only: no compositing in M5b (the board
   shows V1, A1, A2). Caps: 1000 clips, 500 per track, 32 alternatives per slot, 256 KB as compact JSON, 16 cast + 8
   looks in `defaults`.
 - **Edits are whole-document writes** (`PUT …/timelines/{id}` with the `revision` they were made on; stale = 409
@@ -2733,7 +2844,8 @@ saved_at)` (the last 100: `revision <= current - 100` is pruned), and a shot ind
   whole document normalized by one function (rules + snapping) on every write, which keeps one validator in Go; the
   edit maths are pure functions over the document (`t_edit`, shared fixtures) that the web runs to draw the result at
   once and then sends; a named-op API would duplicate each edit in Go. Server-made changes apply to the current
-  revision without one: `POST …/clips` (Add to timeline), `…/shots`, `…/rerender`, and the projector's fills. Each
+  revision without one: `POST …/clips` (Add to timeline), `…/shots`, (1.32) `…/lines`, `…/rerender`, and the
+  projector's fills. Each
   stored change is revision + 1. On 409 the web re-reads and re-applies its pending edit (edits address clips by
   `id`, so one whose clip is gone is dropped). Name and defaults change by PATCH, outside revisions.
 - **Revisions, undo, redo.** Every stored document is a revision with `undo_to` / `redo_to`. A user write (PUT, clips,
@@ -2822,14 +2934,16 @@ session; the batch limits apply). Order and binds are `rerender_steps` (`fixture
 
 ### Take actions (API 1.19; plan 15.3)
 
-- **List**: `GET …/timelines/{id}/clips/{clip}/actions?start=&end=` (a V1 clip) = the clip's take's offers (Media
+- **List**: `GET …/timelines/{id}/clips/{clip}/actions?start=&end=` (a V1 clip; from 1.32 an audio clip: Make shot,
+  below) = the clip's take's offers (Media
   inputs: offers) of the family of the workflow that made it (an upload, import or export: every family), with the
   range = the selection in sequence seconds (absent: the clip's extent), clamped to the clip and mapped to the take's
   own time `t − at + in` (snapped to the take's frames), put in every span param and a trim media param's `in` /
   `out`. Extend works from an end of the take, so an extend template (`ltx-extend`, `echo-extend`) is offered only at one: `extend.direction` `after`
   when the range ends at the take's end (within one frame), else `before` when it starts at 0, else not at all
   (`extend_room`; a trimmed clip's hidden tail would otherwise be skipped or restored). Empty for an empty slot, an
-  offline clip, or nothing fitting. 422 `unknown clip <id>`, `clip <id> is not on V1`, `start must be before end`.
+  offline clip, or nothing fitting. 422 `unknown clip <id>`, `start must be before end` (1.19's `clip <id> is not on
+  V1` is gone in 1.32: an audio clip answers Make shot).
   The inspector shows them as the board's "Extend" and "Retake a section" (labels from `action`), each with Replace
   and Insert after.
 - **Run**: `POST …/shots {slot, run}` with `run` = the action's workflow and inputs (as edited): Replace = `slot
@@ -2858,6 +2972,58 @@ session; the batch limits apply). Order and binds are `rerender_steps` (`fixture
   by position; A1 (V1's own sound) is not a track and stays; undo brings it back. Empty tracks never disappear on their
   own. V1: `video_track`.
 
+### New line (API 1.32; plan 15-voices 19.5)
+
+The timeline's fifth generating action (beside New shot, take actions, Replace, Re-render; plan 19.9 decision 9).
+`POST …/timelines/{id}/lines {slot, run}` (openapi `TimelineLineCreate`) is New shot's twin on an audio track:
+
+- `run` is a `RunRequest` created in the sequence's session exactly as Create's (the docked voice composer: the
+  voice-over or dialogue template, prefilled with the sequence's cast as a script, one `@handle:` line each); its
+  workflow's media must be audio (422 `New line needs a workflow whose media is audio`).
+- `slot {track, at, length, id?}`: a **placeholder** `{id, take_id: null, at: snap(at), hold: snap(length), shot
+  {run_id}}` on that audio track (the playhead; `length` the client's estimate, the template's planned seconds);
+  normalize checks it like any audio clip (`overlap`, `past_end`: 422 `TimelineError`, nothing stored). `slot {clip}`
+  redoes an audio clip ("Generate from this clip"): it gets the shot and keeps its take until the run's take arrives.
+  422 `unknown track A4`, `New line needs an audio track` (V1), `unknown clip <id>`, `clip <id> is not on an audio
+  track`; 409 `clip <id> already has a line running`. 202 `{timeline, run}` (`TimelineShot`), revision + 1.
+- **The result fills the slot** (studio, the projector's first take of the run): `fill` on an audio track = the whole
+  take at the slot's `at` (`in` 0, `out` its length), appended to `alternatives`, `shot` removed; a take that would run
+  into the next clip of its track is cut at that clip's start, one past the sequence's end at the end (with V1 clips;
+  `t_apply`), so a fill never fails. A failed run keeps the placeholder (`status: failed`, `error`: the board's "New line
+  failed · Retry · Remove"); a cancelled one **removes** the placeholder (an empty slot cannot stay on an audio track;
+  a redone clip just loses the shot); undo's reconcile does the same. A placeholder is trimmed by `trim` (its hold, the
+  start kept), moved by `move`, never split (`split_shot`), and plays nothing (`frame_at`).
+
+### Make shot (API 1.32; plan 15-voices 19.5)
+
+A take action on an audio clip: Audio to video at that clip's `at` and length, into V1, through the take-actions and
+New shot machinery (references `make_shot`, `t_edit` `place`, `rerender_steps`; fixtures `make-shot.json`,
+`edits.json`, `rerender.json`). What changes:
+
+- **List**: `GET …/clips/{clip}/actions` on an audio-track clip answers its take's offers of **every** family (the take
+  was made by a voice family; the shot is another's) into one `media` param that accepts audio of a workflow whose
+  media is video (`ltx-audio-to-video`, `echo-a2v`; never rows, never Retake or Extend of a video's sound), the range =
+  the selection or the clip's `in`..`out` in the take's own time (an audio take snapped to whole ms, a video's sound to
+  its frames), the part capped at the param's `max_s` (13.375 s: "a clip over 13.4 s gives its first 13.4 s"), each
+  with `slot {at: <the clip's at> + (the range's start − its in), length: out − in, exact: true}` (`TakeOffer.slot`; a
+  selection inside the clip starts the slot where that sound sits on the track). A V1 clip, an offline clip or a
+  placeholder: none here. A1 (V1's own sound) has no clips, so no Make shot.
+- **Run**: `POST …/shots {slot: {at, length, exact: true}, run}` with the action's workflow and inputs (as edited).
+  `exact` makes the slot with the **`place` edit** instead of `insert`: f = frames(at), n = frames(length); past V1's end
+  an empty slot `gap_id` of f − end first, then the slot; inside an empty slot (no shot) the gap is split: its left part
+  (f − its start, when > 0) keeps its id, then the slot, then what is left of the gap (when > 0; id `gap_id`, or the gap's
+  own when there is no left part); a slot longer than the gap is an insert of what overflows: V1 ripples and every audio-track clip starting at or after
+  the gap's end moves later by the same frames, so picture and sound stay together; inside a take's clip or a slot
+  with a shot it is `insert` at the nearest cut. Studio makes `id` (when absent) and `gap_id`. New shot's rules hold
+  from there: the placeholder, 409 for a clip with a shot running, the fill (the a2v take is the part's 8k + 1 frames,
+  so it fills the slot or shrinks it), a failed run keeping the shot, a cancelled one dropping it. The shot's take has
+  the audio take as a parent (Media inputs: lineage).
+- **Re-render**: `clips` may name audio-track clips whose take a workflow made (a line): each is a step `clip_<id>`
+  (same refusals: an empty slot, offline, `not_made`), its take filling the clip by the audio `fill`; a V1 clip whose
+  media input holds a take in a selected audio clip's `alternatives` (a Make shot) binds `<param>` ←
+  `clip_<line>.takes` and runs after it, so a re-voiced line re-makes its shot. Absent `clips` = V1 clips only, as
+  before.
+
 ### Export (plan 15.4)
 
 - **Plan** (`POST …/export/plan`; `export_plan`, `fixtures/timelines/plan.json`): from the **stream facts** stored on
@@ -2869,7 +3035,13 @@ session; the batch limits apply). Order and binds are `rerender_steps` (`fixture
   that starts the dissolve), `not_probed`, `container`, `codec`, `pixel_format`, `size`, `aspect`, `field_order`,
   `frame_rate`, `trimmed`, `profile`, `level`, `time_base`, `colour`, `parameter_sets`. Gain, mute and audio tracks
   never stop a copy: **sound is always re-encoded** (the 81 ms AAC lesson: each clip's sound is trimmed to its
-  picture, placed at its exact sample with a silence prefix, mixed with `amix normalize=0`, encoded once). `blocked`:
+  picture, placed at its exact sample with a silence prefix, mixed with `amix normalize=0`, encoded once). From 1.32
+  the plan lists `sounds` (`export_plan`, always sent): every clip the mix reads, V1 then the audio tracks in order (V1
+  video clips with sound and audio-track clips with a take; not muted on the clip or track, not offline), each
+  `{clip, track, sample_rate, channels}` from its take (an audio take: `audio.sample_rate`, 1 channel; a video's sound
+  or an upload: null, ffmpeg reads it). Every sound chain resamples to `target.sample_rate` and up-mixes to stereo
+  before the mix (`aresample=<rate>,aformat=channel_layouts=stereo`), so a 24 kHz Qwen line, a 44.1 kHz ZONOS3 line and
+  a 48 kHz video mix on one grid; a line placeholder reads nothing. `blocked`:
   `offline` (per clip), `empty`, `no_host`. `video_bitrate` (conform) = clamp(rnd(w × h × num / den × 0.15), 1 Mb/s, 40
   Mb/s); `estimated_bytes` = copy: Σ clip take bytes + rnd(192000 × duration / 8), else rnd((bitrate + 192000) ×
   duration / 8). `too_large`: longer than 2 hours, `estimated_bytes` over 16 GiB, or the distinct takes it reads (every
@@ -2908,7 +3080,7 @@ session; the batch limits apply). Order and binds are `rerender_steps` (`fixture
   `-progress pipe:1`; at most every 2 s and only when the count moved, or an input finished downloading: a stalled
   job goes silent and studio fails it), then one terminal status, waits for its ack, then acks. A command naming a
   key or `output_prefix` outside `u/<owner_id>/` or with a `..` segment is dead-lettered (`objectKey`, the claim-check
-  rule). It downloads each input once into a 0700 temp dir (an export of empty slots only has none; at most 8 GB each and 32 GiB
+  rule). It downloads each input once into a 0700 temp dir (from 1.32 an input may be kind `audio`: an audio take on an audio track, a WAV with a sound and no picture, else `input`; its sound is mixed as a video's is) (an export of empty slots only has none; at most 8 GB each and 32 GiB
   in all, never past the disk's free space less 2 GiB: else `input`; a cancel is checked between and during
   downloads), writes the concat
   list (copy; each file with its picture's `duration`, so the next starts where the picture ends, not its sound),
@@ -2955,13 +3127,13 @@ studio_service (Go: normalizes every write and restore, runs `add`, `insert`, `f
 | `take_not_found` | `take_id` or an alternative is not the caller's, and `previous` did not name it (named before: the clip is `offline`, kept, not trim-checked) |
 | `shot_invalid` | a `shot` that the stored revision's same clip does not have (only studio makes shots) |
 | `out_required` | an offline video clip without `out` |
-| `trim` | V1 video: `frames(in) < 0`, under one frame, or `frames(out)` past `frames(take length)`; audio: `in < 0`, `out ≤ in` or past the take, in samples |
+| `trim` | V1 video: `frames(in) < 0`, under one frame, or `frames(out)` past `frames(take length)`; audio (a video's sound or, 1.32, an audio take): `in < 0`, `out ≤ in` or past the take, in samples |
 | `hold_on_video` | a `hold` on a video take |
 | `image_trim` | `in` / `out` on an image or an empty slot |
 | `hold_required` | an image or empty slot on V1 without `hold` |
 | `hold` | a hold under one frame |
-| `wrong_track` | an image or an empty slot on an audio track; (1.19) an audio take on any track (not a clip in this version) |
-| `no_audio` | a take without sound on an audio track |
+| `wrong_track` | an image or an empty slot on an audio track (from 1.32 an empty slot with a `shot`, a New line's placeholder, is allowed there: `at` and `hold` required, both snapped to frames, `image_trim` for in / out); (1.32) an audio take on V1 (it has no picture; 1.19 refused it on every track) |
+| `no_audio` | a video take without sound on an audio track (an audio take always has sound) |
 | `at_required` | an audio-track clip without `at` |
 | `overlap` | an audio clip starting (in samples) before the previous one on its track ends |
 | `past_end` | an audio clip ending after the sequence (with V1 clips) |
@@ -2996,7 +3168,8 @@ studio_service (Go: normalizes every write and restore, runs `add`, `insert`, `f
   = the length); `set {clip, gain_db?, mute?, hold?, transition_in?}` (null removes); `add {take_ids, track, ids}` (V1:
   video whole, image hold 3 s; audio track: whole, at the first frame at or after the track's end in samples, so it never overlaps); `insert {at, hold, id}` (an empty slot
   at the V1 cut nearest frames(at), a tie: the later cut; the next clip's dissolve goes); `fill {clip, take_id}` (from 1.19 a take with `source_map` is placed by it: Take actions; New
-  shot, above); `add_track` (`too_many_tracks` past 8), `remove_track {track}` (audio only: `video_track`), `track
+  shot, above; from 1.32 on an audio track: `in` 0, `out` = the take's length, `at` kept: New line); (1.32) `place {at,
+  hold, id, gap_id}` (Make shot); `add_track` (`too_many_tracks` past 8), `remove_track {track}` (audio only: `video_track`), `track
   {track, gain_db?, mute?}`.
 - **Snapping** (`snap_point`): a dragged edge or audio clip start lands on the nearest **cut** (0 and every clip's start
   and end on every track, the dragged clip's own excluded; a tie: the earlier cut) when it is within 6 screen pixels

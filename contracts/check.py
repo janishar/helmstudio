@@ -15,7 +15,8 @@ fixtures/video/ through the reference auto length and keyframe position rules (R
 through the reference host admission (`admit`), dispatch order (`simulate`) (README, The hand-over) and placement
 among several hosts (`place`) (README, Several hosts);
 fixtures/timelines/ through the reference timeline rules (`t_normalize`, `t_edit`, `snap_point`, `frame_at`,
-`export_plan`, `shot_keyframes`, `rerender_steps`) (README, Timeline rules).
+`export_plan`, `shot_keyframes`, `rerender_steps`) (README, Timeline rules); fixtures/voices/ through the reference voice rules (README, Voices; from
+API 1.32 Dialogue and Timeline audio: `expand_script`, `echo_dialogue`, `script_check`, `make_shot`).
 Exit code 1 on any failure."""
 
 import copy
@@ -75,7 +76,7 @@ HTTP_SCHEMAS = [
     "ModelList", "ModelDownload", "ModelJob", "ModelJobList", "HostSettings", "HostSettingsPut", "HostPins", "HostUnload",
     "HostUnloadAccepted", "ImportTakeCreate", "ImportTake",
     "Timeline", "TimelineList", "TimelineCreate", "TimelineUpdate", "TimelineAddClips", "TimelineShotCreate",
-    "TimelineRerender", "ExportPlan", "MediaJob", "TakeFrame", "TakeUses", "ClipActions",
+    "TimelineRerender", "ExportPlan", "MediaJob", "TakeFrame", "TakeUses", "ClipActions", "TimelineLineCreate",
 ]
 OPENAPI = "https://helmstudio.local/contracts/openapi.yaml"
 OPERATION_PREFIX = {"/v1/studio/": "studio", "/files/": "files", "/auth/": "auth"}
@@ -164,6 +165,17 @@ def is_take(spec) -> bool:
     return spec in ("Image", "Media") or (isinstance(spec, dict) and spec["type"] == "media")
 
 
+def is_voice(spec) -> bool:
+    """A rows item field that holds a saved voice (API 1.32: a dialogue's `lines`)."""
+    return isinstance(spec, dict) and spec["type"] == "voice"
+
+
+def voice_field(param: dict) -> str | None:
+    """A rows param's one voice field (API 1.32), else None."""
+    fields = [k for k, v in param.get("item", {}).items() if is_voice(v)]
+    return fields[0] if param["type"] == "rows" and len(fields) == 1 else None
+
+
 def media_field(param: dict) -> str | None:
     """A rows param's one media field (API 1.22: video or audio references), else None."""
     fields = [k for k, v in param.get("item", {}).items() if isinstance(v, dict) and v["type"] == "media"]
@@ -186,8 +198,8 @@ def value_error(param: dict, v) -> str | None:
     if t == "rows":
         if not isinstance(v, list):
             return f"{v!r} is not a list"
-        if v == [] and any(is_take(x) for x in param["item"].values()):
-            return None  # a workflow holds no takes: [] even under min; the run needs min items (README, Video)
+        if v == [] and any(is_take(x) or is_voice(x) for x in param["item"].values()):
+            return None  # a workflow holds no takes or voices: [] even under min; the run needs min items (README, Video)
         if not param.get("min", 0) <= len(v) <= param["max"]:
             return f"{len(v)} items is outside {param.get('min', 0)}..{param['max']}"
         for i, row in enumerate(v, 1):
@@ -197,6 +209,8 @@ def value_error(param: dict, v) -> str | None:
                 if is_take(spec):  # a take; never in a registry workflow
                     return f"item {i}.{f}: a workflow cannot fill an image" if spec in ("Image", "Media") \
                         else f"item {i}.{f}: a workflow cannot fill a media field"
+                if is_voice(spec):  # API 1.32: nor a voice
+                    return f"item {i}.{f}: a workflow cannot fill a voice field"
                 if spec == "Lora":  # required in every item, {lora_id} (README, LoRAs)
                     v_ = row.get(f)
                     if not isinstance(v_, dict) or set(v_) != {"lora_id"} or not LORA_ID.match(str(v_["lora_id"])):
@@ -234,12 +248,15 @@ def value_error(param: dict, v) -> str | None:
 def only_errors(schema: dict, node: dict) -> list[tuple[str, str]]:
     """(param, message) for a workflow node's `only` (API 1.19): an enum param, a subset of its enum, holding the
     node's merged value; the form offers only those values (README, Media inputs: pinned variant). From 1.30 also a
-    voice param, a subset of its accepts: the fit rule reads the narrowed set (voice_params), a value is not checked here."""
+    voice param, a subset of its accepts: the fit rule reads the narrowed set (voice_params), a value is not checked here;
+    from 1.32 also a rows param with one voice field (a dialogue's lines), a subset of that field's accepts."""
     params, out = {p["name"]: p for p in schema["params"]}, []
     for k, allowed in node.get("only", {}).items():
         p = params.get(k)
-        if not p or p["type"] not in ("enum", "voice") or set(allowed) - set(p["enum" if p["type"] == "enum" else "accepts"]):
-            out.append((k, "only must name an enum or voice param and values of it"))
+        pool = (p["enum"] if p["type"] == "enum" else p["accepts"] if p["type"] == "voice"
+                else p["item"][voice_field(p)]["accepts"] if voice_field(p) else None) if p else None
+        if pool is None or set(allowed) - set(pool):
+            out.append((k, "only must name an enum, voice or voice rows param and values of it"))
         elif p["type"] == "enum" and node.get("params", {}).get(k, p["default"]) not in allowed:
             out.append((k, f"must be one of {', '.join(allowed)}"))
     return out
@@ -281,7 +298,20 @@ def schema_errors(n: dict) -> list[str]:
         for x in [p] + [v for v in p.get("item", {}).values() if isinstance(v, dict)]:
             if x.get("min_s", 0) > x.get("max_s", math.inf):
                 out.append(f"{p['name']}: min_s is above max_s")
+        if p.get("script") and not script_target(n):  # API 1.32 (README, Dialogue)
+            out.append(f"{p['name']}: a script needs a rows param `lines` with voice, text, style and pause_s fields")
     return out
+
+
+def script_target(schema: dict) -> dict | None:
+    """The rows param a node's script expands into: `lines`, with one voice field `voice` and the string fields
+    `text`, `style` and the float `pause_s` (API 1.32), else None."""
+    p = next((q for q in schema["params"] if q["name"] == "lines" and q["type"] == "rows"), None)
+    it = p["item"] if p else {}
+    typ = lambda k: it[k]["type"] if isinstance(it.get(k), dict) else None
+    ok = p and voice_field(p) == "voice" and set(it) == {"voice", "text", "style", "pause_s"} and \
+        (typ("text"), typ("style"), typ("pause_s")) == ("string", "string", "float")
+    return p if ok else None
 
 
 def check_canonical_registries() -> None:
@@ -831,7 +861,8 @@ def pipeline_problems(doc: dict, workflows: dict[str, dict], palette: dict, look
             add("model_media", nid)
     for nid in of("write"):
         n = nodes[nid]
-        if ("list" in n) == ("to" in n) or ("to" in n and inputs.get(n["to"][1:]) != "Text"):
+        if ("list" in n) == ("to" in n) or ("to" in n and inputs.get(n["to"][1:]) != "Text") or (
+                n.get("form") == "script" and "list" in n):  # 1.32: a script is one text
             add("write_target", nid)
     for nid in of("write") + of("decide") + of("agent") + [m for m in of("memory") if nodes[m]["op"] == "write"]:
         text_sources(nid)
@@ -1001,7 +1032,8 @@ def pipeline_problems(doc: dict, workflows: dict[str, dict], palette: dict, look
             elif src:
                 timed = any(isinstance(v, dict) and v.get("position") == "seconds" for v in p.get("item", {}).values())
                 fits = (p["type"] in ("image", "media") and src[1] == 1) or (
-                    image_field(p) is not None and src[1] <= (1 if timed else p["max"]))
+                    image_field(p) is not None and src[1] <= (1 if timed else p["max"])) or (
+                    media_field(p) is not None and src[1] == 1)  # 1.32: one take as item 1 (H3 audios)
             if src and not fits:
                 add("bind_type", nid, k)
         for k, p in params.items():  # a param of an optional node (API 1.22) may stay empty
@@ -1840,14 +1872,24 @@ def take_uses(take: dict, workflows: list[dict], palette: dict, rng: tuple | Non
                 elif take["kind"] != "image" and p["type"] == "media" and (
                         take["kind"] in p["accepts"] or (take["kind"] == "video" and "audio" in p["accepts"])):
                     found.append((nid, p))
-        if len(found) != 1 or (take["kind"] != "image" and media_fit(found[0][1], take)):
+                elif take["kind"] != "image" and media_field(p) and take["kind"] in p["item"][media_field(p)]["accepts"]:
+                    found.append((nid, p))  # 1.32: rows of one media field, by the take's own kind only
+        spec = (found[0][1]["item"][media_field(found[0][1])] if media_field(found[0][1]) else found[0][1]) if found else None
+        if len(found) != 1 or (take["kind"] != "image" and media_fit(spec, take)):
             continue
         (nid, p), path = found[0], f"{found[0][0]}.{found[0][1]['name']}"
         a, b = rng or (0, take.get("duration_s"))
         if p["type"] == "image":
             inputs = {path: {"take_id": take["id"]}}
-        elif p["type"] == "rows":
+        elif p["type"] == "rows" and image_field(p):
             inputs = {path: [{image_field(p): {"take_id": take["id"]}}]}
+        elif p["type"] == "rows":  # 1.32: the take as item 1 of a rows param of one media field
+            longest = min(spec.get("max_s", math.inf), p.get("max_total_s", math.inf))
+            part = {"in": a, "out": min(b, a + longest)} if spec.get("trim") else {}
+            n = part["out"] - a if part else b - a  # the part offered (a Timeline range) holds the field's limits
+            if n < spec.get("min_s", 0) - 1e-9 or n > spec.get("max_s", math.inf) + 1e-9:
+                continue
+            inputs = {path: [{media_field(p): {"take_id": take["id"]} | part}]}
         else:
             cap = min(b, a + p["max_s"]) if p.get("max_s") else b
             inputs = {path: {"take_id": take["id"]} | ({"in": a, "out": cap} if p.get("trim") else {})}
@@ -1975,11 +2017,16 @@ SPEECH_CPS = 15  # characters per second of planned speech (the peak_gb variable
 
 def voice_params(nodes: dict, palette: dict) -> list[tuple[str, dict]]:
     """Every voice param of a known, not bypassed node, node id order then schema order (it takes no wire), its
-    accepts narrowed to the node's `only` (1.30)."""
-    pin = lambda nid, p: p | {"accepts": [a for a in p["accepts"] if a in nodes[nid]["only"][p["name"]]]} \
-        if p["name"] in nodes[nid].get("only", {}) else p
-    return [(nid, pin(nid, p)) for nid in sorted(nodes) if (s := palette.get(nodes[nid]["kind"]))
-            and not nodes[nid].get("bypass") for p in s["params"] if p["type"] == "voice"]
+    accepts narrowed to the node's `only` (1.30); from 1.32 a rows param's one voice field (a dialogue's lines) counts
+    as one, named `<param>.<field>` and narrowed by `only` on the rows param."""
+    def one(nid: str, p: dict) -> dict | None:
+        f = voice_field(p) if p["type"] == "rows" else None
+        q = p if p["type"] == "voice" else p["item"][f] | {"name": f"{p['name']}.{f}"} if f else None
+        if q and p["name"] in nodes[nid].get("only", {}):
+            q = q | {"accepts": [a for a in q["accepts"] if a in nodes[nid]["only"][p["name"]]]}
+        return q
+    return [(nid, q) for nid in sorted(nodes) if (s := palette.get(nodes[nid]["kind"]))
+            and not nodes[nid].get("bypass") for p in s["params"] if (q := one(nid, p))]
 
 
 def voice_sources(item: dict) -> list[str]:
@@ -2069,6 +2116,10 @@ def speech_seconds(nodes: dict, palette: dict, stage: str, max_seconds: float | 
     val = lambda nid: nodes[nid].get("params", {}).get("text", next(
         p["default"] for p in palette[nodes[nid]["kind"]]["params"] if p["name"] == "text"))
     s = palette[nodes[stage]["kind"]]
+    if script_target(s):  # API 1.32, a dialogue: its lines' text and the pauses between them (README, Dialogue)
+        rows = nodes[stage].get("params", {}).get("lines", [])
+        sec = sum(len(r.get("text", "")) for r in rows) / SPEECH_CPS + sum(r.get("pause_s", 0) for r in rows[:-1])
+        return min(sec, max_seconds) if max_seconds is not None else sec
     port = next((i["name"] for i in s["inputs"] if i["type"] == "Text" and i["name"] in nodes[stage].get("in", {})), None)
     level = [nodes[stage]["in"][port].split(".")[0]] if port else [stage]
     seen = set(level)
@@ -2082,6 +2133,133 @@ def speech_seconds(nodes: dict, palette: dict, stage: str, max_seconds: float | 
         chars = 0
     sec = chars / SPEECH_CPS
     return min(sec, max_seconds) if max_seconds is not None else sec
+
+
+SCRIPT_LINE = re.compile(r"^@([A-Za-z][A-Za-z0-9_-]*)\s*(?:\(([^()]*)\))?\s*:(.*)$")
+SCRIPT_FORM = "write @name: text or @name (style): text"
+
+
+def script_lines(script: str) -> list[dict]:
+    """A script's lines (README, Dialogue: scripts): each line of the text (split on \\n, a \\r before it dropped),
+    trimmed, from 1: blank = a pause; else `@handle: text` or `@handle (style): text` with the handle lower-cased and
+    style and text trimmed, or {line, error: SCRIPT_FORM}."""
+    out = []
+    for k, raw in enumerate(script.replace("\r\n", "\n").split("\n"), 1):
+        t = raw.strip()
+        m = SCRIPT_LINE.match(t) if t else None
+        if not t:
+            out.append({"line": k, "blank": True})
+        elif not m or not HANDLE.match(m.group(1).lower()):
+            out.append({"line": k, "error": SCRIPT_FORM})
+        else:
+            out.append({"line": k, "handle": m.group(1).lower(), "style": (m.group(2) or "").strip(),
+                        "text": m.group(3).strip()})
+    return out
+
+
+def expand_script(nodes: dict, palette: dict, library: list[dict], voices: dict) -> dict:
+    """Studio's script expansion at create time (README, Dialogue: scripts), on merged, type-checked values: every
+    known, not bypassed node with a `script` param whose value is not blank writes its `lines` from it (the script is
+    then sent empty), each line's voice = its element's `voice_id`, checked with voice_reason against the lines'
+    voice field (narrowed by `only`). library: the caller's elements as studio reads them ({id, handle, name,
+    version, voice_id}, a deleted voice already null); voices: voice id → LibraryItem (the caller's own and the live
+    starter voices). Answers {errors} or {inputs, typed, elements, voices, parents} (parents: the clip takes the lines
+    send, first use order)."""
+    by_handle, errs = {e["handle"]: e for e in library}, []
+    res = {"inputs": {}, "typed": {}, "elements": [], "voices": [], "parents": []}
+    for nid in sorted(nodes):
+        n, s = nodes[nid], palette.get(nodes[nid]["kind"])
+        sp = next((p for p in s["params"] if p.get("script")), None) if s and not n.get("bypass") else None
+        if not sp:
+            continue
+        lp, vals = script_target(s), {p["name"]: p["default"] for p in s["params"]} | n.get("params", {})
+        script, given = vals[sp["name"]], vals["lines"]
+        if not script.strip():
+            if not given:
+                errs.append(f"{nid}.{sp['name']}: the script is empty")
+            continue  # typed lines are resolved as voice values, not here
+        if given:
+            errs.append(f"{nid}.lines: give the script or the lines, not both")
+            continue
+        field = next(q for x, q in voice_params({nid: n}, palette) if q["name"] == "lines.voice")
+        it, pause = lp["item"], vals.get("pause", lp["item"]["pause_s"]["default"])
+        parsed, rows, mine = script_lines(script), [], []
+        for ln in parsed:
+            if ln.get("blank"):
+                if rows:
+                    rows[-1][1] += 1
+                continue
+            at = f"{nid}.{sp['name']} line {ln['line']}: "
+            el = by_handle.get(ln.get("handle"))
+            item = voices.get(el["voice_id"]) if el and el.get("voice_id") else None
+            why = item and voice_reason(n["kind"], field, item)
+            e = ln.get("error") or ("nothing to say" if not ln["text"] else None) \
+                or (f"at most {it['text']['max']} characters ({len(ln['text'])})" if len(ln["text"]) > it["text"]["max"] else None) \
+                or (f"the style is at most {it['style']['max']} characters ({len(ln['style'])})"
+                    if len(ln["style"]) > it["style"]["max"] else None) \
+                or (f"unknown element @{ln['handle']}" if not el else None) \
+                or (f"@{ln['handle']} has no voice" if not item else None) \
+                or (f"voice {item['name']} does not fit this workflow ({why})" if why else None)
+            if e:
+                errs.append(at + e)
+                continue
+            rows.append([{"voice": {"voice_id": item["id"]}, "text": ln["text"], "style": ln["style"]}, 0])
+            mine.append((el, item))
+        if errs:
+            continue
+        if not rows:
+            errs.append(f"{nid}.{sp['name']}: the script is empty")
+            continue
+        if len(rows) > lp["max"]:
+            errs.append(f"{nid}.lines: at most {lp['max']} lines")
+            continue
+        last = len(rows) - 1
+        lines = [r | {"pause_s": 0 if i == last else min(it["pause_s"]["max"], rnd(pause * (1 + b) * 1000) / 1000)}
+                 for i, (r, b) in enumerate(rows)]
+        res["inputs"] |= {f"{nid}.{sp['name']}": "", f"{nid}.lines": lines}
+        res["typed"] |= {f"{nid}.{sp['name']}": script, f"{nid}.lines": given}
+        for el, item in mine:
+            if el["id"] not in [x["id"] for x in res["elements"]]:
+                res["elements"].append({k: el[k] for k in ("id", "handle", "name", "version")})
+            if item["id"] not in [x["id"] for x in res["voices"]]:
+                res["voices"].append({"id": item["id"], "name": item["name"], "version": item["version"],
+                                      "source": item["group"]})
+            clip = item["voice"].get("clip", {}).get("take_id") if voice_source(field, item) == "clip" else None
+            if clip and clip not in res["parents"]:
+                res["parents"].append(clip)
+    return {"errors": errs} if errs else res
+
+
+def echo_dialogue(lines: list[dict], rate: int = 24000) -> dict:
+    """The fake echo/dialogue's take (README, Dialogue: echo): each line one sine tone per character (rate / 15
+    samples each), then rnd(pause_s × rate) samples of silence before the next line; cues from 1 in seconds."""
+    cues, at = [], 0
+    for i, r in enumerate(lines, 1):
+        text = r["text"].strip()  # the text spoken: a typed line's spaces are not
+        end = at + len(text) * rate // SPEECH_CPS
+        cues.append({"line": i, "start_s": at / rate, "end_s": end / rate, "voice_id": r["voice"]["voice_id"],
+                     "text": text})
+        at = end + (rnd(r["pause_s"] * rate) if i < len(lines) else 0)
+    return {"duration_s": at / rate, "cues": cues}
+
+
+def script_check(script: str, cast: list[str], max_lines: int = 40, text_max: int = 600,
+                 style_max: int = 200) -> str | None:
+    """A write-script/v1 answer's check in pipelines (README, Dialogue: agents): None, or the failed check's text
+    (the write is re-asked once): the first bad line in expand_script's order (malformed, nothing to say, text over
+    text_max, style over style_max, a handle not in the cast), no line, too many lines."""
+    parsed = [x for x in script_lines(script) if not x.get("blank")]
+    for x in parsed:
+        e = x.get("error") or ("nothing to say" if not x["text"] else None) \
+            or (f"at most {text_max} characters ({len(x['text'])})" if len(x["text"]) > text_max else None) \
+            or (f"the style is at most {style_max} characters ({len(x['style'])})" if len(x["style"]) > style_max
+                else None) \
+            or (f"@{x['handle']} is not in the cast" if x["handle"] not in cast else None)
+        if e:
+            return f"line {x['line']}: {e}"
+    if not parsed:
+        return "the script is empty"
+    return f"more than {max_lines} lines" if len(parsed) > max_lines else None
 
 
 def check_voices(registry: Registry, palette: dict) -> None:
@@ -2125,6 +2303,31 @@ def check_voices(registry: Registry, palette: dict) -> None:
         if (got := sweep(case["takes"], case["voices"])) != case["expect"]:
             fail(f"fixtures/voices/clone.json sweep {case['description']!r}: got {got!r}, want {case['expect']!r}")
     print("ok   fixtures/voices/clone.json")
+    fx = json.loads((g / "scripts.json").read_text())  # 1.32: scripts, dialogue lines, echo cues, write-script checks
+    inputs_v = Draft202012Validator({"$ref": f"{OPENAPI}#/components/schemas/RunInputs"}, registry=registry)
+    for vid, item in fx["voices"].items():
+        if errs := list(item_v.iter_errors(item)):
+            fail(f"fixtures/voices/scripts.json voice {vid}: {errs[0].json_path}: {errs[0].message}")
+    for wid, wf in fx["workflows"].items():
+        if errs := list(doc_v.iter_errors(wf)):
+            fail(f"fixtures/voices/scripts.json {wid}: not a WorkflowDoc: {errs[0].json_path}: {errs[0].message}")
+    for case in fx["cases"]:
+        where = f"fixtures/voices/scripts.json {case['description']!r}"
+        nodes = copy.deepcopy(fx["workflows"][case["workflow"]]["nodes"])
+        for k, v in case.get("params", {}).items():
+            nodes[k.split(".")[0]].setdefault("params", {})[k.split(".")[1]] = v
+        got = expand_script(nodes, palette, fx["library"], fx["voices"])
+        if got != case["expect"]:
+            fail(f"{where}: got {json.dumps(got)}, want {json.dumps(case['expect'])}")
+            continue
+        if "inputs" in got and (errs := list(inputs_v.iter_errors(got["inputs"]))):
+            fail(f"{where}: inputs are not RunInputs: {errs[0].message}")
+        if "take" in case and (t := echo_dialogue(next(v for k, v in got["inputs"].items() if k.endswith(".lines")))) != case["take"]:
+            fail(f"{where}: echo take {json.dumps(t)}, want {json.dumps(case['take'])}")
+    for case in fx["checks"]:
+        if (got := script_check(case["script"], case["cast"])) != case["expect"]:
+            fail(f"fixtures/voices/scripts.json check {case['description']!r}: got {got!r}, want {case['expect']!r}")
+    print("ok   fixtures/voices/scripts.json")
     # starter voices: a family's voice ids are not its look ids (they share the /library/<family>/<id> URL)
     reg = HERE / "fixtures" / "registry"
     looks = {x["id"] for x in json.loads((reg / "looks.valid.json").read_text())["looks"]}
@@ -2174,7 +2377,8 @@ class Grid:
 
 
 def t_kind(c: dict, takes: dict) -> str:
-    """slot (no take: an empty slot), video or image; an offline clip by its fields (hold = image)."""
+    """slot (no take: an empty slot, or from 1.32 a New line's placeholder on an audio track), video, image or
+    (1.32) audio; an offline clip by its fields (hold = image)."""
     tid = c.get("take_id")
     return "slot" if not tid else takes[tid]["kind"] if tid in takes else "image" if "hold" in c else "video"
 
@@ -2182,8 +2386,13 @@ def t_kind(c: dict, takes: dict) -> str:
 def t_len(c: dict, kind: str, g: Grid, audio: bool = False) -> int:
     """A clip's length in frames on the sequence (an audio-track clip: its end's frame minus its start's)."""
     if audio:
-        return g.f(c["at"] + c["out"] - c["in"]) - g.f(c["at"])
+        return g.f(c["at"] + (c["hold"] if "hold" in c else c["out"] - c["in"])) - g.f(c["at"])
     return g.f(c["out"]) - g.f(c["in"]) if kind == "video" else g.f(c["hold"])
+
+
+def a_len(c: dict, g: Grid) -> int:
+    """An audio-track clip's length in target samples: out − in, or (1.32) a line placeholder's hold."""
+    return g.smp(c["hold"]) if "hold" in c else g.smp(c["out"]) - g.smp(c["in"])
 
 
 def shot_ref(shot: dict) -> dict:
@@ -2221,7 +2430,7 @@ def t_normalize(doc: dict, takes: dict, previous: dict | None = None) -> tuple[d
             if cid in ids:
                 add("duplicate_clip", name, cid)
             ids.add(cid)
-            if kind == "audio":  # an audio take is not a clip in this version (README, Timeline rules)
+            if kind == "audio" and video:  # 1.32: an audio take goes on A2-A9 only (README, Timeline rules)
                 add("wrong_track", name, cid)
                 continue
             if any(x not in takes and x not in known for x in [tid] * bool(tid) + c.get("alternatives", [])):
@@ -2229,7 +2438,7 @@ def t_normalize(doc: dict, takes: dict, previous: dict | None = None) -> tuple[d
             if "shot" in c and shots.get(cid) != shot_ref(c["shot"]):
                 add("shot_invalid", name, cid)
             n = {"id": cid, "take_id": tid}
-            if kind == "video":
+            if kind in ("video", "audio"):
                 if "hold" in c:
                     add("hold_on_video", name, cid)
                 end = c.get("out", tk["duration_s"] if tk else None)
@@ -2245,15 +2454,24 @@ def t_normalize(doc: dict, takes: dict, previous: dict | None = None) -> tuple[d
                     i_, o_ = g.smp(c.get("in", 0)), g.smp(end)
                     if tk and not (0 <= i_ < o_ <= g.smp(tk["duration_s"])):
                         add("trim", name, cid)
-                    if tk and not tk["has_audio"]:
+                    if tk and kind == "video" and not tk["has_audio"]:
                         add("no_audio", name, cid)
                     if "at" not in c:
                         add("at_required", name, cid)
                         continue
                     n |= {"in": i_ / g.sr, "out": o_ / g.sr, "at": g.snap(c["at"])}
-            elif not video:
+            elif not video and not (kind == "slot" and "shot" in c):  # 1.32: a New line placeholder is the exception
                 add("wrong_track", name, cid)
                 continue
+            elif not video:
+                if "in" in c or "out" in c:
+                    add("image_trim", name, cid)
+                if "hold" not in c or "at" not in c:
+                    add("hold_required" if "hold" not in c else "at_required", name, cid)
+                    continue
+                if g.f(c["hold"]) < 1:
+                    add("hold", name, cid)
+                n |= {"at": g.snap(c["at"]), "hold": g.snap(c["hold"])}
             else:
                 if "in" in c or "out" in c:
                     add("image_trim", name, cid)
@@ -2305,7 +2523,7 @@ def t_normalize(doc: dict, takes: dict, previous: dict | None = None) -> tuple[d
             clips.sort(key=lambda x: x[0]["at"])
             prev_end = None
             for n, _ in clips:
-                a, e = g.smp(n["at"]), g.smp(n["at"]) + g.smp(n["out"]) - g.smp(n["in"])
+                a, e = g.smp(n["at"]), g.smp(n["at"]) + a_len(n, g)
                 if prev_end is not None and a < prev_end:
                     add("overlap", name, n["id"])
                 prev_end = max(e, prev_end or 0)
@@ -2357,10 +2575,31 @@ def t_edit(doc: dict, op: dict, takes: dict) -> dict | str:
             else:
                 t["clips"].append({"id": cid, "take_id": tid, "in": 0, "out": tk["duration_s"]})
         return d
+    cuts = [0]
+    for c in v1:
+        cuts.append(cuts[-1] + t_len(c, t_kind(c, takes), g))
+    if o == "place":  # 1.32, Make shot: an empty slot at exactly frames(at) (README, Timeline: Make shot)
+        f, n = g.f(op["at"]), g.f(op["hold"])
+        new = {"id": op["id"], "take_id": None, "hold": g.s(n)}
+        if f >= cuts[-1]:  # past V1's end: a gap up to it first
+            v1 += [{"id": op["gap_id"], "take_id": None, "hold": g.s(f - cuts[-1])}] * (f > cuts[-1]) + [new]
+            return d
+        k = max(i for i in range(len(v1)) if cuts[i] <= f)
+        gap = v1[k]
+        if gap.get("take_id") or "shot" in gap:  # inside a take's clip or a running shot: the insert edit
+            o, op = "insert", {"at": op["at"], "hold": g.s(n), "id": op["id"]}
+        else:  # inside an empty slot: split it around the new slot
+            left, right = f - cuts[k], cuts[k + 1] - f - n
+            parts = ([gap | {"hold": g.s(left)}] if left else []) + [new] + \
+                ([{"id": op["gap_id"] if left else gap["id"], "take_id": None, "hold": g.s(right)}] if right > 0 else [])
+            v1[k:k + 1] = parts
+            cut_at(k + len(parts))
+            for t in d["tracks"][1:] if right < 0 else []:  # longer than the gap: an insert of what overflows, so
+                for c in t["clips"]:  # every track moves on together after the gap (V1 rippled; the audio too)
+                    if g.f(c["at"]) >= cuts[k + 1]:
+                        c["at"] = g.s(g.f(c["at"]) - right)
+            return d
     if o == "insert":  # an empty slot at the V1 cut nearest the playhead (a tie: the later cut)
-        cuts = [0]
-        for c in v1:
-            cuts.append(cuts[-1] + t_len(c, t_kind(c, takes), g))
         f = g.f(op["at"])
         i = min(range(len(cuts)), key=lambda k: (abs(cuts[k] - f), -k))
         v1.insert(i, {"id": op["id"], "take_id": None, "hold": op["hold"]})
@@ -2396,7 +2635,7 @@ def t_edit(doc: dict, op: dict, takes: dict) -> dict | str:
             tracks[op.get("track", t["name"])]["clips"].append(c | {"at": op["at"]})
     elif o == "trim":
         df = g.f(op["delta"])
-        src = g.f(takes[c["take_id"]]["duration_s"]) if kind == "video" and c.get("take_id") in takes else None
+        src = g.f(takes[c["take_id"]]["duration_s"]) if kind in ("video", "audio") and c.get("take_id") in takes else None
         if on_v1:
             d_in, d_out = din(i), din(i + 1)
             least = max(1, d_in // 2 + d_out // 2)
@@ -2410,6 +2649,8 @@ def t_edit(doc: dict, op: dict, takes: dict) -> dict | str:
                 c["in"], c["out"] = g.s(i_), g.s(o_)
             else:
                 c["hold"] = g.s(max(g.f(c["hold"]) + (df if op["edge"] == "out" else -df), least))
+        elif kind == "slot":  # 1.32: a line placeholder's hold, its start kept
+            c["hold"] = g.s(max(g.f(c["hold"]) + (df if op["edge"] == "out" else -df), 1))
         else:
             i_, o_, frame = g.smp(c["in"]), g.smp(c["out"]), g.smp(g.s(1))
             if op["edge"] == "in":
@@ -2417,7 +2658,7 @@ def t_edit(doc: dict, op: dict, takes: dict) -> dict | str:
                 ni = min(max(i_ + g.smp(g.s(df)), 0), o_ - frame)
                 c["at"], c["in"] = g.snap(c["at"] + (ni - i_) / g.sr), ni / g.sr
             else:
-                no = max(o_ + g.smp(g.s(df)), i_ + frame)
+                no = max(o_ + g.smp(g.s(df)), i_ + frame)  # 1.32: a video's sound or an audio take ends at the take's end
                 c["out"] = (no if src is None else min(no, g.smp(takes[c["take_id"]]["duration_s"]))) / g.sr
     elif o in ("remove", "lift"):
         if o == "lift" and not on_v1:
@@ -2434,7 +2675,7 @@ def t_edit(doc: dict, op: dict, takes: dict) -> dict | str:
         if op["take_id"] not in takes:
             return "take_not_found"
         tk, ln = takes[op["take_id"]], t_len(c, kind, g, audio=not on_v1)
-        old_in = g.f(c["in"]) if kind == "video" else 0
+        old_in = g.f(c["in"]) if kind in ("video", "audio") else 0
         for k in ("in", "out", "hold"):
             c.pop(k, None)
         if tk["kind"] == "image" and on_v1:
@@ -2456,7 +2697,9 @@ def t_edit(doc: dict, op: dict, takes: dict) -> dict | str:
         sm, i0, o0 = tk.get("source_map"), c.get("in"), c.get("out")
         for k in ("in", "out", "hold", "shot"):
             c.pop(k, None)
-        if tk["kind"] == "image":
+        if not on_v1:  # 1.32, an audio track (New line, a line's re-render): the whole take at the slot's start
+            c["in"], c["out"] = 0, tk["duration_s"]
+        elif tk["kind"] == "image":
             c["hold"] = g.s(ln)
         elif sm:  # the generated part; replacing its source (or a take made from it): the clip's window, grown on a
             # side only where the generated part lies outside the source (extend), never by the 8-frame snap (retake)
@@ -2517,6 +2760,11 @@ def t_apply(doc: dict, op: dict, takes: dict) -> dict:
         g = Grid(raw["target"])
         bad = {p[2] for p in probs if p[0] in ("dissolve_handles", "dissolve_length")}
         past = {p[2] for p in probs if p[0] == "past_end"}
+        for t in raw["tracks"][1:]:  # 1.32: a filled line running into the next clip of its track is cut at its start
+            order = sorted(t["clips"], key=lambda c: g.smp(c["at"]))
+            for prev, c in zip(order, order[1:]):
+                if [p for p in probs if p[0] == "overlap" and p[2] == c["id"]] and "out" in prev:
+                    prev["out"] = (g.smp(prev["in"]) + g.smp(c["at"]) - g.smp(prev["at"])) / g.sr
         end = g.smp(g.s(sum(t_len(c, t_kind(c, takes), g) for c in raw["tracks"][0]["clips"])))
         for c in raw["tracks"][0]["clips"]:
             if c["id"] in bad:
@@ -2525,8 +2773,10 @@ def t_apply(doc: dict, op: dict, takes: dict) -> dict:
             for c in [c for c in t["clips"] if c["id"] in past]:
                 if (a := g.smp(c["at"])) >= end:
                     t["clips"].remove(c)
-                else:
-                    c["out"] = (g.smp(c["in"]) + end - a) / g.sr
+                elif "hold" in c:  # 1.32: a line placeholder (never longer than it is: it may be cut already)
+                    c["hold"] = min(g.smp(c["hold"]), end - a) / g.sr
+                else:  # never past the out it has (a line cut at the next clip above stays cut)
+                    c["out"] = min(g.smp(c["out"]), g.smp(c["in"]) + end - a) / g.sr
         n, probs = t_normalize(raw, takes, doc)
     return {"document": n} if n else {"problems": probs}
 
@@ -2538,7 +2788,7 @@ def t_cuts(doc: dict, takes: dict, exclude: str | None = None) -> list[float]:
         for c in t["clips"]:
             if c["id"] != exclude:
                 cuts |= {c["at"], g.s(g.f(c["at"]) + t_len(c, t_kind(c, takes), g)) if ti == 0
-                         else c["at"] + c["out"] - c["in"]}
+                         else c["at"] + (c["hold"] if "hold" in c else c["out"] - c["in"])}
     return sorted(cuts)
 
 
@@ -2587,7 +2837,8 @@ def frame_at(doc: dict, f: int, takes: dict) -> dict:
     for t in doc["tracks"][1:]:
         for c in t["clips"]:
             a = g.f(c["at"])
-            if a <= f < a + t_len(c, "video", g, audio=True) and not c.get("offline") and not c["mute"] and not t["mute"]:
+            if c.get("take_id") and a <= f < a + t_len(c, "video", g, audio=True) and not c.get("offline") \
+                    and not c["mute"] and not t["mute"]:
                 sounds.append({"clip": c["id"], "t": c["in"] + g.s(f - a), "gain_db": t["gain_db"] + c["gain_db"],
                                "fade": 1})
     return {"pictures": pics, "sounds": sounds}
@@ -2649,8 +2900,17 @@ def export_plan(doc: dict, takes: dict) -> dict:
     inputs = sum(takes[x]["bytes"] for x in {c.get("take_id") for t in doc["tracks"] for c in t["clips"]} if x in takes)
     if dur > T_MAX_EXPORT_S or est > T_MAX_EXPORT_BYTES or inputs > T_MAX_EXPORT_INPUTS:
         blocked.append(["too_large", None])
+    sounds = []  # 1.32: every sound the mix reads, with the facts it is resampled from (to target, stereo)
+    for ti, t in enumerate(doc["tracks"]):
+        for c in t["clips"]:
+            tk = takes.get(c.get("take_id"))
+            if not tk or c.get("offline") or c["mute"] or t["mute"] or (ti == 0 and not (
+                    tk["kind"] == "video" and tk["has_audio"])):
+                continue
+            sounds.append({"clip": c["id"], "track": t["name"], "sample_rate": tk.get("sample_rate"),
+                           "channels": 1 if tk["kind"] == "audio" else None})
     return {"stream_copy": copy_ok, "reasons": reasons, "blocked": blocked,
-            "video_bitrate": None if copy_ok else bitrate, "estimated_bytes": est}
+            "video_bitrate": None if copy_ok else bitrate, "estimated_bytes": est, "sounds": sounds}
 
 
 def shot_keyframes(nodes: dict, palette: dict) -> dict | None:
@@ -2673,8 +2933,11 @@ def rerender_steps(doc: dict, takes: dict, clips: list[str] | None, keyframes: d
     step (`<param>[<row>]` ← `clip_<other>.first_frame|last_frame`) and runs after it; ties in timeline order.
     keyframes: workflow id → its `shot_keyframes` (absent: none). From 1.19 a media input (media: workflow id → its
     `media` param paths) holding a take of another selected clip binds `<param>` ← `clip_<other>.takes` (in / out
-    kept) and runs after it: a retake or extend re-renders on its source clip's new take."""
-    v1 = [c for c in doc["tracks"][0]["clips"] if (c["id"] in clips if clips is not None else c.get("take_id"))]
+    kept) and runs after it: a retake or extend re-renders on its source clip's new take. From 1.32 `clips` may name
+    audio-track clips (a line made by a voice workflow): a V1 clip whose media input holds such a clip's take (Make
+    shot) binds `clip_<line>.takes` and runs after it."""
+    v1 = [c for ti, t in enumerate(doc["tracks"]) for c in t["clips"]  # 1.32: named audio-track clips too
+          if (c["id"] in clips if clips is not None else ti == 0 and c.get("take_id"))]
     if len(v1) > T_MAX_RERENDER:
         return {"error": "too_many", "clip": None}
     for c in v1:
@@ -2706,6 +2969,28 @@ def rerender_steps(doc: dict, takes: dict, clips: list[str] | None, keyframes: d
         order.append(ready)
         left.remove(ready)
     return {"steps": [{"step": f"clip_{x}", "clip": x, "binds": binds[x]} for x in order]}
+
+
+def make_shot(doc: dict, clip: str, takes: dict, workflows: list[dict], palette: dict, rng: tuple | None = None) -> dict:
+    """An audio-track clip's actions (1.32, Make shot; README, Timeline: Make shot): the offers of its take (every
+    family) into one `media` param accepting audio of a workflow whose media is video, the range = the clip's in..out in the take's
+    own time (an audio take snapped to whole ms, a video's sound to its frames; capped at the param's max_s by the
+    offer), each with `slot {at: the clip's at + (the range's start − its in), length: out − in, exact: true}`.
+    rng: a selection inside the clip in the take's own seconds (else the clip's in..out). A V1 clip has none here."""
+    t, c = next((t, c) for t in doc["tracks"] for c in t["clips"] if c["id"] == clip)
+    tk = takes.get(c.get("take_id"))
+    if t is doc["tracks"][0] or not tk or c.get("offline"):
+        return {"actions": []}
+    snap = (lambda x: rnd(x * 1000) / 1000) if tk["kind"] == "audio" else (lambda x: rnd(x * tk["fps"]) / tk["fps"])
+    acts, by_id = [], {w["id"]: w for w in workflows}
+    a, b = rng or (c["in"], c["out"])
+    at = c["at"] + (a - c["in"])  # a selection starts the slot where its sound sits on the track
+    for o in take_uses(tk, [w for w in workflows if w.get("media") == "video"], palette, (snap(a), snap(b))):
+        v, (nid, name) = o["inputs"][o["param"]], o["param"].split(".")
+        spec = next(q for q in palette[by_id[o["workflow_id"]]["nodes"][nid]["kind"]]["params"] if q["name"] == name)
+        if isinstance(v, dict) and "audio" in spec.get("accepts", []):  # the clip's sound drives the shot
+            acts.append(o | {"slot": {"at": at, "length": v["out"] - v["in"], "exact": True}})
+    return {"actions": acts}
 
 
 def check_timelines(registry: Registry, palette: dict) -> None:
@@ -2755,6 +3040,13 @@ def check_timelines(registry: Registry, palette: dict) -> None:
                 got = {"keyframes": shot_keyframes(c["workflow"]["nodes"], palette)}
             elif p.name.startswith("rerender."):
                 got = rerender_steps(c["document"], takes, c.get("clips"), fx["keyframes"], fx.get("media"))
+            elif p.name.startswith("make-shot."):  # 1.32
+                reg = HERE / "fixtures" / "registry"
+                wfs = [w for pre in ("", "ltx.") for w in json.loads((reg / f"{pre}workflows.valid.json").read_text())["workflows"]]
+                got = make_shot(c["document"], c["clip"], {k: v | {"id": k} for k, v in takes.items()}, wfs, palette,
+                                tuple(c["range"]) if "range" in c else None)
+                if errs := list(ref("ClipActions").iter_errors(got)):
+                    fail(f"{where}: not ClipActions: {errs[0].message}")
             else:
                 fail(f"{name}: unknown timeline fixture")
                 break

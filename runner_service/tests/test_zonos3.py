@@ -75,7 +75,7 @@ PRESETS = fixture("workflows")["workflows"][0]["studio"]["presets"]
 @pytest.mark.parametrize(
     ("preset", "want"),
     [
-        ("Neutral", {"speaker_cfg_scale": 2}),
+        ("Neutral", {"condition_values": {"speaking_rate": 15}, "speaker_cfg_scale": 2}),
         ("Warm", {"controls": {"mood.valence": 1.6, "mood.arousal": -0.4},
                   "condition_values": {"speaking_rate": 14.25}, "speaker_cfg_scale": 2}),
         ("Tense", {"controls": {"mood.valence": -1.6, "mood.arousal": 2.0},
@@ -89,9 +89,11 @@ def test_delivery_maps_the_workflows_presets(preset, want):
     assert native.delivery(params) == want
 
 
-def test_delivery_at_its_neutral_values_sends_nothing_and_the_ends_reach_the_safe_doses():
+def test_delivery_at_its_neutral_values_sends_only_the_rate_and_the_ends_reach_the_safe_doses():
     flat = {"emotion": 0.5, "energy": 0.5, "whisper": 0, "speaking_rate": 1, "guidance": 1}
-    assert native.delivery(flat) == {}
+    assert native.delivery(flat) == {
+        "condition_values": {"speaking_rate": 15}
+    }  # 1: the middle bucket, never unknown
     ends = native.delivery(flat | {"emotion": 0, "energy": 1, "whisper": 1, "speaking_rate": 0.5})
     assert ends == {"controls": {"mood.valence": -4.0, "mood.arousal": 4.0, "delivery.whisper": 1.5},
                     "condition_values": {"speaking_rate": 7.5}}  # fmt: skip
@@ -99,7 +101,7 @@ def test_delivery_at_its_neutral_values_sends_nothing_and_the_ends_reach_the_saf
         "Hi.", 2**32 + 7, flat | {"language": "en-GB"}, {"speaker_mode": "embedding"}
     )
     assert body == {"text": "Hi.", "stream": False, "format": "wav", "seed": 7, "language": "en_gb",
-                    "speaker_mode": "embedding"}  # fmt: skip
+                    "condition_values": {"speaking_rate": 15}, "speaker_mode": "embedding"}  # fmt: skip
 
 
 def clip(**kw) -> dict:

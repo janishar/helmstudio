@@ -17,27 +17,44 @@ const REFUSED = {
   design: "this workflow cannot use a designed voice",
 } as const;
 
+/** A rows param's one voice field (API 1.32: a dialogue's `lines`), else null. */
+export function voiceField(p: Param): string | null {
+  if (p.type !== "rows") return null;
+  const fs = Object.entries(p.item ?? {}).filter(
+    ([, v]) => typeof v === "object" && (v as unknown as Param).type === "voice",
+  );
+  return fs.length === 1 ? fs[0][0] : null;
+}
+
 /** Every voice param of a known, not bypassed node: node id order (code points), then schema order; its `accepts`
- * narrowed to the node's `only` (API 1.30). */
+ * narrowed to the node's `only` (API 1.30); from 1.32 a rows param's one voice field counts as one, named
+ * `<param>.<field>` and narrowed by `only` on the rows param. */
 export function voiceParams(nodes: Record<string, Node>, schemas: Schemas): [string, Param][] {
   return Object.keys(nodes)
     .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
     .flatMap((id) => {
       const s = schemas[nodes[id].kind];
-      return s && !nodes[id].bypass
-        ? s.params
-            .filter((p) => p.type === "voice")
-            .map((p): [string, Param] => [id, narrowed(p, nodes[id].only)])
-        : [];
+      if (!s || nodes[id].bypass) return [];
+      return s.params.flatMap((p): [string, Param][] => {
+        const f = voiceField(p);
+        const q =
+          p.type === "voice"
+            ? p
+            : f
+              ? ({ ...(p.item![f] as unknown as Param), name: `${p.name}.${f}` } as Param)
+              : null;
+        return q ? [[id, narrowed(q, nodes[id].only, p.name)]] : [];
+      });
     });
 }
 
-/** A voice param with its `accepts` narrowed to a workflow node's `only` for it (README, Media inputs: only). */
-export const narrowed = (p: Param, only?: Record<string, string[]>): Param =>
-  only?.[p.name]
+/** A voice param with its `accepts` narrowed to a workflow node's `only` for it (README, Media inputs: only); a rows
+ * voice field reads its rows param's (`key`). */
+export const narrowed = (p: Param, only?: Record<string, string[]>, key = p.name): Param =>
+  only?.[key]
     ? {
         ...p,
-        accepts: (p.accepts ?? []).filter((a) => only[p.name].includes(a)) as Param["accepts"],
+        accepts: (p.accepts ?? []).filter((a) => only[key].includes(a)) as Param["accepts"],
       }
     : p;
 
@@ -204,4 +221,188 @@ export function matches(x: Item, q: string): boolean {
     .split(/\s+/)
     .filter(Boolean)
     .every((w) => hay.includes(w));
+}
+
+// ---------------------------------------------------------------- dialogue scripts (API 1.32)
+
+/** The node a script expands into has a rows param `lines` of exactly voice, text, style and pause_s. */
+export function scriptTarget(params: Param[]): Param | null {
+  const p = params.find((q) => q.name === "lines" && q.type === "rows");
+  const it = (p?.item ?? {}) as unknown as Record<string, Param>;
+  const typ = (k: string) => (typeof it[k] === "object" ? it[k].type : null);
+  const ok =
+    !!p &&
+    voiceField(p) === "voice" &&
+    Object.keys(it).sort().join() === "pause_s,style,text,voice" &&
+    typ("text") === "string" &&
+    typ("style") === "string" &&
+    typ("pause_s") === "float";
+  return ok ? p! : null;
+}
+
+const SCRIPT_LINE = /^@([A-Za-z][A-Za-z0-9_-]*)\s*(?:\(([^()]*)\))?\s*:(.*)$/;
+const HANDLE = /^[a-z](?:[a-z0-9_-]{0,38}[a-z0-9])?$/;
+export const SCRIPT_FORM = "write @name: text or @name (style): text";
+
+export type ScriptLine =
+  | { line: number; blank: true }
+  | { line: number; error: string }
+  | { line: number; handle: string; style: string; text: string };
+
+/** check.py script_lines: each line (split on \n, a \r before it dropped), trimmed, numbered from 1: blank, the form's
+ * error, or the handle (lower-cased), style and text. */
+export function scriptLines(script: string): ScriptLine[] {
+  return script
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((raw, i): ScriptLine => {
+      const t = raw.trim();
+      const line = i + 1;
+      if (!t) return { line, blank: true };
+      const m = SCRIPT_LINE.exec(t);
+      if (!m || !HANDLE.test(m[1].toLowerCase())) return { line, error: SCRIPT_FORM };
+      return { line, handle: m[1].toLowerCase(), style: (m[2] ?? "").trim(), text: m[3].trim() };
+    });
+}
+
+type El = {
+  id: string;
+  handle: string | null;
+  name: string;
+  version: number;
+  voice_id?: string | null;
+};
+export type Expanded =
+  | { errors: string[] }
+  | {
+      inputs: Record<string, unknown>;
+      typed: Record<string, unknown>;
+      elements: { id: string; handle: string; name: string; version: number }[];
+      voices: { id: string; name: string; version: number; source: string }[];
+      parents: string[];
+    };
+
+const len = (s: string) => [...s].length;
+
+/** check.py expand_script: studio's expansion of every script at create time (the Create screen runs it for the line
+ * marks before studio answers). `nodes` hold the merged values; `library` the caller's elements, `voices` id → the
+ * voices the caller can use now. */
+export function expandScript(
+  nodes: Record<string, Node & { params?: Record<string, unknown> }>,
+  schemas: Schemas,
+  library: El[],
+  voices: Record<string, Item>,
+): Expanded {
+  const byHandle = new Map(library.map((e) => [e.handle, e]));
+  const errs: string[] = [];
+  const res = {
+    inputs: {} as Record<string, unknown>,
+    typed: {} as Record<string, unknown>,
+    elements: [] as { id: string; handle: string; name: string; version: number }[],
+    voices: [] as { id: string; name: string; version: number; source: string }[],
+    parents: [] as string[],
+  };
+  for (const nid of Object.keys(nodes).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))) {
+    const n = nodes[nid];
+    const s = schemas[n.kind];
+    const sp = s && !n.bypass ? s.params.find((p) => p.script) : undefined;
+    if (!s || !sp) continue;
+    const lp = scriptTarget(s.params)!;
+    const vals: Record<string, unknown> = {
+      ...Object.fromEntries(s.params.map((p) => [p.name, p.default])),
+      ...(n.params ?? {}),
+    };
+    const script = String(vals[sp.name] ?? "");
+    const given = (vals.lines ?? []) as unknown[];
+    if (!script.trim()) {
+      if (!given.length) errs.push(`${nid}.${sp.name}: the script is empty`);
+      continue;
+    }
+    if (given.length) {
+      errs.push(`${nid}.lines: give the script or the lines, not both`);
+      continue;
+    }
+    const field = voiceParams({ [nid]: n }, schemas).find(([, q]) => q.name === "lines.voice")![1];
+    const it = lp.item as unknown as Record<string, Param>;
+    const pause = Number(vals.pause ?? it.pause_s.default);
+    const rows: [{ voice: { voice_id: string }; text: string; style: string }, number][] = [];
+    const mine: [El, Item][] = [];
+    for (const ln of scriptLines(script)) {
+      if ("blank" in ln) {
+        if (rows.length) rows[rows.length - 1][1] += 1;
+        continue;
+      }
+      const at = `${nid}.${sp.name} line ${ln.line}: `;
+      if ("error" in ln) {
+        errs.push(at + ln.error);
+        continue;
+      }
+      const el = byHandle.get(ln.handle);
+      const item = el?.voice_id ? voices[el.voice_id] : undefined;
+      const why = item ? voiceReason(n.kind, field, item) : null;
+      const e = !ln.text
+        ? "nothing to say"
+        : len(ln.text) > (it.text.max ?? Infinity)
+          ? `at most ${it.text.max} characters (${len(ln.text)})`
+          : len(ln.style) > (it.style.max ?? Infinity)
+            ? `the style is at most ${it.style.max} characters (${len(ln.style)})`
+            : !el
+              ? `unknown element @${ln.handle}`
+              : !item
+                ? `@${ln.handle} has no voice`
+                : why
+                  ? `voice ${item.name} does not fit this workflow (${why})`
+                  : null;
+      if (e) {
+        errs.push(at + e);
+        continue;
+      }
+      rows.push([{ voice: { voice_id: item!.id }, text: ln.text, style: ln.style }, 0]);
+      mine.push([el!, item!]);
+    }
+    if (errs.length) continue;
+    if (!rows.length) {
+      errs.push(`${nid}.${sp.name}: the script is empty`);
+      continue;
+    }
+    if (rows.length > (lp.max ?? 40)) {
+      errs.push(`${nid}.lines: at most ${lp.max} lines`);
+      continue;
+    }
+    const top = Number(it.pause_s.max ?? Infinity);
+    const lines = rows.map(([r, b], i) => ({
+      ...r,
+      pause_s: i === rows.length - 1 ? 0 : Math.min(top, Math.round(pause * (1 + b) * 1000) / 1000),
+    }));
+    res.inputs[`${nid}.${sp.name}`] = "";
+    res.inputs[`${nid}.lines`] = lines;
+    res.typed[`${nid}.${sp.name}`] = script;
+    res.typed[`${nid}.lines`] = given;
+    for (const [el, item] of mine) {
+      if (!res.elements.some((x) => x.id === el.id))
+        res.elements.push({ id: el.id, handle: el.handle!, name: el.name, version: el.version });
+      if (!res.voices.some((x) => x.id === item.id))
+        res.voices.push({
+          id: item.id,
+          name: item.name,
+          version: item.version,
+          source: item.group,
+        });
+      const clip = voiceSource(field, item) === "clip" ? item.voice?.clip?.take_id : undefined;
+      if (clip && !res.parents.includes(clip)) res.parents.push(clip);
+    }
+  }
+  return errs.length ? { errors: errs } : res;
+}
+
+/** Studio's 422 for scripts (`dialogue.script line 3: …`, joined by "; "): line → its message, and the rest. */
+export function scriptErrors(detail: string): { lines: Record<number, string>; other: string[] } {
+  const lines: Record<number, string> = {};
+  const other: string[] = [];
+  for (const part of detail.split("; ")) {
+    const m = /^(?:row \d+: )?[\w-]+\.\w+ line (\d+): (.*)$/.exec(part);
+    if (m) lines[Number(m[1])] ??= m[2];
+    else other.push(part);
+  }
+  return { lines, other };
 }

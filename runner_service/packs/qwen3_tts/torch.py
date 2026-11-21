@@ -5,7 +5,10 @@ speak: the text, split on sentences into pieces of at most PIECE_CHARS, each spo
 does (its prompt, its frame cap, its piecewise decode with 25 frames of context), seeded with torch.manual_seed(seed)
 before each piece (the port's _seed: every piece starts from the same random state, so the voice holds), joined with
 PAUSE_S of silence. torch.compile stays off (it breaks end-of-speech on torch 2.15 MPS). A cancel point and a progress
-step every generated frame."""
+step every generated frame.
+
+dialogue (API 1.32): each line spoken as speak speaks a text (utter), in its preset voice with its style, at the one
+seed, followed by its pause_s of silence, with a cue per line."""
 
 import dataclasses
 import json
@@ -17,6 +20,7 @@ import numpy as np
 import torch
 from torch import nn
 
+from core import media
 from core.graph import RunError
 from core.media import pieces
 from packs.qwen3_tts.vendor.qwen3_tts.codec import CodecConfig, CodecDecoder
@@ -159,6 +163,38 @@ def language_of(param: str, voice: dict) -> str:
     return LANGUAGES.get(tag, "auto")
 
 
+def _frames_counter(ctx, chars: int):
+    """on_frame for say(): a cancel point and a progress step per frame, of the frames planned for `chars`."""
+    planned = max(1, math.ceil(chars / CHARS_PER_S * FRAMES_PER_SECOND))
+    done = [0]
+
+    def on_frame(_n: int) -> None:
+        ctx.check()
+        done[0] += 1
+        ctx.progress(min(done[0], planned - 1) or 1, planned, "speaking")
+
+    return on_frame, planned
+
+
+def utter(ctx, tts, text: str, speaker: str, language: str, instruct: str, seed: int, on_frame):
+    """`text` split on sentences into pieces of at most PIECE_CHARS, each said at `seed`, joined with PAUSE_S of
+    silence: float32 samples."""
+    audio = []
+    for i, part in enumerate(pieces(text, PIECE_CHARS)):
+        ctx.check()
+        samples, _ = say(tts, part, speaker, language, instruct, seed, on_frame)
+        if not len(samples):
+            raise RunError(f"{ctx.node}: no speech came out")
+        if i:
+            audio.append(np.zeros(int(PAUSE_S * SAMPLE_RATE), dtype=np.float32))
+        audio.append(samples)
+    return np.concatenate(audio)
+
+
+def pcm16(samples: np.ndarray) -> bytes:
+    return (np.clip(samples, -1, 1) * 32767).round().astype("<i2").tobytes()
+
+
 def speak(ctx, params: dict, inputs: dict) -> dict:
     model, text = inputs["model"], inputs["text"].strip()
     if not text:
@@ -172,27 +208,54 @@ def speak(ctx, params: dict, inputs: dict) -> dict:
     codec = ctx.component(model, "speech_tokenizer")
     tts = synthesizer(model, talker, codec, float(params["temperature"]))
     speaker, instruct = voice_args(ctx.node, voice, params.get("style", ""), tts._speaker_ids)
-    language = language_of(params["language"], voice)
-    parts = pieces(text, PIECE_CHARS)
-    planned = max(1, math.ceil(len(text) / CHARS_PER_S * FRAMES_PER_SECOND))
-    done, audio = [0], []
-
-    def on_frame(_n: int) -> None:
-        ctx.check()
-        done[0] += 1
-        ctx.progress(min(done[0], planned - 1) or 1, planned, "speaking")
-
-    for i, part in enumerate(parts):
-        ctx.check()
-        samples, _ = say(tts, part, speaker, language, instruct, inputs["seed"], on_frame)
-        if not len(samples):
-            raise RunError(f"{ctx.node}: no speech came out")
-        if i:
-            audio.append(np.zeros(int(PAUSE_S * SAMPLE_RATE), dtype=np.float32))
-        audio.append(samples)
+    on_frame, planned = _frames_counter(ctx, len(text))
+    samples = utter(ctx, tts, text, speaker, language_of(params["language"], voice), instruct,
+                    inputs["seed"], on_frame)  # fmt: skip
     ctx.progress(planned, planned, "speaking")
-    samples = np.concatenate(audio)
-    pcm = (np.clip(samples, -1, 1) * 32767).round().astype("<i2").tobytes()
     return {
-        "audio": {"wav": pcm, "sample_rate": SAMPLE_RATE, "duration_s": len(samples) / SAMPLE_RATE}
+        "audio": {
+            "wav": pcm16(samples),
+            "sample_rate": SAMPLE_RATE,
+            "duration_s": len(samples) / SAMPLE_RATE,
+        }
     }
+
+
+# --- dialogue (API 1.32, contracts/README.md "Dialogue and Timeline audio")
+
+
+def check_dialogue(params: dict, wired: set, models: dict | None = None) -> str | None:
+    """Before loading: a dialogue speaks presets only, so only on custom_voice; at most media.MAX_TAKE_S planned."""
+    model = (models or {}).get("model")
+    if model is not None and model.variant != "custom_voice":
+        return ": a dialogue needs model variant custom_voice (it speaks preset voices only)"
+    return media.lines_problem(params.get("lines") or [])
+
+
+def dialogue(ctx, params: dict, inputs: dict) -> dict:
+    """Each line as speak says it, in its own preset voice and style, the run's language (auto: the line's voice's)
+    and the one seed (reseeded before every piece, so a line repeats on its own), then its pause_s of silence; one
+    take with a cue per line (core.media.stitch)."""
+    model, lines = inputs["model"], params["lines"]
+    if not lines:
+        raise RunError(f"{ctx.node}: nothing to say")
+    talker = ctx.component(model, "talker")
+    codec = ctx.component(model, "speech_tokenizer")
+    tts = synthesizer(model, talker, codec, float(params["temperature"]))
+    on_frame, planned = _frames_counter(ctx, sum(len(r["text"]) for r in lines))
+    spoken = []
+    for i, row in enumerate(lines, 1):
+        where, text = f"{ctx.node}.lines[{i}]", row["text"].strip()
+        if not text:
+            raise RunError(f"{where}: nothing to say")
+        if row["voice"].get("source") != "preset":
+            raise RunError(f"{where}.voice: a Qwen3-TTS dialogue speaks preset voices only")
+        speaker, instruct = voice_args(where, row["voice"], row.get("style", ""), tts._speaker_ids)
+        language = language_of(params["language"], row["voice"])
+        spoken.append(
+            pcm16(utter(ctx, tts, text, speaker, language, instruct, inputs["seed"], on_frame))
+        )
+    ctx.progress(planned, planned, "speaking")
+    wav, cues = media.stitch(lines, spoken, SAMPLE_RATE)
+    return {"audio": {"wav": wav, "sample_rate": SAMPLE_RATE, "duration_s": len(wav) / 2 / SAMPLE_RATE,
+                      "cues": cues}}  # fmt: skip

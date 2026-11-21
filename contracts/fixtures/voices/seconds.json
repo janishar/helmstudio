@@ -152,6 +152,69 @@
           }
         }
       }
+    },
+    "dialogue": {
+      "title": "Echo dialogue",
+      "family": "echo",
+      "env": "fake",
+      "nodes": {
+        "dialogue": {
+          "kind": "echo/dialogue",
+          "params": {
+            "script": "",
+            "lines": [],
+            "pause": 0.35,
+            "seed": -1,
+            "delay_ms": 300
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "dialogue.audio"
+          }
+        }
+      }
+    },
+    "dialogue-lines": {
+      "title": "Echo dialogue",
+      "family": "echo",
+      "env": "fake",
+      "nodes": {
+        "dialogue": {
+          "kind": "echo/dialogue",
+          "params": {
+            "script": "",
+            "lines": [
+              {
+                "voice": {
+                  "voice_id": "echo/ada"
+                },
+                "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "style": "",
+                "pause_s": 0.5
+              },
+              {
+                "voice": {
+                  "voice_id": "echo/bo"
+                },
+                "text": "bbbbbbbbbbbbbbb",
+                "style": "",
+                "pause_s": 2
+              }
+            ],
+            "pause": 0.35,
+            "seed": -1,
+            "delay_ms": 300
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "dialogue.audio"
+          }
+        }
+      }
     }
   },
   "cases": [
@@ -191,6 +254,25 @@
       "workflow": "image",
       "stage": "prompt",
       "expect": 0.0
+    },
+    {
+      "description": "1.32 a dialogue stage: its lines' text (30 + 15 characters: 3 s) and the pauses between them (0.5 s; the last line's is not used)",
+      "workflow": "dialogue-lines",
+      "stage": "dialogue",
+      "expect": 3.5
+    },
+    {
+      "description": "1.32 a dialogue with no lines (the memory plan's default): 0, so it is planned at max_seconds",
+      "workflow": "dialogue",
+      "stage": "dialogue",
+      "expect": 0.0
+    },
+    {
+      "description": "1.32 a dialogue capped at max_seconds",
+      "workflow": "dialogue-lines",
+      "stage": "dialogue",
+      "max_seconds": 2,
+      "expect": 2
     }
   ]
 }

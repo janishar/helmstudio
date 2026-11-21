@@ -1,0 +1,47 @@
+{
+  "revision": 4,
+  "stream_copy": false,
+  "reasons": [
+    {
+      "code": "image",
+      "clip": "b",
+      "message": "clip b is a still: it is drawn, never copied"
+    },
+    {
+      "code": "trimmed",
+      "clip": "c",
+      "message": "clip c is trimmed: only whole clips are copied"
+    }
+  ],
+  "blocked": [],
+  "output": {
+    "width": 256,
+    "height": 128,
+    "fps": 24,
+    "sample_rate": 48000,
+    "container": "mp4",
+    "video_codec": "h264",
+    "audio_codec": "aac",
+    "video_bitrate": 1000000
+  },
+  "frames": 133,
+  "duration_s": 5.541666666666667,
+  "estimated_bytes": 825417,
+  "host": "mac",
+  "env": "mlx",
+  "hardware": true,
+  "sounds": [
+    {
+      "clip": "a",
+      "track": "V1",
+      "sample_rate": null,
+      "channels": null
+    },
+    {
+      "clip": "d",
+      "track": "A2",
+      "sample_rate": 44100,
+      "channels": 1
+    }
+  ]
+}

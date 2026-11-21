@@ -148,7 +148,8 @@ export function Modal({
   return (
     <dialog
       ref={ref}
-      onClose={onClose}
+      // only this dialog's own close: React bubbles a nested dialog's (a picker inside an editor) up its tree
+      onClose={(e) => e.target === e.currentTarget && onClose()}
       onClick={(e) => {
         // the backdrop's clicks land on the dialog itself, outside its box (its padding is inside)
         const d = e.currentTarget;

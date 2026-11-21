@@ -245,7 +245,13 @@ def problems(doc: dict, info: dict | None = None, custom: list[dict] | None = No
             add("model_media", nid)
     for nid in of("write"):
         n = nodes[nid]
-        if ("list" in n) == ("to" in n) or ("to" in n and inputs.get(n["to"][1:]) != "Text"):
+        if (
+            ("list" in n) == ("to" in n)
+            or ("to" in n and inputs.get(n["to"][1:]) != "Text")
+            or (
+                n.get("form") == "script" and "list" in n  # 1.32: a script is one text
+            )
+        ):
             add("write_target", nid)
     texts = (
         of("write") + of("decide") + agents + [m for m in of("memory") if nodes[m]["op"] == "write"]

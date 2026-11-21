@@ -56,6 +56,7 @@ type PipelineNode struct {
 	Sources     []string
 	To          string  // write: the $<Text input> it overwrites
 	Instruction *string // write, agent
+	Form        *string // write (API 1.32): text | script (a dialogue script), text when absent
 	Question    string  // decide
 	Routes      map[string]string
 	// memory
@@ -198,7 +199,7 @@ var nodeFields = map[string][]string{
 	"gate":   {"kind", "title", "position", "takes", "keep"},
 	"output": {"kind", "title", "position", "from", "collection"},
 	"judge":  {"kind", "title", "position", "takes", "criteria", "keep", "mode", "model", "memory"},
-	"write":  {"kind", "title", "position", "from", "to", "instruction", "model", "list"},
+	"write":  {"kind", "title", "position", "from", "to", "instruction", "model", "list", "form"},
 	"decide": {"kind", "title", "position", "question", "from", "routes", "model"},
 	"memory": {"kind", "title", "position", "op", "key", "limit", "from"},
 	"agent": {"kind", "title", "position", "instruction", "from", "tools", "routes", "list", "caps", "model", "director",
@@ -225,7 +226,7 @@ func (n *PipelineNode) UnmarshalJSON(data []byte) error {
 		"criteria": &n.Criteria, "mode": &n.Mode, "model": &n.Model, "memory": &n.Memory, "to": &n.To, "instruction": &n.Instruction,
 		"question": &n.Question, "routes": &n.Routes, "op": &n.Op, "key": &n.Key, "limit": &n.Limit,
 		"each": &n.Each, "list": &n.List, "tools": &n.Tools, "caps": &n.Caps, "director": &n.Director,
-		"wake_on_rows": &n.WakeOnRows, "max_wakes": &n.MaxWakes, "node": &n.CustomNode}
+		"wake_on_rows": &n.WakeOnRows, "max_wakes": &n.MaxWakes, "node": &n.CustomNode, "form": &n.Form}
 	if n.Kind != "output" {
 		targets["from"] = &n.Sources
 	}
@@ -243,6 +244,9 @@ func (n *PipelineNode) UnmarshalJSON(data []byte) error {
 		if err := decoder.Decode(targets[key]); err != nil {
 			return fmt.Errorf("%s: %w", key, err)
 		}
+	}
+	if n.Form != nil && *n.Form != "text" && *n.Form != "script" {
+		return fmt.Errorf("form must be text or script")
 	}
 	return nil
 }
@@ -285,6 +289,7 @@ func (n PipelineNode) MarshalJSON() ([]byte, error) {
 		set("list", n.List, n.List != nil)
 		set("instruction", n.Instruction, n.Instruction != nil)
 		set("model", n.Model, n.Model != nil)
+		set("form", n.Form, n.Form != nil)
 	case "decide":
 		out["question"], out["from"], out["routes"] = n.Question, n.Sources, n.Routes
 		set("model", n.Model, n.Model != nil)

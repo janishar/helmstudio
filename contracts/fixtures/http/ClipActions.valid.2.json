@@ -1,0 +1,44 @@
+{
+  "actions": [
+    {
+      "workflow_id": "echo-a2v",
+      "title": "Echo audio to video",
+      "action": "Audio to video",
+      "family": "echo",
+      "media": "video",
+      "param": "a2v.source",
+      "inputs": {
+        "a2v.source": {
+          "take_id": "ffffffff-0000-4000-8000-000000000011",
+          "in": 0.5,
+          "out": 2.25
+        }
+      },
+      "slot": {
+        "at": 0.25,
+        "length": 1.75,
+        "exact": true
+      }
+    },
+    {
+      "workflow_id": "ltx-audio-to-video",
+      "title": "LTX-2.5 Audio to video",
+      "action": "Audio to video",
+      "family": "ltx",
+      "media": "video",
+      "param": "audio.source",
+      "inputs": {
+        "audio.source": {
+          "take_id": "ffffffff-0000-4000-8000-000000000011",
+          "in": 0.5,
+          "out": 2.25
+        }
+      },
+      "slot": {
+        "at": 0.25,
+        "length": 1.75,
+        "exact": true
+      }
+    }
+  ]
+}

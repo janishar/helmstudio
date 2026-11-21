@@ -1,4 +1,4 @@
-# Prompt templates of the agent nodes (judge/v1, write/v1, decide/v1)
+# Prompt templates of the agent nodes (judge/v1, write/v1, decide/v1, write-script/v1)
 
 The user turns of docs/reference-notes/llm.md 5.5, with `{name}` slots; `system.txt` is the system turn of all three.
 Pipelines fills them (it owns the templates and their schemas: contracts/README.md "The engine") and sends the result
@@ -15,3 +15,10 @@ fenced as a `<label>:\n<<<\n…\n>>>` data block and trimmed first, so the instr
   look:<id> ...".
 - decide: `{question}`, `{context}` named state values with the judge's verdict and reasons, `{routes}` '"<label>":
   <meaning> ...'.
+- write-script (API 1.32, contracts/README.md "Dialogue and Timeline audio: agents"; a write with `form: script`;
+  written fenced, as the v2 templates): `{instruction}`, `{brief}` the `from` texts, each a `\n\n<label>:\n<<<\n…\n>>>`
+  block as write/v2 writes them (`brief:` for the step's brief), `{cast}` one line per character element with a
+  voice, `@<handle> — <name>, voice <voice name>` (library.read `{kind: element, group: character, limit: 20}`;
+  those without a voice left out), fenced texts written as write/v2 does (`<<<` / `>>>` inside one become `‹‹‹` /
+  `›››`). System: system.txt. Answer schema `{script: string 1..4000, note: string ≤ 300}`, max_tokens 1400; checked
+  after the run with check.py `script_check` (re-asked once).

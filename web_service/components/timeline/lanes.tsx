@@ -4,7 +4,7 @@
 // lane); drag an edge (7 px) to trim, snapping to frames and cuts within 6 px; click the ruler to seek; Ctrl/⌘ +
 // wheel zooms. Every drag is an Op handed to the editor, which applies and saves it.
 import { useRef, useState } from "react";
-import { X } from "lucide-react";
+import { Ellipsis, X } from "lucide-react";
 import type { S } from "@/lib/api";
 import { safeUrl } from "@/lib/format";
 import { actionShot } from "@/components/timeline/actions";
@@ -45,6 +45,13 @@ export function clipText(
 ): { title: string; line: string } {
   const len = `${g.s(lenOf(c, kindOf(c, facts), g, audio)).toFixed(1)} s`;
   const t = c.take_id ? takes[c.take_id] : undefined;
+  if (c.shot && audio && !c.take_id) {
+    // a New line's placeholder (API 1.32, docs/mock/TimelineAudio.dc.html): "Speaking line", "New line failed"
+    const st = c.shot.status ?? "queued";
+    if (st === "failed")
+      return { title: "New line failed", line: c.shot.error ?? "the run failed" };
+    return { title: st === "running" ? "Speaking line" : "New line", line: progress ?? st };
+  }
   if (c.shot) {
     const st = c.shot.status ?? "queued";
     // a take action's shot: "Retaking Shot 3", "Extending", "Retake failed" (docs/mock/TakeActions.dc.html)
@@ -62,7 +69,11 @@ export function clipText(
   if (audio) {
     const db = c.gain_db ?? 0;
     return {
-      title: t?.title ?? "Clip",
+      // an audio take names its length (docs/mock/TimelineAudio.dc.html: "Dialogue · harbour scene · 0:09")
+      title:
+        t?.kind === "audio"
+          ? `${t.title} · ${clock(g.s(lenOf(c, "audio", g, true)))}`
+          : (t?.title ?? "Clip"),
       line: c.mute ? "muted" : `${db > 0 ? "+" : db < 0 ? "−" : ""}${Math.abs(db)} dB`,
     };
   }
@@ -88,6 +99,30 @@ type Drag = {
   span: [number, number];
 };
 
+/** "0:09": whole seconds of a clip's length. */
+const clock = (s: number) => {
+  const t = Math.round(s);
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
+};
+
+/** An audio take's cues on its clip (API 1.32): each line's tick at its start in the clip, a trimmed-out one not
+ * drawn (sequence time = at + cue − in). */
+export function cueTicks(
+  c: Clip,
+  t: TTake | undefined,
+): { line: number; x: number; voice: string }[] {
+  const cues = t?.audio?.cues ?? [];
+  const a = c.in ?? 0;
+  const b = c.out ?? 0;
+  return cues
+    .filter((q) => q.start_s >= a && q.start_s < b)
+    .map((q) => ({
+      line: q.line,
+      x: q.start_s - a,
+      voice: q.voice_id,
+    }));
+}
+
 export function Lanes({
   doc,
   takes,
@@ -106,6 +141,8 @@ export function Lanes({
   onAddTrack,
   onRemoveTrack,
   range,
+  onMenu,
+  nameOf,
 }: {
   doc: Norm;
   takes: Record<string, TTake>;
@@ -130,6 +167,10 @@ export function Lanes({
   onRemoveTrack?: (name: string) => void;
   /** the marked range (sequence seconds), drawn as a band with its I / O flags */
   range?: [number, number] | null;
+  /** an audio clip's ⋯ (API 1.32): opens its menu (`menu-<id>` anchors it) */
+  onMenu?: (id: string) => void;
+  /** a cue's speaker ("Mara"), from its voice */
+  nameOf?: (voiceId: string) => string;
 }) {
   const g = new Grid(doc.target);
   const drag = useRef<Drag | null>(null);
@@ -231,7 +272,12 @@ export function Lanes({
               : "border border-a2 bg-[rgba(255,122,89,0.14)]";
     const pct = c.shot && progress[c.id]?.match(/(\d+) \/ (\d+)$/);
     const bg = !audio && t && !c.shot && !c.offline ? safeUrl(t.thumb_url) : undefined;
-    return (
+    // an audio take's clip: a waveform strip, its dialogue's cue ticks and the ⋯ menu (docs/mock/TimelineAudio.dc.html)
+    const wave = audio && t?.kind === "audio" && !c.offline;
+    const ticks = wave && height > 40 ? cueTicks(c, t) : [];
+    const menu = audio && !!c.take_id && !c.offline && !!onMenu;
+    const failedLine = audio && !c.take_id && c.shot?.status === "failed";
+    const button = (
       <button
         key={c.id}
         type="button"
@@ -253,7 +299,7 @@ export function Lanes({
           }
           onSelect(c.id, e.shiftKey || e.metaKey || e.ctrlKey);
         }}
-        className={`tl-clip absolute top-0 ${look} ${on ? "border-2! border-t1!" : ""} ${shift?.id === c.id ? "z-10 opacity-80" : ""}`}
+        className={`tl-clip absolute top-0 ${failedLine ? "border border-bad bg-s2" : audio && c.shot && !c.take_id ? "border border-[#86cdea] bg-s2" : look} ${on ? "border-2! border-t1!" : ""} ${shift?.id === c.id ? "z-10 opacity-80" : ""}`}
         style={{
           left: c.at! * pps,
           width: Math.max(w, 6),
@@ -268,7 +314,32 @@ export function Lanes({
           cursor: shotBusy(c) ? "default" : undefined,
         }}
       >
-        {height > 40 && <b>{title}</b>}
+        {height > 40 && <b className={menu ? "pr-6" : ""}>{title}</b>}
+        {wave && (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 top-[21px] block h-4 opacity-70"
+            style={{
+              background:
+                "repeating-linear-gradient(90deg, transparent 0 2px, color-mix(in srgb, #86cdea 70%, transparent) 2px 3px)",
+              maskImage: "linear-gradient(180deg, transparent 20%, #000 20% 80%, transparent 80%)",
+            }}
+          />
+        )}
+        {ticks.map((k) => (
+          <span key={k.line} aria-hidden>
+            <span
+              className="absolute top-5 bottom-[3px] block w-px bg-t1"
+              style={{ left: k.x * pps }}
+            />
+            <small
+              className="absolute bottom-[3px] rounded bg-s1 px-1"
+              style={{ left: k.x * pps + 3 }}
+            >
+              {k.line} {nameOf?.(k.voice) ?? ""}
+            </small>
+          </span>
+        ))}
         {pct ? (
           <span className="flex items-center gap-1.5">
             <span className="block h-1 flex-1 rounded-[2px] bg-s5">
@@ -279,8 +350,13 @@ export function Lanes({
             </span>
             <small>{line}</small>
           </span>
+        ) : ticks.length ? (
+          <small className="absolute right-2 bottom-[3px]">{line}</small>
         ) : (
-          <small>{height > 40 ? line : `${title === "Clip" ? "" : title} · ${line}`}</small>
+          <small className={wave ? "flex justify-between gap-2" : ""}>
+            {wave && t?.workflow_title && <span>{t.workflow_title}</span>}
+            {height > 40 ? line : `${title === "Clip" ? "" : title} · ${line}`}
+          </small>
         )}
         {!shotBusy(c) && (
           <>
@@ -289,6 +365,28 @@ export function Lanes({
           </>
         )}
       </button>
+    );
+    if (!menu) return button;
+    return (
+      <span key={c.id}>
+        {button}
+        <button
+          type="button"
+          aria-label="Clip menu"
+          aria-haspopup="menu"
+          popoverTarget="clip-menu"
+          onClick={() => onMenu(c.id)}
+          className="absolute top-0.5 z-10 grid size-[22px] place-items-center rounded-lg bg-s3 text-t2"
+          style={
+            {
+              left: c.at! * pps + Math.max(w, 6) - 26,
+              anchorName: `--menu-${c.id}`,
+            } as React.CSSProperties
+          }
+        >
+          <Ellipsis size={14} aria-hidden />
+        </button>
+      </span>
     );
   };
 
@@ -366,7 +464,7 @@ export function Lanes({
         </div>
 
         {doc.tracks.slice(1).map((t, i) => (
-          <div key={t.name} className="flex h-9 items-stretch" data-lane={i + 1}>
+          <div key={t.name} className="flex h-14 items-stretch" data-lane={i + 1}>
             <span className="flex w-[72px] shrink-0 items-center gap-1.5">
               <button
                 type="button"
@@ -390,7 +488,7 @@ export function Lanes({
               )}
             </span>
             <div className="relative flex-1" role="group" aria-label={`${t.name}: sound`}>
-              {t.clips.map((c) => clipButton(c, i + 1, 36))}
+              {t.clips.map((c) => clipButton(c, i + 1, 56))}
             </div>
           </div>
         ))}

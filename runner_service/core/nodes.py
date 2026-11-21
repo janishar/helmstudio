@@ -66,13 +66,15 @@ def output(ctx, params: dict, inputs: dict) -> dict:
     """Store the input as an output of the run: an Image as a PNG; a Video value ({mp4: bytes, poster: PIL image,
     frames, fps, has_audio[, last: PIL image, stream: defs videoStream, source_map: defs sourceMap]}) as its MP4
     with the poster (frame 0) and the last frame as PNGs beside it; an Audio value ({wav, sample_rate,
-    duration_s}) as a WAV (PCM 16-bit, mono, its own rate)."""
+    duration_s[, cues]}) as a WAV (PCM 16-bit, mono, its own rate), a dialogue's cues reported with it."""
     media = inputs["media"]
     if isinstance(media, Image.Image):
         ctx.output(_png(media), ext="png", kind="image", width=media.width, height=media.height)
         return {}
     if "wav" in media:
         data, audio = _wav(ctx, media)
+        if media.get("cues"):  # API 1.32: a dialogue's lines (README, Dialogue: cues)
+            audio["cues"] = media["cues"]
         ctx.output(data, ext="wav", kind="audio", audio=audio)
         return {}
     poster: Image.Image = media["poster"]

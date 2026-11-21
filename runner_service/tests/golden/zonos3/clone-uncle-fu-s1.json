@@ -22,13 +22,13 @@
     "guidance": 2
   },
   "wav": "clone-uncle-fu-s1.wav",
-  "wav_sha256": "ec3dd7768eb001c4f0a368e6ff500205e440b14a90dcb3a45e6f11eea32ae545",
+  "wav_sha256": "b80adb92d0ac4f4fc0c760d59d3faf4efd75842a9ea0ae2903d2d8788f2607c0",
   "sample_rate": 44100,
   "channels": 1,
   "sample_bytes": 2,
-  "duration_s": 2.4,
-  "ready_s": 0.29,
-  "speak_s": 0.61,
+  "duration_s": 2.533,
+  "ready_s": 0.33,
+  "speak_s": 0.63,
   "headers": {
     "X-Seed": "1",
     "X-Decoder": "keep2_plain",
@@ -42,6 +42,9 @@
     "format": "wav",
     "seed": 1,
     "language": "en_us",
+    "condition_values": {
+      "speaking_rate": 15
+    },
     "speaker_cfg_scale": 2,
     "speaker_mode": "embedding"
   },

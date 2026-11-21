@@ -21,7 +21,7 @@ import {
   retakeMap,
   type Placement,
 } from "@/lib/source";
-import { newId, type Clip, type Norm } from "@/lib/timeline";
+import { newId, timecode, type Clip, type Norm } from "@/lib/timeline";
 import {
   buildInputs,
   fields as fieldsOf,
@@ -66,6 +66,7 @@ export function ClipActions({
   workflows,
   disabled,
   onDone,
+  openFirst,
 }: {
   tl: Timeline;
   doc: Norm;
@@ -74,9 +75,12 @@ export function ClipActions({
   workflows: S<"Workflow">[];
   disabled: boolean;
   onDone: (t: Timeline) => void;
+  /** opens the first action's form once they are read (an audio clip's menu: Make shot) */
+  openFirst?: boolean;
 }) {
   const [got, setGot] = useState<{ key: string; actions: Offer[] } | null>(null);
-  const [open, setOpen] = useState<string | null>(null);
+  // null: none chosen yet ("" closed)
+  const [chosen, setOpen] = useState<string | null>(null);
   const key = JSON.stringify([tl.id, tl.revision, clip.id, range]);
   useEffect(() => {
     let stop = false;
@@ -100,8 +104,12 @@ export function ClipActions({
   // an extend first when it applies (docs/mock/TakeActions: Extend, Retake a section, Audio to video)
   const extend = (o: Offer) => Object.keys(o.inputs).some((k) => k.endsWith(".direction"));
   const actions = got?.key === key ? [...got.actions].sort((a, b) => +extend(b) - +extend(a)) : [];
+  const idOf = (o: Offer) => `${o.workflow_id} ${o.param}`;
+  const open = chosen ?? (openFirst && actions[0] ? idOf(actions[0]) : null);
+  // an audio clip's offers are Make shot (API 1.32): one per family, named by it when there are several
+  const makes = actions.filter((o) => o.slot).length;
   return actions.map((o) => {
-    const id = `${o.workflow_id} ${o.param}`;
+    const id = idOf(o);
     const w = workflows.find((x) => x.id === o.workflow_id);
     return (
       <div key={id} className="flex flex-col gap-2">
@@ -110,9 +118,9 @@ export function ClipActions({
           className="act"
           aria-expanded={open === id}
           disabled={disabled}
-          onClick={() => setOpen(open === id ? null : id)}
+          onClick={() => setOpen(open === id ? "" : id)}
         >
-          {o.action ?? o.title}
+          {o.slot ? (makes > 1 ? `Make shot · ${o.title}` : "Make shot") : (o.action ?? o.title)}
         </button>
         {open === id &&
           (w ? (
@@ -124,7 +132,7 @@ export function ClipActions({
               offer={o}
               workflow={w}
               onDone={(t) => {
-                setOpen(null);
+                setOpen("");
                 onDone(t);
               }}
             />
@@ -219,7 +227,10 @@ function ActionForm({
       const bad = Object.entries(built.errors)[0];
       if (bad) throw new Error(`${bad[0]}: ${bad[1]}`);
       const id = newId(doc);
-      const slot = actionSlot(offer, { id: clip.id, at: clip.at ?? 0 }, place, length, id);
+      // Make shot (API 1.32): the offer's own slot, placed exactly at the audio clip's start on V1
+      const slot = offer.slot
+        ? { ...offer.slot, id }
+        : actionSlot(offer, { id: clip.id, at: clip.at ?? 0 }, place, length, id);
       const res = await ok(
         api.POST("/v1/studio/timelines/{timeline_id}/shots", {
           params: { path: { timeline_id: tl.id } },
@@ -318,7 +329,26 @@ function ActionForm({
               onChange={(k, x) => setRaws((r) => ({ ...r, [k]: x as Raw }))}
             />
           ))}
-      <div className="flex items-center justify-between gap-2">
+      {offer.slot && "at" in offer.slot && (
+        <>
+          <span className="mono order-first text-[12px]">
+            {[
+              offer.action ?? offer.title,
+              model[0]?.nodeTitle,
+              `at ${timecode(offer.slot.at)}`,
+              `${(offer.slot.length ?? 0).toFixed(2)} s, into V1`,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </span>
+          <span className="text-[12px] text-t2">
+            The clip&apos;s sound goes in as the shot&apos;s audio
+            {trim?.param.max_s ? `, up to ${trim.param.max_s.toFixed(1)} s` : ""}. The picture
+            follows the sound; it is not lip sync.
+          </span>
+        </>
+      )}
+      <div className={`flex items-center justify-between gap-2 ${offer.slot ? "hidden" : ""}`}>
         <span>Result</span>
         <div className="seg" role="group" aria-label="Where the result goes">
           <button
@@ -337,7 +367,7 @@ function ActionForm({
           </button>
         </div>
       </div>
-      <span className="text-[12px] text-t2">{note}</span>
+      {!offer.slot && <span className="text-[12px] text-t2">{note}</span>}
       <div className="flex flex-wrap items-center gap-2">
         {model.length > 0 && (
           <span className="chip bevel rounded-[10px]" title={model[0].nodeHelp}>

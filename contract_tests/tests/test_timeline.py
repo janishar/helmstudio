@@ -54,6 +54,9 @@ def facts(take: dict) -> dict:
     out = {k: take[k] for k in ("kind", "width", "height", "bytes")}
     if take["kind"] == "video":
         out |= {k: take["video"][k] for k in ("duration_s", "fps", "frames", "has_audio")}
+    if take["kind"] == "audio":  # API 1.32: audio takes are clips on the audio tracks
+        out |= {"duration_s": take["audio"]["duration_s"], "has_audio": True,
+                "sample_rate": take["audio"].get("sample_rate")}  # fmt: skip
     if "source_map" in take:  # API 1.19: fill places a retake, extend or a2v by its map
         out["source_map"] = take["source_map"]
     return out
