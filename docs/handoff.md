@@ -182,11 +182,41 @@ Last full contract suite on the final M7 code: see the last M7 commit message (p
   `made_with.host` = gcp, variant base-fp8, precision fp8. 22.2 dB t2i / 27.5 dB edit against the Mac int8 goldens;
   same scene, the t2i fox sits a little more to the right; no noise or artefacts, so the curve timesteps are right
   and no code changed. Numbers in reference-notes/nvidia-quantized.md, Measured; images docs/mock/checks/m9/minimax-*.
-- **Gap: base-fp8 never becomes `present` after a download.** The `enhancer` component (MiniMax-H3-Image-PE, its
-  own dir) has no source in any variant, so the variant stays `partial` and the studio finds no host. To test, a
-  140-byte placeholder `model-00001-of-00001.safetensors` was put in `/srv/helm/models/MiniMax-H3-Image-PE` on the
-  VM (still there): an un-bypassed enhance node on `gcp` will fail on it. Owner's choice: add the PE repo as a source
-  (17 GB, same licence) or make the enhancer optional for presence; then delete the placeholder.
+- **Fixed: base-fp8 is `present` after its download.** The official prompt enhancer (MiniMaxAI/MiniMax-H3-Image-PE @
+  35603d4, NVFP4, same licence) is base-fp8's last `sources` entry with `dir: MiniMax-H3-Image-PE` (contract: an
+  optional `dir` on a `sources` item, registry.schema.json; additive, kept at API 1.33): its files land in the
+  enhancer component's own folder, where both variants read them. allow_patterns `*.json`, `chat_template.jinja`,
+  `model-*.safetensors`, `prompt/*` (17 files, 17,936,465,146 bytes from the HF API; no README, assets, scripts);
+  `source.bytes` is now the whole download, 67,706,999,380. Files already there at the Hub's hash are kept; a delete
+  of base-fp8 keeps the folder (base reads it too). CPU test `test_a_source_with_a_dir_fills_a_components_own_folder`.
+  **VM, before the download:** delete the 140-byte placeholder `/srv/helm/models/MiniMax-H3-Image-PE/
+  model-00001-of-00001.safetensors` (it matches the enhancer's `model-*.safetensors` glob), rebuild/recreate the gcp
+  torch runner with this code, then `helm model download minimax-h3-image --host gcp --variant base-fp8` fetches the
+  17.9 GB enhancer (the rest is already there) and an un-bypassed Enhance can run.
+- Fourth VM pass (2026-11-21): working-tree source copied (`COPYFILE_DISABLE=1 tar --no-xattrs`: a plain macOS tar
+  ships `._*` AppleDouble files, which the zonos3 CUDA build then compiles as `.cu`), `docker compose --profile native
+  build` clean after two fixes, both runners recreated and healthy. Fixes: (1) the SGLang venv is Python 3.12, not
+  3.13: the lock's pyyaml 6.0.1 and outlines-core 0.1.26 have no cp313 wheels and the build fell back to source (Rust
+  missing); the 3.12 lock is the same 237 pins but numpy 2.3.5, compiled `--no-build` (wheels only). `sglang` 0.5.23
+  imports with torch 2.14.1+cu130 and sees the GPU; `sglang serve --help` has the flags sgl.py passes. The nvcc wheel
+  is in the venv (`site-packages/nvidia/cu*/bin/nvcc`), not on PATH: still unchecked whether the ConvRot JIT needs it
+  (H3 video not run: its licence is not accepted). Native image 28 GB, torch image 11.2 GB. (2) `main.residency_for`
+  called `context_gb()` on any CUDA loader; the native loader (cuda off a Mac since phase 1) has none, so
+  `runner-native` crash-looped at start: now only when the loader has it (CPU test `test_the_native_runner_starts_on_cuda`).
+- Placeholder `/srv/helm/models/MiniMax-H3-Image-PE/model-00001-of-00001.safetensors` deleted; base-fp8 now shows
+  67.7 GB `partial` on gcp (the enhancer is missing). **The enhancer download is not done:** the session's permission
+  guard refused `helm model download minimax-h3-image --host gcp --variant base-fp8 --accept-licence`, so the owner
+  (or a session allowed to pass `--accept-licence`) runs it; then one Enhance run on gcp at <= 1 MP.
+- Qwen3-TTS on gcp: both official variants downloaded through the platform (`helm model download qwen3-tts-1.7b
+  --host gcp --variant custom_voice|voice_design`, no licence prompt). CUDA goldens recorded in a one-off container of
+  the runner image (tests mounted, `record_qwen3_tts.py --port packs/qwen3_tts/vendor`): the recorder's port load reads
+  `speech_tokenizer/` from each variant's own folder, but the platform download keeps it only in CustomVoice's (shares),
+  so the run used a scratch models root linking it into VoiceDesign's. `pytest -m gpu tests/test_qwen3_tts_golden.py`
+  passes on CUDA: all three cases codes- and WAV-exact (preset 2.4 s, design 1.28 s, dialogue 3.55 s). The eight
+  `*.cuda.*` files are in tests/golden/qwen3-tts/. Through the dev stack, `helm run qwen3-tts-voice-over` (ryan, calm,
+  seed 7, "Good morning, everyone.") ran on `gcp` (runs.host = gcp; the Mac's resident copy unloaded first, else
+  placement prefers it): 2.4 s WAV byte-identical to the CUDA golden, 29.6 s cold run; docs/mock/checks/m9/qwen3-tts-app-gcp.wav.
+- The dev stack's seaweedfs was OOM-killed (Docker VM 7.7 GB) during this pass; restarted with `docker start`.
 - Not done: trimming the ZONOS3 sources (~23 MB) from the CUDA runtime image (a later `rm` layer would not shrink
   it). The Qwen ask stage (FP8 lm_head and `generate()`) is still unrun on CUDA.
 
@@ -199,10 +229,10 @@ Last full contract suite on the final M7 code: see the last M7 commit message (p
   (must_accept). Fixtures: `minimax-h3.nodes.valid` + `graphs/palette` (variant and precision enums, help),
   `minimax-h3.models.valid` (runtime devices).
 - Engine: SGLang Diffusion 0.5.23 (first release with MiniMax H3 serving, pins torch 2.14.1) in its own venv
-  `/opt/sglang` on a uv Python 3.13, Dockerfile.cuda stage `sglang`, only in the new last target `native`
+  `/opt/sglang` on a uv Python 3.12 (3.13 lacked wheels: pyyaml 6.0.1, outlines-core 0.1.26), Dockerfile.cuda stage `sglang`, only in the new last target `native`
   (compose: `runner` builds `target: runtime`, `runner-native` `target: native`, image `runner-cuda-native`).
   Why: no clash with the torch runner's torch 2.15 / Python 3.14, and the torch image stays small.
-  Locked in `runner_service/sglang-requirements.txt` (237 exact pins, Linux x86_64 / Python 3.13, `uv pip sync`;
+  Locked in `runner_service/sglang-requirements.txt` (237 exact pins, Linux x86_64 / Python 3.12, wheels only, `uv pip sync`;
   review fix: it was an unlocked `uv pip install`); `make image-cuda` now builds `--target runtime`.
 - `packs/minimax_h3/sgl.py`: one `sglang serve` per run (core.child.serve, ready = uvicorn's line), partition by the
   inputs, DiT and text encoder as `--component-weights-paths.*`, `--layerwise-offload-components text_encoder`,
@@ -218,9 +248,12 @@ Last full contract suite on the final M7 code: see the last M7 commit message (p
   reference 864 × 480 × 107. Record cold load time, s/step, VRAM peak (`nvidia-smi`), host RAM, and check that
   SGLang accepts the skeleton folder (missing shards, overrides) and the uvicorn ready line. "≤ 3 s clips" cannot
   run: SGLang's minimum is 4 s.
-- **Owner:** the MiniMax H3 licence's Applicable Territory excludes the EU, the UK, Korea and the US; the spot VM is
-  in europe-north1 (EU). Running either MiniMax pack there needs the owner's decision (another region, or MiniMax's
-  licence), besides accepting the licence in person.
+- **Owner's decision (2026-11-21):** keep the spot VM in the EU (europe-north1) and use MiniMax there for
+  evaluation only (the owner: "its not even rnd its just evaluation"). Licence territory note: the MiniMax H3
+  licences' "Applicable Territory" excludes the EU, the UK, the Republic of Korea and the US; running there is the
+  owner's call, recorded here. The owner accepted both licences in person: the MiniMax-H3-Image Community License
+  (Image, its enhancer included) and the H3 video licence (`minimax-h3-community`); the video `fp8` download was
+  queued by the lead.
 
 ## M8 notes
 

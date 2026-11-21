@@ -66,7 +66,7 @@ def residency_for(packs) -> tuple[Residency | None, str, object]:
     if config.AFTER_RUN not in POLICIES:
         raise ValueError(f"RUNNER_AFTER_RUN must be one of {POLICIES}")
     dev = loader.device()
-    if dev == "cuda":
+    if dev == "cuda" and hasattr(loader, "context_gb"):  # native on CUDA: none, budget is RAM
         loader.context_gb()  # the CUDA context's own memory, measured once before any tensor
     total = loader.total_gb()
     res = Residency(  # a reserve above the device's memory leaves none, never a negative budget

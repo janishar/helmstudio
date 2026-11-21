@@ -608,6 +608,33 @@ def test_a_variant_downloads_from_two_repos_into_one_folder(pack):
     assert schemas.registry_errors("models", value) == []
 
 
+def test_a_source_with_a_dir_fills_a_components_own_folder(pack):
+    """MiniMax H3 Image base-fp8's prompt enhancer: its own repo, into the component's own `dir`; the variant is
+    present only with it, and a delete of the variant keeps that folder (base reads it too)."""
+    pack.spec["components"]["enhancer"] = {"dir": "Tiny-PE", "files": "pe-*.safetensors"}
+    v = fp8_variant(pack)
+    v["sources"].append({"repo": "t/tiny-pe", "revision": "main", "dir": "Tiny-PE", "gated": False,
+                         "allow_patterns": ["config.json", "pe-*.safetensors"]})  # fmt: skip
+    pe = {"config.json": b"{}", "pe-1.safetensors": BLOB[:333], "README.md": b"x"}
+    with hub_of(t_tiny=Repo(files()), t_tiny_fp8=Repo(community()), t_tiny_pe=Repo(pe)) as hub:
+        assert run(pack, "fp8", hub=hub)["files"] == 6
+    root = config.MODELS / "Tiny-PE"
+    assert (root / "pe-1.safetensors").read_bytes() == BLOB[:333] and not (
+        root / "README.md"
+    ).exists()
+    assert (
+        not (config.MODELS / "Tiny-FP8/config.json").exists()
+        and not (root / models.MARKER).exists()
+    )
+    assert presence(pack)["fp8"] == "present"
+    entry = models.entry(pack)
+    value = {"schema_version": 1, "host": "t", "env": "fake", "published_at": "2026-11-21T10:00:00Z",
+             "published_by": "t", "models": [entry], "licences": models.licences([pack])}  # fmt: skip
+    assert schemas.registry_errors("models", value) == []
+    models.delete_variant(pack, "fp8")
+    assert (root / "pe-1.safetensors").is_file()
+
+
 def test_a_second_source_is_refused_by_its_own_name_and_may_not_repeat_a_path(pack):
     v = fp8_variant(pack)
     with hub_of(

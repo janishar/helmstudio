@@ -152,7 +152,7 @@ def file_sha(root: Path, rel: str, check=lambda: None) -> str:
 def plan(pack, vid: str, api, progress: Progress) -> tuple[list[Item], list[str], list[str]]:
     """(the files to have on disk, shared components reused, shared components fetched separately). The variant's
     `source`, then each of its `sources` (API 1.33: weights from a community repo beside the official configs), all
-    into its folder."""
+    into its folder (a source with a `dir`: into that folder, a component's own, as MiniMax's prompt enhancer)."""
     spec = pack.spec
     v = spec["variants"][vid]
     first = packs.share_owner(pack, vid)  # the lender of its shares
@@ -167,7 +167,8 @@ def plan(pack, vid: str, api, progress: Progress) -> tuple[list[Item], list[str]
             mcommit, mtree = listing(api, more["repo"], more["revision"])
         except Exception as e:  # noqa: BLE001 (named by its own repo)
             raise classify(e, more["repo"], more["revision"], api.token or None) from None
-        items += [Item(more["repo"], mcommit, p, *mtree[p], own)
+        dest = packs.models_root() / more["dir"] if "dir" in more else own
+        items += [Item(more["repo"], mcommit, p, *mtree[p], dest)
                   for p in matching(mtree, more["allow_patterns"])]  # fmt: skip
     reused, separate, lacking = [], [], []
     owner = models.folder(pack, first)
@@ -190,7 +191,8 @@ def plan(pack, vid: str, api, progress: Progress) -> tuple[list[Item], list[str]
             raise JobError("not_downloadable", f"{spec['title']} {first} has no download source")
         for osrc in [lv["source"], *lv.get("sources", [])]:
             ocommit, otree = listing(api, osrc["repo"], osrc["revision"])
-            items += [Item(osrc["repo"], ocommit, p, *otree[p], owner)
+            odest = packs.models_root() / osrc["dir"] if "dir" in osrc else owner
+            items += [Item(osrc["repo"], ocommit, p, *otree[p], odest)
                       for p in matching(otree, osrc["allow_patterns"])
                       if models.component_of(pack, p, first) in (None, *lacking)]  # fmt: skip
     seen = set()

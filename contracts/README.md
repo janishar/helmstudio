@@ -2766,8 +2766,11 @@ an **extra variant** of the pack. model.yaml per variant, all optional:
   pack's variant without `devices` takes its runtime's (its binary is built per device); a torch one runs anywhere.
 - A variant listing one precision (`[fp8]`) loads at it whatever the node's `precision` asks (the node's default is
   the union's, int8): studio uses that precision for eligibility, the memory plan and the resident match.
-- `sources: [{repo, revision, allow_patterns, gated?, bytes?}]`: more repos the download fetches after `source`, into
-  the same folder (configs from the official repo in `source`, weights from the community one). Planned and checked
+- `sources: [{repo, revision, allow_patterns, gated?, bytes?, dir?}]`: more repos the download fetches after `source`, into
+  the same folder (configs from the official repo in `source`, weights from the community one), or with `dir` into
+  that folder under the models root: a component's own `dir` (MiniMax H3 Image `base-fp8` fetches the official prompt
+  enhancer into `MiniMax-H3-Image-PE`, so the variant is `present` after its download; files already there at the
+  Hub's hash are kept, and a delete of the variant never removes them, as every variant reads that folder). Planned and checked
   as `source` is (LFS hashes, sizes, unsafe names); a path two of them list fails the plan (`… twice`). The licence,
   `must_accept`, `gated` and `bytes` of the whole download are `source`'s. Published as the variant's `sources`.
 

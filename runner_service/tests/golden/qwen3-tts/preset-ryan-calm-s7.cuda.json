@@ -1,0 +1,23 @@
+{
+  "name": "preset-ryan-calm-s7",
+  "variant": "custom_voice",
+  "dir": "Qwen3-TTS-12Hz-1.7B-CustomVoice",
+  "text": "Good morning, everyone.",
+  "speaker": "ryan",
+  "language": "en",
+  "style": "calm",
+  "seed": 7,
+  "temperature": 0.3,
+  "wav": "preset-ryan-calm-s7.cuda.wav",
+  "wav_sha256": "f812fc26f5c0a8d285ec69234f0ca6f62da53d8faaf53dc7da0ae21935e0f362",
+  "frames": 30,
+  "duration_s": 2.4,
+  "load_s": 0.0,
+  "speak_s": 1.29,
+  "versions": {
+    "torch": "2.15.0+cu132",
+    "python": "3.14.10",
+    "port": "AI-EXP 16b31cc3 src/qwen3_tts"
+  },
+  "device": "cuda"
+}

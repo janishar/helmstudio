@@ -56,7 +56,8 @@ Qwen3-TTS stays on its official bf16 weights (1.7B: nothing to gain).
 ### 21.5 Known issues
 
 - The MiniMax H3 licence excludes the EU, the UK, the Republic of Korea and the US (its "Applicable Territory"):
-  the spot VM's region must be outside them to run either MiniMax pack (owner's call).
+  the owner decided (2026-11-21) to keep the spot VM in the EU and use MiniMax there for evaluation only, and
+  accepted both MiniMax licences (docs/handoff.md, M9 phase 2 notes).
 - Publisher-measured quality (LPIPS against bf16) is worse for FP8 than for int8 ConvRot in every case; the
   platform shows the variant names plainly so the choice stays visible.
 - The Qwen Image weights are under the Qwen Research licence upstream, not Apache 2.0 as our pack says (found by

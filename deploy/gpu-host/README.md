@@ -117,7 +117,7 @@ worse for FP8 than for int8 ConvRot in every case; the variant names say which o
 |---|---|---|---|
 | Qwen Image 2.1 | `base-fp8` | unsloth FP8 transformer and text encoder, bf16 VAE (configs from the official repo) | 17.2 GB (official bf16: 33.1) |
 | | `turbo-fp8` | unsloth Turbo FP8 transformer; text encoder and VAE shared with `base-fp8` | 7.1 GB more (official: 14.2) |
-| MiniMax H3 Image | `base-fp8` | unsloth FP8 DiT (20.3 GB), Comfy-Org int8 ConvRot text encoder (27.1 GB), the official VAE and configs (2.4 GB); the official NVFP4 prompt enhancer (17.9 GB, its own folder `MiniMax-H3-Image-PE`, copied by hand) | 49.8 GB + 17.9 |
+| MiniMax H3 Image | `base-fp8` | unsloth FP8 DiT (20.3 GB), Comfy-Org int8 ConvRot text encoder (27.1 GB), the official VAE and configs (2.4 GB); the official NVFP4 prompt enhancer (17.9 GB, downloaded with it into its own folder `MiniMax-H3-Image-PE`, kept on delete) | 67.7 GB (49.8 + 17.9) |
 | MiniMax H3 (video) | `fp8` | Comfy-Org pruned FP8 FL2VA and Ref2VA DiTs (2 × 21.0 GB), Comfy-Org int8 ConvRot text encoder (27.1 GB), the official VAEs, configs and tokenizers of both partitions (22.1 GB), run by SGLang 0.5.23 | 91.2 GB (official: 210.3) |
 | ZONOS3-Mini | `mini` (the official one) | the official GGUF q8_0 set, already int8: the same files on the Mac and here, run by a CUDA build of zonos3-server | 1.2 GB |
 

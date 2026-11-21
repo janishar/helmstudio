@@ -6,6 +6,7 @@ RAM), and the measure, which counts the live child (its phys_footprint) with the
 import sys
 from pathlib import Path
 
+import config
 from core import child
 from core.residency import footprint_gb, host_device, ram_gb
 
@@ -20,6 +21,15 @@ def device() -> str:
 
 def total_gb() -> float:
     return ram_gb()
+
+
+def host_ram() -> dict:
+    """The hosts key's `host_ram` on a CUDA host (as loaders_torch): RAM - RUNNER_RAM_RESERVE_GB, and what the runner
+    and its live child hold."""
+    return {
+        "budget_gb": round(ram_gb() - config.RAM_RESERVE_GB, 1),
+        "used_gb": round(measure_gb() or 0, 1),
+    }
 
 
 def device_info() -> dict:

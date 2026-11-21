@@ -315,6 +315,18 @@ def test_the_native_runner_imports_no_runtime_library():
     assert out == "[] mps core.loaders_native"
 
 
+def test_the_native_runner_starts_on_cuda(monkeypatch):
+    """Off a Mac the native loader says cuda; it has no torch context to measure (the gpu host's runner-native)."""
+    import main
+    from core import loaders_native, registry
+
+    monkeypatch.setattr(loaders_native, "device", lambda: "cuda")
+    r, dev, loader = main.residency_for(registry.build("native")[2])
+    assert dev == "cuda" and loader is loaders_native and r.total_gb > 0
+    ram = loader.host_ram()  # the hosts key carries it on cuda (main.extra)
+    assert ram["budget_gb"] > 0 and ram["used_gb"] >= 0
+
+
 def test_a_native_pack_publishes_only_on_its_runtime_devices(monkeypatch):
     from core import models
 

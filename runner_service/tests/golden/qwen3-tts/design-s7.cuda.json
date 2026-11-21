@@ -1,0 +1,22 @@
+{
+  "name": "design-s7",
+  "variant": "voice_design",
+  "dir": "Qwen3-TTS-12Hz-1.7B-VoiceDesign",
+  "text": "Good morning, everyone.",
+  "design": "A deep, calm man in his fifties, speaking slowly.",
+  "language": "auto",
+  "seed": 7,
+  "temperature": 0.3,
+  "wav": "design-s7.cuda.wav",
+  "wav_sha256": "5831a420528aca0804aaa5b6e745945dd8ad9e47a04551fbfcb9e2ecd3e654ed",
+  "frames": 16,
+  "duration_s": 1.28,
+  "load_s": 0.85,
+  "speak_s": 0.71,
+  "versions": {
+    "torch": "2.15.0+cu132",
+    "python": "3.14.10",
+    "port": "AI-EXP 16b31cc3 src/qwen3_tts"
+  },
+  "device": "cuda"
+}

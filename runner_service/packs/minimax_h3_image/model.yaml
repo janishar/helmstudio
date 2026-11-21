@@ -23,8 +23,9 @@ variants:
   base: {dir: MiniMax-H3-Image, title: Base}   # text_encoder/ links into MiniMax-H3/Ref2VA/text_encoder
   # The alternate path for NVIDIA hosts (docs/plan/17-nvidia-quantized.md): unsloth's FP8 DiT (torchao per-row FP8,
   # the adaLN in curve form: torch.py) and Comfy-Org's int8 ConvRot text encoder (50 layers, no norm, no head); VAE,
-  # tokenizer, processor and configs from the official repo. The enhancer is the official NVFP4 one (its own dir).
-  # Byte counts from the HF API at these revisions (source: all of the variant's files).
+  # tokenizer, processor and configs from the official repo. The enhancer is the official NVFP4 one, fetched into its
+  # own dir (the last source's `dir`; base reads the same folder, so a delete of base-fp8 keeps it).
+  # Byte counts from the HF API at these revisions (source: all of the download's files, the enhancer's included).
   base-fp8:
     dir: MiniMax-H3-Image-FP8
     title: Base FP8 (NVIDIA)
@@ -36,13 +37,16 @@ variants:
     source: {repo: MiniMaxAI/MiniMax-H3-Image, revision: 8ced60068623def5b74b4d10558117cb61d6482d,
              allow_patterns: [model_index.json, modular_model_index.json, "processor/*", "scheduler/*", "tokenizer/*",
                               text_encoder/config.json, transformer_diffusers/config.json, "vae_diffusers/*"],
-             licence: minimax-h3-image-community, must_accept: true, gated: false, bytes: 49770534234}
+             licence: minimax-h3-image-community, must_accept: true, gated: false, bytes: 67706999380}
     sources:
       - {repo: unsloth/MiniMax-H3-Image-FP8, revision: cae8483940f3ab5aafb242d0c6d2abccbcc6d6a2,
          allow_patterns: [MiniMax-H3-Image-FP8.safetensors], gated: false, bytes: 20269221000}
       - {repo: Comfy-Org/MiniMax-H3-Image, revision: 89c635085f539d03ad35485ed542c5a286e3c6d6,
          allow_patterns: [text_encoders/qwen3vl_32b_minimax_h3_int8_convrot.safetensors], gated: false,
          bytes: 27141342152}
+      - {repo: MiniMaxAI/MiniMax-H3-Image-PE, revision: 35603d4b63949afa12cb098227fffefedf081afa, dir: MiniMax-H3-Image-PE,
+         allow_patterns: ["*.json", chat_template.jinja, "model-*.safetensors", "prompt/*"], gated: false,
+         bytes: 17936465146}
 components:
   enhancer:                       # MiniMax-H3-Image-PE (Qwen3.5 27B), shipped only as NVFP4: dequantized, then int8
     dir: MiniMax-H3-Image-PE      # a folder of its own (packs/README.md, components.dir)

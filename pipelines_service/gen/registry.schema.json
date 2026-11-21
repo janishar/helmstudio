@@ -1838,6 +1838,13 @@
                                 "type": "integer",
                                 "minimum": 1,
                                 "description": "the expected download size of this repo's files (counted again in the variant's `source.bytes`)"
+                              },
+                              "dir": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 400,
+                                "pattern": "^[^/\\u0000-\\u001f][^\\u0000-\\u001f]*$",
+                                "description": "from API 1.33: the folder under the models root its files land in, instead of the variant's `dir`: a component's own `dir` (model.yaml `components.<c>.dir`; MiniMax H3 Image's prompt enhancer, MiniMax-H3-Image-PE). Files already there at the Hub's hash are kept; a delete of the variant never removes them (every variant of the pack reads that folder)"
                               }
                             }
                           }

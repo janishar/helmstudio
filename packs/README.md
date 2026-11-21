@@ -172,8 +172,9 @@ Keys the core understands; anything else is ignored:
   community pre-quantized variant for NVIDIA hosts, contracts/README.md "Quantized variants for NVIDIA hosts"):
   `precision` (the model node's precisions for it: `[fp8]`), `component_precision` (`{<component>: [..]}`, its
   components' precisions in this variant: `transformer: [fp8]`), `devices` (`[cuda]`: a runner on another device
-  never publishes it) and `sources` (`[{repo, revision, allow_patterns, gated?, bytes?}]`, more repos fetched after
-  `source` into the same `dir`: weights from the community repo, configs from the official one).
+  never publishes it) and `sources` (`[{repo, revision, allow_patterns, gated?, bytes?, dir?}]`, more repos fetched after
+  `source` into the same `dir`: weights from the community repo, configs from the official one; with `dir`, into
+  that folder instead: a component's own `dir`, as MiniMax H3 Image's prompt enhancer).
 - **`components.<name>`**: `files` (a glob, or a list of globs: one component may take keys from several files),
   `dtype` (`bf16` | `fp16` | `fp32`, default bf16; `stored` keeps each tensor's own dtype, MLX and torch: MiniMax's
   float32 tensors), `precision` (default `[bf16]`; `int8`, and `int4` on MLX; `fp32` from API 1.20, a component that

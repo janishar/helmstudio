@@ -1,7 +1,8 @@
-# The native image's SGLang venv (Dockerfile.cuda stage sglang: uv pip sync), locked for Linux x86_64, Python 3.13.
-# Regenerate after changing the two pins:
-#   printf 'sglang[diffusion]==0.5.23\ncomfy-kitchen==0.2.41\n' | uv pip compile - --python-version 3.13 \
-#     --python-platform x86_64-manylinux_2_40 --no-annotate --no-header
+# The native image's SGLang venv (Dockerfile.cuda stage sglang: uv pip sync), locked for Linux x86_64, Python 3.12
+# (3.13 has no wheels of the pinned pyyaml 6.0.1 and outlines-core 0.1.26, which then need a Rust build).
+# Regenerate after changing the two pins (wheels only):
+#   printf 'sglang[diffusion]==0.5.23\ncomfy-kitchen==0.2.41\n' | uv pip compile - --python-version 3.12 \
+#     --python-platform x86_64-manylinux_2_40 --no-annotate --no-header --no-build
 addict==2.4.0
 aiohappyeyeballs==2.7.1
 aiohttp==3.14.5
@@ -104,7 +105,7 @@ nest-asyncio==1.6.0
 networkx==3.7
 ninja==1.13.2
 numba==0.65.1
-numpy==2.4.6
+numpy==2.3.5
 nvidia-cublas==13.1.1.3
 nvidia-cuda-cccl==13.3.5.0.6
 nvidia-cuda-crt==13.5.37
