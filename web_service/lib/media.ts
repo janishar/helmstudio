@@ -1,4 +1,4 @@
-// Media: what a workflow's takes are (the Image / Video switch), the frame grid of a `frames` param (the Duration
+// Media: what a workflow's takes are (the Image / Video / Audio switch), the frame grid of a `frames` param (the Duration
 // slider), and how a take or a run output is shown small (contracts/README.md "Video").
 import type { S } from "@/lib/api";
 
@@ -9,12 +9,19 @@ export type MediaKind = NonNullable<Workflow["media"]>; // text: an ask workflow
 /** A workflow's media; absent (an API before 1.11) is image. */
 export const mediaOf = (w: Pick<Workflow, "media">): MediaKind => w.media ?? "image";
 
+/** A workflow whose voice params take designed voices only (`only {voice: [design]}`: Qwen3-TTS Voice design). */
+const designsOnly = (w: Workflow) =>
+  Object.values(w.nodes ?? {}).some((n) =>
+    Object.values(n.only ?? {}).some((a) => a.length === 1 && a[0] === "design"),
+  );
+
 /** The media the switch offers, in its order: only those some workflow has. */
 export const mediaKinds = (ws: Pick<Workflow, "media">[]): MediaKind[] =>
-  (["image", "video"] as const).filter((m) => ws.some((w) => mediaOf(w) === m));
+  (["image", "video", "audio"] as const).filter((m) => ws.some((w) => mediaOf(w) === m));
 
 /** The workflow the switch opens for `m`: the open one when it is of `m`, else the one of the session's newest run of
- * `m` (runs newest first), else the first template of `m`, else the first workflow of `m`; undefined when none. */
+ * `m` (runs newest first), else the first template of `m` (one that only designs voices, its `only` voice [design],
+ * last: Design a voice opens it), else the first workflow of `m`; undefined when none. */
 export function workflowFor(
   ws: Workflow[],
   runs: Pick<S<"Run">, "workflow_id">[],
@@ -26,7 +33,11 @@ export function workflowFor(
   if (has(current)) return current;
   return (
     runs.find((r) => has(r.workflow_id))?.workflow_id ??
-    (of.find((w) => w.source !== "mine") ?? of[0])?.id
+    (
+      of.find((w) => w.source !== "mine" && !designsOnly(w)) ??
+      of.find((w) => w.source !== "mine") ??
+      of[0]
+    )?.id
   );
 }
 

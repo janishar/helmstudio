@@ -196,16 +196,18 @@ export function valuesByErrors(s: { params: Param[] }, values: Record<string, un
   });
 }
 
-/** [param, message] for a node's `only` (API 1.19): an enum param, a subset of its enum, holding the node's value. */
+/** [param, message] for a node's `only` (API 1.19): an enum param, a subset of its enum, holding the node's value;
+ * from 1.30 a voice param, a subset of its accepts (the voice fit reads it, no value is checked). */
 export function onlyErrors(
   s: { params: Param[] },
   n: { params?: Record<string, unknown>; only?: Record<string, string[]> },
 ) {
   return Object.entries(n.only ?? {}).flatMap(([k, allowed]): [string, string][] => {
     const p = s.params.find((x) => x.name === k);
-    if (!p || p.type !== "enum" || allowed.some((a) => !p.enum?.includes(a)))
-      return [[k, "only must name an enum param and values of it"]];
-    return allowed.includes(String(n.params?.[k] ?? p.default))
+    const values: string[] = (p?.type === "voice" ? p.accepts : p?.enum) ?? [];
+    if (!p || (p.type !== "enum" && p.type !== "voice") || allowed.some((a) => !values.includes(a)))
+      return [[k, "only must name an enum or voice param and values of it"]];
+    return p.type === "voice" || allowed.includes(String(n.params?.[k] ?? p.default))
       ? []
       : [[k, `must be one of ${allowed.join(", ")}`]];
   });

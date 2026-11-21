@@ -1,5 +1,5 @@
 "use client";
-// The caller's elements and looks in this tab (GET /v1/studio/library?kind=element and ?kind=look: own items at most
+// The caller's elements, looks and voices in this tab (GET /v1/studio/library?kind=element, look and voice: own items at most
 // 200, plus the live hosts' starter looks; not paginated): what marks unknown mentions, previews what the mentions and
 // the chosen looks add, and fills the visual picker. Fetched once, again after an edit here.
 import { useEffect, useReducer } from "react";
@@ -13,6 +13,9 @@ let items: Item[] | null = null;
 // looks are read apart: an older studio that knows no looks still serves the elements
 let looks: Item[] | null = null;
 let looksFailed = "";
+// voices (API 1.30) are read apart too
+let voices: Item[] | null = null;
+let voicesFailed = "";
 let loading: Promise<void> | null = null;
 let failed = "";
 // whose list this is: a sign-out and sign-in in the same tab is a soft navigation that keeps this module
@@ -26,24 +29,28 @@ function ownedBy(id: string | null) {
   owner = id;
   items = null;
   looks = null;
+  voices = null;
   loading = null;
   failed = "";
   looksFailed = "";
+  voicesFailed = "";
   generation++;
 }
 
 /** Fetches the list again (after a create, edit or delete, or when the picker opens). */
 export function reloadLibrary(): Promise<void> {
   const mine = generation;
-  const kind = (k: "element" | "look") =>
+  const kind = (k: "element" | "look" | "voice") =>
     ok(api.GET("/v1/studio/library", { params: { query: { kind: k } } }));
-  const read = Promise.allSettled([kind("element"), kind("look")])
-    .then(([e, l]) => {
+  const read = Promise.allSettled([kind("element"), kind("look"), kind("voice")])
+    .then(([e, l, v]) => {
       if (mine !== generation) return;
       if (e.status === "fulfilled") [items, failed] = [e.value.items, ""];
       else failed = message(e.reason);
       if (l.status === "fulfilled") [looks, looksFailed] = [l.value.items, ""];
       else looksFailed = message(l.reason);
+      if (v.status === "fulfilled") [voices, voicesFailed] = [v.value.items, ""];
+      else voicesFailed = message(v.reason);
     })
     .finally(() => {
       if (loading === read) loading = null;
@@ -75,6 +82,15 @@ export function useLooks(): Item[] | null {
   useLibrary();
   return looks;
 }
+
+/** The signed-in user's voices and the live starter voices (API 1.30), or null until they are known. */
+export function useVoices(): Item[] | null {
+  useLibrary();
+  return voices;
+}
+
+/** Why the last read of the voices failed ("" when it did not): a voice tile says so instead of waiting. */
+export const voicesError = () => voicesFailed;
 
 /** Why the last read of the looks failed ("" when it did not). */
 export const looksError = () => looksFailed;

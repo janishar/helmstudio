@@ -1,0 +1,13 @@
+# Qwen3-TTS CustomVoice's 9 preset speakers (config.json talker_config.spk_id), in the model card's order; style is the
+# card's one-line description, language its native language (Dylan speaks Beijing, Eric Sichuan dialect, as the model
+# picks for Chinese or auto). Each preview was spoken once by this pack (tests/test_qwen3_tts_golden.py --previews:
+# seed 1, temperature 0.3, language auto, no style), a short line in the speaker's own language, 1.9-3.2 s.
+- {id: vivian, name: Vivian, speaker: vivian, language: zh, style: "Bright, slightly edgy young female voice.", preview: vivian.wav}
+- {id: serena, name: Serena, speaker: serena, language: zh, style: "Warm, gentle young female voice.", preview: serena.wav}
+- {id: uncle-fu, name: Uncle Fu, speaker: uncle_fu, language: zh, style: "Seasoned male voice with a low, mellow timbre.", preview: uncle-fu.wav}
+- {id: dylan, name: Dylan · Beijing, speaker: dylan, language: zh, style: "Youthful Beijing male voice with a clear, natural timbre.", preview: dylan.wav}
+- {id: eric, name: Eric · Sichuan, speaker: eric, language: zh, style: "Lively Chengdu male voice with a slightly husky brightness.", preview: eric.wav}
+- {id: ryan, name: Ryan, speaker: ryan, language: en, style: "Dynamic male voice with strong rhythmic drive.", preview: ryan.wav}
+- {id: aiden, name: Aiden, speaker: aiden, language: en, style: "Sunny American male voice with a clear midrange.", preview: aiden.wav}
+- {id: ono-anna, name: Ono Anna, speaker: ono_anna, language: ja, style: "Playful Japanese female voice with a light, nimble timbre.", preview: ono-anna.wav}
+- {id: sohee, name: Sohee, speaker: sohee, language: ko, style: "Warm Korean female voice with rich emotion.", preview: sohee.wav}

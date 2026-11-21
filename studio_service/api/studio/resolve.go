@@ -330,7 +330,8 @@ func spanValue(value any) (any, string) {
 // when it is inside or the param has none.
 func onlyDetail(only map[string][]string, name string, params map[string]any) string {
 	allowed, pinned := only[name]
-	if value, _ := params[name].(string); !pinned || slices.Contains(allowed, value) {
+	// a voice value ({voice_id}, or null in a workflow) is not a string: its only is the fit rule's (runVoices)
+	if value, isText := params[name].(string); !pinned || !isText || slices.Contains(allowed, value) {
 		return ""
 	}
 	return "must be one of " + strings.Join(allowed, ", ")

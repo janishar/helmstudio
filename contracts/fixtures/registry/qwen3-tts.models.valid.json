@@ -1,0 +1,166 @@
+{
+  "schema_version": 1,
+  "host": "mac",
+  "env": "torch",
+  "published_at": "2026-11-21T10:00:00Z",
+  "published_by": "runner torch 0.3.0",
+  "models": [
+    {
+      "id": "qwen3-tts-1.7b",
+      "family": "qwen3-tts",
+      "title": "Qwen3-TTS",
+      "media": [
+        "audio"
+      ],
+      "runtimes": [
+        {
+          "runtime": "torch",
+          "env": "torch",
+          "devices": [
+            "mps"
+          ]
+        }
+      ],
+      "variants": [
+        {
+          "id": "custom_voice",
+          "presence": "present",
+          "bytes": 4520217432,
+          "precisions": [
+            "bf16"
+          ],
+          "title": "Custom voice",
+          "dir": "Qwen3-TTS-12Hz-1.7B-CustomVoice",
+          "source": {
+            "repo": "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+            "revision": "0c0e3051f131929182e2c023b9537f8b1c68adfe",
+            "allow_patterns": [
+              "config.json",
+              "generation_config.json",
+              "preprocessor_config.json",
+              "tokenizer_config.json",
+              "vocab.json",
+              "merges.txt",
+              "model.safetensors",
+              "speech_tokenizer/*"
+            ],
+            "licence": "apache-2.0",
+            "must_accept": false,
+            "gated": false
+          },
+          "components": [
+            {
+              "component": "talker",
+              "from_variant": "custom_voice",
+              "precisions": [
+                "bf16"
+              ],
+              "bytes": 3833402552
+            },
+            {
+              "component": "speech_tokenizer",
+              "from_variant": "custom_voice",
+              "precisions": [
+                "bf16"
+              ],
+              "bytes": 682293092
+            }
+          ],
+          "memory": [
+            {
+              "precision": "bf16",
+              "peak_gb": 5.68,
+              "components": [
+                {
+                  "component": "talker",
+                  "variant": "custom_voice",
+                  "precision": "bf16",
+                  "gb": 3.57
+                },
+                {
+                  "component": "speech_tokenizer",
+                  "variant": "custom_voice",
+                  "precision": "bf16",
+                  "gb": 0.21
+                }
+              ],
+              "planned_at": {
+                "mp": 0.0,
+                "frames": 0
+              }
+            }
+          ]
+        },
+        {
+          "id": "voice_design",
+          "presence": "present",
+          "bytes": 4520162313,
+          "precisions": [
+            "bf16"
+          ],
+          "title": "Voice design",
+          "dir": "Qwen3-TTS-12Hz-1.7B-VoiceDesign",
+          "source": {
+            "repo": "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
+            "revision": "5ecdb67327fd37bb2e042aab12ff7391903235d3",
+            "allow_patterns": [
+              "config.json",
+              "generation_config.json",
+              "preprocessor_config.json",
+              "tokenizer_config.json",
+              "vocab.json",
+              "merges.txt",
+              "model.safetensors"
+            ],
+            "licence": "apache-2.0",
+            "must_accept": false,
+            "gated": false
+          },
+          "components": [
+            {
+              "component": "talker",
+              "from_variant": "voice_design",
+              "precisions": [
+                "bf16"
+              ],
+              "bytes": 3833402552
+            },
+            {
+              "component": "speech_tokenizer",
+              "from_variant": "voice_design",
+              "precisions": [
+                "bf16"
+              ],
+              "bytes": 682293092,
+              "separate": true
+            }
+          ],
+          "memory": [
+            {
+              "precision": "bf16",
+              "peak_gb": 5.68,
+              "components": [
+                {
+                  "component": "talker",
+                  "variant": "voice_design",
+                  "precision": "bf16",
+                  "gb": 3.57
+                },
+                {
+                  "component": "speech_tokenizer",
+                  "variant": "voice_design",
+                  "precision": "bf16",
+                  "gb": 0.21
+                }
+              ],
+              "planned_at": {
+                "mp": 0.0,
+                "frames": 0
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

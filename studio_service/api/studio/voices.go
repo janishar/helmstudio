@@ -47,8 +47,9 @@ type voiceParam struct {
 	Param registry.Param
 }
 
-// voiceParams are the voice params of the known, not bypassed nodes, node id then schema order.
-func voiceParams(nodes map[string]registry.Node, schemas map[string]registry.NodeSchema) []voiceParam {
+// voiceParams are the voice params of the known, not bypassed nodes, node id then schema order, each param's accepts
+// narrowed to the workflow node's only (pins: the workflow's own nodes, which hold only; README, Media inputs: only).
+func voiceParams(nodes map[string]registry.Node, schemas map[string]registry.NodeSchema, pins map[string]registry.Node) []voiceParam {
 	var out []voiceParam
 	for _, id := range slices.Sorted(maps.Keys(nodes)) {
 		schema, known := schemas[nodes[id].Kind]
@@ -57,6 +58,9 @@ func voiceParams(nodes map[string]registry.Node, schemas map[string]registry.Nod
 		}
 		for _, p := range schema.Params {
 			if p.Type == "voice" {
+				if allowed, pinned := pins[id].Only[p.Name]; pinned {
+					p.Accepts = slices.DeleteFunc(slices.Clone(p.Accepts), func(a string) bool { return !slices.Contains(allowed, a) })
+				}
 				out = append(out, voiceParam{id, p})
 			}
 		}
@@ -78,7 +82,7 @@ func voiceReason(kind string, param registry.Param, item voiceItem) string {
 
 // voiceFit is GET /library?workflow= for a voice: "" when some voice param takes it, else the first param's reason.
 func voiceFit(nodes map[string]registry.Node, schemas map[string]registry.NodeSchema, item voiceItem) string {
-	params := voiceParams(nodes, schemas)
+	params := voiceParams(nodes, schemas, nodes)
 	if len(params) == 0 {
 		return "this workflow takes no voice"
 	}
@@ -162,9 +166,9 @@ func readVoices(ctx context.Context, tx pgx.Tx, reg *registry.Registry, ownerID 
 // voice the owner can use now ("<node>.<param>: voice <id> not found") that the param takes ("<node>.<param>:
 // <reason>"). It returns each path's defs voice and made_with.voices (node id then param order, each voice once), or
 // the 422 details.
-func runVoices(ctx context.Context, tx pgx.Tx, reg *registry.Registry, ownerID string, nodes map[string]registry.Node,
+func runVoices(ctx context.Context, tx pgx.Tx, reg *registry.Registry, ownerID string, nodes, pins map[string]registry.Node,
 	schemas map[string]registry.NodeSchema) (map[string]voiceValue, []gallerydto.MadeWithVoice, []string, error) {
-	params := voiceParams(nodes, schemas)
+	params := voiceParams(nodes, schemas, pins)
 	var ids []string
 	for _, p := range params {
 		if ref, ok := nodes[p.Node].Params[p.Param.Name].(map[string]any); ok {

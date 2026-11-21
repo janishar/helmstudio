@@ -1,0 +1,22 @@
+{
+  "name": "design-s7",
+  "variant": "voice_design",
+  "dir": "Qwen3-TTS-12Hz-1.7B-VoiceDesign",
+  "text": "Good morning, everyone.",
+  "design": "A deep, calm man in his fifties, speaking slowly.",
+  "language": "auto",
+  "seed": 7,
+  "temperature": 0.3,
+  "frames": 19,
+  "duration_s": 1.52,
+  "load_s": 3.28,
+  "speak_s": 1.0,
+  "peak_rss_gb": 7.77,
+  "versions": {
+    "torch": "2.15.0",
+    "transformers": "5.23.0",
+    "python": "3.14.10",
+    "port": "AI-EXP 16b31cc3 src/qwen3_tts"
+  },
+  "device": "mps, arm64, macOS 27.2.1"
+}

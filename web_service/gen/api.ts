@@ -2659,7 +2659,7 @@ export interface components {
             position?: components["schemas"]["NodePosition"];
             only?: components["schemas"]["ParamOnly"];
         };
-        /** @description from 1.19: enum param → the values this workflow allows (a subset of its `enum` holding the node's value); the form offers only those, another value is 422 `<node>.<param>: must be one of <values>` (LTX dev templates pin `model.variant` to dev) */
+        /** @description from 1.19: enum param → the values this workflow allows (a subset of its `enum` holding the node's value); the form offers only those, another value is 422 `<node>.<param>: must be one of <values>` (LTX dev templates pin `model.variant` to dev). From 1.30 also a voice param → the voice sources this workflow takes (a subset of its `accepts`; the workflow holds null): the voice fit reads the narrowed set, a voice outside it is 422 `<node>.<param>: this workflow cannot use a designed voice` (or `a preset voice`, `clone a voice`; contracts/README.md, Media inputs: only) */
         ParamOnly: {
             [key: string]: string[];
         };
@@ -4147,7 +4147,7 @@ export interface components {
             source: components["schemas"]["VoiceSource"];
             /** @description preset only: the family whose voice params take it */
             family?: string;
-            /** @description preset only: the model's speaker id (Ryan, Uncle_Fu) */
+            /** @description preset only: the model's speaker id (ryan, uncle_fu) */
             speaker?: string;
             /** @description designed only: the voice in words ("male, 17, tenor, nervous") */
             design?: string;

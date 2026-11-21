@@ -316,8 +316,13 @@ func onlyProblems(schema registry.NodeSchema, only map[string][]string, values m
 	out := map[string]string{}
 	for name, allowed := range only {
 		param, ok := paramOf(schema, name)
-		if !ok || param.Type != "enum" || slices.ContainsFunc(allowed, func(v string) bool { return !slices.Contains(param.Enum, v) }) {
-			out[name] = "only must name an enum param and values of it"
+		known := param.Enum
+		if param.Type == "voice" { // API 1.30: a voice param's only narrows its accepts (the fit rule reads it)
+			known = param.Accepts
+		}
+		if !ok || (param.Type != "enum" && param.Type != "voice") ||
+			slices.ContainsFunc(allowed, func(v string) bool { return !slices.Contains(known, v) }) {
+			out[name] = "only must name an enum or voice param and values of it"
 		} else if detail := onlyDetail(only, name, values); detail != "" {
 			out[name] = detail
 		}

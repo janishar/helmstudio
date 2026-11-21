@@ -30,7 +30,7 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `registry.schema.json` | KV values: `$defs/nodes`, `$defs/workflows`, `$defs/models` (with a family's `loraBlock`), `$defs/loras`, `$defs/looks`, (API 1.30) `$defs/voices` (bucket `registry`), `$defs/host` (bucket `hosts`), (API 1.16) `$defs/settings` (bucket `host_settings`, key `<host>`: Hosts admin) and `$defs/pin`, (API 1.15) `$defs/custom` (key `pipelines.engine.custom`: the registered custom nodes) |
 | `fixtures/{messages,registry}/` | `<name>.valid[.N].json` must pass, `<name>.invalid[.N].json` must fail (request/reply: `<type>.{request,reply}.…`) |
 | `fixtures/http/` | HTTP bodies, `<Schema>.{valid,invalid}[.N].json` against `openapi.yaml` `components/schemas/<Schema>` (the names in `check.py` `HTTP_SCHEMAS`) |
-| `fixtures/registry/{nodes,workflows,models,looks,voices}.valid.json` | **canonical** fake-runner registry values (echo family): the fake runner publishes them verbatim, with its own `published_at` (API 1.30: `echo/speak`, workflow `echo-voice-over`, starter voices `echo/ada` and `echo/bo`; `qwen3-tts.voices.valid.json` is an example with a preview clip) |
+| `fixtures/registry/{nodes,workflows,models,looks,voices}.valid.json` | **canonical** fake-runner registry values (echo family): the fake runner publishes them verbatim, with its own `published_at` (API 1.30: `echo/speak`, workflow `echo-voice-over`, starter voices `echo/ada` and `echo/bo`; the qwen3-tts pack's canonical `qwen3-tts.{nodes,workflows,models,voices}.valid.json`, M8 step 3, pinned by runner_service tests/test_packs.py and test_qwen3_tts.py) |
 | `fixtures/registry/qwen-image.{nodes,workflows}.valid.json` | **canonical** torch-runner values (qwen-image family, host `mac`, env `torch`): published verbatim; `qwen-image.models.valid.json` is an example (presence and sizes are measured), so are `qwen-image.{loras,looks}.valid.json` |
 | `fixtures/registry/minimax-h3-image.{nodes,workflows}.valid.json` | (API 1.20) **canonical** torch-runner values of the minimax-h3-image family (workflow `minimax-h3-image`), published with the qwen-image values (the core kinds they share are identical); `minimax-h3-image.models.valid.json` is an example (bytes and sizes measured) |
 | `fixtures/registry/minimax-h3.{nodes,workflows}.valid.json` | (API 1.21) **canonical** native-runner values (minimax-h3 family, host `mac`, env `native`, workflows `minimax-h3-text-to-video`, `minimax-h3-image-to-video`, `minimax-h3-references`): published verbatim; `minimax-h3.models.valid.json` is an example (bytes measured, `peak_gb` a placeholder until measured; `components: []` in its memory item: the native runtime) |
@@ -1082,7 +1082,13 @@ unchanged; a video never fills them.
 - **`only`** (`GraphNode.only`, registry and user workflows): enum param → the values this workflow allows (a subset of
   its `enum`, holding its value). The form offers only those; another value is 422 / `param_invalid`
   (`model.variant: must be one of dev`). Studio drops it from `cmd.run.execute`. Why: `ltx/model.variant` gains `dev`,
-  and t2v / i2v keep offering only Distilled while the dev templates pin Dev.
+  and t2v / i2v keep offering only Distilled while the dev templates pin Dev. From 1.30 it may also name a **`voice`
+  param** → the voice sources this workflow takes (a subset of its `accepts`; the workflow still holds null): every
+  voice fit (studio's run 422 and `GET /library?workflow=`, the web's picker; Voices: fit) reads the narrowed set, so
+  a voice outside it is 422 `<node>.<param>: this workflow cannot use a designed voice` (`… a preset voice`, `…
+  clone a voice`). Why: voice fit is per stage, and Qwen3-TTS's one `speak` kind serves both templates (voice-over
+  `only {voice: [preset]}`, voice design `only {voice: [design]}`); the web finds a family's design template as the
+  audio template whose voice param takes `[design]` only.
 - **Offers** ("Use in…", `GET /v1/studio/takes/{id}/uses`, `take_uses`): the templates a live host could run now (the
   dispatcher's eligibility: published, model variant present, Several hosts rule 2, and for `ltx/distill` the
   family's pre-fused distilled LoRA listed in that host's `lora.prefused`), by family id then in their pack's order (the
@@ -1209,7 +1215,8 @@ resolve.audio-*.json`); `check.py` holds the reference (`workflow_media`, `voice
     starter looks); `group` filters by source; `q` matches the name. `thumb_url`: a starter voice's preview clip
     (signed), else null.
 - **Voice fit** (`voice_reason`, `voice_fit`; `GET /library?workflow=` for voices, the run's 422, the picker). The
-  voice params are those of known, not bypassed nodes, node id then schema order. One param refuses an item when
+  voice params are those of known, not bypassed nodes, node id then schema order, each `accepts` narrowed to its
+  node's `only` (Media inputs: `only`). One param refuses an item when
   (first that holds): its source (preset → `preset`, cloned → `clip`, designed → `design`) is not in `accepts`:
   `this workflow cannot use a preset voice` | `this workflow cannot clone a voice` | `this workflow cannot use a
   designed voice`; a preset whose `voice.family` is not the node's family: `voice <name> is for <family>`. The
@@ -1225,7 +1232,7 @@ resolve.audio-*.json`); `check.py` holds the reference (`workflow_media`, `voice
 - **Starter voices.** A pack may hold `runner_service/packs/<pack>/voices/*.yaml`, each file a list `{id, name,
   speaker, language, style?, version?, preview?}`: `id` a slug `^[a-z0-9][a-z0-9-]{0,63}$` unique in the family and
   not one of the family's look ids (they share `/library/<family>/<id>`); `name` 1–80; `speaker` the model's own
-  speaker id (`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`, Qwen3-TTS `Ryan`, `Uncle_Fu`); `language` a BCP 47 tag the pack
+  speaker id (`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`, Qwen3-TTS `ryan`, `uncle_fu`: config.json `spk_id`); `language` a BCP 47 tag the pack
   maps; `style` ≤ 500; `version` ≥ 1 (default 1; bump it when the voice changes); `preview` a WAV file next to the
   YAML (mono or stereo PCM, ≤ 2 MB, ≤ 30 s). At most 200 voices per pack. A broken file stops the runner like a
   broken look file. At start the runner publishes registry `<host>.<env>.voices` (`$defs/voices`): `id

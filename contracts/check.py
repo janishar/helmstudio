@@ -233,13 +233,14 @@ def value_error(param: dict, v) -> str | None:
 
 def only_errors(schema: dict, node: dict) -> list[tuple[str, str]]:
     """(param, message) for a workflow node's `only` (API 1.19): an enum param, a subset of its enum, holding the
-    node's merged value; the form offers only those values (README, Media inputs: pinned variant)."""
+    node's merged value; the form offers only those values (README, Media inputs: pinned variant). From 1.30 also a
+    voice param, a subset of its accepts: the fit rule reads the narrowed set (voice_params), a value is not checked here."""
     params, out = {p["name"]: p for p in schema["params"]}, []
     for k, allowed in node.get("only", {}).items():
         p = params.get(k)
-        if not p or p["type"] != "enum" or set(allowed) - set(p["enum"]):
-            out.append((k, "only must name an enum param and values of it"))
-        elif node.get("params", {}).get(k, p["default"]) not in allowed:
+        if not p or p["type"] not in ("enum", "voice") or set(allowed) - set(p["enum" if p["type"] == "enum" else "accepts"]):
+            out.append((k, "only must name an enum or voice param and values of it"))
+        elif p["type"] == "enum" and node.get("params", {}).get(k, p["default"]) not in allowed:
             out.append((k, f"must be one of {', '.join(allowed)}"))
     return out
 
@@ -1973,9 +1974,12 @@ SPEECH_CPS = 15  # characters per second of planned speech (the peak_gb variable
 
 
 def voice_params(nodes: dict, palette: dict) -> list[tuple[str, dict]]:
-    """Every voice param of a known, not bypassed node, node id order then schema order (it takes no wire)."""
-    return [(nid, p) for nid in sorted(nodes) if (s := palette.get(nodes[nid]["kind"])) and not nodes[nid].get("bypass")
-            for p in s["params"] if p["type"] == "voice"]
+    """Every voice param of a known, not bypassed node, node id order then schema order (it takes no wire), its
+    accepts narrowed to the node's `only` (1.30)."""
+    pin = lambda nid, p: p | {"accepts": [a for a in p["accepts"] if a in nodes[nid]["only"][p["name"]]]} \
+        if p["name"] in nodes[nid].get("only", {}) else p
+    return [(nid, pin(nid, p)) for nid in sorted(nodes) if (s := palette.get(nodes[nid]["kind"]))
+            and not nodes[nid].get("bypass") for p in s["params"] if p["type"] == "voice"]
 
 
 def voice_reason(kind: str, param: dict, item: dict) -> str | None:

@@ -1,0 +1,183 @@
+{
+  "schema_version": 1,
+  "host": "mac",
+  "env": "torch",
+  "published_at": "2026-11-21T10:00:00Z",
+  "published_by": "runner torch 0.3.0",
+  "nodes": [
+    {
+      "kind": "prompt",
+      "title": "Prompt",
+      "family": null,
+      "params": [
+        {
+          "name": "text",
+          "type": "text",
+          "label": "Prompt",
+          "default": "",
+          "min": 0,
+          "max": 4000
+        }
+      ],
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "text",
+          "type": "Text"
+        }
+      ],
+      "help": "The text the workflow starts from."
+    },
+    {
+      "kind": "seed",
+      "title": "Seed",
+      "family": null,
+      "params": [
+        {
+          "name": "seed",
+          "type": "seed",
+          "label": "Seed",
+          "default": -1,
+          "min": -1,
+          "max": 9007199254740991,
+          "step": 1
+        }
+      ],
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "seed",
+          "type": "Seed"
+        }
+      ],
+      "help": "The noise seed; -1 picks a random one, reported with the result."
+    },
+    {
+      "kind": "qwen3-tts/model",
+      "title": "Qwen3-TTS",
+      "family": "qwen3-tts",
+      "params": [
+        {
+          "name": "variant",
+          "type": "enum",
+          "enum": [
+            "custom_voice",
+            "voice_design"
+          ],
+          "default": "custom_voice",
+          "label": "Voice model",
+          "help": "Custom voice: 9 preset speakers with a style. Voice design: a voice from words."
+        },
+        {
+          "name": "precision",
+          "type": "enum",
+          "enum": [
+            "bf16"
+          ],
+          "default": "bf16"
+        }
+      ],
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "Model"
+        }
+      ],
+      "help": "Which voice model to load."
+    },
+    {
+      "kind": "qwen3-tts/speak",
+      "title": "Speak",
+      "family": "qwen3-tts",
+      "params": [
+        {
+          "name": "voice",
+          "type": "voice",
+          "label": "Voice",
+          "default": null,
+          "accepts": [
+            "preset",
+            "design"
+          ],
+          "help": "A Qwen3-TTS preset speaker (Custom voice) or a designed voice (Voice design)."
+        },
+        {
+          "name": "language",
+          "type": "enum",
+          "label": "Language",
+          "default": "auto",
+          "enum": [
+            "auto",
+            "en",
+            "zh",
+            "ja",
+            "ko",
+            "de",
+            "fr",
+            "ru",
+            "pt",
+            "es",
+            "it"
+          ],
+          "help": "The language of the text; auto lets the model tell."
+        },
+        {
+          "name": "style",
+          "type": "string",
+          "label": "Style",
+          "default": "",
+          "max": 500,
+          "when": "model.variant == 'custom_voice'",
+          "help": "How to say it, in words: calm, angry, whispering."
+        },
+        {
+          "name": "temperature",
+          "type": "float",
+          "label": "Variation",
+          "default": 0.3,
+          "min": 0.1,
+          "max": 1.2,
+          "step": 0.05,
+          "help": "Low keeps the voice steady; high is livelier and drifts."
+        }
+      ],
+      "inputs": [
+        {
+          "name": "model",
+          "type": "Model"
+        },
+        {
+          "name": "text",
+          "type": "Text"
+        },
+        {
+          "name": "seed",
+          "type": "Seed"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "audio",
+          "type": "Audio"
+        }
+      ],
+      "component": "talker",
+      "help": "Reads the text in one voice: a preset speaker (Custom voice) or a designed voice (Voice design). Long text is split on sentences and joined; at most 900 characters (about 60 s)."
+    },
+    {
+      "kind": "output",
+      "title": "Output",
+      "family": null,
+      "params": [],
+      "inputs": [
+        {
+          "name": "media",
+          "type": "Media"
+        }
+      ],
+      "outputs": [],
+      "help": "Stores its input as a run output: an image, a video or (from API 1.30) an audio take."
+    }
+  ]
+}

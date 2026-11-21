@@ -1,0 +1,23 @@
+{
+  "name": "preset-ryan-calm-s7",
+  "variant": "custom_voice",
+  "dir": "Qwen3-TTS-12Hz-1.7B-CustomVoice",
+  "text": "Good morning, everyone.",
+  "speaker": "ryan",
+  "language": "en",
+  "style": "calm",
+  "seed": 7,
+  "temperature": 0.3,
+  "frames": 26,
+  "duration_s": 2.08,
+  "load_s": 2.53,
+  "speak_s": 2.19,
+  "peak_rss_gb": 7.67,
+  "versions": {
+    "torch": "2.15.0",
+    "transformers": "5.23.0",
+    "python": "3.14.10",
+    "port": "AI-EXP 16b31cc3 src/qwen3_tts"
+  },
+  "device": "mps, arm64, macOS 27.2.1"
+}

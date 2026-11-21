@@ -45,6 +45,7 @@ describe("media of workflows and the Image / Video switch", () => {
     expect(mediaOf(qwen)).toBe("image");
     expect(mediaKinds([qwen])).toEqual(["image"]);
     expect(mediaKinds([ltx, qwen])).toEqual(["image", "video"]);
+    expect(mediaKinds([{ media: "audio" }, ltx, qwen])).toEqual(["image", "video", "audio"]);
   });
 
   it("opens the open workflow, else the session's newest of that media, else the first template", () => {
@@ -57,6 +58,16 @@ describe("media of workflows and the Image / Video switch", () => {
     ).toBe("my-ltx");
     expect(workflowFor(ws, [], "image", ltx.id)).toBe(qwen.id);
     expect(workflowFor([qwen], [], "video")).toBeUndefined();
+    const tts = (id: string, voice: string[]) =>
+      ({
+        id,
+        media: "audio",
+        source: "template",
+        nodes: { speak: { kind: "q/speak", only: { voice } } },
+      }) as never;
+    expect(workflowFor([tts("design", ["design"]), tts("over", ["preset"])], [], "audio")).toBe(
+      "over",
+    );
   });
 
   it("carries the prompt and seed across, and a canvas only when it suits the new one", () => {

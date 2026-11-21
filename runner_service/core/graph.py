@@ -493,9 +493,11 @@ def problems(
         params, specs = n.get("params", {}), {p["name"]: p for p in s["params"]}
         for name in params.keys() - specs.keys():
             add("unknown_param", nid, param=name, message=f"{nid}.{name}: unknown param")
-        for name, allowed in n.get("only", {}).items():  # an enum param and a subset of its values
-            if specs.get(name, {}).get("type") != "enum" or set(allowed) - set(specs[name]["enum"]):
-                add("param_invalid", nid, param=name, message=f"{nid}.{name}: only must name an enum param and values of it")  # fmt: skip
+        for name, allowed in n.get("only", {}).items():  # enum (voice: accepts) param, a subset
+            t = specs.get(name, {}).get("type")
+            known = specs.get(name, {}).get("enum" if t == "enum" else "accepts", [])
+            if t not in ("enum", "voice") or set(allowed) - set(known):
+                add("param_invalid", nid, param=name, message=f"{nid}.{name}: only must name an enum or voice param and values of it")  # fmt: skip
         for name, spec in specs.items():
             if name not in params:
                 add("param_missing", nid, param=name, message=f"{nid}.{name}: missing")
@@ -508,8 +510,10 @@ def problems(
                 add("param_invalid", nid, param=name,
                     message=f"{nid}.{name}: must be one of {', '.join(map(str, ok))}")  # fmt: skip
             elif (
-                name in n.get("only", {}) and params[name] not in n["only"][name]
-            ):  # README, Media inputs: only
+                spec["type"] == "enum"
+                and name in n.get("only", {})
+                and params[name] not in n["only"][name]
+            ):  # README, Media inputs: only (a voice param's only is studio's fit rule)
                 add("param_invalid", nid, param=name,
                     message=f"{nid}.{name}: must be one of {', '.join(map(str, n['only'][name]))}")  # fmt: skip
             elif field := lora_field(spec):  # README, LoRAs: one LoRA once per stack

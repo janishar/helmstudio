@@ -432,6 +432,13 @@ describe("when expressions and tile labels", () => {
     });
   });
 
+  it("reads an unplaced field in a placed field's when (the scope)", () => {
+    const fs = fields(qwen);
+    const shown = fs.filter((f) => f.key === "sample.steps");
+    expect(visible(shown, { "model.variant": "turbo" }).length).toBe(1); // model.variant out of reach: shown
+    expect(visible(shown, { "model.variant": "turbo" }, fs).length).toBe(0);
+  });
+
   it("labels tiles as the mock does, from the schema", () => {
     const f = (k: string) => fields(qwen).find((x) => x.key === k)!;
     expect(display(f("model.variant"), "base")).toEqual({ label: "Model", value: "Base" });

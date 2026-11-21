@@ -2870,7 +2870,7 @@ components:
         only: {$ref: '#/components/schemas/ParamOnly'}
     ParamOnly:
       type: object
-      description: 'from 1.19: enum param → the values this workflow allows (a subset of its `enum` holding the node''s value); the form offers only those, another value is 422 `<node>.<param>: must be one of <values>` (LTX dev templates pin `model.variant` to dev)'
+      description: 'from 1.19: enum param → the values this workflow allows (a subset of its `enum` holding the node''s value); the form offers only those, another value is 422 `<node>.<param>: must be one of <values>` (LTX dev templates pin `model.variant` to dev). From 1.30 also a voice param → the voice sources this workflow takes (a subset of its `accepts`; the workflow holds null): the voice fit reads the narrowed set, a voice outside it is 422 `<node>.<param>: this workflow cannot use a designed voice` (or `a preset voice`, `clone a voice`; contracts/README.md, Media inputs: only)'
       propertyNames: {pattern: '^[a-z][a-z0-9_]{0,63}$'}
       additionalProperties: {type: array, minItems: 1, uniqueItems: true, items: {type: string}}
     NodePosition:
@@ -4195,7 +4195,7 @@ components:
       properties:
         source: {$ref: '#/components/schemas/VoiceSource'}
         family: {type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,63}$', description: 'preset only: the family whose voice params take it'}
-        speaker: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$', description: 'preset only: the model''s speaker id (Ryan, Uncle_Fu)'}
+        speaker: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$', description: 'preset only: the model''s speaker id (ryan, uncle_fu)'}
         design: {type: string, minLength: 1, maxLength: 2000, description: 'designed only: the voice in words ("male, 17, tenor, nervous")'}
         language: {type: string, pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8}){0,3}$', description: 'a BCP 47 tag (en, en-US, zh, pt-BR); absent = none (the node''s own language param decides)'}
         style: {type: string, minLength: 1, maxLength: 500, description: 'how it speaks, in words; absent = none'}

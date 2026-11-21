@@ -333,6 +333,35 @@ def test_voice_fit_in_the_list(uv, anon):
         assert (image[vid]["fits"], image[vid]["reason"]) == (False, "this workflow takes no voice")
 
 
+def test_only_narrows_a_voice_param(uv, sid, voice_over):
+    """`only {voice: [preset]}` on speak (README, Media inputs: only): the list and the run refuse a designed voice."""
+    body = {
+        k: voice_over[k] for k in ("title", "family", "env", "nodes", "studio") if k in voice_over
+    }
+    body["title"] = "Presets only"
+    body["nodes"]["speak"]["only"] = {"voice": ["preset"]}
+    w = ok(uv.post(f"{STUDIO}/workflows", json=body), 201)
+    assert w["problems"] == [] and w["nodes"]["speak"]["only"] == {"voice": ["preset"]}
+    mine = designed(uv, "Pinned out")
+    got = by_id(uv, kind="voice", workflow=w["id"])
+    assert (got[mine["id"]]["fits"], got[mine["id"]]["reason"]) == (
+        False,
+        "this workflow cannot use a designed voice",
+    )
+    assert (got[ADA]["fits"], got[ADA]["reason"]) == (True, None)
+    r = uv.post(
+        f"{STUDIO}/sessions/{sid}/runs",
+        json={
+            "workflow_id": w["id"],
+            "inputs": FAST | {"prompt.text": TEXT, "speak.voice": voice(mine["id"])},
+        },
+    )
+    assert detail(r, 422) == "speak.voice: this workflow cannot use a designed voice"
+    body["nodes"]["speak"]["only"] = {"voice": ["clip", "nope"]}
+    bad = ok(uv.post(f"{STUDIO}/workflows/validate", json=body))["problems"]
+    assert [(p["code"], p.get("param")) for p in bad] == [("param_invalid", "voice")]
+
+
 # ---------------------------------------------------------------- isolation
 
 

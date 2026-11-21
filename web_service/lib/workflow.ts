@@ -1,6 +1,7 @@
 // The run form, derived from a workflow's node schemas (contracts/openapi.yaml `Workflow`).
 import type { S } from "@/lib/api";
 import { frameError } from "@/lib/media";
+import { languageName, narrowed } from "@/lib/voices";
 import { allowedInts, clipOf, positionErrors, positionOf } from "@/lib/video";
 
 type Param = S<"ParamSchema">;
@@ -30,8 +31,9 @@ export type Field = {
 };
 
 /** What a form control holds: a switch's boolean, the text typed ("" in a seed field is random), an image param's
- * take id ("" for none), a rows param's items, or a media or span param's value ("" for none). */
-export type Raw = string | boolean | S<"RowItem">[] | S<"MediaRef"> | S<"SpanValue">;
+ * take id ("" for none), a rows param's items, or a media, span or voice param's value ("" for none). */
+export type Raw =
+  string | boolean | S<"RowItem">[] | S<"MediaRef"> | S<"SpanValue"> | S<"VoiceRef">;
 /** A new value for a control, or how to make it from what it holds (undefined: the field's initial value). Uploads
  * and picks finish late, so they add to the list as it is then. */
 export type Update = Raw | ((old: Raw | undefined) => Raw);
@@ -52,8 +54,15 @@ export function fields(w: Pick<S<"Workflow">, "nodes" | "node_schemas">): Field[
     return (
       schema.params
         .filter((param) => !(param.name in (n.in ?? {})))
-        // `only`: the values this workflow allows of an enum param (API 1.19); the form offers just those
-        .map((p) => (n.only?.[p.name] ? { ...p, enum: n.only[p.name] } : p))
+        // `only`: the values this workflow allows of an enum param (API 1.19), the voice sources of a voice param
+        // (1.30); the form offers just those
+        .map((p) =>
+          p.type === "voice"
+            ? narrowed(p, n.only)
+            : n.only?.[p.name]
+              ? { ...p, enum: n.only[p.name] }
+              : p,
+        )
         .map((param) => ({
           key: `${node}.${param.name}`,
           node,
@@ -72,8 +81,15 @@ export function fields(w: Pick<S<"Workflow">, "nodes" | "node_schemas">): Field[
   });
 }
 
-/** An enum value as shown: a plain lowercase word title-cased ("base" → "Base"); ids like "int8" stay as they are. */
-export const pretty = (v: string) => (/^[a-z]+$/.test(v) ? v[0].toUpperCase() + v.slice(1) : v);
+/** An enum value as shown: plain lowercase words title-cased, underscores as spaces ("base" → "Base",
+ * "custom_voice" → "Custom voice"); ids like "int8" stay as they are. */
+export const pretty = (v: string) =>
+  /^[a-z]+(_[a-z]+)*$/.test(v) ? v[0].toUpperCase() + v.slice(1).replaceAll("_", " ") : v;
+
+/** A param's enum value as shown: a `language` param's tag as its language ("en" → "English"; "auto" stays a
+ * word), else `pretty`. */
+export const optionText = (p: Pick<Param, "name">, v: string) =>
+  p.name === "language" && v !== "auto" ? languageName(v) : pretty(v);
 
 /** A tile's label and value as shown. The model node's variant is "Model"; a label ending in its node's title
  * ("Tiled decode" on Decode) becomes that title, its first words leading the value ("Tiled · auto"); other enum
@@ -88,7 +104,7 @@ export function display(f: Field, raw: Raw): { label: string; value: string } {
     return { label: f.nodeTitle, value: `${pretty(label.slice(0, -t.length - 1))} · ${v}` };
   // a whole float keeps one decimal, so it reads as a float ("CFG 3.0", docs/mock/VideoSource.dc.html)
   if (f.param.type === "float" && /^-?\d+$/.test(v)) return { label, value: `${v}.0` };
-  return { label, value: f.param.type === "enum" ? pretty(v) : v };
+  return { label, value: f.param.type === "enum" ? optionText(f.param, v) : v };
 }
 
 type ExprValue = string | number | boolean | null | undefined;
@@ -156,10 +172,11 @@ export function evaluate(expr: string, get: (ref: string) => ExprValue): ExprVal
 }
 
 /** The fields whose `when` holds for the values in the controls now (an expression that does not parse shows its
- * field). Hidden fields are neither shown nor sent. */
-export function visible(fs: Field[], raws: Record<string, Raw>): Field[] {
+ * field); `scope` holds the fields an expression may name (every field of the workflow: a placed field's `when` may
+ * read an unplaced one, Qwen3-TTS style reads model.variant). Hidden fields are neither shown nor sent. */
+export function visible(fs: Field[], raws: Record<string, Raw>, scope: Field[] = fs): Field[] {
   const get = (ref: string) => {
-    const f = fs.find((x) => x.key === ref);
+    const f = scope.find((x) => x.key === ref);
     if (!f) return undefined;
     const r = readValue(f.param, raws[f.key] ?? toRaw(f.initial, f.param));
     return "value" in r ? (r.value as ExprValue) : String(raws[f.key]);
@@ -180,6 +197,7 @@ export function toRaw(v: Value, p: Param): Raw {
   if (p.type === "image") return v && typeof v === "object" && "take_id" in v ? v.take_id : "";
   if (p.type === "media") return isRef(v) ? v : "";
   if (p.type === "span") return isSpan(v) ? v : "";
+  if (p.type === "voice") return isVoice(v) ? v : "";
   if (typeof v === "boolean") return v;
   return v == null || typeof v === "object" || (p.type === "seed" && v === -1) ? "" : String(v);
 }
@@ -219,6 +237,7 @@ export function readValue(p: Param, raw: Raw): { value: Value } | { error: strin
       ? { value: { take_id: raw } }
       : { error: "an image is required" };
   if (p.type === "media") return isRef(raw) ? { value: raw } : { error: "a take is required" };
+  if (p.type === "voice") return isVoice(raw) ? { value: raw } : { error: "a voice is required" };
   if (p.type === "span")
     return !isSpan(raw)
       ? { error: "a range is required" }
@@ -267,6 +286,10 @@ const isLoraRef = (v: unknown) =>
 /** Whether a value is an Image (`{take_id}`). */
 export const isRef = (v: unknown): v is S<"ImageRef"> =>
   !!v && typeof v === "object" && typeof (v as { take_id?: unknown }).take_id === "string";
+
+/** Whether a value is a voice (`{voice_id}`, API 1.30). */
+export const isVoice = (v: unknown): v is S<"VoiceRef"> =>
+  !!v && typeof v === "object" && typeof (v as { voice_id?: unknown }).voice_id === "string";
 
 /** Whether a value is a span (`{start, end}`). */
 export const isSpan = (v: unknown): v is S<"SpanValue"> =>

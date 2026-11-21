@@ -3,20 +3,35 @@
   "host": "mac",
   "env": "torch",
   "published_at": "2026-11-21T10:00:00Z",
-  "published_by": "runner torch 0.1.0",
+  "published_by": "runner torch 0.3.0",
   "voices": [
     {
-      "id": "qwen3-tts/ryan",
+      "id": "qwen3-tts/vivian",
       "family": "qwen3-tts",
-      "name": "Ryan",
-      "speaker": "Ryan",
-      "language": "en",
-      "style": "lively",
+      "name": "Vivian",
+      "speaker": "vivian",
+      "language": "zh",
+      "style": "Bright, slightly edgy young female voice.",
       "version": 1,
       "preview": {
-        "key": "packs/qwen3-tts/voices/ryan-0123456789abcdef.wav",
-        "bytes": 144044,
-        "duration_s": 3.0,
+        "key": "packs/qwen3-tts/voices/vivian-453bcb0061285491.wav",
+        "bytes": 122924,
+        "duration_s": 2.56,
+        "sample_rate": 24000
+      }
+    },
+    {
+      "id": "qwen3-tts/serena",
+      "family": "qwen3-tts",
+      "name": "Serena",
+      "speaker": "serena",
+      "language": "zh",
+      "style": "Warm, gentle young female voice.",
+      "version": 1,
+      "preview": {
+        "key": "packs/qwen3-tts/voices/serena-17f232abb615b1e2.wav",
+        "bytes": 92204,
+        "duration_s": 1.92,
         "sample_rate": 24000
       }
     },
@@ -24,10 +39,106 @@
       "id": "qwen3-tts/uncle-fu",
       "family": "qwen3-tts",
       "name": "Uncle Fu",
-      "speaker": "Uncle_Fu",
+      "speaker": "uncle_fu",
       "language": "zh",
+      "style": "Seasoned male voice with a low, mellow timbre.",
       "version": 1,
-      "preview": null
+      "preview": {
+        "key": "packs/qwen3-tts/voices/uncle-fu-1ceb1908fa4a19b8.wav",
+        "bytes": 153644,
+        "duration_s": 3.2,
+        "sample_rate": 24000
+      }
+    },
+    {
+      "id": "qwen3-tts/dylan",
+      "family": "qwen3-tts",
+      "name": "Dylan · Beijing",
+      "speaker": "dylan",
+      "language": "zh",
+      "style": "Youthful Beijing male voice with a clear, natural timbre.",
+      "version": 1,
+      "preview": {
+        "key": "packs/qwen3-tts/voices/dylan-a58770aaa5904dd3.wav",
+        "bytes": 99884,
+        "duration_s": 2.08,
+        "sample_rate": 24000
+      }
+    },
+    {
+      "id": "qwen3-tts/eric",
+      "family": "qwen3-tts",
+      "name": "Eric · Sichuan",
+      "speaker": "eric",
+      "language": "zh",
+      "style": "Lively Chengdu male voice with a slightly husky brightness.",
+      "version": 1,
+      "preview": {
+        "key": "packs/qwen3-tts/voices/eric-8b6d0d1fd473edf6.wav",
+        "bytes": 115244,
+        "duration_s": 2.4,
+        "sample_rate": 24000
+      }
+    },
+    {
+      "id": "qwen3-tts/ryan",
+      "family": "qwen3-tts",
+      "name": "Ryan",
+      "speaker": "ryan",
+      "language": "en",
+      "style": "Dynamic male voice with strong rhythmic drive.",
+      "version": 1,
+      "preview": {
+        "key": "packs/qwen3-tts/voices/ryan-1b43359120220e2f.wav",
+        "bytes": 142124,
+        "duration_s": 2.96,
+        "sample_rate": 24000
+      }
+    },
+    {
+      "id": "qwen3-tts/aiden",
+      "family": "qwen3-tts",
+      "name": "Aiden",
+      "speaker": "aiden",
+      "language": "en",
+      "style": "Sunny American male voice with a clear midrange.",
+      "version": 1,
+      "preview": {
+        "key": "packs/qwen3-tts/voices/aiden-e3d9a5db618ab158.wav",
+        "bytes": 115244,
+        "duration_s": 2.4,
+        "sample_rate": 24000
+      }
+    },
+    {
+      "id": "qwen3-tts/ono-anna",
+      "family": "qwen3-tts",
+      "name": "Ono Anna",
+      "speaker": "ono_anna",
+      "language": "ja",
+      "style": "Playful Japanese female voice with a light, nimble timbre.",
+      "version": 1,
+      "preview": {
+        "key": "packs/qwen3-tts/voices/ono-anna-c27de7aac6910984.wav",
+        "bytes": 119084,
+        "duration_s": 2.48,
+        "sample_rate": 24000
+      }
+    },
+    {
+      "id": "qwen3-tts/sohee",
+      "family": "qwen3-tts",
+      "name": "Sohee",
+      "speaker": "sohee",
+      "language": "ko",
+      "style": "Warm Korean female voice with rich emotion.",
+      "version": 1,
+      "preview": {
+        "key": "packs/qwen3-tts/voices/sohee-204135acc4a44dbe.wav",
+        "bytes": 111404,
+        "duration_s": 2.32,
+        "sample_rate": 24000
+      }
     }
   ]
 }

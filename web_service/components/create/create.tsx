@@ -16,6 +16,7 @@ import {
   choiceBypass,
   idOf,
 } from "@/components/create/form";
+import { TileWords, tileClass } from "@/components/create/elements";
 import { FirstFrameTile, takeDrop, useRefUploads } from "@/components/create/refs";
 import {
   MediaRows,
@@ -35,6 +36,8 @@ import { ElementsPanel, ElementsPicker } from "@/components/create/elements";
 import { AddToTimeline } from "@/components/timeline/add";
 import { LooksPicker, LooksSection, QuickTiles } from "@/components/create/looks";
 import { MentionChips, insertAtCaret } from "@/components/create/prompt";
+import { WavePlayer } from "@/components/create/audio";
+import { VoiceTile, designWorkflow, type VoiceCtx } from "@/components/create/voices";
 import { useLibrary, useLooks } from "@/lib/library";
 import {
   chosenFrom,
@@ -97,7 +100,9 @@ import type { GraphProps } from "@/components/graph/graph";
 import {
   buildInputs,
   carry,
+  display,
   fields as fieldsOf,
+  isVoice,
   queueInputs,
   rawsFrom,
   toRaw,
@@ -426,9 +431,16 @@ export function Create({
   // a workflow with a Studio block shows exactly what it places (lib/studio.ts)
   const layout = useMemo(() => (workflow ? studioView(workflow, all) : null), [workflow, all]);
   // the params whose `when` holds now: the others are neither shown nor sent
-  const fields = visible(layout ? layout.shown : all, raws);
+  const fields = visible(layout ? layout.shown : all, raws, all);
+  // an audio workflow reads it too: the voice picker names each family's starter voices by its title
   const palette = usePalette(
-    view === "graph" ? `graph ${workflowId}` : workflow?.source === "mine" ? "mine" : null,
+    view === "graph"
+      ? `graph ${workflowId}`
+      : workflow?.source === "mine"
+        ? "mine"
+        : workflow?.media === "audio"
+          ? "audio"
+          : null,
   );
   const loras = useLoras();
   const own = useMemo(
@@ -505,6 +517,8 @@ export function Create({
   const media = workflow ? mediaOf(workflow) : "image";
   const kinds = workflows ? mediaKinds(workflows) : [];
   const video = media === "video";
+  // speech (API 1.30, docs/mock/CreateAudio.dc.html): the prompt is spoken, no elements or looks
+  const audio = media === "audio";
   // a drop or paste on the stage or the composer goes to the first image input
   const refField = imageInputs(fields)[0];
   const intoRefs = (dt: DataTransfer) =>
@@ -547,20 +561,22 @@ export function Create({
   // the top bar's label: an edit counts its references; a clip its frames, or offers a first frame
   const workflowLabel = !workflow
     ? ""
-    : !video
-      ? editLabel(workflow.title, refs)
-      : [
-          videoTitle(workflow, familyName),
-          refs
-            ? [`${refs} ${refUnit(refField)}${refs === 1 ? "" : "s"}`, ...mediaCounts].join(" · ")
-            : mediaCounts.length
-              ? mediaCounts.join(" · ")
-              : fields.some((f) => f.param.type === "span")
-                ? "the rest of the clip is kept as context" // docs/mock/VideoSource.dc.html
-                : firstFrameIn && "add a first frame to animate it",
-        ]
-          .filter(Boolean)
-          .join(" · ");
+    : audio
+      ? videoTitle(workflow, familyName)
+      : !video
+        ? editLabel(workflow.title, refs)
+        : [
+            videoTitle(workflow, familyName),
+            refs
+              ? [`${refs} ${refUnit(refField)}${refs === 1 ? "" : "s"}`, ...mediaCounts].join(" · ")
+              : mediaCounts.length
+                ? mediaCounts.join(" · ")
+                : fields.some((f) => f.param.type === "span")
+                  ? "the rest of the clip is kept as context" // docs/mock/VideoSource.dc.html
+                  : firstFrameIn && "add a first frame to animate it",
+          ]
+            .filter(Boolean)
+            .join(" · ");
   // the model choices outside the inspector's sections (quick ones or unplaced): the model chip names them
   const chipModels = layout
     ? all.filter(
@@ -582,13 +598,14 @@ export function Create({
         fields.some((x) => x.node === f.node && x.param.type === "rows")
       ),
   );
-  const groups = layout?.groups.flatMap((g) => {
+  const placed = layout?.groups.flatMap((g) => {
     const fs = g.fields.filter((f) => fields.includes(f));
     if (g.title !== "Quick") return [{ ...g, fields: fs }];
     // a quick model choice is picked from the model chip's menu (docs/mock/TextToVideo.dc.html has no Model tile)
     const rest = fs.filter(
       (f) =>
         f.param.type !== "bool" &&
+        f.param.type !== "voice" &&
         !(f.param.type === "enum" && (f.param.enum?.length ?? 0) < 2) &&
         !(f.model && f.param.type === "enum"),
     );
@@ -603,6 +620,17 @@ export function Create({
       ...(ext ? [{ title: ext.seconds.nodeTitle, fields: extFields }] : []),
     ];
   });
+  // an audio workflow (docs/mock/CreateAudio.dc.html): the voice heads the Voice section (also a composer tile);
+  // Quick keeps Language and Seed, which the composer tiles open (VoicePicker.dc.html)
+  const spokenVoices = fields.filter((f) => f.param.type === "voice");
+  const groups =
+    audio && placed && spokenVoices.length
+      ? placed.some((g) => g.title === "Voice")
+        ? placed.map((g) =>
+            g.title === "Voice" ? { ...g, fields: [...spokenVoices, ...g.fields] } : g,
+          )
+        : [...placed, { title: "Voice", fields: spokenVoices }]
+      : placed;
   // media inputs (API 1.19): composer tiles, the source on the stage, the family's frame grid for the readouts
   const mediaFields = fields.filter((f) => f.param.type === "media");
   // rows of video or audio takes (API 1.22, MiniMax H3 references): their chips in the composer
@@ -649,9 +677,10 @@ export function Create({
   const formInputs = buildInputs(fields, raws).inputs;
   // the graph as the form sets it: what the picker's fit reasons are about
   const current = workflow && { ...workflow, nodes: withInputs(workflow.nodes, formInputs) };
-  const tiles = (workflow ? tilesOf(workflow, looks ?? [], loraFamilies, looksChosen) : []).filter(
-    (t) => t !== "elements" || textFields.length > 0,
-  );
+  // an audio workflow's composer has neither tile (contracts/README.md, Voices: speech and the library)
+  const tiles = (
+    workflow && !audio ? tilesOf(workflow, looks ?? [], loraFamilies, looksChosen) : []
+  ).filter((t) => t !== "elements" || textFields.length > 0);
   const lookIds = workflow ? lookIdsOf(workflow) : [];
   const preview =
     workflow && (handles.length || lookIds.length) ? mentionsOf(workflow, formInputs) : null;
@@ -687,6 +716,41 @@ export function Create({
       el?.focus();
     });
   };
+
+  // voice params (API 1.30): a composer tile each that opens the voice picker; an audio workflow's quick params and
+  // its seed are composer tiles too (docs/mock/CreateAudio.dc.html: Voice, Language, Seed)
+  const voiceFields = fields.filter((f) => f.param.type === "voice");
+  // a run needs a voice (studio's `a voice is required`): Generate waits for one and says so, as the tile does
+  const noVoice = voiceFields.some((f) => !isVoice(raws[f.key]));
+  const familyTitle = (f: string) => palette?.groups.find((g) => g.family === f)?.title ?? f;
+  const designSession = useRef<string | null>(null);
+  const designWf = audio && workflows ? designWorkflow(workflows, workflow?.family) : undefined;
+  const voiceCtx: VoiceCtx | undefined = workflow && {
+    workflow,
+    familyTitle,
+    design: designWf && {
+      workflow: designWf,
+      label: videoTitle(designWf, familyTitle(designWf.family)),
+      session: async () =>
+        sessionId ??
+        (designSession.current ??= (
+          await ok(api.POST("/v1/studio/sessions", { body: { title: "Voice design" } }))
+        ).id),
+      stay: () => setChosen(workflow.id),
+    },
+  };
+  const paramCards = audio
+    ? [
+        ...quick.filter(
+          (f) =>
+            !["voice", "bool", "text", "rows", "image", "media", "span"].includes(f.param.type) &&
+            !(f.model && f.param.type === "enum"),
+        ),
+        ...(seedField && !quick.includes(seedField) && fields.includes(seedField)
+          ? [seedField]
+          : []),
+      ]
+    : [];
 
   async function newSession(title?: string) {
     const s = await ok(api.POST("/v1/studio/sessions", { body: title ? { title } : {} }));
@@ -807,6 +871,7 @@ export function Create({
     inlineGroup && lookTiles.includes(inlineGroup) ? inlineGroup : (lookTiles[0] ?? null);
   const elementsAside =
     empty &&
+    !audio &&
     !!textFields[0] &&
     !inspect &&
     !fields.some((f) => f.param.type !== "text" && errors[f.key]);
@@ -816,13 +881,14 @@ export function Create({
   // the reference control and the prompt's @mentions: in the tiles row, or on the empty screen in the bottom row
   // by Generate, as the board's + and @ (docs/mock/Direct.dc.html)
   // a video workflow's composer tiles are cards, label over value (docs/mock/TextToVideo.dc.html)
-  const card = video && !empty;
+  const card = (video || audio) && !empty;
   // what opens the first tile's picker (the + chip)
   const firstPicker = useRef<(() => void) | null>(null);
   // its + and @ chips (docs/mock/TextToVideo.dc.html, VideoSource.dc.html); a workflow with its own add controls
   // (reference rows, image params, video or audio rows: docs/mock/CreateMediaRefs.dc.html) has none
   const plusAt =
     card &&
+    !audio &&
     !mediaRowFields.length &&
     !imageInputs(fields).some((f) => f.param.type === "image" || !positionOf(f.param));
   const refsAndMentions = (
@@ -999,7 +1065,7 @@ export function Create({
           hosts={hosts}
           generate={(w) => {
             const fs = fieldsOf(w);
-            return send(w, visible(studioView(w, fs)?.shown ?? fs, raws));
+            return send(w, visible(studioView(w, fs)?.shown ?? fs, raws, fs));
           }}
           busy={busy}
           anyActive={anyActive}
@@ -1186,7 +1252,9 @@ export function Create({
               textFields.length > 0 ||
               tiles.length > 0 ||
               mediaFields.length > 0 ||
-              mediaRowFields.length > 0) && (
+              mediaRowFields.length > 0 ||
+              voiceFields.length > 0 ||
+              paramCards.length > 0) && (
               // the empty screen's big tiles: equal columns, so a tile that wraps keeps their width
               <div
                 className={
@@ -1195,6 +1263,34 @@ export function Create({
                     : "flex flex-wrap items-center gap-2"
                 }
               >
+                {voiceCtx &&
+                  voiceFields.map((f) => (
+                    <VoiceTile
+                      key={f.key}
+                      f={f}
+                      raws={raws}
+                      onChange={(k, v) => change(k, v)}
+                      ctx={voiceCtx}
+                    />
+                  ))}
+                {paramCards.map((f) => {
+                  const raw = raws[f.key] ?? toRaw(f.initial, f.param);
+                  const d = display(f, raw);
+                  return (
+                    <button
+                      key={f.key}
+                      type="button"
+                      className={tileClass("card")}
+                      onClick={() => show(f.key)}
+                    >
+                      <TileWords
+                        big="card"
+                        label={d.label}
+                        value={f.param.type === "seed" && raw === "" ? "Random" : d.value || "—"}
+                      />
+                    </button>
+                  );
+                })}
                 {mediaFields.map((f, i) => (
                   <MediaTile
                     key={f.key}
@@ -1246,6 +1342,7 @@ export function Create({
               raws={raws}
               errors={errors}
               onChange={change}
+              spoken={audio}
             />
             {note && (
               <p
@@ -1308,13 +1405,14 @@ export function Create({
                 raws={raws}
                 onChange={change}
                 show={show}
-                compact={video}
+                compact={video || audio}
                 toggles={toggles}
                 models={
                   // the model choices outside the inspector's sections (quick ones or unplaced)
                   chipModels.length ? chipModels : undefined
                 }
                 family={familyName}
+                spoken={audio}
               />
               {seedField && (
                 <div
@@ -1351,17 +1449,19 @@ export function Create({
                 type="submit"
                 title="Generate (⌘ or Ctrl + Enter)"
                 // a video workflow's key is the second accent (docs/mock/TextToVideo.dc.html)
-                className={`key flex h-14 flex-col items-center justify-center gap-px px-6 ${video ? "bg-a2 text-[var(--on2)]" : ""}`}
-                disabled={!workflow || busy || blocked > 0}
+                className={`key flex h-14 flex-col items-center justify-center gap-px px-6 ${video || audio ? "bg-a2 text-[var(--on2)]" : ""}`}
+                disabled={!workflow || busy || blocked > 0 || noVoice}
               >
                 <span className="text-sm">
                   {busy
                     ? "Sending…"
                     : blocked
                       ? `${blocked} problem${blocked === 1 ? "" : "s"}`
-                      : anyActive
-                        ? "Add to queue"
-                        : "Generate"}
+                      : noVoice
+                        ? "Pick a voice"
+                        : anyActive
+                          ? "Add to queue"
+                          : "Generate"}
                 </span>
                 {pinned && !busy ? (
                   <span className="mono text-[11px] font-medium" title={`The queued run ${pinned}`}>
@@ -1450,8 +1550,10 @@ export function Create({
               palette?.groups.find((g) => g.family === workflow?.family)?.title ??
               (workflow?.source === "mine" ? undefined : workflow?.title)
             }
+            voice={audio ? voiceCtx : undefined}
           />
         )}
+        {audio && !elementsAside && <SpeechOutput take={shownTake} text={texts[0] ?? ""} />}
       </aside>
     </>
   );
@@ -1517,19 +1619,33 @@ function Stage({
   const [playingKey, setPlayingKey] = useState<string | undefined>();
   const playing = !!outKey && playingKey === outKey;
   const videoRef = useRef<HTMLVideoElement>(null);
-  const label = !run
-    ? take
-      ? "Take"
-      : ""
-    : node && p
-      ? [`${node} · step ${p.step} of ${p.of}`, p.phase].filter(Boolean).join(" · ")
-      : {
-          queued: "Queued",
-          running: "Starting",
-          succeeded: "Take",
-          failed: "Failed",
-          cancelled: "Stopped",
-        }[run.status];
+  // an audio take's badge: "seed 12 · 24 kHz mono" (docs/mock/CreateAudio.dc.html)
+  const sound = out?.kind === "audio";
+  const outSeed = take?.made_with?.seed ?? (out && "seed" in out ? out.seed : undefined);
+  const audioBadge =
+    sound && (!run || run.status === "succeeded")
+      ? [
+          outSeed != null && `seed ${outSeed}`,
+          out.audio?.sample_rate && `${+(out.audio.sample_rate / 1000).toFixed(1)} kHz mono`,
+        ]
+          .filter(Boolean)
+          .join(" · ")
+      : "";
+  const label = audioBadge
+    ? audioBadge
+    : !run
+      ? take
+        ? "Take"
+        : ""
+      : node && p
+        ? [`${node} · step ${p.step} of ${p.of}`, p.phase].filter(Boolean).join(" · ")
+        : {
+            queued: "Queued",
+            running: "Starting",
+            succeeded: "Take",
+            failed: "Failed",
+            cancelled: "Stopped",
+          }[run.status];
   // what a screen reader hears: the state and the node, not every step
   const said = node ? `Running ${node}` : label;
   return (
@@ -1582,7 +1698,7 @@ function Stage({
                 )}
               </button>
             )}
-            {take && (
+            {take && !sound && (
               <button
                 type="button"
                 aria-label="Full screen"
@@ -1617,7 +1733,7 @@ function Stage({
                 {size.w} × {size.h}
               </span>
             )}
-            {take && onStar && (
+            {take && onStar && !sound && (
               <button
                 type="button"
                 aria-pressed={take.starred}
@@ -1642,6 +1758,8 @@ function Stage({
         {/* with neither, Create shows its empty screen, not the Stage */}
         {!run && !take ? null : compare ? (
           compare
+        ) : out?.kind === "audio" ? (
+          <WavePlayer key={outKey} url={safeUrl(out.url)} duration={out.audio?.duration_s} />
         ) : out?.kind === "image" || out?.kind === "video" ? (
           <Media
             key={outKey}
@@ -1802,6 +1920,31 @@ const seedLabel = (seed: number) => {
 function TakeTile({ take, current, onPick }: { take: Take; current: boolean; onPick: () => void }) {
   const seed = take.made_with?.seed;
   const label = seed != null ? seedLabel(seed) : take.title;
+  // a sound tile: the wave over "seed 12 · 0:07" (docs/mock/CreateAudio.dc.html)
+  if (take.kind === "audio")
+    return (
+      <button
+        type="button"
+        aria-label={[
+          seed != null ? `Take, seed ${seed}` : `Take, ${take.title}`,
+          take.audio && clock(take.audio.duration_s),
+          take.starred && "starred",
+        ]
+          .filter(Boolean)
+          .join(", ")}
+        aria-pressed={current}
+        title={label}
+        onClick={onPick}
+        className={`bevel mono flex h-[72px] w-28 shrink-0 flex-col justify-between rounded-lg bg-s1 px-2 pt-2 pb-1.5 text-left text-[11px] text-t2 ${
+          current ? "border-2 border-a2" : "border border-s5"
+        }`}
+      >
+        <span aria-hidden className="wave block h-[30px] w-full" />
+        <span className="truncate">
+          {take.audio ? `${label} · ${clock(take.audio.duration_s)}` : label}
+        </span>
+      </button>
+    );
   return (
     <button
       type="button"
@@ -1901,7 +2044,7 @@ function RunTile({
   );
 }
 
-/** The Image / Video switch beside the composer (docs/mock/TextToVideo.dc.html "Output kind"): which media's
+/** The Image / Video / Audio switch beside the composer (docs/mock/TextToVideo.dc.html "Output kind"): which media's
  * workflows the model chip offers. */
 function MediaSwitch({
   kinds,
@@ -1927,7 +2070,7 @@ function MediaSwitch({
           onClick={() => m !== media && onPick(m)}
           className="min-h-11 w-16 flex-1 rounded-xl text-[12px] font-semibold text-t2 aria-selected:bg-s5 aria-selected:text-t1"
         >
-          {m === "image" ? "Image" : "Video"}
+          {{ image: "Image", video: "Video", audio: "Audio", text: "Text" }[m]}
         </button>
       ))}
     </div>
@@ -2004,4 +2147,36 @@ function elementsNote(st: S<"ElementStatus">[]) {
           : [],
   );
   return said.length ? `Since this take: ${said.join("; ")}.` : "";
+}
+
+/** An audio workflow's Output section (docs/mock/CreateAudio.dc.html): the shown take's sound, and the length the
+ * text comes to at 15 characters a second (contracts/README.md, Voices: `speech_seconds`). */
+function SpeechOutput({ take, text }: { take?: Take; text: string }) {
+  const rate = take?.kind === "audio" ? take.audio?.sample_rate : undefined;
+  const words = text.trim().split(/\s+/).filter(Boolean).length;
+  const chars = [...text].length;
+  if (!rate && !words) return null;
+  return (
+    <section aria-labelledby="sec-output" className="flex flex-col gap-2">
+      <h2 id="sec-output" className="heading">
+        Output
+      </h2>
+      {rate && (
+        <div className="flex justify-between gap-2.5 text-[13px]">
+          <span>Sound</span>
+          <span className="mono text-[12px] text-t2">
+            {+(rate / 1000).toFixed(1)} kHz · mono · wav
+          </span>
+        </div>
+      )}
+      {words > 0 && (
+        <div className="flex justify-between gap-2.5 text-[13px]">
+          <span>Length</span>
+          <span className="mono text-[12px] text-t2">
+            ≈ {clock(chars / 15)} from {words} word{words === 1 ? "" : "s"}
+          </span>
+        </div>
+      )}
+    </section>
+  );
 }

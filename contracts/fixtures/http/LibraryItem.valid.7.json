@@ -17,7 +17,7 @@
   "voice": {
     "source": "preset",
     "family": "qwen3-tts",
-    "speaker": "Ryan",
+    "speaker": "ryan",
     "language": "en",
     "style": "lively"
   }

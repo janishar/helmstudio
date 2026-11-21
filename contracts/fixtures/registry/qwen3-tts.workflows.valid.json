@@ -1,0 +1,186 @@
+{
+  "schema_version": 1,
+  "host": "mac",
+  "env": "torch",
+  "published_at": "2026-11-21T10:00:00Z",
+  "published_by": "runner torch 0.3.0",
+  "workflows": [
+    {
+      "id": "qwen3-tts-voice-over",
+      "title": "Qwen3-TTS Voice-over",
+      "family": "qwen3-tts",
+      "env": "torch",
+      "media": "audio",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "seed": {
+          "kind": "seed",
+          "params": {
+            "seed": -1
+          }
+        },
+        "model": {
+          "kind": "qwen3-tts/model",
+          "params": {
+            "variant": "custom_voice",
+            "precision": "bf16"
+          },
+          "only": {
+            "variant": [
+              "custom_voice"
+            ]
+          }
+        },
+        "speak": {
+          "kind": "qwen3-tts/speak",
+          "in": {
+            "model": "model.model",
+            "text": "prompt.text",
+            "seed": "seed.seed"
+          },
+          "params": {
+            "voice": null,
+            "language": "auto",
+            "style": "",
+            "temperature": 0.3
+          },
+          "only": {
+            "voice": [
+              "preset"
+            ]
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "speak.audio"
+          }
+        }
+      },
+      "studio": {
+        "composer": [
+          "prompt.text"
+        ],
+        "quick": [
+          "speak.voice",
+          "speak.language",
+          "seed.seed"
+        ],
+        "inspector": [
+          {
+            "title": "Voice",
+            "items": [
+              "speak.style",
+              "speak.temperature"
+            ]
+          }
+        ],
+        "presets": {
+          "Steady": {
+            "speak.temperature": 0.3
+          },
+          "Lively": {
+            "speak.temperature": 0.9
+          }
+        },
+        "preset_order": [
+          "Steady",
+          "Lively"
+        ]
+      }
+    },
+    {
+      "id": "qwen3-tts-design-voice",
+      "title": "Qwen3-TTS Voice design",
+      "family": "qwen3-tts",
+      "env": "torch",
+      "media": "audio",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "seed": {
+          "kind": "seed",
+          "params": {
+            "seed": -1
+          }
+        },
+        "model": {
+          "kind": "qwen3-tts/model",
+          "params": {
+            "variant": "voice_design",
+            "precision": "bf16"
+          },
+          "only": {
+            "variant": [
+              "voice_design"
+            ]
+          }
+        },
+        "speak": {
+          "kind": "qwen3-tts/speak",
+          "in": {
+            "model": "model.model",
+            "text": "prompt.text",
+            "seed": "seed.seed"
+          },
+          "params": {
+            "voice": null,
+            "language": "auto",
+            "style": "",
+            "temperature": 0.3
+          },
+          "only": {
+            "voice": [
+              "design"
+            ]
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "speak.audio"
+          }
+        }
+      },
+      "studio": {
+        "composer": [
+          "prompt.text"
+        ],
+        "quick": [
+          "speak.voice",
+          "speak.language",
+          "seed.seed"
+        ],
+        "inspector": [
+          {
+            "title": "Voice",
+            "items": [
+              "speak.temperature"
+            ]
+          }
+        ],
+        "presets": {
+          "Steady": {
+            "speak.temperature": 0.3
+          },
+          "Lively": {
+            "speak.temperature": 0.9
+          }
+        },
+        "preset_order": [
+          "Steady",
+          "Lively"
+        ]
+      }
+    }
+  ]
+}

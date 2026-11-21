@@ -50,6 +50,20 @@ Last full contract suite on the final M7 code: see the last M7 commit message (p
     wants pyo3 and other crates from crates.io; no downloads.
   - ZONOS3 runs `zonos3-server` as the run's child, not `zonos3-cli`. Why: only the server normalises text and
     speaks several lines per load (scout, reference-notes/voices.md part 4).
+  - Step 3: `GraphNode.only` also narrows a `voice` param (a subset of its `accepts`), within API 1.30. Why: voice
+    fit was per stage, so the voice-over template offered designed voices the runner then refused; `only` is
+    the existing per-template narrowing.
+  - Step 3: Design a voice's Hear it saves the description as a designed voice ("Untitled voice" without a name)
+    and runs the design template with it; Cancel or Back deletes a voice made in the dialog and not saved, and
+    cancels its run. Why: a voice param needs a saved voice; no contract change.
+  - Step 3: a designed voice is only its description; Qwen's designs drift between lines, so the copy says so
+    instead of pinning a seed. Making one exact is ZONOS3's job (save it with its clip, step 4).
+  - Step 3: the speech tokenizer loads in bf16 (the reference casts it; byte-exact goldens), not fp32.
+  - Step 3: long text is cut into sentence pieces of at most 200 characters, joined with 0.25 s of silence, each
+    seeded with the run's seed; over 900 characters is refused.
+  - Step 3: Generate is disabled and reads "Pick a voice" while the voice is empty.
+  - Step 3, left as built: presets sorted by name (the contract's order, the board shows pack order); no
+    "24 kHz" chip before a take exists.
   - Keep-awake for the overnight run: denied once by the app's auto-mode check, then granted when the owner asked
     (until the session is idle for about 5 minutes).
 

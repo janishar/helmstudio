@@ -42,4 +42,4 @@ addopts = "-m 'not gpu'"
 [tool.ruff]
 line-length = 100
 target-version = "py314"
-extend-exclude = ["gen", "packs/ltx/vendor"]  # vendored unchanged (packs/ltx/vendor/VENDORED.md)
+extend-exclude = ["gen", "packs/ltx/vendor", "packs/qwen3_tts/vendor"]  # vendored unchanged (packs/ltx/vendor/VENDORED.md)

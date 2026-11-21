@@ -529,7 +529,7 @@ func (s *Service) runGraphs(ctx context.Context, tx pgx.Tx, ownerID string, work
 	for i, inputs := range rows {
 		nodes, detail := resolve(workflow, inputs)
 		if detail == "" { // API 1.30: voices next, as the owner (before mentions and looks)
-			values, made, errs, err := runVoices(ctx, tx, s.registry, ownerID, nodes, workflow.NodeSchemas)
+			values, made, errs, err := runVoices(ctx, tx, s.registry, ownerID, nodes, workflow.Nodes, workflow.NodeSchemas)
 			if err != nil {
 				return nil, nil, libraryCopy{}, err
 			}

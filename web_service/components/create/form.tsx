@@ -16,6 +16,7 @@ import {
 } from "@/components/create/source";
 import { mediaItem, type FrameGrid } from "@/lib/source";
 import { PlainRows } from "@/components/create/rows";
+import { VoiceSet, type VoiceCtx } from "@/components/create/voices";
 import {
   allowedInts,
   autoBounds,
@@ -36,6 +37,7 @@ import {
   display,
   megapixelChoices,
   megapixelsOf,
+  optionText,
   pretty,
   sections,
   sizeFor,
@@ -68,7 +70,16 @@ function FieldError({ k, errors }: { k: string; errors: Record<string, string> }
 }
 
 /** The multi-line text params (the prompt), borderless inside the composer, as in the mock; ⌘/Ctrl+Enter submits the form. */
-export function TextFields({ fields, raws, errors, onChange }: FormProps) {
+export function TextFields({
+  fields,
+  raws,
+  errors,
+  onChange,
+  spoken,
+}: FormProps & {
+  /** an audio workflow's text is spoken (docs/mock/CreateAudio.dc.html) */
+  spoken?: boolean;
+}) {
   // the prompt names references only where the param says how (`mention`)
   const ref = imageInputs(fields).find((f) => f.param.mention && refIds(f, raws[f.key]).length);
   return fields
@@ -83,9 +94,11 @@ export function TextFields({ fields, raws, errors, onChange }: FormProps) {
           maxLength={f.param.max}
           placeholder={
             f.param.name === "text"
-              ? ref
-                ? `Describe the edit; name the references ${mentionOf(ref.param, 1)}, ${mentionOf(ref.param, 2)}…`
-                : "Describe what you want to see"
+              ? spoken
+                ? "Type the words to speak"
+                : ref
+                  ? `Describe the edit; name the references ${mentionOf(ref.param, 1)}, ${mentionOf(ref.param, 2)}…`
+                  : "Describe what you want to see"
               : (f.param.label ?? f.param.name)
           }
           rows={2}
@@ -216,8 +229,12 @@ export function Inspector({
   presetOrder,
   grid = null,
   stage1,
+  voice,
 }: FormProps &
   OpenProps & {
+    /** what a voice param's tile and picker need (API 1.30); with it, an audio workflow's text and number params
+     * read as the board draws them (docs/mock/CreateAudio.dc.html: Style, Variation) */
+    voice?: VoiceCtx;
     uploads: RefUploads;
     /** the Studio block's sections; `help` is the section's (i) text (API 1.25) */
     groups?: { title: string; help?: string; fields: Field[]; choices?: Choice[] }[];
@@ -250,7 +267,8 @@ export function Inspector({
     !s.tiles.length &&
     !s.switches.length &&
     !s.more.length &&
-    !s.media.length
+    !s.media.length &&
+    !groups?.some((g) => g.fields.length || g.choices?.length)
   )
     return <p className="text-[13px] text-t2">Nothing to set.</p>;
   const control = (f: Field) => {
@@ -280,7 +298,27 @@ export function Inspector({
     if (cfg && stg && f === stg) return null;
     if (ext && f === ext.seconds)
       return <ExtendControl key={f.key} {...ext} {...shared} onChange={onChange} />;
+    if (f.param.type === "voice")
+      return (
+        voice && (
+          <VoiceSet
+            key={f.key}
+            f={f}
+            raws={raws}
+            onChange={onChange}
+            ctx={voice}
+            error={errors[f.key]}
+          />
+        )
+      );
     if (f.param.type === "bool") return <Switch key={f.key} f={f} raw={raw} onChange={onChange} />;
+    if (
+      voice &&
+      (f.param.type === "float" || f.param.type === "int") &&
+      f.param.min != null &&
+      f.param.max != null
+    )
+      return <Slider key={f.key} f={f} raw={raw} error={errors[f.key]} onChange={onChange} />;
     if (f.param.type === "frames")
       return (
         <Duration
@@ -295,7 +333,9 @@ export function Inspector({
         />
       );
     if (f.param.type === "string" || f.param.type === "text")
-      return <Line key={f.key} f={f} raw={raw} errors={errors} onChange={onChange} />;
+      return (
+        <Line key={f.key} f={f} raw={raw} errors={errors} onChange={onChange} counted={!!voice} />
+      );
     return (
       <Tile
         key={f.key}
@@ -937,7 +977,7 @@ function Editor({
               aria-pressed={raw === o}
               onClick={() => onChange(f.key, o)}
             >
-              {pretty(o)}
+              {optionText(p, o)}
             </button>
           ))}
         </div>
@@ -1024,14 +1064,78 @@ export function Switch({
   );
 }
 
-/** A string param: a labelled line of text. */
+/** A number with bounds as a slider: its label and value over it, the help under it (docs/mock/CreateAudio.dc.html,
+ * Variation). */
+function Slider({
+  f,
+  raw,
+  error,
+  onChange,
+}: {
+  f: Field;
+  raw: Raw;
+  error?: string;
+  onChange: (key: string, raw: Raw) => void;
+}) {
+  const id = idOf(f.key);
+  const p = f.param;
+  return (
+    <div id={id + "-ed"} className="col-span-2 flex flex-col gap-2.5">
+      <label htmlFor={id} className="flex justify-between gap-2">
+        <span>{p.label ?? p.name}</span>
+        <span className="mono text-[12px] text-t2">{display(f, raw).value}</span>
+      </label>
+      <input
+        id={id}
+        type="range"
+        min={p.min}
+        max={p.max}
+        step={p.step ?? (p.type === "float" ? 0.05 : 1)}
+        value={Number(raw) || p.min}
+        aria-invalid={!!error || undefined}
+        onChange={(e) => onChange(f.key, e.target.value)}
+        className="w-full accent-a2"
+      />
+      {p.help && <span className="text-[12px] text-t2">{p.help}</span>}
+      <FieldError k={f.key} errors={error ? { [f.key]: error } : {}} />
+    </div>
+  );
+}
+
+/** A string param: a labelled line of text. `counted`: its length over its max beside the label and the help under
+ * the line (docs/mock/CreateAudio.dc.html, Style). */
 function Line({
   f,
   raw,
   errors,
   onChange,
-}: { f: Field; raw: Raw } & Omit<FormProps, "fields" | "raws">) {
+  counted,
+}: { f: Field; raw: Raw; counted?: boolean } & Omit<FormProps, "fields" | "raws">) {
   const id = idOf(f.key);
+  if (counted)
+    return (
+      <div className="col-span-2 flex flex-col gap-2.5">
+        <label htmlFor={id} className="flex justify-between gap-2">
+          <span>{f.param.label ?? f.param.name}</span>
+          {f.param.max != null && (
+            <span className="mono text-[12px] text-t2">
+              {String(raw).length} / {f.param.max}
+            </span>
+          )}
+        </label>
+        <input
+          id={id}
+          className="h-10 rounded-[10px] border border-s5 bg-s1 px-3 text-sm text-t1"
+          maxLength={f.param.max}
+          value={String(raw)}
+          aria-invalid={!!errors[f.key] || undefined}
+          aria-describedby={errors[f.key] ? id + "-err" : undefined}
+          onChange={(e) => onChange(f.key, e.target.value)}
+        />
+        {f.param.help && <span className="text-[12px] text-t2">{f.param.help}</span>}
+        <FieldError k={f.key} errors={errors} />
+      </div>
+    );
   return (
     <div className="col-span-2 flex flex-col gap-1.5">
       <span className="flex items-center text-[12px] text-t2">
@@ -1063,6 +1167,7 @@ export function Chips({
   toggles = [],
   models,
   family,
+  spoken,
 }: Omit<FormProps, "errors"> & {
   show: (key: string) => void;
   /** a video workflow's chips (docs/mock/TextToVideo.dc.html): the size as w × h, no seed chip */
@@ -1074,6 +1179,9 @@ export function Chips({
   models?: Field[];
   /** the family's title: a chip naming one choice leads with it ("LTX-2.5 · Distilled") */
   family?: string;
+  /** an audio workflow (docs/mock/CreateAudio.dc.html): the chip leaves out one-value choices ("Qwen3-TTS · Custom
+   * voice", not "Custom voice · bf16") */
+  spoken?: boolean;
 }) {
   const s = sections(fields);
   const model = (models ?? s.tiles).filter((f) => f.model && f.param.type === "enum");
@@ -1087,7 +1195,8 @@ export function Chips({
   const pickable = (models ?? []).filter(
     (f) => fields.some((x) => x.key === f.key) && (f.param.enum?.length ?? 0) > 1,
   );
-  const named = model.map((f) => pretty(String(rawOf(f, raws))));
+  const choosable = model.filter((f) => (f.param.enum?.length ?? 0) > 1 || f === first);
+  const named = (spoken ? choosable : model).map((f) => pretty(String(rawOf(f, raws))));
   const modelText = (named.length === 1 && family ? [family, ...named] : named).join(" · ");
   return (
     <>

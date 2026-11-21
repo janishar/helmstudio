@@ -1,0 +1,59 @@
+# Qwen3-TTS 1.7B on torch (plan 15-voices 19.4): voice-over from text in a preset speaker (CustomVoice, with a style
+# in words) or in a voice made up from a description (VoiceDesign). The AI-EXP port, vendored unchanged in vendor/
+# (VENDORED.md), loaded by the core loader; facts measured in docs/reference-notes/voices.md. Generates exactly the
+# canonical qwen3-tts fixtures (contracts/fixtures/registry/qwen3-tts.*.valid.json; tests/test_packs.py).
+id: qwen3-tts-1.7b
+family: qwen3-tts
+title: Qwen3-TTS
+media: [audio]
+runtimes:
+  torch: {env: torch, devices: [mps]}   # measured on MPS only; CUDA is untested
+licences:
+  apache-2.0: {title: Apache License 2.0, url: https://www.apache.org/licenses/LICENSE-2.0}
+model:
+  help: Which voice model to load.
+  variant: {label: Voice model, help: "Custom voice: 9 preset speakers with a style. Voice design: a voice from words."}
+variants:
+  custom_voice:
+    dir: Qwen3-TTS-12Hz-1.7B-CustomVoice
+    title: Custom voice
+    source: {repo: Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice, revision: 0c0e3051f131929182e2c023b9537f8b1c68adfe,
+             allow_patterns: [config.json, generation_config.json, preprocessor_config.json, tokenizer_config.json,
+                              vocab.json, merges.txt, model.safetensors, "speech_tokenizer/*"],
+             licence: apache-2.0, must_accept: false, gated: false}
+  voice_design:
+    dir: Qwen3-TTS-12Hz-1.7B-VoiceDesign
+    title: Voice design
+    shares: [speech_tokenizer]          # byte-identical in both repos: loaded from custom_voice's folder
+    source: {repo: Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign, revision: 5ecdb67327fd37bb2e042aab12ff7391903235d3,
+             allow_patterns: [config.json, generation_config.json, preprocessor_config.json, tokenizer_config.json,
+                              vocab.json, merges.txt, model.safetensors],   # never the shared speech tokenizer
+             licence: apache-2.0, must_accept: false, gated: false}
+components:
+  talker: {files: model.safetensors, dtype: bf16, precision: [bf16]}   # talker + code predictor, stored bf16
+  # stored fp32 (the decoder only: the cloning encoder's keys are never read); cast to bf16 as the reference port
+  # does, so the waveform is the reference's bit for bit (tests/test_qwen3_tts_golden.py)
+  speech_tokenizer: {files: speech_tokenizer/model.safetensors, dtype: bf16, precision: [bf16]}
+stages:
+  speak:
+    title: Speak
+    component: talker
+    help: "Reads the text in one voice: a preset speaker (Custom voice) or a designed voice (Voice design). Long text is split on sentences and joined; at most 900 characters (about 60 s)."
+    uses: [talker, speech_tokenizer]
+    inputs: {model: Model, text: Text, seed: Seed}
+    outputs: {audio: Audio}
+    params:
+      voice: {type: voice, label: Voice, default: null, accepts: [preset, design],
+              help: "A Qwen3-TTS preset speaker (Custom voice) or a designed voice (Voice design)."}
+      language: {type: enum, label: Language, default: auto, enum: [auto, en, zh, ja, ko, de, fr, ru, pt, es, it],
+                 help: "The language of the text; auto lets the model tell."}
+      style: {type: string, label: Style, default: "", max: 500, when: "model.variant == 'custom_voice'",
+              help: "How to say it, in words: calm, angry, whispering."}
+      temperature: {type: float, label: Variation, default: 0.3, min: 0.1, max: 1.2, step: 0.05,
+                    help: "Low keeps the voice steady; high is livelier and drifts."}
+    # measured (torch 2.15 MPS, phys_footprint sampled every 50 ms, tests/test_qwen3_tts_golden.py): 5.24-5.28 GB for
+    # 1.5-3.2 s takes, cold (loads included) or warm, over a 0.39 GB runner and 3.78 GB of components: 1.1 GB above
+    # them, flat in length (the scout: the same process peak at 1.7 and 20 s; the codec decodes 35 frames at a time)
+    peak_gb: "1.3 + 0.01 * speech_seconds"
+    max_seconds: 60
+    stall_s: 120                  # a cancel point every generated frame (80 ms of speech) and every loaded tensor

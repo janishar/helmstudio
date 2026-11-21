@@ -2,7 +2,7 @@
 // Small shared pieces: the logo, the theme select, the info button, error notes and a modal dialog.
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useTheme } from "next-themes";
-import { X } from "lucide-react";
+import { ChevronLeft, X } from "lucide-react";
 import { THEMES } from "@/lib/themes";
 
 /** The helmstudio mark on its accent gradient. */
@@ -123,6 +123,7 @@ export function Modal({
   onClose,
   title,
   width = "w-[min(92vw,380px)]",
+  back,
   children,
 }: {
   open: boolean;
@@ -130,6 +131,8 @@ export function Modal({
   title: string;
   /** the dialog's width class */
   width?: string;
+  /** a "Back" button before the title (a dialog's second view, docs/mock/VoicePicker.dc.html) */
+  back?: () => void;
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -159,7 +162,17 @@ export function Modal({
       className={`pop m-auto ${width} p-5 text-t1 outline-none backdrop:bg-black/50`}
     >
       <div className="mb-4 flex h-7 items-center justify-between gap-2">
-        <h2 className="m-0 font-display text-base font-bold">{title}</h2>
+        {back && (
+          <button
+            type="button"
+            aria-label="Back"
+            onClick={back}
+            className="grid size-8 shrink-0 place-items-center rounded-lg bg-s3 text-t2"
+          >
+            <ChevronLeft size={16} aria-hidden />
+          </button>
+        )}
+        <h2 className="m-0 mr-auto font-display text-base font-bold">{title}</h2>
         <button
           type="button"
           aria-label="Close"
