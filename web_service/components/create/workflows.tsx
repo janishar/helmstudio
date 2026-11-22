@@ -3,11 +3,44 @@
 // their own (contracts/README.md, User workflows).
 import Link from "next/link";
 import { useState } from "react";
-import { ChevronDown } from "lucide-react";
+import {
+  AudioLines,
+  ChevronDown,
+  Film,
+  Image,
+  MessageSquare,
+  Mic,
+  Workflow as WorkflowGlyph,
+  type LucideIcon,
+} from "lucide-react";
 import { Modal } from "@/components/kit";
 import { api, message, ok, type S } from "@/lib/api";
+import { mediaOf } from "@/lib/media";
 
 type Workflow = S<"Workflow">;
+
+const ICONS: Record<string, LucideIcon> = {
+  image: Image,
+  video: Film,
+  audio: AudioLines,
+  voice: Mic,
+  text: MessageSquare,
+};
+
+/** What a workflow makes, for its icon: its media, and voice for audio that takes a voice param. */
+export function makes(w: Pick<Workflow, "media" | "nodes" | "node_schemas">): string {
+  const m = mediaOf(w);
+  const voice = Object.values(w.nodes ?? {}).some((n) =>
+    w.node_schemas?.[n.kind]?.params?.some((p) => p.type === "voice"),
+  );
+  return m === "audio" && voice ? "voice" : m;
+}
+
+/** A workflow's icon (docs/mock/Main.dc.html, the workflow picker): by what it makes; the workflow glyph otherwise. */
+export function WorkflowIcon({ w, size = 16 }: { w: Workflow; size?: number }) {
+  const Icon = ICONS[makes(w)] ?? WorkflowGlyph;
+  return <Icon size={size} strokeWidth={1.75} aria-hidden className="shrink-0" />;
+}
 
 /** The badge that opens the picker; `label` is what it reads (the open workflow and its state). */
 export function WorkflowPicker({
@@ -53,13 +86,14 @@ export function WorkflowPicker({
         type="button"
         role="menuitemradio"
         aria-checked={w.id === current?.id}
-        className={`min-w-0 flex-1 truncate rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-s3 aria-checked:bg-s4 aria-checked:font-semibold ${available(w) ? "" : "text-t2"}`}
+        className={`flex min-w-0 flex-1 items-center gap-2 rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-s3 aria-checked:bg-s4 aria-checked:font-semibold ${available(w) ? "" : "text-t2"}`}
         onClick={() => {
           hide();
           onPick(w.id);
         }}
       >
-        {w.title}
+        <WorkflowIcon w={w} />
+        <span className="truncate">{w.title}</span>
       </button>
     );
     if (available(w)) return pick;
@@ -84,6 +118,7 @@ export function WorkflowPicker({
         className="flex max-w-[48ch] min-w-0 items-center gap-1.5 rounded-full bg-s2 px-2.5 py-1 text-[12px] font-medium text-t2"
         style={{ anchorName: "--workflows" } as React.CSSProperties}
       >
+        {current && <WorkflowIcon w={current} size={14} />}
         <span className="truncate">{label}</span>
         <ChevronDown size={12} aria-hidden className="shrink-0" />
       </button>
