@@ -1944,6 +1944,7 @@ export function Create({
             voice={audio ? voiceCtx : undefined}
             blocks={blocks}
             valueBlocks={valueBlocks}
+            addonOwner={modelList?.models.find((m) => m.family === workflow?.family)?.title}
           />
         )}
         {audio && !elementsAside && <SpeechOutput take={rateTake} text={texts[0] ?? ""} />}

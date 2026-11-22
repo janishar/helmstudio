@@ -242,6 +242,7 @@ export function Inspector({
   voice,
   blocks = {},
   valueBlocks = {},
+  addonOwner,
 }: FormProps &
   OpenProps & {
     /** the nodes whose optional add-on is missing (API 1.36), each with why: their controls are greyed with it */
@@ -249,6 +250,8 @@ export function Inspector({
     /** (API 1.41) field → value → why: an option whose add-on is missing where the run may go ("Turbo LoRA not
      * downloaded"); it and every preset that picks it are greyed */
     valueBlocks?: Record<string, Record<string, string>>;
+    /** the model whose add-on a value block names ("MiniMax H3"): its tooltip says where to get it */
+    addonOwner?: string;
     /** what a voice param's tile and picker need (API 1.30); with it, an audio workflow's text and number params
      * read as the board draws them (docs/mock/CreateAudio.dc.html: Style, Variation) */
     voice?: VoiceCtx;
@@ -417,7 +420,11 @@ export function Inspector({
         }
         pair={cfg && stg && f === cfg ? { f: stg, raw: rawOf(stg, raws) } : undefined}
         setBy={f.param.type === "enum" ? setBy(f) : undefined}
-        facts={valueBlocks[f.key] ? (o) => ({ why: valueBlocks[f.key][o] }) : undefined}
+        facts={
+          valueBlocks[f.key]
+            ? (o) => ({ why: valueBlocks[f.key][o], owner: addonOwner })
+            : undefined
+        }
       />
     );
   };
@@ -454,6 +461,7 @@ export function Inspector({
       onChange={onChange}
       blocks={blocks}
       valueBlocks={valueBlocks}
+      owner={addonOwner}
     />
   );
   // a choice tile (API 1.26): an enum of its options' names, showing the first whose values hold; picking one sets
@@ -851,11 +859,14 @@ function Presets({
   onChange,
   blocks = {},
   valueBlocks = {},
+  owner,
 }: Omit<FormProps, "errors"> & {
   presets: Record<string, Record<string, S<"ParamValue">>>;
   order: string[];
   blocks?: Record<string, string>;
   valueBlocks?: Record<string, Record<string, string>>;
+  /** the model's name in a value block's tooltip */
+  owner?: string;
 }) {
   // a preset that switches on a node whose add-on is missing ("Enhanced"), or (API 1.41) picks a value whose add-on
   // is (Turbo: "Turbo LoRA not downloaded"), is greyed with the reason
@@ -872,6 +883,8 @@ function Presets({
       const f = fields.find((x) => x.key === k);
       return f && JSON.stringify(rawOf(f, raws)) === JSON.stringify(toRaw(v, f.param));
     });
+  // the first value block's reason, under the chips (H3Options frames 11-13: "Turbo LoRA not downloaded")
+  const reason = order.map((n) => presets[n] && byValue(presets[n])).find(Boolean);
   return (
     <section aria-labelledby="sec-preset" className="flex flex-col gap-2">
       <h2 id="sec-preset" className="heading">
@@ -889,12 +902,8 @@ function Presets({
                 type="button"
                 aria-disabled
                 aria-pressed={holds(values)}
-                title={
-                  byValue(values)
-                    ? `${why}. An admin downloads it in Models, under the model's optional add-ons.`
-                    : why
-                }
-                className="h-9 cursor-not-allowed rounded-full border border-transparent bg-s3 px-3.5 text-[13px] text-t2 aria-pressed:border-dashed aria-pressed:border-a2"
+                title={byValue(values) ? addonHint(why, owner) : why}
+                className="h-9 cursor-not-allowed rounded-full border border-line bg-transparent px-3.5 text-[13px] text-t2 aria-pressed:border-dashed aria-pressed:border-a2"
               >
                 <span className="opacity-55">{name}</span>
               </button>
@@ -916,6 +925,7 @@ function Presets({
             );
           })}
       </div>
+      {reason && <span className="text-[12px] text-t2">{reason}</span>}
     </section>
   );
 }
@@ -923,7 +933,11 @@ function Presets({
 type Stage1 = { by: number; clip: boolean };
 
 /** A choice option's line under its name (`help`) and why it is greyed (its add-on is missing). */
-type OptionFacts = { sub?: string; why?: string };
+type OptionFacts = { sub?: string; why?: string; owner?: string };
+
+/** A greyed control's tooltip: where an admin gets the missing add-on (`owner`: the model's name, H3Options). */
+const addonHint = (why: string, owner?: string) =>
+  `${why}. An admin downloads it in Models, under ${owner ? `${owner}'s` : "the model's"} optional add-ons.`;
 
 type Choice = NonNullable<S<"StudioLayout">["inspector"]>[number]["choices"] extends
   (infer C)[] | undefined
@@ -1112,7 +1126,7 @@ function Editor({
       {p.type === "enum" || choices ? (
         <div className="flex flex-wrap gap-1.5">
           {(choices ?? p.enum)?.map((o) => {
-            const { sub, why } = facts?.(o) ?? {};
+            const { sub, why, owner } = facts?.(o) ?? {};
             return (
               <button
                 key={o}
@@ -1121,11 +1135,7 @@ function Editor({
                 aria-pressed={raw === o}
                 aria-label={sub || why ? optionText(p, o, f.kind) : undefined}
                 aria-disabled={why ? true : undefined}
-                title={
-                  why
-                    ? `${why}. An admin downloads it in Models, under the model's optional add-ons.`
-                    : undefined
-                }
+                title={why ? addonHint(why, owner) : undefined}
                 onClick={() => !why && onChange(f.key, o)}
               >
                 <span className={why ? "opacity-55" : undefined}>{optionText(p, o, f.kind)}</span>
@@ -1480,11 +1490,7 @@ export function Chips({
                       aria-checked={rawOf(f, raws) === o}
                       className={`mi ${r?.dim || r?.why ? "dim" : ""}`}
                       aria-disabled={r?.why ? true : undefined}
-                      title={
-                        r?.why
-                          ? `${r.why}. An admin downloads it in Models, under the model's optional add-ons.`
-                          : undefined
-                      }
+                      title={r?.why ? addonHint(r.why) : undefined}
                       onClick={() => !r?.why && onChange(f.key, o)}
                     >
                       <span>
@@ -1560,7 +1566,7 @@ export function Chips({
               type="button"
               aria-pressed
               aria-disabled
-              title={`${why}. An admin downloads it in Models, under the model's optional add-ons.`}
+              title={addonHint(why)}
               className={`${chip} inline-flex cursor-not-allowed items-center gap-2 text-t2`}
             >
               <span className="opacity-55">{label} on</span>
