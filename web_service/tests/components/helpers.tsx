@@ -102,7 +102,7 @@ export function Host({
 type Reply = { status?: number; data?: unknown; error?: unknown };
 /** Answers api calls by path (the openapi path, e.g. "/v1/studio/takes/{take_id}"); unknown paths 404. */
 export function answer(
-  method: "GET" | "POST",
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
   routes: Record<string, (init: { params?: unknown; body?: unknown }) => Reply>,
 ) {
   return vi.spyOn(api, method).mockImplementation(((path: string, init: never) => {

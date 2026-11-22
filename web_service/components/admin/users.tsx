@@ -102,13 +102,18 @@ export function UsersAdmin({ initialUsers }: { initialUsers?: User[] }) {
 }
 
 /** The Admin sections, in the boards' order (docs/mock/Users.dc.html, Hosts.dc.html, ApiKeys.dc.html,
- * Providers.dc.html). */
-export function AdminTabs({ current }: { current: "users" | "hosts" | "keys" | "providers" }) {
+ * Providers.dc.html, AdminAgents.dc.html). */
+export function AdminTabs({
+  current,
+}: {
+  current: "users" | "hosts" | "keys" | "providers" | "agents";
+}) {
   const tabs = [
     ["users", "Users", "/admin"],
     ["hosts", "Hosts", "/admin?tab=hosts"],
     ["keys", "API keys", "/admin?tab=keys"],
     ["providers", "Model providers", "/admin?tab=providers"],
+    ["agents", "AI agents", "/admin?tab=agents"],
   ] as const;
   return (
     <div role="tablist" aria-label="Admin sections" className="flex flex-wrap gap-2">

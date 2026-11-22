@@ -1,5 +1,5 @@
 // Folding a session's events (SSE or ?since= pages) into its runs. Events are hints: a run that ends is fetched again.
-import { api, ok, type S } from "@/lib/api";
+import { api, ok, okOr, type S } from "@/lib/api";
 import { graphOrder, nodeTitle } from "@/lib/workflow";
 import { emptyStack } from "@/lib/loras";
 
@@ -55,7 +55,7 @@ export function applyEvent(
     }
   } else if (e.type === "progress") {
     if (isActive(run.status)) next = { ...run, status: "running", progress: e.data };
-  } else if (!run.outputs.some((o) => o.index === e.data.index)) {
+  } else if (e.type === "output" && !run.outputs.some((o) => o.index === e.data.index)) {
     next = { ...run, outputs: [...run.outputs, e.data].sort((a, b) => a.index - b.index) };
   }
   if (next === run) return { runs, known: true, ended: false };
@@ -314,7 +314,7 @@ export function followSession(
 ): () => void {
   return followEvents(
     `/api/v1/studio/sessions/${encodeURIComponent(sessionId)}/events`,
-    ["status", "progress", "output"],
+    ["status", "progress", "output", "session"],
     onEvent,
     page,
   );
@@ -397,4 +397,30 @@ export function followEvents<E extends { seq: number }>(
     if (typeof document !== "undefined")
       document.removeEventListener("visibilitychange", onVisible);
   };
+}
+
+/** A run its tile's ✕ and Clear may remove (plan 21 25.3): failed or stopped, not a batch's (it goes with its batch). */
+export const removable = (r: Run) =>
+  (r.status === "failed" || r.status === "cancelled") && !r.batch_id;
+
+/** "N failed · Clear": how many (failed and stopped together) and its title ("1 failed, 1 stopped"). */
+export function failedCount(runs: Run[]): { count: number; title: string } {
+  const list = runs.filter(removable);
+  const failed = list.filter((r) => r.status === "failed").length;
+  const stopped = list.length - failed;
+  return {
+    count: list.length,
+    title: [failed && `${failed} failed`, stopped && `${stopped} stopped`]
+      .filter(Boolean)
+      .join(", "),
+  };
+}
+
+/** Deletes finished runs one by one (Clear is at most 100 a session; no bulk endpoint), calling `gone` for each; a
+ * run already gone (404) counts as deleted. */
+export async function deleteRuns(ids: string[], gone: (id: string) => void) {
+  for (const id of ids.slice(0, 100)) {
+    await okOr(api.DELETE("/v1/studio/runs/{run_id}", { params: { path: { run_id: id } } }), 404);
+    gone(id);
+  }
 }

@@ -11,7 +11,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The caller's sessions, newest first (at most 100, not paginated) */
+        /**
+         * The caller's sessions, newest first (at most 100, not paginated)
+         * @description From 1.43 `naming` says how new sessions get their title (contracts/README.md, Sessions: titles and naming), so Create can say so before a prompt leaves the machine.
+         */
         get: operations["studioListSessions"];
         put?: never;
         /** A new, empty session */
@@ -35,12 +38,13 @@ export interface paths {
         /**
          * Delete a session with its runs and events
          * @description 409 while one of its runs is queued or running (cancel it first), or while a batch in it is queued, running or
-         *     paused (stop it first). Its takes stay in the gallery with `session_id` and `run_id` set to null (`made_with`
+         *     paused (stop it first). From 1.43 its hidden naming run (`purpose` name) does not count: the delete cancels it. Its takes stay in the gallery with `session_id` and `run_id` set to null (`made_with`
          *     is a snapshot); its finished batches stay with `session_id` and their rows' `run_id` set to null.
          */
         delete: operations["studioDeleteSession"];
         options?: never;
         head?: never;
+        /** @description From 1.43 a rename makes the title the user's (`title_source` user, `named_by` null): the namer never replaces it. */
         patch: operations["studioRenameSession"];
         trace?: never;
     };
@@ -712,7 +716,15 @@ export interface paths {
         get: operations["studioGetRun"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete a finished run from its session
+         * @description From 1.43 (contracts/README.md, Deleting runs). Soft: the run leaves `GET …/sessions/{id}/runs`, `GET` on it is
+         *     404 and its events leave the session's replay; its takes stay in the gallery. Allowed when `failed`,
+         *     `cancelled` or `succeeded`; 409 `stop the run first` while `queued` or `running`, 409 `a batch's run goes with
+         *     its batch` for a run with a `batch_id`. 404 for an unknown, another user's, an already deleted or a hidden
+         *     (`purpose` name) run.
+         */
+        delete: operations["studioDeleteRun"];
         options?: never;
         head?: never;
         patch?: never;
@@ -752,7 +764,8 @@ export interface paths {
         /**
          * The caller's queued and running runs across sessions, and per host how many runs of others wait
          * @description `runs`: the caller's own runs that are `queued` or `running`, every session: running first, then queued by
-         *     host and `position`. `hosts`: one entry per host name in the KV `hosts` (its envs merged), with the number of
+         *     host and `position`; from 1.43 a session's hidden naming run too (`purpose` name, the only place one is listed).
+         *     `hosts`: one entry per host name in the KV `hosts` (its envs merged), with the number of
          *     other users' queued runs lined up for it, never whose or which (plan 17.3).
          */
         get: operations["studioGetQueue"];
@@ -1662,6 +1675,34 @@ export interface paths {
          * @description From 1.15. Admin only. Studio asks `pipelines.providers.test` (30 s, else 503); `?model=` adds one tiny chat completion. A failed test is 200 with ok false and `failure`.
          */
         post: operations["studioAdminTestProvider"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/admin/session-names": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * How untitled sessions are named (Admin › AI agents)
+         * @description From 1.43. Admin only (403). contracts/README.md, Sessions: titles and naming.
+         */
+        get: operations["studioAdminGetSessionNames"];
+        /**
+         * Set how untitled sessions are named
+         * @description From 1.43. Admin only (403). Applies to sessions named from then on. 422 `<provider> is not an enabled provider`,
+         *     `<model> is not a model of <provider>`, `provider and model are only for remote`, `remote needs a provider`,
+         *     `Qwen3.8 27B is not downloaded` (local with no live host that can run `llm-ask`); 409 `remote models are off on
+         *     this deployment` for a provider of kind remote while the deployment's switch is off (a server, "on this
+         *     network", needs no switch).
+         */
+        put: operations["studioAdminPutSessionNames"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2587,6 +2628,9 @@ export interface components {
             /** Format: uuid */
             id: string;
             title: string;
+            title_source?: components["schemas"]["TitleSource"];
+            /** @description from 1.43: the model that wrote the title (`Qwen3.8`, `DeepSeek`) while `title_source` is model; null otherwise */
+            named_by?: string | null;
             /** Format: date-time */
             created_at: string;
             /**
@@ -2595,12 +2639,28 @@ export interface components {
              */
             updated_at: string;
         };
+        /**
+         * @description from 1.43, who wrote the title: default ("Untitled"), prompt (Generate's slice of the prompt, `from_prompt`), user (typed or renamed), model (the namer). The namer replaces only default and prompt, once per session
+         * @enum {string}
+         */
+        TitleSource: "default" | "prompt" | "user" | "model";
         SessionList: {
             sessions: components["schemas"]["StudioSession"][];
+            /** @description from 1.43: how an untitled session is named after its first run succeeds (the admin's setting, redacted) */
+            naming?: {
+                /** @enum {string} */
+                mode: "off" | "local" | "remote";
+                /** @description local: Qwen3.8; remote: the provider's title; null when off */
+                named_by: string | null;
+                /** @description the prompt leaves this machine (a provider of kind remote) */
+                remote: boolean;
+            };
         };
         SessionCreate: {
             /** @description trimmed; empty or missing = "Untitled" */
             title?: string;
+            /** @description from 1.43: the title is a slice of the prompt Generate is about to send (`title_source` prompt, so the namer may replace it); default false (user) */
+            from_prompt?: boolean;
         };
         SessionPatch: {
             /** @description trimmed; blank = 422 */
@@ -3728,6 +3788,11 @@ export interface components {
             /** @description the looks it was asked with (RunRequest.looks; a batch run: its row's or step's), as requested; absent or empty = none */
             looks?: components["schemas"]["LookIds"];
             answer?: components["schemas"]["RunAnswer"];
+            /**
+             * @description from 1.43: name = the hidden run that names its session (local namer, lane batch); only `GET /v1/studio/queue` lists one. Absent or null otherwise
+             * @enum {string|null}
+             */
+            purpose?: "name" | null;
             /** @description from 1.16, only while queued (computed on every read, like `position`): the pinned components the host memory admission would unload, as its last-resort victims, if the run were admitted on `host` now (contracts/README.md, Hosts admin: Generate says so first); they are loaded again, and pinned again, when next used. Absent when none */
             unloads_pinned?: {
                 env: string;
@@ -3792,7 +3857,7 @@ export interface components {
          *     `progress`: a step; `output`: an output stored, its key turned into a signed `url`. After a terminal status,
          *     `GET /v1/studio/runs/{run_id}` has the whole run.
          */
-        SessionEvent: components["schemas"]["StatusEvent"] | components["schemas"]["ProgressEvent"] | components["schemas"]["OutputEvent"];
+        SessionEvent: components["schemas"]["StatusEvent"] | components["schemas"]["ProgressEvent"] | components["schemas"]["OutputEvent"] | components["schemas"]["TitleEvent"];
         StatusEvent: {
             /** @description per-session cursor */
             seq: number;
@@ -3839,6 +3904,24 @@ export interface components {
             /** Format: date-time */
             ts: string;
             data: components["schemas"]["RunOutput"];
+        };
+        /** @description from 1.43: the namer gave the session its title; `run_id` is the run whose prompt it was named from */
+        TitleEvent: {
+            seq: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "session";
+            /** Format: uuid */
+            run_id: string;
+            /** Format: date-time */
+            ts: string;
+            data: {
+                title: string;
+                title_source: components["schemas"]["TitleSource"];
+                named_by: string | null;
+            };
         };
         EventPage: {
             events: components["schemas"]["SessionEvent"][];
@@ -5555,6 +5638,35 @@ export interface components {
              */
             failure: "network" | "answer" | "refused" | "off" | null;
             seconds: number;
+        };
+        /** @description from 1.43: how an untitled session is named (contracts/README.md, Sessions: titles and naming). Default off */
+        SessionNames: {
+            /**
+             * @description off; local: the llm pack (Qwen3.8 27B) on the local GPU queue, nothing leaves the machine; remote: a provider of Admin › Model providers, kind remote (sends the prompt out) or server (on this network)
+             * @enum {string}
+             */
+            mode: "off" | "local" | "remote";
+            /** @description remote: the provider's name; null otherwise */
+            provider: string | null;
+            /** @description remote: one of its models; null otherwise */
+            model: string | null;
+            /** @description a live host can run llm-ask now (else Local is greyed: "Qwen3.8 27B not downloaded") */
+            local_available: boolean;
+            /** @description the deployment's remote switch */
+            remote_enabled: boolean;
+            /**
+             * Format: date-time
+             * @description null until first set
+             */
+            updated_at: string | null;
+        };
+        SessionNamesPut: {
+            /** @enum {string} */
+            mode: "off" | "local" | "remote";
+            /** @description remote only, required there */
+            provider?: string;
+            /** @description remote only; absent = the provider's default_model */
+            model?: string;
         };
         /** @description from 1.15: what a user may name as a model (the editor's "Runs on"): enabled providers, redacted to names and models */
         ModelSourceList: {
@@ -7859,6 +7971,31 @@ export interface operations {
             503: components["responses"]["Unavailable"];
         };
     };
+    studioDeleteRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description run UUID (malformed = 404) */
+                run_id: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
     studioCancelRun: {
         parameters: {
             query?: never;
@@ -9082,6 +9219,58 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["AdminRequired"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioAdminGetSessionNames: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the setting */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionNames"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["AdminRequired"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioAdminPutSessionNames: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SessionNamesPut"];
+            };
+        };
+        responses: {
+            /** @description the setting */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionNames"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["AdminRequired"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
             503: components["responses"]["Unavailable"];
         };
     };

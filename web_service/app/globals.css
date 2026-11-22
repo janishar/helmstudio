@@ -534,3 +534,22 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* the "named by …" hint under Create's title (plan 21 25.5): shown a few seconds, then fades; Create removes it */
+@keyframes fade-late {
+  0%,
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.fade-late {
+  animation: fade-late 6s forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fade-late {
+    animation: none;
+  }
+}

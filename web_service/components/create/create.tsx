@@ -7,7 +7,6 @@ import dynamic from "next/dynamic";
 import {
   AtSign,
   Check,
-  ChevronDown,
   Info as InfoIcon,
   Maximize,
   Minus,
@@ -43,6 +42,13 @@ import { mediaItem, offerLabel } from "@/lib/source";
 import { useTakes, useUses } from "@/lib/take-cache";
 import { clipOf, placeRows, positionOf } from "@/lib/video";
 import { WorkflowPicker } from "@/components/create/workflows";
+import {
+  DeleteCard,
+  SessionMenu,
+  TileMenu,
+  firstHint,
+  openTileMenu,
+} from "@/components/create/sessions";
 import { FrameIn } from "@/components/create/frame-in";
 import { Compare, ExplainDrawer } from "@/components/create/compare";
 import { ElementsPanel, ElementsPicker } from "@/components/create/elements";
@@ -105,7 +111,9 @@ import { mediaKinds, mediaOf, secondsText, workflowFor, type MediaKind } from "@
 import {
   applyEvent,
   clock,
+  deleteRuns,
   etaText,
+  failedCount,
   followSession,
   fraction,
   isActive,
@@ -113,6 +121,7 @@ import {
   pinnedNote,
   mergeRuns,
   nodeLabel,
+  removable,
   seedOf,
   segments,
   track,
@@ -221,6 +230,8 @@ export type CreateInitial = {
   sessionId: string | null;
   runs: Run[];
   takes: Take[];
+  /** how new sessions get their title (API 1.43): the session menu's remote-naming line */
+  naming?: S<"SessionList">["naming"];
 };
 
 /** The Create screen; `initialSession` comes from `?s=`, `reuse` (a take id whose settings fill the form) from
@@ -238,6 +249,16 @@ export function Create({
   initial?: CreateInitial;
 }) {
   const [sessions, setSessions] = useState<S<"StudioSession">[] | null>(initial?.sessions ?? null);
+  const [naming, setNaming] = useState(initial?.naming);
+  // the model that just named the open session: "named by Qwen3.8" under the title, once per browser
+  const [hint, setHint] = useState("");
+  useEffect(() => {
+    if (!hint) return;
+    const t = setTimeout(() => setHint(""), 6000);
+    return () => clearTimeout(t);
+  }, [hint]);
+  // the delete card open for a strip tile: a take, or a text answer (a succeeded run with no take)
+  const [deleting, setDeleting] = useState<{ take: Take } | { run: Run } | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(initial?.sessionId ?? null);
   const [workflows, setWorkflows] = useState<S<"Workflow">[] | null>(initial?.workflows ?? null);
   // the workflow picked here or by a reuse; "" follows the session's newest run
@@ -322,6 +343,7 @@ export function Create({
       .then(([s, w]) => {
         setError("");
         setSessions(s.sessions);
+        setNaming(s.naming);
         open(s.sessions.find((x) => x.id === initialSession)?.id ?? s.sessions[0]?.id ?? null);
         setWorkflows(w.workflows);
       })
@@ -473,6 +495,13 @@ export function Create({
   const listTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(listTimer.current), []);
   useSessionEvents(runs === null ? null : sessionId, (e) => {
+    if (e.type === "session") {
+      // the namer's title (API 1.43); the replay brings it again on open, so the hint shows the first time only
+      setSessions((l) => l && l.map((x) => (x.id === sessionId ? { ...x, ...e.data } : x)));
+      if (e.data.title_source === "model" && e.data.named_by && firstHint())
+        setHint(e.data.named_by);
+      return;
+    }
     setTracks((t) => track(t, e));
     const r = applyEvent(runsRef.current, e);
     put(r.runs);
@@ -974,7 +1003,10 @@ export function Create({
     : [];
 
   async function newSession(title?: string) {
-    const s = await ok(api.POST("/v1/studio/sessions", { body: title ? { title } : {} }));
+    // Generate's slice of the prompt is not the user's title: the namer may replace it (API 1.43 from_prompt)
+    const s = await ok(
+      api.POST("/v1/studio/sessions", { body: title ? { title, from_prompt: true } : {} }),
+    );
     setSessions((list) => [s, ...(list ?? [])]);
     open(s.id, true);
     return s.id;
@@ -1082,6 +1114,40 @@ export function Create({
     items.find((i) => (i.take ?? i.run).id === selected) ??
     items.find((i) => i.take?.run_id === selected) ??
     items[0];
+  /** A tile is going: when it is the picked one, the next tile is picked (else the one before). */
+  const pickNext = (id: string) => {
+    if ((picked?.take ?? picked?.run)?.id !== id) return;
+    const i = items.findIndex((it) => (it.take ?? it.run).id === id);
+    const next = items[i + 1] ?? items[i - 1];
+    setSelected(next ? (next.take ?? next.run).id : null);
+  };
+  const dropRun = (id: string) => {
+    pickNext(id);
+    put(runsRef.current.filter((r) => r.id !== id));
+  };
+  /** ✕, Clear and a text answer's Delete (API 1.43 DELETE /runs/{id}; plan 21 25.3). */
+  const removeRuns = (ids: string[]) => deleteRuns(ids, dropRun).catch((e) => setError(message(e)));
+  /** A take's Delete: the Gallery's call; its run keeps no output for it, so no run tile takes its place. */
+  async function removeTake(t: Take) {
+    try {
+      await okOr(
+        api.DELETE("/v1/studio/takes/{take_id}", { params: { path: { take_id: t.id } } }),
+        404,
+      );
+      pickNext(t.id);
+      setTakes((l) => l.filter((x) => x.id !== t.id));
+      put(
+        runsRef.current.map((r) =>
+          r.outputs.some((o) => o.take_id === t.id)
+            ? { ...r, outputs: r.outputs.filter((o) => o.take_id !== t.id) }
+            : r,
+        ),
+      );
+    } catch (e) {
+      setError(message(e));
+    }
+  }
+  const failed = failedCount(runs ?? []);
   const shownTake = picked?.take;
   useFullScreenKey(!!shownTake && !full, () => setFull(true));
   const offers = useUses(shownTake?.id);
@@ -1195,61 +1261,24 @@ export function Create({
     workflow?.env,
     runOn?.host ?? (runs?.find((r) => isActive(r.status) && r.host) ?? shown)?.host,
   );
-  const session = sessions?.find((s) => s.id === sessionId);
-
   const topBar = (badge?: string) => (
     <div className="flex flex-wrap items-center gap-3">
-      <button
-        type="button"
-        popoverTarget="sessions"
-        aria-label={`Session: ${session?.title ?? "new"}. Change session`}
-        className="flex h-10 max-w-[40ch] min-w-0 items-center gap-2 rounded-[10px] px-3 font-display text-lg font-bold"
-        style={{ anchorName: "--sessions" } as React.CSSProperties}
-      >
-        <span className="truncate">{session?.title ?? "New session"}</span>
-        <ChevronDown size={16} strokeWidth={2} aria-hidden className="shrink-0" />
-      </button>
-      <div
-        id="sessions"
-        popover="auto"
-        role="dialog"
-        aria-label="Sessions"
-        className="pop w-72"
-        style={
-          {
-            positionAnchor: "--sessions",
-            positionArea: "bottom span-right",
-            marginTop: 6,
-          } as React.CSSProperties
-        }
-      >
-        <div className="flex max-h-[60vh] flex-col gap-1 overflow-y-auto [&>*]:shrink-0">
-          <button
-            type="button"
-            className="chip bevel mb-1 justify-center rounded-[10px] bg-s4"
-            onClick={() => {
-              document.getElementById("sessions")?.hidePopover();
-              newSession().catch((e) => setError(message(e)));
-            }}
-          >
-            <Plus size={14} aria-hidden /> New session
-          </button>
-          {sessions?.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              aria-current={s.id === sessionId || undefined}
-              className="truncate rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-s3 aria-[current]:bg-s4 aria-[current]:font-semibold"
-              onClick={() => {
-                document.getElementById("sessions")?.hidePopover();
-                if (s.id !== sessionId) open(s.id);
-              }}
-            >
-              {s.title}
-            </button>
-          ))}
-        </div>
-      </div>
+      <SessionMenu
+        sessions={sessions}
+        current={sessionId}
+        naming={naming}
+        hint={hint}
+        onOpen={(id) => open(id)}
+        onNew={() => void newSession().catch((e) => setError(message(e)))}
+        onRenamed={(n) => setSessions((l) => l && l.map((x) => (x.id === n.id ? n : x)))}
+        onDeleted={(id) => {
+          const rest = (sessions ?? []).filter((x) => x.id !== id);
+          setSessions(rest);
+          // the newest other session, else the empty state
+          if (id === sessionId) open(rest[0]?.id ?? null);
+        }}
+        onError={setError}
+      />
       {workflows && workflows.length > 0 && (
         <WorkflowPicker
           // the Image / Video switch is a filter on what the chip offers
@@ -1454,32 +1483,91 @@ export function Create({
             aria-label="Takes"
             className="flex shrink-0 items-center gap-2.5 overflow-x-auto p-0.5"
           >
-            {items.map((it, i) =>
-              it.take ? (
-                <TakeTile
-                  key={it.take.id}
-                  take={it.take}
-                  current={it === picked}
-                  onPick={() => {
-                    setSelected(it.take.id);
-                    setSourceView(false);
-                  }}
-                />
-              ) : (
-                <RunTile
-                  key={it.run.id}
-                  run={it.run}
-                  thumb={takes.find((t) => t.id === it.run.outputs[0]?.take_id)?.thumb_url}
-                  n={items.length - i}
-                  seedKey={seedKeyOf(workflows?.find((w) => w.id === it.run.workflow_id))}
-                  current={it === picked}
-                  onPick={() => {
-                    setSelected(it.run.id);
-                    setSourceView(false);
-                  }}
-                />
-              ),
+            {items.map((it, i) => {
+              const id = (it.take ?? it.run).id;
+              const seed = it.take ? it.take.made_with?.seed : seedOf(it.run);
+              const name = seed != null ? `seed ${seed}` : `take ${items.length - i}`;
+              const menu = it.take || it.run.status === "succeeded";
+              return (
+                <div
+                  key={id}
+                  className="group relative shrink-0"
+                  onContextMenu={
+                    menu
+                      ? (e) => {
+                          e.preventDefault();
+                          openTileMenu(id);
+                        }
+                      : undefined
+                  }
+                >
+                  {it.take ? (
+                    <TakeTile
+                      take={it.take}
+                      current={it === picked}
+                      onPick={() => {
+                        setSelected(it.take.id);
+                        setSourceView(false);
+                      }}
+                    />
+                  ) : (
+                    <RunTile
+                      run={it.run}
+                      thumb={takes.find((t) => t.id === it.run.outputs[0]?.take_id)?.thumb_url}
+                      n={items.length - i}
+                      seedKey={seedKeyOf(workflows?.find((w) => w.id === it.run.workflow_id))}
+                      current={it === picked}
+                      onPick={() => {
+                        setSelected(it.run.id);
+                        setSourceView(false);
+                      }}
+                    />
+                  )}
+                  {menu && (
+                    <TileMenu
+                      id={id}
+                      label={`${it.take ? "Take" : "Answer"} ${name}`}
+                      current={it === picked}
+                      onDelete={() => setDeleting(it.take ? { take: it.take } : { run: it.run })}
+                    />
+                  )}
+                  {!it.take && removable(it.run) && (
+                    <button
+                      type="button"
+                      aria-label={`Remove ${it.run.status === "failed" ? "failed" : "stopped"} run, ${name}`}
+                      className="absolute top-[3px] right-[3px] grid size-[18px] place-items-center rounded-md bg-s3 p-0 text-[11px] text-t1"
+                      onClick={() => void removeRuns([it.run.id])}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+            {failed.count > 0 && (
+              <button
+                type="button"
+                className="chip bevel h-11 shrink-0 rounded-[10px]"
+                title={failed.title}
+                onClick={() => void removeRuns((runs ?? []).filter(removable).map((r) => r.id))}
+              >
+                <span className="text-bad">{failed.count} failed</span> · Clear
+              </button>
             )}
+            <DeleteCard
+              title={deleting && ("take" in deleting ? "Delete this take?" : "Delete this answer?")}
+              text={
+                deleting && "take" in deleting
+                  ? "It leaves the gallery and Create. This can't be undone."
+                  : "This can't be undone."
+              }
+              onCancel={() => setDeleting(null)}
+              onDelete={() => {
+                setDeleting(null);
+                if (deleting && "take" in deleting) void removeTake(deleting.take);
+                else if (deleting) void removeRuns([deleting.run.id]);
+              }}
+            />
             {extendOffer && (
               <button
                 type="button"
@@ -2423,7 +2511,16 @@ function RunTile({
         .filter(Boolean)
         .join(", ")}
       aria-pressed={current}
-      title={seed != null ? `seed ${seed}` : undefined}
+      // a failed tile's title is its error; a going one has no ✕ (plan 21 25.3)
+      title={
+        run.status === "failed" && run.error
+          ? run.error
+          : isActive(run.status)
+            ? "Stop it first"
+            : seed != null
+              ? `seed ${seed}`
+              : undefined
+      }
       onClick={onPick}
       className={`bevel mono relative grid h-[63px] w-28 shrink-0 place-items-center overflow-hidden rounded-lg bg-s1 text-[11px] ${
         current ? "border-2 border-a1" : "border border-s5"
