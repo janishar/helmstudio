@@ -42,6 +42,8 @@ export function ItemFields({
   const pos = positionOf(p);
   return itemSpecs(p)
     .filter(([k, s]) => !skip.includes(k) && (s.type !== "enum" || choosable(s)))
+    // a choice goes under the sliders (docs/mock/LtxFeatures.dc.html frame 4): the item's keys reach the page sorted
+    .sort(([, a], [, b]) => Number(a.type === "enum") - Number(b.type === "enum"))
     .map(([k, s]) => {
       const fid = `${id}-${k}`;
       const label = (

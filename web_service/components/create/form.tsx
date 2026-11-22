@@ -1091,7 +1091,7 @@ function Editor({
               <button
                 key={o}
                 type="button"
-                className={`opt bevel min-w-16 px-3 text-[13px] ${sub ? "flex flex-col items-start py-1.5 text-left" : ""} ${why ? "cursor-not-allowed" : ""}`}
+                className={`opt bevel min-w-16 px-3 text-[13px] ${sub ? "flex h-auto min-h-9 flex-col items-start py-1.5 text-left" : ""} ${why ? "cursor-not-allowed" : ""}`}
                 aria-pressed={raw === o}
                 aria-label={sub || why ? optionText(p, o, f.kind) : undefined}
                 aria-disabled={why ? true : undefined}

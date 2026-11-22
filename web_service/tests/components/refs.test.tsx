@@ -340,9 +340,10 @@ describe("RowsEditor: keyframe cards on the clip", () => {
     const seen: Raw[] = [];
     const bound = field("bound", {
       ...keys.param,
+      // the API sends the item's keys sorted, so the enum comes first; it is drawn under the sliders
       item: {
-        ...(keys.param.item as object),
         binding: { type: "enum", label: "Binding", default: "auto", enum: ["auto", "replace", "guide"] },
+        ...(keys.param.item as object),
       } as unknown as S<"ParamSchema">["item"],
     });
     render(
@@ -356,6 +357,8 @@ describe("RowsEditor: keyframe cards on the clip", () => {
     );
     const seg = screen.getByRole("group", { name: "Binding" });
     expect(seg.className).toContain("seg");
+    const slider = screen.getAllByRole("slider").at(-1)!;
+    expect(slider.compareDocumentPosition(seg) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(seg).getByRole("button", { name: "Auto" }).getAttribute("aria-pressed")).toBe("true");
     fireEvent.click(within(seg).getByRole("button", { name: "Replace" }));
     expect((seen.at(-1) as S<"RowItem">[])[0].binding).toBe("replace");
