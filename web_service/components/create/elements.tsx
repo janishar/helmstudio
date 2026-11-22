@@ -261,6 +261,8 @@ function Picker({
             >
               {e.thumb_url ? (
                 <img
+                  loading="lazy"
+                  decoding="async"
                   src={safeUrl(e.thumb_url)}
                   alt=""
                   className="size-16 shrink-0 rounded-[10px] object-cover"
@@ -484,7 +486,13 @@ function Editor({
               key={im.take_id}
               className="relative aspect-square overflow-hidden rounded-lg bg-s1"
             >
-              <img src={safeUrl(im.thumb_url)} alt="" className="size-full object-cover" />
+              <img
+                loading="lazy"
+                decoding="async"
+                src={safeUrl(im.thumb_url)}
+                alt=""
+                className="size-full object-cover"
+              />
               <button
                 type="button"
                 aria-label={`Remove image ${i + 1}`}

@@ -537,7 +537,7 @@ function Card({
       {card.thumbs && card.thumbs.length > 0 && (
         <div className="thumbs" aria-label="The takes it is about">
           {card.thumbs.map((u, i) => (
-            <img key={i} src={u} alt="" />
+            <img loading="lazy" decoding="async" key={i} src={u} alt="" />
           ))}
         </div>
       )}

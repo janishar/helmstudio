@@ -2,7 +2,7 @@
 // The media viewer (plan 05-ui "Media viewer"): a take's media, and its full screen: Esc closes, the arrow keys step
 // through the list it was opened from, video plays with the native controls.
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ImageOff, Play, X } from "lucide-react";
 import { safeUrl } from "@/lib/format";
 import { thumbOf } from "@/lib/media";
@@ -10,8 +10,9 @@ import type { S } from "@/lib/api";
 
 type Take = S<"Take">;
 
-/** A take's (or a run output's) image, video (native controls, its poster until it plays, fetched with Range
- * requests and only its metadata until then) or audio. */
+/** A take's (or a run output's) image (its thumbnail, already loaded by the lists, painted under it until the full
+ * file arrives: API 1.48), video (native controls, its full-size poster until it plays, fetched with Range requests
+ * and only its metadata until then) or audio. */
 export function Media({
   take: t,
   url,
@@ -33,14 +34,35 @@ export function Media({
   onPlaying?: (on: boolean) => void;
 }) {
   const label = alt ?? ("title" in t ? t.title : "The take");
-  if (t.kind === "image")
-    return <img src={url} alt={label} className={className} style={style} fetchPriority="high" />;
+  const [loaded, setLoaded] = useState<string>();
+  if (t.kind === "image") {
+    const thumb = safeUrl(t.thumb_url);
+    const under =
+      thumb && thumb !== url && loaded !== url
+        ? {
+            backgroundImage: `url("${thumb}")`,
+            backgroundSize: className.includes("object-cover") ? "cover" : "contain",
+            backgroundPosition: "center",
+            backgroundRepeat: "no-repeat",
+          }
+        : undefined;
+    return (
+      <img
+        src={url}
+        alt={label}
+        className={className}
+        style={{ ...under, ...style }}
+        fetchPriority="high"
+        onLoad={() => setLoaded(url)}
+      />
+    );
+  }
   if (t.kind === "video")
     return (
       <video
         ref={videoRef}
         src={url}
-        poster={safeUrl(thumbOf(t).src)}
+        poster={safeUrl(t.video?.poster_url)}
         aria-label={label}
         controls
         playsInline

@@ -162,6 +162,7 @@ export function Pic({ thumb, empty, n = -1 }: { thumb: string | null; empty: str
     <span className="relative block w-full">
       {src ? (
         <img
+          decoding="async"
           src={src}
           alt=""
           loading="lazy"

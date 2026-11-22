@@ -111,6 +111,8 @@ export function MemoryPanel({
                   ...m.rejected.map((t) => [t, false] as const),
                 ].map(([t, kept]) => (
                   <img
+                    loading="lazy"
+                    decoding="async"
                     key={t.id}
                     src={safeUrl(t.thumb_url)}
                     alt=""

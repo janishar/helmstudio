@@ -213,6 +213,8 @@ export function RowsEditor({
       >
         {thumb ? (
           <img
+            loading="lazy"
+            decoding="async"
             src={thumb}
             alt=""
             draggable={false}
@@ -264,7 +266,13 @@ export function RowsEditor({
       >
         <div className="flex items-center gap-2">
           {thumb ? (
-            <img src={thumb} alt="" className="h-7 w-11 shrink-0 rounded-md object-cover" />
+            <img
+              loading="lazy"
+              decoding="async"
+              src={thumb}
+              alt=""
+              className="h-7 w-11 shrink-0 rounded-md object-cover"
+            />
           ) : (
             <span
               aria-hidden
@@ -477,7 +485,13 @@ export function RefThumbs({ ids, onPick }: { ids: string[]; onPick: (t: S<"Take"
             onClick={() => onPick(t)}
             className="bevel size-10 overflow-hidden rounded-md bg-s1"
           >
-            <img src={safeUrl(t.thumb_url)} alt="" className="size-full object-cover" />
+            <img
+              loading="lazy"
+              decoding="async"
+              src={safeUrl(t.thumb_url)}
+              alt=""
+              className="size-full object-cover"
+            />
           </button>
         ) : (
           <span
@@ -545,6 +559,8 @@ export function FirstFrameTile({
       >
         {thumb ? (
           <img
+            loading="lazy"
+            decoding="async"
             src={thumb}
             alt=""
             className={

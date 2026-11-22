@@ -323,6 +323,8 @@ function ReviewRow({
                 onDoubleClick={() => onFull(i)}
               >
                 <img
+                  loading="lazy"
+                  decoding="async"
                   src={safeUrl(c.thumb_url)}
                   alt=""
                   className="min-h-0 w-full flex-1 object-contain"

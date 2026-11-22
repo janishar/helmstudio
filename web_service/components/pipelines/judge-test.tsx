@@ -106,7 +106,13 @@ export function JudgeTest({
             return (
               <div key={v.take_id} className="set flex items-start gap-2 py-1.5">
                 {thumb && (
-                  <img src={thumb} alt="" className="size-10 shrink-0 rounded-md object-cover" />
+                  <img
+                    loading="lazy"
+                    decoding="async"
+                    src={thumb}
+                    alt=""
+                    className="size-10 shrink-0 rounded-md object-cover"
+                  />
                 )}
                 <div className="flex min-w-0 flex-col gap-0.5">
                   <span className="text-[13px]">

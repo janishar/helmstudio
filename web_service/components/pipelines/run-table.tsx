@@ -162,6 +162,8 @@ export function RunTable({
                       onClick={() => onOpen(out.ids)}
                     >
                       <img
+                        loading="lazy"
+                        decoding="async"
                         src={safeUrl(out.thumb)}
                         alt=""
                         className="h-10 w-16 rounded-md bg-s3 object-cover"
@@ -279,6 +281,8 @@ function JudgeAttempts({
                     >
                       {tk?.thumb_url && (
                         <img
+                          loading="lazy"
+                          decoding="async"
                           src={safeUrl(tk.thumb_url)}
                           alt=""
                           className="size-full object-cover"

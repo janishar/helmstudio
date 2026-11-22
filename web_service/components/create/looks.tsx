@@ -67,7 +67,13 @@ function LookTile({
       className={`${tileClass(big)} ${open ? "outline-2 outline-a1" : ""}`}
     >
       {card ? null : src ? (
-        <img src={src} alt="" className={`${picClass(big)} object-cover`} />
+        <img
+          loading="lazy"
+          decoding="async"
+          src={src}
+          alt=""
+          className={`${picClass(big)} object-cover`}
+        />
       ) : (
         <span
           aria-hidden
@@ -645,7 +651,13 @@ function Editor({
               key={im.take_id}
               className="relative aspect-square overflow-hidden rounded-lg bg-s1"
             >
-              <img src={safeUrl(im.thumb_url)} alt="" className="size-full object-cover" />
+              <img
+                loading="lazy"
+                decoding="async"
+                src={safeUrl(im.thumb_url)}
+                alt=""
+                className="size-full object-cover"
+              />
               <button
                 type="button"
                 aria-label={`Remove image ${i + 1}`}

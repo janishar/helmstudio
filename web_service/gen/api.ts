@@ -1115,8 +1115,8 @@ export interface paths {
          * @description Studio reads the object's size (HEAD) and its first 64 KB (range GET) from the object store: the size must be
          *     the declared `bytes`, the header must be a real image of the declared type, at most 16384 px a side and 50 MP;
          *     it records `width` and `height` upright (a JPEG whose EXIF orientation is 5-8 has them swapped, as browsers and
-         *     the runner show it). The original serves as its own thumbnail in this version (`thumb_url` signs the same
-         *     key). 409 "upload not received" when the object is not there yet (PUT it, then call again). 422 when a check
+         *     the runner show it). From 1.48 a runner's thumbs media job makes its thumbnail within seconds (contracts/README.md,
+         *     Thumbnails); until then `thumb_url` signs the original. 409 "upload not received" when the object is not there yet (PUT it, then call again). 422 when a check
          *     fails ("size differs from the declared bytes", "not a valid png image", "image is larger than 16384 px",
          *     "image is larger than 50 MP"; from 1.19 audio: the header must be RIFF/WAVE, or an ID3v2 tag or MPEG audio frame
          *     sync, from 1.38 an `ftyp` box whose major or a compatible brand is `M4A `, else "not a valid wav file" / "not
@@ -3935,6 +3935,8 @@ export interface components {
              * @description the take this output became (every output is a take); absent only on events stored before API 1.2
              */
             take_id?: string;
+            /** @description from 1.48: its take's thumb_url (Take.thumb_url); absent without a take (or once it is deleted): use `url` */
+            thumb_url?: components["schemas"]["SignedUrl"];
         } & (unknown & unknown);
         /**
          * @description interactive (Create, POST …/runs) is dispatched before batch (runs pipelines_service asks for, one per batch row and step)
@@ -4291,7 +4293,7 @@ export interface components {
             title: string;
             /** @description the file: an image, or a video's MP4 (GET /files serves Range requests) */
             url: components["schemas"]["SignedUrl"];
-            /** @description a small preview; an image: in 1.2 the original itself; a video: its poster (frame 0); from 1.19 an audio take (an upload, from 1.30 a run's WAV too): the file itself (the gallery draws a sound tile by `kind`) */
+            /** @description a small preview; an image: in 1.2 the original itself; a video: its poster (frame 0); from 1.19 an audio take (an upload, from 1.30 a run's WAV too): the file itself (the gallery draws a sound tile by `kind`); from 1.48 an image or video: a WebP of the image or the poster, short side 512 px (never upscaled), long side at most 1024, and until it is made (or when it would save nothing) the original image or the poster as before (contracts/README.md, Thumbnails) */
             thumb_url: components["schemas"]["SignedUrl"];
             /**
              * @example image/png
@@ -4359,7 +4361,8 @@ export interface components {
         /**
          * @description A video take's or output's metadata, from the runner's `evt.run.output` `video`. `url` / `thumb_url` of the take
          *     stay the MP4 and the poster's thumbnail; `poster_url` is the full-size poster (frame 0, the video's size; in
-         *     1.11 the same object as the thumbnail).
+         *     1.11 the same object as the thumbnail; from 1.48 the thumbnail is a small WebP of it: a player's `poster` is
+         *     `poster_url`).
          */
         VideoInfo: {
             /**
@@ -4477,6 +4480,7 @@ export interface components {
             id: string;
             kind: components["schemas"]["TakeKind"];
             title: string;
+            /** @description from 1.48 the take's thumbnail (Take.thumb_url) */
             thumb_url: components["schemas"]["SignedUrl"];
         };
         TakeUse: {
@@ -4675,6 +4679,7 @@ export interface components {
             /** Format: uuid */
             take_id: string;
             url: components["schemas"]["SignedUrl"];
+            /** @description from 1.48 the take's thumbnail (Take.thumb_url) */
             thumb_url: components["schemas"]["SignedUrl"];
             width: number;
             height: number;
@@ -4705,7 +4710,7 @@ export interface components {
             text: string;
             /** @description an element 1-4 when saved, a look 0-4; a starter look none (its picture is only `thumb_url`) */
             images: components["schemas"]["LibraryImage"][];
-            /** @description the first image's thumb_url; else (a look) the thumb of the take it was saved from (`from_take_id`), or a starter look's pack image; from 1.30 a voice: a starter voice's preview clip (a WAV: the picker draws a sound tile); from 1.31 a voice with a clip: its take's file (also after the take was deleted; the picker plays `voice.clip` in..out); else null */
+            /** @description the first image's thumb_url (from 1.48 its take's thumbnail); else (a look) the thumb of the take it was saved from (`from_take_id`), or a starter look's pack image; from 1.30 a voice: a starter voice's preview clip (a WAV: the picker draws a sound tile); from 1.31 a voice with a clip: its take's file (also after the take was deleted; the picker plays `voice.clip` in..out); else null */
             thumb_url: components["schemas"]["SignedUrl"] | null;
             /** @description 1 on create, +1 on every PUT; send it back in LibraryItemUpdate. A starter look or voice: the pack's `version` */
             version: number;
@@ -4882,7 +4887,7 @@ export interface components {
             state: components["schemas"]["LoraState"];
             /** @description rejected: why (the complete call's 422 detail); null otherwise */
             reason: string | null;
-            /** @description the caller's oldest take made with it; null when none */
+            /** @description the thumbnail (Take.thumb_url, from 1.48) of the caller's oldest take made with it; null when none */
             thumb_url: components["schemas"]["SignedUrl"] | null;
             /**
              * Format: date-time
@@ -5080,7 +5085,7 @@ export interface components {
             run_id: string | null;
             /** @description the current attempt's takes (deleted ones left out); a pipeline row: the takes its output received, once it succeeded */
             take_ids: string[];
-            /** @description the first take's thumbnail; null without one */
+            /** @description the first take's thumbnail (Take.thumb_url); null without one */
             thumb_url: components["schemas"]["SignedUrl"] | null;
             /** @description set when failed */
             error: string | null;
@@ -5363,7 +5368,7 @@ export interface components {
             kind: components["schemas"]["TakeKind"];
             /** @description the file: an image, or a video's MP4 */
             url: components["schemas"]["SignedUrl"];
-            /** @description an image itself, a video's poster */
+            /** @description an image itself, a video's poster; from 1.48 the take's thumbnail (Take.thumb_url) */
             thumb_url: components["schemas"]["SignedUrl"];
             /** @description kind video only (absent for an image) */
             video?: components["schemas"]["VideoInfo"];
@@ -6680,6 +6685,7 @@ export interface components {
             source: components["schemas"]["TakeSource"];
             title: string;
             url: components["schemas"]["SignedUrl"];
+            /** @description from 1.48 the take's thumbnail (Take.thumb_url) */
             thumb_url: components["schemas"]["SignedUrl"];
             width: number | null;
             height: number | null;

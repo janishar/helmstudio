@@ -150,7 +150,9 @@ export function ClipTrack({
               left: `calc(${(f / Math.max(clip.last, 1)) * 100}% - ${(f / Math.max(clip.last, 1)) * 44}px)`,
             }}
           >
-            {src && <img src={src} alt="" className="size-full object-cover" />}
+            {src && (
+              <img loading="lazy" decoding="async" src={src} alt="" className="size-full object-cover" />
+            )}
           </span>
         );
       })}

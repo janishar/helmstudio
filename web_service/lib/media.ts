@@ -78,12 +78,12 @@ export const framesFor = (p: Param, s: number, fps: number) => snapFrames(p, s *
 export const durationText = (frames: number, fps: number) =>
   `${frames} frames · ${secondsText(seconds(frames, fps))}`;
 
-/** What a take or run output shows small: its picture (an image's thumbnail, a video's poster; audio has none) and
- * a video's or audio's length ("2.0 s"). */
+/** What a take or run output shows small: its picture (its thumbnail: from API 1.48 a small WebP, a run output's
+ * its take's; else an image itself, a video's poster; audio has none) and a video's or audio's length ("2.0 s"). */
 export function thumbOf(t: S<"Take"> | S<"RunOutput">): { src?: string; length?: string } {
   const audio = "audio" in t ? t.audio : undefined;
   if (t.kind === "audio") return { length: audio && secondsText(audio.duration_s) };
-  const src = "thumb_url" in t ? t.thumb_url : t.kind === "video" ? t.video?.poster_url : t.url;
+  const src = t.thumb_url ?? (t.kind === "video" ? t.video?.poster_url : t.url);
   return { src, length: t.video ? secondsText(t.video.duration_s) : undefined };
 }
 

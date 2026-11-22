@@ -185,6 +185,9 @@ describe("video takes and the run strip", () => {
       height: 1,
     } as S<"RunOutput">;
     expect(thumbOf(img)).toEqual({ src: "/files/k.png", length: undefined });
+    // API 1.48: a run output's thumbnail is its take's, before the full file
+    expect(thumbOf({ ...img, thumb_url: "/files/k.thumb.webp" }).src).toBe("/files/k.thumb.webp");
+    expect(thumbOf({ ...out, thumb_url: "/files/t.webp" }).src).toBe("/files/t.webp");
     expect(videoLine(video)).toBe("2.0 s · 24 fps · 49 frames · audio");
   });
 

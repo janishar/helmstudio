@@ -718,6 +718,8 @@ function DecisionDetail({ d, name }: { d: S<"Decision">; name: (id: string) => s
             <div className="grid grid-cols-4 gap-1.5">
               {d.seen.map((t) => (
                 <img
+                  loading="lazy"
+                  decoding="async"
                   key={`${t.take_id}:${t.frame}`}
                   src={safeUrl(t.thumb_url)}
                   alt={`take ${d.judge!.takes.findIndex((x) => x.take_id === t.take_id) + 1}${t.frame != null ? `, frame ${t.frame}` : ""}`}

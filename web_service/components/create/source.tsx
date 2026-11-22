@@ -183,7 +183,13 @@ export function MediaTile({
         className="bevel flex min-h-12 max-w-[34ch] flex-[1_1_220px] items-center gap-2 rounded-xl bg-s3 px-3 py-1.5 text-left"
       >
         {thumb ? (
-          <img src={thumb} alt="" className="h-7 w-11 shrink-0 rounded-md object-cover" />
+          <img
+            loading="lazy"
+            decoding="async"
+            src={thumb}
+            alt=""
+            className="h-7 w-11 shrink-0 rounded-md object-cover"
+          />
         ) : (
           <span
             aria-hidden
@@ -574,6 +580,8 @@ export function MediaControl({
           <div className="flex items-center gap-2.5">
             {thumb ? (
               <img
+                loading="lazy"
+                decoding="async"
                 src={thumb}
                 alt=""
                 className="w-[88px] shrink-0 rounded-lg object-cover"
@@ -996,7 +1004,14 @@ export function MediaRows({
   const thumbOf = (t: Take | null | undefined, cls: string) => {
     const src = t?.kind === "video" && !audio ? safeUrl(t.thumb_url) : undefined;
     return src ? (
-      <img src={src} alt="" draggable={false} className={`${cls} object-cover`} />
+      <img
+        loading="lazy"
+        decoding="async"
+        src={src}
+        alt=""
+        draggable={false}
+        className={`${cls} object-cover`}
+      />
     ) : audio ? (
       <span aria-hidden className={`${cls} wave`} />
     ) : (

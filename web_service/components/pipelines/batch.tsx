@@ -425,6 +425,8 @@ export function BatchRun({
                             onClick={() => void openTakes(r)}
                           >
                             <img
+                              loading="lazy"
+                              decoding="async"
                               src={safeUrl(r.thumb_url)}
                               alt=""
                               className="h-10 w-16 rounded-md bg-s3 object-cover"

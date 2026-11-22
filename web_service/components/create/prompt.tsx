@@ -235,6 +235,8 @@ export function PromptArea({
           >
             {it.thumb_url ? (
               <img
+                loading="lazy"
+                decoding="async"
                 src={safeUrl(it.thumb_url)}
                 alt=""
                 className="size-8 shrink-0 rounded-md object-cover"

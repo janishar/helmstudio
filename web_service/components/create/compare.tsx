@@ -8,7 +8,6 @@ import { usePlannedPeak } from "@/components/create/memory-chip";
 import { useLibrary, useLooks } from "@/lib/library";
 import { explain, seedGroup, type Origin } from "@/lib/explain";
 import { safeUrl } from "@/lib/format";
-import { thumbOf } from "@/lib/media";
 import type { S } from "@/lib/api";
 
 type Take = S<"Take">;
@@ -27,7 +26,7 @@ function Picture({ take, style }: { take: Take; style?: React.CSSProperties }) {
   return take.kind === "video" ? (
     <video
       src={safeUrl(take.url)}
-      poster={safeUrl(thumbOf(take).src)}
+      poster={safeUrl(take.video?.poster_url)}
       aria-label={nameOf(take)}
       autoPlay
       muted
