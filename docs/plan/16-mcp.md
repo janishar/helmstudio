@@ -59,7 +59,7 @@ clip-level editing. Add them on request, deletes and admin with MCP's `destructi
 
 Clip-level editing is planned in [24-timeline-edit-api.md](24-timeline-edit-api.md) (§28): `edit_timeline` (ops, dry
 run), `timeline_revisions`, `restore_timeline` and `timeline_frame` over `POST …/timelines/{id}/edits`, with
-`destructiveHint` for remove ops.
+`try_timeline_edit` read-only and `destructiveHint` on applies and restore.
 
 **Resources:** `helm://take/{id}` (the take's thumbnail and metadata) and `helm://workflow/{id}`, so a client can
 attach them to a conversation. **Prompts:** none at first.
