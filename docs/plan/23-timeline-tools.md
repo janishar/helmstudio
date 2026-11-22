@@ -2,7 +2,7 @@
 
 [← Plan index](../README.md)
 
-Status: **a design for the owner to decide** (2026-11-22). A plan, not in a milestone: it becomes one in
+Status: **decided by the owner (2026-11-22), queued to build**. A plan, not in a milestone: it becomes one in
 [08-milestones.md](08-milestones.md) when the owner schedules it. Nothing here is built. The tools need **no API
 change**: they are new entries in the shared edit functions (`t_edit` / `edit`), the README's Timeline rules and the
 fixtures. Only the two optional parts (linked sound clips and markers, open points 5 and 6) change the schema; they
@@ -259,6 +259,12 @@ About 38 h without phase 8, 46 h with it. Phases 2–5 (about 25 h) ship the too
 and can follow.
 
 ### 27.13 Open points for the owner
+
+**Decided by the owner, 2026-11-22 (one by one):** 1. UI option **B, the tool row**. 2. Five tools with a smart Trim
+(roll, slip, slide by where you grab). 3. S stays split at the playhead, next to ⌘B. 4. Audio tracks ripple (later
+clips on the track move left). 5. Linked sound clips, yes (1.46). 6. Markers, yes (1.46). 7. Hover scrub **on by
+default** (toggle in the tool row, ⇧S). 8. Filmstrips and waveforms made in the browser. 9. Max zoom 64 px per frame.
+
 
 Each with the recommended option first.
 
