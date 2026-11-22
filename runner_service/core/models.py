@@ -371,7 +371,7 @@ def variant_entry(pack, vid: str) -> dict:
         out["bytes"] = sum(f["bytes"] for f in files)
     out["precisions"] = packs.variant_precisions(pack, vid)
     out |= {"title": v.get("title", vid), "dir": v["dir"]}
-    for k in ("source", "sources", "devices", "distill_from"):
+    for k in ("source", "sources", "devices", "distill_from", "help"):
         if k in v:
             out[k] = v[k]
     if comps:

@@ -1369,12 +1369,12 @@ export function Chips({
   spoken?: boolean;
   /** the Run on chip, right after the model chip (docs/mock/RunOn.dc.html) */
   runOn?: React.ReactNode;
-  /** a variant value's row in the model chip's menu: its title, note ("NVIDIA only") and dim text under Run on a
-   * host ("not on Mac") */
+  /** a variant value's row in the model chip's menu: its title, line (API 1.39), note ("NVIDIA only") and dim text
+   * under Run on a host ("not on Mac") */
   versions?: (
     f: Field,
     o: string,
-  ) => { title: string; note: string | null; dim: string | null } | null;
+  ) => { title: string; sub?: string; note: string | null; dim: string | null } | null;
 }) {
   const s = sections(fields);
   const model = (models ?? s.tiles).filter((f) => f.model && f.param.type === "enum");
@@ -1447,7 +1447,10 @@ export function Chips({
                       className={`mi ${r?.dim ? "dim" : ""}`}
                       onClick={() => onChange(f.key, o)}
                     >
-                      <span>{r?.title ?? pretty(o)}</span>
+                      <span>
+                        {r?.title ?? pretty(o)}
+                        {r?.sub && <small>{r.sub}</small>}
+                      </span>
                       {end && <em>{end}</em>}
                     </button>
                   );

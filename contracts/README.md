@@ -937,7 +937,9 @@ audio track) plus a poster image; uploads stay images.
   audio frozen, and `sample2` refines ancestrally (`a2v --distilled`); `ltx/distill` passes the model through (the
   LoRA is fused in). A distilled extend fails before the transformer loads with `Distilled extend needs sides on a
   64 px grid (this take is <W> × <H>); pick Dev` and `Distilled extend needs at least 25 source frames (this take has
-  <n>)`.
+  <n>)`. Each variant may carry a `help` line (model.yaml `variants.<id>.help`, the models key's and GET
+  /v1/studio/models' variant `help`), shown under its title in the model chip's menu (`8 steps, about 10× faster`,
+  `guided, 30 steps`).
   **Cross-node `values_by`** (API 1.39): `values_by.param` may name another node's enum param in the `when` reference
   form (`<node>.<param>`), read from the graph's merged values (a graph without that node, or a value not listed,
   allows all), and `values_by` may sit on an enum (subsets of its `enum`; a cross-node one allows the default for

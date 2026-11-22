@@ -70,6 +70,7 @@ type ModelAddon struct {
 type ModelVariant struct {
 	ID            string             `json:"id"`
 	Title         string             `json:"title"`
+	Help          string             `json:"help,omitempty"` // API 1.39: its line in the model chip's menu
 	Precisions    []string           `json:"precisions"`
 	Devices       []string           `json:"devices,omitempty"`
 	Dir           *string            `json:"dir"`

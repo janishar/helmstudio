@@ -142,7 +142,7 @@ func buildModels(values []registry.Host, published map[string]registry.Published
 					break
 				}
 			}
-			variant := dto.ModelVariant{ID: vid, Title: cmp.Or(desc.Title, vid), Precisions: orEmpty(desc.Precisions),
+			variant := dto.ModelVariant{ID: vid, Title: cmp.Or(desc.Title, vid), Help: desc.Help, Precisions: orEmpty(desc.Precisions),
 				Devices: desc.Devices, Components: []dto.VariantComponent{}, Hosts: []dto.ModelVariantHost{}}
 			if desc.Dir != "" {
 				variant.Dir = &desc.Dir

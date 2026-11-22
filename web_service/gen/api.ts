@@ -5649,6 +5649,8 @@ export interface components {
             id: string;
             /** @example Turbo */
             title: string;
+            /** @description from 1.39: its line under the title in the model chip's menu (registry variant `help`, from the freshest key publishing it; LTX's Distilled `8 steps, about 10× faster`); absent = none */
+            help?: string;
             /** @description what it loads at (one only: whatever the model node asks, studio's RunsAt). With its components' `stored` (from 1.34) a precision other than the stored dtype is made at load (`bf16 · int8 at load`) and a stored quantized dtype loads as it is (`fp8 · stored quantized`); without, first = as stored and the rest load-time quantizations */
             precisions: components["schemas"]["Precision"][];
             /** @description from 1.34: the only devices it runs on (registry variant `devices`, from the freshest key publishing it; the board's per-variant `NVIDIA only`); absent = every device of the model's runtimes */

@@ -10,6 +10,7 @@ import {
   machines,
   pinnedMachine,
   versionDim,
+  versionRow,
   type Machine,
 } from "@/lib/run-on";
 
@@ -174,5 +175,20 @@ describe("optional add-ons (API 1.36)", () => {
     expect(machineReason(gcp, "torch", [], needs)).toBe("text enhancer not downloaded on gcp");
     expect(machineReason(mac, "torch", [], needs)).toBeNull();
     expect(machineReason(gcp, "torch", [], [])).toBeNull(); // the node is bypassed: not asked
+  });
+});
+
+describe("versionRow", () => {
+  it("carries the variant's line (API 1.39 help) for the model chip's menu", () => {
+    const list = {
+      models: [
+        {
+          ...model,
+          variants: [{ ...variant("Distilled", ["mac"]), help: "8 steps, about 10× faster" }],
+        },
+      ],
+    } as unknown as S<"ModelList">;
+    const f = { family: "qwen-image" } as Parameters<typeof versionRow>[2];
+    expect(versionRow(list, undefined, f, "distilled")?.sub).toBe("8 steps, about 10× faster");
   });
 });

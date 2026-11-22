@@ -180,17 +180,18 @@ export function pinnedMachine(list: Machine[], host: string): Machine | undefine
   );
 }
 
-/** A version menu row for value `o` of a variant field: its title, its note ("NVIDIA only") and, under Run on
- * `mc`, the dim text; null when the models list does not know it. */
+/** A version menu row for value `o` of a variant field: its title, its line (API 1.39 `help`, "8 steps, about 10×
+ * faster"), its note ("NVIDIA only") and, under Run on `mc`, the dim text; null when the models list does not know it. */
 export function versionRow(
   list: S<"ModelList"> | null,
   mc: Machine | undefined,
   f: Field,
   o: string,
-): { title: string; note: string | null; dim: string | null } | null {
+): { title: string; sub?: string; note: string | null; dim: string | null } | null {
   for (const m of list?.models.filter((x) => x.family === f.family) ?? []) {
     const v = m.variants.find((x) => x.id === o);
-    if (v) return { title: v.title, note: deviceNote(m, v), dim: versionDim(mc, m, v) };
+    if (v)
+      return { title: v.title, sub: v.help, note: deviceNote(m, v), dim: versionDim(mc, m, v) };
   }
   return null;
 }

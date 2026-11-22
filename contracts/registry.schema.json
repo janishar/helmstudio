@@ -1879,6 +1879,12 @@
                           "type": "string",
                           "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
                           "description": "M9: the variant whose weights are this one's distilled model, built in (model.yaml `variants.<id>.distill_from`: ltx dev-int8's is distilled-fp8, the dev transformer with the distilled LoRA fused in): `<family>/distill` on this variant loads that variant's transformer, no LoRA, so a host qualifies for it when that variant is present there. Absent: the distill bakes the family's pre-fused distilled LoRA (`lora.prefused`, variant distilled)"
+                        },
+                        "help": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 120,
+                          "description": "from API 1.39: the variant's line under its title in the model chip's menu (model.yaml `variants.<id>.help`; LTX's Distilled `8 steps, about 10× faster`)"
                         }
                       }
                     }

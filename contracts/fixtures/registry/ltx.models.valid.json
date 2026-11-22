@@ -13,6 +13,7 @@
         {
           "id": "distilled",
           "presence": "present",
+          "help": "8 steps, about 10× faster",
           "bytes": 76350000000,
           "precisions": [
             "bf16",

@@ -44,6 +44,7 @@ variants:
   distilled:
     dir: ltx-2.5
     title: Distilled
+    help: 8 steps, about 10× faster   # API 1.39: its line in the model chip's menu (board LtxFeatures frame 6)
     devices: [mps]   # the official pair stays the Mac's (MLX) until it has run on CUDA
     source:
       repo: Lightricks/LTX-2.5
@@ -65,6 +66,7 @@ variants:
   dev:
     dir: ltx-2.5
     title: Dev
+    help: guided, 30 steps
     devices: [mps]
     shares: [text_encoder, connector, upscaler, vae, vae_encoder, audio_vae, vocoder, audio_encoder]
     files: {transformer: "diffusion_models/ltx-2.5-22b-dev-transformer-bf16.safetensors"}
