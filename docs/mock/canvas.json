@@ -8,8 +8,9 @@
       "is_interactive": true,
       "title": "Pipelines · write and decide nodes, judge attempts",
       "w": 1440,
-      "x": 4560,
-      "y": 2160
+      "x": 3040,
+      "y": 1080,
+      "page": "pipelines"
     },
     "AgentSettings.dc.html": {
       "expand": "fill",
@@ -17,8 +18,9 @@
       "is_interactive": true,
       "title": "Pipelines · agent, fan-out, custom node, remote calls",
       "w": 1440,
-      "x": 9120,
-      "y": 3120
+      "x": 3040,
+      "y": 2160,
+      "page": "pipelines"
     },
     "AgentSteps.dc.html": {
       "expand": "fill",
@@ -26,8 +28,9 @@
       "is_interactive": true,
       "title": "Pipelines · write and decide steps, run again",
       "w": 1440,
-      "x": 6080,
-      "y": 2160
+      "x": 0,
+      "y": 2160,
+      "page": "pipelines"
     },
     "ApiKeys.dc.html": {
       "expand": "fill",
@@ -35,8 +38,9 @@
       "is_interactive": true,
       "title": "Admin · API keys",
       "w": 1440,
-      "x": 4560,
-      "y": 4800
+      "x": 3040,
+      "y": 1320,
+      "page": "models-admin"
     },
     "CreateAudio.dc.html": {
       "expand": "fill",
@@ -44,8 +48,9 @@
       "is_interactive": true,
       "title": "Create · voices on Qwen3-TTS: voice-over and dialogue, the prompt expanded",
       "w": 1440,
-      "x": 16720,
-      "y": 0
+      "x": 0,
+      "y": 0,
+      "page": "create-audio"
     },
     "CreateEnhance.dc.html": {
       "expand": "fill",
@@ -53,8 +58,9 @@
       "is_interactive": true,
       "title": "Create · MiniMax H3 Image: No enhance, Think, the enhanced prompt under the run, Enhance is off, enhancer not downloaded",
       "w": 1440,
-      "x": -1520,
-      "y": 0
+      "x": 1520,
+      "y": 0,
+      "page": "create-image"
     },
     "CreateMediaRefs.dc.html": {
       "expand": "fill",
@@ -62,8 +68,9 @@
       "is_interactive": true,
       "title": "Create · MiniMax H3 References: video and audio references, the Last frame tile",
       "w": 1440,
-      "x": -1520,
-      "y": 1780
+      "x": 0,
+      "y": 2440,
+      "page": "create-video"
     },
     "Direct.dc.html": {
       "expand": "fill",
@@ -71,8 +78,9 @@
       "is_interactive": true,
       "title": "Create · empty state, elements and looks",
       "w": 1440,
-      "x": 4560,
-      "y": 0
+      "x": 3040,
+      "y": 0,
+      "page": "create-image"
     },
     "DirectorChat.dc.html": {
       "expand": "fill",
@@ -80,8 +88,9 @@
       "is_interactive": true,
       "title": "Pipelines · director chat, fan-out, rows it added",
       "w": 1440,
-      "x": 7600,
-      "y": 3440
+      "x": 1520,
+      "y": 2160,
+      "page": "pipelines"
     },
     "Elements.dc.html": {
       "expand": "fill",
@@ -89,8 +98,9 @@
       "is_interactive": true,
       "title": "Create · elements and @ mentions",
       "w": 1440,
-      "x": 9120,
-      "y": 1080
+      "x": 3040,
+      "y": 2080,
+      "page": "create-image"
     },
     "Execution.dc.html": {
       "expand": "fill",
@@ -98,8 +108,9 @@
       "is_interactive": true,
       "title": "Pipelines · execution view of one row",
       "w": 1440,
-      "x": 4560,
-      "y": 1080
+      "x": 0,
+      "y": 1080,
+      "page": "pipelines"
     },
     "Gallery.dc.html": {
       "expand": "fill",
@@ -107,8 +118,9 @@
       "is_interactive": true,
       "title": "Gallery · the hub for sharing and reuse",
       "w": 1440,
-      "x": 9120,
-      "y": 0
+      "x": 0,
+      "y": 0,
+      "page": "gallery"
     },
     "GalleryPicker.dc.html": {
       "expand": "fill",
@@ -116,8 +128,9 @@
       "is_interactive": true,
       "title": "Create · add references from the gallery",
       "w": 1440,
-      "x": 7600,
-      "y": 1080
+      "x": 3040,
+      "y": 4160,
+      "page": "create-image"
     },
     "Graph.dc.html": {
       "expand": "fill",
@@ -126,7 +139,8 @@
       "title": "Graph view · same workflow",
       "w": 1440,
       "x": 1520,
-      "y": 0
+      "y": 2080,
+      "page": "create-image"
     },
     "Hosts.dc.html": {
       "expand": "fill",
@@ -134,8 +148,9 @@
       "is_interactive": true,
       "title": "Admin · hosts",
       "w": 1440,
-      "x": 3040,
-      "y": 4800
+      "x": 0,
+      "y": 1320,
+      "page": "models-admin"
     },
     "ImageToVideo.dc.html": {
       "expand": "fill",
@@ -143,8 +158,9 @@
       "is_interactive": true,
       "title": "Create · LTX image to video, keyframes, auto length, beats",
       "w": 1440,
-      "x": 7600,
-      "y": 2160
+      "x": 1520,
+      "y": 0,
+      "page": "create-video"
     },
     "JudgeReview.dc.html": {
       "expand": "fill",
@@ -152,8 +168,9 @@
       "is_interactive": true,
       "title": "Pipelines · review with the judge's pick, memory",
       "w": 1440,
-      "x": 3040,
-      "y": 2160
+      "x": 1520,
+      "y": 1080,
+      "page": "pipelines"
     },
     "Landing.dc.html": {
       "expand": "fill",
@@ -162,7 +179,8 @@
       "title": "Landing page",
       "w": 1440,
       "x": 0,
-      "y": 2080
+      "y": 0,
+      "page": "start"
     },
     "Looks.dc.html": {
       "expand": "fill",
@@ -170,8 +188,9 @@
       "is_interactive": true,
       "title": "Create · looks and the visual picker, Save as look",
       "w": 1440,
-      "x": 12160,
-      "y": 1080
+      "x": 0,
+      "y": 4160,
+      "page": "create-image"
     },
     "LoraPicker.dc.html": {
       "expand": "fill",
@@ -179,8 +198,9 @@
       "is_interactive": true,
       "title": "Create · add a LoRA, upload your own",
       "w": 1440,
-      "x": 10640,
-      "y": 1080
+      "x": 1520,
+      "y": 4160,
+      "page": "create-image"
     },
     "Main.dc.html": {
       "expand": "fill",
@@ -189,7 +209,8 @@
       "title": "Create · Qwen Image: Enhance prompt (PE-T2I / PE-I2I), enhancer not downloaded",
       "w": 1440,
       "x": 0,
-      "y": 0
+      "y": 0,
+      "page": "create-image"
     },
     "ModelDownload.dc.html": {
       "expand": "fill",
@@ -197,8 +218,9 @@
       "is_interactive": true,
       "title": "Models · download to a host, licence and gated repo",
       "w": 1440,
-      "x": 9120,
-      "y": 6000
+      "x": 1520,
+      "y": 0,
+      "page": "models-admin"
     },
     "Models.dc.html": {
       "expand": "fill",
@@ -206,8 +228,9 @@
       "is_interactive": true,
       "title": "Models",
       "w": 1440,
-      "x": 6080,
-      "y": 4800
+      "x": 0,
+      "y": 0,
+      "page": "models-admin"
     },
     "ModelsLoras.dc.html": {
       "expand": "fill",
@@ -215,8 +238,9 @@
       "is_interactive": true,
       "title": "Models · LoRAs, shared per host and your own",
       "w": 1440,
-      "x": 6080,
-      "y": 6000
+      "x": 3040,
+      "y": 0,
+      "page": "models-admin"
     },
     "Pipeline.dc.html": {
       "expand": "fill",
@@ -224,8 +248,9 @@
       "is_interactive": true,
       "title": "Pipelines · pick a take, memory controls",
       "w": 1440,
-      "x": 3040,
-      "y": 0
+      "x": 1520,
+      "y": 0,
+      "page": "pipelines"
     },
     "PipelineGraph.dc.html": {
       "expand": "fill",
@@ -234,7 +259,8 @@
       "title": "Pipelines · graph of an unattended batch",
       "w": 1440,
       "x": 3040,
-      "y": 1080
+      "y": 0,
+      "page": "pipelines"
     },
     "Pipelines.dc.html": {
       "expand": "fill",
@@ -242,8 +268,9 @@
       "is_interactive": true,
       "title": "Pipelines · list",
       "w": 1440,
-      "x": 7600,
-      "y": 4800
+      "x": 0,
+      "y": 0,
+      "page": "pipelines"
     },
     "Providers.dc.html": {
       "expand": "fill",
@@ -251,8 +278,9 @@
       "is_interactive": true,
       "title": "Admin · model providers",
       "w": 1440,
-      "x": 7600,
-      "y": 6000
+      "x": 1520,
+      "y": 1320,
+      "page": "models-admin"
     },
     "SignIn.dc.html": {
       "expand": "fill",
@@ -261,7 +289,8 @@
       "title": "Sign in",
       "w": 1440,
       "x": 1520,
-      "y": 4800
+      "y": 0,
+      "page": "start"
     },
     "SubmitEgress.dc.html": {
       "expand": "fill",
@@ -269,8 +298,9 @@
       "is_interactive": true,
       "title": "Pipelines · Submit: what leaves the machine, agent steps",
       "w": 1440,
-      "x": 10640,
-      "y": 3120
+      "x": 0,
+      "y": 3240,
+      "page": "pipelines"
     },
     "TakeActions.dc.html": {
       "expand": "fill",
@@ -278,8 +308,9 @@
       "is_interactive": true,
       "title": "Timeline · take actions: Use in…, Extend / Retake / Audio to video on a clip, remove a track",
       "w": 1440,
-      "x": 13680,
-      "y": 0
+      "x": 3040,
+      "y": 0,
+      "page": "timeline"
     },
     "TextToVideo.dc.html": {
       "expand": "fill",
@@ -287,8 +318,9 @@
       "is_interactive": true,
       "title": "Create · LTX text to video",
       "w": 1440,
-      "x": 7600,
-      "y": 0
+      "x": 0,
+      "y": 0,
+      "page": "create-video"
     },
     "Timeline.dc.html": {
       "expand": "fill",
@@ -296,8 +328,9 @@
       "is_interactive": true,
       "title": "Timeline · direct shots, edit, export",
       "w": 1440,
-      "x": 6080,
-      "y": 0
+      "x": 0,
+      "y": 0,
+      "page": "timeline"
     },
     "TimelineAudio.dc.html": {
       "expand": "fill",
@@ -305,8 +338,9 @@
       "is_interactive": true,
       "title": "Timeline · voice takes on audio tracks, New line on Qwen3-TTS, Make shot",
       "w": 1440,
-      "x": 19760,
-      "y": 0
+      "x": 0,
+      "y": 2320,
+      "page": "timeline"
     },
     "TimelineDialogs.dc.html": {
       "expand": "fill",
@@ -314,8 +348,9 @@
       "is_interactive": true,
       "title": "Timeline · sequences, replace, re-render, export",
       "w": 1440,
-      "x": 10640,
-      "y": 0
+      "x": 1520,
+      "y": 0,
+      "page": "timeline"
     },
     "Users.dc.html": {
       "expand": "fill",
@@ -323,8 +358,9 @@
       "is_interactive": true,
       "title": "Admin · users, root admin only",
       "w": 1440,
-      "x": 6080,
-      "y": 1080
+      "x": 0,
+      "y": 2400,
+      "page": "models-admin"
     },
     "VideoSource.dc.html": {
       "expand": "fill",
@@ -332,8 +368,9 @@
       "is_interactive": true,
       "title": "Create · LTX retake, extend, audio to video: source, range, audio",
       "w": 1440,
-      "x": 15200,
-      "y": 0
+      "x": 3040,
+      "y": 0,
+      "page": "create-video"
     },
     "VoicePicker.dc.html": {
       "expand": "fill",
@@ -341,35 +378,39 @@
       "is_interactive": true,
       "title": "Create · voice picker on Qwen3-TTS: presets, clone from a clip, design a voice, an element's voice",
       "w": 1440,
-      "x": 18240,
-      "y": 0
+      "x": 1520,
+      "y": 0,
+      "page": "create-audio"
     },
     "CreateAudioZonos3.dc.html": {
-      "x": 16720,
-      "y": 1080,
+      "x": 3040,
+      "y": 0,
       "w": 1440,
       "h": 1920,
       "title": "Create · voices on ZONOS3: voice-over and dialogue, Delivery",
       "expand": "fill",
-      "is_interactive": true
+      "is_interactive": true,
+      "page": "create-audio"
     },
     "VoicePickerZonos3.dc.html": {
-      "x": 18240,
+      "x": 0,
       "y": 2040,
       "w": 1440,
       "h": 1920,
       "title": "Create · voice picker on ZONOS3: presets picked, clone from a clip",
       "expand": "fill",
-      "is_interactive": true
+      "is_interactive": true,
+      "page": "create-audio"
     },
     "TimelineAudioZonos3.dc.html": {
-      "x": 19760,
-      "y": 1560,
+      "x": 1520,
+      "y": 2320,
       "w": 1440,
       "h": 960,
       "title": "Timeline · New line on ZONOS3, a ZONOS3 dialogue clip",
       "expand": "fill",
-      "is_interactive": true
+      "is_interactive": true,
+      "page": "timeline"
     },
     "Assistant.dc.html": {
       "expand": "fill",
@@ -377,8 +418,9 @@
       "is_interactive": true,
       "title": "Assistant · the drawer on Create, Graph and Timeline, phone, cards, chains, memory, web search",
       "w": 1440,
-      "x": 21280,
-      "y": 0
+      "x": 0,
+      "y": 0,
+      "page": "assistant"
     },
     "RunOn.dc.html": {
       "expand": "fill",
@@ -386,8 +428,9 @@
       "is_interactive": true,
       "title": "Create · Run on",
       "w": 1440,
-      "x": 1520,
-      "y": 1080
+      "x": 0,
+      "y": 2080,
+      "page": "create-image"
     },
     "LtxFeatures.dc.html": {
       "expand": "fill",
@@ -395,8 +438,9 @@
       "is_interactive": true,
       "title": "Create · LTX studio features: Detail, negative prompt, float16, bindings, distilled actions, optional add-ons (Deblur, Refine details, SDR to HDR: backlog)",
       "w": 1440,
-      "x": 13680,
-      "y": 2280
+      "x": 3040,
+      "y": 2440,
+      "page": "create-video"
     },
     "H3Options.dc.html": {
       "expand": "fill",
@@ -404,8 +448,9 @@
       "is_interactive": true,
       "title": "Create · MiniMax H3 options: presets, Advanced speed controls, NVIDIA Mode and flow shift, replace a video's sound, last / first frame in…, H3 New shot, Turbo preset (optional add-ons: Turbo LoRA, Turbo Ref LoRA for References)",
       "w": 1440,
-      "x": -3040,
-      "y": 0
+      "x": 1520,
+      "y": 2440,
+      "page": "create-video"
     },
     "UploadOptimise.dc.html": {
       "expand": "fill",
@@ -413,8 +458,9 @@
       "is_interactive": true,
       "title": "Uploads · optimised in the browser: Optimising… on reference, audio and Gallery tiles, voice clips kept as WAV, fallbacks; video uploads (backlog)",
       "w": 1440,
-      "x": -3040,
-      "y": 5220
+      "x": 1520,
+      "y": 0,
+      "page": "gallery"
     }
   },
   "createdOnFiles": {
@@ -423,66 +469,168 @@
   },
   "designSystems": [],
   "launch": {
-    "view": "canvas"
+    "view": "canvas",
+    "page": "create-image"
   },
   "notes": {
-    "heading": {
+    "title-create-image": {
       "kind": "title1",
-      "maxW": 8000,
-      "text": "helmstudio-next · Create, Pipelines, Gallery, Timeline",
-      "w": 240,
+      "text": "Create · image",
       "x": 0,
-      "y": -300
+      "y": -300,
+      "maxW": 4480,
+      "page": "create-image"
+    },
+    "title-create-video": {
+      "kind": "title1",
+      "text": "Create · video",
+      "x": 0,
+      "y": -300,
+      "maxW": 4480,
+      "page": "create-video"
+    },
+    "title-create-audio": {
+      "kind": "title1",
+      "text": "Create · audio",
+      "x": 0,
+      "y": -300,
+      "maxW": 4480,
+      "page": "create-audio"
+    },
+    "title-timeline": {
+      "kind": "title1",
+      "text": "Timeline",
+      "x": 0,
+      "y": -300,
+      "maxW": 4480,
+      "page": "timeline"
+    },
+    "title-pipelines": {
+      "kind": "title1",
+      "text": "Pipelines",
+      "x": 0,
+      "y": -300,
+      "maxW": 4480,
+      "page": "pipelines"
+    },
+    "title-gallery": {
+      "kind": "title1",
+      "text": "Gallery and uploads",
+      "x": 0,
+      "y": -300,
+      "maxW": 2960,
+      "page": "gallery"
+    },
+    "title-models-admin": {
+      "kind": "title1",
+      "text": "Models and admin",
+      "x": 0,
+      "y": -300,
+      "maxW": 4480,
+      "page": "models-admin"
+    },
+    "title-assistant": {
+      "kind": "title1",
+      "text": "Assistant",
+      "x": 0,
+      "y": -300,
+      "maxW": 1440,
+      "page": "assistant"
+    },
+    "title-start": {
+      "kind": "title1",
+      "text": "Landing and sign in",
+      "x": 0,
+      "y": -300,
+      "maxW": 2960,
+      "page": "start"
     }
   },
   "order": [
     "Main.dc.html",
-    "RunOn.dc.html",
     "CreateEnhance.dc.html",
-    "CreateMediaRefs.dc.html",
-    "Graph.dc.html",
-    "Pipeline.dc.html",
     "Direct.dc.html",
-    "Timeline.dc.html",
-    "TimelineDialogs.dc.html",
-    "TakeActions.dc.html",
+    "RunOn.dc.html",
+    "Graph.dc.html",
+    "Elements.dc.html",
+    "Looks.dc.html",
+    "LoraPicker.dc.html",
+    "GalleryPicker.dc.html",
     "TextToVideo.dc.html",
     "ImageToVideo.dc.html",
     "VideoSource.dc.html",
+    "CreateMediaRefs.dc.html",
+    "H3Options.dc.html",
     "LtxFeatures.dc.html",
-    "Gallery.dc.html",
-    "GalleryPicker.dc.html",
-    "Elements.dc.html",
-    "LoraPicker.dc.html",
-    "Looks.dc.html",
+    "CreateAudio.dc.html",
+    "VoicePicker.dc.html",
+    "CreateAudioZonos3.dc.html",
+    "VoicePickerZonos3.dc.html",
+    "Timeline.dc.html",
+    "TimelineDialogs.dc.html",
+    "TakeActions.dc.html",
+    "TimelineAudio.dc.html",
+    "TimelineAudioZonos3.dc.html",
+    "Pipelines.dc.html",
+    "Pipeline.dc.html",
     "PipelineGraph.dc.html",
     "Execution.dc.html",
-    "Users.dc.html",
-    "Landing.dc.html",
-    "SignIn.dc.html",
-    "Hosts.dc.html",
-    "ApiKeys.dc.html",
-    "Models.dc.html",
-    "ModelDownload.dc.html",
-    "ModelsLoras.dc.html",
-    "Pipelines.dc.html",
     "JudgeReview.dc.html",
     "AgentNodes.dc.html",
     "AgentSteps.dc.html",
     "DirectorChat.dc.html",
     "AgentSettings.dc.html",
     "SubmitEgress.dc.html",
+    "Gallery.dc.html",
+    "UploadOptimise.dc.html",
+    "Models.dc.html",
+    "ModelDownload.dc.html",
+    "ModelsLoras.dc.html",
+    "Hosts.dc.html",
     "Providers.dc.html",
-    "CreateAudio.dc.html",
-    "VoicePicker.dc.html",
-    "TimelineAudio.dc.html",
-    "CreateAudioZonos3.dc.html",
-    "VoicePickerZonos3.dc.html",
-    "TimelineAudioZonos3.dc.html",
+    "ApiKeys.dc.html",
+    "Users.dc.html",
     "Assistant.dc.html",
-    "H3Options.dc.html",
-    "UploadOptimise.dc.html"
+    "Landing.dc.html",
+    "SignIn.dc.html"
   ],
-  "pages": [],
+  "pages": [
+    {
+      "id": "create-image",
+      "name": "Create · image"
+    },
+    {
+      "id": "create-video",
+      "name": "Create · video"
+    },
+    {
+      "id": "create-audio",
+      "name": "Create · audio"
+    },
+    {
+      "id": "timeline",
+      "name": "Timeline"
+    },
+    {
+      "id": "pipelines",
+      "name": "Pipelines"
+    },
+    {
+      "id": "gallery",
+      "name": "Gallery and uploads"
+    },
+    {
+      "id": "models-admin",
+      "name": "Models and admin"
+    },
+    {
+      "id": "assistant",
+      "name": "Assistant"
+    },
+    {
+      "id": "start",
+      "name": "Landing and sign in"
+    }
+  ],
   "title": "helmstudio-next UI mock"
 }
