@@ -301,4 +301,18 @@ func TestThumbsSweepAndFrames(t *testing.T) {
 	if _, err := e.store.Stat(ctx, prefix+"frame.png"); err != nil {
 		t.Fatal("the video's last frame survives its frame take's sweep", err)
 	}
+	// a take from before 1.48 sharing the video's last frame: neither sweep deletes it while the other is live
+	legacy := e.clipTake(userA, 2, false, nil)
+	e.exec(`UPDATE takes SET key = $2, deleted_at = clock_timestamp() - interval '2 hours' WHERE id = $1`, legacy, prefix+"frame.png")
+	if n, err := gallery.NewSweeper(e.pool, e.store).Sweep(ctx); err != nil || n != 0 {
+		t.Fatal("a take sharing a live video's last frame is left", n, err)
+	}
+	e.exec(`UPDATE takes SET deleted_at = NULL WHERE id = $1`, legacy)
+	e.exec(`UPDATE takes SET deleted_at = clock_timestamp() - interval '2 hours' WHERE id = $1`, old)
+	if n, err := gallery.NewSweeper(e.pool, e.store).Sweep(ctx); err != nil || n != 0 {
+		t.Fatal("a video whose last frame a live take shares is left", n, err)
+	}
+	if _, err := e.store.Stat(ctx, prefix+"frame.png"); err != nil {
+		t.Fatal("the shared last frame survives", err)
+	}
 }

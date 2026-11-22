@@ -37,7 +37,8 @@ func NewSweeper(pool *pgxpool.Pool, store storage.Store) *Sweeper {
 // take still points at, nor (API 1.31) a take one of its owner's voices keeps as its clip (deleting the voice frees it
 // for a later sweep; contracts/README.md, Voices: cloned voices). A video's poster goes with its MP4, its thumbnail (API 1.48) with it, and the LLM thumbnails a judge made of it
 // (u/<owner_id>/llm/thumbs/, a copy of the take) unless a live take's decision shows the same one. The objects go
-// first: a failure keeps the rows for the next sweep.
+// first: a failure keeps the rows for the next sweep. A frame take made before API 1.48 may share its key with its
+// video's last frame: neither is swept while the other is live (ponytail: scans video->'last'; an index if sweeps slow).
 func (s *Sweeper) Sweep(ctx context.Context) (int, error) {
 	removed := 0
 	err := common.System(ctx, s.pool, func(tx pgx.Tx) error {
@@ -47,6 +48,8 @@ func (s *Sweeper) Sweep(ctx context.Context) (int, error) {
 				OR (NOT t.ready AND t.created_at < clock_timestamp() - make_interval(secs =>
 					CASE WHEN t.source = 'import' THEN $4::float8 ELSE $2::float8 END)))
 			AND NOT EXISTS (SELECT 1 FROM takes o WHERE o.key = t.key AND o.id <> t.id AND o.deleted_at IS NULL)
+			AND NOT EXISTS (SELECT 1 FROM takes o WHERE o.id <> t.id AND o.deleted_at IS NULL
+				AND (o.video->'last'->>'key' = t.key OR o.key = t.video->'last'->>'key'))
 			AND NOT EXISTS (SELECT 1 FROM library_items l WHERE l.owner_id = t.owner_id AND l.kind = 'voice'
 				AND l.voice->'clip'->>'take_id' = t.id::text)
 			ORDER BY t.created_at LIMIT $3 FOR UPDATE SKIP LOCKED`, Grace.Seconds(), UploadTTL.Seconds(), sweepBatch,
