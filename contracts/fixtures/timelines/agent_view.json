@@ -286,7 +286,8 @@
       ],
       "shot": null,
       "number": null,
-      "offline": false
+      "offline": false,
+      "link": null
      },
      {
       "id": "b",
@@ -311,7 +312,8 @@
       ],
       "shot": null,
       "number": null,
-      "offline": false
+      "offline": false,
+      "link": null
      },
      {
       "id": "c",
@@ -337,7 +339,8 @@
       ],
       "shot": null,
       "number": null,
-      "offline": false
+      "offline": false,
+      "link": null
      },
      {
       "id": "m",
@@ -362,9 +365,12 @@
       ],
       "shot": null,
       "number": null,
-      "offline": false
+      "offline": false,
+      "link": null
      }
-    ]
+    ],
+    "links": {},
+    "markers": []
    }
   },
   {
@@ -503,7 +509,8 @@
       ],
       "shot": null,
       "number": null,
-      "offline": false
+      "offline": false,
+      "link": null
      },
      {
       "id": "s1",
@@ -526,7 +533,8 @@
       "alternatives": [],
       "shot": null,
       "number": null,
-      "offline": false
+      "offline": false,
+      "link": null
      },
      {
       "id": "b",
@@ -551,7 +559,8 @@
       ],
       "shot": null,
       "number": null,
-      "offline": false
+      "offline": false,
+      "link": null
      },
      {
       "id": "c",
@@ -577,7 +586,8 @@
       ],
       "shot": null,
       "number": null,
-      "offline": false
+      "offline": false,
+      "link": null
      },
      {
       "id": "m",
@@ -602,7 +612,388 @@
       ],
       "shot": null,
       "number": null,
-      "offline": false
+      "offline": false,
+      "link": null
+     }
+    ],
+    "links": {},
+    "markers": []
+   }
+  },
+  {
+   "description": "1.50: links (each clip's and the groups) and markers with their frames",
+   "takes": {},
+   "document": {
+    "target": {
+     "width": 256,
+     "height": 128,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "tracks": [
+     {
+      "name": "V1",
+      "kind": "video",
+      "gain_db": 0,
+      "mute": false,
+      "clips": [
+       {
+        "id": "a",
+        "take_id": "aaaaaaaa-0000-4000-8000-000000000003",
+        "in": 1.0,
+        "out": 3.0,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [
+         "aaaaaaaa-0000-4000-8000-000000000003"
+        ],
+        "at": 0.0
+       },
+       {
+        "id": "b",
+        "take_id": "aaaaaaaa-0000-4000-8000-000000000003",
+        "in": 2.0,
+        "out": 4.0,
+        "gain_db": 0,
+        "mute": false,
+        "transition_in": {
+         "type": "dissolve",
+         "frames": 12
+        },
+        "alternatives": [
+         "aaaaaaaa-0000-4000-8000-000000000003"
+        ],
+        "at": 2.0
+       },
+       {
+        "id": "c",
+        "take_id": "bbbbbbbb-0000-4000-8000-000000000001",
+        "hold": 2.0,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [
+         "bbbbbbbb-0000-4000-8000-000000000001"
+        ],
+        "at": 4.0
+       },
+       {
+        "id": "d",
+        "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+        "in": 0.5,
+        "out": 1.5,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [
+         "aaaaaaaa-0000-4000-8000-000000000001"
+        ],
+        "at": 6.0
+       }
+      ]
+     },
+     {
+      "name": "A2",
+      "kind": "audio",
+      "gain_db": 0,
+      "mute": false,
+      "clips": [
+       {
+        "id": "m",
+        "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+        "in": 0.0,
+        "out": 2.0,
+        "at": 1.0,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [
+         "aaaaaaaa-0000-4000-8000-000000000001"
+        ]
+       },
+       {
+        "id": "n",
+        "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+        "in": 0.0,
+        "out": 1.0,
+        "at": 4.5,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [
+         "aaaaaaaa-0000-4000-8000-000000000001"
+        ]
+       }
+      ]
+     },
+     {
+      "name": "A3",
+      "kind": "audio",
+      "gain_db": 0,
+      "mute": false,
+      "clips": [
+       {
+        "id": "v",
+        "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+        "in": 0.0,
+        "out": 1.0,
+        "at": 2.5,
+        "gain_db": 0,
+        "mute": false,
+        "link": "b",
+        "alternatives": [
+         "aaaaaaaa-0000-4000-8000-000000000001"
+        ]
+       }
+      ]
+     }
+    ],
+    "duration_s": 7.0,
+    "frames": 168,
+    "markers": [
+     {
+      "id": "k1",
+      "at": 1.0,
+      "name": "Beat"
+     },
+     {
+      "id": "k2",
+      "at": 3.0,
+      "color": "blue"
+     }
+    ]
+   },
+   "expect": {
+    "target": {
+     "width": 256,
+     "height": 128,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "duration_s": 7.0,
+    "frames": 168,
+    "tracks": [
+     {
+      "name": "V1",
+      "kind": "video",
+      "gain_db": 0,
+      "mute": false,
+      "clips": 4
+     },
+     {
+      "name": "A2",
+      "kind": "audio",
+      "gain_db": 0,
+      "mute": false,
+      "clips": 2
+     },
+     {
+      "name": "A3",
+      "kind": "audio",
+      "gain_db": 0,
+      "mute": false,
+      "clips": 1
+     }
+    ],
+    "clips": [
+     {
+      "id": "a",
+      "track": "V1",
+      "index": 0,
+      "take_id": "aaaaaaaa-0000-4000-8000-000000000003",
+      "kind": "video",
+      "in": 1.0,
+      "out": 3.0,
+      "hold": null,
+      "at": 0.0,
+      "end": 2.0,
+      "length": 2.0,
+      "at_f": 0,
+      "end_f": 48,
+      "length_f": 48,
+      "gain_db": 0,
+      "mute": false,
+      "transition_in": null,
+      "alternatives": [
+       "aaaaaaaa-0000-4000-8000-000000000003"
+      ],
+      "shot": null,
+      "number": null,
+      "offline": false,
+      "link": null
+     },
+     {
+      "id": "b",
+      "track": "V1",
+      "index": 1,
+      "take_id": "aaaaaaaa-0000-4000-8000-000000000003",
+      "kind": "video",
+      "in": 2.0,
+      "out": 4.0,
+      "hold": null,
+      "at": 2.0,
+      "end": 4.0,
+      "length": 2.0,
+      "at_f": 48,
+      "end_f": 96,
+      "length_f": 48,
+      "gain_db": 0,
+      "mute": false,
+      "transition_in": 12,
+      "alternatives": [
+       "aaaaaaaa-0000-4000-8000-000000000003"
+      ],
+      "shot": null,
+      "number": null,
+      "offline": false,
+      "link": null
+     },
+     {
+      "id": "c",
+      "track": "V1",
+      "index": 2,
+      "take_id": "bbbbbbbb-0000-4000-8000-000000000001",
+      "kind": "image",
+      "in": null,
+      "out": null,
+      "hold": 2.0,
+      "at": 4.0,
+      "end": 6.0,
+      "length": 2.0,
+      "at_f": 96,
+      "end_f": 144,
+      "length_f": 48,
+      "gain_db": 0,
+      "mute": false,
+      "transition_in": null,
+      "alternatives": [
+       "bbbbbbbb-0000-4000-8000-000000000001"
+      ],
+      "shot": null,
+      "number": null,
+      "offline": false,
+      "link": null
+     },
+     {
+      "id": "d",
+      "track": "V1",
+      "index": 3,
+      "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+      "kind": "video",
+      "in": 0.5,
+      "out": 1.5,
+      "hold": null,
+      "at": 6.0,
+      "end": 7.0,
+      "length": 1.0,
+      "at_f": 144,
+      "end_f": 168,
+      "length_f": 24,
+      "gain_db": 0,
+      "mute": false,
+      "transition_in": null,
+      "alternatives": [
+       "aaaaaaaa-0000-4000-8000-000000000001"
+      ],
+      "shot": null,
+      "number": null,
+      "offline": false,
+      "link": null
+     },
+     {
+      "id": "m",
+      "track": "A2",
+      "index": 0,
+      "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+      "kind": "video",
+      "in": 0.0,
+      "out": 2.0,
+      "hold": null,
+      "at": 1.0,
+      "end": 3.0,
+      "length": 2.0,
+      "at_f": 24,
+      "end_f": 72,
+      "length_f": 48,
+      "gain_db": 0,
+      "mute": false,
+      "transition_in": null,
+      "alternatives": [
+       "aaaaaaaa-0000-4000-8000-000000000001"
+      ],
+      "shot": null,
+      "number": null,
+      "offline": false,
+      "link": null
+     },
+     {
+      "id": "n",
+      "track": "A2",
+      "index": 1,
+      "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+      "kind": "video",
+      "in": 0.0,
+      "out": 1.0,
+      "hold": null,
+      "at": 4.5,
+      "end": 5.5,
+      "length": 1.0,
+      "at_f": 108,
+      "end_f": 132,
+      "length_f": 24,
+      "gain_db": 0,
+      "mute": false,
+      "transition_in": null,
+      "alternatives": [
+       "aaaaaaaa-0000-4000-8000-000000000001"
+      ],
+      "shot": null,
+      "number": null,
+      "offline": false,
+      "link": null
+     },
+     {
+      "id": "v",
+      "track": "A3",
+      "index": 0,
+      "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+      "kind": "video",
+      "in": 0.0,
+      "out": 1.0,
+      "hold": null,
+      "at": 2.5,
+      "end": 3.5,
+      "length": 1.0,
+      "at_f": 60,
+      "end_f": 84,
+      "length_f": 24,
+      "gain_db": 0,
+      "mute": false,
+      "transition_in": null,
+      "alternatives": [
+       "aaaaaaaa-0000-4000-8000-000000000001"
+      ],
+      "shot": null,
+      "number": null,
+      "offline": false,
+      "link": "b"
+     }
+    ],
+    "links": {
+     "b": [
+      "v"
+     ]
+    },
+    "markers": [
+     {
+      "id": "k1",
+      "at": 1.0,
+      "at_f": 24,
+      "name": "Beat",
+      "color": null
+     },
+     {
+      "id": "k2",
+      "at": 3.0,
+      "at_f": 72,
+      "name": null,
+      "color": "blue"
      }
     ]
    }

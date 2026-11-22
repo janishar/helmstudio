@@ -3,10 +3,9 @@
 [← Plan index](../README.md)
 
 Status: **decided by the owner (2026-11-22); the first slice (today's edits) built (2026-11-23)**, as-built notes in
-28.15 and 28.16. Plan 23's ops, links and markers and exact frames are still to come. API version: **1.49.0** (main was at 1.48.0, plan 22's
-thumbnails, when the first slice was built; plan 23's links and markers are still unbuilt, so numbers are not landing
-in plan order). A plan that lands after it renumbers then, never below main's version. Plan 23's new ops need a bump here once `TimelineOp` is in
-openapi (28.10).
+28.15 and 28.16. Plan 23's ops, links and markers joined in 1.50 (plan 23 27.14); exact frames are still to come. API version: **1.49.0** (main was at 1.48.0, plan 22's
+thumbnails, when the first slice was built). Plan 23's ops, links and markers joined `/edits`, `TimelineOp`, the
+catalog, the diff and the agent view in **1.50.0** (plan 23 27.14).
 
 The owner's ask, 2026-11-22: "if I have to power the coding agent to plan and edit the clips, what's the standard way
 without the browser", then "Yes, plan it".
@@ -43,7 +42,7 @@ Facts come from a read of the code on 2026-11-22: `studio_service/api/timeline/e
   `lift`, `replace`, `set`, `add {take_ids, track, ids}`, `insert`, `place`, `fill`, `add_track`, `remove_track`,
   `track`. `fill` is studio's (the projector filling a slot with its shot's take); the web never sends it. Plan 23
   (decided, not built) adds `roll`, `slip`, `slide`, `overwrite`, `split_all`, `remove_range`,
-  `lift_range`, `remove {ripple}` and, in 1.46, `link` on clips and `markers` on the document.
+  `lift_range`, `remove {ripple}` and `link` on clips and `markers` on the document (all built in 1.50: plan 23 27.14).
 - **New clip ids are made by the caller.** `split`, `insert`, `add`, `split_all`, `overwrite` and the range ops carry
   the ids of the clips they create; the web makes them with `newId` (8 random `[a-z0-9]`, unused in the document).
 - **Revisions exist.** `timeline_revisions(timeline_id, owner_id, revision, doc, by user|studio, undo_to, redo_to,
@@ -121,7 +120,7 @@ What an agent needs to check its own work without re-reading 1000 clips:
 ```
 
 Computed by comparing clip ids of the two normalized documents (fields `take_id`, `in`, `out`, `hold`, `at`, `gain_db`,
-`mute`, `transition_in`, `alternatives`, `shot`, `offline`, `track`, and `link` from plan 23's 1.46 part); V1 clips
+`mute`, `transition_in`, `alternatives`, `shot`, `offline`, `track`, and `link` from plan 23's 1.50 part); V1 clips
 store no `at`, so the diff uses their computed start and a V1 ripple shows as `at` changes on the later clips; a
 track's `gain_db` / `mute` change shows under `tracks.changed`. One Go function plus
 its `check.py` reference and a `diffs.json` fixture file; the web does not need it.

@@ -2747,6 +2747,7 @@ RATES = [(23.976, 24000, 1001), (24, 24, 1), (25, 25, 1), (29.97, 30000, 1001), 
 T_MAGNET_PX = 6  # an edge lands on a cut within this many screen pixels
 T_IMAGE_HOLD_S = 3.0  # an image take added to V1 holds this long
 T_MAX_AUDIO_TRACKS, T_MAX_CLIPS, T_MAX_BYTES, T_MAX_ALTERNATIVES, T_MAX_RERENDER = 8, 1000, 262144, 32, 22
+T_MAX_MARKERS = 200  # 1.50: markers on a sequence
 # an export: at most 2 hours, an estimated 16 GiB written and 32 GiB of distinct takes read (cmd.media.job, runner)
 T_MAX_EXPORT_S, T_MAX_EXPORT_BYTES, T_MAX_EXPORT_INPUTS = 7200, 16 << 30, 32 << 30
 
@@ -2822,6 +2823,7 @@ def t_normalize(doc: dict, takes: dict, previous: dict | None = None) -> tuple[d
             if "shot" in c:
                 shots[c["id"]] = shot_ref(c["shot"])
     ids, out, ends = set(), [], []
+    v1ids = {c["id"] for c in tracks[0]["clips"]}
     for ti, t in enumerate(tracks):
         name, video, clips = ("V1" if ti == 0 else f"A{ti + 1}"), ti == 0, []
         for c in t["clips"]:
@@ -2882,6 +2884,12 @@ def t_normalize(doc: dict, takes: dict, previous: dict | None = None) -> tuple[d
                     add("hold", name, cid)
                 n["hold"] = g.snap(c["hold"])
             n |= {"gain_db": c.get("gain_db", 0), "mute": c.get("mute", False)}
+            if "link" in c:  # 1.50: an audio-track clip linked to a V1 clip (README, Timeline rules: linked clips)
+                if video:
+                    add("link_track", name, cid)
+                elif c["link"] not in v1ids:
+                    add("link_not_v1", name, cid)
+                n["link"] = c["link"]
             if "transition_in" in c:
                 if video:
                     n["transition_in"] = c["transition_in"]
@@ -2938,14 +2946,140 @@ def t_normalize(doc: dict, takes: dict, previous: dict | None = None) -> tuple[d
                 add("past_end", name, cid)
     else:
         frames = max([g.f(e / g.sr) for _, _, e in ends], default=0)
+    marks, mids = [], set()  # 1.50: markers, snapped to frames, sorted by time then id; none = no `markers`
+    if len(doc.get("markers", [])) > T_MAX_MARKERS:
+        add("too_many_markers")
+    for m in doc.get("markers", []):
+        if m["id"] in mids:
+            add("duplicate_marker", None, m["id"])
+        mids.add(m["id"])
+        if v1 and g.f(m["at"]) > frames:
+            add("marker_past_end", None, m["id"])
+        marks.append({"id": m["id"], "at": g.snap(m["at"])} | {k: m[k] for k in ("name", "color") if k in m})
     if probs:
         return None, sorted(probs, key=lambda p: (p[0], p[1] or "", p[2] or ""))
-    return {"target": doc["target"], "tracks": out, "duration_s": g.s(frames), "frames": frames}, []
+    res = {"target": doc["target"], "tracks": out, "duration_s": g.s(frames), "frames": frames}
+    if marks:
+        res["markers"] = sorted(marks, key=lambda m: (m["at"], m["id"]))
+    return res, []
+
+
+T_ALL_TRACKS = ("split_all", "remove_range", "lift_range")  # 1.50: ops that cut every track themselves
 
 
 def t_edit(doc: dict, op: dict, takes: dict) -> dict | str:
     """One edit on a normalized document → the new document as written (normalize it next), or an error code when
-    the edit cannot apply. The web draws with it; studio runs `add`, `insert` and `fill` itself."""
+    the edit cannot apply. The web draws with it; studio runs every op of POST …/edits with it. From 1.50 linked
+    sound clips follow their V1 clip (t_follow)."""
+    raw = t_edit_op(doc, op, takes)
+    return raw if isinstance(raw, str) else t_follow(doc, raw, op, takes)
+
+
+def t_follow(before: dict, raw: dict, op: dict, takes: dict) -> dict | str:
+    """1.50, linked sound clips (README, Timeline rules: linked clips): an audio-track clip whose V1 clip the edit
+    removed goes too; one whose V1 clip moved moves by as many frames (its content's place: start − in for a video
+    that stays a video, else its start), except after the ops that cut every track themselves (T_ALL_TRACKS).
+    Moved before 0: `link_start`."""
+    if not any("link" in c for t in raw["tracks"][1:] for c in t["clips"]):
+        return raw
+    g = Grid(raw["target"])
+
+    def anchors(d: dict) -> dict:  # a field an edit removed counts 0 (normalize refuses that document anyway)
+        out, pos = {}, 0
+        for c in d["tracks"][0]["clips"]:
+            kind = t_kind(c, takes)
+            i_ = g.f(c.get("in", 0))
+            out[c["id"]] = (kind, pos, pos - i_ if kind == "video" else pos)
+            pos += g.f(c.get("out", 0)) - i_ if kind == "video" else g.f(c.get("hold", 0))
+        return out
+
+    b, a = anchors(before), anchors(raw)
+    for t in raw["tracks"][1:]:
+        keep = []
+        for c in t["clips"]:
+            ln = c.get("link")
+            if ln in b and ln not in a:
+                continue
+            if ln in b and op["op"] not in T_ALL_TRACKS:
+                (kb, sb, nb), (ka, sa, na) = b[ln], a[ln]
+                if sh := (na - nb if ka == kb else sa - sb):
+                    if g.f(c["at"]) + sh < 0:
+                        return "link_start"
+                    c["at"] = g.s(g.f(c["at"]) + sh)
+            keep.append(c)
+        t["clips"] = keep
+    return raw
+
+
+def v1_starts(clips: list, takes: dict, g: Grid) -> tuple[list[int], int]:
+    """V1's clip starts in frames, and its end (the clips' `at` may be stale while an edit runs)."""
+    out, pos = [], 0
+    for c in clips:
+        out.append(pos)
+        pos += t_len(c, t_kind(c, takes), g)
+    return out, pos
+
+
+def t_grow(c: dict, kind: str, df: int, g: Grid) -> None:
+    """A V1 clip's end moves by df frames: a video's out, else its hold."""
+    if kind == "video":
+        c["out"] = g.s(g.f(c["out"]) + df)
+    else:
+        c["hold"] = g.s(g.f(c["hold"]) + df)
+
+
+def t_front(c: dict, kind: str, df: int, g: Grid) -> None:
+    """A V1 clip's start moves by df frames into it: a video's in, else its hold shrinks."""
+    if kind == "video":
+        c["in"] = g.s(g.f(c["in"]) + df)
+    else:
+        c["hold"] = g.s(g.f(c["hold"]) - df)
+
+
+def t_inside(t: dict, f: int, on_v1: bool, takes: dict, g: Grid) -> tuple | None:
+    """The clip of t strictly around frame f (f is not its first frame): (index, start, length), else None."""
+    starts, hit = v1_starts(t["clips"], takes, g)[0] if on_v1 else None, None
+    for k, c in enumerate(t["clips"]):
+        a = starts[k] if on_v1 else g.f(c["at"])
+        ln = t_len(c, t_kind(c, takes), g, audio=not on_v1)
+        if a < f < a + ln:
+            hit = (k, a, ln)
+    return hit
+
+
+def t_cut(t: dict, k: int, f: int, a: int, ln: int, nid: str, on_v1: bool, takes: dict, g: Grid) -> dict:
+    """Cut clip k of t (start a, length ln frames) at frame f: the right part, inserted after it, gets nid, keeps the
+    take, alternatives and link, never the dissolve or the shot."""
+    c = t["clips"][k]
+    c2 = {x: v for x, v in copy.deepcopy(c).items() if x not in ("transition_in", "shot")} | {"id": nid}
+    if not on_v1:
+        cut = g.smp(g.s(f)) - g.smp(c["at"]) + g.smp(c["in"])  # the left part ends on the right part's start sample
+        c["out"], c2["in"], c2["at"] = cut / g.sr, cut / g.sr, g.s(f)
+    elif t_kind(c, takes) == "video":
+        c["out"] = c2["in"] = g.s(g.f(c["in"]) + f - a)
+    else:
+        c["hold"], c2["hold"] = g.s(f - a), g.s(ln - f + a)
+    t["clips"].insert(k + 1, c2)
+    return c2
+
+
+def t_relink(d: dict, root: dict, takes: dict, g: Grid) -> None:
+    """1.50: after V1 clips were cut (root: each new part's id → the clip it was cut from), a sound clip linked to one
+    of the parts links to the part it starts in (the last starting at or before it; else the first)."""
+    if not root:
+        return
+    v1 = d["tracks"][0]["clips"]
+    parts = {}
+    for c, a in zip(v1, v1_starts(v1, takes, g)[0]):
+        parts.setdefault(root.get(c["id"], c["id"]), []).append((a, c["id"]))
+    for t in d["tracks"][1:]:
+        for c in t["clips"]:
+            if "link" in c and (ps := parts.get(root.get(c["link"], c["link"]))):
+                c["link"] = ([pid for a, pid in ps if a <= g.f(c["at"])] or [ps[0][1]])[-1]
+
+
+def t_edit_op(doc: dict, op: dict, takes: dict) -> dict | str:
+    """t_edit's op itself."""
     d, g = copy.deepcopy(doc), Grid(doc["target"])
     tracks = {t["name"]: t for t in d["tracks"]}
     v1 = d["tracks"][0]["clips"]
@@ -3021,6 +3155,71 @@ def t_edit(doc: dict, op: dict, takes: dict) -> dict | str:
         return d
     if o == "split":
         return t_split(d, tracks[op["track"]], op, takes, g)
+    if o == "split_all":  # 1.50: blade on every track at frame `at` (README, Timeline rules: tools)
+        f, ids, root, cut = g.f(op["at"]), iter(op.get("ids", [])), {}, False
+        for ti, t in enumerate(d["tracks"]):
+            hit = t_inside(t, f, ti == 0, takes, g)
+            if hit is None or "shot" in t["clips"][hit[0]]:
+                continue
+            if (nid := next(ids, None)) is None:
+                return "ids_short"
+            t_cut(t, hit[0], f, hit[1], hit[2], nid, ti == 0, takes, g)
+            if ti == 0:
+                root[nid] = t["clips"][hit[0]]["id"]
+            cut = True
+        if not cut:
+            return "split_none"
+        t_relink(d, root, takes, g)
+        return d
+    if o in ("remove_range", "lift_range"):  # 1.50: a range on every track, cut at both ends
+        lo, hi = g.f(op["from"]), g.f(op["to"])
+        if hi <= lo:
+            return "range_empty"
+        for ti, t in enumerate(d["tracks"]):
+            starts = v1_starts(t["clips"], takes, g)[0] if ti == 0 else None
+            for k, c in enumerate(t["clips"]):
+                a = starts[k] if ti == 0 else g.f(c["at"])
+                if "shot" in c and a < hi and a + t_len(c, t_kind(c, takes), g, audio=ti > 0) > lo:
+                    return "range_shot"
+        ids, root = iter(op.get("ids", [])), {}
+        for ti, t in enumerate(d["tracks"]):
+            for f in (lo, hi):
+                if hit := t_inside(t, f, ti == 0, takes, g):
+                    if (nid := next(ids, None)) is None:
+                        return "ids_short"
+                    t_cut(t, hit[0], f, hit[1], hit[2], nid, ti == 0, takes, g)
+                    if ti == 0:
+                        root[nid] = root.get(t["clips"][hit[0]]["id"], t["clips"][hit[0]]["id"])
+        t_relink(d, root, takes, g)
+        starts, end = v1_starts(v1, takes, g)
+        gone = [k for k, a in enumerate(starts) if lo <= a < hi]
+        if gone:
+            del v1[gone[0]:gone[-1] + 1]
+            if o == "lift_range":
+                if (nid := next(ids, None)) is None:
+                    return "ids_short"
+                v1.insert(gone[0], {"id": nid, "take_id": None, "hold": g.s(min(hi, end) - lo)})
+            cut_at(gone[0] + (o == "lift_range"))
+        for t in d["tracks"][1:]:
+            keep = []
+            for c in t["clips"]:
+                a = g.f(c["at"])
+                if lo <= a < hi:
+                    continue
+                if a >= hi and o == "remove_range":  # open point 4: audio tracks ripple too
+                    c["at"] = g.s(a - (hi - lo))
+                keep.append(c)
+            t["clips"] = keep
+        return d
+    if o == "marker":  # 1.50: a marker put (a new id adds one; a known id is replaced whole)
+        d["markers"] = [m for m in d.get("markers", []) if m["id"] != op["id"]] + [
+            {"id": op["id"], "at": op["at"]} | {k: op[k] for k in ("name", "color") if k in op}]
+        return d
+    if o == "remove_marker":
+        if not any(m["id"] == op["id"] for m in d.get("markers", [])):
+            return "unknown_marker"
+        d["markers"] = [m for m in d["markers"] if m["id"] != op["id"]]
+        return d
     t, i = find(op["clip"])
     c, kind, on_v1 = t["clips"][i], t_kind(t["clips"][i], takes), t is d["tracks"][0]
     if o == "move":
@@ -3069,6 +3268,46 @@ def t_edit(doc: dict, op: dict, takes: dict) -> dict | str:
             t["clips"].pop(i)
         if on_v1:
             cut_at(i if o == "remove" else i + 1)
+        elif o == "remove" and op.get("ripple"):  # 1.50: the later clips of its audio track move left by its length
+            a, ln = g.f(c["at"]), t_len(c, kind, g, audio=True)
+            for x in t["clips"]:
+                if g.f(x["at"]) >= a:
+                    x["at"] = g.s(g.f(x["at"]) - ln)
+    elif o == "roll":  # 1.50: the cut before the clip moves by delta; the sequence's length is kept
+        if not on_v1:
+            return "roll_track"
+        if i == 0:
+            return "roll_first"
+        df, p = g.f(op["delta"]), v1[i - 1]
+        pk = t_kind(p, takes)
+        if (t_len(p, pk, g) + df < max(1, din(i - 1) // 2 + din(i) // 2)
+                or t_len(c, kind, g) - df < max(1, din(i) // 2 + din(i + 1) // 2)):
+            return "least"
+        t_grow(p, pk, df, g)
+        t_front(c, kind, df, g)
+    elif o == "slip":  # 1.50: in and out move by delta; place and length kept
+        if kind in ("image", "slot"):
+            return "slip_still"
+        df = g.f(op["delta"])
+        if on_v1:
+            c["in"], c["out"] = g.s(g.f(c["in"]) + df), g.s(g.f(c["out"]) + df)
+        else:  # on the sample grid
+            ds = g.smp(g.s(df))
+            c["in"], c["out"] = (g.smp(c["in"]) + ds) / g.sr, (g.smp(c["out"]) + ds) / g.sr
+    elif o == "slide":  # 1.50: the clip moves along V1 by delta; its neighbours give and take the frames
+        if not on_v1:
+            return "slide_track"
+        if i == 0 or i == len(v1) - 1:
+            return "slide_end"
+        df, p, nx = g.f(op["delta"]), v1[i - 1], v1[i + 1]
+        pk, nk = t_kind(p, takes), t_kind(nx, takes)
+        if (t_len(p, pk, g) + df < max(1, din(i - 1) // 2 + din(i) // 2)
+                or t_len(nx, nk, g) - df < max(1, din(i + 1) // 2 + din(i + 2) // 2)):
+            return "least"
+        t_grow(p, pk, df, g)
+        t_front(nx, nk, df, g)
+    elif o == "overwrite":
+        return t_overwrite(d, t, i, op, takes, g)
     elif o == "replace":
         if op["take_id"] not in c.get("alternatives", []):
             return "not_alternative"
@@ -3086,7 +3325,7 @@ def t_edit(doc: dict, op: dict, takes: dict) -> dict | str:
             c["in"], c["out"] = g.s(i_), g.s(min(i_ + ln, src))
         c["take_id"] = op["take_id"]
     elif o == "set":
-        for k in ("gain_db", "mute", "hold", "transition_in"):
+        for k in ("gain_db", "mute", "hold", "transition_in", "link"):  # link: 1.50
             if k in op:
                 if op[k] is None:
                     c.pop(k, None)
@@ -3122,7 +3361,8 @@ def t_edit(doc: dict, op: dict, takes: dict) -> dict | str:
 
 def t_split(d: dict, t: dict, op: dict, takes: dict, g: Grid) -> dict | str:
     """Split at the playhead (`at`, sequence seconds) the clip of `track` under it; the right part gets `id`, keeps
-    the take and alternatives, never the dissolve or the shot."""
+    the take and alternatives, never the dissolve or the shot. From 1.50 a V1 split cuts the clip's linked sound
+    clips at that frame too (`ids`, in track order) and relinks them (t_relink)."""
     f, on_v1 = g.f(op["at"]), t is d["tracks"][0]
     hit = None
     for k, c in enumerate(t["clips"]):
@@ -3136,15 +3376,111 @@ def t_split(d: dict, t: dict, op: dict, takes: dict, g: Grid) -> dict | str:
         return "split_edge"
     if "shot" in c:
         return "split_shot"
-    c2 = {x: v for x, v in copy.deepcopy(c).items() if x not in ("transition_in", "shot")} | {"id": op["id"]}
-    if not on_v1:
-        cut = g.smp(g.s(f)) - g.smp(c["at"]) + g.smp(c["in"])  # the left part ends on the right part's start sample
-        c["out"], c2["in"], c2["at"] = cut / g.sr, cut / g.sr, g.s(f)
-    elif t_kind(c, takes) == "video":
-        c["out"] = c2["in"] = g.s(g.f(c["in"]) + p)
-    else:
-        c["hold"], c2["hold"] = g.s(p), g.s(ln - p)
-    t["clips"].insert(k + 1, c2)
+    t_cut(t, k, f, f - p, ln, op["id"], on_v1, takes, g)
+    if on_v1:
+        ids = iter(op.get("ids", []))
+        for at in d["tracks"][1:]:
+            hit = t_inside(at, f, False, takes, g)
+            if hit and at["clips"][hit[0]].get("link") == c["id"] and "shot" not in at["clips"][hit[0]]:
+                if (nid := next(ids, None)) is None:
+                    return "ids_short"
+                t_cut(at, hit[0], f, hit[1], hit[2], nid, False, takes, g)
+        t_relink(d, {op["id"]: c["id"]}, takes, g)
+    return d
+
+
+def t_overwrite(d: dict, t: dict, i: int, op: dict, takes: dict, g: Grid) -> dict | str:
+    """1.50, Overwrite: the clip goes in at `at` over what is there. V1: it leaves an empty slot of its length, the
+    frames [at, at + length) are cut out of V1 (a clip across both ends is cut in two) and it goes in there, an empty
+    slot first past V1's end; no ripple. Audio (on `track`, default its own): the clips under it are cut around it, a
+    right part starting on the first frame at or after its end. New ids from `ids`: a right part, then (V1) the slot
+    it leaves, then the gap past the end."""
+    c, ids = t["clips"][i], iter(op.get("ids", []))
+    v1 = d["tracks"][0]["clips"]
+    if t is d["tracks"][0]:
+        if op.get("track", "V1") != "V1":
+            return "overwrite_track"
+        kind = t_kind(c, takes)
+        n, lo = t_len(c, kind, g), g.f(op["at"])
+        hi = lo + n
+        moved = {k: v for k, v in c.items() if k != "transition_in"}
+        starts, end = v1_starts(v1, takes, g)
+        hole = {"id": None, "take_id": None, "hold": g.s(n)}
+        v1[i] = hole
+        if i + 1 < len(v1):
+            v1[i + 1].pop("transition_in", None)
+        parts = []
+        for x, a in zip(v1, starts):
+            xk = t_kind(x, takes)
+            parts.append((x, a, a + t_len(x, xk, g), xk))
+        if any("shot" in x and a < hi and b > lo for x, a, b, _ in parts):
+            return "overwrite_shot"
+        right, root = None, {}
+        if span := next((p for p in parts if p[1] < lo and p[2] > hi), None):
+            if (nid := next(ids, None)) is None:
+                return "ids_short"
+            right = {k: v for k, v in copy.deepcopy(span[0]).items() if k not in ("transition_in", "shot")} | {"id": nid}
+            t_front(right, span[3], hi - span[1], g)
+            root[nid] = span[0]["id"]
+        if (hole_id := next(ids, None)) is None:
+            return "ids_short"
+        hole["id"], gap = hole_id, []
+        if lo > end:
+            if (gid := next(ids, None)) is None:
+                return "ids_short"
+            gap = [{"id": gid, "take_id": None, "hold": g.s(lo - end)}]
+        before, after = [], [right] if right else []
+        for x, a, b, xk in parts:
+            if b <= lo:
+                before.append(x)
+            elif a >= hi:
+                after.append(x)
+            elif a < lo:
+                t_grow(x, xk, lo - b, g)
+                before.append(x)
+            elif b > hi:
+                t_front(x, xk, hi - a, g)
+                after.append(x)
+        if after:
+            after[0].pop("transition_in", None)
+        v1[:] = before + gap + [moved] + after
+        t_relink(d, root, takes, g)
+        return d
+    name = op.get("track", t["name"])
+    if name not in [x["name"] for x in d["tracks"]]:
+        return "unknown_track"
+    tt = next(x for x in d["tracks"] if x["name"] == name)
+    if tt is d["tracks"][0]:
+        return "overwrite_track"
+    t["clips"].pop(i)
+    at = g.snap(op["at"])
+    lo = g.smp(at)
+    hi = lo + a_len(c, g)
+    fe = g.f(hi / g.sr)
+    fe += g.smp(g.s(fe)) < hi  # the first frame at or after its end
+    re = g.smp(g.s(fe))
+    under = lambda x: g.smp(x["at"]) < hi and g.smp(x["at"]) + a_len(x, g) > lo
+    if any("shot" in x for x in tt["clips"] if under(x)):
+        return "overwrite_shot"
+    keep = []
+    for x in sorted(tt["clips"], key=lambda x: g.smp(x["at"])):
+        xs, xe = g.smp(x["at"]), g.smp(x["at"]) + a_len(x, g)
+        if not under(x):
+            keep.append(x)
+            continue
+        i_s = g.smp(x["in"])
+        if xs < lo:
+            x2 = copy.deepcopy(x) | {"in": (i_s + re - xs) / g.sr, "at": g.s(fe)}
+            x["out"] = (i_s + lo - xs) / g.sr
+            keep.append(x)
+            if xe > re:
+                if (nid := next(ids, None)) is None:
+                    return "ids_short"
+                keep.append(x2 | {"id": nid})
+        elif xe > re:
+            x["in"], x["at"] = (i_s + re - xs) / g.sr, g.s(fe)
+            keep.append(x)
+    tt["clips"] = keep + [c | {"at": at}]
     return d
 
 
@@ -3245,7 +3581,7 @@ def frame_at(doc: dict, f: int, takes: dict) -> dict:
 
 
 DIFF_FIELDS = ("take_id", "in", "out", "hold", "at", "gain_db", "mute", "transition_in", "alternatives", "shot",
-               "offline", "track")
+               "offline", "track", "link")  # link: 1.50
 
 
 def t_diff(before: dict, after: dict) -> dict:
@@ -3268,13 +3604,22 @@ def t_diff(before: dict, after: dict) -> dict:
     return {"added": [i for i in b if i not in a], "removed": [i for i in a if i not in b], "changed": changed,
             "tracks": {"added": [n for n in tb if n not in ta], "removed": [n for n in ta if n not in tb],
                        "changed": tchanged},
-            "duration": [before["duration_s"], after["duration_s"]]}
+            "duration": [before["duration_s"], after["duration_s"]], "markers": t_diff_markers(before, after)}
+
+
+def t_diff_markers(before: dict, after: dict) -> dict:
+    """1.50: markers by id: added (in the new order), removed, changed fields (at, name, color) as [before, after]."""
+    ma, mb = ({m["id"]: m for m in d.get("markers", [])} for d in (before, after))
+    changed = [{"marker": i, "fields": f} for i, m in mb.items() if i in ma and (
+        f := {k: [ma[i].get(k), m.get(k)] for k in ("at", "name", "color") if ma[i].get(k) != m.get(k)})]
+    return {"added": [i for i in mb if i not in ma], "removed": [i for i in ma if i not in mb], "changed": changed}
 
 
 def t_agent_view(doc: dict, takes: dict) -> dict:
     """A normalized document flat for an agent (README, Timeline: edits by ops; studio adds id, name, revision and
     each clip's take_title): every clip track by track with its index, kind, times in seconds and frames (target
-    grid; an audio-track clip's length in seconds is its own, hold or out − in), dissolve frames, shot and number."""
+    grid; an audio-track clip's length in seconds is its own, hold or out − in), dissolve frames, shot and number;
+    from 1.50 each clip's link, the linked groups ({V1 clip: [sound clips]}) and the markers (with at_f)."""
     g, tracks, clips = Grid(doc["target"]), [], []
     for ti, t in enumerate(doc["tracks"]):
         tracks.append({"name": t["name"], "kind": t["kind"], "gain_db": t["gain_db"], "mute": t["mute"],
@@ -3289,9 +3634,15 @@ def t_agent_view(doc: dict, takes: dict) -> dict:
                           "at_f": a, "end_f": a + ln, "length_f": ln, "gain_db": c["gain_db"], "mute": c["mute"],
                           "transition_in": c.get("transition_in", {}).get("frames"),
                           "alternatives": c.get("alternatives", []), "shot": c.get("shot"),
-                          "number": c.get("number"), "offline": c.get("offline", False)})
+                          "number": c.get("number"), "offline": c.get("offline", False), "link": c.get("link")})
+    links = {}  # 1.50: each V1 clip's linked sound clips, in track order
+    for c in clips:
+        if c["link"]:
+            links.setdefault(c["link"], []).append(c["id"])
+    marks = [{"id": m["id"], "at": m["at"], "at_f": g.f(m["at"]), "name": m.get("name"), "color": m.get("color")}
+             for m in doc.get("markers", [])]
     return {"target": doc["target"], "duration_s": doc["duration_s"], "frames": doc["frames"], "tracks": tracks,
-            "clips": clips}
+            "clips": clips, "links": links, "markers": marks}
 
 
 def frame_at_time(doc: dict, t: float, takes: dict) -> dict:
@@ -3524,7 +3875,8 @@ def check_timelines(registry: Registry, palette: dict) -> None:
                 got = t_apply(c["document"], c["op"], takes)
             elif p.name.startswith("snap."):
                 g = Grid(c["document"]["target"])
-                got = {"to": snap_point(c["t"], t_cuts(c["document"], takes, c.get("exclude")), c["px_per_s"], g)} \
+                got = {"to": snap_point(c["t"], t_cuts(c["document"], takes, c.get("exclude")) + c.get("points", []),
+                                        c["px_per_s"], g)} \
                     if "t" in c else {"index": drop_index(c["document"], c["clip"], c["mid"], takes)}
             elif p.name.startswith("frame-at."):
                 got = frame_at(c["document"], c["frame"], takes)

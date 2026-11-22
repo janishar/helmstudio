@@ -751,6 +751,271 @@
       "expect": {
         "index": 0
       }
+    },
+    {
+      "description": "1.50: the playhead is a snap point like a cut (the web adds it to the list)",
+      "document": {
+        "target": {
+          "width": 256,
+          "height": 128,
+          "fps": 24,
+          "sample_rate": 48000
+        },
+        "tracks": [
+          {
+            "name": "V1",
+            "kind": "video",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "a",
+                "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+                "in": 0.0,
+                "out": 2.0416666666666665,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "aaaaaaaa-0000-4000-8000-000000000001"
+                ],
+                "at": 0.0
+              },
+              {
+                "id": "b",
+                "take_id": "bbbbbbbb-0000-4000-8000-000000000001",
+                "hold": 2.0,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "bbbbbbbb-0000-4000-8000-000000000001"
+                ],
+                "at": 2.0416666666666665
+              },
+              {
+                "id": "c",
+                "take_id": "aaaaaaaa-0000-4000-8000-000000000002",
+                "in": 0.25,
+                "out": 1.75,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "aaaaaaaa-0000-4000-8000-000000000003",
+                  "aaaaaaaa-0000-4000-8000-000000000002"
+                ],
+                "at": 4.041666666666667
+              }
+            ]
+          },
+          {
+            "name": "A2",
+            "kind": "audio",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "m",
+                "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+                "in": 0.0,
+                "out": 1.0,
+                "at": 1.0,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "aaaaaaaa-0000-4000-8000-000000000001"
+                ]
+              }
+            ]
+          }
+        ],
+        "duration_s": 5.541666666666667,
+        "frames": 133
+      },
+      "exclude": "c",
+      "t": 3.01,
+      "points": [
+        3.0
+      ],
+      "px_per_s": 100,
+      "expect": {
+        "to": 3.0
+      }
+    },
+    {
+      "description": "1.50: a range out point within 6 px wins over a farther cut",
+      "document": {
+        "target": {
+          "width": 256,
+          "height": 128,
+          "fps": 24,
+          "sample_rate": 48000
+        },
+        "tracks": [
+          {
+            "name": "V1",
+            "kind": "video",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "a",
+                "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+                "in": 0.0,
+                "out": 2.0416666666666665,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "aaaaaaaa-0000-4000-8000-000000000001"
+                ],
+                "at": 0.0
+              },
+              {
+                "id": "b",
+                "take_id": "bbbbbbbb-0000-4000-8000-000000000001",
+                "hold": 2.0,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "bbbbbbbb-0000-4000-8000-000000000001"
+                ],
+                "at": 2.0416666666666665
+              },
+              {
+                "id": "c",
+                "take_id": "aaaaaaaa-0000-4000-8000-000000000002",
+                "in": 0.25,
+                "out": 1.75,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "aaaaaaaa-0000-4000-8000-000000000003",
+                  "aaaaaaaa-0000-4000-8000-000000000002"
+                ],
+                "at": 4.041666666666667
+              }
+            ]
+          },
+          {
+            "name": "A2",
+            "kind": "audio",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "m",
+                "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+                "in": 0.0,
+                "out": 1.0,
+                "at": 1.0,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "aaaaaaaa-0000-4000-8000-000000000001"
+                ]
+              }
+            ]
+          }
+        ],
+        "duration_s": 5.541666666666667,
+        "frames": 133
+      },
+      "exclude": "c",
+      "t": 2.07,
+      "points": [
+        3.0,
+        2.0833333333333335
+      ],
+      "px_per_s": 100,
+      "expect": {
+        "to": 2.0833333333333335
+      }
+    },
+    {
+      "description": "1.50: a point past 6 px is not taken: the nearest frame",
+      "document": {
+        "target": {
+          "width": 256,
+          "height": 128,
+          "fps": 24,
+          "sample_rate": 48000
+        },
+        "tracks": [
+          {
+            "name": "V1",
+            "kind": "video",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "a",
+                "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+                "in": 0.0,
+                "out": 2.0416666666666665,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "aaaaaaaa-0000-4000-8000-000000000001"
+                ],
+                "at": 0.0
+              },
+              {
+                "id": "b",
+                "take_id": "bbbbbbbb-0000-4000-8000-000000000001",
+                "hold": 2.0,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "bbbbbbbb-0000-4000-8000-000000000001"
+                ],
+                "at": 2.0416666666666665
+              },
+              {
+                "id": "c",
+                "take_id": "aaaaaaaa-0000-4000-8000-000000000002",
+                "in": 0.25,
+                "out": 1.75,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "aaaaaaaa-0000-4000-8000-000000000003",
+                  "aaaaaaaa-0000-4000-8000-000000000002"
+                ],
+                "at": 4.041666666666667
+              }
+            ]
+          },
+          {
+            "name": "A2",
+            "kind": "audio",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "m",
+                "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+                "in": 0.0,
+                "out": 1.0,
+                "at": 1.0,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "aaaaaaaa-0000-4000-8000-000000000001"
+                ]
+              }
+            ]
+          }
+        ],
+        "duration_s": 5.541666666666667,
+        "frames": 133
+      },
+      "exclude": "c",
+      "t": 3.1,
+      "points": [
+        3.0
+      ],
+      "px_per_s": 100,
+      "expect": {
+        "to": 3.0833333333333335
+      }
     }
   ]
 }

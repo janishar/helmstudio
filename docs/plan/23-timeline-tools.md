@@ -2,11 +2,11 @@
 
 [← Plan index](../README.md)
 
-Status: **decided by the owner (2026-11-22), queued to build**. A plan, not in a milestone: it becomes one in
-[08-milestones.md](08-milestones.md) when the owner schedules it. Nothing here is built. The tools need **no API
-change**: they are new entries in the shared edit functions (`t_edit` / `edit`), the README's Timeline rules and the
-fixtures. Only the two optional parts (linked sound clips and markers, open points 5 and 6) change the schema; they
-would take API **1.46.0** (main is at 1.43.0, `assistant` takes 1.44.0, plan 22 takes 1.45.0).
+Status: **decided by the owner (2026-11-22); the contract and server part of phases 2 and 8 and the web's pure edits
+(phase 3's `lib/timeline.ts`) built (2026-11-23)**, as-built notes in 27.14; the UI (phases 4-7) is still to come. A
+plan, not in a milestone: it becomes one in [08-milestones.md](08-milestones.md) when the owner schedules it. Since plan
+24 (1.49) made `TimelineOp` part of openapi, every new op is an openapi change, so the tools, linked sound clips and
+markers took API **1.50.0** together (the next free version when they were built; the plan first said 1.46.0).
 
 The owner's ask, 2026-11-22, looking at the Timeline screen: "plan basic editing tools like blade etc as in final cut
 pro, five ui option to zoom in and zoom out. it should become more polished professional tool".
@@ -165,7 +165,7 @@ the op itself returns an error code when called past them, like `trim`.
   interaction constants; `check.py` gains `roll`, `slip`, `slide`, `overwrite`, `split_all`, `remove_range`,
   `lift_range` in `t_edit`, each with fixtures in `edits.json`; `snap.json` gains the playhead and range points as
   ordinary members of `list`. No openapi change and no version bump for these (the wire is the same whole document).
-  Open points 5 and 6 add `TimelineClip.link` and `TimelineDoc.markers` (1.46.0), their normalize rules
+  Open points 5 and 6 add `TimelineClip.link` and `TimelineDoc.markers` (1.50.0), their normalize rules
   (`link_not_v1`, `link_track`, `marker_past_end`, `too_many_markers`) and fixtures in `normalize.json`.
 - **studio_service**: no handler change (normalize already checks every result), but `api/timeline/edit.go` gains the
   same new ops (`Op` gains `ripple`), or `TestEditFixtures` fails on the new `edits.json` cases. For links and markers:
@@ -255,7 +255,7 @@ ruler free for seeking and range marks.
    canvas (7 h).
 6. **Moving and playing**: J/K/L, ↑ / ↓, Home / End, hover scrub (4 h).
 7. **Detail**: filmstrip and waveform extraction, caches, drawing by zoom (6 h).
-8. **Optional, 1.46.0**: linked sound clips and markers: contract, normalize in Go and `check.py`, web (8 h).
+8. **Optional, 1.50.0**: linked sound clips and markers: contract, normalize in Go and `check.py`, web (8 h).
 9. **Gates**: `make test lint` (web), `make contracts-check`, `make test` on `helmstudio-test`, the browser pass (3 h).
 
 About 38 h without phase 8, 46 h with it. Phases 2–5 (about 25 h) ship the tools and the zoom; 6 and 7 add the polish
@@ -265,7 +265,7 @@ and can follow.
 
 **Decided by the owner, 2026-11-22 (one by one):** 1. UI option **B, the tool row**. 2. Five tools with a smart Trim
 (roll, slip, slide by where you grab). 3. S stays split at the playhead, next to ⌘B. 4. Audio tracks ripple (later
-clips on the track move left). 5. Linked sound clips, yes (1.46). 6. Markers, yes (1.46). 7. Hover scrub **on by
+clips on the track move left). 5. Linked sound clips, yes (1.50). 6. Markers, yes (1.50). 7. Hover scrub **on by
 default** (toggle in the tool row, ⇧S). 8. Filmstrips and waveforms made in the browser. 9. Max zoom 64 px per frame.
 
 
@@ -279,11 +279,36 @@ Each with the recommended option first.
    ⌘B, Shift+S freed.
 4. **Ripple on audio tracks** (Delete and range delete): later clips on the same track move left (as V1) · audio
    tracks never ripple (a gap stays; safer for music beds).
-5. **Linked sound clips** (`link`, 1.46.0): yes, so dialogue stays in sync when V1 ripples · not now (Shift-blade and
+5. **Linked sound clips** (`link`, 1.50.0): yes, so dialogue stays in sync when V1 ripples · not now (Shift-blade and
    range edits cut every track; a ripple on V1 can still pull dialogue out of sync).
-6. **Markers** (1.46.0): yes, with names and snapping · not now.
+6. **Markers** (1.50.0): yes, with names and snapping · not now.
 7. **Hover scrub**: off by default with a toggle · on by default.
 8. **Filmstrip and waveform source**: made in the browser (no contract, works on old takes) · a runner job writing a
-   sprite sheet and a peaks file per take (exact and shared, but a media job, storage and 1.46 fields) · posters and
+   sprite sheet and a peaks file per take (exact and shared, but a media job, storage and new fields) · posters and
    the stripe as today.
 9. **Max zoom**: 64 px per frame (frame numbers fit) · 32 px (less scrolling, numbers every other frame).
+
+### 27.14 As built: the contract, studio and the web's edits (phases 2, 8's contract part, 3's lib; 2026-11-23)
+
+- **Contract (API 1.50.0).** openapi: `TimelineOp` gains `roll`, `slip`, `slide` `{clip, delta}`, `overwrite {clip,
+  at, track?, ids?}`, `split_all {at, ids?}`, `remove_range` / `lift_range {from, to, ids?}`, `marker {id?, at, name?,
+  color?}`, `remove_marker {id}`; `remove` gains `ripple`, `split` gains `ids` (its linked clips' right parts), `set`
+  gains `link`. `TimelineClip.link`, `TimelineMarker`, `TimelineMarkerColor` (red, orange, yellow, green, blue,
+  purple), `TimelineDoc.markers` (so `Timeline` and `TimelineUpdate` carry them), `TimelineDiff.markers`,
+  `TimelineAgentClip.link`, `TimelineAgentView.links` and `.markers`. README Timeline rules: the tools' ops, linked
+  clips, markers, the new codes and keys. check.py: the ops in `t_edit_op`, `t_follow` (linked clips), `t_relink`,
+  `t_overwrite`; normalize's link and marker rules; `t_diff` and `t_agent_view`. Fixtures: 62 new `edits.json` cases
+  (each op's happy path, each bound and code; replayed three ways), 7 `normalize.json`, 2 `diffs.json`, 1
+  `agent_view.json`, 3 `snap.json` (`points`: the playhead, range and markers as ordinary snap points). The catalog's
+  `ops` are regenerated from `TimelineOp`; `actions.json` `timeline.edit` lists the new op names.
+- **Studio.** `edit.go` ports every op (`follow`, `relink`, `overwrite`), `rules.go` normalizes links and markers,
+  `agent.go` diffs markers and shows links; `/edits` takes the ops (shape checks in `dto/timeline_edits.go`), makes
+  absent `ids` (as many as the op needs: it retries while the rules answer `ids_short`) and a marker's absent id; the
+  PUT takes `markers`; problems on markers read `marker <id>: …`. No migration (the document is jsonb).
+- **Web.** `lib/timeline.ts` has the same ops, normalize and follow (pure; fixture tests pass, the three-way replay
+  passes). The assistant's `timeline.edit` knows the new names (`editText`) and fills their ids (`withIds`). No UI.
+- **Decisions made here** (the plan left them open): the ops do not clamp (past a bound: the op's code or normalize's
+  problem; the web clamps while dragging); a linked clip follows its V1 clip's content (start − in for a video), so
+  ripple, move, slide and slip carry it and roll does not; a V1 split, `split_all`, the ranges and `overwrite` relink
+  a linked clip to the part it starts in; markers never move with edits and an edit leaving one past the end is
+  refused (`marker_past_end`, like `past_end`); `marker` with a known id replaces it whole.

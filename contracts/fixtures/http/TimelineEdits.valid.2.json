@@ -1,0 +1,91 @@
+{
+ "base_revision": 7,
+ "ops": [
+  {
+   "op": "roll",
+   "clip": "b",
+   "delta": 0.25
+  },
+  {
+   "op": "slip",
+   "clip": "a",
+   "delta": -0.5
+  },
+  {
+   "op": "slide",
+   "clip": "c",
+   "delta": 0.5
+  },
+  {
+   "op": "overwrite",
+   "clip": "d",
+   "at": 1.0,
+   "ids": [
+    "h1"
+   ]
+  },
+  {
+   "op": "overwrite",
+   "clip": "m",
+   "at": 2.0,
+   "track": "A3"
+  },
+  {
+   "op": "split_all",
+   "at": 2.75
+  },
+  {
+   "op": "remove_range",
+   "from": 1.5,
+   "to": 2.5,
+   "ids": [
+    "r1",
+    "r2"
+   ]
+  },
+  {
+   "op": "lift_range",
+   "from": 3.0,
+   "to": 3.5
+  },
+  {
+   "op": "remove",
+   "clip": "m",
+   "ripple": true
+  },
+  {
+   "op": "split",
+   "track": "V1",
+   "at": 4.0,
+   "id": "s1",
+   "ids": [
+    "s2"
+   ]
+  },
+  {
+   "op": "set",
+   "clip": "v",
+   "link": "b"
+  },
+  {
+   "op": "set",
+   "clip": "w",
+   "link": null
+  },
+  {
+   "op": "marker",
+   "at": 2.0,
+   "name": "Beat",
+   "color": "red"
+  },
+  {
+   "op": "marker",
+   "id": "k1",
+   "at": 5.0
+  },
+  {
+   "op": "remove_marker",
+   "id": "k2"
+  }
+ ]
+}

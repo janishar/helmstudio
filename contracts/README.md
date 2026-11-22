@@ -3252,7 +3252,8 @@ saved_at, via, ops_summary)` (from 1.49 `via` and `ops_summary`: Edits by ops; t
   audio-track clips are a video take's sound or (1.32) an audio take placed at `at`, or (1.32) a New line's
   placeholder (`take_id` null, `at`, `hold`, `shot`). One video track only: no compositing in M5b (the board
   shows V1, A1, A2). Caps: 1000 clips, 500 per track, 32 alternatives per slot, 256 KB as compact JSON, 16 cast + 8
-  looks in `defaults`.
+  looks in `defaults`. From 1.50 an audio-track clip may carry `link` (the V1 clip whose sound it is) and the document
+  `markers` (Timeline rules: linked clips, markers).
 - **Edits are whole-document writes** (`PUT …/timelines/{id}` with the `revision` they were made on; stale = 409
   `timeline changed since you opened it (now revision <n>)`). Why not named operations: the old studio's model is a
   whole document normalized by one function (rules + snapping) on every write, which keeps one validator in Go; the
@@ -3290,7 +3291,7 @@ document and a diff, and tried first without saving. Studio applies them with `e
 three-way replay in `make contracts-check`).
 
 - **`POST …/timelines/{id}/edits {base_revision, ops, dry_run?}`**: `ops` (`TimelineOp`, 1 to **200**; more =
-  `too_many_ops`) are today's union (Timeline rules: edits) without `fill`, which is studio's (the projector's; 422
+  `too_many_ops`) are the union (Timeline rules: edits; from 1.50 the tools' and marker ops too) without `fill`, which is studio's (the projector's; 422
   `fill is studio's`). Applied in order to the current document under the sequence's row lock; `base_revision` is
   **required** and must be the current revision, else the 409 `timeline changed since you opened it (now revision
   <n>)` (a dry run too, so a dry run's diff is the diff an apply at that revision makes; no silent re-apply: re-read
@@ -3298,17 +3299,24 @@ three-way replay in `make contracts-check`).
   user's is `take <id> not found`. **All or nothing**: one stored revision for the whole call (`by` user, `undo_to`
   the revision before), so one undo undoes it. 200 `TimelineEditResult {revision, dry_run, timeline, diff,
   warnings}`: `timeline` as GET answers it, `diff` = `t_diff(before, after)`, `warnings` = what studio changed beyond
-  the ops (an op's `at`, `hold` or `delta` snapped to the frame grid), never a refusal. `dry_run: true`: the same
+  the ops (an op's `at`, `hold`, `delta`, `from` or `to` snapped to the frame grid), never a refusal. From 1.50 the
+  diff also has `markers {added, removed, changed [{marker, fields}]}` (fields among at, name, color) and clips'
+  `link` among their fields. `dry_run: true`: the same
   answer, `revision` = `base_revision`, nothing stored.
 - **422 per op** (`TimelineEditError` = `TimelineError` + `op_index`, `code`): an edit error, `ops[3]: split_edge`
   (`code` the edit's: `unknown_op`, `unknown_clip` (`ops[3]: unknown clip k3`), `unknown_track`, `take_not_found`,
-  `split_edge`, `split_none`, `split_shot`, `lift_track`, `video_track`, `too_many_tracks`, `not_alternative`), or a
+  `split_edge`, `split_none`, `split_shot`, `lift_track`, `video_track`, `too_many_tracks`, `not_alternative`; from
+  1.50 `roll_track`, `roll_first`, `least`, `slip_still`, `slide_track`, `slide_end`, `overwrite_track`,
+  `overwrite_shot`, `range_empty`, `range_shot`, `ids_short`, `unknown_marker` (`ops[3]: unknown marker k3`),
+  `link_start`), or a
   rule broken by the document after that op, `ops[3]: timeline has 2 problems: …` (`code` = the first problem's,
   `problems` = all). A body that does not fit (an unknown field, a missing one, `fill`) is the usual `{detail}` 422
   (`ops[2]: …`). Nothing is stored.
-- **New clip ids**: an op that makes clips (`split` `id`, `insert` / `place` `id` and `gap_id`, `add` `ids`) may give
-  them (`[a-z0-9]{1,16}`, unused; a later op in the same call can name only those); absent ones studio makes (8
-  random `[a-z0-9]`, unused in the document and by every id the call gives) and answers in `diff.added`.
+- **New clip ids**: an op that makes clips (`split` `id`, `insert` / `place` `id` and `gap_id`, `add` `ids`; from 1.50
+  `split` / `overwrite` / `split_all` / `remove_range` / `lift_range` `ids`) may give them (`[a-z0-9]{1,16}`, unused; a
+  later op in the same call can name only those); absent ones studio makes (8 random `[a-z0-9]`, unused in the
+  document and by every id the call gives; for `ids` as many as the op needs) and answers in `diff.added`. A `marker`
+  without `id` gets one the same way, unused among the markers.
 - **`via`**: the client's `X-Helm-Client` header (Kong passes it) labels a user write: `web`, `mcp`, `assistant`;
   `helm`, any other value or none = `api`. A label, never a permission. `ops_summary`: an /edits call's distinct op
   names in order (`split, remove`); every other write its kind (`edit` a PUT, `add`, `shot`, `line`, `rerender`,
@@ -3324,8 +3332,9 @@ three-way replay in `make contracts-check`).
   the document as GET normalizes it (shots with their status) plus `id`, `name`, `revision` and each clip's
   `take_title`: every clip flat, track by track, `{id, track, index, take_id, kind (video | image | audio | slot), in,
   out, hold, at, end, length (seconds; an audio-track clip's own), at_f, end_f, length_f (frames on the target's
-  grid), gain_db, mute, transition_in (frames), alternatives, shot, number, offline}`; tracks `{name, kind, gain_db,
-  mute, clips}`. Plain data, no signed links.
+  grid), gain_db, mute, transition_in (frames), alternatives, shot, number, offline, link (1.50)}`; tracks `{name, kind,
+  gain_db, mute, clips}`; from 1.50 `links` (each V1 clip with linked sound clips → their ids, in track order) and
+  `markers [{id, at, at_f, name, color}]` (null when absent). Plain data, no signed links.
 - **A frame at a time**: `POST …/timelines/{id}/frame {at}` = `frame_at_time(document, at, takes)` plus the signed
   `url`: the V1 clip under frames(at), no dissolve or sound composited. Past the end or an empty slot: `empty`; an
   offline clip: `offline`, no image; an image take: its image (`shown: image`); a video take: the source time wanted
@@ -3628,6 +3637,11 @@ Numbers in fixtures compare by value (1 = 1.0).
 | `dissolve_gap` | this clip or the previous one is an empty slot |
 | `dissolve_handles` | the outgoing video's `frames(out) + d/2` is past its take's length, or the incoming video's `frames(in) − d/2 < 0` (an image has handles without end; an offline clip is not checked) |
 | `dissolve_length` | a clip's in-dissolve d/2 + out-dissolve d/2 is more than its length |
+| `link_track` | (1.50) a `link` on a V1 clip |
+| `link_not_v1` | (1.50) an audio-track clip's `link` names no V1 clip of the document |
+| `too_many_markers` | (1.50) more than 200 markers (track and clip null) |
+| `duplicate_marker` | (1.50) a marker id twice (the clip field holds the marker's id, track null) |
+| `marker_past_end` | (1.50) a marker after the sequence's end, `frames(at) > frames` (with V1 clips; a marker on the end is fine) |
 
 - **Shot numbers** (from 1.29): a V1 clip's `number` (the board's "Shot 4 · birches"). Normalize keeps it as
   written on V1 and drops it on an audio track; studio alone gives numbers, when it stores a revision (every write,
@@ -3656,13 +3670,67 @@ Numbers in fixtures compare by value (1 = 1.0).
   at the V1 cut nearest frames(at), a tie: the later cut; the next clip's dissolve goes); `fill {clip, take_id}` (from 1.19 a take with `source_map` is placed by it: Take actions; New
   shot, above; from 1.32 on an audio track: `in` 0, `out` = the take's length, `at` kept: New line); (1.32) `place {at,
   hold, id, gap_id}` (Make shot); `add_track` (`too_many_tracks` past 8), `remove_track {track}` (audio only: `video_track`), `track
-  {track, gain_db?, mute?}`.
+  {track, gain_db?, mute?}`. From 1.50 `remove {clip, ripple?}` (`ripple` on an audio-track clip: the later clips of
+  its track, start frame at or after its start, move left by its length in frames; V1 always ripples), `split {…, ids?}`
+  (below: linked clips) and `set {…, link?}`, and the tools' ops below.
+- **Tools' ops** (from 1.50; plan 23 27.2). Every bound is in frames on the target grid; `least` = max(1, d_in/2 +
+  d_out/2) of the clip it applies to. The ops do not clamp: past a bound the op's code, or the problem normalize finds
+  in the result (`trim` past a take's start or end, `dissolve_handles`), so a drag clamps in the web and an op sent
+  past it is refused.
+  - `roll {clip, delta}`: the cut before the V1 clip moves by frames(delta): the clip before gets out + δ (an image or
+    slot: hold + δ), this one in + δ (hold − δ); the length is kept and the dissolve on the cut moves with it. Not V1:
+    `roll_track`; the first clip: `roll_first`; either clip under its `least`: `least`.
+  - `slip {clip, delta}`: in and out + δ, place and length kept. V1 video in frames; an audio-track clip on the sample
+    grid (`samples(seconds(δ))`). An image or an empty slot (a line placeholder too): `slip_still`.
+  - `slide {clip, delta}`: the V1 clip keeps its content and length and moves by δ: the clip before gets out + δ (hold
+    + δ), the clip after in + δ (hold − δ); both cuts keep their dissolves. Not V1: `slide_track`; no clip before or
+    after: `slide_end`; a neighbour under its `least`: `least`.
+  - `overwrite {clip, at, track?, ids?}`: no ripple. V1 (`track` other than V1: `overwrite_track`): the clip leaves an
+    empty slot of its length (the next clip's dissolve goes), then the frames [f, f + length) (f = frames(at)) are cut
+    out of V1: a clip across f ends there, one across f + length starts there (its dissolve goes), one across both is
+    cut in two, the ones inside go; the clip goes in at f without its dissolve, the clip after it loses its own; past
+    V1's end an empty slot fills the gap first. Audio (onto `track`, default its own; V1: `overwrite_track`, unknown:
+    `unknown_track`): at = snap(at); every clip of the track under [at, at + length) in samples is cut around it: one
+    across the start ends there (out = in + samples to the start), one across the end starts on the first frame at or
+    after the end (in moved by as many samples), one across both is cut in two, the ones inside go. A clip under it
+    with a shot: `overwrite_shot`. Ids: a right part, then (V1) the slot it leaves, then the gap.
+  - `split_all {at, ids?}`: `split` on every track whose clip is strictly around frames(at) (a clip with a shot is
+    skipped); none: `split_none`. Ids in track order.
+  - `remove_range {from, to, ids?}`, `lift_range {from, to, ids?}`: F = frames(from), T = frames(to), T ≤ F:
+    `range_empty`; a clip with a shot overlapping [F, T): `range_shot`. Every track is cut at F, then at T (ids in track
+    order, F before T), then the clips starting in [F, T) go: remove ripples V1 (the clip after loses its dissolve) and
+    moves every audio clip starting at or after T left by T − F; lift puts one empty slot of min(T, V1's end) − F on V1
+    (the last id; the clip after loses its dissolve) and leaves a gap on the audio tracks.
+  - **New ids**: an op that makes clips takes their ids from `ids` in this order; too few: `ids_short` (the web makes
+    them with `newId`; studio fills absent ones: Edits by ops), more are ignored.
+- **Linked clips** (from 1.50; plan 23 27.5): an audio-track clip may carry `link`, the id of a V1 clip (its sound:
+  dialogue kept in sync). After every edit (`t_follow`): a linked clip whose V1 clip the edit removed goes too (`lift`
+  keeps the id: it stays); one whose V1 clip moved moves by as many frames, measured on the clip's content (start −
+  frames(in) for a video that stays a video, else its start), so a ripple, a move, a slide or a slip carries it and a
+  roll does not; pushed before 0: `link_start`; onto another clip of its track: normalize's `overlap`. `split_all` and
+  the range ops cut and move every track themselves, so they move no linked clip. A V1 `split` also cuts the clip's
+  linked clips strictly around that frame (their right parts take `split.ids`); after any cut of V1 (`split`,
+  `split_all`, the ranges, `overwrite`) a linked clip links to the part of its V1 clip it starts in (the last part
+  starting at or before it, else the first). `set {clip, link}` links or (null) unlinks.
+- **Markers** (from 1.50): `markers [{id, at, name?, color?}]` on the document (id `[a-z0-9]{1,16}`, unique; name 1-80
+  characters; color red, orange, yellow, green, blue, purple), at most 200. Normalize snaps `at` to frames, sorts by
+  `at` then id and leaves the list out when empty. Edits never move them (they mark sequence time). `marker {id, at,
+  name?, color?}` puts one (a known id is replaced whole), `remove_marker {id}` (`unknown_marker`). An edit that
+  leaves one past the end is refused (`marker_past_end`), as an audio clip's `past_end`.
 - **Snapping** (`snap_point`): a dragged edge or audio clip start lands on the nearest **cut** (0 and every clip's start
   and end on every track, the dragged clip's own excluded; a tie: the earlier cut) when it is within 6 screen pixels
   (`|cut − t| × px_per_s ≤ 6`), else on its frame. Moving a V1 clip reorders by midpoint (`drop_index`: the count of
   other clips whose midpoint is before the dragged one's, in frames). Interaction constants (the old element): trim
   handle 7 px, drag starts after 3 px; keys `[` / `]` trim a frame (shift: reverse), Alt+arrows move, Delete removes,
-  Cmd+Z / Shift+Cmd+Z undo / redo, Space plays, arrows step a frame (shift: 1 s).
+  Cmd+Z / Shift+Cmd+Z undo / redo, Space plays, arrows step a frame (shift: 1 s). From 1.50 (plan 23): the playhead,
+  the range's in and out and the markers are snap points too, added by the web to the list as ordinary members
+  (`snap.json` `points`); N toggles snapping, ⌘ held while dragging inverts it. Tools: A Select, T Trim (an edge:
+  ripple trim; the cut between two clips: roll; a body: slip; Alt + body: slide), B Blade (Shift: every track,
+  `split_all`), R Range, P Overwrite; a held key over 250 ms is temporary; Esc back to Select. ⌘B blades at the
+  playhead on the selected track (else V1), ⇧⌘B on every track, S stays Split at playhead; Delete ripple deletes
+  (audio: `remove {ripple: true}`), Shift+Delete lifts; Alt+[ / Alt+] trim the edge to the playhead; J / K / L play;
+  ↑ / ↓ previous / next cut (Alt: markers too); Home / End; X marks the clip; Alt+X clears the range; M adds a marker;
+  ⇧S hover scrub (on by default); ? the shortcut sheet. Keys with Alt or Shift match `e.code`.
 - **Preview** (`frame_at(document, f)`): plays each clip's own file against one clock, nothing rendered. At frame f:
   pictures bottom first `{clip, t (source seconds, null for an image), opacity}` (in a dissolve the incoming opacity =
   (f − (cut − d/2)) / d), an offline clip `{…, offline: true}`; sounds `{clip, t, gain_db = track gain + clip gain,

@@ -1,0 +1,9 @@
+{
+ "base_revision": 7,
+ "ops": [
+  {
+   "op": "remove_range",
+   "from": 1.0
+  }
+ ]
+}

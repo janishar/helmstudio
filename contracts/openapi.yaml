@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.49.0
+  version: 1.50.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -27,7 +27,7 @@ servers:
 security:
   - {ApiKey: [], BearerJWT: []}
 tags:
-  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media); from 1.23 LoRA strengths 0..2 (looks saved before are clamped when read; contracts/README.md, Looks); from 1.24 the model component a node loads (NodeSchema.component); from 1.25 an inspector section''s help, the presets'' order (StudioLayout.preset_order) and a run''s planned peak before it is sent (POST /v1/studio/runs/plan); from 1.26 an inspector section''s choice tiles (LTX''s Recipe: two-stage or one-stage); from 1.28 a judge''s branch without `then` (Ask me) and a judge test on picked takes (POST /v1/studio/pipelines/{pipeline_id}/judge-tests); from 1.29 a V1 clip''s shot number (TimelineClip.number: "Shot 4"); from 1.30 voices: audio takes made by runs (the `Audio` port, `Workflow.media` audio), the `voice` param, saved voices in the library (designed voices and the packs'' starter voices; contracts/README.md, Voices); from 1.31 cloned voices (a 3–30 s clip of an audio take or a video''s sound, with consent), designed voices that keep a clip, Save as voice (`from_take` with `kind: voice`) and the zonos3 family (contracts/README.md, Voices: cloned voices); from 1.32 dialogue and Timeline audio: dialogue scripts (`script` text params expanded into `lines` rows whose items carry a voice), an element''s `voice_id`, cues on a dialogue''s take, audio takes on the audio tracks, New line (POST /v1/studio/timelines/{timeline_id}/lines), Make shot (a slot `exact` at an audio clip''s time), an export plan''s `sounds`, offers and pipeline binds into rows of one media field, `library.read` voices and the write node''s `form: script` (contracts/README.md, Dialogue and Timeline audio); from 1.44 the in-app assistant: chats, their events and memory, the admin''s assistant settings, search providers (kind `search`) and the Gallery''s `order` (contracts/README.md, Assistant); from 1.47 rules (refusals as data, ParamSchema.rules), option help (ParamSchema.option_help), a native node''s peak formula and sound limits (NodeSchema.peak_gb, sounds: the planned peak per run) and the Preset heading''s help (StudioLayout.preset_help); from 1.48 thumbnails: every list''s `thumb_url` is a small WebP of the image or the poster once made, `RunOutput.thumb_url` (contracts/README.md, Thumbnails); from 1.49 timeline edits by named ops (POST …/timelines/{timeline_id}/edits: a dry run, a diff, studio-made clip ids), the revision history and restore to any kept revision, the agent view (`view=agent`) and a stored frame at a sequence time (contracts/README.md, Timeline: edits by ops)'}
+  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media); from 1.23 LoRA strengths 0..2 (looks saved before are clamped when read; contracts/README.md, Looks); from 1.24 the model component a node loads (NodeSchema.component); from 1.25 an inspector section''s help, the presets'' order (StudioLayout.preset_order) and a run''s planned peak before it is sent (POST /v1/studio/runs/plan); from 1.26 an inspector section''s choice tiles (LTX''s Recipe: two-stage or one-stage); from 1.28 a judge''s branch without `then` (Ask me) and a judge test on picked takes (POST /v1/studio/pipelines/{pipeline_id}/judge-tests); from 1.29 a V1 clip''s shot number (TimelineClip.number: "Shot 4"); from 1.30 voices: audio takes made by runs (the `Audio` port, `Workflow.media` audio), the `voice` param, saved voices in the library (designed voices and the packs'' starter voices; contracts/README.md, Voices); from 1.31 cloned voices (a 3–30 s clip of an audio take or a video''s sound, with consent), designed voices that keep a clip, Save as voice (`from_take` with `kind: voice`) and the zonos3 family (contracts/README.md, Voices: cloned voices); from 1.32 dialogue and Timeline audio: dialogue scripts (`script` text params expanded into `lines` rows whose items carry a voice), an element''s `voice_id`, cues on a dialogue''s take, audio takes on the audio tracks, New line (POST /v1/studio/timelines/{timeline_id}/lines), Make shot (a slot `exact` at an audio clip''s time), an export plan''s `sounds`, offers and pipeline binds into rows of one media field, `library.read` voices and the write node''s `form: script` (contracts/README.md, Dialogue and Timeline audio); from 1.44 the in-app assistant: chats, their events and memory, the admin''s assistant settings, search providers (kind `search`) and the Gallery''s `order` (contracts/README.md, Assistant); from 1.47 rules (refusals as data, ParamSchema.rules), option help (ParamSchema.option_help), a native node''s peak formula and sound limits (NodeSchema.peak_gb, sounds: the planned peak per run) and the Preset heading''s help (StudioLayout.preset_help); from 1.48 thumbnails: every list''s `thumb_url` is a small WebP of the image or the poster once made, `RunOutput.thumb_url` (contracts/README.md, Thumbnails); from 1.49 timeline edits by named ops (POST …/timelines/{timeline_id}/edits: a dry run, a diff, studio-made clip ids), the revision history and restore to any kept revision, the agent view (`view=agent`) and a stored frame at a sequence time (contracts/README.md, Timeline: edits by ops); from 1.50 the Timeline tools'' ops (roll, slip, slide, overwrite, split_all, remove_range, lift_range, an audio track''s ripple remove), linked sound clips (`TimelineClip.link`) and markers (`TimelineDoc.markers`, the marker ops; contracts/README.md, Timeline rules: tools, linked clips, markers)'}
   - {name: files, description: signed file downloads and uploads}
   - name: auth
     description: 'auth_service: users, sessions (JWT access + rotating refresh tokens), roles, client API keys'
@@ -6547,6 +6547,18 @@ components:
         shot: {$ref: '#/components/schemas/TimelineShotRef'}
         number: {type: integer, minimum: 1, description: 'From 1.29, V1 only: the shot number ("Shot 4"), given by studio when the clip is added (the highest so far + 1) and kept when it moves; a write cannot change a stored clip''s. contracts/README.md, Timeline rules: shot numbers'}
         offline: {type: boolean, description: 'answers only, true when the take is deleted or gone: the clip keeps its place and length, plays as offline and blocks an export'}
+        link: {$ref: '#/components/schemas/TimelineClipId', description: 'From 1.50, an audio-track clip only: the V1 clip it is linked to (its sound clip: it follows that clip''s ripples, goes when it goes and is cut with it; contracts/README.md, Timeline rules: linked clips)'}
+    TimelineMarkerColor: {type: string, enum: [red, orange, yellow, green, blue, purple], description: 'a marker''s colour, drawn with the theme''s own shade'}
+    TimelineMarker:
+      type: object
+      required: [id, at]
+      additionalProperties: false
+      description: 'From 1.50: a named point on the sequence (snapped to frames; drawn on the ruler, a snap target)'
+      properties:
+        id: {$ref: '#/components/schemas/TimelineClipId', description: 'unique among the markers'}
+        at: {$ref: '#/components/schemas/TimelineSeconds', description: 'sequence seconds; with V1 clips never past the end (`marker_past_end`)'}
+        name: {type: string, minLength: 1, maxLength: 80}
+        color: {$ref: '#/components/schemas/TimelineMarkerColor'}
     TimelineTrackKind: {type: string, enum: [video, audio]}
     TimelineTrack:
       type: object
@@ -6565,6 +6577,7 @@ components:
       properties:
         target: {$ref: '#/components/schemas/TimelineTarget'}
         tracks: {type: array, minItems: 1, maxItems: 9, items: {$ref: '#/components/schemas/TimelineTrack'}}
+        markers: {type: array, items: {$ref: '#/components/schemas/TimelineMarker'}, description: 'From 1.50: at most 200 (`too_many_markers`); absent = none; answers sort them by time, then id, and leave the list out when empty'}
     TimelineNormalized:
       allOf: [{$ref: '#/components/schemas/TimelineDoc'}]
       type: object
@@ -6596,6 +6609,7 @@ components:
         revision: {type: integer, minimum: 1, description: 'the revision the edit was made on'}
         target: {$ref: '#/components/schemas/TimelineTarget'}
         tracks: {$ref: '#/components/schemas/TimelineDoc/properties/tracks'}
+        markers: {$ref: '#/components/schemas/TimelineDoc/properties/markers', description: 'From 1.50: the whole list (absent = none)'}
     TimelinePatch:
       type: object
       additionalProperties: false
@@ -6696,13 +6710,13 @@ components:
           type: object
           required: [op, track, at]
           additionalProperties: false
-          properties: {op: {const: split}, track: {type: string, pattern: '^(V1|A[2-9])$'}, at: {$ref: '#/components/schemas/TimelineSeconds'}, id: {$ref: '#/components/schemas/TimelineClipId'}}
+          properties: {op: {const: split}, track: {type: string, pattern: '^(V1|A[2-9])$'}, at: {$ref: '#/components/schemas/TimelineSeconds'}, id: {$ref: '#/components/schemas/TimelineClipId'}, ids: {type: array, maxItems: 32, items: {$ref: '#/components/schemas/TimelineClipId'}, description: 'from 1.50, V1: ids for the right parts of its linked sound clips cut with it, in track order (absent ones: studio makes them)'}}
         - title: remove
-          description: 'remove the clip (V1 ripples)'
+          description: 'remove the clip (V1 ripples; from 1.50 with `ripple` an audio track does too)'
           type: object
           required: [op, clip]
           additionalProperties: false
-          properties: {op: {const: remove}, clip: {$ref: '#/components/schemas/TimelineClipId'}}
+          properties: {op: {const: remove}, clip: {$ref: '#/components/schemas/TimelineClipId'}, ripple: {type: boolean, description: 'from 1.50, an audio-track clip: the later clips of its track move left by its length (V1 always ripples)'}}
         - title: lift
           description: 'V1 only: an empty slot of the clip''s length, same id'
           type: object
@@ -6727,6 +6741,7 @@ components:
             mute: {type: [boolean, 'null']}
             hold: {type: [number, 'null'], exclusiveMinimum: 0, maximum: 3600}
             transition_in: {oneOf: [{$ref: '#/components/schemas/TimelineDissolve'}, {type: 'null'}]}
+            link: {oneOf: [{$ref: '#/components/schemas/TimelineClipId'}, {type: 'null'}], description: 'from 1.50, an audio-track clip: the V1 clip it is linked to (null unlinks)'}
         - title: add
           description: 'append takes in order to `track` (default V1); `ids` for the new clips, in order (absent ones: studio makes them)'
           type: object
@@ -6767,6 +6782,60 @@ components:
           required: [op, track]
           additionalProperties: false
           properties: {op: {const: track}, track: {type: string, pattern: '^(V1|A[2-9])$'}, gain_db: {type: number, minimum: -60, maximum: 12}, mute: {type: boolean}}
+        - title: roll
+          description: 'from 1.50, V1: the cut before the clip moves by `delta` (the clip before ends later, this one starts later; the length is kept, the dissolve on the cut moves with it)'
+          type: object
+          required: [op, clip, delta]
+          additionalProperties: false
+          properties: {op: {const: roll}, clip: {$ref: '#/components/schemas/TimelineClipId'}, delta: {type: number, minimum: -86400, maximum: 86400, description: 'seconds, snapped to frames'}}
+        - title: slip
+          description: 'from 1.50: the clip shows other frames of its take, in and out moved by `delta` (place and length kept)'
+          type: object
+          required: [op, clip, delta]
+          additionalProperties: false
+          properties: {op: {const: slip}, clip: {$ref: '#/components/schemas/TimelineClipId'}, delta: {type: number, minimum: -86400, maximum: 86400, description: 'seconds, snapped to frames'}}
+        - title: slide
+          description: 'from 1.50, V1: the clip moves along V1 by `delta`, its content and length kept; the clip before and the one after give and take the frames'
+          type: object
+          required: [op, clip, delta]
+          additionalProperties: false
+          properties: {op: {const: slide}, clip: {$ref: '#/components/schemas/TimelineClipId'}, delta: {type: number, minimum: -86400, maximum: 86400, description: 'seconds, snapped to frames'}}
+        - title: overwrite
+          description: 'from 1.50: the clip goes in at `at` over what is there, no ripple (V1: it leaves an empty slot where it was; audio: onto `track`, default its own)'
+          type: object
+          required: [op, clip, at]
+          additionalProperties: false
+          properties: {op: {const: overwrite}, clip: {$ref: '#/components/schemas/TimelineClipId'}, at: {$ref: '#/components/schemas/TimelineSeconds'}, track: {type: string, pattern: '^(V1|A[2-9])$'}, ids: {type: array, maxItems: 32, items: {$ref: '#/components/schemas/TimelineClipId'}, description: 'ids for the clips it makes, in track order, then left to right (absent ones: studio makes them; too few in a web replay: ids_short)'}}
+        - title: split_all
+          description: 'from 1.50: blade on every track at `at` (a clip with a shot or a cut there is skipped)'
+          type: object
+          required: [op, at]
+          additionalProperties: false
+          properties: {op: {const: split_all}, at: {$ref: '#/components/schemas/TimelineSeconds'}, ids: {type: array, maxItems: 32, items: {$ref: '#/components/schemas/TimelineClipId'}, description: 'ids for the clips it makes, in track order, then left to right (absent ones: studio makes them; too few in a web replay: ids_short)'}}
+        - title: remove_range
+          description: 'from 1.50: every track cut at `from` and `to`, what is between removed; V1 and the audio tracks ripple'
+          type: object
+          required: [op, from, to]
+          additionalProperties: false
+          properties: {op: {const: remove_range}, from: {$ref: '#/components/schemas/TimelineSeconds'}, to: {$ref: '#/components/schemas/TimelineSeconds'}, ids: {type: array, maxItems: 32, items: {$ref: '#/components/schemas/TimelineClipId'}, description: 'ids for the clips it makes, in track order, then left to right (absent ones: studio makes them; too few in a web replay: ids_short)'}}
+        - title: lift_range
+          description: 'from 1.50: every track cut at `from` and `to`, what is between lifted (V1: one empty slot; audio: a gap); nothing moves'
+          type: object
+          required: [op, from, to]
+          additionalProperties: false
+          properties: {op: {const: lift_range}, from: {$ref: '#/components/schemas/TimelineSeconds'}, to: {$ref: '#/components/schemas/TimelineSeconds'}, ids: {type: array, maxItems: 32, items: {$ref: '#/components/schemas/TimelineClipId'}, description: 'ids for the clips it makes, in track order, then left to right (absent ones: studio makes them; too few in a web replay: ids_short)'}}
+        - title: marker
+          description: 'from 1.50: put a marker (a new `id` adds one, a known one is replaced whole; absent: studio makes one)'
+          type: object
+          required: [op, at]
+          additionalProperties: false
+          properties: {op: {const: marker}, id: {$ref: '#/components/schemas/TimelineClipId'}, at: {$ref: '#/components/schemas/TimelineSeconds'}, name: {type: string, minLength: 1, maxLength: 80}, color: {$ref: '#/components/schemas/TimelineMarkerColor'}}
+        - title: remove_marker
+          description: 'from 1.50: remove a marker'
+          type: object
+          required: [op, id]
+          additionalProperties: false
+          properties: {op: {const: remove_marker}, id: {$ref: '#/components/schemas/TimelineClipId'}}
     TimelineEdits:
       type: object
       required: [base_revision, ops]
@@ -6777,7 +6846,7 @@ components:
         dry_run: {type: boolean, default: false, description: 'try it: the same answer, nothing stored'}
     TimelineDiff:
       type: object
-      required: [added, removed, changed, tracks, duration]
+      required: [added, removed, changed, tracks, duration, markers]
       additionalProperties: false
       description: 'what changed between two normalized documents (check.py t_diff), by clip id; a field absent on one side is null'
       properties:
@@ -6791,7 +6860,7 @@ components:
             additionalProperties: false
             properties:
               clip: {$ref: '#/components/schemas/TimelineClipId'}
-              fields: {type: object, description: 'field → [before, after], among take_id, in, out, hold, at, gain_db, mute, transition_in, alternatives, shot, offline, track (a V1 ripple shows as `at` changes)', additionalProperties: {type: array, minItems: 2, maxItems: 2}}
+              fields: {type: object, description: 'field → [before, after], among take_id, in, out, hold, at, gain_db, mute, transition_in, alternatives, shot, offline, track and (1.50) link (a V1 ripple shows as `at` changes)', additionalProperties: {type: array, minItems: 2, maxItems: 2}}
         tracks:
           type: object
           required: [added, removed, changed]
@@ -6807,6 +6876,21 @@ components:
                 additionalProperties: false
                 properties: {track: {type: string}, fields: {type: object, additionalProperties: {type: array, minItems: 2, maxItems: 2}}}
         duration: {type: array, minItems: 2, maxItems: 2, items: {type: number, minimum: 0}, description: '[before, after] duration_s'}
+        markers:
+          type: object
+          required: [added, removed, changed]
+          additionalProperties: false
+          description: 'from 1.50: markers by id'
+          properties:
+            added: {type: array, items: {$ref: '#/components/schemas/TimelineClipId'}}
+            removed: {type: array, items: {$ref: '#/components/schemas/TimelineClipId'}}
+            changed:
+              type: array
+              items:
+                type: object
+                required: [marker, fields]
+                additionalProperties: false
+                properties: {marker: {$ref: '#/components/schemas/TimelineClipId'}, fields: {type: object, description: 'among at, name, color', additionalProperties: {type: array, minItems: 2, maxItems: 2}}}
     TimelineEditResult:
       type: object
       required: [revision, dry_run, timeline, diff, warnings]
@@ -6823,7 +6907,7 @@ components:
       properties:
         detail: {type: string}
         op_index: {type: integer, minimum: 0}
-        code: {type: string, description: 'the edit''s error code (unknown_op, unknown_clip, unknown_track, take_not_found, split_edge, split_none, split_shot, lift_track, video_track, too_many_tracks, not_alternative) or the first problem''s code'}
+        code: {type: string, description: 'the edit''s error code (unknown_op, unknown_clip, unknown_track, take_not_found, split_edge, split_none, split_shot, lift_track, video_track, too_many_tracks, not_alternative; from 1.50 roll_track, roll_first, least, slip_still, slide_track, slide_end, overwrite_track, overwrite_shot, range_empty, range_shot, ids_short, unknown_marker, link_start) or the first problem''s code'}
         problems: {type: array, items: {$ref: '#/components/schemas/TimelineProblem'}}
     TimelineRevisionItem:
       type: object
@@ -6854,7 +6938,7 @@ components:
         to: {type: integer, minimum: 1, description: 'the kept revision to bring back'}
     TimelineAgentClip:
       type: object
-      required: [id, track, index, take_id, take_title, kind, in, out, hold, at, end, length, at_f, end_f, length_f, gain_db, mute, transition_in, alternatives, shot, number, offline]
+      required: [id, track, index, take_id, take_title, kind, in, out, hold, at, end, length, at_f, end_f, length_f, gain_db, mute, transition_in, alternatives, shot, number, offline, link]
       additionalProperties: false
       properties:
         id: {$ref: '#/components/schemas/TimelineClipId'}
@@ -6879,9 +6963,10 @@ components:
         shot: {oneOf: [{$ref: '#/components/schemas/TimelineShotRef'}, {type: 'null'}]}
         number: {type: [integer, 'null'], description: 'V1: the shot number'}
         offline: {type: boolean}
+        link: {oneOf: [{$ref: '#/components/schemas/TimelineClipId'}, {type: 'null'}], description: 'from 1.50, an audio-track clip: the V1 clip it is linked to'}
     TimelineAgentView:
       type: object
-      required: [id, name, revision, target, duration_s, frames, tracks, clips]
+      required: [id, name, revision, target, duration_s, frames, tracks, clips, links, markers]
       additionalProperties: false
       description: 'GET …/{timeline_id}?view=agent (check.py t_agent_view, plus id, name, revision and take titles): plain data, no signed links'
       properties:
@@ -6899,6 +6984,15 @@ components:
             additionalProperties: false
             properties: {name: {type: string}, kind: {$ref: '#/components/schemas/TimelineTrackKind'}, gain_db: {type: number}, mute: {type: boolean}, clips: {type: integer, minimum: 0}}
         clips: {type: array, items: {$ref: '#/components/schemas/TimelineAgentClip'}, description: 'every clip, track by track, in order'}
+        links: {type: object, additionalProperties: {type: array, items: {$ref: '#/components/schemas/TimelineClipId'}}, description: 'from 1.50: each V1 clip that has linked sound clips → their ids, in track order'}
+        markers:
+          type: array
+          description: 'from 1.50: the markers by time, `at_f` in frames'
+          items:
+            type: object
+            required: [id, at, at_f, name, color]
+            additionalProperties: false
+            properties: {id: {$ref: '#/components/schemas/TimelineClipId'}, at: {type: number, minimum: 0}, at_f: {type: integer, minimum: 0}, name: {type: [string, 'null']}, color: {oneOf: [{$ref: '#/components/schemas/TimelineMarkerColor'}, {type: 'null'}]}}
     TimelineFrameRequest:
       type: object
       required: [at]
