@@ -115,7 +115,6 @@ The pack runs the pinned h3 binary (`vendor/h3c`, h3.c 4cafd17, `make h3`) as a 
   the runner's environment never merges. `H3_LORA_STRENGTH` is sent as 1 (owner: fixed).
 - **SGLang (NVIDIA)** gets an SGLang-ready copy as `--lora-path` on the run's one server (no `/set_lora`); on the FP8
   weights it applies it dynamically ("quantized weights cannot be merged in place"). Turbo sends no flow shifts.
-  Unverified on the VM: s/step, VRAM, the look.
 - **SGLang cannot take the files as they are (sglang 0.5.23, read 2026-11-22).** Its fused qkv gathers to_q/k/v's
   `.alpha` into one 3-element tensor, then `_apply_lora_to_layers` calls `.item()` on it: FL2V fails "a Tensor with 3
   elements cannot be converted to Scalar". Its alpha otherwise: the layer's `.alpha` (cast to int), else
@@ -126,6 +125,28 @@ The pack runs the pinned h3 binary (`vendor/h3c`, h3.c 4cafd17, `make h3`) as a 
   size and mtime; tmp + rename, bf16 kept, an older copy of the same file removed), reused after; ~2 s per file on
   the VM. The add-on's delete removes its copy with its file (core.models `SGLANG_COPIES`). Measured 2026-11-22 by
   hand in runner-native: FL2V copy loads, "applied to 259 layers", server ready.
+- **No AdaLN modules on NVIDIA.** The pruned FP8 transformer's AdaLN takes an 8-wide time table
+  (`adaln_proj.linear.weight` [96768, 8], `adaln_t_table` [1025, 8]); the LoRA's AdaLN `lora_A` is 2688 wide.
+  SGLang's `prepare_lora_adapter` projects it only for a `MiniMaxH3PrunedTransformer3DModel` config whose checkpoint
+  carries `adaln_basis` / `adaln_mean`; ours has neither (the transformer config is the unpruned one), so the run
+  failed "mat1 and mat2 shapes cannot be multiplied (1x8 and 2688x16)". The copy leaves out `adaln_proj.*` and
+  `norm_out.*` (51 FL2V modules; ref2v has none); `COPY_V` in the copy's key replaces older copies. So NVIDIA Turbo
+  is the LoRA minus its AdaLN part (the Mac merges all of it). The proper fix needs the unpruned time embedder (not on
+  the VM) to fit the 8-wide projection.
+- **NVIDIA checks** (2026-11-22, helm-gpu RTX PRO 6000 Blackwell 96 GB, through the pack with `helm run --host gcp`,
+  Base fp8, 864 × 480 × 124, seed 42, the fox prompt; `docs/mock/checks/h3-turbo/nvidia/`, `grid.jpg` rows in this
+  order; generate s is the runner's `generate: ran in`, which includes starting the SGLang server; GPU peak from
+  `nvidia-smi` at 1 s; sharpness: Laplacian variance, mean of 8 gray frames every 15th):
+
+  | Run | generate s | GPU peak | sharpness | look |
+  |---|---|---|---|---|
+  | Text, Turbo LoRA, 8 steps (first run: also writes the copy) | 116.9 | 33.4 GB | 49.4 | clean |
+  | Text, no LoRA, 8 steps | 76.7 | 32.1 GB | 71.4 | clean |
+  | Text, Base default (20 steps) | 97.0 | 32.1 GB | 51.9 | clean |
+  | References, one image, Turbo Ref LoRA, 8 steps | 206.4 | 36.6 GB | 53.2 | clean, the fox (not noise) |
+
+  On this GPU the server start dominates a short run, so Turbo saves little time on Text, and the FP8 base is already
+  clean at 8 steps without it. Turbo adds ~1.3 GB (dynamic LoRA). Mac clips for scale: base50 65.0, Fast 38.9.
 - **Preset order by time** (owner 24.12 point 3: swap Turbo and Fast if Fast is quicker): measured 2026-11-22 through
   the pack at 864 × 480 × 124, seed 42, one after the other (the contract suite building on the same Mac, so both
   slower than the spike's 340 s): Fast 344.5 s (peak 19.1 GB), Turbo 420.0 s (peak 24.6 GB, the runner's measure;
