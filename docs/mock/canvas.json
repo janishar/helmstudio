@@ -471,6 +471,16 @@
       "x": 1520,
       "y": 2400,
       "page": "models-admin"
+    },
+    "Logo.dc.html": {
+      "expand": "fill",
+      "h": 2832,
+      "is_interactive": true,
+      "title": "Brand · logo concepts: aperture helm, playhead h, spark tile, lens o",
+      "w": 1440,
+      "x": 0,
+      "y": 0,
+      "page": "brand"
     }
   },
   "createdOnFiles": {
@@ -603,7 +613,8 @@
     "AdminAgents.dc.html",
     "Assistant.dc.html",
     "Landing.dc.html",
-    "SignIn.dc.html"
+    "SignIn.dc.html",
+    "Logo.dc.html"
   ],
   "pages": [
     {
@@ -641,6 +652,10 @@
     {
       "id": "start",
       "name": "Landing and sign in"
+    },
+    {
+      "id": "brand",
+      "name": "Brand"
     }
   ],
   "title": "helmstudio-next UI mock"
