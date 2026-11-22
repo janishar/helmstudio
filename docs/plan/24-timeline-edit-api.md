@@ -315,3 +315,51 @@ Each with the recommended option first.
     about 2 h).
 12. **Dry run as its own MCP tool**: yes, `try_timeline_edit` read-only so clients never prompt for a try · one
     `edit_timeline` with `dry_run` (every try prompts, since hints are per tool).
+
+### 28.15 As built: the first slice (phases 2, 3, 4 and 6; 2026-11-23)
+
+Built with today's ops only (plan 23's new ops, links and markers are not here). **Phase 5 (web) is not built yet**,
+so the plan is not marked built.
+
+- **Contract (API 1.49.0).** openapi: `POST …/edits` (`TimelineEdits`, `TimelineOp` as a `oneOf` of today's ops
+  without `fill`, `TimelineEditResult {revision, dry_run, timeline, diff, warnings}`, `TimelineDiff`,
+  `TimelineEditError`), `GET …/revisions` (`TimelineRevisionList`), `GET …/revisions/{revision}`
+  (`TimelineRevisionDoc`), `POST …/restore` (`TimelineRestore`), `POST …/frame` (`TimelineFrameRequest`,
+  `TimelineFrame`), `view=agent` on GET (`TimelineAgentView`, `TimelineAgentClip`; the 200 is a `oneOf` of it and
+  `Timeline`). README Timeline: "Edits by ops". check.py: `t_diff`, `t_agent_view`, `frame_at_time` with
+  `fixtures/timelines/diffs.json`, `agent_view.json`, `frame_time.json`; http fixtures for the new shapes; the
+  three-way replay (`check_edit_replay`: every `edits.json` case through check.py, studio's `go test -run
+  TestEditReplay` and `contracts/replay_edits.mjs`, which loads `web_service/lib/timeline.ts` in node with its types
+  stripped; compared as canonical JSON; it needs `go` and `node` on PATH and fails without them); the catalog's ops
+  must be `TimelineOp`'s names, each with a description. Catalog: `show_timeline` answers the agent view;
+  `timeline_revisions` (assistant, mcp; `req.studio.tools` and `offered.json` follow); `try_timeline_edit`,
+  `timeline_frame` (mcp, read-only); `edit_timeline`, `restore_timeline` (mcp, destructive). The catalog's `ops`
+  schema is generated from openapi's `TimelineOp` with its refs inlined.
+- **Studio.** `api/studio/timeline_edits.go` (`EditTimeline`, `applyOps`, revisions, `GetTimelineAgent`,
+  `TimelineFrame`), `api/studio/dto/timeline_edits.go` (per-op shape checks: fields each op takes and needs, ids,
+  tracks, ranges, `set` / `track` value types), `api/timeline/agent.go` (`DiffDocs`, `Agent`, `FrameAtTime`, the
+  Go ports, held by the new fixtures). Migration **00031** adds `timeline_revisions.via` and `ops_summary`. Every
+  write now stores them: `via` from `X-Helm-Client` (`common.ViaOf`: web, mcp, assistant; helm, other or none = api;
+  studio's writes null; rows from before read `web` for user writes); `ops_summary` the /edits op names, else the
+  write's kind (`create`, `edit` a PUT, `add`, `shot`, `line`, `rerender`, `undo`, `redo`, `restore`, studio's
+  `fill`, `drop_shot`). Restore is `restore` with a target (`undo_to` = current, `redo_to` = null, reconciled).
+  **Kong needs no change**: it passes request headers; its plugin only clears `X-Client-Id` and `X-Key-Scopes`.
+- **CLI.** `helm timeline show --agent`, `edit -f ops.json [--revision n] [--dry-run]` (the file is a list of ops or
+  `{base_revision, ops}`; a revision is required, from the flag or the file), `revisions [--before] [--limit]`,
+  `restore --to n --revision n`. helm sends `X-Helm-Client: helm`, helm mcp `mcp`. helm mcp registers the new tools
+  through the catalog as before; `timeline_frame` adds the image as image content (16 MB at most).
+- **Tests.** Go: `TestAgentFixtures`, `TestEditReplay`, `tests/timeline_edits_test.go` (28.12's list: all or nothing
+  with `op_index`, stale apply and dry run, a dry run stores nothing, a retry is a 409, `fill` refused, another
+  user's sequence 404 and take 422, the 200-op cap, unique studio-made ids, one undo per call, via and ops_summary,
+  the history, restore reconciling a finished shot, 100 kept), the assistant's two tools. CLI and MCP unit tests.
+  Contract suite: `test_timeline_edits.py` (the CLI by ops: dry run, apply, a 409 from a parallel write, restore,
+  history, the agent view; helm mcp: the hints, try, apply, a 409, history via mcp, a frame as an image, restore).
+- **Deviations.** (1) `fill` and an unknown op are refused as a body that does not fit (`{detail}` 422, `ops[2]: fill
+  is studio's`), since `TimelineOp` leaves `fill` out; over 200 ops is `{detail}` `too_many_ops: …`. (2) The frame
+  at a time signs the stored object as it is (a run's poster, or the stored last frame) instead of copying it into a
+  frame take: a read must not add gallery items, and `timeline_frame` is read-only. A video with no frame 0 stored
+  (an upload or import) answers its last frame, else its poster (`shown: poster`, time unknown). (3) The diff and the
+  agent view have no `markers` and no `link` (plan 23, not built). (4) A revision item has `duration_s`, not
+  `duration`, as the house names it. (5) **The web's generated types (`web_service/gen/api.ts`) are not regenerated
+  here**: the GET 200 is now a union, and three uses in `components/timeline/editor.tsx` need narrowing; that is
+  phase 5's first step (the web agent).
