@@ -54,9 +54,16 @@ an optional touch for later is a small leaf as the dot of the i.
 | Concept | Legible at 16 px | Organic | Says helm and studio | Unique | Motion and loading | Score |
 |---|---|---|---|---|---|---|
 | 2 Sprout h | 3 | 3 | 2 | 3 | 3: leaf unfurls as progress | 14 |
+| Round 1 · 2 Playhead h | 2 | 1 | 2 | 3 | 3: playhead slides as a progress bar | 11 |
 | 4 Current eye | 3 | 3 | 3 | 2 | 3: the curl turns as a spinner | 14 |
 | 3 Bud pebble | 2 | 3 | 2 | 2 | 3: bud opens as a take lands | 12 |
 | 1 Leaf play | 2 | 3 | 2 | 2 | 2: leaf sways, play pulses | 11 |
+
+**Kept for comparison (owner, 2026-11-22: "option 2 keep for comparison").** Round 1's concept 2, **Playhead h**
+(an h whose stem is the Timeline playhead, flag on top), is shown as a full frame right after the four round-2
+concepts, exactly as drawn in commit 7dcac56, labelled "Round 1 · 2 Playhead h (kept for comparison)", and scored
+above on the round-2 criteria next to Sprout h: it is a real monogram with a natural progress motion, but it is the
+least organic (even strokes, round caps), its flag gets small at 16 px, and it speaks for video more than the rest.
 
 **Recommendation: concept 2, Sprout h**, with the soft wordmark. It is the most organic and still the clearest: a
 living h for helm with a leaf flag for growth and steering; it holds at 16 px, works in one colour, and the swaying
@@ -85,7 +92,7 @@ brand. All four stay distinct (leaf, letter, pod in a pebble, curl).
 - **Colour.** Lime and orange stay apart in every mark except the h, where the orange leaf meets the lime stem at
   one small joint; the one-colour versions carry all four. No clashes found on dark, light or the gradient tile.
 
-**Open for the owner (round 2):** pick 1–4 (recommended 2); soft or plain wordmark; leaf in orange or both parts in
+**Open for the owner (round 2):** pick 1–4 (recommended 2) or keep round 1's Playhead h; soft or plain wordmark; leaf in orange or both parts in
 lime. The usage rules below carry over to whichever mark is chosen (for an organic mark the small cut is the 16 px
 version on the board, not the wheel's simplified hub, and loading uses that mark's motion, not the wheel's).
 
