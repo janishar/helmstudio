@@ -2,21 +2,18 @@
 // The frame of every signed-in page: the floating dock on the left, the page beside it.
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { createContext, use, useEffect, useState } from "react";
+import { createContext, use, useEffect, useRef, useState } from "react";
 import {
   Boxes,
   Clapperboard,
   Images,
-  LogOut,
   Settings,
   ShieldCheck,
   Sparkles,
   Workflow,
 } from "lucide-react";
-import { ThemeSelect } from "@/components/kit";
 import { AssistantDrawer, shortcut, useAssistant } from "@/components/assistant/assistant";
 import { ToolsContext } from "@/components/assistant/tools";
-import { signout } from "@/app/(auth)/actions";
 import { ApiError, api, ok, type S } from "@/lib/api";
 
 /** The signed-in user (null when auth can't be reached). */
@@ -102,6 +99,13 @@ export function AppShell({
   useEffect(() => {
     reg.setPath(path);
   }, [reg, path]);
+  const nav = useRef<HTMLElement>(null);
+  useEffect(() => {
+    // a phone's dock is a bar that scrolls sideways: keep the current item (Settings is the last) in view
+    nav.current
+      ?.querySelector("[aria-current=page]")
+      ?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+  }, [path]);
   return (
     <UserContext value={me}>
       <ToolsContext value={reg}>
@@ -110,6 +114,7 @@ export function AppShell({
           data-drawer={(a.enabled && a.open) || undefined}
         >
           <nav
+            ref={nav}
             aria-label="Sections"
             className="panel z-10 m-3.5 mb-0 flex shrink-0 items-center gap-3.5 self-stretch overflow-x-auto rounded-[30px] px-3 py-1 md:mr-0 md:mb-3.5 md:w-[76px] md:flex-col md:self-start md:overflow-visible md:px-1 md:py-3.5"
           >
@@ -148,7 +153,21 @@ export function AppShell({
                 )}
               </button>
             )}
-            <SettingsMenu user={user} />
+            <Link
+              href="/settings"
+              aria-current={isCurrent("/settings", path) ? "page" : undefined}
+              className="dock-item flex h-16 w-[58px] shrink-0 flex-col items-center justify-center gap-[5px] rounded-2xl text-[10px] font-medium text-t2 aria-[current]:text-t1 md:mt-1.5"
+            >
+              <span
+                className="tile"
+                style={
+                  { "--tile": "linear-gradient(155deg,#a7b0c2,#4b5468)" } as React.CSSProperties
+                }
+              >
+                <Settings size={20} strokeWidth={1.75} aria-hidden />
+              </span>
+              Settings
+            </Link>
           </nav>
           {/* lg+: the window never scrolls; the dock and the side panel stay put and only <main> scrolls */}
           <div className="flex min-h-0 min-w-0 flex-1 flex-wrap content-start lg:flex-nowrap lg:overflow-hidden lg:[&>.aside]:max-h-[calc(100dvh-28px)] lg:[&>.aside]:shrink-0 lg:[&>.aside]:overflow-y-auto lg:[&>main]:min-h-0 lg:[&>main]:overflow-y-auto">
@@ -158,60 +177,5 @@ export function AppShell({
         {a.enabled && <AssistantDrawer a={a} />}
       </ToolsContext>
     </UserContext>
-  );
-}
-
-/** The Settings tile: who is signed in, the theme and Sign out. */
-function SettingsMenu({ user }: { user: S<"User"> | null }) {
-  return (
-    <>
-      <button
-        type="button"
-        popoverTarget="settings"
-        className="dock-item flex h-16 w-[58px] shrink-0 flex-col items-center justify-center gap-[5px] text-[10px] font-medium text-t2 md:mt-1.5"
-        style={{ anchorName: "--settings" } as React.CSSProperties}
-      >
-        <span
-          className="tile"
-          style={{ "--tile": "linear-gradient(155deg,#a7b0c2,#4b5468)" } as React.CSSProperties}
-        >
-          <Settings size={20} strokeWidth={1.75} aria-hidden />
-        </span>
-        Settings
-      </button>
-      <div
-        id="settings"
-        popover="auto"
-        role="dialog"
-        aria-label="Settings"
-        className="pop w-[240px]"
-        style={
-          {
-            positionAnchor: "--settings",
-            positionArea: "right span-top",
-            marginLeft: 8,
-            positionTryFallbacks: "flip-block, bottom",
-          } as React.CSSProperties
-        }
-      >
-        <div className="flex flex-col gap-2">
-          {user && (
-            <div className="mb-1 min-w-0">
-              <div className="truncate font-semibold">{user.name}</div>
-              <div className="mono truncate text-[11px] text-t2">{user.email}</div>
-            </div>
-          )}
-          <label htmlFor="theme" className="text-[13px]">
-            Theme
-          </label>
-          <ThemeSelect id="theme" />
-          <form action={signout} className="mt-2">
-            <button type="submit" className="chip bevel w-full justify-center bg-s4">
-              <LogOut size={16} aria-hidden /> Sign out
-            </button>
-          </form>
-        </div>
-      </div>
-    </>
   );
 }
