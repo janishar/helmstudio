@@ -219,11 +219,14 @@ async def test_conform_with_an_image_a_dissolve_gain_and_an_extra_audio_track(cl
     assert last.convert("RGB").getpixel((128, 64))[2] < 80  # the image (orange) ends it
 
 
+@pytest.mark.parametrize("codec", ["pcm_s16le", "aac"])
 async def test_an_audio_take_on_an_audio_track_is_mixed_resampled_to_stereo_at_its_start(
-    clips, tmp_path
+    clips, tmp_path, codec
 ):
-    """1.32: an input of kind audio (a mono 24 kHz WAV, sine at 1/8 scale) mixed as studio's buildArgs mixes a sound: in 0.1..0.4 laid
-    at 0.5 s, resampled to 48 kHz stereo, -6 dB; silence before it."""
+    """1.32: an input of kind audio (a mono 24 kHz WAV, sine at 1/8 scale; 1.38 also an m4a, what the web uploads)
+    mixed as studio's buildArgs mixes a sound: in 0.1..0.4 laid at 0.5 s, resampled to 48 kHz stereo, -6 dB; silence
+    before it."""
+    name = "w.wav" if codec == "pcm_s16le" else "w.m4a"
     ff(
         "-f",
         "lavfi",
@@ -232,11 +235,11 @@ async def test_an_audio_take_on_an_audio_track_is_mixed_resampled_to_stereo_at_i
         "-ac",
         "1",
         "-c:a",
-        "pcm_s16le",
-        str(tmp_path / "w.wav"),
+        codec,
+        str(tmp_path / name),
     )
     store = store_of(clips, **{"runs/t/1/0.mp4": "t"})
-    store.objects[f"{U}runs/w/1/0.wav"] = ((tmp_path / "w.wav").read_bytes(), "audio/wav")
+    store.objects[f"{U}runs/w/1/0.wav"] = ((tmp_path / name).read_bytes(), "audio/wav")
     silence = "anullsrc=r=48000:cl=stereo"
     graph = (f"[0:v:0]trim=start=0:end=1,setpts=PTS-STARTPTS,{CONFORM}[vout];"
              f"{silence},atrim=duration=1,asetpts=N/SR/TB[abase];"

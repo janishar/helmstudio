@@ -23,7 +23,17 @@ The pack runs the pinned h3 binary (`vendor/h3c`, h3.c 4cafd17, `make h3`) as a 
 - **Progress lines** are `\r`-updated `<phase> <n>/<total>`; on macOS 27 an MPSGraph log line (`Failed to import MPS
   module`) can be glued after one, so the parser matches the start of the line and ignores the rest.
 - **Exit codes.** 0 ok; 1 with a last `h3: <error>` line; 2 bad arguments. `h3: warning: --reuse with only N
-  denoising steps ...` is printed for `fast` at ≤ 7 steps: a warning, not an error.
+  denoising steps ...` is printed for reuse > 1 at ≤ 7 steps: a warning, not an error (Draft uses reuse 1).
+- **Speed params (API 1.37).** `speed` is gone: layers / reuse / core reuse / token reduction / render go to h3 as
+  they are. h3 refuses core reuse with reuse (`--core-reuse` is passed only at reuse 1) and any internal size that
+  is not exactly the canvas's shape on the 32 px grid, so Render picks one (`render_size`): 864 × 480 has only 576 ×
+  320 and 288 × 160 below it, so 75 % and 62.5 % both give 576 × 320; 832 × 480 has none (refused, "use Full").
+  Measured 2026-11-22 (golden `minimax-h3-t2v-render75`, 512² × 22, 4 steps, h3 at 384²): 35 s, child peak 18.4 GB
+  (18.5 at Full: the fixed ~18 GB dominates small canvases); it repeats bit for bit. The phase texts carry `renders
+  <w> × <h> → <W> × <H>` (the Create stage tag).
+- **Replace a video's sound (API 1.37).** `cut` writes the picture alone, then muxes the soundtrack's part in as
+  PCM (`-map 0:v:0 -map 1:a:0 -shortest`): the shorter of the two sets the reference's length; then `--ref-video`
+  (or an SGLang `video` condition with sound) as for a kept sound. Unmeasured on the GPU (no golden yet).
 - **Cancel** kills the process group (h3 spawns ffmpeg for the mux): SIGTERM, SIGKILL after 3 s. A runner killed hard
   (stall exit, jetsam) leaves the child running; the next start of the env kills it from
   `RUNNER_CACHE/child-native.pid` (only when that pid still runs the same binary).
@@ -67,8 +77,11 @@ The pack runs the pinned h3 binary (`vendor/h3c`, h3.c 4cafd17, `make h3`) as a 
   so the clip is exactly the frames asked); canvas from short edge + aspect (adapt_shape_v1, sgl.shape), aspect one
   of six for t2va / ref2va, any for fl2va. Anything it would resize is refused, never silently changed.
 - **No abort in SGLang** (`DELETE /v1/videos/{id}` only forgets the job): cancel kills the server's process group.
-- **Speed.** SGLang's `quality` (exact / lossless / high) is not h3's reuse; `high` is audited for 4×H200 only. The
-  run sends no quality (SGLang's default) and refuses `speed: fast` (check_generate).
+- **Quality and shifts (API 1.37).** SGLang's `quality` (exact / lossless / high) is not h3's reuse; `high` is
+  audited for 4×H200 only (refused on our one-card FP8 deployment), so `generate.quality` offers lossless (sent as
+  nothing: SGLang's default) and exact; `flow_shift` / `audio_flow_shift` are sent only when not 12 / 3. h3's speed
+  params are hidden on Base fp8 and ignored here. Unmeasured on the VM: exact vs lossless s/step and VRAM, and that
+  a shift of 8 takes.
 - **Memory.** The native measure counts the child's pid only; SGLang's scheduler worker is a grandchild, so `used_gb`
   under-reads during a run. VRAM is not budgeted (the native budget is host RAM): keep the torch runner empty.
 - **Unmeasured:** peak (VRAM and host RAM), load time, s/step, and whether the int8 text encoder runs with layerwise

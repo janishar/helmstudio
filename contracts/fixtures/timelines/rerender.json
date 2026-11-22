@@ -6,6 +6,10 @@
       "image": "image",
       "seconds": "seconds",
       "last": true
+    },
+    "minimax-h3-image-to-video": {
+      "first": "first.image",
+      "last": "last.image"
     }
   },
   "cases": [
@@ -1630,6 +1634,229 @@
       "expect": {
         "error": "not_made",
         "clip": "u"
+      }
+    },
+    {
+      "description": "1.37 MiniMax H3 Image to video: B's First frame is A's last frame and its Last frame C's first (studio.keyframes image params), so it binds first.image and last.image and runs after both",
+      "document": {
+        "target": {
+          "width": 256,
+          "height": 128,
+          "fps": 24,
+          "sample_rate": 48000
+        },
+        "tracks": [
+          {
+            "name": "V1",
+            "kind": "video",
+            "gain_db": 0,
+            "mute": false,
+            "clips": [
+              {
+                "id": "a",
+                "take_id": "11111111-0000-4000-8000-000000000002",
+                "in": 0.0,
+                "out": 1.0416666666666667,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "11111111-0000-4000-8000-000000000001",
+                  "11111111-0000-4000-8000-000000000002"
+                ],
+                "at": 0.0
+              },
+              {
+                "id": "b",
+                "take_id": "22222222-0000-4000-8000-000000000001",
+                "in": 0.0,
+                "out": 1.0416666666666667,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "22222222-0000-4000-8000-000000000001"
+                ],
+                "at": 1.0416666666666667
+              },
+              {
+                "id": "c",
+                "take_id": "33333333-0000-4000-8000-000000000001",
+                "in": 0.0,
+                "out": 1.0416666666666667,
+                "gain_db": 0,
+                "mute": false,
+                "alternatives": [
+                  "33333333-0000-4000-8000-000000000001"
+                ],
+                "at": 2.0833333333333335
+              }
+            ]
+          }
+        ],
+        "duration_s": 3.125,
+        "frames": 75
+      },
+      "takes": {
+        "11111111-0000-4000-8000-000000000001": {
+          "kind": "video",
+          "duration_s": 1.0416666666666667,
+          "fps": 24,
+          "frames": 25,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 400000,
+          "made_with": {
+            "workflow_id": "echo-video",
+            "inputs": {
+              "prompt.text": "x"
+            }
+          }
+        },
+        "11111111-0000-4000-8000-000000000002": {
+          "kind": "video",
+          "duration_s": 1.0416666666666667,
+          "fps": 24,
+          "frames": 25,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 400000,
+          "made_with": {
+            "workflow_id": "echo-video",
+            "inputs": {
+              "prompt.text": "x"
+            }
+          }
+        },
+        "22222222-0000-4000-8000-000000000001": {
+          "kind": "video",
+          "duration_s": 1.0416666666666667,
+          "fps": 24,
+          "frames": 25,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 400000,
+          "made_with": {
+            "workflow_id": "minimax-h3-image-to-video",
+            "inputs": {
+              "prompt.text": "x",
+              "first.image": {
+                "take_id": "44444444-0000-4000-8000-000000000001"
+              },
+              "last.image": {
+                "take_id": "44444444-0000-4000-8000-000000000002"
+              }
+            }
+          }
+        },
+        "33333333-0000-4000-8000-000000000001": {
+          "kind": "video",
+          "duration_s": 1.0416666666666667,
+          "fps": 24,
+          "frames": 25,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 400000,
+          "made_with": {
+            "workflow_id": "minimax-h3-image-to-video",
+            "inputs": {
+              "prompt.text": "x",
+              "first.image": {
+                "take_id": "bbbbbbbb-0000-4000-8000-000000000001"
+              }
+            }
+          }
+        },
+        "44444444-0000-4000-8000-000000000001": {
+          "kind": "image",
+          "frame_of": {
+            "take_id": "11111111-0000-4000-8000-000000000001",
+            "at": "last"
+          },
+          "width": 256,
+          "height": 128,
+          "bytes": 1
+        },
+        "44444444-0000-4000-8000-000000000002": {
+          "kind": "image",
+          "frame_of": {
+            "take_id": "33333333-0000-4000-8000-000000000001",
+            "at": "first"
+          },
+          "width": 256,
+          "height": 128,
+          "bytes": 1
+        },
+        "44444444-0000-4000-8000-000000000003": {
+          "kind": "image",
+          "frame_of": {
+            "take_id": "22222222-0000-4000-8000-000000000001",
+            "at": "last"
+          },
+          "width": 256,
+          "height": 128,
+          "bytes": 1
+        },
+        "bbbbbbbb-0000-4000-8000-000000000001": {
+          "kind": "image",
+          "width": 256,
+          "height": 128,
+          "bytes": 90000
+        },
+        "aaaaaaaa-0000-4000-8000-000000000001": {
+          "kind": "video",
+          "duration_s": 2.0416666666666665,
+          "fps": 24,
+          "frames": 49,
+          "has_audio": true,
+          "width": 256,
+          "height": 128,
+          "bytes": 400000,
+          "stream": {
+            "container": "mp4",
+            "codec": "h264",
+            "profile": "High",
+            "level": 21,
+            "pix_fmt": "yuv420p",
+            "width": 256,
+            "height": 128,
+            "sar": "1:1",
+            "field_order": "progressive",
+            "frame_rate": "24/1",
+            "time_base": "1/12288",
+            "color": {
+              "range": null,
+              "space": null,
+              "primaries": null,
+              "transfer": null
+            },
+            "extradata_sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+          }
+        }
+      },
+      "expect": {
+        "steps": [
+          {
+            "step": "clip_a",
+            "clip": "a",
+            "binds": {}
+          },
+          {
+            "step": "clip_c",
+            "clip": "c",
+            "binds": {}
+          },
+          {
+            "step": "clip_b",
+            "clip": "b",
+            "binds": {
+              "first.image": "clip_a.last_frame",
+              "last.image": "clip_c.first_frame"
+            }
+          }
+        ]
       }
     }
   ],

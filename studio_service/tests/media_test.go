@@ -153,9 +153,9 @@ func TestAudioUpload(t *testing.T) {
 	e := setup(t)
 	wav := []byte("RIFF\x24\x00\x00\x00WAVEfmt 0123")
 	for body, want := range map[string]map[string]any{
-		"duration_s is required for audio":                                    {"filename": "a.wav", "content_type": "audio/wav", "bytes": 10},
-		"audio is longer than 600 s":                                          {"filename": "a.wav", "content_type": "audio/wav", "bytes": 10, "duration_s": 601},
-		"only png, jpeg and webp images or wav and mp3 audio can be uploaded": {"filename": "a.ogg", "content_type": "audio/ogg", "bytes": 10},
+		"duration_s is required for audio":                                         {"filename": "a.wav", "content_type": "audio/wav", "bytes": 10},
+		"audio is longer than 600 s":                                               {"filename": "a.wav", "content_type": "audio/wav", "bytes": 10, "duration_s": 601},
+		"only png, jpeg and webp images or wav, mp3 and m4a audio can be uploaded": {"filename": "a.ogg", "content_type": "audio/ogg", "bytes": 10},
 	} {
 		if got := e.call(userA, "POST", "/v1/studio/uploads", want, 422); got["detail"] != body {
 			t.Errorf("%s: %v", body, got)

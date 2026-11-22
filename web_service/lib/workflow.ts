@@ -2,6 +2,7 @@
 import type { S } from "@/lib/api";
 import { frameError } from "@/lib/media";
 import { languageName, narrowed, voiceField } from "@/lib/voices";
+import { optionalMedia } from "@/lib/source";
 import { allowedInts, clipOf, positionErrors, positionOf } from "@/lib/video";
 
 type Param = S<"ParamSchema">;
@@ -239,6 +240,7 @@ export function readValue(p: Param, raw: Raw): { value: Value } | { error: strin
       for (const [k, v] of Object.entries(p.item ?? {})) {
         if (typeof v !== "object") continue;
         const spec = { name: k, ...(v as object) } as Param;
+        if (spec.type === "media" && spec.optional && it[k] == null) continue; // API 1.37: may stay empty
         const r = readValue(spec, toRaw((it[k] ?? spec.default) as Value, spec));
         if ("error" in r) return { error: `item ${i + 1}, ${spec.label ?? k}: ${r.error}` };
       }
@@ -336,12 +338,25 @@ export function buildInputs(fs: Field[], raws: Record<string, Raw>) {
         ? positionErrors(f.param, r.value as S<"RowItem">[], clipOf(fs, raws))
         : [];
       const i = all.findIndex(Boolean);
+      const unmet = replaceUnmet(f.param, r.value);
       if (i >= 0) errors[f.key] = `row ${i + 1}: ${all[i]}`;
+      else if (unmet) errors[f.key] = unmet;
       else if (!same(r.value, f.initial) && !(r.value === -1 && f.initial === null))
         inputs[f.key] = r.value;
     }
   }
   return { inputs, errors };
+}
+
+/** API 1.37 (MiniMax H3, docs/mock/H3Options.dc.html frame 6): a row whose Sound is Replace needs its optional media
+ * item (the soundtrack) before Generate; the runner's text for the first such row, else null. */
+export function replaceUnmet(p: Param, v: unknown): string | null {
+  if (p.type !== "rows" || !Array.isArray(v)) return null;
+  for (const [i, r] of (v as S<"RowItem">[]).entries())
+    for (const [k, s] of optionalMedia(p))
+      if (Object.values(r).includes("replace") && !isRef(r[k]))
+        return `row ${i + 1}: Replace needs a ${(s.label ?? k).toLowerCase()}`;
+  return null;
 }
 
 /** Equal values; a list or an image compares by content. */

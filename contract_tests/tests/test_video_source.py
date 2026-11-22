@@ -447,16 +447,62 @@ def test_audio_uploads(api, anon):
     }
 
 
+# an m4a's head: ftyp (major M4A, compatible M4A isom mp42) then an empty mdat; studio reads the brand, the runner the file
+M4A = b"\x00\x00\x00\x1cftypM4A \x00\x00\x02\x00M4A isommp42" + b"\x00\x00\x00\x08mdat"
+
+
+def test_m4a_uploads(api, anon):
+    """API 1.38: audio/mp4 (an m4a, what the web makes of a wav): the .m4a key, files_service's type on it, the ftyp
+    brand checked on complete."""
+    t = upload(api, anon, M4A, "voice.m4a", content_type="audio/mp4", duration_s=1.5)
+    assert (t["kind"], t["content_type"], t["audio"], t["width"]) == (
+        "audio",
+        "audio/mp4",
+        {"duration_s": 1.5},
+        None,
+    )
+    up = upload(api, anon, M4A, "a.m4a", complete=False, content_type="audio/mp4", duration_s=1)
+    assert up["upload_url"].split("?")[0].endswith(f"/uploads/{up['take_id']}.m4a")
+    # the key's one type (415), the signed length (411)
+    for ct, data, code in (
+        ("audio/wav", M4A, 415),
+        ("audio/mp4", M4A[:-1], 411),
+        ("audio/mp4", M4A, 204),
+    ):
+        r = anon.put(up["upload_url"], content=data, headers={"Content-Type": ct})
+        assert r.status_code == code, f"{ct}: {r.status_code} {r.text}"
+    ok(api.post(f"{STUDIO}/uploads/{up['take_id']}/complete"))
+    video = b"\x00\x00\x00\x1cftypisom\x00\x00\x02\x00isomavc1mp41" + b"\x00\x00\x00\x08mdat"
+    bad = upload(api, anon, video, "b.m4a", complete=False, content_type="audio/mp4", duration_s=1)
+    assert (
+        anon.put(
+            bad["upload_url"], content=video, headers={"Content-Type": "audio/mp4"}
+        ).status_code
+        == 204
+    )
+    r = api.post(f"{STUDIO}/uploads/{bad['take_id']}/complete")
+    assert r.status_code == 422 and r.json()["detail"] == "not a valid m4a file", r.text
+    assert api.post(f"{STUDIO}/uploads/{bad['take_id']}/complete").status_code == 404  # discarded
+
+
+def test_upload_limits(api, no_token):
+    """API 1.38: GET /uploads/limits, from the registry as check.py upload_limits computes it over the schemas."""
+    groups = ok(api.get(f"{STUDIO}/nodes"))["groups"]
+    nodes = [n for g in groups for n in g["nodes"]]
+    assert ok(api.get(f"{STUDIO}/uploads/limits")) == check.upload_limits(nodes)
+    assert no_token.get(f"{STUDIO}/uploads/limits").status_code == 401
+
+
 def test_audio_upload_refusals(api, anon):
     good = {"filename": "a.wav", "content_type": "audio/wav", "bytes": 10, "duration_s": 1}
     for change, text in (
         (
             {"content_type": "audio/ogg"},
-            "only png, jpeg and webp images or wav and mp3 audio can be uploaded",
+            "only png, jpeg and webp images or wav, mp3 and m4a audio can be uploaded",
         ),
         (
             {"content_type": "image/gif"},
-            "only png, jpeg and webp images or wav and mp3 audio can be uploaded",
+            "only png, jpeg and webp images or wav, mp3 and m4a audio can be uploaded",
         ),
         ({"duration_s": 600.5}, "audio is longer than 600 s"),
         ({"bytes": 52428801}, None),  # over 50 MB

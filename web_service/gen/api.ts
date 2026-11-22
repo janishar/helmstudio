@@ -1046,13 +1046,36 @@ export interface paths {
         /**
          * Start an upload; answers a signed files_service URL to PUT the bytes to
          * @description Stores a pending take (source `upload`, invisible until completed) and signs a single-use `PUT` link for the
-         *     key `u/<caller>/uploads/<take_id>.<png|jpg|webp|wav|mp3>`, valid 15 minutes (`PUT /files/{path}`): `image/png`,
-         *     `image/jpeg`, `image/webp` and, from 1.19, `audio/wav` and `audio/mpeg` (an audio take; `duration_s` required,
-         *     at most 600 s), at most 50 MB (52428800 bytes). 422 for any other type or size ("only png, jpeg and webp
-         *     images or wav and mp3 audio can be uploaded", "file is larger than 50 MB", "audio is longer than 600 s"). A
-         *     pending upload not completed within an hour is discarded.
+         *     key `u/<caller>/uploads/<take_id>.<png|jpg|webp|wav|mp3|m4a>`, valid 15 minutes (`PUT /files/{path}`): `image/png`,
+         *     `image/jpeg`, `image/webp` and, from 1.19, `audio/wav` and `audio/mpeg`, from 1.38 `audio/mp4` (an m4a; an
+         *     audio take; `duration_s` required, at most 600 s), at most 50 MB (52428800 bytes). 422 for any other type or
+         *     size ("only png, jpeg and webp images or wav, mp3 and m4a audio can be uploaded", "file is larger than 50 MB",
+         *     "audio is longer than 600 s"). A pending upload not completed within an hour is discarded. From 1.38 the web
+         *     optimises a file before this call (contracts/README.md, Optimised uploads): `bytes` is the file it uploads.
          */
         post: operations["studioCreateUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/uploads/limits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The sizes the web optimises an upload to, derived from the registry (API 1.38)
+         * @description Computed from every node schema any runner publishes (contracts/README.md, Optimised uploads), never a
+         *     constant: the web reads it once per session and scales an image down only when its long side is over
+         *     `image_max_side`.
+         */
+        get: operations["studioUploadLimits"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1077,7 +1100,8 @@ export interface paths {
          *     key). 409 "upload not received" when the object is not there yet (PUT it, then call again). 422 when a check
          *     fails ("size differs from the declared bytes", "not a valid png image", "image is larger than 16384 px",
          *     "image is larger than 50 MP"; from 1.19 audio: the header must be RIFF/WAVE, or an ID3v2 tag or MPEG audio frame
-         *     sync, else "not a valid wav file" / "not a valid mp3 file"; the take is `kind: audio`, `width` / `height` null,
+         *     sync, from 1.38 an `ftyp` box whose major or a compatible brand is `M4A `, else "not a valid wav file" / "not
+         *     a valid mp3 file" / "not a valid m4a file"; the take is `kind: audio`, `width` / `height` null,
          *     `audio.duration_s` as declared): the
          *     upload is discarded and its take_id is 404 from then on. Calling it again after success answers the same take.
          */
@@ -2329,7 +2353,7 @@ export interface paths {
         get: operations["filesGetFile"];
         /**
          * Upload the bytes of a signed upload link (the signature is the auth; no API key)
-         * @description Only reachable through an `upload_url` from `POST /v1/studio/uploads` (images, at most 50 MB) or `POST
+         * @description Only reachable through an `upload_url` from `POST /v1/studio/uploads` (images and audio, at most 50 MB) or `POST
          *     /v1/studio/loras` (`u/<owner>/loras/<lora_id>.safetensors`, `application/octet-stream`, at most 2 GiB). The signature is the lower-case hex
          *     HMAC-SHA256 (the `/files` secret) of `"PUT\n" + path + "\n" + exp + "\n" + bytes + "\n" + ct`; a GET link
          *     (`path + "\n" + exp`) never verifies as a PUT. The request must carry `Content-Type` equal to `ct` and
@@ -2704,6 +2728,8 @@ export interface components {
             max_total_s?: number;
             /** @description from 1.22, rows only: optional inputs of the same node; while one is wired the rows must stay empty (`<node>.<param>: must stay empty while <node>.<input> is wired`) */
             not_with?: string[];
+            /** @description from 1.37, a rows item's media field only: it may be left empty (null or absent; MiniMax H3's `soundtrack`); `max_total_s` and Use in… go by the item's one required media field */
+            optional?: boolean;
             /** @description frames only: the name of the same node's int or float param holding frames per second */
             fps?: string;
             /** @description frames only: present = the value `"auto"` is allowed (the model predicts the length, clamped to min_s..max_s seconds and to min..max frames); absent = it is 422 (`<node>.<param>: auto length is not offered`) */
@@ -2730,7 +2756,7 @@ export interface components {
             help?: string;
             /** @description visibility expression; absent = always shown */
             when?: string;
-            /** @description rows only: field → a ref kind (`Image`: an image take, from 1.14 `Media`: an image or video take (an ask node's `media`), `Lora`: a LoRA; required in every item) or a param schema without name (from 1.22 a `media` param: required in every item; from 1.32 a `voice` param: required in every item) */
+            /** @description rows only: field → a ref kind (`Image`: an image take, from 1.14 `Media`: an image or video take (an ask node's `media`), `Lora`: a LoRA; required in every item) or a param schema without name (from 1.22 a `media` param: required in every item unless, from 1.37, `optional`; from 1.32 a `voice` param: required in every item) */
             item?: {
                 [key: string]: "Image" | "Media" | "Lora" | Record<string, never>;
             };
@@ -2895,6 +2921,17 @@ export interface components {
                     }[];
                 }[];
             }[];
+            /**
+             * @description from 1.37: the image params a Timeline New shot binds a first and a last frame into, for a workflow whose frames are image params, not keyframe rows (MiniMax H3 Image to video); `Workflow.keyframes` takes this shape (contracts/README.md, Timeline: New shot options). Not a placement
+             * @example {
+             *       "first": "first.image",
+             *       "last": "last.image"
+             *     }
+             */
+            keyframes?: {
+                first: components["schemas"]["StudioPath"];
+                last?: string | null;
+            };
             /** @description a field's title in the Studio when it should differ from the param's label */
             labels?: {
                 [key: string]: string;
@@ -4469,13 +4506,18 @@ export interface components {
             /** @description the file's name; only its base name (without extension) is kept, as the title */
             filename: string;
             /**
-             * @description from 1.19 also WAV and MP3 (an audio take)
+             * @description from 1.19 also WAV and MP3 (an audio take), from 1.38 m4a (AAC in MP4)
              * @enum {string}
              */
-            content_type: "image/png" | "image/jpeg" | "image/webp" | "audio/wav" | "audio/mpeg";
+            content_type: "image/png" | "image/jpeg" | "image/webp" | "audio/wav" | "audio/mpeg" | "audio/mp4";
             bytes: number;
             /** @description audio only (required): its length as the browser decoded it; studio records it, the runner reads the file itself */
             duration_s?: number;
+        };
+        /** @description API 1.38 (contracts/README.md, Optimised uploads): what the web optimises an upload to */
+        UploadLimits: {
+            /** @description the largest `max` of a `width` or `height` param on any node schema with a `Canvas` output (8192 with MiniMax H3 Image, 4096 with Qwen Image alone); 16384 (the upload cap) when no runner publishes one */
+            image_max_side: number;
         };
         Upload: {
             /**
@@ -6284,7 +6326,7 @@ export interface components {
             /** @enum {string} */
             mode: "copy" | "conform";
         };
-        /** @description the keyframe rows a New shot binds (contracts/README.md, Timeline: New shot options) */
+        /** @description what a New shot binds its frames into (contracts/README.md, Timeline: New shot options): keyframe rows (LTX), or from 1.37 two image params (`WorkflowFrameParams`, a workflow's `studio.keyframes`: MiniMax H3 Image to video) */
         WorkflowKeyframes: {
             /** @example keyframes.images */
             param: string;
@@ -6300,6 +6342,17 @@ export interface components {
             seconds: string;
             /** @description it takes 2 rows or more: "End on the next clip's first frame" is offered */
             last: boolean;
+        } | components["schemas"]["WorkflowFrameParams"];
+        /**
+         * @description from 1.37: the image param the previous clip's last frame goes into, and the one the next clip's first frame goes into (null: "End on the next clip's first frame" is not offered)
+         * @example {
+         *       "first": "first.image",
+         *       "last": "last.image"
+         *     }
+         */
+        WorkflowFrameParams: {
+            first: components["schemas"]["StudioPath"];
+            last: components["schemas"]["StudioPath"] | null;
         };
         SigninRequest: {
             /** @description normalised like sign-up; a malformed one is just a failed sign-in (401) */
@@ -8183,6 +8236,27 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             422: components["responses"]["Unprocessable"];
             503: components["responses"]["Unavailable"];
+        };
+    };
+    studioUploadLimits: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the limits */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadLimits"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
         };
     };
     studioCompleteUpload: {

@@ -37,6 +37,7 @@ func (c *controller) MountRoutes(group *gin.RouterGroup) {
 	group.GET("/takes/:id/uses", c.usesHandler)
 	group.GET("/sessions/:id/takes", c.sessionTakesHandler)
 	group.POST("/uploads", c.createUploadHandler)
+	group.GET("/uploads/limits", c.uploadLimitsHandler)
 	group.POST("/uploads/:id/complete", c.completeUploadHandler)
 	group.POST("/admin/imports/takes", c.createImportHandler)
 	group.POST("/admin/imports/takes/:id/complete", c.completeImportHandler)
@@ -75,6 +76,11 @@ func (c *controller) createImportHandler(ctx *gin.Context) {
 func (c *controller) completeImportHandler(ctx *gin.Context) {
 	out, err := c.service.CompleteImport(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"))
 	reply(ctx, http.StatusOK, out, err)
+}
+
+// uploadLimitsHandler: GET /uploads/limits (API 1.38).
+func (c *controller) uploadLimitsHandler(ctx *gin.Context) {
+	network.SendJSON(ctx, http.StatusOK, c.service.UploadLimits())
 }
 
 // usesHandler: GET /takes/{take_id}/uses (API 1.19).

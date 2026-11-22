@@ -8,7 +8,9 @@ text encoder layerwise offloaded (one 96 GB card) on torch_sdpa (SM120).
 The request (POST /v1/videos, SGLang's canonical MiniMax H3 request): task, conditions (first / last frame →
 keyframes at frame 0 / -1; image, audio, video references in h3's argv order: images, audios, videos, each numbered
 per kind as the prompt's <Picture n>, <Audio n>, <Video n>), target {short_edge, aspect_ratio, duration_seconds =
-frames / 24}, seed, num_inference_steps. SGLang derives the canvas from short edge and aspect (adapt_shape_v1: shape()
+frames / 24}, seed, num_inference_steps; API 1.37 `quality` (exact; lossless, SGLang's default, is sent as nothing),
+`flow_shift` and `audio_flow_shift` only when they differ from the model's 12 and 3, so a default run's body is
+unchanged (plan 20 24.3 A5; unverified on the VM). SGLang derives the canvas from short edge and aspect (adapt_shape_v1: shape()
 here) and the frames from the duration (4-15 s, snapped up to 5 + 17k), so only canvases and lengths it can make
 exactly are accepted (cuda_error). Polled every POLL s: `progress` (0-99, the denoise) → phase sampling (phase id
 sample; the server's start is encode, and once the denoise reaches 99, decode_video: SGLang reports nothing of its
@@ -47,6 +49,8 @@ RATIOS = (
     "9:16",
 )  # t2va and ref2va; fl2va takes any W:H (1:4 to 4:1)
 MAX_PIXELS = 768 * 1344
+# the model's flow shifts (model_index.json _minimax_h3.sigma_shift_scales): generate.flow_shift / audio_flow_shift
+FLOW_SHIFT, AUDIO_FLOW_SHIFT = 12.0, 3.0
 
 
 def shape(short: int, rw: int, rh: int) -> tuple[int, int]:
@@ -75,8 +79,9 @@ def target(task: str, width: int, height: int, frames: int) -> dict:
 
 
 def request(prompt: str, seed: int, steps: int, size: dict, frames: int, first, last,
-            images: list[Path], audios: list[Path], videos: list[Path]) -> dict:  # fmt: skip
-    """The /v1/videos body; first / last are PNG paths or None."""
+            images: list[Path], audios: list[Path], videos: list[Path], *, quality: str = "lossless",
+            flow_shift: float = FLOW_SHIFT, audio_flow_shift: float = AUDIO_FLOW_SHIFT) -> dict:  # fmt: skip
+    """The /v1/videos body; first / last are PNG paths or None; quality and the shifts only when not the default."""
     refs = (
         [("image", p) for p in images]
         + [("audio", p) for p in audios]
@@ -88,9 +93,16 @@ def request(prompt: str, seed: int, steps: int, size: dict, frames: int, first, 
         {"type": "image", "role": "keyframe", "uri": str(p), "frame_index": i} for i, p in keys if p
     ]
     conditions += [{"type": kind, "role": "reference", "uri": str(p)} for kind, p in refs]
-    return {"prompt": prompt, "task": task, "conditions": conditions,
+    body = {"prompt": prompt, "task": task, "conditions": conditions,
             "target": target(task, size["width"], size["height"], frames),
             "seed": seed, "num_inference_steps": steps}  # fmt: skip
+    if quality != "lossless":
+        body["quality"] = quality
+    if flow_shift != FLOW_SHIFT:
+        body["flow_shift"] = flow_shift
+    if audio_flow_shift != AUDIO_FLOW_SHIFT:
+        body["audio_flow_shift"] = audio_flow_shift
+    return body
 
 
 def argv(model, partition: str, port: int, tmp: Path) -> list[str]:

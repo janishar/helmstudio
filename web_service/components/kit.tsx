@@ -1,9 +1,10 @@
 "use client";
-// Small shared pieces: the logo, the theme select, the info button, error notes and a modal dialog.
+// Small shared pieces: the logo, the theme select, the info button, error notes, a modal dialog and an upload's state.
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useTheme } from "next-themes";
 import { ChevronLeft, X } from "lucide-react";
 import { THEMES } from "@/lib/themes";
+import { progressText, type UploadProgress } from "@/lib/takes";
 
 /** The helmstudio mark on its accent gradient. */
 export function Logo({ size = 44 }: { size?: number }) {
@@ -186,5 +187,31 @@ export function Modal({
       </div>
       {open && children}
     </dialog>
+  );
+}
+
+/** A pending upload's state (docs/mock/UploadOptimise.dc.html): "Optimising…" (an image), "Optimising 62%" (audio) or
+ * "Uploading 48%", the bar while a fraction is known, and the mono line ("12.4 → 1.9 MB · WebP", "as is"). */
+export function UploadStatus({ p, name }: { p: UploadProgress; name: string }) {
+  const pct = p.f === undefined ? undefined : Math.round(p.f * 100);
+  return (
+    <>
+      <span aria-live="polite" className="text-t1">
+        {progressText(p)}
+      </span>
+      {pct !== undefined && (
+        <span
+          role="progressbar"
+          aria-label={`${p.step === "uploading" ? "Uploading" : "Optimising"} ${name}`}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={pct}
+          className="block h-1 w-full overflow-hidden rounded-[2px] bg-inset"
+        >
+          <span className="block h-full bg-a2" style={{ width: `${pct}%` }} />
+        </span>
+      )}
+      {p.line && <span className="mono text-[10px] text-t2">{p.line}</span>}
+    </>
   );
 }

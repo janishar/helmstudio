@@ -83,7 +83,8 @@ func templateDoc(workflow registry.Workflow) dto.WorkflowDoc {
 func (s *Service) templateDTO(workflow registry.Workflow, problems *[]dto.Problem) dto.Workflow {
 	return dto.Workflow{ID: workflow.ID, Title: workflow.Title, Action: workflow.Action, Family: workflow.Family, Env: workflow.Env,
 		Media: cmp.Or(workflow.Media, "image"), Nodes: workflow.Nodes, NodeSchemas: workflow.NodeSchemas, Source: "template",
-		Studio: templateDoc(workflow).Studio, Problems: problems, Keyframes: timeline.ShotKeyframes(workflow.Nodes, workflow.NodeSchemas)}
+		Studio: templateDoc(workflow).Studio, Problems: problems,
+		Keyframes: timeline.ShotKeyframes(workflow.Nodes, workflow.NodeSchemas, templateDoc(workflow).Studio.FrameParams())}
 }
 
 // mineDTO maps a stored workflow (its media computed from its graph); problems nil leaves them out.
@@ -93,7 +94,7 @@ func (s *Service) mineDTO(row model.UserWorkflow, problems *[]dto.Problem) dto.W
 	return dto.Workflow{ID: row.ID, Title: doc.Title, Family: doc.Family, Env: doc.Env, Nodes: doc.Nodes,
 		Media: workflowMedia(doc.Nodes, schemas), NodeSchemas: schemas, Source: "mine", Studio: doc.Studio, BasedOn: row.BasedOn,
 		Version: &row.Version, CreatedAt: &row.CreatedAt, UpdatedAt: &row.UpdatedAt, Problems: problems,
-		Keyframes: timeline.ShotKeyframes(doc.Nodes, schemas)}
+		Keyframes: timeline.ShotKeyframes(doc.Nodes, schemas, doc.Studio.FrameParams())}
 }
 
 // readWorkflow reads one of the caller's workflows in tx (lock: FOR UPDATE); another user's is errNotFound.

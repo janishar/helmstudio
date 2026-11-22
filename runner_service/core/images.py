@@ -162,6 +162,7 @@ async def load(specs: list[dict], params: dict, owner: str, fetch) -> dict:
                 | {
                     f: row[f] | {"data": await read(row[f], owner, fetch, True)}
                     for f in media_fields(s)
+                    if row.get(f) is not None  # API 1.37: an optional media field left empty
                 }
                 | {f: await _clip(row[f], owner, fetch, clips) for f in graph.voice_fields(s)}
             )

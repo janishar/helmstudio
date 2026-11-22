@@ -88,6 +88,7 @@ type mediaSlot struct {
 	Total      float64
 	Value      map[string]any
 	set        func(map[string]any)
+	Extra      bool // API 1.37: an item's optional media field (checked and snapped, never counted)
 }
 
 // mediaSlots lists a graph's media values (null ones left out) in input order: node id, then schema order, then item;
@@ -114,6 +115,20 @@ func mediaSlots(nodes map[string]registry.Node, schemas map[string]registry.Node
 				if v, isRef := fields[field].(map[string]any); ok && isRef {
 					out = append(out, mediaSlot{Path: fmt.Sprintf("%s[%d].%s", path, i+1, field), Rows: path, Param: spec,
 						Total: p.MaxTotalS, Value: v, set: func(x map[string]any) { fields[field] = x }})
+				}
+			}
+			// API 1.37: then each item's optional media fields (item, then field order), after the totals
+			for i, item := range items {
+				fields, _ := item.(map[string]any)
+				for _, name := range slices.Sorted(maps.Keys(p.Item)) {
+					var spec registry.Param
+					if json.Unmarshal(p.Item[name], &spec) != nil || spec.Type != "media" || !spec.Optional {
+						continue
+					}
+					if v, isRef := fields[name].(map[string]any); isRef {
+						out = append(out, mediaSlot{Path: fmt.Sprintf("%s[%d].%s", path, i+1, name), Rows: path, Param: spec,
+							Value: v, Extra: true, set: func(x map[string]any) { fields[name] = x }})
+					}
 				}
 			}
 		}
@@ -184,7 +199,7 @@ func mediaRules(nodes map[string]registry.Node, schemas map[string]registry.Node
 		if detail := gallery.MediaFit(slot.Param, take); detail != "" {
 			return slot.Path + ": " + detail
 		}
-		if slot.Rows == "" && slices.Contains(slot.Param.Accepts, "video") {
+		if slot.Rows == "" && slices.Contains(slot.Param.Accepts, "video") { // never an item's field
 			sources++
 			source = &take
 		}
@@ -193,7 +208,7 @@ func mediaRules(nodes map[string]registry.Node, schemas map[string]registry.Node
 			return slot.Path + ": " + detail
 		}
 		slot.set(value)
-		if slot.Rows == "" {
+		if slot.Rows == "" || slot.Extra {
 			continue
 		}
 		if out, trimmed := value["out"].(float64); trimmed {
@@ -201,7 +216,7 @@ func mediaRules(nodes map[string]registry.Node, schemas map[string]registry.Node
 		} else {
 			total += take.DurationS
 		}
-		if i+1 < len(slots) && slots[i+1].Rows == slot.Rows {
+		if i+1 < len(slots) && slots[i+1].Rows == slot.Rows && !slots[i+1].Extra {
 			continue // the rows param's last item adds up its items
 		}
 		if slot.Total > 0 && total > slot.Total+1e-9 {

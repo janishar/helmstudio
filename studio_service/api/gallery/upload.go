@@ -11,6 +11,7 @@ import (
 	_ "image/jpeg" // registers jpeg with image.DecodeConfig
 	_ "image/png"  // registers png
 	"io"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -23,6 +24,7 @@ import (
 	"github.com/helmstudio/studio_service/api/gallery/dto"
 	"github.com/helmstudio/studio_service/api/gallery/model"
 	"github.com/helmstudio/studio_service/common"
+	"github.com/helmstudio/studio_service/registry"
 )
 
 // MaxSide is the largest width or height an upload may have.
@@ -138,9 +140,42 @@ func (s *Service) inspect(ctx context.Context, row model.Take) (width, height in
 	return width, height, hex.EncodeToString(hash.Sum(nil)), detail, nil
 }
 
+// UploadLimits is GET /uploads/limits (API 1.38): the largest max of a width or height param over the node schemas
+// with a Canvas output (contract check.py upload_limits), MaxSide when none is published.
+func (s *Service) UploadLimits() dto.UploadLimits {
+	side := 0
+	for _, schema := range s.registry.Schemas() {
+		if !slices.ContainsFunc(schema.Outputs, func(o registry.Port) bool { return o.Type == "Canvas" }) {
+			continue
+		}
+		for _, p := range schema.Params {
+			if (p.Name == "width" || p.Name == "height") && p.Max != nil {
+				side = max(side, int(*p.Max))
+			}
+		}
+	}
+	if side == 0 {
+		side = MaxSide
+	}
+	return dto.UploadLimits{ImageMaxSide: side}
+}
+
 // checkAudio checks an audio upload's header (API 1.19): RIFF….WAVE for a wav; an ID3v2 tag or an MPEG audio frame
-// sync for an mp3. Its length is the client's (the runner reads the file itself).
+// sync for an mp3; (1.38) an ftyp box whose major or a compatible brand is M4A for an m4a. Its length is the
+// client's (the runner reads the file itself).
 func checkAudio(head []byte, contentType string) string {
+	if contentType == "audio/mp4" {
+		if len(head) < 16 || string(head[4:8]) != "ftyp" {
+			return "not a valid m4a file"
+		}
+		size := min(int(binary.BigEndian.Uint32(head)), len(head))
+		for i := 8; i+4 <= size; i += 4 { // the major brand, the minor version (never M4A), the compatible brands
+			if string(head[i:i+4]) == "M4A " {
+				return ""
+			}
+		}
+		return "not a valid m4a file"
+	}
 	if contentType == "audio/wav" {
 		if len(head) < 12 || string(head[:4]) != "RIFF" || string(head[8:12]) != "WAVE" {
 			return "not a valid wav file"

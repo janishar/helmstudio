@@ -414,6 +414,382 @@
       "expect": {
         "keyframes": null
       }
+    },
+    {
+      "description": "1.37 minimax-h3 image to video: its studio.keyframes, two image params",
+      "workflow": {
+        "nodes": {
+          "prompt": {
+            "kind": "prompt",
+            "params": {
+              "text": ""
+            }
+          },
+          "seed": {
+            "kind": "seed",
+            "params": {
+              "seed": -1
+            }
+          },
+          "canvas": {
+            "kind": "minimax-h3/canvas",
+            "params": {
+              "width": 864,
+              "height": 480
+            }
+          },
+          "duration": {
+            "kind": "minimax-h3/duration",
+            "params": {
+              "frames": 124,
+              "fps": 24
+            }
+          },
+          "model": {
+            "kind": "minimax-h3/model",
+            "params": {
+              "variant": "base",
+              "precision": "int8"
+            }
+          },
+          "first": {
+            "kind": "image",
+            "params": {
+              "image": null
+            }
+          },
+          "last": {
+            "kind": "image",
+            "optional": true,
+            "params": {
+              "image": null
+            }
+          },
+          "generate": {
+            "kind": "minimax-h3/generate",
+            "in": {
+              "model": "model.model",
+              "prompt": "prompt.text",
+              "seed": "seed.seed",
+              "canvas": "canvas.canvas",
+              "duration": "duration.duration",
+              "first": "first.image",
+              "last": "last.image"
+            },
+            "params": {
+              "steps": 20,
+              "layers": 45,
+              "reuse": 2,
+              "core_reuse": 1,
+              "token_reduction": false,
+              "render": "Full",
+              "quality": "lossless",
+              "flow_shift": 12,
+              "audio_flow_shift": 3,
+              "refs": [],
+              "videos": [],
+              "audios": []
+            }
+          },
+          "output": {
+            "kind": "output",
+            "in": {
+              "media": "generate.video"
+            }
+          }
+        },
+        "studio": {
+          "keyframes": {
+            "first": "first.image",
+            "last": "last.image"
+          }
+        }
+      },
+      "expect": {
+        "keyframes": {
+          "first": "first.image",
+          "last": "last.image"
+        }
+      }
+    },
+    {
+      "description": "1.37: a last path naming no image param is null (only Start from offered)",
+      "workflow": {
+        "nodes": {
+          "prompt": {
+            "kind": "prompt",
+            "params": {
+              "text": ""
+            }
+          },
+          "seed": {
+            "kind": "seed",
+            "params": {
+              "seed": -1
+            }
+          },
+          "canvas": {
+            "kind": "minimax-h3/canvas",
+            "params": {
+              "width": 864,
+              "height": 480
+            }
+          },
+          "duration": {
+            "kind": "minimax-h3/duration",
+            "params": {
+              "frames": 124,
+              "fps": 24
+            }
+          },
+          "model": {
+            "kind": "minimax-h3/model",
+            "params": {
+              "variant": "base",
+              "precision": "int8"
+            }
+          },
+          "first": {
+            "kind": "image",
+            "params": {
+              "image": null
+            }
+          },
+          "last": {
+            "kind": "image",
+            "optional": true,
+            "params": {
+              "image": null
+            }
+          },
+          "generate": {
+            "kind": "minimax-h3/generate",
+            "in": {
+              "model": "model.model",
+              "prompt": "prompt.text",
+              "seed": "seed.seed",
+              "canvas": "canvas.canvas",
+              "duration": "duration.duration",
+              "first": "first.image",
+              "last": "last.image"
+            },
+            "params": {
+              "steps": 20,
+              "layers": 45,
+              "reuse": 2,
+              "core_reuse": 1,
+              "token_reduction": false,
+              "render": "Full",
+              "quality": "lossless",
+              "flow_shift": 12,
+              "audio_flow_shift": 3,
+              "refs": [],
+              "videos": [],
+              "audios": []
+            }
+          },
+          "output": {
+            "kind": "output",
+            "in": {
+              "media": "generate.video"
+            }
+          }
+        },
+        "studio": {
+          "keyframes": {
+            "first": "first.image",
+            "last": "gone.image"
+          }
+        }
+      },
+      "expect": {
+        "keyframes": {
+          "first": "first.image",
+          "last": null
+        }
+      }
+    },
+    {
+      "description": "1.37: a first path that is not an image param: none (no keyframe rows either)",
+      "workflow": {
+        "nodes": {
+          "prompt": {
+            "kind": "prompt",
+            "params": {
+              "text": ""
+            }
+          },
+          "seed": {
+            "kind": "seed",
+            "params": {
+              "seed": -1
+            }
+          },
+          "canvas": {
+            "kind": "minimax-h3/canvas",
+            "params": {
+              "width": 864,
+              "height": 480
+            }
+          },
+          "duration": {
+            "kind": "minimax-h3/duration",
+            "params": {
+              "frames": 124,
+              "fps": 24
+            }
+          },
+          "model": {
+            "kind": "minimax-h3/model",
+            "params": {
+              "variant": "base",
+              "precision": "int8"
+            }
+          },
+          "first": {
+            "kind": "image",
+            "params": {
+              "image": null
+            }
+          },
+          "last": {
+            "kind": "image",
+            "optional": true,
+            "params": {
+              "image": null
+            }
+          },
+          "generate": {
+            "kind": "minimax-h3/generate",
+            "in": {
+              "model": "model.model",
+              "prompt": "prompt.text",
+              "seed": "seed.seed",
+              "canvas": "canvas.canvas",
+              "duration": "duration.duration",
+              "first": "first.image",
+              "last": "last.image"
+            },
+            "params": {
+              "steps": 20,
+              "layers": 45,
+              "reuse": 2,
+              "core_reuse": 1,
+              "token_reduction": false,
+              "render": "Full",
+              "quality": "lossless",
+              "flow_shift": 12,
+              "audio_flow_shift": 3,
+              "refs": [],
+              "videos": [],
+              "audios": []
+            }
+          },
+          "output": {
+            "kind": "output",
+            "in": {
+              "media": "generate.video"
+            }
+          }
+        },
+        "studio": {
+          "keyframes": {
+            "first": "generate.steps",
+            "last": "last.image"
+          }
+        }
+      },
+      "expect": {
+        "keyframes": null
+      }
+    },
+    {
+      "description": "1.37: the same graph without studio.keyframes: none",
+      "workflow": {
+        "nodes": {
+          "prompt": {
+            "kind": "prompt",
+            "params": {
+              "text": ""
+            }
+          },
+          "seed": {
+            "kind": "seed",
+            "params": {
+              "seed": -1
+            }
+          },
+          "canvas": {
+            "kind": "minimax-h3/canvas",
+            "params": {
+              "width": 864,
+              "height": 480
+            }
+          },
+          "duration": {
+            "kind": "minimax-h3/duration",
+            "params": {
+              "frames": 124,
+              "fps": 24
+            }
+          },
+          "model": {
+            "kind": "minimax-h3/model",
+            "params": {
+              "variant": "base",
+              "precision": "int8"
+            }
+          },
+          "first": {
+            "kind": "image",
+            "params": {
+              "image": null
+            }
+          },
+          "last": {
+            "kind": "image",
+            "optional": true,
+            "params": {
+              "image": null
+            }
+          },
+          "generate": {
+            "kind": "minimax-h3/generate",
+            "in": {
+              "model": "model.model",
+              "prompt": "prompt.text",
+              "seed": "seed.seed",
+              "canvas": "canvas.canvas",
+              "duration": "duration.duration",
+              "first": "first.image",
+              "last": "last.image"
+            },
+            "params": {
+              "steps": 20,
+              "layers": 45,
+              "reuse": 2,
+              "core_reuse": 1,
+              "token_reduction": false,
+              "render": "Full",
+              "quality": "lossless",
+              "flow_shift": 12,
+              "audio_flow_shift": 3,
+              "refs": [],
+              "videos": [],
+              "audios": []
+            }
+          },
+          "output": {
+            "kind": "output",
+            "in": {
+              "media": "generate.video"
+            }
+          }
+        }
+      },
+      "expect": {
+        "keyframes": null
+      }
     }
   ]
 }

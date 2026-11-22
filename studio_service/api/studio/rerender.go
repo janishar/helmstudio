@@ -82,7 +82,8 @@ func (s *Service) RerenderTimeline(ctx context.Context, caller common.Caller, id
 			} else if err != nil {
 				return err
 			}
-			workflows[wid], keyframes[wid] = workflow, timeline.ShotKeyframes(workflow.Nodes, workflow.NodeSchemas)
+			workflows[wid], keyframes[wid] = workflow, timeline.ShotKeyframes(workflow.Nodes, workflow.NodeSchemas,
+				templateDoc(workflow).Studio.FrameParams())
 			media[wid] = slices.Sorted(maps.Keys(mediaParams(workflow.Nodes, workflow.NodeSchemas)))
 			if version != nil {
 				versions[wid] = *version

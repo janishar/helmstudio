@@ -220,12 +220,15 @@ def run_inputs(plan, state, spec, item: str | None = None) -> tuple[dict | None,
     out = dict(state["inputs"]) if spec.get("row_inputs") else {}
     out |= spec["inputs"]
     for k, src in spec["bind"].items():
-        # API 1.17 Re-render: that row's Image ← a frameRef
+        # API 1.17 Re-render: that row's Image ← a frameRef; from 1.37 an image param itself (MiniMax H3's frames)
         if src.endswith(("first_frame", "last_frame")):
             nid, what = src.split(".")
             ids = (state.get("takes") or {}).get(nid)
             if not ids:
                 return None, f"nothing from {nid} yet"
+            if "[" not in k:
+                out[k] = {"frame_of": ids[0], "at": what.removesuffix("_frame")}
+                continue
             key, r = k[:-1].split("[")
             rows = [dict(x) for x in out.get(key) or []]
             if not 1 <= int(r) <= len(rows):

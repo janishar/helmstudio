@@ -123,10 +123,11 @@ IMAGE_CODECS = {"png", "mjpeg", "webp", "bmp", "tiff"}
 
 def check_kind(info: dict, kind: str) -> None:
     """Refuse (input) a file that is not the media type the command says: a video = mp4/mov with a video stream
-    that is not an image codec; an image = one still picture; (1.32) an audio = a WAV with a sound and no picture."""
+    that is not an image codec; an image = one still picture; (1.32) an audio = a WAV (1.38: or an mp3, an m4a) with a
+    sound and no picture."""
     v = info["video"]
     if kind == "audio":
-        ok = v is None and info["audio"] is not None and info["container"] == "wav"
+        ok = v is None and info["audio"] is not None and info["container"] in ("wav", "mp3", "mp4")
     elif kind == "video":
         ok = (
             v is not None

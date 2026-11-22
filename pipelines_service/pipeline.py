@@ -312,7 +312,8 @@ def problems(doc: dict, info: dict | None = None, custom: list[dict] | None = No
         for k, v in nodes[nid].get("bind", {}).items():
             s = source(v)
             if (not s or (s[0] == "text" and s[1] != "custom") or s[0] == "items"
-                    or ("[" in k) != (s[0] == "frame")  # `<node>.<param>[<row>]` ← `<step>.first|last_frame` only
+                    # `<node>.<param>[<row>]` ← `<step>.first|last_frame` only; from 1.37 a frame may bind a param too
+                    or ("[" in k and s[0] != "frame")
                     or (s[0] == "item" and fan.get(nid) != s[1])
                     or (s[0] != "item" and not before(v, nid))):  # fmt: skip
                 add("bind_source", nid, k)

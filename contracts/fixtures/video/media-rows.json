@@ -1,5 +1,5 @@
 {
-  "description": "media_rows(nodes, palette, takes): studio's run checks of API 1.22 on a canonical minimax-h3 template with `inputs` merged into its params (contracts/README.md, Media inputs: rows of media): optional image nodes left empty are dropped (with their wires), a rows value while a `not_with` input is wired is refused, then each media field of a rows item (items from 1; a trim field's in / out filled: in 0, out min(duration, max_s)) and each rows param's max_total_s. expect: {error} or {error: null, dropped, values: path → rows as studio sends them}. in / out are on the take's frames already (no snapping here). The counts (rows max) and the cross-param rules (audio needs an image or video, 12 in all, sound) are elsewhere: the rows max and fixtures/video/minimax-h3.json",
+  "description": "media_rows(nodes, palette, takes): studio's run checks of API 1.22 on a canonical minimax-h3 template with `inputs` merged into its params (contracts/README.md, Media inputs: rows of media): optional image nodes left empty are dropped (with their wires), a rows value while a `not_with` input is wired is refused, then each media field of a rows item (items from 1; a trim field's in / out filled: in 0, out min(duration, max_s)) and each rows param's max_total_s. expect: {error} or {error: null, dropped, values: path → rows as studio sends them}. in / out are on the take's frames already (no snapping here). The counts (rows max) and the cross-param rules (audio needs an image or video, 12 in all, sound) are elsewhere: the rows max and fixtures/video/minimax-h3.json From API 1.37 an item's optional media field (MiniMax H3's soundtrack) may be left out; when set it is checked like the required one and does not count toward max_total_s.",
   "takes": {
     "11111111-0000-4000-8000-000000000021": {
       "kind": "video",
@@ -485,6 +485,102 @@
       },
       "expect": {
         "error": "generate.videos: must stay empty while generate.first is wired"
+      }
+    },
+    {
+      "description": "1.37: a replaced sound: the soundtrack (an audio take) is trimmed like the video; only the video counts toward max_total_s",
+      "workflow": "minimax-h3-references",
+      "inputs": {
+        "generate.videos": [
+          {
+            "video": {
+              "take_id": "11111111-0000-4000-8000-000000000021"
+            },
+            "sound": "replace",
+            "soundtrack": {
+              "take_id": "11111111-0000-4000-8000-000000000024"
+            }
+          },
+          {
+            "video": {
+              "take_id": "11111111-0000-4000-8000-000000000021",
+              "in": 0,
+              "out": 7.0
+            },
+            "sound": "silent"
+          }
+        ]
+      },
+      "expect": {
+        "error": null,
+        "dropped": [],
+        "values": {
+          "generate.videos": [
+            {
+              "video": {
+                "take_id": "11111111-0000-4000-8000-000000000021",
+                "in": 0,
+                "out": 8.0
+              },
+              "sound": "replace",
+              "soundtrack": {
+                "take_id": "11111111-0000-4000-8000-000000000024",
+                "in": 0,
+                "out": 3.0
+              }
+            },
+            {
+              "video": {
+                "take_id": "11111111-0000-4000-8000-000000000021",
+                "in": 0,
+                "out": 7.0
+              },
+              "sound": "silent"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "description": "1.37: a soundtrack must have sound: a silent video is refused under its field",
+      "workflow": "minimax-h3-references",
+      "inputs": {
+        "generate.videos": [
+          {
+            "video": {
+              "take_id": "11111111-0000-4000-8000-000000000021"
+            },
+            "sound": "replace",
+            "soundtrack": {
+              "take_id": "11111111-0000-4000-8000-000000000022"
+            }
+          }
+        ]
+      },
+      "expect": {
+        "error": "generate.videos[1].soundtrack: take 11111111-0000-4000-8000-000000000022 has no sound"
+      }
+    },
+    {
+      "description": "1.37: a soundtrack part under its min_s of 2.34 s",
+      "workflow": "minimax-h3-references",
+      "inputs": {
+        "generate.videos": [
+          {
+            "video": {
+              "take_id": "11111111-0000-4000-8000-000000000021"
+            },
+            "sound": "replace",
+            "soundtrack": {
+              "take_id": "11111111-0000-4000-8000-000000000024",
+              "in": 0,
+              "out": 2.0
+            }
+          }
+        ]
+      },
+      "expect": {
+        "error": "generate.videos[1].soundtrack: the part lasts 2.0 s; this input takes at least 2.3 s"
       }
     }
   ]

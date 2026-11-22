@@ -23,6 +23,7 @@ import {
   mediaItem,
   mediaRowsError,
   mediaValueError,
+  optionalMedia,
   partOf,
   pickable,
   retakeMap,
@@ -96,7 +97,7 @@ export function takeFacts(t: Take, audioInput = false): string {
   return audioInput ? `sound · ${d}` : `${t.width} × ${t.height} · ${t.video.frames} f · ${d}`;
 }
 
-/** The picker of a media param: the takes it accepts; wav or mp3 upload for an audio input. */
+/** The picker of a media param: the takes it accepts; wav, mp3 or m4a upload for an audio input. */
 function MediaPicker({
   f,
   open,
@@ -755,6 +756,108 @@ export function ExtendControl({
   );
 }
 
+/** An item's optional media field (API 1.37, docs/mock/H3Options.dc.html frames 5-6: a video reference's
+ * Soundtrack): Pick when empty (with why Replace needs one), else the take with its trim and part, cut to the
+ * video part's length. */
+function ItemMedia({
+  spec,
+  value,
+  part,
+  path,
+  replace,
+  onSet,
+}: {
+  spec: S<"ParamSchema">;
+  value: S<"MediaRef"> | null;
+  part: number | null;
+  path: string;
+  /** the row's Sound is Replace: a soundtrack is read only then (the runner refuses it otherwise) */
+  replace: boolean;
+  onSet: (v: S<"MediaRef"> | null) => void;
+}) {
+  const [picking, setPicking] = useState(false);
+  const get = useTakes(value ? [value.take_id] : []);
+  const t = value ? get(value.take_id) : undefined;
+  const label = spec.label ?? spec.name;
+  const d = t ? (factsOf(t).duration_s ?? 0) : 0;
+  const ab = value && t ? partOf(value, d, spec) : null;
+  const issue = value && t !== undefined ? mediaValueError(spec, value, t && factsOf(t)) : null;
+  return (
+    <div className="flex flex-col gap-2 border-t border-s3 pt-2">
+      <span className="text-[12px] text-t2">{label}</span>
+      {!value ? (
+        <>
+          <button
+            type="button"
+            aria-haspopup="dialog"
+            onClick={() => setPicking(true)}
+            className="h-9 rounded-[10px] border border-dashed border-dash bg-transparent text-[13px]"
+          >
+            Pick {label.toLowerCase()}
+          </button>
+          <span role="alert" className="mono text-[12px] text-bad">
+            {path}: Replace needs a {label.toLowerCase()}
+          </span>
+        </>
+      ) : (
+        <>
+          <div className="flex items-center gap-2">
+            <span aria-hidden className="wave h-7 w-11 shrink-0 rounded-md" />
+            <span className="flex min-w-0 grow flex-col">
+              <b className="truncate text-[13px]">
+                {t ? t.title : t === null ? "The take was deleted." : "Loading…"}
+              </b>
+              {t && <span className="mono text-[11px] text-t2">{takeFacts(t, true)}</span>}
+            </span>
+            <button
+              type="button"
+              aria-label={`Clear ${label.toLowerCase()}`}
+              onClick={() => onSet(null)}
+              className="grid size-[22px] shrink-0 place-items-center rounded-lg bg-s3 text-t2 hover:text-t1"
+            >
+              <X size={12} aria-hidden />
+            </button>
+          </div>
+          {ab && t && spec.trim && (
+            <>
+              <RangeBar
+                label={`Part of ${label}, in ${ab[0].toFixed(2)} s, out ${ab[1].toFixed(2)} s`}
+                duration={d}
+                value={[ab[0], ab[1]]}
+                step={0.01}
+                onEdge={(e, x) => onSet(trimmed(value!, factsOf(t), spec, e ? "out" : "in", x))}
+              />
+              <Row
+                label="Part"
+                value={`${(ab[1] - ab[0]).toFixed(1)} s${part != null ? ` · cut to the video's ${part.toFixed(1)} s` : ""}`}
+              />
+            </>
+          )}
+          {(issue || !replace) && (
+            <span role="alert" className="mono text-[12px] text-bad">
+              {issue ?? `${path}: a ${label.toLowerCase()} is read only with Sound: Replace`}
+            </span>
+          )}
+        </>
+      )}
+      <GalleryPicker
+        open={picking}
+        onClose={() => setPicking(false)}
+        max={1}
+        title={`Pick ${label.toLowerCase()}`}
+        kind={null}
+        only={(x) => pickable(spec, x)}
+        sub={(x) => takeFacts(x, true)}
+        audioUpload
+        onPick={(ts) => {
+          remember(ts);
+          if (ts[0]) onSet(picked(spec, ts[0]));
+        }}
+      />
+    </div>
+  );
+}
+
 /** A rows param of media (API 1.22, docs/mock/CreateMediaRefs.dc.html: MiniMax H3's video and audio references):
  * `compact` is the composer's chips (the mention, Remove, Add video / Add audio); else the inspector's cards, each
  * the take (poster or sound tile, facts), its trim with In / Out and the part's length, the item's other fields
@@ -975,11 +1078,28 @@ export function MediaRows({
                   row={r}
                   id={`f-${f.key.replace(/\W/g, "-")}-${i}`}
                   clip={null}
-                  skip={[k]}
+                  skip={[k, ...optionalMedia(p).map(([o]) => o)]}
                   onRow={(patch) =>
                     set((old) => old.map((it, j) => (j === i ? { ...it, ...patch } : it)))
                   }
                 />
+                {optionalMedia(p).map(
+                  ([o, ospec]) =>
+                    // API 1.37: shown while set or while the row's Sound is Replace (MiniMax H3's soundtrack)
+                    (isRef(r[o]) || Object.values(r).includes("replace")) && (
+                      <ItemMedia
+                        key={o}
+                        spec={ospec}
+                        value={isRef(r[o]) ? (r[o] as S<"MediaRef">) : null}
+                        part={part ? part[1] - part[0] : null}
+                        path={`${f.key}[${i + 1}].${o}`}
+                        replace={Object.values(r).includes("replace")}
+                        onSet={(x) =>
+                          set((old) => old.map((it, j) => (j === i ? { ...it, [o]: x } : it)))
+                        }
+                      />
+                    ),
+                )}
                 {issue && (
                   <span role="alert" className="mono text-[12px] text-bad">
                     {issue}
@@ -1000,8 +1120,8 @@ export function MediaRows({
       {addButton}
       {audio && (
         <span className="text-[12px] text-t2">
-          Audio takes and videos with sound come from the gallery; Add audio also uploads wav or
-          mp3.
+          Audio takes and videos with sound come from the gallery; Add audio also uploads wav, mp3
+          or m4a.
         </span>
       )}
       {(error || (own && !own.startsWith("row "))) && (

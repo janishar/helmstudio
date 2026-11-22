@@ -43,6 +43,7 @@ import { mediaItem, offerLabel } from "@/lib/source";
 import { useTakes, useUses } from "@/lib/take-cache";
 import { clipOf, placeRows, positionOf } from "@/lib/video";
 import { WorkflowPicker } from "@/components/create/workflows";
+import { FrameIn } from "@/components/create/frame-in";
 import { Compare, ExplainDrawer } from "@/components/create/compare";
 import { ElementsPanel, ElementsPicker } from "@/components/create/elements";
 import { AddToTimeline } from "@/components/timeline/add";
@@ -149,6 +150,7 @@ import {
   isVoice,
   queueInputs,
   rawsFrom,
+  replaceUnmet,
   toRaw,
   visible,
   type Field,
@@ -1096,6 +1098,7 @@ export function Create({
           uploads={uploads}
           extra={<MentionChips texts={texts} />}
           card={card}
+          frames={video}
           openerRef={mediaFields.length ? undefined : firstPicker}
         />
       ) : (
@@ -1471,6 +1474,7 @@ export function Create({
               <UseIn
                 offers={offers}
                 onUse={applyOffer}
+                video={shownTake?.kind === "video" ? shownTake.id : undefined}
                 seed={shownTake?.made_with?.seed}
                 familyTitle={(f) => palette?.groups.find((g) => g.family === f)?.title ?? f}
               />
@@ -1765,6 +1769,8 @@ export function Create({
                   !workflow ||
                   busy ||
                   blocked > 0 ||
+                  // a Replace sound without its soundtrack (the row says why; docs/mock/H3Options.dc.html frame 6)
+                  fields.some((f) => replaceUnmet(f.param, raws[f.key] ?? f.initial)) ||
                   noVoice ||
                   badLine > 0 ||
                   notDownloaded ||
@@ -1865,6 +1871,7 @@ export function Create({
             resolved={shown?.workflow_id === workflow?.id ? shown?.resolved?.params : undefined}
             presets={workflow?.studio?.presets}
             presetOrder={presetNames(workflow?.studio)}
+            presetScope={all}
             fields={fields}
             raws={raws}
             errors={errors}
@@ -2436,16 +2443,19 @@ function MediaSwitch({
 function UseIn({
   offers,
   onUse,
+  video,
   seed,
   familyTitle,
 }: {
   offers: S<"TakeOffer">[];
   onUse: (o: S<"TakeOffer">) => void;
+  /** a video take's id: the menu also offers its Last / First frame in… (API 1.37, docs/mock/H3Options.dc.html) */
+  video?: string;
   /** the take's seed: the header "Use seed 12 in…" (docs/mock/CreateAudio.dc.html, TakeActions.dc.html) */
   seed?: number | null;
   familyTitle: (family: string) => string;
 }) {
-  if (!offers.length) return null;
+  if (!offers.length && !video) return null;
   return (
     <>
       <button
@@ -2499,6 +2509,17 @@ function UseIn({
               <span className="mono text-[11px] text-t2">{familyTitle(o.family)}</span>
             </button>
           ))}
+          {video && (
+            <FrameIn
+              key={video}
+              takeId={video}
+              className="rounded-[10px] bg-s3 px-3 py-2 text-left text-[13px] hover:bg-s4"
+              onUse={(o) => {
+                document.getElementById("use-in")?.hidePopover();
+                onUse(o);
+              }}
+            />
+          )}
         </div>
       </div>
     </>

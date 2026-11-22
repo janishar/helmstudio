@@ -31,7 +31,7 @@ type Workflow struct {
 	CreatedAt *time.Time `json:"created_at,omitempty"`
 	UpdatedAt *time.Time `json:"updated_at,omitempty"`
 	Problems  *[]Problem `json:"problems,omitempty"` // only from get, create and replace
-	// API 1.17, always sent: the keyframe rows New shot binds (null: neither option is offered)
+	// API 1.17, always sent: the keyframe rows New shot binds (null: neither option is offered); 1.37 or image params
 	Keyframes *timeline.Keyframes `json:"keyframes"`
 }
 
@@ -44,6 +44,16 @@ type StudioLayout struct {
 	Presets   map[string]map[string]any `json:"presets,omitempty"`
 	// API 1.25: every preset name once, in the order Create shows them (a map's order is not kept)
 	PresetOrder []string `json:"preset_order,omitempty"`
+	// API 1.37: the image params a New shot binds its frames into (Workflow.keyframes)
+	Keyframes *timeline.FrameParams `json:"keyframes,omitempty"`
+}
+
+// FrameParams is the layout's studio.keyframes (API 1.37), nil without a layout or without it.
+func (l *StudioLayout) FrameParams() *timeline.FrameParams {
+	if l == nil {
+		return nil
+	}
+	return l.Keyframes
 }
 
 // StudioSection is one inspector section.

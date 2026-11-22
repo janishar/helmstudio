@@ -13,8 +13,9 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import { Info } from "@/components/kit";
+import { Info, UploadStatus } from "@/components/kit";
 import { GalleryPicker } from "@/components/gallery/picker";
+import { frameTake } from "@/components/create/frame-in";
 import { message, type S } from "@/lib/api";
 import {
   addIds,
@@ -31,11 +32,24 @@ import { remember, useTakes } from "@/lib/take-cache";
 import { ClipTrack, ItemFields } from "@/components/create/rows";
 import { itemSpecs, positionErrors, positionOf, type Clip } from "@/lib/video";
 import { safeUrl } from "@/lib/format";
-import { UPLOAD_TYPES, uploadFile } from "@/lib/takes";
+import {
+  progressText,
+  UPLOAD_START,
+  UPLOAD_TYPES,
+  uploadFile,
+  type UploadProgress,
+} from "@/lib/takes";
 import type { Field, Raw, Update } from "@/lib/workflow";
 
 type Change = (key: string, u: Update) => void;
-type Pending = { id: number; key: string; name: string; progress: number; error?: string };
+type Pending = {
+  id: number;
+  key: string;
+  name: string;
+  p: UploadProgress;
+  stop: AbortController;
+  error?: string;
+};
 
 /** Adds takes to a field's references (each once, up to its max), onto the list as it is when they arrive. */
 export const addRefs = (onChange: Change, f: Field, ids: string[]) =>
@@ -48,14 +62,23 @@ export function useRefUploads(onChange: Change) {
   const seq = useRef(0);
   const upload = (f: Field, files: File[]) => {
     const ids = files.map(() => ++seq.current);
+    const stops = files.map(() => new AbortController());
     const set = (id: number, p: Partial<Pending>) =>
       setList((l) => l.map((x) => (x.id === id ? { ...x, ...p } : x)));
     setList((l) => [
       ...l,
-      ...files.map((file, i) => ({ id: ids[i], key: f.key, name: file.name, progress: 0 })),
+      ...files.map((file, i) => ({
+        id: ids[i],
+        key: f.key,
+        name: file.name,
+        p: UPLOAD_START,
+        stop: stops[i],
+      })),
     ]);
     // all upload at once; each becomes a reference in drop order once those before it are settled
-    const jobs = files.map((file, i) => uploadFile(file, (progress) => set(ids[i], { progress })));
+    const jobs = files.map((file, i) =>
+      uploadFile(file, (p) => set(ids[i], { p }), undefined, { signal: stops[i].signal }),
+    );
     void inOrder(
       jobs,
       (t, i) => {
@@ -66,7 +89,12 @@ export function useRefUploads(onChange: Change) {
       (e, i) => set(ids[i], { error: message(e) }),
     );
   };
-  const dismiss = (id: number) => setList((l) => l.filter((x) => x.id !== id));
+  // × on a pending tile stops its optimising or PUT; on a failed one it dismisses
+  const dismiss = (id: number) =>
+    setList((l) => {
+      l.find((x) => x.id === id)?.stop.abort();
+      return l.filter((x) => x.id !== id);
+    });
   return { list, upload, dismiss };
 }
 export type RefUploads = ReturnType<typeof useRefUploads>;
@@ -291,23 +319,23 @@ export function RowsEditor({
     <div
       key={u.id}
       role="listitem"
-      className={`flex items-center justify-center gap-1 rounded-lg border border-dashed border-dash text-[11px] ${u.error ? "text-bad" : "text-t2"} ${compact ? "h-8 px-2" : "relative aspect-square p-1.5 text-center"}`}
+      className={`flex items-center justify-center gap-1 rounded-lg border border-dashed border-dash text-[11px] ${u.error ? "text-bad" : "text-t2"} ${compact ? "h-8 px-2" : "relative aspect-square flex-col p-1.5 text-center"}`}
     >
       {u.error ? (
-        <>
-          <span role="alert">{u.error}</span>
-          <button
-            type="button"
-            aria-label={`Dismiss ${u.name}`}
-            className="grid size-6 shrink-0 place-items-center rounded-full bg-s3 text-t1"
-            onClick={() => uploads.dismiss(u.id)}
-          >
-            <X size={12} aria-hidden />
-          </button>
-        </>
+        <span role="alert">{u.error}</span>
+      ) : compact ? (
+        <span aria-live="polite">{progressText(u.p)}</span>
       ) : (
-        <span aria-live="polite">Uploading {Math.round(u.progress * 100)}%</span>
+        <UploadStatus p={u.p} name={u.name} />
       )}
+      <button
+        type="button"
+        aria-label={u.error ? `Dismiss ${u.name}` : `Cancel the upload of ${u.name}`}
+        className={`grid size-6 shrink-0 place-items-center rounded-full bg-s3 text-t1 ${compact || u.error ? "" : "absolute top-1 right-1"}`}
+        onClick={() => uploads.dismiss(u.id)}
+      >
+        <X size={12} aria-hidden />
+      </button>
     </div>
   ));
 
@@ -478,10 +506,14 @@ export function FirstFrameTile({
   empty = "None · text only",
   card,
   openerRef,
+  frames,
 }: {
   id?: string;
   more?: number;
   onPick: (takeId: string) => void;
+  /** API 1.37 (docs/mock/H3Options.dc.html frame 8): the picker shows videos too, and a video offers its last or
+   * first frame (made as an image take) */
+  frames?: boolean;
   /** the tile's label (an image param's: "Last frame") and what it says with no take */
   label?: string;
   empty?: string;
@@ -491,9 +523,19 @@ export function FirstFrameTile({
   openerRef?: Opener;
 }) {
   const [picking, setPicking] = useState(false);
+  // a video picked for its frame: Use last frame / Use first frame, then why making it failed
+  const [video, setVideo] = useState<{ id: string; title: string; error?: string } | null>(null);
   useEffect(() => {
     if (openerRef) openerRef.current = () => setPicking(true);
   }, [openerRef]);
+  const takeFrame = async (at: "first" | "last") => {
+    try {
+      onPick(await frameTake(video!.id, at));
+      setVideo(null);
+    } catch (e) {
+      setVideo((v) => v && { ...v, error: message(e) });
+    }
+  };
   const t = useTakes(id ? [id] : [])(id ?? "");
   const thumb = t ? safeUrl(t.thumb_url) : undefined;
   const name = id ? (t?.title ?? (t === null ? "gone" : "…")) : empty;
@@ -546,13 +588,48 @@ export function FirstFrameTile({
           </>
         )}
       </button>
+      {video && (
+        <span
+          role="group"
+          aria-label={`${label} from ${video.title}`}
+          className="flex flex-wrap items-center gap-1.5"
+        >
+          {(["last", "first"] as const).map((at) => (
+            <button
+              key={at}
+              type="button"
+              className="chip bevel h-8 rounded-lg text-[12px]"
+              onClick={() => void takeFrame(at)}
+            >
+              Use {at} frame
+            </button>
+          ))}
+          <button
+            type="button"
+            aria-label="Cancel"
+            className="grid size-6 place-items-center rounded text-t2"
+            onClick={() => setVideo(null)}
+          >
+            <X size={12} aria-hidden />
+          </button>
+          {video.error && (
+            <span role="alert" className="mono text-[12px] text-bad">
+              {video.error}
+            </span>
+          )}
+        </span>
+      )}
       <GalleryPicker
         open={picking}
         onClose={() => setPicking(false)}
         max={1}
+        kind={frames ? null : "image"}
+        only={frames ? (x) => x.kind !== "audio" : undefined}
         onPick={(takes) => {
           remember(takes);
-          if (takes[0]) onPick(takes[0].id);
+          const t = takes[0];
+          if (t?.kind === "video") setVideo({ id: t.id, title: t.title });
+          else if (t) onPick(t.id);
         }}
       />
     </>

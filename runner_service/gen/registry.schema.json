@@ -211,7 +211,7 @@
         },
         "item": {
           "type": "object",
-          "description": "rows only: field name \u2192 a ref kind (the field holds a value of that kind, required in every item: Image = an image take {take_id}; Media (API 1.14) = an image or a video take {take_id}, an ask node's `media`; Lora = a LoRA {lora_id}, contracts/README.md, LoRAs) or a param schema (without name; not rows); from API 1.22 that may be a `media` param (a video or audio take {take_id[, in, out]}, required in every item)",
+          "description": "rows only: field name \u2192 a ref kind (the field holds a value of that kind, required in every item: Image = an image take {take_id}; Media (API 1.14) = an image or a video take {take_id}, an ask node's `media`; Lora = a LoRA {lora_id}, contracts/README.md, LoRAs) or a param schema (without name; not rows); from API 1.22 that may be a `media` param (a video or audio take {take_id[, in, out]}, required in every item; from API 1.37 one with `optional` may be null)",
           "minProperties": 1,
           "propertyNames": {
             "pattern": "^[a-z][a-z0-9_]{0,63}$"
@@ -843,7 +843,7 @@
     },
     "itemParam": {
       "type": "object",
-      "description": "a rows item field that is a param: a paramSchema without name, not rows or image (an item may add `position`); from API 1.22 a `media` param (required in every item, never left out); from API 1.32 a `voice` param (a dialogue line's speaker: required in every item, never left out)",
+      "description": "a rows item field that is a param: a paramSchema without name, not rows or image (an item may add `position`); from API 1.22 a `media` param (required in every item unless, from API 1.37, `optional`); from API 1.32 a `voice` param (a dialogue line's speaker: required in every item, never left out)",
       "required": [
         "type",
         "default"
@@ -941,6 +941,10 @@
           "type": "number",
           "exclusiveMinimum": 0,
           "description": "media only (API 1.22): the shortest it reads, in seconds: a take shorter is refused (`take <id> lasts <d> s; this input takes at least <min_s> s`), and with trim so is a shorter part (`the part lasts <d> s; \u2026`)"
+        },
+        "optional": {
+          "const": true,
+          "description": "media only (API 1.37): the field may be left empty (null or absent) in an item; its default is null. Absent = required in every item. A rows param's `max_total_s` and Use in\u2026 offers go by the item's one required media field (contracts/README.md, Media inputs: rows of media)"
         }
       },
       "allOf": [
@@ -2779,6 +2783,27 @@
       "additionalProperties": false,
       "description": "openapi.yaml StudioLayout (check.py keeps the two equal): which params Create shows and where. Absent = the derived form",
       "properties": {
+        "keyframes": {
+          "type": "object",
+          "required": [
+            "first"
+          ],
+          "additionalProperties": false,
+          "description": "from API 1.37: the image params a Timeline New shot binds a first and a last frame into, for a workflow whose frames are image params rather than keyframe rows (MiniMax H3 Image to video); Workflow.keyframes takes this shape (contracts/README.md, Timeline: New shot options). Not a placement",
+          "properties": {
+            "first": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$"
+            },
+            "last": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$"
+            }
+          }
+        },
         "composer": {
           "type": "array",
           "maxItems": 8,

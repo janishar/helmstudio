@@ -331,7 +331,12 @@ const MaxUploadBytes = 52428800
 
 // UploadTypes maps each content type an upload may have to its key's extension.
 var UploadTypes = map[string]string{"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "audio/wav": "wav",
-	"audio/mpeg": "mp3"}
+	"audio/mpeg": "mp3", "audio/mp4": "m4a"}
+
+// UploadLimits is GET /uploads/limits (API 1.38): what the web optimises an upload to.
+type UploadLimits struct {
+	ImageMaxSide int `json:"image_max_side"`
+}
 
 // MaxAudioS is the longest audio upload (API 1.19).
 const MaxAudioS = 600
@@ -366,7 +371,7 @@ func (b *UploadCreate) Validate() string {
 	case b.Filename == "" || utf8.RuneCountInString(b.Filename) > 255:
 		return "filename must be 1-255 characters"
 	case UploadTypes[b.ContentType] == "":
-		return "only png, jpeg and webp images or wav and mp3 audio can be uploaded"
+		return "only png, jpeg and webp images or wav, mp3 and m4a audio can be uploaded"
 	case b.Bytes < 1:
 		return "bytes must be at least 1"
 	case b.Bytes > MaxUploadBytes:

@@ -415,6 +415,9 @@ func checkRows(param registry.Param, value any) (any, string) {
 			if !given { // the merged item is checked: a default may not do (a beat's text)
 				field = itemParam.Default
 			}
+			if itemParam.Type == "media" && field == nil && itemParam.Optional {
+				continue // API 1.37: an optional media field left empty (left out of the item)
+			}
 			if itemParam.Type == "media" && field == nil { // API 1.22: a video or audio take, required in every item
 				return nil, at + "." + name + ": a take is required"
 			}

@@ -2,12 +2,20 @@
 // The gallery picker (plan 9.1: the one way to choose media): the Gallery's grid, search and filters in a dialog,
 // images only (or every kind: `kind` null), picking up to `max` takes. A media input's picker (API 1.19,
 // docs/mock/VideoSource.dc.html) narrows it further (`only`: audio takes and videos with sound), says each tile's
-// facts and may upload wav or mp3.
+// facts and may upload wav, mp3 or m4a (a wav becomes m4a: lib/optimise.ts).
 import { useRef, useState } from "react";
-import { ErrorNote, Modal } from "@/components/kit";
+import { X } from "lucide-react";
+import { ErrorNote, Modal, UploadStatus } from "@/components/kit";
 import { Chip, TakeCard, useTakePages } from "@/components/gallery/gallery";
 import { message, type S } from "@/lib/api";
-import { AUDIO_TYPES, MAX_AUDIO_S, uploadFile, type Filter } from "@/lib/takes";
+import {
+  AUDIO_ACCEPT,
+  MAX_AUDIO_S,
+  UPLOAD_START,
+  uploadFile,
+  type Filter,
+  type UploadProgress,
+} from "@/lib/takes";
 
 type Take = S<"Take">;
 
@@ -41,7 +49,7 @@ export function GalleryPicker({
   only?: (t: Take) => boolean;
   /** a tile's facts line ("448 × 256 · 49 f · 2.04 s"), else the gallery's */
   sub?: (t: Take) => string;
-  /** offers "Upload wav or mp3" (an audio input) */
+  /** offers "Upload wav, mp3 or m4a" (an audio input) */
   audioUpload?: boolean;
   /** a line under the footer (docs/mock/GalleryPicker: what the picks join, the limit) */
   help?: string;
@@ -62,43 +70,73 @@ export function GalleryPicker({
   );
 }
 
-/** "Upload wav or mp3": the length is read here, the take picked once it is stored. */
+/** "Upload wav, mp3 or m4a": the length is read here, a wav becomes m4a (docs/mock/UploadOptimise.dc.html frame 2:
+ * the pending card, × cancels), the take picked once it is stored. */
 function AudioUpload({ onDone }: { onDone: (t: Take) => void }) {
   const input = useRef<HTMLInputElement>(null);
-  const [state, setState] = useState<{ progress?: number; error?: string }>({});
+  const [state, setState] = useState<{
+    name?: string;
+    p?: UploadProgress;
+    stop?: AbortController;
+    error?: string;
+  }>({});
   return (
     <div className="flex flex-wrap items-center gap-2">
       <input
         ref={input}
         type="file"
-        accept={[...AUDIO_TYPES, ".wav", ".mp3"].join(",")}
+        accept={AUDIO_ACCEPT}
         hidden
         onChange={(e) => {
           const f = e.target.files?.[0];
           e.target.value = "";
           if (!f) return;
-          setState({ progress: 0 });
-          uploadFile(f, (progress) => setState({ progress }), undefined, true)
+          const stop = new AbortController();
+          // a cancelled upload's late reports are dropped
+          const mine = (next: (s: typeof state) => typeof state) =>
+            setState((s) => (s.stop === stop ? next(s) : s));
+          setState({ name: f.name, p: UPLOAD_START, stop });
+          uploadFile(f, (p) => mine((s) => ({ ...s, p })), undefined, {
+            audio: true,
+            signal: stop.signal,
+          })
             .then((t) => {
-              setState({});
+              mine(() => ({}));
               onDone(t);
             })
-            .catch((err) => setState({ error: message(err) }));
+            .catch((err) => mine(() => ({ error: message(err) })));
         }}
       />
       <button
         type="button"
         className="h-10 rounded-[10px] border border-dashed border-dash bg-transparent px-3.5 text-[13px]"
-        disabled={state.progress !== undefined}
+        disabled={!!state.p}
         onClick={() => input.current?.click()}
       >
-        {state.progress !== undefined
-          ? `Uploading… ${Math.round(state.progress * 100)}%`
-          : "Upload wav or mp3"}
+        Upload wav, mp3 or m4a
       </button>
       <span className="mono text-[12px] text-t2">
-        Up to 50 MB and {MAX_AUDIO_S} s; the length is read in the browser
+        Up to {MAX_AUDIO_S} s; a wav uploads as m4a, the length is read in the browser
       </span>
+      {state.p && state.name && (
+        <div className="flex w-full flex-col gap-1.5 rounded-[10px] border border-line bg-s1 p-2.5 text-[12px] text-t2">
+          <div className="flex items-center gap-2">
+            <b className="min-w-0 flex-1 truncate text-[13px] text-t1">{state.name}</b>
+            <button
+              type="button"
+              aria-label="Cancel the upload"
+              className="grid size-6 shrink-0 place-items-center rounded-full bg-s3 text-t1"
+              onClick={() => {
+                state.stop?.abort();
+                setState({});
+              }}
+            >
+              <X size={12} aria-hidden />
+            </button>
+          </div>
+          <UploadStatus p={state.p} name={state.name} />
+        </div>
+      )}
       {state.error && <p className="mono m-0 w-full text-[12px] text-bad">{state.error}</p>}
     </div>
   );

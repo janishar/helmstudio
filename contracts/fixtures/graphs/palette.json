@@ -2893,23 +2893,23 @@
             {
               "name": "variant",
               "type": "enum",
-              "label": "Variant",
-              "default": "base",
               "enum": [
                 "base",
                 "base-fp8"
               ],
+              "default": "base",
+              "label": "Variant",
               "help": "Base: Macs only. fp8: smaller community weights, NVIDIA hosts only."
             },
             {
               "name": "precision",
               "type": "enum",
-              "label": "Precision",
-              "default": "int8",
               "enum": [
                 "int8",
                 "fp8"
               ],
+              "default": "int8",
+              "label": "Precision",
               "help": "Base: stored bf16; the h3 binary quantizes the transformer to int8 at load on M5 (other Macs keep bf16). Base fp8: fp8, as stored."
             }
           ],
@@ -2957,18 +2957,126 @@
               "min": 2,
               "max": 50,
               "step": 1,
-              "help": "Denoising passes: 50 is the reference quality, 4 to 7 a fast draft."
+              "help": "Denoising passes: 50 is the reference quality, 20 the default, 4 a draft."
             },
             {
-              "name": "speed",
-              "type": "enum",
-              "label": "Speed",
-              "default": "exact",
-              "enum": [
-                "exact",
-                "fast"
+              "name": "layers",
+              "type": "int",
+              "label": "Layers",
+              "default": 50,
+              "min": 35,
+              "max": 50,
+              "step": 1,
+              "values": [
+                35,
+                36,
+                37,
+                38,
+                39,
+                40,
+                41,
+                42,
+                43,
+                44,
+                45,
+                46,
+                47,
+                48,
+                49,
+                50
               ],
-              "help": "exact: all 50 transformer blocks every step. fast: 45 blocks and every other step reused: quicker, slightly different."
+              "when": "model.variant == 'base'",
+              "help": "DiT blocks: 50 exact, 45 fast, 40 aggressive; fewer also hold less of the transformer."
+            },
+            {
+              "name": "reuse",
+              "type": "int",
+              "label": "Reuse",
+              "default": 1,
+              "min": 1,
+              "max": 3,
+              "step": 1,
+              "values": [
+                1,
+                2,
+                3
+              ],
+              "when": "model.variant == 'base'",
+              "help": "1 close, 2 fast, 3 aggressive; at 20 steps 20, 11 or 8 fresh passes."
+            },
+            {
+              "name": "core_reuse",
+              "type": "int",
+              "label": "Core reuse",
+              "default": 1,
+              "min": 1,
+              "max": 6,
+              "step": 1,
+              "values": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6
+              ],
+              "when": "model.variant == 'base' && generate.reuse == 1",
+              "help": "Runs the costly core every n steps: 4 fast, 6 a rough preview. Only with Reuse 1."
+            },
+            {
+              "name": "token_reduction",
+              "type": "bool",
+              "label": "Token reduction",
+              "default": false,
+              "when": "model.variant == 'base'",
+              "help": "Pairs video tokens in the middle blocks: about 25 % faster, can shift the composition."
+            },
+            {
+              "name": "render",
+              "type": "enum",
+              "label": "Render",
+              "default": "Full",
+              "enum": [
+                "Full",
+                "75%",
+                "62.5%"
+              ],
+              "when": "model.variant == 'base'",
+              "help": "Renders smaller and scales up after decoding: faster, less fine detail. The size keeps the canvas's shape."
+            },
+            {
+              "name": "quality",
+              "type": "enum",
+              "label": "Mode",
+              "default": "lossless",
+              "enum": [
+                "lossless",
+                "exact"
+              ],
+              "when": "model.variant == 'base-fp8'",
+              "help": "Lossless: SGLang's default fast paths, the same maths. Exact: bit-identical to the reference path, slower. High is not offered: SGLang allows it only on its audited 4-GPU setup."
+            },
+            {
+              "name": "flow_shift",
+              "type": "float",
+              "label": "Flow shift",
+              "default": 12,
+              "min": 1,
+              "max": 20,
+              "step": 0.5,
+              "when": "model.variant == 'base-fp8'",
+              "help": "How the noise schedule spends its steps on the picture; the model's value is 12."
+            },
+            {
+              "name": "audio_flow_shift",
+              "type": "float",
+              "label": "Audio flow shift",
+              "default": 3,
+              "min": 1,
+              "max": 10,
+              "step": 0.5,
+              "when": "model.variant == 'base-fp8'",
+              "help": "How the noise schedule spends its steps on the sound; the model's value is 3."
             },
             {
               "name": "refs",
@@ -3013,9 +3121,23 @@
                   "default": "keep",
                   "enum": [
                     "keep",
-                    "silent"
+                    "silent",
+                    "replace"
                   ],
-                  "help": "keep: the model also hears the video's sound (a take without sound is read silent). silent: picture only."
+                  "help": "keep: the model also hears the video's sound (a take without sound is read silent). silent: picture only. replace: it hears the soundtrack instead."
+                },
+                "soundtrack": {
+                  "type": "media",
+                  "label": "Soundtrack",
+                  "default": null,
+                  "optional": true,
+                  "accepts": [
+                    "audio"
+                  ],
+                  "trim": true,
+                  "min_s": 2.34,
+                  "max_s": 15,
+                  "help": "With Sound: replace, the sound the model hears with this video: an audio take or a video's sound, cut to the video part's length."
                 }
               },
               "mention": "<Video {n}>",

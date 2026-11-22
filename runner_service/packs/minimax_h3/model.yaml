@@ -92,9 +92,29 @@ stages:
     outputs: {video: Video}
     params:
       steps: {type: int, label: Steps, default: 6, min: 2, max: 50, step: 1,
-              help: "Denoising passes: 50 is the reference quality, 4 to 7 a fast draft."}
-      speed: {type: enum, label: Speed, default: exact, enum: [exact, fast],
-              help: "exact: all 50 transformer blocks every step. fast: 45 blocks and every other step reused: quicker, slightly different."}
+              help: "Denoising passes: 50 is the reference quality, 20 the default, 4 a draft."}
+      # API 1.37 (plan 20 24.3): h3's speed flags, Base (Mac) only: the SGLang path (Base fp8) ignores them
+      layers: {type: int, label: Layers, default: 50, min: 35, max: 50, step: 1,
+               values: [35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50], when: "model.variant == 'base'",
+               help: "DiT blocks: 50 exact, 45 fast, 40 aggressive; fewer also hold less of the transformer."}
+      reuse: {type: int, label: Reuse, default: 1, min: 1, max: 3, step: 1, values: [1, 2, 3],
+              when: "model.variant == 'base'",
+              help: "1 close, 2 fast, 3 aggressive; at 20 steps 20, 11 or 8 fresh passes."}
+      core_reuse: {type: int, label: Core reuse, default: 1, min: 1, max: 6, step: 1, values: [1, 2, 3, 4, 5, 6],
+                   when: "model.variant == 'base' && generate.reuse == 1",
+                   help: "Runs the costly core every n steps: 4 fast, 6 a rough preview. Only with Reuse 1."}
+      token_reduction: {type: bool, label: Token reduction, default: false, when: "model.variant == 'base'",
+                        help: "Pairs video tokens in the middle blocks: about 25 % faster, can shift the composition."}
+      render: {type: enum, label: Render, default: Full, enum: [Full, 75%, 62.5%], when: "model.variant == 'base'",
+               help: "Renders smaller and scales up after decoding: faster, less fine detail. The size keeps the canvas's shape."}
+      # API 1.37 (plan 20 24.3 A5): SGLang's quality mode and flow shifts, Base fp8 (NVIDIA) only; sent only when changed
+      quality: {type: enum, label: Mode, default: lossless, enum: [lossless, exact], when: "model.variant == 'base-fp8'",
+                help: "Lossless: SGLang's default fast paths, the same maths. Exact: bit-identical to the reference path, slower. High is not offered: SGLang allows it only on its audited 4-GPU setup."}
+      flow_shift: {type: float, label: Flow shift, default: 12, min: 1, max: 20, step: 0.5, when: "model.variant == 'base-fp8'",
+                   help: "How the noise schedule spends its steps on the picture; the model's value is 12."}
+      audio_flow_shift: {type: float, label: Audio flow shift, default: 3, min: 1, max: 10, step: 0.5,
+                         when: "model.variant == 'base-fp8'",
+                         help: "How the noise schedule spends its steps on the sound; the model's value is 3."}
       refs: {type: rows, label: References, default: [], min: 0, max: 9, item: {image: Image},
              mention: "<Picture {n}>",
              help: "Images the prompt names <Picture 1>, <Picture 2>, …; any reference (image, video or audio) switches to the Ref2VA model and cannot go with a first or last frame.",
@@ -108,8 +128,12 @@ stages:
         item:
           video: {type: media, label: Video, default: null, accepts: [video], trim: true, min_s: 2, max_s: 15,
                   help: "A video take; in and out pick the part it reads (2 to 15 s)."}
-          sound: {type: enum, label: Sound, default: keep, enum: [keep, silent],
-                  help: "keep: the model also hears the video's sound (a take without sound is read silent). silent: picture only."}
+          sound: {type: enum, label: Sound, default: keep, enum: [keep, silent, replace],
+                  help: "keep: the model also hears the video's sound (a take without sound is read silent). silent: picture only. replace: it hears the soundtrack instead."}
+          # API 1.37: an optional media field (empty unless Sound is replace), cut to the video part's length
+          soundtrack: {type: media, label: Soundtrack, default: null, optional: true, accepts: [audio], trim: true,
+                       min_s: 2.34, max_s: 15,
+                       help: "With Sound: replace, the sound the model hears with this video: an audio take or a video's sound, cut to the video part's length."}
         mention: "<Video {n}>"
         max_total_s: 15
         not_with: [first, last]
@@ -131,7 +155,9 @@ stages:
     # grid, at most h3's adapted canvas, <= 1.04 MP) for up to the clip's frames, and all video parts read <= 15 s
     # (360 frames at 24 fps): counted as 1.04 MP each (the peak is in the denoise, measure.md). ponytail: the largest
     # size per video; use each take's own size if this ever refuses runs that fit
-    peak_gb: "24 + 0.05 * (mp * frames + 1.04 * min(len(videos) * frames, 360))"
+    # API 1.37: Render shrinks the denoise term (and the video decode), not the fixed part: mp x r, r an upper bound of
+    # (k / g)^2 over every grid factor g (plan 20 24.7)
+    peak_gb: "24 + 0.05 * (mp * (1 if render == 'Full' else 0.75 if render == '75%' else 0.6) * frames + 1.04 * min(len(videos) * frames, 360))"
     # fp8 (SGLang, CUDA): the formula is the native budget's, host RAM, unmeasured there (the text encoder's ~27 GB
     # sit in pinned host RAM, layerwise offload); VRAM is not budgeted: SGLang measured 95.8 GB at 1344 x 768 x 345
     # with its own 33 GB FP8 DiT, so this 21 GB pruned one fits the 96 GB card at every size (GOTCHAS.md)

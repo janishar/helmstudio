@@ -183,3 +183,85 @@ describe("ShotComposer", () => {
     expect(pick()[2].textContent).toBe("NVIDIAgcp · RTX PRO 6000offline");
   });
 });
+
+// API 1.37 (docs/mock/H3Options.dc.html frame 9): MiniMax H3 Image to video's frames are two image params
+// (Workflow.keyframes {first, last}): Start from / End on put the frame takes into them
+describe("ShotComposer: keyframes as image params", () => {
+  it("binds the previous clip's last frame to First frame and the next one's first to Last frame", async () => {
+    const A = "aaaaaaaa-0000-4000-8000-000000000001";
+    const C = "cccccccc-0000-4000-8000-000000000001";
+    const h3 = {
+      id: "minimax-h3-image-to-video",
+      title: "MiniMax H3 Image to video",
+      family: "minimax-h3",
+      media: "video",
+      source: "template",
+      keyframes: { first: "first.image", last: "last.image" },
+      nodes: {
+        prompt: { kind: "prompt" },
+        first: { kind: "image" },
+        last: { kind: "image", optional: true },
+      },
+      node_schemas: {
+        prompt: { title: "Prompt", params: [P("text", "text", { default: "" })], outputs: [] },
+        image: { title: "Image", params: [P("image", "image", { default: null })], outputs: [] },
+      },
+    } as unknown as S<"Workflow">;
+    const clip = (id: string, take: string | null, at: number) => ({
+      id,
+      take_id: take,
+      in: 0,
+      out: 2,
+      at,
+      gain_db: 0,
+      mute: false,
+      alternatives: take ? [take] : [],
+    });
+    const three: Norm = {
+      ...doc,
+      tracks: [
+        {
+          name: "V1",
+          kind: "video",
+          clips: [clip("a", A, 0), clip("b", null, 2), clip("c", C, 4)],
+        },
+      ],
+    } as unknown as Norm;
+    const { shots } = serve();
+    const frames: Record<string, string> = { [`${A}:last`]: "f-last", [`${C}:first`]: "f-first" };
+    answer("POST", {
+      "/v1/studio/takes/{take_id}/frame": (init) => {
+        const p = init.params as { path: { take_id: string } };
+        const at = (init.body as { at: string }).at;
+        return { status: 200, data: { take: { id: frames[`${p.path.take_id}:${at}`] } } };
+      },
+      "/v1/studio/timelines/{timeline_id}/shots": (init) => {
+        shots.push(init.body as (typeof shots)[number]);
+        return { status: 202, data: { timeline: tl, run: {} } };
+      },
+    });
+    const done = vi.fn();
+    const vt = (title: string) => ({ kind: "video", title, video: { fps: 24, frames: 48 } });
+    const withTakes = {
+      ...tl,
+      takes: { [A]: vt("Shot 2"), [C]: vt("Shot 3") },
+    } as unknown as S<"Timeline">;
+    render(
+      <ShotComposer
+        tl={withTakes}
+        doc={three}
+        facts={{}}
+        slot={{ clip: "b" }}
+        workflows={[h3]}
+        onDone={done}
+        onClose={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Start from last frame of Shot 2" }));
+    fireEvent.click(screen.getByRole("button", { name: "End on first frame of Shot 3" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Generate shot/ }));
+    await waitFor(() => expect(done).toHaveBeenCalled());
+    expect(shots[0].run.inputs?.["first.image"]).toEqual({ take_id: "f-last" });
+    expect(shots[0].run.inputs?.["last.image"]).toEqual({ take_id: "f-first" });
+  });
+});

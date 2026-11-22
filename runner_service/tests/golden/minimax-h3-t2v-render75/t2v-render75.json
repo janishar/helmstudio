@@ -1,0 +1,79 @@
+{
+  "name": "t2v-render75",
+  "prompt": "A red fox trots through a snowy pine forest, snow falling softly, wind in the trees, the crunch of paws on fresh snow.",
+  "width": 512,
+  "height": 512,
+  "frames": 22,
+  "steps": 4,
+  "seed": 42,
+  "fps": 24,
+  "params": {
+    "layers": 50,
+    "reuse": 1,
+    "core_reuse": 1,
+    "token_reduction": false,
+    "render": "75%"
+  },
+  "flags": [
+    "--layers",
+    "50",
+    "--reuse",
+    "1",
+    "--render-width",
+    "384",
+    "--render-height",
+    "384",
+    "--use-int8-row-fc2"
+  ],
+  "inputs": {},
+  "mp4": {
+    "file": "t2v-render75-512x512-22f-s42.mp4",
+    "streams": [
+      {
+        "index": 0,
+        "codec_name": "h264",
+        "codec_type": "video",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "index": 1,
+        "codec_name": "aac",
+        "codec_type": "audio",
+        "width": null,
+        "height": null
+      }
+    ]
+  },
+  "rgb24_sha256": "6e4dbd745b5ff5c37b59df9d3699f02d6b712acc737746461dede163236a85ef",
+  "pcm_f32le_sha256": "4e5a0c0f246fe57d1b59925913e52d27b5b9386227775578b6e6e24f3b9b784e",
+  "bit_identical_runs": true,
+  "runs": [
+    {
+      "phases": [
+        "renders 384 \u00d7 384 \u2192 512 \u00d7 512",
+        "encoding \u00b7 renders 384 \u00d7 384 \u2192 512 \u00d7 512",
+        "loading transformer \u00b7 renders 384 \u00d7 384 \u2192 512 \u00d7 512",
+        "sampling \u00b7 renders 384 \u00d7 384 \u2192 512 \u00d7 512",
+        "decoding video \u00b7 renders 384 \u00d7 384 \u2192 512 \u00d7 512",
+        "writing mp4 \u00b7 renders 384 \u00d7 384 \u2192 512 \u00d7 512"
+      ],
+      "peak_gb": 18.4,
+      "s": 35.1
+    },
+    {
+      "phases": [
+        "renders 384 \u00d7 384 \u2192 512 \u00d7 512",
+        "encoding \u00b7 renders 384 \u00d7 384 \u2192 512 \u00d7 512",
+        "loading transformer \u00b7 renders 384 \u00d7 384 \u2192 512 \u00d7 512",
+        "sampling \u00b7 renders 384 \u00d7 384 \u2192 512 \u00d7 512",
+        "decoding audio \u00b7 renders 384 \u00d7 384 \u2192 512 \u00d7 512",
+        "decoding video \u00b7 renders 384 \u00d7 384 \u2192 512 \u00d7 512",
+        "writing mp4 \u00b7 renders 384 \u00d7 384 \u2192 512 \u00d7 512"
+      ],
+      "peak_gb": 18.44,
+      "s": 35.2
+    }
+  ],
+  "h3c": "4cafd1773585eb59bb32a99d80c27033d211032b"
+}

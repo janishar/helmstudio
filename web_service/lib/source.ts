@@ -132,13 +132,27 @@ export function mediaFit(p: Param, t: Facts): string | null {
 
 // ---------------------------------------------------------------- rows of media (API 1.22)
 
-/** A rows param's one `media` item field and its schema (MiniMax H3's videos and audios), else null. */
+/** A rows param's one required `media` item field and its schema (MiniMax H3's videos and audios), else null. */
 export function mediaItem(p: Param): [string, Param] | null {
   if (p.type !== "rows") return null;
   const m = Object.entries(p.item ?? {}).filter(
-    ([, v]) => typeof v === "object" && (v as unknown as Param).type === "media",
+    ([, v]) =>
+      typeof v === "object" &&
+      (v as unknown as Param).type === "media" &&
+      !(v as unknown as Param).optional,
   );
   return m.length === 1 ? [m[0][0], { ...(m[0][1] as unknown as Param), name: m[0][0] }] : null;
+}
+
+/** A rows param's optional `media` item fields (API 1.37: MiniMax H3's soundtrack), in item order. */
+export function optionalMedia(p: Param): [string, Param][] {
+  return Object.entries(p.item ?? {}).flatMap(([k, v]) =>
+    typeof v === "object" &&
+    (v as unknown as Param).type === "media" &&
+    (v as unknown as Param).optional
+      ? [[k, { ...(v as unknown as Param), name: k }] as [string, Param]]
+      : [],
+  );
 }
 
 /** The part a media value reads: in..out with trim (in 0, out min(duration, max_s) when left out), else the whole
@@ -188,9 +202,19 @@ export function mediaRowsError(
     const [a, b] = partOf(v, t!.duration_s ?? 0, spec);
     total += b - a;
   }
-  return p.max_total_s && total > p.max_total_s + 1e-9
-    ? `${path}: the takes last ${s1(total)} s in all; at most ${s1(p.max_total_s)} s`
-    : null;
+  if (p.max_total_s && total > p.max_total_s + 1e-9)
+    return `${path}: the takes last ${s1(total)} s in all; at most ${s1(p.max_total_s)} s`;
+  // API 1.37: then each item's optional media fields, empty or checked the same way (check.py media_rows)
+  for (const [i, row] of rows.entries())
+    for (const [o, ospec] of optionalMedia(p)) {
+      const v = row[o] as S<"MediaRef"> | null | undefined;
+      if (!v?.take_id) continue;
+      const t = facts(v.take_id);
+      if (t === undefined) return null;
+      const err = mediaValueError(ospec, v, t);
+      if (err) return `${path}[${i + 1}].${o}: ${err}`;
+    }
+  return null;
 }
 
 /** Whether a take shows in a media param's picker: its kind fits (an audio input takes a video with sound). */

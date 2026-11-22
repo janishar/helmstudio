@@ -96,7 +96,18 @@ def test_a_runs_inputs_map_onto_the_canonical_request():
     ]
 
 
-def test_fp8_is_published_on_cuda_only_and_refuses_speed_fast(monkeypatch):
+def test_quality_and_the_shifts_are_sent_only_when_changed():
+    """API 1.37 (plan 20 24.3 A5): a default run's body is unchanged; exact and changed shifts are added."""
+    args = ("a fox", 7, 20, {"width": 864, "height": 480}, 124, None, None, [], [], [])
+    base = sgl.request(*args)
+    assert sgl.request(*args, quality="lossless", flow_shift=12, audio_flow_shift=3) == base
+    assert "quality" not in base and "flow_shift" not in base and "audio_flow_shift" not in base
+    got = sgl.request(*args, quality="exact", flow_shift=8.0, audio_flow_shift=3.0)
+    assert got == base | {"quality": "exact", "flow_shift": 8.0}
+    assert sgl.request(*args, audio_flow_shift=4.5) == base | {"audio_flow_shift": 4.5}
+
+
+def test_fp8_is_published_on_cuda_only_and_ignores_the_mac_speed_params(monkeypatch):
     (p,) = [p for p, _ in pack.for_env("native") if p.spec["id"] == "minimax-h3"]
     monkeypatch.setattr(models, "device", lambda p: "cuda")
     assert models.runs_here(p, "base-fp8") and not models.runs_here(p, "base")
@@ -106,12 +117,9 @@ def test_fp8_is_published_on_cuda_only_and_refuses_speed_fast(monkeypatch):
     class M:
         variant = "base-fp8"
 
-    assert native.check_generate({"speed": "fast"}, {"prompt"}, {"model": M()}) == (
-        ": speed fast is h3's (Mac); the Base fp8 variant runs exact only"
-    )
-    assert native.check_generate({"speed": "exact"}, {"prompt"}, {"model": M()}) is None
-    M.variant = "base"
-    assert native.check_generate({"speed": "fast"}, {"prompt"}, {"model": M()}) is None
+    # API 1.37: speed is gone; Base fp8 hides layers / reuse / render (`when`) and its run ignores them
+    fast = {"layers": 40, "reuse": 3, "token_reduction": True, "render": "62.5%"}
+    assert native.check_generate(fast, {"prompt"}, {"model": M()}) is None
 
 
 @pytest.fixture
@@ -151,7 +159,10 @@ def fake(tmp_path, monkeypatch):
 
     inputs = {"model": Model(), "prompt": "a fox", "seed": 2**53 - 1, "canvas": {"width": 864, "height": 480},
               "duration": {"frames": 107, "fps": 24}, "first": Image.new("RGB", (64, 64), (255, 0, 0))}  # fmt: skip
-    return Ctx(), inputs, {"steps": 4, "speed": "exact", "refs": []}, log, folder
+    # Mac-only speed values a run on Base fp8 ignores (on Base: token reduction at 40 layers and reuse 3 is refused)
+    params = {"steps": 4, "layers": 40, "reuse": 3, "token_reduction": True, "render": "75%", "refs": [],
+              "quality": "exact", "flow_shift": 8.0, "audio_flow_shift": 3}  # fmt: skip
+    return Ctx(), inputs, params, log, folder
 
 
 def test_generate_serves_the_partition_and_returns_its_video(fake, monkeypatch):
@@ -181,6 +192,10 @@ def test_generate_serves_the_partition_and_returns_its_video(fake, monkeypatch):
     assert "SGLANG_FAKE_LOG" in run["env"] and "NATS_URL" not in run["env"]
     b = run["body"]
     assert (b["task"], b["seed"], b["num_inference_steps"]) == ("fl2va", 2**53 - 1, 4)
+    assert (b["quality"], b["flow_shift"]) == (
+        "exact",
+        8.0,
+    ) and "audio_flow_shift" not in b  # API 1.37
     assert b["target"] == {
         "short_edge": 480,
         "aspect_ratio": "9:5",

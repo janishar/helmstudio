@@ -55,8 +55,15 @@
             "duration": "duration.duration"
           },
           "params": {
-            "steps": 6,
-            "speed": "exact",
+            "steps": 20,
+            "layers": 45,
+            "reuse": 2,
+            "core_reuse": 1,
+            "token_reduction": false,
+            "render": "Full",
+            "quality": "lossless",
+            "flow_shift": 12,
+            "audio_flow_shift": 3,
             "refs": [],
             "videos": [],
             "audios": []
@@ -74,7 +81,6 @@
           "prompt.text"
         ],
         "quick": [
-          "generate.speed",
           "model.variant",
           "seed.seed"
         ],
@@ -94,11 +100,62 @@
           },
           {
             "title": "Quality",
+            "help": "On NVIDIA (Base fp8) a preset sets only Steps, so Fast and Default run the same there; Mode and the flow shifts are NVIDIA only.",
             "items": [
               "model.precision",
-              "generate.steps"
+              "generate.steps",
+              "generate.quality",
+              "generate.flow_shift",
+              "generate.audio_flow_shift"
+            ]
+          },
+          {
+            "title": "Advanced",
+            "help": "h3's speed settings on a Mac (Base). Hidden on Base fp8: the NVIDIA run ignores them.",
+            "items": [
+              "generate.layers",
+              "generate.reuse",
+              "generate.core_reuse",
+              "generate.render",
+              "generate.token_reduction"
             ]
           }
+        ],
+        "presets": {
+          "Draft": {
+            "generate.steps": 4,
+            "generate.layers": 50,
+            "generate.reuse": 1,
+            "generate.token_reduction": false,
+            "generate.core_reuse": 1
+          },
+          "Fast": {
+            "generate.steps": 20,
+            "generate.layers": 45,
+            "generate.reuse": 2,
+            "generate.token_reduction": true,
+            "generate.core_reuse": 1
+          },
+          "Default": {
+            "generate.steps": 20,
+            "generate.layers": 45,
+            "generate.reuse": 2,
+            "generate.token_reduction": false,
+            "generate.core_reuse": 1
+          },
+          "Reference": {
+            "generate.steps": 50,
+            "generate.layers": 50,
+            "generate.reuse": 1,
+            "generate.token_reduction": false,
+            "generate.core_reuse": 1
+          }
+        },
+        "preset_order": [
+          "Draft",
+          "Fast",
+          "Default",
+          "Reference"
         ]
       }
     },
@@ -168,8 +225,15 @@
             "last": "last.image"
           },
           "params": {
-            "steps": 6,
-            "speed": "exact",
+            "steps": 20,
+            "layers": 45,
+            "reuse": 2,
+            "core_reuse": 1,
+            "token_reduction": false,
+            "render": "Full",
+            "quality": "lossless",
+            "flow_shift": 12,
+            "audio_flow_shift": 3,
             "refs": [],
             "videos": [],
             "audios": []
@@ -189,7 +253,6 @@
           "last.image"
         ],
         "quick": [
-          "generate.speed",
           "model.variant",
           "seed.seed"
         ],
@@ -209,15 +272,70 @@
           },
           {
             "title": "Quality",
+            "help": "On NVIDIA (Base fp8) a preset sets only Steps, so Fast and Default run the same there; Mode and the flow shifts are NVIDIA only.",
             "items": [
               "model.precision",
-              "generate.steps"
+              "generate.steps",
+              "generate.quality",
+              "generate.flow_shift",
+              "generate.audio_flow_shift"
+            ]
+          },
+          {
+            "title": "Advanced",
+            "help": "h3's speed settings on a Mac (Base). Hidden on Base fp8: the NVIDIA run ignores them.",
+            "items": [
+              "generate.layers",
+              "generate.reuse",
+              "generate.core_reuse",
+              "generate.render",
+              "generate.token_reduction"
             ]
           }
         ],
         "labels": {
           "first.image": "First frame",
           "last.image": "Last frame"
+        },
+        "presets": {
+          "Draft": {
+            "generate.steps": 4,
+            "generate.layers": 50,
+            "generate.reuse": 1,
+            "generate.token_reduction": false,
+            "generate.core_reuse": 1
+          },
+          "Fast": {
+            "generate.steps": 20,
+            "generate.layers": 45,
+            "generate.reuse": 2,
+            "generate.token_reduction": true,
+            "generate.core_reuse": 1
+          },
+          "Default": {
+            "generate.steps": 20,
+            "generate.layers": 45,
+            "generate.reuse": 2,
+            "generate.token_reduction": false,
+            "generate.core_reuse": 1
+          },
+          "Reference": {
+            "generate.steps": 50,
+            "generate.layers": 50,
+            "generate.reuse": 1,
+            "generate.token_reduction": false,
+            "generate.core_reuse": 1
+          }
+        },
+        "preset_order": [
+          "Draft",
+          "Fast",
+          "Default",
+          "Reference"
+        ],
+        "keyframes": {
+          "first": "first.image",
+          "last": "last.image"
         }
       }
     },
@@ -271,8 +389,15 @@
             "duration": "duration.duration"
           },
           "params": {
-            "steps": 6,
-            "speed": "exact",
+            "steps": 20,
+            "layers": 45,
+            "reuse": 2,
+            "core_reuse": 1,
+            "token_reduction": false,
+            "render": "Full",
+            "quality": "lossless",
+            "flow_shift": 12,
+            "audio_flow_shift": 3,
             "refs": [],
             "videos": [],
             "audios": []
@@ -294,7 +419,6 @@
         ],
         "quick": [
           "elements",
-          "generate.speed",
           "model.variant",
           "seed.seed"
         ],
@@ -314,11 +438,62 @@
           },
           {
             "title": "Quality",
+            "help": "On NVIDIA (Base fp8) a preset sets only Steps, so Fast and Default run the same there; Mode and the flow shifts are NVIDIA only.",
             "items": [
               "model.precision",
-              "generate.steps"
+              "generate.steps",
+              "generate.quality",
+              "generate.flow_shift",
+              "generate.audio_flow_shift"
+            ]
+          },
+          {
+            "title": "Advanced",
+            "help": "h3's speed settings on a Mac (Base). Hidden on Base fp8: the NVIDIA run ignores them.",
+            "items": [
+              "generate.layers",
+              "generate.reuse",
+              "generate.core_reuse",
+              "generate.render",
+              "generate.token_reduction"
             ]
           }
+        ],
+        "presets": {
+          "Draft": {
+            "generate.steps": 4,
+            "generate.layers": 50,
+            "generate.reuse": 1,
+            "generate.token_reduction": false,
+            "generate.core_reuse": 1
+          },
+          "Fast": {
+            "generate.steps": 20,
+            "generate.layers": 45,
+            "generate.reuse": 2,
+            "generate.token_reduction": true,
+            "generate.core_reuse": 1
+          },
+          "Default": {
+            "generate.steps": 20,
+            "generate.layers": 45,
+            "generate.reuse": 2,
+            "generate.token_reduction": false,
+            "generate.core_reuse": 1
+          },
+          "Reference": {
+            "generate.steps": 50,
+            "generate.layers": 50,
+            "generate.reuse": 1,
+            "generate.token_reduction": false,
+            "generate.core_reuse": 1
+          }
+        },
+        "preset_order": [
+          "Draft",
+          "Fast",
+          "Default",
+          "Reference"
         ]
       }
     }

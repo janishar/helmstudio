@@ -1,6 +1,7 @@
 """The minimax_h3 pack against the h3 goldens (runner_service/tests/golden/minimax-h3-*, recorded by
 tests/golden/record_h3.py with the vendored binary at h3.c 4cafd17, 512 x 512 x 22 frames, 4 steps (the API 1.22
-reference cases: 2 steps, a 2 s audio or silent video reference), seed 42, exact):
+reference cases: 2 steps, a 2 s audio or silent video reference), seed 42, exact; API 1.37 t2v-render75: the same
+t2v at Render 75 %, h3 rendering 384 x 384, recorded by this pack's own run, `params` in its json):
 runs the pack's workflows in-process (graph.run with the native residency manager; no NATS) with a golden's
 settings, so the real h3 child runs on the GPU, and compares the MP4's decoded frames and sound with the stored one.
 
@@ -36,12 +37,17 @@ GOLDEN = HERE / "golden"
 CASES = {"t2v": "minimax-h3-t2v", "fl2va-first": "minimax-h3-fl2va-first",
          "fl2va-first-last": "minimax-h3-fl2va-first-last", "ref2va-image": "minimax-h3-ref2va-image",
          "ref2va-image-audio": "minimax-h3-ref2va-image-audio",
-         "ref2va-silent-video": "minimax-h3-ref2va-silent-video"}  # fmt: skip
+         "ref2va-silent-video": "minimax-h3-ref2va-silent-video",
+         "t2v-render75": "minimax-h3-t2v-render75"}  # fmt: skip
 BAR = 30.0  # dB, image modes (below the 36.9-39.8 dB spread of repeated runs)
 # a silent video reference repeats less (2 steps): its two recorded runs differ by 29.5 dB, the pack's run vs the
 # golden 31.8 dB; the pack's cut gives h3 the same decoded pixels as the recorder's input (checked on the CPU)
 # first + last frame spreads wider too (robust pass: the pack 25.8-27.0 dB, the raw binary 30.0, with pixel-equal inputs)
 BARS = {"ref2va-silent-video": 27.0, "fl2va-first-last": 25.0}
+# the old speed enum's flags as API 1.37 params (the templates open on Default: 45 layers, reuse 2)
+SPEED = {
+    "exact": {"layers": 50, "reuse": 1, "core_reuse": 1, "token_reduction": False, "render": "Full"}
+}
 
 
 def image_value(n: int, rel: str) -> dict:
@@ -100,7 +106,7 @@ class Bench:
         files = {role: f"{CASES[name]}/{x['file']}" for role, x in s["inputs"].items()}
         wid = (
             "text-to-video"
-            if name == "t2v"
+            if name.startswith("t2v")
             else "references"
             if name.startswith("ref2va")
             else "image-to-video"
@@ -110,7 +116,10 @@ class Bench:
         nodes["seed"]["params"]["seed"] = s["seed"]
         nodes["canvas"]["params"] |= {"width": s["width"], "height": s["height"]}
         nodes["duration"]["params"]["frames"] = s["frames"]
-        nodes["generate"]["params"] |= {"steps": s["steps"], "speed": s["speed"]}
+        # the goldens name their speed (exact, before API 1.37) or, from 1.37, the generate params they set
+        nodes["generate"]["params"] |= {"steps": s["steps"]} | (
+            s.get("params") or SPEED[s["speed"]]
+        )
         if "first" in files:
             nodes["first"]["params"]["image"] = image_value(1, files["first"])
         if "last" in files:
@@ -138,7 +147,7 @@ class Bench:
         nodes, _ = g.resolve(nodes, self.schemas)
         out: dict = {"mp4": None, "phases": [], "peak_gb": 0.0}
 
-        async def progress(node, step, of, phase, eta):
+        async def progress(node, step, of, phase, eta, phase_id=None):  # API 1.36: the phase id too
             if not out["phases"] or out["phases"][-1] != phase:
                 out["phases"].append(phase)
 
@@ -194,7 +203,7 @@ def case(bench: Bench, name: str) -> dict:
     shape = (video["frames"], video["fps"], video["has_audio"]) == (s["frames"], 24, True)
     r["exact"], r["ok"] = (
         exact,
-        shape and (exact if name == "t2v" else r["psnr"] >= BARS.get(name, BAR)),
+        shape and (exact if name.startswith("t2v") else r["psnr"] >= BARS.get(name, BAR)),
     )
     return r
 

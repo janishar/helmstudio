@@ -106,6 +106,23 @@ def test_templates_are_the_canonical_ones(live):
                 assert schema.get(key) == value, (w["id"], kind, key)
 
 
+def test_image_to_video_binds_new_shot_frames_into_its_image_params(live):
+    """API 1.37: Workflow.keyframes is `studio.keyframes` (two image params) for H3 Image to video; none elsewhere."""
+    assert live[I2V]["keyframes"] == {"first": "first.image", "last": "last.image"}
+    assert live[T2V]["keyframes"] is None and live[REFS]["keyframes"] is None
+
+
+def test_presets_replace_speed(live):
+    """API 1.37: Draft, Fast, Default and Reference in that order; the templates open on Default; no speed param."""
+    for w in live.values():
+        assert w["studio"]["preset_order"] == ["Draft", "Fast", "Default", "Reference"]
+        params = w["nodes"]["generate"]["params"]
+        assert "speed" not in params
+        assert all(
+            params[k.split(".")[1]] == v for k, v in w["studio"]["presets"]["Default"].items()
+        )
+
+
 def test_native_host_and_a_mac_only_model(hapi, live):
     hosts = get(hapi, f"{STUDIO}/hosts")["hosts"]
     assert [h for h in hosts if h["env"] == "native" and h["state"] in ("idle", "busy")], hosts

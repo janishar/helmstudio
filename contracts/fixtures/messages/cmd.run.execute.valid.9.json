@@ -59,7 +59,8 @@
           },
           "params": {
             "steps": 6,
-            "speed": "exact",
+            "layers": 50,
+            "reuse": 1,
             "refs": [
               {
                 "image": {

@@ -49,7 +49,10 @@ type fixtureCase struct {
 	Clips       []string        `json:"clips"`
 	Range       *[2]float64     `json:"range"` // make-shot (1.32): a selection inside the clip
 	Workflow    struct {
-		Nodes map[string]registry.Node `json:"nodes"`
+		Nodes  map[string]registry.Node `json:"nodes"`
+		Studio struct {
+			Keyframes *FrameParams `json:"keyframes"`
+		} `json:"studio"`
 	} `json:"workflow"`
 	Expect json.RawMessage `json:"expect"`
 }
@@ -195,7 +198,7 @@ func TestShotKeyframeFixtures(t *testing.T) {
 	}
 	_, _, cases := load(t, "shot-keyframes.json")
 	for _, c := range cases {
-		check(t, "shot-keyframes", c, map[string]any{"keyframes": ShotKeyframes(c.Workflow.Nodes, schemas)})
+		check(t, "shot-keyframes", c, map[string]any{"keyframes": ShotKeyframes(c.Workflow.Nodes, schemas, c.Workflow.Studio.Keyframes)})
 	}
 }
 

@@ -199,3 +199,18 @@ def test_rerender_row_bind_sends_a_frame_ref():
     assert graph.run_inputs(plan, {"inputs": {}, "takes": {"clip_a": ["t1"]}}, spec)[1].endswith(
         "no row 3"
     )
+
+
+def test_rerender_image_param_bind_sends_a_frame_ref():
+    """API 1.37 Re-render of MiniMax H3 Image to video: `first.image` ← `<step>.last_frame` is the frameRef itself."""
+    plan = {
+        "workflows": {"w": {"nodes": {"first": {"params": {"image": None}}}}},
+        "inputs_node": "inputs",
+    }
+    spec = {"workflow": "w", "inputs": {"first.image": {"take_id": "old"}},
+            "bind": {"first.image": "clip_a.last_frame", "last.image": "clip_c.first_frame"}}  # fmt: skip
+    got, err = graph.run_inputs(
+        plan, {"inputs": {}, "takes": {"clip_a": ["t1"], "clip_c": ["t3"]}}, spec
+    )
+    assert err is None and got["first.image"] == {"frame_of": "t1", "at": "last"}
+    assert got["last.image"] == {"frame_of": "t3", "at": "first"}

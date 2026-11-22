@@ -2,14 +2,17 @@
 h3 binary (runner_service/vendor/h3c, `make h3`) as a child process (core.child), with cwd = its folder (it opens
 h3_shaders.metal by relative path), so every path it gets is absolute. Modes follow the inputs, as the h3 CLI: refs →
 Ref2VA (`--ref-image` <Picture n>, `--ref-video` / `--ref-silent-video` <Video n>, `--ref-audio` <Audio n>, numbered
-per kind in that order), a first and/or last frame → FL2VA, neither → text to video. Speed exact is
-`--layers 50 --reuse 1`, fast the old studio's fast preset `--layers 45 --reuse 2`; `--use-int8-row-fc2` always (M5).
+per kind in that order), a first and/or last frame → FL2VA, neither → text to video. API 1.37 (plan 20 24.3): the
+speed params go to h3 as they are (`--layers`, `--reuse`, `--core-reuse` at reuse 1, `--token-reduction`, Render as
+`--render-width/--render-height`, render_size); `--use-int8-row-fc2` always (M5).
 Image inputs are written as PNGs into a per-run temp folder, deleted after with the MP4; each video or audio
 reference (API 1.22) is cut there to its in..out with ffmpeg (a video: lossless H.264, its sound as PCM when kept;
-an audio, or a video's sound: a WAV). The Video value is built as
+an audio, or a video's sound: a WAV; API 1.37 a replaced sound: the soundtrack's part muxed in as the video's PCM
+track). The Video value is built as
 the ltx pack's: {mp4, poster, last, frames, fps, has_audio, stream} (core.media probe, frames as PNG). No torch.
 The base-fp8 variant (NVIDIA hosts) takes the same inputs to SGLang instead of h3: sgl.py."""
 
+import math
 import subprocess
 import tempfile
 from pathlib import Path
@@ -25,7 +28,7 @@ H3C = Path(__file__).resolve().parents[2] / "vendor/h3c"
 BINARY = H3C / "h3"
 MAX_PIXELS = 768 * 1344  # 1,032,192 (contracts/check.py H3_MAX_PIXELS)
 FPS = 24
-SPEED = {"exact": ["--layers", "50", "--reuse", "1"], "fast": ["--layers", "45", "--reuse", "2"]}
+RENDER = {"Full": 1.0, "75%": 0.75, "62.5%": 0.625}  # generate.render (API 1.37)
 # h3's stderr phases → the run's progress (phase, phase id of model.yaml `generate.phases`; unknown ones pass as they
 # are); the video VAE decode prints none, the MP4 write folds into decode_video, the transformer load into encode
 PHASES = {
@@ -47,20 +50,46 @@ PHASES = {
 # 864 x 480 x 124, ~560 s at 1344 x 768 x 243); a denoise step at the largest canvas x 362 frames is ~12 min (est.)
 # ponytail: flat; scale with mp x frames if a real run ever comes near it
 IDLE_S = 1800
+# generate's speed params (API 1.37) in generate_error's order, with the schema defaults (model.yaml)
+DEFAULTS = (("layers", 50), ("reuse", 1), ("token_reduction", False), ("render", "Full"))
 # h3.c's own Ref2VA limits (contracts/check.py H3_*): references in all, sound inputs, a video's sound needs 2 s of
 # clip and of its part (frames on the 5 + 17k grid), all reference sound
 MAX_REFS, MAX_SOUNDS, SOUND_FRAMES, MAX_SOUND_S = 12, 3, 56, 15.0
 
 
+def render_size(width: int, height: int, render: str) -> tuple[int, int] | None:
+    """The size h3 renders at for Render (contracts/check.py h3_render_size): the canvas at Full; else, with g =
+    gcd(w / 32, h / 32), k = g x scale rounded half up and capped at g - 1, (w k / g, h k / g): exactly the canvas's
+    shape on the 32 px grid, as h3 needs. None when there is no such smaller size (g = 1, or k = 0)."""
+    if render == "Full":
+        return width, height
+    g = math.gcd(width // 32, height // 32)
+    k = min(
+        math.floor(g * RENDER[render] + 0.5), g - 1
+    )  # g x 0.75 and g x 0.625 are exact binary fractions
+    return (width * k // g, height * k // g) if k > 0 else None
+
+
 def generate_error(node: str, refs: int, first: bool, last: bool, width: int, height: int, frames: int = 124,
-                   videos: list | None = None, audios: list | None = None) -> str | None:  # fmt: skip
+                   videos: list | None = None, audios: list | None = None,
+                   speed: list | None = None) -> str | None:  # fmt: skip
     """contracts/check.py h3_generate_error (fixtures/video/minimax-h3.json): the run's error text, or None. refs =
-    image references; videos = [seconds read, sound kept and the take has sound] per video reference; audios =
-    seconds read per audio reference."""
-    videos, audios = videos or [], audios or []
-    sounds = [s for _, s in videos if s]
+    image references; videos = [seconds read, sound, soundtrack seconds or null] per video reference (sound: true
+    when kept and the take has sound, false when not read, "replace" for Sound: replace); audios = seconds read per
+    audio reference; speed = [layers, reuse, token reduction, render] on Base (null on Base fp8: SGLang ignores
+    them)."""
+    videos, audios = (
+        [(v[0], v[1], v[2] if len(v) > 2 else None) for v in videos or []],
+        audios or [],
+    )
+    sounds = [s for _, s, _ in videos if s]
     if (refs or videos or audios) and (first or last):
         return f"{node}: references cannot go with a first or last frame"
+    for i, (_, s, t) in enumerate(videos, 1):  # API 1.37: a replaced sound
+        if s == "replace" and t is None:
+            return f"{node}.videos[{i}].soundtrack: Replace needs a soundtrack"
+        if s != "replace" and t is not None:
+            return f"{node}.videos[{i}].soundtrack: a soundtrack is read only with Sound: Replace"
     if audios and not (refs or videos):
         return f"{node}: audio references need an image or video reference"
     if (n := refs + len(videos) + len(audios)) > MAX_REFS:
@@ -69,7 +98,7 @@ def generate_error(node: str, refs: int, first: bool, last: bool, width: int, he
         return f"{node}: at most {MAX_SOUNDS} sound references (audio references and videos with sound; {n})"
     if sounds and frames < SOUND_FRAMES:
         return f"{node}: a video reference with sound needs a clip of at least {SOUND_FRAMES} frames ({frames})"
-    for i, (x, s) in enumerate(videos, 1):
+    for i, (x, s, _) in enumerate(videos, 1):
         if (
             s and (n := round(x * FPS)) < SOUND_FRAMES
         ):  # h3 keeps 5 + 17k frames, reads the sound that long
@@ -77,12 +106,24 @@ def generate_error(node: str, refs: int, first: bool, last: bool, width: int, he
                 f"{node}: a video reference with sound needs a part of at least {SOUND_FRAMES} frames at {FPS} fps "
                 f"(video {i} reads {n})"
             )
-    if (t := sum(audios) + sum(min(x, frames / FPS) for x, s in videos if s)) > MAX_SOUND_S + 1e-9:
+    # a replaced sound is cut to the video part (and h3 to the clip's frames), so it reads the shortest of the three
+    heard = sum(min(x, frames / FPS, *([t] if s == "replace" else [])) for x, s, t in videos if s)
+    if (t := sum(audios) + heard) > MAX_SOUND_S + 1e-9:
         return f"{node}: the sound references last {t:.1f} s in all; at most {MAX_SOUND_S:.1f} s"
     if any(not 256 <= x <= 1344 or x % 32 for x in (width, height)):
         return f"{node}: the canvas is {width} × {height}; sides must be multiples of 32 from 256 to 1344"
     if width * height > MAX_PIXELS:
         return f"{node}: the canvas is {width} × {height}; at most {MAX_PIXELS} pixels (768 × 1344)"
+    if speed:  # API 1.37, Base only
+        layers, reuse, reduce, render = speed
+        size = render_size(width, height, render)
+        if size is None:
+            return f"{node}: the canvas {width} × {height} has no smaller size of the same shape; use Full"
+        if reduce and layers <= 40 and reuse == 3:  # h3.c README: colour ringing and ghosted limbs
+            return (f"{node}: token reduction with 40 layers or fewer and reuse 3 gives colour ringing; "
+                    "use reuse 2 or more layers")  # fmt: skip
+        if reduce and size == (256, 256):  # h3.c README: keep token reduction off at this size
+            return f"{node}: token reduction does not run when h3 renders 256 × 256; switch it off or render larger"
     return None
 
 
@@ -99,18 +140,15 @@ def check_generate(params: dict, wired: set, models: dict | None = None) -> str 
     canvas is checked in generate: it may come from another node)."""
     if any(params.get(k) for k in ("refs", "videos", "audios")) and wired & {"first", "last"}:
         return ": references cannot go with a first or last frame"
-    if (
-        params.get("speed") == "fast"
-        and getattr((models or {}).get("model"), "variant", None) == "base-fp8"
-    ):
-        return ": speed fast is h3's (Mac); the Base fp8 variant runs exact only"
     return None
 
 
-def argv(model_dir: Path, prompt: str, out: Path, *, width: int, height: int, frames: int, steps: int,
-         seed: int, speed: str, images: list[tuple[str, Path]]) -> list[str]:  # fmt: skip
-    """The h3 command line, in the goldens' order (tests/golden/record_h3.py); `images` are every (flag, path) input:
-    frames, image, video and audio references, in that order."""
+def argv(model_dir: Path, prompt: str, out: Path, *, width: int, height: int, frames: int, steps: int, seed: int,
+         layers: int = 50, reuse: int = 1, core_reuse: int = 1, token_reduction: bool = False,
+         render: tuple[int, int] | None = None, images: list[tuple[str, Path]]) -> list[str]:  # fmt: skip
+    """The h3 command line, in the goldens' order; `images` are every (flag, path) input: frames, image, video and
+    audio references, in that order. `--core-reuse` only at reuse 1 (h3 refuses it with reuse) and above 1; render =
+    h3's internal size (render_size), passed when not the canvas."""
     a = [str(BINARY), "-d", str(model_dir), "-p", prompt, "-o", str(out)]
     a += [
         "--width",
@@ -122,7 +160,14 @@ def argv(model_dir: Path, prompt: str, out: Path, *, width: int, height: int, fr
         "--steps",
         str(steps),
     ]
-    a += ["--seed", str(seed), *SPEED[speed], "--use-int8-row-fc2"]
+    a += ["--seed", str(seed), "--layers", str(layers), "--reuse", str(reuse)]
+    if reuse == 1 and core_reuse > 1:
+        a += ["--core-reuse", str(core_reuse)]
+    if token_reduction:
+        a += ["--token-reduction"]
+    if render and render != (width, height):
+        a += ["--render-width", str(render[0]), "--render-height", str(render[1])]
+    a += ["--use-int8-row-fc2"]
     for flag, path in images:
         a += [flag, str(path)]
     return a
@@ -133,14 +178,38 @@ def part(v: dict) -> float:
     return v.get("out", v["duration_s"]) - v.get("in", 0)
 
 
-def sound(row: dict) -> bool:
-    """A video reference row reads its sound: sound keep (the item default) and the take has sound."""
-    return row.get("sound", "keep") == "keep" and bool(row["video"].get("has_audio"))
+def sound(row: dict) -> bool | str:
+    """What a video reference row reads of sound: true for sound keep (the item default) when the take has sound,
+    "replace" for sound replace (API 1.37: its soundtrack), else false."""
+    if (s := row.get("sound", "keep")) == "replace":
+        return s
+    return s == "keep" and bool(row["video"].get("has_audio"))
 
 
-def cut(node: str, v: dict, dest: Path, *, picture: bool, audio: bool) -> Path:
+def cut(
+    node: str, v: dict, dest: Path, *, picture: bool, audio: bool, soundtrack: dict | None = None
+) -> Path:
     """Write the media value's in..out part to `dest`: the picture as lossless H.264 (frame exact: -ss after -i),
-    the sound as 16-bit PCM, either one left out when not wanted."""
+    the sound as 16-bit PCM, either one left out when not wanted. API 1.37: with `soundtrack` (a media value), the
+    picture is cut alone, then the soundtrack's part comes in as a second input and is mapped as its PCM track,
+    the shorter of the two setting the length (-shortest)."""
+    if soundtrack is not None:
+        bare = cut(
+            node, v, dest.with_name(dest.stem + "-picture" + dest.suffix), picture=True, audio=False
+        )
+        track = dest.with_name(dest.stem + "-soundtrack")
+        track.write_bytes(soundtrack["data"])
+        a = [media.FFMPEG or "ffmpeg", "-v", "error", "-nostdin", "-y", "-protocol_whitelist", "file", "-i", str(bare),
+             "-ss", f"{soundtrack.get('in', 0):.6f}", "-t", f"{part(soundtrack):.6f}", "-i", str(track),
+             "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "pcm_s16le", "-shortest", str(dest)]  # fmt: skip
+        r = subprocess.run(a, capture_output=True, text=True, check=False, timeout=600)
+        bare.unlink()
+        track.unlink()
+        if r.returncode or not dest.is_file():
+            raise RunError(
+                f"{node}: adding soundtrack take {soundtrack['take_id']} failed: {media.last_line(r.stderr)}"
+            )
+        return dest
     src = dest.with_name(dest.stem + "-take")
     src.write_bytes(v["data"])
     a = [media.FFMPEG or "ffmpeg", "-v", "error", "-nostdin", "-y", "-protocol_whitelist", "file", "-i", str(src),
@@ -166,11 +235,15 @@ def generate(ctx, params: dict, inputs: dict) -> dict:
     videos, audios = params.get("videos") or [], [r["audio"] for r in params.get("audios") or []]
     first, last = inputs.get("first"), inputs.get("last")
     w, h = size["width"], size["height"]
-    facts = [[part(r["video"]), sound(r)] for r in videos]
-    if why := generate_error(ctx.node, len(refs), first is not None, last is not None, w, h, d["frames"], facts,
-                             [part(a) for a in audios]):  # fmt: skip
-        raise RunError(why)
+    facts = [
+        [part(r["video"]), sound(r), part(r["soundtrack"]) if r.get("soundtrack") else None]
+        for r in videos
+    ]
     fp8 = inputs["model"].variant == "base-fp8"
+    speed = None if fp8 else [params.get(k, d_) for k, d_ in DEFAULTS]
+    if why := generate_error(ctx.node, len(refs), first is not None, last is not None, w, h, d["frames"], facts,
+                             [part(a) for a in audios], speed):  # fmt: skip
+        raise RunError(why)
     if not fp8 and not BINARY.is_file():
         raise RunError(f"{ctx.node}: the h3 binary is not built (make h3 in runner_service)")
     with tempfile.TemporaryDirectory(prefix="h3-") as tmp:
@@ -191,8 +264,10 @@ def generate(ctx, params: dict, inputs: dict) -> dict:
             images.append(
                 ("--ref-audio", cut(ctx.node, a, tmp / f"audio-{i}.wav", picture=False, audio=True))
             )
-        for i, (row, (_, keep)) in enumerate(zip(videos, facts, strict=True)):
-            path = cut(ctx.node, row["video"], tmp / f"video-{i}.mkv", picture=True, audio=keep)
+        for i, (row, (_, keep, _)) in enumerate(zip(videos, facts, strict=True)):
+            track = row.get("soundtrack") if keep == "replace" else None
+            path = cut(ctx.node, row["video"], tmp / f"video-{i}.mkv", picture=True, audio=keep is True,
+                       soundtrack=track)  # fmt: skip
             images.append(("--ref-video" if keep else "--ref-silent-video", path))
         out = tmp / "out.mp4"
         if fp8:
@@ -200,15 +275,26 @@ def generate(ctx, params: dict, inputs: dict) -> dict:
             try:
                 body = sgl.request(inputs["prompt"], inputs["seed"], params["steps"], size, d["frames"],
                                    (by("--first-frame") or [None])[0], (by("--last-frame") or [None])[0],
-                                   by("--ref-image"), by("--ref-audio"), by("--ref-video", "--ref-silent-video"))  # fmt: skip
+                                   by("--ref-image"), by("--ref-audio"), by("--ref-video", "--ref-silent-video"),
+                                   quality=params.get("quality", "lossless"),
+                                   flow_shift=params.get("flow_shift", sgl.FLOW_SHIFT),
+                                   audio_flow_shift=params.get("audio_flow_shift", sgl.AUDIO_FLOW_SHIFT))  # fmt: skip
             except ValueError as e:
                 raise RunError(f"{ctx.node}: {e}") from None
             sgl.generate(ctx, inputs["model"], body, out, tmp)
             return {"video": video_value(out, tmp)}
+        layers, reuse, reduce, render = speed
+        size = render_size(w, h, render)
         cmd = argv(inputs["model"].folder().resolve(), inputs["prompt"], out, width=w, height=h, frames=d["frames"],
-                   steps=params["steps"], seed=inputs["seed"], speed=params["speed"], images=images)  # fmt: skip
-        ctx.progress(1, 1, "starting h3", "encode")  # a phase without steps: 1 of 1
-        child.run(ctx, cmd, cwd=H3C, name="h3", phases=PHASES, idle_s=IDLE_S)
+                   steps=params["steps"], seed=inputs["seed"], layers=layers, reuse=reuse,
+                   core_reuse=params.get("core_reuse", 1), token_reduction=reduce, render=size,
+                   images=images)  # fmt: skip
+        # a phase without steps: 1 of 1. At a smaller Render every phase text names the size (the Create stage tag
+        # shows the latest one: "sampling · renders 576 × 320 → 864 × 480")
+        tag = "" if size == (w, h) else f"renders {size[0]} × {size[1]} → {w} × {h}"
+        phases = {k: (f"{t} · {tag}" if tag else t, i) for k, (t, i) in PHASES.items()}
+        ctx.progress(1, 1, tag or "starting h3", "encode")
+        child.run(ctx, cmd, cwd=H3C, name="h3", phases=phases, idle_s=IDLE_S)
         if not out.is_file():
             raise RunError(f"{ctx.node}: h3 wrote no video")
         return {"video": video_value(out, tmp)}

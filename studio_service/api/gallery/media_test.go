@@ -101,9 +101,49 @@ func TestCheckAudio(t *testing.T) {
 		{"\xff\xfb\x90\x64", "audio/mpeg", ""},
 		{"\x89PNG", "audio/mpeg", "not a valid mp3 file"},
 		{"", "audio/mpeg", "not a valid mp3 file"},
+		{"\x00\x00\x00\x18ftypM4A \x00\x00\x02\x00isomiso2", "audio/mp4", ""},
+		{"\x00\x00\x00\x18ftypisom\x00\x00\x02\x00M4A mp42", "audio/mp4", ""},
+		{"\x00\x00\x00\x18ftypisom\x00\x00\x02\x00avc1mp41", "audio/mp4", "not a valid m4a file"},
+		{"\x00\x00\x00\x0cftypM4A ", "audio/mp4", "not a valid m4a file"},
+		{"RIFF\x24\x00\x00\x00WAVEfmt ", "audio/mp4", "not a valid m4a file"},
 	} {
 		if got := checkAudio([]byte(c.head), c.contentType); got != c.want {
 			t.Errorf("%q: %q", c.head, got)
 		}
+	}
+}
+
+// GET /uploads/limits (API 1.38): the largest Canvas width or height over the canonical registries (check.py
+// upload_limits): 8192 with MiniMax H3 Image, 4096 with Qwen alone, the upload cap with none.
+func TestUploadLimits(t *testing.T) {
+	limits := func(prefixes ...string) int {
+		var r registry.Registry
+		_ = r.SetHost("mac.mlx", []byte(`{"host": "mac", "env": "mlx", "state": "idle", "updated_at": "2026-11-15T10:00:00Z"}`))
+		var all []json.RawMessage // one host's nodes key holds every pack's
+		for _, prefix := range prefixes {
+			var nodes struct{ Nodes []json.RawMessage }
+			data, err := os.ReadFile(filepath.Join("..", "..", "..", "contracts", "fixtures", "registry", prefix+"nodes.valid.json"))
+			if err == nil {
+				err = json.Unmarshal(data, &nodes)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			all = append(all, nodes.Nodes...)
+		}
+		data, _ := json.Marshal(map[string]any{"nodes": all})
+		if err := r.SetRegistry("mac.mlx.nodes", data); err != nil {
+			t.Fatal(err)
+		}
+		return (&Service{registry: &r}).UploadLimits().ImageMaxSide
+	}
+	if got := limits("qwen-image.", "ltx.", "minimax-h3.", "minimax-h3-image."); got != 8192 {
+		t.Fatal(got)
+	}
+	if got := limits("qwen-image.", "ltx.", "minimax-h3."); got != 4096 {
+		t.Fatal(got)
+	}
+	if got := limits(); got != MaxSide {
+		t.Fatal(got)
 	}
 }

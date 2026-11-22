@@ -89,7 +89,11 @@ export function thumbOf(t: S<"Take"> | S<"RunOutput">): { src?: string; length?:
 
 /** An audio take's format from its type ("mp3", "wav"). */
 export const audioFormat = (contentType: string) =>
-  contentType === "audio/mpeg" ? "mp3" : contentType.replace(/^audio\/(x-)?/, "");
+  contentType === "audio/mpeg"
+    ? "mp3"
+    : contentType === "audio/mp4"
+      ? "m4a"
+      : contentType.replace(/^audio\/(x-)?/, "");
 
 /** The take's line in a details panel: "2.0 s · 24 fps · 49 frames · audio"; "" for an image. */
 export const videoLine = (v?: S<"VideoInfo">) =>

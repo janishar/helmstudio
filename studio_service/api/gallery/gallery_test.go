@@ -172,7 +172,7 @@ func TestBodies(t *testing.T) {
 		want string
 	}{
 		{dto.UploadCreate{Filename: "C:\\pics\\fox reference 1.JPG", ContentType: "image/jpeg", Bytes: 1}, ""},
-		{dto.UploadCreate{Filename: "a.svg", ContentType: "image/svg+xml", Bytes: 1}, "only png, jpeg and webp images or wav and mp3 audio can be uploaded"},
+		{dto.UploadCreate{Filename: "a.svg", ContentType: "image/svg+xml", Bytes: 1}, "only png, jpeg and webp images or wav, mp3 and m4a audio can be uploaded"},
 		{dto.UploadCreate{Filename: "a.wav", ContentType: "audio/wav", Bytes: 1, DurationS: &seconds[0]}, ""},
 		{dto.UploadCreate{Filename: "a.mp3", ContentType: "audio/mpeg", Bytes: 1}, "duration_s is required for audio"},
 		{dto.UploadCreate{Filename: "a.mp3", ContentType: "audio/mpeg", Bytes: 1, DurationS: &seconds[1]}, "audio is longer than 600 s"},

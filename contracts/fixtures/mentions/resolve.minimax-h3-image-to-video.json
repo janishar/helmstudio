@@ -66,7 +66,8 @@
         },
         "params": {
           "steps": 6,
-          "speed": "exact",
+          "layers": 50,
+          "reuse": 1,
           "refs": [],
           "videos": [],
           "audios": []
@@ -86,7 +87,6 @@
         "last.image"
       ],
       "quick": [
-        "generate.speed",
         "seed.seed"
       ],
       "inspector": [

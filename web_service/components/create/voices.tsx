@@ -7,7 +7,8 @@
 // action Save as voice opens it with that take. An element's Voice tile comes with API 1.32.
 import { useEffect, useRef, useState } from "react";
 import { ChevronRight, Mic, MoreVertical, Pause, Play, Scissors, Wand2 } from "lucide-react";
-import { ErrorNote, Info, Modal } from "@/components/kit";
+import { X } from "lucide-react";
+import { ErrorNote, Info, Modal, UploadStatus } from "@/components/kit";
 import { VisualPicker } from "@/components/create/visual-picker";
 import { TileWords, tileClass } from "@/components/create/elements";
 import { usePlayer } from "@/components/create/audio";
@@ -19,6 +20,7 @@ import { audioFormat } from "@/lib/media";
 import { isActive } from "@/lib/runs";
 import { factsOf, mediaFit, pickable, trimmed } from "@/lib/source";
 import { remember, useTakes } from "@/lib/take-cache";
+import { AUDIO_ACCEPT, typeOf, uploadFile, type UploadProgress } from "@/lib/takes";
 import {
   CLIP,
   baseLanguage,
@@ -1177,14 +1179,45 @@ function Cloner({
   onSaved: (x: Item) => void;
 }) {
   const list = useClipTakes();
-  const takes = start
-    ? [start, ...(list.takes ?? []).filter((t) => t.id !== start.id)]
-    : (list.takes ?? []);
+  // Upload a clip (docs/mock/UploadOptimise.dc.html frame 3): kept as it is, a wav stays WAV; it leads the list
+  const [added, setAdded] = useState<Take[]>([]);
+  const [up, setUp] = useState<{
+    name: string;
+    facts: string;
+    tag: string;
+    p: UploadProgress;
+    stop: AbortController;
+    error?: string;
+  } | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const first = [...(start ? [start] : []), ...added];
+  const takes = [...first, ...(list.takes ?? []).filter((t) => !first.some((x) => x.id === t.id))];
   const whole = (t: Take): S<"MediaRef"> => {
     const d = factsOf(t).duration_s ?? 0;
     return { take_id: t.id, in: 0, out: Math.min(d, CLIP.max_s ?? d) };
   };
   const [part, setPart] = useState<S<"MediaRef"> | null>(start ? whole(start) : null);
+  function uploadClip(f: File) {
+    const stop = new AbortController();
+    const mine = (next: (u: NonNullable<typeof up>) => typeof up) =>
+      setUp((u) => (u?.stop === stop ? next(u) : u));
+    const facts = `${audioFormat(typeOf(f))} · ${(f.size / 1_048_576).toFixed(1)} MB, uploaded as it is.`;
+    const tag = typeOf(f) === "audio/wav" ? "voice clip · kept as WAV" : "voice clip · as it is";
+    // never optimised, so no Optimising step (docs/mock/UploadOptimise.dc.html frame 3)
+    setUp({ name: f.name, facts, tag, p: { step: "uploading", f: 0 }, stop });
+    uploadFile(f, (p) => mine((u) => ({ ...u, p })), undefined, {
+      audio: true,
+      asIs: true,
+      signal: stop.signal,
+    })
+      .then((t) => {
+        remember([t]);
+        setAdded((a) => [t, ...a]);
+        setPart(whole(t));
+        mine(() => null);
+      })
+      .catch((e) => mine((u) => ({ ...u, error: message(e) })));
+  }
   const take = takes.find((t) => t.id === part?.take_id);
   const designed = start && part?.take_id === start.id ? designedOf(start) : undefined;
   const [name, setName] = useState(designed?.name ?? "");
@@ -1273,9 +1306,12 @@ function Cloner({
   return (
     <div className="flex flex-col gap-3.5">
       <div className="flex flex-col gap-2">
-        <span className="text-[12px] text-t2">An audio take, or a video&apos;s sound</span>
+        <span className="text-[12px] text-t2">
+          An audio take, or a video&apos;s sound
+          <Info>Voice clips are never converted: the clone reads the WAV.</Info>
+        </span>
         {list.error && <ErrorNote>{list.error}</ErrorNote>}
-        {list.takes && !takes.length ? (
+        {list.takes && !takes.length && !up ? (
           <p className="m-0 text-[13px] text-t2">
             No audio takes or videos with sound of 3 s or more yet.
           </p>
@@ -1284,6 +1320,26 @@ function Cloner({
             aria-label="Takes"
             className="m-0 grid list-none auto-cols-[calc((100%-30px)/4)] grid-flow-col gap-2.5 overflow-x-auto p-0.5"
           >
+            {up && !up.error && (
+              <li className="relative flex flex-col gap-1">
+                <span className="flex h-12 w-full flex-col justify-center gap-1 rounded-[10px] border border-dashed border-s5 px-2.5 text-[11px]">
+                  <UploadStatus p={{ ...up.p, line: undefined }} name={up.name} />
+                </span>
+                <button
+                  type="button"
+                  aria-label={`Cancel the upload of ${up.name}`}
+                  className="absolute top-1 right-1 grid size-5 place-items-center rounded-full bg-s3 text-t1"
+                  onClick={() => {
+                    up.stop.abort();
+                    setUp(null);
+                  }}
+                >
+                  <X size={10} aria-hidden />
+                </button>
+                <b className="truncate text-[13px] font-semibold">{up.name}</b>
+                <small className="mono text-[11px] text-t2">{up.tag}</small>
+              </li>
+            )}
             {takes.map((x) => (
               <li key={x.id}>
                 <button
@@ -1304,6 +1360,33 @@ function Cloner({
             ))}
           </ul>
         )}
+        <input
+          ref={fileInput}
+          type="file"
+          accept={AUDIO_ACCEPT}
+          hidden
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            e.target.value = "";
+            if (f) uploadClip(f);
+          }}
+        />
+        <button
+          type="button"
+          className="h-10 rounded-[10px] border border-dashed border-dash bg-transparent px-3.5 text-[13px]"
+          disabled={!!up && !up.error}
+          onClick={() => fileInput.current?.click()}
+        >
+          Upload a clip
+        </button>
+        {up &&
+          (up.error ? (
+            <p role="alert" className="mono m-0 text-[12px] text-bad">
+              {up.error}
+            </p>
+          ) : (
+            <span className="text-[12px] text-t2">{up.facts}</span>
+          ))}
       </div>
       {take && part && (
         <div className="flex flex-col gap-2">

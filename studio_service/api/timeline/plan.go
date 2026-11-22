@@ -298,17 +298,72 @@ func sameColour(a, b map[string]any) bool {
 	return string(x) == string(y)
 }
 
-// Keyframes is Workflow.keyframes: the rows a New shot binds a first (and with Last, a last) frame into.
+// Keyframes is Workflow.keyframes: the rows a New shot binds a first (and with Last, a last) frame into; from API
+// 1.37, when First is set, two image params instead (WorkflowFrameParams: First, LastParam, nil for none).
 type Keyframes struct {
-	Param   string `json:"param"`
-	Image   string `json:"image"`
-	Seconds string `json:"seconds"`
-	Last    bool   `json:"last"`
+	Param, Image, Seconds string
+	Last                  bool
+	First                 string
+	LastParam             *string
 }
 
-// ShotKeyframes is which frames a New shot can bind (shot_keyframes): the workflow's one rows param, unwired on a
-// known, not bypassed node, with one Image field and a `position: seconds` field; nil when there is not exactly one.
-func ShotKeyframes(nodes map[string]registry.Node, schemas map[string]registry.NodeSchema) *Keyframes {
+// FrameParams is a workflow's studio.keyframes (API 1.37): the image params a New shot binds its frames into.
+type FrameParams struct {
+	First string  `json:"first"`
+	Last  *string `json:"last,omitempty"`
+}
+
+// MarshalJSON writes the shape WorkflowKeyframes names: the rows', or {first, last}.
+func (k Keyframes) MarshalJSON() ([]byte, error) {
+	if k.First != "" {
+		return json.Marshal(map[string]any{"first": k.First, "last": k.LastParam})
+	}
+	return json.Marshal(map[string]any{"param": k.Param, "image": k.Image, "seconds": k.Seconds, "last": k.Last})
+}
+
+// UnmarshalJSON reads either shape (fixtures).
+func (k *Keyframes) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Param, Image, Seconds, First string
+		Last                         json.RawMessage
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*k = Keyframes{Param: raw.Param, Image: raw.Image, Seconds: raw.Seconds, First: raw.First}
+	if len(raw.Last) == 0 { // `last` left out
+		return nil
+	}
+	if raw.First != "" {
+		return json.Unmarshal(raw.Last, &k.LastParam)
+	}
+	return json.Unmarshal(raw.Last, &k.Last)
+}
+
+// ShotKeyframes is which frames a New shot can bind (shot_keyframes): from API 1.37 the workflow's studio.keyframes
+// when its first path names an unwired image param on a known, not bypassed node (its last the same, else nil); else
+// the workflow's one rows param, unwired on a known, not bypassed node, with one Image field and a `position:
+// seconds` field; nil when there is not exactly one.
+func ShotKeyframes(nodes map[string]registry.Node, schemas map[string]registry.NodeSchema, frames *FrameParams) *Keyframes {
+	imageParam := func(path *string) bool {
+		if path == nil {
+			return false
+		}
+		id, name, _ := strings.Cut(*path, ".")
+		n, ok := nodes[id]
+		s, known := schemas[n.Kind]
+		if _, wired := n.In[name]; !ok || !known || n.Bypass || wired {
+			return false
+		}
+		return slices.ContainsFunc(s.Params, func(p registry.Param) bool { return p.Name == name && p.Type == "image" })
+	}
+	if frames != nil && imageParam(&frames.First) {
+		kf := &Keyframes{First: frames.First}
+		if imageParam(frames.Last) {
+			kf.LastParam = frames.Last
+		}
+		return kf
+	}
 	var found []Keyframes
 	for _, id := range sortedKeys(nodes) {
 		n := nodes[id]
@@ -411,6 +466,22 @@ func RerenderSteps(doc Doc, takes map[string]Take, clips []string, keyframes map
 		}
 		kf := keyframes[mw.WorkflowID]
 		if kf == nil {
+			continue
+		}
+		if kf.First != "" { // API 1.37: frames as image params, bound by their path
+			for _, path := range []*string{&kf.First, kf.LastParam} {
+				if path == nil {
+					continue
+				}
+				ref, _ := mw.Inputs[*path].(map[string]any)
+				tid, _ := ref["take_id"].(string)
+				if fo := takes[tid].FrameOf; fo != nil {
+					if src := owner[fo.TakeID]; src != "" && src != c.ID {
+						binds[c.ID][*path] = "clip_" + src + "." + fo.At + "_frame"
+						deps[c.ID][src] = true
+					}
+				}
+			}
 			continue
 		}
 		rows, _ := mw.Inputs[kf.Param].([]any)

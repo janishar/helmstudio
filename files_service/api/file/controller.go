@@ -52,14 +52,15 @@ var loraKey = regexp.MustCompile(`^u/[0-9a-f-]{36}/loras/[0-9a-f-]{36}\.safetens
 // importVideoKey is the only key shape a video upload may have: an imported take, u/<owner>/imports/<take_id>.mp4.
 var importVideoKey = regexp.MustCompile(`^u/[0-9a-f-]{36}/imports/[0-9a-f-]{36}\.mp4$`)
 
-// audioUploadKey is an audio upload's key (API 1.19): u/<owner>/uploads/<take_id>.wav|.mp3, its type by its extension.
-var audioUploadKey = regexp.MustCompile(`^u/[^/]+/uploads/[^/]+\.(wav|mp3)$`)
+// audioUploadKey is an audio upload's key (API 1.19; m4a from 1.38): u/<owner>/uploads/<take_id>.wav|.mp3|.m4a, its
+// type by its extension.
+var audioUploadKey = regexp.MustCompile(`^u/[^/]+/uploads/[^/]+\.(wav|mp3|m4a)$`)
 
 // audioTypes maps an audio upload key's extension to its one content type.
-var audioTypes = map[string]string{"wav": "audio/wav", "mp3": "audio/mpeg"}
+var audioTypes = map[string]string{"wav": "audio/wav", "mp3": "audio/mpeg", "m4a": "audio/mp4"}
 
 // uploadLimit is the cap and the allowed content types of a key: a LoRA key takes application/octet-stream up to
-// 2 GiB, an import's video key video/mp4 up to 2 GiB, an audio upload's key its wav or mp3 type up to 50 MB, any
+// 2 GiB, an import's video key video/mp4 up to 2 GiB, an audio upload's key its wav, mp3 or m4a type up to 50 MB, any
 // other key an image up to 50 MB.
 func uploadLimit(key string) (int64, func(string) bool) {
 	if m := audioUploadKey.FindStringSubmatch(key); m != nil {

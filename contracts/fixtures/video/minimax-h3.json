@@ -1,5 +1,5 @@
 {
-  "description": "minimax-h3/generate's refusals: h3_generate_error(node, refs, first, last, width, height, frames = 124, videos = [], audios = []) → the run's error text, or null (contracts/README.md, the minimax-h3 family). refs = the number of image reference rows, first / last = whether those inputs are wired, frames = the clip's frames, videos = [seconds read, sound] per video row (sound: kept and the take has sound), audios = seconds read per audio row (API 1.22). The runner fails the run with the text before the h3 child starts",
+  "description": "minimax-h3/generate's refusals: h3_generate_error(node, refs, first, last, width, height, frames = 124, videos = [], audios = []) → the run's error text, or null (contracts/README.md, the minimax-h3 family). refs = the number of image reference rows, first / last = whether those inputs are wired, frames = the clip's frames, videos = [seconds read, sound] per video row (sound: kept and the take has sound), audios = seconds read per audio row (API 1.22). The runner fails the run with the text before the h3 child starts. From API 1.37: a video row may be [seconds, sound, soundtrack seconds or null] with sound \"replace\"; a tenth arg speed = [layers, reuse, token reduction, render] (Base; null on Base fp8). `render`: h3_render_size(width, height, render) → [w, h] or null",
   "cases": [
     {"description": "the template default, 864 × 480, text to video", "args": ["generate", 0, false, false, 864, 480], "expect": null},
     {"description": "first and last frame, no references", "args": ["generate", 0, true, true, 864, 480], "expect": null},
@@ -29,6 +29,41 @@
     {"description": "a short video with sound second: numbered by its row", "args": ["generate", 0, false, false, 512, 512, 56, [[2.5, false], [2.0, true]], []], "expect": "generate: a video reference with sound needs a part of at least 56 frames at 24 fps (video 2 reads 48)"},
     {"description": "a short silent video next to a sound one: only the sound one counts", "args": ["generate", 0, false, false, 512, 512, 56, [[2.0, false], [2.4, true]], []], "expect": null},
     {"description": "sound in all: 10 s of audio + a 10 s video with sound in a 124-frame clip (its sound read for 5.2 s) = 15.2 s", "args": ["generate", 1, false, false, 864, 480, 124, [[10.0, true]], [10.0]], "expect": "generate: the sound references last 15.2 s in all; at most 15.0 s"},
-    {"description": "the same in a 56-frame clip: the video's sound is read for 2.3 s, 12.3 s in all", "args": ["generate", 1, false, false, 864, 480, 56, [[10.0, true]], [10.0]], "expect": null}
+    {"description": "the same in a 56-frame clip: the video's sound is read for 2.3 s, 12.3 s in all", "args": ["generate", 1, false, false, 864, 480, 56, [[10.0, true]], [10.0]], "expect": null},
+    {"description": "1.37: Replace with a soundtrack counts as a sound input", "args": ["generate", 0, false, false, 512, 512, 56, [[3.0, "replace", 3.0]]], "expect": null},
+    {"description": "1.37: Replace without a soundtrack", "args": ["generate", 1, false, false, 512, 512, 56, [[3.0, true], [3.0, "replace", null]]], "expect": "generate.videos[2].soundtrack: Replace needs a soundtrack"},
+    {"description": "1.37: a soundtrack with Keep", "args": ["generate", 0, false, false, 512, 512, 56, [[3.0, true, 3.0]]], "expect": "generate.videos[1].soundtrack: a soundtrack is read only with Sound: Replace"},
+    {"description": "1.37: a soundtrack with Silent (or a take without sound)", "args": ["generate", 0, false, false, 512, 512, 56, [[3.0, false, 2.5]]], "expect": "generate.videos[1].soundtrack: a soundtrack is read only with Sound: Replace"},
+    {"description": "1.37: a replaced sound needs a clip of 56 frames", "args": ["generate", 0, false, false, 512, 512, 22, [[3.0, "replace", 3.0]]], "expect": "generate: a video reference with sound needs a clip of at least 56 frames (22)"},
+    {"description": "1.37: a replaced sound needs a video part of 56 frames", "args": ["generate", 0, false, false, 512, 512, 56, [[2.0, "replace", 5.0]]], "expect": "generate: a video reference with sound needs a part of at least 56 frames at 24 fps (video 1 reads 48)"},
+    {"description": "1.37: a replaced sound is the 4th sound input", "args": ["generate", 1, false, false, 512, 512, 124, [[3.0, "replace", 3.0]], [2.5, 2.5, 2.5]], "expect": "generate: at most 3 sound references (audio references and videos with sound; 4)"},
+    {"description": "1.37: a replaced sound reads its shortest: a 3 s soundtrack of a 10 s part, 12 s of audio: 15.0 s", "args": ["generate", 1, false, false, 512, 512, 362, [[10.0, "replace", 3.0]], [12.0]], "expect": null},
+    {"description": "1.37: the same with a 4 s soundtrack: 16.0 s", "args": ["generate", 1, false, false, 512, 512, 362, [[10.0, "replace", 4.0]], [12.0]], "expect": "generate: the sound references last 16.0 s in all; at most 15.0 s"},
+    {"description": "1.37: the template's Default speed", "args": ["generate", 0, false, false, 864, 480, 124, [], [], [45, 2, false, "Full"]], "expect": null},
+    {"description": "1.37: 864 × 480 at 75 % renders 576 × 320", "args": ["generate", 0, false, false, 864, 480, 124, [], [], [50, 1, false, "75%"]], "expect": null},
+    {"description": "1.37: 832 × 480 (26 × 15 cells) has no smaller same-shape size", "args": ["generate", 0, false, false, 832, 480, 124, [], [], [50, 1, false, "62.5%"]], "expect": "generate: the canvas 832 × 480 has no smaller size of the same shape; use Full"},
+    {"description": "1.37: 832 × 480 at Full is fine", "args": ["generate", 0, false, false, 832, 480, 124, [], [], [50, 1, false, "Full"]], "expect": null},
+    {"description": "1.37: token reduction, 40 layers, reuse 3", "args": ["generate", 0, false, false, 864, 480, 124, [], [], [40, 3, true, "Full"]], "expect": "generate: token reduction with 40 layers or fewer and reuse 3 gives colour ringing; use reuse 2 or more layers"},
+    {"description": "1.37: token reduction, 41 layers, reuse 3 is allowed", "args": ["generate", 0, false, false, 864, 480, 124, [], [], [41, 3, true, "Full"]], "expect": null},
+    {"description": "1.37: token reduction, 40 layers, reuse 2 is allowed", "args": ["generate", 0, false, false, 864, 480, 124, [], [], [40, 2, true, "Full"]], "expect": null},
+    {"description": "1.37: token reduction at a 256 × 256 canvas", "args": ["generate", 0, false, false, 256, 256, 124, [], [], [45, 2, true, "Full"]], "expect": "generate: token reduction does not run when h3 renders 256 × 256; switch it off or render larger"},
+    {"description": "1.37: token reduction when 384 × 384 renders 256 × 256 at 62.5 %", "args": ["generate", 0, false, false, 384, 384, 124, [], [], [45, 2, true, "62.5%"]], "expect": "generate: token reduction does not run when h3 renders 256 × 256; switch it off or render larger"},
+    {"description": "1.37: token reduction at 384 × 384, 75 % (288 × 288)", "args": ["generate", 0, false, false, 384, 384, 124, [], [], [45, 2, true, "75%"]], "expect": null},
+    {"description": "1.37: Base fp8 (speed null) ignores Render", "args": ["generate", 0, false, false, 832, 480, 124, [], [], null], "expect": null}
+  ],
+  "render": [
+    {"description": "Full is the canvas", "args": [864, 480, "Full"], "expect": [864, 480]},
+    {"description": "864 × 480 (g 3) at 75 %: k round(2.25) = 2", "args": [864, 480, "75%"], "expect": [576, 320]},
+    {"description": "864 × 480 at 62.5 %: k round(1.875) = 2", "args": [864, 480, "62.5%"], "expect": [576, 320]},
+    {"description": "1344 × 768 (g 6) at 75 %: k round(4.5) = 5, half up", "args": [1344, 768, "75%"], "expect": [1120, 640]},
+    {"description": "1344 × 768 at 62.5 %: k round(3.75) = 4", "args": [1344, 768, "62.5%"], "expect": [896, 512]},
+    {"description": "512 × 512 (g 16) at 75 %", "args": [512, 512, "75%"], "expect": [384, 384]},
+    {"description": "512 × 512 at 62.5 %", "args": [512, 512, "62.5%"], "expect": [320, 320]},
+    {"description": "384 × 384 (g 12) at 62.5 %: k round(7.5) = 8", "args": [384, 384, "62.5%"], "expect": [256, 256]},
+    {"description": "832 × 480 (g 1): none", "args": [832, 480, "75%"], "expect": null},
+    {"description": "288 × 256 would be g 1: none", "args": [288, 256, "62.5%"], "expect": null},
+    {"description": "512 × 256 (g 8) at 62.5 %: k 5", "args": [512, 256, "62.5%"], "expect": [320, 160]},
+    {"description": "384 × 256 (g 4) at 75 %: k 3", "args": [384, 256, "75%"], "expect": [288, 192]},
+    {"description": "576 × 320 (g 2) at 75 %: k round(1.5) = 2, capped at g - 1 = 1", "args": [576, 320, "75%"], "expect": [288, 160]}
   ]
 }

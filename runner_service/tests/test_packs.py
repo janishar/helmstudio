@@ -394,8 +394,12 @@ def test_a_native_pack_publishes_only_on_its_runtime_devices(monkeypatch):
 def test_minimax_h3_refusals_equal_the_contract_fixture():
     from packs.minimax_h3 import native
 
-    for c in json.loads((CONTRACTS / "fixtures/video/minimax-h3.json").read_text())["cases"]:
+    fx = json.loads((CONTRACTS / "fixtures/video/minimax-h3.json").read_text())
+    for c in fx["cases"]:
         assert native.generate_error(*c["args"]) == c["expect"], c["description"]
+    for c in fx["render"]:  # API 1.37: the render size rule
+        got = native.render_size(*c["args"])
+        assert (list(got) if got else None) == c["expect"], c["description"]
     one = {"refs": [{"image": None}]}
     assert (
         native.check_generate(one, {"prompt", "first"})
@@ -474,7 +478,7 @@ def test_minimax_h3_generate_runs_the_binary_and_returns_a_video(tmp_path, monke
     inputs = {"model": Model(), "prompt": "-a fox", "seed": 2**53 - 1, "canvas": {"width": 256, "height": 288},
               "duration": {"frames": 22, "fps": 24}, "first": Image.new("RGBA", (300, 200), (255, 0, 0, 128)),
               "last": Image.new("RGB", (64, 64))}  # fmt: skip
-    params = {"steps": 2, "speed": "fast", "refs": []}
+    params = {"steps": 2, "layers": 45, "reuse": 2, "refs": []}  # the old speed fast
     ctx = Ctx()
     v = native.generate(ctx, params, inputs)["video"]
     run = json.loads(log.read_text())
@@ -570,3 +574,87 @@ def test_minimax_h3_generate_runs_the_binary_and_returns_a_video(tmp_path, monke
             {k: x for k, x in frames.items() if x is not None},
         )
     assert not log.exists()
+    # API 1.37: a replaced sound: the soundtrack's part becomes the cut clip's sound, the shorter setting the length;
+    # it reads like a kept sound (--ref-video) and its refusals come first
+    track = take("audio", w, take_id="t-track", **{"in": 0.5, "out": 3.0})  # 2.5 s of the 3 s sine
+    replaced = params | {"refs": [{"image": Image.new("RGB", (8, 8))}],
+                         "videos": [{"video": take("video", v, **{"in": 0.0, "out": 3.0}), "sound": "replace",
+                                     "soundtrack": track}]}  # fmt: skip
+    native.generate(ctx, replaced, {k: x for k, x in frames.items() if x is not None})
+    run = json.loads(log.read_text())
+    (got,) = [(f, [st["codec_type"] for st in m["streams"]], round(float(m["format"]["duration"]), 1))
+              for f, m in run["media"]]  # fmt: skip
+    assert got == ("--ref-video", ["video", "audio"], 2.5)
+    for row, why in [({"sound": "replace"}, "generate.videos[1].soundtrack: Replace needs a soundtrack"),
+                     ({"sound": "keep", "soundtrack": track},
+                      "generate.videos[1].soundtrack: a soundtrack is read only with Sound: Replace")]:  # fmt: skip
+        bad = replaced | {"videos": [{"video": take("video", v)} | row]}
+        with pytest.raises(RunError, match=f"^{re.escape(why)}$"):
+            native.generate(ctx, bad, {k: x for k, x in frames.items() if x is not None})
+
+
+def test_minimax_h3_presets_and_advanced_map_onto_h3_flags(tmp_path):
+    """API 1.37 (plan 20 24.3): each preset of the templates as h3 flags, Render as the exact same-shape size,
+    core reuse only at reuse 1, and the refusals on Base."""
+    from packs.minimax_h3 import native
+
+    wf = json.loads(
+        (Path(native.__file__).parent / "workflows/1-minimax-h3-text-to-video.json").read_text()
+    )
+    presets = wf["studio"]["presets"]
+    assert wf["studio"]["preset_order"] == ["Draft", "Fast", "Default", "Reference"]
+    params = wf["nodes"]["generate"]["params"]
+    assert all(
+        params[k.split(".")[1]] == v for k, v in presets["Default"].items()
+    )  # the template opens on Default
+
+    def flags(**kw):
+        a = native.argv(
+            tmp_path,
+            "p",
+            tmp_path / "o.mp4",
+            width=864,
+            height=480,
+            frames=124,
+            seed=1,
+            images=[],
+            **kw,
+        )
+        return a[a.index("--steps") :]
+
+    want = {
+        "Draft": ["--steps", "4", "--seed", "1", "--layers", "50", "--reuse", "1"],
+        "Fast": [
+            "--steps",
+            "20",
+            "--seed",
+            "1",
+            "--layers",
+            "45",
+            "--reuse",
+            "2",
+            "--token-reduction",
+        ],
+        "Default": ["--steps", "20", "--seed", "1", "--layers", "45", "--reuse", "2"],
+        "Reference": ["--steps", "50", "--seed", "1", "--layers", "50", "--reuse", "1"],
+    }
+    for name, values in presets.items():
+        p = {k.split(".")[1]: v for k, v in values.items()}
+        assert flags(**p) == want[name] + ["--use-int8-row-fc2"], name
+    assert flags(steps=4, core_reuse=4) == want["Draft"] + [
+        "--core-reuse",
+        "4",
+        "--use-int8-row-fc2",
+    ]
+    assert flags(steps=20, reuse=2, core_reuse=4)[-1:] == [
+        "--use-int8-row-fc2"
+    ]  # h3 refuses both: not passed
+    size = native.render_size(864, 480, "75%")
+    assert flags(steps=4, render=size)[-5:] == [
+        "--render-width",
+        "576",
+        "--render-height",
+        "320",
+        "--use-int8-row-fc2",
+    ]
+    assert "--render-width" not in flags(steps=4, render=(864, 480))

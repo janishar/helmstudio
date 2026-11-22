@@ -193,7 +193,7 @@ describe("MediaRows: the inspector's cards", () => {
     remember([s]);
     const seen = mount(audios, [{ audio: { take_id: s.id, in: 0, out: 6 } }]);
     expect(screen.getByText("wav · 6.0 s")).toBeTruthy();
-    expect(screen.getByText(/Add audio also uploads wav or\s+mp3/)).toBeTruthy();
+    expect(screen.getByText(/Add audio also uploads wav,\s+mp3 or m4a/)).toBeTruthy();
     fireEvent.keyDown(screen.getByRole("slider", { name: "In" }), { key: "ArrowRight" });
     const v = (seen.at(-1) as S<"RowItem">[])[0].audio as S<"MediaRef">;
     expect(v.in).toBeCloseTo(0.01, 9);
@@ -221,5 +221,77 @@ describe("MediaRows: the composer's chips", () => {
     fireEvent.click(within(chip).getByRole("button", { name: "Remove <Video 1>" }));
     expect(seen.at(-1)).toEqual([]);
     expect(screen.getByRole("button", { name: "Add video" })).toBeTruthy();
+  });
+});
+
+// API 1.37 (docs/mock/H3Options.dc.html frames 5-6): Sound Replace and the optional soundtrack field
+const replaceable = field("generate", {
+  ...videos.param,
+  item: {
+    ...(videos.param.item as object),
+    sound: {
+      type: "enum",
+      label: "Sound",
+      default: "keep",
+      enum: ["keep", "silent", "replace"],
+    },
+    soundtrack: {
+      type: "media",
+      label: "Soundtrack",
+      default: null,
+      optional: true,
+      accepts: ["audio"],
+      trim: true,
+      min_s: 2.34,
+      max_s: 15,
+    },
+  } as unknown as S<"ParamSchema">["item"],
+});
+
+describe("MediaRows: a replaced sound (API 1.37)", () => {
+  it("asks for a soundtrack only with Replace, and shows a picked one with its part", () => {
+    const a = video(3);
+    const s = audio(12);
+    remember([a, s]);
+    mount(replaceable, [{ video: { take_id: a.id, in: 0, out: 3 } }] as S<"RowItem">[]);
+    expect(screen.queryByRole("button", { name: "Pick soundtrack" })).toBeNull();
+    cleanup();
+    mount(replaceable, [
+      { video: { take_id: a.id, in: 0, out: 3 }, sound: "replace" },
+    ] as S<"RowItem">[]);
+    expect(screen.getByRole("button", { name: "Pick soundtrack" })).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toBe(
+      "generate.videos[1].soundtrack: Replace needs a soundtrack",
+    );
+    cleanup();
+    mount(replaceable, [
+      {
+        video: { take_id: a.id, in: 0, out: 3 },
+        sound: "replace",
+        soundtrack: { take_id: s.id, in: 0, out: 3 },
+      },
+    ] as S<"RowItem">[]);
+    expect(screen.getByText("3.0 s · cut to the video's 3.0 s")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+    // the total counts the video parts only
+    expect(screen.getByText("3.0 s of 15.0 s in all")).toBeTruthy();
+  });
+
+  it("says a soundtrack is read only with Replace, and clears it", () => {
+    const a = video(3);
+    const s = audio(12);
+    remember([a, s]);
+    const seen = mount(replaceable, [
+      {
+        video: { take_id: a.id, in: 0, out: 3 },
+        sound: "keep",
+        soundtrack: { take_id: s.id, in: 0, out: 3 },
+      },
+    ] as S<"RowItem">[]);
+    expect(screen.getByRole("alert").textContent).toBe(
+      "generate.videos[1].soundtrack: a soundtrack is read only with Sound: Replace",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Clear soundtrack" }));
+    expect((seen.at(-1) as S<"RowItem">[])[0].soundtrack).toBeNull();
   });
 });

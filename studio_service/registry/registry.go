@@ -53,6 +53,8 @@ type Param struct {
 	MinS      float64  `json:"min_s,omitempty"`
 	MaxTotalS float64  `json:"max_total_s,omitempty"`
 	NotWith   []string `json:"not_with,omitempty"`
+	// API 1.37: a rows item's media field that may be left empty (MiniMax H3's soundtrack); not the item's media field
+	Optional bool `json:"optional,omitempty"`
 	// text only (API 1.32, contracts/README.md "Dialogue and Timeline audio"): a dialogue script, expanded into the
 	// node's `lines` rows at create time
 	Script bool `json:"script,omitempty"`
@@ -82,8 +84,8 @@ func IsTakeField(raw json.RawMessage) bool {
 	return IsImageField(raw) || IsMediaField(raw) || (json.Unmarshal(raw, &item) == nil && item.Type == "media")
 }
 
-// MediaRowsField is a rows param's one media item field (API 1.22: video or audio references) and its item param, ok
-// false for any other param.
+// MediaRowsField is a rows param's one required media item field (API 1.22: video or audio references; API 1.37
+// optional ones aside) and its item param, ok false for any other param.
 func MediaRowsField(p Param) (string, Param, bool) {
 	if p.Type != "rows" {
 		return "", Param{}, false
@@ -93,7 +95,7 @@ func MediaRowsField(p Param) (string, Param, bool) {
 	n := 0
 	for k, raw := range p.Item {
 		var item Param
-		if json.Unmarshal(raw, &item) == nil && item.Type == "media" {
+		if json.Unmarshal(raw, &item) == nil && item.Type == "media" && !item.Optional {
 			name, field, n = k, item, n+1
 		}
 	}
@@ -151,7 +153,7 @@ func (p Param) MediaItem() (field string, spec Param, ok bool) {
 	n := 0
 	for _, name := range slices.Sorted(maps.Keys(p.Item)) {
 		var item Param
-		if json.Unmarshal(p.Item[name], &item) == nil && item.Type == "media" {
+		if json.Unmarshal(p.Item[name], &item) == nil && item.Type == "media" && !item.Optional {
 			field, spec, n = name, item, n+1
 		}
 	}

@@ -5,7 +5,9 @@ import type { S } from "@/lib/api";
 import {
   appendPage,
   checkFile,
+  checkSize,
   fits,
+  progressText,
   sizeSeed,
   stripItems,
   subLine,
@@ -150,15 +152,18 @@ describe("stripItems", () => {
 });
 
 describe("checkFile", () => {
-  it("takes png, jpeg and webp up to 50 MB", () => {
+  it("takes png, jpeg and webp; the 50 MB cap is the optimised file's", () => {
     expect(checkFile({ type: "image/png", size: 1 })).toBeNull();
-    expect(checkFile({ type: "image/webp", size: 52_428_800 })).toBeNull();
+    expect(checkFile({ type: "image/webp", size: 70_000_000 })).toBeNull();
+    expect(checkSize(new Blob([new Uint8Array(52_428_800)]))).toBeNull();
+    expect(checkSize(new Blob([new Uint8Array(52_428_801)]))).toMatch(/larger than 50 MB/);
     expect(checkFile({ type: "image/gif", size: 1 })).toMatch(/only png, jpeg and webp/);
-    expect(checkFile({ type: "image/jpeg", size: 52_428_801 })).toMatch(/larger than 50 MB/);
     expect(checkFile({ type: "image/jpeg", size: 0 })).toMatch(/empty/);
     expect(checkFile({ type: "audio/wav", size: 1 }, true)).toBeNull();
+    expect(checkFile({ type: "audio/x-m4a", size: 1 }, true)).toBeNull();
+    expect(checkFile({ type: "", size: 1, name: "v.M4A" }, true)).toBeNull();
     expect(checkFile({ type: "video/mp4", size: 1 }, true)).toBe(
-      "only png, jpeg and webp images or wav and mp3 audio can be uploaded",
+      "only png, jpeg and webp images or wav, mp3 and m4a audio can be uploaded",
     );
   });
 });
@@ -176,6 +181,8 @@ describe("uploadFile", () => {
     put: vi.fn(async (_u, _f, _ct, p) => p(1)),
     complete: vi.fn(async () => take({ id: "u1", source: "upload", made_with: null })),
     duration: vi.fn(async () => 20),
+    // as is, unless a test says what it makes
+    optimise: vi.fn(async (f, type) => ({ blob: f, type, line: "as is" })),
     ...over,
   });
   const file = (type = "image/png", body = "abc") => new File([body], "fox.png", { type });
@@ -194,15 +201,78 @@ describe("uploadFile", () => {
       "/files/u/o/uploads/u1.png?exp=1&bytes=3&ct=image%2Fpng&sig=s",
       expect.any(File),
       "image/png",
-      progress,
+      expect.any(Function),
+      undefined,
     );
-    expect(progress).toHaveBeenCalledWith(1);
+    expect(progress).toHaveBeenLastCalledWith({ step: "uploading", f: 1, line: "as is" });
     expect(x.complete).toHaveBeenCalledWith("u1");
+  });
+
+  it("uploads what the optimiser made: its type and size, the cap on it, its line on the tile", async () => {
+    const made = new Blob(["ab"], { type: "image/webp" });
+    const x = io({
+      optimise: vi.fn(async (_f, _t, step) => {
+        step({ line: "6000 × 4000" });
+        return { blob: made, type: "image/webp", line: "0.07 → 0.01 MB · WebP" };
+      }),
+    });
+    const seen: unknown[] = [];
+    await uploadFile(file("image/png", "a".repeat(70)), (p) => seen.push(p), x);
+    expect(x.create).toHaveBeenCalledWith({
+      filename: "fox.png",
+      content_type: "image/webp",
+      bytes: 2,
+    });
+    expect((x.put as ReturnType<typeof vi.fn>).mock.calls[0][1]).toBe(made);
+    expect(seen[0]).toEqual({ step: "optimising", line: "6000 × 4000" });
+    expect(seen.at(-1)).toEqual({ step: "uploading", f: 1, line: "0.07 → 0.01 MB · WebP" });
+    const big = io({
+      optimise: vi.fn(async () => ({
+        blob: new Blob([new Uint8Array(52_428_801)]),
+        type: "image/png",
+        line: "",
+      })),
+    });
+    await expect(uploadFile(file(), () => {}, big)).rejects.toThrow("file is larger than 50 MB");
+    expect(big.create).not.toHaveBeenCalled();
+  });
+
+  it("keeps a voice clip as it is (asIs): a wav never reaches the optimiser", async () => {
+    const x = io();
+    const seen: unknown[] = [];
+    await uploadFile(new File(["abc"], "me.wav", { type: "audio/wav" }), (p) => seen.push(p), x, {
+      audio: true,
+      asIs: true,
+    });
+    expect(x.optimise).not.toHaveBeenCalled();
+    expect(x.create).toHaveBeenCalledWith(expect.objectContaining({ content_type: "audio/wav" }));
+    expect(seen.at(-1)).toEqual({ step: "uploading", f: 1, line: "voice clip · kept as WAV" });
+  });
+
+  it("stops on the signal: before the API, or the PUT it is given", async () => {
+    const stop = new AbortController();
+    const x = io({
+      optimise: vi.fn(async (f, type) => (stop.abort(), { blob: f, type, line: "" })),
+    });
+    await expect(uploadFile(file(), () => {}, x, { signal: stop.signal })).rejects.toThrow();
+    expect(x.create).not.toHaveBeenCalled();
+    const later = new AbortController();
+    const y = io();
+    await uploadFile(file(), () => {}, y, { signal: later.signal });
+    expect((y.put as ReturnType<typeof vi.fn>).mock.calls[0][4]).toBe(later.signal);
+  });
+
+  it("says the tile's state", () => {
+    expect(progressText({ step: "optimising" })).toBe("Optimising…");
+    expect(progressText({ step: "optimising", f: 0.62 })).toBe("Optimising 62%");
+    expect(progressText({ step: "uploading", f: 0.481 })).toBe("Uploading 48%");
   });
 
   it("sends an audio file's type and length (audio pickers only)", async () => {
     const x = io();
-    await uploadFile(new File(["abc"], "song.mp3", { type: "audio/mp3" }), () => {}, x, true);
+    await uploadFile(new File(["abc"], "song.mp3", { type: "audio/mp3" }), () => {}, x, {
+      audio: true,
+    });
     expect(x.create).toHaveBeenCalledWith({
       filename: "song.mp3",
       content_type: "audio/mpeg",
@@ -217,11 +287,13 @@ describe("uploadFile", () => {
   it("refuses audio over 600 s or that the browser cannot read", async () => {
     const wav = new File(["abc"], "a.wav", { type: "audio/x-wav" });
     const long = io({ duration: vi.fn(async () => 601) });
-    await expect(uploadFile(wav, () => {}, long, true)).rejects.toThrow(
+    await expect(uploadFile(wav, () => {}, long, { audio: true })).rejects.toThrow(
       "audio is longer than 600 s",
     );
     const bad = io({ duration: vi.fn(async () => Promise.reject(new Error("x"))) });
-    await expect(uploadFile(wav, () => {}, bad, true)).rejects.toThrow("not a valid wav file");
+    await expect(uploadFile(wav, () => {}, bad, { audio: true })).rejects.toThrow(
+      "not a valid wav file",
+    );
     expect(long.create).not.toHaveBeenCalled();
   });
 

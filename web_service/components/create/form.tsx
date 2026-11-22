@@ -228,6 +228,7 @@ export function Inspector({
   resolved,
   presets,
   presetOrder,
+  presetScope,
   grid = null,
   stage1,
   voice,
@@ -258,6 +259,9 @@ export function Inspector({
     presets?: Record<string, Record<string, S<"ParamValue">>>;
     /** the presets' names in the pack's order (`presetNames`); absent = as the object lists them */
     presetOrder?: string[];
+    /** every field of the workflow, hidden ones too: a preset sets and reads a field its `when` hides (MiniMax H3's
+     * Layers on Base fp8), so it reads picked on every variant; absent = `fields` */
+    presetScope?: Field[];
     /** the family's frame grid: what a span, an extension or a part comes to */
     grid?: FrameGrid | null;
     /** a two-stage workflow: stage 1 runs at the canvas divided by `by` (LTX: 2); `clip`: the clip comes out at
@@ -425,7 +429,7 @@ export function Inspector({
       key="presets"
       presets={presets}
       order={presetOrder ?? Object.keys(presets)}
-      fields={fields}
+      fields={presetScope ?? fields}
       raws={raws}
       onChange={onChange}
       blocks={blocks}
@@ -1500,12 +1504,15 @@ export function RefChips({
   uploads,
   extra,
   card,
+  frames = card,
   openerRef,
 }: FormProps & {
   uploads: RefUploads;
   extra?: React.ReactNode;
   /** a video workflow's tiles (docs/mock/ImageToVideo.dc.html) */
   card?: boolean;
+  /** an image tile's picker also offers a video's first or last frame (API 1.37; a video workflow, empty stage too) */
+  frames?: boolean;
   /** what opens the first tile's picker (the composer's +) */
   openerRef?: Opener;
 }) {
@@ -1521,6 +1528,7 @@ export function RefChips({
             id={refIds(f, raws[f.key])[0]}
             onPick={(id) => onChange(f.key, id)}
             card={card}
+            frames={frames}
             openerRef={i === 0 ? openerRef : undefined}
           />
           {i === 0 && extra}

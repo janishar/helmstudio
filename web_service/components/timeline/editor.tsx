@@ -15,6 +15,7 @@ import { LooksPicker } from "@/components/create/looks";
 import { GalleryPicker } from "@/components/gallery/picker";
 import { Lanes, clipText, shotName } from "@/components/timeline/lanes";
 import { ShotComposer, type ShotSlot } from "@/components/timeline/shot";
+import { FrameIn } from "@/components/create/frame-in";
 import { LineComposer } from "@/components/timeline/line";
 import { VoicePicker, type VoiceCtx } from "@/components/create/voices";
 import { speakerOf } from "@/components/create/dialogue";
@@ -1350,6 +1351,15 @@ function ClipPanel({
             >
               Redo this shot
             </button>
+          )}
+          {kind === "video" && c.take_id && !c.offline && (
+            // API 1.37 (docs/mock/H3Options.dc.html frame 7): the clip's frame as another workflow's input
+            <FrameIn
+              takeId={c.take_id}
+              href={(id, o) =>
+                `/?${tl.session_id ? `s=${encodeURIComponent(tl.session_id)}&` : ""}use=${encodeURIComponent(id)}&w=${encodeURIComponent(o.workflow_id)}`
+              }
+            />
           )}
           {clipRange && <ActionsNote />}
         </div>

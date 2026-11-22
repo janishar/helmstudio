@@ -200,29 +200,52 @@ the native MLX runner is host `mac`, env `mlx` (durable `runner-mac-mlx`, subjec
   (`minimax-h3/duration`: `frames` 124, 5–362 step 17 (5 + 17k), `fps` = `fps`, no auto; `fps` 24, `values [24]`) ·
   `model` (`minimax-h3/model`: `variant` base, `precision` int8 only: stored bf16, the binary quantizes the
   transformer to int8 at load on M5; not a choice) → `generate` (`minimax-h3/generate`, in `model`, `prompt`, `seed`,
-  `canvas`, `duration`, optional `first` and `last`: Image; `steps` 2–50 default 6; `speed` exact | fast default exact
-  (exact: all 50 transformer blocks, no reuse; fast: 45 blocks and every other step's velocity reused, as the old
-  studio's fast preset); `refs` rows 0–9 `{image: Image}`, mention `<Picture {n}>`; from 1.22 `videos` rows 0–3
-  `{video: media [video], trim, 2–15 s; sound: keep | silent, default keep}`, mention `<Video {n}>`, `max_total_s` 15,
+  `canvas`, `duration`, optional `first` and `last`: Image; `steps` 2–50 default 6; until 1.36 `speed` exact | fast
+  (gone in 1.37: a saved workflow holding it shows `unknown_param` and is re-saved); from 1.37 h3's speed params, all
+  `when: "model.variant == 'base'"` (Base fp8 hides them and its SGLang run ignores them): `layers` int 35–50 default
+  50 (`values` 35..50), `reuse` 1–3 default 1, `core_reuse` 1–6 default 1 (`when` also `generate.reuse == 1`; h3
+  refuses it with reuse), `token_reduction` bool default false, `render` enum `Full` | `75%` | `62.5%` default Full;
+  and SGLang's, all `when: "model.variant == 'base-fp8'"`: `quality` lossless | exact default lossless (SGLang's
+  `high` refuses every non-audited deployment, so it is not offered), `flow_shift` float 1–20 step 0.5 default 12,
+  `audio_flow_shift` 1–10 step 0.5 default 3 (the model's `sigma_shift_scales`; each is sent only when changed, so a
+  default request is unchanged); `refs` rows 0–9 `{image: Image}`, mention `<Picture {n}>`; from 1.22 `videos` rows 0–3
+  `{video: media [video], trim, 2–15 s; sound: keep | silent, default keep}` (from 1.37 `sound` keep | silent |
+  replace and an `optional` media field `soundtrack` [audio], trim, 2.34–15 s: with replace the model hears the
+  soundtrack's part instead of the video's sound), mention `<Video {n}>`, `max_total_s` 15,
   and `audios` rows 0–3 `{audio: media [audio], trim, 2–15 s}`, mention `<Audio {n}>`, `max_total_s` 15 (Media
   inputs: rows of media); all three rows `not_with: [first, last]`; out `video`: Video) → `output`.
   Templates (`media: video`): `minimax-h3-text-to-video` (`MiniMax H3 Text to video`), `minimax-h3-image-to-video`
   (`MiniMax H3 Image to video`, action Animate: a core `image` node `first` wired to `generate.first` and, from 1.22,
   an `optional` `image` node `last` wired to `generate.last`: the composer's First frame and Last frame tiles, the
   last one optional, dropped with its wire when left empty; `valid.minimax-h3-first-last.json` is the same made in the
-  editor without `optional`), `minimax-h3-references` (`MiniMax H3 References`: `generate.refs`, from 1.22
-  `generate.videos` and `generate.audios` in the composer, the elements tile). Modes follow the inputs: references
+  editor without `optional`; from 1.37 `studio.keyframes {first: first.image, last: last.image}`: Timeline New shot
+  options), `minimax-h3-references` (`MiniMax H3 References`: `generate.refs`, from 1.22
+  `generate.videos` and `generate.audios` in the composer, the elements tile). From 1.37 the three templates have
+  `studio.presets` Draft (steps 4, layers 50, reuse 1), Fast (20, 45, 2, token reduction on), Default (20, 45, 2) and
+  Reference (50, 50, 1), each also `core_reuse` 1 and token reduction off but Fast's (`preset_order` as listed), open
+  on Default, and an inspector section `Advanced` (layers, reuse, core reuse, render, token reduction) after
+  `Quality` (precision, steps, quality, the shifts); on Base fp8 a preset sets only the steps. The runner passes
+  `--layers`, `--reuse`, `--core-reuse` only at reuse 1 and above 1, `--token-reduction` when on, and for a Render
+  below Full `--render-width/--render-height` of **the render size** (`h3_render_size`, `fixtures/video/minimax-h3.json`
+  `render`): with g = gcd(w / 32, h / 32) and k = g × scale (0.75, 0.625) rounded half up, capped at g − 1, the size
+  is (w k / g, h k / g), the canvas's exact shape on the 32 px grid (h3 takes no other): 864 × 480 → 576 × 320 at
+  both, 1344 × 768 → 1120 × 640 and 896 × 512; the run's first progress line is `renders <w> × <h>`. Its peak_gb counts
+  mp × r (r 1, 0.75, 0.6). Modes follow the inputs: references
   (any non-empty `refs`, `videos` or `audios`) run the Ref2VA transformer, everything else FL2VA (text only, first,
   last, or both). The runner passes the references in the order images, audios, videos (`--ref-image`; `--ref-audio`; a
-  video row `--ref-video` when `sound` is keep and the take has sound, else `--ref-silent-video`;
-  `--ref-video-audio` is not offered), each the part in..out as studio sent it (cut by the runner before h3 reads
+  video row `--ref-video` when `sound` is keep and the take has sound or, from 1.37, replace (the soundtrack's part
+  muxed into the cut clip as its sound, the shorter setting the length: one path on both hosts), else
+  `--ref-silent-video`; `--ref-video-audio` is not offered), each the part in..out as studio sent it (cut by the runner before h3 reads
   it; an audio row holding a video take: its sound); h3 numbers `<Picture n>` and `<Video n>` per kind from 1, but
   gives `<Audio n>` from one counter to every reference with sound in argv order (a video read with its sound counts),
   so audio rows go before the videos: they are `<Audio 1..k>` as the mentions say, and a kept video soundtrack is
   `<Audio k+1>` and beyond. **Refusals**
   (`h3_generate_error`, `fixtures/video/minimax-h3.json`), checked by the runner before the child starts, failing
   the run, in this order: `<node>: references cannot go with a first or last frame` (any reference kind; studio
-  already refuses it with `not_with`, this is the backstop); from 1.22 `<node>: audio references need an image or
+  already refuses it with `not_with`, this is the backstop); from 1.37 `<node>.videos[<i>].soundtrack: Replace needs
+  a soundtrack` and `<node>.videos[<i>].soundtrack: a soundtrack is read only with Sound: Replace` (a replaced sound
+  counts as a sound input in every rule below, reading min(the soundtrack's part, the video part, frames / 24) s);
+  from 1.22 `<node>: audio references need an image or
   video reference`; `<node>: at most 12 references in all (<n>)`; `<node>: at most 3 sound references (audio
   references and videos with sound; <n>)` (h3 counts a video read with its sound as a sound input); `<node>: a video
   reference with sound needs a clip of at least 56 frames (<frames>)` (h3 reads a video reference up to the clip's
@@ -231,10 +254,14 @@ the native MLX runner is host `mac`, env `mlx` (durable `runner-mac-mlx`, subjec
   reads and the sound only that long, so a 2.0 s part keeps 39 frames, 1.6 s of sound: a sound part needs 2.34 s); `<node>: the sound references last <d> s in all; at most 15.0 s`
   (the audio parts plus each video-with-sound's part up to frames / 24 s); then `<node>: the canvas is <w> × <h>;
   sides must be multiples of 32 from 256 to 1344`; `<node>: the canvas is <w> × <h>; at most 1032192 pixels (768 ×
-  1344)` (the schema cannot say the area, and a Canvas may come from another node). Studio checks the rest before
+  1344)` (the schema cannot say the area, and a Canvas may come from another node); from 1.37, on Base only, `<node>:
+  the canvas <w> × <h> has no smaller size of the same shape; use Full` (g = 1: 832 × 480), `<node>: token reduction
+  with 40 layers or fewer and reuse 3 gives colour ringing; use reuse 2 or more layers` and `<node>: token reduction
+  does not run when h3 renders 256 × 256; switch it off or render larger` (the render size, not only the canvas: 384²
+  at 62.5 % renders 256²). Studio checks the rest before
   the run: each row 2–15 s, at most 9 / 3 / 3 rows, each kind's 15 s in all (Media inputs: rows of media). A
   first frame is stretched to the canvas, a last frame cropped to cover it, references keep their aspect (the h3
-  CLI). No `--ref-video-audio` (a video with another sound), no prompt enhancer, no LoRAs (no lora-stack, no look
+  CLI). No `--ref-video-audio` (1.37's replace muxes instead), no prompt enhancer, no LoRAs (no lora-stack, no look
   tiles), no ask workflow. Output: one Video value with sound
   (H.264 + AAC 32 kHz stereo, 24 fps, `+faststart`) with poster, last frame and stream facts as ltx's (Video:
   Outputs). The same seed, flags, OS, GPU family and binary give the same frames (noise is made on the CPU from the
@@ -818,8 +845,24 @@ or presigned URLs, which the claim-check rule (never signed URLs in messages) ru
   with exactly the signed `Content-Type` and `Content-Length`; files_service streams them to the object store and never
   overwrites an object. `POST /v1/studio/uploads/{take_id}/complete` checks size and image header (HEAD + a 64 KB
   range read of the object), records width and height and shows the take. The original is its own thumbnail in API
-  1.2. Images (png, jpeg, webp) and, from 1.19, audio (wav, mp3: Media inputs, audio uploads), at most 50 MB; Kong must
-  let a 50 MB `PUT /files/*` through.
+  1.2. Images (png, jpeg, webp) and, from 1.19, audio (wav, mp3: Media inputs, audio uploads; from 1.38 m4a), at
+  most 50 MB; Kong must let a 50 MB `PUT /files/*` through.
+- **Optimised uploads** (API 1.38; plan 20-h3-options-and-uploads 24.5, board UploadOptimise; images and audio,
+  video uploads are not in this version). The web optimises every media upload before `POST /v1/studio/uploads`, in
+  one place (`uploadFile`); the server checks what arrives as before and knows nothing of the original (its size is
+  not stored). `GET /v1/studio/uploads/limits` → `UploadLimits {image_max_side}`, computed from the registry: the
+  largest `max` of a `width` or `height` param over every node schema with a `Canvas` output (8192 with MiniMax H3
+  Image, 4096 with Qwen Image alone; 16384, the upload cap, when none is published). Reference: `upload_limits`.
+  - An image (png, jpeg, webp) is decoded upright (EXIF applied), scaled to `image_max_side` on its long side only
+    when over it, then encoded WebP 0.9, else JPEG 0.9; one with any transparent pixel (png, webp) keeps its alpha
+    (WebP; PNG where the browser cannot encode WebP). The original uploads instead when nothing was scaled and the
+    new file is not at least 10 % smaller, or when the browser cannot decode or encode it.
+  - A wav becomes an m4a (AAC-LC, 256 kb/s stereo, 192 kb/s mono; 44.1 or 48 kHz as the source, any other rate
+    resampled to 48 kHz), the original when the browser cannot encode AAC. mp3 and m4a upload as they are. A wav
+    uploaded for voice cloning (the voice picker's Clone from a clip) is never converted: the clone reads the WAV.
+  - The 50 MB cap applies to the file that uploads (a 120 MB wav may upload as a 20 MB m4a); the type is checked on
+    the file dropped. The pending tile's × stops the conversion or the PUT (a PUT stopped midway leaves a pending
+    take, discarded within the hour).
 - **`/files` signatures** (the shared `FILE_URL_SECRET`, lower-case hex HMAC-SHA256):
   - `GET`/`HEAD /files/<key>?exp=&sig=`: `sig = HMAC(key + "\n" + exp)`.
   - `PUT /files/<key>?exp=&bytes=&ct=&sig=`: `sig = HMAC("PUT\n" + key + "\n" + exp + "\n" + bytes + "\n" + ct)`
@@ -1095,21 +1138,24 @@ unchanged; a video never fills them.
   Image inputs hold. **Lineage**: `parents` add every media value's take (input order); `made_with.inputs` keep the
   values as studio checked them (in / out and a span snapped to frames or ms, a trim param's in / out filled), so
   reuse answers exactly what ran.
-- **Audio uploads** (`POST /v1/studio/uploads`): `audio/wav` or `audio/mpeg`, at most 50 MB, `duration_s` (≤ 600,
-  what the browser decoded: required for audio, refused for images) → key `u/<owner>/uploads/<take_id>.wav|.mp3`
-  (files_service accepts those types on such keys). Complete checks the size and the header (`RIFF….WAVE`; an ID3v2
-  tag or an MPEG audio frame sync) and stores `kind: audio`, `width` / `height` null, `audio {duration_s}` as
+- **Audio uploads** (`POST /v1/studio/uploads`): `audio/wav` or `audio/mpeg` (from 1.38 `audio/mp4`, an m4a), at
+  most 50 MB, `duration_s` (≤ 600, what the browser decoded: required for audio, refused for images) → key
+  `u/<owner>/uploads/<take_id>.wav|.mp3|.m4a` (files_service accepts those types on such keys). Complete checks the
+  size and the header (`RIFF….WAVE`; an ID3v2 tag or an MPEG audio frame sync; from 1.38 an `ftyp` box at 0 whose
+  major or a compatible brand is `M4A `) and stores `kind: audio`, `width` / `height` null, `audio {duration_s}` as
   declared, `thumb_url` = the file. The runner reads the file itself (a declared length that lies fails the run, never
   more). From 1.30 an audio take made by a run (Voices: `<output_prefix><n>.wav`) goes everywhere an audio upload
   does: media params and rows accepting audio, offers ("Use in…"), `media_fit`. From 1.32 audio takes are clips on the audio tracks A2–A9 (Timeline rules; on V1 `wrong_track`, `POST
   …/clips`: 422 `take_ids[0]: an audio take goes on an audio track` for the first take: `take_ids[<i>]` counts from 0, as
   every `…/clips` and `…/shots` text since 1.17 does; a rows item's `[<i>]` and a script's `line <n>` count from 1); 1.19's `… cannot go on the timeline yet` is gone.
 - **Rows of media** (API 1.22, M7 pack 3 step 2; `media_rows`, `fixtures/video/media-rows.json`). A `rows` item field
-  may be a `media` param (registry `itemParam`; required in every item, never a wire): each item holds one video or
+  may be a `media` param (registry `itemParam`; required in every item, never a wire; from 1.37 one with `optional:
+  true` and default null may be left empty: MiniMax H3's `soundtrack`, checked like the required one when set, never
+  counted toward `max_total_s`; `max_total_s` and offers go by the item's one required media field): each item holds one video or
   audio take as a `MediaRef` (`{take_id, in?, out?}`), next to the item's other fields (MiniMax H3: `videos`
   `{video, sound}`, `audios` `{audio}`). New keys: `min_s` (media, also a top-level one: the shortest it reads; a take
   shorter is `take <id> lasts <d> s; this input takes at least <min_s> s`, with `trim` a shorter part is `the part
-  lasts <d> s; this input takes at least <min_s> s`), `max_total_s` (rows with exactly one media field: the most
+  lasts <d> s; this input takes at least <min_s> s`), `max_total_s` (rows with exactly one required media field: the most
   seconds the items read together, each item's out − in or the whole take; over it is `<node>.<param>: the takes
   last <d> s in all; at most <max_total_s> s`, `%.1f`), `not_with` (rows: optional inputs of the same node; while
   one is wired the rows must stay empty: `<node>.<param>: must stay empty while <node>.<input> is wired`; mentions
@@ -3007,6 +3053,10 @@ saved_at)` (the last 100: `revision <= current - 100` is pruned), and a shot ind
 - **Options, offered only when the workflow has the template for them** (`Workflow.keyframes`, computed with
   `shot_keyframes`: its one unwired rows param on a known, not bypassed node with one Image field and a `position:
   seconds` field; `last` when its `max` ≥ 2; null = no option. Echo: `echo-image-to-video`; LTX: `ltx-image-to-video`;
+  from 1.37 a workflow whose frames are image params declares them, `studio.keyframes {first, last}`, and
+  `Workflow.keyframes` is that `{first, last}` (`WorkflowFrameParams`) when `first` names an unwired `image` param on
+  a known, not bypassed node (`last` likewise, else null; checked before the rows): MiniMax H3
+  `minimax-h3-image-to-video`; the frame takes go into those params instead of rows;
   text-to-video templates offer none, so the web offers the family's image-to-video template for them):
   - *Start from the previous clip's last frame*: `POST /v1/studio/takes/{prev take}/frame {at: last}` → an image take,
     put in row 1 at `seconds` 0.
@@ -3046,7 +3096,9 @@ session; the batch limits apply). Order and binds are `rerender_steps` (`fixture
   them, `preset` named for display, `looks` = the take's `made_with.looks` ids;
 - **an edge where a clip starts from another's frame**: a keyframe row whose image is a frame take (`frame_of`) of a
   take in another selected clip's `alternatives` binds `<param>[<row>]` ← `clip_<other>.last_frame` (or
-  `.first_frame`), which fills that row's Image field and keeps its other fields; that step runs after the other; ties
+  `.first_frame`), which fills that row's Image field and keeps its other fields (from 1.37, with a `{first, last}`
+  keyframes, the image param itself: `first.image` ← `clip_<other>.last_frame`, `last.image` ←
+  `clip_<other>.first_frame`, the param's value becoming the frameRef); that step runs after the other; ties
   keep timeline order; a cycle is 422 (`rerender_cycle`). pipelines_service sends such a source to `studio.runs.create`
   as a `frameRef {frame_of: <that step's first take>, at}`; studio resolves it to the frame take (a copy, as above).
 - every selected clip gets `shot {batch_id, step}`; each step's take fills its slot when the projector stores it (a
@@ -3204,7 +3256,7 @@ New shot machinery (references `make_shot`, `t_edit` `place`, `rerender_steps`; 
   `-progress pipe:1`; at most every 2 s and only when the count moved, or an input finished downloading: a stalled
   job goes silent and studio fails it), then one terminal status, waits for its ack, then acks. A command naming a
   key or `output_prefix` outside `u/<owner_id>/` or with a `..` segment is dead-lettered (`objectKey`, the claim-check
-  rule). It downloads each input once into a 0700 temp dir (from 1.32 an input may be kind `audio`: an audio take on an audio track, a WAV with a sound and no picture, else `input`; its sound is mixed as a video's is) (an export of empty slots only has none; at most 8 GB each and 32 GiB
+  rule). It downloads each input once into a 0700 temp dir (from 1.32 an input may be kind `audio`: an audio take on an audio track, a WAV (from 1.38 also an mp3 or an m4a) with a sound and no picture, else `input`; its sound is mixed as a video's is) (an export of empty slots only has none; at most 8 GB each and 32 GiB
   in all, never past the disk's free space less 2 GiB: else `input`; a cancel is checked between and during
   downloads), writes the concat
   list (copy; each file with its picture's `duration`, so the next starts where the picture ends, not its sound),

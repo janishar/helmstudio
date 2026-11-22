@@ -8,6 +8,7 @@ import { Minus, Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ErrorNote } from "@/components/kit";
 import { PromptArea } from "@/components/create/prompt";
+import { frameTake } from "@/components/create/frame-in";
 import { useHosts } from "@/components/create/memory-chip";
 import { RunOnChip } from "@/components/create/run-on";
 import { chosenVariants, machines, pinnedMachine } from "@/lib/run-on";
@@ -65,27 +66,6 @@ function neighbours(
     if (Math.abs(c - f) <= Math.abs(cuts[i] - f)) i = k;
   });
   return { prev: v1[i - 1], next: v1[i], at: g.s(cuts[i]) };
-}
-
-/** An image take of a video take's first or last frame: at once, or by a media job polled until it ends. */
-async function frameTake(takeId: string, at: "first" | "last"): Promise<string> {
-  const r = await ok(
-    api.POST("/v1/studio/takes/{take_id}/frame", {
-      params: { path: { take_id: takeId } },
-      body: { at },
-    }),
-  );
-  if (r.take) return r.take.id;
-  let job = r.job!;
-  while (job.status === "queued" || job.status === "running") {
-    await new Promise((res) => setTimeout(res, 1000));
-    job = await ok(
-      api.GET("/v1/studio/media-jobs/{job_id}", { params: { path: { job_id: job.id } } }),
-    );
-  }
-  if (job.status !== "succeeded" || !job.take_id)
-    throw new Error(job.failure?.detail ?? `Making the ${at} frame ${job.status}.`);
-  return job.take_id;
 }
 
 /** The element is an open popover (Escape then closes only it). jsdom knows no :popover-open. */
@@ -226,7 +206,11 @@ export function ShotComposer({
       if (promptField) r[promptField.key] = prompt;
       if (framesField && nFrames) r[framesField.key] = String(nFrames);
       const kf = workflow.keyframes;
-      if (kf && (start || end)) {
+      if (kf && "first" in kf) {
+        // API 1.37: frames as image params (MiniMax H3 Image to video's First and Last frame)
+        if (start && from) r[kf.first] = await frameTake(from.take_id!, "last");
+        if (end && to && kf.last) r[kf.last] = await frameTake(to.take_id!, "first");
+      } else if (kf && (start || end)) {
         const rows: S<"RowItem">[] = [];
         if (start && from)
           rows.push({

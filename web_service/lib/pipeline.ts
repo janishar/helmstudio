@@ -63,11 +63,17 @@ export function imageField(p: Param): string | null {
   return fs.length === 1 ? fs[0] : null;
 }
 
-/** A rows param's one media field (API 1.22: video or audio references), else null. */
+/** A rows param's one required media field (API 1.22: video or audio references; 1.37 optional ones aside), else
+ * null. */
 export function mediaField(p: Param): string | null {
   if (p.type !== "rows") return null;
   const fs = Object.entries(p.item ?? {})
-    .filter(([, v]) => typeof v === "object" && (v as unknown as Param).type === "media")
+    .filter(
+      ([, v]) =>
+        typeof v === "object" &&
+        (v as unknown as Param).type === "media" &&
+        !(v as unknown as Param).optional,
+    )
     .map(([k]) => k);
   return fs.length === 1 ? fs[0] : null;
 }

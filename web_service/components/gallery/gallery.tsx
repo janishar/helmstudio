@@ -1,6 +1,6 @@
 "use client";
 // Gallery: every take of the user (docs/mock/Gallery.dc.html, plan 9.1). Search and chips filter the list (the API
-// ANDs them), pages load as the grid scrolls, images (and wav or mp3 audio) upload from the picker or by dropping them
+// ANDs them), pages load as the grid scrolls, images (and wav, mp3 or m4a audio) upload from the picker or by dropping them
 // on the grid, and the side panel shows the selected take with the actions that exist so far.
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { Check, FileText, Maximize, Star, X } from "lucide-react";
 import { FullScreen, Media, Thumb, useFullScreenKey } from "@/components/media";
 import { videoLine } from "@/lib/media";
-import { ErrorNote, Info, Modal } from "@/components/kit";
+import { ErrorNote, Info, Modal, UploadStatus } from "@/components/kit";
 import { RefThumbs } from "@/components/create/refs";
 import { ElementEditor } from "@/components/create/elements";
 import { AddToTimeline } from "@/components/timeline/add";
@@ -21,8 +21,10 @@ import { api, message, ok, type S } from "@/lib/api";
 import { safeUrl } from "@/lib/format";
 import { useLoras } from "@/lib/lora-library";
 import { madeWithLine } from "@/lib/loras";
+import { FrameIn } from "@/components/create/frame-in";
 import {
-  AUDIO_TYPES,
+  AUDIO_ACCEPT,
+  UPLOAD_START,
   UPLOAD_TYPES,
   appendPage,
   fits,
@@ -33,10 +35,17 @@ import {
   templateLine,
   uploadFile,
   type Filter,
+  type UploadProgress,
 } from "@/lib/takes";
 
 type Take = S<"Take">;
-type Upload = { id: number; name: string; progress: number; error?: string };
+type Upload = {
+  id: number;
+  name: string;
+  p: UploadProgress;
+  stop: AbortController;
+  error?: string;
+};
 
 /** A page of the grid. */
 export const PAGE = 60;
@@ -273,8 +282,9 @@ export function Gallery({
       const id = ++uploadSeq.current;
       const set = (u: Partial<Upload>) =>
         setUploads((list) => list.map((x) => (x.id === id ? { ...x, ...u } : x)));
-      setUploads((list) => [...list, { id, name: f.name, progress: 0 }]);
-      uploadFile(f, (progress) => set({ progress }), undefined, true)
+      const stop = new AbortController();
+      setUploads((list) => [...list, { id, name: f.name, p: UPLOAD_START, stop }]);
+      uploadFile(f, (p) => set({ p }), undefined, { audio: true, signal: stop.signal })
         .then((t) => {
           setUploads((list) => list.filter((x) => x.id !== id));
           if (fits(t, filter) && !query.trim())
@@ -350,7 +360,7 @@ export function Gallery({
           <input
             ref={fileInput}
             type="file"
-            accept={[...UPLOAD_TYPES, ...AUDIO_TYPES, ".wav", ".mp3"].join(",")}
+            accept={[...UPLOAD_TYPES, AUDIO_ACCEPT].join(",")}
             multiple
             hidden
             onChange={(e) => {
@@ -502,35 +512,23 @@ export function Gallery({
                 className={`relative flex aspect-[16/10] flex-col items-center justify-center gap-1 rounded-[10px] border border-dashed border-dash bg-s1 p-2 text-center text-[11px] not-italic ${u.error ? "text-bad" : "text-t2"}`}
               >
                 {u.error ? (
-                  <>
-                    <span role="alert">{u.error}</span>
-                    <button
-                      type="button"
-                      aria-label={`Dismiss ${u.name}`}
-                      className="absolute top-1.5 right-1.5 grid size-6 place-items-center rounded-full bg-s3 text-t1"
-                      onClick={() => setUploads((list) => list.filter((x) => x.id !== u.id))}
-                    >
-                      <X size={12} aria-hidden />
-                    </button>
-                  </>
+                  <span role="alert">{u.error}</span>
                 ) : (
-                  <>
-                    <span>Uploading {Math.round(u.progress * 100)}%</span>
-                    <span
-                      role="progressbar"
-                      aria-label={`Uploading ${u.name}`}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                      aria-valuenow={Math.round(u.progress * 100)}
-                      className="block h-1 w-3/5 rounded-[2px] bg-s5"
-                    >
-                      <span
-                        className="block h-1 rounded-[2px] bg-a1"
-                        style={{ width: `${u.progress * 100}%` }}
-                      />
-                    </span>
-                  </>
+                  <span className="flex w-3/5 flex-col items-center gap-1">
+                    <UploadStatus p={u.p} name={u.name} />
+                  </span>
                 )}
+                <button
+                  type="button"
+                  aria-label={u.error ? `Dismiss ${u.name}` : `Cancel the upload of ${u.name}`}
+                  className="absolute top-1.5 right-1.5 grid size-6 place-items-center rounded-full bg-s3 text-t1"
+                  onClick={() => {
+                    u.stop.abort();
+                    setUploads((list) => list.filter((x) => x.id !== u.id));
+                  }}
+                >
+                  <X size={12} aria-hidden />
+                </button>
               </i>
               <b className="truncate text-[12px] font-semibold">{u.name}</b>
               <small className="mono text-[10px] text-t2">Upload</small>
@@ -832,6 +830,18 @@ function TakePanel({
               {offerLabel(o)}
             </Link>
           ))}
+        </div>
+      )}
+
+      {t.kind === "video" && (
+        // API 1.37 (docs/mock/H3Options.dc.html frame 7): a video's first or last frame as another workflow's input
+        <div className="flex flex-col gap-2">
+          <FrameIn
+            takeId={t.id}
+            href={(id, o) =>
+              `/?${session}use=${encodeURIComponent(id)}&w=${encodeURIComponent(o.workflow_id)}`
+            }
+          />
         </div>
       )}
 

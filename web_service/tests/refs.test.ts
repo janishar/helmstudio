@@ -173,7 +173,7 @@ describe("canvas auto in an edit", () => {
     );
   });
 
-  it("lays out the three minimax-h3 video templates (API 1.21) from their node schemas and studio blocks", () => {
+  it("lays out the three minimax-h3 video templates (API 1.21; 1.37 presets, Advanced) from their node schemas and studio blocks", () => {
     const schemas = Object.fromEntries(h3Nodes.nodes.map((n) => [n.kind, n]));
     const [t2v, i2v, refs] = h3Workflows.workflows.map(
       (w) => ({ ...w, node_schemas: schemas }) as unknown as S<"Workflow">,
@@ -185,32 +185,41 @@ describe("canvas auto in an edit", () => {
     const rest = [
       ["Canvas", ["canvas.width", "canvas.height"]],
       ["Duration", ["duration.frames"]],
-      ["Quality", ["model.precision", "generate.steps"]],
+      [
+        "Quality",
+        [
+          "model.precision",
+          "generate.steps",
+          "generate.quality",
+          "generate.flow_shift",
+          "generate.audio_flow_shift",
+        ],
+      ],
+      [
+        "Advanced",
+        [
+          "generate.layers",
+          "generate.reuse",
+          "generate.core_reuse",
+          "generate.render",
+          "generate.token_reduction",
+        ],
+      ],
     ];
     expect(layout(t2v)).toEqual([
       ["prompt.text"],
-      [["Quick", ["generate.speed", "model.variant", "seed.seed"]], ...rest],
+      [["Quick", ["model.variant", "seed.seed"]], ...rest],
     ]);
     expect(layout(i2v)).toEqual([
       ["prompt.text"],
-      [
-        ["Quick", ["first.image", "last.image", "generate.speed", "model.variant", "seed.seed"]],
-        ...rest,
-      ],
+      [["Quick", ["first.image", "last.image", "model.variant", "seed.seed"]], ...rest],
     ]);
     expect(layout(refs)).toEqual([
       ["prompt.text"],
       [
         [
           "Quick",
-          [
-            "generate.refs",
-            "generate.videos",
-            "generate.audios",
-            "generate.speed",
-            "model.variant",
-            "seed.seed",
-          ],
+          ["generate.refs", "generate.videos", "generate.audios", "model.variant", "seed.seed"],
         ],
         ...rest,
       ],

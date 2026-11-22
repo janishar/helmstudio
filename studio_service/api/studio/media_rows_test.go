@@ -116,7 +116,7 @@ func TestMediaRowsItemRequired(t *testing.T) {
 		`{"generate.audios": [{"audio": null}]}`:                                                                 "generate.audios[1].audio: a take is required",
 		`{"generate.videos": [{"video": {"take_id": "x"}}]}`:                                                     `generate.videos[1].video: must be {"take_id": <uuid>, "in"?: <seconds>, "out"?: <seconds>}`,
 		`{"generate.videos": [{}, {}, {}, {}]}`:                                                                  "generate.videos: at most 3 items",
-		`{"generate.videos": [{"video": {"take_id": "11111111-0000-4000-8000-000000000021"}, "sound": "loud"}]}`: "generate.videos[1].sound: must be one of keep, silent",
+		`{"generate.videos": [{"video": {"take_id": "11111111-0000-4000-8000-000000000021"}, "sound": "loud"}]}`: "generate.videos[1].sound: must be one of keep, silent, replace",
 	} {
 		if _, detail := resolve(refs, inputs(t, body)); detail != want {
 			t.Errorf("%s: got %q, want %q", body, detail, want)

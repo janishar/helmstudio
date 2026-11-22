@@ -386,6 +386,8 @@ def _check_rows(spec: dict, value) -> str | None:
                 if not isinstance(v, dict) or not LORA_ID.match(str(v.get("lora_id"))):
                     return f"item {i}.{f}: a LoRA is required"
             elif isinstance(item, dict) and item["type"] == "media" and not _image(row.get(f)):
+                if item.get("optional") and row.get(f) is None:
+                    continue  # API 1.37: an optional media field left empty
                 return f"item {i}.{f}: a take is required"  # API 1.22: never left out
             elif (
                 isinstance(item, dict)

@@ -9,7 +9,7 @@ import h3Workflows from "../../contracts/fixtures/registry/minimax-h3.workflows.
 import ltxNodes from "../../contracts/fixtures/registry/ltx.nodes.valid.json";
 import ltxWorkflows from "../../contracts/fixtures/registry/ltx.workflows.valid.json";
 import type { S } from "@/lib/api";
-import { buildInputs, fields, rawsFrom, readValue } from "@/lib/workflow";
+import { buildInputs, fields, rawsFrom, readValue, replaceUnmet } from "@/lib/workflow";
 import {
   actionSlot,
   audioMap,
@@ -68,6 +68,16 @@ describe("media-rows.json (API 1.22: rows of media, per item then in all)", () =
       ["videos", "video"],
       ["audios", "audio"],
     ]));
+  it("Replace without a soundtrack blocks Generate (frame 6), with one it does not", () => {
+    const videos = rowsParams.find((p) => p.name === "videos")!;
+    const v = { take_id: "v1" };
+    expect(replaceUnmet(videos, [{ video: v, sound: "keep" }, { video: v, sound: "replace" }])).toBe(
+      "row 2: Replace needs a soundtrack",
+    );
+    expect(replaceUnmet(videos, [{ video: v, sound: "replace", soundtrack: { take_id: "a1" } }])).toBe(
+      null,
+    );
+  });
   // the item and total checks; the drop of an optional node and not_with are studio's (the form sends neither)
   for (const c of mediaRows.cases.filter((x) => x.workflow === "minimax-h3-references"))
     it(c.description, () => {

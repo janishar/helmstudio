@@ -58,6 +58,7 @@ func TestUpload(t *testing.T) {
 	good := link(key, 5, "image/png", later)
 	owner, take := "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13", "9b2f4c6e-1a3d-4e5f-8a7b-0c1d2e3f4a51"
 	wav, mp3, wav2 := "u/"+owner+"/uploads/"+take+".wav", "u/"+owner+"/uploads/"+take+".mp3", "u/"+owner+"/uploads/x"+take[1:]+".wav"
+	m4a := "u/" + owner + "/uploads/y" + take[1:] + ".m4a"
 
 	for name, test := range map[string]struct {
 		target, contentType string
@@ -78,6 +79,9 @@ func TestUpload(t *testing.T) {
 		"mp3 as wav":   {link(mp3, 5, "audio/wav", later), "audio/wav", 5, 415},
 		"audio as png": {link(key, 5, "audio/wav", later), "audio/wav", 5, 415},
 		"png as audio": {link(wav2, 5, "image/png", later), "image/png", 5, 415},
+		// API 1.38: an m4a's key takes audio/mp4 only
+		"m4a":        {link(m4a, 5, "audio/mp4", later), "audio/mp4", 5, 204},
+		"m4a as wav": {link(m4a, 5, "audio/wav", later), "audio/wav", 5, 415},
 	} {
 		if got := put(test.target, "hello", test.contentType, test.length); got != test.want {
 			t.Errorf("%s: %d, want %d", name, got, test.want)
