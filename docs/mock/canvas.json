@@ -481,6 +481,16 @@
       "x": 0,
       "y": 0,
       "page": "brand"
+    },
+    "TimelineTools.dc.html": {
+      "expand": "fill",
+      "h": 4060,
+      "is_interactive": true,
+      "title": "Timeline · editing tools and zoom: five UI options, blade, ripple, slip, frames, fit, snapping, shortcuts",
+      "w": 1440,
+      "x": 3040,
+      "y": 2320,
+      "page": "timeline"
     }
   },
   "createdOnFiles": {
@@ -591,6 +601,7 @@
     "TakeActions.dc.html",
     "TimelineAudio.dc.html",
     "TimelineAudioZonos3.dc.html",
+    "TimelineTools.dc.html",
     "Pipelines.dc.html",
     "Pipeline.dc.html",
     "PipelineGraph.dc.html",
