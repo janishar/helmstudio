@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Admin: AI agents</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Bricolage+Grotesque:wght@600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* themes */
+[data-theme="forest"]{--g:#0e1512;--in:#090e0c;--p0:#131c17;--s1:#16201b;--s2:#1e2a24;--s3:#26342d;--s4:#2c3b33;--s5:#32433a;--ln:#3d5146;--dash:#5a7265;--t2:#a9b8ab;--t1:#f0f2e8;--t1b:#dfe5d8;--ib:#354a3f;--it:#cfdacb;--a1:#b9e37a;--on1:#17200a;--a2:#ff8552;--on2:#2b0c02;--shd:#000000}
+[data-theme="ocean"]{--g:#0c1320;--in:#080d17;--p0:#101a2a;--s1:#131d2e;--s2:#1c2940;--s3:#24344f;--s4:#2b3d5c;--s5:#33486b;--ln:#40587f;--dash:#5e779e;--t2:#9fb0c6;--t1:#eaf0f7;--t1b:#d6dfeb;--ib:#33486b;--it:#cdd8e6;--a1:#ff8a6b;--on1:#2b0d05;--a2:#7cc7f2;--on2:#06202e;--shd:#000000}
+[data-theme="aubergine"]{--g:#15101a;--in:#0f0b13;--p0:#1a1421;--s1:#1f1826;--s2:#2b2135;--s3:#352a41;--s4:#3f324d;--s5:#4a3b5a;--ln:#5c4a6e;--dash:#7a678c;--t2:#b3a6b8;--t1:#f3ecf2;--t1b:#e2d8e3;--ib:#4a3b5a;--it:#d9cedc;--a1:#ffb36b;--on1:#2b1500;--a2:#d59bf6;--on2:#230a33;--shd:#000000}
+[data-theme="espresso"]{--g:#17110d;--in:#0f0b08;--p0:#1c1510;--s1:#211914;--s2:#2e231c;--s3:#3a2d24;--s4:#45362b;--s5:#514033;--ln:#655141;--dash:#84705e;--t2:#b8a896;--t1:#f5ece0;--t1b:#e5d9c9;--ib:#514033;--it:#dccfbd;--a1:#f2b84b;--on1:#2a1c00;--a2:#ff8552;--on2:#2b0c02;--shd:#000000}
+[data-theme="oxblood"]{--g:#170e10;--in:#0f0809;--p0:#1c1113;--s1:#221517;--s2:#301d20;--s3:#3c2529;--s4:#472d31;--s5:#54363a;--ln:#694549;--dash:#896266;--t2:#bfa8a6;--t1:#f6ecea;--t1b:#e6d8d6;--ib:#54363a;--it:#dccccb;--a1:#f6c177;--on1:#2b1a00;--a2:#ff7d96;--on2:#33060f;--shd:#000000}
+[data-theme="indigo"]{--g:#0e0f22;--in:#090a18;--p0:#12142b;--s1:#161832;--s2:#20234a;--s3:#292d5c;--s4:#32376c;--s5:#3c417d;--ln:#4b5194;--dash:#6a70b0;--t2:#a5a9cf;--t1:#eceefc;--t1b:#d9dcf3;--ib:#3c417d;--it:#d0d3ee;--a1:#ffc145;--on1:#2b1d00;--a2:#ff7fa8;--on2:#33061a;--shd:#000000}
+[data-theme="parchment"]{--g:#f3ede2;--in:#e9e1d3;--p0:#f8f3ea;--s1:#fbf7ef;--s2:#ffffff;--s3:#efe7d9;--s4:#e6ddcd;--s5:#dcd1be;--ln:#cdbfa8;--dash:#a8987f;--t2:#6e6455;--t1:#1f1a14;--t1b:#3a3228;--ib:#dcd1be;--it:#3a3228;--a1:#c8553d;--on1:#ffffff;--a2:#2f5d8a;--on2:#ffffff;--shd:#b8a688}
+body{margin:0}
+nav button{flex-direction:column!important;width:58px!important;height:54px!important;gap:3px;font-size:10px;font-weight:500}
+nav button::after{content:attr(aria-label)}
+*{text-transform:none!important}
+nav button{height:64px!important;gap:5px!important;background:transparent!important}
+nav button svg{width:36px;height:36px;padding:8px;box-sizing:border-box;border-radius:12px;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.5),inset 0 -4px 6px color-mix(in srgb, var(--shd) 35%, transparent),0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)}
+nav button[aria-label="Create"] svg{background:linear-gradient(155deg,#a393ff,#4a2fe0)}
+nav button[aria-label="Pipelines"] svg{background:linear-gradient(155deg,#6cc4ff,#1f5fe0)}
+nav button[aria-label="Gallery"] svg{background:linear-gradient(155deg,#ffb07a,#e0457a)}
+nav button[aria-label="Timeline"] svg{background:linear-gradient(155deg,#ffe07a,#f08a1c)}
+nav button[aria-label="Models"] svg{background:linear-gradient(155deg,#7af5d6,#12967f)}
+nav button:not([aria-current]) svg{filter:saturate(.55) brightness(.8)}
+nav button[aria-current]{color:var(--t1)!important}
+nav button[aria-current] svg{outline:2px solid rgba(255,255,255,.85);outline-offset:2px}
+main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.09),inset 0 -2px 0 color-mix(in srgb, var(--shd) 30%, transparent),0 2px 5px color-mix(in srgb, var(--shd) 45%, transparent)}
+[style*="border-radius: 16px"],[style*="border-radius: 18px"],[style*="border-radius: 14px"]{box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 28px 48px -18px color-mix(in srgb, var(--shd) 85%, transparent),0 10px 18px -10px color-mix(in srgb, var(--shd) 60%, transparent)}
+aside{box-shadow:-28px 0 48px -28px color-mix(in srgb, var(--shd) 80%, transparent)}
+.n{background:linear-gradient(180deg,var(--s3),var(--s1))!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 20px 34px -12px color-mix(in srgb, var(--shd) 85%, transparent)!important}
+.pi,.po{box-shadow:0 0 8px currentColor}
+input[type=range]{filter:drop-shadow(0 2px 3px color-mix(in srgb, var(--shd) 60%, transparent))}
+button{font:inherit;color:inherit;cursor:pointer}
+a{color:var(--t2)}a:hover{color:var(--t1)}
+nav{gap:14px!important}
+.i{width:18px;height:18px;margin-left:6px;border-radius:50%;border:0;background:var(--ib);color:var(--it);font:600 11px/18px Inter,sans-serif;padding:0;vertical-align:middle;flex:0 0 auto}
+[style*="border-radius: 16px"],[style*="border-radius: 18px"],.set,.crit,.tile{background-image:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,0) 46%)}
+.chip{height:36px;padding:0 12px;border-radius:999px;border:0;background:var(--s3);font-size:13px;font-weight:500}
+.take{text-align:left;padding:0;border:0;background:transparent;display:flex;flex-direction:column;gap:6px}
+.take i{display:flex;align-items:center;justify-content:center;aspect-ratio:16/10;border-radius:10px;border:1px dashed var(--dash);background:var(--s1);font-style:normal;font-size:11px;color:var(--t2)}
+.take b{font-size:12px;font-weight:600}
+.take small{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t2)}
+.act{height:40px;border-radius:10px;border:0;background:var(--s3);font-size:13px;font-weight:500;text-align:left;padding:0 12px}
+.h{margin:0;font-size:12px;font-weight:600;letter-spacing:.04em;color:var(--t2)}
+.row{display:flex;justify-content:space-between;gap:10px;font-size:13px}
+.row span:last-child{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t2);text-align:right}
+/* organic layer */
+td,th{padding:10px;text-align:left;font-size:13px;border-bottom:1px solid var(--s3);white-space:nowrap}
+th{font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--t2)}
+tbody tr:last-child td{border-bottom:0}
+td.m{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t2)}
+nav button[aria-label="Admin"] svg{background:linear-gradient(155deg,#c9ced9,#5b6478)}
+.in{width:100%;height:38px;box-sizing:border-box;border-radius:10px;border:0;background:var(--s4);color:var(--t1);font:inherit;font-size:13px;padding:0 12px}
+.tag{padding:2px 8px;border-radius:999px;background:var(--s4);font-size:11px;font-weight:500}
+.tag.adm{background:var(--a1);color:var(--on1)}
+
+[style*="min-height: 960px"]{background-image:radial-gradient(1100px 620px at 14% -12%,rgba(255,196,120,.11),transparent 62%),radial-gradient(900px 640px at 108% 112%,color-mix(in srgb, var(--a1) 7%, transparent),transparent 60%),repeating-linear-gradient(118deg,rgba(255,255,255,.014) 0 1px,transparent 1px 4px)}
+nav{margin:14px 0 14px 14px;border:0!important;border-radius:30px;background:var(--s1);align-self:flex-start;padding:14px 4px!important;flex:0 0 68px!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 24px 40px -18px color-mix(in srgb, var(--shd) 80%, transparent)}
+aside{margin:14px 14px 14px 0;border:0!important;border-radius:34px 34px 34px 14px;background:var(--p0)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 28px 48px -20px color-mix(in srgb, var(--shd) 85%, transparent)!important}
+main [style*="border-radius: 16px"]{border-radius:28px 28px 28px 12px!important;border-color:transparent!important}
+main [style*="border-radius: 18px"]{border-radius:32px!important;border-color:transparent!important}
+aside [style*="border-radius: 14px"],aside [style*="border-radius: 12px"],.set,.crit{border-radius:18px 18px 18px 8px!important;border-color:transparent!important}
+.n{border-radius:20px 20px 20px 8px!important;border-color:rgba(255,255,255,.08)}
+button[style*="border-radius: 14px"]{border-radius:20px 20px 20px 8px!important}
+main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -2px 0 color-mix(in srgb, var(--shd) 28%, transparent),0 3px 6px color-mix(in srgb, var(--shd) 35%, transparent)}
+/* stage B: chat, tool calls, checklists */
+.msg{align-self:flex-start;max-width:92%;padding:8px 12px;border-radius:18px 18px 18px 6px;background:var(--s2);font-size:13px;line-height:19px;white-space:pre-wrap}
+.msg.me{align-self:flex-end;border-radius:18px 18px 6px 18px;background:var(--s4)}
+.msg.note{background:transparent;box-shadow:inset 0 0 0 1px #f2c14e;color:#f2c14e;font-size:12px}
+.tc{margin-top:6px;font-size:12px;color:var(--t2)}
+.tc summary{cursor:pointer}
+.tc div{font-family:'JetBrains Mono',monospace;font-size:11px;padding:2px 0 0 12px}
+.ck2{display:flex;align-items:center;gap:10px;min-height:30px;font-size:13px}
+.ck2 input{accent-color:var(--a2)}
+</style>
+</helmet>
+<div data-theme="{{theme}}" style="display: flex; flex-wrap: wrap; min-height: 960px; background: var(--g); color: var(--t1); font-family: Inter, system-ui, sans-serif; font-size: 14px; line-height: 20px">
+
+<nav aria-label="Sections" style="flex: 0 0 64px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 0; border-right: 1px solid var(--s3)">
+<button aria-label="Create" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"></path><circle cx="12" cy="12" r="3"></circle></svg></button>
+<button aria-label="Pipelines" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="6" height="6" rx="1.5"></rect><rect x="15" y="14" width="6" height="6" rx="1.5"></rect><path d="M9 7h4a2 2 0 0 1 2 2v5"></path></svg></button>
+<button aria-label="Gallery" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="9" cy="10" r="2"></circle><path d="m21 16-5-5L5 20"></path></svg></button>
+<button aria-label="Timeline" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 17h18"></path><rect x="5" y="4" width="6" height="6" rx="1.5"></rect><rect x="12" y="14" width="7" height="6" rx="1.5"></rect></svg></button>
+<button aria-label="Models" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"></path><path d="m3 8 9 5 9-5M12 13v8"></path></svg></button>
+<button aria-label="Admin" aria-current="page" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: var(--s2); color: var(--a1); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.5 3.2 7.6 8 9 4.8-1.4 8-4.5 8-9V6l-8-3Z"></path><path d="m9 12 2 2 4-4"></path></svg></button>
+<details style="position: relative; margin-top: 6px">
+<summary aria-label="Settings" style="list-style: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10px; font-weight: 500; color: var(--t2)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 36px; height: 36px; padding: 8px; box-sizing: border-box; border-radius: 12px; color: #fff; background: linear-gradient(155deg, #a7b0c2, #4b5468); box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg>Settings</summary>
+<div style="position: absolute; left: 70px; bottom: 0; z-index: 5; width: 220px; box-sizing: border-box; padding: 14px; border-radius: 18px 18px 18px 8px; background: var(--s2); box-shadow: 0 24px 40px -12px color-mix(in srgb, var(--shd) 80%, transparent); display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 12px; font-weight: 600; color: var(--t2)">Settings</span>
+<label for="theme" style="font-size: 13px; color: var(--t1)">Theme</label>
+<select id="theme" value="{{theme}}" onChange="{{setTheme}}" style="width: 100%; height: 36px; padding: 0 10px; border-radius: 10px; border: 0; background: var(--s4); color: var(--t1); font: inherit; font-size: 13px">
+<option value="forest">Forest ink</option>
+<option value="ocean">Deep ocean</option>
+<option value="aubergine">Aubergine dusk</option>
+<option value="espresso">Espresso</option>
+<option value="oxblood">Oxblood</option>
+<option value="indigo">Indigo night</option>
+<option value="parchment">Parchment (light)</option>
+</select>
+</div>
+</details>
+</nav>
+
+<main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 16px; padding: 16px 20px 24px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+<h1 style="margin: 0; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 22px; font-weight: 700; letter-spacing: 0.01em">Admin</h1>
+<div style="flex-grow: 1"></div>
+<span class="tag adm">Signed in as root admin</span>
+</div>
+<div role="tablist" aria-label="Admin sections" style="display: flex; flex-wrap: wrap; gap: 8px">
+<button role="tab" aria-selected="false" class="chip">Users</button>
+<button role="tab" aria-selected="false" class="chip">Hosts</button>
+<button role="tab" aria-selected="false" class="chip">API keys</button>
+<button role="tab" aria-selected="false" class="chip">Model providers</button>
+<button role="tab" aria-selected="true" class="chip" style="background: var(--t1); color: var(--p0); font-weight: 600">AI agents</button>
+</div>
+<span style="font-size: 13px; color: var(--t2)">Each AI job and the model that does it. Providers and their keys are set in Model providers.<button class="i" aria-label="More information" title="Local runs on your own GPU hosts in the shared queue and sends nothing out. Remote sends what the row says to that provider, and only while the deployment's remote switch (REMOTE_MODELS) is on.">i</button></span>
+<div style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 6px 8px; overflow-x: auto">
+<table style="border-collapse: collapse; width: 100%; min-width: 760px">
+<thead><tr><th>Job</th><th>Model</th><th>Sends</th><th>Status</th><th>Actions</th></tr></thead>
+<tbody>
+<tr><td style="font-weight: 600">Assistant<br><span class="m" style="font-weight: 400">the in-app assistant (plan 18)</span></td><td class="m">DeepSeek · deepseek-chat<br>web search: Brave</td><td><span class="tag adm">remote</span><br><span style="font-size: 12px; color: #f2c14e">your messages to DeepSeek</span></td><td>On<br><span style="font-size: 12px; color: var(--t2)">200 calls · 2 M tokens a day</span></td><td><button class="chip" style="height: 30px">Edit</button></td></tr>
+<tr aria-selected="true" style="background: var(--s3)"><td style="font-weight: 600">Session names<br><span class="m" style="font-weight: 400">names an untitled session after its first run</span></td><td class="m">DeepSeek · deepseek-chat</td><td><span class="tag adm">remote</span><br><span style="font-size: 12px; color: #f2c14e">the prompt to DeepSeek</span></td><td>On<br><span style="font-size: 12px; color: var(--t2)">never over your titles</span></td><td><button class="chip" style="height: 30px">Edit</button></td></tr>
+</tbody>
+</table>
+</div>
+
+<section aria-label="Assistant settings" style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 16px; font-weight: 700">Assistant<button class="i" aria-label="More information" title="Plan 18's settings, moved here from Model providers when branch assistant merges. Same API: /v1/studio/admin/assistant.">i</button></h2>
+<button role="switch" aria-checked="true" aria-label="Assistant on" style="flex: 0 0 auto; width: 44px; height: 26px; border-radius: 999px; border: 0; background: var(--a1); padding: 2px; display: flex; justify-content: flex-end"><span style="width: 20px; height: 20px; border-radius: 50%; background: var(--on1); display: block"></span></button>
+</div>
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px">
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="a-prov" style="font-size: 12px; color: var(--t2)">Provider</label><select id="a-prov" class="in"><option>DeepSeek (remote)</option><option>Ollama on the Mac (local server)</option></select></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="a-model" style="font-size: 12px; color: var(--t2)">Model</label><select id="a-model" class="in"><option>deepseek-chat (default)</option></select></div>
+</div>
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: end">
+<label style="display: flex; align-items: center; gap: 10px; min-height: 38px; font-size: 13px"><input type="checkbox" checked style="accent-color: var(--a1)">Web search</label>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="a-search" style="font-size: 12px; color: var(--t2)">Search provider</label><select id="a-search" class="in"><option>Brave (search)</option></select></div>
+</div>
+<span style="font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--t2)">Caps per user</span>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px">
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="a-c1" style="font-size: 12px; color: var(--t2)">Model calls a day</label><input id="a-c1" class="in" value="200"></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="a-c2" style="font-size: 12px; color: var(--t2)">Tokens a day</label><input id="a-c2" class="in" value="2000000"></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="a-c3" style="font-size: 12px; color: var(--t2)">Look at, an hour</label><input id="a-c3" class="in" value="20"></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="a-c4" style="font-size: 12px; color: var(--t2)">Messages a minute</label><input id="a-c4" class="in" value="6"></div>
+</div>
+<div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap"><span style="font-size: 12px; color: #f2c14e">Sends your messages, the screen summary and tool results to DeepSeek; never images.</span><div style="flex-grow: 1"></div><button class="chip">Cancel</button><button style="height: 38px; padding: 0 18px; border-radius: 10px; border: 0; background: var(--a1); color: var(--on1); font-weight: 600; font-size: 13px">Save</button></div>
+</section>
+
+<section aria-label="Other states" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 12px; color: var(--t2)">Before branch assistant merges: the Session names row alone</span>
+<div style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 6px 8px">
+<table style="border-collapse: collapse; width: 100%">
+<thead><tr><th>Job</th><th>Model</th><th>Status</th></tr></thead>
+<tbody><tr><td style="font-weight: 600">Session names</td><td class="m">Off</td><td style="color: var(--t2)">Off<br><span style="font-size: 12px">titles stay as typed</span></td></tr></tbody>
+</table>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 12px; color: var(--t2)">Remote models off on this deployment: Remote is greyed</span>
+<div role="radiogroup" aria-label="Session names, remote off" style="display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px; background: var(--s1)">
+<label style="display: flex; align-items: center; gap: 10px; font-size: 13px"><input type="radio" name="sn2" checked style="accent-color: var(--a1)">Off</label>
+<label style="display: flex; align-items: center; gap: 10px; font-size: 13px"><input type="radio" name="sn2" style="accent-color: var(--a1)">Local LLM<span class="m" style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--t2)">Qwen3.8 27B · mac</span></label>
+<label aria-disabled="true" style="display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--t2)"><input type="radio" name="sn2" disabled>Remote<span style="font-size: 12px">remote models are off on this deployment</span></label>
+</div>
+</div>
+</section>
+</main>
+
+<aside aria-label="Session names" style="flex: 1 1 340px; box-sizing: border-box; padding: 16px 18px 24px; border-left: 1px solid var(--s3); background: var(--p0); display: flex; flex-direction: column; gap: 12px">
+<h2 style="margin: 0; display: flex; align-items: center; gap: 8px; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 16px; font-weight: 700">Session names<button class="i" aria-label="More information" title="When a session nobody titled finishes its first run, this model writes a 2-5 word title from that run's prompt. A title you typed is never replaced. Off until you turn it on.">i</button></h2>
+<span style="font-size: 13px; color: var(--t2)">Names an untitled session from its first prompt.</span>
+<div role="radiogroup" aria-label="Session names" style="display: flex; flex-direction: column; gap: 8px">
+<label style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--s1); font-size: 13px"><input type="radio" name="sn" style="accent-color: var(--a1); margin-top: 3px"><span style="display: flex; flex-direction: column; gap: 2px"><b style="font-weight: 600">Off</b><span style="font-size: 12px; color: var(--t2)">Titles stay Untitled until renamed</span></span></label>
+<label aria-disabled="true" title="An admin downloads Qwen3.8 27B in Models" style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--s1); font-size: 13px; color: var(--t2)"><input type="radio" name="sn" disabled style="margin-top: 3px"><span style="display: flex; flex-direction: column; gap: 2px"><b style="font-weight: 600; opacity: 0.55">Local LLM</b><span style="font-size: 12px">Qwen3.8 27B not downloaded · <a href="#">Models</a></span><span style="font-size: 12px">Uses the GPU queue · sends nothing out</span></span></label>
+<label style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--s2); box-shadow: inset 0 0 0 2px var(--a1); font-size: 13px"><input type="radio" name="sn" checked style="accent-color: var(--a1); margin-top: 3px"><span style="display: flex; flex-direction: column; gap: 2px"><b style="font-weight: 600">Remote</b><span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--t2)">DeepSeek · deepseek-chat</span></span></label>
+</div>
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px">
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="s-prov" style="font-size: 12px; color: var(--t2)">Provider</label><select id="s-prov" class="in"><option>DeepSeek</option></select></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="s-model" style="font-size: 12px; color: var(--t2)">Model</label><select id="s-model" class="in"><option>deepseek-chat</option></select></div>
+</div>
+<span style="padding: 8px 12px; border-radius: 10px; background: color-mix(in srgb, #f2c14e 14%, transparent); color: #f2c14e; font-size: 12px">Sends the prompt to DeepSeek. Never images or references.</span>
+<span style="font-size: 12px; color: var(--t2)">Users see "named by DeepSeek" once, and a line in the session menu.</span>
+<button style="height: 48px; border-radius: 14px; border: 0; background: var(--a1); color: var(--on1); background-image: linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 55%); font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.04em">Save</button>
+</aside>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":960}}'>
+class Component extends DCLogic {
+state = { theme: null };
+renderVals() {
+return {
+theme: this.state.theme ?? this.props.theme ?? 'forest',
+setTheme: (e) => this.setState({ theme: e.target.value })
+};
+}
+}
+</script>
+</body>
+</html>

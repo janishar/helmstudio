@@ -312,6 +312,74 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 </div>
 </div>
 
+<div style="display: flex; flex-direction: column; gap: 12px">
+<span style="font-size: 12px; color: var(--t2)">The session menu (the title's ⌄): Rename and Delete on each row; Rename edits the row in place</span>
+<button style="align-self: flex-start; height: 40px; padding: 0 12px; border-radius: 10px; border: 0; background: transparent; display: flex; align-items: center; gap: 8px; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 18px; font-weight: 700">Fox in the snow<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></button>
+<div role="dialog" aria-label="Sessions" style="width: 380px; box-sizing: border-box; padding: 8px; border-radius: 18px 18px 18px 8px; background: var(--s2); border: 1px solid var(--s5); box-shadow: 0 24px 40px -12px color-mix(in srgb, var(--shd) 80%, transparent); display: flex; flex-direction: column; gap: 2px">
+<button style="height: 36px; margin-bottom: 4px; border-radius: 10px; border: 0; background: var(--s4); font-size: 13px; font-weight: 500">+ New session</button>
+<div style="display: flex; align-items: center; gap: 6px; padding: 4px; border-radius: 10px; background: var(--s4)"><label for="ren" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%)">Session title</label><input id="ren" value="Fox in the snow" style="flex: 1 1 auto; min-width: 0; height: 32px; box-sizing: border-box; padding: 0 10px; border-radius: 8px; border: 1px solid var(--a1); background: var(--in); color: var(--t1); font: inherit; font-size: 13px; font-weight: 600"><button style="height: 32px; padding: 0 12px; border-radius: 8px; border: 0; background: var(--a1); color: var(--on1); font-size: 12px; font-weight: 600">Save</button></div>
+<div style="display: flex; align-items: center; gap: 4px"><button aria-current="false" style="flex: 1 1 auto; min-width: 0; text-align: left; padding: 8px 12px; border-radius: 10px; border: 0; box-shadow: none; background: var(--s3); font-size: 13px"><span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Untitled</span></button><button aria-label="Rename Untitled" style="padding: 4px 8px; border-radius: 8px; border: 0; background: transparent; font-size: 12px; color: var(--t2); flex: 0 0 auto">Rename</button><button aria-label="Delete Untitled" style="padding: 4px 8px; border-radius: 8px; border: 0; background: transparent; font-size: 12px; color: var(--t2); flex: 0 0 auto">Delete</button></div>
+<div style="display: flex; align-items: center; gap: 4px"><button style="flex: 1 1 auto; min-width: 0; text-align: left; padding: 8px 12px; border-radius: 10px; border: 0; box-shadow: none; background: transparent; font-size: 13px">Neon alley at night</button><span style="padding: 4px 8px; font-size: 11px; color: var(--t2)" title="A run is going: stop it first to delete">running</span></div>
+<button style="text-align: left; padding: 8px 12px; border-radius: 10px; border: 0; box-shadow: none; background: transparent; font-size: 13px">Product shots, mugs</button>
+<span style="padding: 8px 12px 4px; border-top: 1px solid var(--s5); margin-top: 4px; font-size: 12px; color: #f2c14e">New sessions are named by DeepSeek from their first prompt.</span>
+</div>
+<span style="font-size: 12px; color: var(--t2)">Enter saves, Esc cancels, blank keeps the old title. A renamed title is never replaced by the model.</span>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 12px">
+<span style="font-size: 12px; color: var(--t2)">Delete opens a card; while a run or batch of the session is going, Delete is greyed</span>
+<section role="dialog" aria-label="Delete this session?" style="width: 400px; box-sizing: border-box; padding: 18px 20px; border-radius: 16px; background: var(--s2); border: 1px solid var(--s5); display: flex; flex-direction: column; gap: 12px">
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 16px; font-weight: 700">Delete this session?</h2>
+<p style="margin: 0; font-size: 13px; color: var(--t2)">Untitled: its runs go. Its takes stay in the gallery. This can't be undone.</p>
+<div style="display: flex; justify-content: flex-end; gap: 8px"><button style="height: 36px; padding: 0 14px; border-radius: 10px; border: 0; background: var(--s4); font-size: 13px">Cancel</button><button style="height: 36px; padding: 0 16px; border-radius: 10px; border: 0; background: var(--a1); color: var(--on1); font-weight: 600; font-size: 13px">Delete</button></div>
+</section>
+<div style="display: flex; align-items: center; gap: 4px; width: 380px; padding: 4px; box-sizing: border-box; border-radius: 12px; background: var(--s2)"><button style="flex: 1 1 auto; text-align: left; padding: 8px 12px; border-radius: 10px; border: 0; box-shadow: none; background: transparent; font-size: 13px">Neon alley at night</button><button aria-label="Rename Neon alley at night" style="padding: 4px 8px; border-radius: 8px; border: 0; background: transparent; font-size: 12px; color: var(--t2)">Rename</button><button aria-disabled="true" title="Stop its runs first" style="padding: 4px 8px; border-radius: 8px; border: 0; background: transparent; font-size: 12px; color: var(--t2); opacity: 0.45; cursor: not-allowed">Delete</button></div>
+<span style="font-size: 12px; color: var(--t2)">Greyed Delete's title: "Stop its runs first". After a delete Create opens the newest other session, else the empty state.</span>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 12px">
+<span style="font-size: 12px; color: var(--t2)">An untitled session after its first run: the model's title, with a hint shown once</span>
+<div style="display: flex; flex-direction: column; align-items: flex-start; gap: 2px">
+<button style="height: 40px; padding: 0 12px; border-radius: 10px; border: 0; background: transparent; display: flex; align-items: center; gap: 8px; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 18px; font-weight: 700">Red fox at dusk<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></button>
+<span role="status" style="margin-left: 12px; padding: 2px 8px; border-radius: 999px; background: var(--s2); font-size: 11px; color: var(--t2)">named by Qwen3.8</span>
+</div>
+<div style="display: flex; flex-direction: column; align-items: flex-start; gap: 2px">
+<button style="height: 40px; padding: 0 12px; border-radius: 10px; border: 0; background: transparent; display: flex; align-items: center; gap: 8px; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 18px; font-weight: 700">Neon alley at night<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></button>
+<span role="status" style="margin-left: 12px; padding: 2px 8px; border-radius: 999px; background: var(--s2); font-size: 11px; color: #f2c14e">named by DeepSeek</span>
+</div>
+<span style="font-size: 12px; color: var(--t2)">Before: "Untitled" (New session) or the prompt's first 60 characters (Generate with no session). Written once, 2-5 words, from that run's prompt only; the hint fades after a few seconds and does not come back.</span>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 12px">
+<span style="font-size: 12px; color: var(--t2)">A take tile's ⋯ (on hover and on the current tile): Delete, then its card</span>
+<div style="display: flex; align-items: flex-start; gap: 16px; flex-wrap: wrap">
+<div style="position: relative; display: flex; flex-direction: column; gap: 6px">
+<div style="position: relative; width: 112px; height: 63px; box-sizing: border-box; border-radius: 8px; border: 2px solid var(--a1); background: var(--s1); color: var(--t2); font-family: 'JetBrains Mono', monospace; font-size: 11px; display: grid; place-items: center">seed 43<button aria-label="Take seed 43: more" style="position: absolute; top: 3px; right: 3px; width: 22px; height: 18px; padding: 0; border-radius: 6px; border: 0; background: color-mix(in srgb, var(--s2) 92%, transparent); color: var(--t1); font-size: 12px; line-height: 18px">⋯</button></div>
+<div role="menu" aria-label="Take seed 43" style="width: 140px; box-sizing: border-box; padding: 6px; border-radius: 14px 14px 14px 6px; background: var(--s2); border: 1px solid var(--s5); box-shadow: 0 24px 40px -12px color-mix(in srgb, var(--shd) 80%, transparent)"><button role="menuitem" style="width: 100%; text-align: left; padding: 8px 10px; border-radius: 8px; border: 0; box-shadow: none; background: var(--s4); font-size: 13px; color: #ff8a80">Delete</button></div>
+</div>
+<section role="dialog" aria-label="Delete this take?" style="flex: 1 1 260px; max-width: 360px; box-sizing: border-box; padding: 18px 20px; border-radius: 16px; background: var(--s2); border: 1px solid var(--s5); display: flex; flex-direction: column; gap: 12px">
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 16px; font-weight: 700">Delete this take?</h2>
+<p style="margin: 0; font-size: 13px; color: var(--t2)">It leaves the gallery and Create. This can't be undone.</p>
+<div style="display: flex; justify-content: flex-end; gap: 8px"><button style="height: 36px; padding: 0 14px; border-radius: 10px; border: 0; background: var(--s4); font-size: 13px">Cancel</button><button style="height: 36px; padding: 0 16px; border-radius: 10px; border: 0; background: var(--a1); color: var(--on1); font-weight: 600; font-size: 13px">Delete</button></div>
+</section>
+</div>
+<span style="font-size: 12px; color: var(--t2)">The same call as the Gallery's Delete; the next tile is picked.</span>
+</div>
+
+<div style="grid-column: 1 / -1; display: flex; flex-direction: column; gap: 12px">
+<span style="font-size: 12px; color: var(--t2)">Failed and stopped runs: a ✕ on each tile, and Clear for all of them (no card: nothing is lost). A running tile has no ✕ ("Stop it first").</span>
+<div role="group" aria-label="Takes" style="display: flex; align-items: center; gap: 10px; overflow-x: auto">
+<div style="position: relative; flex: 0 0 auto; width: 112px; height: 63px; box-sizing: border-box; border-radius: 8px; border: 1px solid var(--s5); background: var(--s1); color: var(--t2); font-family: 'JetBrains Mono', monospace; font-size: 11px; display: grid; place-items: center" title="Stop it first">seed 46<br>40%</div>
+<div style="position: relative; flex: 0 0 auto; width: 112px; height: 63px; box-sizing: border-box; border-radius: 8px; border: 1px solid var(--s5); background: var(--s1); color: #ff8a80; font-family: 'JetBrains Mono', monospace; font-size: 11px; display: grid; place-items: center" title="out of memory on mac">seed 45<br>failed<button aria-label="Remove failed run, seed 45" style="position: absolute; top: 3px; right: 3px; width: 18px; height: 18px; padding: 0; border-radius: 6px; border: 0; background: var(--s3); color: var(--t1); font-size: 11px; line-height: 18px; box-shadow: none">✕</button></div>
+<div style="position: relative; flex: 0 0 auto; width: 112px; height: 63px; box-sizing: border-box; border-radius: 8px; border: 1px solid var(--s5); background: var(--s1); color: var(--t2); font-family: 'JetBrains Mono', monospace; font-size: 11px; display: grid; place-items: center">seed 44<br>stopped<button aria-label="Remove stopped run, seed 44" style="position: absolute; top: 3px; right: 3px; width: 18px; height: 18px; padding: 0; border-radius: 6px; border: 0; background: var(--s3); color: var(--t1); font-size: 11px; line-height: 18px; box-shadow: none">✕</button></div>
+<div style="flex: 0 0 auto; width: 112px; height: 63px; box-sizing: border-box; border-radius: 8px; border: 1px solid var(--s5); background: var(--s1); color: var(--t2); font-family: 'JetBrains Mono', monospace; font-size: 11px; display: grid; place-items: center">seed 43</div>
+<div style="flex: 0 0 auto; width: 112px; height: 63px; box-sizing: border-box; border-radius: 8px; border: 1px solid var(--s5); background: var(--s1); color: var(--t2); font-family: 'JetBrains Mono', monospace; font-size: 11px; display: grid; place-items: center">seed 42</div>
+<button title="1 failed, 1 stopped" style="flex: 0 0 auto; height: 44px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--s5); background: transparent; font-size: 13px"><span style="color: #ff8a80">2 failed</span> · Clear</button>
+<button style="flex: 0 0 auto; height: 44px; padding: 0 14px; border-radius: 10px; border: 1px dashed var(--dash); background: transparent; color: var(--t1); font-size: 13px">Use in…</button>
+</div>
+<span style="font-size: 12px; color: var(--t2)">A failed tile's title is its error. Clear never touches a queued or running run; the chip goes when none is left.</span>
+</div>
+
 </div>
 </aside>
 </div>
