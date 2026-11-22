@@ -531,3 +531,80 @@ def test_venc_per_encoder_and_nvenc_only_when_it_encodes(monkeypatch):
         media.usable("h264_nvenc") is False and "h264_nvenc" in runs[0]
     )  # listed, but no GPU encodes
     assert media.usable("libx264")
+
+
+# ---- API 1.48: thumbnails (contracts/README.md, Thumbnails); PIL only
+
+
+def thumbs_command(keys: list[str]) -> dict:
+    cmd = copy.deepcopy(BASE)
+    cmd["data"] = {"kind": "thumbs", "inputs": [{"key": f"{U}{k}", "kind": "image"} for k in keys],
+                   "output_prefix": f"{U}thumbs/{BASE['job_id']}/"}  # fmt: skip
+    assert schemas.message_errors(cmd) == []
+    return cmd
+
+
+def picture(size, fmt="PNG") -> bytes:
+    import os
+
+    buf = io.BytesIO()
+    Image.frombytes("RGB", size, os.urandom(size[0] * size[1] * 3)).save(buf, fmt)
+    return buf.getvalue()
+
+
+async def test_a_thumbs_job_writes_each_inputs_thumb_skips_small_ones_and_reports_broken_ones():
+    store = FakeStore()
+    for key, body in {"uploads/a.png": picture((1600, 900)), "uploads/b.png": picture((300, 300)),
+                      "uploads/c.png": b"broken", "runs/r/1/0.poster.png": picture((900, 1600), "JPEG")}.items():  # fmt: skip
+        store.objects[f"{U}{key}"] = (body, "image/png")
+    inputs = [
+        "uploads/a.png",
+        "uploads/b.png",
+        "uploads/c.png",
+        "uploads/gone.png",
+        "runs/r/1/0.poster.png",
+    ]
+    before = dict(store.objects)
+    end = (await run(thumbs_command(inputs), store))[-1]["data"]
+    assert end["status"] == "succeeded"
+    prefix = f"{U}thumbs/{BASE['job_id']}/"
+    t = end["result"]["thumbs"]
+    assert t[0] == {"index": 0, "key": f"{prefix}0.webp", "width": 910, "height": 512,
+                    "bytes": len(store.objects[f"{prefix}0.webp"][0])}  # fmt: skip
+    assert t[1] == {"index": 1, "skip": True}
+    assert t[2] == {"index": 2, "error": "input 2: not a readable image"}
+    assert t[3] == {"index": 3, "error": "input 3 is missing"}
+    assert (t[4]["width"], t[4]["height"]) == (512, 910)
+    assert set(store.objects) - set(before) == {
+        f"{prefix}0.webp",
+        f"{prefix}4.webp",
+    }  # only <prefix><i>.webp
+    assert all(store.objects[k] == v for k, v in before.items())  # no input rewritten
+    assert store.objects[f"{prefix}0.webp"][1] == "image/webp"
+
+
+async def test_a_thumbs_job_naming_another_owners_key_is_dead_lettered():
+    cmd = thumbs_command(["uploads/a.png"])
+    cmd["data"]["inputs"][0]["key"] = "u/00000000-0000-4000-8000-000000000000/uploads/a.png"
+    js = FakeJS()
+    jobs = media_jobs.MediaJobs(js=js, cancels_kv=FakeKV(), store=FakeStore(), encoders=["libx264"])
+    msg = FakeMsg(cmd, js, subject="cmd.media.fake.fake")
+    await jobs.handle(msg)
+    assert msg.log[-1][0] == "term" and js.sent[0][0] == "dlq.cmd.media.fake.fake"
+
+
+async def test_a_frame_job_writes_the_frames_thumb(clips, tmp_path):
+    big = tmp_path / "big.mp4"
+    await asyncio.to_thread(subprocess.run, ["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc2=s=1280x720:r=24:d=0.2",
+                    "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", str(big)], check=True)  # fmt: skip
+    store = FakeStore()
+    store.objects[f"{U}runs/t/1/0.mp4"] = (big.read_bytes(), "video/mp4")
+    r = (
+        await run(command([("runs/t/1/0.mp4", "video")], frame={"at": "first", "index": 0}), store)
+    )[-1]
+    thumb = r["data"]["result"]["thumb"]
+    assert thumb["key"].endswith("/frame.thumb.webp") and (thumb["width"], thumb["height"]) == (
+        910,
+        512,
+    )
+    assert store.objects[thumb["key"]][1] == "image/webp"

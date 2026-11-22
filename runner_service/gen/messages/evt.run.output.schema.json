@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helmstudio.local/contracts/messages/evt.run.output.schema.json",
   "title": "runner → studio: one output object written",
-  "description": "Subject evt.run.<host>.<session_id>.output (stream EVT), Nats-Msg-Id <run_id>:<attempt>:<seq>. Sent after the object is fully written to the object store, before the terminal status. `key` is under the command's output_prefix: an image is <output_prefix><index>.png, a video <output_prefix><index>.mp4 (H.264 yuv420p + AAC, moov atom first: -movflags +faststart) with its poster <output_prefix><index>.poster.png (frame 0, the video's size), both written before this event; from API 1.30 an audio output <output_prefix><index>.wav (RIFF WAVE, PCM 16-bit, mono, the model's own sample rate).",
+  "description": "Subject evt.run.<host>.<session_id>.output (stream EVT), Nats-Msg-Id <run_id>:<attempt>:<seq>. Sent after the object is fully written to the object store, before the terminal status. `key` is under the command's output_prefix: an image is <output_prefix><index>.png, a video <output_prefix><index>.mp4 (H.264 yuv420p + AAC, moov atom first: -movflags +faststart) with its poster <output_prefix><index>.poster.png (frame 0, the video's size), both written before this event; from API 1.30 an audio output <output_prefix><index>.wav (RIFF WAVE, PCM 16-bit, mono, the model's own sample rate). From API 1.48 an image or video output may carry `thumb`: <output_prefix><index>.thumb.webp, written before the main object.",
   "allOf": [
     {
       "$ref": "envelope.schema.json"
@@ -236,6 +236,21 @@
               "description": "API 1.32, a dialogue's take only (a stage with `lines`): one cue per line, in order, each [start_s, end_s) inside [0, duration_s] and after the previous one's end; absent for one voice"
             }
           }
+        },
+        "thumb": {
+          "allOf": [
+            {
+              "$ref": "defs.schema.json#/$defs/takeThumb"
+            },
+            {
+              "properties": {
+                "key": {
+                  "pattern": "/[0-9]+\\.thumb\\.webp$"
+                }
+              }
+            }
+          ],
+          "description": "API 1.48, an image or video output: its thumbnail (of the image, or of the poster), <output_prefix><index>.thumb.webp, under the same prefix; absent when it would save nothing (contracts/README.md, Thumbnails)"
         }
       },
       "allOf": [
@@ -300,6 +315,11 @@
                 {
                   "required": [
                     "height"
+                  ]
+                },
+                {
+                  "required": [
+                    "thumb"
                   ]
                 }
               ]

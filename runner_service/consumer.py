@@ -158,11 +158,16 @@ class Consumer:
             log.info("run %s: running (seed %s)", run_id, ctx.seed)
 
             async def output(
-                index: int, body: bytes, *, ext: str, poster=None, last=None, **meta
+                index: int, body: bytes, *, ext: str, poster=None, last=None, thumb=None, **meta
             ) -> None:
                 key = f"{data['output_prefix']}{index}.{ext}"
 
                 async def upload() -> None:
+                    # API 1.48: <prefix><n>.thumb.webp first (README, Thumbnails)
+                    if thumb is not None:
+                        tkey, (webp, tw, th) = f"{data['output_prefix']}{index}.thumb.webp", thumb
+                        await self.store.put(tkey, webp, "image/webp")
+                        meta["thumb"] = {"key": tkey, "width": tw, "height": th, "bytes": len(webp)}
                     # a video: its poster and last frame first, <prefix><n>.{poster,last}.png at the video's size
                     for name, png in (("poster", poster), ("last", last)):
                         if png is not None:

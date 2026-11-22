@@ -81,13 +81,7 @@
         "result": {
           "type": "object",
           "additionalProperties": false,
-          "description": "succeeded",
-          "required": [
-            "key",
-            "width",
-            "height",
-            "bytes"
-          ],
+          "description": "succeeded: an export's or a frame's take (key, width, height, bytes); (1.48) a thumbs job's `thumbs` (no key)",
           "properties": {
             "key": {
               "allOf": [
@@ -229,8 +223,147 @@
                   "$ref": "defs.schema.json#/$defs/videoStream"
                 }
               }
+            },
+            "thumb": {
+              "allOf": [
+                {
+                  "$ref": "defs.schema.json#/$defs/takeThumb"
+                },
+                {
+                  "properties": {
+                    "key": {
+                      "pattern": "/(export|frame)\\.thumb\\.webp$"
+                    }
+                  }
+                }
+              ],
+              "description": "API 1.48, export and frame: the thumbnail of the poster (export.thumb.webp) or of the frame (frame.thumb.webp) under output_prefix; absent when it would save nothing"
+            },
+            "thumbs": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 20,
+              "description": "API 1.48, a thumbs job: one item per input, by its index: the thumbnail written at <output_prefix><index>.webp, `skip` (the input needs none: its short side is at most 512 px, or the WebP is not smaller), or `error` (it could not be read; the job goes on)",
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "index",
+                      "key",
+                      "width",
+                      "height",
+                      "bytes"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "index": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 19
+                      },
+                      "key": {
+                        "allOf": [
+                          {
+                            "$ref": "defs.schema.json#/$defs/objectKey"
+                          },
+                          {
+                            "pattern": "/thumbs/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[0-9]+\\.webp$"
+                          }
+                        ]
+                      },
+                      "width": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 1024
+                      },
+                      "height": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 1024
+                      },
+                      "bytes": {
+                        "type": "integer",
+                        "minimum": 1
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "index",
+                      "skip"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "index": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 19
+                      },
+                      "skip": {
+                        "const": true
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "index",
+                      "error"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "index": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 19
+                      },
+                      "error": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 300
+                      }
+                    }
+                  }
+                ]
+              }
             }
-          }
+          },
+          "anyOf": [
+            {
+              "required": [
+                "key",
+                "width",
+                "height",
+                "bytes"
+              ],
+              "not": {
+                "required": [
+                  "thumbs"
+                ]
+              }
+            },
+            {
+              "required": [
+                "thumbs"
+              ],
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "key"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "thumb"
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
         }
       },
       "allOf": [

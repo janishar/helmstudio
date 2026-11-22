@@ -9,6 +9,7 @@ import wave
 from PIL import Image
 
 from core.graph import RunError
+from core.images import thumb
 
 
 def prompt(ctx, params: dict, inputs: dict) -> dict:
@@ -65,11 +66,20 @@ def _wav(ctx, audio: dict) -> tuple[bytes, dict]:
 def output(ctx, params: dict, inputs: dict) -> dict:
     """Store the input as an output of the run: an Image as a PNG; a Video value ({mp4: bytes, poster: PIL image,
     frames, fps, has_audio[, last: PIL image, stream: defs videoStream, source_map: defs sourceMap]}) as its MP4
-    with the poster (frame 0) and the last frame as PNGs beside it; an Audio value ({wav, sample_rate,
+    with the poster (frame 0) and the last frame as PNGs beside it (an image or a poster also with its thumbnail, API
+    1.48); an Audio value ({wav, sample_rate,
     duration_s[, cues]}) as a WAV (PCM 16-bit, mono, its own rate), a dialogue's cues reported with it."""
     media = inputs["media"]
-    if isinstance(media, Image.Image):
-        ctx.output(_png(media), ext="png", kind="image", width=media.width, height=media.height)
+    if isinstance(media, Image.Image):  # API 1.48: with its thumbnail (none when it saves nothing)
+        png = _png(media)
+        ctx.output(
+            png,
+            ext="png",
+            kind="image",
+            width=media.width,
+            height=media.height,
+            thumb=thumb(media, len(png)),
+        )
         return {}
     if "wav" in media:
         data, audio = _wav(ctx, media)
@@ -80,9 +90,9 @@ def output(ctx, params: dict, inputs: dict) -> dict:
     poster: Image.Image = media["poster"]
     video = {"duration_s": media["frames"] / media["fps"], "fps": media["fps"], "frames": media["frames"],
              "has_audio": media["has_audio"]} | ({"stream": media["stream"]} if media.get("stream") else {})  # fmt: skip
-    last = media.get("last")
+    last, png = media.get("last"), _png(poster)
     ctx.output(media["mp4"], ext="mp4", kind="video", width=poster.width, height=poster.height, video=video,
-               poster=_png(poster), last=_png(last) if last is not None else None,
+               poster=png, last=_png(last) if last is not None else None, thumb=thumb(poster, len(png)),
                source_map=media.get("source_map"))  # fmt: skip
     return {}
 

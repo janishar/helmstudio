@@ -195,16 +195,20 @@ class Ctx:
         poster=None,
         last=None,
         source_map=None,
+        thumb=None,
     ) -> None:
         """A video also passes `video` ({duration_s, fps, frames, has_audio[, stream]}), `poster` and `last` (the
         last frame; PNG bytes), and `source_map` when it was made from a media take (README, Media inputs); an
-        audio output passes `audio` ({duration_s, sample_rate}) and no width or height (README, Voices)."""
+        audio output passes `audio` ({duration_s, sample_rate}) and no width or height (README, Voices); an image or
+        a video `thumb` (API 1.48, README Thumbnails: (WebP bytes, width, height) from core.images.thumb, or None)."""
         index, self.outputs = self.outputs, self.outputs + 1
         extra = {"video": video, "poster": poster, "last": last} if video is not None else {}
         if audio is not None:
             extra["audio"] = audio
         if source_map is not None:
             extra["source_map"] = source_map
+        if thumb is not None:
+            extra["thumb"] = thumb
         if video is not None and self.auto:  # auto length: the clip's real frames (README, Video)
             self.resolved |= dict.fromkeys(self.auto, video["frames"])
             extra["resolved"] = {"params": dict(self.resolved)}

@@ -7,7 +7,8 @@ weight holder.
   probed and refused (input) when it is not the kind the command says → export: the plan's copy re-checked against
   `expect` (any fact differs: conform_args), the placeholders substituted and the argument list checked (invalid),
   ffmpeg in its own process group with progress from `-progress pipe:1`, the output verified, poster (a tenth in)
-  and last frame written; frame: that exact frame as a PNG → uploads under output_prefix → one terminal status →
+  and last frame written; frame: that exact frame as a PNG (each with its thumbnail, API 1.48); thumbs: each input's
+  thumbnail (README, Thumbnails) → uploads under output_prefix → one terminal status →
   ack (after the status is acked). The temp dir is removed on every path. A redelivery starts over."""
 
 import asyncio
@@ -26,7 +27,7 @@ from pathlib import Path
 from PIL import Image
 
 from config import ENV, HOST
-from core import media
+from core import images, media
 from core.download import Cancelled
 from core.media import MediaError
 from messaging import cancels, schemas
@@ -98,7 +99,8 @@ class MediaJobs:
                     extra = {"encoder": encoder}
                 else:
                     await events.publish("status", {"status": "running"})
-                    result = await self.frame(data, tmp, cancel)
+                    job = self.thumbs if data["kind"] == "thumbs" else self.frame
+                    result = await job(data, tmp, cancel)
                 status = "succeeded"
         except Cancelled:
             status = "cancelled"
@@ -230,6 +232,8 @@ class MediaJobs:
                 raise MediaError("verify", str(e)) from None
             key = f"{prefix}export.{name}.png"
             body = png.read_bytes()
+            if name == "poster":  # API 1.48: its thumbnail first, export.thumb.webp
+                thumb = await self._thumb(body, f"{prefix}export.thumb.webp")
             await self.store.put(key, body, "image/png")
             pictures[name] = {
                 "key": key,
@@ -243,7 +247,7 @@ class MediaJobs:
         video = {"duration_s": frames / fps, "fps": fps, "frames": frames, "has_audio": info["audio"] is not None,
                  **pictures, "stream": info["stream"]}  # fmt: skip
         result = {"key": key, "width": v["width"], "height": v["height"], "bytes": size, "etag": etag, "mode": mode,
-                  "video": video}  # fmt: skip
+                  "video": video} | ({"thumb": thumb} if thumb else {})  # fmt: skip
         if reason:
             result["reason"] = reason
         return result, encoder
@@ -349,6 +353,7 @@ class MediaJobs:
         with Image.open(png) as im:
             w, h = im.size
         key = f"{data['output_prefix']}frame.png"
+        thumb = await self._thumb(body, f"{data['output_prefix']}frame.thumb.webp")  # API 1.48
         await self.store.put(key, body, "image/png")
         return {
             "key": key,
@@ -356,4 +361,40 @@ class MediaJobs:
             "height": h,
             "bytes": len(body),
             "etag": hashlib.md5(body).hexdigest(),
-        }
+        } | ({"thumb": thumb} if thumb else {})
+
+    async def _thumb(self, body: bytes, key: str) -> dict | None:
+        """The thumbnail of the image file `body` written at `key` (README, Thumbnails), or None when it needs none."""
+        made = await asyncio.to_thread(images.thumb_of, body)
+        if made is None:
+            return None
+        webp, w, h = made
+        await self.store.put(key, webp, "image/webp")
+        return {"key": key, "width": w, "height": h, "bytes": len(webp)}
+
+    async def thumbs(self, data: dict, tmp: Path, cancel: asyncio.Event) -> dict:
+        """API 1.48, kind thumbs (README, Thumbnails): each input's thumbnail at <output_prefix><i>.webp, or `skip`
+        when it needs none, or `error` when it cannot be read (the job goes on). Only PIL: no download to disk."""
+        prefix, out = data["output_prefix"], []
+        keys = {it["key"] for it in data["inputs"]}
+        for i, it in enumerate(data["inputs"]):
+            if cancel.is_set():
+                raise Cancelled
+            key = f"{prefix}{i}.webp"
+            body = await self.store.get(it["key"], images.MAX_BYTES)
+            if key in keys:  # never overwrite an input
+                out.append({"index": i, "error": f"input {i} is an output key"})
+            elif body is None:
+                out.append({"index": i, "error": f"input {i} is missing"})
+            elif len(body) > images.MAX_BYTES:
+                out.append(
+                    {"index": i, "error": f"input {i} is larger than {images.MAX_BYTES >> 20} MB"}
+                )
+            else:
+                try:
+                    made = await self._thumb(body, key)
+                except ValueError as e:
+                    out.append({"index": i, "error": f"input {i}: {e}"[:300]})
+                    continue
+                out.append({"index": i} | (made or {"skip": True}))
+        return {"thumbs": out}

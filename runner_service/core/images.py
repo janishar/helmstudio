@@ -95,6 +95,74 @@ def decode(data: bytes, take_id: str) -> Image.Image:
         raise graph.RunError(f"input image {take_id} is not a readable image") from e
 
 
+# API 1.48 (contracts/README.md, Thumbnails): one WebP per image or poster, short side 512, long side at most 1024
+THUMB_SHORT, THUMB_LONG, THUMB_QUALITY = 512, 1024, 80
+
+
+def thumb_size(width: int, height: int) -> tuple[int, int] | None:
+    """The thumbnail's size for a width x height picture, or None when its short side is already at most
+    THUMB_SHORT (never upscaled)."""
+    short, long = min(width, height), max(width, height)
+    if short <= THUMB_SHORT:
+        return None
+    s = min(THUMB_SHORT / short, THUMB_LONG / long)
+    return max(1, round(width * s)), max(1, round(height * s))
+
+
+def thumb(
+    img: Image.Image, original: int | None = None, size: tuple[int, int] | None = None
+) -> tuple[bytes, int, int] | None:
+    """`img` as its thumbnail (WebP q80, alpha kept): (bytes, width, height); None when it saves nothing (a short
+    side at most THUMB_SHORT, or a WebP not smaller than the `original` file's bytes). `size`: the thumbnail's size
+    when `img` was decoded smaller than the original (a JPEG draft)."""
+    size = size or thumb_size(*img.size)
+    if size is None:
+        return None
+    alpha = img.mode in ("RGBA", "LA", "PA") or (img.mode == "P" and "transparency" in img.info)
+    if img.mode not in ("RGB", "RGBA"):
+        img = img.convert("RGBA" if alpha else "RGB")
+    small = img.resize(size, Image.Resampling.LANCZOS, reducing_gap=3.0)
+    buf = io.BytesIO()
+    small.save(buf, "WEBP", quality=THUMB_QUALITY, method=4)
+    data = buf.getvalue()
+    if original is not None and len(data) >= original:
+        return None
+    return data, *size
+
+
+def thumb_of(data: bytes) -> tuple[bytes, int, int] | None:
+    """The thumbnail of the image file `data` (upright: a JPEG's EXIF applied; a JPEG decoded at a reduced scale),
+    None when it needs none; ValueError when it is not a readable image or is over MAX_PIXELS (checked on the
+    header)."""
+    try:
+        with Image.open(io.BytesIO(data), formats=FORMATS) as img:
+            if img.format not in OPENED:
+                raise ValueError(f"not a png, jpeg or webp image ({img.format})")
+            if img.width * img.height > MAX_PIXELS:
+                raise ValueError(f"larger than {MAX_PIXELS // 10**6} MP")
+            size = thumb_size(*img.size)
+            if size is None:
+                return None
+            jpeg = img.format in ("JPEG", "MPO")
+            if not jpeg:
+                img.load()
+                return thumb(img, len(data), size)
+            img.draft(
+                "RGB", size
+            )  # decode at 1/2, 1/4 or 1/8 while still at least the thumbnail's size
+            img.load()
+            if img.getexif().get(0x0112, 1) in (
+                5,
+                6,
+                7,
+                8,
+            ):  # turned a quarter: the upright size is swapped
+                size = size[::-1]
+            return thumb(ImageOps.exif_transpose(img), len(data), size)
+    except (OSError, SyntaxError, Image.DecompressionBombError) as e:
+        raise ValueError("not a readable image") from e
+
+
 async def read(value: dict, owner: str, fetch, media: bool = False) -> Image.Image | bytes:
     """Fetch one resolved Image value and decode it (a video take or a `media` value: its checked bytes,
     undecoded). `fetch(key, limit, etag)` → bytes (at most limit + 1), or None when the object is missing or its

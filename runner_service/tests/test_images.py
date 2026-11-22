@@ -297,3 +297,87 @@ def test_echo_schema_has_the_rows_param():
     refs = {p["name"]: p for p in SCHEMAS["echo/echo"]["params"]}["refs"]
     assert refs["type"] == "rows" and refs["item"] == {"image": "Image"} and refs["max"] == 10
     assert json.dumps(refs["mention"]) == '"<image{n}>"'
+
+
+# ---- API 1.48 thumbnails (contracts/README.md, Thumbnails)
+
+
+def noisy(size, mode="RGB") -> Image.Image:
+    """A picture a WebP cannot squeeze to nothing (random pixels compress badly as PNG too)."""
+    import os
+
+    return Image.frombytes(mode, size, os.urandom(size[0] * size[1] * len(mode)))
+
+
+@pytest.mark.parametrize(
+    "size, want",
+    [((2048, 1152), (910, 512)), ((1152, 2048), (512, 910)), ((1024, 1024), (512, 512)),
+     ((6000, 1000), (1024, 171)), ((513, 2000), (263, 1024)), ((512, 4000), None), ((300, 200), None)],
+)  # fmt: skip
+def test_thumb_size_short_side_512_long_side_at_most_1024_never_upscaled(size, want):
+    assert images.thumb_size(*size) == want
+
+
+def test_thumb_is_a_webp_at_that_size_with_its_alpha():
+    data, w, h = images.thumb(noisy((1200, 800), "RGBA"))
+    img = Image.open(io.BytesIO(data))
+    assert (img.format, img.size, (w, h), img.mode) == ("WEBP", (768, 512), (768, 512), "RGBA")
+    data, w, h = images.thumb(noisy((1200, 800)))
+    assert Image.open(io.BytesIO(data)).mode == "RGB"
+
+
+def test_no_thumb_when_it_saves_nothing():
+    assert images.thumb(noisy((500, 900))) is None  # short side at most 512
+    assert images.thumb(noisy((1200, 800)), original=100) is None  # not smaller than the original
+
+
+def test_thumb_of_a_file_rotates_a_jpeg_and_drafts_it():
+    buf = io.BytesIO()
+    exif = Image.Exif()
+    exif[0x0112] = 6  # turned: upright it is 1000 x 2000
+    noisy((2000, 1000)).save(buf, "JPEG", exif=exif)
+    data, w, h = images.thumb_of(buf.getvalue())
+    assert (w, h) == (512, 1024) and Image.open(io.BytesIO(data)).size == (512, 1024)
+    buf = io.BytesIO()
+    noisy((2048, 1024)).save(buf, "JPEG")  # drafted to 1024 x 512: still the full thumbnail size
+    assert images.thumb_of(buf.getvalue())[1:] == (1024, 512)
+
+
+def test_thumb_of_refuses_a_broken_or_huge_file_and_skips_a_small_one():
+    with pytest.raises(ValueError):
+        images.thumb_of(b"not an image")
+    with pytest.raises(ValueError, match="MP"):
+        images.thumb_of(png((8000, 7000)))
+    assert images.thumb_of(png((400, 300))) is None
+
+
+async def test_an_image_output_writes_its_thumb_before_the_png_and_reports_it():
+    from conftest import IMPLS
+    from test_consumer import PREFIX, kinds
+
+    from core.pack import Node
+
+    pic = noisy((1024, 768))
+
+    def make(ctx, params, inputs):
+        return {"image": pic}
+
+    schema = {"kind": "t/pic", "title": "Pic", "family": "t", "params": [], "inputs": [],
+              "outputs": [{"name": "image", "type": "Image"}]}  # fmt: skip
+    cmd = command()
+    cmd["data"]["workflow"]["nodes"] = {"pic": {"kind": "t/pic", "params": {}},
+                                        "output": {"kind": "output", "params": {}, "in": {"media": "pic.image"}}}  # fmt: skip
+    js = FakeJS()
+    c = consumer(js, impls=IMPLS | {"t/pic": Node(make)}, node_schemas=SCHEMAS | {"t/pic": schema})
+    await c.handle(FakeMsg(cmd, js))
+    assert kinds(js) == ["running", "output", "succeeded"]
+    assert list(c.store.objects) == [PREFIX + "0.thumb.webp", PREFIX + "0.png"]
+    webp, ct = c.store.objects[PREFIX + "0.thumb.webp"]
+    out = js.events()[1]["data"]
+    assert ct == "image/webp" and schemas.message_errors(js.events()[1]) == []
+    assert out["thumb"] == {
+        "key": PREFIX + "0.thumb.webp",
+        "width": 683,
+        "height": 512,
+        "bytes": len(webp),
+    }
