@@ -1107,7 +1107,8 @@ func eligibleIn(reg *registry.Registry, values []registry.Host, reserved map[str
 	// API 1.36 (contracts/README.md "Optional add-ons"): a node that is not bypassed needs each add-on its kind loads
 	// present in the host's models entry of its family; from 1.40 not when that entry does not list it, or lists it
 	// for other variants than the run's (the distilled LoRA is Dev's) or for the other task (`refs`: Qwen's PE-I2I is
-	// an edit's, a run whose graph holds an Image value)
+	// an edit's, a run whose graph holds an Image value); from 1.41 also those its enum params' resolved values ask for
+	// (NodeAddons: MiniMax H3's lora turbo, with a reference Turbo Ref LoRA instead)
 	refs := len(images(graph)) > 0
 	for _, id := range slices.Sorted(maps.Keys(graph)) {
 		node := graph[id]
@@ -1123,7 +1124,7 @@ func eligibleIn(reg *registry.Registry, values []registry.Host, reserved map[str
 		// stage loads no add-on, needs none)
 		var needs []string
 		for _, host := range hosts {
-			for _, c := range reg.Addons(host+"."+env, node.Kind) {
+			for _, c := range reg.NodeAddons(host+"."+env, node) {
 				if !slices.Contains(needs, c) {
 					needs = append(needs, c)
 				}
@@ -1132,7 +1133,7 @@ func eligibleIn(reg *registry.Registry, values []registry.Host, reserved map[str
 		for _, c := range needs {
 			title := c
 			hosts = slices.DeleteFunc(hosts, func(host string) bool {
-				if !slices.Contains(reg.Addons(host+"."+env, node.Kind), c) {
+				if !slices.Contains(reg.NodeAddons(host+"."+env, node), c) {
 					return false
 				}
 				found, _ := reg.Model(host+"."+env, family)

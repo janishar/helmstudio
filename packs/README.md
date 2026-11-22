@@ -219,7 +219,12 @@ Keys the core understands; anything else is ignored:
   runner that runs one of them (ltx's two add-ons are the Mac's). Also from 1.40 the `addon` block may carry
   `refs` (the task whose runs need it: true = a run with references, an edit; false = one without; absent = both:
   Qwen's PE-I2I and PE-T2I), `short` (the name in `<short> not downloaded`, the controls' and the stage's refusal;
-  absent = `title`) and `tag` (the Models card's mono line; absent = the component id).
+  absent = `title`) and `tag` (the Models card's mono line; absent = the component id). From API 1.41 an add-on may
+  be needed by one value of a stage's enum param instead: the param's `addons: {<value>: [<name>]}` and
+  `addons_with: {<input or rows param>: {<value>: [<name>]}}` (that list instead while the input is wired or the rows
+  hold a row), published as they are; the stage reads the file itself (`core.pack.value_addons` gives the names).
+  MiniMax H3's `generate.lora: turbo` needs `turbo`, with any reference `turbo_ref`. Two add-ons may share a `dir`
+  (`MiniMax-H3-Turbo`): each then goes by its own `files` there (presence, its download marker, delete).
 - **`lora`** (optional; contracts/README.md "LoRAs", "LoRA normaliser"): `component` (the component LoRAs patch),
   `renames` (ordered `{from, to[, at: end]}` rewrites of a key's module part: a prefix, or with `at: end` a suffix,
   as ltx's `.to_out.0` → `.to_out`), `runtime` (optional: the one runtime the block holds for; ltx's is `mlx`, so

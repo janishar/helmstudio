@@ -1,0 +1,305 @@
+/* helmstudio's patch, not upstream h3.c (VERSION, patches/h3-lora.diff):
+ * merge a Diffusers/PEFT MiniMax-H3 LoRA (lightx2v's Turbo layout) into the
+ * DiT's BF16 weights as h3 loads them, before its int8 quantizer sees them.
+ * From docs/reference-notes/h3-turbo-spike, quiet: one summary line
+ * ("h3 lora: merged 363 modules in 17.2 s"), and every failure an
+ * "h3 lora: " line plus a 0 return (h3 then fails "cannot merge LoRA into
+ * <name>"), never an exit.
+ *
+ * Env: H3_LORA = the file (unset or empty: off), H3_LORA_STRENGTH (default
+ * 1). Scale = strength x alpha / rank, alpha the module's own `.alpha`
+ * tensor, else the rank (never the file's metadata alpha: the FL2V file's 128
+ * is wrong for its rank-16 AdaLN modules).
+ *
+ * Key map (PEFT -> native): transformer_blocks.N -> blocks.N,
+ * token_refiner.refiner_blocks.N -> token_refiner.blocks.N; attn.to_q/k/v ->
+ * the per-head interleaved attn.qkv_proj rows ((r/128)*384 + slot*128 +
+ * r%128); attn.to_out.0 -> attn.out_proj; ff.net.0.proj -> mlp.fc1;
+ * ff.net.2 -> mlp.fc2; adaln_proj.linear -> itself; norm_out.linear ->
+ * final_layer.adaln_proj.linear.
+ *
+ * Rounding: the delta is far below one bf16 ulp / int8 step for most
+ * elements, so round-to-nearest keeps only ~6-15 % of it; stochastic
+ * rounding, seeded by the tensor name (a merge repeats bit for bit), keeps it
+ * in expectation. For the DiT linears h3 quantizes to int8 at load
+ * (per-row absmax/127, rint) it writes bf16(q * s), so that quantizer
+ * reproduces q = SR(v / s) exactly.
+ * ponytail: CPU sgemm per weight at load (~17 s a run); a Metal merge if load
+ * time ever matters. */
+#define ACCELERATE_NEW_LAPACK /* the cblas of macOS 13.3+ (no deprecation) */
+#include "h3_lora.h"
+#include "h3_safetensors.h"
+
+#include <Accelerate/Accelerate.h>
+#include <dispatch/dispatch.h>
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
+static const char lora_a[] = ".lora_A.default.weight";
+
+static int initialized, lora_open, lora_bad, reported;
+static h3_st_header lora;
+static float strength = 1.0f;
+static int modules_total, merged_count;
+static double merge_seconds;
+
+static double now(void) {
+    struct timespec t;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return (double)t.tv_sec + (double)t.tv_nsec * 1e-9;
+}
+
+static void report(void) {
+    if (reported || !lora_open || lora_bad) return;
+    reported = 1;
+    /* a line of its own: h3's progress lines end in \r, not \n */
+    if (merged_count == modules_total)
+        fprintf(stderr, "\nh3 lora: merged %d modules in %.1f s\n",
+                merged_count, merge_seconds);
+    else
+        fprintf(stderr, "\nh3 lora: merged %d of %d modules in %.1f s\n",
+                merged_count, modules_total, merge_seconds);
+}
+
+static void init(void) {
+    if (initialized) return;
+    initialized = 1;
+    const char *path = getenv("H3_LORA");
+    if (!path || !*path) return;
+    char error[512];
+    if (!h3_st_read_header(path, &lora, error, sizeof(error))) {
+        fprintf(stderr, "h3 lora: %s\n", error);
+        lora_bad = 1;
+        return;
+    }
+    lora_open = 1;
+    size_t suffix = strlen(lora_a);
+    for (size_t i = 0; i < lora.tensor_count; i++) {
+        size_t n = strlen(lora.tensors[i].name);
+        if (n > suffix && !strcmp(lora.tensors[i].name + n - suffix, lora_a))
+            modules_total++;
+    }
+    if (!modules_total) {
+        fprintf(stderr, "h3 lora: %s holds no Diffusers/PEFT LoRA "
+                "(*.lora_A.default.weight) keys\n", path);
+        lora_bad = 1;
+        return;
+    }
+    const char *s = getenv("H3_LORA_STRENGTH");
+    if (s && *s) strength = strtof(s, NULL);
+    atexit(report); /* fewer layers load fewer modules: said at exit */
+}
+
+static float bf16_to_f32(uint16_t v) {
+    uint32_t bits = (uint32_t)v << 16;
+    float f;
+    memcpy(&f, &bits, sizeof(f));
+    return f;
+}
+
+/* 1 with *out = the tensor as f32 (NULL when the file lacks it), 0 on a
+ * failure. */
+static int read_f32(const char *name, float **out, uint64_t *rows,
+                    uint64_t *cols) {
+    *out = NULL;
+    const h3_st_tensor *t = h3_st_find(&lora, name);
+    if (!t) return 1;
+    if (t->dtype != H3_DTYPE_BF16) {
+        fprintf(stderr, "h3 lora: %s is %s, not bf16\n", name,
+                h3_dtype_name(t->dtype));
+        return 0;
+    }
+    uint64_t n = h3_st_tensor_elements(t);
+    if (rows) *rows = t->ndim == 2 ? t->shape[0] : 1;
+    if (cols) *cols = t->ndim == 2 ? t->shape[1] : n;
+    uint16_t *raw = malloc(n * 2);
+    float *f = malloc(n * sizeof(float));
+    char error[512];
+    if (!raw || !f ||
+        !h3_st_read_data(&lora, t, raw, n * 2, error, sizeof(error))) {
+        fprintf(stderr, "h3 lora: cannot read %s\n", name);
+        free(raw);
+        free(f);
+        return 0;
+    }
+    for (uint64_t i = 0; i < n; i++) f[i] = bf16_to_f32(raw[i]);
+    free(raw);
+    *out = f;
+    return 1;
+}
+
+/* Add scale * B @ A of one LoRA module into weight rows; 1 when added or
+ * absent from the file, 0 on a failure. grouped: the module is q (0), k (1)
+ * or v (2) of H3's per-head interleaved qkv_proj (-1: not grouped). */
+static int add_module(float *weight, uint64_t rows, uint64_t cols,
+                      const char *prefix, int grouped) {
+    char name[256];
+    uint64_t ar = 0, ac = 0, br = 0, bc = 0;
+    float *a, *b, *alpha_t;
+    snprintf(name, sizeof(name), "%s.lora_A.default.weight", prefix);
+    if (!read_f32(name, &a, &ar, &ac)) return 0;
+    snprintf(name, sizeof(name), "%s.lora_B.default.weight", prefix);
+    if (!read_f32(name, &b, &br, &bc)) {
+        free(a);
+        return 0;
+    }
+    if (!a || !b) {
+        free(a);
+        free(b);
+        return 1;
+    }
+    uint64_t want_rows = grouped >= 0 ? rows / 3 : rows;
+    if (ac != cols || bc != ar || br != want_rows) {
+        fprintf(stderr, "h3 lora: %s is A[%llu,%llu] B[%llu,%llu]; the "
+                "weight is [%llu,%llu]\n", prefix,
+                (unsigned long long)ar, (unsigned long long)ac,
+                (unsigned long long)br, (unsigned long long)bc,
+                (unsigned long long)rows, (unsigned long long)cols);
+        free(a);
+        free(b);
+        return 0;
+    }
+    float alpha = (float)ar;
+    snprintf(name, sizeof(name), "%s.alpha", prefix);
+    if (!read_f32(name, &alpha_t, NULL, NULL)) {
+        free(a);
+        free(b);
+        return 0;
+    }
+    if (alpha_t) {
+        alpha = alpha_t[0];
+        free(alpha_t);
+    }
+    float scale = strength * alpha / (float)ar;
+    const uint64_t chunk = 2048;
+    float *delta = malloc(chunk * cols * sizeof(float));
+    if (!delta) {
+        fprintf(stderr, "h3 lora: out of memory merging %s\n", prefix);
+        free(a);
+        free(b);
+        return 0;
+    }
+    for (uint64_t r0 = 0; r0 < br; r0 += chunk) {
+        uint64_t n = br - r0 < chunk ? br - r0 : chunk;
+        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, (int)n,
+                    (int)cols, (int)ar, scale, b + r0 * ar, (int)ar, a,
+                    (int)cols, 0.0f, delta, (int)cols);
+        for (uint64_t i = 0; i < n; i++) {
+            uint64_t src = r0 + i;
+            uint64_t dst = grouped >= 0
+                ? (src / 128) * 384 + (uint64_t)grouped * 128 + src % 128
+                : src;
+            float *row = weight + dst * cols;
+            const float *d = delta + i * cols;
+            for (uint64_t c = 0; c < cols; c++) row[c] += d[c];
+        }
+    }
+    free(delta);
+    free(a);
+    free(b);
+    merged_count++;
+    return 1;
+}
+
+int h3_lora_apply(const char *name, h3_gpu_tensor *tensor, uint64_t rows,
+                  uint64_t cols) {
+    init();
+    if (lora_bad) return 0;
+    if (!lora_open) return 1;
+    unsigned layer;
+    char tail[128], base[96];
+    const char *refiner = "token_refiner.blocks.";
+    int is_refiner = strncmp(name, refiner, strlen(refiner)) == 0;
+    const char *rest = is_refiner ? name + strlen(refiner) :
+        (strncmp(name, "blocks.", 7) == 0 ? name + 7 : NULL);
+    const char *modules[3] = {NULL, NULL, NULL};
+    int grouped = -1;
+    if (!strcmp(name, "final_layer.adaln_proj.linear.weight")) {
+        snprintf(base, sizeof(base), "norm_out");
+        modules[0] = "linear";
+    } else if (rest && sscanf(rest, "%u.%127s", &layer, tail) == 2) {
+        snprintf(base, sizeof(base), "%s.%u",
+                 is_refiner ? "token_refiner.refiner_blocks" :
+                              "transformer_blocks", layer);
+        if (!strcmp(tail, "attn.qkv_proj.weight")) {
+            modules[0] = "attn.to_q";
+            modules[1] = "attn.to_k";
+            modules[2] = "attn.to_v";
+            grouped = 0;
+        } else if (!strcmp(tail, "attn.out_proj.weight")) {
+            modules[0] = "attn.to_out.0";
+        } else if (!strcmp(tail, "mlp.fc1.weight")) {
+            modules[0] = "ff.net.0.proj";
+        } else if (!strcmp(tail, "mlp.fc2.weight")) {
+            modules[0] = "ff.net.2";
+        } else if (!strcmp(tail, "adaln_proj.linear.weight")) {
+            modules[0] = "adaln_proj.linear";
+        }
+    }
+    if (!modules[0]) return 1;
+    double started = now();
+    size_t elements = (size_t)(rows * cols);
+    uint16_t *raw = malloc(elements * 2);
+    float *weight = malloc(elements * sizeof(float));
+    if (!raw || !weight || !h3_gpu_tensor_read_bf16(tensor, raw, elements)) {
+        fprintf(stderr, "h3 lora: cannot read %s\n", name);
+        free(raw);
+        free(weight);
+        return 0;
+    }
+    for (size_t i = 0; i < elements; i++) weight[i] = bf16_to_f32(raw[i]);
+    int before = merged_count, ok = 1;
+    for (int i = 0; ok && i < 3 && modules[i]; i++) {
+        char prefix[256];
+        snprintf(prefix, sizeof(prefix), "%s.%s", base, modules[i]);
+        ok = add_module(weight, rows, cols, prefix, grouped >= 0 ? i : -1);
+    }
+    if (ok && merged_count != before) {
+        int int8 = !is_refiner && strncmp(name, "blocks.", 7) == 0 &&
+                   strstr(name, "adaln") == NULL;
+        uint64_t seed = 0x9E3779B97F4A7C15ull;
+        for (const char *c = name; *c; c++)
+            seed = (seed ^ (uint8_t)*c) * 0x100000001B3ull;
+        dispatch_apply((size_t)rows,
+                       dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0),
+                       ^(size_t r) {
+            uint64_t state = (seed ^ (r * 0xD1B54A32D192ED03ull)) | 1u;
+            float *v = weight + r * cols;
+            uint16_t *out = raw + r * cols;
+            float s = 0.0f;
+            if (int8) {
+                for (uint64_t c = 0; c < cols; c++)
+                    s = fabsf(v[c]) > s ? fabsf(v[c]) : s;
+                s = s > 0 ? s / 127.0f : 1.0f / 127.0f;
+            }
+            for (uint64_t c = 0; c < cols; c++) {
+                state ^= state << 13; state ^= state >> 7; state ^= state << 17;
+                float u = (float)(state >> 40) / 16777216.0f;
+                if (int8) {
+                    float q = floorf(v[c] / s + u);
+                    q = q > 127 ? 127 : (q < -127 ? -127 : q);
+                    float x = q * s;
+                    uint32_t bits;
+                    memcpy(&bits, &x, sizeof(bits));
+                    bits += 0x7FFFu + ((bits >> 16) & 1u);
+                    out[c] = (uint16_t)(bits >> 16);
+                } else {
+                    uint32_t bits;
+                    memcpy(&bits, &v[c], sizeof(bits));
+                    bits += (uint32_t)(u * 65536.0f);
+                    out[c] = (uint16_t)(bits >> 16);
+                }
+            }
+        });
+        ok = h3_gpu_tensor_write_bf16(tensor, raw, elements);
+        if (!ok) fprintf(stderr, "h3 lora: cannot write %s\n", name);
+    }
+    free(raw);
+    free(weight);
+    merge_seconds += now() - started;
+    if (ok && merged_count == modules_total) report();
+    return ok;
+}

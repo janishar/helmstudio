@@ -13,6 +13,9 @@ import {
   pinnedMachine,
   versionDim,
   versionRow,
+  valueBlock,
+  valueNeeds,
+  valueNeedsAt,
   type Machine,
 } from "@/lib/run-on";
 
@@ -306,5 +309,103 @@ describe("add-ons scoped to variants (API 1.40)", () => {
     expect(addonBlocks(needs, gcp)).toEqual({});
     expect(machineReason(gcp, "torch", [], needs)).toBeNull();
     expect(addonBlocks(needs, mac)).toEqual({ detail: "Detailer not downloaded on mac" });
+  });
+});
+
+// API 1.41 (contracts/README.md Optional add-ons: an add-on per value; docs/mock/H3Options.dc.html frames 11-13):
+// MiniMax H3's lora turbo needs Turbo LoRA, with a reference Turbo Ref LoRA instead
+describe("an add-on per value (API 1.41)", () => {
+  const [mac, gcp] = machines([
+    host("mac", "native", "mps", "Apple M5 Pro"),
+    host("gcp", "native", "cuda", "RTX PRO 6000"),
+  ]);
+  const w = {
+    nodes: { generate: { kind: "minimax-h3/generate" } },
+    node_schemas: {
+      "minimax-h3/generate": {
+        kind: "minimax-h3/generate",
+        family: "minimax-h3",
+        params: [
+          {
+            name: "lora",
+            type: "enum",
+            default: "none",
+            enum: ["none", "turbo"],
+            addons: { turbo: ["turbo"] },
+            addons_with: { refs: { turbo: ["turbo_ref"] }, videos: { turbo: ["turbo_ref"] } },
+          },
+        ],
+        inputs: [],
+        outputs: [],
+      },
+    },
+  } as unknown as S<"Workflow">;
+  // both hosts list both add-ons (the add-on is of both variants): missing unless given
+  const on = (x: Record<string, string>) =>
+    ["mac", "gcp"].map((host) => ({ host, state: x[host] ?? "missing" }));
+  const list = (turbo: Record<string, string>, ref: Record<string, string>) =>
+    ({
+      hosts: ["mac", "gcp"].map((h) => ({ host: h, live: true })),
+      models: [
+        {
+          ...model,
+          id: "minimax-h3",
+          family: "minimax-h3",
+          variants: [variant("Base", ["mac"]), variant("Base fp8", ["gcp"])],
+          addons: [
+            { component: "turbo", title: "Turbo LoRA", hosts: on(turbo) },
+            { component: "turbo_ref", title: "Turbo Ref LoRA", hosts: on(ref) },
+          ],
+        },
+      ],
+    }) as unknown as S<"ModelList">;
+  const none = () => false;
+  const refs = (n: string) => n === "refs";
+
+  it("lists each value's add-ons and picks by what is wired", () => {
+    const needs = valueNeeds(w, list({ mac: "present" }, {}));
+    expect(needs.map((n) => [n.field, n.value, n.component, n.with ?? null])).toEqual([
+      ["generate.lora", "turbo", "turbo", null],
+      ["generate.lora", "turbo", "turbo_ref", "refs"],
+      ["generate.lora", "turbo", "turbo_ref", "videos"],
+    ]);
+    expect(valueNeedsAt(needs, "generate.lora", "turbo", none).map((n) => n.title)).toEqual([
+      "Turbo LoRA",
+    ]);
+    expect(valueNeedsAt(needs, "generate.lora", "turbo", refs).map((n) => n.title)).toEqual([
+      "Turbo Ref LoRA",
+    ]);
+    expect(valueNeedsAt(needs, "generate.lora", "none", refs)).toEqual([]);
+  });
+
+  it("greys the option without a reference when no host that can run it has Turbo LoRA (frame 11)", () => {
+    const needs = valueNeeds(w, list({ gcp: "present" }, { mac: "present" }));
+    // Base runs on the Mac only: gcp's copy does not count
+    expect(valueBlock(needs, "generate.lora", "turbo", none, [mac])).toBe(
+      "Turbo LoRA not downloaded",
+    );
+    expect(valueBlock(needs, "generate.lora", "none", none, [mac])).toBeNull();
+    expect(valueBlock(needs, "generate.lora", "turbo", none, [mac, gcp])).toBeNull();
+  });
+
+  it("per host under Run on, in the option's own case (frame 12)", () => {
+    const needs = valueNeeds(w, list({ mac: "present" }, {}));
+    expect(valueBlock(needs, "generate.lora", "turbo", none, [mac, gcp], gcp)).toBe(
+      "Turbo LoRA not downloaded on gcp",
+    );
+    expect(valueBlock(needs, "generate.lora", "turbo", none, [mac, gcp], mac)).toBeNull();
+    const held = valueNeedsAt(needs, "generate.lora", "turbo", none);
+    expect(machineReason(gcp, "native", [], held)).toBe("Turbo LoRA not downloaded on gcp");
+    expect(machineReason(mac, "native", [], held)).toBeNull();
+  });
+
+  it("with a reference wired it needs Turbo Ref LoRA, and re-checks when it goes (frame 13)", () => {
+    const needs = valueNeeds(w, list({ mac: "present" }, {}));
+    expect(valueBlock(needs, "generate.lora", "turbo", refs, [mac])).toBe(
+      "Turbo Ref LoRA not downloaded",
+    );
+    expect(valueBlock(needs, "generate.lora", "turbo", none, [mac])).toBeNull();
+    const held = valueNeedsAt(needs, "generate.lora", "turbo", refs);
+    expect(machineReason(mac, "native", [], held)).toBe("Turbo Ref LoRA not downloaded on mac");
   });
 });

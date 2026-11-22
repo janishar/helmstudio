@@ -1,5 +1,8 @@
 # Third-party notices
 
+`h3_lora.c`, `h3_lora.h` and `patches/h3-lora.diff` are helmstudio's (the LoRA merge for lightx2v's MiniMax H3 Turbo
+LoRAs, VERSION), not part of upstream h3.c; they are under the repository's own terms. Everything below is upstream's.
+
 The rectangular Morton decoder and the dynamic symmetric int8 quantization /
 Metal 4 TensorOps scheduling design in `h3_shaders.metal` are adapted from
 ccv's Metal FlashAttention `NAMatMulKernel` and `NAInt8MatMulKernel`,

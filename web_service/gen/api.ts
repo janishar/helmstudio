@@ -598,7 +598,9 @@ export interface paths {
          *     From 1.36 a node that is not bypassed and needs an optional add-on (its NodeSchema `addons`) is eligible only
          *     on a host where the add-on is present: set to a host without it, 422 `<node>: <title> not downloaded on host
          *     <host>`; otherwise the run fails `<node>: <title> not downloaded on any live host for env <env>`
-         *     (contracts/README.md, Optional add-ons).
+         *     (contracts/README.md, Optional add-ons). From 1.41 so does an enum param's value that needs one (ParamSchema
+         *     `addons`, swapped by `addons_with` while a named input is wired or rows param holds a row: MiniMax H3's
+         *     `lora: turbo` needs Turbo LoRA, with a reference Turbo Ref LoRA), with the same texts.
          *     409 when the caller already has 100 runs queued or running (any session): `You have 100 runs queued or
          *     running; wait for some to finish.`
          *
@@ -2730,6 +2732,16 @@ export interface components {
             max_total_s?: number;
             /** @description from 1.22, rows only: optional inputs of the same node; while one is wired the rows must stay empty (`<node>.<param>: must stay empty while <node>.<input> is wired`) */
             not_with?: string[];
+            /** @description from 1.41, enum only: value → the optional add-ons (Model.addons[].component of the node's family) a run needs while the param holds that value (MiniMax H3's `lora`: `turbo` → [turbo]); the run check counts them as the node's `addons` on its resolved value (never while the node is bypassed) and the form greys that option, and every preset that sets it, with `<title> not downloaded` (contracts/README.md, Optional add-ons). Absent = none */
+            addons?: {
+                [key: string]: string[];
+            };
+            /** @description from 1.41, with `addons`: `<name>` (an optional input of the node, or one of its rows params) → {value → add-ons}: while that input is wired or that rows param holds a row its list replaces the value's `addons` list, several names' lists together (MiniMax H3: any reference runs Ref2VA, so `turbo` then needs `turbo_ref`) */
+            addons_with?: {
+                [key: string]: {
+                    [key: string]: string[];
+                };
+            };
             /** @description from 1.37, a rows item's media field only: it may be left empty (null or absent; MiniMax H3's `soundtrack`); `max_total_s` and Use in… go by the item's one required media field */
             optional?: boolean;
             /** @description frames only: the name of the same node's int or float param holding frames per second */

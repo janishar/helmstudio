@@ -57,6 +57,40 @@ components:
   text_encoder: {files: "Ref2VA/text_encoder/*.safetensors", dtype: stored, precision: [int8]}
   video_vae: {files: "Ref2VA/video_vae/source/*.safetensors", dtype: stored, precision: [fp32]}
   audio_vae: {files: "Ref2VA/audio_vae/model.safetensors", dtype: stored, precision: [fp32]}
+  # API 1.41 (plan 20 24.11 C2): lightx2v's 8-step Turbo LoRAs, two optional add-ons of both variants, picked by
+  # generate.lora's value (`addons`, `addons_with`): FL2VA runs take turbo, Ref2VA runs (any reference) turbo_ref.
+  # One folder for both (the first variant's does not exist on an NVIDIA host); each add-on's presence, marker and
+  # delete go by its own file (core.models: a `dir` two add-ons share). Diffusers / PEFT keys: h3 merges them at load
+  # (vendor/h3c h3_lora.c, every weight copied: H3_ZERO_COPY_WEIGHTS=0), SGLang applies them (--lora-path). Bytes and
+  # sha256 from the HF API at that revision (2026-11-22). precision [int8] as the others (none would add bf16).
+  turbo:
+    dir: MiniMax-H3-Turbo
+    addon:
+      title: Turbo LoRA
+      tag: v1.2 · 8 steps
+      help: For text, image and first-last to video. The Turbo preset needs it; for Base and Base fp8.
+      source: {repo: lightx2v/Minimax-h3-Turbo, revision: c2bf13b837e33bd851b370285fc7db99482d2ab2,
+               allow_patterns: [minimax_h3_fl2v_turbo_8step_v1.2_768p_bf16.safetensors],
+               licence: minimax-h3-community, must_accept: true, gated: false, bytes: 1543291302}
+    # sha256 4c94278f9207209c193efd489e89c992d225e3fb3986c3658cf992c1e51f7b39; 1089 tensors: 363 modules, each with
+    # its own .alpha (128, AdaLN and norm_out 16)
+    files: minimax_h3_fl2v_turbo_8step_v1.2_768p_bf16.safetensors
+    dtype: stored
+    precision: [int8]
+  turbo_ref:
+    dir: MiniMax-H3-Turbo
+    addon:
+      title: Turbo Ref LoRA
+      tag: v1.1 · 8 steps
+      help: For References. Turbo needs it when references are wired; for Base and Base fp8.
+      source: {repo: lightx2v/Minimax-h3-Turbo, revision: c2bf13b837e33bd851b370285fc7db99482d2ab2,
+               allow_patterns: [minimax_h3_ref2v_turbo_8step_v1.1_768p_bf16.safetensors],
+               licence: minimax-h3-community, must_accept: true, gated: false, bytes: 1383677808}
+    # sha256 46c64fc94509489f18dd1f545172e30c8df7d4cc50a30e96744409b4288c937d; 624 tensors: 312 modules (attention,
+    # MLP, token refiner; no AdaLN or norm_out), no .alpha tensors (alpha = rank: scale 1), metadata alpha 8 unread
+    files: minimax_h3_ref2v_turbo_8step_v1.1_768p_bf16.safetensors
+    dtype: stored
+    precision: [int8]
 stages:
   canvas:
     title: Canvas
@@ -115,6 +149,11 @@ stages:
       audio_flow_shift: {type: float, label: Audio flow shift, default: 3, min: 1, max: 10, step: 0.5,
                          when: "model.variant == 'base-fp8'",
                          help: "How the noise schedule spends its steps on the sound; the model's value is 3."}
+      # API 1.41 (plan 20 24.11 C3): lightx2v's 8-step Turbo LoRA, an optional add-on per value: turbo needs Turbo
+      # LoRA, with any reference (Ref2VA) Turbo Ref LoRA instead. Strength fixed at 1 (owner, 24.12 point 5)
+      lora: {type: enum, label: LoRA, default: none, enum: [none, turbo], addons: {turbo: [turbo]},
+             addons_with: {refs: {turbo: [turbo_ref]}, videos: {turbo: [turbo_ref]}, audios: {turbo: [turbo_ref]}},
+             help: "turbo: lightx2v's 8-step Turbo LoRA (an add-on; References use their own); use 8 steps. Merged at load on a Mac, applied by SGLang on NVIDIA."}
       refs: {type: rows, label: References, default: [], min: 0, max: 9, item: {image: Image},
              mention: "<Picture {n}>",
              help: "Images the prompt names <Picture 1>, <Picture 2>, …; any reference (image, video or audio) switches to the Ref2VA model and cannot go with a first or last frame.",
@@ -157,7 +196,9 @@ stages:
     # size per video; use each take's own size if this ever refuses runs that fit
     # API 1.37: Render shrinks the denoise term (and the video decode), not the fixed part: mp x r, r an upper bound of
     # (k / g)^2 over every grid factor g (plan 20 24.7)
-    peak_gb: "24 + 0.05 * (mp * (1 if render == 'Full' else 0.75 if render == '75%' else 0.6) * frames + 1.04 * min(len(videos) * frames, 360))"
+    # API 1.41: Turbo copies every transformer weight instead of mapping it (H3_ZERO_COPY_WEIGHTS=0): +4.4 GB measured
+    # (20.7 -> 25.0 GB at 864 x 480 x 124), the merge nothing on top (GOTCHAS.md); counted as 4.5
+    peak_gb: "24 + 0.05 * (mp * (1 if render == 'Full' else 0.75 if render == '75%' else 0.6) * frames + 1.04 * min(len(videos) * frames, 360)) + (4.5 if lora == 'turbo' else 0)"
     # fp8 (SGLang, CUDA): the formula is the native budget's, host RAM, unmeasured there (the text encoder's ~27 GB
     # sit in pinned host RAM, layerwise offload); VRAM is not budgeted: SGLang measured 95.8 GB at 1344 x 768 x 345
     # with its own 33 GB FP8 DiT, so this 21 GB pruned one fits the 96 GB card at every size (GOTCHAS.md)

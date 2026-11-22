@@ -602,7 +602,13 @@ def test_minimax_h3_presets_and_advanced_map_onto_h3_flags(tmp_path):
         (Path(native.__file__).parent / "workflows/1-minimax-h3-text-to-video.json").read_text()
     )
     presets = wf["studio"]["presets"]
-    assert wf["studio"]["preset_order"] == ["Draft", "Fast", "Default", "Reference"]
+    assert wf["studio"]["preset_order"] == [
+        "Draft",
+        "Fast",
+        "Turbo",
+        "Default",
+        "Reference",
+    ]  # API 1.41
     params = wf["nodes"]["generate"]["params"]
     assert all(
         params[k.split(".")[1]] == v for k, v in presets["Default"].items()
@@ -624,6 +630,16 @@ def test_minimax_h3_presets_and_advanced_map_onto_h3_flags(tmp_path):
 
     want = {
         "Draft": ["--steps", "4", "--seed", "1", "--layers", "50", "--reuse", "1"],
+        "Turbo": [
+            "--steps",
+            "8",
+            "--seed",
+            "1",
+            "--layers",
+            "50",
+            "--reuse",
+            "1",
+        ],  # + H3_LORA (test_minimax_turbo)
         "Fast": [
             "--steps",
             "20",
@@ -640,6 +656,9 @@ def test_minimax_h3_presets_and_advanced_map_onto_h3_flags(tmp_path):
     }
     for name, values in presets.items():
         p = {k.split(".")[1]: v for k, v in values.items()}
+        p = {
+            k: v for k, v in p.items() if k not in ("lora", "flow_shift", "audio_flow_shift")
+        }  # not h3 flags
         assert flags(**p) == want[name] + ["--use-int8-row-fc2"], name
     assert flags(steps=4, core_reuse=4) == want["Draft"] + [
         "--core-reuse",

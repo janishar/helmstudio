@@ -233,10 +233,34 @@ def addon_globs_in(pack, root: Path) -> list[str]:
             for g in globs(pack, c)]  # fmt: skip
 
 
+def own_folder(pack, component: str) -> bool:
+    """Whether the add-on's folder is its own alone: a `dir` of its own that no other add-on names (API 1.41: MiniMax
+    H3's Turbo LoRA and Turbo Ref LoRA share MiniMax-H3-Turbo, so each goes by its own file there)."""
+    own = pack.component(component).get("dir")
+    return bool(own) and not any(
+        c != component and pack.component(c).get("dir") == own for c in packs.addons(pack)
+    )
+
+
+def marked(pack, component: str, root: Path) -> bool:
+    """An unfinished download's marker in `root` that counts against the add-on: any, unless the folder is shared
+    with another add-on, where only one naming it (its `variant`, download.fetch) does."""
+    try:
+        text = (root / MARKER).read_text()
+    except OSError:
+        return False
+    if own_folder(pack, component) or not pack.component(component).get("dir"):
+        return True
+    try:
+        return json.loads(text).get("variant") in (component, None)
+    except ValueError:
+        return True
+
+
 def addon_files(pack, component: str) -> list[Path]:
-    """An add-on's files, relative to its folder: the whole folder when it is its own, else its globs there."""
+    """An add-on's files, relative to its folder: the whole folder when it is its own alone, else its globs there."""
     files = own_files(addon_folder(pack, component))
-    if pack.component(component).get("dir"):
+    if own_folder(pack, component):
         return files
     return [f for f in files if any(fnmatchcase(f.as_posix(), g) for g in globs(pack, component))]
 
@@ -393,8 +417,8 @@ def addon_entry(pack, c: str) -> dict:
         presence = "mismatch"
     elif (
         addon_weights(pack, c)
-        and not (root / MARKER).exists()
-        and not (addon_dest(pack, c) / MARKER).exists()
+        and not marked(pack, c, root)
+        and not marked(pack, c, addon_dest(pack, c))
     ):
         presence = "present"
     else:
@@ -561,9 +585,8 @@ def delete_variant(pack, vid: str, only: list[str] | None = None) -> tuple[int, 
 
 
 def delete_addon(pack, c: str) -> tuple[int, int]:
-    """Remove an add-on's files (its whole folder when it is its own, else its globs in the first variant's)."""
-    own = pack.component(c).get("dir")
-    return delete_in(addon_folder(pack, c), None if own else globs(pack, c), [])
+    """Remove an add-on's files (its whole folder when it is its own alone, else its globs in its folder)."""
+    return delete_in(addon_folder(pack, c), None if own_folder(pack, c) else globs(pack, c), [])
 
 
 def delete_in(base: Path, only: list[str] | None, addon: list[str]) -> tuple[int, int]:

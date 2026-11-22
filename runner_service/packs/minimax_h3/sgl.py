@@ -12,7 +12,9 @@ frames / 24}, seed, num_inference_steps; API 1.37 `quality` (exact; lossless, SG
 `flow_shift` and `audio_flow_shift` only when they differ from the model's 12 and 3, so a default run's body is
 unchanged (plan 20 24.3 A5; unverified on the VM). SGLang derives the canvas from short edge and aspect (adapt_shape_v1: shape()
 here) and the frames from the duration (4-15 s, snapped up to 5 + 17k), so only canvases and lengths it can make
-exactly are accepted (cuda_error). Polled every POLL s: `progress` (0-99, the denoise) → phase sampling (phase id
+exactly are accepted (cuda_error). API 1.41: `lora: turbo` starts the server with `--lora-path` the add-on file
+native.lora_file picked for the partition (Turbo LoRA for fl2va, Turbo Ref LoRA for ref2va; one server per run, so
+no /set_lora); SGLang's default `--lora-merge-mode auto` keeps it unmerged on the FP8 weights (unverified on the VM). Polled every POLL s: `progress` (0-99, the denoise) → phase sampling (phase id
 sample; the server's start is encode, and once the denoise reaches 99, decode_video: SGLang reports nothing of its
 decode); cancel kills the server (SGLang has no abort). Its MP4 (H.264 + AAC 32 kHz, 24 fps) is the output."""
 
@@ -105,7 +107,7 @@ def request(prompt: str, seed: int, steps: int, size: dict, frames: int, first, 
     return body
 
 
-def argv(model, partition: str, port: int, tmp: Path) -> list[str]:
+def argv(model, partition: str, port: int, tmp: Path, lora: Path | None = None) -> list[str]:
     transformer = model.files(f"transformer_{partition}")[0]
     (te,) = model.files("text_encoder")
     # --backend sglang --pipeline-class-name: SGLang picks its native H3 pipeline only for a folder named MiniMax-H3
@@ -117,7 +119,8 @@ def argv(model, partition: str, port: int, tmp: Path) -> list[str]:
             "--layerwise-offload-components", "text_encoder",
             "--component-attention-backends", "text_encoder=torch_sdpa",
             "--warmup-mode", "off", "--host", "127.0.0.1", "--port", str(port),
-            "--output-path", str(tmp / "out"), "--input-save-path", str(tmp / "in")]  # fmt: skip
+            "--output-path", str(tmp / "out"), "--input-save-path", str(tmp / "in"),
+            *(["--lora-path", str(lora)] if lora else [])]  # fmt: skip
 
 
 def free_port() -> int:
@@ -174,15 +177,15 @@ def wait(ctx, port: int, job: str) -> None:
         time.sleep(POLL)
 
 
-def generate(ctx, model, body: dict, out: Path, tmp: Path) -> None:
-    """Start the partition's server, run `body`, write its MP4 to `out`."""
+def generate(ctx, model, body: dict, out: Path, tmp: Path, lora: Path | None = None) -> None:
+    """Start the partition's server (with `lora`: its LoRA), run `body`, write its MP4 to `out`."""
     if not SGLANG.is_file():
         raise RunError(
             f"{ctx.node}: SGLang is not installed (the runner-cuda-native image, Dockerfile.cuda target native)"
         )
     partition = "ref2va" if body["task"] == "ref2va" else "fl2va"
     ctx.progress(1, 1, "starting sglang", "encode")  # a phase without steps: 1 of 1
-    with child.serve(ctx, argv(model, partition, free_port(), tmp), cwd=tmp, name="sglang",
+    with child.serve(ctx, argv(model, partition, free_port(), tmp, lora), cwd=tmp, name="sglang",
                      ready=READY, ready_s=READY_S) as port:  # fmt: skip
         job = json.loads(call(ctx.node, port, "/v1/videos", body))["id"]
         wait(ctx, port, job)

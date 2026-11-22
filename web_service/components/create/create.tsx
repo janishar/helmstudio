@@ -128,8 +128,12 @@ import {
   needed,
   chosenVariants,
   clashNote,
+  machineReason,
   machines,
   pinnedMachine,
+  valueBlock,
+  valueNeeds,
+  valueNeedsAt,
   versionRow,
 } from "@/lib/run-on";
 import {
@@ -511,6 +515,33 @@ export function Create({
   const forced = Object.fromEntries(Object.keys(blocks).map((n) => [`${n}.bypass`, true]));
   const raws =
     Object.keys(pins).length || Object.keys(forced).length ? { ...held, ...pins, ...forced } : held;
+  // (API 1.41) an add-on one value of a param asks for (MiniMax H3's lora turbo: Turbo LoRA, with a reference Turbo
+  // Ref LoRA): that option and every preset that picks it are greyed where the run may go, and a form that holds it
+  // anyway keeps it, greyed, with Generate blocked (it never drops to another value by itself; H3Options 11-13)
+  const allValueNeeds = useMemo(() => valueNeeds(workflow, modelList), [workflow, modelList]);
+  const valueOn = (node: string) =>
+    (raws[`${node}.bypass`] ?? workflow?.nodes[node]?.bypass) !== true;
+  const wiredIn = (node: string) => (name: string) => {
+    const v = raws[`${node}.${name}`] ?? all.find((f) => f.key === `${node}.${name}`)?.initial;
+    return (Array.isArray(v) && v.length > 0) || !!workflow?.nodes[node]?.in?.[name];
+  };
+  const canRun = machineList.filter(
+    (mc) => machineReason(mc, workflow?.env, chosenModels) === null,
+  );
+  const valueBlocks: Record<string, Record<string, string>> = {};
+  const heldNeeds: typeof allValueNeeds = [];
+  let heldBlock: string | null = null;
+  for (const f of all.filter((x) =>
+    allValueNeeds.some((n) => n.field === x.key && valueOn(n.node)),
+  )) {
+    const cur = String(raws[f.key] ?? toRaw(f.initial, f.param));
+    for (const o of f.param.enum ?? []) {
+      const why = valueBlock(allValueNeeds, f.key, o, wiredIn(f.node), canRun, runOn);
+      if (why) (valueBlocks[f.key] ??= {})[o] = why;
+    }
+    heldNeeds.push(...valueNeedsAt(allValueNeeds, f.key, cur, wiredIn(f.node)));
+    heldBlock ??= valueBlocks[f.key]?.[cur] ?? null;
+  }
   // what the form held in each workflow when it was left: a value that did not suit the next one comes back
   const left = useRef<Record<string, Record<string, Raw>>>({});
   // a workflow with a Studio block shows exactly what it places (lib/studio.ts)
@@ -953,7 +984,8 @@ export function Create({
   const sending = useRef(false);
   async function generate(e: React.FormEvent) {
     e.preventDefault();
-    if (workflow && !blocked && !notDownloaded && !runOnOffline) await send(workflow, fields);
+    if (workflow && !blocked && !notDownloaded && !runOnOffline && !heldBlock)
+      await send(workflow, fields);
   }
   /** Queues runs of `w` (Graph view passes the version it just saved) with the form's settings for it. */
   async function send(w: S<"Workflow">, fields: Field[]) {
@@ -1723,9 +1755,13 @@ export function Create({
                     chosen={runOn}
                     env={workflow?.env}
                     picks={chosenVariants(all, raws, modelList)}
-                    needs={needs.filter(
-                      (n) => (raws[`${n.node}.bypass`] ?? workflow?.nodes[n.node]?.bypass) !== true,
-                    )}
+                    needs={[
+                      ...needs.filter(
+                        (n) =>
+                          (raws[`${n.node}.bypass`] ?? workflow?.nodes[n.node]?.bypass) !== true,
+                      ),
+                      ...heldNeeds,
+                    ]}
                     onPick={(h) => {
                       setRunOnHost(h);
                       setRunNote("");
@@ -1784,7 +1820,8 @@ export function Create({
                   noVoice ||
                   badLine > 0 ||
                   notDownloaded ||
-                  runOnOffline
+                  runOnOffline ||
+                  !!heldBlock
                 }
               >
                 <span className="text-sm">
@@ -1804,6 +1841,8 @@ export function Create({
                 </span>
                 {badLine > 0 && !busy ? (
                   <span className="mono text-[11px] font-medium">Fix line {badLine} first</span>
+                ) : heldBlock && !busy && !runOnOffline ? (
+                  <span className="mono text-[11px] font-medium">{heldBlock}</span>
                 ) : runOnOffline && !busy ? (
                   <span className="mono text-[11px] font-medium">{runOn.label} is offline</span>
                 ) : pinned && !busy ? (
@@ -1904,6 +1943,7 @@ export function Create({
             }
             voice={audio ? voiceCtx : undefined}
             blocks={blocks}
+            valueBlocks={valueBlocks}
           />
         )}
         {audio && !elementsAside && <SpeechOutput take={rateTake} text={texts[0] ?? ""} />}

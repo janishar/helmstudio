@@ -100,8 +100,8 @@ class _Child:
     ready line, LIVE and the pid file set; stop() kills the group (if still running) and clears them."""
 
     def __init__(self, argv: list[str], cwd: Path, name: str, phases: dict[str, str | tuple] | None = None,
-                 ready: re.Pattern | None = None, loose: bool = False) -> None:  # fmt: skip
-        self.proc = subprocess.Popen(argv, cwd=cwd, env=child_env(name), stdin=subprocess.DEVNULL,
+                 ready: re.Pattern | None = None, loose: bool = False, env: dict | None = None) -> None:  # fmt: skip
+        self.proc = subprocess.Popen(argv, cwd=cwd, env=child_env(name) | (env or {}), stdin=subprocess.DEVNULL,
                                      stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, start_new_session=True)  # fmt: skip
         LIVE["pid"] = self.proc.pid
         with contextlib.suppress(OSError):
@@ -187,12 +187,12 @@ class _Child:
         return last_line("\n".join(diag)) if diag else f"exited with status {code}"
 
 
-def run(
-    ctx, argv: list[str], *, cwd: Path, name: str, phases: dict[str, str | tuple], idle_s: float
-) -> None:
+def run(ctx, argv: list[str], *, cwd: Path, name: str, phases: dict[str, str | tuple], idle_s: float,
+        env: dict[str, str] | None = None) -> None:  # fmt: skip
     """Run `argv` (argv[0] an absolute binary path) in `cwd` until it exits 0; RunError otherwise (see the module
-    doc). Every path in `argv` must be absolute (cwd is the binary's folder)."""
-    c = _Child(argv, cwd, name, phases)
+    doc). Every path in `argv` must be absolute (cwd is the binary's folder). `env` is merged over child_env (the
+    stage's own knobs for this run: MiniMax H3's H3_LORA)."""
+    c = _Child(argv, cwd, name, phases, env=env)
     sent = None
     try:
         while not c.gone(POLL):

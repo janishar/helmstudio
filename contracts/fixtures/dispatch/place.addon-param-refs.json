@@ -1,0 +1,103 @@
+{
+  "description": "From 1.41: with a reference wired (refs holds a row) lora turbo needs Turbo Ref LoRA instead (addons_with); the run is set to mac, which has only Turbo LoRA",
+  "hosts": {
+    "mac": {
+      "keys": {
+        "native": {
+          "state": "fresh",
+          "budget_gb": 52,
+          "resident": []
+        }
+      },
+      "workflows": {
+        "native": [
+          "minimax-h3-text-to-video"
+        ]
+      },
+      "variants": {
+        "native": {
+          "minimax-h3/base": [
+            "int8"
+          ]
+        }
+      },
+      "loras": {
+        "native": []
+      },
+      "free": true,
+      "idle_since": null,
+      "addons": {
+        "native": [
+          "minimax-h3/turbo"
+        ]
+      }
+    }
+  },
+  "run": {
+    "env": "native",
+    "workflow": "minimax-h3-text-to-video",
+    "model": "minimax-h3",
+    "variant": "base",
+    "precision": "int8",
+    "loras": [],
+    "peak_gb": 31.0,
+    "needs": [],
+    "addons": [
+      {
+        "node": "generate",
+        "kind": "minimax-h3/generate",
+        "component": "turbo",
+        "title": "Turbo LoRA",
+        "param": "lora",
+        "value": "turbo"
+      },
+      {
+        "node": "generate",
+        "kind": "minimax-h3/generate",
+        "component": "turbo_ref",
+        "title": "Turbo Ref LoRA",
+        "param": "lora",
+        "value": "turbo",
+        "with": "refs"
+      },
+      {
+        "node": "generate",
+        "kind": "minimax-h3/generate",
+        "component": "turbo_ref",
+        "title": "Turbo Ref LoRA",
+        "param": "lora",
+        "value": "turbo",
+        "with": "videos"
+      },
+      {
+        "node": "generate",
+        "kind": "minimax-h3/generate",
+        "component": "turbo_ref",
+        "title": "Turbo Ref LoRA",
+        "param": "lora",
+        "value": "turbo",
+        "with": "audios"
+      }
+    ],
+    "params": {
+      "generate": {
+        "lora": "turbo",
+        "refs": [
+          {
+            "image": {
+              "take_id": "t1"
+            }
+          }
+        ],
+        "videos": [],
+        "audios": []
+      }
+    },
+    "host": "mac"
+  },
+  "expect": {
+    "host": null,
+    "eligible": [],
+    "error": "generate: Turbo Ref LoRA not downloaded on host mac"
+  }
+}

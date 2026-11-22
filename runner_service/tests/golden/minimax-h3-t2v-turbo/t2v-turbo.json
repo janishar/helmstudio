@@ -1,0 +1,82 @@
+{
+  "name": "t2v-turbo",
+  "prompt": "A red fox trots through a snowy pine forest, snow falling softly, wind in the trees, the crunch of paws on fresh snow.",
+  "width": 512,
+  "height": 512,
+  "frames": 22,
+  "steps": 8,
+  "seed": 42,
+  "fps": 24,
+  "params": {
+    "layers": 50,
+    "reuse": 1,
+    "core_reuse": 1,
+    "token_reduction": false,
+    "render": "Full",
+    "lora": "turbo"
+  },
+  "flags": [
+    "--layers",
+    "50",
+    "--reuse",
+    "1",
+    "--use-int8-row-fc2"
+  ],
+  "env": {
+    "H3_LORA": "MiniMax-H3-Turbo/minimax_h3_fl2v_turbo_8step_v1.2_768p_bf16.safetensors",
+    "H3_LORA_STRENGTH": "1",
+    "H3_ZERO_COPY_WEIGHTS": "0"
+  },
+  "inputs": {},
+  "mp4": {
+    "file": "t2v-turbo-512x512-22f-s42.mp4",
+    "streams": [
+      {
+        "index": 0,
+        "codec_name": "h264",
+        "codec_type": "video",
+        "width": 512,
+        "height": 512
+      },
+      {
+        "index": 1,
+        "codec_name": "aac",
+        "codec_type": "audio",
+        "width": null,
+        "height": null
+      }
+    ]
+  },
+  "rgb24_sha256": "eccf18400f306c6d4e5b2ddd3009ef3d1385b5ebf11492d967ba2ca52abf027c",
+  "pcm_f32le_sha256": "ce44865e6ead2c85ec8e275c871a5382afd2b25d4ef633be9967ac9fdfefe5b8",
+  "bit_identical_runs": true,
+  "runs": [
+    {
+      "phases": [
+        "starting h3",
+        "encoding",
+        "loading transformer",
+        "sampling",
+        "decoding audio",
+        "decoding video",
+        "writing mp4"
+      ],
+      "peak_gb": 23.21,
+      "s": 62.1
+    },
+    {
+      "phases": [
+        "starting h3",
+        "encoding",
+        "loading transformer",
+        "sampling",
+        "decoding audio",
+        "decoding video",
+        "writing mp4"
+      ],
+      "peak_gb": 23.25,
+      "s": 63.7
+    }
+  ],
+  "h3c": "4cafd1773585eb59bb32a99d80c27033d211032b + patches/h3-lora.diff"
+}

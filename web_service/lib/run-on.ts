@@ -112,8 +112,10 @@ export function machineReason(
     if (why) return why.text;
   }
   const miss = needs.find((n) => lacks(n, mc));
+  // a node's add-on reads as a thing ("enhancer not downloaded on gcp"), a value's as the option's name ("Turbo LoRA
+  // not downloaded on gcp", docs/mock/H3Options.dc.html frame 12)
   if (miss)
-    return `${miss.title[0].toLowerCase()}${miss.title.slice(1)} not downloaded on ${mc.host}`;
+    return `${"field" in miss ? miss.title : miss.title[0].toLowerCase() + miss.title.slice(1)} not downloaded on ${mc.host}`;
   return null;
 }
 
@@ -180,6 +182,93 @@ export function addonNeeds(
       };
     });
   });
+}
+
+/** An add-on one value of an enum param asks for (API 1.41, ParamSchema `addons`; contracts/README.md Optional
+ * add-ons: an add-on per value): the field `node.param`, the value, and `with`, the `addons_with` name (an optional
+ * input, or a rows param) whose wiring swaps it in (MiniMax H3's lora turbo: Turbo LoRA; with a reference Turbo Ref
+ * LoRA). */
+export type ValueNeed = AddonNeed & { field: string; value: string; with?: string };
+
+/** Every add-on the workflow's enum params ask for by value, graph order then the schema's (as addonNeeds). */
+export function valueNeeds(
+  w: Pick<S<"Workflow">, "nodes" | "node_schemas"> | undefined,
+  list: S<"ModelList"> | null,
+): ValueNeed[] {
+  if (!w || !list) return [];
+  const live = new Set(list.hosts.filter((h) => h.live).map((h) => h.host));
+  return graphOrder(w).flatMap((node) => {
+    const s = w.node_schemas[w.nodes[node].kind];
+    const ms = list.models.filter((m) => m.family === s?.family);
+    if (!ms.length) return [];
+    return s.params.flatMap((p) => {
+      const pairs = [
+        ...Object.entries(p.addons ?? {}).flatMap(([value, cs]) =>
+          cs.map((c) => ({ value, component: c, with: undefined as string | undefined })),
+        ),
+        ...Object.entries(p.addons_with ?? {}).flatMap(([wi, by]) =>
+          Object.entries(by).flatMap(([value, cs]) =>
+            cs.map((c) => ({ value, component: c, with: wi })),
+          ),
+        ),
+      ];
+      return pairs.map(({ value, component, with: wi }) => {
+        const as = ms.flatMap((m) => (m.addons ?? []).filter((a) => a.component === component));
+        const listed = new Set(as.flatMap((a) => a.hosts.map((h) => h.host)));
+        const free = ms.flatMap((m) => m.variants.flatMap((v) => v.hosts.map((h) => h.host)));
+        return {
+          node,
+          family: s.family ?? "",
+          component,
+          title: as[0]?.short ?? as[0]?.title ?? component,
+          hosts: [
+            ...new Set(
+              as.flatMap((a) =>
+                a.hosts.filter((h) => h.state === "present" && live.has(h.host)).map((h) => h.host),
+              ),
+            ),
+          ],
+          free: as.length ? [...new Set(free)].filter((h) => !listed.has(h)) : [],
+          always: w.nodes[node].bypass !== true,
+          field: `${node}.${p.name}`,
+          value,
+          ...(wi && { with: wi }),
+        };
+      });
+    });
+  });
+}
+
+/** The add-ons `field` asks for at value `o` now: those of its `addons_with` names that are wired (`wired(name)`),
+ * else its plain `addons`. */
+export function valueNeedsAt(
+  needs: ValueNeed[],
+  field: string,
+  o: string,
+  wired: (name: string) => boolean,
+): ValueNeed[] {
+  const mine = needs.filter((n) => n.field === field);
+  const swapped = mine.some((n) => n.with != null && wired(n.with));
+  return mine.filter(
+    (n) => n.value === o && (swapped ? n.with != null && wired(n.with) : n.with == null),
+  );
+}
+
+/** Why value `o` of `field` cannot run now (API 1.41), else null: under Run on `mc` an add-on it asks for is missing
+ * there ("Turbo LoRA not downloaded on gcp"); under Auto on every machine that could take the run (`can`; none known:
+ * every live host), "Turbo LoRA not downloaded". */
+export function valueBlock(
+  needs: ValueNeed[],
+  field: string,
+  o: string,
+  wired: (name: string) => boolean,
+  can: Machine[],
+  mc?: Machine,
+): string | null {
+  const n = valueNeedsAt(needs, field, o, wired).find((x) =>
+    mc ? lacks(x, mc) : can.length ? can.every((m) => lacks(x, m)) : !x.hosts.length,
+  );
+  return n ? `${n.title} not downloaded${mc ? ` on ${mc.host}` : ""}` : null;
 }
 
 /** The nodes whose add-on is missing where the run may go, each with why its controls are greyed: under Auto on

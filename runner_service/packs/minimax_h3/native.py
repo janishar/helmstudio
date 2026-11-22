@@ -4,7 +4,11 @@ h3_shaders.metal by relative path), so every path it gets is absolute. Modes fol
 Ref2VA (`--ref-image` <Picture n>, `--ref-video` / `--ref-silent-video` <Video n>, `--ref-audio` <Audio n>, numbered
 per kind in that order), a first and/or last frame → FL2VA, neither → text to video. API 1.37 (plan 20 24.3): the
 speed params go to h3 as they are (`--layers`, `--reuse`, `--core-reuse` at reuse 1, `--token-reduction`, Render as
-`--render-width/--render-height`, render_size); `--use-int8-row-fc2` always (M5).
+`--render-width/--render-height`, render_size); `--use-int8-row-fc2` always (M5). API 1.41 (plan 20 24.11): `lora:
+turbo` hands h3 the Turbo add-on's file the run's partition asks for (model.yaml generate.lora `addons` /
+`addons_with`: Turbo LoRA on FL2VA, Turbo Ref LoRA with any reference) as H3_LORA, with every weight copied
+(H3_ZERO_COPY_WEIGHTS=0: merged pages of mapped shards stay resident); `none` sends H3_LORA empty, so a stray one in
+the runner's environment never merges. Base fp8 gives SGLang the same file (sgl.argv --lora-path).
 Image inputs are written as PNGs into a per-run temp folder, deleted after with the MP4; each video or audio
 reference (API 1.22) is cut there to its in..out with ffmpeg (a video: lossless H.264, its sound as PCM when kept;
 an audio, or a video's sound: a WAV; API 1.37 a replaced sound: the soundtrack's part muxed in as the video's PCM
@@ -17,10 +21,13 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+import yaml
 from PIL import Image
 
+import config
 from core import child, media
 from core.graph import RunError
+from core.pack import value_addons
 
 from . import sgl
 
@@ -55,6 +62,10 @@ DEFAULTS = (("layers", 50), ("reuse", 1), ("token_reduction", False), ("render",
 # h3.c's own Ref2VA limits (contracts/check.py H3_*): references in all, sound inputs, a video's sound needs 2 s of
 # clip and of its part (frames on the 5 + 17k grid), all reference sound
 MAX_REFS, MAX_SOUNDS, SOUND_FRAMES, MAX_SOUND_S = 12, 3, 56, 15.0
+# generate's lora param (API 1.41): which add-on each value asks for, by partition (model.yaml `addons`, `addons_with`)
+LORA = yaml.safe_load((Path(__file__).parent / "model.yaml").read_text())["stages"]["generate"][
+    "params"
+]["lora"]
 
 
 def render_size(width: int, height: int, render: str) -> tuple[int, int] | None:
@@ -173,6 +184,31 @@ def argv(model_dir: Path, prompt: str, out: Path, *, width: int, height: int, fr
     return a
 
 
+def lora_file(node: str, model, params: dict, inputs: dict) -> Path | None:
+    """API 1.41: the add-on file `generate.lora`'s value asks for on this run (model.yaml `addons`, replaced by
+    `addons_with` while a named rows param holds a row or input is wired: the partition's), None for none. Missing on
+    this host: RunError (studio's run check refuses it first)."""
+    wired = {k for k, v in params.items() if isinstance(v, list) and v} | {
+        k for k, v in inputs.items() if v is not None
+    }
+    names = value_addons(LORA, params.get("lora", LORA["default"]), wired)
+    if not names:
+        return None
+    (c,) = names  # one file per value and partition (h3 merges one LoRA)
+    if not (files := model.files(c)):
+        a = model.pack.component(c)["addon"]
+        raise RunError(f"{node}: {a.get('short', a['title'])} not downloaded on host {config.HOST}")
+    return files[0].resolve()
+
+
+def lora_env(path: Path | None) -> dict[str, str]:
+    """h3's environment for the run's LoRA (h3_lora.c): the file with every weight copied and strength 1 (owner,
+    plan 20 24.12 points 4 and 5), else H3_LORA empty."""
+    if path is None:
+        return {"H3_LORA": ""}
+    return {"H3_LORA": str(path), "H3_LORA_STRENGTH": "1", "H3_ZERO_COPY_WEIGHTS": "0"}
+
+
 def part(v: dict) -> float:
     """The seconds a media value reads: out - in (studio fills both for a trim field)."""
     return v.get("out", v["duration_s"]) - v.get("in", 0)
@@ -246,6 +282,7 @@ def generate(ctx, params: dict, inputs: dict) -> dict:
         raise RunError(why)
     if not fp8 and not BINARY.is_file():
         raise RunError(f"{ctx.node}: the h3 binary is not built (make h3 in runner_service)")
+    lora = lora_file(ctx.node, inputs["model"], params, inputs)
     with tempfile.TemporaryDirectory(prefix="h3-") as tmp:
         tmp = Path(tmp).resolve()
         images: list[tuple[str, Path]] = []
@@ -281,7 +318,7 @@ def generate(ctx, params: dict, inputs: dict) -> dict:
                                    audio_flow_shift=params.get("audio_flow_shift", sgl.AUDIO_FLOW_SHIFT))  # fmt: skip
             except ValueError as e:
                 raise RunError(f"{ctx.node}: {e}") from None
-            sgl.generate(ctx, inputs["model"], body, out, tmp)
+            sgl.generate(ctx, inputs["model"], body, out, tmp, lora=lora)
             return {"video": video_value(out, tmp)}
         layers, reuse, reduce, render = speed
         size = render_size(w, h, render)
@@ -294,7 +331,7 @@ def generate(ctx, params: dict, inputs: dict) -> dict:
         tag = "" if size == (w, h) else f"renders {size[0]} × {size[1]} → {w} × {h}"
         phases = {k: (f"{t} · {tag}" if tag else t, i) for k, (t, i) in PHASES.items()}
         ctx.progress(1, 1, tag or "starting h3", "encode")
-        child.run(ctx, cmd, cwd=H3C, name="h3", phases=phases, idle_s=IDLE_S)
+        child.run(ctx, cmd, cwd=H3C, name="h3", phases=phases, idle_s=IDLE_S, env=lora_env(lora))
         if not out.is_file():
             raise RunError(f"{ctx.node}: h3 wrote no video")
         return {"video": video_value(out, tmp)}

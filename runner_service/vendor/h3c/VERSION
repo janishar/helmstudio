@@ -1,5 +1,8 @@
 h3.c pinned copy (MIT, Salvatore Sanfilippo; shader parts BSD-3, see THIRD_PARTY_NOTICES.md)
 source: https://github.com/janishar/h3.c.git (fork used by h3c-studio as its h3c submodule)
 commit: 4cafd1773585eb59bb32a99d80c27033d211032b (2026-09-12, "Merge pull request #2 from janishar/preview-v2")
-copied: every tracked file at that commit except tests/ and .gitignore; nothing changed
+copied: every tracked file at that commit except tests/ and .gitignore
+changed: the helmstudio LoRA patch (patches/h3-lora.diff, API 1.41, plan 20 24.11 C4): h3_lora.c / h3_lora.h (new,
+         helmstudio's), the hook in h3_weights.c load_tensor and h3_lora.c in the Makefile's LIB_C; everything else
+         is the upstream copy. A re-vendor copies the new commit, then: git apply patches/h3-lora.diff
 build:  make -C runner_service/vendor/h3c h3   (run h3 with cwd = this folder: it opens h3_shaders.metal by relative path)

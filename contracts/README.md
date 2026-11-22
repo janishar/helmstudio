@@ -208,7 +208,10 @@ the native MLX runner is host `mac`, env `mlx` (durable `runner-mac-mlx`, subjec
   and SGLang's, all `when: "model.variant == 'base-fp8'"`: `quality` lossless | exact default lossless (SGLang's
   `high` refuses every non-audited deployment, so it is not offered), `flow_shift` float 1–20 step 0.5 default 12,
   `audio_flow_shift` 1–10 step 0.5 default 3 (the model's `sigma_shift_scales`; each is sent only when changed, so a
-  default request is unchanged); `refs` rows 0–9 `{image: Image}`, mention `<Picture {n}>`; from 1.22 `videos` rows 0–3
+  default request is unchanged); from 1.41 `lora` none | turbo default none (lightx2v's 8-step Turbo LoRA, both
+  variants: `addons {turbo: [turbo]}`, `addons_with` `refs` / `videos` / `audios` → `{turbo: [turbo_ref]}`, the two
+  optional add-ons Turbo LoRA and Turbo Ref LoRA; h3 merges it at load with every weight copied, SGLang applies it with
+  `--lora-path`; Optional add-ons: an add-on per value); `refs` rows 0–9 `{image: Image}`, mention `<Picture {n}>`; from 1.22 `videos` rows 0–3
   `{video: media [video], trim, 2–15 s; sound: keep | silent, default keep}` (from 1.37 `sound` keep | silent |
   replace and an `optional` media field `soundtrack` [audio], trim, 2.34–15 s: with replace the model hears the
   soundtrack's part instead of the video's sound), mention `<Video {n}>`, `max_total_s` 15,
@@ -628,7 +631,9 @@ not; Starting up still exempts):
    host's models entry of the node's family lists that add-on `present` (from 1.40: or does not list it, or lists it
    with `variants` leaving out the run's model variant, or with `refs` other than whether X's graph holds an Image
    value): `<node>: <title> not downloaded on any live host for env <env>` (title: the add-on's `short`, else its
-   `title`, from the first host left that lists it, else the component).
+   `title`, from the first host left that lists it, else the component). From 1.41 a node's add-ons also include
+   those its enum params' resolved values ask for (`addons` of the value, replaced by `addons_with`: Optional
+   add-ons), after its kind's, in schema order, by the same rule and texts.
 3. **Shared LoRAs**: `<H>.<env>.loras` lists every shared LoRA of the resolved graph. With F = the first host left (by
    name) and L = the first LoRA (graph order) F lacks: `no live host for env <env> has LoRA <L>` when no host left has
    L, else `no live host for env <env> has all of its LoRAs (<L> is not on <F>)`.
@@ -716,7 +721,8 @@ counts as that receipt time. `.tools/make-secrets` refuses `mac` and `fake` as G
 workflows: {env: [ids]}, variants: {env: {"<model>/<variant>": [precisions]}} (present ones only), addons?: {env: ["<model>/<component>"]} (1.36:
 present add-ons only), loras: {env: [shared LoRA names]}, free, idle_since, reserved_gb?}}, run: {env, workflow, model?,
 variant?, precision?, refs? (1.40: the graph holds an Image value), addons? ([{node, kind, component, title, bypass?,
-variants?, refs?}]: 1.36, nodes of the run's model family needing an add-on; `variants`, `refs` 1.40), loras (shared, graph order), peak_gb, ram_peak_gb?, needs, lora_component?, lost_host?, host?}, expect: {host,
+variants?, refs?, param?, value?, with?}]: 1.36, nodes of the run's model family needing an add-on; `variants`, `refs`
+1.40; `param`, `value`, `with` 1.41), params? (1.41: {node: {param: value}}), loras (shared, graph order), peak_gb, ram_peak_gb?, needs, lora_component?, lost_host?, host?}, expect: {host,
 eligible, error}}`; `eligible` is
 after the `lost_host` rule, by name; the run's `host` (1.35) is its pin. Cases: resident-first, fits-first,
 idle-longest, name-order, free-first, variant-missing, no-variant, offline, small-gpu, too-big, host-ram, loras,
@@ -727,7 +733,12 @@ pinned-lost (attempt 2 while H is still offline: fails, never the live other hos
 attempt 2 runs there); from 1.36 addon (Auto: the host with the add-on though the other is resident), addon-none (on no
 live host), pinned-addon (the pinned host lacks it), addon-bypassed (a bypassed node needs nothing); from 1.40
 addon-variant (an add-on scoped to another variant: the host without it runs the run), addon-refs (Qwen's enhance:
-an edit needs only its PE-I2I add-on, so the host with only PE-T2I is not eligible). Admission
+an edit needs only its PE-I2I add-on, so the host with only PE-T2I is not eligible); from 1.41 (an add-on per value:
+an addon entry's `param` and `value`, and `with` for an `addons_with` name, read against the run's `params`:
+{<node>: {<param>: value}}, a rows param counting as wired when it holds a row) addon-param (`lora: turbo` on a host
+without Turbo LoRA: the reason), addon-param-none (`lora: none` needs nothing), addon-param-refs (with a reference,
+only Turbo LoRA there: the Turbo Ref LoRA reason), addon-param-refs-ok (with a reference, only Turbo Ref LoRA: it
+runs). Admission
 on a cuda host: `admit.cuda-cpu-entry.json` (a `device: cpu` entry is not counted), `admit.cuda-host-ram.json`.
 
 ## A remote GPU host: credentials and TLS (API 1.18, M6; deployment, normative for names and permissions)
@@ -3017,6 +3028,23 @@ studio or the web.
   Image's enhance names both its add-ons and a run needs one: PE-T2I (`refs: false`) or PE-I2I (`refs: true`). And
   `short` (the name the run check and the UI use, both Qwen enhancers `Enhancer`; absent = `title`) and `tag` (the
   Models card's mono line, `PE-T2I`; absent = the component id).
+- **An add-on per value** (API 1.41; plan 20 24.11 C3): an add-on needed by one value of a param of a node that always
+  runs (MiniMax H3's `generate.lora: turbo`, its Turbo LoRA), not by the whole node. An enum param may carry
+  `addons: {<value>: [<component>, …]}` (each key one of its `enum`, each component an add-on of the node's family) and
+  `addons_with: {<name>: {<value>: [<component>, …]}}` (`<name>` an optional input of the node or one of its rows
+  params; the same values and add-ons as `addons`): while that input is wired, or that rows param holds a row, its
+  list **replaces** the value's `addons` list (several such names: their lists together). MiniMax H3's generate runs
+  Ref2VA with any reference (`refs`, `videos`, `audios`), so `lora: turbo` needs `turbo` (Turbo LoRA) without one and
+  `turbo_ref` (Turbo Ref LoRA) with one. The run check (step 2b) adds, for each node that is not bypassed, the add-ons
+  its params' resolved values ask for on the resolved graph (a param left out: its default), checked and worded as the
+  node's own `addons` (`generate: Turbo LoRA not downloaded on host gcp`; with a reference `generate: Turbo Ref LoRA
+  not downloaded on any live host for env native`); POST /v1/studio/runs/plan answers it as `reason`, Run on (a run set
+  to one host) is 422. The form greys that option of the param and every preset whose values pick it, by the add-on
+  the form needs now (`Turbo LoRA not downloaded`; per host in Run on, `Turbo LoRA not downloaded on gcp`), and
+  re-checks when a reference is added or removed. A form that already holds such a value where it cannot run (a saved
+  workflow, a Remix) keeps it, picked and greyed, and Generate is blocked with the reason: it never drops to another
+  value by itself. `contracts/check.py` refuses a key outside `enum`, an `addons_with` name the node lacks or values
+  outside `addons`, and (canonical registries) a component that is not an add-on of the family's models entry.
 - **Presence**: a variant is `present` without its add-ons; their files are never in its `components`, `files` or
   `bytes`, and a delete of the variant keeps them. The models entry lists `addons [{component, title, short?, tag?,
   refs?, help?, dir, presence, bytes?, source?, variants?, mismatch?}]`, presence decided as a variant's over the add-on's own files (its globs in

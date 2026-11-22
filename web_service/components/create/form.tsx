@@ -240,10 +240,14 @@ export function Inspector({
   stage1,
   voice,
   blocks = {},
+  valueBlocks = {},
 }: FormProps &
   OpenProps & {
     /** the nodes whose optional add-on is missing (API 1.36), each with why: their controls are greyed with it */
     blocks?: Record<string, string>;
+    /** (API 1.41) field → value → why: an option whose add-on is missing where the run may go ("Turbo LoRA not
+     * downloaded"); it and every preset that picks it are greyed */
+    valueBlocks?: Record<string, Record<string, string>>;
     /** what a voice param's tile and picker need (API 1.30); with it, an audio workflow's text and number params
      * read as the board draws them (docs/mock/CreateAudio.dc.html: Style, Variation) */
     voice?: VoiceCtx;
@@ -412,6 +416,7 @@ export function Inspector({
         }
         pair={cfg && stg && f === cfg ? { f: stg, raw: rawOf(stg, raws) } : undefined}
         setBy={f.param.type === "enum" ? setBy(f) : undefined}
+        facts={valueBlocks[f.key] ? (o) => ({ why: valueBlocks[f.key][o] }) : undefined}
       />
     );
   };
@@ -447,6 +452,7 @@ export function Inspector({
       raws={raws}
       onChange={onChange}
       blocks={blocks}
+      valueBlocks={valueBlocks}
     />
   );
   // a choice tile (API 1.26): an enum of its options' names, showing the first whose values hold; picking one sets
@@ -843,13 +849,19 @@ function Presets({
   raws,
   onChange,
   blocks = {},
+  valueBlocks = {},
 }: Omit<FormProps, "errors"> & {
   presets: Record<string, Record<string, S<"ParamValue">>>;
   order: string[];
   blocks?: Record<string, string>;
+  valueBlocks?: Record<string, Record<string, string>>;
 }) {
-  // a preset that switches on a node whose add-on is missing ("Enhanced") is greyed with the reason
+  // a preset that switches on a node whose add-on is missing ("Enhanced"), or (API 1.41) picks a value whose add-on
+  // is (Turbo: "Turbo LoRA not downloaded"), is greyed with the reason
+  const byValue = (values: Record<string, S<"ParamValue">>) =>
+    Object.entries(values).flatMap(([k, v]) => valueBlocks[k]?.[String(v)] ?? [])[0];
   const blocked = (values: Record<string, S<"ParamValue">>) =>
+    byValue(values) ??
     Object.entries(values).flatMap(([k, v]) => {
       const [node, param] = k.split(".");
       return param === "bypass" && v === false && blocks[node] ? [blocks[node]] : [];
@@ -869,13 +881,19 @@ function Presets({
           .flatMap((name) => (presets[name] ? [[name, presets[name]] as const] : []))
           .map(([name, values]) => {
             const why = blocked(values);
+            // a form that holds it anyway (a Remix of a Turbo take) shows it picked and greyed (H3Options frame 12)
             return why ? (
               <button
                 key={name}
                 type="button"
                 aria-disabled
-                title={why}
-                className="h-9 cursor-not-allowed rounded-full border border-transparent bg-s3 px-3.5 text-[13px] text-t2"
+                aria-pressed={holds(values)}
+                title={
+                  byValue(values)
+                    ? `${why}. An admin downloads it in Models, under the model's optional add-ons.`
+                    : why
+                }
+                className="h-9 cursor-not-allowed rounded-full border border-transparent bg-s3 px-3.5 text-[13px] text-t2 aria-pressed:border-dashed aria-pressed:border-a2"
               >
                 <span className="opacity-55">{name}</span>
               </button>

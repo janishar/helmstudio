@@ -87,3 +87,37 @@ The pack runs the pinned h3 binary (`vendor/h3c`, h3.c 4cafd17, `make h3`) as a 
 - **Unmeasured:** peak (VRAM and host RAM), load time, s/step, and whether the int8 text encoder runs with layerwise
   offload on SM120; the JIT ConvRot kernels may need nvcc: the lock carries the
   `nvidia-cuda-nvcc` 13.5 wheel (via humming-kernels), but it is not on PATH.
+
+## Turbo (API 1.41, plan 20 24.11): lightx2v's 8-step LoRAs
+
+- **Two files, two add-ons, one folder.** `turbo` (FL2V v1.2, Turbo LoRA) for FL2VA runs, `turbo_ref` (ref2v v1.1,
+  Turbo Ref LoRA) for Ref2VA runs (any reference: `refs`, `videos` or `audios` holds a row); generate.lora's
+  `addons` / `addons_with` pick it, the same rule studio's run check uses, so the runner never picks by name
+  (`lora_file`). Both in `MiniMax-H3-Turbo/`: core.models gives two add-ons sharing a `dir` their own files, marker
+  (its `variant`) and delete.
+- **The two files differ (C0, headers read 2026-11-22).** FL2V: 1089 tensors, 363 modules (50 blocks × attention
+  q/k/v/out, MLP fc1/fc2, AdaLN; 2 token-refiner blocks; norm_out), each with its own `.alpha` (128; AdaLN and
+  norm_out rank 16 alpha 16), metadata alpha 128. ref2v: 624 tensors, 312 modules (no AdaLN, no norm_out), **no
+  `.alpha` tensors** and metadata alpha 8. h3_lora.c takes alpha = rank without a `.alpha` (scale 1, as diffusers /
+  ComfyUI read a file without one), never the metadata (FL2V's 128 would scale its AdaLN 8×). If a References render
+  looks over-cooked, the authors' intended scale may be 8 / 128 (H3_LORA_STRENGTH=0.0625 tries it on a Mac by hand;
+  the runner sends 1). Same key layout and shapes as FL2V for the modules both have: one key map.
+- **h3 (Mac)** merges at load (vendor/h3c `h3_lora.c`, helmstudio's patch: `patches/h3-lora.diff`) every BF16 2-D
+  transformer tensor it loads, so only the run's partition; CPU sgemm per weight, stochastic rounding seeded by the
+  tensor name (repeats bit for bit; h3's int8 quantizer keeps the small delta). Measured 2026-11-22 (M5 Pro, 512 × 512
+  × 22, 8 steps, seed 42, FL2V): `h3 lora: merged 363 modules in 19.3 s`, 67 s in all, peak footprint 24.9 GB
+  (`/usr/bin/time -l`), a clean picture. Fewer layers load fewer blocks: `merged 300 of 363` at exit, not an error.
+  A bad file: an `h3 lora: …` line, then h3 fails `cannot merge LoRA into <name>` (child.run shows the `h3:` line).
+- **Every weight copied** (`H3_ZERO_COPY_WEIGHTS=0`, owner 24.12 point 4): merging into mapped bf16 shards dirties
+  copy-on-write pages that stay resident (the spike swapped). The peak formula adds 4.5 GB on Turbo (20.7 → 25.0 GB at
+  864 × 480 × 124 copied; the merge adds nothing on top). `H3_LORA` is always sent (empty with `none`): a stray one in
+  the runner's environment never merges. `H3_LORA_STRENGTH` is sent as 1 (owner: fixed).
+- **SGLang (NVIDIA)** gets the same file as `--lora-path` on the run's one server (no `/set_lora`); its default merge
+  mode keeps the adapter unmerged on the FP8 weights. Turbo sends no flow shifts (12 / 3 are the model's).
+  Unverified on the VM: s/step, VRAM, the look.
+- **Preset order by time** (owner 24.12 point 3: swap Turbo and Fast if Fast is quicker): measured 2026-11-22 through
+  the pack at 864 × 480 × 124, seed 42, one after the other (the contract suite building on the same Mac, so both
+  slower than the spike's 340 s): Fast 344.5 s (peak 19.1 GB), Turbo 420.0 s (peak 24.6 GB, the runner's measure;
+  the formula plans 31.1). So the order is Draft · Fast · Turbo · Default · Reference.
+- **Golden** `t2v-turbo` (512 × 512 × 22, 8 steps, seed 42): two pack runs bit-identical (62 s, peak 23.2 GB).
+- **Not measured yet:** Ref2VA at Turbo (the C7 render: the ref2v file's scale is the open question above).

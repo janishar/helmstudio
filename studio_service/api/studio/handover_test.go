@@ -393,7 +393,9 @@ func TestPlaceFixtures(t *testing.T) {
 					Bypass                       bool
 					Variants                     []string // API 1.40
 					Refs                         *bool    // API 1.40
+					Param, Value, With           string   // API 1.41: an add-on per value
 				} `json:"addons"` // API 1.36
+				Params map[string]map[string]any `json:"params"` // API 1.41: the nodes' values
 			} `json:"run"`
 			Expect struct {
 				Host     *string  `json:"host"`
@@ -405,6 +407,10 @@ func TestPlaceFixtures(t *testing.T) {
 			t.Fatal(name, err)
 		}
 		run := fx.Run
+		family := "qwen-image" // the model's family: the add-on nodes' (API 1.41: MiniMax H3's)
+		if len(run.Addons) > 0 {
+			family = registry.Family(run.Addons[0].Kind)
+		}
 		reg := &registry.Registry{}
 		busy, idle, reserved := map[string]bool{}, map[string]time.Time{}, map[string]int{}
 		for host, h := range fx.Hosts {
@@ -463,24 +469,45 @@ func TestPlaceFixtures(t *testing.T) {
 				for m, vs := range byModel {
 					var addons []registry.Addon // every add-on the run needs, present when the host lists it
 					for _, a := range run.Addons {
+						if slices.ContainsFunc(addons, func(x registry.Addon) bool { return x.Component == a.Component }) {
+							continue
+						}
 						presence := "missing"
 						if slices.Contains(h.Addons[env], m+"/"+a.Component) {
 							presence = "present"
 						}
 						addons = append(addons, registry.Addon{Component: a.Component, Title: a.Title, Dir: a.Component, Presence: presence, Variants: a.Variants, Refs: a.Refs})
 					}
-					models = append(models, registry.Model{ID: m, Family: "qwen-image", Title: m, Variants: vs,
+					models = append(models, registry.Model{ID: m, Family: family, Title: m, Variants: vs,
 						Lora: &registry.LoraBlock{Component: run.LoraComponent}, Addons: addons})
 				}
 				raw, _ := json.Marshal(map[string]any{"models": models})
 				_ = reg.SetRegistry(host+"."+env+".models", raw)
 				var schemas []registry.NodeSchema // one per kind, its add-ons in order (Qwen's enhance names two)
 				for _, a := range run.Addons {
-					if i := slices.IndexFunc(schemas, func(s registry.NodeSchema) bool { return s.Kind == a.Kind }); i >= 0 {
+					i := slices.IndexFunc(schemas, func(s registry.NodeSchema) bool { return s.Kind == a.Kind })
+					if i < 0 {
+						schemas, i = append(schemas, registry.NodeSchema{Kind: a.Kind, Title: a.Kind}), len(schemas)
+					}
+					if a.Param == "" {
 						schemas[i].Addons = append(schemas[i].Addons, a.Component)
 						continue
 					}
-					schemas = append(schemas, registry.NodeSchema{Kind: a.Kind, Title: a.Kind, Addons: []string{a.Component}})
+					// API 1.41: the enum param that asks for it at a.Value (with a.With wired: addons_with)
+					j := slices.IndexFunc(schemas[i].Params, func(p registry.Param) bool { return p.Name == a.Param })
+					if j < 0 {
+						schemas[i].Params, j = append(schemas[i].Params, registry.Param{Name: a.Param, Type: "enum",
+							Addons: map[string][]string{}, AddonsWith: map[string]map[string][]string{}}), len(schemas[i].Params)
+					}
+					p := &schemas[i].Params[j]
+					if a.With == "" {
+						p.Addons[a.Value] = append(p.Addons[a.Value], a.Component)
+					} else {
+						if p.AddonsWith[a.With] == nil {
+							p.AddonsWith[a.With] = map[string][]string{}
+						}
+						p.AddonsWith[a.With][a.Value] = append(p.AddonsWith[a.With][a.Value], a.Component)
+					}
 				}
 				raw, _ = json.Marshal(map[string]any{"nodes": schemas})
 				_ = reg.SetRegistry(host+"."+env+".nodes", raw)
@@ -488,10 +515,14 @@ func TestPlaceFixtures(t *testing.T) {
 		}
 		graph := map[string]registry.Node{}
 		if run.Model != "" {
-			graph["model"] = registry.Node{Kind: "qwen-image/model", Params: map[string]any{"variant": run.Variant, "precision": run.Precision}}
+			graph["model"] = registry.Node{Kind: family + "/model", Params: map[string]any{"variant": run.Variant, "precision": run.Precision}}
 		}
 		for _, a := range run.Addons {
-			graph[a.Node] = registry.Node{Kind: a.Kind, Params: map[string]any{}, Bypass: a.Bypass}
+			params := run.Params[a.Node]
+			if params == nil {
+				params = map[string]any{}
+			}
+			graph[a.Node] = registry.Node{Kind: a.Kind, Params: params, Bypass: a.Bypass}
 		}
 		if run.Refs { // an edit: a reference image in the encode node's rows
 			graph["encode"] = registry.Node{Kind: "qwen-image/encode", Params: map[string]any{

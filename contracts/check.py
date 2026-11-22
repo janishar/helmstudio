@@ -322,6 +322,14 @@ def schema_errors(n: dict) -> list[str]:
             out.append(f"{p['name']}: auto needs 0 < min_s < max_s")
         if set(p.get("not_with", [])) - {i["name"] for i in n["inputs"] if i.get("optional")}:
             out.append(f"{p['name']}: not_with must name optional inputs of the node")
+        if set(p.get("addons", {})) - set(p.get("enum", [])):  # API 1.41: an add-on per value
+            out.append(f"{p['name']}: addons must key values of its enum")
+        named = {i["name"] for i in n["inputs"] if i.get("optional")} | {q["name"] for q in n["params"] if q["type"] == "rows"}
+        for w, by in p.get("addons_with", {}).items():
+            if w not in named:
+                out.append(f"{p['name']}: addons_with must name optional inputs or rows params of the node ({w})")
+            elif set(by) - set(p.get("addons", {})):
+                out.append(f"{p['name']}: addons_with {w} must key values of its addons")
         if "max_total_s" in p and not media_field(p):
             out.append(f"{p['name']}: max_total_s needs an item with exactly one required media field")
         for f, x in p.get("item", {}).items():  # API 1.37
@@ -352,9 +360,18 @@ def check_canonical_registries() -> None:
     for prefix in CANONICAL:
         nodes = json.loads((reg / f"{prefix}nodes.valid.json").read_text())["nodes"]
         kinds = {n["kind"]: n for n in nodes}
+        models = reg / f"{prefix}models.valid.json"
+        extra = {m["family"]: {a["component"] for a in m.get("addons", [])}
+                 for m in (json.loads(models.read_text())["models"] if models.exists() else [])}  # fmt: skip
         for n in nodes:
             for e in schema_errors(n):
                 fail(f"fixtures/registry/{prefix}nodes.valid.json {n['kind']}.{e}")
+            for p in n["params"]:  # API 1.41: each an add-on of the family's models entry
+                got = {c for cs in [*p.get("addons", {}).values(),
+                                    *(c for by in p.get("addons_with", {}).values() for c in by.values())] for c in cs}
+                if bad := got - extra.get(n.get("family"), set()):
+                    fail(f"fixtures/registry/{prefix}nodes.valid.json {n['kind']}.{p['name']}: addons names no add-on "
+                         f"of {prefix}models.valid.json {sorted(bad)}")
             for p in n["params"]:
                 if err := value_error(p, p["default"]):
                     fail(
@@ -3294,6 +3311,28 @@ def admit_fixture(fx: dict) -> dict:
     return got
 
 
+def value_addons(p: dict, value, wired: set) -> list[str]:
+    """API 1.41 (README, Optional add-ons: an add-on per value): the add-ons enum param `p` asks for at `value`: the
+    lists of its `addons_with` names that are wired (an input wired, a rows param holding a row), together, else its
+    `addons` list for the value."""
+    by = p.get("addons_with", {})
+    if any(w in wired for w in by):
+        return list(dict.fromkeys(c for w in by if w in wired for c in by[w].get(value, [])))
+    return p.get("addons", {}).get(value, [])
+
+
+def param_addons(a: dict, node_values: dict, entries: list[dict]) -> list[str]:
+    """A place fixture's add-ons per value of the param of entry `a` (README, Several hosts: fixtures): the param's
+    `addons` / `addons_with` from the run's entries of that node and param, its value from the run's `params`."""
+    p: dict = {"addons": {}, "addons_with": {}}
+    for e in entries:
+        if e["node"] == a["node"] and e.get("param") == a["param"]:
+            to = p["addons_with"].setdefault(e["with"], {}) if "with" in e else p["addons"]
+            to.setdefault(e["value"], []).append(e["component"])
+    wired = {k for k, v in node_values.items() if isinstance(v, list) and v}
+    return value_addons(p, node_values.get(a["param"]), wired)
+
+
 def place(fx: dict) -> dict:
     """Several hosts (README, Several hosts): the run's eligible hosts and the one it is lined up on, or the error it
     fails with. hosts: name -> {keys (as admit fixtures), workflows: {env: [ids]}, variants: {env: {"model/variant":
@@ -3325,11 +3364,14 @@ def place(fx: dict) -> dict:
             want = f"model {run['model']} variant {run['variant']} at {run['precision']}"
             return {"host": None, "eligible": [], "error": gone(
                 f"host {pin} does not have {want}" if pin else f"no live host for env {env} has {want}")}
+    values = run.get("params", {})
     for a in sorted(run.get("addons", []), key=lambda a: a["node"]):  # 1.36: Optional add-ons, by node id
         if a.get("bypass") or run.get("variant") not in a.get("variants", [run.get("variant")]):
             continue  # 1.40: an add-on scoped to other variants is not needed
         if a.get("refs", bool(run.get("refs"))) != bool(run.get("refs")):
             continue  # 1.40: nor one of the other task (Qwen's PE-T2I in an edit)
+        if "param" in a and a["component"] not in param_addons(a, values.get(a["node"], {}), run["addons"]):
+            continue  # 1.41: an add-on per value, of another value or swapped by a wired input
         cand = [h for h in cand if f"{run['model']}/{a['component']}" in hosts[h].get("addons", {}).get(env, [])]
         if not cand:
             return {"host": None, "eligible": [], "error": gone(

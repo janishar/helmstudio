@@ -1,7 +1,8 @@
 """The minimax_h3 pack against the h3 goldens (runner_service/tests/golden/minimax-h3-*, recorded by
 tests/golden/record_h3.py with the vendored binary at h3.c 4cafd17, 512 x 512 x 22 frames, 4 steps (the API 1.22
 reference cases: 2 steps, a 2 s audio or silent video reference), seed 42, exact; API 1.37 t2v-render75: the same
-t2v at Render 75 %, h3 rendering 384 x 384, recorded by this pack's own run, `params` in its json):
+t2v at Render 75 %, h3 rendering 384 x 384, recorded by this pack's own run, `params` in its json; API 1.41 t2v-turbo:
+the Turbo preset, 8 steps with Turbo LoRA merged at load, recorded so, skipped without the add-on):
 runs the pack's workflows in-process (graph.run with the native residency manager; no NATS) with a golden's
 settings, so the real h3 child runs on the GPU, and compares the MP4's decoded frames and sound with the stored one.
 
@@ -38,7 +39,7 @@ CASES = {"t2v": "minimax-h3-t2v", "fl2va-first": "minimax-h3-fl2va-first",
          "fl2va-first-last": "minimax-h3-fl2va-first-last", "ref2va-image": "minimax-h3-ref2va-image",
          "ref2va-image-audio": "minimax-h3-ref2va-image-audio",
          "ref2va-silent-video": "minimax-h3-ref2va-silent-video",
-         "t2v-render75": "minimax-h3-t2v-render75"}  # fmt: skip
+         "t2v-render75": "minimax-h3-t2v-render75", "t2v-turbo": "minimax-h3-t2v-turbo"}  # fmt: skip
 BAR = 30.0  # dB, image modes (below the 36.9-39.8 dB spread of repeated runs)
 # a silent video reference repeats less (2 steps): its two recorded runs differ by 29.5 dB, the pack's run vs the
 # golden 31.8 dB; the pack's cut gives h3 the same decoded pixels as the recorder's input (checked on the CPU)
@@ -222,6 +223,14 @@ def bench():
 @pytest.mark.gpu
 @pytest.mark.parametrize("name", list(CASES))
 def test_matches_the_golden(bench, name):
+    from core import pack
+
+    turbo = (
+        pack.models_root()
+        / "MiniMax-H3-Turbo/minimax_h3_fl2v_turbo_8step_v1.2_768p_bf16.safetensors"
+    )
+    if settings(name).get("params", {}).get("lora") == "turbo" and not turbo.is_file():
+        pytest.skip("Turbo LoRA is not downloaded")
     r = case(bench, name)
     print(name, r)
     assert r["ok"]

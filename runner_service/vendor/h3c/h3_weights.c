@@ -1,4 +1,5 @@
 #include "h3_weights.h"
+#include "h3_lora.h" /* helmstudio: patches/h3-lora.diff */
 
 #include <dirent.h>
 #include <stdarg.h>
@@ -181,6 +182,12 @@ static h3_gpu_tensor *load_tensor(const h3_weight_store *store, h3_gpu *gpu,
                                (size_t)elements);
     if (!result) {
         fail(error, error_size, "cannot load %s: %s", name, h3_gpu_error(gpu));
+    } else if (dtype == H3_DTYPE_BF16 && ndim == 2 &&
+               strstr(header->path, "/transformer/") &&
+               !h3_lora_apply(name, result, shape[0], shape[1])) {
+        fail(error, error_size, "cannot merge LoRA into %s", name);
+        h3_gpu_tensor_free(result);
+        return NULL;
     }
     return result;
 }

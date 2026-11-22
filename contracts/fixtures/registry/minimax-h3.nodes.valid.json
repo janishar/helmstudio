@@ -316,6 +316,39 @@
           "help": "How the noise schedule spends its steps on the sound; the model's value is 3."
         },
         {
+          "name": "lora",
+          "type": "enum",
+          "label": "LoRA",
+          "default": "none",
+          "enum": [
+            "none",
+            "turbo"
+          ],
+          "addons": {
+            "turbo": [
+              "turbo"
+            ]
+          },
+          "addons_with": {
+            "refs": {
+              "turbo": [
+                "turbo_ref"
+              ]
+            },
+            "videos": {
+              "turbo": [
+                "turbo_ref"
+              ]
+            },
+            "audios": {
+              "turbo": [
+                "turbo_ref"
+              ]
+            }
+          },
+          "help": "turbo: lightx2v's 8-step Turbo LoRA (an add-on; References use their own); use 8 steps. Merged at load on a Mac, applied by SGLang on NVIDIA."
+        },
+        {
           "name": "refs",
           "type": "rows",
           "label": "References",

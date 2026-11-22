@@ -439,6 +439,38 @@ def addons(pack: Pack) -> list[str]:
     return [c for c, s in pack.spec.get("components", {}).items() if "addon" in s]
 
 
+def value_addons(param: dict, value, wired) -> list[str]:
+    """API 1.41 (contracts/README.md "Optional add-ons": an add-on per value; check.py value_addons): the add-ons an
+    enum param asks for at `value`: the lists of its `addons_with` names in `wired` (inputs wired, rows params holding
+    a row), together, else its `addons` list for the value."""
+    by = param.get("addons_with") or {}
+    if any(w in wired for w in by):
+        return list(dict.fromkeys(c for w in by if w in wired for c in by[w].get(value, [])))
+    return list((param.get("addons") or {}).get(value, []))
+
+
+def value_addon_errors(schema: dict, extra: list[str]) -> str | None:
+    """What makes a node schema's `addons` / `addons_with` params wrong (check.py schema_errors): keys outside the
+    enum, a name that is no optional input or rows param, a component that is not one of the add-ons `extra`."""
+    named = {i["name"] for i in schema["inputs"] if i.get("optional")}
+    named |= {p["name"] for p in schema["params"] if p["type"] == "rows"}
+    for p in schema["params"]:
+        if "addons" not in p and "addons_with" not in p:
+            continue
+        by, per = p.get("addons_with") or {}, p.get("addons") or {}
+        if p["type"] != "enum" or not per or set(per) - set(p["enum"]):
+            return f"{p['name']}: addons must key values of an enum param"
+        if bad := set(by) - named:
+            return f"{p['name']}: addons_with names no optional input or rows param {sorted(bad)}"
+        if any(set(x) - set(per) for x in by.values()):
+            return f"{p['name']}: addons_with must key values of its addons"
+        if bad := {
+            c for x in [*per.values(), *(c for w in by.values() for c in w.values())] for c in x
+        } - set(extra):
+            return f"{p['name']}: addons names no add-on {sorted(bad)}"
+    return None
+
+
 def needed(pack: Pack, variant: str | None = None) -> list[str]:
     """The components a variant needs to be present: every one but the add-ons, and (plan 19 phase 4) with
     `variant`, but those whose `variants` leaves it out (absent: all; LTX's duration head is the distilled ones')."""
@@ -629,6 +661,8 @@ def _nodes(stages: dict, family: str | None, code: str, pack: Pack | None, modul
             )
         if pack and (need := list(dict.fromkeys(c for c in (*uses, *extra) if c in addons(pack)))):
             schema["addons"] = need  # API 1.36: a run with the node needs them on its host
+        if bad := value_addon_errors(schema, addons(pack) if pack else []):
+            raise ValueError(f"{schema['kind']}: {bad}")
         if len(ids := [x["id"] for x in stage.get("phases") or []]) != len(set(ids)):
             raise ValueError(f"{schema['kind']}: phases repeat an id")
         unload = tuple(stage.get("unload_after", ()))

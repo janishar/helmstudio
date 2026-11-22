@@ -27,7 +27,7 @@ import uuid
 
 import pytest
 from conftest import headers, make_client, sign_in
-from helpers import STUDIO, TERMINAL, new_session, png_bytes, ref, start_run, upload, wait_for
+from helpers import STUDIO, TERMINAL, new_session, ok, png_bytes, ref, start_run, upload, wait_for
 from test_elements import element
 from test_qwen import events_of, get
 from test_user_workflows import CONTRACTS
@@ -113,9 +113,10 @@ def test_image_to_video_binds_new_shot_frames_into_its_image_params(live):
 
 
 def test_presets_replace_speed(live):
-    """API 1.37: Draft, Fast, Default and Reference in that order; the templates open on Default; no speed param."""
+    """API 1.37: Draft, Fast, Default and Reference in that order (1.41: Turbo after Fast, by time); the templates open on Default;
+    no speed param."""
     for w in live.values():
-        assert w["studio"]["preset_order"] == ["Draft", "Fast", "Default", "Reference"]
+        assert w["studio"]["preset_order"] == ["Draft", "Fast", "Turbo", "Default", "Reference"]
         params = w["nodes"]["generate"]["params"]
         assert "speed" not in params
         assert all(
@@ -130,6 +131,35 @@ def test_native_host_and_a_mac_only_model(hapi, live):
     if not models:
         pytest.skip(f"{FAMILY} is not in the model catalog")
     assert [r["runtime"] for r in models[0]["runtimes"]] == ["native"], models[0]["runtimes"]
+
+
+def test_turbo_needs_its_add_on_on_the_host_it_is_set_to(hapi, anon, sid, live):
+    """API 1.41 (contracts/README.md Optional add-ons: an add-on per value): `lora: turbo` set to the live native
+    host needs Turbo LoRA there, with a reference Turbo Ref LoRA: missing, the run is a 422 with the run check's text
+    and nothing is queued; present, the plan has no reason (no run is made: it would render)."""
+    hosts = sorted({h["host"] for h in get(hapi, f"{STUDIO}/hosts")["hosts"]
+                    if h["env"] == "native" and h["state"] in ("idle", "busy")})  # fmt: skip
+    (m,) = [m for m in get(hapi, f"{STUDIO}/models")["models"] if m["id"] == FAMILY] or pytest.skip(
+        "no model"
+    )
+    img = upload(hapi, anon, png_bytes(64, 64))["id"]
+    for host in hosts:
+        for addon, wid, extra in [
+            ("turbo", T2V, {}),
+            ("turbo_ref", REFS, {"generate.refs": [ref(img)]}),
+        ]:
+            a = next(x for x in m["addons"] if x["component"] == addon)
+            present = any(h["host"] == host and h["state"] == "present" for h in a["hosts"])
+            body = {"workflow_id": wid, "host": host, "inputs": {"generate.lora": "turbo"} | extra}
+            if present:
+                assert ok(hapi.post(f"{STUDIO}/runs/plan", json=body))["reason"] is None, (
+                    host,
+                    addon,
+                )
+                continue
+            r = hapi.post(f"{STUDIO}/sessions/{sid}/runs", json=body)
+            assert r.status_code == 422, (r.status_code, r.text)
+            assert r.json()["detail"] == f"generate: {a['title']} not downloaded on host {host}"
 
 
 def refused(client, sid: str, workflow_id: str, inputs: dict) -> str:

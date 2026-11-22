@@ -57,6 +57,7 @@
         "quality": "lossless",
         "flow_shift": 12,
         "audio_flow_shift": 3,
+        "lora": "none",
         "refs": [],
         "videos": [],
         "audios": []
@@ -97,13 +98,14 @@
       },
       {
         "title": "Quality",
-        "help": "On NVIDIA (Base fp8) a preset sets only Steps, so Fast and Default run the same there; Mode and the flow shifts are NVIDIA only.",
+        "help": "On NVIDIA (Base fp8) a preset sets only Steps (and Turbo the LoRA), so Fast and Default run the same there; Mode and the flow shifts are NVIDIA only.",
         "items": [
           "model.precision",
           "generate.steps",
           "generate.quality",
           "generate.flow_shift",
-          "generate.audio_flow_shift"
+          "generate.audio_flow_shift",
+          "generate.lora"
         ]
       },
       {
@@ -124,33 +126,48 @@
         "generate.layers": 50,
         "generate.reuse": 1,
         "generate.token_reduction": false,
-        "generate.core_reuse": 1
+        "generate.core_reuse": 1,
+        "generate.lora": "none"
       },
       "Fast": {
         "generate.steps": 20,
         "generate.layers": 45,
         "generate.reuse": 2,
         "generate.token_reduction": true,
-        "generate.core_reuse": 1
+        "generate.core_reuse": 1,
+        "generate.lora": "none"
+      },
+      "Turbo": {
+        "generate.steps": 8,
+        "generate.layers": 50,
+        "generate.reuse": 1,
+        "generate.token_reduction": false,
+        "generate.core_reuse": 1,
+        "generate.lora": "turbo",
+        "generate.flow_shift": 12,
+        "generate.audio_flow_shift": 3
       },
       "Default": {
         "generate.steps": 20,
         "generate.layers": 45,
         "generate.reuse": 2,
         "generate.token_reduction": false,
-        "generate.core_reuse": 1
+        "generate.core_reuse": 1,
+        "generate.lora": "none"
       },
       "Reference": {
         "generate.steps": 50,
         "generate.layers": 50,
         "generate.reuse": 1,
         "generate.token_reduction": false,
-        "generate.core_reuse": 1
+        "generate.core_reuse": 1,
+        "generate.lora": "none"
       }
     },
     "preset_order": [
       "Draft",
       "Fast",
+      "Turbo",
       "Default",
       "Reference"
     ]

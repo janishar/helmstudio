@@ -193,6 +193,7 @@ describe("canvas auto in an edit", () => {
           "generate.quality",
           "generate.flow_shift",
           "generate.audio_flow_shift",
+          "generate.lora", // API 1.41: Turbo's LoRA (H3Options frame 1)
         ],
       ],
       [

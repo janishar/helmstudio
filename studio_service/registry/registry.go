@@ -59,6 +59,32 @@ type Param struct {
 	// text only (API 1.32, contracts/README.md "Dialogue and Timeline audio"): a dialogue script, expanded into the
 	// node's `lines` rows at create time
 	Script bool `json:"script,omitempty"`
+	// enum only (API 1.41, contracts/README.md "Optional add-ons": an add-on per value): value → the add-ons a run
+	// needs while the param holds it; AddonsWith: an optional input or rows param → value → the add-ons that replace
+	// them while it is wired or holds a row (MiniMax H3's lora: turbo, with a reference turbo_ref)
+	Addons     map[string][]string            `json:"addons,omitempty"`
+	AddonsWith map[string]map[string][]string `json:"addons_with,omitempty"`
+}
+
+// ValueAddons is the add-ons the param asks for at value (API 1.41): the lists of its AddonsWith names in wired,
+// together, else its Addons list for the value.
+func (p Param) ValueAddons(value string, wired func(string) bool) []string {
+	var out []string
+	hit := false
+	for _, w := range slices.Sorted(maps.Keys(p.AddonsWith)) {
+		if wired(w) {
+			hit = true
+			for _, c := range p.AddonsWith[w][value] {
+				if !slices.Contains(out, c) {
+					out = append(out, c)
+				}
+			}
+		}
+	}
+	if hit {
+		return out
+	}
+	return p.Addons[value]
 }
 
 // Auto is a frames param's auto length bounds in seconds.
@@ -1205,6 +1231,42 @@ func (r *Registry) Addons(source, kind string) []string {
 		return r.nodes[source][i].Addons
 	}
 	return nil
+}
+
+// NodeAddons returns what node needs on the runner at source: its kind's add-ons, then (API 1.41) those its enum
+// params' values ask for on that runner's schema, in schema order (a param the node leaves out: its default; wired:
+// an input in In, or a rows param holding a row).
+func (r *Registry) NodeAddons(source string, node Node) []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	i := slices.IndexFunc(r.nodes[source], func(s NodeSchema) bool { return s.Kind == node.Kind })
+	if i < 0 {
+		return nil
+	}
+	s := r.nodes[source][i]
+	out := slices.Clone(s.Addons)
+	wired := func(name string) bool {
+		if _, ok := node.In[name]; ok {
+			return true
+		}
+		rows, ok := node.Params[name].([]any)
+		return ok && len(rows) > 0
+	}
+	for _, p := range s.Params {
+		if len(p.Addons) == 0 {
+			continue
+		}
+		v, ok := node.Params[p.Name].(string)
+		if !ok {
+			v, _ = p.Default.(string)
+		}
+		for _, c := range p.ValueAddons(v, wired) {
+			if !slices.Contains(out, c) {
+				out = append(out, c)
+			}
+		}
+	}
+	return out
 }
 
 // Schemas returns every kind any runner publishes, live or not (its host present): the schema of the newest publish.
