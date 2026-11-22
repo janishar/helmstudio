@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/cmd.assistant.turn.schema.json",
+  "title": "studio → pipelines: one input to an assistant chat",
+  "description": "From API 1.42 (plan 18, 22.3). Written by studio's outbox in the transaction that stores the input (POST /v1/studio/assistant/threads/{id}/messages, or a chat ended for its summary); subject `cmd.assistant.turn` (stream CMD, durable `pipelines`), Nats-Msg-Id `<thread_id>:<turn>`. pipelines runs the chat's LangGraph graph (thread `assistant:<thread_id>`, its state holding owner_id: an input whose owner differs is dropped): a message starts a turn, results and an answer resume the parked one (`Command(resume=…)`), summarize writes the chat's summary. Studio sets owner_id from its thread row, roles from the owner's token, `tools` from tools/catalog.json by those roles and the settings, `actions` from the screen's registered ones. A redelivered input (same turn) does nothing twice.",
+  "allOf": [{"$ref": "envelope.schema.json"}],
+  "properties": {
+    "type": {"const": "cmd.assistant.turn"},
+    "version": {"const": 1},
+    "job_id": {"$ref": "defs.schema.json#/$defs/uuid", "description": "the thread id"},
+    "data": {
+      "type": "object",
+      "required": ["thread_id", "turn", "client_id", "roles", "tools", "actions", "settings", "input"],
+      "additionalProperties": false,
+      "properties": {
+        "thread_id": {"$ref": "defs.schema.json#/$defs/uuid"},
+        "turn": {"type": "integer", "minimum": 1, "maximum": 999999, "description": "the thread's input counter, from 1"},
+        "client_id": {"$ref": "assistant.schema.json#/$defs/clientId", "description": "the tab whose actions this turn runs"},
+        "roles": {"type": "array", "maxItems": 8, "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{0,31}$"}},
+        "tools": {"type": "array", "maxItems": 64, "uniqueItems": true, "items": {"$ref": "assistant.schema.json#/$defs/toolName"}, "description": "the tools of tools/catalog.json offered: surface assistant, the owner's roles; web_search only when it is on; look_at only when an ask workflow can run now"},
+        "actions": {"type": "array", "maxItems": 64, "uniqueItems": true, "items": {"$ref": "assistant.schema.json#/$defs/actionName"}, "description": "the screen actions offered: the screen's registered ones (empty for summarize)"},
+        "settings": {
+          "type": "object",
+          "required": ["source", "providers", "search", "limits"],
+          "additionalProperties": false,
+          "description": "the admin's assistant settings at this input",
+          "properties": {
+            "source": {
+              "description": "the assistant's model: a local server or a remote provider",
+              "$ref": "defs.schema.json#/$defs/modelSource",
+              "properties": {"kind": {"enum": ["server", "remote"]}}
+            },
+            "providers": {
+              "type": "object",
+              "minProperties": 1,
+              "maxProperties": 2,
+              "propertyNames": {"$ref": "defs.schema.json#/$defs/providerName"},
+              "additionalProperties": {"$ref": "defs.schema.json#/$defs/providerSnapshot"},
+              "description": "the source's provider and the search provider, as they are now"
+            },
+            "search": {
+              "oneOf": [{"$ref": "defs.schema.json#/$defs/providerName"}, {"type": "null"}],
+              "description": "the web search provider when web search is on (a key of providers, kind search); null when off"
+            },
+            "limits": {"$ref": "assistant.schema.json#/$defs/limits"}
+          }
+        },
+        "input": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["kind", "message_id", "text", "screen", "at"],
+              "additionalProperties": false,
+              "properties": {
+                "kind": {"const": "message"},
+                "message_id": {"$ref": "defs.schema.json#/$defs/uuid"},
+                "text": {"type": "string", "minLength": 1, "maxLength": 4000},
+                "screen": {"$ref": "assistant.schema.json#/$defs/screen"},
+                "at": {"type": "string", "format": "date-time"},
+                "results": {"type": "array", "maxItems": 30, "items": {"$ref": "assistant.schema.json#/$defs/result"}, "description": "the parked turn's pending actions that never ran (did_not_run: the tab was closed), resumed before this message starts a turn"}
+              }
+            },
+            {
+              "type": "object",
+              "required": ["kind", "results"],
+              "additionalProperties": false,
+              "properties": {
+                "kind": {"const": "results"},
+                "results": {"type": "array", "minItems": 1, "maxItems": 30, "items": {"$ref": "assistant.schema.json#/$defs/result"}},
+                "screen": {"$ref": "assistant.schema.json#/$defs/screen", "description": "after a navigate: the new screen"}
+              }
+            },
+            {
+              "type": "object",
+              "required": ["kind", "card_id", "answer"],
+              "additionalProperties": false,
+              "properties": {
+                "kind": {"const": "answer"},
+                "card_id": {"$ref": "assistant.schema.json#/$defs/callId"},
+                "answer": {"enum": ["yes", "not_now"]}
+              }
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "additionalProperties": false,
+              "description": "the chat ended (New chat, or 24 h after its last message): write its summary (one model call, at most 600 characters)",
+              "properties": {"kind": {"const": "summarize"}}
+            }
+          ]
+        }
+      }
+    }
+  }
+}

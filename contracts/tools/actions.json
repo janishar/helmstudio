@@ -1,0 +1,1818 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/tools/actions.json",
+  "title": "The assistant's screen actions and cards (API 1.42)",
+  "description": "Not a message: what a screen registers for the assistant (plan 18, 22.5 and 22.6), assistant only. Each action calls the screen's existing entry point in the tab that sent the message. `effect`: line (an action line), undo (a line with Undo), card (the card of kind `card` first; Yes is the user's click), dialog (opens the screen's own dialog prefilled; resolves on close with the new id and @handle, or cancelled). The shell's actions are on every screen; a screen with `roles` registers only for them. `input` is model-facing and self-contained.",
+  "tags": {
+    "gpu": "uses the GPU",
+    "egress": "sends to <provider>",
+    "final": "can't be undone",
+    "machine": "uses the machine",
+    "disk": "uses disk and network"
+  },
+  "cards": {
+    "generate": {
+      "tags": [
+        "gpu"
+      ],
+      "shows": "model and version, machine and place in line, size, run count, time and memory (runs/plan), the prompt"
+    },
+    "batch": {
+      "tags": [
+        "gpu",
+        "egress"
+      ],
+      "shows": "rows, caps, what leaves the machine"
+    },
+    "stop": {
+      "tags": [
+        "final"
+      ],
+      "shows": "rows that stop"
+    },
+    "pick": {
+      "tags": [
+        "gpu"
+      ],
+      "shows": "the row, the take, what runs next"
+    },
+    "judge_test": {
+      "tags": [
+        "gpu",
+        "egress"
+      ],
+      "shows": "takes, criteria, provider"
+    },
+    "export": {
+      "tags": [
+        "machine"
+      ],
+      "shows": "preset, size, fps, time (export/plan)"
+    },
+    "hear": {
+      "tags": [
+        "gpu"
+      ],
+      "shows": "tries, voice model"
+    },
+    "download": {
+      "tags": [
+        "disk"
+      ],
+      "shows": "size, machine, licence state; Yes is the row's own Download, on only once ticked"
+    },
+    "web_search": {
+      "tags": [
+        "egress"
+      ],
+      "shows": "the query, the provider"
+    },
+    "look": {
+      "tags": [
+        "gpu"
+      ],
+      "shows": "the takes, the question, machine and place in line"
+    },
+    "delete": {
+      "tags": [
+        "final"
+      ],
+      "shows": "what goes, what stays"
+    }
+  },
+  "screens": {
+    "shell": {
+      "routes": [
+        "*"
+      ],
+      "actions": {
+        "navigate": {
+          "description": "Go to a screen with the right thing open. Actions after it in the same batch are dropped; the new screen's summary comes back.",
+          "effect": "line",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "to": {
+                "enum": [
+                  "/",
+                  "/gallery",
+                  "/timeline",
+                  "/pipelines",
+                  "/pipelines/{id}",
+                  "/pipelines/batches/{id}",
+                  "/pipelines/batches/{id}/review",
+                  "/pipelines/batches/{id}/rows/{row}",
+                  "/models",
+                  "/admin"
+                ]
+              },
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "row": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 500
+              },
+              "query": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "propertyNames": {
+                  "enum": [
+                    "s",
+                    "reuse",
+                    "use",
+                    "w",
+                    "batch",
+                    "t",
+                    "view",
+                    "attempt",
+                    "tab"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "to"
+            ]
+          }
+        },
+        "await": {
+          "description": "Wait for a run, model job, download, export or clone in this tab (at most 10 min, then still running).",
+          "effect": "line",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "what": {
+                "enum": [
+                  "run",
+                  "job",
+                  "download",
+                  "export",
+                  "clone"
+                ]
+              },
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              }
+            },
+            "required": [
+              "what",
+              "id"
+            ]
+          }
+        }
+      }
+    },
+    "create": {
+      "routes": [
+        "/"
+      ],
+      "actions": {
+        "change": {
+          "description": "Set one form field (prompt, size, variant, Enhance, Think, references, bindings, source, LoRAs, looks, dialogue…). Refused when the form shows it greyed or hidden.",
+          "effect": "undo",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "key": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "value": {
+                "description": "a form value, as the field takes it"
+              }
+            },
+            "required": [
+              "key",
+              "value"
+            ]
+          }
+        },
+        "switchTo": {
+          "description": "Switch the form to another workflow.",
+          "effect": "undo",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "workflow": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              }
+            },
+            "required": [
+              "workflow"
+            ]
+          }
+        },
+        "preset": {
+          "description": "Apply a preset (refused when greyed).",
+          "effect": "undo",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        },
+        "runOn": {
+          "description": "Pick Auto or a machine the form allows, with a reason.",
+          "effect": "undo",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "host": {
+                "type": "string",
+                "pattern": "^(auto|[a-z0-9]{1,32})$"
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              }
+            },
+            "required": [
+              "host",
+              "reason"
+            ]
+          }
+        },
+        "seeds": {
+          "description": "How many takes to make.",
+          "effect": "undo",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "n": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4
+              }
+            },
+            "required": [
+              "n"
+            ]
+          }
+        },
+        "view": {
+          "description": "Studio or Graph view.",
+          "effect": "line",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "view": {
+                "enum": [
+                  "studio",
+                  "graph"
+                ]
+              }
+            },
+            "required": [
+              "view"
+            ]
+          }
+        },
+        "newSession": {
+          "description": "Start a new session.",
+          "effect": "line",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {}
+          }
+        },
+        "renameWorkflow": {
+          "description": "Rename this workflow.",
+          "effect": "line",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              }
+            },
+            "required": [
+              "title"
+            ]
+          }
+        },
+        "duplicateWorkflow": {
+          "description": "Duplicate this workflow.",
+          "effect": "line",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {}
+          }
+        },
+        "deleteWorkflow": {
+          "description": "Delete this workflow (its takes stay).",
+          "effect": "card",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {}
+          },
+          "card": "delete"
+        },
+        "frameIn": {
+          "description": "Use a take as the first or last frame.",
+          "effect": "line",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "take_id": {
+                "type": "string",
+                "format": "uuid",
+                "description": "a take"
+              },
+              "at": {
+                "enum": [
+                  "first",
+                  "last"
+                ]
+              }
+            },
+            "required": [
+              "take_id",
+              "at"
+            ]
+          }
+        },
+        "select": {
+          "description": "Select a take.",
+          "effect": "undo",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "take_id": {
+                "type": "string",
+                "format": "uuid",
+                "description": "a take"
+              }
+            },
+            "required": [
+              "take_id"
+            ]
+          }
+        },
+        "star": {
+          "description": "Star or unstar a take.",
+          "effect": "undo",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "take_id": {
+                "type": "string",
+                "format": "uuid",
+                "description": "a take"
+              },
+              "on": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "take_id",
+              "on"
+            ]
+          }
+        },
+        "stop": {
+          "description": "Stop a run.",
+          "effect": "line",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "run_id": {
+                "type": "string",
+                "format": "uuid",
+                "description": "the run"
+              }
+            },
+            "required": [
+              "run_id"
+            ]
+          }
+        },
+        "generate": {
+          "description": "Generate with the form as it is.",
+          "effect": "card",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {}
+          },
+          "card": "generate"
+        },
+        "saveAsLook": {
+          "description": "Open Save as look, prefilled.",
+          "effect": "dialog",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "take_id": {
+                "type": "string",
+                "format": "uuid",
+                "description": "a take"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              }
+            }
+          }
+        },
+        "saveAsElement": {
+          "description": "Open Save as element, prefilled.",
+          "effect": "dialog",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "take_id": {
+                "type": "string",
+                "format": "uuid",
+                "description": "a take"
+              },
+              "handle": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40
+              }
+            }
+          }
+        },
+        "editItem": {
+          "description": "Open a library item's Edit.",
+          "effect": "dialog",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "item_id": {
+                "type": "string",
+                "format": "uuid",
+                "description": "the item"
+              }
+            },
+            "required": [
+              "item_id"
+            ]
+          }
+        },
+        "cloneVoice": {
+          "description": "Open Clone a voice, prefilled.",
+          "effect": "dialog",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "take_id": {
+                "type": "string",
+                "format": "uuid",
+                "description": "a take"
+              },
+              "from_s": {
+                "type": "number",
+                "minimum": 0
+              },
+              "to_s": {
+                "type": "number",
+                "minimum": 0
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              }
+            },
+            "required": [
+              "take_id"
+            ]
+          }
+        },
+        "designVoice": {
+          "description": "Open Design a voice, prefilled.",
+          "effect": "dialog",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "description": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 600
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              }
+            }
+          }
+        },
+        "hear": {
+          "description": "Hear tries in the open clone or design dialog.",
+          "effect": "card",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {}
+          },
+          "card": "hear"
+        },
+        "deleteItem": {
+          "description": "Delete a library item.",
+          "effect": "card",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "item_id": {
+                "type": "string",
+                "format": "uuid",
+                "description": "the item"
+              }
+            },
+            "required": [
+              "item_id"
+            ]
+          },
+          "card": "delete"
+        },
+        "renameLora": {
+          "description": "Rename a LoRA.",
+          "effect": "line",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "lora_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              }
+            },
+            "required": [
+              "lora_id",
+              "name"
+            ]
+          }
+        },
+        "deleteLora": {
+          "description": "Delete a LoRA.",
+          "effect": "card",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "lora_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              }
+            },
+            "required": [
+              "lora_id"
+            ]
+          },
+          "card": "delete"
+        }
+      }
+    },
+    "graph": {
+      "routes": [
+        "/"
+      ],
+      "actions": {
+        "addNode": {
+          "description": "Add a node, wired around the selected one.",
+          "effect": "undo",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "near": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          }
+        },
+        "removeNodes": {
+          "description": "Remove nodes and their wires.",
+          "effect": "undo",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "ids": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 32,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                }
+              }
+            },
+            "required": [
+              "ids"
+            ]
+          }
+        },
+        "connect": {
+          "description": "Wire `ref` (<node>.<output>) into a node's input.",
+          "effect": "undo",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "node": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "key": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "ref": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 130
+              }
+            },
+            "required": [
+              "node",
+              "key",
+              "ref"
+            ]
+          }
+        },
+        "disconnect": {
+          "description": "Remove the wire into a node's input.",
+          "effect": "undo",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "node": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "key": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              }
+            },
+            "required": [
+              "node",
+              "key"
+            ]
+          }
+        },
+        "setParam": {
+          "description": "Set a node's param.",
+          "effect": "undo",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "node": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "key": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "value": {
+                "description": "a form value, as the field takes it"
+              }
+            },
+            "required": [
+              "node",
+              "key",
+              "value"
+            ]
+          }
+        },
+        "setBypass": {
+          "description": "Bypass a node or not.",
+          "effect": "undo",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "node": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "on": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "node",
+              "on"
+            ]
+          }
+        },
+        "generate": {
+          "description": "Generate with the graph as it is.",
+          "effect": "card",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {}
+          },
+          "card": "generate"
+        }
+      }
+    },
+    "pipeline_editor": {
+      "routes": [
+        "/pipelines/{id}"
+      ],
+      "actions": {
+        "addNode": {
+          "description": "Add a pipeline node.",
+          "effect": "undo",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40
+              },
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "fields": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          }
+        },
+        "setNode": {
+          "description": "Change a node's fields.",
+          "effect": "undo",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "fields": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "id",
+              "fields"
+            ]
+          }
+        },
+        "removeNode": {
+          "description": "Remove a node and its edges.",
+          "effect": "undo",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              }
+            },
+            "required": [
+              "id"
+            ]
+          }
+        },
+        "connect": {
+          "description": "Add an edge (a branch of a judge or decide: `branch`).",
+          "effect": "undo",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "from": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "to": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "branch": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              }
+            },
+            "required": [
+              "from",
+              "to"
+            ]
+          }
+        },
+        "disconnect": {
+          "description": "Remove an edge.",
+          "effect": "undo",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "from": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "to": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              }
+            },
+            "required": [
+              "from",
+              "to"
+            ]
+          }
+        },
+        "newPipeline": {
+          "description": "A new pipeline.",
+          "effect": "line",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              }
+            }
+          }
+        },
+        "renamePipeline": {
+          "description": "Rename this pipeline.",
+          "effect": "line",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              }
+            },
+            "required": [
+              "title"
+            ]
+          }
+        },
+        "deletePipeline": {
+          "description": "Delete this pipeline.",
+          "effect": "card",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {}
+          },
+          "card": "delete"
+        },
+        "judgeTest": {
+          "description": "Test a judge on picked takes.",
+          "effect": "card",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "node": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "take_ids": {
+                "type": "array",
+                "maxItems": 8,
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "required": [
+              "node"
+            ]
+          },
+          "card": "judge_test"
+        },
+        "addMemory": {
+          "description": "Open Add note, prefilled.",
+          "effect": "dialog",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "text": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            }
+          }
+        },
+        "deleteMemory": {
+          "description": "Delete a memory item.",
+          "effect": "card",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "item_id": {
+                "type": "string",
+                "format": "uuid",
+                "description": "the item"
+              }
+            },
+            "required": [
+              "item_id"
+            ]
+          },
+          "card": "delete"
+        },
+        "runStep": {
+          "description": "Run one Studio step.",
+          "effect": "card",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "node": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              }
+            },
+            "required": [
+              "node"
+            ]
+          },
+          "card": "generate"
+        },
+        "pickTake": {
+          "description": "Pick a step's take in the Studio view.",
+          "effect": "undo",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "node": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "take_id": {
+                "type": "string",
+                "format": "uuid",
+                "description": "a take"
+              }
+            },
+            "required": [
+              "node",
+              "take_id"
+            ]
+          }
+        }
+      }
+    },
+    "batches": {
+      "routes": [
+        "/pipelines",
+        "/pipelines/batches/{id}",
+        "/pipelines/batches/{id}/review",
+        "/pipelines/batches/{id}/rows/{row}"
+      ],
+      "actions": {
+        "newBatch": {
+          "description": "Fill New batch: rows, seeds, looks.",
+          "effect": "undo",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "rows": {
+                "type": "array",
+                "maxItems": 100,
+                "items": {
+                  "type": "object"
+                }
+              },
+              "seeds": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 8
+              },
+              "looks": {
+                "type": "array",
+                "maxItems": 8,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 130
+                }
+              }
+            }
+          }
+        },
+        "start": {
+          "description": "Start the batch (Submit on New batch).",
+          "effect": "card",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {}
+          },
+          "card": "batch"
+        },
+        "resume": {
+          "description": "Resume the batch.",
+          "effect": "card",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {}
+          },
+          "card": "batch"
+        },
+        "retry": {
+          "description": "Retry a row, optionally from a step.",
+          "effect": "card",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "row": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 500
+              },
+              "from_step": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              }
+            },
+            "required": [
+              "row"
+            ]
+          },
+          "card": "batch"
+        },
+        "again": {
+          "description": "Run the batch again.",
+          "effect": "card",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {}
+          },
+          "card": "batch"
+        },
+        "stop": {
+          "description": "Stop the batch.",
+          "effect": "card",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {}
+          },
+          "card": "stop"
+        },
+        "pause": {
+          "description": "Pause the batch.",
+          "effect": "line",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {}
+          }
+        },
+        "pick": {
+          "description": "Pick at a gate.",
+          "effect": "card",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "row": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 500
+              },
+              "take_ids": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 8,
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "required": [
+              "row",
+              "take_ids"
+            ]
+          },
+          "card": "pick"
+        },
+        "reviewNote": {
+          "description": "Open the review note, prefilled.",
+          "effect": "dialog",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "row": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 500
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            }
+          }
+        }
+      }
+    },
+    "timeline": {
+      "routes": [
+        "/timeline"
+      ],
+      "actions": {
+        "edit": {
+          "description": "Edit clips: place, trim, split, order (saved; a conflict reloads and retries).",
+          "effect": "undo",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "ops": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 32,
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "op"
+                  ],
+                  "properties": {
+                    "op": {
+                      "enum": [
+                        "move",
+                        "trim",
+                        "split",
+                        "remove",
+                        "lift",
+                        "replace",
+                        "set",
+                        "add",
+                        "insert",
+                        "place",
+                        "fill",
+                        "add_track",
+                        "remove_track",
+                        "track"
+                      ]
+                    }
+                  },
+                  "description": "one Timeline edit (the Op union in web_service lib/timeline.ts)"
+                }
+              }
+            },
+            "required": [
+              "ops"
+            ]
+          }
+        },
+        "newSequence": {
+          "description": "A new sequence.",
+          "effect": "line",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              }
+            }
+          }
+        },
+        "renameSequence": {
+          "description": "Rename this sequence.",
+          "effect": "line",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              }
+            },
+            "required": [
+              "title"
+            ]
+          }
+        },
+        "deleteSequence": {
+          "description": "Delete this sequence.",
+          "effect": "card",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {}
+          },
+          "card": "delete"
+        },
+        "setPlayhead": {
+          "description": "Move the playhead.",
+          "effect": "line",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "at_s": {
+                "type": "number",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "at_s"
+            ]
+          }
+        },
+        "setRange": {
+          "description": "Set the in and out range.",
+          "effect": "line",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "in_s": {
+                "type": "number",
+                "minimum": 0
+              },
+              "out_s": {
+                "type": "number",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "in_s",
+              "out_s"
+            ]
+          }
+        },
+        "shot": {
+          "description": "New shot, or a shot action on a clip (extend, retake, insert, replace, redo).",
+          "effect": "card",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "new",
+                  "extend",
+                  "retake",
+                  "insert",
+                  "replace",
+                  "redo"
+                ]
+              },
+              "clip": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "at_s": {
+                "type": "number",
+                "minimum": 0
+              },
+              "seconds": {
+                "type": "number",
+                "minimum": 0.5,
+                "maximum": 30
+              },
+              "prompt": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "card": "generate"
+        },
+        "newLine": {
+          "description": "Voice a new dialogue line.",
+          "effect": "card",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "text": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 600
+              },
+              "voice": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 130
+              }
+            },
+            "required": [
+              "text"
+            ]
+          },
+          "card": "generate"
+        },
+        "saveAsVoice": {
+          "description": "Open Save as voice for a clip, prefilled.",
+          "effect": "dialog",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "clip": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              }
+            },
+            "required": [
+              "clip"
+            ]
+          }
+        },
+        "rerender": {
+          "description": "Re-render the changed shots.",
+          "effect": "card",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {}
+          },
+          "card": "batch"
+        },
+        "export": {
+          "description": "Export the sequence.",
+          "effect": "card",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "preset": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40
+              }
+            }
+          },
+          "card": "export"
+        },
+        "cancelExport": {
+          "description": "Cancel an export.",
+          "effect": "line",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "job_id": {
+                "type": "string",
+                "format": "uuid",
+                "description": "the media job"
+              }
+            },
+            "required": [
+              "job_id"
+            ]
+          }
+        }
+      }
+    },
+    "gallery": {
+      "routes": [
+        "/gallery"
+      ],
+      "actions": {
+        "search": {
+          "description": "Search takes.",
+          "effect": "line",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "q": {
+                "type": "string",
+                "minLength": 0,
+                "maxLength": 200
+              }
+            },
+            "required": [
+              "q"
+            ]
+          }
+        },
+        "filter": {
+          "description": "Filter takes.",
+          "effect": "line",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "image",
+                  "video",
+                  "audio"
+                ]
+              },
+              "source": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40
+              },
+              "starred": {
+                "type": "boolean"
+              },
+              "batch_id": {
+                "type": "string",
+                "format": "uuid",
+                "description": "a batch's collection"
+              }
+            }
+          }
+        },
+        "sort": {
+          "description": "Sort takes.",
+          "effect": "line",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "order": {
+                "enum": [
+                  "newest",
+                  "oldest",
+                  "starred",
+                  "name"
+                ],
+                "description": "newest (default), oldest, starred first, name"
+              }
+            },
+            "required": [
+              "order"
+            ]
+          }
+        },
+        "select": {
+          "description": "Select takes.",
+          "effect": "line",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "take_ids": {
+                "type": "array",
+                "maxItems": 60,
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "required": [
+              "take_ids"
+            ]
+          }
+        },
+        "star": {
+          "description": "Star or unstar a take.",
+          "effect": "undo",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "take_id": {
+                "type": "string",
+                "format": "uuid",
+                "description": "a take"
+              },
+              "on": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "take_id",
+              "on"
+            ]
+          }
+        },
+        "rename": {
+          "description": "Rename a take.",
+          "effect": "undo",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "take_id": {
+                "type": "string",
+                "format": "uuid",
+                "description": "a take"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              }
+            },
+            "required": [
+              "take_id",
+              "title"
+            ]
+          }
+        },
+        "saveAsPipeline": {
+          "description": "Save how a take was made as a pipeline.",
+          "effect": "line",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "take_id": {
+                "type": "string",
+                "format": "uuid",
+                "description": "a take"
+              }
+            },
+            "required": [
+              "take_id"
+            ]
+          }
+        },
+        "saveAsElement": {
+          "description": "Open Save as element, prefilled.",
+          "effect": "dialog",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "take_id": {
+                "type": "string",
+                "format": "uuid",
+                "description": "a take"
+              },
+              "handle": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40
+              }
+            },
+            "required": [
+              "take_id"
+            ]
+          }
+        },
+        "saveAsLook": {
+          "description": "Open Save as look, prefilled.",
+          "effect": "dialog",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "take_id": {
+                "type": "string",
+                "format": "uuid",
+                "description": "a take"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              }
+            },
+            "required": [
+              "take_id"
+            ]
+          }
+        },
+        "delete": {
+          "description": "Delete takes.",
+          "effect": "card",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "take_ids": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 60,
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "required": [
+              "take_ids"
+            ]
+          },
+          "card": "delete"
+        }
+      }
+    },
+    "models": {
+      "routes": [
+        "/models"
+      ],
+      "roles": [
+        "admin"
+      ],
+      "actions": {
+        "openRow": {
+          "description": "Open a model's row on a machine.",
+          "effect": "line",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "model": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "variant": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "host": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 32
+              }
+            },
+            "required": [
+              "model",
+              "variant",
+              "host"
+            ]
+          }
+        },
+        "download": {
+          "description": "Download on the open row (the licence tick stays yours).",
+          "effect": "card",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {}
+          },
+          "card": "download"
+        },
+        "cancelJob": {
+          "description": "Cancel a model job.",
+          "effect": "line",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "job_id": {
+                "type": "string",
+                "format": "uuid",
+                "description": "the model job"
+              }
+            },
+            "required": [
+              "job_id"
+            ]
+          }
+        },
+        "delete": {
+          "description": "Delete a downloaded variant from a machine.",
+          "effect": "card",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "model": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "variant": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "host": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 32
+              }
+            },
+            "required": [
+              "model",
+              "variant",
+              "host"
+            ]
+          },
+          "card": "delete"
+        }
+      }
+    }
+  }
+}

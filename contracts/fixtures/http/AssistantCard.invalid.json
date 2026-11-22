@@ -1,0 +1,20 @@
+{
+  "id": "3b7c9d1e-2f4a-4b6c-8d0e-1a2b3c4d5e6f:1:5",
+  "kind": "generate",
+  "title": "Search the web?",
+  "rows": [
+    {
+      "label": "Query",
+      "value": "ltx 2.3 prompt tips camera motion"
+    },
+    {
+      "label": "Provider",
+      "value": "Brave · set by your admin"
+    }
+  ],
+  "note": "Only the query leaves this machine.",
+  "tags": [
+    "sends to Brave"
+  ],
+  "state": "waiting"
+}

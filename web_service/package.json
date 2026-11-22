@@ -9,7 +9,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "gen": "openapi-typescript ../contracts/openapi.yaml --default-non-nullable false -o gen/api.ts",
+    "gen": "openapi-typescript ../contracts/openapi.yaml --default-non-nullable false -o gen/api.ts && cp ../contracts/tools/actions.json gen/actions.json",
     "mock": "npx -y @stoplight/prism-cli@5.16.0 mock -h 127.0.0.1 -p 4010 ../contracts/openapi.yaml",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

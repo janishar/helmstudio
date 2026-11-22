@@ -1,0 +1,9 @@
+{
+  "kind": "search",
+  "api": "brave",
+  "base_url": "https://api.search.brave.com/res/v1",
+  "models": [
+    "web"
+  ],
+  "key_secret": "provider-brave"
+}

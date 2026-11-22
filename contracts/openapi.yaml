@@ -27,7 +27,7 @@ servers:
 security:
   - {ApiKey: [], BearerJWT: []}
 tags:
-  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media); from 1.23 LoRA strengths 0..2 (looks saved before are clamped when read; contracts/README.md, Looks); from 1.24 the model component a node loads (NodeSchema.component); from 1.25 an inspector section''s help, the presets'' order (StudioLayout.preset_order) and a run''s planned peak before it is sent (POST /v1/studio/runs/plan); from 1.26 an inspector section''s choice tiles (LTX''s Recipe: two-stage or one-stage); from 1.28 a judge''s branch without `then` (Ask me) and a judge test on picked takes (POST /v1/studio/pipelines/{pipeline_id}/judge-tests); from 1.29 a V1 clip''s shot number (TimelineClip.number: "Shot 4"); from 1.30 voices: audio takes made by runs (the `Audio` port, `Workflow.media` audio), the `voice` param, saved voices in the library (designed voices and the packs'' starter voices; contracts/README.md, Voices); from 1.31 cloned voices (a 3–30 s clip of an audio take or a video''s sound, with consent), designed voices that keep a clip, Save as voice (`from_take` with `kind: voice`) and the zonos3 family (contracts/README.md, Voices: cloned voices); from 1.32 dialogue and Timeline audio: dialogue scripts (`script` text params expanded into `lines` rows whose items carry a voice), an element''s `voice_id`, cues on a dialogue''s take, audio takes on the audio tracks, New line (POST /v1/studio/timelines/{timeline_id}/lines), Make shot (a slot `exact` at an audio clip''s time), an export plan''s `sounds`, offers and pipeline binds into rows of one media field, `library.read` voices and the write node''s `form: script` (contracts/README.md, Dialogue and Timeline audio)'}
+  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media); from 1.23 LoRA strengths 0..2 (looks saved before are clamped when read; contracts/README.md, Looks); from 1.24 the model component a node loads (NodeSchema.component); from 1.25 an inspector section''s help, the presets'' order (StudioLayout.preset_order) and a run''s planned peak before it is sent (POST /v1/studio/runs/plan); from 1.26 an inspector section''s choice tiles (LTX''s Recipe: two-stage or one-stage); from 1.28 a judge''s branch without `then` (Ask me) and a judge test on picked takes (POST /v1/studio/pipelines/{pipeline_id}/judge-tests); from 1.29 a V1 clip''s shot number (TimelineClip.number: "Shot 4"); from 1.30 voices: audio takes made by runs (the `Audio` port, `Workflow.media` audio), the `voice` param, saved voices in the library (designed voices and the packs'' starter voices; contracts/README.md, Voices); from 1.31 cloned voices (a 3–30 s clip of an audio take or a video''s sound, with consent), designed voices that keep a clip, Save as voice (`from_take` with `kind: voice`) and the zonos3 family (contracts/README.md, Voices: cloned voices); from 1.32 dialogue and Timeline audio: dialogue scripts (`script` text params expanded into `lines` rows whose items carry a voice), an element''s `voice_id`, cues on a dialogue''s take, audio takes on the audio tracks, New line (POST /v1/studio/timelines/{timeline_id}/lines), Make shot (a slot `exact` at an audio clip''s time), an export plan''s `sounds`, offers and pipeline binds into rows of one media field, `library.read` voices and the write node''s `form: script` (contracts/README.md, Dialogue and Timeline audio); from 1.42 the in-app assistant: chats, their events and memory, the admin''s assistant settings, search providers (kind `search`) and the Gallery''s `order` (contracts/README.md, Assistant)'}
   - {name: files, description: signed file downloads and uploads}
   - name: auth
     description: 'auth_service: users, sessions (JWT access + rotating refresh tokens), roles, client API keys'
@@ -986,7 +986,7 @@ paths:
     get:
       tags: [studio]
       operationId: studioListTakes
-      summary: The caller's gallery, newest first, filtered and paginated
+      summary: The caller's gallery, newest first (or by `order`), filtered and paginated
       description: |
         Every take of the caller that is not deleted and (for an upload or an import) completed, newest first (`created_at`, then
         `id`). Filters combine with AND. `q`: every whitespace-separated word must occur, case-insensitively, in the
@@ -994,6 +994,9 @@ paths:
         leading `@` of the word is ignored there), the workflow title or id (`made_with.workflow_title`,
         `workflow_id`) or the model id (`made_with.model.id`, which names its family). A `session_id` or (from 1.27)
         `batch_id` that is unknown or another user's just matches nothing. A malformed filter value or cursor is 422.
+        From 1.42 `order`: `newest` (the default), `oldest` (`created_at`, then `id`, ascending), `starred` (starred
+        first, each part newest first), `name` (the title, case-insensitively, then newest first). A cursor belongs to
+        its order: one from another order is 422.
       parameters:
         - {name: kind, in: query, required: false, schema: {$ref: '#/components/schemas/TakeKind'}}
         - {name: source, in: query, required: false, schema: {$ref: '#/components/schemas/TakeSource'}}
@@ -1001,6 +1004,7 @@ paths:
         - {name: session_id, in: query, required: false, schema: {type: string, format: uuid}, description: only takes of this session}
         - {name: batch_id, in: query, required: false, schema: {type: string, format: uuid}, description: 'from 1.27: only takes of this batch (`Take.batch_id`, its collection)'}
         - {name: q, in: query, required: false, schema: {type: string, maxLength: 200}, description: 'text search over title, prompt and (from 1.27) element handles, workflow and model; blank = no filter'}
+        - {name: order, in: query, required: false, schema: {type: string, enum: [newest, oldest, starred, name], default: newest}, description: 'from 1.42: the Gallery''s sort'}
         - {$ref: '#/components/parameters/Cursor'}
         - {$ref: '#/components/parameters/Limit'}
       responses:
@@ -1699,7 +1703,7 @@ paths:
       tags: [studio]
       operationId: studioListModelSources
       summary: The local servers and remote providers a pipeline may name (names and models only)
-      description: 'From 1.15. Enabled providers, redacted for every user: no base_url, key_secret, host or limits. Remote ones only when the deployment has remote models on.'
+      description: 'From 1.15. Enabled providers, redacted for every user: no base_url, key_secret, host or limits. Remote ones only when the deployment has remote models on. Never a search provider (1.42).'
       responses:
         '200': {description: the sources, content: {application/json: {schema: {$ref: '#/components/schemas/ModelSourceList'}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -1814,6 +1818,202 @@ paths:
         '503': {$ref: '#/components/responses/Unavailable'}
 
   # ------------------------------------------------------------------ studio: models and model jobs (API 1.16, contracts/README.md, Models and model jobs)
+  # ------------------------------------------------------------------ studio: the assistant (from 1.42, plan 18 22)
+  /v1/studio/assistant/threads:
+    get:
+      tags: [studio]
+      operationId: studioListAssistantThreads
+      summary: 'From 1.42: your assistant chats, newest first, and the assistant''s state for you'
+      description: |
+        At most 200 chats (`updated_at`, then `id`, newest first). `status` says whether the assistant is on, where its
+        model runs (a remote provider: the drawer shows the notice first), whether web search is on, your caps and what
+        you used today. When the admin has it off, `status.enabled` is false and the list is still served.
+      responses:
+        '200': {description: the chats, content: {application/json: {schema: {$ref: '#/components/schemas/AssistantThreadList'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    post:
+      tags: [studio]
+      operationId: studioCreateAssistantThread
+      summary: 'From 1.42: New chat'
+      description: |
+        Creates an empty chat. Your previous chat (the newest with a message) gets its summary written
+        (`cmd.assistant.turn` input `summarize`). 409 `the assistant is off` while the admin has it off.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/AssistantThreadCreate'}}}
+      responses:
+        '201': {description: the chat, content: {application/json: {schema: {$ref: '#/components/schemas/AssistantThread'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/assistant/threads/{thread_id}:
+    get:
+      tags: [studio]
+      operationId: studioGetAssistantThread
+      summary: 'From 1.42: one chat with its newest 200 entries, oldest first'
+      description: 'Another user''s chat is 404. New entries arrive on `GET …/events`.'
+      parameters: [{$ref: '#/components/parameters/ThreadId'}]
+      responses:
+        '200': {description: the chat, content: {application/json: {schema: {$ref: '#/components/schemas/AssistantThreadDetail'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    delete:
+      tags: [studio]
+      operationId: studioDeleteAssistantThread
+      summary: 'From 1.42: delete a chat, its checkpoints and its summary'
+      description: |
+        Deletes the chat's rows and writes `cmd.assistant.delete` in one transaction (pipelines drops its checkpoints
+        and the chat's summary; the other items it saved stay). A card waiting in it is cancelled.
+      parameters: [{$ref: '#/components/parameters/ThreadId'}]
+      responses:
+        '204': {description: deleted}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/assistant/threads/{thread_id}/messages:
+    post:
+      tags: [studio]
+      operationId: studioPostAssistantMessage
+      summary: 'From 1.42: a message, the actions'' results, a card''s answer, or Continue here'
+      description: |
+        `message` stores your message and writes `cmd.assistant.turn` in one transaction (202; the turn's steps arrive
+        on `…/events`); a chat parked on actions of a tab that went away resumes first, each of them `did_not_run`
+        (`the tab was closed`). `results` and `answer` resume the parked turn; they are accepted only from the tab that
+        runs it (`client_id`, else 409 `this chat is working in another tab`) and only for the ids it waits on (409
+        `nothing waits on <id>`). `continue` moves the chat to this tab (Continue here): its pending actions are sent
+        to it, the other tab turns read-only; no command is written. 409 `the assistant is off`, and for a message while
+        a turn is working (`wait for the answer, or Stop`); 429 above the admin's messages a minute (`at most <n>
+        messages a minute`); 422 for a blank text or a screen summary over 16 000 characters. A daily cap is not a 4xx:
+        the message is kept and the step's `error` says when it starts again.
+      parameters: [{$ref: '#/components/parameters/ThreadId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/AssistantPost'}}}
+      responses:
+        '202': {description: accepted, content: {application/json: {schema: {$ref: '#/components/schemas/AssistantAccepted'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/assistant/threads/{thread_id}/events:
+    get:
+      tags: [studio]
+      operationId: studioAssistantEvents
+      summary: 'From 1.42: chat events after a cursor — JSON polling, or server-sent events with `Accept text/event-stream`'
+      description: |
+        Like the batch events, numbered by a per-chat `seq`: JSON gives the events with `seq > since` (at most 500) and
+        `last_seq`; SSE replays `seq > since` (or `Last-Event-ID`, which wins), then streams, `id:` = seq, `event:` =
+        `entry` (a stored entry: your message, the assistant's words, a line, a card) or `thread` (the chat's state and
+        the tab that runs it), `data:` = the `AssistantEvent` JSON, `: keep-alive` every 15 s. A step that asks for
+        actions sends them in the `thread` event's `pending`; only the drawer whose `client_id` matches runs them.
+      parameters:
+        - {$ref: '#/components/parameters/ThreadId'}
+        - {name: since, in: query, schema: {type: integer, minimum: 0, default: 0}, description: cursor — the last seq the client has}
+        - {name: Last-Event-ID, in: header, required: false, schema: {type: string}, description: 'SSE resume: the last `id:` received (an integer)'}
+      responses:
+        '200':
+          description: events
+          content:
+            application/json: {schema: {$ref: '#/components/schemas/AssistantEventPage'}}
+            text/event-stream: {schema: {type: string}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/assistant/memory:
+    get:
+      tags: [studio]
+      operationId: studioListAssistantMemory
+      summary: 'From 1.42: what the assistant remembers about you, newest first — the Memory list'
+      description: |
+        Studio asks pipelines_service (`pipelines.assistant.memory` `list`, 5 s: else 503) in your namespace only.
+        `kind`: preference (Likes), project (Projects), worked (Worked), summary (Chats). Each item names its chat
+        (title, or null once the chat is deleted).
+      parameters:
+        - {name: kind, in: query, required: false, schema: {$ref: '#/components/schemas/AssistantMemoryKind'}}
+      responses:
+        '200': {description: the items, content: {application/json: {schema: {$ref: '#/components/schemas/AssistantMemoryList'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    delete:
+      tags: [studio]
+      operationId: studioClearAssistantMemory
+      summary: 'From 1.42: Clear all'
+      responses:
+        '204': {description: cleared}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/assistant/memory/{item_id}:
+    patch:
+      tags: [studio]
+      operationId: studioEditAssistantMemoryItem
+      summary: 'From 1.42: edit one item''s text'
+      description: '`text` is trimmed (blank: 422). Another user''s item is 404.'
+      parameters:
+        - {name: item_id, in: path, required: true, schema: {type: string}, description: 'memory item UUID (unknown, another user''s or malformed = 404)'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/AssistantMemoryPatch'}}}
+      responses:
+        '200': {description: the item, content: {application/json: {schema: {$ref: '#/components/schemas/AssistantMemoryItem'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    delete:
+      tags: [studio]
+      operationId: studioDeleteAssistantMemoryItem
+      summary: 'From 1.42: delete one item (Delete, or Undo on a Remembered line)'
+      parameters:
+        - {name: item_id, in: path, required: true, schema: {type: string}, description: 'memory item UUID (unknown, another user''s or malformed = 404)'}
+      responses:
+        '204': {description: deleted}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/admin/assistant:
+    get:
+      tags: [studio]
+      operationId: studioAdminGetAssistant
+      summary: 'From 1.42: the assistant''s settings (Admin › Model providers)'
+      description: 'Admin only (403). Off, with no provider, until the admin sets it.'
+      responses:
+        '200': {description: the settings, content: {application/json: {schema: {$ref: '#/components/schemas/AssistantSettings'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/AdminRequired'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    put:
+      tags: [studio]
+      operationId: studioAdminPutAssistant
+      summary: 'From 1.42: set the assistant on or off, its provider and model, web search and the caps'
+      description: |
+        Admin only (403). Applies from each chat's next input. 422 when `enabled` without a provider, for a provider
+        that is not an enabled server or remote, a model not in its models, or a search provider that is not an
+        enabled provider of kind search; 409 `remote models are off on this deployment` for a remote provider or web
+        search while the deployment's switch is off.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/AssistantSettingsPut'}}}
+      responses:
+        '200': {description: the settings, content: {application/json: {schema: {$ref: '#/components/schemas/AssistantSettings'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/AdminRequired'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
   /v1/studio/models:
     get:
       tags: [studio]
@@ -2799,6 +2999,7 @@ components:
     Limit: {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200, default: 60}}
     TimelineId: {name: timeline_id, in: path, required: true, schema: {type: string}, description: sequence UUID (malformed = 404)}
     MediaJobId: {name: job_id, in: path, required: true, schema: {type: string}, description: media job UUID (malformed = 404)}
+    ThreadId: {name: thread_id, in: path, required: true, schema: {type: string}, description: 'from 1.42: an assistant chat''s UUID (another user''s or malformed = 404)'}
 
   responses:
     Unauthorized: {description: 'missing or invalid x-api-key (Kong), or missing/invalid/expired/revoked bearer token', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
@@ -5406,7 +5607,7 @@ components:
         state: {type: object, description: 'the thread''s state after the step, read-only plain JSON (row inputs, run and take ids, picks, loop counters; never media)'}
 
     # ---------------------------------------------------------- studio: model providers, custom nodes (1.15)
-    ProviderKind: {type: string, enum: [server, remote], description: 'server: a local server you run (loopback or private address); remote: outside the machine (https; only when the deployment has remote models on)'}
+    ProviderKind: {type: string, enum: [server, remote, search], description: 'server: a local server you run (loopback or private address); remote: outside the machine (https; only when the deployment has remote models on); from 1.42 search: a web search provider for the assistant (https, `api` brave, `key_secret`; only with remote models on; never a model source)'}
     Provider:
       type: object
       required: [name, kind, api, base_url, models, default_model, enabled, timeout_s, created_at, updated_at]
@@ -5414,7 +5615,7 @@ components:
       properties:
         name: {type: string, pattern: '^[a-z][a-z0-9-]{0,31}$'}
         kind: {$ref: '#/components/schemas/ProviderKind'}
-        api: {type: string, const: openai, description: 'OpenAI-compatible /v1/chat/completions (ChatOpenAI(base_url=…))'}
+        api: {type: string, enum: [openai, brave], description: 'openai: OpenAI-compatible /v1/chat/completions (ChatOpenAI(base_url=…)); from 1.42 brave: the Brave Search API (kind search only)'}
         title: {type: string, maxLength: 60, description: 'what users see (`Ollama on the Mac`); absent = name'}
         base_url: {type: string, maxLength: 300, examples: ['http://host.docker.internal:11434/v1', 'https://api.example.com/v1']}
         models: {type: array, minItems: 1, maxItems: 16, uniqueItems: true, items: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$'}, description: 'the models pipelines may name'}
@@ -5431,9 +5632,10 @@ components:
       type: object
       required: [kind, base_url, models]
       additionalProperties: false
-      description: 'create or replace a provider. server: http(s) base_url whose host is a loopback or private address or a name that resolves only to such (checked again at every call); `host` and `memory_gb` required. remote: https base_url, `key_secret` required, refused (409) unless the deployment has remote models on'
+      description: 'create or replace a provider. server: http(s) base_url whose host is a loopback or private address or a name that resolves only to such (checked again at every call); `host` and `memory_gb` required. remote: https base_url, `key_secret` required, refused (409) unless the deployment has remote models on. From 1.42 search: like remote, with `api` brave and `models` [web]'
       properties:
         kind: {$ref: '#/components/schemas/ProviderKind'}
+        api: {type: string, enum: [openai, brave], description: 'from 1.42: absent = openai; kind search needs brave, the others openai (422)'}
         title: {type: string, minLength: 1, maxLength: 60}
         base_url: {type: string, minLength: 8, maxLength: 300, pattern: '^https?://[^\s/?#@]+(/[^\s?#]*)?$'}
         models: {type: array, minItems: 1, maxItems: 16, uniqueItems: true, items: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$'}}
@@ -5493,10 +5695,313 @@ components:
             additionalProperties: false
             properties:
               name: {type: string}
-              kind: {$ref: '#/components/schemas/ProviderKind'}
+              kind: {type: string, enum: [server, remote], description: 'never search (1.42)'}
               title: {type: string}
               models: {type: array, items: {type: string}}
               default_model: {type: string}
+    # ---------------------------------------------------------- studio: the assistant (from 1.42; plan 18 22; the twins
+    # of messages/assistant.schema.json are marked, check.py runs their fixtures against both)
+    AssistantCallId: {type: string, pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[1-9][0-9]{0,5}:([0-9]|[12][0-9])$', description: '<thread_id>:<turn>:<n>'}
+    AssistantClientId: {type: string, pattern: '^[A-Za-z0-9_-]{8,64}$', description: 'one drawer (a browser tab)'}
+    AssistantScreen:
+      type: object
+      required: [route, ids, roles, as_of, hidden, actions, fields]
+      additionalProperties: false
+      description: 'twin of assistant.schema.json screen: the screen summary, built by the screen from values it already works out, sent with each message, fenced as data (at most 16 000 characters of JSON)'
+      properties:
+        route: {type: string, pattern: '^/[^\s]{0,199}$'}
+        ids: {type: object, maxProperties: 16, propertyNames: {pattern: '^[a-z][a-z_]{0,31}$'}, additionalProperties: {type: string, maxLength: 80}}
+        roles: {type: array, maxItems: 8, items: {type: string, pattern: '^[a-z][a-z0-9_-]{0,31}$'}}
+        as_of: {type: string, format: date-time}
+        hidden: {type: boolean}
+        actions: {type: array, maxItems: 64, uniqueItems: true, items: {type: string, pattern: '^[a-z][A-Za-z0-9]{0,47}$'}, description: 'the screen actions registered now (tools/actions.json)'}
+        fields: {type: object}
+    AssistantAction:
+      type: object
+      required: [id, name, args]
+      additionalProperties: false
+      description: 'twin of assistant.schema.json action: one screen action for the tab to run'
+      properties:
+        id: {$ref: '#/components/schemas/AssistantCallId'}
+        name: {type: string, pattern: '^[a-z][A-Za-z0-9]{0,47}$'}
+        args: {type: object}
+    AssistantLineText:
+      type: object
+      required: [text, undo]
+      additionalProperties: false
+      properties:
+        text: {type: string, minLength: 1, maxLength: 300}
+        undo: {type: boolean}
+    AssistantActionResult:
+      type: object
+      required: [id, status, line]
+      additionalProperties: false
+      description: 'twin of assistant.schema.json result: what one action did in the tab'
+      properties:
+        id: {$ref: '#/components/schemas/AssistantCallId'}
+        status: {type: string, enum: [done, failed, did_not_run, cancelled, still_running]}
+        line: {$ref: '#/components/schemas/AssistantLineText'}
+        result: {type: object}
+        error: {type: string, maxLength: 500}
+    AssistantLine:
+      type: object
+      required: [id, status, text, undo]
+      additionalProperties: false
+      description: 'twin of assistant.schema.json line: one action line'
+      properties:
+        id: {$ref: '#/components/schemas/AssistantCallId'}
+        status: {type: string, enum: [running, waiting, done, undone, did_not_run, failed, cancelled]}
+        text: {type: string, minLength: 1, maxLength: 300}
+        undo: {type: boolean}
+        memory_id: {type: string, format: uuid}
+        sources:
+          type: array
+          maxItems: 5
+          items:
+            type: object
+            required: [title, url]
+            additionalProperties: false
+            properties: {title: {type: string, maxLength: 200}, url: {type: string, maxLength: 500}}
+    AssistantCard:
+      type: object
+      required: [id, kind, title, rows, tags, state]
+      additionalProperties: false
+      description: 'twin of assistant.schema.json card: a card the server asks (look_at, web_search, forget); Yes or Not now is a message of kind answer'
+      properties:
+        id: {$ref: '#/components/schemas/AssistantCallId'}
+        kind: {type: string, enum: [look, web_search, delete]}
+        title: {type: string, minLength: 1, maxLength: 120}
+        rows:
+          type: array
+          maxItems: 8
+          items:
+            type: object
+            required: [label, value]
+            additionalProperties: false
+            properties: {label: {type: string, maxLength: 40}, value: {type: string, maxLength: 300}}
+        note: {type: string, maxLength: 300}
+        tags: {type: array, minItems: 1, maxItems: 3, items: {type: string, maxLength: 40}}
+        take_ids: {type: array, maxItems: 8, items: {type: string, format: uuid}}
+        state: {type: string, enum: [waiting, 'yes', not_now, cancelled]}
+    AssistantCaps:
+      type: object
+      required: [model_calls, tool_calls, memory_writes]
+      additionalProperties: false
+      description: 'twin of assistant.schema.json caps: used by the current message'
+      properties:
+        model_calls: {type: integer, minimum: 0, maximum: 12}
+        tool_calls: {type: integer, minimum: 0, maximum: 30}
+        memory_writes: {type: integer, minimum: 0, maximum: 4}
+    AssistantError:
+      type: object
+      required: [code, text]
+      additionalProperties: false
+      description: 'twin of assistant.schema.json error: why a turn ended early'
+      properties:
+        code: {type: string, enum: [cap_message, cap_day, cap_tokens, cap_look_at, answer, provider, 'off', internal]}
+        text: {type: string, minLength: 1, maxLength: 500}
+        resets_at: {type: string, format: date-time}
+    AssistantLimits:
+      type: object
+      required: [model_calls_per_day, tokens_per_day, look_at_per_hour, messages_per_minute]
+      additionalProperties: false
+      description: 'twin of assistant.schema.json limits: the caps per user'
+      properties:
+        model_calls_per_day: {type: integer, minimum: 1, maximum: 100000, default: 200}
+        tokens_per_day: {type: integer, minimum: 1000, maximum: 100000000, default: 2000000}
+        look_at_per_hour: {type: integer, minimum: 0, maximum: 1000, default: 20}
+        messages_per_minute: {type: integer, minimum: 1, maximum: 60, default: 6}
+    AssistantStatus:
+      type: object
+      required: [enabled, provider, web_search, limits]
+      additionalProperties: false
+      description: 'what every user may know: on or off (the dock item is hidden when off), where the model runs, web search, the caps'
+      properties:
+        enabled: {type: boolean}
+        provider:
+          oneOf:
+            - type: object
+              required: [title, remote]
+              additionalProperties: false
+              properties:
+                title: {type: string, description: '`DeepSeek`'}
+                remote: {type: boolean, description: 'true: your messages leave this machine (the notice shows first)'}
+            - {type: 'null'}
+        web_search: {type: [string, 'null'], description: 'the search provider''s title when web search is on'}
+        limits: {$ref: '#/components/schemas/AssistantLimits'}
+    AssistantPending:
+      type: object
+      required: [turn, actions, cards]
+      additionalProperties: false
+      description: 'what the parked turn waits on: actions for the tab `client_id` to run, cards (ids of card entries) to answer'
+      properties:
+        turn: {type: integer, minimum: 1}
+        actions: {type: array, maxItems: 30, items: {$ref: '#/components/schemas/AssistantAction'}}
+        cards: {type: array, maxItems: 4, items: {$ref: '#/components/schemas/AssistantCallId'}}
+    AssistantThread:
+      type: object
+      required: [id, title, state, client_id, pending, caps, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        title: {type: string, maxLength: 120, description: 'from the first message; `New chat` before'}
+        state: {type: string, enum: [idle, working, waiting], description: 'working: the agent is thinking; waiting: parked on actions, cards or a run'}
+        client_id: {oneOf: [{$ref: '#/components/schemas/AssistantClientId'}, {type: 'null'}], description: 'the tab that runs its actions; other tabs show it read-only with Continue here'}
+        pending: {oneOf: [{$ref: '#/components/schemas/AssistantPending'}, {type: 'null'}]}
+        caps: {$ref: '#/components/schemas/AssistantCaps'}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    AssistantThreadList:
+      type: object
+      required: [status, threads]
+      properties:
+        status: {$ref: '#/components/schemas/AssistantStatus'}
+        threads: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/AssistantThread'}}
+    AssistantThreadCreate:
+      type: object
+      required: [client_id]
+      additionalProperties: false
+      properties:
+        client_id: {$ref: '#/components/schemas/AssistantClientId'}
+    AssistantEntry:
+      type: object
+      required: [id, turn, kind, at]
+      description: 'one stored entry of a chat: your message, the assistant''s words, an action line, a card, a notice (the remote provider''s, an error)'
+      properties:
+        id: {type: string, format: uuid}
+        turn: {type: integer, minimum: 1}
+        kind: {type: string, enum: [user, assistant, line, card, notice]}
+        at: {type: string, format: date-time}
+        text: {type: string, maxLength: 4000, description: 'user, assistant, notice: shown as text, never HTML'}
+        line: {$ref: '#/components/schemas/AssistantLine'}
+        card: {$ref: '#/components/schemas/AssistantCard'}
+        error: {$ref: '#/components/schemas/AssistantError'}
+      allOf:
+        - {if: {properties: {kind: {enum: [user, assistant]}}}, then: {required: [text]}}
+        - {if: {properties: {kind: {const: line}}}, then: {required: [line]}}
+        - {if: {properties: {kind: {const: card}}}, then: {required: [card]}}
+    AssistantThreadDetail:
+      allOf:
+        - {$ref: '#/components/schemas/AssistantThread'}
+        - type: object
+          required: [entries]
+          properties:
+            entries: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/AssistantEntry'}, description: 'the newest 200, oldest first'}
+    AssistantPost:
+      oneOf:
+        - type: object
+          required: [kind, client_id, text, screen]
+          additionalProperties: false
+          properties:
+            kind: {const: message}
+            client_id: {$ref: '#/components/schemas/AssistantClientId'}
+            text: {type: string, minLength: 1, maxLength: 4000, description: 'trimmed; blank = 422'}
+            screen: {$ref: '#/components/schemas/AssistantScreen'}
+        - type: object
+          required: [kind, client_id, turn, results]
+          additionalProperties: false
+          properties:
+            kind: {const: results}
+            client_id: {$ref: '#/components/schemas/AssistantClientId'}
+            turn: {type: integer, minimum: 1}
+            results: {type: array, minItems: 1, maxItems: 30, items: {$ref: '#/components/schemas/AssistantActionResult'}}
+            screen: {$ref: '#/components/schemas/AssistantScreen', description: 'after a navigate: the new screen'}
+        - type: object
+          required: [kind, client_id, card_id, answer]
+          additionalProperties: false
+          properties:
+            kind: {const: answer}
+            client_id: {$ref: '#/components/schemas/AssistantClientId'}
+            card_id: {$ref: '#/components/schemas/AssistantCallId'}
+            answer: {type: string, enum: ['yes', not_now]}
+        - type: object
+          required: [kind, client_id]
+          additionalProperties: false
+          properties:
+            kind: {const: continue}
+            client_id: {$ref: '#/components/schemas/AssistantClientId'}
+    AssistantAccepted:
+      type: object
+      required: [thread, entry]
+      properties:
+        thread: {$ref: '#/components/schemas/AssistantThread'}
+        entry: {oneOf: [{$ref: '#/components/schemas/AssistantEntry'}, {type: 'null'}], description: 'message: your stored message; otherwise null'}
+    AssistantEvent:
+      type: object
+      required: [seq, type]
+      properties:
+        seq: {type: integer, minimum: 1}
+        type: {type: string, enum: [entry, thread]}
+        entry: {$ref: '#/components/schemas/AssistantEntry', description: 'type entry: a new or changed entry (same id replaces: a line going from running to done, a card answered)'}
+        thread: {$ref: '#/components/schemas/AssistantThread', description: 'type thread: the chat''s state, tab and pending'}
+      allOf:
+        - {if: {properties: {type: {const: entry}}}, then: {required: [entry]}}
+        - {if: {properties: {type: {const: thread}}}, then: {required: [thread]}}
+    AssistantEventPage:
+      type: object
+      required: [events, last_seq]
+      properties:
+        events: {type: array, maxItems: 500, items: {$ref: '#/components/schemas/AssistantEvent'}}
+        last_seq: {type: integer, minimum: 0, description: next `since` (unchanged when the page is empty)}
+    AssistantMemoryKind: {type: string, enum: [preference, project, worked, summary], description: 'the Memory list''s Likes, Projects, Worked, Chats'}
+    AssistantMemoryItem:
+      type: object
+      required: [id, kind, text, thread, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        kind: {$ref: '#/components/schemas/AssistantMemoryKind'}
+        text: {type: string, minLength: 1, maxLength: 600}
+        thread:
+          description: 'the chat that saved it; null once it is deleted'
+          oneOf:
+            - type: object
+              required: [id, title]
+              properties: {id: {type: string, format: uuid}, title: {type: string, maxLength: 120}}
+            - {type: 'null'}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    AssistantMemoryList:
+      type: object
+      required: [items, counts]
+      properties:
+        items: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/AssistantMemoryItem'}}
+        counts:
+          type: object
+          required: [preference, project, worked, summary]
+          properties:
+            preference: {type: integer, minimum: 0}
+            project: {type: integer, minimum: 0}
+            worked: {type: integer, minimum: 0}
+            summary: {type: integer, minimum: 0}
+    AssistantMemoryPatch:
+      type: object
+      required: [text]
+      additionalProperties: false
+      properties:
+        text: {type: string, minLength: 1, maxLength: 500, description: 'trimmed; blank = 422'}
+    AssistantSettings:
+      type: object
+      required: [enabled, provider, model, web_search, search_provider, limits, remote_enabled, updated_at]
+      description: 'the admin''s assistant settings (Admin › Model providers)'
+      properties:
+        enabled: {type: boolean}
+        provider: {type: [string, 'null'], description: 'a server or remote provider''s name'}
+        model: {type: [string, 'null'], description: 'one of its models; null = its default_model'}
+        web_search: {type: boolean, description: 'web search''s own egress switch (off by default)'}
+        search_provider: {type: [string, 'null'], description: 'a provider of kind search'}
+        limits: {$ref: '#/components/schemas/AssistantLimits'}
+        remote_enabled: {type: boolean, description: 'the deployment''s switch (REMOTE_MODELS): a remote provider and web search need it'}
+        updated_at: {type: [string, 'null'], format: date-time, description: 'null before the first PUT'}
+    AssistantSettingsPut:
+      type: object
+      required: [enabled]
+      additionalProperties: false
+      properties:
+        enabled: {type: boolean}
+        provider: {type: [string, 'null'], pattern: '^[a-z][a-z0-9-]{0,31}$'}
+        model: {type: [string, 'null'], pattern: '^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$'}
+        web_search: {type: boolean, default: false}
+        search_provider: {type: [string, 'null'], pattern: '^[a-z][a-z0-9-]{0,31}$'}
+        limits: {$ref: '#/components/schemas/AssistantLimits', description: 'absent = unchanged'}
     CustomNode:
       type: object
       required: [name, title, help, input, output, network, version]

@@ -1,0 +1,10 @@
+{
+  "tool": "look_at",
+  "result": {
+    "run_id": "1c9e3f6a-2b4d-4e8f-9a1c-5d7b3e2f8a60",
+    "session_id": "2d4f6a8b-1c3e-4a5b-9c7d-8e0f1a2b3c4d",
+    "workflow_id": "qwen-image-ask",
+    "host": "mac",
+    "position": 2
+  }
+}

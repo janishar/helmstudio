@@ -154,7 +154,22 @@ async def test_run_finished_off_contract_is_termed():
 def test_the_contract_copy_is_current():
     from conftest import CONTRACTS
 
-    for p in (CONTRACTS / "messages").glob("*.schema.json"):
-        assert (schemas.GEN / "messages" / p.name).read_text() == p.read_text(), (
+    for p in [
+        *(CONTRACTS / "messages").glob("*.schema.json"),
+        *(CONTRACTS / "tools").glob("*.json"),
+    ]:
+        assert (schemas.GEN / p.parent.name / p.name).read_text() == p.read_text(), (
             f"make gen: {p.name}"
         )
+
+
+def test_assistant_tool_calls_resolve_into_the_tools_copy():
+    """req.studio.tools' assistant args $ref gen/tools/catalog.json (API 1.42)."""
+    ref = f"{schemas.BASE}req.studio.tools.schema.json#/$defs/request"
+    call = {
+        "owner_id": OWNER,
+        "thread_id": BATCH["batch_id"],
+        "call_id": f"{BATCH['batch_id']}:1:0",
+    }
+    assert schemas.errors(ref, call | {"tool": "get_run", "args": {"run_id": RUN}}) == []
+    assert schemas.errors(ref, call | {"tool": "get_run", "args": {}}) != []

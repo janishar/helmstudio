@@ -1,0 +1,26 @@
+{
+  "items": [
+    {
+      "id": "4c5d6e7f-8a9b-4c0d-9e1f-2a3b4c5d6e7f",
+      "kind": "preference",
+      "text": "You like 16:9",
+      "thread_id": "3b7c9d1e-2f4a-4b6c-8d0e-1a2b3c4d5e6f",
+      "created_at": "2026-11-22T10:20:00Z",
+      "updated_at": "2026-11-22T10:20:00Z"
+    },
+    {
+      "id": "4c5d6e7f-8a9b-4c0d-9e1f-2a3b4c5d6e70",
+      "kind": "summary",
+      "text": "Bus stop scene, 3 shots",
+      "thread_id": null,
+      "created_at": "2026-11-22T10:20:00Z",
+      "updated_at": "2026-11-22T10:20:00Z"
+    }
+  ],
+  "counts": {
+    "preference": 1,
+    "project": 0,
+    "worked": 0,
+    "summary": 1
+  }
+}

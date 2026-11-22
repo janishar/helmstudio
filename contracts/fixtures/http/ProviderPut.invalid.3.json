@@ -1,0 +1,9 @@
+{
+  "kind": "search",
+  "api": "bing",
+  "base_url": "https://api.example.com/v1",
+  "models": [
+    "web"
+  ],
+  "key_secret": "provider-bing"
+}

@@ -10,9 +10,10 @@ test:
 	set -a; [ -f .test.env ] && . ./.test.env; set +a; go test -count=1 ./...
 
 # HTTP bodies are hand-written DTOs (api/studio/dto); gen/ holds the NATS envelope from contracts/messages (hand-kept:
-# one struct; message data is decoded per type where it is used)
+# one struct; message data is decoded per type where it is used) and a copy of contracts/tools/catalog.json (embedded;
+# gen/tools_test.go fails when it drifts)
 gen:
-	@echo "studio_service: gen/ is hand-kept (contracts/messages/envelope.schema.json)"
+	mkdir -p gen/tools && cp ../contracts/tools/catalog.json gen/tools/
 
 lint:
 	gofmt -l . | (! grep .) && go vet ./...

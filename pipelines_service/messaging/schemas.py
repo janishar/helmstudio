@@ -17,7 +17,11 @@ REGISTRY = "https://helmstudio.local/contracts/registry.schema.json"
 def _registry() -> Registry:
     """The message schemas from gen/, loaded once."""
     resources = []
-    for p in [*GEN.glob("messages/*.schema.json"), GEN / "registry.schema.json"]:
+    for p in [
+        *GEN.glob("messages/*.schema.json"),
+        GEN / "registry.schema.json",
+        *GEN.glob("tools/*.json"),
+    ]:
         schema = json.loads(p.read_text())
         resources.append((schema["$id"], Resource.from_contents(schema)))
     return Registry().with_resources(resources)

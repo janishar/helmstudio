@@ -7,7 +7,7 @@ type Provider = S<"Provider">;
 type Put = S<"ProviderPut">;
 
 export type ProviderForm = {
-  kind: "server" | "remote";
+  kind: Provider["kind"];
   name: string;
   title: string;
   base_url: string;

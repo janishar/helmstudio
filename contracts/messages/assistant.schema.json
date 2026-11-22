@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/assistant.schema.json",
+  "title": "The in-app assistant's shared shapes (API 1.42)",
+  "description": "Not a message: what cmd.assistant.turn, evt.assistant.step and req.pipelines.assistant.memory share (plan 18, 22.3). The HTTP bodies in openapi.yaml (Assistant*) carry the same shapes. Ids of calls are `<thread_id>:<turn>:<n>`: the thread, its input counter, the call's index in that message (from 0), so a replay after a crash names the same call.",
+  "$defs": {
+    "callId": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[1-9][0-9]{0,5}:([0-9]|[12][0-9])$",
+      "description": "<thread_id>:<turn>:<n>, n below 30 (the tool calls of one message)"
+    },
+    "clientId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{8,64}$",
+      "description": "one drawer (a browser tab); a turn's actions run only in the tab that sent its message"
+    },
+    "toolName": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,47}$", "description": "a tool of tools/catalog.json"},
+    "actionName": {"type": "string", "pattern": "^[a-z][A-Za-z0-9]{0,47}$", "description": "a screen action of tools/actions.json"},
+    "screen": {
+      "type": "object",
+      "required": ["route", "ids", "roles", "as_of", "hidden", "actions", "fields"],
+      "additionalProperties": false,
+      "description": "the screen summary the sending tab built from values it already works out (22.4), fenced as data. Studio refuses one over 16 000 characters of JSON (422)",
+      "properties": {
+        "route": {"type": "string", "pattern": "^/[^\\s]{0,199}$", "description": "the path and query shown"},
+        "ids": {"type": "object", "maxProperties": 16, "propertyNames": {"pattern": "^[a-z][a-z_]{0,31}$"}, "additionalProperties": {"type": "string", "maxLength": 80}, "description": "the open ids (session, workflow, version, pipeline, batch, row, sequence…)"},
+        "roles": {"type": "array", "maxItems": 8, "items": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{0,31}$"}},
+        "as_of": {"type": "string", "format": "date-time"},
+        "hidden": {"type": "boolean", "description": "the tab was hidden when it was built"},
+        "actions": {"type": "array", "maxItems": 64, "uniqueItems": true, "items": {"$ref": "#/$defs/actionName"}, "description": "the actions this screen has registered now (the shell's included)"},
+        "fields": {"type": "object", "description": "the screen's own summary fields (22.4 table)"}
+      }
+    },
+    "action": {
+      "type": "object",
+      "required": ["id", "name", "args"],
+      "additionalProperties": false,
+      "description": "one screen action for the sending tab to run, in order; an action after a navigate is dropped",
+      "properties": {
+        "id": {"$ref": "#/$defs/callId"},
+        "name": {"$ref": "#/$defs/actionName"},
+        "args": {"type": "object", "description": "the action's input in tools/actions.json"}
+      }
+    },
+    "result": {
+      "type": "object",
+      "required": ["id", "status", "line"],
+      "additionalProperties": false,
+      "description": "what one action did in the tab (or, for a tab that went away, did_not_run)",
+      "properties": {
+        "id": {"$ref": "#/$defs/callId"},
+        "status": {"enum": ["done", "failed", "did_not_run", "cancelled", "still_running"], "description": "cancelled: Not now on its card, the dialog closed, or the screen unmounted; still_running: an await past its 10 min"},
+        "line": {"$ref": "#/$defs/lineText"},
+        "result": {"type": "object", "description": "done: what the action returned (a dialog's new id and @handle, an await's run, the new screen after a navigate)"},
+        "error": {"type": "string", "maxLength": 500, "description": "failed, did_not_run: why (the form's own reason, `the tab was closed`)"}
+      }
+    },
+    "lineText": {
+      "type": "object",
+      "required": ["text", "undo"],
+      "additionalProperties": false,
+      "properties": {
+        "text": {"type": "string", "minLength": 1, "maxLength": 300},
+        "undo": {"type": "boolean", "description": "the screen can undo it"}
+      }
+    },
+    "line": {
+      "type": "object",
+      "required": ["id", "status", "text", "undo"],
+      "additionalProperties": false,
+      "description": "one action line in the drawer",
+      "properties": {
+        "id": {"$ref": "#/$defs/callId"},
+        "status": {"enum": ["running", "waiting", "done", "undone", "did_not_run", "failed", "cancelled"]},
+        "text": {"type": "string", "minLength": 1, "maxLength": 300},
+        "undo": {"type": "boolean"},
+        "memory_id": {"$ref": "defs.schema.json#/$defs/uuid", "description": "a Remembered line: the item its Undo deletes"},
+        "sources": {
+          "type": "array",
+          "maxItems": 5,
+          "description": "a web search line: its sources, shown as text",
+          "items": {
+            "type": "object",
+            "required": ["title", "url"],
+            "additionalProperties": false,
+            "properties": {"title": {"type": "string", "maxLength": 200}, "url": {"type": "string", "maxLength": 500}}
+          }
+        }
+      }
+    },
+    "card": {
+      "type": "object",
+      "required": ["id", "kind", "title", "rows", "tags", "state"],
+      "additionalProperties": false,
+      "description": "a card the server asks (look_at, web_search, forget, Clear all); a screen action's card is drawn by its screen",
+      "properties": {
+        "id": {"$ref": "#/$defs/callId"},
+        "kind": {"enum": ["look", "web_search", "delete"]},
+        "title": {"type": "string", "minLength": 1, "maxLength": 120},
+        "rows": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "required": ["label", "value"],
+            "additionalProperties": false,
+            "properties": {"label": {"type": "string", "maxLength": 40}, "value": {"type": "string", "maxLength": 300}}
+          }
+        },
+        "note": {"type": "string", "maxLength": 300, "description": "what leaves the machine, or what can't be undone"},
+        "tags": {"type": "array", "minItems": 1, "maxItems": 3, "items": {"type": "string", "maxLength": 40}, "description": "the tag line (`uses the GPU`, `sends to Brave`, `can't be undone`)"},
+        "take_ids": {"type": "array", "maxItems": 8, "items": {"$ref": "defs.schema.json#/$defs/uuid"}, "description": "look: the takes shown"},
+        "state": {"enum": ["waiting", "yes", "not_now", "cancelled"]}
+      }
+    },
+    "caps": {
+      "type": "object",
+      "required": ["model_calls", "tool_calls", "memory_writes"],
+      "additionalProperties": false,
+      "description": "used by this message so far (at most 12 model calls, 30 tool calls, 4 memory writes)",
+      "properties": {
+        "model_calls": {"type": "integer", "minimum": 0, "maximum": 12},
+        "tool_calls": {"type": "integer", "minimum": 0, "maximum": 30},
+        "memory_writes": {"type": "integer", "minimum": 0, "maximum": 4}
+      }
+    },
+    "limits": {
+      "type": "object",
+      "required": ["model_calls_per_day", "tokens_per_day", "look_at_per_hour", "messages_per_minute"],
+      "additionalProperties": false,
+      "description": "the admin's caps per user (studio counts messages; pipelines counts model calls, tokens and look_at at the bound)",
+      "properties": {
+        "model_calls_per_day": {"type": "integer", "minimum": 1, "maximum": 100000},
+        "tokens_per_day": {"type": "integer", "minimum": 1000, "maximum": 100000000},
+        "look_at_per_hour": {"type": "integer", "minimum": 0, "maximum": 1000},
+        "messages_per_minute": {"type": "integer", "minimum": 1, "maximum": 60}
+      }
+    },
+    "error": {
+      "type": "object",
+      "required": ["code", "text"],
+      "additionalProperties": false,
+      "properties": {
+        "code": {"enum": ["cap_message", "cap_day", "cap_tokens", "cap_look_at", "answer", "provider", "off", "internal"], "description": "cap_message: a per-message cap ended the turn; cap_day, cap_tokens, cap_look_at: a per-user cap (the message is kept); answer: the model's answer failed its schema twice; provider: the model provider failed; off: the assistant or its provider is off"},
+        "text": {"type": "string", "minLength": 1, "maxLength": 500},
+        "resets_at": {"type": "string", "format": "date-time", "description": "a per-user cap: when it starts again"}
+      }
+    },
+    "memoryKind": {"enum": ["preference", "project", "worked", "summary"], "description": "the Memory list's Likes, Projects, Worked, Chats"},
+    "memoryItem": {
+      "type": "object",
+      "required": ["id", "kind", "text", "thread_id", "created_at", "updated_at"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"$ref": "defs.schema.json#/$defs/uuid"},
+        "kind": {"$ref": "#/$defs/memoryKind"},
+        "text": {"type": "string", "minLength": 1, "maxLength": 600, "description": "at most 500 characters; a summary 600"},
+        "thread_id": {"oneOf": [{"$ref": "defs.schema.json#/$defs/uuid"}, {"type": "null"}], "description": "the chat that saved it (null once that chat is deleted)"},
+        "created_at": {"type": "string", "format": "date-time"},
+        "updated_at": {"type": "string", "format": "date-time"}
+      }
+    }
+  }
+}

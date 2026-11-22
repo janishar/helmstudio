@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "provider": "deepseek",
+  "model": null,
+  "web_search": true,
+  "search_provider": "brave",
+  "limits": {
+    "model_calls_per_day": 200,
+    "tokens_per_day": 2000000,
+    "look_at_per_hour": 20,
+    "messages_per_minute": 6
+  },
+  "remote_enabled": true,
+  "updated_at": "2026-11-22T09:00:00Z"
+}

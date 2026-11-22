@@ -1,0 +1,10 @@
+{
+  "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+  "thread_id": "3b7c9d1e-2f4a-4b6c-8d0e-1a2b3c4d5e6f",
+  "batch_id": "3b7c9d1e-2f4a-4b6c-8d0e-1a2b3c4d5e6f",
+  "call_id": "3b7c9d1e-2f4a-4b6c-8d0e-1a2b3c4d5e6f:1:0",
+  "tool": "get_run",
+  "args": {
+    "run_id": "1c9e3f6a-2b4d-4e8f-9a1c-5d7b3e2f8a60"
+  }
+}

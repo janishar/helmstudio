@@ -2602,11 +2602,17 @@
         "kind": {
           "enum": [
             "server",
-            "remote"
-          ]
+            "remote",
+            "search"
+          ],
+          "description": "from API 1.42 also search: the assistant's web search provider (pipelines calls it, never a run)"
         },
         "api": {
-          "const": "openai"
+          "enum": [
+            "openai",
+            "brave"
+          ],
+          "description": "openai: OpenAI-compatible /v1/chat/completions; from API 1.42 brave: the Brave Search API (kind search only)"
         },
         "base_url": {
           "type": "string",
@@ -2642,7 +2648,32 @@
           "maximum": 8,
           "description": "remote: calls in flight at once over every batch (default 2)"
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "search"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "api": {
+                "const": "brave"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "api": {
+                "const": "openai"
+              }
+            }
+          }
+        }
+      ]
     },
     "remoteSettings": {
       "type": "object",

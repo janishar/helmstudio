@@ -21,6 +21,12 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `messages/req.studio.tools.schema.json` | (API 1.15) NATS request/reply pipelines → studio (not enveloped): one Agent tool call that needs studio's data (gallery.search, library.read, rows.add, rows.edit), as the batch's owner |
 | `messages/req.pipelines.providers.test.schema.json` | (API 1.15) NATS request/reply studio → pipelines (not enveloped): test a model provider (only pipelines ever calls one) |
 | `messages/req.pipelines.judge.test.schema.json` | (API 1.28) NATS request/reply studio → pipelines (not enveloped): a judge test's filled template, and its verdict from the answer |
+| `messages/cmd.assistant.{turn,delete}.schema.json`, `evt.assistant.step.schema.json` | (API 1.42) studio → pipelines: one input to an assistant chat (a message, the actions' results, a card's answer, summarize), a deleted chat; pipelines → studio's projector: one step of a turn (Assistant, below) |
+| `messages/req.pipelines.assistant.memory.schema.json` | (API 1.42) NATS request/reply studio → pipelines (not enveloped): the Memory list's list, edit, delete, clear, in the owner's namespace only |
+| `messages/assistant.schema.json` | (API 1.42) not a message: the assistant's shared shapes (screen summary, action, result, line, card, caps, limits, error, memory item); openapi.yaml's `Assistant*` twins copy them |
+| `tools/catalog.json` | (API 1.42) not a message: every tool the in-app assistant and `helm mcp` share (name, input, output, routes, roles, surfaces, card); studio_service embeds a copy (`gen/tools/`), pipelines_service copies it with the rest of `tools/` |
+| `tools/actions.json` | (API 1.42) not a message: the assistant's screen actions per screen and its card kinds; web_service and pipelines_service copy it |
+| `tools/catalog.schema.json` | (API 1.42) the shape of `tools/catalog.json` and `tools/actions.json` |
 | `messages/tools.schema.json` | (API 1.15) not a message: every Agent tool's arguments and result, one turn, one executed tool call (Agents: tools) |
 | `messages/cmd.model.job.schema.json`, `evt.model.{status,progress}.schema.json` | (API 1.16) studio → a runner: one model job (download, delete, lora_delete); runner → studio's projector: its lifecycle and download progress (Models and model jobs) |
 | `messages/cmd.media.job.schema.json`, `evt.media.{status,progress}.schema.json` | (API 1.17) studio → a runner: one media job (a sequence's export, a video take's frame) run with ffmpeg outside the GPU loop; runner → studio's projector: its lifecycle and export progress (Timeline: media jobs) |
@@ -48,7 +54,8 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `fixtures/mentions/` | the **shared mention and look fixtures** (Mentions, Looks, below): `scan.json` (prompt → parts), `fit.json` (an item and a workflow → the fit reason), `resolve.*.json` (a graph with merged values, a library, chosen looks → the expanded inputs, `typed`, `elements`, `looks`, or `errors`), against `fixtures/graphs/palette.json`. studio_service and the web editor both run them |
 | `fixtures/voices/` | (API 1.30) the **shared voice fixtures** (Voices, below): `media.json` (a graph → `Workflow.media`, audio included), `fit.json` (a LibraryItem and a workflow → the voice fit's reason; looks and elements in an audio workflow), `seconds.json` (a graph and a stage → the `peak_gb` variable `speech_seconds`), each `{description, workflows: {name: WorkflowDoc}, cases: [{description, workflow, …, expect}]}` against `fixtures/graphs/palette.json`. studio_service, the web and the runner core run them | (API 1.32) `scripts.json` (a dialogue graph, the caller's elements and voices → `expand_script`; the fake take → `echo_dialogue`; write-script answers → `script_check`)
 | `fixtures/loras/` | the **shared LoRA fixtures** (LoRA normaliser, below): header-only files `{description, name, family?, metadata, tensors: {key: {dtype, shape}}, values: {alpha key: number}, ignore?, expect}` that runner_service and studio_service tests turn into synthetic safetensors (random A/B values, `values` for the alphas); `expect` = `{key_style, rank, total, applied, ignored, unapplied, error, family, licence}` against the canonical lora block of `family` (absent = qwen-image; `ltx`: `ltx.models.valid.json`'s) (`ignore`, when present, replaces its ignore list); `detect/families.json`: family detection cases (families with their envs and blocks, a LoRA fixture, the detected family) |
-| `check.py` | validates every fixture (a registry fixture may carry a family prefix, `<family>.<key>.…`), checks each canonical workflow against its node schemas (kinds, params, wire types by `fits`, values and defaults in range, `media`; a `frames` param's `fps` names an int/float param), runs the graph fixtures through its reference implementation of the graph rules (`graph_problems`, `autowire`, `wire_drop`), the pipeline fixtures through `pipeline_problems` (and their `bounds` / `models` / `egress` / `reserved`), the decision fixtures through `judge_verdict` / `inputs_hash` / `agent_turn` / `turn_schema`, the mention and look fixtures through `scan` / `look_fit` / `resolve_mentions`, (API 1.30) the voice fixtures through `workflow_media` / `voice_fit` (`voice_reason` per param) / `look_fit` / `speech_seconds`, the LoRA fixtures through `normalise`, the video fixtures through `auto_frames` / `position_errors` (and `retake_map` / `extend_map` / `audio_map`, `take_uses` / `media_fit`, `h3_generate_error`), the timeline fixtures through `t_normalize` / `t_apply` / `snap_point` / `drop_index` / `frame_at` / `export_plan` / `shot_keyframes` / `rerender_steps`, the dispatch fixtures through `admit` / `simulate` / `place`, node schemas' `values` / `values_by` / `auto`, lints `openapi.yaml` and the house rules |
+| `fixtures/tools/offered.json` | (API 1.42) the **shared offer fixtures** (Assistant, below): roles and switches → the tools a turn offers (`offered_tools`), a screen and roles → the actions it registers (`screen_actions`) |
+| `check.py` | validates every fixture (a registry fixture may carry a family prefix, `<family>.<key>.…`), checks each canonical workflow against its node schemas (kinds, params, wire types by `fits`, values and defaults in range, `media`; a `frames` param's `fps` names an int/float param), runs the graph fixtures through its reference implementation of the graph rules (`graph_problems`, `autowire`, `wire_drop`), the pipeline fixtures through `pipeline_problems` (and their `bounds` / `models` / `egress` / `reserved`), the decision fixtures through `judge_verdict` / `inputs_hash` / `agent_turn` / `turn_schema`, the mention and look fixtures through `scan` / `look_fit` / `resolve_mentions`, (API 1.30) the voice fixtures through `workflow_media` / `voice_fit` (`voice_reason` per param) / `look_fit` / `speech_seconds`, the LoRA fixtures through `normalise`, the video fixtures through `auto_frames` / `position_errors` (and `retake_map` / `extend_map` / `audio_map`, `take_uses` / `media_fit`, `h3_generate_error`), the timeline fixtures through `t_normalize` / `t_apply` / `snap_point` / `drop_index` / `frame_at` / `export_plan` / `shot_keyframes` / `rerender_steps`, the dispatch fixtures through `admit` / `simulate` / `place`, (API 1.42) the assistant's tool files (Assistant: tools) and the offer fixtures through `offered_tools` / `screen_actions`, node schemas' `values` / `values_by` / `auto`, lints `openapi.yaml` and the house rules |
 
 ```sh
 make -C contract_tests venv              # once: contract_tests' own .venv has the checker's dependencies
@@ -76,6 +83,9 @@ make -C contract_tests check-contracts   # exit 1 on any failure
 | `studio.tools` | core request/reply, queue group `studio` | bare JSON (`req.studio.tools`) | pipelines → studio (5 s; API 1.15) |
 | `pipelines.providers.test` | core request/reply, queue group `pipelines` | bare JSON (`req.pipelines.providers.test`) | studio → pipelines (30 s; API 1.15) |
 | `pipelines.judge.test` | core request/reply, queue group `pipelines` | bare JSON (`req.pipelines.judge.test`) | studio → pipelines (5 s; API 1.28) |
+| `cmd.assistant.turn`, `cmd.assistant.delete` | stream `CMD` (work queue) | `cmd.assistant.<same>`, `Nats-Msg-Id <thread_id>:<turn>` (delete: `<thread_id>:delete`) | studio outbox relay → pipelines (durable `pipelines`; API 1.42) |
+| `evt.assistant.<thread_id>.step` | stream `EVT` | `evt.assistant.step`, `Nats-Msg-Id <thread_id>:<seq>` | pipelines → studio projector (durable `studio-assistant`; API 1.42) |
+| `pipelines.assistant.memory` | core request/reply, queue group `pipelines` | bare JSON (`req.pipelines.assistant.memory`) | studio → pipelines (5 s; API 1.42) |
 | `cmd.run.<host>.server` | stream `CMD` (work queue) | `cmd.run.execute` of a `server-ask` run | studio outbox relay → pipelines' server executor (durable `runner-<host>-server`; API 1.15) |
 | `evt.auth.revoked` | core | `evt.auth.revoked` | auth → every Go service's token cache |
 | `runner.unload.<host>.<env>` | core request/reply, no queue group | bare JSON (`req.runner.unload`) | studio's dispatcher → the runner of that host and env (60 s) |
@@ -3568,6 +3578,51 @@ studio_service (Go: normalizes every write and restore, runs `add`, `insert`, `f
   (1-60 characters, one line) and stored with `title_source` model and `named_by`, and a `session` event
   (`TitleEvent` {title, title_source, named_by}, run_id = the run it was named from) goes to the session's log, kept
   in the replay even after that run is deleted.
+## Assistant (API 1.42; plan 18-assistant section 22; normative)
+
+The in-app assistant: a drawer on every screen of the app shell, a LangGraph agent per chat in pipelines_service,
+chats (threads), their rows, roles, caps and SSE in studio_service.
+
+- **HTTP** (`/v1/studio/assistant/*`): `threads` (list with `status`, create = New chat, get with the newest 200
+  entries, delete), `…/messages` (202: a `message` with the screen summary, the actions' `results`, a card's `answer`,
+  or `continue` = Continue here), `…/events` (JSON or SSE, `entry` and `thread` events), `memory` (list by kind, Clear
+  all), `memory/{id}` (edit, delete). `/v1/studio/admin/assistant` holds the admin's settings: on or off, provider and
+  model (a server or remote provider), web search's own switch and its provider (kind `search`), and the caps per
+  user (model calls and tokens a day, `look_at` an hour, messages a minute). Another user's chat or memory item is 404.
+- **One input = one command.** Studio stores the input and writes `cmd.assistant.turn` (owner from its thread row,
+  roles from the token, `tools` = `offered_tools`, `actions` = the screen's registered ones, the settings) in one
+  transaction; pipelines answers with `evt.assistant.step`s; studio stores their text, lines and cards as entries and
+  sets the thread's `state`, `client_id` and `pending`. Only the tab `client_id` runs pending actions; its drawer
+  posts their `results`. A message to a chat parked on a tab that went away first resumes it with each pending
+  action `did_not_run` (`the tab was closed`).
+- **Ids.** A call (a tool call, a screen action, a card) is `<thread_id>:<turn>:<n>`: `turn` counts the chat's
+  inputs from 1, `n` the calls of that message from 0 (below 30). A replay after a crash names the same call, and
+  studio.tools and memory writes are idempotent on it.
+- **Costly, deleting or data-leaving actions wait for a card.** A screen action with `effect` card (actions.json)
+  shows its screen's card; Yes is the user's click on the screen's own button. A server card (`look_at`, `web_search`,
+  `forget`, Clear all) is an `AssistantCard` answered with a message of kind `answer`. The licence tick is never set
+  by the assistant.
+
+### Assistant: tools
+
+`tools/catalog.json` (validated against `tools/catalog.schema.json` `$defs/toolsFile`) holds every tool:
+
+- `input` is **model-facing and self-contained** (no `$ref`); `output` is the API's own shape (`$ref` into
+  openapi.yaml, each resolving).
+- `served_by` studio: answered on `studio.tools` (req.studio.tools `$defs/assistant`, whose `tool` enum and per-tool
+  `args` / `result` refs are exactly these tools'); its `routes` exist in openapi.yaml. `served_by` pipelines
+  (memory, web search): no routes.
+- A route under `/v1/studio/admin/` ⇔ `roles` [admin]; an admin tool is never offered to anyone else and studio
+  checks the role again (`forbidden`).
+- A write is mcp only, or the assistant's behind a `card`; only memory writes (`remember`) go without one.
+- `offered_tools(roles, web_search, look_at)`: surface assistant, every role held, `web_search` only when on,
+  `look_at` only when an ask workflow can run now.
+
+`tools/actions.json` (`$defs/actionsFile`) holds each screen's actions (`effect` line, undo, card, dialog; `card`
+names a card kind), the card kinds (each asked by some action or tool; tags from `tags`) and the shell's actions on
+every screen. An action is never named like a tool or a shell action; every screen route is a `navigate` target; a
+screen with `roles` registers only for them (`screen_actions`). The server's card kinds in assistant.schema.json are
+the tools' cards plus `delete` (Clear all).
 
 ## Rules
 

@@ -1,0 +1,5 @@
+{
+  "enabled": true,
+  "provider": "deepseek",
+  "web_search": false
+}

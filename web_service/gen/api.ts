@@ -837,13 +837,16 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * The caller's gallery, newest first, filtered and paginated
+         * The caller's gallery, newest first (or by `order`), filtered and paginated
          * @description Every take of the caller that is not deleted and (for an upload or an import) completed, newest first (`created_at`, then
          *     `id`). Filters combine with AND. `q`: every whitespace-separated word must occur, case-insensitively, in the
          *     title or the prompt (`made_with.prompt`), or from 1.27 in an element handle (`made_with.elements[].handle`; a
          *     leading `@` of the word is ignored there), the workflow title or id (`made_with.workflow_title`,
          *     `workflow_id`) or the model id (`made_with.model.id`, which names its family). A `session_id` or (from 1.27)
          *     `batch_id` that is unknown or another user's just matches nothing. A malformed filter value or cursor is 422.
+         *     From 1.42 `order`: `newest` (the default), `oldest` (`created_at`, then `id`, ascending), `starred` (starred
+         *     first, each part newest first), `name` (the title, case-insensitively, then newest first). A cursor belongs to
+         *     its order: one from another order is 422.
          */
         get: operations["studioListTakes"];
         put?: never;
@@ -1582,7 +1585,7 @@ export interface paths {
         };
         /**
          * The local servers and remote providers a pipeline may name (names and models only)
-         * @description From 1.15. Enabled providers, redacted for every user: no base_url, key_secret, host or limits. Remote ones only when the deployment has remote models on.
+         * @description From 1.15. Enabled providers, redacted for every user: no base_url, key_secret, host or limits. Remote ones only when the deployment has remote models on. Never a search provider (1.42).
          */
         get: operations["studioListModelSources"];
         put?: never;
@@ -1702,6 +1705,181 @@ export interface paths {
          *     network", needs no switch).
          */
         put: operations["studioAdminPutSessionNames"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/assistant/threads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * From 1.42: your assistant chats, newest first, and the assistant's state for you
+         * @description At most 200 chats (`updated_at`, then `id`, newest first). `status` says whether the assistant is on, where its
+         *     model runs (a remote provider: the drawer shows the notice first), whether web search is on, your caps and what
+         *     you used today. When the admin has it off, `status.enabled` is false and the list is still served.
+         */
+        get: operations["studioListAssistantThreads"];
+        put?: never;
+        /**
+         * From 1.42: New chat
+         * @description Creates an empty chat. Your previous chat (the newest with a message) gets its summary written
+         *     (`cmd.assistant.turn` input `summarize`). 409 `the assistant is off` while the admin has it off.
+         */
+        post: operations["studioCreateAssistantThread"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/assistant/threads/{thread_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * From 1.42: one chat with its newest 200 entries, oldest first
+         * @description Another user's chat is 404. New entries arrive on `GET …/events`.
+         */
+        get: operations["studioGetAssistantThread"];
+        put?: never;
+        post?: never;
+        /**
+         * From 1.42: delete a chat, its checkpoints and its summary
+         * @description Deletes the chat's rows and writes `cmd.assistant.delete` in one transaction (pipelines drops its checkpoints
+         *     and the chat's summary; the other items it saved stay). A card waiting in it is cancelled.
+         */
+        delete: operations["studioDeleteAssistantThread"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/assistant/threads/{thread_id}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * From 1.42: a message, the actions' results, a card's answer, or Continue here
+         * @description `message` stores your message and writes `cmd.assistant.turn` in one transaction (202; the turn's steps arrive
+         *     on `…/events`); a chat parked on actions of a tab that went away resumes first, each of them `did_not_run`
+         *     (`the tab was closed`). `results` and `answer` resume the parked turn; they are accepted only from the tab that
+         *     runs it (`client_id`, else 409 `this chat is working in another tab`) and only for the ids it waits on (409
+         *     `nothing waits on <id>`). `continue` moves the chat to this tab (Continue here): its pending actions are sent
+         *     to it, the other tab turns read-only; no command is written. 409 `the assistant is off`, and for a message while
+         *     a turn is working (`wait for the answer, or Stop`); 429 above the admin's messages a minute (`at most <n>
+         *     messages a minute`); 422 for a blank text or a screen summary over 16 000 characters. A daily cap is not a 4xx:
+         *     the message is kept and the step's `error` says when it starts again.
+         */
+        post: operations["studioPostAssistantMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/assistant/threads/{thread_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * From 1.42: chat events after a cursor — JSON polling, or server-sent events with `Accept text/event-stream`
+         * @description Like the batch events, numbered by a per-chat `seq`: JSON gives the events with `seq > since` (at most 500) and
+         *     `last_seq`; SSE replays `seq > since` (or `Last-Event-ID`, which wins), then streams, `id:` = seq, `event:` =
+         *     `entry` (a stored entry: your message, the assistant's words, a line, a card) or `thread` (the chat's state and
+         *     the tab that runs it), `data:` = the `AssistantEvent` JSON, `: keep-alive` every 15 s. A step that asks for
+         *     actions sends them in the `thread` event's `pending`; only the drawer whose `client_id` matches runs them.
+         */
+        get: operations["studioAssistantEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/assistant/memory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * From 1.42: what the assistant remembers about you, newest first — the Memory list
+         * @description Studio asks pipelines_service (`pipelines.assistant.memory` `list`, 5 s: else 503) in your namespace only.
+         *     `kind`: preference (Likes), project (Projects), worked (Worked), summary (Chats). Each item names its chat
+         *     (title, or null once the chat is deleted).
+         */
+        get: operations["studioListAssistantMemory"];
+        put?: never;
+        post?: never;
+        /** From 1.42: Clear all */
+        delete: operations["studioClearAssistantMemory"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/assistant/memory/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** From 1.42: delete one item (Delete, or Undo on a Remembered line) */
+        delete: operations["studioDeleteAssistantMemoryItem"];
+        options?: never;
+        head?: never;
+        /**
+         * From 1.42: edit one item's text
+         * @description `text` is trimmed (blank: 422). Another user's item is 404.
+         */
+        patch: operations["studioEditAssistantMemoryItem"];
+        trace?: never;
+    };
+    "/v1/studio/admin/assistant": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * From 1.42: the assistant's settings (Admin › Model providers)
+         * @description Admin only (403). Off, with no provider, until the admin sets it.
+         */
+        get: operations["studioAdminGetAssistant"];
+        /**
+         * From 1.42: set the assistant on or off, its provider and model, web search and the caps
+         * @description Admin only (403). Applies from each chat's next input. 422 when `enabled` without a provider, for a provider
+         *     that is not an enabled server or remote, a model not in its models, or a search provider that is not an
+         *     enabled provider of kind search; 409 `remote models are off on this deployment` for a remote provider or web
+         *     search while the deployment's switch is off.
+         */
+        put: operations["studioAdminPutAssistant"];
         post?: never;
         delete?: never;
         options?: never;
@@ -5562,19 +5740,19 @@ export interface components {
             state: Record<string, never>;
         };
         /**
-         * @description server: a local server you run (loopback or private address); remote: outside the machine (https; only when the deployment has remote models on)
+         * @description server: a local server you run (loopback or private address); remote: outside the machine (https; only when the deployment has remote models on); from 1.42 search: a web search provider for the assistant (https, `api` brave, `key_secret`; only with remote models on; never a model source)
          * @enum {string}
          */
-        ProviderKind: "server" | "remote";
+        ProviderKind: "server" | "remote" | "search";
         /** @description from 1.15: one model provider as the admin sees it. A remote provider's key is never in the API: `key_secret` names a file under pipelines_service's secrets directory */
         Provider: {
             name: string;
             kind: components["schemas"]["ProviderKind"];
             /**
-             * @description OpenAI-compatible /v1/chat/completions (ChatOpenAI(base_url=…))
-             * @constant
+             * @description openai: OpenAI-compatible /v1/chat/completions (ChatOpenAI(base_url=…)); from 1.42 brave: the Brave Search API (kind search only)
+             * @enum {string}
              */
-            api: "openai";
+            api: "openai" | "brave";
             /** @description what users see (`Ollama on the Mac`); absent = name */
             title?: string;
             /**
@@ -5601,9 +5779,14 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
-        /** @description create or replace a provider. server: http(s) base_url whose host is a loopback or private address or a name that resolves only to such (checked again at every call); `host` and `memory_gb` required. remote: https base_url, `key_secret` required, refused (409) unless the deployment has remote models on */
+        /** @description create or replace a provider. server: http(s) base_url whose host is a loopback or private address or a name that resolves only to such (checked again at every call); `host` and `memory_gb` required. remote: https base_url, `key_secret` required, refused (409) unless the deployment has remote models on. From 1.42 search: like remote, with `api` brave and `models` [web] */
         ProviderPut: {
             kind: components["schemas"]["ProviderKind"];
+            /**
+             * @description from 1.42: absent = openai; kind search needs brave, the others openai (422)
+             * @enum {string}
+             */
+            api?: "openai" | "brave";
             title?: string;
             base_url: string;
             models: string[];
@@ -5673,11 +5856,281 @@ export interface components {
             remote_enabled: boolean;
             sources: {
                 name: string;
-                kind: components["schemas"]["ProviderKind"];
+                /**
+                 * @description never search (1.42)
+                 * @enum {string}
+                 */
+                kind: "server" | "remote";
                 title: string;
                 models: string[];
                 default_model: string;
             }[];
+        };
+        /** @description <thread_id>:<turn>:<n> */
+        AssistantCallId: string;
+        /** @description one drawer (a browser tab) */
+        AssistantClientId: string;
+        /** @description twin of assistant.schema.json screen: the screen summary, built by the screen from values it already works out, sent with each message, fenced as data (at most 16 000 characters of JSON) */
+        AssistantScreen: {
+            route: string;
+            ids: {
+                [key: string]: string;
+            };
+            roles: string[];
+            /** Format: date-time */
+            as_of: string;
+            hidden: boolean;
+            /** @description the screen actions registered now (tools/actions.json) */
+            actions: string[];
+            fields: Record<string, never>;
+        };
+        /** @description twin of assistant.schema.json action: one screen action for the tab to run */
+        AssistantAction: {
+            id: components["schemas"]["AssistantCallId"];
+            name: string;
+            args: Record<string, never>;
+        };
+        AssistantLineText: {
+            text: string;
+            undo: boolean;
+        };
+        /** @description twin of assistant.schema.json result: what one action did in the tab */
+        AssistantActionResult: {
+            id: components["schemas"]["AssistantCallId"];
+            /** @enum {string} */
+            status: "done" | "failed" | "did_not_run" | "cancelled" | "still_running";
+            line: components["schemas"]["AssistantLineText"];
+            result?: Record<string, never>;
+            error?: string;
+        };
+        /** @description twin of assistant.schema.json line: one action line */
+        AssistantLine: {
+            id: components["schemas"]["AssistantCallId"];
+            /** @enum {string} */
+            status: "running" | "waiting" | "done" | "undone" | "did_not_run" | "failed" | "cancelled";
+            text: string;
+            undo: boolean;
+            /** Format: uuid */
+            memory_id?: string;
+            sources?: {
+                title: string;
+                url: string;
+            }[];
+        };
+        /** @description twin of assistant.schema.json card: a card the server asks (look_at, web_search, forget); Yes or Not now is a message of kind answer */
+        AssistantCard: {
+            id: components["schemas"]["AssistantCallId"];
+            /** @enum {string} */
+            kind: "look" | "web_search" | "delete";
+            title: string;
+            rows: {
+                label: string;
+                value: string;
+            }[];
+            note?: string;
+            tags: string[];
+            take_ids?: string[];
+            /** @enum {string} */
+            state: "waiting" | "yes" | "not_now" | "cancelled";
+        };
+        /** @description twin of assistant.schema.json caps: used by the current message */
+        AssistantCaps: {
+            model_calls: number;
+            tool_calls: number;
+            memory_writes: number;
+        };
+        /** @description twin of assistant.schema.json error: why a turn ended early */
+        AssistantError: {
+            /** @enum {string} */
+            code: "cap_message" | "cap_day" | "cap_tokens" | "cap_look_at" | "answer" | "provider" | "off" | "internal";
+            text: string;
+            /** Format: date-time */
+            resets_at?: string;
+        };
+        /** @description twin of assistant.schema.json limits: the caps per user */
+        AssistantLimits: {
+            /** @default 200 */
+            model_calls_per_day: number;
+            /** @default 2000000 */
+            tokens_per_day: number;
+            /** @default 20 */
+            look_at_per_hour: number;
+            /** @default 6 */
+            messages_per_minute: number;
+        };
+        /** @description what every user may know: on or off (the dock item is hidden when off), where the model runs, web search, the caps */
+        AssistantStatus: {
+            enabled: boolean;
+            provider: {
+                /** @description `DeepSeek` */
+                title: string;
+                /** @description true: your messages leave this machine (the notice shows first) */
+                remote: boolean;
+            } | null;
+            /** @description the search provider's title when web search is on */
+            web_search: string | null;
+            limits: components["schemas"]["AssistantLimits"];
+        };
+        /** @description what the parked turn waits on: actions for the tab `client_id` to run, cards (ids of card entries) to answer */
+        AssistantPending: {
+            turn: number;
+            actions: components["schemas"]["AssistantAction"][];
+            cards: components["schemas"]["AssistantCallId"][];
+        };
+        AssistantThread: {
+            /** Format: uuid */
+            id: string;
+            /** @description from the first message; `New chat` before */
+            title: string;
+            /**
+             * @description working: the agent is thinking; waiting: parked on actions, cards or a run
+             * @enum {string}
+             */
+            state: "idle" | "working" | "waiting";
+            /** @description the tab that runs its actions; other tabs show it read-only with Continue here */
+            client_id: components["schemas"]["AssistantClientId"] | null;
+            pending: components["schemas"]["AssistantPending"] | null;
+            caps: components["schemas"]["AssistantCaps"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        AssistantThreadList: {
+            status: components["schemas"]["AssistantStatus"];
+            threads: components["schemas"]["AssistantThread"][];
+        };
+        AssistantThreadCreate: {
+            client_id: components["schemas"]["AssistantClientId"];
+        };
+        /** @description one stored entry of a chat: your message, the assistant's words, an action line, a card, a notice (the remote provider's, an error) */
+        AssistantEntry: {
+            /** Format: uuid */
+            id: string;
+            turn: number;
+            /** @enum {string} */
+            kind: "user" | "assistant" | "line" | "card" | "notice";
+            /** Format: date-time */
+            at: string;
+            /** @description user, assistant, notice: shown as text, never HTML */
+            text?: string;
+            line?: components["schemas"]["AssistantLine"];
+            card?: components["schemas"]["AssistantCard"];
+            error?: components["schemas"]["AssistantError"];
+        } & (unknown & unknown & unknown);
+        AssistantThreadDetail: components["schemas"]["AssistantThread"] & {
+            /** @description the newest 200, oldest first */
+            entries: components["schemas"]["AssistantEntry"][];
+        };
+        AssistantPost: {
+            /** @constant */
+            kind: "message";
+            client_id: components["schemas"]["AssistantClientId"];
+            /** @description trimmed; blank = 422 */
+            text: string;
+            screen: components["schemas"]["AssistantScreen"];
+        } | {
+            /** @constant */
+            kind: "results";
+            client_id: components["schemas"]["AssistantClientId"];
+            turn: number;
+            results: components["schemas"]["AssistantActionResult"][];
+            /** @description after a navigate: the new screen */
+            screen?: components["schemas"]["AssistantScreen"];
+        } | {
+            /** @constant */
+            kind: "answer";
+            client_id: components["schemas"]["AssistantClientId"];
+            card_id: components["schemas"]["AssistantCallId"];
+            /** @enum {string} */
+            answer: "yes" | "not_now";
+        } | {
+            /** @constant */
+            kind: "continue";
+            client_id: components["schemas"]["AssistantClientId"];
+        };
+        AssistantAccepted: {
+            thread: components["schemas"]["AssistantThread"];
+            /** @description message: your stored message; otherwise null */
+            entry: components["schemas"]["AssistantEntry"] | null;
+        };
+        AssistantEvent: {
+            seq: number;
+            /** @enum {string} */
+            type: "entry" | "thread";
+            /** @description type entry: a new or changed entry (same id replaces: a line going from running to done, a card answered) */
+            entry?: components["schemas"]["AssistantEntry"];
+            /** @description type thread: the chat's state, tab and pending */
+            thread?: components["schemas"]["AssistantThread"];
+        } & (unknown & unknown);
+        AssistantEventPage: {
+            events: components["schemas"]["AssistantEvent"][];
+            /** @description next `since` (unchanged when the page is empty) */
+            last_seq: number;
+        };
+        /**
+         * @description the Memory list's Likes, Projects, Worked, Chats
+         * @enum {string}
+         */
+        AssistantMemoryKind: "preference" | "project" | "worked" | "summary";
+        AssistantMemoryItem: {
+            /** Format: uuid */
+            id: string;
+            kind: components["schemas"]["AssistantMemoryKind"];
+            text: string;
+            /** @description the chat that saved it; null once it is deleted */
+            thread: {
+                /** Format: uuid */
+                id: string;
+                title: string;
+            } | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        AssistantMemoryList: {
+            items: components["schemas"]["AssistantMemoryItem"][];
+            counts: {
+                preference: number;
+                project: number;
+                worked: number;
+                summary: number;
+            };
+        };
+        AssistantMemoryPatch: {
+            /** @description trimmed; blank = 422 */
+            text: string;
+        };
+        /** @description the admin's assistant settings (Admin › Model providers) */
+        AssistantSettings: {
+            enabled: boolean;
+            /** @description a server or remote provider's name */
+            provider: string | null;
+            /** @description one of its models; null = its default_model */
+            model: string | null;
+            /** @description web search's own egress switch (off by default) */
+            web_search: boolean;
+            /** @description a provider of kind search */
+            search_provider: string | null;
+            limits: components["schemas"]["AssistantLimits"];
+            /** @description the deployment's switch (REMOTE_MODELS): a remote provider and web search need it */
+            remote_enabled: boolean;
+            /**
+             * Format: date-time
+             * @description null before the first PUT
+             */
+            updated_at: string | null;
+        };
+        AssistantSettingsPut: {
+            enabled: boolean;
+            provider?: string | null;
+            model?: string | null;
+            /** @default false */
+            web_search?: boolean;
+            search_provider?: string | null;
+            /** @description absent = unchanged */
+            limits?: components["schemas"]["AssistantLimits"];
         };
         /** @description from 1.15: a custom node a pack registered (registry key pipelines.engine.custom) */
         CustomNode: {
@@ -6850,6 +7303,8 @@ export interface components {
         TimelineId: string;
         /** @description media job UUID (malformed = 404) */
         MediaJobId: string;
+        /** @description from 1.42: an assistant chat's UUID (another user's or malformed = 404) */
+        ThreadId: string;
     };
     requestBodies: never;
     headers: never;
@@ -8114,6 +8569,8 @@ export interface operations {
                 batch_id?: string;
                 /** @description text search over title, prompt and (from 1.27) element handles, workflow and model; blank = no filter */
                 q?: string;
+                /** @description from 1.42: the Gallery's sort */
+                order?: "newest" | "oldest" | "starred" | "name";
                 /** @description `next_cursor` of the previous page; opaque (malformed = 422) */
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["Limit"];
@@ -9265,6 +9722,325 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SessionNames"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["AdminRequired"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioListAssistantThreads: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the chats */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantThreadList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioCreateAssistantThread: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistantThreadCreate"];
+            };
+        };
+        responses: {
+            /** @description the chat */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantThread"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioGetAssistantThread: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description from 1.42: an assistant chat's UUID (another user's or malformed = 404) */
+                thread_id: components["parameters"]["ThreadId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the chat */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantThreadDetail"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioDeleteAssistantThread: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description from 1.42: an assistant chat's UUID (another user's or malformed = 404) */
+                thread_id: components["parameters"]["ThreadId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioPostAssistantMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description from 1.42: an assistant chat's UUID (another user's or malformed = 404) */
+                thread_id: components["parameters"]["ThreadId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistantPost"];
+            };
+        };
+        responses: {
+            /** @description accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantAccepted"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioAssistantEvents: {
+        parameters: {
+            query?: {
+                /** @description cursor — the last seq the client has */
+                since?: number;
+            };
+            header?: {
+                /** @description SSE resume: the last `id:` received (an integer) */
+                "Last-Event-ID"?: string;
+            };
+            path: {
+                /** @description from 1.42: an assistant chat's UUID (another user's or malformed = 404) */
+                thread_id: components["parameters"]["ThreadId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description events */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantEventPage"];
+                    "text/event-stream": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioListAssistantMemory: {
+        parameters: {
+            query?: {
+                kind?: components["schemas"]["AssistantMemoryKind"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the items */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantMemoryList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioClearAssistantMemory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description cleared */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioDeleteAssistantMemoryItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description memory item UUID (unknown, another user's or malformed = 404) */
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioEditAssistantMemoryItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description memory item UUID (unknown, another user's or malformed = 404) */
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistantMemoryPatch"];
+            };
+        };
+        responses: {
+            /** @description the item */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantMemoryItem"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioAdminGetAssistant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantSettings"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["AdminRequired"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioAdminPutAssistant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistantSettingsPut"];
+            };
+        };
+        responses: {
+            /** @description the settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantSettings"];
                 };
             };
             401: components["responses"]["Unauthorized"];

@@ -1,0 +1,310 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/tools/catalog.schema.json",
+  "title": "The shape of the tool files tools/catalog.json and tools/actions.json (API 1.42)",
+  "description": "Not a message. check.py validates tools/catalog.json against $defs/toolsFile and tools/actions.json against $defs/actionsFile, then the rules JSON Schema can't say (contracts/README.md, Assistant: tools).",
+  "$defs": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{0,47}$",
+      "description": "a tool's name: snake_case, an OpenAI function name"
+    },
+    "actionName": {
+      "type": "string",
+      "pattern": "^[a-z][A-Za-z0-9]{0,47}$",
+      "description": "a screen action's name: camelCase, an OpenAI function name"
+    },
+    "cardKind": {
+      "type": "string",
+      "pattern": "^[a-z][a-z_]{0,31}$"
+    },
+    "schema": {
+      "type": "object",
+      "description": "a JSON Schema (draft 2020-12)"
+    },
+    "route": {
+      "type": "string",
+      "pattern": "^(GET|POST|PUT|PATCH|DELETE) /v1/studio/[^\\s]+$",
+      "description": "an openapi.yaml operation"
+    },
+    "toolsFile": {
+      "type": "object",
+      "required": [
+        "$schema",
+        "$id",
+        "title",
+        "description",
+        "tools"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "$schema": {
+          "const": "https://json-schema.org/draft/2020-12/schema"
+        },
+        "$id": {
+          "const": "https://helmstudio.local/contracts/tools/catalog.json"
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "tools": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "$ref": "#/$defs/name"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/tool"
+          }
+        }
+      }
+    },
+    "tool": {
+      "type": "object",
+      "required": [
+        "description",
+        "surfaces",
+        "served_by",
+        "read_only",
+        "roles",
+        "routes",
+        "input",
+        "output"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "description": "model-facing"
+        },
+        "surfaces": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "assistant",
+              "mcp"
+            ]
+          }
+        },
+        "served_by": {
+          "enum": [
+            "studio",
+            "pipelines"
+          ],
+          "description": "studio: on studio.tools (req.studio.tools) as the thread's owner; pipelines: by the agent itself"
+        },
+        "read_only": {
+          "type": "boolean"
+        },
+        "roles": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "admin"
+            ]
+          },
+          "description": "empty = every user"
+        },
+        "routes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/route"
+          }
+        },
+        "card": {
+          "$ref": "#/$defs/cardKind",
+          "description": "the card the user's Yes answers before it runs"
+        },
+        "input": {
+          "$ref": "#/$defs/schema"
+        },
+        "output": {
+          "$ref": "#/$defs/schema"
+        }
+      }
+    },
+    "action": {
+      "type": "object",
+      "required": [
+        "description",
+        "effect",
+        "input"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "effect": {
+          "enum": [
+            "line",
+            "undo",
+            "card",
+            "dialog"
+          ]
+        },
+        "card": {
+          "$ref": "#/$defs/cardKind"
+        },
+        "input": {
+          "$ref": "#/$defs/schema"
+        }
+      },
+      "if": {
+        "properties": {
+          "effect": {
+            "const": "card"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "card"
+        ]
+      },
+      "else": {
+        "not": {
+          "required": [
+            "card"
+          ]
+        }
+      }
+    },
+    "actionsFile": {
+      "type": "object",
+      "required": [
+        "$schema",
+        "$id",
+        "title",
+        "description",
+        "tags",
+        "cards",
+        "screens"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "$schema": {
+          "const": "https://json-schema.org/draft/2020-12/schema"
+        },
+        "$id": {
+          "const": "https://helmstudio.local/contracts/tools/actions.json"
+        },
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "object",
+          "propertyNames": {
+            "enum": [
+              "gpu",
+              "egress",
+              "final",
+              "machine",
+              "disk"
+            ]
+          },
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40,
+            "description": "the card's tag line"
+          }
+        },
+        "cards": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/cardKind"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "tags",
+              "shows"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "tags": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {
+                  "enum": [
+                    "gpu",
+                    "egress",
+                    "final",
+                    "machine",
+                    "disk"
+                  ]
+                },
+                "description": "egress is shown only when something leaves the machine"
+              },
+              "shows": {
+                "type": "string",
+                "maxLength": 200
+              }
+            }
+          }
+        },
+        "screens": {
+          "type": "object",
+          "required": [
+            "shell"
+          ],
+          "propertyNames": {
+            "pattern": "^[a-z][a-z_]{0,31}$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "routes",
+              "actions"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "routes": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "string",
+                  "pattern": "^(\\*|/[a-z/{}]*)$"
+                }
+              },
+              "roles": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "admin"
+                  ]
+                }
+              },
+              "actions": {
+                "type": "object",
+                "minProperties": 1,
+                "propertyNames": {
+                  "$ref": "#/$defs/actionName"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/action"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

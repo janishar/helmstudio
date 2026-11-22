@@ -1,0 +1,9 @@
+{
+  "enabled": true,
+  "provider": "deepseek",
+  "model": null,
+  "web_search": true,
+  "search_provider": "brave",
+  "remote_enabled": true,
+  "updated_at": "2026-11-22T09:00:00Z"
+}

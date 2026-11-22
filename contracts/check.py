@@ -38,6 +38,7 @@ from referencing.jsonschema import DRAFT202012
 
 HERE = Path(__file__).parent
 SCHEMA_FILES = sorted((HERE / "messages").glob("*.schema.json"))
+TOOL_FILES = sorted((HERE / "tools").glob("*.json"))  # the assistant's tools/catalog.json, actions.json and their schema
 # Every cmd.*/evt.* schema is an enveloped message; every req.* holds $defs/request and $defs/reply.
 MESSAGE_TYPES = [
     n
@@ -60,6 +61,11 @@ REGISTRY_KEYS = [
     "custom",
     "settings",
 ]  # registry.schema.json $defs; fixtures/registry/<key>.*
+# API 1.42: openapi.yaml schemas that copy a messages/assistant.schema.json $def; their fixtures must agree on both
+TWINS = {
+    "AssistantScreen": "screen", "AssistantAction": "action", "AssistantActionResult": "result", "AssistantLine": "line",
+    "AssistantCard": "card", "AssistantCaps": "caps", "AssistantError": "error", "AssistantLimits": "limits",
+}
 # openapi.yaml components/schemas with body fixtures in fixtures/http/<name>.*
 HTTP_SCHEMAS = [
     "Run", "RunRequest", "RunPlan", "Queue", "Take", "TakePage", "TakePatch", "TakeReuse", "TakeUse", "UploadCreate", "Upload", "UploadLimits",
@@ -78,11 +84,13 @@ HTTP_SCHEMAS = [
     "Timeline", "TimelineList", "TimelineCreate", "TimelineUpdate", "TimelineAddClips", "TimelineShotCreate",
     "TimelineRerender", "ExportPlan", "MediaJob", "TakeFrame", "TakeUses", "ClipActions", "TimelineLineCreate",
     "SessionList", "SessionNames", "SessionNamesPut",
+    "AssistantPost", "AssistantThreadList", "AssistantThreadDetail", "AssistantEvent", "AssistantMemoryList",
+    "AssistantSettings", "AssistantSettingsPut", *TWINS,
 ]
 OPENAPI = "https://helmstudio.local/contracts/openapi.yaml"
 OPERATION_PREFIX = {"/v1/studio/": "studio", "/files/": "files", "/auth/": "auth"}
 # Names of the reference product that must not come back.
-FORBIDDEN = re.compile(r"\bcatalog|\bora[._]|\bORA\b|agents_service|\bagents\.", re.IGNORECASE)
+FORBIDDEN = re.compile(r"\bcatalog(?!(\.schema)?\.json)|\bora[._]|\bORA\b|agents_service|\bagents\.", re.IGNORECASE)
 METHODS = {"get", "post", "put", "patch", "delete"}
 
 errors: list[str] = []
@@ -96,6 +104,7 @@ def fail(msg: str) -> None:
 def load_schemas() -> tuple[dict[str, dict], Registry]:
     schemas = {p.name.removesuffix(".schema.json"): json.loads(p.read_text()) for p in SCHEMA_FILES}
     schemas["registry"] = json.loads((HERE / "registry.schema.json").read_text())
+    schemas |= {f"tools/{p.name}": json.loads(p.read_text()) for p in TOOL_FILES}
     for name, s in schemas.items():
         try:
             Draft202012Validator.check_schema(s)
@@ -3577,6 +3586,10 @@ def check_fixtures(schemas: dict[str, dict], registry: Registry) -> None:
             errs = list(targets[name].iter_errors(doc))
             if sub == "messages" and not errs:
                 errs = foreign_keys(doc)
+            if sub == "http" and name in TWINS:
+                twin = validator({"$ref": f"{schemas['assistant']['$id']}#/$defs/{TWINS[name]}"})
+                if twin.is_valid(doc) != (not errs):
+                    fail(f"{p.relative_to(HERE)}: openapi.yaml {name} and assistant.schema.json {TWINS[name]} disagree")
             if kind == "valid" and errs:
                 fail(f"{p.relative_to(HERE)} should pass: {errs[0].json_path}: {errs[0].message}")
             elif kind == "invalid" and not errs:
@@ -3647,6 +3660,130 @@ def check_openapi() -> None:
                     fail(f"{where} {code}: use a components/responses error")
 
 
+ASSISTANT_CARD_KINDS = {"delete"}  # cards the server asks without a tool of its own: Clear all (a delete card)
+
+
+def refs(node, out=None) -> list[str]:
+    """Every $ref in a JSON tree."""
+    out = [] if out is None else out
+    if isinstance(node, dict):
+        out += [node["$ref"]] if isinstance(node.get("$ref"), str) else []
+        for v in node.values():
+            refs(v, out)
+    elif isinstance(node, list):
+        for v in node:
+            refs(v, out)
+    return out
+
+
+def offered_tools(catalog: dict, roles: list[str], web_search: bool, look_at: bool) -> list[str]:
+    """The catalog tools a turn offers (README, Assistant: tools): surface assistant, every role it needs held,
+    web_search only when on, look_at only when an ask workflow can run now. Studio (Go) runs the same fixtures."""
+    return sorted(
+        n for n, t in catalog["tools"].items()
+        if "assistant" in t["surfaces"] and set(t["roles"]) <= set(roles)
+        and (n != "web_search" or web_search) and (n != "look_at" or look_at)
+    )
+
+
+def screen_actions(actions: dict, screen: str, roles: list[str]) -> list[str]:
+    """The actions a screen registers: the shell's and its own, none for a screen whose roles are not all held."""
+    own = actions["screens"].get(screen, {})
+    ok = set(own.get("roles", [])) <= set(roles)
+    return sorted({*actions["screens"]["shell"]["actions"], *(own.get("actions", {}) if ok else {})})
+
+
+def check_tools(schemas: dict[str, dict], registry: Registry) -> None:
+    """tools/catalog.json and tools/actions.json (README, Assistant: tools)."""
+    shape = schemas["tools/catalog.schema.json"]["$id"]
+    catalog, actions = schemas["tools/catalog.json"], schemas["tools/actions.json"]
+    for doc, d in ((catalog, "toolsFile"), (actions, "actionsFile")):
+        if bad := list(Draft202012Validator({"$ref": f"{shape}#/$defs/{d}"}, registry=registry).iter_errors(doc)):
+            fail(f"tools: {doc['$id'].rsplit('/', 1)[1]}: {bad[0].json_path}: {bad[0].message}")
+            return
+    spec = yaml.safe_load((HERE / "openapi.yaml").read_text())
+    ops = {f"{m.upper()} {path}" for path, item in spec["paths"].items() for m in item if m in METHODS}
+    cards, tags = actions["cards"], actions["tags"]
+    used = set()
+
+    def schema_ok(where: str, sch: dict, model_facing: bool) -> None:
+        try:
+            Draft202012Validator.check_schema(sch)
+        except SchemaError as e:
+            fail(f"{where}: not a JSON Schema: {e.message}")
+        for r in refs(sch):
+            if model_facing:
+                fail(f"{where}: model-facing, so self-contained: no $ref ({r})")
+                continue
+            try:
+                registry.resolver(catalog["$id"]).lookup(r)
+            except Exception as e:  # noqa: BLE001 - any resolution failure is the finding
+                fail(f"{where}: $ref {r} does not resolve ({type(e).__name__})")
+
+    for n, t in catalog["tools"].items():
+        w = f"tools/catalog.json {n}"
+        schema_ok(f"{w} input", t["input"], True)
+        schema_ok(f"{w} output", t["output"], False)
+        for r in t["routes"]:
+            if r not in ops:
+                fail(f"{w}: route {r!r} is not in openapi.yaml")
+        if (t["served_by"] == "studio") != bool(t["routes"]):
+            fail(f"{w}: a studio tool names its routes, a pipelines tool none")
+        if any(r.split(" ")[1].startswith("/v1/studio/admin/") for r in t["routes"]) != ("admin" in t["roles"]):
+            fail(f"{w}: an admin route needs roles [admin], and roles [admin] an admin route")
+        if not t["read_only"] and "mcp" in t["surfaces"] and "assistant" in t["surfaces"]:
+            fail(f"{w}: a write tool is mcp only, or the assistant's behind a card")
+        if not t["read_only"] and "assistant" in t["surfaces"] and "card" not in t and t["served_by"] != "pipelines":
+            fail(f"{w}: an assistant write needs a card (only memory writes go without)")
+        if "card" in t:
+            used.add(t["card"])
+            if t["card"] not in cards:
+                fail(f"{w}: no card {t['card']!r} in actions.json")
+    shell = set(actions["screens"]["shell"]["actions"])
+    to = set(actions["screens"]["shell"]["actions"]["navigate"]["input"]["properties"]["to"]["enum"])
+    for sn, sc in actions["screens"].items():
+        for r in sc["routes"]:
+            if r != "*" and r not in to:
+                fail(f"tools/actions.json {sn}: route {r} is not a navigate target")
+        for an, a in sc["actions"].items():
+            w = f"tools/actions.json {sn}.{an}"
+            schema_ok(f"{w} input", a["input"], True)
+            if an in catalog["tools"]:
+                fail(f"{w}: named like a catalog tool")
+            if sn != "shell" and an in shell:
+                fail(f"{w}: named like a shell action")
+            if "card" in a:
+                used.add(a["card"])
+                if a["card"] not in cards:
+                    fail(f"{w}: no card {a['card']!r}")
+    for k, c in cards.items():
+        if k not in used:
+            fail(f"tools/actions.json card {k}: no action or tool asks it")
+        for g in c["tags"]:
+            if g not in tags:
+                fail(f"tools/actions.json card {k}: no tag {g!r}")
+    server = {t["card"] for t in catalog["tools"].values() if "card" in t} | ASSISTANT_CARD_KINDS
+    if set(schemas["assistant"]["$defs"]["card"]["properties"]["kind"]["enum"]) != server:
+        fail(f"assistant.schema.json card.kind must be the catalog tools' cards and Clear all's: {sorted(server)}")
+    studio = sorted(n for n, t in catalog["tools"].items() if "assistant" in t["surfaces"] and t["served_by"] == "studio")
+    req = schemas["req.studio.tools"]["$defs"]
+    for d, part in (("assistant", "input"), ("assistantOk", "output")):
+        if sorted(req[d]["properties"]["tool"]["enum"]) != studio:
+            fail(f"req.studio.tools $defs/{d}: tool must be the catalog's assistant tools served by studio: {studio}")
+        key = "args" if part == "input" else "result"
+        got = {c["if"]["properties"]["tool"]["const"]: c["then"]["properties"][key]["$ref"] for c in req[d]["allOf"]}
+        want = {n: f"../tools/catalog.json#/tools/{n}/{part}" for n in studio}
+        if got != want:
+            fail(f"req.studio.tools $defs/{d}: each tool's {key} must $ref its catalog {part}")
+    fx = json.loads((HERE / "fixtures" / "tools" / "offered.json").read_text())
+    for c in fx["cases"]:
+        got = (offered_tools(catalog, c["roles"], c.get("web_search", False), c.get("look_at", False))
+               if "screen" not in c else screen_actions(actions, c["screen"], c["roles"]))
+        if got != c["expect"]:
+            fail(f"fixtures/tools/offered.json {c['description']!r}: got {got}, want {c['expect']}")
+    print("ok   tools/catalog.json, tools/actions.json, fixtures/tools/offered.json")
+
+
 def main() -> int:
     schemas, registry = load_schemas()
     check_fixtures(schemas, registry)
@@ -3661,6 +3798,7 @@ def main() -> int:
     check_voices(registry, palette)
     check_timelines(registry, palette)
     check_dispatch(registry)
+    check_tools(schemas, registry)
     check_openapi()
     check_names()
     print(f"\n{len(errors)} failure(s)" if errors else "\nall contract checks passed")

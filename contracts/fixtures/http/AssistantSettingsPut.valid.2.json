@@ -1,0 +1,9 @@
+{
+  "enabled": false,
+  "limits": {
+    "model_calls_per_day": 200,
+    "tokens_per_day": 2000000,
+    "look_at_per_hour": 20,
+    "messages_per_minute": 10
+  }
+}

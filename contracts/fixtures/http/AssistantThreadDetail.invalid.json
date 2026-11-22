@@ -1,0 +1,47 @@
+{
+  "id": "3b7c9d1e-2f4a-4b6c-8d0e-1a2b3c4d5e6f",
+  "title": "Rain still",
+  "state": "waiting",
+  "client_id": "tab-8f3a2c91",
+  "pending": {
+    "turn": 1,
+    "actions": [
+      {
+        "id": "3b7c9d1e-2f4a-4b6c-8d0e-1a2b3c4d5e6f:1:0",
+        "name": "switchTo",
+        "args": {
+          "workflow": "qwen-image-2.1"
+        }
+      },
+      {
+        "id": "3b7c9d1e-2f4a-4b6c-8d0e-1a2b3c4d5e6f:1:1",
+        "name": "change",
+        "args": {
+          "key": "prompt",
+          "value": "@mara under a transparent umbrella"
+        }
+      },
+      {
+        "id": "3b7c9d1e-2f4a-4b6c-8d0e-1a2b3c4d5e6f:1:2",
+        "name": "generate",
+        "args": {}
+      }
+    ],
+    "cards": []
+  },
+  "caps": {
+    "model_calls": 2,
+    "tool_calls": 5,
+    "memory_writes": 0
+  },
+  "created_at": "2026-11-22T10:19:00Z",
+  "updated_at": "2026-11-22T10:20:00Z",
+  "entries": [
+    {
+      "id": "5e6f7a8b-9c0d-4e1f-8a2b-3c4d5e6f7a8c",
+      "turn": 1,
+      "kind": "line",
+      "at": "2026-11-22T10:20:01Z"
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/cmd.assistant.delete.schema.json",
+  "title": "studio → pipelines: a chat was deleted",
+  "description": "From API 1.42 (plan 18, 22.3). Written by studio's outbox in the transaction that deletes the chat's rows (DELETE /v1/studio/assistant/threads/{id}); subject `cmd.assistant.delete` (stream CMD, durable `pipelines`), Nats-Msg-Id `<thread_id>:delete`. pipelines drops the thread's checkpoints (`adelete_thread`) and the chat's summary, only in owner_id's namespace; the other items the chat saved stay (their thread_id turns null). Idempotent: a thread already gone is acked.",
+  "allOf": [{"$ref": "envelope.schema.json"}],
+  "properties": {
+    "type": {"const": "cmd.assistant.delete"},
+    "version": {"const": 1},
+    "job_id": {"$ref": "defs.schema.json#/$defs/uuid", "description": "the thread id"},
+    "data": {
+      "type": "object",
+      "required": ["thread_id"],
+      "additionalProperties": false,
+      "properties": {"thread_id": {"$ref": "defs.schema.json#/$defs/uuid"}}
+    }
+  }
+}

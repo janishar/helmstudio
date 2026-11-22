@@ -1,0 +1,47 @@
+{
+  "type": "evt.assistant.step",
+  "version": 1,
+  "id": "6f1c2d3e-4b5a-4c7d-8e9f-000000004202",
+  "job_id": "3b7c9d1e-2f4a-4b6c-8d0e-1a2b3c4d5e6f",
+  "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+  "occurred_at": "2026-11-22T10:20:00Z",
+  "trace": {
+    "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+  },
+  "data": {
+    "thread_id": "3b7c9d1e-2f4a-4b6c-8d0e-1a2b3c4d5e6f",
+    "turn": 1,
+    "seq": 2,
+    "text": "Most say: name the move first.",
+    "lines": [
+      {
+        "id": "3b7c9d1e-2f4a-4b6c-8d0e-1a2b3c4d5e6f:1:3",
+        "status": "done",
+        "text": "Searched the web · Brave",
+        "undo": false,
+        "sources": [
+          {
+            "title": "LTX camera prompts",
+            "url": "https://example-forum.org/ltx"
+          }
+        ]
+      },
+      {
+        "id": "3b7c9d1e-2f4a-4b6c-8d0e-1a2b3c4d5e6f:1:4",
+        "status": "done",
+        "text": "Remembered: you like 16:9",
+        "undo": true,
+        "memory_id": "4c5d6e7f-8a9b-4c0d-9e1f-2a3b4c5d6e7f"
+      }
+    ],
+    "actions": [],
+    "cards": [],
+    "done": true,
+    "caps": {
+      "model_calls": 2,
+      "tool_calls": 5,
+      "memory_writes": 0
+    },
+    "error": null
+  }
+}

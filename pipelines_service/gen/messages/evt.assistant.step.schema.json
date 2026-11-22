@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/evt.assistant.step.schema.json",
+  "title": "pipelines → studio's projector: one step of an assistant turn",
+  "description": "From API 1.42 (plan 18, 22.3). Subject `evt.assistant.<thread_id>.step` (stream EVT, durable `studio-assistant`), Nats-Msg-Id `<thread_id>:<seq>`. Published when the graph parks (`wait`: actions or cards pending) and when the turn ends (`done`). Studio stores the text, lines and cards in the chat's rows, sets the thread's state and appends a `step` event to the chat's stream (GET …/events); the drawer of `client_id` runs `actions` in order and posts their results. A republish (same seq) replaces, never duplicates.",
+  "allOf": [{"$ref": "envelope.schema.json"}],
+  "properties": {
+    "type": {"const": "evt.assistant.step"},
+    "version": {"const": 1},
+    "job_id": {"$ref": "defs.schema.json#/$defs/uuid", "description": "the thread id"},
+    "data": {
+      "type": "object",
+      "required": ["thread_id", "turn", "seq", "text", "lines", "actions", "cards", "done", "caps", "error"],
+      "additionalProperties": false,
+      "properties": {
+        "thread_id": {"$ref": "defs.schema.json#/$defs/uuid"},
+        "turn": {"type": "integer", "minimum": 1, "maximum": 999999, "description": "the input it answers"},
+        "seq": {"type": "integer", "minimum": 1, "description": "per thread, from 1"},
+        "text": {"type": "string", "maxLength": 4000, "description": "the assistant's words in this step, shown as text, never HTML"},
+        "lines": {"type": "array", "maxItems": 30, "items": {"$ref": "assistant.schema.json#/$defs/line"}, "description": "lines of the server's calls (Looked at, Searched the web, Remembered)"},
+        "actions": {"type": "array", "maxItems": 30, "items": {"$ref": "assistant.schema.json#/$defs/action"}, "description": "pending: the screen actions to run, in order"},
+        "cards": {"type": "array", "maxItems": 4, "items": {"$ref": "assistant.schema.json#/$defs/card"}, "description": "pending: the server's cards"},
+        "done": {"type": "boolean", "description": "the turn ended (nothing pending)"},
+        "caps": {"$ref": "assistant.schema.json#/$defs/caps"},
+        "error": {"oneOf": [{"$ref": "assistant.schema.json#/$defs/error"}, {"type": "null"}], "description": "why the turn ended early (done is then true)"},
+        "summary_id": {"$ref": "defs.schema.json#/$defs/uuid", "description": "a summarize input: the summary item written"}
+      },
+      "allOf": [
+        {"if": {"properties": {"done": {"const": true}}}, "then": {"properties": {"actions": {"maxItems": 0}, "cards": {"maxItems": 0}}}},
+        {"if": {"properties": {"done": {"const": false}}}, "then": {"properties": {"error": {"type": "null"}}, "anyOf": [{"properties": {"actions": {"minItems": 1}}}, {"properties": {"cards": {"minItems": 1}}}]}}
+      ]
+    }
+  }
+}

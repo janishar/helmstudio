@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/req.pipelines.assistant.memory.schema.json",
+  "title": "NATS request/reply pipelines.assistant.memory (studio → pipelines)",
+  "description": "From API 1.42 (plan 18, 22.8). Core NATS request/reply on subject `pipelines.assistant.memory` (queue group `pipelines`), bare JSON, for /v1/studio/assistant/memory (the drawer's Memory list). pipelines owns the assistant's memory (LangGraph's Postgres store, namespace (<owner_id>, \"assistant\", <kind>)) and answers only inside owner_id's namespace: another user's item is not_found. Studio sets owner_id from the caller's token and waits 5 s (no answer: 503). `list`: every item, newest first (`kind` filters); `edit`: one item's text; `delete`: one item; `clear`: every item of the owner.",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "required": ["owner_id", "op"],
+      "additionalProperties": false,
+      "properties": {
+        "owner_id": {"$ref": "defs.schema.json#/$defs/uuid"},
+        "op": {"enum": ["list", "edit", "delete", "clear"]},
+        "kind": {"$ref": "assistant.schema.json#/$defs/memoryKind", "description": "list only"},
+        "item_id": {"$ref": "defs.schema.json#/$defs/uuid", "description": "edit, delete"},
+        "text": {"type": "string", "minLength": 1, "maxLength": 500, "description": "edit only: trimmed by studio"}
+      },
+      "allOf": [
+        {"if": {"properties": {"op": {"enum": ["edit", "delete"]}}}, "then": {"required": ["item_id"]}},
+        {"if": {"properties": {"op": {"const": "edit"}}}, "then": {"required": ["text"]}}
+      ]
+    },
+    "reply": {"oneOf": [{"$ref": "#/$defs/ok"}, {"$ref": "#/$defs/error"}]},
+    "ok": {
+      "type": "object",
+      "not": {"required": ["code"]},
+      "minProperties": 1,
+      "additionalProperties": false,
+      "description": "list: items (at most 200, the owner's cap) and counts; edit: item; delete and clear: deleted (how many)",
+      "properties": {
+        "items": {"type": "array", "maxItems": 200, "items": {"$ref": "assistant.schema.json#/$defs/memoryItem"}},
+        "counts": {
+          "type": "object",
+          "required": ["preference", "project", "worked", "summary"],
+          "additionalProperties": false,
+          "properties": {
+            "preference": {"type": "integer", "minimum": 0},
+            "project": {"type": "integer", "minimum": 0},
+            "worked": {"type": "integer", "minimum": 0},
+            "summary": {"type": "integer", "minimum": 0}
+          }
+        },
+        "item": {"$ref": "assistant.schema.json#/$defs/memoryItem"},
+        "deleted": {"type": "integer", "minimum": 0}
+      }
+    },
+    "error": {
+      "type": "object",
+      "required": ["error", "code"],
+      "additionalProperties": false,
+      "properties": {
+        "error": {"type": "string", "minLength": 1, "maxLength": 500, "description": "`memory item not found` (not_found)"},
+        "code": {"enum": ["not_found", "invalid", "internal"]}
+      }
+    }
+  }
+}
