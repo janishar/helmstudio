@@ -247,13 +247,23 @@ def _entry(c: dict, status: str, result=None, error=None, line=None, undo=False)
             "line": line, "undo": undo}  # fmt: skip
 
 
-def _again(chat: list, c: dict, msg: str) -> dict | None:
-    """This message's last action of the same name, when `c` repeats it: same arguments, done, and a setting the
-    screen holds (it had Undo; a Generate or a new session makes something each time and always runs)."""
-    last = next((e for e in reversed(chat) if e.get("role") == "call" and e["name"] == c["name"]
+# actions with Undo that add something each time (a second node or clip is a real ask), never answered "Already done"
+MAKES = {"addNode", "edit"}
+
+
+def _again(chat: list, c: dict, msg: str) -> str | None:
+    """The line to answer at once when `c` repeats this message's last action: same name and arguments, done, and
+    a setting the screen holds (it had Undo; a Generate or a new session makes something each time and always runs).
+    Only the last action: anything between (a switchTo, a preset) may have changed what the screen holds."""
+    if c["name"] in MAKES:
+        return None
+    last = next((e for e in reversed(chat) if e.get("role") == "call" and e.get("kind", "action") == "action"
                  and e["id"].startswith(msg)), None)  # fmt: skip
-    ok = last and last["status"] == "done" and last.get("undo") and last["args"] == c["args"]
-    return last if ok else None
+    if not (last and last["name"] == c["name"] and last["status"] == "done" and last.get("undo")
+            and last["args"] == c["args"] and last.get("line")):  # fmt: skip
+        return None
+    return last["line"] if last["line"].startswith("Already done") else \
+        f"Already done: {last['line']}. The screen shows it; go on"  # fmt: skip
 
 
 def _end(code: str, text: str, resets_at: str | None = None, **up) -> dict:
@@ -374,11 +384,10 @@ class Assistant:
         msg = f"{s['thread_id']}:{s['msg']}:"
         while q:
             c = q[0]
-            if c["kind"] == "action" and (last := _again(chat, c, msg)):
+            if c["kind"] == "action" and (again := _again(chat, c, msg)):
                 # the switch loop's guard: a repeat of what already took answers at once, no new line in the tab
                 q.pop(0)
-                chat.append(_entry(c, "done", line=f"Already done: {last['line']}. The screen shows it; go on",
-                                   undo=True))  # fmt: skip
+                chat.append(_entry(c, "done", line=again, undo=True))
                 continue
             if c["kind"] == "action":
                 n = next((i for i, x in enumerate(q) if x["kind"] != "action"), len(q))

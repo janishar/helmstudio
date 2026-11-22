@@ -211,6 +211,36 @@ async def test_a_repeated_action_that_already_took_answers_at_once_and_the_new_s
     assert "Already done: Switched to Image · Qwen Image" in c.asked()[2]["messages"][1]["content"]
 
 
+def test_the_repeat_guard_answers_only_a_repeat_of_the_last_action_that_holds():
+    """Only the message's last action counts (a switchTo or preset between may have reset the field); adding a node
+    or a clip again is a real ask; a third repeat keeps one "Already done"; another message never counts."""
+    n = iter(range(100))
+
+    def act(name, args, undo=True, msg="t:1"):
+        c = {"id": f"{msg}:{next(n)}", "name": name, "args": args, "kind": "action"}
+        return assistant._entry(c, "done", line=f"{name} line", undo=undo)
+
+    def again(chat, name, args):
+        return assistant._again(
+            chat, {"id": "t:1:99", "name": name, "args": args, "kind": "action"}, "t:1:"
+        )
+
+    size, sw = {"field": "size", "value": "1024"}, {"workflow": "qwen-image"}
+    assert (
+        again([act("change", size)], "change", size)
+        == "Already done: change line. The screen shows it; go on"
+    )
+    assert again([act("change", size), act("switchTo", sw)], "change", size) is None
+    assert again([act("change", size)], "change", {"field": "size", "value": "512"}) is None
+    assert again([act("generate", {}, undo=False)], "generate", {}) is None
+    assert again([act("change", size, msg="t:0")], "change", size) is None
+    assert again([act("addNode", {"type": "KSampler"})], "addNode", {"type": "KSampler"}) is None
+    third = [act("switchTo", sw), assistant._entry({"id": "t:1:50", "name": "switchTo", "args": sw},
+                                                   "done", line="Already done: switchTo line. The screen shows it; go on",
+                                                   undo=True)]  # fmt: skip
+    assert again(third, "switchTo", sw) == "Already done: switchTo line. The screen shows it; go on"
+
+
 async def test_admin_tools_are_never_offered_to_a_user(pool, fake):
     c = Chat(pool, fake)
     c.script({"content": "Hi."}, calls(("model_jobs", {})), calls(("model_jobs", {})))
