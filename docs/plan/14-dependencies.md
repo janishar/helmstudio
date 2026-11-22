@@ -25,6 +25,7 @@ This section owns version numbers; other sections name libraries without them.
 | golang.org/x/crypto | v0.59.0 |
 | golang.org/x/image | v0.47.0 (studio: webp header check of uploads) |
 | golang-jwt/jwt/v5 | v5.3.1 |
+| modelcontextprotocol/go-sdk | v1.8.0 (cli only: `helm mcp`, plan 16; 2026-09-04, the newest stable release; v1.9.0 was a pre-release on 2026-11-22) |
 
 **Infrastructure** (exact image tags, by digest in production)
 

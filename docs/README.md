@@ -34,7 +34,7 @@ other sections point to it rather than restate it.
 | [Service architecture](plan/13-services.md) | §17 | Services, users, databases, messaging, dispatcher, deployment, contracts |
 | [Dependencies](plan/14-dependencies.md) | §18 | Version pins, what moves together, how they stay current |
 | [Voices](plan/15-voices.md) | §19 | Qwen3-TTS and ZONOS3 packs, saved voices, dialogue, audio takes (a plan, not in a milestone) |
-| [MCP server](plan/16-mcp.md) | §20 | `helm mcp`: the platform as MCP tools for agents (a plan, not in a milestone) |
+| [MCP server](plan/16-mcp.md) | §20 | `helm mcp`: the platform as MCP tools for agents (built 2026-11-22; how to use: [guides/mcp.md](guides/mcp.md)) |
 | [NVIDIA quantized path](plan/17-nvidia-quantized.md) | §21 | Community FP8 / int8 variants for NVIDIA hosts (M9) |
 | [In-app assistant](plan/18-assistant.md) | §22 | An AI assistant panel that works every screen, confirms costly actions, sees takes (a plan, not in a milestone) |
 | [ltx studio features](plan/19-ltx-studio-features.md) | §23 | The new ltx studio options in the LTX pack: distilled actions, NAG, float16, audio relay, adapters, DFR detail, bindings, Refine details and Deblur, SDR to HDR; what is left out and why (a plan, not in a milestone) |
@@ -43,3 +43,9 @@ other sections point to it rather than restate it.
 | [Thumbnails](plan/22-thumbnails.md) | §26 | One WebP thumbnail per image and video take (short side 512 px) made where the take is made or by a runner thumbs job, a backfill, the sweep removing it; lists load it, viewers the full file (a design for the owner to decide, not in a milestone) |
 | [Timeline tools](plan/23-timeline-tools.md) | §27 | Editing tools on the Timeline (Select, Trim with ripple / roll / slip / slide, Blade, Range, Overwrite), snapping, J/K/L, zoom from the whole sequence down to single frames with a filmstrip and waveform that grow with it, five UI options on the TimelineTools board (a design for the owner to decide, not in a milestone) |
 | [Timeline edit API](plan/24-timeline-edit-api.md) | §28 | `POST …/timelines/{id}/edits`: named ops applied by studio with dry run, diff and per-op errors on a required revision; revision history and restore; an agent view and frames at a time; `show_timeline` / `try_timeline_edit` / `edit_timeline` / `restore_timeline` tools for helm mcp and the CLI (a design for the owner to decide, not in a milestone) |
+
+## Guides
+
+| Guide | For |
+|---|---|
+| [helm mcp](guides/mcp.md) | Using helmstudio from Claude Code or Claude Desktop: set-up, the tools, which ones ask first |

@@ -2,7 +2,8 @@
 
 [← Plan index](../README.md)
 
-Status: a plan, not in a milestone. Nothing is built. The owner asked on 2026-11-21 how an MCP server would let an
+Status: **built (2026-11-22)**, all four steps of 20.5 in one build (owner's decisions in 20.6); as-built notes in
+20.7, how to use in [guides/mcp.md](../guides/mcp.md). The owner asked on 2026-11-21 how an MCP server would let an
 agent (Claude Code, Claude Desktop, any MCP client) work with helmstudio.
 
 ## 20. `helm mcp`: the platform as MCP tools
@@ -99,3 +100,31 @@ merges. 2. Stdio only (local); no remote endpoint. 3. Test with Claude Code and 
 - Is it a milestone (M9) now, or after the backlog items? (Recommended: M9, steps 1–2 first.)
 - Stdio only (recommended), or the remote endpoint too?
 - Which agent clients matter: Claude Code and Claude Desktop (recommended), others?
+
+### 20.7 As built (2026-11-22)
+
+- `cli/mcp.go`: `helm mcp` on the Go MCP SDK v1.8.0 (stdio). It embeds a copy of `contracts/tools/catalog.json`
+  (`make gen` in `cli/`) and registers every tool marked `mcp`, its input schema from the catalog (the SDK checks
+  each call against it). No API or server change; no new auth.
+- Catalog: the 13 new tools are `mcp` only, `served_by` studio, with the routes they call. A new optional field
+  `destructive` marks the three deletes; helm mcp sends `destructiveHint` true for them and false for every other
+  write (the MCP default is true), and `readOnlyHint` from `read_only`. `check.py`: `destructive` is an mcp-only
+  write, and a screen action may share a name with an mcp-only tool (the Batches screen's `pick` action and the
+  `pick` tool).
+- `run_workflow` takes typed `inputs` as Generate sends them (no `-p` parsing) and makes a new session unless given
+  one. At most 4 of the process's runs may be queued or running; the 5th is refused until one ends.
+- `wait_run` follows the session's event stream from its start (so nothing is missed between the GET and the
+  stream), sends each line `helm run` would print as MCP progress, stops at `timeout_s` (≤ 600) with
+  `still_running`, and saves outputs to `out_dir` like `-o`.
+- `get_take` adds the take's `thumb_url` (plan 22: WebP, short side 512) as image content; audio takes get none.
+- `upload` is images only, as `helm upload`: the API has no video upload, and audio needs `duration_s`, which the
+  CLI cannot read yet.
+- `add_to_timeline` without `timeline_id` makes a new sequence of the takes (`POST /timelines`), so an agent can
+  start one. `export_timeline` returns the job at once, or with `out` waits (≤ 10 min, progress) and saves the MP4.
+- `review_batch` is the review read alone (`batch_status` also returns it). `pick` finds the row's gate from it.
+- The CLI's client is now safe for concurrent tool calls (a lock on the tokens, one refresh at a time).
+- Tests: `cli/mcp_test.go` (schemas and annotations against the catalog, the calls each write makes, errors as the
+  `{"detail"}` text, the queue cap, progress, the thumbnail, resources); `contract_tests/tests/test_mcp.py` builds the
+  CLI and drives `helm mcp` over stdio on `helmstudio-test` (echo run, wait, take; another user's take is 404).
+- Not done: the by-hand pass in Claude Code and Claude Desktop (20.4, third point). Plan 24's clip-level edit tools
+  are not built here.
