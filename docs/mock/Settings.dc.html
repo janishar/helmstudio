@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings: its own page</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Bricolage+Grotesque:wght@600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* themes */
+[data-theme="forest"]{--g:#0e1512;--in:#090e0c;--p0:#131c17;--s1:#16201b;--s2:#1e2a24;--s3:#26342d;--s4:#2c3b33;--s5:#32433a;--ln:#3d5146;--dash:#5a7265;--t2:#a9b8ab;--t1:#f0f2e8;--t1b:#dfe5d8;--ib:#354a3f;--it:#cfdacb;--a1:#b9e37a;--on1:#17200a;--a2:#ff8552;--on2:#2b0c02;--shd:#000000}
+[data-theme="ocean"]{--g:#0c1320;--in:#080d17;--p0:#101a2a;--s1:#131d2e;--s2:#1c2940;--s3:#24344f;--s4:#2b3d5c;--s5:#33486b;--ln:#40587f;--dash:#5e779e;--t2:#9fb0c6;--t1:#eaf0f7;--t1b:#d6dfeb;--ib:#33486b;--it:#cdd8e6;--a1:#ff8a6b;--on1:#2b0d05;--a2:#7cc7f2;--on2:#06202e;--shd:#000000}
+[data-theme="aubergine"]{--g:#15101a;--in:#0f0b13;--p0:#1a1421;--s1:#1f1826;--s2:#2b2135;--s3:#352a41;--s4:#3f324d;--s5:#4a3b5a;--ln:#5c4a6e;--dash:#7a678c;--t2:#b3a6b8;--t1:#f3ecf2;--t1b:#e2d8e3;--ib:#4a3b5a;--it:#d9cedc;--a1:#ffb36b;--on1:#2b1500;--a2:#d59bf6;--on2:#230a33;--shd:#000000}
+[data-theme="espresso"]{--g:#17110d;--in:#0f0b08;--p0:#1c1510;--s1:#211914;--s2:#2e231c;--s3:#3a2d24;--s4:#45362b;--s5:#514033;--ln:#655141;--dash:#84705e;--t2:#b8a896;--t1:#f5ece0;--t1b:#e5d9c9;--ib:#514033;--it:#dccfbd;--a1:#f2b84b;--on1:#2a1c00;--a2:#ff8552;--on2:#2b0c02;--shd:#000000}
+[data-theme="oxblood"]{--g:#170e10;--in:#0f0809;--p0:#1c1113;--s1:#221517;--s2:#301d20;--s3:#3c2529;--s4:#472d31;--s5:#54363a;--ln:#694549;--dash:#896266;--t2:#bfa8a6;--t1:#f6ecea;--t1b:#e6d8d6;--ib:#54363a;--it:#dccccb;--a1:#f6c177;--on1:#2b1a00;--a2:#ff7d96;--on2:#33060f;--shd:#000000}
+[data-theme="indigo"]{--g:#0e0f22;--in:#090a18;--p0:#12142b;--s1:#161832;--s2:#20234a;--s3:#292d5c;--s4:#32376c;--s5:#3c417d;--ln:#4b5194;--dash:#6a70b0;--t2:#a5a9cf;--t1:#eceefc;--t1b:#d9dcf3;--ib:#3c417d;--it:#d0d3ee;--a1:#ffc145;--on1:#2b1d00;--a2:#ff7fa8;--on2:#33061a;--shd:#000000}
+[data-theme="parchment"]{--g:#f3ede2;--in:#e9e1d3;--p0:#f8f3ea;--s1:#fbf7ef;--s2:#ffffff;--s3:#efe7d9;--s4:#e6ddcd;--s5:#dcd1be;--ln:#cdbfa8;--dash:#a8987f;--t2:#6e6455;--t1:#1f1a14;--t1b:#3a3228;--ib:#dcd1be;--it:#3a3228;--a1:#c8553d;--on1:#ffffff;--a2:#2f5d8a;--on2:#ffffff;--shd:#b8a688}
+body{margin:0}
+nav button{flex-direction:column!important;width:58px!important;height:54px!important;gap:3px;font-size:10px;font-weight:500}
+nav button::after{content:attr(aria-label)}
+*{text-transform:none!important}
+nav button{height:64px!important;gap:5px!important;background:transparent!important}
+nav button svg{width:36px;height:36px;padding:8px;box-sizing:border-box;border-radius:12px;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.5),inset 0 -4px 6px color-mix(in srgb, var(--shd) 35%, transparent),0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)}
+nav button[aria-label="Create"] svg{background:linear-gradient(155deg,#a393ff,#4a2fe0)}
+nav button[aria-label="Pipelines"] svg{background:linear-gradient(155deg,#6cc4ff,#1f5fe0)}
+nav button[aria-label="Gallery"] svg{background:linear-gradient(155deg,#ffb07a,#e0457a)}
+nav button[aria-label="Timeline"] svg{background:linear-gradient(155deg,#ffe07a,#f08a1c)}
+nav button[aria-label="Models"] svg{background:linear-gradient(155deg,#7af5d6,#12967f)}
+nav button:not([aria-current]) svg{filter:saturate(.55) brightness(.8)}
+nav button[aria-current]{color:var(--t1)!important}
+nav button[aria-current] svg{outline:2px solid rgba(255,255,255,.85);outline-offset:2px}
+main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.09),inset 0 -2px 0 color-mix(in srgb, var(--shd) 30%, transparent),0 2px 5px color-mix(in srgb, var(--shd) 45%, transparent)}
+[style*="border-radius: 16px"],[style*="border-radius: 18px"],[style*="border-radius: 14px"]{box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 28px 48px -18px color-mix(in srgb, var(--shd) 85%, transparent),0 10px 18px -10px color-mix(in srgb, var(--shd) 60%, transparent)}
+aside{box-shadow:-28px 0 48px -28px color-mix(in srgb, var(--shd) 80%, transparent)}
+.n{background:linear-gradient(180deg,var(--s3),var(--s1))!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 20px 34px -12px color-mix(in srgb, var(--shd) 85%, transparent)!important}
+.pi,.po{box-shadow:0 0 8px currentColor}
+input[type=range]{filter:drop-shadow(0 2px 3px color-mix(in srgb, var(--shd) 60%, transparent))}
+button{font:inherit;color:inherit;cursor:pointer}
+a{color:var(--t2)}a:hover{color:var(--t1)}
+nav{gap:14px!important}
+.i{width:18px;height:18px;margin-left:6px;border-radius:50%;border:0;background:var(--ib);color:var(--it);font:600 11px/18px Inter,sans-serif;padding:0;vertical-align:middle;flex:0 0 auto}
+[style*="border-radius: 16px"],[style*="border-radius: 18px"],.set,.crit,.tile{background-image:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,0) 46%)}
+.chip{height:36px;padding:0 12px;border-radius:999px;border:0;background:var(--s3);font-size:13px;font-weight:500}
+.take{text-align:left;padding:0;border:0;background:transparent;display:flex;flex-direction:column;gap:6px}
+.take i{display:flex;align-items:center;justify-content:center;aspect-ratio:16/10;border-radius:10px;border:1px dashed var(--dash);background:var(--s1);font-style:normal;font-size:11px;color:var(--t2)}
+.take b{font-size:12px;font-weight:600}
+.take small{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t2)}
+.act{height:40px;border-radius:10px;border:0;background:var(--s3);font-size:13px;font-weight:500;text-align:left;padding:0 12px}
+.h{margin:0;font-size:12px;font-weight:600;letter-spacing:.04em;color:var(--t2)}
+.row{display:flex;justify-content:space-between;gap:10px;font-size:13px}
+.row span:last-child{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t2);text-align:right}
+/* organic layer */
+td,th{padding:10px;text-align:left;font-size:13px;border-bottom:1px solid var(--s3);white-space:nowrap}
+th{font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--t2)}
+tbody tr:last-child td{border-bottom:0}
+td.m{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t2)}
+nav button[aria-label="Admin"] svg{background:linear-gradient(155deg,#c9ced9,#5b6478)}
+.in{width:100%;height:38px;box-sizing:border-box;border-radius:10px;border:0;background:var(--s4);color:var(--t1);font:inherit;font-size:13px;padding:0 12px}
+.tag{padding:2px 8px;border-radius:999px;background:var(--s4);font-size:11px;font-weight:500}
+.tag.adm{background:var(--a1);color:var(--on1)}
+
+[style*="min-height: 960px"]{background-image:radial-gradient(1100px 620px at 14% -12%,rgba(255,196,120,.11),transparent 62%),radial-gradient(900px 640px at 108% 112%,color-mix(in srgb, var(--a1) 7%, transparent),transparent 60%),repeating-linear-gradient(118deg,rgba(255,255,255,.014) 0 1px,transparent 1px 4px)}
+nav{margin:14px 0 14px 14px;border:0!important;border-radius:30px;background:var(--s1);align-self:flex-start;padding:14px 4px!important;flex:0 0 68px!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 24px 40px -18px color-mix(in srgb, var(--shd) 80%, transparent)}
+aside{margin:14px 14px 14px 0;border:0!important;border-radius:34px 34px 34px 14px;background:var(--p0)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 28px 48px -20px color-mix(in srgb, var(--shd) 85%, transparent)!important}
+main [style*="border-radius: 16px"]{border-radius:28px 28px 28px 12px!important;border-color:transparent!important}
+main [style*="border-radius: 18px"]{border-radius:32px!important;border-color:transparent!important}
+aside [style*="border-radius: 14px"],aside [style*="border-radius: 12px"],.set,.crit{border-radius:18px 18px 18px 8px!important;border-color:transparent!important}
+.n{border-radius:20px 20px 20px 8px!important;border-color:rgba(255,255,255,.08)}
+button[style*="border-radius: 14px"]{border-radius:20px 20px 20px 8px!important}
+main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -2px 0 color-mix(in srgb, var(--shd) 28%, transparent),0 3px 6px color-mix(in srgb, var(--shd) 35%, transparent)}
+/* settings page */
+nav button[aria-label="Settings"] svg{background:linear-gradient(155deg,#a7b0c2,#4b5468)}
+.board{position:relative;flex:1 1 100%;display:flex;flex-wrap:nowrap;align-items:flex-start;box-sizing:border-box;background:var(--g);color:var(--t1)}
+.board+.board{border-top:1px solid var(--s3)}
+.lbl{position:absolute;left:96px;bottom:-1px;z-index:30;padding:5px 12px;border-radius:10px 10px 0 0;background:var(--s3);font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t2)}
+.note{font-size:12px;color:var(--t2);margin:0}
+.fine{font-size:12px;line-height:17px;color:var(--t2);margin:0}
+.grid{display:grid;grid-template-columns:420px minmax(0,1fr);grid-template-areas:"acct look" "pass look" "pass out";grid-template-rows:auto auto 1fr;gap:16px;align-items:start;max-width:1240px}
+.pnl{box-sizing:border-box;border-radius:16px;background:var(--s1);border:1px solid var(--s3);padding:16px 18px 18px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.pnl h2{margin:0;font-family:'Bricolage Grotesque',Inter,sans-serif;font-size:16px;font-weight:700;display:flex;align-items:center;gap:8px}
+.f{display:flex;flex-direction:column;gap:6px}
+.f label{font-size:12px;color:var(--t2)}
+.kv{display:grid;grid-template-columns:72px minmax(0,1fr);gap:10px 12px;align-items:center;font-size:13px}
+.kv dt{font-size:12px;color:var(--t2)}.kv dd{margin:0;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.mono{font-family:'JetBrains Mono',monospace;font-size:12px}
+.lnk{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 14px;border-radius:999px;background:var(--s3);color:var(--t1);font-size:13px;font-weight:500;text-decoration:none;align-self:flex-start}
+.go{height:44px;border-radius:14px;border:0;background:var(--a1);color:var(--on1);background-image:linear-gradient(180deg,rgba(255,255,255,0.35),rgba(255,255,255,0) 55%);font-family:'Bricolage Grotesque',Inter,sans-serif;font-weight:700;font-size:14px;letter-spacing:.04em;padding:0 18px}
+.out{height:40px;border-radius:12px;border:0;background:var(--s4);display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:0 16px;font-size:13px;font-weight:500;align-self:flex-start}
+.rules{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--t2)}
+.rules li{display:flex;align-items:center;gap:6px}
+.rules li::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--ln)}
+.rules li.ok{color:var(--t1b)}.rules li.ok::before{background:var(--a1)}
+.rules li.bad{color:var(--err)}.rules li.bad::before{background:var(--err)}
+.warn{display:flex;gap:8px;align-items:flex-start;padding:10px 12px;border-radius:12px 12px 12px 6px;background:var(--s2);font-size:12px;line-height:17px;color:var(--t1b)}
+.board{--err:#ff9a8a}.board[data-theme="parchment"],[data-theme="parchment"] .board{--err:#b3261e}
+.in[aria-invalid="true"]{box-shadow:inset 0 0 0 2px var(--err)}
+.msg{display:flex;gap:6px;align-items:flex-start;font-size:12px;line-height:17px;color:var(--err)}
+.alert{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:12px 12px 12px 6px;background:color-mix(in srgb,var(--err) 14%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--err) 45%,transparent);font-size:13px;line-height:18px}
+/* theme cards: a real radio group, each card painted with its own theme's tokens */
+.themes{margin:0;padding:0;border:0;min-width:0}
+.themes legend{padding:0 0 10px;font-size:12px;color:var(--t2)}
+.tg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.th{position:relative;display:flex;flex-direction:column;gap:8px;padding:8px 8px 10px;border-radius:16px 16px 16px 6px;background:var(--s2);cursor:pointer}
+.th input{position:absolute;opacity:0;width:1px;height:1px;margin:0}
+.th:has(input:checked){box-shadow:inset 0 0 0 2px var(--a1)}
+.th:has(input:focus-visible){outline:2px solid var(--t1);outline-offset:3px}
+.pv{aspect-ratio:16/10;border-radius:10px 10px 10px 4px;background:var(--g);padding:8px;box-sizing:border-box;display:flex;gap:6px;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}
+.pv .d{flex:0 0 12px;border-radius:6px;background:var(--s1)}
+.pv .p{flex:1 1 auto;border-radius:8px 8px 8px 3px;background:var(--s1);padding:7px 8px;display:flex;flex-direction:column;gap:5px;min-width:0}
+.pv b{font-family:'Bricolage Grotesque',Inter,sans-serif;font-size:14px;line-height:16px;color:var(--t1)}
+.pv i{display:block;height:4px;border-radius:2px;background:var(--t2);opacity:.8}
+.pv .ac{margin-top:auto;display:flex;gap:4px}
+.pv .ac span{height:14px;padding:0 6px;border-radius:999px;font:600 8px/14px Inter,sans-serif}
+.th .nm{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:500;padding:0 2px}
+.th .nm small{font-size:11px;color:var(--t2);font-weight:400}
+.ck{display:none;margin-left:auto;width:18px;height:18px;border-radius:50%;background:var(--a1);color:var(--on1);place-items:center}
+.th:has(input:checked) .ck{display:grid}
+/* phone */
+.fone{position:relative;flex:0 0 auto;width:390px;height:844px;border-radius:46px;overflow:hidden;background:var(--g);box-shadow:0 0 0 9px #050605,0 0 0 10px #2a2d2b,0 50px 90px -30px color-mix(in srgb,var(--shd) 95%,transparent);display:flex;flex-direction:column}
+.fdock{margin:44px 12px 0;padding:4px 8px;border-radius:30px;background:var(--s1);display:flex;justify-content:flex-end;gap:6px;overflow:hidden;flex:0 0 auto}
+.fdock span{flex:0 0 auto;width:54px;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 0;font-size:9px;font-weight:500;color:var(--t2)}
+.fdock span i{width:30px;height:30px;border-radius:10px;display:block;filter:saturate(.55) brightness(.8)}
+.fdock span.cur{color:var(--t1)}.fdock span.cur i{filter:none;outline:2px solid rgba(255,255,255,.85);outline-offset:2px}
+.fbody{flex:1 1 auto;overflow:hidden;padding:14px 14px 24px;display:flex;flex-direction:column;gap:12px}
+.fone .tg{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.fone .pv{aspect-ratio:16/8}
+.fone .pnl{padding:14px;gap:12px;border-radius:22px 22px 22px 10px}
+</style>
+</helmet>
+<div data-theme="{{theme}}" style="display: flex; flex-wrap: wrap; background: var(--g); color: var(--t1); font-family: Inter, system-ui, sans-serif; font-size: 14px; line-height: 20px">
+
+<!-- ============ 1 · Settings, Forest ink · /settings, a page in the dock (was a popup) ============ -->
+<section class="board" aria-label="1 · Settings, Forest ink · /settings, a page in the dock (was a popup)" style="min-height: 960px; height: 960px">
+<span class="lbl">1 · Settings, Forest ink · /settings, a page in the dock (was a popup)</span>
+<nav aria-label="Sections" style="flex: 0 0 64px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 0; border-right: 1px solid var(--s3)">
+<button aria-label="Create" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"></path><circle cx="12" cy="12" r="3"></circle></svg></button>
+<button aria-label="Pipelines" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="6" height="6" rx="1.5"></rect><rect x="15" y="14" width="6" height="6" rx="1.5"></rect><path d="M9 7h4a2 2 0 0 1 2 2v5"></path></svg></button>
+<button aria-label="Gallery" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="9" cy="10" r="2"></circle><path d="m21 16-5-5L5 20"></path></svg></button>
+<button aria-label="Timeline" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 17h18"></path><rect x="5" y="4" width="6" height="6" rx="1.5"></rect><rect x="12" y="14" width="7" height="6" rx="1.5"></rect></svg></button>
+<button aria-label="Models" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"></path><path d="m3 8 9 5 9-5M12 13v8"></path></svg></button>
+<button aria-label="Admin" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.5 3.2 7.6 8 9 4.8-1.4 8-4.5 8-9V6l-8-3Z"></path><path d="m9 12 2 2 4-4"></path></svg></button>
+<button aria-label="Settings" aria-current="page" style="width: 44px; height: 44px; margin-top: 6px; border-radius: 12px; border: 0; background: var(--s2); color: var(--a1); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg></button>
+</nav>
+<main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 16px; padding: 16px 20px 24px">
+<h1 style="margin: 0; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 22px; font-weight: 700; letter-spacing: 0.01em">Settings</h1>
+<div class="grid">
+<section class="pnl" aria-labelledby="f1-acct" style="grid-area: acct">
+<h2 id="f1-acct">Account</h2>
+<dl class="kv" style="margin: 0">
+<dt>Name</dt><dd style="font-weight: 600">Root admin</dd>
+<dt>Email</dt><dd class="mono">[ADMIN EMAIL]</dd>
+<dt>Roles</dt><dd style="display: flex; flex-wrap: wrap; gap: 6px"><span class="tag adm">admin</span><span class="tag">dev</span><span class="tag">user</span></dd>
+</dl>
+<a class="lnk" href="/admin">Admin<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"></path></svg></a>
+<p class="fine">Admins only. Users, hosts and API keys.</p>
+</section>
+<section class="pnl" aria-labelledby="f1-look" style="grid-area: look">
+<h2 id="f1-look">Appearance</h2>
+<fieldset class="themes"><legend>Theme · applies at once, saved on this device</legend>
+<div class="tg">
+<label class="th"><input type="radio" name="f1-theme" value="forest" checked onChange="{{setTheme}}">
+<span class="pv" data-theme="forest" aria-hidden="true"><span class="d"></span><span class="p"><b>Aa</b><i style="width: 80%"></i><i style="width: 55%"></i><span class="ac"><span style="background: var(--a1); color: var(--on1)">Go</span><span style="background: var(--a2); color: var(--on2)">Pick</span></span></span></span>
+<span class="nm">Forest ink<span class="ck" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg></span></span></label>
+<label class="th"><input type="radio" name="f1-theme" value="ocean" onChange="{{setTheme}}">
+<span class="pv" data-theme="ocean" aria-hidden="true"><span class="d"></span><span class="p"><b>Aa</b><i style="width: 80%"></i><i style="width: 55%"></i><span class="ac"><span style="background: var(--a1); color: var(--on1)">Go</span><span style="background: var(--a2); color: var(--on2)">Pick</span></span></span></span>
+<span class="nm">Deep ocean<span class="ck" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg></span></span></label>
+<label class="th"><input type="radio" name="f1-theme" value="aubergine" onChange="{{setTheme}}">
+<span class="pv" data-theme="aubergine" aria-hidden="true"><span class="d"></span><span class="p"><b>Aa</b><i style="width: 80%"></i><i style="width: 55%"></i><span class="ac"><span style="background: var(--a1); color: var(--on1)">Go</span><span style="background: var(--a2); color: var(--on2)">Pick</span></span></span></span>
+<span class="nm">Aubergine dusk<span class="ck" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg></span></span></label>
+<label class="th"><input type="radio" name="f1-theme" value="espresso" onChange="{{setTheme}}">
+<span class="pv" data-theme="espresso" aria-hidden="true"><span class="d"></span><span class="p"><b>Aa</b><i style="width: 80%"></i><i style="width: 55%"></i><span class="ac"><span style="background: var(--a1); color: var(--on1)">Go</span><span style="background: var(--a2); color: var(--on2)">Pick</span></span></span></span>
+<span class="nm">Espresso<span class="ck" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg></span></span></label>
+<label class="th"><input type="radio" name="f1-theme" value="oxblood" onChange="{{setTheme}}">
+<span class="pv" data-theme="oxblood" aria-hidden="true"><span class="d"></span><span class="p"><b>Aa</b><i style="width: 80%"></i><i style="width: 55%"></i><span class="ac"><span style="background: var(--a1); color: var(--on1)">Go</span><span style="background: var(--a2); color: var(--on2)">Pick</span></span></span></span>
+<span class="nm">Oxblood<span class="ck" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg></span></span></label>
+<label class="th"><input type="radio" name="f1-theme" value="indigo" onChange="{{setTheme}}">
+<span class="pv" data-theme="indigo" aria-hidden="true"><span class="d"></span><span class="p"><b>Aa</b><i style="width: 80%"></i><i style="width: 55%"></i><span class="ac"><span style="background: var(--a1); color: var(--on1)">Go</span><span style="background: var(--a2); color: var(--on2)">Pick</span></span></span></span>
+<span class="nm">Indigo night<span class="ck" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg></span></span></label>
+<label class="th"><input type="radio" name="f1-theme" value="parchment" onChange="{{setTheme}}">
+<span class="pv" data-theme="parchment" aria-hidden="true"><span class="d"></span><span class="p"><b>Aa</b><i style="width: 80%"></i><i style="width: 55%"></i><span class="ac"><span style="background: var(--a1); color: var(--on1)">Go</span><span style="background: var(--a2); color: var(--on2)">Pick</span></span></span></span>
+<span class="nm">Parchment <small>light</small><span class="ck" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg></span></span></label>
+</div>
+</fieldset>
+</section>
+<section class="pnl" aria-labelledby="f1-pass" style="grid-area: pass">
+<h2 id="f1-pass">Password</h2>
+<form style="display: flex; flex-direction: column; gap: 14px; margin: 0">
+<div class="f"><label for="f1-cur">Current password</label><input id="f1-cur" class="in" type="password" autocomplete="current-password"></div>
+<div class="f"><label for="f1-new">New password</label><input id="f1-new" class="in" type="password" autocomplete="new-password" minlength="10" aria-describedby="f1-rules"></div>
+<div class="f"><label for="f1-cfm">Confirm</label><input id="f1-cfm" class="in" type="password" autocomplete="new-password"></div>
+<ul class="rules" id="f1-rules"><li>At least 10 characters</li><li>Not a common password</li></ul>
+<p class="warn"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 auto; margin-top: 2px"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v4M12 16h.01"></path></svg><span>Changing it signs you out everywhere else.</span></p>
+<button type="submit" class="go" style="align-self: flex-start">Change password</button>
+</form>
+</section>
+<section class="pnl" aria-labelledby="f1-out" style="grid-area: out">
+<h2 id="f1-out">Sign out</h2>
+<form style="margin: 0"><button type="submit" class="out"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"></path></svg>Sign out</button></form>
+</section>
+</div>
+</main>
+</section>
+<!-- ============ 2 · Same page in Parchment (light) ============ -->
+<section class="board" aria-label="2 · Same page in Parchment (light)" data-theme="parchment" style="min-height: 960px; height: 960px">
+<span class="lbl">2 · Same page in Parchment (light)</span>
+<nav aria-label="Sections" style="flex: 0 0 64px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 0; border-right: 1px solid var(--s3)">
+<button aria-label="Create" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"></path><circle cx="12" cy="12" r="3"></circle></svg></button>
+<button aria-label="Pipelines" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="6" height="6" rx="1.5"></rect><rect x="15" y="14" width="6" height="6" rx="1.5"></rect><path d="M9 7h4a2 2 0 0 1 2 2v5"></path></svg></button>
+<button aria-label="Gallery" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="9" cy="10" r="2"></circle><path d="m21 16-5-5L5 20"></path></svg></button>
+<button aria-label="Timeline" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 17h18"></path><rect x="5" y="4" width="6" height="6" rx="1.5"></rect><rect x="12" y="14" width="7" height="6" rx="1.5"></rect></svg></button>
+<button aria-label="Models" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"></path><path d="m3 8 9 5 9-5M12 13v8"></path></svg></button>
+<button aria-label="Admin" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.5 3.2 7.6 8 9 4.8-1.4 8-4.5 8-9V6l-8-3Z"></path><path d="m9 12 2 2 4-4"></path></svg></button>
+<button aria-label="Settings" aria-current="page" style="width: 44px; height: 44px; margin-top: 6px; border-radius: 12px; border: 0; background: var(--s2); color: var(--a1); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg></button>
+</nav>
+<main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 16px; padding: 16px 20px 24px">
+<h1 style="margin: 0; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 22px; font-weight: 700; letter-spacing: 0.01em">Settings</h1>
+<div class="grid">
+<section class="pnl" aria-labelledby="f2-acct" style="grid-area: acct">
+<h2 id="f2-acct">Account</h2>
+<dl class="kv" style="margin: 0">
+<dt>Name</dt><dd style="font-weight: 600">Root admin</dd>
+<dt>Email</dt><dd class="mono">[ADMIN EMAIL]</dd>
+<dt>Roles</dt><dd style="display: flex; flex-wrap: wrap; gap: 6px"><span class="tag adm">admin</span><span class="tag">dev</span><span class="tag">user</span></dd>
+</dl>
+<a class="lnk" href="/admin">Admin<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"></path></svg></a>
+<p class="fine">Admins only. Users, hosts and API keys.</p>
+</section>
+<section class="pnl" aria-labelledby="f2-look" style="grid-area: look">
+<h2 id="f2-look">Appearance</h2>
+<fieldset class="themes"><legend>Theme · applies at once, saved on this device</legend>
+<div class="tg">
+<label class="th"><input type="radio" name="f2-theme" value="forest">
+<span class="pv" data-theme="forest" aria-hidden="true"><span class="d"></span><span class="p"><b>Aa</b><i style="width: 80%"></i><i style="width: 55%"></i><span class="ac"><span style="background: var(--a1); color: var(--on1)">Go</span><span style="background: var(--a2); color: var(--on2)">Pick</span></span></span></span>
+<span class="nm">Forest ink<span class="ck" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg></span></span></label>
+<label class="th"><input type="radio" name="f2-theme" value="ocean">
+<span class="pv" data-theme="ocean" aria-hidden="true"><span class="d"></span><span class="p"><b>Aa</b><i style="width: 80%"></i><i style="width: 55%"></i><span class="ac"><span style="background: var(--a1); color: var(--on1)">Go</span><span style="background: var(--a2); color: var(--on2)">Pick</span></span></span></span>
+<span class="nm">Deep ocean<span class="ck" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg></span></span></label>
+<label class="th"><input type="radio" name="f2-theme" value="aubergine">
+<span class="pv" data-theme="aubergine" aria-hidden="true"><span class="d"></span><span class="p"><b>Aa</b><i style="width: 80%"></i><i style="width: 55%"></i><span class="ac"><span style="background: var(--a1); color: var(--on1)">Go</span><span style="background: var(--a2); color: var(--on2)">Pick</span></span></span></span>
+<span class="nm">Aubergine dusk<span class="ck" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg></span></span></label>
+<label class="th"><input type="radio" name="f2-theme" value="espresso">
+<span class="pv" data-theme="espresso" aria-hidden="true"><span class="d"></span><span class="p"><b>Aa</b><i style="width: 80%"></i><i style="width: 55%"></i><span class="ac"><span style="background: var(--a1); color: var(--on1)">Go</span><span style="background: var(--a2); color: var(--on2)">Pick</span></span></span></span>
+<span class="nm">Espresso<span class="ck" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg></span></span></label>
+<label class="th"><input type="radio" name="f2-theme" value="oxblood">
+<span class="pv" data-theme="oxblood" aria-hidden="true"><span class="d"></span><span class="p"><b>Aa</b><i style="width: 80%"></i><i style="width: 55%"></i><span class="ac"><span style="background: var(--a1); color: var(--on1)">Go</span><span style="background: var(--a2); color: var(--on2)">Pick</span></span></span></span>
+<span class="nm">Oxblood<span class="ck" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg></span></span></label>
+<label class="th"><input type="radio" name="f2-theme" value="indigo">
+<span class="pv" data-theme="indigo" aria-hidden="true"><span class="d"></span><span class="p"><b>Aa</b><i style="width: 80%"></i><i style="width: 55%"></i><span class="ac"><span style="background: var(--a1); color: var(--on1)">Go</span><span style="background: var(--a2); color: var(--on2)">Pick</span></span></span></span>
+<span class="nm">Indigo night<span class="ck" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg></span></span></label>
+<label class="th"><input type="radio" name="f2-theme" value="parchment" checked>
+<span class="pv" data-theme="parchment" aria-hidden="true"><span class="d"></span><span class="p"><b>Aa</b><i style="width: 80%"></i><i style="width: 55%"></i><span class="ac"><span style="background: var(--a1); color: var(--on1)">Go</span><span style="background: var(--a2); color: var(--on2)">Pick</span></span></span></span>
+<span class="nm">Parchment <small>light</small><span class="ck" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg></span></span></label>
+</div>
+</fieldset>
+</section>
+<section class="pnl" aria-labelledby="f2-pass" style="grid-area: pass">
+<h2 id="f2-pass">Password</h2>
+<form style="display: flex; flex-direction: column; gap: 14px; margin: 0">
+<div class="f"><label for="f2-cur">Current password</label><input id="f2-cur" class="in" type="password" autocomplete="current-password"></div>
+<div class="f"><label for="f2-new">New password</label><input id="f2-new" class="in" type="password" autocomplete="new-password" minlength="10" aria-describedby="f2-rules"></div>
+<div class="f"><label for="f2-cfm">Confirm</label><input id="f2-cfm" class="in" type="password" autocomplete="new-password"></div>
+<ul class="rules" id="f2-rules"><li>At least 10 characters</li><li>Not a common password</li></ul>
+<p class="warn"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 auto; margin-top: 2px"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v4M12 16h.01"></path></svg><span>Changing it signs you out everywhere else.</span></p>
+<button type="submit" class="go" style="align-self: flex-start">Change password</button>
+</form>
+</section>
+<section class="pnl" aria-labelledby="f2-out" style="grid-area: out">
+<h2 id="f2-out">Sign out</h2>
+<form style="margin: 0"><button type="submit" class="out"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"></path></svg>Sign out</button></form>
+</section>
+</div>
+</main>
+</section>
+<!-- ============ 3 · Password errors · wrong current password, too short, does not match ============ -->
+<section class="board" aria-label="3 · Password errors · wrong current password, too short, does not match" style="min-height: 960px; height: 960px">
+<span class="lbl">3 · Password errors · wrong current password, too short, does not match</span>
+<nav aria-label="Sections" style="flex: 0 0 64px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 0; border-right: 1px solid var(--s3)">
+<button aria-label="Create" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"></path><circle cx="12" cy="12" r="3"></circle></svg></button>
+<button aria-label="Pipelines" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="6" height="6" rx="1.5"></rect><rect x="15" y="14" width="6" height="6" rx="1.5"></rect><path d="M9 7h4a2 2 0 0 1 2 2v5"></path></svg></button>
+<button aria-label="Gallery" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="9" cy="10" r="2"></circle><path d="m21 16-5-5L5 20"></path></svg></button>
+<button aria-label="Timeline" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 17h18"></path><rect x="5" y="4" width="6" height="6" rx="1.5"></rect><rect x="12" y="14" width="7" height="6" rx="1.5"></rect></svg></button>
+<button aria-label="Models" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"></path><path d="m3 8 9 5 9-5M12 13v8"></path></svg></button>
+<button aria-label="Admin" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.5 3.2 7.6 8 9 4.8-1.4 8-4.5 8-9V6l-8-3Z"></path><path d="m9 12 2 2 4-4"></path></svg></button>
+<button aria-label="Settings" aria-current="page" style="width: 44px; height: 44px; margin-top: 6px; border-radius: 12px; border: 0; background: var(--s2); color: var(--a1); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg></button>
+</nav>
+<main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 16px; padding: 16px 20px 24px">
+<h1 style="margin: 0; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 22px; font-weight: 700; letter-spacing: 0.01em">Settings</h1>
+<div class="grid">
+<section class="pnl" aria-labelledby="f3-acct" style="grid-area: acct">
+<h2 id="f3-acct">Account</h2>
+<dl class="kv" style="margin: 0">
+<dt>Name</dt><dd style="font-weight: 600">Root admin</dd>
+<dt>Email</dt><dd class="mono">[ADMIN EMAIL]</dd>
+<dt>Roles</dt><dd style="display: flex; flex-wrap: wrap; gap: 6px"><span class="tag adm">admin</span><span class="tag">dev</span><span class="tag">user</span></dd>
+</dl>
+<a class="lnk" href="/admin">Admin<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"></path></svg></a>
+<p class="fine">Admins only. Users, hosts and API keys.</p>
+</section>
+<section class="pnl" aria-labelledby="f3-look" style="grid-area: look">
+<h2 id="f3-look">Appearance</h2>
+<fieldset class="themes"><legend>Theme · applies at once, saved on this device</legend>
+<div class="tg">
+<label class="th"><input type="radio" name="f3-theme" value="forest" checked>
+<span class="pv" data-theme="forest" aria-hidden="true"><span class="d"></span><span class="p"><b>Aa</b><i style="width: 80%"></i><i style="width: 55%"></i><span class="ac"><span style="background: var(--a1); color: var(--on1)">Go</span><span style="background: var(--a2); color: var(--on2)">Pick</span></span></span></span>
+<span class="nm">Forest ink<span class="ck" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg></span></span></label>
+<label class="th"><input type="radio" name="f3-theme" value="ocean">
+<span class="pv" data-theme="ocean" aria-hidden="true"><span class="d"></span><span class="p"><b>Aa</b><i style="width: 80%"></i><i style="width: 55%"></i><span class="ac"><span style="background: var(--a1); color: var(--on1)">Go</span><span style="background: var(--a2); color: var(--on2)">Pick</span></span></span></span>
+<span class="nm">Deep ocean<span class="ck" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg></span></span></label>
+<label class="th"><input type="radio" name="f3-theme" value="aubergine">
+<span class="pv" data-theme="aubergine" aria-hidden="true"><span class="d"></span><span class="p"><b>Aa</b><i style="width: 80%"></i><i style="width: 55%"></i><span class="ac"><span style="background: var(--a1); color: var(--on1)">Go</span><span style="background: var(--a2); color: var(--on2)">Pick</span></span></span></span>
+<span class="nm">Aubergine dusk<span class="ck" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg></span></span></label>
+<label class="th"><input type="radio" name="f3-theme" value="espresso">
+<span class="pv" data-theme="espresso" aria-hidden="true"><span class="d"></span><span class="p"><b>Aa</b><i style="width: 80%"></i><i style="width: 55%"></i><span class="ac"><span style="background: var(--a1); color: var(--on1)">Go</span><span style="background: var(--a2); color: var(--on2)">Pick</span></span></span></span>
+<span class="nm">Espresso<span class="ck" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg></span></span></label>
+<label class="th"><input type="radio" name="f3-theme" value="oxblood">
+<span class="pv" data-theme="oxblood" aria-hidden="true"><span class="d"></span><span class="p"><b>Aa</b><i style="width: 80%"></i><i style="width: 55%"></i><span class="ac"><span style="background: var(--a1); color: var(--on1)">Go</span><span style="background: var(--a2); color: var(--on2)">Pick</span></span></span></span>
+<span class="nm">Oxblood<span class="ck" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg></span></span></label>
+<label class="th"><input type="radio" name="f3-theme" value="indigo">
+<span class="pv" data-theme="indigo" aria-hidden="true"><span class="d"></span><span class="p"><b>Aa</b><i style="width: 80%"></i><i style="width: 55%"></i><span class="ac"><span style="background: var(--a1); color: var(--on1)">Go</span><span style="background: var(--a2); color: var(--on2)">Pick</span></span></span></span>
+<span class="nm">Indigo night<span class="ck" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg></span></span></label>
+<label class="th"><input type="radio" name="f3-theme" value="parchment">
+<span class="pv" data-theme="parchment" aria-hidden="true"><span class="d"></span><span class="p"><b>Aa</b><i style="width: 80%"></i><i style="width: 55%"></i><span class="ac"><span style="background: var(--a1); color: var(--on1)">Go</span><span style="background: var(--a2); color: var(--on2)">Pick</span></span></span></span>
+<span class="nm">Parchment <small>light</small><span class="ck" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg></span></span></label>
+</div>
+</fieldset>
+</section>
+<section class="pnl" aria-labelledby="f3-pass" style="grid-area: pass">
+<h2 id="f3-pass">Password</h2>
+<form style="display: flex; flex-direction: column; gap: 14px; margin: 0">
+<div class="alert" role="alert"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 auto; margin-top: 2px"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v4M12 16h.01"></path></svg><span>Password not changed.</span></div>
+<div class="f"><label for="f3-cur">Current password</label><input id="f3-cur" class="in" type="password" autocomplete="current-password" value="wrongpass1" aria-invalid="true" aria-describedby="f3-cur-e">
+<p class="msg" id="f3-cur-e" style="margin: 0">Current password is incorrect.</p>
+<p class="fine">5 wrong tries in 15 minutes sign you out here too.</p></div>
+<div class="f"><label for="f3-new">New password</label><input id="f3-new" class="in" type="password" autocomplete="new-password" value="short12" aria-invalid="true" aria-describedby="f3-rules"></div>
+<ul class="rules" id="f3-rules"><li class="bad">At least 10 characters</li><li class="ok">Not a common password</li></ul>
+<div class="f"><label for="f3-cfm">Confirm</label><input id="f3-cfm" class="in" type="password" autocomplete="new-password" value="short1" aria-invalid="true" aria-describedby="f3-cfm-e">
+<p class="msg" id="f3-cfm-e" style="margin: 0">Does not match.</p></div>
+<p class="warn"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 auto; margin-top: 2px"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v4M12 16h.01"></path></svg><span>Changing it signs you out everywhere else.</span></p>
+<button type="submit" class="go" style="align-self: flex-start">Change password</button>
+</form>
+</section>
+<section class="pnl" aria-labelledby="f3-out" style="grid-area: out">
+<h2 id="f3-out">Sign out</h2>
+<form style="margin: 0"><button type="submit" class="out"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"></path></svg>Sign out</button></form>
+</section>
+</div>
+</main>
+</section>
+<!-- ============ 4 · Phone ============ -->
+<section class="board" aria-label="Phone width" style="padding: 64px 40px 72px 96px; gap: 64px; align-items: flex-start">
+<span class="lbl">4 · Phone, 390 px · one column; the dock is the bar at the top</span>
+<div style="display: flex; flex-direction: column; gap: 12px">
+<p class="note">Top</p>
+<div class="fone" aria-label="Phone, top of Settings">
+<div class="fdock" aria-hidden="true"><span><i style="background: linear-gradient(155deg,#a393ff,#4a2fe0)"></i>Create</span><span><i style="background: linear-gradient(155deg,#6cc4ff,#1f5fe0)"></i>Pipelines</span><span><i style="background: linear-gradient(155deg,#ffb07a,#e0457a)"></i>Gallery</span><span><i style="background: linear-gradient(155deg,#ffe07a,#f08a1c)"></i>Timeline</span><span><i style="background: linear-gradient(155deg,#7af5d6,#12967f)"></i>Models</span><span><i style="background: linear-gradient(155deg,#c9ced9,#5b6478)"></i>Admin</span><span class="cur"><i style="background: linear-gradient(155deg,#a7b0c2,#4b5468)"></i>Settings</span></div>
+<div class="fbody">
+<h1 style="margin: 0; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 20px; font-weight: 700">Settings</h1>
+<section class="pnl" aria-labelledby="p1-acct" >
+<h2 id="p1-acct">Account</h2>
+<dl class="kv" style="margin: 0">
+<dt>Name</dt><dd style="font-weight: 600">Root admin</dd>
+<dt>Email</dt><dd class="mono">[ADMIN EMAIL]</dd>
+<dt>Roles</dt><dd style="display: flex; flex-wrap: wrap; gap: 6px"><span class="tag adm">admin</span><span class="tag">dev</span><span class="tag">user</span></dd>
+</dl>
+<a class="lnk" href="/admin">Admin<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"></path></svg></a>
+<p class="fine">Admins only. Users, hosts and API keys.</p>
+</section>
+<section class="pnl" aria-labelledby="p1-look" >
+<h2 id="p1-look">Appearance</h2>
+<fieldset class="themes"><legend>Theme · applies at once, saved on this device</legend>
+<div class="tg">
+<label class="th"><input type="radio" name="p1-theme" value="forest" checked>
+<span class="pv" data-theme="forest" aria-hidden="true"><span class="d"></span><span class="p"><b>Aa</b><i style="width: 80%"></i><i style="width: 55%"></i><span class="ac"><span style="background: var(--a1); color: var(--on1)">Go</span><span style="background: var(--a2); color: var(--on2)">Pick</span></span></span></span>
+<span class="nm">Forest ink<span class="ck" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg></span></span></label>
+<label class="th"><input type="radio" name="p1-theme" value="ocean">
+<span class="pv" data-theme="ocean" aria-hidden="true"><span class="d"></span><span class="p"><b>Aa</b><i style="width: 80%"></i><i style="width: 55%"></i><span class="ac"><span style="background: var(--a1); color: var(--on1)">Go</span><span style="background: var(--a2); color: var(--on2)">Pick</span></span></span></span>
+<span class="nm">Deep ocean<span class="ck" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg></span></span></label>
+<label class="th"><input type="radio" name="p1-theme" value="aubergine">
+<span class="pv" data-theme="aubergine" aria-hidden="true"><span class="d"></span><span class="p"><b>Aa</b><i style="width: 80%"></i><i style="width: 55%"></i><span class="ac"><span style="background: var(--a1); color: var(--on1)">Go</span><span style="background: var(--a2); color: var(--on2)">Pick</span></span></span></span>
+<span class="nm">Aubergine dusk<span class="ck" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg></span></span></label>
+<label class="th"><input type="radio" name="p1-theme" value="espresso">
+<span class="pv" data-theme="espresso" aria-hidden="true"><span class="d"></span><span class="p"><b>Aa</b><i style="width: 80%"></i><i style="width: 55%"></i><span class="ac"><span style="background: var(--a1); color: var(--on1)">Go</span><span style="background: var(--a2); color: var(--on2)">Pick</span></span></span></span>
+<span class="nm">Espresso<span class="ck" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg></span></span></label>
+<label class="th"><input type="radio" name="p1-theme" value="oxblood">
+<span class="pv" data-theme="oxblood" aria-hidden="true"><span class="d"></span><span class="p"><b>Aa</b><i style="width: 80%"></i><i style="width: 55%"></i><span class="ac"><span style="background: var(--a1); color: var(--on1)">Go</span><span style="background: var(--a2); color: var(--on2)">Pick</span></span></span></span>
+<span class="nm">Oxblood<span class="ck" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg></span></span></label>
+<label class="th"><input type="radio" name="p1-theme" value="indigo">
+<span class="pv" data-theme="indigo" aria-hidden="true"><span class="d"></span><span class="p"><b>Aa</b><i style="width: 80%"></i><i style="width: 55%"></i><span class="ac"><span style="background: var(--a1); color: var(--on1)">Go</span><span style="background: var(--a2); color: var(--on2)">Pick</span></span></span></span>
+<span class="nm">Indigo night<span class="ck" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg></span></span></label>
+<label class="th"><input type="radio" name="p1-theme" value="parchment">
+<span class="pv" data-theme="parchment" aria-hidden="true"><span class="d"></span><span class="p"><b>Aa</b><i style="width: 80%"></i><i style="width: 55%"></i><span class="ac"><span style="background: var(--a1); color: var(--on1)">Go</span><span style="background: var(--a2); color: var(--on2)">Pick</span></span></span></span>
+<span class="nm">Parchment <small>light</small><span class="ck" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg></span></span></label>
+</div>
+</fieldset>
+</section>
+</div>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 12px">
+<p class="note">Scrolled down</p>
+<div class="fone" aria-label="Phone, Settings scrolled down">
+<div class="fdock" aria-hidden="true"><span><i style="background: linear-gradient(155deg,#a393ff,#4a2fe0)"></i>Create</span><span><i style="background: linear-gradient(155deg,#6cc4ff,#1f5fe0)"></i>Pipelines</span><span><i style="background: linear-gradient(155deg,#ffb07a,#e0457a)"></i>Gallery</span><span><i style="background: linear-gradient(155deg,#ffe07a,#f08a1c)"></i>Timeline</span><span><i style="background: linear-gradient(155deg,#7af5d6,#12967f)"></i>Models</span><span><i style="background: linear-gradient(155deg,#c9ced9,#5b6478)"></i>Admin</span><span class="cur"><i style="background: linear-gradient(155deg,#a7b0c2,#4b5468)"></i>Settings</span></div>
+<div class="fbody">
+<section class="pnl" aria-labelledby="p2-pass" >
+<h2 id="p2-pass">Password</h2>
+<form style="display: flex; flex-direction: column; gap: 14px; margin: 0">
+<div class="f"><label for="p2-cur">Current password</label><input id="p2-cur" class="in" type="password" autocomplete="current-password"></div>
+<div class="f"><label for="p2-new">New password</label><input id="p2-new" class="in" type="password" autocomplete="new-password" minlength="10" aria-describedby="p2-rules"></div>
+<div class="f"><label for="p2-cfm">Confirm</label><input id="p2-cfm" class="in" type="password" autocomplete="new-password"></div>
+<ul class="rules" id="p2-rules"><li>At least 10 characters</li><li>Not a common password</li></ul>
+<p class="warn"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 auto; margin-top: 2px"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v4M12 16h.01"></path></svg><span>Changing it signs you out everywhere else.</span></p>
+<button type="submit" class="go" style="align-self: flex-start">Change password</button>
+</form>
+</section>
+<section class="pnl" aria-labelledby="p2-out" >
+<h2 id="p2-out">Sign out</h2>
+<form style="margin: 0"><button type="submit" class="out"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"></path></svg>Sign out</button></form>
+</section>
+</div>
+</div>
+</div>
+<div style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 10px; padding-top: 32px; max-width: 320px">
+<p class="note" style="font-size: 13px; color: var(--t1b)">Sections stack in the same order: Account, Appearance, Password, Sign out.</p>
+<p class="note" style="font-size: 13px; color: var(--t1b)">Theme cards go two to a row.</p>
+<p class="note" style="font-size: 13px; color: var(--t1b)">Settings is the last dock item, so the bar shows its end.</p>
+</div>
+</section>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":3893}}'>
+class Component extends DCLogic {
+state = { theme: null };
+renderVals() {
+return {
+theme: this.state.theme ?? this.props.theme ?? 'forest',
+setTheme: (e) => this.setState({ theme: e.target.value })
+};
+}
+}
+</script>
+</body>
+</html>

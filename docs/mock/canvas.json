@@ -491,6 +491,16 @@
       "x": 3040,
       "y": 2320,
       "page": "timeline"
+    },
+    "Settings.dc.html": {
+      "expand": "fill",
+      "h": 3893,
+      "is_interactive": true,
+      "title": "Settings · its own page: account, theme, password, sign out",
+      "w": 1440,
+      "x": 3040,
+      "y": 2400,
+      "page": "models-admin"
     }
   },
   "createdOnFiles": {
@@ -622,6 +632,7 @@
     "ApiKeys.dc.html",
     "Users.dc.html",
     "AdminAgents.dc.html",
+    "Settings.dc.html",
     "Assistant.dc.html",
     "Landing.dc.html",
     "SignIn.dc.html",
