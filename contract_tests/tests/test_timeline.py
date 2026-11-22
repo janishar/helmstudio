@@ -65,7 +65,9 @@ def facts(take: dict) -> dict:
 def doc(tl: dict) -> dict:
     """The normalized document of a Timeline answer, without V1's shot numbers (1.29: studio's, not the rules'; a
     write without them keeps them, test_shot_numbers)."""
-    d = {k: tl[k] for k in ("target", "tracks", "duration_s", "frames")}
+    d = {
+        k: tl[k] for k in ("target", "tracks", "duration_s", "frames", "markers") if k in tl
+    }  # markers: 1.50
     v1 = d["tracks"][0]
     return d | {"tracks": [v1 | {"clips": [{k: v for k, v in c.items() if k != "number"} for c in v1["clips"]]}]
                 + d["tracks"][1:]}  # fmt: skip
@@ -88,8 +90,10 @@ def get(client, tl: dict | str) -> dict:
 
 
 def put(client, tl: dict, written: dict, status: int = 200) -> dict:
-    """PUT the written document (target + tracks) on tl's revision."""
-    body = {"revision": tl["revision"], "target": written["target"], "tracks": written["tracks"]}
+    """PUT the written document (target, tracks and from 1.50 markers) on tl's revision."""
+    body = {"revision": tl["revision"]} | {
+        k: written[k] for k in ("target", "tracks", "markers") if k in written
+    }
     return ok(client.put(f"{TL}/{tl['id']}", json=body), status)
 
 
@@ -387,6 +391,12 @@ def reproducible(case: dict) -> str | None:
         return "names a take the fake cannot make (a silent video, a 50-frame 25 fps one)"
     if case.get("takes"):
         return "names takes of its own (lengths the fake cannot make; studio and web run it on the fixtures)"
+    if (
+        '"shot"' in json.dumps(case.get("document", {}))
+        and "expect" in case
+        and "document" in case["expect"]
+    ):
+        return "starts from a slot with a shot, which only studio sets (studio and web run it on the fixtures)"
     if case.get("previous"):
         return "needs a stored revision with a shot or a since-deleted take (test_offline_clip covers it)"
     return None
@@ -405,7 +415,7 @@ def test_normalize_fixture(api, scratch, fixture_ids, case):
     back = {v: k for k, v in fixture_ids.items()}
     written = mapped(case["document"], fixture_ids)
     r = api.put(f"{TL}/{scratch['tl']['id']}", json={"revision": scratch["tl"]["revision"]} | {
-        k: written[k] for k in ("target", "tracks")})  # fmt: skip
+        k: written[k] for k in ("target", "tracks", "markers") if k in written})  # fmt: skip
     if "problems" in case["expect"]:
         assert r.status_code == 422, r.text
         assert problems(r.json()) == case["expect"]["problems"]
@@ -427,22 +437,29 @@ def test_edit_fixture(api, scratch, fixture_ids, takes, case):
     if op["op"] in ("insert", "fill"):
         pytest.skip("made by studio only (New shot): test_new_shot_in_a_gap covers it")
     back = {v: k for k, v in fixture_ids.items()}
-    tl = put(api, scratch["tl"], mapped(case["document"], fixture_ids))
+    scratch["tl"] = tl = put(api, scratch["tl"], mapped(case["document"], fixture_ids))
     assert mapped(doc(tl), back) == case["document"]  # a normalized document is a fixed point
     live_op = mapped(op, fixture_ids)
+    by_ops = case["description"].startswith(
+        "1.50"
+    )  # the tools' ops: the web saves them through /edits
     if op["op"] == "add":
         body = {"take_ids": live_op["take_ids"], "track": op.get("track", "V1")}
         r = api.post(f"{TL}/{tl['id']}/clips", json=body)
+    elif by_ops:
+        r = api.post(
+            f"{TL}/{tl['id']}/edits", json={"base_revision": tl["revision"], "ops": [live_op]}
+        )
     else:
         written = check.t_edit(doc(tl), live_op, takes)
         r = api.put(f"{TL}/{tl['id']}", json={"revision": tl["revision"]} | {
-            k: written[k] for k in ("target", "tracks")})  # fmt: skip
+            k: written[k] for k in ("target", "tracks", "markers") if k in written})  # fmt: skip
     if "problems" in expect:
         assert r.status_code == 422, r.text
         assert problems(r.json()) == expect["problems"]
         scratch["tl"] = tl
         return
-    scratch["tl"] = got = ok(r)
+    scratch["tl"] = got = ok(r)["timeline"] if by_ops else ok(r)
     assert got["revision"] == tl["revision"] + 1
     if op["op"] == "add":  # studio names the new clips: compare them under the fixture's ids
         old = {c["id"] for t in tl["tracks"] for c in t["clips"]}
