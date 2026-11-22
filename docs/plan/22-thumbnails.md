@@ -151,7 +151,7 @@ store). With one size there is no size in the key.
 `export`, Python with PIL and ffmpeg that it already has):
 
 - studio's `Thumbs` loop (beside the take sweeper, as System) picks ready, live image and video takes whose
-  `thumb` is null and whose `thumb_tries` < 3, oldest first, one owner at a time, at most 20 per job, and only when no
+  `thumb` is null and whose `thumb_tries` < 3, newest first (built: so a new upload never waits behind the backfill), one owner at a time, at most 20 per job, and only when no
   thumbs job is queued or running (one at a time for the stack). Because each env's media durable has
   `max_ack_pending 1`, a frame or export queued behind a running thumbs job waits for it: 20 inputs keep that to about
   20–40 s (a large PNG takes about a second to fetch and decode). Takes whose key (or poster key) is outside

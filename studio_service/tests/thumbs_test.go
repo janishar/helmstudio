@@ -133,7 +133,10 @@ func TestThumbsJob(t *testing.T) {
 	e.thumbOf(done, "u/"+userA+"/thumbs/old/0.webp")
 	foreign := e.image(userA)
 	e.exec(`UPDATE takes SET key = 'u/`+userB+`/uploads/x.png' WHERE id = $1`, foreign)
-	e.exec(`UPDATE takes SET created_at = clock_timestamp() + interval '1 hour' WHERE id = $1`, b) // userA's are older
+	// newest first (a new upload never waits behind a backfill): userA's a1, a2, video, then userB's b
+	for i, id := range []string{b, video, a2, a1} {
+		e.exec(`UPDATE takes SET created_at = clock_timestamp() + make_interval(hours => $2) WHERE id = $1`, id, i)
+	}
 
 	jobID, err := studio.QueueThumbs(ctx, e.pool, e.registry)
 	if err != nil || jobID == "" {
@@ -152,7 +155,7 @@ func TestThumbsJob(t *testing.T) {
 	prefix := "u/" + userA + "/thumbs/" + jobID + "/"
 	if command.Kind != "thumbs" || len(command.Inputs) != 3 || command.OutputPrefix != prefix || sent[len(sent)-1].OwnerID != userA ||
 		!strings.HasSuffix(command.Inputs[2]["key"].(string), "/0.poster.png") || command.Inputs[2]["kind"] != "image" {
-		t.Fatal("one owner's ready live takes without a thumb, oldest first; a video's poster", command)
+		t.Fatal("one owner's ready live takes without a thumb, newest first; a video's poster", command)
 	}
 	// no endpoint: 404; not one of the user's open media jobs
 	e.call(userA, "GET", "/v1/studio/media-jobs/"+jobID, nil, 404)

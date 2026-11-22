@@ -30,7 +30,7 @@ const thumbsTodo = `t.thumb IS NULL AND t.deleted_at IS NULL AND t.ready AND t.t
 	AND ((t.kind = 'image' AND starts_with(t.key, 'u/' || t.owner_id::text || '/'))
 		OR (t.kind = 'video' AND starts_with(t.video->'poster'->>'key', 'u/' || t.owner_id::text || '/')))`
 
-// QueueThumbs sends one thumbs job (as System) for the oldest takes without a thumbnail, of one owner, at most
+// QueueThumbs sends one thumbs job (as System) for the newest takes without a thumbnail, of one owner, at most
 // ThumbsPerJob, unless one is open already or no live env can run it; it returns the job id ("" for none).
 func QueueThumbs(ctx context.Context, pool *pgxpool.Pool, reg *registry.Registry) (string, error) {
 	env, ok := mediaEnvOf(reg, nil, true) // never an older runner: it would fail every job
@@ -49,10 +49,10 @@ func QueueThumbs(ctx context.Context, pool *pgxpool.Pool, reg *registry.Registry
 		}
 		type pick struct{ ID, Owner, Key string }
 		picks, err := collect[pick](ctx, tx, `WITH o AS (SELECT t.owner_id FROM takes t WHERE `+thumbsTodo+`
-				ORDER BY t.created_at, t.id LIMIT 1)
+				ORDER BY t.created_at DESC, t.id LIMIT 1)
 			SELECT t.id::text, t.owner_id::text, CASE WHEN t.kind = 'video' THEN t.video->'poster'->>'key' ELSE t.key END
 			FROM takes t JOIN o ON o.owner_id = t.owner_id WHERE `+thumbsTodo+`
-			ORDER BY t.created_at, t.id LIMIT $1 FOR UPDATE OF t SKIP LOCKED`, ThumbsPerJob)
+			ORDER BY t.created_at DESC, t.id LIMIT $1 FOR UPDATE OF t SKIP LOCKED`, ThumbsPerJob)
 		if err != nil || len(picks) == 0 {
 			return err
 		}
