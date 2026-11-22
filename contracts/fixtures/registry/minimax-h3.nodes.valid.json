@@ -187,6 +187,24 @@
       "family": "minimax-h3",
       "component": "whole model",
       "help": "Runs MiniMax H3 end to end in its own process (the native h3 binary): encodes the prompt and any frames or references, denoises, decodes picture and sound, and writes an MP4 (H.264 + AAC 32 kHz, 24 fps). References use the Ref2VA model, everything else FL2VA.",
+      "phases": [
+        {
+          "id": "encode",
+          "label": "Encode"
+        },
+        {
+          "id": "sample",
+          "label": "Sample"
+        },
+        {
+          "id": "decode_audio",
+          "label": "Decode audio"
+        },
+        {
+          "id": "decode_video",
+          "label": "Decode video"
+        }
+      ],
       "params": [
         {
           "name": "steps",

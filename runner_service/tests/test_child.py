@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import time
+import types
 
 import pytest
 
@@ -75,6 +76,20 @@ w("h3: wrote /tmp/out.mp4\n")
     assert all(p in ("tokenizer", "sampling") for _, _, p in ctx.seen)
     assert all(n >= 1 for n, _, _ in ctx.seen)  # `0/N` opens a phase; progress counts from 1
     assert child.LIVE["pid"] is None and not child.pid_file().exists()
+
+
+def test_a_phase_maps_to_its_text_and_phase_id(tmp_path):
+    """API 1.36: a `phases` value (text, phase id) reaches ctx.progress as both; a plain one as the text alone."""
+    seen = []
+    ctx = types.SimpleNamespace(node="gen", check=lambda: None, progress=lambda *a: seen.append(a))
+    code = r"""
+import sys, time
+sys.stderr.write("tokenizer 1/1\n"); sys.stderr.flush(); time.sleep(0.3)
+sys.stderr.write("audio VAE 2/3\n"); sys.stderr.flush(); time.sleep(0.3)
+"""
+    child.run(ctx, py(code), cwd=tmp_path, name="h3", idle_s=10,
+              phases={"tokenizer": "encoding", "audio VAE": ("decoding audio", "decode_audio")})  # fmt: skip
+    assert seen == [(1, 1, "encoding"), (2, 3, "decoding audio", "decode_audio")]
 
 
 def test_an_update_counts_before_the_next_one_comes(tmp_path):

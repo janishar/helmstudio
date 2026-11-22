@@ -41,7 +41,7 @@ var JobSilence = 10 * time.Minute
 // jobRow is a model_jobs row.
 type jobRow struct {
 	ID, Kind, Host, Env            string
-	Model, Variant, LoraID         *string
+	Model, Variant, Addon, LoraID  *string
 	Title, State                   string
 	Progress, Failure, Result      json.RawMessage
 	Keeps, Licence                 json.RawMessage
@@ -50,13 +50,13 @@ type jobRow struct {
 	ReleasedAt, StartedAt, EndedAt *time.Time
 }
 
-const jobCols = `id::text, kind, host, env, model, variant, lora_id, title, state, progress, failure, result, keeps,
+const jobCols = `id::text, kind, host, env, model, variant, addon, lora_id, title, state, progress, failure, result, keeps,
 	licence, requested_by::text, created_at, released_at, started_at, ended_at`
 
 var jobEnded = map[string]bool{"succeeded": true, "failed": true, "cancelled": true}
 
 func (r jobRow) dto() dto.ModelJob {
-	out := dto.ModelJob{ID: r.ID, Kind: r.Kind, Host: r.Host, Env: r.Env, Model: r.Model, Variant: r.Variant, LoraID: r.LoraID,
+	out := dto.ModelJob{ID: r.ID, Kind: r.Kind, Host: r.Host, Env: r.Env, Model: r.Model, Variant: r.Variant, Addon: r.Addon, LoraID: r.LoraID,
 		Title: r.Title, State: r.State, Progress: r.Progress, Failure: r.Failure, Result: r.Result, Keeps: []dto.Keep{},
 		RequestedBy: r.RequestedBy, CreatedAt: r.CreatedAt, StartedAt: r.StartedAt, EndedAt: r.EndedAt}
 	_ = json.Unmarshal(r.Keeps, &out.Keeps)
@@ -101,11 +101,12 @@ func lockHost(ctx context.Context, tx pgx.Tx, host string) error {
 	return err
 }
 
-// unfinished is the open job of kind on host matching model, variant and lora (nil compares as null), or nil.
-func unfinished(ctx context.Context, tx pgx.Tx, kind, host string, model, variant, loraID *string) (*jobRow, error) {
+// unfinished is the open job of kind on host matching model, variant, add-on and lora (nil compares as null), or nil.
+func unfinished(ctx context.Context, tx pgx.Tx, kind, host string, model, variant, addon, loraID *string) (*jobRow, error) {
 	row, err := one[jobRow](ctx, tx, `SELECT `+jobCols+` FROM model_jobs WHERE kind = $1 AND host = $2
 		AND model IS NOT DISTINCT FROM $3 AND variant IS NOT DISTINCT FROM $4 AND lora_id IS NOT DISTINCT FROM $5
-		AND state IN ('queued', 'running') ORDER BY created_at LIMIT 1`, kind, host, model, variant, loraID)
+		AND addon IS NOT DISTINCT FROM $6 AND state IN ('queued', 'running') ORDER BY created_at LIMIT 1`,
+		kind, host, model, variant, loraID, addon)
 	if errors.Is(err, errNotFound) {
 		return nil, nil
 	}
@@ -126,8 +127,8 @@ func insertJob(ctx context.Context, tx pgx.Tx, j jobRow) (jobRow, error) {
 		j.Keeps = json.RawMessage(`[]`)
 	}
 	return one[jobRow](ctx, tx, `INSERT INTO model_jobs (id, kind, host, env, model, variant, lora_id, title, keeps,
-		licence, requested_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING `+jobCols,
-		utility.NewID(), j.Kind, j.Host, j.Env, j.Model, j.Variant, j.LoraID, j.Title, j.Keeps, j.Licence, j.RequestedBy)
+		licence, requested_by, addon) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING `+jobCols,
+		utility.NewID(), j.Kind, j.Host, j.Env, j.Model, j.Variant, j.LoraID, j.Title, j.Keeps, j.Licence, j.RequestedBy, j.Addon)
 }
 
 // downloadDB applies a download's refusals that need the jobs table: a delete of the model on the host unfinished.
@@ -192,20 +193,20 @@ func (s *Service) DownloadModel(ctx context.Context, caller common.Caller, model
 			return errNotFound
 		}
 		variant := body.Variant
-		if variant == nil { // the job names the variant it fetches
+		if variant == nil && body.Addon == nil { // the job names the variant it fetches
 			if _, m, ok := w.envFor(body.Host, model); ok && len(m.Variants) > 0 {
 				variant = &m.Variants[0].ID
 			}
 		}
-		if variant != nil {
-			if open, err := unfinished(ctx, tx, "download", body.Host, &model, variant, nil); err != nil || open != nil {
+		if variant != nil || body.Addon != nil {
+			if open, err := unfinished(ctx, tx, "download", body.Host, &model, variant, body.Addon, nil); err != nil || open != nil {
 				if open != nil {
 					out = *open
 				}
 				return err
 			}
 		}
-		d, err := w.checkDownload(body.Host, model, variant, body.AcceptLicence)
+		d, err := w.checkDownload(body.Host, model, variant, body.Addon, body.AcceptLicence)
 		if err != nil {
 			return err
 		}
@@ -213,16 +214,21 @@ func (s *Service) DownloadModel(ctx context.Context, caller common.Caller, model
 			return err
 		}
 		licence, _ := json.Marshal(d.licence)
-		out, err = insertJob(ctx, tx, jobRow{Kind: "download", Host: body.Host, Env: d.env, Model: &model, Variant: &d.variant.ID,
-			Title: d.model.Title + " · " + firstNonEmpty(d.variant.Title, d.variant.ID), Licence: licence, RequestedBy: caller.ID})
+		job := jobRow{Kind: "download", Host: body.Host, Env: d.env, Model: &model, Licence: licence, RequestedBy: caller.ID}
+		if d.addon != nil {
+			job.Addon, job.Title = &d.addon.Component, d.model.Title+" · "+d.addon.Title
+		} else {
+			job.Variant, job.Title = &d.variant.ID, d.model.Title+" · "+firstNonEmpty(d.variant.Title, d.variant.ID)
+		}
+		out, err = insertJob(ctx, tx, job)
 		created = err == nil
 		return err
 	})
 	return out.dto(), created, err
 }
 
-// DeleteModel answers DELETE /admin/models/{model}?host=&variant=.
-func (s *Service) DeleteModel(ctx context.Context, caller common.Caller, model, host string, variant *string) (dto.ModelJob, bool, error) {
+// DeleteModel answers DELETE /admin/models/{model}?host=&variant=&addon=.
+func (s *Service) DeleteModel(ctx context.Context, caller common.Caller, model, host string, variant, addon *string) (dto.ModelJob, bool, error) {
 	if !caller.IsAdmin() {
 		return dto.ModelJob{}, false, errAdmin
 	}
@@ -233,6 +239,10 @@ func (s *Service) DeleteModel(ctx context.Context, caller common.Caller, model, 
 		return dto.ModelJob{}, false, network.NewUnprocessableError("host must be a host name", nil)
 	case variant != nil && !dto.VariantID.MatchString(*variant):
 		return dto.ModelJob{}, false, network.NewUnprocessableError("variant must be a variant id", nil)
+	case addon != nil && !dto.AddonID.MatchString(*addon):
+		return dto.ModelJob{}, false, network.NewUnprocessableError("addon must be a component name", nil)
+	case addon != nil && variant != nil:
+		return dto.ModelJob{}, false, network.NewUnprocessableError("give a variant or an add-on, not both", nil)
 	case !s.registry.Ready():
 		return dto.ModelJob{}, false, network.NewServiceUnavailableError("studio is starting; try again", nil)
 	}
@@ -242,14 +252,14 @@ func (s *Service) DeleteModel(ctx context.Context, caller common.Caller, model, 
 		if err := lockHost(ctx, tx, host); err != nil {
 			return err
 		}
-		if open, err := unfinished(ctx, tx, "delete", host, &model, variant, nil); err != nil || open != nil {
+		if open, err := unfinished(ctx, tx, "delete", host, &model, variant, addon, nil); err != nil || open != nil {
 			if open != nil {
 				out = *open
 			}
 			return err
 		}
 		w := s.weights()
-		del, err := w.checkDelete(host, model, variant)
+		del, err := w.checkDelete(host, model, variant, addon)
 		if err != nil {
 			return err
 		}
@@ -258,7 +268,7 @@ func (s *Service) DeleteModel(ctx context.Context, caller common.Caller, model, 
 		}
 		keeps, _ := json.Marshal(del.keeps)
 		out, err = insertJob(ctx, tx, jobRow{Kind: "delete", Host: host, Env: del.env, Model: &model, Variant: variant,
-			Title: del.title, Keeps: keeps, RequestedBy: caller.ID})
+			Addon: addon, Title: del.title, Keeps: keeps, RequestedBy: caller.ID})
 		created = err == nil
 		return err
 	})
@@ -286,7 +296,7 @@ func (s *Service) DeleteSharedLora(ctx context.Context, caller common.Caller, id
 		if err := lockHost(ctx, tx, host); err != nil {
 			return err
 		}
-		if open, err := unfinished(ctx, tx, "lora_delete", host, nil, nil, &id); err != nil || open != nil {
+		if open, err := unfinished(ctx, tx, "lora_delete", host, nil, nil, nil, &id); err != nil || open != nil {
 			if open != nil {
 				out = *open
 			}
@@ -505,12 +515,12 @@ func recheck(ctx context.Context, tx pgx.Tx, w weights, job jobRow) (*message.Mo
 		}
 		return "", err
 	}
-	command := &message.ModelJob{Kind: job.Kind, Host: job.Host, Model: job.Model, Variant: job.Variant, LoraID: job.LoraID}
+	command := &message.ModelJob{Kind: job.Kind, Host: job.Host, Model: job.Model, Variant: job.Variant, Addon: job.Addon, LoraID: job.LoraID}
 	var err error
 	switch job.Kind {
 	case "download":
 		var d download
-		if d, err = w.checkDownload(job.Host, deref(job.Model), job.Variant, true); err == nil {
+		if d, err = w.checkDownload(job.Host, deref(job.Model), job.Variant, job.Addon, true); err == nil {
 			err = downloadDB(ctx, tx, job.Host, d, job.ID)
 		}
 		command.Env = d.env
@@ -519,7 +529,7 @@ func recheck(ctx context.Context, tx pgx.Tx, w weights, job jobRow) (*message.Mo
 		command.Licence = accepted
 	case "delete":
 		var del removal
-		if del, err = w.checkDelete(job.Host, deref(job.Model), job.Variant); err == nil {
+		if del, err = w.checkDelete(job.Host, deref(job.Model), job.Variant, job.Addon); err == nil {
 			err = deleteDB(ctx, tx, w, job.Host, del)
 		}
 		command.Env = del.env

@@ -123,6 +123,8 @@ type RunProgress struct {
 	Of    int      `json:"of"`
 	Phase *string  `json:"phase,omitempty"`
 	EtaS  *float64 `json:"eta_s,omitempty"`
+	// API 1.36: which of the node's phases it is in
+	PhaseID *string `json:"phase_id,omitempty"`
 }
 
 // RunOutput is one stored output with its signed link.

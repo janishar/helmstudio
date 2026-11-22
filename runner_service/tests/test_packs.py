@@ -233,18 +233,22 @@ def test_memory_plan_lists_components_in_order_of_last_use_and_the_warm_peak(
     tmp_path, monkeypatch, variant
 ):
     """models[].variants[].memory (the hand-over): the canonical workflow at its default sizes (1024², no refs):
-    decode's 8.5 * mp is the largest stage peak, on top of every kept component."""
+    decode's 8.5 * mp is the largest stage peak, on top of every kept component. The enhance node's add-ons come
+    first (the default model's, unloaded after it; not on this host, so 0 GB)."""
     q = FakeQwen(tmp_path, monkeypatch)
     q.pack.workflows = fixture("qwen-image.workflows.valid.json")["workflows"]
     plan = registry.memory_plan(q.pack, variant, "int8", q.impls, q.schemas)
     owner = {"text_encoder": "base", "vae": "base", "transformer": variant}
+    pes, comps = plan["components"][:2], plan["components"][2:]
+    assert [(c["component"], c["variant"], c["precision"], c["gb"], c["unloads_after"]) for c in pes] == [
+        ("text_enhancer", "base", "bf16", 0, True), ("edit_enhancer", "base", "bf16", 0, True)]  # fmt: skip
     want = [
         (c, owner[c], "bf16" if c == "vae" else "int8")
         for c in ("text_encoder", "transformer", "vae")
     ]
-    assert [(c["component"], c["variant"], c["precision"]) for c in plan["components"]] == want
-    kept = sum(c["gb"] for c in plan["components"])
-    assert plan["precision"] == "int8" and not any("unloads_after" in c for c in plan["components"])
+    assert [(c["component"], c["variant"], c["precision"]) for c in comps] == want
+    kept = sum(c["gb"] for c in comps)
+    assert plan["precision"] == "int8" and not any("unloads_after" in c for c in comps)
     assert plan["peak_gb"] == pytest.approx(kept + 8.5 * 1024 * 1024 / 1e6, abs=0.01)
     assert plan["planned_at"] == {"mp": 1.0486, "frames": 0}  # a larger run has no plan (studio)
     entry = pack.models_entry(q.pack)
@@ -260,9 +264,9 @@ def test_memory_plan_marks_unload_after_and_leaves_it_out_of_the_kept_set(tmp_pa
     q.impls["qwen-image/encode"].unload_after = ("text_encoder",)
     q.impls["qwen-image/encode"].peak = pack.compile_formula("100", set())
     plan = registry.memory_plan(q.pack, "base", "bf16", q.impls, q.schemas)
-    te = plan["components"][0]
+    te = plan["components"][2]  # after the enhance node's two add-ons
     assert te["component"] == "text_encoder" and te["unloads_after"] is True
-    others = sum(c["gb"] for c in plan["components"][1:])
+    others = sum(c["gb"] for c in plan["components"][3:])
     assert plan["peak_gb"] == pytest.approx(others + te["gb"] + 100, abs=0.01)  # its stage holds it
 
 
@@ -463,9 +467,9 @@ def test_minimax_h3_generate_runs_the_binary_and_returns_a_video(tmp_path, monke
         def check(self):
             pass
 
-        def progress(self, step, of, phase=None):
+        def progress(self, step, of, phase=None, phase_id=None):
             assert 1 <= step <= of  # evt.run.progress counts from 1
-            self.seen.append((step, of, phase))
+            self.seen.append((step, of, phase, phase_id))
 
     inputs = {"model": Model(), "prompt": "-a fox", "seed": 2**53 - 1, "canvas": {"width": 256, "height": 288},
               "duration": {"frames": 22, "fps": 24}, "first": Image.new("RGBA", (300, 200), (255, 0, 0, 128)),
@@ -489,11 +493,13 @@ def test_minimax_h3_generate_runs_the_binary_and_returns_a_video(tmp_path, monke
     assert (v["frames"], v["fps"], v["has_audio"]) == (22, 24, True)
     assert v["poster"].size == v["last"].size == (256, 288) and v["mp4"][4:8] == b"ftyp"
     assert v["stream"]["codec"] == "h264" and v["stream"]["width"] == 256
-    assert ctx.seen[0] == (1, 1, "starting h3") and ctx.seen[-1] == (
+    # the last line, mapped; API 1.36: each with the phase id of model.yaml generate.phases
+    assert ctx.seen[0] == (1, 1, "starting h3", "encode") and ctx.seen[-1] == (
         2,
         2,
         "sampling",
-    )  # the last line, mapped
+        "sample",
+    )
     # refused before the child starts
     log.unlink()
     with pytest.raises(

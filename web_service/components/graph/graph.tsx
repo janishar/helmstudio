@@ -383,7 +383,11 @@ function Graph({
   const states = useMemo(
     () =>
       shown
-        ? Object.fromEntries(segments(workflow, shown, track).map((s) => [s.node, s.state]))
+        ? // a node with phases (API 1.36) has a piece per phase: its first piece not done is its state
+          segments(workflow, shown, track).reduce<Record<string, Segment["state"]>>(
+            (m, s) => (m[s.node] && m[s.node] !== "done" ? m : { ...m, [s.node]: s.state }),
+            {},
+          )
         : {},
     [shown, track, workflow],
   );

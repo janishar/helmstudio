@@ -206,6 +206,7 @@ describe("video takes and the run strip", () => {
       ["Upscale latent", "pending", undefined],
       ["Sample 2", "pending", 3],
       ["Decode", "pending", undefined],
+      ["Saving", "pending", undefined],
     ]);
   });
 });

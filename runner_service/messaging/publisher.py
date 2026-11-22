@@ -100,12 +100,16 @@ class RunEvents:
         return await self.publish("status", data)
 
     async def progress(
-        self, node: str, step: int, of: int, phase: str | None = None, eta_s: float | None = None
-    ) -> dict:
-        """One step of a stepping node done; phase says what it is doing (loading transformer, sampling)."""
+        self, node: str, step: int, of: int, phase: str | None = None, eta_s: float | None = None,
+        phase_id: str | None = None,
+    ) -> dict:  # fmt: skip
+        """One step of a stepping node done; phase says what it is doing (loading transformer, sampling), phase_id
+        (API 1.36) which of the node's phases it is in."""
         data = {"node": node, "step": step, "of": of}
         if phase:
             data["phase"] = phase[:80]
+        if phase_id:
+            data["phase_id"] = phase_id
         if eta_s is not None:
             data["eta_s"] = eta_s
         return await self.publish("progress", data)

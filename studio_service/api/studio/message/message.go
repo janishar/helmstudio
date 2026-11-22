@@ -78,6 +78,8 @@ type Progress struct {
 	Of    int      `json:"of"`
 	Phase *string  `json:"phase"`
 	EtaS  *float64 `json:"eta_s"`
+	// API 1.36: which of the node's phases it is in
+	PhaseID *string `json:"phase_id"`
 }
 
 // Output is evt.run.output's data.
@@ -488,6 +490,7 @@ type ModelJob struct {
 	Kind    string      `json:"kind"` // download | delete | lora_delete
 	Model   *string     `json:"model,omitempty"`
 	Variant *string     `json:"variant,omitempty"`
+	Addon   *string     `json:"addon,omitempty"` // API 1.36: an optional add-on instead of a variant
 	Licence *JobLicence `json:"licence,omitempty"`
 	LoraID  *string     `json:"lora_id,omitempty"`
 	Host    string      `json:"-"`

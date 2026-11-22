@@ -42,6 +42,11 @@
           "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
           "description": "download: the variant (absent = the first); delete: the variant (absent = every variant of the model on the host)"
         },
+        "addon": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "description": "from API 1.36, download and delete: the model's optional add-on (a `component` of its models entry `addons`) instead of a variant: a download fetches its `source` into its `dir`, a delete removes only its files (contracts/README.md, Optional add-ons). Never with `variant`"
+        },
         "licence": {
           "type": "object",
           "required": [
@@ -49,7 +54,7 @@
             "sha256"
           ],
           "additionalProperties": false,
-          "description": "download of a variant whose source.must_accept is true: the licence the admin accepted and the SHA-256 of its UTF-8 text as the models key published it. The runner fails the job `licence` when its pack's text hashes otherwise",
+          "description": "download of a variant (or, from API 1.36, an add-on) whose source.must_accept is true: the licence the admin accepted and the SHA-256 of its UTF-8 text as the models key published it. The runner fails the job `licence` when its pack's text hashes otherwise",
           "properties": {
             "id": {
               "type": "string",
@@ -66,6 +71,28 @@
         }
       },
       "allOf": [
+        {
+          "if": {
+            "required": [
+              "addon"
+            ]
+          },
+          "then": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "download",
+                  "delete"
+                ]
+              }
+            },
+            "not": {
+              "required": [
+                "variant"
+              ]
+            }
+          }
+        },
         {
           "if": {
             "properties": {

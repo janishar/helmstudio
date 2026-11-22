@@ -50,6 +50,11 @@
           "maxLength": 80,
           "description": "what the node is doing, for the UI"
         },
+        "phase_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,31}$",
+          "description": "from API 1.36: the id of one of the node's `phases` (its kind's registry nodeSchema) that it is in; only from a node that declares phases (contracts/README.md, Phases). The UI lights that phase's chip, with step/of when of > 1"
+        },
         "eta_s": {
           "type": "number",
           "minimum": 0,

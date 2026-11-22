@@ -61,6 +61,23 @@ describe("model state per host", () => {
   });
 });
 
+describe("optional add-ons (API 1.36)", () => {
+  const list = fixture as unknown as S<"ModelList">;
+  const m = list.models.find((x) => x.addons.length)!;
+  const a = m.addons[0];
+  it("are filtered by host, count as downloading, and plan a download as a variant", () => {
+    expect(forHost(list.models, "gpu1").find((x) => x.id === m.id)!.addons[0].hosts).toEqual([
+      a.hosts.find((h) => h.host === "gpu1"),
+    ]);
+    const only = [{ ...m, variants: [] }];
+    expect(anyDownloading(only)).toBe(true); // the add-on downloads on mac
+    expect(anyDownloading(forHost(only, "gpu1"))).toBe(false);
+    expect(downloadPlan(list, a, "mac").blocked).toBe("downloading to mac");
+    expect(downloadPlan(list, a, "gpu1").blocked).toBeNull();
+    expect(canDelete(a, "gpu1")).toBe(false);
+  });
+});
+
 describe("progress and sizes", () => {
   it("rounds progress down and caps it", () => {
     expect(percent({ done_bytes: 25360000000, total_bytes: 40900000000 })).toBe(62);

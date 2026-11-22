@@ -17,6 +17,7 @@ var (
 	// HostName, EnvName, VariantID, ModelID, ComponentName are the contracts' name patterns.
 	HostName      = regexp.MustCompile(`^[a-z0-9]{1,32}$`)
 	VariantID     = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
+	AddonID       = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 	ModelID       = regexp.MustCompile(`^[a-z0-9][a-z0-9_.-]{0,63}$`)
 	ComponentName = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 	pinLoraID     = regexp.MustCompile(`^([0-9a-f]{64}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$`)
@@ -50,6 +51,19 @@ type Model struct {
 	Media    []string           `json:"media"`
 	Runtimes []registry.Runtime `json:"runtimes"`
 	Variants []ModelVariant     `json:"variants"`
+	Addons   []ModelAddon       `json:"addons"` // API 1.36
+}
+
+// ModelAddon is one optional add-on of a model with its per-host state (API 1.36).
+type ModelAddon struct {
+	Component     string             `json:"component"`
+	Title         string             `json:"title"`
+	Help          string             `json:"help,omitempty"`
+	Dir           *string            `json:"dir"`
+	Licence       *VariantLicence    `json:"licence"`
+	Gated         bool               `json:"gated"`
+	DownloadBytes *int64             `json:"download_bytes"`
+	Hosts         []ModelVariantHost `json:"hosts"`
 }
 
 // ModelVariant is one variant with its components and per-host state.
@@ -103,6 +117,7 @@ type VariantJob struct {
 type ModelDownload struct {
 	Host          string  `json:"host"`
 	Variant       *string `json:"variant"`
+	Addon         *string `json:"addon"` // API 1.36: an optional add-on instead of a variant
 	AcceptLicence bool    `json:"accept_licence"`
 }
 
@@ -113,6 +128,10 @@ func (b *ModelDownload) Validate() string {
 		return "host must be a host name"
 	case b.Variant != nil && !VariantID.MatchString(*b.Variant):
 		return "variant must be a variant id"
+	case b.Addon != nil && !AddonID.MatchString(*b.Addon):
+		return "addon must be a component name"
+	case b.Addon != nil && b.Variant != nil:
+		return "give a variant or an add-on, not both"
 	}
 	return ""
 }
@@ -125,6 +144,7 @@ type ModelJob struct {
 	Env         string          `json:"env"`
 	Model       *string         `json:"model"`
 	Variant     *string         `json:"variant"`
+	Addon       *string         `json:"addon"` // API 1.36
 	LoraID      *string         `json:"lora_id"`
 	Title       string          `json:"title"`
 	State       string          `json:"state"`

@@ -26,7 +26,9 @@ Env: `.env.example`. Secrets are read from `<NAME>_FILE` when set, else from `<N
    nothing is sent. 202 either way; the answer has the host it is lined up for and its `position`. From API 1.35 a
    body `host` (Create's Run on) is stored as `runs.pin_host`: the run is eligible on that host only (attempt 2
    too) and, when that host cannot take it now, the answer is a 422 with the eligibility text and nothing is stored
-   (contracts/README.md "Several hosts", A run set to one host).
+   (contracts/README.md "Several hosts", A run set to one host). From API 1.36 a node that is not bypassed and whose
+   kind names `addons` is eligible only where each is present (`eligibleIn`, step 2b: `<node>: <title> not
+   downloaded on host <host>` / `… on any live host for env <env>`).
 2. The dispatcher (`api/studio/dispatcher.go`, every 500 ms, one pass at a time across replicas by a Postgres
    advisory lock) releases at most one run per host (across envs) while no released run on it has ended. Eligible
    host: hosts key fresher than 30 s, the run's env, its runner publishes the workflow, and the run's model variant is
@@ -262,7 +264,9 @@ consumes `evt.run.>` (durable `studio-projector`) and `evt.pipeline.>` (durable 
   its refusals (a refusal fails it `in_use`) once its env's key is live: `cmd.model.job` on `cmd.model.<host>.<env>`,
   `Nats-Msg-Id <job_id>:1`. Durable `studio-models` projects `evt.model.*` (dedupe on job, delivery, seq; nothing after
   the end). Cancel: unreleased at once; a released download through KV `cancels` (a key gone or older than 60 s:
-  cancelled here, `cmd.model.<host>.<env>` purged); a released delete 409.
+  cancelled here, `cmd.model.<host>.<env>` purged); a released delete 409. From API 1.36 a job may name an optional
+  add-on (`model_jobs.addon`, migration 00026; `weights.checkAddonDownload`, `checkDelete` with `addon`), and
+  `buildAddons` lists each model's add-ons per host (contracts/README.md "Optional add-ons").
 - Hosts admin (`hosts_admin.go`, `dispatcher_admin.go`): settings and pins per host in `host_settings` (version + 1,
   written to KV `host_settings` key `<host>` on every change and at start); `POST …/unload` sends `req.runner.unload`
   `by: admin` per env (at once when it runs nothing, else after its run), repeated every 10 s for at most 10 minutes;

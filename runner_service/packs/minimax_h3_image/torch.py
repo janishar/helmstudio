@@ -526,13 +526,14 @@ def enhance(ctx, params: dict, inputs: dict) -> dict:
     images = [r["image"].convert("RGB") for r in params.get("refs") or []]
     # an edit's enhancer writes its caption for a canvas the user fixed (its reduced W:H), else "adaptive"
     fixed = reduced_ratio(cv["width"], cv["height"]) if images and cv["mode"] == "fixed" else None
+    # first: a missing add-on fails here with its title, not on a file read
+    pe = ctx.component(model, "enhancer")
     folder = model.folder("enhancer")
     proc = pe_processor(folder)
     turns, ratio_key = messages(folder, prompt, images, fixed)
     batch = proc.apply_chat_template(turns, add_generation_prompt=True, tokenize=True, return_dict=True,
                                      return_tensors="pt", enable_thinking=True,
                                      reasoning_effort="xhigh" if params["think"] else "low")  # fmt: skip
-    pe = ctx.component(model, "enhancer")
     batch = batch.to(ctx.device)
     n_in = batch["input_ids"].shape[1]
     ctx.progress(1, PE_TOKENS, "enhancing")

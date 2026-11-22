@@ -121,7 +121,15 @@ import { rememberProject, stripItems } from "@/lib/takes";
 import { hostMemory } from "@/lib/hosts";
 import { estimateText, Memory, useHosts, usePlan } from "@/components/create/memory-chip";
 import { RunOnChip } from "@/components/create/run-on";
-import { chosenVariants, clashNote, machines, pinnedMachine, versionRow } from "@/lib/run-on";
+import {
+  addonBlocks,
+  addonNeeds,
+  chosenVariants,
+  clashNote,
+  machines,
+  pinnedMachine,
+  versionRow,
+} from "@/lib/run-on";
 import {
   TAKE_MIME,
   capacity,
@@ -485,7 +493,15 @@ export function Create({
       unpinned.map((f) => (pins[f.key] ? { ...f, param: { ...f.param, enum: [pins[f.key]] } } : f)),
     [unpinned, pins],
   );
-  const raws = Object.keys(pins).length ? { ...held, ...pins } : held;
+  const machineList = useMemo(() => machines(hosts), [hosts]);
+  const runOn = pinnedMachine(machineList, runOnHost);
+  // optional add-ons (API 1.36): a node whose add-on is not where the run may go has its controls greyed, and stays
+  // bypassed so the run check never refuses it (contracts/README.md, Optional add-ons)
+  const needs = useMemo(() => addonNeeds(workflow, modelList), [workflow, modelList]);
+  const blocks = addonBlocks(needs, runOn);
+  const forced = Object.fromEntries(Object.keys(blocks).map((n) => [`${n}.bypass`, true]));
+  const raws =
+    Object.keys(pins).length || Object.keys(forced).length ? { ...held, ...pins, ...forced } : held;
   // what the form held in each workflow when it was left: a value that did not suit the next one comes back
   const left = useRef<Record<string, Record<string, Raw>>>({});
   // a workflow with a Studio block shows exactly what it places (lib/studio.ts)
@@ -549,8 +565,6 @@ export function Create({
   )?.[0];
   // the Seeds stepper whenever the workflow has a seed, placed or not (docs/mock/TextToVideo.dc.html)
   const seedField = all.find((f) => f.param.type === "seed");
-  const machineList = useMemo(() => machines(hosts), [hosts]);
-  const runOn = pinnedMachine(machineList, runOnHost);
   // the chosen host is gone: nothing is queued (Generate says so), the chip warns
   const runOnOffline = !!runOn && !runOn.live;
   const change = (key: string, u: Update) => {
@@ -575,6 +589,25 @@ export function Create({
       // rows whose node's bypass is placed too (LTX Audio to video's Frames · No keyframes): a frame picked
       // switches the node on, the last one cleared switches it off
       const off = f && Array.isArray(v) && fields.find((x) => x.key === `${f.node}.bypass`);
+      // a setting of a bypassed node switched on (Think) switches the node back on, and says so
+      // (docs/mock/CreateEnhance.dc.html: "No enhance turned off: Think needs the enhancer")
+      const by =
+        f?.param.type === "bool" &&
+        f.param.name !== "bypass" &&
+        v === true &&
+        fields.find((x) => x.key === `${f.node}.bypass`);
+      if (by && (r[by.key] ?? toRaw(by.initial, by.param)) === true) {
+        const n = needs.filter((x) => x.node === f.node);
+        const what =
+          n.length === 1
+            ? `the ${n[0].title.toLowerCase()}`
+            : workflow?.node_schemas[workflow.nodes[f.node].kind]?.component
+              ? `the ${workflow.node_schemas[workflow.nodes[f.node].kind].component}`
+              : f.nodeTitle;
+        const label = (x: Field) => x.param.label ?? x.param.name;
+        queueMicrotask(() => setRunNote(`${label(by)} turned off: ${label(f)} needs ${what}`));
+        return { ...r, [key]: placed, [by.key]: false };
+      }
       return { ...r, [key]: placed, ...(off && { [off.key]: v.length === 0 }) };
     });
     setErrors((errs) => {
@@ -1669,12 +1702,16 @@ export function Create({
                 family={familyName}
                 spoken={audio}
                 versions={(f, o) => versionRow(modelList, runOn, f, o)}
+                blocks={blocks}
                 runOn={
                   <RunOnChip
                     list={machineList}
                     chosen={runOn}
                     env={workflow?.env}
                     picks={chosenVariants(all, raws, modelList)}
+                    needs={needs.filter(
+                      (n) => (raws[`${n.node}.bypass`] ?? workflow?.nodes[n.node]?.bypass) !== true,
+                    )}
                     onPick={(h) => {
                       setRunOnHost(h);
                       setRunNote("");
@@ -1849,6 +1886,7 @@ export function Create({
               (workflow?.source === "mine" ? undefined : workflow?.title)
             }
             voice={audio ? voiceCtx : undefined}
+            blocks={blocks}
           />
         )}
         {audio && !elementsAside && <SpeechOutput take={rateTake} text={texts[0] ?? ""} />}
@@ -2137,38 +2175,46 @@ function RunStrip({
     >
       {segments(workflow, run, track).map((s) =>
         s.state === "done" ? (
-          <span key={s.node} className="step">
+          <span key={s.key} className="step">
             <Check size={14} strokeWidth={2.5} className="text-a1" aria-label="done" />
             {s.title}
-            {s.seconds != null && <span className="mono text-t2">{s.seconds.toFixed(1)} s</span>}
+            {s.seconds != null && (
+              <span className="mono text-t2">
+                {s.seconds >= 60 ? clock(s.seconds) : `${s.seconds.toFixed(1)} s`}
+              </span>
+            )}
           </span>
         ) : s.state === "active" && p ? (
           <span
-            key={s.node}
+            key={s.key}
             className="step gap-2.5 border border-s5 bg-s2 font-medium"
             aria-current="step"
           >
-            {s.title}
-            <span
-              role="progressbar"
-              aria-label={`${s.title} progress`}
-              aria-valuemin={0}
-              aria-valuemax={p.of}
-              aria-valuenow={p.step}
-              className="block h-1 w-[120px] rounded-[2px] bg-s5"
-            >
-              <span
-                className="block h-1 rounded-[2px] bg-a1 transition-[width]"
-                style={{ width: `${fraction(run) * 100}%` }}
-              />
-            </span>
-            <span className="mono font-normal">
-              {p.step} / {p.of}
-            </span>
+            {s.bar ? s.title : `${s.title}…`}
+            {s.bar && (
+              <>
+                <span
+                  role="progressbar"
+                  aria-label={`${s.title} progress`}
+                  aria-valuemin={0}
+                  aria-valuemax={p.of}
+                  aria-valuenow={p.step}
+                  className="block h-1 w-[120px] rounded-[2px] bg-s5"
+                >
+                  <span
+                    className="block h-1 rounded-[2px] bg-a1 transition-[width]"
+                    style={{ width: `${fraction(run) * 100}%` }}
+                  />
+                </span>
+                <span className="mono font-normal">
+                  {p.step} / {p.of}
+                </span>
+              </>
+            )}
           </span>
         ) : (
           <span
-            key={s.node}
+            key={s.key}
             className={`step text-t2 ${s.state === "stopped" || s.state === "bypassed" ? "line-through" : ""}`}
           >
             {s.title}

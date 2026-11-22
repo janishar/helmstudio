@@ -25,6 +25,7 @@ import time
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 
+import config
 from core import images
 
 log = logging.getLogger("graph")
@@ -158,7 +159,10 @@ class Ctx:
         self.alive = time.monotonic()
         self._check()
 
-    def progress(self, step: int, of: int, phase: str | None = None) -> None:
+    def progress(
+        self, step: int, of: int, phase: str | None = None, phase_id: str | None = None
+    ) -> None:
+        """One step of the node; `phase_id` (API 1.36) names one of the node's model.yaml `phases`."""
         now = time.monotonic()
         self.alive = now
         if self._phase[:2] != (
@@ -171,7 +175,11 @@ class Ctx:
         # ponytail: the ETA of this node's phase only, from its own pace; history-based ETA is later
         elapsed = now - self._phase[2]
         eta = round(elapsed / step * (of - step), 1) if step and elapsed > 0 else None
-        self._call(self._progress(self.node, step, of, phase, eta))
+        self._call(
+            self._progress(
+                self.node, step, of, phase, eta, **({"phase_id": phase_id} if phase_id else {})
+            )
+        )
 
     def output(
         self,
@@ -213,6 +221,9 @@ class Ctx:
         """The component `name` of the Model handle `model`, loaded (to self.device) if it is not resident."""
         if name not in self.impl.uses:
             raise RunError(f"{self.node}: component {name!r} is not in its stage's uses")
+        if (addon := model.pack.component(name).get("addon")) and not model.files(name):
+            # studio's run check refuses this first (API 1.36, Optional add-ons)
+            raise RunError(f"{self.node}: {addon['title']} not downloaded on host {config.HOST}")
         gb, transient = model.gb(name)
         key = model.key(name)
         module = self.residency.get(key, gb, transient, lambda: model.load(name, self), model.resident_loras(name))  # fmt: skip

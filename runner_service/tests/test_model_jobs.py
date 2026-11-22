@@ -717,3 +717,99 @@ def test_a_component_publishes_the_dtype_most_of_its_bytes_are_stored_in(tmp_pat
     assert (
         models.stored_dtype([st("e.safetensors", {"w": ("U8", 50)})]) is None
     )  # NVFP4 says nothing
+
+
+def enhancer(pack, own_dir: bool = True) -> dict:
+    """API 1.36: an optional add-on of the tiny pack, in a folder of its own or in base's."""
+    spec = {"files": "pe/*.safetensors" if not own_dir else "pe-*.safetensors",
+            "addon": {"title": "Enhancer", "source": source("t/tiny-pe", ["config.json", "pe-*.safetensors"]
+                                                            if own_dir else ["pe/*"])}}  # fmt: skip
+    if own_dir:
+        spec["dir"] = "Tiny-PE"
+    pack.spec["components"]["enhancer"] = spec
+    return spec
+
+
+def test_an_addon_downloads_and_deletes_on_its_own_and_no_variant_needs_it(pack):
+    """Optional add-ons: base is present without its add-on; the add-on's job fetches only its source into its own
+    folder, its entry turns present; a delete of base keeps it, a delete of the add-on removes only it."""
+    enhancer(pack)
+    pe = {"config.json": b"{}", "pe-1.safetensors": BLOB[:333], "README.md": b"x"}
+    with hub_of(t_tiny=Repo(files()), t_tiny_pe=Repo(pe)) as hub:
+        run(pack, hub=hub)
+        assert presence(pack)["base"] == "present"
+        (addon,) = models.entry(pack)["addons"]
+        assert (addon["component"], addon["presence"], addon["dir"]) == (
+            "enhancer",
+            "missing",
+            "Tiny-PE",
+        )
+        result = download.download(pack, None, endpoint=hub.url, token=None, cache=config.MODELS.parent / "cache",
+                                   host="t", progress=Progress(), addon="enhancer")  # fmt: skip
+    assert result["files"] == 2 and not (config.MODELS / "Tiny-PE/README.md").exists()
+    entry = models.entry(pack)
+    assert entry["addons"][0]["presence"] == "present" and entry["addons"][0]["bytes"] == 335
+    assert "enhancer" not in {c["component"] for c in entry["variants"][0]["components"]}
+    value = {"schema_version": 1, "host": "t", "env": "fake", "published_at": "2026-11-22T10:00:00Z",
+             "published_by": "t", "models": [entry], "licences": models.licences([pack])}  # fmt: skip
+    assert schemas.registry_errors("models", value) == []
+    models.delete_variant(pack, "base")
+    assert (config.MODELS / "Tiny-PE/pe-1.safetensors").is_file()
+    assert (
+        models.delete_addon(pack, "enhancer") == (2, 335)
+        and not (config.MODELS / "Tiny-PE").exists()
+    )
+
+
+def test_an_addon_in_the_first_variants_folder_is_never_that_variants(pack):
+    """An add-on without a dir of its own lives in the first variant's folder: not in its files or bytes, kept by
+    its delete; the add-on's own delete removes only its globs."""
+    enhancer(pack, own_dir=False)
+    with hub_of(t_tiny=Repo(files()), t_tiny_pe=Repo({"pe/e.safetensors": BLOB[:77]})) as hub:
+        run(pack, hub=hub)
+        download.download(pack, None, endpoint=hub.url, token=None, cache=config.MODELS.parent / "cache",
+                          host="t", progress=Progress(), addon="enhancer")  # fmt: skip
+    base = models.entry(pack)["variants"][0]
+    assert base["presence"] == "present" and "pe/e.safetensors" not in {
+        f["path"] for f in base["files"]
+    }
+    assert models.entry(pack)["addons"][0]["presence"] == "present"
+    models.delete_variant(pack, "base")
+    assert [
+        p.relative_to(config.MODELS).as_posix() for p in config.MODELS.rglob("*.safetensors")
+    ] == ["Tiny/pe/e.safetensors"]
+    models.delete_addon(pack, "enhancer")
+    assert not (config.MODELS / "Tiny").exists()
+
+
+async def test_worker_addon_jobs_and_refusals(pack, tmp_path):
+    enhancer(pack)
+    js = FakeJS()
+    pe = {"config.json": b"{}", "pe-1.safetensors": BLOB[:333]}
+    res = types.SimpleNamespace(entries={("tiny-1", "base", "enhancer", "bf16"): None}, used=set())
+    with hub_of(t_tiny_pe=Repo(pe)) as hub:
+        jobs, _ = worker(pack, hub, tmp_path, residency=res, js=js)
+        await jobs.handle(
+            FakeMsg(job("download", model="tiny-1", addon="enhancer"), js, "cmd.model.t.fake")
+        )
+        await jobs.handle(
+            FakeMsg(job("download", model="tiny-1", addon="nope"), js, "cmd.model.t.fake")
+        )
+        await jobs.handle(
+            FakeMsg(job("delete", model="tiny-1", addon="enhancer"), js, "cmd.model.t.fake")
+        )
+        res.entries = {}
+        await jobs.handle(
+            FakeMsg(job("delete", model="tiny-1", addon="enhancer"), js, "cmd.model.t.fake")
+        )
+    ends = [e["data"] for e in js.events() if e["data"].get("status") in ("succeeded", "failed")]
+    assert ends[0]["status"] == "succeeded"
+    assert ends[1]["failure"] == {"class": "not_found", "detail": "Tiny has no add-on nope"}
+    assert ends[2]["failure"] == {
+        "class": "in_use",
+        "detail": "Tiny base enhancer is loaded on fake.fake: unload it first",
+    }
+    assert ends[3]["status"] == "succeeded" and ends[3]["result"] == {
+        "files": 2,
+        "freed_bytes": 335,
+    }

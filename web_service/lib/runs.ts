@@ -125,10 +125,13 @@ export function pinnedNote(r?: Run): string {
   return `unloads pinned ${names.join(", ")}, reloads ≈ ${gb} GB after`;
 }
 
-/** When a run's nodes reported: the run's start and, per node, its first and last progress (ms). */
+/** When a run's nodes reported: the run's start and end (its first running and its ending status), per node its
+ * first and last progress (ms), and per phase (`<node>:<phase_id>`, API 1.36) the same. */
 export type RunTrack = {
   start?: number;
+  end?: number;
   nodes: Record<string, { first: number; last: number }>;
+  phases?: Record<string, { first: number; last: number }>;
 };
 
 /** The tracks by run id after one event. */
@@ -137,23 +140,40 @@ export function track(t: Record<string, RunTrack>, e: S<"SessionEvent">): Record
   const r = t[e.run_id] ?? { nodes: {} };
   if (e.type === "status" && e.data.status === "running" && r.start == null)
     return { ...t, [e.run_id]: { ...r, start: ts } };
+  if (e.type === "status" && !isActive(e.data.status) && r.end == null)
+    return { ...t, [e.run_id]: { ...r, end: ts } };
   if (e.type !== "progress") return t;
   const n = r.nodes[e.data.node];
+  const k = `${e.data.node}:${e.data.phase_id}`;
+  const ph = e.data.phase_id ? r.phases?.[k] : undefined;
   return {
     ...t,
-    [e.run_id]: { ...r, nodes: { ...r.nodes, [e.data.node]: { first: n?.first ?? ts, last: ts } } },
+    [e.run_id]: {
+      ...r,
+      nodes: { ...r.nodes, [e.data.node]: { first: n?.first ?? ts, last: ts } },
+      ...(e.data.phase_id && {
+        phases: { ...r.phases, [k]: { first: ph?.first ?? ts, last: ts } },
+      }),
+    },
   };
 }
 
-/** One piece of the run's progress strip. `seconds`: how long a done node took, when its events say; `steps`: the
- * node's `steps` param as the run set it, shown while it waits. */
+/** One piece of the run's progress strip. `key`: the node id, `<node>:<phase id>` for a phase of a node with
+ * `phases` (API 1.36), or "saving"; `seconds`: how long a done piece took, when its events say; `steps`: the node's
+ * `steps` param as the run set it, shown while it waits; `bar`: a step / of bar while active (a phase or Saving
+ * shows one only when `of` > 1). */
 export type Segment = {
+  key: string;
   node: string;
   title: string;
   state: "done" | "active" | "stopped" | "pending" | "bypassed";
   seconds?: number;
   steps?: number;
+  bar?: boolean;
 };
+
+/** The strip's last piece on an image or video workflow: the upload of the output (docs/mock/CreateMediaRefs.dc.html). */
+export const SAVING = "saving";
 
 /** A node's name in the strip and on the stage: its schema's title, numbered in graph order when the graph has
  * several nodes of its kind ("Sample 1", "Sample 2"). */
@@ -166,43 +186,94 @@ export function nodeLabel(w: S<"Workflow"> | undefined, node: string): string {
 }
 
 /** The progress strip: the nodes that do work (take inputs and give outputs, and are not an empty LoRA stack, or
- * reported progress), in graph order;
- * the stepping node is active (stopped if the run ended there); those before it, or up to the furthest node that
- * reported (a node may report again after a later one), are done; the rest pending. A done node's time runs from the
- * previous node's last report to its own; after a node that never reported, from its own first report. */
+ * reported progress), in graph order, a node with `phases` as one piece per phase; on an image or video workflow a
+ * last "Saving" piece for its output nodes (they report `saving` while an upload runs, contracts/README.md Phases);
+ * the stepping piece is active (stopped if the run ended there); those before it, or up to the furthest piece that
+ * reported (a node may report again after a later one), are done; the rest pending. A done piece's time runs from the
+ * previous piece's last report to its own (Saving's to the run's end); after a piece that never reported, from its
+ * own first report. */
 export function segments(w: S<"Workflow">, run: Run, t?: RunTrack): Segment[] {
   const nodes = t?.nodes ?? {};
+  const schema = (id: string) => w.node_schemas[w.nodes[id]?.kind];
+  const saving = w.media !== "audio" && w.media !== "text";
+  // an output node (no outputs of its own): its report is Saving's
+  const sink = (id: string) => saving && !!schema(id) && !schema(id).outputs.length;
   const order = graphOrder(w).filter((id) => {
-    const s = w.node_schemas[w.nodes[id].kind];
+    const s = schema(id);
+    if (sink(id)) return false;
     if (id in nodes || id === run.progress?.node) return true;
     return !!s?.inputs.length && !!s.outputs.length && !emptyStack(w, id);
   });
   // a node the graph does not have still gets its piece, at the end
-  for (const id of Object.keys(nodes)) if (!order.includes(id)) order.push(id);
-  if (run.progress && !order.includes(run.progress.node)) order.push(run.progress.node);
+  for (const id of Object.keys(nodes)) if (!order.includes(id) && !sink(id)) order.push(id);
+  const p = run.progress;
+  if (p && !order.includes(p.node) && !sink(p.node)) order.push(p.node);
+  const pieces = order.flatMap((node) => {
+    const ph = schema(node)?.phases ?? [];
+    return ph.length
+      ? ph.map((x) => ({ key: `${node}:${x.id}`, node, title: x.label, phase: true }))
+      : [{ key: node, node, title: nodeLabel(w, node), phase: false }];
+  });
+  const reports: Record<string, { first: number; last: number }> = { ...nodes, ...t?.phases };
+  const sinks = graphOrder(w).filter(sink);
+  if (saving) {
+    pieces.push({ key: SAVING, node: sinks.at(-1) ?? SAVING, title: "Saving", phase: true });
+    const rs = sinks.flatMap((id) => (nodes[id] ? [nodes[id]] : []));
+    if (rs.length)
+      reports[SAVING] = {
+        first: Math.min(...rs.map((r) => r.first)),
+        last: Math.max(...rs.map((r) => r.last)),
+      };
+  }
+  const phased = (node: string) => !!schema(node)?.phases?.length;
+  const curKey = !p
+    ? undefined
+    : sink(p.node)
+      ? SAVING
+      : phased(p.node)
+        ? `${p.node}:${p.phase_id ?? schema(p.node).phases![0].id}`
+        : p.node;
+  // a phase the schema does not list still gets its piece, after its node's
+  if (curKey && !pieces.some((x) => x.key === curKey))
+    pieces.splice(pieces.findLastIndex((x) => x.node === p!.node) + 1 || pieces.length, 0, {
+      key: curKey,
+      node: p!.node,
+      title: p!.phase ?? nodeLabel(w, p!.node),
+      phase: true,
+    });
   const cur =
     run.status === "succeeded"
-      ? order.length
-      : run.progress
-        ? order.indexOf(run.progress.node)
+      ? pieces.length
+      : curKey
+        ? pieces.findIndex((x) => x.key === curKey)
         : -1;
-  const seen = order.reduce((m, id, i) => (id in nodes ? i : m), -1);
+  const seen = pieces.reduce((m, x, i) => (x.key in reports ? i : m), -1);
   let prevEnd = t?.start;
-  return order.map((node, i) => {
-    const n = nodes[node];
-    const seconds = n ? (n.last - (prevEnd ?? n.first)) / 1000 : undefined;
-    // a silent node's time is not known: don't add it to the next node's
-    prevEnd = n?.last;
-    const title = nodeLabel(w, node);
-    const p = w.nodes[node]?.params?.steps;
-    const asked = run.inputs[`${node}.steps`] ?? p;
-    const steps = typeof asked === "number" ? asked : undefined;
-    // a bypassed node did no work: struck through, as the mock's Enhance (docs/mock/Main.dc.html)
+  return pieces.map(({ key, node, title, phase }, i) => {
+    const n = reports[key];
+    const base = { key, node, title };
+    // a bypassed node did no work: struck through, as the mock's Enhance (docs/mock/Main.dc.html); it leaves the
+    // next node's start where it was
     if ((run.inputs[`${node}.bypass`] ?? w.nodes[node]?.bypass) === true && !n)
-      return { node, title, state: "bypassed" };
-    if (i === cur) return { node, title, state: isActive(run.status) ? "active" : "stopped" };
-    if (i < cur || i <= seen) return { node, title, state: "done", seconds };
-    return { node, title, state: "pending", steps };
+      return { ...base, state: "bypassed" };
+    // Saving ends with the run (an upload under 2 s never reports)
+    const last = key === SAVING && run.status === "succeeded" ? (t?.end ?? n?.last) : n?.last;
+    // a piece that started before the previous one ended (the graph order is not the run order: LTX's Encode
+    // before Source audio) is timed alone, never negative
+    const from = n && prevEnd != null && prevEnd > n.first ? n.first : (prevEnd ?? n?.first);
+    const seconds = last != null && from != null ? (last - from) / 1000 : undefined;
+    // a silent node's time is not known: don't add it to the next node's
+    prevEnd = last;
+    const asked = phase ? undefined : (run.inputs[`${node}.steps`] ?? w.nodes[node]?.params?.steps);
+    const steps = typeof asked === "number" ? asked : undefined;
+    if (i === cur)
+      return {
+        ...base,
+        state: isActive(run.status) ? "active" : "stopped",
+        bar: !phase || (p?.of ?? 0) > 1,
+      };
+    if (i < cur || i <= seen) return { ...base, state: "done", seconds };
+    return { ...base, state: "pending", steps };
   });
 }
 

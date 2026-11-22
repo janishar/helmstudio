@@ -18,6 +18,7 @@ model:
 media: [image]
 licences:                         # licences/<id>.md holds each text, shown before a download
   apache-2.0: {title: Apache License 2.0, url: https://www.apache.org/licenses/LICENSE-2.0}
+  qwen-research: {title: Qwen Research License Agreement, url: https://huggingface.co/Qwen/Qwen-Image-2.1-PE-T2I}
 variants:
   base:
     dir: Qwen-Image-2.1
@@ -80,6 +81,32 @@ components:
     precision: [bf16, int8]
     quantize: ["*.language_model.layers.*", "lm_head"]
   vae: {files: "vae/*.safetensors", dtype: bf16, precision: [bf16]}
+  # Qwen's own prompt enhancers (API 1.36 optional add-ons, each its own folder): fine-tuned Qwen3.5-VL 9B
+  # (Qwen3_5ForConditionalGeneration), one per task with its own system_prompt.txt (QwenLM/Qwen-Image-2.1
+  # prompt_rewrite). bf16 as stored, as the old studio and the model cards run them (17.5 GB, one at a time).
+  # Byte counts from the HF API at these revisions (the files allow_patterns fetch).
+  text_enhancer:
+    dir: Qwen-Image-2.1-PE-T2I
+    addon:
+      title: Text enhancer
+      help: "Qwen-Image-2.1-PE-T2I (9B). Enhance prompt without references."
+      source: {repo: Qwen/Qwen-Image-2.1-PE-T2I, revision: f3ed7985c788ad75b3ab7223e0c4c51e2a43545b,
+               allow_patterns: ["*.json", chat_template.jinja, system_prompt.txt, "model-*.safetensors"],
+               licence: qwen-research, must_accept: true, gated: false, bytes: 18839796212}
+    files: "model-*.safetensors"
+    dtype: bf16
+    precision: [bf16]
+  edit_enhancer:
+    dir: Qwen-Image-2.1-PE-I2I
+    addon:
+      title: Edit enhancer
+      help: "Qwen-Image-2.1-PE-I2I (9B). Enhance prompt with references."
+      source: {repo: Qwen/Qwen-Image-2.1-PE-I2I, revision: 72927bc08afc99b7888ceb7d7d51a12db3700bbd,
+               allow_patterns: ["*.json", chat_template.jinja, system_prompt.txt, "model-*.safetensors"],
+               licence: qwen-research, must_accept: true, gated: false, bytes: 18839804437}
+    files: "model-*.safetensors"
+    dtype: bf16
+    precision: [bf16]
 lora:                             # LoRAs: the generated qwen-image/lora-stack node and the registry lora block
   component: transformer          # the component LoRAs patch; only stages that use it see the Model's LoRA set
   renames: []                     # {from, to} prefix rewrites of a key's module part (most families: none)
@@ -88,6 +115,25 @@ lora:                             # LoRAs: the generated qwen-image/lora-stack n
   max_rows: 8
   strength: {min: 0, max: 2, default: 1}
 stages:
+  enhance:
+    title: Enhance prompt
+    component: prompt enhancer
+    help: "Rewrites the prompt with Qwen-Image-2.1-PE: PE-T2I without references, PE-I2I with them (9B each), and picks an aspect for an auto canvas; it sees the references of the encode node its text feeds. Bypassed: the prompt and canvas pass through."
+    uses: [text_enhancer, edit_enhancer]   # one of them per run (references or not); a host needs both (node addons)
+    unload_after: [text_enhancer, edit_enhancer]
+    alone: true                   # none of the model's other components stay beside it, as MiniMax's enhance
+    sees: {refs: text}            # the refs param of the node its text feeds (the encode node)
+    reports: [text]               # evt.run.status resolved.texts {"<node>.text": …}
+    inputs: {prompt: Text, canvas: Canvas, seed: Seed}
+    outputs: {text: Text, canvas: Canvas}
+    params:
+      think: {type: bool, label: Think, default: false,
+              help: "Think longer: better prompts, slower (minutes)."}
+    # measured 1.86 GB above its 17.5 (PE-T2I bf16, think off: 2452 prompt tokens, 445 new; phys_footprint, the load
+    # included; tests/test_qwen_golden.py enhance-turbo-1024-s42). An edit's PE-I2I prompt is ~2k tokens longer and
+    # each reference (at most 1 MP) ~1k vision tokens through a 27-block ViT: ~1 GB each, as MiniMax's enhancer.
+    # ponytail: the edit and think-on slopes are extrapolated, unmeasured; measure a 10-reference edit with think on
+    peak_gb: "2.5 + images"
   encode:
     title: Encode
     component: text encoder

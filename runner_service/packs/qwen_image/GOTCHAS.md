@@ -26,3 +26,17 @@
   transformers resident), bf16 turbo 62.9 with the int8 entries still resident. A cold encode reads 15.8 GB reserved
   with 9.9 GB of weights: the allocator keeps the load's freed blocks cached until a later stage reuses them, so the
   stage peaks above weights are an over-count on CUDA, not a plan error.
+
+## Enhance prompt (API 1.36 add-ons, measured 2026-11-22 on the Mac: torch 2.15, transformers 5.23, MPS)
+
+- **Two add-ons, one node.** PE-T2I runs without references, PE-I2I with them; the node publishes both as `addons`,
+  so studio runs it only on a host holding both (no add-on-by-param rule yet). The plan and the stage's room count
+  both (20.3 GB unloaded after), though a run loads one.
+- **Which path is the reference.** The pack's text equals QwenLM/Qwen-Image-2.1 prompt_rewrite's transformers path
+  (AutoProcessor + AutoModelForImageTextToText, bf16) byte for byte at the same seed (golden
+  enhance-turbo-1024-s42). The old studio's T2I loads AutoModelForCausalLM: the same 2452 prompt ids, another text
+  (bf16 numerics of the text-only class diverge at a sampled token). Neither is wrong.
+- **think = enable_thinking**, as the old studio: off, the template's empty `<think>` block (41.5 s T2I here, 445
+  tokens); on, minutes. prompt_rewrite's README says both models were trained with thinking and its production runs
+  use a presence penalty of 1.5 for T2I: neither is ported (the model cards and the old studio use neither).
+- **Licence**: the Qwen Research License, non-commercial only (`licences/qwen-research.md`), accepted per download.

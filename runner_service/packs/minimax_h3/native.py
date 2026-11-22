@@ -26,21 +26,22 @@ BINARY = H3C / "h3"
 MAX_PIXELS = 768 * 1344  # 1,032,192 (contracts/check.py H3_MAX_PIXELS)
 FPS = 24
 SPEED = {"exact": ["--layers", "50", "--reuse", "1"], "fast": ["--layers", "45", "--reuse", "2"]}
-# h3's stderr phases → the run's progress phases (unknown ones pass as they are); the video VAE decode prints none
+# h3's stderr phases → the run's progress (phase, phase id of model.yaml `generate.phases`; unknown ones pass as they
+# are); the video VAE decode prints none, the MP4 write folds into decode_video, the transformer load into encode
 PHASES = {
-    "tokenizer": "encoding",
-    "text encoder": "encoding",
-    "refine text": "encoding",
-    "Qwen vision": "encoding images",
-    "video VAE encoder": "encoding images",
-    "audio VAE encoder": "encoding images",
-    "precompute AdaLN": "loading transformer",
-    "load transformer core": "loading transformer",
-    "denoise enqueue": "sampling",
-    "denoise": "sampling",
-    "audio VAE": "decoding audio",
-    "video VAE load": "decoding video",
-    "FFmpeg": "writing mp4",
+    "tokenizer": ("encoding", "encode"),
+    "text encoder": ("encoding", "encode"),
+    "refine text": ("encoding", "encode"),
+    "Qwen vision": ("encoding images", "encode"),
+    "video VAE encoder": ("encoding images", "encode"),
+    "audio VAE encoder": ("encoding images", "encode"),
+    "precompute AdaLN": ("loading transformer", "encode"),
+    "load transformer core": ("loading transformer", "encode"),
+    "denoise enqueue": ("sampling", "sample"),
+    "denoise": ("sampling", "sample"),
+    "audio VAE": ("decoding audio", "decode_audio"),
+    "video VAE load": ("decoding video", "decode_video"),
+    "FFmpeg": ("writing mp4", "decode_video"),
 }
 # no progress line for this long fails the run: the longest measured silence is the video VAE decode (104 s at
 # 864 x 480 x 124, ~560 s at 1344 x 768 x 243); a denoise step at the largest canvas x 362 frames is ~12 min (est.)
@@ -206,7 +207,7 @@ def generate(ctx, params: dict, inputs: dict) -> dict:
             return {"video": video_value(out, tmp)}
         cmd = argv(inputs["model"].folder().resolve(), inputs["prompt"], out, width=w, height=h, frames=d["frames"],
                    steps=params["steps"], seed=inputs["seed"], speed=params["speed"], images=images)  # fmt: skip
-        ctx.progress(1, 1, "starting h3")  # a phase without steps: 1 of 1
+        ctx.progress(1, 1, "starting h3", "encode")  # a phase without steps: 1 of 1
         child.run(ctx, cmd, cwd=H3C, name="h3", phases=PHASES, idle_s=IDLE_S)
         if not out.is_file():
             raise RunError(f"{ctx.node}: h3 wrote no video")

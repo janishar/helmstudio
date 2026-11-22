@@ -3,6 +3,8 @@
 import { describe, expect, it } from "vitest";
 import type { S } from "@/lib/api";
 import {
+  addonBlocks,
+  addonNeeds,
   clashNote,
   machineReason,
   machines,
@@ -97,5 +99,80 @@ describe("reasons", () => {
     expect(clashNote(mac, model, fp8)).toBe("Run on set to Auto: Base fp8 is NVIDIA only");
     expect(clashNote(gcp, model, turbo)).toBe("Run on set to Auto: Turbo is not downloaded on gcp");
     expect(clashNote(mac, model, base)).toBeNull();
+  });
+});
+
+describe("optional add-ons (API 1.36)", () => {
+  const [mac, gcp] = machines([
+    host("mac", "torch", "mps", "Apple M5 Pro"),
+    host("gcp", "torch", "cuda", "RTX PRO 6000"),
+  ]);
+  const w = {
+    nodes: { prompt: { kind: "prompt" }, enhance: { kind: "qwen-image/enhance", bypass: true } },
+    node_schemas: {
+      prompt: { kind: "prompt", family: null, params: [], inputs: [], outputs: [] },
+      "qwen-image/enhance": {
+        kind: "qwen-image/enhance",
+        family: "qwen-image",
+        addons: ["text_enhancer", "edit_enhancer"],
+        params: [],
+        inputs: [],
+        outputs: [],
+      },
+    },
+  } as unknown as S<"Workflow">;
+  const addon = (component: string, title: string, on: Record<string, string>) => ({
+    component,
+    title,
+    hosts: Object.entries(on).map(([h, state]) => ({ host: h, state })),
+  });
+  const list = (offline = "") =>
+    ({
+      hosts: ["mac", "gcp"].map((h) => ({ host: h, live: h !== offline })),
+      models: [
+        {
+          ...model,
+          addons: [
+            addon("text_enhancer", "Text enhancer", { mac: "present", gcp: "missing" }),
+            addon("edit_enhancer", "Edit enhancer", { mac: "present", gcp: "present" }),
+          ],
+        },
+      ],
+    }) as unknown as S<"ModelList">;
+
+  it("a node's add-ons with the live hosts they are on; nothing to tell without a list or the family", () => {
+    expect(addonNeeds(w, list())).toEqual([
+      { node: "enhance", component: "text_enhancer", title: "Text enhancer", hosts: ["mac"] },
+      {
+        node: "enhance",
+        component: "edit_enhancer",
+        title: "Edit enhancer",
+        hosts: ["mac", "gcp"],
+      },
+    ]);
+    expect(addonNeeds(w, list("mac"))[0].hosts).toEqual([]); // an offline host does not count
+    expect(addonNeeds(w, null)).toEqual([]);
+    expect(addonNeeds(w, { ...list(), models: [] })).toEqual([]);
+    // the family's models do not list it: missing everywhere, named by its component
+    const none = { ...list(), models: [{ ...model, addons: [] }] } as S<"ModelList">;
+    expect(addonNeeds(w, none)[0]).toMatchObject({ title: "text_enhancer", hosts: [] });
+  });
+
+  it("greys the node under Auto when no live host has it, under a host when that one lacks it", () => {
+    expect(addonBlocks(addonNeeds(w, list()))).toEqual({});
+    expect(addonBlocks(addonNeeds(w, list("mac")))).toEqual({
+      enhance: "Text enhancer not downloaded",
+    });
+    expect(addonBlocks(addonNeeds(w, list()), gcp)).toEqual({
+      enhance: "Text enhancer not downloaded on gcp",
+    });
+    expect(addonBlocks(addonNeeds(w, list()), mac)).toEqual({});
+  });
+
+  it("a Run on row without an add-on a running node needs is greyed, in lower case", () => {
+    const needs = addonNeeds(w, list());
+    expect(machineReason(gcp, "torch", [], needs)).toBe("text enhancer not downloaded on gcp");
+    expect(machineReason(mac, "torch", [], needs)).toBeNull();
+    expect(machineReason(gcp, "torch", [], [])).toBeNull(); // the node is bypassed: not asked
   });
 });

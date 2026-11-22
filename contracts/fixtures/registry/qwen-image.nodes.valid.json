@@ -208,6 +208,50 @@
       ]
     },
     {
+      "kind": "qwen-image/enhance",
+      "title": "Enhance prompt",
+      "family": "qwen-image",
+      "component": "prompt enhancer",
+      "help": "Rewrites the prompt with Qwen-Image-2.1-PE: PE-T2I without references, PE-I2I with them (9B each), and picks an aspect for an auto canvas; it sees the references of the encode node its text feeds. Bypassed: the prompt and canvas pass through.",
+      "addons": [
+        "text_enhancer",
+        "edit_enhancer"
+      ],
+      "params": [
+        {
+          "name": "think",
+          "type": "bool",
+          "label": "Think",
+          "default": false,
+          "help": "Think longer: better prompts, slower (minutes)."
+        }
+      ],
+      "inputs": [
+        {
+          "name": "prompt",
+          "type": "Text"
+        },
+        {
+          "name": "canvas",
+          "type": "Canvas"
+        },
+        {
+          "name": "seed",
+          "type": "Seed"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "text",
+          "type": "Text"
+        },
+        {
+          "name": "canvas",
+          "type": "Canvas"
+        }
+      ]
+    },
+    {
       "kind": "qwen-image/encode",
       "title": "Encode",
       "family": "qwen-image",

@@ -3,7 +3,7 @@
 // hosts publish (GET /v1/studio/hosts: online, device; GET /v1/studio/models: variants, devices, presence).
 import type { S } from "@/lib/api";
 import { deviceNote, variantDevices } from "@/lib/models";
-import type { Field } from "@/lib/workflow";
+import { graphOrder, type Field } from "@/lib/workflow";
 
 type Host = S<"Host">;
 type Model = S<"Model">;
@@ -96,12 +96,14 @@ export function misfit(
   return null;
 }
 
-/** Why the Run on row of `mc` is greyed for the form's workflow (env) and chosen variants: "offline", a version's
- * device, "not downloaded on <host>"; null = pickable. */
+/** Why the Run on row of `mc` is greyed for the form's workflow (env), chosen variants and the add-ons its nodes
+ * that run need: "offline", a version's device, "not downloaded on <host>", "enhancer not downloaded on gcp"; null =
+ * pickable. */
 export function machineReason(
   mc: Machine,
   env: string | undefined,
   picks: { m: Model; v: Variant }[],
+  needs: AddonNeed[] = [],
 ): string | null {
   if (!mc.live) return "offline";
   if (env && !mc.envs.includes(env)) return "cannot run this workflow";
@@ -109,7 +111,46 @@ export function machineReason(
     const why = misfit(mc, m, v);
     if (why) return why.text;
   }
+  const miss = needs.find((n) => !n.hosts.includes(mc.host));
+  if (miss)
+    return `${miss.title[0].toLowerCase()}${miss.title.slice(1)} not downloaded on ${mc.host}`;
   return null;
+}
+
+/** One optional add-on a node of the workflow loads (its NodeSchema `addons`, API 1.36; contracts/README.md
+ * Optional add-ons): its title and the live hosts it is present on. */
+export type AddonNeed = { node: string; component: string; title: string; hosts: string[] };
+
+/** The workflow's add-on needs, graph order then the schema's: from the models of each node's family (a family the
+ * list does not hold, or no list yet, needs nothing it can tell). Titles as the list has them, else the component. */
+export function addonNeeds(
+  w: Pick<S<"Workflow">, "nodes" | "node_schemas"> | undefined,
+  list: S<"ModelList"> | null,
+): AddonNeed[] {
+  if (!w || !list) return [];
+  const live = new Set(list.hosts.filter((h) => h.live).map((h) => h.host));
+  return graphOrder(w).flatMap((node) => {
+    const s = w.node_schemas[w.nodes[node].kind];
+    const ms = list.models.filter((m) => m.family === s?.family);
+    if (!ms.length) return [];
+    return (s.addons ?? []).map((component) => {
+      const as = ms.flatMap((m) => (m.addons ?? []).filter((a) => a.component === component));
+      const hosts = as.flatMap((a) =>
+        a.hosts.filter((h) => h.state === "present" && live.has(h.host)).map((h) => h.host),
+      );
+      return { node, component, title: as[0]?.title ?? component, hosts: [...new Set(hosts)] };
+    });
+  });
+}
+
+/** The nodes whose add-on is missing where the run may go, each with why its controls are greyed: under Auto on
+ * every live host ("Enhancer not downloaded"), under Run on `mc` there ("Enhancer not downloaded on gcp"). */
+export function addonBlocks(needs: AddonNeed[], mc?: Machine): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const n of needs)
+    if (!(n.node in out) && (mc ? !n.hosts.includes(mc.host) : !n.hosts.length))
+      out[n.node] = `${n.title} not downloaded${mc ? ` on ${mc.host}` : ""}`;
+  return out;
 }
 
 /** A version row's dim text under Run on `mc` ("not on Mac"), null when it runs there or under Auto. */

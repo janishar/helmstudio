@@ -149,6 +149,41 @@ def file_sha(root: Path, rel: str, check=lambda: None) -> str:
     return rec if fresh else models.hashes.compute(p, check)
 
 
+def addon_plan(pack, c: str, api) -> list[Item]:
+    """An add-on's files (API 1.36): its `source` into its folder."""
+    src = pack.component(c)["addon"]["source"]
+    commit, tree = listing(api, src["repo"], src["revision"])
+    dest = models.addon_folder(pack, c)
+    return [
+        Item(src["repo"], commit, p, *tree[p], dest) for p in matching(tree, src["allow_patterns"])
+    ]
+
+
+def checked(items: list[Item]) -> list[Item]:
+    """The plan's items, refused when a name is unsafe, under a symlinked folder or twice (case folded)."""
+    seen = set()
+    for it in items:
+        if not models.is_safe(it.path):
+            raise JobError(
+                "internal", f"repo {it.repo} lists an unsafe file name: {it.path[:200]!r}"
+            )
+        if models.linked(
+            it.dest, it.path
+        ):  # a linked folder: the write would land in another folder
+            raise JobError("internal", f"{it.dest.name}/{it.path[:200]} is under a symlinked folder: "
+                                       "remove the link by hand")  # fmt: skip
+        if not models.inside(packs.models_root(), it.dest) or not models.inside(
+            it.dest, it.dest / it.path
+        ):
+            raise JobError(
+                "internal", f"repo {it.repo} lists an unsafe file name: {it.path[:200]!r}"
+            )
+        if (it.dest, it.path.casefold()) in seen:  # APFS folds case: one file on disk
+            raise JobError("internal", f"repo {it.repo} lists {it.path[:200]} twice")
+        seen.add((it.dest, it.path.casefold()))
+    return items
+
+
 def plan(pack, vid: str, api, progress: Progress) -> tuple[list[Item], list[str], list[str]]:
     """(the files to have on disk, shared components reused, shared components fetched separately). The variant's
     `source`, then each of its `sources` (API 1.33: weights from a community repo beside the official configs), all
@@ -173,7 +208,9 @@ def plan(pack, vid: str, api, progress: Progress) -> tuple[list[Item], list[str]
     reused, separate, lacking = [], [], []
     owner = models.folder(pack, first)
     have = {r.as_posix() for r in models.own_files(owner)} if first != vid else set()
-    for c in v.get("shares", []):
+    for c in [
+        c for c in v.get("shares", []) if c in packs.needed(pack)
+    ]:  # an add-on downloads on its own
         theirs = {p: tree[p] for p in matching(tree, component_patterns(pack, c, first))}
         lfs = {p: sha for p, (_, sha) in theirs.items() if sha}
         if packs.owns_copy(pack, vid, c) or (lfs and set(lfs) <= have and any(
@@ -195,27 +232,7 @@ def plan(pack, vid: str, api, progress: Progress) -> tuple[list[Item], list[str]
             items += [Item(osrc["repo"], ocommit, p, *otree[p], odest)
                       for p in matching(otree, osrc["allow_patterns"])
                       if models.component_of(pack, p, first) in (None, *lacking)]  # fmt: skip
-    seen = set()
-    for it in items:
-        if not models.is_safe(it.path):
-            raise JobError(
-                "internal", f"repo {it.repo} lists an unsafe file name: {it.path[:200]!r}"
-            )
-        if models.linked(
-            it.dest, it.path
-        ):  # a linked folder: the write would land in another folder
-            raise JobError("internal", f"{it.dest.name}/{it.path[:200]} is under a symlinked folder: "
-                                       "remove the link by hand")  # fmt: skip
-        if not models.inside(packs.models_root(), it.dest) or not models.inside(
-            it.dest, it.dest / it.path
-        ):
-            raise JobError(
-                "internal", f"repo {it.repo} lists an unsafe file name: {it.path[:200]!r}"
-            )
-        if (it.dest, it.path.casefold()) in seen:  # APFS folds case: one file on disk
-            raise JobError("internal", f"repo {it.repo} lists {it.path[:200]} twice")
-        seen.add((it.dest, it.path.casefold()))
-    return items, reused, separate
+    return checked(items), reused, separate
 
 
 def complete(it: Item, progress: Progress) -> bool:
@@ -272,19 +289,26 @@ def bar_class(progress: Progress):
     return Bar
 
 
-def download(pack, vid: str, *, endpoint: str, token: str | None, cache: Path, host: str,
-             progress: Progress) -> dict:  # fmt: skip
-    """Fetch the variant (and the shared components it lacks); returns evt.model.status `result`. JobError,
-    Cancelled."""
+def download(pack, vid: str | None, *, endpoint: str, token: str | None, cache: Path, host: str,
+             progress: Progress, addon: str | None = None) -> dict:  # fmt: skip
+    """Fetch the variant (and the shared components it lacks), or with `addon` that add-on alone; returns
+    evt.model.status `result`. JobError, Cancelled."""
     from huggingface_hub import HfApi, hf_hub_download
 
-    spec, v = pack.spec, pack.spec["variants"][vid]
-    src = v.get("source")
+    spec = pack.spec
+    if addon:
+        src = pack.component(addon)["addon"].get("source")
+        what = f"{spec['title']} {pack.component(addon)['addon']['title']}"
+    else:
+        src, what = spec["variants"][vid].get("source"), f"{spec['title']} {vid}"
     if src is None:
-        raise JobError("not_downloadable", f"{spec['title']} {vid} has no download source")
+        raise JobError("not_downloadable", f"{what} has no download source")
     api = HfApi(endpoint=endpoint, token=token or False)
     try:
-        items, reused, separate = plan(pack, vid, api, progress)
+        if addon:
+            items, reused, separate = checked(addon_plan(pack, addon, api)), [], []
+        else:
+            items, reused, separate = plan(pack, vid, api, progress)
     except JobError, Cancelled:
         raise
     except Exception as e:  # noqa: BLE001 (every hub error has a class)
@@ -298,7 +322,9 @@ def download(pack, vid: str, *, endpoint: str, token: str | None, cache: Path, h
                                     f"{(need + MARGIN) / 1e9:.1f} GB")  # fmt: skip
     for d in {it.dest for it in todo}:
         (d / models.MARKER).parent.mkdir(parents=True, exist_ok=True)
-        (d / models.MARKER).write_text(f'{{"repo": "{src["repo"]}", "variant": "{vid}"}}\n')
+        (d / models.MARKER).write_text(
+            f'{{"repo": "{src["repo"]}", "variant": "{addon or vid}"}}\n'
+        )
     written, progress.left = 0, need
     cache.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(

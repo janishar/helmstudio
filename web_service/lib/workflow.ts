@@ -71,7 +71,10 @@ export function fields(w: Pick<S<"Workflow">, "nodes" | "node_schemas">): Field[
           param: twin ? { ...param, label: `${param.label ?? param.name} (${node})` } : param,
           initial: n.params?.[param.name] ?? param.default,
           kind: n.kind,
-          canvas: schema.outputs.some((o) => o.type === "Canvas"),
+          // a node that passes a Canvas through (an Enhance prompt node) is not a canvas source
+          canvas:
+            schema.outputs.some((o) => o.type === "Canvas") &&
+            !schema.inputs.some((i) => i.type === "Canvas"),
           model: schema.outputs.some((o) => o.type === "Model"),
           family: schema.family,
           siblings,

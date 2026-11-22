@@ -203,7 +203,7 @@ class FakeQwen:
         for vid, v in spec["variants"].items():
             root = models / v["dir"]
             for comp, c in spec["components"].items():
-                if comp not in v.get("shares", []):
+                if comp not in v.get("shares", []) and "addon" not in c:  # add-ons: not downloaded
                     shape = [64, 32] if comp == "transformer" else [16, 8]
                     name = "transformer_blocks.0.ff.weight" if comp == "transformer" else "w"
                     path = root / c["files"].replace("*", vid)
@@ -233,6 +233,7 @@ class FakeQwen:
 
         module = types.SimpleNamespace(
             __name__="fake_qwen",
+            enhance=stage("enhance", "text"),
             encode=stage("encode", "cond"),
             sample=stage("sample", "latent"),
             decode=stage("decode", "image"),

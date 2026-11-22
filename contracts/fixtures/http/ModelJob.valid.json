@@ -5,6 +5,7 @@
   "env": "torch",
   "model": "qwen-image-2.1",
   "variant": "turbo",
+  "addon": null,
   "lora_id": null,
   "title": "Qwen Image 2.1 · Turbo",
   "state": "running",

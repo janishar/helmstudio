@@ -158,27 +158,38 @@ class ModelJobs:
             raise JobError("not_found", f"{model} is not published by {HOST}.{ENV}")
         return p
 
+    def addon(self, p, data: dict) -> str | None:
+        """The job's add-on (API 1.36), checked: one of the model's."""
+        if (c := data.get("addon")) is not None and c not in packs.addons(p):
+            raise JobError("not_found", f"{p.spec['title']} has no add-on {c}")
+        return c
+
     async def download(self, job_id: str, data: dict, events: ModelEvents) -> dict:
         p = self.find(data["model"])
-        vid = data.get("variant") or next(iter(p.spec.get("variants", {})), None)
-        if vid not in p.spec.get("variants", {}):
-            raise JobError("not_found", f"{p.spec['title']} has no variant {vid}")
-        src = p.spec["variants"][vid].get("source")
+        if addon := self.addon(p, data):
+            vid, spec = None, p.component(addon)["addon"]
+            src, what, more = spec.get("source"), f"{p.spec['title']} {spec['title']}", []
+        else:
+            vid = data.get("variant") or next(iter(p.spec.get("variants", {})), None)
+            if vid not in p.spec.get("variants", {}):
+                raise JobError("not_found", f"{p.spec['title']} has no variant {vid}")
+            src, what = p.spec["variants"][vid].get("source"), f"{p.spec['title']} {vid}"
+            more = p.spec["variants"][vid].get("sources", [])
         if src is None:
-            raise JobError("not_downloadable", f"{p.spec['title']} {vid} has no download source")
+            raise JobError("not_downloadable", f"{what} has no download source")
         if src["must_accept"]:
             want = hashlib.sha256(models.licence_text(p, src["licence"]).encode()).hexdigest()
             if data.get("licence") != {"id": src["licence"], "sha256": want}:
                 raise JobError("licence", f"licence {src['licence']} changed since it was accepted")
-        gated = src["gated"] or any(s["gated"] for s in p.spec["variants"][vid].get("sources", []))
+        gated = src["gated"] or any(s["gated"] for s in more)
         token = download.read_token(self.token_file) if gated else None
-        log.info("model job %s: %s %s from %s, token: %s", job_id, p.spec["id"], vid, src["repo"],
+        log.info("model job %s: %s %s from %s, token: %s", job_id, p.spec["id"], addon or vid, src["repo"],
                  "present" if token else "absent")  # fmt: skip
         progress = download.Progress()
         stop = await cancels.watch(self.cancels_kv, job_id, progress.cancel.set)
         task = asyncio.create_task(asyncio.to_thread(
             download.download, p, vid, endpoint=self.endpoint, token=token, cache=self.cache, host=HOST,
-            progress=progress))  # fmt: skip
+            progress=progress, addon=addon))  # fmt: skip
         try:
             sent, at, last = None, 0.0, None
             while True:
@@ -208,6 +219,8 @@ class ModelJobs:
 
     async def delete(self, job_id: str, data: dict, events: ModelEvents) -> dict:
         p = self.find(data["model"])
+        if addon := self.addon(p, data):
+            return await self.delete_addon(job_id, p, addon)
         variants = p.spec.get("variants", {})
         if (v := data.get("variant")) is not None and v not in variants:
             raise JobError("not_found", f"{p.spec['title']} has no variant {v}")
@@ -216,7 +229,7 @@ class ModelJobs:
         # residency names a shared component by its owner variant: one kept on disk stays loadable (studio's rule;
         # kept is not empty only when the one deleted variant is a lender)
         if loaded := self._loaded(lambda k: k[0] == p.spec["id"] and k[1] in deleted
-                                  and k[2] not in kept):  # fmt: skip
+                                  and k[2] not in kept and k[2] not in packs.addons(p)):  # fmt: skip
             raise JobError("in_use", f"{p.spec['title']} {loaded[0][1]} {loaded[0][2]} is loaded on "
                                      f"{HOST}.{ENV}: unload it first")  # fmt: skip
         res = self.consumer.residency
@@ -242,6 +255,25 @@ class ModelJobs:
             "model job %s: deleted %d files (%.1f GB), kept %s", job_id, files, freed / 1e9, kept
         )
         return {"files": files, "freed_bytes": freed} | ({"kept": kept} if kept else {})
+
+    async def delete_addon(self, job_id: str, p, c: str) -> dict:
+        """An add-on's files (API 1.36), refused while it is loaded or a run uses the model here."""
+        if loaded := self._loaded(lambda k: k[0] == p.spec["id"] and k[2] == c):
+            raise JobError(
+                "in_use",
+                f"{p.spec['title']} {loaded[0][1]} {c} is loaded on {HOST}.{ENV}: unload it first",
+            )
+        res = self.consumer.residency
+        if self.consumer.ctx is not None and res and any(k[0] == p.spec["id"] for k in res.used):
+            raise JobError("in_use", f"a run on {HOST}.{ENV} uses {p.spec['title']}")
+        try:
+            files, freed = await asyncio.to_thread(models.delete_addon, p, c)
+        except models.InUse as e:
+            raise JobError("in_use", str(e)) from None
+        log.info(
+            "model job %s: deleted add-on %s (%d files, %.1f GB)", job_id, c, files, freed / 1e9
+        )
+        return {"files": files, "freed_bytes": freed}
 
     async def lora_delete(self, job_id: str, data: dict, events: ModelEvents) -> dict:
         sha, lib = data["lora_id"], self.library

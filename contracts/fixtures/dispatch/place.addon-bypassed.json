@@ -1,0 +1,122 @@
+{
+  "description": "The enhance node is bypassed: its add-on is not needed, so both hosts are eligible and mac (never ran) is picked",
+  "hosts": {
+    "mac": {
+      "keys": {
+        "torch": {
+          "state": "fresh",
+          "budget_gb": 52,
+          "resident": []
+        },
+        "mlx": {
+          "state": "fresh",
+          "budget_gb": 52,
+          "resident": []
+        }
+      },
+      "workflows": {
+        "torch": [
+          "qwen-image"
+        ]
+      },
+      "variants": {
+        "torch": {
+          "qwen-image-2.1/base": [
+            "bf16",
+            "int8"
+          ],
+          "qwen-image-2.1/turbo": [
+            "bf16",
+            "int8"
+          ]
+        }
+      },
+      "loras": {
+        "torch": []
+      },
+      "free": true,
+      "idle_since": null,
+      "addons": {
+        "torch": []
+      }
+    },
+    "gcp": {
+      "keys": {
+        "torch": {
+          "state": "fresh",
+          "budget_gb": 94,
+          "ram_budget_gb": 176,
+          "resident": []
+        }
+      },
+      "workflows": {
+        "torch": [
+          "qwen-image"
+        ]
+      },
+      "variants": {
+        "torch": {
+          "qwen-image-2.1/base": [
+            "bf16",
+            "int8"
+          ]
+        }
+      },
+      "loras": {
+        "torch": []
+      },
+      "free": true,
+      "idle_since": "2026-11-15T09:00:00Z",
+      "addons": {
+        "torch": []
+      }
+    }
+  },
+  "run": {
+    "env": "torch",
+    "workflow": "qwen-image",
+    "model": "qwen-image-2.1",
+    "variant": "base",
+    "precision": "int8",
+    "loras": [],
+    "peak_gb": 29.25,
+    "needs": [
+      {
+        "component": "text_encoder",
+        "model": "qwen-image-2.1",
+        "variant": "base",
+        "precision": "int8"
+      },
+      {
+        "component": "transformer",
+        "model": "qwen-image-2.1",
+        "variant": "base",
+        "precision": "int8"
+      },
+      {
+        "component": "vae",
+        "model": "qwen-image-2.1",
+        "variant": "base",
+        "precision": "bf16"
+      }
+    ],
+    "lora_component": "transformer",
+    "addons": [
+      {
+        "node": "enhance",
+        "kind": "qwen-image/enhance",
+        "component": "enhancer",
+        "title": "Enhancer",
+        "bypass": true
+      }
+    ]
+  },
+  "expect": {
+    "host": "mac",
+    "eligible": [
+      "gcp",
+      "mac"
+    ],
+    "error": null
+  }
+}

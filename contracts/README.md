@@ -496,6 +496,16 @@ then B (different envs of H), one user, nothing else queued, one seed per step, 
   `peak_gb`); nothing is resident after the run (the child exited), so `resident` stays empty, an unload request
   frees nothing, and `RUNNER_AFTER_RUN` and pins do not apply. Like mlx, native runs only on Apple silicon (Metal):
   a model whose only runtimes are mlx or native is `Mac only`.
+- **Phases** (API 1.36): a node that runs one engine end to end (the minimax-h3 family's `generate`: h3, or SGLang on
+  NVIDIA) may declare its ordered `phases` (registry nodeSchema `phases [{id, label}]`, model.yaml
+  `stages.<name>.phases`; H3: `encode` Encode, `sample` Sample, `decode_audio` Decode audio, `decode_video` Decode
+  video). Each of its `evt.run.progress` events then carries `phase_id`, the phase it is in (the free-text `phase`
+  stays); a phase id never goes back within an attempt. H3 maps its stderr phases: the tokenizer, text encoder,
+  image and reference encoders and the transformer load are `encode`, the denoise `sample`, the audio VAE
+  `decode_audio`, the video VAE and the MP4 write `decode_video`. SGLang reports only its start (`encode`), the denoise
+  (`sample`) and, once that reaches its end, `decode_video` (its decode reports nothing). The UI draws one chip per
+  phase (the current one lit, with `step`/`of` when `of` > 1), then a `Saving` chip from the output node's `phase`
+  `saving` (sent once an upload has run 2 s). A node without `phases` sends no `phase_id`.
 
 **Hosts data and the memory chip.** `GET /v1/studio/hosts` gives every entry `host_memory {budget_gb, used_gb}` (the
 same for all envs of a host: B, and per present key the larger of its entries' Σ `gb` and its measured `used_gb`,
@@ -583,6 +593,11 @@ not; Starting up still exempts):
 2. **Model**: X's `<family>/model` node's model id has the node's `variant` with `presence: present` and its
    `precision` in `precisions`, in `<H>.<env>.models`: `no live host for env <env> has model <model> variant <variant>
    at <precision>`. A workflow without a model node (echo): no check.
+2b. **Add-ons** (API 1.36, Optional add-ons): for each node of X's graph that is not bypassed, by node id, and each of
+   its kind's `addons` in order (as that host's nodes key lists them: a host whose runner names none needs none), the
+   host's models entry of the node's family lists that add-on `present`: `<node>:
+   <title> not downloaded on any live host for env <env>` (title: the add-on's, from the first host left that lists
+   it, else the component).
 3. **Shared LoRAs**: `<H>.<env>.loras` lists every shared LoRA of the resolved graph. With F = the first host left (by
    name) and L = the first LoRA (graph order) F lacks: `no live host for env <env> has LoRA <L>` when no host left has
    L, else `no live host for env <env> has all of its LoRAs (<L> is not on <F>)`.
@@ -601,7 +616,7 @@ above narrows to H and, with H left out, fails with H's own text instead (H's ro
    run workflow <workflow>` (H is live but has no fresh key of the workflow's env, or does not publish the workflow).
 2. `host <H> does not have model <model> variant <variant> at <precision>` (not downloaded there, or a variant whose
    `devices` leave out H's device: such a variant is never in H's models key); `host <H> does not have the distilled
-   LoRA` (a `<family>/distill` node H cannot fuse).
+   LoRA` (a `<family>/distill` node H cannot fuse); from 1.36 `<node>: <title> not downloaded on host <H>` (step 2b).
 3. `host <H> does not have LoRA <L>` (L: the first shared LoRA, graph order, H lacks).
 At create (POST …/runs, New shot's run) any of these, or step 4, is a 422 with the text and nothing is stored;
 POST /v1/studio/runs/plan answers it as `reason`. A queued run whose H drops fails at the next pass with the text
@@ -667,16 +682,19 @@ publish among the highest-ranked sources that publish it. A `published_at` later
 counts as that receipt time. `.tools/make-secrets` refuses `mac` and `fake` as GPU host names.
 
 **Fixtures** (`place.*.json`): `{description, hosts: {<name>: {keys (as admit fixtures, plus `ram_budget_gb`),
-workflows: {env: [ids]}, variants: {env: {"<model>/<variant>": [precisions]}} (present ones only), loras: {env: [shared
-LoRA names]}, free, idle_since, reserved_gb?}}, run: {env, workflow, model?, variant?, precision?, loras (shared, graph order),
-peak_gb, ram_peak_gb?, needs, lora_component?, lost_host?, host?}, expect: {host, eligible, error}}`; `eligible` is
+workflows: {env: [ids]}, variants: {env: {"<model>/<variant>": [precisions]}} (present ones only), addons?: {env: ["<model>/<component>"]} (1.36:
+present add-ons only), loras: {env: [shared LoRA names]}, free, idle_since, reserved_gb?}}, run: {env, workflow, model?,
+variant?, precision?, addons? ([{node, kind, component, title, bypass?}]: 1.36, nodes of the run's model family needing an
+add-on), loras (shared, graph order), peak_gb, ram_peak_gb?, needs, lora_component?, lost_host?, host?}, expect: {host,
+eligible, error}}`; `eligible` is
 after the `lost_host` rule, by name; the run's `host` (1.35) is its pin. Cases: resident-first, fits-first,
 idle-longest, name-order, free-first, variant-missing, no-variant, offline, small-gpu, too-big, host-ram, loras,
 loras-split, lost-elsewhere, lost-same, lost-none, reserved (a local server's reservation leaves the resident host too
 small: the other host); from 1.35 pinned (the pinned host though another is free with the model resident),
 pinned-offline, pinned-unknown, pinned-env, pinned-variant (a NVIDIA-only variant pinned to the Mac), pinned-lora,
 pinned-lost (attempt 2 while H is still offline: fails, never the live other host), pinned-lost-back (H is back:
-attempt 2 runs there). Admission
+attempt 2 runs there); from 1.36 addon (Auto: the host with the add-on though the other is resident), addon-none (on no
+live host), pinned-addon (the pinned host lacks it), addon-bypassed (a bypassed node needs nothing). Admission
 on a cuda host: `admit.cuda-cpu-entry.json` (a `device: cpu` entry is not counted), `admit.cuda-host-ram.json`.
 
 ## A remote GPU host: credentials and TLS (API 1.18, M6; deployment, normative for names and permissions)
@@ -2805,9 +2823,9 @@ an **extra variant** of the pack. model.yaml per variant, all optional:
   the union's, int8): studio uses that precision for eligibility, the memory plan and the resident match.
 - `sources: [{repo, revision, allow_patterns, gated?, bytes?, dir?}]`: more repos the download fetches after `source`, into
   the same folder (configs from the official repo in `source`, weights from the community one), or with `dir` into
-  that folder under the models root: a component's own `dir` (MiniMax H3 Image `base-fp8` fetches the official prompt
-  enhancer into `MiniMax-H3-Image-PE`, so the variant is `present` after its download; files already there at the
-  Hub's hash are kept, and a delete of the variant never removes them, as every variant reads that folder). Planned and checked
+  that folder under the models root: a component's own `dir` (files already there at the Hub's hash are kept, and a
+  delete of the variant never removes them, as every variant reads that folder; until 1.36 MiniMax H3 Image
+  `base-fp8` fetched its prompt enhancer so, which is now an optional add-on). Planned and checked
   as `source` is (LFS hashes, sizes, unsafe names); a path two of them list fails the plan (`… twice`). The licence,
   `must_accept`, `gated` and `bytes` of the whole download are `source`'s. Published as the variant's `sources`.
 
@@ -2825,6 +2843,34 @@ Linear: on CUDA `torch._scaled_mm` with the input quantized per row (dequantize 
 decided once per process; `RUNNER_FP8_MATMUL=dequant` forces that); elsewhere dequantize per layer. A LoRA bakes into
 no FP8 weight (a run asking it fails; adapters work). An int8 ConvRot build (the input axis rotated by a 256-wide
 block Hadamard) runs as int8 with the input rotated the same way first; a LoRA bakes into no ConvRot weight either.
+
+### Optional add-ons (API 1.36; plan 19-ltx-studio-features 23.11; normative)
+
+An **optional add-on** is a weight component a few controls need and no variant does (Qwen Image's and MiniMax H3
+Image's prompt enhancers, LTX's detailer and distilled LoRA): one shared, model.yaml-driven rule, no model names in
+studio or the web.
+- **model.yaml**: `components.<c>.addon: {title, help?, source?}` (`source` as a variant's: `{repo, revision,
+  allow_patterns, licence, must_accept, gated, bytes?}`). Its folder is the component's own `dir`, else the first
+  variant's. A stage whose `uses` names it publishes `addons: [<c>]` in its nodeSchema.
+- **Presence**: a variant is `present` without its add-ons; their files are never in its `components`, `files` or
+  `bytes`, and a delete of the variant keeps them. The models entry lists `addons [{component, title, help?, dir,
+  presence, bytes?, source?, mismatch?}]`, presence decided as a variant's over the add-on's own files (its globs in
+  its folder, a download marker there, recorded hashes).
+- **The run check** (Several hosts: eligibility, step 2b): a run in which a node with `addons` is not bypassed is
+  eligible only on hosts where each is present. Set to a host without it (Run on): 422 at create, `<node>: <title> not
+  downloaded on host <H>`; Auto picks a host that has it, and with none the run fails `<node>: <title> not downloaded
+  on any live host for env <env>`. POST /v1/studio/runs/plan answers either as `reason`. The UI greys the controls
+  that need a missing add-on (`<title> not downloaded`; per host in Run on, `… not downloaded on <host>`) and leaves
+  such a node bypassed, so a run never reaches the refusal from the form.
+- **Model jobs**: `POST …/models/{model}/download` with `addon` (no `variant`) fetches its `source` into its folder
+  (the same plan, checks, licence and failures as a variant's; 422 `<model> has no add-on <c>`, `<title> <add-on
+  title> has no download source`, `licence <id> must be accepted`; 409 `<title> <add-on title> is already on <host>`,
+  `a delete of <title> on <host> is unfinished`); `DELETE …/models/{model}?host=&addon=` removes only its files (409
+  `<title> <add-on title> is not on <host>`, `<c> of <title> is loaded on <host>; unload it first`, `<title> is in use
+  by a queued or running run on <host>`, `a download of <title> on <host> is unfinished; cancel it first`). The job
+  has `addon` (and `variant` null), `title` `<model title> · <add-on title>`; `cmd.model.job` carries `addon`.
+  `GET /v1/studio/models` lists each model's `addons` with a per-host state as a variant's (`downloading` while its
+  download job is open). Idempotency, release, cancel and host loss are a variant's.
 
 ## Hosts admin (API 1.16, M5a; plan 03-runtime 6.2; normative)
 

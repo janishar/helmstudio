@@ -408,10 +408,22 @@ def stage_schema(name: str, stage: dict, family: str | None) -> dict:
         ],
         "outputs": [{"name": p, "type": t} for p, t in (stage.get("outputs") or {}).items()],
     }
-    for key in ("component", "help"):  # component: API 1.24, the inspector's "uses the <component>"
+    # component: API 1.24, the inspector's "uses the <component>"; phases: API 1.36, a one-engine node's chips
+    for key in ("component", "help", "phases"):
         if key in stage:
             schema[key] = stage[key]
     return schema
+
+
+def addons(pack: Pack) -> list[str]:
+    """The model's optional add-ons (API 1.36, contracts/README.md "Optional add-ons"): its components with an
+    `addon` block, model.yaml order. No variant needs them to be present."""
+    return [c for c, s in pack.spec.get("components", {}).items() if "addon" in s]
+
+
+def needed(pack: Pack) -> list[str]:
+    """The components a variant needs to be present: every one but the add-ons."""
+    return [c for c in pack.spec.get("components", {}) if "addon" not in pack.component(c)]
 
 
 def model_schema(pack: Pack) -> dict:
@@ -510,7 +522,7 @@ def lora_block(pack: Pack) -> dict | None:
         spec, block = lora_spec(pack), None
         build = getattr(pack.module, "build", None)
         present = [v for v in pack.spec.get("variants", {}) if all(
-            ModelRef(pack, v, "bf16").files(c) for c in pack.spec.get("components", {}))]  # fmt: skip
+            ModelRef(pack, v, "bf16").files(c) for c in needed(pack))]  # fmt: skip
         if spec and "modules" in spec:  # a model-free pack (the fake echo) names them itself
             block = {k: spec.get(k, []) for k in ("component", "modules", "renames", "ignore")}
         elif spec and build and present:
@@ -574,6 +586,10 @@ def _nodes(stages: dict, family: str | None, code: str, pack: Pack | None, modul
         uses = tuple(stage.get("uses", ()))
         if pack and (unknown := set(uses) - set(pack.spec.get("components", {}))):
             raise ValueError(f"{schema['kind']}: uses unknown components {sorted(unknown)}")
+        if pack and (need := [c for c in uses if c in addons(pack)]):
+            schema["addons"] = need  # API 1.36: a run with the node needs them on its host
+        if len(ids := [x["id"] for x in stage.get("phases") or []]) != len(set(ids)):
+            raise ValueError(f"{schema['kind']}: phases repeat an id")
         unload = tuple(stage.get("unload_after", ()))
         if unknown := set(unload) - set(uses):
             raise ValueError(

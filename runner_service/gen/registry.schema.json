@@ -1332,6 +1332,42 @@
           "items": {
             "$ref": "#/$defs/port"
           }
+        },
+        "addons": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,63}$"
+          },
+          "description": "from API 1.36 (contracts/README.md, Optional add-ons): the optional add-ons the node loads, each a `component` of its family's models entry `addons` (model.yaml: a component with `addon` in the stage's `uses`). A run in which the node is not bypassed is eligible only on a host where each is present; the UI shows the node's controls greyed while it is not (\"Enhancer not downloaded\"). Absent = none"
+        },
+        "phases": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 12,
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "label"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{0,31}$"
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40
+              }
+            }
+          },
+          "description": "from API 1.36: the ordered phases of a node that runs one engine end to end (model.yaml `stages.<name>.phases`; MiniMax H3's generate: encode, sample, decode_audio, decode_video), ids unique. Its evt.run.progress carries `phase_id`, one of these ids (contracts/README.md, Phases); the UI draws one chip per phase, the current one with its step n/N. Absent = none"
         }
       }
     },
@@ -1639,58 +1675,8 @@
                           "description": "from API 1.16: its folder under the host's models root (`Qwen-Image-2.1-Turbo`): model.yaml `variants.<id>.dir`"
                         },
                         "source": {
-                          "type": "object",
-                          "required": [
-                            "repo",
-                            "revision",
-                            "allow_patterns",
-                            "licence",
-                            "must_accept",
-                            "gated"
-                          ],
-                          "additionalProperties": false,
-                          "description": "from API 1.16: where a download fetches the variant's own files (model.yaml `variants.<id>.source`): huggingface_hub.snapshot_download(repo_id=repo, revision=revision, allow_patterns=allow_patterns, local_dir=<models root>/<dir>). Absent: the variant cannot be downloaded (put its files there by hand); from API 1.33 a variant may also fetch from `sources` into the same folder: `bytes` then counts them too, and `gated` is true when any of them is",
-                          "properties": {
-                            "repo": {
-                              "type": "string",
-                              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,95}/[A-Za-z0-9][A-Za-z0-9._-]{0,95}$",
-                              "description": "a Hub model repo, owner/name"
-                            },
-                            "revision": {
-                              "type": "string",
-                              "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]{0,79}$",
-                              "description": "a commit SHA (preferred: pinned), tag or branch"
-                            },
-                            "allow_patterns": {
-                              "type": "array",
-                              "minItems": 1,
-                              "maxItems": 64,
-                              "items": {
-                                "type": "string",
-                                "minLength": 1,
-                                "maxLength": 200
-                              },
-                              "description": "fnmatch globs over repo paths; the variant's own components' files and their configs (shared components come from their owner variant's source)"
-                            },
-                            "licence": {
-                              "type": "string",
-                              "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
-                              "description": "an id of the key's `licences`"
-                            },
-                            "must_accept": {
-                              "type": "boolean",
-                              "description": "true: the admin accepts the licence text before the download starts (accept_licence)"
-                            },
-                            "gated": {
-                              "type": "boolean",
-                              "description": "the repo needs a Hub token: the runner reads it from the host's secrets file (RUNNER_HF_TOKEN_FILE); never in a message, the API or a log"
-                            },
-                            "bytes": {
-                              "type": "integer",
-                              "minimum": 1,
-                              "description": "the expected download size of the variant's own files (shown while missing; the job's total_bytes is the hub's)"
-                            }
-                          }
+                          "$ref": "#/$defs/source",
+                          "description": "from API 1.16: where a download fetches the variant's own files (model.yaml `variants.<id>.source`): huggingface_hub.snapshot_download(repo_id=repo, revision=revision, allow_patterns=allow_patterns, local_dir=<models root>/<dir>). Absent: the variant cannot be downloaded (put its files there by hand); from API 1.33 a variant may also fetch from `sources` into the same folder: `bytes` then counts them too, and `gated` is true when any of them is"
                         },
                         "components": {
                           "type": "array",
@@ -1932,6 +1918,83 @@
                       }
                     },
                     "description": "from API 1.16: every runtime the pack has (model.yaml `runtimes`), also those of other envs: a model whose only runtimes are mlx or native runs only on Apple silicon"
+                  },
+                  "addons": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 16,
+                    "description": "from API 1.36 (contracts/README.md, Optional add-ons): the model's optional add-ons on this host, model.yaml order: components (`components.<c>.addon`) that some nodes load (their `addons`) and no variant needs. A variant is present without them, and never lists them in its components, files or bytes; each is downloaded and deleted on its own (cmd.model.job `addon`). Absent = none",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "component",
+                        "title",
+                        "dir",
+                        "presence"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "component": {
+                          "type": "string",
+                          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+                          "description": "the component (model.yaml `components.<c>`)"
+                        },
+                        "title": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 60,
+                          "description": "its display name (`Enhancer`): the run check's and the UI's `<title> not downloaded`"
+                        },
+                        "help": {
+                          "type": "string",
+                          "maxLength": 300,
+                          "description": "what it adds, for the Models screen"
+                        },
+                        "dir": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 400,
+                          "pattern": "^[^/\\u0000-\\u001f][^\\u0000-\\u001f]*$",
+                          "not": {
+                            "pattern": "(^|/)\\.\\.(/|$)"
+                          },
+                          "description": "its folder under the models root: the component's own `dir`, else the first variant's (its files then never count as that variant's)"
+                        },
+                        "presence": {
+                          "enum": [
+                            "present",
+                            "partial",
+                            "missing",
+                            "mismatch"
+                          ],
+                          "description": "as a variant's, over the add-on's own files only: present = its globs match and no download of it is unfinished and no recorded hash differs"
+                        },
+                        "bytes": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "description": "its files on disk; absent when missing"
+                        },
+                        "source": {
+                          "$ref": "#/$defs/source",
+                          "description": "where a download of the add-on fetches its files, into `dir` (model.yaml `components.<c>.addon.source`). Absent: not downloadable (put its files there by hand)"
+                        },
+                        "mismatch": {
+                          "type": "array",
+                          "minItems": 1,
+                          "maxItems": 64,
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 400,
+                            "pattern": "^[^/\\u0000-\\u001f][^\\u0000-\\u001f]*$",
+                            "not": {
+                              "pattern": "(^|/)\\.\\.(/|$)"
+                            }
+                          },
+                          "description": "presence mismatch only: its files (relative to `dir`) whose SHA-256 on disk differs from the recorded one, sorted"
+                        }
+                      }
+                    }
                   }
                 }
               }
@@ -3203,6 +3266,60 @@
           }
         }
       ]
+    },
+    "source": {
+      "type": "object",
+      "required": [
+        "repo",
+        "revision",
+        "allow_patterns",
+        "licence",
+        "must_accept",
+        "gated"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "repo": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,95}/[A-Za-z0-9][A-Za-z0-9._-]{0,95}$",
+          "description": "a Hub model repo, owner/name"
+        },
+        "revision": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]{0,79}$",
+          "description": "a commit SHA (preferred: pinned), tag or branch"
+        },
+        "allow_patterns": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "description": "fnmatch globs over repo paths; the variant's own components' files and their configs (shared components come from their owner variant's source)"
+        },
+        "licence": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+          "description": "an id of the key's `licences`"
+        },
+        "must_accept": {
+          "type": "boolean",
+          "description": "true: the admin accepts the licence text before the download starts (accept_licence)"
+        },
+        "gated": {
+          "type": "boolean",
+          "description": "the repo needs a Hub token: the runner reads it from the host's secrets file (RUNNER_HF_TOKEN_FILE); never in a message, the API or a log"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "the expected download size of the variant's own files (shown while missing; the job's total_bytes is the hub's)"
+        }
+      },
+      "description": "where a download fetches files: huggingface_hub.snapshot_download(repo_id=repo, revision=revision, allow_patterns=allow_patterns, local_dir=<models root>/<dir>)"
     }
   }
 }

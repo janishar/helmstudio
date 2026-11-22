@@ -36,7 +36,8 @@ func (s *Service) ListModels(ctx context.Context, caller common.Caller) (dto.Mod
 			Done                            int64
 			Total                           *int64
 		}
-		rows, err := collect[open](ctx, tx, `SELECT id::text, state, host, model, variant,
+		// an add-on's job (API 1.36) is "<host> <model> +<addon>"
+		rows, err := collect[open](ctx, tx, `SELECT id::text, state, host, model, coalesce(variant, '+' || addon, ''),
 			coalesce((progress->>'done_bytes')::bigint, 0), (progress->>'total_bytes')::bigint
 			FROM model_jobs WHERE kind = 'download' AND state IN ('queued', 'running')`)
 		for _, r := range rows {
@@ -132,7 +133,7 @@ func buildModels(values []registry.Host, published map[string]registry.Published
 	used := map[string]bool{}
 	for id, m := range described {
 		model := dto.Model{ID: id, Family: m.Family, Title: m.Title, Media: orEmpty(m.Media),
-			Runtimes: orEmpty(m.Runtimes), Variants: []dto.ModelVariant{}}
+			Runtimes: orEmpty(m.Runtimes), Variants: []dto.ModelVariant{}, Addons: []dto.ModelAddon{}}
 		for _, vid := range variantIDs[id] {
 			var desc registry.Variant
 			for _, source := range sources {
@@ -200,6 +201,7 @@ func buildModels(values []registry.Host, published map[string]registry.Published
 			}
 			model.Variants = append(model.Variants, variant)
 		}
+		model.Addons = buildAddons(id, sources, published, hostNames, byHost, downloading, used)
 		out.Models = append(out.Models, model)
 	}
 	slices.SortFunc(out.Models, func(a, b dto.Model) int {
@@ -208,6 +210,65 @@ func buildModels(values []registry.Host, published map[string]registry.Published
 	for _, id := range slices.Sorted(maps.Keys(used)) {
 		if l, ok := licences[id]; ok {
 			out.Licences = append(out.Licences, l)
+		}
+	}
+	return out
+}
+
+// buildAddons is a model's optional add-ons on the Models screen (API 1.36): each add-on's descriptive fields from the
+// freshest key that lists it (sources' order), its state on every host whose first env listing the model lists it.
+func buildAddons(id string, sources []string, published map[string]registry.Published, hostNames []string,
+	byHost map[string][]registry.Host, downloading map[string]dto.VariantJob, used map[string]bool) []dto.ModelAddon {
+	model := func(source string) (registry.Model, bool) {
+		i := slices.IndexFunc(published[source].Models, func(m registry.Model) bool { return m.ID == id })
+		if i < 0 {
+			return registry.Model{}, false
+		}
+		return published[source].Models[i], true
+	}
+	out := []dto.ModelAddon{}
+	seen := map[string]bool{}
+	for _, source := range sources {
+		m, _ := model(source)
+		for _, a := range m.Addons {
+			if seen[a.Component] {
+				continue
+			}
+			seen[a.Component] = true
+			addon := dto.ModelAddon{Component: a.Component, Title: a.Title, Help: a.Help, Hosts: []dto.ModelVariantHost{}}
+			if a.Dir != "" {
+				addon.Dir = &a.Dir
+			}
+			if src := a.Source; src != nil {
+				addon.Licence = &dto.VariantLicence{ID: src.Licence, MustAccept: src.MustAccept}
+				addon.Gated, addon.DownloadBytes, used[src.Licence] = src.Gated, src.Bytes, true
+			}
+			for _, name := range hostNames {
+				var on *registry.Addon
+				for _, k := range byHost[name] {
+					if m, listed := model(k.Host + "." + k.Env); listed {
+						if found, ok := m.Addon(a.Component); ok {
+							on = &found
+						}
+						break
+					}
+				}
+				if on == nil {
+					continue
+				}
+				state := dto.ModelVariantHost{Host: name, State: cmp.Or(on.Presence, "missing")}
+				if state.State != "missing" {
+					state.Bytes = on.Bytes
+				}
+				if state.State == "mismatch" {
+					state.Mismatch = on.Mismatch
+				}
+				if job, ok := downloading[name+" "+id+" +"+a.Component]; ok {
+					state.State, state.Job = "downloading", &job
+				}
+				addon.Hosts = append(addon.Hosts, state)
+			}
+			out = append(out, addon)
 		}
 	}
 	return out
@@ -275,16 +336,17 @@ func variantTitle(m registry.Model, v registry.Variant) string {
 	return m.Title + " " + cmp.Or(v.Title, v.ID)
 }
 
-// download is what a download job takes: its env, model, variant and the licence accepted.
+// download is what a download job takes: its env, model, variant (or add-on, API 1.36) and the licence accepted.
 type download struct {
 	env     string
 	model   registry.Model
 	variant registry.Variant
+	addon   *registry.Addon
 	licence *dto.JobLicence
 }
 
 // checkDownload applies POST …/download's registry refusals (404, 422, 409 already on the host).
-func (w weights) checkDownload(host, model string, variant *string, accept bool) (download, error) {
+func (w weights) checkDownload(host, model string, variant, addon *string, accept bool) (download, error) {
 	if !w.known(model) {
 		return download{}, errNotFound
 	}
@@ -295,6 +357,9 @@ func (w weights) checkDownload(host, model string, variant *string, accept bool)
 	out := download{env: env, model: m}
 	if err := w.writable(host, env); err != nil {
 		return out, err
+	}
+	if addon != nil {
+		return w.checkAddonDownload(host, out, *addon, accept)
 	}
 	switch {
 	case variant == nil && len(m.Variants) == 0:
@@ -317,15 +382,41 @@ func (w weights) checkDownload(host, model string, variant *string, accept bool)
 	case out.variant.Presence == "present":
 		return out, network.NewConflictError(fmt.Sprintf("%s is already on %s", variantTitle(m, out.variant), host), nil)
 	}
-	if src.MustAccept {
-		text := ""
-		if i := slices.IndexFunc(w.published[host+"."+env].Licences, func(l registry.Licence) bool { return l.ID == src.Licence }); i >= 0 {
-			text = w.published[host+"."+env].Licences[i].Text
-		}
-		sum := sha256.Sum256([]byte(text))
-		out.licence = &dto.JobLicence{ID: src.Licence, SHA256: hex.EncodeToString(sum[:])}
-	}
+	out.licence = w.accepted(host, env, src)
 	return out, nil
+}
+
+// checkAddonDownload is checkDownload for an optional add-on (API 1.36).
+func (w weights) checkAddonDownload(host string, out download, component string, accept bool) (download, error) {
+	m := out.model
+	a, ok := m.Addon(component)
+	if !ok {
+		return out, network.NewUnprocessableError(fmt.Sprintf("%s has no add-on %s", m.ID, component), nil)
+	}
+	out.addon = &a
+	switch src := a.Source; {
+	case src == nil:
+		return out, network.NewUnprocessableError(m.Title+" "+a.Title+" has no download source", nil)
+	case src.MustAccept && !accept:
+		return out, network.NewUnprocessableError("licence "+src.Licence+" must be accepted", nil)
+	case a.Presence == "present":
+		return out, network.NewConflictError(fmt.Sprintf("%s %s is already on %s", m.Title, a.Title, host), nil)
+	}
+	out.licence = w.accepted(host, out.env, a.Source)
+	return out, nil
+}
+
+// accepted is the licence a download of src records as accepted (its text as host.env publishes it), or nil.
+func (w weights) accepted(host, env string, src *registry.Source) *dto.JobLicence {
+	if !src.MustAccept {
+		return nil
+	}
+	text := ""
+	if i := slices.IndexFunc(w.published[host+"."+env].Licences, func(l registry.Licence) bool { return l.ID == src.Licence }); i >= 0 {
+		text = w.published[host+"."+env].Licences[i].Text
+	}
+	sum := sha256.Sum256([]byte(text))
+	return &dto.JobLicence{ID: src.Licence, SHA256: hex.EncodeToString(sum[:])}
 }
 
 // removal is what a delete job removes: its env, the model, the variants deleted, the shared components kept and the
@@ -340,7 +431,7 @@ type removal struct {
 }
 
 // checkDelete applies DELETE …/models/{model}'s registry refusals: 404, 422, 409 not on the host, 409 loaded.
-func (w weights) checkDelete(host, model string, variant *string) (removal, error) {
+func (w weights) checkDelete(host, model string, variant, addon *string) (removal, error) {
 	if !w.known(model) {
 		return removal{}, errNotFound
 	}
@@ -353,6 +444,22 @@ func (w weights) checkDelete(host, model string, variant *string) (removal, erro
 		return out, err
 	}
 	on := func(v registry.Variant) bool { return v.Presence != "missing" && v.Presence != "" }
+	if addon != nil { // API 1.36: only the add-on's files
+		a, ok := m.Addon(*addon)
+		switch {
+		case !ok:
+			return out, network.NewUnprocessableError(fmt.Sprintf("%s has no add-on %s", model, *addon), nil)
+		case a.Presence == "missing" || a.Presence == "":
+			return out, network.NewConflictError(fmt.Sprintf("%s %s is not on %s", m.Title, a.Title, host), nil)
+		}
+		out.title = m.Title + " · " + a.Title
+		for _, v := range w.values {
+			if v.Host == host && slices.ContainsFunc(v.Resident, func(r registry.Resident) bool { return r.Model == model && r.Component == *addon }) {
+				return out, network.NewConflictError(fmt.Sprintf("%s of %s is loaded on %s; unload it first", *addon, m.Title, host), nil)
+			}
+		}
+		return out, nil
+	}
 	if variant != nil {
 		i := slices.IndexFunc(m.Variants, func(v registry.Variant) bool { return v.ID == *variant })
 		if i < 0 {

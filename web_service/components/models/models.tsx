@@ -2,7 +2,8 @@
 // Models (docs/mock/Models.dc.html, ModelDownload.dc.html, ModelsLoras.dc.html): every model family and variant with
 // its components and sizes, and its presence on each host (present, partial, missing, downloading with progress,
 // hash mismatch), for everyone; admins download a variant to a host (licence shown and accepted first, the gated
-// note) and delete it from one. The LoRAs tab is the library (components/models/loras.tsx). While anything is
+// note) and delete it from one; a model's optional add-ons (API 1.36) are listed under it with their own Download and
+// Delete. The LoRAs tab is the library (components/models/loras.tsx). While anything is
 // downloading the list is read every 2 s (GET /v1/studio/models carries each job's bytes), else every 15 s.
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -21,6 +22,7 @@ import {
   jobOpen,
   deviceNote,
   mediaText,
+  parts,
   percent,
   precisionTags,
   variantStored,
@@ -35,6 +37,7 @@ type List = S<"ModelList">;
 type Model = S<"Model">;
 type Variant = S<"ModelVariant">;
 type VariantHost = S<"ModelVariantHost">;
+type Addon = S<"ModelAddon">;
 
 /** The model list, polled (fast while downloading) when the tab is visible; admins also get the model jobs. */
 function useModels(admin: boolean) {
@@ -79,7 +82,7 @@ export function ModelsScreen({ tab }: { tab: "models" | "loras" }) {
   const model = models.find((m) => m.id === sel?.model) ?? models[0];
   const variant = model?.variants.find((v) => v.id === sel?.variant) ?? model?.variants[0];
   const states = new Set(
-    models.flatMap((m) => m.variants.flatMap((v) => v.hosts.map((h) => h.state))),
+    models.flatMap((m) => parts(m).flatMap((v) => v.hosts.map((h) => h.state))),
   );
 
   const header = (
@@ -153,6 +156,11 @@ export function ModelsScreen({ tab }: { tab: "models" | "loras" }) {
             selected={m.id === model?.id}
             picked={m.id === model?.id ? variant?.id : undefined}
             onPick={(v) => setSel({ model: m.id, variant: v })}
+            addons={
+              list && (m.addons ?? []).length > 0 ? (
+                <Addons list={list} m={m} admin={admin} onChanged={reload} />
+              ) : null
+            }
           />
         ))}
       </main>
@@ -192,11 +200,14 @@ function ModelSection({
   selected,
   picked,
   onPick,
+  addons,
 }: {
   m: Model;
   selected: boolean;
   picked: string | undefined;
   onPick: (variant: string) => void;
+  /** the model's optional add-ons, under its variants */
+  addons?: React.ReactNode;
 }) {
   const licences = new Set(m.variants.map((v) => v.licence?.id).filter(Boolean));
   return (
@@ -239,7 +250,154 @@ function ModelSection({
           />
         ))}
       </div>
+      {addons}
     </section>
+  );
+}
+
+/** docs/mock/Models.dc.html: "Optional add-ons" under a model, a dashed card each with its size, help, hosts and (for
+ * admins) its own Download (to the first host it can go to: pick a host above for another) and Delete. */
+function Addons({
+  list,
+  m,
+  admin,
+  onChanged,
+}: {
+  list: List;
+  m: Model;
+  admin: boolean;
+  onChanged: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <h3 className="heading flex items-center">
+        Optional add-ons
+        <Info>
+          Parts a few controls need, downloaded and deleted on their own. Every variant works
+          without them; the controls that need one are greyed with &quot;… not downloaded&quot;
+          until it is on the host.
+        </Info>
+      </h3>
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+        {(m.addons ?? []).map((a) => (
+          <AddonCard
+            key={a.component}
+            list={list}
+            m={m}
+            a={a}
+            admin={admin}
+            onChanged={onChanged}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AddonCard({
+  list,
+  m,
+  a,
+  admin,
+  onChanged,
+}: {
+  list: List;
+  m: Model;
+  a: Addon;
+  admin: boolean;
+  onChanged: () => void;
+}) {
+  const [dialog, setDialog] = useState<"download" | "delete" | null>(null);
+  const [notice, setNotice] = useState("");
+  const down = a.hosts.find((h) => !downloadPlan(list, a, h.host).blocked)?.host;
+  const del = a.hosts.find((h) => canDelete(a, h.host))?.host;
+  const btn = "h-7 rounded-lg bg-s4 px-2.5 text-[12px] font-medium disabled:opacity-50";
+  return (
+    <div className="flex min-w-0 flex-col gap-2 rounded-xl border border-dashed border-line bg-s2 px-3 py-2.5">
+      <div className="flex items-center gap-2">
+        <span className="tag">add-on</span>
+        <b className="text-[13px]">{a.title}</b>
+        <span className="mono truncate text-[12px] text-t2">{a.component}</span>
+        <div className="grow" />
+        <span className="mono text-[12px]">{bytesText(a.download_bytes)}</span>
+      </div>
+      {a.help && <span className="text-[12px] text-t2">{a.help}</span>}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {a.hosts.map((h) => (
+          <HostChip key={h.host} h={h} label={`${a.title} on ${h.host}`} />
+        ))}
+        <div className="grow" />
+        {admin && (
+          <>
+            <button
+              type="button"
+              className={btn}
+              disabled={!down}
+              title={down ? `Download to ${down}` : undefined}
+              onClick={() => setDialog("download")}
+            >
+              Download…
+            </button>
+            <button
+              type="button"
+              className={`${btn} text-a2`}
+              disabled={!del}
+              title={del ? `Delete from ${del}` : undefined}
+              onClick={() => setDialog("delete")}
+            >
+              Delete
+            </button>
+          </>
+        )}
+      </div>
+      {notice && (
+        <p role="status" className="m-0 text-[12px] text-t2">
+          {notice}
+        </p>
+      )}
+      {down && (
+        <Modal
+          open={dialog === "download"}
+          onClose={() => setDialog(null)}
+          title={`Download ${m.title} · ${a.title}`}
+          width="w-[min(94vw,560px)]"
+        >
+          <DownloadDialog
+            list={list}
+            m={m}
+            v={a}
+            host={down}
+            onClose={() => setDialog(null)}
+            onDone={(j) => {
+              setDialog(null);
+              setNotice(`Download queued on ${j.host}.`);
+              onChanged();
+            }}
+          />
+        </Modal>
+      )}
+      {del && (
+        <Modal
+          open={dialog === "delete"}
+          onClose={() => setDialog(null)}
+          title={`Delete ${m.title} · ${a.title} from ${del}?`}
+          width="w-[min(94vw,440px)]"
+        >
+          <DeleteDialog
+            m={m}
+            v={a}
+            host={del}
+            folder={folderOf(list, a, del)}
+            onClose={() => setDialog(null)}
+            onDone={(j) => {
+              setDialog(null);
+              setNotice(`Delete queued on ${j.host}.`);
+              onChanged();
+            }}
+          />
+        </Modal>
+      )}
+    </div>
   );
 }
 
@@ -405,7 +563,7 @@ function VariantPanel({
   const on = v.hosts.find((h) => h.host === shown);
   const onTarget = v.hosts.find((h) => h.host === target);
   const last = jobs.find(
-    (j) => j.host === target && j.model === m.id && (j.variant ?? v.id) === v.id,
+    (j) => j.host === target && j.model === m.id && !j.addon && (j.variant ?? v.id) === v.id,
   );
   const plan = downloadPlan(list, v, target);
 
@@ -618,7 +776,8 @@ function DownloadDialog({
 }: {
   list: List;
   m: Model;
-  v: Variant;
+  /** a variant, or an optional add-on (its `component`) */
+  v: Variant | Addon;
   host: string;
   onClose: () => void;
   onDone: (j: S<"ModelJob">) => void;
@@ -635,7 +794,11 @@ function DownloadDialog({
         await ok(
           api.POST("/v1/studio/admin/models/{model}/download", {
             params: { path: { model: m.id } },
-            body: { host, variant: v.id, ...(plan.mustAccept && { accept_licence: accepted }) },
+            body: {
+              host,
+              ...("component" in v ? { addon: v.component } : { variant: v.id }),
+              ...(plan.mustAccept && { accept_licence: accepted }),
+            },
           }),
         ),
       );
@@ -736,7 +899,7 @@ function DeleteDialog({
   onDone,
 }: {
   m: Model;
-  v: Variant;
+  v: Variant | Addon;
   host: string;
   folder: string;
   onClose: () => void;
@@ -750,7 +913,10 @@ function DeleteDialog({
       onDone(
         await ok(
           api.DELETE("/v1/studio/admin/models/{model}", {
-            params: { path: { model: m.id }, query: { host, variant: v.id } },
+            params: {
+              path: { model: m.id },
+              query: { host, ...("component" in v ? { addon: v.component } : { variant: v.id }) },
+            },
           }),
         ),
       );
@@ -763,8 +929,9 @@ function DeleteDialog({
   return (
     <>
       <p className="mb-4 text-[13px] text-t2">
-        The files of this variant under {folder || "its folder"} on {host} are removed. Shared
-        components another variant on the host loads are kept. A download can fetch it again.
+        {"component" in v
+          ? `The files of this add-on under ${folder || "its folder"} on ${host} are removed. Every variant keeps working without it. A download can fetch it again.`
+          : `The files of this variant under ${folder || "its folder"} on ${host} are removed. Shared components another variant on the host loads are kept. A download can fetch it again.`}
       </p>
       {error && <ErrorNote>{error}</ErrorNote>}
       <div className="mt-3 flex justify-end gap-2">

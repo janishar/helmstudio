@@ -959,13 +959,16 @@ func (c *controller) downloadModelHandler(ctx *gin.Context) {
 	reply(ctx, accepted(created), out, err)
 }
 
-// deleteModelHandler: DELETE /admin/models/{model}?host=&variant=.
+// deleteModelHandler: DELETE /admin/models/{model}?host=&variant=&addon=.
 func (c *controller) deleteModelHandler(ctx *gin.Context) {
-	var variant *string
+	var variant, addon *string
 	if v, ok := ctx.GetQuery("variant"); ok {
 		variant = &v
 	}
-	out, created, err := c.service.DeleteModel(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("model"), ctx.Query("host"), variant)
+	if v, ok := ctx.GetQuery("addon"); ok {
+		addon = &v
+	}
+	out, created, err := c.service.DeleteModel(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("model"), ctx.Query("host"), variant, addon)
 	reply(ctx, accepted(created), out, err)
 }
 

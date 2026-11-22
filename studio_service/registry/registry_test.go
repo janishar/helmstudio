@@ -154,7 +154,7 @@ func TestQwenAndHostMemory(t *testing.T) {
 	_ = r.SetRegistry("mac.torch.nodes", fixture(t, "qwen-image.nodes"))
 	_ = r.SetRegistry("mac.torch.workflows", fixture(t, "qwen-image.workflows"))
 	workflow, ok := r.Workflow("qwen-image")
-	if !ok || len(workflow.NodeSchemas) != 9 || workflow.Env != "torch" {
+	if !ok || len(workflow.NodeSchemas) != 10 || workflow.Env != "torch" { // + qwen-image/enhance (API 1.36)
 		t.Fatalf("%+v", workflow)
 	}
 	host3, _ := os.ReadFile(filepath.Join("..", "..", "contracts", "fixtures", "registry", "host.valid.3.json"))

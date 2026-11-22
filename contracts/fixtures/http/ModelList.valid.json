@@ -175,6 +175,39 @@
             }
           ]
         }
+      ],
+      "addons": [
+        {
+          "component": "enhancer_t2i",
+          "title": "Text enhancer",
+          "help": "Enhance prompt without references.",
+          "dir": "Qwen-Image-2.1-PE-T2I",
+          "licence": {
+            "id": "apache-2.0",
+            "must_accept": false
+          },
+          "gated": false,
+          "download_bytes": 16000000000,
+          "hosts": [
+            {
+              "host": "gpu1",
+              "state": "missing",
+              "bytes": null,
+              "job": null
+            },
+            {
+              "host": "mac",
+              "state": "downloading",
+              "bytes": null,
+              "job": {
+                "id": "5b2e8c41-7a3d-4f9e-b6c0-1d2e3f4a5b6d",
+                "state": "running",
+                "done_bytes": 1000,
+                "total_bytes": 16000000000
+              }
+            }
+          ]
+        }
       ]
     },
     {
@@ -225,7 +258,8 @@
             }
           ]
         }
-      ]
+      ],
+      "addons": []
     }
   ]
 }

@@ -1,0 +1,121 @@
+{
+  "description": "Run on gcp with an enhance node: gcp has the variant but not the Enhancer add-on (mac has it): fails, never mac",
+  "hosts": {
+    "mac": {
+      "keys": {
+        "torch": {
+          "state": "fresh",
+          "budget_gb": 52,
+          "resident": []
+        },
+        "mlx": {
+          "state": "fresh",
+          "budget_gb": 52,
+          "resident": []
+        }
+      },
+      "workflows": {
+        "torch": [
+          "qwen-image"
+        ]
+      },
+      "variants": {
+        "torch": {
+          "qwen-image-2.1/base": [
+            "bf16",
+            "int8"
+          ],
+          "qwen-image-2.1/turbo": [
+            "bf16",
+            "int8"
+          ]
+        }
+      },
+      "loras": {
+        "torch": []
+      },
+      "free": true,
+      "idle_since": null,
+      "addons": {
+        "torch": [
+          "qwen-image-2.1/enhancer"
+        ]
+      }
+    },
+    "gcp": {
+      "keys": {
+        "torch": {
+          "state": "fresh",
+          "budget_gb": 94,
+          "ram_budget_gb": 176,
+          "resident": []
+        }
+      },
+      "workflows": {
+        "torch": [
+          "qwen-image"
+        ]
+      },
+      "variants": {
+        "torch": {
+          "qwen-image-2.1/base": [
+            "bf16",
+            "int8"
+          ]
+        }
+      },
+      "loras": {
+        "torch": []
+      },
+      "free": true,
+      "idle_since": "2026-11-15T09:00:00Z",
+      "addons": {
+        "torch": []
+      }
+    }
+  },
+  "run": {
+    "env": "torch",
+    "workflow": "qwen-image",
+    "model": "qwen-image-2.1",
+    "variant": "base",
+    "precision": "int8",
+    "loras": [],
+    "peak_gb": 29.25,
+    "needs": [
+      {
+        "component": "text_encoder",
+        "model": "qwen-image-2.1",
+        "variant": "base",
+        "precision": "int8"
+      },
+      {
+        "component": "transformer",
+        "model": "qwen-image-2.1",
+        "variant": "base",
+        "precision": "int8"
+      },
+      {
+        "component": "vae",
+        "model": "qwen-image-2.1",
+        "variant": "base",
+        "precision": "bf16"
+      }
+    ],
+    "lora_component": "transformer",
+    "host": "gcp",
+    "addons": [
+      {
+        "node": "enhance",
+        "kind": "qwen-image/enhance",
+        "component": "enhancer",
+        "title": "Enhancer"
+      }
+    ]
+  },
+  "expect": {
+    "host": null,
+    "eligible": [],
+    "error": "enhance: Enhancer not downloaded on host gcp"
+  }
+}

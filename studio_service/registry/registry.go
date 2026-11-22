@@ -182,11 +182,14 @@ type NodeSchema struct {
 	Title  string  `json:"title"`
 	Family *string `json:"family"`
 	// API 1.24: the model component it loads, in words (the Graph inspector's "uses the <component>")
-	Component string  `json:"component,omitempty"`
-	Help      string  `json:"help,omitempty"`
-	Params    []Param `json:"params"`
-	Inputs    []Port  `json:"inputs"`
-	Outputs   []Port  `json:"outputs"`
+	Component string `json:"component,omitempty"`
+	Help      string `json:"help,omitempty"`
+	// API 1.36: the optional add-ons the node loads (its family's Model.Addons) and a one-engine node's phases
+	Addons  []string `json:"addons,omitempty"`
+	Phases  []Phase  `json:"phases,omitempty"`
+	Params  []Param  `json:"params"`
+	Inputs  []Port   `json:"inputs"`
+	Outputs []Port   `json:"outputs"`
 }
 
 // Node is one node of a workflow graph. Bypass and Position belong to an edited workflow: a command never carries them.
@@ -199,6 +202,12 @@ type Node struct {
 	Only     map[string][]string `json:"only,omitempty"` // API 1.19: enum param → the values this workflow allows
 	// API 1.22: a core image node that may stay empty: studio drops it and its wires before a run (never sent)
 	Optional bool `json:"optional,omitempty"`
+}
+
+// Phase is one phase of a node that runs one engine end to end (API 1.36): its progress names it by ID.
+type Phase struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
 }
 
 // Position is a node card's top-left in the Graph view.
@@ -407,6 +416,7 @@ type Model struct {
 	Lora     *LoraBlock `json:"lora,omitempty"`
 	Media    []string   `json:"media,omitempty"`    // API 1.16
 	Runtimes []Runtime  `json:"runtimes,omitempty"` // API 1.16: every runtime of the pack
+	Addons   []Addon    `json:"addons,omitempty"`   // API 1.36: its optional add-ons on the host
 }
 
 // Runtime is one runtime of a model's pack and its env.
@@ -432,6 +442,27 @@ type Variant struct {
 	Devices    []string    `json:"devices,omitempty"` // API 1.34: the only devices it runs on
 	// M9: the variant whose weights are this one's distilled model (ltx dev-int8: distilled-fp8), used by <family>/distill
 	DistillFrom string `json:"distill_from,omitempty"`
+}
+
+// Addon is one optional add-on of a model on a host (API 1.36): a component a few nodes load and no variant needs.
+type Addon struct {
+	Component string   `json:"component"`
+	Title     string   `json:"title"`
+	Help      string   `json:"help,omitempty"`
+	Dir       string   `json:"dir"`
+	Presence  string   `json:"presence"` // present | partial | missing | mismatch
+	Bytes     *int64   `json:"bytes,omitempty"`
+	Source    *Source  `json:"source,omitempty"`
+	Mismatch  []string `json:"mismatch,omitempty"`
+}
+
+// Addon returns the model's add-on named component, if the host lists it.
+func (m Model) Addon(component string) (Addon, bool) {
+	i := slices.IndexFunc(m.Addons, func(a Addon) bool { return a.Component == component })
+	if i < 0 {
+		return Addon{}, false
+	}
+	return m.Addons[i], true
 }
 
 // Source is where a download fetches a variant's own files; nil: not downloadable.
@@ -1111,6 +1142,16 @@ func (r *Registry) PublishesKinds(source string, kinds []string) bool {
 		}
 	}
 	return true
+}
+
+// Addons returns the optional add-ons (API 1.36) the runner at source says its kind loads.
+func (r *Registry) Addons(source, kind string) []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if i := slices.IndexFunc(r.nodes[source], func(s NodeSchema) bool { return s.Kind == kind }); i >= 0 {
+		return r.nodes[source][i].Addons
+	}
+	return nil
 }
 
 // Schemas returns every kind any runner publishes, live or not (its host present): the schema of the newest publish.

@@ -514,3 +514,14 @@ async def test_admission_plans_a_stage_after_an_auto_length_for_the_resolved_fra
          "out": {"kind": "out", "in": {"l": "s2.l"}}}  # fmt: skip
     await graph.run(n, impls, schemas, ctx(residency=Res()), Cache())
     assert peaks == [321, 97]  # stage 1 plans for the longest clip, stage 2 for the one it got
+
+
+def test_a_missing_addon_fails_its_stage_with_the_run_checks_text():
+    """API 1.36: studio refuses such a run first; should one arrive, the stage that loads the add-on fails with the
+    same text before any load."""
+    c = Ctx(progress=None, output=None, check=lambda: None)
+    c.node, c.impl = "enhance", types.SimpleNamespace(uses=("enhancer",))
+    model = types.SimpleNamespace(pack=types.SimpleNamespace(component=lambda n: {"addon": {"title": "Enhancer"}}),
+                                  files=lambda n: [])  # fmt: skip
+    with pytest.raises(RunError, match=r"^enhance: Enhancer not downloaded on host \S+$"):
+        c.component(model, "enhancer")

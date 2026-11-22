@@ -160,13 +160,17 @@ describe("canvas auto in an edit", () => {
     const v = studioView(qwen, fs)!;
     expect(v.text.map((f) => f.key)).toEqual(["prompt.text"]);
     expect(v.groups.map((g) => [g.title, g.fields.map((f) => f.key)])).toEqual([
-      ["Quick", ["encode.refs", "model.variant", "seed.seed"]],
+      ["Quick", ["encode.refs", "model.variant", "enhance.bypass", "seed.seed"]],
       ["Canvas", ["canvas.mode", "canvas.width", "canvas.height"]],
       ["Quality", ["model.precision", "sample.steps", "decode.tiled"]],
       ["LoRA", ["lora.rows"]],
+      ["Enhance", ["enhance.think"]],
       ["Options", ["encode.transparent"]],
     ]);
-    expect(v.shown.map((f) => f.key).sort()).toEqual(fs.map((f) => f.key).sort());
+    // + the No enhance switch (a node's bypass, not a param)
+    expect(v.shown.map((f) => f.key).sort()).toEqual(
+      [...fs.map((f) => f.key), "enhance.bypass"].sort(),
+    );
   });
 
   it("lays out the three minimax-h3 video templates (API 1.21) from their node schemas and studio blocks", () => {

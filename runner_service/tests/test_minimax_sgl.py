@@ -145,9 +145,9 @@ def fake(tmp_path, monkeypatch):
             if self.cancel_after is not None and len(self.seen) >= self.cancel_after:
                 raise Cancelled()
 
-        def progress(self, step, of, phase=None):
+        def progress(self, step, of, phase=None, phase_id=None):
             assert 1 <= step <= of
-            self.seen.append((step, of, phase))
+            self.seen.append((step, of, phase, phase_id))
 
     inputs = {"model": Model(), "prompt": "a fox", "seed": 2**53 - 1, "canvas": {"width": 864, "height": 480},
               "duration": {"frames": 107, "fps": 24}, "first": Image.new("RGB", (64, 64), (255, 0, 0))}  # fmt: skip
@@ -190,7 +190,10 @@ def test_generate_serves_the_partition_and_returns_its_video(fake, monkeypatch):
     assert key["frame_index"] == 0 and key["uri"].endswith(".png") and key["uri"].startswith("/")
     assert not Path(key["uri"]).exists()  # the per-run folder went
     assert v["mp4"][4:8] == b"ftyp" and v["has_audio"] and v["poster"].size == (256, 256)
-    assert ctx.seen[0] == (1, 1, "starting sglang") and (40, 100, "sampling") in ctx.seen
+    assert (
+        ctx.seen[0] == (1, 1, "starting sglang", "encode")
+        and (40, 100, "sampling", "sample") in ctx.seen
+    )
     assert child.LIVE["pid"] is None
     # references: the Ref2VA server
     refs = params | {"refs": [{"image": Image.new("RGB", (8, 8))}]}

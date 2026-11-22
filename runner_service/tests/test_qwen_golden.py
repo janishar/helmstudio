@@ -35,7 +35,14 @@ EDITS = [
 ]  # turbo int8; e1/e2 auto size (1 and 2 refs), e3 a fixed 1024²
 
 
+# the pack's own run with Enhance on (turbo int8, PE-T2I at int8, think off), recorded with --record: no reference
+# stack runs Qwen's PE at int8, so this golden guards the pack against itself (text equal, image at the bar)
+ENHANCE = "enhance-turbo-1024-s42"
+
+
 def folder(name: str) -> Path:
+    if name.startswith("enhance-"):
+        return GOLDEN / "qwen-image-enhance"
     return GOLDEN / ("qwen-image-edit" if name.startswith("edit-") else "qwen-image")
 
 
@@ -104,6 +111,15 @@ class Bench:
         nodes["encode"]["params"]["transparent"] = case["transparent"]
         nodes["sample"]["params"]["steps"] = case["steps_arg"]
         nodes["decode"]["params"]["tiled"] = "on" if case["tiled"] else "auto"
+        if "think" in case:  # Enhance on
+            nodes["enhance"].pop("bypass")
+            nodes["enhance"]["params"]["think"] = case["think"]
+        else:  # bypassed: spliced out as studio does (its outputs rewired to the pass-through inputs)
+            del nodes["enhance"]
+            nodes["encode"]["in"]["prompt"], nodes["sample"]["in"]["canvas"] = (
+                "prompt.text",
+                "canvas.canvas",
+            )
         return nodes
 
     def run(self, nodes: dict, *, cancel_after_step: int | None = None, cancel_delay: float = 0):
@@ -179,11 +195,21 @@ def compare(golden: Path, png: bytes) -> tuple[float, str]:
 CUDA_BAR = 50
 
 
-def case(bench: Bench, name: str, out_dir: Path | None = None) -> dict:
+def case(bench: Bench, name: str, out_dir: Path | None = None, record: bool = False) -> dict:
     settings = json.loads((folder(name) / f"{name}.json").read_text())
     t = time.monotonic()
     r = bench.run(bench.nodes(settings))
     r["total_s"] = round(time.monotonic() - t, 1)
+    if name.startswith("enhance-"):  # the enhanced text, then the image as any case
+        from core.pack import default_model
+
+        r["text"] = r["texts"].get("enhance.text") or ""
+        pe = next(p for p in bench.packs if p.spec["family"] == "qwen-image")
+        r["enhancer_gb"] = round(default_model(pe).gb("text_enhancer")[0], 2)
+        if record:
+            (folder(name) / f"{name}.txt").write_text(r["text"] + "\n")
+            (folder(name) / f"{name}.png").write_bytes(r["png"])
+        r["text_ok"] = r["text"] + "\n" == (folder(name) / f"{name}.txt").read_text()
     r["psnr"], r["compare"] = compare(folder(name) / f"{name}.png", r["png"])
     if bench.lt.device() == "cuda" and (cuda := folder(name) / f"{name}.cuda.png").is_file():
         r["psnr_cuda"], cuda_line = compare(cuda, r["png"])
@@ -336,6 +362,54 @@ def test_edit_matches_the_golden(bench, name):
     assert r["psnr"] >= 30 and r.get("psnr_cuda", CUDA_BAR) >= CUDA_BAR
 
 
+def test_enhance_answer_parse_and_canvas():
+    """No weights: the answer JSON after the last </think> (pe_core.py parse_answer) and the canvas it sets."""
+    pytest.importorskip("torch")
+    from PIL import Image
+
+    from packs.qwen_image.torch import pe_answer, pe_canvas
+
+    one = '{"rewritten_prompt": "a {fox}", "wh_ratio": "16:9"}'
+    assert pe_answer(f"plan {{x}}</think>\n\n{one}") == ("a {fox}", "16:9", "")
+    assert (
+        pe_answer(one) == ("a {fox}", "16:9", "") and pe_answer("</think> no json") is None
+    )  # think off: no </think>
+    assert pe_answer('{"rewritten_prompt": " "} {"rewrited_prompt": "b", "ratio_follow": "<image2>"}') == ("b", "", "<image2>")  # fmt: skip
+    auto = {"mode": "auto", "width": 1024, "height": 1024}
+    refs = [Image.new("RGB", (300, 100)), Image.new("RGB", (100, 100))]
+    assert pe_canvas(auto, [], "16:9", "") == {
+        "width": 1376,
+        "height": 768,
+        "mode": "fixed",
+    }  # the canvas's area
+    assert pe_canvas(auto, [], "21:9", "") == pe_canvas(
+        auto, [], "16:9", ""
+    )  # snapped to the old studio's seven
+    assert (
+        pe_canvas(auto, [], "", "") == auto
+        and pe_canvas(auto | {"mode": "fixed"}, [], "16:9", "")["mode"] == "fixed"
+    )
+    assert pe_canvas(auto, refs, "", "<image1>") == {
+        "width": 1760,
+        "height": 576,
+        "mode": "fixed",
+    }  # ~1 MP, 3:1
+    assert pe_canvas(auto, refs, "9:16", "<image3>") == {
+        "width": 768,
+        "height": 1376,
+        "mode": "fixed",
+    }  # no image3
+
+
+@pytest.mark.gpu
+def test_enhance_matches_the_golden(bench):
+    if not (folder(ENHANCE) / f"{ENHANCE}.txt").is_file():
+        pytest.skip(f"{ENHANCE} is not recorded yet")
+    r = case(bench, ENHANCE)
+    print(r["compare"], r["s"], r["peak_gb"])
+    assert r["text_ok"] and r["psnr"] >= 30
+
+
 @pytest.mark.gpu
 def test_turbo_768_matches_the_golden(bench):
     r = case(bench, CASES[0])
@@ -364,16 +438,24 @@ def test_seed_change_cache_cancel_and_unload(bench):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("cases", nargs="*", default=CASES[:1], choices=CASES + EDITS)
+    ap.add_argument("cases", nargs="*", default=CASES[:1], choices=CASES + EDITS + [ENHANCE])
     ap.add_argument("--checks", action="store_true")
+    ap.add_argument(
+        "--record", action="store_true", help="write the enhance case's .txt and .png first"
+    )
     ap.add_argument("--out", type=Path)
     args = ap.parse_args()
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     b = Bench()
     failed = False
     for name in args.cases:
-        r = case(b, name, args.out)
-        failed |= r["psnr"] < 30 or r.get("psnr_cuda", CUDA_BAR) < CUDA_BAR
+        r = case(b, name, args.out, args.record)
+        failed |= (
+            r["psnr"] < 30 or r.get("psnr_cuda", CUDA_BAR) < CUDA_BAR or not r.get("text_ok", True)
+        )
+        if "text" in r:
+            print("enhanced:", r["text"], "| canvas:", r["meta"].get("width"), r["meta"].get("height"),
+                  "| enhancer_gb:", r["enhancer_gb"], "| text equal:", r["text_ok"], flush=True)  # fmt: skip
         print(name, r["compare"], "s:", r["s"], "total:", r["total_s"], "peak_gb:", r["peak_gb"],
               "resident:", [(e["component"], e["variant"], e["gb"]) for e in b.residency.state()["resident"]],
               flush=True)  # fmt: skip

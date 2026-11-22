@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.35.0
+  version: 1.36.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -760,6 +760,10 @@ paths:
         body with `host` (Create's Run on) is eligible on that host only: when it cannot take the run now the answer
         is 422 with the eligibility text (`host gcp is offline`, `host mac does not have model <model> variant
         <variant> at <precision>`, …; contracts/README.md, Several hosts: a run set to one host) and nothing is stored.
+        From 1.36 a node that is not bypassed and needs an optional add-on (its NodeSchema `addons`) is eligible only
+        on a host where the add-on is present: set to a host without it, 422 `<node>: <title> not downloaded on host
+        <host>`; otherwise the run fails `<node>: <title> not downloaded on any live host for env <env>`
+        (contracts/README.md, Optional add-ons).
         409 when the caller already has 100 runs queued or running (any session): `You have 100 runs queued or
         running; wait for some to finish.`
 
@@ -1772,7 +1776,10 @@ paths:
         variant <variant>`, `<title> <variant> has no download source`, `licence <id> must be accepted` (the variant's
         `source.must_accept` and `accept_licence` not true). 409 `<title> <variant> is already on <host>` (state
         present), `a delete of <title> on <host> is unfinished`; from 1.18 `models root on <host> is read-only` (its
-        runner's hosts key reports `models_disk.writable: false`).
+        runner's hosts key reports `models_disk.writable: false`). From 1.36 a body with `addon` downloads that optional
+        add-on instead (contracts/README.md, Optional add-ons): 422 `<model> has no add-on <addon>`, `give a variant or
+        an add-on, not both`, `<title> <add-on title> has no download source`; 409 `<title> <add-on title> is already
+        on <host>`.
       parameters: [{$ref: '#/components/parameters/ModelId'}]
       requestBody:
         required: true
@@ -1803,11 +1810,15 @@ paths:
         that is not placed yet and the host is eligible for it), `a download of <title> on <host> is unfinished; cancel
         it first`, from 1.18 `models root on <host> is read-only`. 422 `host <host> has no env for <model>`, `<model>
         has no variant <variant>`, `host is required`. The
-        runner deletes only inside `<models root>/<dir>/` (never through a symlink out of it).
+        runner deletes only inside `<models root>/<dir>/` (never through a symlink out of it). From 1.36 `addon`
+        deletes only that optional add-on's files (a variant's delete keeps them): 409 `<title> <add-on title> is not on
+        <host>`, `<addon> of <title> is loaded on <host>; unload it first`, and the in-use and unfinished-download texts
+        above; 422 `<model> has no add-on <addon>`, `give a variant or an add-on, not both`.
       parameters:
         - {$ref: '#/components/parameters/ModelId'}
         - {name: host, in: query, required: true, schema: {type: string, pattern: '^[a-z0-9]{1,32}$'}}
         - {name: variant, in: query, required: false, schema: {type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,63}$'}}
+        - {name: addon, in: query, required: false, schema: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$'}, description: 'from 1.36: an optional add-on of the model (Model.addons[].component) instead of a variant'}
       responses:
         '200': {description: 'the same delete, already queued or running', content: {application/json: {schema: {$ref: '#/components/schemas/ModelJob'}}}}
         '202': {description: 'the job, queued', content: {application/json: {schema: {$ref: '#/components/schemas/ModelJob'}}}}
@@ -2951,6 +2962,11 @@ components:
         family: {type: [string, 'null'], description: null for a core node (prompt, output)}
         component: {type: string, minLength: 1, maxLength: 40, description: 'from 1.24: the model component the node loads, in words (transformer, text encoder, vae); the Graph inspector reads "<family> · runs on <runtime> · uses the <component>". Absent = it loads none'}
         help: {type: string}
+        addons: {type: array, items: {type: string}, description: 'from 1.36: the optional add-ons the node loads (a `component` of its family''s Model.addons); while one is not present the form greys the node''s controls (`<title> not downloaded`) and a run with the node not bypassed is refused on such a host (contracts/README.md, Optional add-ons). Absent = none'}
+        phases:
+          type: array
+          description: 'from 1.36: the ordered phases of a node that runs one engine end to end (MiniMax H3: Encode, Sample, Decode audio, Decode video); its progress carries `phase_id` (contracts/README.md, Phases). Absent = none'
+          items: {type: object, required: [id, label], properties: {id: {type: string}, label: {type: string}}}
         params: {type: array, items: {$ref: '#/components/schemas/ParamSchema'}, description: in form order}
         inputs: {type: array, items: {$ref: '#/components/schemas/Port'}}
         outputs: {type: array, items: {$ref: '#/components/schemas/Port'}}
@@ -3697,6 +3713,7 @@ components:
         step: {type: integer, minimum: 1}
         of: {type: integer, minimum: 1}
         phase: {type: string, description: 'what the node is doing (loading transformer, sampling, decoding); absent from M0 runners'}
+        phase_id: {type: string, description: 'from 1.36: the id of one of the node''s NodeSchema `phases` it is in; only from a node with phases (contracts/README.md, Phases)'}
         eta_s: {type: number, minimum: 0, description: estimated seconds until the run finishes}
     RunOutput:
       type: object
@@ -5380,7 +5397,7 @@ components:
         text: {type: string, description: 'the full text; its UTF-8 SHA-256 is what a download''s job records as accepted'}
     Model:
       type: object
-      required: [id, family, title, media, runtimes, variants]
+      required: [id, family, title, media, runtimes, variants, addons]
       properties:
         id: {type: string, examples: [qwen-image-2.1]}
         family: {type: string, examples: [qwen-image]}
@@ -5388,6 +5405,26 @@ components:
         media: {type: array, items: {type: string, enum: [image, video, audio]}, description: 'the board''s `image`, `video + audio`'}
         runtimes: {type: array, items: {type: object, required: [runtime, env], properties: {runtime: {type: string}, env: {type: string}, devices: {type: array, items: {type: string, enum: [cuda, mps, cpu]}, description: 'from 1.18: the devices it runs on (model.yaml `runtimes.<r>.devices`); absent = every device of that runtime'}}}, description: 'every runtime the pack has; only mlx or native (from 1.21: a pack whose stage runs a child process, the MiniMax H3 video model) = runs on Apple silicon only (the board''s `Mac only`)'}
         variants: {type: array, items: {$ref: '#/components/schemas/ModelVariant'}}
+        addons: {type: array, items: {$ref: '#/components/schemas/ModelAddon'}, description: 'from 1.36: its optional add-ons (contracts/README.md, Optional add-ons), the freshest key''s order; empty for most models'}
+    ModelAddon:
+      type: object
+      required: [component, title, dir, licence, gated, download_bytes, hosts]
+      description: 'from 1.36: a part a few controls need, downloaded and deleted on its own (the Models screen''s "Optional add-ons"); every variant works without it. Descriptive fields from the freshest live key that publishes it, as a variant''s'
+      properties:
+        component: {type: string, examples: [enhancer], description: 'what a NodeSchema''s `addons` names; a model job''s `addon`'}
+        title: {type: string, examples: [Enhancer]}
+        help: {type: string}
+        dir: {type: [string, 'null'], description: 'its folder under each host''s models root'}
+        licence:
+          oneOf:
+            - type: object
+              required: [id, must_accept]
+              properties: {id: {type: string}, must_accept: {type: boolean}}
+            - type: 'null'
+          description: 'its source''s licence; null = no download source'
+        gated: {type: boolean}
+        download_bytes: {type: [integer, 'null'], minimum: 1}
+        hosts: {type: array, items: {$ref: '#/components/schemas/ModelVariantHost'}, description: 'every host whose models key lists the model with this add-on, by name: its state as a variant''s (`downloading` while its download job is open)'}
     ModelVariant:
       type: object
       required: [id, title, precisions, dir, licence, gated, download_bytes, components, hosts]
@@ -5449,19 +5486,21 @@ components:
       properties:
         host: {type: string, pattern: '^[a-z0-9]{1,32}$'}
         variant: {type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,63}$', description: 'absent = the model''s first variant'}
+        addon: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$', description: 'from 1.36: download this optional add-on (Model.addons[].component) instead of a variant; never with `variant`'}
         accept_licence: {type: boolean, description: 'true: the admin accepted the variant''s licence text as GET /v1/studio/models showed it; required when its must_accept is true'}
     ModelJobKind: {type: string, enum: [download, delete, lora_delete]}
     ModelJobState: {type: string, enum: [queued, running, succeeded, failed, cancelled]}
     ModelJob:
       type: object
-      required: [id, kind, host, env, model, variant, lora_id, title, state, progress, failure, result, keeps, licence, requested_by, created_at, started_at, ended_at]
+      required: [id, kind, host, env, model, variant, addon, lora_id, title, state, progress, failure, result, keeps, licence, requested_by, created_at, started_at, ended_at]
       properties:
         id: {type: string, format: uuid}
         kind: {$ref: '#/components/schemas/ModelJobKind'}
         host: {type: string}
         env: {type: string, description: 'the runner env that does it (the one whose models or loras key lists the model or LoRA)'}
         model: {type: [string, 'null'], description: 'download, delete'}
-        variant: {type: [string, 'null'], description: 'download: the variant; delete: null = every variant'}
+        variant: {type: [string, 'null'], description: 'download: the variant; delete: null = every variant (or the add-on''s)'}
+        addon: {type: [string, 'null'], description: 'from 1.36, download and delete: the optional add-on instead of a variant (`variant` null)'}
         lora_id: {type: [string, 'null'], pattern: '^[0-9a-f]{64}$', description: 'lora_delete'}
         title: {type: string, description: '`Qwen Image 2.1 · Turbo`, or the LoRA''s name', examples: ['Qwen Image 2.1 · Turbo']}
         state: {$ref: '#/components/schemas/ModelJobState'}

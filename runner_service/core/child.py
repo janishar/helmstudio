@@ -6,8 +6,9 @@ prefix: its stderr lines `<name>: ` are its diagnostics, its environment knobs `
   line and hands the stage its port for the body of a `with` (zonos3-server: many lines in one load);
 
 - its stderr is read by a thread, split on \\r and \\n; a line `<phase> <n>/<total>` (anything after it is ignored:
-  macOS 27 can glue a system log line on) is progress, mapped through the pack's `phases` (h3 phase → runner phase;
-  unknown ones pass as they are) and handed to ctx.progress on the GPU thread, at most every POLL s;
+  macOS 27 can glue a system log line on) is progress, mapped through the pack's `phases` (h3 phase → runner phase,
+  or (runner phase, phase id): API 1.36, the node's model.yaml `phases`; unknown ones pass as they are) and handed
+  to ctx.progress on the GPU thread, at most every POLL s;
 - the GPU thread polls ctx.check() every POLL s; on Cancelled or RunError (cancel, shutdown) the child's process
   group gets SIGTERM, SIGKILL after KILL_S, and the exception goes on;
 - it has its own idle limit: polling feeds the stall watchdog, so a hung child is failed here when no progress line
@@ -98,7 +99,7 @@ class _Child:
     """A started child: its process (own session), a thread reading its stderr into progress, diagnostics and the
     ready line, LIVE and the pid file set; stop() kills the group (if still running) and clears them."""
 
-    def __init__(self, argv: list[str], cwd: Path, name: str, phases: dict[str, str] | None = None,
+    def __init__(self, argv: list[str], cwd: Path, name: str, phases: dict[str, str | tuple] | None = None,
                  ready: re.Pattern | None = None, loose: bool = False) -> None:  # fmt: skip
         self.proc = subprocess.Popen(argv, cwd=cwd, env=child_env(name), stdin=subprocess.DEVNULL,
                                      stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, start_new_session=True)  # fmt: skip
@@ -125,10 +126,11 @@ class _Child:
                 phase = m.group(1).strip()
                 # `<phase> 0/N` only opens a phase: evt.run.progress counts from 1
                 if int(m.group(2)) >= 1:
+                    to = self.phases.get(phase, phase)  # a phase text, or (text, phase id)
                     self.progress = (
                         int(m.group(2)),
                         int(m.group(3)),
-                        self.phases.get(phase, phase),
+                        *((to,) if isinstance(to, str) else to),
                     )
                 self.seen = time.monotonic()
             elif self.diagnostic(line):
@@ -186,7 +188,7 @@ class _Child:
 
 
 def run(
-    ctx, argv: list[str], *, cwd: Path, name: str, phases: dict[str, str], idle_s: float
+    ctx, argv: list[str], *, cwd: Path, name: str, phases: dict[str, str | tuple], idle_s: float
 ) -> None:
     """Run `argv` (argv[0] an absolute binary path) in `cwd` until it exits 0; RunError otherwise (see the module
     doc). Every path in `argv` must be absolute (cwd is the binary's folder)."""

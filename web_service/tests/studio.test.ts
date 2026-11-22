@@ -3,6 +3,8 @@ import nodesFixture from "../../contracts/fixtures/registry/nodes.valid.json";
 import workflowsFixture from "../../contracts/fixtures/registry/workflows.valid.json";
 import qwenNodes from "../../contracts/fixtures/registry/qwen-image.nodes.valid.json";
 import qwenWorkflows from "../../contracts/fixtures/registry/qwen-image.workflows.valid.json";
+import h3Nodes from "../../contracts/fixtures/registry/minimax-h3.nodes.valid.json";
+import h3Workflows from "../../contracts/fixtures/registry/minimax-h3.workflows.valid.json";
 import type { S } from "@/lib/api";
 import {
   applyEvent,
@@ -372,7 +374,7 @@ describe("the inspector and the canvas", () => {
       "decode.tiled",
       "seed.seed",
     ]);
-    expect(s.switches.map((f) => f.key)).toEqual(["encode.transparent"]);
+    expect(s.switches.map((f) => f.key)).toEqual(["enhance.think", "encode.transparent"]);
     const e = sections(fields(echo));
     expect(e.canvas).toEqual([]);
     expect(e.switches.map((f) => f.key)).toEqual(["echo.fail"]);
@@ -492,11 +494,14 @@ describe("the progress strip", () => {
     data: { node, step, of },
   });
   const states = (r: S<"Run">, t?: RunTrack) =>
-    segments(qwen, r, t).map((x) => [x.node, x.state, x.seconds]);
+    segments(qwen, r, t).map((x) => [x.key, x.state, x.seconds]);
 
   it("orders the working nodes by the graph", () => {
     expect(graphOrder(qwen).indexOf("sample")).toBeGreaterThan(graphOrder(qwen).indexOf("canvas"));
-    expect(segments(echo, run()).map((x) => [x.title, x.state])).toEqual([["Echo", "pending"]]);
+    expect(segments(echo, run()).map((x) => [x.title, x.state])).toEqual([
+      ["Echo", "pending"],
+      ["Saving", "pending"],
+    ]);
   });
 
   it("marks nodes done (with their time), active and pending from the events", () => {
@@ -510,17 +515,27 @@ describe("the progress strip", () => {
       t = track(t, e);
     const r = run({ status: "running", progress: { node: "sample", step: 12, of: 40 } });
     expect(states(r, t.r1)).toEqual([
+      ["enhance", "bypassed", undefined], // bypassed by default: no time of its own, none taken from encode
       ["encode", "done", 4],
       ["sample", "active", undefined],
       ["decode", "pending", undefined],
+      ["saving", "pending", undefined],
     ]);
-    expect(states({ ...r, status: "cancelled" }, t.r1)[1][1]).toBe("stopped");
+    expect(states({ ...r, status: "cancelled" }, t.r1)[2][1]).toBe("stopped");
     expect(states({ ...r, status: "succeeded" }, t.r1).map((x) => x[1])).toEqual([
+      "bypassed",
+      "done",
       "done",
       "done",
       "done",
     ]);
-    expect(states(run()).map((x) => x[1])).toEqual(["pending", "pending", "pending"]);
+    expect(states(run()).map((x) => x[1])).toEqual([
+      "bypassed",
+      "pending",
+      "pending",
+      "pending",
+      "pending",
+    ]);
   });
 
   it("keeps reported nodes done when an earlier node reports again, and times a node after a silent one alone", () => {
@@ -535,21 +550,153 @@ describe("the progress strip", () => {
     const r = run({ status: "running", progress: { node: "model", step: 1, of: 1 } });
     expect(states(r, t.r1)).toEqual([
       ["model", "active", undefined],
+      ["enhance", "bypassed", undefined],
       ["encode", "done", undefined],
       ["sample", "done", 3],
       ["decode", "pending", undefined],
+      ["saving", "pending", undefined],
+    ]);
+  });
+
+  it("times a node that ran before an earlier piece alone, never negative", () => {
+    let t: Record<string, RunTrack> = {};
+    for (const e of [
+      { ...status(1, "running"), ts: at(0) },
+      ev(2, 4, "encode", 1, 1),
+      ev(3, 9, "model", 1, 1), // reports after encode, though the graph has it first
+      ev(4, 12, "sample", 1, 40),
+    ])
+      t = track(t, e);
+    const r = run({ status: "running", progress: { node: "sample", step: 1, of: 40 } });
+    expect(states(r, t.r1).slice(0, 3)).toEqual([
+      ["model", "done", 9],
+      ["enhance", "bypassed", undefined],
+      ["encode", "done", 0],
     ]);
   });
 
   it("gives a node the graph does not have its own piece", () => {
     const r = run({ status: "failed", progress: { node: "vae-load", step: 1, of: 2 } });
-    expect(states(r).at(-1)).toEqual(["vae-load", "stopped", undefined]);
+    expect(states(r).at(-2)).toEqual(["vae-load", "stopped", undefined]);
   });
 
   it("includes a node that reported progress though it takes no inputs (loading the model)", () => {
     const t = track({}, ev(1, 1, "model", 1, 1));
     const r = run({ status: "running", progress: { node: "model", step: 1, of: 1 } });
     expect(states(r, t.r1)[0]).toEqual(["model", "active", undefined]);
+  });
+
+  it("ends an image or video strip with Saving: lit while the output uploads, then timed to the run's end", () => {
+    const save = (seq: number, s: number): S<"SessionEvent"> => ({
+      seq,
+      run_id: "r1",
+      ts: at(s),
+      type: "progress",
+      data: { node: "output", step: 1, of: 1, phase: "saving" },
+    });
+    let t: Record<string, RunTrack> = {};
+    for (const e of [
+      { ...status(1, "running"), ts: at(0) },
+      ev(2, 4, "encode", 1, 1),
+      ev(3, 9, "sample", 40, 40),
+      ev(4, 10, "decode", 1, 1),
+      save(5, 12),
+    ])
+      t = track(t, e);
+    const r = run({
+      status: "running",
+      progress: { node: "output", step: 1, of: 1, phase: "saving" },
+    });
+    const last = segments(qwen, r, t.r1).at(-1)!;
+    // "Saving…", no bar for its one step (docs/mock/CreateMediaRefs.dc.html)
+    expect([last.key, last.title, last.state, last.bar]).toEqual([
+      "saving",
+      "Saving",
+      "active",
+      false,
+    ]);
+    expect(segments(qwen, r, t.r1).some((x) => x.node === "output" && x.key !== "saving")).toBe(
+      false,
+    );
+    t = track(t, { ...status(6, "succeeded"), ts: at(14) });
+    expect(states({ ...r, status: "succeeded" }, t.r1).at(-1)).toEqual(["saving", "done", 4]);
+    // an upload under 2 s never reports: Saving still takes the time to the run's end
+    let quick: Record<string, RunTrack> = {};
+    for (const e of [
+      { ...status(1, "running"), ts: at(0) },
+      ev(2, 10, "decode", 1, 1),
+      { ...status(3, "succeeded"), ts: at(11) },
+    ])
+      quick = track(quick, e);
+    expect(states(run({ status: "succeeded" }), quick.r1).at(-1)).toEqual(["saving", "done", 1]);
+    // a run that failed before saving leaves it pending
+    expect(
+      states(run({ status: "failed", progress: { node: "sample", step: 1, of: 40 } }), quick.r1).at(
+        -1,
+      )?.[1],
+    ).toBe("pending");
+    // an audio workflow has none (docs/mock/CreateAudio.dc.html)
+    expect(segments({ ...qwen, media: "audio" }, run()).some((x) => x.key === "saving")).toBe(
+      false,
+    );
+  });
+
+  it("draws a node with phases (H3's generate) as one piece per phase, timed by phase", () => {
+    const h3 = {
+      ...h3Workflows.workflows[0],
+      node_schemas: Object.fromEntries(
+        [...nodesFixture.nodes, ...h3Nodes.nodes].map((n) => [n.kind, n]),
+      ),
+    } as unknown as S<"Workflow">;
+    const gen = Object.keys(h3.nodes).find((id) => h3.nodes[id].kind === "minimax-h3/generate")!;
+    const ph = (seq: number, s: number, phase_id: string, step = 1, of = 1): S<"SessionEvent"> => ({
+      seq,
+      run_id: "r1",
+      ts: at(s),
+      type: "progress",
+      data: { node: gen, step, of, phase_id },
+    });
+    let t: Record<string, RunTrack> = {};
+    for (const e of [
+      { ...status(1, "running"), ts: at(0) },
+      ph(2, 10, "encode"),
+      ph(3, 12, "sample", 1, 6),
+      ph(4, 20, "sample", 4, 6),
+    ])
+      t = track(t, e);
+    const r = run({
+      workflow_id: h3.id,
+      status: "running",
+      progress: { node: gen, step: 4, of: 6, phase_id: "sample" },
+    });
+    const pieces = segments(h3, r, t.r1).filter((x) => x.node === gen);
+    expect(pieces.map((x) => [x.title, x.state, x.seconds, x.bar])).toEqual([
+      ["Encode", "done", 10, undefined],
+      ["Sample", "active", undefined, true],
+      ["Decode audio", "pending", undefined, undefined],
+      ["Decode video", "pending", undefined, undefined],
+    ]);
+    expect(segments(h3, r, t.r1).at(-1)?.title).toBe("Saving");
+    // a phase of one step shows no bar
+    const enc = { ...r, progress: { node: gen, step: 1, of: 1, phase_id: "encode" } };
+    expect(segments(h3, enc).find((x) => x.state === "active")).toMatchObject({
+      title: "Encode",
+      bar: false,
+    });
+    t = track(t, ph(5, 23, "decode_audio"));
+    t = track(t, ph(6, 44, "decode_video"));
+    t = track(t, { ...status(7, "succeeded"), ts: at(48) });
+    expect(
+      segments(h3, { ...r, status: "succeeded" }, t.r1)
+        .filter((x) => x.node === gen || x.key === "saving")
+        .map((x) => [x.title, x.state, x.seconds]),
+    ).toEqual([
+      ["Encode", "done", 10],
+      ["Sample", "done", 10],
+      ["Decode audio", "done", 3],
+      ["Decode video", "done", 21],
+      ["Saving", "done", 4],
+    ]);
   });
 
   it("knows how long the last finished run of a workflow took", () => {

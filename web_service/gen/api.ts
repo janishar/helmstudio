@@ -594,6 +594,10 @@ export interface paths {
          *     body with `host` (Create's Run on) is eligible on that host only: when it cannot take the run now the answer
          *     is 422 with the eligibility text (`host gcp is offline`, `host mac does not have model <model> variant
          *     <variant> at <precision>`, …; contracts/README.md, Several hosts: a run set to one host) and nothing is stored.
+         *     From 1.36 a node that is not bypassed and needs an optional add-on (its NodeSchema `addons`) is eligible only
+         *     on a host where the add-on is present: set to a host without it, 422 `<node>: <title> not downloaded on host
+         *     <host>`; otherwise the run fails `<node>: <title> not downloaded on any live host for env <env>`
+         *     (contracts/README.md, Optional add-ons).
          *     409 when the caller already has 100 runs queued or running (any session): `You have 100 runs queued or
          *     running; wait for some to finish.`
          *
@@ -1682,7 +1686,10 @@ export interface paths {
          *     variant <variant>`, `<title> <variant> has no download source`, `licence <id> must be accepted` (the variant's
          *     `source.must_accept` and `accept_licence` not true). 409 `<title> <variant> is already on <host>` (state
          *     present), `a delete of <title> on <host> is unfinished`; from 1.18 `models root on <host> is read-only` (its
-         *     runner's hosts key reports `models_disk.writable: false`).
+         *     runner's hosts key reports `models_disk.writable: false`). From 1.36 a body with `addon` downloads that optional
+         *     add-on instead (contracts/README.md, Optional add-ons): 422 `<model> has no add-on <addon>`, `give a variant or
+         *     an add-on, not both`, `<title> <add-on title> has no download source`; 409 `<title> <add-on title> is already
+         *     on <host>`.
          */
         post: operations["studioAdminDownloadModel"];
         delete?: never;
@@ -1713,7 +1720,10 @@ export interface paths {
          *     that is not placed yet and the host is eligible for it), `a download of <title> on <host> is unfinished; cancel
          *     it first`, from 1.18 `models root on <host> is read-only`. 422 `host <host> has no env for <model>`, `<model>
          *     has no variant <variant>`, `host is required`. The
-         *     runner deletes only inside `<models root>/<dir>/` (never through a symlink out of it).
+         *     runner deletes only inside `<models root>/<dir>/` (never through a symlink out of it). From 1.36 `addon`
+         *     deletes only that optional add-on's files (a variant's delete keeps them): 409 `<title> <add-on title> is not on
+         *     <host>`, `<addon> of <title> is loaded on <host>; unload it first`, and the in-use and unfinished-download texts
+         *     above; 422 `<model> has no add-on <addon>`, `give a variant or an add-on, not both`.
          */
         delete: operations["studioAdminDeleteModel"];
         options?: never;
@@ -2739,6 +2749,13 @@ export interface components {
             /** @description from 1.24: the model component the node loads, in words (transformer, text encoder, vae); the Graph inspector reads "<family> · runs on <runtime> · uses the <component>". Absent = it loads none */
             component?: string;
             help?: string;
+            /** @description from 1.36: the optional add-ons the node loads (a `component` of its family's Model.addons); while one is not present the form greys the node's controls (`<title> not downloaded`) and a run with the node not bypassed is refused on such a host (contracts/README.md, Optional add-ons). Absent = none */
+            addons?: string[];
+            /** @description from 1.36: the ordered phases of a node that runs one engine end to end (MiniMax H3: Encode, Sample, Decode audio, Decode video); its progress carries `phase_id` (contracts/README.md, Phases). Absent = none */
+            phases?: {
+                id: string;
+                label: string;
+            }[];
             /** @description in form order */
             params: components["schemas"]["ParamSchema"][];
             inputs: components["schemas"]["Port"][];
@@ -3575,6 +3592,8 @@ export interface components {
             of: number;
             /** @description what the node is doing (loading transformer, sampling, decoding); absent from M0 runners */
             phase?: string;
+            /** @description from 1.36: the id of one of the node's NodeSchema `phases` it is in; only from a node with phases (contracts/README.md, Phases) */
+            phase_id?: string;
             /** @description estimated seconds until the run finishes */
             eta_s?: number;
         };
@@ -5549,6 +5568,30 @@ export interface components {
                 devices?: ("cuda" | "mps" | "cpu")[];
             }[];
             variants: components["schemas"]["ModelVariant"][];
+            /** @description from 1.36: its optional add-ons (contracts/README.md, Optional add-ons), the freshest key's order; empty for most models */
+            addons: components["schemas"]["ModelAddon"][];
+        };
+        /** @description from 1.36: a part a few controls need, downloaded and deleted on its own (the Models screen's "Optional add-ons"); every variant works without it. Descriptive fields from the freshest live key that publishes it, as a variant's */
+        ModelAddon: {
+            /**
+             * @description what a NodeSchema's `addons` names; a model job's `addon`
+             * @example enhancer
+             */
+            component: string;
+            /** @example Enhancer */
+            title: string;
+            help?: string;
+            /** @description its folder under each host's models root */
+            dir: string | null;
+            /** @description its source's licence; null = no download source */
+            licence: {
+                id: string;
+                must_accept: boolean;
+            } | null;
+            gated: boolean;
+            download_bytes: number | null;
+            /** @description every host whose models key lists the model with this add-on, by name: its state as a variant's (`downloading` while its download job is open) */
+            hosts: components["schemas"]["ModelVariantHost"][];
         };
         ModelVariant: {
             /** @example turbo */
@@ -5615,6 +5658,8 @@ export interface components {
             host: string;
             /** @description absent = the model's first variant */
             variant?: string;
+            /** @description from 1.36: download this optional add-on (Model.addons[].component) instead of a variant; never with `variant` */
+            addon?: string;
             /** @description true: the admin accepted the variant's licence text as GET /v1/studio/models showed it; required when its must_accept is true */
             accept_licence?: boolean;
         };
@@ -5631,8 +5676,10 @@ export interface components {
             env: string;
             /** @description download, delete */
             model: string | null;
-            /** @description download: the variant; delete: null = every variant */
+            /** @description download: the variant; delete: null = every variant (or the add-on's) */
             variant: string | null;
+            /** @description from 1.36, download and delete: the optional add-on instead of a variant (`variant` null) */
+            addon: string | null;
             /** @description lora_delete */
             lora_id: string | null;
             /**
@@ -8989,6 +9036,8 @@ export interface operations {
             query: {
                 host: string;
                 variant?: string;
+                /** @description from 1.36: an optional add-on of the model (Model.addons[].component) instead of a variant */
+                addon?: string;
             };
             header?: never;
             path: {

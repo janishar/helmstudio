@@ -3160,9 +3160,11 @@ def admit_fixture(fx: dict) -> dict:
 def place(fx: dict) -> dict:
     """Several hosts (README, Several hosts): the run's eligible hosts and the one it is lined up on, or the error it
     fails with. hosts: name -> {keys (as admit fixtures), workflows: {env: [ids]}, variants: {env: {"model/variant":
-    [precisions]}} (present ones only), loras: {env: [shared LoRA names]}, free, idle_since (null = never ran), reserved_gb? (enabled local servers)};
-    run: {env, workflow, model?, variant?, precision?, loras (shared, graph order), peak_gb, ram_peak_gb?, needs,
-    lora_component?, lost_host?, host? (1.35: the run is set to that host only)}."""
+    [precisions]}} (present ones only), addons?: {env: ["model/component"]} (1.36: present add-ons only), loras: {env:
+    [shared LoRA names]}, free, idle_since (null = never ran), reserved_gb? (enabled local servers)};
+    run: {env, workflow, model?, variant?, precision?, addons? ([{node, kind, component, title, bypass?}]: 1.36), loras
+    (shared, graph order), peak_gb, ram_peak_gb?, needs, lora_component?, lost_host?, host? (1.35: the run is set to
+    that host only)}."""
     run, hosts = fx["run"], fx["hosts"]
     env, pin = run["env"], run.get("host")
     if pin and run.get("lost_host"):
@@ -3185,6 +3187,14 @@ def place(fx: dict) -> dict:
             want = f"model {run['model']} variant {run['variant']} at {run['precision']}"
             return {"host": None, "eligible": [], "error": gone(
                 f"host {pin} does not have {want}" if pin else f"no live host for env {env} has {want}")}
+    for a in sorted(run.get("addons", []), key=lambda a: a["node"]):  # 1.36: Optional add-ons, by node id
+        if a.get("bypass"):
+            continue
+        cand = [h for h in cand if f"{run['model']}/{a['component']}" in hosts[h].get("addons", {}).get(env, [])]
+        if not cand:
+            return {"host": None, "eligible": [], "error": gone(
+                f"{a['node']}: {a['title']} not downloaded on host {pin}" if pin
+                else f"{a['node']}: {a['title']} not downloaded on any live host for env {env}")}
     has = lambda h, n: n in hosts[h]["loras"].get(env, [])
     with_loras = [h for h in cand if all(has(h, n) for n in run.get("loras", []))]
     if not with_loras:

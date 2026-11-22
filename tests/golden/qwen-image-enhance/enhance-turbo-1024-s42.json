@@ -1,0 +1,60 @@
+{
+  "name": "enhance-turbo-1024-s42",
+  "variant": "turbo",
+  "precision": "int8",
+  "width": 1024,
+  "height": 1024,
+  "seed": 42,
+  "prompt": "a corgi playing guitar in the rain",
+  "think": false,
+  "steps_arg": 40,
+  "transparent": false,
+  "tiled": false,
+  "refs": [],
+  "old_studio": {
+    "what": "qwen-image-2.1-studio src/qwen_image_2_1/enhance.py enhance(prompt, None, PE-T2I, 42, think=False, 'mps'), run on the runner's venv (bf16, AutoModelForCausalLM)",
+    "enhanced_prompt": "A vertically framed, realistic image shows a small tan-and-white corgi centered in the scene, sitting outdoors in heavy rain and playing an acoustic guitar. The dog occupies the middle of the composition from roughly the lower edge to the upper-middle area, with its head turned slightly toward the viewer’s right. Its large upright ears are wet and rimmed with darker brown fur, its face has a white blaze running down the forehead and muzzle, and its dark eyes and black nose stand out against the rain-darkened coat. The corgi’s expression appears calm, focused, and slightly solemn, with its mouth closed as if absorbed in performing. Its front legs are wrapped around the guitar body: one paw rests near the sound hole while the other reaches toward the fretboard, creating the humorous impression that the dog is actively playing. The acoustic guitar is positioned diagonally across the dog’s torso, with the rounded wooden body in the lower-left center, the dark fretboard extending toward the right, and the headstock reaching the mid-right edge. The guitar has a glossy brown wood-grain body, a circular sound hole with decorative rosette rings, metal strings, frets, tuning pegs, and a dark pickguard under the dog’s paw. Rainwater beads on the guitar surface and runs down its curves, emphasizing the wet weather. The background is a softly blurred rural path or dirt track running from the lower foreground into the distance at center, bordered by lush green grass, shrubs, trees, and small flowers. The road surface is slick and reflective, mirroring the vertical streaks of falling rain. Heavy rainfall appears as numerous bright vertical streaks across the entire frame, especially visible against the darker forest and sky. The sky is filled with dramatic dark gray storm clouds, with lighter breaks near the horizon and faint warm light suggesting dusk or early evening. On both sides of the path, vegetation appears saturated and shadowy, with tree trunks and leafy canopies fading into mist. The composition uses shallow depth of field, keeping the corgi and guitar sharply detailed while the background recedes into atmospheric blur. The color palette combines warm amber-brown tones from the dog and guitar with cool blue-gray, green, and storm-dark hues in the environment. The overall effect is cinematic, whimsical, and emotionally expressive, blending realistic animal portraiture with a fantastical musician-in-the-rain scenario.",
+    "ratio": "2:3",
+    "enhance_s": 48.0,
+    "peak_mps_driver_gb": 17.71,
+    "note": "its T2I path loads AutoModelForCausalLM: the same prompt ids (2452), another text from the first sampled divergence (bf16 numerics of the text-only class)"
+  },
+  "pe_dir": "~/GenAI/models/Qwen-Image-2.1-PE-T2I",
+  "pe_revision": "f3ed7985c788ad75b3ab7223e0c4c51e2a43545b",
+  "versions": {
+    "torch": "2.15.0",
+    "transformers": "5.23.0",
+    "diffusers": "0.43.0",
+    "python": "3.14.10",
+    "device": "mps",
+    "machine": "Darwin 27.2.0 arm64"
+  },
+  "prompt_rewrite": {
+    "what": "QwenLM/Qwen-Image-2.1 prompt_rewrite run_transformers.py's path (AutoProcessor + AutoModelForImageTextToText, bf16, device_map mps) at enable_thinking False, no presence penalty, torch.manual_seed(42), the old studio's sampling: the pack's text equals it byte for byte",
+    "equal": true,
+    "new_tokens": 445,
+    "generate_s": 35.5
+  },
+  "pack": {
+    "canvas": [
+      832,
+      1248
+    ],
+    "timing_s": {
+      "enhance": 41.5,
+      "encode": 6.1,
+      "sample": 34.1,
+      "decode": 1.9,
+      "total": 83.8
+    },
+    "peak_gb_phys_footprint": {
+      "enhance": 19.39,
+      "encode": 17.73,
+      "sample": 19.07,
+      "decode": 29.65
+    },
+    "enhancer_gb": 17.53,
+    "prompt_tokens": 2452,
+    "new_tokens": 445
+  }
+}

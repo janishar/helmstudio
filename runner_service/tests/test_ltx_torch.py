@@ -353,7 +353,6 @@ def test_the_torch_registry_publishes_the_ltx_nodes_but_not_its_mlx_workflows():
     assert not [w["id"] for w in values["workflows"]["workflows"] if w["id"].startswith("ltx")]
 
 
-
 def test_a_torch_runner_plans_the_nvidia_variants_past_the_mlx_only_lora_stack(pack, monkeypatch):
     """The ltx workflows hold an ltx/lora-stack node the torch runner lacks (lora.runtime: mlx): the memory plan
     splices it out (its users read the model it passes through) instead of failing the rescan with a KeyError."""

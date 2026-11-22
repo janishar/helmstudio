@@ -2,7 +2,7 @@
 // The Run on chip (docs/mock/RunOn.dc.html): right after the model chip on every Create composer. Auto is today's
 // placement; a host row is greyed with why it cannot take the run; a chosen host that went offline warns.
 import { Monitor, TriangleAlert } from "lucide-react";
-import { machineReason, type Machine } from "@/lib/run-on";
+import { machineReason, type AddonNeed, type Machine } from "@/lib/run-on";
 import type { S } from "@/lib/api";
 
 export function RunOnChip({
@@ -11,6 +11,7 @@ export function RunOnChip({
   chosen,
   env,
   picks,
+  needs = [],
   onPick,
 }: {
   id?: string;
@@ -21,6 +22,8 @@ export function RunOnChip({
   /** the workflow's env and chosen variants: what a host row is greyed by */
   env: string | undefined;
   picks: { m: S<"Model">; v: S<"ModelVariant"> }[];
+  /** the add-ons the nodes that run need (API 1.36): a host without one is greyed ("enhancer not downloaded on gcp") */
+  needs?: AddonNeed[];
   /** "" = Auto */
   onPick: (host: string) => void;
 }) {
@@ -82,7 +85,7 @@ export function RunOnChip({
             </span>
           </button>
           {list.map((x) => {
-            const why = machineReason(x, env, picks);
+            const why = machineReason(x, env, picks, needs);
             return (
               <button
                 key={x.host}

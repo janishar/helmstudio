@@ -1087,6 +1087,45 @@ func eligibleIn(reg *registry.Registry, values []registry.Host, reserved map[str
 			return gone(pinned("does not have the distilled LoRA", "no live host for env "+env+" has the distilled LoRA"))
 		}
 	}
+	// API 1.36 (contracts/README.md "Optional add-ons"): a node that is not bypassed needs each add-on its kind loads
+	// present in the host's models entry of its family
+	for _, id := range slices.Sorted(maps.Keys(graph)) {
+		node := graph[id]
+		if node.Bypass {
+			continue
+		}
+		family := registry.Family(node.Kind)
+		// each host's own runner names what the kind loads there (a host on an older runner, or on a runtime whose
+		// stage loads no add-on, needs none)
+		var needs []string
+		for _, host := range hosts {
+			for _, c := range reg.Addons(host+"."+env, node.Kind) {
+				if !slices.Contains(needs, c) {
+					needs = append(needs, c)
+				}
+			}
+		}
+		for _, c := range needs {
+			title := c
+			hosts = slices.DeleteFunc(hosts, func(host string) bool {
+				if !slices.Contains(reg.Addons(host+"."+env, node.Kind), c) {
+					return false
+				}
+				found, _ := reg.Model(host+"."+env, family)
+				a, listed := found.Addon(c)
+				if listed && title == c {
+					title = a.Title
+				}
+				return a.Presence != "present"
+			})
+			if len(hosts) == 0 {
+				if pin != nil {
+					return gone(id + ": " + title + " not downloaded on host " + *pin)
+				}
+				return gone(id + ": " + title + " not downloaded on any live host for env " + env)
+			}
+		}
+	}
 	has := func(host string, u lora.Used) bool { return u.Source != "shared" || reg.HasLora(host+"."+env, u.ID) }
 	withAll := slices.DeleteFunc(slices.Clone(hosts), func(host string) bool {
 		return slices.ContainsFunc(used, func(u lora.Used) bool { return !has(host, u) })

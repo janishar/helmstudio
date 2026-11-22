@@ -176,6 +176,9 @@ func applyProgress(ctx context.Context, tx pgx.Tx, run model.Run, event *gen.Mes
 	if data.EtaS != nil {
 		progress["eta_s"] = *data.EtaS
 	}
+	if data.PhaseID != nil {
+		progress["phase_id"] = *data.PhaseID
+	}
 	_, err := tx.Exec(ctx, `UPDATE runs SET progress = $2, updated_at = clock_timestamp() WHERE id = $1`, run.ID, progress)
 	return progress, err
 }

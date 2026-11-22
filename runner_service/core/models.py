@@ -15,7 +15,10 @@ variant (its folder's manifest, components, presence), the hash index, the host'
   `shares` whose `dir` is the first variant's owns only its components' files there (`own_globs`); the first owns
   the rest.
 - **Shares** load from the first variant, or from the variant `shares_from` names (API 1.33: turbo-fp8 from
-  base-fp8): core.pack.share_owner."""
+  base-fp8): core.pack.share_owner.
+- **Optional add-ons** (API 1.36, contracts/README.md "Optional add-ons"): a component with `addon` counts towards no
+  variant (presence, components, files, bytes, delete); it has its own entry in the model's `addons`, its own
+  download and delete. Its folder is its own `dir`, else the first variant's (then only its globs are its files)."""
 
 import hashlib
 import importlib
@@ -205,7 +208,30 @@ def own_globs(pack, vid: str) -> list[str] | None:
         x != vid and folder(pack, x) == root for x in pack.spec["variants"]
     ):
         return None
-    return [g for c in pack.spec["components"] if c not in v["shares"] for g in globs(pack, c, vid)]
+    return [g for c in packs.needed(pack) if c not in v["shares"] for g in globs(pack, c, vid)]
+
+
+def addon_folder(pack, component: str) -> Path:
+    """An add-on's folder: the component's own `dir`, else the first variant's."""
+    own = pack.component(component).get("dir")
+    return packs.models_root() / (
+        own or pack.spec["variants"][next(iter(pack.spec["variants"]))]["dir"]
+    )
+
+
+def addon_globs_in(pack, root: Path) -> list[str]:
+    """The globs of the add-ons without a `dir` of their own whose files sit in `root` (a variant's folder): never
+    that variant's files."""
+    return [g for c in packs.addons(pack) if not pack.component(c).get("dir") and addon_folder(pack, c) == root
+            for g in globs(pack, c)]  # fmt: skip
+
+
+def addon_files(pack, component: str) -> list[Path]:
+    """An add-on's files, relative to its folder: the whole folder when it is its own, else its globs there."""
+    files = own_files(addon_folder(pack, component))
+    if pack.component(component).get("dir"):
+        return files
+    return [f for f in files if any(fnmatchcase(f.as_posix(), g) for g in globs(pack, component))]
 
 
 def variant_files(pack, vid: str) -> list[Path]:
@@ -216,6 +242,7 @@ def variant_files(pack, vid: str) -> list[Path]:
     if (mine := own_globs(pack, vid)) is not None:
         return [f for f in files if match(f, mine)]
     theirs = [g for x in pack.spec["variants"] if x != vid and folder(pack, x) == root for g in own_globs(pack, x) or []]  # fmt: skip
+    theirs += addon_globs_in(pack, root)
     return [f for f in files if not match(f, theirs)]
 
 
@@ -223,10 +250,15 @@ def folder(pack, variant: str) -> Path:
     return packs.models_root() / pack.spec["variants"][variant]["dir"]
 
 
-def manifest(pack, variant: str) -> tuple[list[dict], list[str]]:
-    """(files [{path, bytes, sha256?, component?}], mismatch [path]) of the variant's own folder."""
-    root, files, mismatch = folder(pack, variant), [], []
-    for rel in variant_files(pack, variant)[:MAX_FILES]:
+def manifest(pack, variant: str, addon: str | None = None) -> tuple[list[dict], list[str]]:
+    """(files [{path, bytes, sha256?, component?}], mismatch [path]) of the variant's own folder (with `addon`:
+    of that add-on's files)."""
+    if addon:
+        root, rels = addon_folder(pack, addon), addon_files(pack, addon)
+    else:
+        root, rels = folder(pack, variant), variant_files(pack, variant)
+    files, mismatch = [], []
+    for rel in rels[:MAX_FILES]:
         p, r = root / rel, rel.as_posix()
         st = p.stat()
         rec, fresh = recorded(root, r, st)
@@ -295,20 +327,21 @@ def stored_dtype(files: list[Path]) -> str | None:
 
 def variant_entry(pack, vid: str) -> dict:
     """One variant of the models key (registry.schema.json `models[].variants[]`)."""
-    spec, v = pack.spec, pack.spec["variants"][vid]
+    v = pack.spec["variants"][vid]
     ref = packs.ModelRef(pack, vid, "bf16")
     files, mismatch = manifest(pack, vid)
     comps, ok, unfinished = [], True, (folder(pack, vid) / MARKER).exists()
-    found_by = {c: ref.files(c) for c in spec.get("components", {})}
+    found_by = {
+        c: ref.files(c) for c in packs.needed(pack)
+    }  # an add-on is no variant's (addon_entry)
     # a file several components read (LTX: vae and vae_encoder, the connector inside the transformer and text
     # encoder files) counts once, for the component listing the fewest files (the first on a tie): bytes add up
     counted: dict = {}
     for c, found in sorted(found_by.items(), key=lambda kv: len(kv[1])):
         for f in found:
             counted.setdefault(f, c)
-    for c in spec.get("components", {}):
+    for c, found in found_by.items():
         owner = ref.owner(c)
-        found = found_by[c]
         ok = ok and bool(found)
         unfinished = unfinished or (folder(pack, owner) / MARKER).exists()
         item = {"component": c, "from_variant": owner,
@@ -343,6 +376,36 @@ def variant_entry(pack, vid: str) -> dict:
     return out
 
 
+def addon_entry(pack, c: str) -> dict:
+    """One add-on of the models key (registry.schema.json `models[].addons[]`): presence as a variant's, over its
+    own files only."""
+    spec = pack.component(c)
+    files, mismatch = manifest(pack, next(iter(pack.spec["variants"])), addon=c)
+    root = addon_folder(pack, c)
+    if mismatch:
+        presence = "mismatch"
+    elif addon_weights(pack, c) and not (root / MARKER).exists():
+        presence = "present"
+    else:
+        presence = "partial" if files else "missing"
+    out = {"component": c, "title": spec["addon"]["title"]}
+    if "help" in spec["addon"]:
+        out["help"] = spec["addon"]["help"]
+    out |= {"dir": root.relative_to(packs.models_root()).as_posix(), "presence": presence}
+    if files:
+        out["bytes"] = sum(f["bytes"] for f in files)
+    if "source" in spec["addon"]:
+        out["source"] = spec["addon"]["source"]
+    if mismatch:
+        out["mismatch"] = mismatch[:64]
+    return out
+
+
+def addon_weights(pack, c: str) -> list[Path]:
+    """The add-on's weight files as a load reads them (its globs in its folder)."""
+    return packs.component_files(pack, next(iter(pack.spec["variants"])), c)
+
+
 def entry(pack) -> dict:
     """The pack's `models` entry: id, family, title, media, runtimes, variants (as on disk now), lora."""
     spec = pack.spec
@@ -355,6 +418,8 @@ def entry(pack) -> dict:
         out["variants"] = [
             variant_entry(pack, vid) for vid in spec["variants"] if runs_here(pack, vid)
         ]
+        if (extra := packs.addons(pack)) and out["variants"]:
+            out["addons"] = [addon_entry(pack, c) for c in extra]
     if block := packs.lora_block(pack):
         out["lora"] = block
     return out
@@ -467,14 +532,25 @@ def linked_from_outside(root: Path, base: Path) -> set[str]:
 def delete_variant(pack, vid: str, only: list[str] | None = None) -> tuple[int, int]:
     """Remove the variant's files under its folder (`only`: just those under these folder prefixes ending in /,
     or matching these globs), sidecars with them, then the empty folders. Never follows a link: a link is removed,
-    not its target; a file another model's link resolves to stays. Returns (files removed, bytes freed)."""
+    not its target; a file another model's link resolves to stays. An add-on's files in the folder stay (it is
+    deleted on its own). Returns (files removed, bytes freed)."""
+    return delete_in(folder(pack, vid), only, addon_globs_in(pack, folder(pack, vid)))
+
+
+def delete_addon(pack, c: str) -> tuple[int, int]:
+    """Remove an add-on's files (its whole folder when it is its own, else its globs in the first variant's)."""
+    own = pack.component(c).get("dir")
+    return delete_in(addon_folder(pack, c), None if own else globs(pack, c), [])
+
+
+def delete_in(base: Path, only: list[str] | None, addon: list[str]) -> tuple[int, int]:
+    """delete_variant's work in `base`, keeping the files `addon`'s globs match."""
     root = packs.models_root()
-    base = folder(pack, vid)
     if not base.exists():
         return 0, 0
     if base.is_symlink() or not inside(root, base) or base.resolve() == root.resolve():
         raise InUse(
-            f"{pack.spec['variants'][vid]['dir']} is a link or outside the models root: remove it by hand"
+            f"{os.path.relpath(base, root)} is a link or outside the models root: remove it by hand"
         )
 
     lent = linked_from_outside(root, base)
@@ -483,7 +559,7 @@ def delete_variant(pack, vid: str, only: list[str] | None = None) -> tuple[int, 
         side = SIDECARS.as_posix() + "/"
         if rel.startswith(side):  # a sidecar goes with its file
             rel = re.sub(r"\.(metadata|lock)$", "", rel[len(side) :])
-        if rel in lent:
+        if rel in lent or any(fnmatchcase(rel, g) for g in addon):
             return True
         if only is None:
             return False

@@ -192,12 +192,14 @@ def test_base_fp8_publishes_on_cuda_only_and_base_everywhere(tmp_path, monkeypat
     base, v = models.entry(pack)["variants"]
     assert base["id"] == "base" and v["id"] == "base-fp8" and v["precisions"] == ["fp8"]
     comps = {c["component"]: c["precisions"] for c in v["components"]}
-    assert comps == {
-        "enhancer": ["int8"],
-        "text_encoder": ["int8"],
-        "transformer": ["fp8"],
-        "vae": ["fp32"],
-    }
+    # API 1.36: the enhancer is an optional add-on, its own entry, in no variant's components
+    assert comps == {"text_encoder": ["int8"], "transformer": ["fp8"], "vae": ["fp32"]}
+    (addon,) = models.entry(pack)["addons"]
+    assert (addon["component"], addon["dir"], addon["presence"]) == (
+        "enhancer",
+        "MiniMax-H3-Image-PE",
+        "missing",
+    )
     ref = packs.ModelRef(pack, "base-fp8", "fp8")
     assert mm.community(ref) and not mm.community(packs.ModelRef(pack, "base", "int8"))
     assert (

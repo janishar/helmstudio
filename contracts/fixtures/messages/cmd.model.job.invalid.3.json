@@ -1,0 +1,17 @@
+{
+  "type": "cmd.model.job",
+  "version": 1,
+  "id": "6f1c2d3e-4b5a-4c7d-8e9f-000000000058",
+  "job_id": "5b2e8c41-7a3d-4f9e-b6c0-1d2e3f4a5b6c",
+  "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+  "occurred_at": "2026-11-16T10:00:00Z",
+  "trace": {
+    "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+  },
+  "data": {
+    "kind": "download",
+    "model": "minimax-h3-image",
+    "variant": "base",
+    "addon": "enhancer"
+  }
+}

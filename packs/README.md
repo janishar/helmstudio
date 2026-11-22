@@ -80,6 +80,14 @@ components:                       # weight components the residency manager load
     precision: [bf16, int8]
     quantize: ["*.language_model.layers.*", "lm_head"]
   vae: {files: "vae/*.safetensors", dtype: bf16, precision: [bf16]}
+  text_enhancer:                  # an optional add-on (API 1.36): a folder of its own, no variant needs it
+    dir: Qwen-Image-2.1-PE-T2I
+    addon: {title: Text enhancer, help: "Qwen-Image-2.1-PE-T2I (9B). Enhance prompt without references."}
+    files: "model-*.safetensors"
+  edit_enhancer:
+    dir: Qwen-Image-2.1-PE-I2I
+    addon: {title: Edit enhancer, help: "Qwen-Image-2.1-PE-I2I (9B). Enhance prompt with references."}
+    files: "model-*.safetensors"
 lora:                             # LoRAs: the generated qwen-image/lora-stack node and the registry lora block
   component: transformer          # the component LoRAs patch; only stages that use it see the Model's LoRA set
   renames: []                     # {from, to} prefix rewrites of a key's module part (most families: none)
@@ -88,6 +96,21 @@ lora:                             # LoRAs: the generated qwen-image/lora-stack n
   max_rows: 8
   strength: {min: 0, max: 2, default: 1}
 stages:                           # one node kind each: <family>/<stage>; the function <stage>() in torch.py
+  enhance:
+    title: Enhance prompt
+    component: prompt enhancer
+    help: "Rewrites the prompt with Qwen-Image-2.1-PE: PE-T2I without references, PE-I2I with them (9B each), and picks an aspect for an auto canvas; it sees the references of the encode node its text feeds. Bypassed: the prompt and canvas pass through."
+    uses: [text_enhancer, edit_enhancer]   # add-ons: published as the node's `addons`
+    unload_after: [text_enhancer, edit_enhancer]
+    alone: true
+    sees: {refs: text}
+    reports: [text]
+    inputs: {prompt: Text, canvas: Canvas, seed: Seed}
+    outputs: {text: Text, canvas: Canvas}
+    params:
+      think: {type: bool, label: Think, default: false,
+              help: "Think longer: better prompts, slower (minutes)."}
+    peak_gb: "2.5 + images"
   encode:
     title: Encode
     component: text encoder
@@ -183,6 +206,12 @@ Keys the core understands; anything else is ignored:
   names, used only at a quantized precision; a stored `U8` weight counts as two values per byte, NVFP4) and `dir` (a
   folder of its own under the models root, for every variant: a model the family loads beside its own, MiniMax's
   prompt enhancer; its files count towards presence, never towards the variant's own files, bytes or delete). Only the keys the module's `rename()` keeps count towards the component's size.
+  From API 1.36 `addon: {title, help?, source?}` makes it an **optional add-on** (contracts/README.md "Optional
+  add-ons"): no variant needs it to be present, it is in no variant's components, files, bytes or delete, and it is
+  downloaded (`source`, as a variant's, into its `dir` or else the first variant's folder) and deleted on its own. A
+  stage whose `uses` names it publishes `addons: [<name>]`: studio runs such a node (not bypassed) only on a host
+  where the add-on is present, and the stage itself fails `<node>: <title> not downloaded on host <h>` without its
+  files (MiniMax H3 Image's enhancer, Qwen Image's two).
 - **`lora`** (optional; contracts/README.md "LoRAs", "LoRA normaliser"): `component` (the component LoRAs patch),
   `renames` (ordered `{from, to[, at: end]}` rewrites of a key's module part: a prefix, or with `at: end` a suffix,
   as ltx's `.to_out.0` → `.to_out`), `runtime` (optional: the one runtime the block holds for; ltx's is `mlx`, so
@@ -208,7 +237,10 @@ Keys the core understands; anything else is ignored:
   counts it without the kept ones: MiniMax's enhancer, text encoder and transformer never fit two at a time),
   `sees` (`{param: output}`: the stage also gets that param of the first node, graph order, whose input is wired to
   its `output`, read and cache-keyed like its own: minimax/enhance reads the encode node's `refs`) and `reports`
-  (Text outputs sent as the run's `resolved.texts` `{"<node>.<output>": …}` on succeeded, a cache hit too). A stage
+  (Text outputs sent as the run's `resolved.texts` `{"<node>.<output>": …}` on succeeded, a cache hit too), and (API
+  1.36) `phases` (`[{id, label}]`, ids unique: the ordered phases of a node that runs one engine end to end, published
+  as is; its progress then names one with `ctx.progress(step, of, phase, phase_id)`, and core.child's `phases`
+  mapping may give `(text, phase id)`: MiniMax H3's generate). A stage
   with `uses` and no Model input loads from `core.pack.default_model` (the first variant at the model node's default
   precision): minimax/enhance.
   - `params`: name → a registry `paramSchema` without `name`, copied verbatim (`type` int | float | bool |

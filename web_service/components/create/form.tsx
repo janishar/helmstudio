@@ -231,8 +231,11 @@ export function Inspector({
   grid = null,
   stage1,
   voice,
+  blocks = {},
 }: FormProps &
   OpenProps & {
+    /** the nodes whose optional add-on is missing (API 1.36), each with why: their controls are greyed with it */
+    blocks?: Record<string, string>;
     /** what a voice param's tile and picker need (API 1.30); with it, an audio workflow's text and number params
      * read as the board draws them (docs/mock/CreateAudio.dc.html: Style, Variation) */
     voice?: VoiceCtx;
@@ -279,8 +282,38 @@ export function Inspector({
     !groups?.some((g) => g.fields.length || g.choices?.length)
   )
     return <p className="text-[13px] text-t2">Nothing to set.</p>;
-  /** `alone`: the only control of its section (a Voice section of its own draws its param's help under it) */
+  // the nodes switched off by their placed bypass ("No enhance" on): their settings show dimmed, still usable (a
+  // bypass placed with its node's rows is that tile's "No keyframes", not a switch: not dimmed)
+  const offNodes = new Set(
+    fields
+      .filter(
+        (f) =>
+          f.param.name === "bypass" &&
+          rawOf(f, raws) === true &&
+          !fields.some((x) => x.node === f.node && x.param.type === "rows"),
+      )
+      .map((f) => f.node),
+  );
+  const setting = (f: Field) => f.param.name !== "bypass";
+  /** A control as `plain` draws it, dimmed while its node is off, greyed and inert while its add-on is missing. */
   const control = (f: Field, alone = false) => {
+    const why = setting(f) ? blocks[f.node] : undefined;
+    const dim = !why && setting(f) && offNodes.has(f.node);
+    if (f.param.type === "bool" && (why || dim))
+      return (
+        <Switch key={f.key} f={f} raw={rawOf(f, raws)} onChange={onChange} dim={dim} why={why} />
+      );
+    const c = plain(f, alone);
+    return c && (why || dim) ? (
+      <div key={f.key} className="contents [&>*]:opacity-55" inert={!!why} title={why}>
+        {c}
+      </div>
+    ) : (
+      c
+    );
+  };
+  /** `alone`: the only control of its section (a Voice section of its own draws its param's help under it) */
+  const plain = (f: Field, alone = false) => {
     const raw = rawOf(f, raws);
     const shared = { fields, raws, error: errors[f.key], grid };
     if (f.param.type === "media")
@@ -395,6 +428,7 @@ export function Inspector({
       fields={fields}
       raws={raws}
       onChange={onChange}
+      blocks={blocks}
     />
   );
   // a choice tile (API 1.26): an enum of its options' names, showing the first whose values hold; picking one sets
@@ -430,12 +464,14 @@ export function Inspector({
     help?: string,
     gap = "gap-2.5",
     choices: Choice[] = [],
+    note?: string,
   ) =>
     (fs.length > 0 || head || choices.length > 0) && (
       <section key={id} aria-labelledby={id} className={`flex flex-col ${gap}`}>
         <h2 id={id} className="heading flex items-center">
           {title}
           {help && <Info>{help}</Info>}
+          {note && <span className="ml-2">{note}</span>}
         </h2>
         {head}
         {(fs.length > 0 || choices.length > 0) && (
@@ -498,6 +534,11 @@ export function Inspector({
                   : undefined))),
           undefined,
           g.choices,
+          // every setting here belongs to a node switched off (not for want of its add-on): "Enhance is off"
+          g.fields.length > 0 &&
+            g.fields.every((f) => setting(f) && offNodes.has(f.node) && !blocks[f.node])
+            ? `${g.title} is off`
+            : undefined,
         );
       }),
     ];
@@ -772,10 +813,18 @@ function Presets({
   fields,
   raws,
   onChange,
+  blocks = {},
 }: Omit<FormProps, "errors"> & {
   presets: Record<string, Record<string, S<"ParamValue">>>;
   order: string[];
+  blocks?: Record<string, string>;
 }) {
+  // a preset that switches on a node whose add-on is missing ("Enhanced") is greyed with the reason
+  const blocked = (values: Record<string, S<"ParamValue">>) =>
+    Object.entries(values).flatMap(([k, v]) => {
+      const [node, param] = k.split(".");
+      return param === "bypass" && v === false && blocks[node] ? [blocks[node]] : [];
+    })[0];
   const holds = (values: Record<string, S<"ParamValue">>) =>
     Object.entries(values).every(([k, v]) => {
       const f = fields.find((x) => x.key === k);
@@ -789,22 +838,35 @@ function Presets({
       <div className="flex flex-wrap gap-2">
         {order
           .flatMap((name) => (presets[name] ? [[name, presets[name]] as const] : []))
-          .map(([name, values]) => (
-            <button
-              key={name}
-              type="button"
-              aria-pressed={holds(values)}
-              onClick={() =>
-                Object.entries(values).forEach(([k, v]) => {
-                  const f = fields.find((x) => x.key === k);
-                  if (f) onChange(k, toRaw(v, f.param));
-                })
-              }
-              className="h-9 rounded-full border border-transparent bg-s3 px-3.5 text-[13px] aria-pressed:border-a2 aria-pressed:bg-s1"
-            >
-              {name}
-            </button>
-          ))}
+          .map(([name, values]) => {
+            const why = blocked(values);
+            return why ? (
+              <button
+                key={name}
+                type="button"
+                aria-disabled
+                title={why}
+                className="h-9 cursor-not-allowed rounded-full border border-transparent bg-s3 px-3.5 text-[13px] text-t2"
+              >
+                <span className="opacity-55">{name}</span>
+              </button>
+            ) : (
+              <button
+                key={name}
+                type="button"
+                aria-pressed={holds(values)}
+                onClick={() =>
+                  Object.entries(values).forEach(([k, v]) => {
+                    const f = fields.find((x) => x.key === k);
+                    if (f) onChange(k, toRaw(v, f.param));
+                  })
+                }
+                className="h-9 rounded-full border border-transparent bg-s3 px-3.5 text-[13px] aria-pressed:border-a2 aria-pressed:bg-s1"
+              >
+                {name}
+              </button>
+            );
+          })}
       </div>
     </section>
   );
@@ -1037,24 +1099,37 @@ export function Switch({
   raw,
   onChange,
   note,
+  dim,
+  why,
 }: {
   f: Field;
   raw: Raw;
   onChange: (key: string, raw: Raw) => void;
   /** the help as a line under the label, not an (i) (a span's switch, docs/mock/VideoSource.dc.html) */
   note?: boolean;
+  /** its node is bypassed: shown dimmed, still usable (docs/mock/CreateEnhance.dc.html, "Enhance is off") */
+  dim?: boolean;
+  /** why it cannot be used (its node's add-on is missing, "Enhancer not downloaded"): greyed, the reason under it */
+  why?: string;
 }) {
   const id = idOf(f.key);
   const on = raw === true;
   return (
-    <div className="col-span-2 flex items-center justify-between gap-3">
-      {note ? (
+    <div className={`col-span-2 flex items-center justify-between gap-3 ${why ? "text-t2" : ""}`}>
+      {why ? (
+        <span className="flex flex-col gap-0.5">
+          <span id={id + "-l"} className="opacity-55">
+            {f.param.label ?? f.param.name}
+          </span>
+          <span className="text-[12px]">{why}</span>
+        </span>
+      ) : note ? (
         <span className="flex flex-col gap-0.5">
           <span id={id + "-l"}>{f.param.label ?? f.param.name}</span>
           {f.param.help && <span className="text-[12px] text-t2">{f.param.help}</span>}
         </span>
       ) : (
-        <span className="flex items-center">
+        <span className={`flex items-center ${dim ? "opacity-55" : ""}`}>
           <span id={id + "-l"}>{f.param.label ?? f.param.name}</span>
           {f.param.help && <Info>{f.param.help}</Info>}
         </span>
@@ -1065,8 +1140,9 @@ export function Switch({
         role="switch"
         aria-checked={on}
         aria-labelledby={id + "-l"}
-        onClick={() => onChange(f.key, !on)}
-        className="flex h-[26px] w-11 shrink-0 rounded-full border border-line p-0.5"
+        aria-disabled={why ? true : undefined}
+        onClick={() => !why && onChange(f.key, !on)}
+        className={`flex h-[26px] w-11 shrink-0 rounded-full border border-line p-0.5 ${why ? "cursor-not-allowed" : ""} ${dim ? "opacity-55" : ""}`}
         style={{ background: on ? "var(--a1)" : "var(--s1)" }}
       >
         <span
@@ -1192,7 +1268,10 @@ export function Chips({
   spoken,
   runOn,
   versions,
+  blocks = {},
 }: Omit<FormProps, "errors"> & {
+  /** the nodes whose optional add-on is missing (API 1.36), each with why: its bypass chip is greyed, held on */
+  blocks?: Record<string, string>;
   show: (key: string) => void;
   /** a video workflow's chips (docs/mock/TextToVideo.dc.html): the size as w × h, no seed chip */
   compact?: boolean;
@@ -1344,9 +1423,26 @@ export function Chips({
       {toggles.map((f) => {
         const on = rawOf(f, raws) === true;
         const label = f.param.label ?? f.param.name;
-        // a one-word label says its state ("Audio on"); a longer one is just pressed, and looks it
-        // ("Regenerate audio", docs/mock/VideoSource.dc.html)
-        const words = label.includes(" ");
+        // a one-word label, or a node's bypass ("No enhance on"), says its state ("Audio on"); a longer one is
+        // just pressed, and looks it ("Regenerate audio", docs/mock/VideoSource.dc.html)
+        const bypass = f.param.name === "bypass";
+        const words = label.includes(" ") && !bypass;
+        const why = bypass ? blocks[f.node] : undefined;
+        // its add-on is missing: greyed with the reason, held on (docs/mock/CreateEnhance.dc.html)
+        if (why)
+          return (
+            <button
+              key={f.key}
+              type="button"
+              aria-pressed
+              aria-disabled
+              title={`${why}. An admin downloads it in Models, under the model's optional add-ons.`}
+              className={`${chip} inline-flex cursor-not-allowed items-center gap-2 text-t2`}
+            >
+              <span className="opacity-55">{label} on</span>
+              <em className="text-[11px] whitespace-nowrap not-italic">{why}</em>
+            </button>
+          );
         return (
           <button
             key={f.key}
@@ -1356,7 +1452,9 @@ export function Chips({
             className={
               words
                 ? `${chip} aria-pressed:bg-t1 aria-pressed:font-semibold aria-pressed:text-panel`
-                : chip
+                : bypass
+                  ? `${chip} aria-pressed:bg-s5`
+                  : chip
             }
             onClick={() => onChange(f.key, !on)}
           >

@@ -6,6 +6,8 @@ import type { Field } from "@/lib/workflow";
 type Model = S<"Model">;
 type Variant = S<"ModelVariant">;
 type VariantHost = S<"ModelVariantHost">;
+/** What a download, a delete and a folder read of a variant or an optional add-on (API 1.36) */
+type Part = Pick<Variant, "licence" | "gated" | "dir" | "hosts">;
 
 /** "57.8 GB" (decimal, as the board), "640 MB" below a gigabyte; "" for null. */
 export function bytesText(n: number | null | undefined): string {
@@ -122,23 +124,36 @@ export function variantBytes(v: Variant, host?: string): number | null {
 }
 
 /** The variant's folder on a host: "~/GenAI/models/Qwen-Image-2.1-Turbo" ("" without a root or dir). */
-export function folderOf(list: S<"ModelList">, v: Variant, host: string | undefined): string {
+export function folderOf(
+  list: S<"ModelList">,
+  v: Pick<Part, "dir">,
+  host: string | undefined,
+): string {
   const root = list.hosts.find((h) => h.host === host)?.models_root;
   return root && v.dir ? `${root.replace(/\/$/, "")}/${v.dir}` : (v.dir ?? "");
 }
 
-/** The models with only the chosen host's presence ("" = all hosts); a variant no longer on any host stays listed. */
+/** The models with only the chosen host's presence ("" = all hosts); a variant or add-on no longer on any host stays
+ * listed. */
 export function forHost(models: Model[], host: string): Model[] {
   if (!host) return models;
+  const on = <T extends { hosts: VariantHost[] }>(x: T) => ({
+    ...x,
+    hosts: x.hosts.filter((h) => h.host === host),
+  });
   return models.map((m) => ({
     ...m,
-    variants: m.variants.map((v) => ({ ...v, hosts: v.hosts.filter((h) => h.host === host) })),
+    variants: m.variants.map(on),
+    addons: (m.addons ?? []).map(on),
   }));
 }
 
-/** True while any variant is downloading somewhere (the screen then polls fast). */
+/** A model's variants and optional add-ons (API 1.36): every part with a presence per host. */
+export const parts = (m: Model): Part[] => [...m.variants, ...(m.addons ?? [])];
+
+/** True while any variant or add-on is downloading somewhere (the screen then polls fast). */
 export const anyDownloading = (models: Model[]) =>
-  models.some((m) => m.variants.some((v) => v.hosts.some((h) => h.state === "downloading")));
+  models.some((m) => parts(m).some((v) => v.hosts.some((h) => h.state === "downloading")));
 
 export type DownloadPlan = {
   /** the licence to show, or null when the variant names none */
@@ -152,7 +167,7 @@ export type DownloadPlan = {
 };
 
 /** What the Download dialog asks for a variant and target host. The server checks it all again. */
-export function downloadPlan(list: S<"ModelList">, v: Variant, host: string): DownloadPlan {
+export function downloadPlan(list: S<"ModelList">, v: Part, host: string): DownloadPlan {
   const h = list.hosts.find((x) => x.host === host);
   const on = v.hosts.find((x) => x.host === host);
   const licence = v.licence ? (list.licences.find((l) => l.id === v.licence!.id) ?? null) : null;
@@ -183,7 +198,7 @@ export function jobOpen(jobs: S<"ModelJob">[], id: string): boolean {
 }
 
 /** Delete is offered when the variant has files on that host and no download of it is running there. */
-export function canDelete(v: Variant, host: string): boolean {
+export function canDelete(v: Pick<Part, "hosts">, host: string): boolean {
   const s = v.hosts.find((x) => x.host === host)?.state;
   return s === "present" || s === "partial" || s === "mismatch";
 }

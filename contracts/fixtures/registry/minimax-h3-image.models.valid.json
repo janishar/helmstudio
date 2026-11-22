@@ -56,6 +56,29 @@
             }
           ]
         }
+      ],
+      "addons": [
+        {
+          "component": "enhancer",
+          "title": "Enhancer",
+          "help": "MiniMax-H3-Image-PE (27B). Enhance prompt rewrites the prompt with it; without it Enhance is off.",
+          "dir": "MiniMax-H3-Image-PE",
+          "presence": "missing",
+          "source": {
+            "repo": "MiniMaxAI/MiniMax-H3-Image-PE",
+            "revision": "35603d4b63949afa12cb098227fffefedf081afa",
+            "allow_patterns": [
+              "*.json",
+              "chat_template.jinja",
+              "model-*.safetensors",
+              "prompt/*"
+            ],
+            "licence": "minimax-h3-image-community",
+            "must_accept": true,
+            "gated": false,
+            "bytes": 17936465146
+          }
+        }
       ]
     }
   ]

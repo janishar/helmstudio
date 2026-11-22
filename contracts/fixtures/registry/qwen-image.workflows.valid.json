@@ -48,11 +48,23 @@
             "rows": []
           }
         },
+        "enhance": {
+          "kind": "qwen-image/enhance",
+          "bypass": true,
+          "in": {
+            "prompt": "prompt.text",
+            "canvas": "canvas.canvas",
+            "seed": "seed.seed"
+          },
+          "params": {
+            "think": false
+          }
+        },
         "encode": {
           "kind": "qwen-image/encode",
           "in": {
             "model": "model.model",
-            "prompt": "prompt.text"
+            "prompt": "enhance.text"
           },
           "params": {
             "transparent": false,
@@ -64,7 +76,7 @@
           "in": {
             "model": "lora.model",
             "cond": "encode.cond",
-            "canvas": "canvas.canvas",
+            "canvas": "enhance.canvas",
             "seed": "seed.seed"
           },
           "params": {
@@ -100,6 +112,7 @@
           "look:colour",
           "look:lighting",
           "model.variant",
+          "enhance.bypass",
           "seed.seed"
         ],
         "inspector": [
@@ -126,11 +139,38 @@
             ]
           },
           {
+            "title": "Enhance",
+            "items": [
+              "enhance.think"
+            ]
+          },
+          {
             "title": "Options",
             "items": [
               "encode.transparent"
             ]
           }
+        ],
+        "labels": {
+          "enhance.bypass": "No enhance"
+        },
+        "presets": {
+          "Plain": {
+            "enhance.bypass": true
+          },
+          "Enhanced": {
+            "enhance.bypass": false,
+            "enhance.think": false
+          },
+          "Enhanced, think": {
+            "enhance.bypass": false,
+            "enhance.think": true
+          }
+        },
+        "preset_order": [
+          "Plain",
+          "Enhanced",
+          "Enhanced, think"
         ]
       }
     },

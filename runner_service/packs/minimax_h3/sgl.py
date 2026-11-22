@@ -10,8 +10,9 @@ keyframes at frame 0 / -1; image, audio, video references in h3's argv order: im
 per kind as the prompt's <Picture n>, <Audio n>, <Video n>), target {short_edge, aspect_ratio, duration_seconds =
 frames / 24}, seed, num_inference_steps. SGLang derives the canvas from short edge and aspect (adapt_shape_v1: shape()
 here) and the frames from the duration (4-15 s, snapped up to 5 + 17k), so only canvases and lengths it can make
-exactly are accepted (cuda_error). Polled every POLL s: `progress` (0-99, the denoise) → phase sampling; cancel
-kills the server (SGLang has no abort). Its MP4 (H.264 + AAC 32 kHz, 24 fps) is the output."""
+exactly are accepted (cuda_error). Polled every POLL s: `progress` (0-99, the denoise) → phase sampling (phase id
+sample; the server's start is encode, and once the denoise reaches 99, decode_video: SGLang reports nothing of its
+decode); cancel kills the server (SGLang has no abort). Its MP4 (H.264 + AAC 32 kHz, 24 fps) is the output."""
 
 import json
 import math
@@ -150,7 +151,11 @@ def wait(ctx, port: int, job: str) -> None:
             why = (v.get("error") or {}).get("message") or "no reason given"
             raise RunError(f"{ctx.node}: SGLang failed: {media.last_line(why)}")
         if (p := int(v.get("progress") or 0)) > sent:
-            ctx.progress(p, 100, "sampling")
+            ctx.progress(p, 100, "sampling", "sample")
+            if (
+                p >= 99
+            ):  # ponytail: the denoise's last report taken as the decode's start; SGLang names no decode
+                ctx.progress(1, 1, "decoding", "decode_video")
             sent, seen = p, time.monotonic()
         if time.monotonic() - seen > IDLE_S:
             raise RunError(f"{ctx.node}: SGLang made no progress for {IDLE_S} s")
@@ -164,7 +169,7 @@ def generate(ctx, model, body: dict, out: Path, tmp: Path) -> None:
             f"{ctx.node}: SGLang is not installed (the runner-cuda-native image, Dockerfile.cuda target native)"
         )
     partition = "ref2va" if body["task"] == "ref2va" else "fl2va"
-    ctx.progress(1, 1, "starting sglang")  # a phase without steps: 1 of 1
+    ctx.progress(1, 1, "starting sglang", "encode")  # a phase without steps: 1 of 1
     with child.serve(ctx, argv(model, partition, free_port(), tmp), cwd=tmp, name="sglang",
                      ready=READY, ready_s=READY_S) as port:  # fmt: skip
         job = json.loads(call(ctx.node, port, "/v1/videos", body))["id"]

@@ -590,3 +590,105 @@ func TestHostsAdmin(t *testing.T) {
 		t.Fatal(asked)
 	}
 }
+
+// withAddon is qwenModels with an optional add-on (API 1.36) on Qwen Image, in the given presence.
+func withAddon(turbo, presence string) []byte {
+	var value map[string]any
+	_ = json.Unmarshal(qwenModels(turbo), &value)
+	addon := map[string]any{"component": "enhancer", "title": "Enhancer", "dir": "Qwen-Image-2.1-PE", "presence": presence,
+		"source": map[string]any{"repo": "Qwen/Qwen-Image-2.1-PE", "revision": "main", "allow_patterns": []string{"*"},
+			"licence": "apache-2.0", "must_accept": false, "gated": false, "bytes": 40}}
+	if presence != "missing" {
+		addon["bytes"] = 40
+	}
+	value["models"].([]any)[0].(map[string]any)["addons"] = []any{addon}
+	raw, _ := json.Marshal(value)
+	return raw
+}
+
+// Optional add-ons (API 1.36): GET /models lists them per host; a download or delete job of one names it (variant
+// null), is idempotent, carries it in its command, and is refused with the contract's texts.
+func TestModelAddonJobs(t *testing.T) {
+	e := setup(t)
+	e.modelsSetup("missing")
+	if err := e.registry.SetRegistry("mac.torch.models", withAddon("missing", "missing")); err != nil {
+		t.Fatal(err)
+	}
+	addonOn := func() map[string]any {
+		list := e.call(userA, "GET", "/v1/studio/models", nil, 200)
+		dump(t, "ModelList", list)
+		for _, m := range list["models"].([]any) {
+			if m.(map[string]any)["id"] == "qwen-image-2.1" {
+				a := m.(map[string]any)["addons"].([]any)[0].(map[string]any)
+				if a["title"] != "Enhancer" || a["licence"].(map[string]any)["id"] != "apache-2.0" || a["download_bytes"] != 40.0 {
+					t.Fatal(a)
+				}
+				return a["hosts"].([]any)[0].(map[string]any)
+			}
+		}
+		t.Fatal("no qwen")
+		return nil
+	}
+	if got := addonOn(); got["host"] != "mac" || got["state"] != "missing" {
+		t.Fatal(got)
+	}
+	download := "/v1/studio/admin/models/qwen-image-2.1/download"
+	for body, want := range map[string]string{
+		`{"host": "mac", "addon": "enhancer", "variant": "base"}`: "give a variant or an add-on, not both",
+		`{"host": "mac", "addon": "nope"}`:                        "qwen-image-2.1 has no add-on nope",
+		`{"host": "mac", "addon": "Bad"}`:                         "addon must be a component name",
+	} {
+		var b map[string]any
+		_ = json.Unmarshal([]byte(body), &b)
+		if got := e.call(admin, "POST", download, b, 422); got["detail"] != want {
+			t.Fatal(body, got)
+		}
+	}
+	job := e.call(admin, "POST", download, map[string]any{"host": "mac", "addon": "enhancer"}, 202)
+	dump(t, "ModelJob", job)
+	if job["addon"] != "enhancer" || job["variant"] != nil || job["title"] != "Qwen Image 2.1 · Enhancer" || job["licence"] != nil {
+		t.Fatal(job)
+	}
+	if again := e.call(admin, "POST", download, map[string]any{"host": "mac", "addon": "enhancer"}, 200); again["id"] != job["id"] {
+		t.Fatal(again)
+	}
+	if got := addonOn(); got["state"] != "downloading" || got["job"].(map[string]any)["id"] != job["id"] {
+		t.Fatal(got)
+	}
+	if got := e.variantOn(userA, "qwen-image-2.1", "base", "mac"); got["state"] != "present" {
+		t.Fatal("an add-on's download is no variant's", got)
+	}
+	_, _, data := e.release()
+	if len(data) != 1 || data[0]["kind"] != "download" || data[0]["addon"] != "enhancer" || data[0]["variant"] != nil {
+		t.Fatal(data)
+	}
+	if got := e.call(admin, "DELETE", "/v1/studio/admin/models/qwen-image-2.1?host=mac&addon=enhancer", nil, 409); got["detail"] != "Qwen Image 2.1 Enhancer is not on mac" {
+		t.Fatal(got)
+	}
+	e.modelEvent(job["id"].(string), "status", 1, 1, map[string]any{"status": "succeeded", "result": map[string]any{"bytes": 40, "files": 1}})
+	if err := e.registry.SetRegistry("mac.torch.models", withAddon("missing", "present")); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.call(admin, "POST", download, map[string]any{"host": "mac", "addon": "enhancer"}, 409); got["detail"] != "Qwen Image 2.1 Enhancer is already on mac" {
+		t.Fatal(got)
+	}
+	e.modelHost("torch", time.Now(), []map[string]any{{"component": "enhancer", "model": "qwen-image-2.1", "variant": "base",
+		"precision": "int8", "gb": 9, "pinned": false}}, nil)
+	if got := e.call(admin, "DELETE", "/v1/studio/admin/models/qwen-image-2.1?host=mac&addon=enhancer", nil, 409); got["detail"] != "enhancer of Qwen Image 2.1 is loaded on mac; unload it first" {
+		t.Fatal(got)
+	}
+	if got := e.call(admin, "DELETE", "/v1/studio/admin/models/qwen-image-2.1?host=mac&addon=enhancer&variant=base", nil, 422); got["detail"] != "give a variant or an add-on, not both" {
+		t.Fatal(got)
+	}
+	e.modelHost("torch", time.Now(), nil, nil)
+	del := e.call(admin, "DELETE", "/v1/studio/admin/models/qwen-image-2.1?host=mac&addon=enhancer", nil, 202)
+	if del["kind"] != "delete" || del["addon"] != "enhancer" || del["variant"] != nil || del["title"] != "Qwen Image 2.1 · Enhancer" {
+		t.Fatal(del)
+	}
+	if again := e.call(admin, "DELETE", "/v1/studio/admin/models/qwen-image-2.1?host=mac&addon=enhancer", nil, 200); again["id"] != del["id"] {
+		t.Fatal(again)
+	}
+	if _, _, data := e.release(); len(data) != 1 || data[0]["kind"] != "delete" || data[0]["addon"] != "enhancer" {
+		t.Fatal(data)
+	}
+}

@@ -372,6 +372,7 @@ func TestPlaceFixtures(t *testing.T) {
 				} `json:"keys"`
 				Workflows  map[string][]string            `json:"workflows"`
 				Variants   map[string]map[string][]string `json:"variants"`
+				Addons     map[string][]string            `json:"addons"` // API 1.36: present "<model>/<component>"
 				Loras      map[string][]string            `json:"loras"`
 				Free       bool                           `json:"free"`
 				IdleSince  *time.Time                     `json:"idle_since"`
@@ -386,6 +387,10 @@ func TestPlaceFixtures(t *testing.T) {
 				LoraComponent                            string              `json:"lora_component"`
 				LostHost                                 *string             `json:"lost_host"`
 				Host                                     *string             `json:"host"` // API 1.35: the run's pin
+				Addons                                   []struct {
+					Node, Kind, Component, Title string
+					Bypass                       bool
+				} `json:"addons"` // API 1.36
 			} `json:"run"`
 			Expect struct {
 				Host     *string  `json:"host"`
@@ -453,16 +458,33 @@ func TestPlaceFixtures(t *testing.T) {
 				}
 				var models []registry.Model
 				for m, vs := range byModel {
+					var addons []registry.Addon // every add-on the run needs, present when the host lists it
+					for _, a := range run.Addons {
+						presence := "missing"
+						if slices.Contains(h.Addons[env], m+"/"+a.Component) {
+							presence = "present"
+						}
+						addons = append(addons, registry.Addon{Component: a.Component, Title: a.Title, Dir: a.Component, Presence: presence})
+					}
 					models = append(models, registry.Model{ID: m, Family: "qwen-image", Title: m, Variants: vs,
-						Lora: &registry.LoraBlock{Component: run.LoraComponent}})
+						Lora: &registry.LoraBlock{Component: run.LoraComponent}, Addons: addons})
 				}
 				raw, _ := json.Marshal(map[string]any{"models": models})
 				_ = reg.SetRegistry(host+"."+env+".models", raw)
+				var schemas []registry.NodeSchema
+				for _, a := range run.Addons {
+					schemas = append(schemas, registry.NodeSchema{Kind: a.Kind, Title: a.Kind, Addons: []string{a.Component}})
+				}
+				raw, _ = json.Marshal(map[string]any{"nodes": schemas})
+				_ = reg.SetRegistry(host+"."+env+".nodes", raw)
 			}
 		}
 		graph := map[string]registry.Node{}
 		if run.Model != "" {
 			graph["model"] = registry.Node{Kind: "qwen-image/model", Params: map[string]any{"variant": run.Variant, "precision": run.Precision}}
+		}
+		for _, a := range run.Addons {
+			graph[a.Node] = registry.Node{Kind: a.Kind, Params: map[string]any{}, Bypass: a.Bypass}
 		}
 		nodes, _ := json.Marshal(graph)
 		var used []lora.Used

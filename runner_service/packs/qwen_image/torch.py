@@ -19,10 +19,24 @@ store a Linear as `X._weight_qdata` (e4m3) + `X._weight_scale` (fp32 per row): `
 Fp8Linear's `X.weight` / `X.scale`. The text encoder is a plain FP8 cast (no scales: ones; its FP8 biases are cast
 to bf16 by the loader). `tensor_hook` refuses a file of another unsloth format.
 
-Not ported: the prompt enhancer, CFG."""
+Enhance (API 1.36, optional add-ons): the old studio's enhance.py (qwen-image-2.1-studio), Qwen's own prompt
+enhancers (fine-tuned Qwen3.5-VL 9B, bf16), one per task: PE-T2I without references, PE-I2I with them, each with its
+own system_prompt.txt and the references first; think: enable_thinking (off: the template's empty <think> block),
+temperature 1.0 / top_p 0.95 / top_k 20, max_new_tokens 16256 / 24000, torch.manual_seed(seed); the answer the JSON
+after the last </think>. Its wh_ratio (snapped to the old studio's seven ratios) or an edit's ratio_follow <imageN>
+(that reference's aspect) sets an auto canvas, at the canvas's area (about 1 MP in an edit). From the official
+prompt_rewrite (QwenLM/Qwen-Image-2.1, pe_core.py): each reference shrunk to at most 1 MP, as trained, and its
+balanced-JSON answer scan. Not taken from it: its presence penalty (1.5 for T2I) and always-on thinking (the old
+studio and the model cards run neither).
+
+Not ported: CFG."""
 
 import hashlib
 import json
+import logging
+import math
+import re
+import time
 from dataclasses import dataclass, field
 from functools import lru_cache
 
@@ -66,6 +80,16 @@ AREA = (
 SCALE = 16  # the VAE compresses 16x; sizes are floored to multiples of 32
 # tiled: auto tiles above this many MP (the studio tiled only when asked; the goldens are <= 1 MP)
 AUTO_TILE_MP = 2.5
+# enhance (module docstring): the component and max_new_tokens, by whether there are references
+PE = {False: ("text_enhancer", 16256), True: ("edit_enhancer", 24000)}
+PE_IMAGE_PIXELS = (
+    1024 * 1024
+)  # a reference reaches the enhancer at most this many pixels (as trained)
+PE_ANSWER = (
+    2048  # think off: progress counts to this (an answer is ~700 tokens); on, to max_new_tokens
+)
+RATIOS = (1, 4 / 3, 3 / 4, 3 / 2, 2 / 3, 16 / 9, 9 / 16)  # W/H of the old studio's ASPECT_RATIOS
+log = logging.getLogger("qwen")
 
 
 # the unsloth files' __metadata__ unsloth_format each FP8 component is read as (a later format may lay keys out
@@ -121,6 +145,16 @@ class Latent:
 
 def build(component: str, model):
     """The component on the meta device (rotary buffers stay real, on the CPU; the loader moves them)."""
+    if component.endswith("_enhancer"):  # its own folder (components.<c>.dir)
+        from transformers import AutoModelForImageTextToText, GenerationConfig
+
+        folder = model.folder(component)
+        with accelerate.init_empty_weights():
+            out = AutoModelForImageTextToText.from_config(
+                AutoConfig.from_pretrained(folder), dtype=torch.bfloat16
+            )
+        out.generation_config = GenerationConfig.from_pretrained(folder)
+        return out
     sub = model.folder(component) / component
     with accelerate.init_empty_weights(include_buffers=False):
         if component == "text_encoder":
@@ -369,3 +403,117 @@ def ask(ctx, params: dict, inputs: dict) -> dict:
         return proc.decode(new, skip_special_tokens=True), batch.input_ids.shape[1], len(new)
 
     return asks.ask(ctx, params, generate)
+
+
+@lru_cache(maxsize=2)
+def pe_processor(folder):
+    return AutoProcessor.from_pretrained(folder)
+
+
+def pe_image(img: Image.Image) -> Image.Image:
+    """RGB, Lanczos-shrunk to at most PE_IMAGE_PIXELS at its aspect (pe_core.py load_image)."""
+    img = img.convert("RGB")
+    w, h = img.size
+    if w * h > PE_IMAGE_PIXELS:
+        s = (PE_IMAGE_PIXELS / (w * h)) ** 0.5
+        img = img.resize((max(1, int(w * s)), max(1, int(h * s))), Image.LANCZOS)
+    return img
+
+
+def pe_answer(gen: str) -> tuple[str, str, str] | None:
+    """(rewritten_prompt, wh_ratio, ratio_follow) of the last JSON object after the last </think> (the whole text
+    with thinking off) that has a prompt (pe_core.py parse_answer, without json_repair), or None."""
+    found, dec, answer = None, json.JSONDecoder(), gen.rpartition("</think>")[2]
+    for i in (i for i, ch in enumerate(answer) if ch == "{"):
+        try:
+            obj, _ = dec.raw_decode(answer, i)
+        except json.JSONDecodeError:
+            continue
+        text = (
+            (obj.get("rewritten_prompt") or obj.get("rewrited_prompt"))
+            if isinstance(obj, dict)
+            else None
+        )
+        if isinstance(text, str) and text.strip():
+            found = (
+                text.strip(),
+                str(obj.get("wh_ratio") or "").strip(),
+                str(obj.get("ratio_follow") or "").strip(),
+            )
+    return found
+
+
+def pe_canvas(cv: dict, refs: list, wh: str, follow: str) -> dict:
+    """An auto canvas with the answer's aspect: an edit's ratio_follow <imageN> (that reference's), else wh_ratio W:H
+    snapped to the nearest of RATIOS (enhance.py nearest_ratio); at about AREA with references, else at the canvas's
+    area. Fixed, or with neither, as it came."""
+    m, r = re.fullmatch(r"<image(\d+)>", follow), re.fullmatch(r"(\d+)\s*:\s*(\d+)", wh)
+    if cv["mode"] != "auto":
+        return dict(cv)
+    if m and 1 <= int(m[1]) <= len(refs):
+        ratio = refs[int(m[1]) - 1].width / refs[int(m[1]) - 1].height
+    elif r and int(r[1]) and int(r[2]):
+        ratio = min(RATIOS, key=lambda x: abs(math.log(int(r[1]) / int(r[2]) / x)))
+    else:
+        return dict(cv)
+    width, height, _ = calculate_dimensions(AREA if refs else cv["width"] * cv["height"], ratio)
+    return {
+        "width": min(max(width, 256), 4096),
+        "height": min(max(height, 256), 4096),
+        "mode": "fixed",
+    }
+
+
+class _Tokens(StoppingCriteria):
+    """A cancel point per generated token, progress every 16."""
+
+    def __init__(self, ctx, start: int, total: int) -> None:
+        self.ctx, self.start, self.total = ctx, start, total
+
+    def __call__(self, input_ids, scores, **kwargs) -> bool:
+        self.ctx.check()
+        n = input_ids.shape[1] - self.start
+        if n % 16 == 0:
+            self.ctx.progress(min(n, self.total), self.total, "enhancing")
+        return False
+
+
+@torch.no_grad()
+def enhance(ctx, params: dict, inputs: dict) -> dict:
+    from core.pack import default_model
+
+    prompt, cv, seed = inputs["prompt"], inputs["canvas"], inputs["seed"]
+    if not prompt.strip():
+        raise RunError(f"{ctx.node}: empty prompt")
+    model = default_model(ctx.impl.pack)  # no Model input: the enhancers are models of their own
+    refs = [r["image"] for r in params.get("refs") or []]
+    name, max_new = PE[bool(refs)]
+    # first: a missing add-on fails here with its title, not on a file read
+    pe = ctx.component(model, name)
+    folder = model.folder(name)
+    proc = pe_processor(folder)
+    system = (folder / "system_prompt.txt").read_text(encoding="utf-8").strip()
+    content = [{"type": "image", "image": pe_image(img)} for img in refs]
+    turns = [
+        {"role": "system", "content": [{"type": "text", "text": system}]},
+        {"role": "user", "content": [*content, {"type": "text", "text": prompt}]},
+    ]
+    batch = proc.apply_chat_template(turns, add_generation_prompt=True, tokenize=True, return_dict=True,
+                                     return_tensors="pt", enable_thinking=params["think"])  # fmt: skip
+    batch = batch.to(ctx.device)
+    n_in = batch["input_ids"].shape[1]
+    total = max_new if params["think"] else PE_ANSWER
+    ctx.progress(1, total, "enhancing")
+    t = time.monotonic()
+    torch.manual_seed(seed)
+    out = pe.generate(**batch, max_new_tokens=max_new, do_sample=True, temperature=1.0, top_p=0.95, top_k=20,
+                      stopping_criteria=StoppingCriteriaList([_Tokens(ctx, n_in, total)]))  # fmt: skip
+    gen = proc.tokenizer.decode(out[0, n_in:], skip_special_tokens=True)
+    log.info("enhance %s: %d prompt tokens, %d new in %.0f s", name, n_in, out.shape[1] - n_in, time.monotonic() - t)  # fmt: skip
+    del out, batch
+    if (answer := pe_answer(gen)) is None:
+        log.warning("enhancer output without an answer: %s", gen[-2000:])
+        raise RunError(f"{ctx.node}: the enhancer gave no answer")
+    text, wh, follow = answer
+    ctx.progress(total, total, "enhancing")
+    return {"text": text, "canvas": pe_canvas(cv, refs, wh, follow)}
