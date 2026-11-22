@@ -229,14 +229,15 @@ def test_two_add_ons_in_one_folder_go_by_their_own_files(tmp_path, monkeypatch):
 
 def test_sglang_gets_a_lora_copy_with_alpha_folded(tmp_path):
     """sgl.ready_lora: lora_B × alpha / rank (the module's .alpha, else the metadata's, else the rank: h3_lora.c's), no
-    alpha left for SGLang, bf16 kept, written once next to the file and reused."""
+    alpha left for SGLang, no AdaLN modules (the pruned FP8 AdaLN cannot take them), bf16 kept, written once next to the file and reused."""
     torch = pytest.importorskip("torch")
     from safetensors import safe_open
     from safetensors.torch import load_file, save_file
 
     def lora(name, with_alpha, meta):
         g, t = torch.Generator().manual_seed(0), {}
-        for m, r in (("blocks.0.attn.to_q", 4), ("blocks.0.attn.to_k", 2)):
+        for m, r in (("blocks.0.attn.to_q", 4), ("blocks.0.attn.to_k", 2), ("blocks.0.adaln_proj.linear", 2),
+                     ("norm_out.linear", 2)):  # fmt: skip
             t[f"{m}.lora_A.default.weight"] = torch.randn(r, 8, generator=g).bfloat16()
             t[f"{m}.lora_B.default.weight"] = torch.randn(8, r, generator=g).bfloat16()
             if with_alpha:
@@ -255,6 +256,10 @@ def test_sglang_gets_a_lora_copy_with_alpha_folded(tmp_path):
         )
         got = load_file(str(out))
         assert not any(k.endswith(".alpha") for k in got)
+        assert sorted({k.rsplit(".lora_", 1)[0] for k in got}) == [
+            "blocks.0.attn.to_k",
+            "blocks.0.attn.to_q",
+        ]
         with safe_open(str(out), "pt") as f:
             assert f.metadata() == {"format": "pt"}
         for k, v in got.items():

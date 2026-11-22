@@ -126,14 +126,20 @@ def argv(model, partition: str, port: int, tmp: Path, lora: Path | None = None) 
             *(["--lora-path", str(lora)] if lora else [])]  # fmt: skip
 
 
+COPY_V = 2  # bump when ready_lora's output changes: a new key, the old copy replaced
+ADALN_LORA = re.compile(r"(^|\.)(adaln_proj|norm_out)\.")
+
+
 def ready_lora(src: Path) -> Path:
     """The LoRA as SGLang should load it: each module's lora_B times alpha / rank (alpha: its `.alpha`, else the
     metadata's, else the rank; h3_lora.c's), no `.alpha` tensors or metadata alpha, so SGLang's scale is rank / rank
     at lora_scale 1. Its fused qkv cannot take per-module `.alpha` (a 3-element .item()), and it would truncate a
     fractional alpha. Written once (tmp + rename) to models.SGLANG_COPIES next to the file, keyed by its size and
-    mtime; the add-on's delete removes it with its file."""
+    mtime; the add-on's delete removes it with its file. The AdaLN modules (`adaln_proj`, `norm_out`) are left out:
+    the pruned FP8 transformer's AdaLN takes an 8-wide input and SGLang can project a 2688-wide LoRA onto it only
+    with an `adaln_basis` the checkpoint does not carry (else "mat1 and mat2 shapes cannot be multiplied")."""
     st = src.stat()
-    key = hashlib.sha256(f"{st.st_size}:{st.st_mtime_ns}".encode()).hexdigest()[:12]
+    key = hashlib.sha256(f"{COPY_V}:{st.st_size}:{st.st_mtime_ns}".encode()).hexdigest()[:12]
     out = src.parent / models.SGLANG_COPIES / f"{src.stem}-{key}{src.suffix}"
     if out.is_file():
         return out
@@ -149,7 +155,7 @@ def ready_lora(src: Path) -> Path:
         a = t.pop(f"{prefix}.alpha", None)
         alpha = float(a) if a is not None else file_alpha if file_alpha > 0 else rank
         t[kb] = (t[kb].float() * (alpha / rank)).to(t[kb].dtype)
-    t = {k: v for k, v in t.items() if not k.endswith(".alpha")}
+    t = {k: v for k, v in t.items() if not k.endswith(".alpha") and not ADALN_LORA.search(k)}
     meta = {k: v for k, v in meta.items() if k not in ("alpha", "lora_alpha", "network_alpha")}
     out.parent.mkdir(parents=True, exist_ok=True)
     for old in out.parent.glob(f"{src.stem}-*{src.suffix}"):  # an older copy of a replaced file
