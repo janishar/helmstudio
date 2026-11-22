@@ -333,8 +333,9 @@ And there it is, our server is live and returning real data. Next time, we'll co
 </sc-if>
 </aside>
 
-<section aria-label="The prompt, expanded" style="flex: 1 1 100%; position: relative; min-height: 700px; border-top: 1px solid var(--s3)">
+<section aria-label="The prompt, expanded" style="flex: 1 1 100%; position: relative; min-height: 960px; border-top: 1px solid var(--s3)">
 <span style="position: absolute; left: 40px; top: 28px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--t2)">Expand (top-right of the prompt, shown when the text overflows or on focus) opens the same text in a dialog; edits go straight back to the prompt</span>
+<span style="position: absolute; left: 40px; top: 48px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--t2)">Every multi-line text box: prompts, negative prompt, dialogue script, style lines, descriptions, briefs, notes, chat</span>
 <div aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--g) 70%, transparent)"></div>
 <section role="dialog" aria-label="Words to speak" style="position: absolute; left: 50%; top: 72px; transform: translateX(-50%); width: 880px; box-sizing: border-box; padding: 18px 20px; border-radius: 16px; background: var(--s2); border: 1px solid var(--s5); display: flex; flex-direction: column; gap: 14px">
 <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px"><h2 style="margin: 0; font-size: 15px; font-weight: 600">Words to speak</h2><button aria-label="Close" style="width: 28px; height: 28px; flex: 0 0 auto; display: grid; place-items: center; padding: 0; border: 0; border-radius: 8px; background: transparent; box-shadow: none"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button></div>
@@ -349,6 +350,35 @@ And there it is, our server is live and returning real data. Next time, we'll co
 <span style="font-size: 12px; color: var(--t2)">· @ adds an element · Esc closes</span>
 <span style="flex-grow: 1"></span>
 <button style="height: 36px; padding: 0 16px; border-radius: 10px; border: 0; background: var(--a1); color: var(--on1); font-size: 13px; font-weight: 600">Done</button>
+</div>
+</section>
+<span style="position: absolute; left: 40px; top: 652px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--t2)">Example: the dialogue script. The same Expand opens it as text, one line each; @ mentions work</span>
+<div style="position: absolute; left: 40px; top: 684px; width: 400px; box-sizing: border-box; padding: 12px 14px; border-radius: 14px; background: var(--s2); border: 1px solid var(--s5)">
+<button aria-label="Expand" title="Expand" aria-haspopup="dialog" style="position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 8px; background: var(--s3); color: var(--t2)"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"></path></svg></button>
+<ol aria-label="Script" style="margin: 0; padding: 0 36px 0 0; list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 20px">
+<li style="display: flex; align-items: center; gap: 6px"><span class="vc" style="height: 24px">@mara</span><span style="color: var(--t2); font-style: italic">(quiet):</span><span>You said you'd be back by noon.</span></li>
+<li style="display: flex; align-items: center; gap: 6px"><span class="vc" style="height: 24px">@jon</span><span>I know. The road was closed.</span></li>
+<li style="display: flex; align-items: center; gap: 6px"><span class="vc" style="height: 24px">@mara</span><span>Then you should have called.</span></li>
+</ol>
+</div>
+<section role="dialog" aria-label="Script" style="position: absolute; left: 480px; top: 684px; width: 620px; box-sizing: border-box; padding: 14px 16px; border-radius: 16px; background: var(--s2); border: 1px solid var(--s5); display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 8px"><h2 style="margin: 0; font-size: 15px; font-weight: 600">Script</h2><button aria-label="Close" style="width: 28px; height: 28px; flex: 0 0 auto; display: grid; place-items: center; padding: 0; border: 0; border-radius: 8px; background: transparent; box-shadow: none"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button></div>
+<label for="script-x" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%)">Script</label>
+<div style="position: relative">
+<textarea id="script-x" placeholder="@handle (style): text, one line each" style="width: 100%; height: 150px; box-sizing: border-box; resize: none; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--a1); outline: 0; background: var(--s1); color: var(--t1); font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 22px">@mara (quiet): You said you'd be back by noon.
+@jon: I know. The road was closed.
+
+@mara: Then you should have called.
+@j</textarea>
+<ul role="listbox" aria-label="Elements" style="position: absolute; left: 40px; top: 118px; margin: 0; padding: 4px; list-style: none; width: 200px; border-radius: 10px; background: var(--s3); border: 1px solid var(--s5); font-size: 12px; box-shadow: 0 8px 16px -6px color-mix(in srgb, var(--shd) 60%, transparent)">
+<li role="option" aria-selected="true" style="display: flex; justify-content: space-between; padding: 4px 8px; border-radius: 6px; background: var(--s5)"><span class="mono">@jon</span><span style="color: var(--t2)">Jon · Ryan</span></li>
+</ul>
+</div>
+<div style="display: flex; align-items: center; gap: 8px">
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--t2)">3 lines</span>
+<span style="font-size: 12px; color: var(--t2)">· @ adds an element · Esc closes</span>
+<span style="flex-grow: 1"></span>
+<button style="height: 32px; padding: 0 14px; border-radius: 10px; border: 0; background: var(--a1); color: var(--on1); font-size: 13px; font-weight: 600">Done</button>
 </div>
 </section>
 </section>
