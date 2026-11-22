@@ -931,6 +931,9 @@
           "name": "model",
           "type": "Model"
         }
+      ],
+      "addons": [
+        "distilled_lora"
       ]
     },
     {

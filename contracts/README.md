@@ -625,7 +625,8 @@ not; Starting up still exempts):
    at <precision>`. A workflow without a model node (echo): no check.
 2b. **Add-ons** (API 1.36, Optional add-ons): for each node of X's graph that is not bypassed, by node id, and each of
    its kind's `addons` in order (as that host's nodes key lists them: a host whose runner names none needs none), the
-   host's models entry of the node's family lists that add-on `present`: `<node>:
+   host's models entry of the node's family lists that add-on `present` (from 1.40: or does not list it, or lists it
+   with `variants` leaving out the run's model variant): `<node>:
    <title> not downloaded on any live host for env <env>` (title: the add-on's, from the first host left that lists
    it, else the component).
 3. **Shared LoRAs**: `<H>.<env>.loras` lists every shared LoRA of the resolved graph. With F = the first host left (by
@@ -714,8 +715,8 @@ counts as that receipt time. `.tools/make-secrets` refuses `mac` and `fake` as G
 **Fixtures** (`place.*.json`): `{description, hosts: {<name>: {keys (as admit fixtures, plus `ram_budget_gb`),
 workflows: {env: [ids]}, variants: {env: {"<model>/<variant>": [precisions]}} (present ones only), addons?: {env: ["<model>/<component>"]} (1.36:
 present add-ons only), loras: {env: [shared LoRA names]}, free, idle_since, reserved_gb?}}, run: {env, workflow, model?,
-variant?, precision?, addons? ([{node, kind, component, title, bypass?}]: 1.36, nodes of the run's model family needing an
-add-on), loras (shared, graph order), peak_gb, ram_peak_gb?, needs, lora_component?, lost_host?, host?}, expect: {host,
+variant?, precision?, addons? ([{node, kind, component, title, bypass?, variants?}]: 1.36, nodes of the run's model family
+needing an add-on; `variants` 1.40), loras (shared, graph order), peak_gb, ram_peak_gb?, needs, lora_component?, lost_host?, host?}, expect: {host,
 eligible, error}}`; `eligible` is
 after the `lost_host` rule, by name; the run's `host` (1.35) is its pin. Cases: resident-first, fits-first,
 idle-longest, name-order, free-first, variant-missing, no-variant, offline, small-gpu, too-big, host-ram, loras,
@@ -724,7 +725,8 @@ small: the other host); from 1.35 pinned (the pinned host though another is free
 pinned-offline, pinned-unknown, pinned-env, pinned-variant (a NVIDIA-only variant pinned to the Mac), pinned-lora,
 pinned-lost (attempt 2 while H is still offline: fails, never the live other host), pinned-lost-back (H is back:
 attempt 2 runs there); from 1.36 addon (Auto: the host with the add-on though the other is resident), addon-none (on no
-live host), pinned-addon (the pinned host lacks it), addon-bypassed (a bypassed node needs nothing). Admission
+live host), pinned-addon (the pinned host lacks it), addon-bypassed (a bypassed node needs nothing); from 1.40
+addon-variant (an add-on scoped to another variant: the host without it runs the run). Admission
 on a cuda host: `admit.cuda-cpu-entry.json` (a `device: cpu` entry is not counted), `admit.cuda-host-ram.json`.
 
 ## A remote GPU host: credentials and TLS (API 1.18, M6; deployment, normative for names and permissions)
@@ -968,7 +970,8 @@ audio track) plus a poster image; uploads stay images.
 - **Recipe Detail** (API 1.39; plan 19-ltx-studio-features 23.4 phases 4 and 4b, board LtxFeatures frames 1, 2, 5,
   9, 15 and 16; normative). DFR (ltx studio's `generate --dfr` / `a2v --dfr` at spatial ×1, no temporal rounds, the
   conv decoder): `ltx/ic-lora` (title IC-LoRA; Model → Model; `strength` float 0–2 default 1; `uses: [ic_lora]`, so
-  it publishes `addons: [ic_lora]` on both runtimes) adds the model's IC-LoRA, the optional add-on `ic_lora`
+  it publishes `addons: [ic_lora]` on both runtimes; from 1.40 the add-on is `variants: [distilled]`, so the NVIDIA
+  runner lists no `ic_lora` and a Detail run there gets its `the detail pass is Mac only for now`) adds the model's IC-LoRA, the optional add-on `ic_lora`
   (`Detailer`, Lightricks' Pixel-Spatial-Upscaler, 327,322,640 bytes, `reference_downscale_factor` 2), to the Model
   handle as one adapter use (core's MLX adapter path: its file read in place, its strength a held scalar, no second
   transformer); bypassed it is the Model as it is. `ltx/sample` gains `detail` (bool, default false, label Detail pass)
@@ -1258,8 +1261,8 @@ unchanged; a video never fills them.
   audio template whose voice param takes `[design]` only.
 - **Offers** ("Use in…", `GET /v1/studio/takes/{id}/uses`, `take_uses`): the templates a live host could run now (the
   dispatcher's eligibility: published, model variant present, Several hosts rule 2, and for `ltx/distill` the
-  family's pre-fused distilled LoRA listed in that host's `lora.prefused` or the model variant's built-in
-  `distill_from` variant present there), by family id then in their pack's order (the
+  model variant's built-in `distill_from` variant present there; from 1.40 the distilled LoRA is the add-on rule's,
+  2b), by family id then in their pack's order (the
   runner's workflows value: `workflows/*.json` by file name, the board's Retake a section, Extend, Audio to video), then
   the caller's own non-text workflows in `GET /workflows` order, with exactly one unwired input of the take's sort on a known, not bypassed node (an image:
   an `image` or Image rows param; a video or audio take: a `media` param accepting it) that it fits; from 1.22 an
@@ -1332,10 +1335,13 @@ unchanged; a video never fills them.
   `planned_at` also counts each media value: a video take's width × height and frames (an extend: + 8N), an audio
   part's frames; above it P = B. `ltx/distill` is not a bake row: after an a2v run the runner reports its transformer
   with `loras: [{pre-fused id, 1}]`, which no plain-dev run counts as resident. Eligibility adds: a run with
-  `ltx/distill` needs a host whose models key lists the family's `lora.prefused` entry for variant distilled (MLX: the
-  LoRA is baked), or whose model variant has `distill_from` with that variant present there (torch, M9: dev-int8's
+  `ltx/distill` whose model variant has `distill_from` needs that variant present on the host (torch, M9: dev-int8's
   distill is distilled-fp8's transformer, the LoRA already fused in); else it fails `no live host for env <env> has
-  the distilled LoRA`.
+  the distilled LoRA`. From 1.40 the MLX file is the optional add-on `distilled_lora` (`Distilled LoRA`, 8,899,889,568
+  bytes, `variants: [dev]`; Optional add-ons): `ltx/distill` publishes `addons: [distilled_lora]` (model.yaml stage
+  `addons`, not `uses`), so a Dev run without it fails `distill: Distilled LoRA not downloaded on any live host for
+  env mlx` and a Distilled one (the identity there) needs none; the Distilled variant's files and bytes leave it out.
+  The shared LoRA index still lists the file (its id is the bake's `lora_id`, `lora.prefused`).
 
 ## Voices (API 1.30, M8 step 2; plan 15-voices 19.3; normative)
 
@@ -2953,8 +2959,8 @@ an **extra variant** of the pack. model.yaml per variant, all optional:
 - `distill_from: <variant>`: the variant whose weights are this one's distilled model, built in (ltx dev-int8:
   distilled-fp8, unsloth's dev transformer with the distilled LoRA fused at 1). `<family>/distill` on this variant
   loads that variant's transformer instead of baking the pre-fused LoRA. Published as the variant's `distill_from`; the
-  dispatcher accepts a host for `<family>/distill` when its `lora.prefused` lists variant distilled or the run's model
-  variant has `distill_from` and that variant is present on the host.
+  dispatcher accepts a host for `<family>/distill` unless the run's model variant has `distill_from` and that variant
+  is not present on the host (from 1.40 the MLX bake's file is the add-on rule's: Optional add-ons).
 - `lora.runtime: mlx` (model.yaml, the whole block): the family takes LoRAs on that runtime only. A runner of another
   runtime publishes no `lora` block and no `<family>/lora-stack` node for it (ltx: LoRAs only on the Mac's MLX runner;
   the torch path has no bake into FP8 or ConvRot weights), and never builds the model on the meta device for it.
@@ -2990,22 +2996,33 @@ Image's prompt enhancers, LTX's detailer and distilled LoRA): one shared, model.
 studio or the web.
 - **model.yaml**: `components.<c>.addon: {title, help?, source?}` (`source` as a variant's: `{repo, revision,
   allow_patterns, licence, must_accept, gated, bytes?}`). Its folder is the component's own `dir`, else the first
-  variant's. A stage whose `uses` names it publishes `addons: [<c>]` in its nodeSchema. From API 1.39 the model.yaml
+  variant's. A stage whose `uses` names it publishes `addons: [<c>]` in its nodeSchema; from API 1.40 so does one whose
+  model.yaml `addons` names it (an add-on the stage reads outside the residency manager, never a `uses` component, so
+  the memory plans never count it: LTX's `ltx/distill` bakes the distilled LoRA into Dev's transformer, which its
+  plan counts as the baked entry). From API 1.39 the model.yaml
   `source` may carry `dir`: the folder under the models root the repo's files land in (LTX's detailer: the repo's root
   file into `ltx-2.5/loras`, inside the add-on's folder `ltx-2.5`, where its glob finds it); the models entry publishes
   `source` without it. A component may also carry `variants: [<id>, …]` (model.yaml only): it is a part of those
   variants only (absent: all), so the others need it neither for presence nor for a download (LTX's `duration_head`:
-  the distilled variants'; Dev's shares stay 8).
+  the distilled variants'; Dev's shares stay 8). From API 1.40 an add-on may carry `variants` too: the variants whose
+  runs need it (LTX's `distilled_lora`: `[dev]`, Dev's fast-distill stage; its `ic_lora`: `[distilled]`, the detail
+  pass), published as the add-on's `variants`. A runner lists an add-on only when it runs one of those variants (the
+  NVIDIA runner lists neither: no add-ons), and a run on another variant does not need it.
 - **Presence**: a variant is `present` without its add-ons; their files are never in its `components`, `files` or
   `bytes`, and a delete of the variant keeps them. The models entry lists `addons [{component, title, help?, dir,
   presence, bytes?, source?, mismatch?}]`, presence decided as a variant's over the add-on's own files (its globs in
   its folder, a download marker there, recorded hashes).
 - **The run check** (Several hosts: eligibility, step 2b): a run in which a node with `addons` is not bypassed is
-  eligible only on hosts where each is present. Set to a host without it (Run on): 422 at create, `<node>: <title> not
+  eligible only on hosts where each is present; from 1.40 a host whose models entry does not list the add-on, or
+  lists it with `variants` that leave out the run's variant of that family, needs none (a Distilled audio to video
+  runs without the distilled LoRA; a Detail run set to gcp gets the runner's `sample1.detail: the detail pass is Mac
+  only for now`). Set to a host without it (Run on): 422 at create, `<node>: <title> not
   downloaded on host <H>`; Auto picks a host that has it, and with none the run fails `<node>: <title> not downloaded
   on any live host for env <env>`. POST /v1/studio/runs/plan answers either as `reason`. The UI greys the controls
   that need a missing add-on (`<title> not downloaded`; per host in Run on, `… not downloaded on <host>`) and leaves
-  such a node bypassed, so a run never reaches the refusal from the form.
+  such a node bypassed, so a run never reaches the refusal from the form; from 1.40, for a node the workflow runs
+  unbypassed (`ltx/distill`), it greys instead the model chip's rows of the add-on's `variants` (`Dev` · `Distilled
+  LoRA not downloaded`; board LtxFeatures frame 17).
 - **Model jobs**: `POST …/models/{model}/download` with `addon` (no `variant`) fetches its `source` into its folder
   (the same plan, checks, licence and failures as a variant's; 422 `<model> has no add-on <c>`, `<title> <add-on
   title> has no download source`, `licence <id> must be accepted`; 409 `<title> <add-on title> is already on <host>`,

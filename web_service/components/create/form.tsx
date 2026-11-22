@@ -1374,7 +1374,14 @@ export function Chips({
   versions?: (
     f: Field,
     o: string,
-  ) => { title: string; sub?: string; note: string | null; dim: string | null } | null;
+  ) => {
+    title: string;
+    sub?: string;
+    note: string | null;
+    dim: string | null;
+    /** an add-on it needs is missing (API 1.40): greyed and not pickable */
+    why?: string | null;
+  } | null;
 }) {
   const s = sections(fields);
   const model = (models ?? s.tiles).filter((f) => f.model && f.param.type === "enum");
@@ -1437,14 +1444,20 @@ export function Chips({
                 </span>
                 {f.param.enum?.map((o) => {
                   const r = versions?.(f, o);
-                  const end = r?.dim ?? r?.note;
+                  const end = r?.why ?? r?.dim ?? r?.note;
                   return (
                     <button
                       key={o}
                       type="button"
                       role="menuitemradio"
                       aria-checked={rawOf(f, raws) === o}
-                      className={`mi ${r?.dim ? "dim" : ""}`}
+                      className={`mi ${r?.dim || r?.why ? "dim" : ""}`}
+                      disabled={!!r?.why}
+                      title={
+                        r?.why
+                          ? `${r.why}. An admin downloads it in Models, under the model's optional add-ons.`
+                          : undefined
+                      }
                       onClick={() => onChange(f.key, o)}
                     >
                       <span>

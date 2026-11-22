@@ -111,15 +111,36 @@ export function machineReason(
     const why = misfit(mc, m, v);
     if (why) return why.text;
   }
-  const miss = needs.find((n) => !n.hosts.includes(mc.host));
+  const miss = needs.find((n) => lacks(n, mc));
   if (miss)
     return `${miss.title[0].toLowerCase()}${miss.title.slice(1)} not downloaded on ${mc.host}`;
   return null;
 }
 
 /** One optional add-on a node of the workflow loads (its NodeSchema `addons`, API 1.36; contracts/README.md
- * Optional add-ons): its title and the live hosts it is present on. */
-export type AddonNeed = { node: string; component: string; title: string; hosts: string[] };
+ * Optional add-ons): its title, the live hosts it is present on, and (API 1.40) the hosts that list the family's model
+ * but not it (`free`: they need none, as NVIDIA for LTX's), the variants whose runs need it and whether the workflow
+ * runs its node unbypassed (`always`: ltx/distill). */
+export type AddonNeed = {
+  node: string;
+  family: string;
+  component: string;
+  title: string;
+  hosts: string[];
+  free: string[];
+  variants?: string[];
+  always: boolean;
+};
+
+/** Whether the add-on is missing on `mc` (it lists it, not present). */
+const lacks = (n: AddonNeed, mc: Machine) =>
+  !n.hosts.includes(mc.host) && !n.free.includes(mc.host);
+
+/** Whether a run with the form's chosen variants needs the add-on (API 1.40: its `variants`, absent = every one). */
+export function needed(n: AddonNeed, picks: { m: Model; v: Variant }[]): boolean {
+  const pick = picks.find((p) => p.m.family === n.family);
+  return !n.variants || !pick || n.variants.includes(pick.v.id);
+}
 
 /** The workflow's add-on needs, graph order then the schema's: from the models of each node's family (a family the
  * list does not hold, or no list yet, needs nothing it can tell). Titles as the list has them, else the component. */
@@ -138,7 +159,18 @@ export function addonNeeds(
       const hosts = as.flatMap((a) =>
         a.hosts.filter((h) => h.state === "present" && live.has(h.host)).map((h) => h.host),
       );
-      return { node, component, title: as[0]?.title ?? component, hosts: [...new Set(hosts)] };
+      const listed = new Set(as.flatMap((a) => a.hosts.map((h) => h.host)));
+      const free = ms.flatMap((m) => m.variants.flatMap((v) => v.hosts.map((h) => h.host)));
+      return {
+        node,
+        family: s.family ?? "",
+        component,
+        title: as[0]?.title ?? component,
+        hosts: [...new Set(hosts)],
+        free: as.length ? [...new Set(free)].filter((h) => !listed.has(h)) : [],
+        ...(as[0]?.variants && { variants: as[0].variants }),
+        always: w.nodes[node].bypass !== true,
+      };
     });
   });
 }
@@ -148,9 +180,28 @@ export function addonNeeds(
 export function addonBlocks(needs: AddonNeed[], mc?: Machine): Record<string, string> {
   const out: Record<string, string> = {};
   for (const n of needs)
-    if (!(n.node in out) && (mc ? !n.hosts.includes(mc.host) : !n.hosts.length))
+    if (!(n.node in out) && !(n.always && n.variants) && (mc ? lacks(n, mc) : !n.hosts.length))
       out[n.node] = `${n.title} not downloaded${mc ? ` on ${mc.host}` : ""}`;
   return out;
+}
+
+/** Why the version row `o` of `family` is greyed (API 1.40): a node the workflow always runs needs an add-on scoped
+ * to it that is missing where the run may go ("Distilled LoRA not downloaded", board LtxFeatures frame 17); null when
+ * it is pickable. */
+export function variantBlock(
+  needs: AddonNeed[],
+  family: string,
+  o: string,
+  mc?: Machine,
+): string | null {
+  const n = needs.find(
+    (x) =>
+      x.family === family &&
+      x.always &&
+      x.variants?.includes(o) &&
+      (mc ? lacks(x, mc) : !x.hosts.length),
+  );
+  return n ? `${n.title} not downloaded${mc ? ` on ${mc.host}` : ""}` : null;
 }
 
 /** A version row's dim text under Run on `mc` ("not on Mac"), null when it runs there or under Auto. */
@@ -187,11 +238,24 @@ export function versionRow(
   mc: Machine | undefined,
   f: Field,
   o: string,
-): { title: string; sub?: string; note: string | null; dim: string | null } | null {
+  needs: AddonNeed[] = [],
+): {
+  title: string;
+  sub?: string;
+  note: string | null;
+  dim: string | null;
+  why: string | null;
+} | null {
   for (const m of list?.models.filter((x) => x.family === f.family) ?? []) {
     const v = m.variants.find((x) => x.id === o);
     if (v)
-      return { title: v.title, sub: v.help, note: deviceNote(m, v), dim: versionDim(mc, m, v) };
+      return {
+        title: v.title,
+        sub: v.help,
+        note: deviceNote(m, v),
+        dim: versionDim(mc, m, v),
+        why: variantBlock(needs, f.family ?? "", o, mc),
+      };
   }
   return null;
 }

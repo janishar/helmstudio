@@ -235,7 +235,7 @@ func buildAddons(id string, sources []string, published map[string]registry.Publ
 				continue
 			}
 			seen[a.Component] = true
-			addon := dto.ModelAddon{Component: a.Component, Title: a.Title, Help: a.Help, Hosts: []dto.ModelVariantHost{}}
+			addon := dto.ModelAddon{Component: a.Component, Title: a.Title, Help: a.Help, Variants: a.Variants, Hosts: []dto.ModelVariantHost{}}
 			if a.Dir != "" {
 				addon.Dir = &a.Dir
 			}

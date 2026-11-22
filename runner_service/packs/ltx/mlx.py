@@ -884,20 +884,18 @@ def ltx2_schedule(steps: int, tokens: int) -> list[float]:
 
 
 def check_distill(params: dict, wired: set, models: dict | None = None) -> str | None:
-    """The dev model, and the pre-fused distilled LoRA is on this host (studio dispatches such a run only to a host
-    whose models key lists it: README, Media inputs; the memory plans skip audio to video without it)."""
-    from core.pack import models_root
+    """The dev model, and the distilled LoRA (the optional add-on distilled_lora, API 1.40) is on this host: studio's
+    run check refuses a Dev run without it first (contracts/README.md, Optional add-ons); the memory plans skip Dev's
+    audio to video without it."""
+    import config
 
     model = (models or {}).get("model")
     if model is not None and is_distilled(model):
         return None  # the identity: the LoRA is fused in already
     if why := _needs_dev(params, wired, models):
         return why
-    spec = model.pack.spec if model is not None else {}
-    files = [models_root() / spec["variants"][x["variant"]]["dir"] / x["file"]
-             for x in spec.get("lora", {}).get("prefused", []) if x["variant"] == "distilled"]  # fmt: skip
-    if model is not None and not any(f.is_file() for f in files):
-        return f": no live host for env {ENV} has the distilled LoRA"
+    if model is not None and not model.files("distilled_lora"):
+        return f": {model.pack.component('distilled_lora')['addon']['title']} not downloaded on host {config.HOST}"
     return None
 
 

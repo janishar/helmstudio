@@ -621,7 +621,13 @@ def _nodes(stages: dict, family: str | None, code: str, pack: Pack | None, modul
         uses = tuple(stage.get("uses", ()))
         if pack and (unknown := set(uses) - set(pack.spec.get("components", {}))):
             raise ValueError(f"{schema['kind']}: uses unknown components {sorted(unknown)}")
-        if pack and (need := [c for c in uses if c in addons(pack)]):
+        # API 1.40: `addons` names add-ons the stage reads outside residency (ltx/distill's bake): never planned
+        extra = tuple(stage.get("addons", ()))
+        if extra and (not pack or (bad := set(extra) - set(addons(pack)))):
+            raise ValueError(
+                f"{schema['kind']}: addons names no add-on {sorted(bad) if pack else list(extra)}"
+            )
+        if pack and (need := list(dict.fromkeys(c for c in (*uses, *extra) if c in addons(pack)))):
             schema["addons"] = need  # API 1.36: a run with the node needs them on its host
         if len(ids := [x["id"] for x in stage.get("phases") or []]) != len(set(ids)):
             raise ValueError(f"{schema['kind']}: phases repeat an id")

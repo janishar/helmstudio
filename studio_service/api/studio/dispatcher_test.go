@@ -284,21 +284,31 @@ func TestEligibleLoras(t *testing.T) {
 	}
 }
 
-// A run with <family>/distill goes to a host whose lora block lists the distilled LoRA as pre-fused (MLX) or whose
-// model variant has its distilled weights built in (distill_from, torch) with that variant present.
+// A run with <family>/distill: on MLX the distilled LoRA is the optional add-on distilled_lora, scoped to Dev (API
+// 1.40: a Distilled run needs none); on torch the model variant's distilled weights are built in (distill_from) and
+// that variant must be present.
 func TestEligibleDistill(t *testing.T) {
 	reg := &registry.Registry{}
 	set := func(source, models string) {
 		host, env, _ := strings.Cut(source, ".")
 		_ = reg.SetRegistry(source+".workflows", []byte(`{"workflows": [{"id": "ltx-a2v-`+env+`", "env": "`+env+`", "nodes": {}}]}`))
 		_ = reg.SetRegistry(source+".models", []byte(models))
+		addons := ""
+		if env == "mlx" { // both runtimes' nodes name it; only the Mac's models entry lists it
+			addons = `, "addons": ["distilled_lora"]`
+		}
+		_ = reg.SetRegistry(source+".nodes", []byte(`{"nodes": [{"kind": "ltx/distill", "title": "Distilled LoRA", "params": [],
+			"inputs": [], "outputs": []`+addons+`}]}`))
 		_ = reg.SetHost(source, hostValue(host, env, t0, ""))
 	}
-	set("mac.mlx", `{"models": [{"id": "ltx-2.5", "family": "ltx", "variants": [{"id": "dev", "presence": "present",
-		"precisions": ["int8"]}], "lora": {"component": "transformer", "modules": [], "renames": [], "ignore": [],
-		"prefused": [{"lora_id": "d", "variant": "distilled"}]}}]}`)
-	set("old.mlx", `{"models": [{"id": "ltx-2.5", "family": "ltx", "variants": [{"id": "dev", "presence": "present",
-		"precisions": ["int8"]}], "lora": {"component": "transformer", "modules": [], "renames": [], "ignore": []}}]}`)
+	mlx := func(presence string) string {
+		return `{"models": [{"id": "ltx-2.5", "family": "ltx", "variants": [{"id": "distilled", "presence": "present",
+			"precisions": ["int8"]}, {"id": "dev", "presence": "present", "precisions": ["int8"]}],
+			"addons": [{"component": "distilled_lora", "title": "Distilled LoRA", "dir": "ltx-2.5", "presence": "` + presence + `",
+			"variants": ["dev"]}]}]}`
+	}
+	set("mac.mlx", mlx("present"))
+	set("old.mlx", mlx("missing"))
 	torch := func(fp8 string) string {
 		return `{"models": [{"id": "ltx-2.5", "family": "ltx", "variants": [{"id": "distilled-fp8", "presence": "` + fp8 + `",
 			"precisions": ["fp8"]}, {"id": "dev-int8", "presence": "present", "precisions": ["int8"],
@@ -313,14 +323,50 @@ func TestEligibleDistill(t *testing.T) {
 		return model.Run{WorkflowID: "ltx-a2v-" + env, Env: env, Nodes: graph} // a workflow id is one env's
 	}
 	if slots, _, reason := eligible(reg, reg.Hosts(), run("mlx", "dev"), t0); len(slots) != 1 || slots["mac"] != "mlx" {
-		t.Fatal("mlx: mac lists the pre-fused LoRA, old does not", slots, reason)
+		t.Fatal("mlx: mac has the add-on, old does not", slots, reason)
+	}
+	if slots, _, reason := eligible(reg, reg.Hosts(), run("mlx", "distilled"), t0); len(slots) != 2 {
+		t.Fatal("mlx: a Distilled run needs no distilled LoRA", slots, reason)
+	}
+	pinned := run("mlx", "dev")
+	old := "old"
+	pinned.PinHost = &old
+	if _, _, reason := eligible(reg, reg.Hosts(), pinned, t0); reason != "distill: Distilled LoRA not downloaded on host old" {
+		t.Fatal(reason)
+	}
+	_ = reg.SetRegistry("mac.mlx.models", []byte(mlx("partial")))
+	if _, _, reason := eligible(reg, reg.Hosts(), run("mlx", "dev"), t0); reason != "distill: Distilled LoRA not downloaded on any live host for env mlx" {
+		t.Fatal(reason)
 	}
 	if slots, _, reason := eligible(reg, reg.Hosts(), run("torch", "dev-int8"), t0); len(slots) != 1 || slots["gpu"] != "torch" {
 		t.Fatal("torch: gpu has dev-int8's distill_from variant, bare lacks it", slots, reason)
 	}
+	if slots, _, reason := eligible(reg, reg.Hosts(), run("torch", "distilled-fp8"), t0); len(slots) != 1 || slots["gpu"] != "torch" {
+		t.Fatal("torch: distilled-fp8 has no distill_from (the runner's check answers)", slots, reason)
+	}
 	_ = reg.SetRegistry("gpu.torch.models", []byte(torch("partial")))
 	if _, _, reason := eligible(reg, reg.Hosts(), run("torch", "dev-int8"), t0); reason != "no live host for env torch has the distilled LoRA" {
 		t.Fatal(reason)
+	}
+}
+
+// API 1.40: a host whose models entry does not list an add-on its node names needs none there (the NVIDIA runner lists
+// no ltx add-on): a Detail run set to gcp reaches gcp, whose runner refuses the detail pass.
+func TestEligibleAddonUnlisted(t *testing.T) {
+	reg := &registry.Registry{}
+	_ = reg.SetRegistry("gcp.torch.workflows", []byte(`{"workflows": [{"id": "ltx-t2v", "env": "torch", "nodes": {}}]}`))
+	_ = reg.SetRegistry("gcp.torch.models", []byte(`{"models": [{"id": "ltx-2.5", "family": "ltx", "variants": [{"id": "distilled-fp8",
+		"presence": "present", "precisions": ["fp8"]}]}]}`))
+	_ = reg.SetRegistry("gcp.torch.nodes", []byte(`{"nodes": [{"kind": "ltx/ic-lora", "title": "IC-LoRA", "params": [], "inputs": [],
+		"outputs": [], "addons": ["ic_lora"]}]}`))
+	_ = reg.SetHost("gcp.torch", hostValue("gcp", "torch", t0, ""))
+	graph, _ := json.Marshal(map[string]registry.Node{
+		"model":  {Kind: "ltx/model", Params: map[string]any{"variant": "distilled-fp8", "precision": "fp8"}},
+		"detail": {Kind: "ltx/ic-lora", In: map[string]string{"model": "model.model"}}})
+	gcp := "gcp"
+	run := model.Run{WorkflowID: "ltx-t2v", Env: "torch", Nodes: graph, PinHost: &gcp}
+	if slots, _, reason := eligible(reg, reg.Hosts(), run, t0); len(slots) != 1 {
+		t.Fatal(slots, reason)
 	}
 }
 

@@ -2001,6 +2001,17 @@
                           "$ref": "#/$defs/source",
                           "description": "where a download of the add-on fetches its files, into `dir` (model.yaml `components.<c>.addon.source`). Absent: not downloadable (put its files there by hand)"
                         },
+                        "variants": {
+                          "type": "array",
+                          "minItems": 1,
+                          "maxItems": 16,
+                          "uniqueItems": true,
+                          "items": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+                          },
+                          "description": "from API 1.40 (contracts/README.md, Optional add-ons): the variants whose runs need it (model.yaml component `variants`: LTX's distilled LoRA is Dev's fast-distill stage, its detailer Distilled's detail pass); a run on another variant of the model does not need it. A runner lists an add-on only when it runs one of these. Absent = every variant"
+                        },
                         "mismatch": {
                           "type": "array",
                           "minItems": 1,

@@ -60,6 +60,7 @@ type ModelAddon struct {
 	Title         string             `json:"title"`
 	Help          string             `json:"help,omitempty"`
 	Dir           *string            `json:"dir"`
+	Variants      []string           `json:"variants,omitempty"` // API 1.40: the variants whose runs need it
 	Licence       *VariantLicence    `json:"licence"`
 	Gated         bool               `json:"gated"`
 	DownloadBytes *int64             `json:"download_bytes"`

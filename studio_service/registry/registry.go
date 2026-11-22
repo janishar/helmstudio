@@ -484,6 +484,13 @@ type Addon struct {
 	Bytes     *int64   `json:"bytes,omitempty"`
 	Source    *Source  `json:"source,omitempty"`
 	Mismatch  []string `json:"mismatch,omitempty"`
+	// API 1.40: the variants whose runs need it; absent = every variant
+	Variants []string `json:"variants,omitempty"`
+}
+
+// Needs reports whether a run on variant needs the add-on (API 1.40: its variants, absent = every one).
+func (a Addon) Needs(variant string) bool {
+	return len(a.Variants) == 0 || slices.Contains(a.Variants, variant)
 }
 
 // Addon returns the model's add-on named component, if the host lists it.

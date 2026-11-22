@@ -5634,6 +5634,8 @@ export interface components {
             help?: string;
             /** @description its folder under each host's models root */
             dir: string | null;
+            /** @description from 1.40: the variants whose runs need it (the hosts' models entries, contracts/README.md Optional add-ons); a run on another variant does not, and the form greys those variants' rows instead of a control when the node always runs (Dev without the distilled LoRA). Absent = every variant */
+            variants?: string[];
             /** @description its source's licence; null = no download source */
             licence: {
                 id: string;

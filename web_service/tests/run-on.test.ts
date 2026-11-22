@@ -6,6 +6,8 @@ import {
   addonBlocks,
   addonNeeds,
   clashNote,
+  needed,
+  variantBlock,
   machineReason,
   machines,
   pinnedMachine,
@@ -142,14 +144,10 @@ describe("optional add-ons (API 1.36)", () => {
     }) as unknown as S<"ModelList">;
 
   it("a node's add-ons with the live hosts they are on; nothing to tell without a list or the family", () => {
+    const base = { node: "enhance", family: "qwen-image", free: [], always: false };
     expect(addonNeeds(w, list())).toEqual([
-      { node: "enhance", component: "text_enhancer", title: "Text enhancer", hosts: ["mac"] },
-      {
-        node: "enhance",
-        component: "edit_enhancer",
-        title: "Edit enhancer",
-        hosts: ["mac", "gcp"],
-      },
+      { ...base, component: "text_enhancer", title: "Text enhancer", hosts: ["mac"] },
+      { ...base, component: "edit_enhancer", title: "Edit enhancer", hosts: ["mac", "gcp"] },
     ]);
     expect(addonNeeds(w, list("mac"))[0].hosts).toEqual([]); // an offline host does not count
     expect(addonNeeds(w, null)).toEqual([]);
@@ -190,5 +188,87 @@ describe("versionRow", () => {
     } as unknown as S<"ModelList">;
     const f = { family: "qwen-image" } as Parameters<typeof versionRow>[2];
     expect(versionRow(list, undefined, f, "distilled")?.sub).toBe("8 steps, about 10× faster");
+  });
+});
+
+describe("add-ons scoped to variants (API 1.40)", () => {
+  const [mac, gcp] = machines([
+    host("mac", "mlx", "mps", "Apple M5 Pro"),
+    host("gcp", "torch", "cuda", "RTX PRO 6000"),
+  ]);
+  const ltx = (lora: string) =>
+    ({
+      hosts: ["mac", "gcp"].map((h) => ({ host: h, live: true })),
+      models: [
+        {
+          ...model,
+          family: "ltx",
+          // the NVIDIA host has the model but lists neither add-on: it needs none
+          variants: [
+            variant("Distilled", ["mac"]),
+            variant("Dev", ["mac"]),
+            variant("Fp8", ["gcp"]),
+          ],
+          addons: [
+            {
+              component: "ic_lora",
+              title: "Detailer",
+              variants: ["distilled"],
+              hosts: [{ host: "mac", state: "missing" }],
+            },
+            {
+              component: "distilled_lora",
+              title: "Distilled LoRA",
+              variants: ["dev"],
+              hosts: [{ host: "mac", state: lora }],
+            },
+          ],
+        },
+      ],
+    }) as unknown as S<"ModelList">;
+  const schema = (kind: string, addons: string[]) => ({
+    kind,
+    family: "ltx",
+    addons,
+    params: [],
+    inputs: [],
+    outputs: [],
+  });
+  const w = {
+    nodes: { detail: { kind: "ltx/ic-lora", bypass: true }, distill: { kind: "ltx/distill" } },
+    node_schemas: {
+      "ltx/ic-lora": schema("ltx/ic-lora", ["ic_lora"]),
+      "ltx/distill": schema("ltx/distill", ["distilled_lora"]),
+    },
+  } as unknown as S<"Workflow">;
+  const pick = (id: string) => [
+    { m: ltx("missing").models[0], v: ltx("missing").models[0].variants.find((v) => v.id === id)! },
+  ];
+
+  it("a run on another variant needs none; the node always run greys its variants' rows, not its controls", () => {
+    const needs = addonNeeds(w, ltx("missing"));
+    expect(needs.map((n) => [n.node, n.always, n.free])).toEqual([
+      ["detail", false, ["gcp"]],
+      ["distill", true, ["gcp"]],
+    ]);
+    // Distilled: the detailer is needed (Detail greyed), the distilled LoRA not
+    const distilled = needs.filter((n) => needed(n, pick("distilled")));
+    expect(distilled.map((n) => n.node)).toEqual(["detail"]);
+    expect(addonBlocks(distilled)).toEqual({ detail: "Detailer not downloaded" });
+    // Dev: the distilled LoRA's node is never forced off; Dev's row is greyed instead (board LtxFeatures 17)
+    const dev = needs.filter((n) => needed(n, pick("dev")));
+    expect(addonBlocks(dev)).toEqual({});
+    expect(variantBlock(needs, "ltx", "dev")).toBe("Distilled LoRA not downloaded");
+    expect(variantBlock(needs, "ltx", "dev", mac)).toBe("Distilled LoRA not downloaded on mac");
+    expect(variantBlock(needs, "ltx", "distilled")).toBeNull();
+    expect(variantBlock(addonNeeds(w, ltx("present")), "ltx", "dev")).toBeNull();
+    expect(machineReason(mac, "mlx", [], dev)).toBe("distilled LoRA not downloaded on mac");
+  });
+
+  it("a host that does not list an add-on needs none there (NVIDIA: no add-ons)", () => {
+    const needs = addonNeeds(w, ltx("missing"));
+    expect(addonBlocks(needs, gcp)).toEqual({});
+    expect(machineReason(gcp, "torch", [], needs)).toBeNull();
+    expect(addonBlocks(needs, mac)).toEqual({ detail: "Detailer not downloaded on mac" });
   });
 });

@@ -56,11 +56,10 @@ variants:
         - vae/ltx-2.5-video-vae-conv-bf16.safetensors
         - vae/ltx-2.5-audio-vae-bf16.safetensors
         - model_patches/ltx-2.5-duration-head-bf16.safetensors
-        - loras/ltx-2.5-22b-distilled-lora-450-bf16.safetensors
       licence: ltx-2-community
       must_accept: true
       gated: true   # Lightricks/LTX-2.5 is gated (auto): the host needs a Hub token
-      bytes: 79998697238
+      bytes: 71098807670   # API 1.40: without the distilled LoRA (8,899,889,568 bytes), an add-on now
   # the full (non-distilled) transformer, in the same folder (core/models.py: one folder, two variants); every other
   # component is the distilled variant's (the connector too: the old studio read it from the distilled file first)
   dev:
@@ -156,6 +155,7 @@ components:
   ic_lora:
     files: "loras/ltx-2.5-22b-ic-lora-pixel-spatial-upscaler-x2-1.0.safetensors"
     dtype: stored
+    variants: [distilled]   # API 1.40: the detail pass is Distilled's (and the Mac's): the NVIDIA runner lists no add-on
     addon:
       title: Detailer
       help: "Recipe: Detail. Lightricks' Pixel-Spatial-Upscaler."
@@ -164,6 +164,19 @@ components:
                revision: 59f26f1e0c11af42f1affa924b4ef231e9e98b2a,
                allow_patterns: [ltx-2.5-22b-ic-lora-pixel-spatial-upscaler-x2-1.0.safetensors], dir: ltx-2.5/loras,
                licence: ltx-2-community, must_accept: true, gated: true, bytes: 327322640}
+  # the distilled LoRA (the distilled transformer is dev + it at 1): an optional add-on of Dev's fast-distill stage
+  # (ltx/distill on Dev: audio to video's stage 2; owner's decision, 23.11, later the same night). Read by the bake
+  # (core/loaders_mlx.py), never a residency entry of its own: ltx/distill names it in `addons`, not `uses`
+  distilled_lora:
+    files: "loras/ltx-2.5-22b-distilled-lora-450-bf16.safetensors"
+    dtype: stored
+    variants: [dev]   # API 1.40: a Distilled run (distill is its identity) needs none
+    addon:
+      title: Distilled LoRA
+      help: "Dev's fast-distill stage (Audio to video on Dev). Distilled has it fused in."
+      source: {repo: Lightricks/LTX-2.5, revision: 5e6e71018ee1756ed329b697a7b4aedc934dfce9,
+               allow_patterns: [loras/ltx-2.5-22b-distilled-lora-450-bf16.safetensors],
+               licence: ltx-2-community, must_accept: true, gated: true, bytes: 8899889568}
 # LoRAs: adapter (the default, as upstream's unfused LoRAs: core/loaders_mlx.py activate) or bake (the old MLX code's
 # fuse into the transformer). The renames are the old LTXV_LORA_COMFY_RENAMING_MAP as end-of-module-part rewrites;
 # kohya files match none: refused. MLX only (runtime: mlx): the torch path (NVIDIA) refuses LoRA rows (no bake into
@@ -425,5 +438,6 @@ stages:
   distill:
     title: Distilled LoRA
     help: "Fuses the distilled LoRA into the dev transformer at strength 1, so a stage-2 sampler can refine with the distilled schedule. Distilled has it fused in: passed through."
+    addons: [distilled_lora]   # API 1.40: needed, not loaded through residency (the bake reads it): no memory plan counts it
     inputs: {model: Model}
     outputs: {model: Model}

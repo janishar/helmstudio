@@ -211,7 +211,10 @@ Keys the core understands; anything else is ignored:
   downloaded (`source`, as a variant's, into its `dir` or else the first variant's folder) and deleted on its own. A
   stage whose `uses` names it publishes `addons: [<name>]`: studio runs such a node (not bypassed) only on a host
   where the add-on is present, and the stage itself fails `<node>: <title> not downloaded on host <h>` without its
-  files (MiniMax H3 Image's enhancer, Qwen Image's two).
+  files (MiniMax H3 Image's enhancer, Qwen Image's two). From API 1.40 a stage's `addons: [<name>]` publishes it too
+  without loading it through residency (no memory plan counts it: ltx/distill's bake reads the distilled LoRA), and the
+  component's `variants` scopes an add-on to the runs of those variants: published as its `variants`, listed only by a
+  runner that runs one of them (ltx's two add-ons are the Mac's).
 - **`lora`** (optional; contracts/README.md "LoRAs", "LoRA normaliser"): `component` (the component LoRAs patch),
   `renames` (ordered `{from, to[, at: end]}` rewrites of a key's module part: a prefix, or with `at: end` a suffix,
   as ltx's `.to_out.0` → `.to_out`), `runtime` (optional: the one runtime the block holds for; ltx's is `mlx`, so

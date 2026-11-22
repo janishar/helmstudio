@@ -390,6 +390,7 @@ func TestPlaceFixtures(t *testing.T) {
 				Addons                                   []struct {
 					Node, Kind, Component, Title string
 					Bypass                       bool
+					Variants                     []string // API 1.40
 				} `json:"addons"` // API 1.36
 			} `json:"run"`
 			Expect struct {
@@ -464,7 +465,7 @@ func TestPlaceFixtures(t *testing.T) {
 						if slices.Contains(h.Addons[env], m+"/"+a.Component) {
 							presence = "present"
 						}
-						addons = append(addons, registry.Addon{Component: a.Component, Title: a.Title, Dir: a.Component, Presence: presence})
+						addons = append(addons, registry.Addon{Component: a.Component, Title: a.Title, Dir: a.Component, Presence: presence, Variants: a.Variants})
 					}
 					models = append(models, registry.Model{ID: m, Family: "qwen-image", Title: m, Variants: vs,
 						Lora: &registry.LoraBlock{Component: run.LoraComponent}, Addons: addons})

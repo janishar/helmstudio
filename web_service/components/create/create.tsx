@@ -125,6 +125,7 @@ import { RunOnChip } from "@/components/create/run-on";
 import {
   addonBlocks,
   addonNeeds,
+  needed,
   chosenVariants,
   clashNote,
   machines,
@@ -499,7 +500,11 @@ export function Create({
   const runOn = pinnedMachine(machineList, runOnHost);
   // optional add-ons (API 1.36): a node whose add-on is not where the run may go has its controls greyed, and stays
   // bypassed so the run check never refuses it (contracts/README.md, Optional add-ons)
-  const needs = useMemo(() => addonNeeds(workflow, modelList), [workflow, modelList]);
+  // (API 1.40) an add-on scoped to other variants than the chosen one is not needed; one a node the workflow always
+  // runs needs greys its variants' rows instead (Dev without the distilled LoRA)
+  const allNeeds = useMemo(() => addonNeeds(workflow, modelList), [workflow, modelList]);
+  const chosenModels = chosenVariants(all, { ...held, ...pins }, modelList);
+  const needs = allNeeds.filter((n) => needed(n, chosenModels));
   const blocks = addonBlocks(needs, runOn);
   const forced = Object.fromEntries(Object.keys(blocks).map((n) => [`${n}.bypass`, true]));
   const raws =
@@ -1708,7 +1713,7 @@ export function Create({
                 models={chipModels}
                 family={familyName}
                 spoken={audio}
-                versions={(f, o) => versionRow(modelList, runOn, f, o)}
+                versions={(f, o) => versionRow(modelList, runOn, f, o, allNeeds)}
                 blocks={blocks}
                 runOn={
                   <RunOnChip

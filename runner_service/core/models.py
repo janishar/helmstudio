@@ -407,9 +407,18 @@ def addon_entry(pack, c: str) -> dict:
         out["bytes"] = sum(f["bytes"] for f in files)
     if "source" in spec["addon"]:  # its `dir` is model.yaml's (addon_dest), not the contract's
         out["source"] = {k: v for k, v in spec["addon"]["source"].items() if k != "dir"}
+    if "variants" in spec:  # API 1.40: only these variants' runs need it
+        out["variants"] = list(spec["variants"])
     if mismatch:
         out["mismatch"] = mismatch[:64]
     return out
+
+
+def listed_addons(pack) -> list[str]:
+    """The add-ons this runner lists (API 1.40): those a variant it runs needs (the component's `variants`, absent:
+    every variant). LTX's are the Mac's, so the NVIDIA runner lists none."""
+    return [c for c in packs.addons(pack)
+            if any(runs_here(pack, v) for v in pack.component(c).get("variants", pack.spec["variants"]))]  # fmt: skip
 
 
 def addon_weights(pack, c: str) -> list[Path]:
@@ -429,7 +438,7 @@ def entry(pack) -> dict:
         out["variants"] = [
             variant_entry(pack, vid) for vid in spec["variants"] if runs_here(pack, vid)
         ]
-        if (extra := packs.addons(pack)) and out["variants"]:
+        if (extra := listed_addons(pack)) and out["variants"]:
             out["addons"] = [addon_entry(pack, c) for c in extra]
         # API 1.39: the components a non-default compute keys apart
         if compute := packs.compute_spec(pack):

@@ -10,6 +10,7 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 import numpy as np
 import pytest
@@ -1048,6 +1049,15 @@ def test_distilled_actions_pass_distill_through_and_key_the_encode_by_variant():
     distilled = pack.ModelRef(p, "distilled", "int8")
     assert ltx_mlx.distill(None, {}, {"model": distilled})["model"] is distilled
     assert ltx_mlx.check_distill({}, {"model"}, {"model": distilled}) is None
+    # API 1.40: Dev needs the add-on distilled_lora on this host (the run check's text, as studio's)
+    import config
+
+    dev = pack.ModelRef(p, "dev", "int8")
+    with mock.patch.object(pack, "models_root", lambda: Path("/nonexistent")):
+        assert ltx_mlx.check_distill({}, {"model"}, {"model": dev}) == (
+            f": Distilled LoRA not downloaded on host {config.HOST}"
+        )
+        assert ltx_mlx.check_distill({}, {"model"}, {"model": distilled}) is None
     nodes, impls, schemas = dev_workflow("ltx-retake")
     nodes["prompt"]["params"]["text"] = "a cat"
     nodes, _ = graph.resolve(nodes, schemas)
@@ -1079,6 +1089,8 @@ def test_dev_memory_plans_cover_only_the_runs_that_can_use_it():
         "dev"
     }
     assert registry.memory_plans(p, "dev", "bf16", impls, schemas) == []
+    # API 1.40: the distilled LoRA is an add-on the bake reads: no plan counts it as a component
+    assert not [c for x in plans for c in x["components"] if c["component"] == "distilled_lora"]
     # from API 1.39 retake, extend and audio to video run on Distilled too: audio to video gets its own item there
     assert [
         x.get("workflow") for x in registry.memory_plans(p, "distilled", "int8", impls, schemas)

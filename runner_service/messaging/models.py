@@ -160,7 +160,7 @@ class ModelJobs:
 
     def addon(self, p, data: dict) -> str | None:
         """The job's add-on (API 1.36), checked: one of the model's."""
-        if (c := data.get("addon")) is not None and c not in packs.addons(p):
+        if (c := data.get("addon")) is not None and c not in models.listed_addons(p):
             raise JobError("not_found", f"{p.spec['title']} has no add-on {c}")
         return c
 

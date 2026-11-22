@@ -2560,6 +2560,9 @@
           "envs": [
             "mlx",
             "torch"
+          ],
+          "addons": [
+            "distilled_lora"
           ]
         }
       ]

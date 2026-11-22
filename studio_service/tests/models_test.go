@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -597,7 +598,7 @@ func withAddon(turbo, presence string) []byte {
 	_ = json.Unmarshal(qwenModels(turbo), &value)
 	addon := map[string]any{"component": "enhancer", "title": "Enhancer", "dir": "Qwen-Image-2.1-PE", "presence": presence,
 		"source": map[string]any{"repo": "Qwen/Qwen-Image-2.1-PE", "revision": "main", "allow_patterns": []string{"*"},
-			"licence": "apache-2.0", "must_accept": false, "gated": false, "bytes": 40}}
+			"licence": "apache-2.0", "must_accept": false, "gated": false, "bytes": 40}, "variants": []string{"base", "turbo"}}
 	if presence != "missing" {
 		addon["bytes"] = 40
 	}
@@ -620,7 +621,8 @@ func TestModelAddonJobs(t *testing.T) {
 		for _, m := range list["models"].([]any) {
 			if m.(map[string]any)["id"] == "qwen-image-2.1" {
 				a := m.(map[string]any)["addons"].([]any)[0].(map[string]any)
-				if a["title"] != "Enhancer" || a["licence"].(map[string]any)["id"] != "apache-2.0" || a["download_bytes"] != 40.0 {
+				if a["title"] != "Enhancer" || a["licence"].(map[string]any)["id"] != "apache-2.0" || a["download_bytes"] != 40.0 ||
+					fmt.Sprint(a["variants"]) != "[base turbo]" { // API 1.40: as the hosts' entries scope it
 					t.Fatal(a)
 				}
 				return a["hosts"].([]any)[0].(map[string]any)

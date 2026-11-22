@@ -85,7 +85,7 @@ const host = (name: string, kind: string, device: string, state: string) => ({
   device: { kind, name: device, memory_total_gb: 96 },
 });
 
-function start(gcp = "idle", wf = workflow) {
+function start(gcp = "idle", wf = workflow, list: unknown = models) {
   let gcpState = gcp;
   const runs: Record<string, unknown>[] = [];
   const plans: Record<string, unknown>[] = [];
@@ -94,7 +94,7 @@ function start(gcp = "idle", wf = workflow) {
     "/v1/studio/sessions/{session_id}/takes": () => ({ data: { takes: [] } }),
     "/v1/studio/library": () => ({ data: { items: [] } }),
     "/v1/studio/loras": () => ({ data: { loras: [] } }),
-    "/v1/studio/models": () => ({ data: models }),
+    "/v1/studio/models": () => ({ data: list }),
     "/v1/studio/hosts": () => ({
       data: {
         hosts: [
@@ -156,6 +156,48 @@ const pickVersion = (title: string) =>
     )!,
   );
 const generate = (c: HTMLElement) => c.querySelector<HTMLButtonElement>('button[type="submit"]')!;
+
+describe("Create: an add-on scoped to a variant (API 1.40)", () => {
+  it("Audio to video without the distilled LoRA greys Dev's row, not Distilled's (board LtxFeatures 17)", async () => {
+    const a2v = {
+      ...ltxWorkflows.workflows.find((w) => w.id === "ltx-audio-to-video"),
+      env: "torch",
+      node_schemas: schemas,
+      source: "template",
+    } as unknown as S<"Workflow">;
+    const addon = (component: string, title: string, scope: string) => ({
+      component,
+      title,
+      variants: [scope],
+      dir: "ltx-2.5",
+      licence: null,
+      gated: false,
+      download_bytes: null,
+      hosts: [{ host: "mac", state: "missing" }],
+    });
+    const list = {
+      ...models,
+      models: [
+        {
+          ...models.models[0],
+          addons: [
+            addon("ic_lora", "Detailer", "distilled"),
+            addon("distilled_lora", "Distilled LoRA", "dev"),
+          ],
+        },
+      ],
+    };
+    start("idle", a2v, list);
+    await waitFor(() => expect(versions()).toHaveLength(2));
+    await waitFor(() =>
+      expect(versions()).toEqual(["DistilledMac only", "DevDistilled LoRA not downloaded (dim)"]),
+    );
+    const dev = [...document.querySelectorAll<HTMLButtonElement>("#model-pick button")].find((b) =>
+      b.textContent?.startsWith("Dev"),
+    )!;
+    expect(dev.disabled).toBe(true);
+  });
+});
 
 describe("Create: Run on", () => {
   it("Auto by default: the chip after the model chip, an offline host greyed, no host sent", async () => {

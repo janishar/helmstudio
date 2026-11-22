@@ -241,7 +241,32 @@
             "must_accept": true,
             "gated": true,
             "bytes": 327322640
-          }
+          },
+          "variants": [
+            "distilled"
+          ]
+        },
+        {
+          "component": "distilled_lora",
+          "title": "Distilled LoRA",
+          "help": "Dev's fast-distill stage (Audio to video on Dev). Distilled has it fused in.",
+          "dir": "ltx-2.5",
+          "presence": "present",
+          "bytes": 8899889568,
+          "source": {
+            "repo": "Lightricks/LTX-2.5",
+            "revision": "5e6e71018ee1756ed329b697a7b4aedc934dfce9",
+            "allow_patterns": [
+              "loras/ltx-2.5-22b-distilled-lora-450-bf16.safetensors"
+            ],
+            "licence": "ltx-2-community",
+            "must_accept": true,
+            "gated": true,
+            "bytes": 8899889568
+          },
+          "variants": [
+            "dev"
+          ]
         }
       ],
       "compute": {

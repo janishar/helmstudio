@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.39.0
+  version: 1.40.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -5451,6 +5451,7 @@ components:
         title: {type: string, examples: [Enhancer]}
         help: {type: string}
         dir: {type: [string, 'null'], description: 'its folder under each host''s models root'}
+        variants: {type: array, items: {type: string}, description: 'from 1.40: the variants whose runs need it (the hosts'' models entries, contracts/README.md Optional add-ons); a run on another variant does not, and the form greys those variants'' rows instead of a control when the node always runs (Dev without the distilled LoRA). Absent = every variant'}
         licence:
           oneOf:
             - type: object

@@ -56,7 +56,7 @@ def test_the_detailer_is_an_optional_add_on_whose_published_source_has_no_dir(
 
     monkeypatch.setattr(packs, "models_root", lambda: tmp_path)
     p = SimpleNamespace(spec=SPEC, component=lambda c: SPEC["components"][c])
-    assert packs.addons(p) == ["ic_lora"]
+    assert packs.addons(p) == ["ic_lora", "distilled_lora"]
     assert models.addon_dest(p, "ic_lora") == tmp_path / "ltx-2.5/loras"
     out = models.addon_entry(p, "ic_lora")
     assert (
@@ -72,6 +72,61 @@ def test_the_detailer_is_an_optional_add_on_whose_published_source_has_no_dir(
     assert models.addon_entry(p, "ic_lora")["presence"] == "partial"  # its download is unfinished
     marker.unlink()
     assert models.addon_entry(p, "ic_lora")["presence"] == "present"
+
+
+def test_the_distilled_lora_is_devs_add_on_not_a_file_of_distilled(tmp_path, monkeypatch):
+    """API 1.40: the 8.9 GB LoRA is the add-on `distilled_lora` scoped to Dev; Distilled's download and bytes leave
+    it out, the file in its folder is not Distilled's, and the detailer is scoped to Distilled."""
+    from core import models
+
+    monkeypatch.setattr(packs, "models_root", lambda: tmp_path)
+    p = SimpleNamespace(spec=SPEC, component=lambda c: SPEC["components"][c])
+    lora = SPEC["components"]["distilled_lora"]["files"]
+    src = SPEC["variants"]["distilled"]["source"]
+    assert lora not in src["allow_patterns"] and src["bytes"] == 71098807670
+    assert [x["file"] for x in SPEC["lora"]["prefused"]] == [
+        lora
+    ]  # the bake's file is the add-on's
+    out = models.addon_entry(p, "distilled_lora")
+    assert (out["title"], out["dir"], out["variants"], out["source"]["bytes"]) == (
+        "Distilled LoRA", "ltx-2.5", ["dev"], 8899889568)  # fmt: skip
+    assert models.addon_entry(p, "ic_lora")["variants"] == ["distilled"]
+    (tmp_path / "ltx-2.5/loras").mkdir(parents=True)
+    (tmp_path / "ltx-2.5" / lora).write_bytes(b"x")
+    assert models.addon_entry(p, "distilled_lora")["presence"] == "present"
+    assert Path(lora) not in models.variant_files(p, "distilled")
+
+
+def test_only_a_runner_that_runs_an_add_ons_variants_lists_it(monkeypatch):
+    """The Mac lists both LTX add-ons; the NVIDIA runner (distilled-fp8, dev-int8) none (board LtxFeatures 15)."""
+    from core import models
+
+    p = SimpleNamespace(spec=SPEC, component=lambda c: SPEC["components"][c], runtime="mlx")
+    monkeypatch.setattr(models, "device", lambda pack: "mps")
+    assert models.listed_addons(p) == ["ic_lora", "distilled_lora"]
+    p.runtime = "torch"
+    monkeypatch.setattr(models, "device", lambda pack: "cuda")
+    assert models.listed_addons(p) == []
+
+
+def test_distill_needs_the_add_on_without_loading_it():
+    """ltx/distill publishes addons [distilled_lora] from its `addons` (not `uses`): no memory plan counts it."""
+    stage = SPEC["stages"]["distill"]
+    assert stage["addons"] == ["distilled_lora"] and "uses" not in stage
+    pack = packs.Pack("ltx", LTX, SPEC, "mlx", None, "")
+    nodes = packs._nodes(
+        {"distill": stage}, "ltx", "c", pack, SimpleNamespace(distill=lambda *a: {})
+    )
+    schema, node = nodes["ltx/distill"]
+    assert schema["addons"] == ["distilled_lora"] and node.uses == ()
+    with pytest.raises(ValueError, match="addons names no add-on"):
+        packs._nodes(
+            {"distill": stage | {"addons": ["vae"]}},
+            "ltx",
+            "c",
+            pack,
+            SimpleNamespace(distill=lambda *a: {}),
+        )
 
 
 def test_the_ltx_pack_names_no_weight_file_in_code():

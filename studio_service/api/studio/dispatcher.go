@@ -1085,9 +1085,9 @@ func eligibleIn(reg *registry.Registry, values []registry.Host, reserved map[str
 	if len(hosts) == 0 {
 		return gone(pinned("does not have "+missing, "no live host for env "+env+" has "+missing))
 	}
-	// API 1.19: a <family>/distill node fuses the family's distilled LoRA onto another variant: the host's models
-	// key must list it as pre-fused for variant distilled (MLX), or (M9, torch) the run's model variant names its
-	// built-in distilled weights (`distill_from`: dev-int8 → distilled-fp8) and that variant is present there
+	// API 1.19: a <family>/distill node on a variant with built-in distilled weights (M9, torch: `distill_from`,
+	// dev-int8 → distilled-fp8) needs that variant present; from 1.40 the MLX bake's file is the add-on rule's below
+	// (`distilled_lora`, scoped to Dev: a Distilled run needs none)
 	for _, id := range slices.Sorted(maps.Keys(graph)) {
 		family, distill := strings.CutSuffix(graph[id].Kind, "/distill")
 		if !distill {
@@ -1095,12 +1095,9 @@ func eligibleIn(reg *registry.Registry, values []registry.Host, reserved map[str
 		}
 		hosts = slices.DeleteFunc(hosts, func(host string) bool {
 			found, _ := reg.Model(host+"."+env, family)
-			if found.Lora != nil && slices.ContainsFunc(found.Lora.Prefused, func(p registry.Prefused) bool { return p.Variant == "distilled" }) {
-				return false
-			}
-			return !slices.ContainsFunc(models, func(m runModel) bool {
+			return slices.ContainsFunc(models, func(m runModel) bool {
 				i := slices.IndexFunc(found.Variants, func(v registry.Variant) bool { return v.ID == m.variant })
-				return m.family == family && i >= 0 && found.Variants[i].DistillFrom != "" && found.Has(found.Variants[i].DistillFrom)
+				return m.family == family && i >= 0 && found.Variants[i].DistillFrom != "" && !found.Has(found.Variants[i].DistillFrom)
 			})
 		})
 		if len(hosts) == 0 {
@@ -1108,13 +1105,18 @@ func eligibleIn(reg *registry.Registry, values []registry.Host, reserved map[str
 		}
 	}
 	// API 1.36 (contracts/README.md "Optional add-ons"): a node that is not bypassed needs each add-on its kind loads
-	// present in the host's models entry of its family
+	// present in the host's models entry of its family; from 1.40 not when that entry does not list it, or lists it
+	// for other variants than the run's (the distilled LoRA is Dev's)
 	for _, id := range slices.Sorted(maps.Keys(graph)) {
 		node := graph[id]
 		if node.Bypass {
 			continue
 		}
 		family := registry.Family(node.Kind)
+		variant := ""
+		if i := slices.IndexFunc(models, func(m runModel) bool { return m.family == family }); i >= 0 {
+			variant = models[i].variant
+		}
 		// each host's own runner names what the kind loads there (a host on an older runner, or on a runtime whose
 		// stage loads no add-on, needs none)
 		var needs []string
@@ -1133,7 +1135,10 @@ func eligibleIn(reg *registry.Registry, values []registry.Host, reserved map[str
 				}
 				found, _ := reg.Model(host+"."+env, family)
 				a, listed := found.Addon(c)
-				if listed && title == c {
+				if !listed || !a.Needs(variant) {
+					return false
+				}
+				if title == c {
 					title = a.Title
 				}
 				return a.Presence != "present"
