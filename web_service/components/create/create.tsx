@@ -1487,7 +1487,7 @@ export function Create({
               const id = (it.take ?? it.run).id;
               const seed = it.take ? it.take.made_with?.seed : seedOf(it.run);
               const name = seed != null ? `seed ${seed}` : `take ${items.length - i}`;
-              const menu = it.take || it.run.status === "succeeded";
+              const menu = it.take || (it.run.status === "succeeded" && !it.run.batch_id); // a batch's run goes with its batch
               return (
                 <div
                   key={id}

@@ -199,17 +199,19 @@ func (p *Projector) askName(ctx context.Context, tx pgx.Tx, run model.Run) error
 	if prompt == "" {
 		return nil // the next run with a prompt may ask
 	}
+	// marked first, whatever the setting: only the first succeeded run with a prompt may name (naming turned on later
+	// never names an older session)
+	tag, err := tx.Exec(ctx, `UPDATE sessions SET name_asked = true WHERE id = $1 AND NOT name_asked
+		AND title_source IN ('default', 'prompt')`, run.SessionID)
+	if err != nil || tag.RowsAffected() == 0 {
+		return err
+	}
 	set, err := readNames(ctx, tx)
 	if err != nil {
 		return err
 	}
 	name, provider, ok, err := namer(ctx, tx, set)
 	if err != nil || !ok || (provider != nil && provider.Kind == "remote" && !p.RemoteOn) {
-		return err
-	}
-	tag, err := tx.Exec(ctx, `UPDATE sessions SET name_asked = true WHERE id = $1 AND NOT name_asked
-		AND title_source IN ('default', 'prompt')`, run.SessionID)
-	if err != nil || tag.RowsAffected() == 0 {
 		return err
 	}
 	data := message.Name{SessionID: run.SessionID, RunID: run.ID, Prompt: prompt, Mode: set.Mode, NamedBy: name}

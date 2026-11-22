@@ -149,6 +149,14 @@ describe("Create: deleting from the strip", () => {
     );
   });
 
+  it("a batch's answer has no ⋯ (it goes with its batch)", () => {
+    const out = { index: 0, key: "k", kind: "image", url: "/files/u/x/1.png", width: 1, height: 1 };
+    start({
+      runs: [run("r3", "succeeded", { outputs: [out] as S<"Run">["outputs"], batch_id: "b1" })],
+    });
+    expect(within(strip()).queryByRole("button", { name: /: more$/ })).toBeNull();
+  });
+
   it("✕ on failed and stopped tiles only; Clear removes both without a card", async () => {
     const runs = [
       run("ok", "running"),

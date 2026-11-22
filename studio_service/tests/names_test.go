@@ -275,6 +275,13 @@ func TestSessionTitlesAndNaming(t *testing.T) {
 	if len(e.typed(e.finish(group, off, run, "succeeded"), "cmd.pipeline.name")) != 0 {
 		t.Fatal("off")
 	}
+	// naming turned on later never names a session past its first succeeded run
+	e.call(admin, "PUT", names, map[string]any{"mode": "remote", "provider": "ollama"}, 200)
+	run = e.call(userA, "POST", "/v1/studio/sessions/"+off+"/runs", map[string]any{"workflow_id": "echo",
+		"inputs": map[string]any{"prompt.text": "owl"}}, 202)["id"].(string)
+	if len(e.typed(e.finish(group, off, run, "succeeded"), "cmd.pipeline.name")) != 0 {
+		t.Fatal("asked after off")
+	}
 }
 
 // typed is the envelopes of one type.

@@ -112,6 +112,9 @@ func (s *Service) ListSessions(ctx context.Context, caller common.Caller) (dto.S
 		if err == nil {
 			out.Naming, err = naming(ctx, tx)
 		}
+		if out.Naming.Remote && !s.remoteOn { // the projector asks nothing while the switch is off: say nothing
+			out.Naming = dto.SessionNaming{Mode: "off"}
+		}
 		return err
 	})
 	return out, err
