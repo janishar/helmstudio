@@ -2942,6 +2942,12 @@
                             "minLength": 1,
                             "maxLength": 40
                           },
+                          "help": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 300,
+                            "description": "from API 1.39: the option's line under its name in the tile's menu (LTX's Recipe: Detail)"
+                          },
                           "set": {
                             "type": "object",
                             "minProperties": 1,

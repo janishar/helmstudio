@@ -36,7 +36,7 @@ import pytest
 GOLDENS = Path(__file__).resolve().parent / "golden"
 DIRS = {"t2v": "ltx-text-to-video", "i2v": "ltx-image-to-video", "kf": "ltx-image-to-video",
         "beats": "ltx-prompt-beats", "lora": "ltx-lora", "retake": "ltx-retake", "extend": "ltx-extend",
-        "a2v": "ltx-audio-to-video", "nag": "ltx-nag"}  # fmt: skip
+        "a2v": "ltx-audio-to-video", "nag": "ltx-nag", "detail": "ltx-detail"}  # fmt: skip
 CASES = ["t2v-448x256-49f-s42", "t2v-512x320-57f-s7", "i2v-448x256-49f-s42", "kf-448x256-49f-s42",
          "beats-448x256-49f-s42", "lora-448x256-49f-s42", "lora-adapter-448x256-49f-s42", "nag-448x256-49f-s42",
          "auto-duration"]  # fmt: skip
@@ -46,6 +46,11 @@ DEV_CASES = ["retake-448x256-49f-s42", "extend-448x256-49f+8-s42", "a2v-448x256-
 # `retake | extend | a2v --distilled` (tests/golden/record_ltx.py DISTILLED_CASES); matched on frames and the WAV
 DISTILLED_CASES = ["retake-distilled-448x256-49f-s42", "extend-distilled-448x256-49f+48-s42",
                    "a2v-distilled-448x256-49f-s42"]  # fmt: skip
+# plan 19 phases 4 and 4b, Recipe Detail (DFR; fork main e6e15b7 with LTX2_LORA_MODE=unfused, as the detailer is an
+# adapter here): text to video at 49 frames (no padding) and 57 (padded to 65), audio to video at 49 and 57; matched as
+# the distilled ones (DISTILLED_BAR_DB)
+DETAIL_CASES = ["detail-448x256-49f-s42", "detail-512x320-57f-s7", "a2v-detail-448x256-49f-s42",
+                "a2v-detail-448x256-57f-s42"]  # fmt: skip
 DEV = ("retake", "extend", "a2v")
 INPUTS = (
     Path(__file__).resolve().parents[2] / "tests" / "golden"
@@ -54,6 +59,30 @@ INPUTS = (
 
 def golden_dir(name: str) -> Path:
     return GOLDENS / DIRS[name.split("-")[0]]
+
+
+def detailed(nodes: dict) -> None:
+    """The workflow's Recipe: Detail (its `detail` node on, both samples' detail pass)."""
+    nodes["detail"].pop("bypass", None)
+    for s in ("sample1", "sample2"):
+        nodes[s]["params"]["detail"] = True
+
+
+def unbypassed(nodes: dict, schemas: dict) -> dict:
+    """The graph without its bypassed nodes, each consumer wired to the input the node passes through, as studio
+    splices a run (Recipe Two-stage's `detail`)."""
+    for nid in [n for n, x in nodes.items() if x.get("bypass")]:
+        x = nodes.pop(nid)
+        schema = schemas[x["kind"]]
+        types = {i["name"]: i["type"] for i in schema["inputs"]}
+        through = {
+            o["name"]: x["in"][next(i for i, t in types.items() if t == o["type"])]
+            for o in schema["outputs"]
+        }
+        for n in nodes.values():
+            n["in"] = {p: through.get(r.partition(".")[2], r) if r.partition(".")[0] == nid else r
+                       for p, r in n.get("in", {}).items()}  # fmt: skip
+    return nodes
 
 
 # On the goldens' mlx (0.32.2) every latent must be bit-exact (measured: it is, PSNR inf, WAV identical). On another
@@ -263,8 +292,10 @@ class Bench:
         nodes["model"]["params"]["precision"] = f"int{case['quantize_on_load']}"
         # the templates default to Distilled from API 1.39: a dev golden asks for Dev
         nodes["model"]["params"]["variant"] = (
-            "distilled" if "-distilled-" in case["name"] else "dev"
+            "distilled" if "-distilled-" in case["name"] or case.get("dfr") else "dev"
         )
+        if case.get("dfr"):
+            detailed(nodes)
         if kind == "a2v":
             f = GOLDENS / "ltx-audio-to-video" / case["inputs"]["audio"]["file"]
             out = round(case["frames"] / case["fps"], 3)
@@ -360,6 +391,8 @@ class Bench:
             nodes["encode"]["params"]["negative"] = case["negative_prompt"]
         if case.get("compute"):
             nodes["model"]["params"]["compute"] = case["compute"]
+        if case.get("dfr"):
+            detailed(nodes)
         return nodes
 
     def ctx(self, progress=None, output=None):
@@ -387,6 +420,11 @@ class Bench:
 
     def run(self, nodes: dict, wav: Path | None = None) -> dict:
         g = self.graph
+        nodes = unbypassed(nodes, self.schemas)
+        for n in (
+            nodes.values()
+        ):  # studio merges the schema's defaults in (a template may leave one out: compute)
+            n["params"] = {p["name"]: p["default"] for p in self.schemas[n["kind"]]["params"] if "default" in p} | n.get("params", {})  # fmt: skip
         assert not g.validate(nodes, self.schemas), g.validate(nodes, self.schemas)
         nodes, _ = g.resolve(nodes, self.schemas)
         self.rows, self.wav, out = {}, wav, {"mp4": None, "phases": []}
@@ -715,6 +753,13 @@ DISTILLED_BARS = {
         "video_worst_db": 20.5,
         "logmel_db": 0.1,
     },
+    # plan 19 phases 4 and 4b (2026-11-22, fork main e6e15b7 with LTX2_LORA_MODE=unfused; bit-exact on 0.32.2, PSNR
+    # inf and the WAV equal, all four); 0.32.4 measured 25.49 / 22.68 / 0.816, 28.17 / 26.94 / 0.881 (the padded
+    # 57-frame canvas), a2v 25.70 / 24.56 / 0.000 and 26.30 / 25.20 / 0.000 (padded)
+    "detail-448x256-49f-s42": {"video_mean_db": 25.0, "video_worst_db": 22.0, "logmel_db": 0.9},
+    "detail-512x320-57f-s7": {"video_mean_db": 27.5, "video_worst_db": 26.5, "logmel_db": 0.95},
+    "a2v-detail-448x256-49f-s42": {"video_mean_db": 25.0, "video_worst_db": 24.0, "logmel_db": 0.1},
+    "a2v-detail-448x256-57f-s42": {"video_mean_db": 25.5, "video_worst_db": 24.5, "logmel_db": 0.1},
 }
 
 
@@ -742,7 +787,7 @@ def compare_distilled(name: str, r: dict, out: Path) -> dict:
                       "worst_db": round(worst, 2) if per else None,
                       "same_streams": [s["codec_type"] for s in probe] == [s["codec_type"] for s in gprobe]},
             "audio": audio, "fork": {"total_s": g["timing_s"]["total_wall"], "memory": g["memory"]},
-            "pass": bool(per) and (worst >= DISTILLED_BAR_DB if g["versions"]["mlx"] == mx.__version__ else
+            "pass": bool(per) and bool(worst >= DISTILLED_BAR_DB if g["versions"]["mlx"] == mx.__version__ else
                                    (b := DISTILLED_BARS[name])["video_mean_db"] <= np.mean(per)
                                    and b["video_worst_db"] <= worst and audio.get("logmel_db", 99) <= b["logmel_db"])}  # fmt: skip
 
@@ -778,7 +823,7 @@ def main(argv=None) -> int:
             bench.prefuse()
         r = bench.run(bench.dev_nodes(case) if dev else bench.nodes(case), wav=out / f"{name}.wav")
         r["mlx"] = mx.__version__
-        if "-distilled-" in name:
+        if "-distilled-" in name or name in DETAIL_CASES:
             c = compare_distilled(name, r, out)
         else:
             c = compare_dev(name, r, out, bench) if dev else compare(name, r, out, bench)
@@ -824,6 +869,13 @@ def test_ltx_distilled_goldens():
     """Distilled retake, extend and audio to video (plan 19 phase 1): every frame >= 40 dB from the fork's."""
     pytest.importorskip("mlx")
     assert main(DISTILLED_CASES) == 0
+
+
+@pytest.mark.gpu
+def test_ltx_detail_goldens():
+    """Recipe Detail on text and audio to video (plan 19 phases 4, 4b): every frame >= 40 dB from the fork's."""
+    pytest.importorskip("mlx")
+    assert main(DETAIL_CASES) == 0
 
 
 @pytest.mark.gpu

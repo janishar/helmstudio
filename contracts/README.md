@@ -963,6 +963,34 @@ audio track) plus a poster image; uploads stay images.
   alpha 0.25, tau 2.5, video and audio; a frozen audio stream unguided); blank adds nothing. On NVIDIA the run check
   refuses it: `encode.negative: NAG is Mac only for now`. `ltx/encode-guided.negative` (text, 0–500, `when` Dev):
   Dev's CFG negative, blank = the fixed one (both runtimes); Distilled has none.
+- **Recipe Detail** (API 1.39; plan 19-ltx-studio-features 23.4 phases 4 and 4b, board LtxFeatures frames 1, 2, 5,
+  9, 15 and 16; normative). DFR (ltx studio's `generate --dfr` / `a2v --dfr` at spatial ×1, no temporal rounds, the
+  conv decoder): `ltx/ic-lora` (title IC-LoRA; Model → Model; `strength` float 0–2 default 1; `uses: [ic_lora]`, so
+  it publishes `addons: [ic_lora]` on both runtimes) adds the model's IC-LoRA, the optional add-on `ic_lora`
+  (`Detailer`, Lightricks' Pixel-Spatial-Upscaler, 327,322,640 bytes, `reference_downscale_factor` 2), to the Model
+  handle as one adapter use (core's MLX adapter path: its file read in place, its strength a held scalar, no second
+  transformer); bypassed it is the Model as it is. `ltx/sample` gains `detail` (bool, default false, label Detail pass)
+  and the optional input `reference` (Latent); `ltx/sample-guided` gains `detail`. Stage 1 with `detail` pads the clip
+  to whole keyframe segments (24 or 32 frames, the least padding, the longer on a tie) with one generated keyframe
+  slot per segment boundary (`dfr_layout.resolve_canvas`; RoPE fps snaps to 60 above 30); a2v pads the frozen source
+  audio with zero tokens to the canvas. `upscale` doubles the slots too. Stage 2 with `detail` conditions on the
+  upscaled slots and, when its Model carries an IC-LoRA, on `reference` (stage 1's latent) as the IC reference at the
+  file's downscale factor, keeps stage 1's audio and trims the padding. The templates: a node `detail` (ltx/ic-lora,
+  strength 0.5, bypassed, not placed; t2v / i2v between `lora` and `sample2.model`, a2v between `distill` and
+  `sample2.model`) and `sample2.reference ← sample1.latent` always wired (unread without the IC-LoRA: Two-stage and
+  One-stage give the same pixels). Recipe `Detail`: `detail.bypass` false, `sample1.detail` and `sample2.detail`
+  true (t2v / i2v also `upscale.bypass` and `sample2.bypass` false); a2v's Quality gets a Recipe `Two-stage · Detail`.
+  The run check (the runner, before anything loads): `<node>.detail: needs model variant distilled` (Dev, a2v's
+  Recipe stays placed); NVIDIA: `<node>.detail: the detail pass is Mac only for now`; a detail stage 1 into a stage
+  2 without it (or the reverse) `<node>.detail: stage 1 and stage 2 take the detail pass together …`, straight into
+  decode `<node>: the latent has the detail pass's padding; a stage 2 with detail trims it`. Without the Detailer on
+  a host, `detail` is not runnable there (Optional add-ons: `detail: Detailer not downloaded on host <H>`, `… on any
+  live host for env <env>`); the UI greys Recipe `Detail` with `Detailer not downloaded`. The progress strip shows no
+  piece for a node that only hands a Model on (`ltx/lora-stack`, `ltx/ic-lora`, `ltx/distill`) unless it reports.
+  Memory: stage 1 + the padding and one latent frame per slot, stage 2 + the reference (a quarter of the stage's
+  tokens) and the slots (model.yaml peak_gb); the adapter is counted at its file's size. Goldens:
+  `runner_service/tests/golden/ltx-detail` and `ltx-audio-to-video/a2v-detail-*` (fork main e6e15b7 with
+  `LTX2_LORA_MODE=unfused`).
 - **Auto length** (`auto` on a `frames` param). The value `"auto"` asks the model to choose the length (LTX: a 3.8 MB
   DurationHead on the encoded prompt, beats included; deterministic, no seed). Allowed only when the param declares
   `auto` (else 422 / `param_invalid`: `<node>.<param>: auto length is not offered`); it may sit in a workflow, a preset,
@@ -1607,11 +1635,14 @@ graph is saved first: "Save" for one's own, "Save as my workflow" for a template
   title), `presets` (name → `{path: value}`, at most 8) and from API 1.25 `preset_order` (every preset name once, in
   the order Create shows them; an object's key order is not kept, so the list carries it; absent = by name; else 422
   `studio.preset_order: every preset once`). From API 1.26 a section may lead with `choices` (at most 4: `{label,
-  help?, options}`, 2–8 options `{name, set}`, `set` a preset's `{path: value}`): a tile that picks one option and sets
-  its values, showing the first option whose set holds (none: `custom`); its paths need not be placed and are sent with
-  the run like placed ones. LTX text and image to video: Quality's `Recipe` (`Two-stage`: `upscale.bypass` and
-  `sample2.bypass` false; `One-stage`: both true, so stage 1's half-size latent is decoded: the clip is half the
-  canvas). A path is `<node>.<param>` or `<node>.bypass`. Present = Create shows
+  help?, options}`, 2–8 options `{name, help?, set}`, `set` a preset's `{path: value}`; from API 1.39 an option's
+  `help` is its line under its name in the tile's menu): a tile that picks one option and sets its values, showing the
+  first option whose set holds (none: `custom`); its paths need not be placed and are sent with the run like placed
+  ones. An option whose set switches on (`<node>.bypass: false`) a node whose add-on is missing where the run may go is
+  greyed with `<title> not downloaded` (Optional add-ons). LTX text and image to video: Quality's `Recipe`
+  (`Two-stage`: `upscale.bypass` and `sample2.bypass` false; `One-stage`: both true, so stage 1's half-size latent is
+  decoded: the clip is half the canvas; from 1.39 `Detail`, below, and each option also sets `detail.bypass`,
+  `sample1.detail` and `sample2.detail`). A path is `<node>.<param>` or `<node>.bypass`. Present = Create shows
   exactly the placed paths, each at most once; every other param keeps its graph value (the composer's model chip
   still names an unplaced model node's choices, read-only). Absent = the derived form (every param, as today). Graph view "Show in
   Studio" on a param: if `studio` is absent the editor first writes the derived form out as a block (the web's own
@@ -2951,7 +2982,12 @@ Image's prompt enhancers, LTX's detailer and distilled LoRA): one shared, model.
 studio or the web.
 - **model.yaml**: `components.<c>.addon: {title, help?, source?}` (`source` as a variant's: `{repo, revision,
   allow_patterns, licence, must_accept, gated, bytes?}`). Its folder is the component's own `dir`, else the first
-  variant's. A stage whose `uses` names it publishes `addons: [<c>]` in its nodeSchema.
+  variant's. A stage whose `uses` names it publishes `addons: [<c>]` in its nodeSchema. From API 1.39 the model.yaml
+  `source` may carry `dir`: the folder under the models root the repo's files land in (LTX's detailer: the repo's root
+  file into `ltx-2.5/loras`, inside the add-on's folder `ltx-2.5`, where its glob finds it); the models entry publishes
+  `source` without it. A component may also carry `variants: [<id>, …]` (model.yaml only): it is a part of those
+  variants only (absent: all), so the others need it neither for presence nor for a download (LTX's `duration_head`:
+  the distilled variants'; Dev's shares stay 8).
 - **Presence**: a variant is `present` without its add-ons; their files are never in its `components`, `files` or
   `bytes`, and a delete of the variant keeps them. The models entry lists `addons [{component, title, help?, dir,
   presence, bytes?, source?, mismatch?}]`, presence decided as a variant's over the add-on's own files (its globs in

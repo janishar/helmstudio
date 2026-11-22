@@ -1,0 +1,100 @@
+{
+  "name": "a2v-detail-448x256-49f-s42",
+  "out": "ltx-audio-to-video",
+  "kind": "a2v",
+  "seed": 42,
+  "width": 448,
+  "height": 256,
+  "frames": 49,
+  "fps": 24.0,
+  "audio_start": 0.0,
+  "prompt": "A musician plays a glowing synthesizer on a dark stage, lights pulsing in time with each note",
+  "dfr": true,
+  "lora_mode": "unfused",
+  "argv_equivalent": "LTX2_LORA_MODE=unfused ltx-2-mlx a2v --dfr --detailing-lora ltx-2.5-22b-ic-lora-pixel-spatial-upscaler-x2-1.0.safetensors --model ~/GenAI/models/ltx-2.5 --quantize-on-load 8 --width 448 --height 256 --frames 49 --frame-rate 24 --seed 42 --audio a2v-detail-448x256-49f-s42-audio.wav --prompt '...' -o a2v-detail-448x256-49f-s42.mp4",
+  "inputs": {
+    "audio": {
+      "file": "a2v-detail-448x256-49f-s42-audio.wav",
+      "sha256": "29c22ff6b64a77469180c420fd9bb6e4be2fc565832e5237000779c639d55334",
+      "seconds": 3.0,
+      "rate": 48000,
+      "channels": 2,
+      "what": "ltx_inputs.test_tones"
+    }
+  },
+  "quantize_on_load": 8,
+  "low_ram": false,
+  "final_video_latent": null,
+  "final_audio_latent": null,
+  "wav": {
+    "sample_rate": 48000,
+    "file": "a2v-detail-448x256-49f-s42.wav",
+    "what": "the input audio trimmed to the video (a2v muxes it)"
+  },
+  "frames_png": {
+    "first": {
+      "index": 0,
+      "file": "a2v-detail-448x256-49f-s42-first.png"
+    },
+    "mid": {
+      "index": 24,
+      "file": "a2v-detail-448x256-49f-s42-mid.png"
+    },
+    "last": {
+      "index": 48,
+      "file": "a2v-detail-448x256-49f-s42-last.png"
+    }
+  },
+  "mp4": {
+    "file": "a2v-detail-448x256-49f-s42.mp4",
+    "bytes": 143423,
+    "ffprobe": {
+      "programs": [],
+      "stream_groups": [],
+      "streams": [
+        {
+          "index": 0,
+          "codec_name": "h264",
+          "profile": "High",
+          "codec_type": "video",
+          "width": 448,
+          "height": 256,
+          "pix_fmt": "yuv420p",
+          "r_frame_rate": "24/1",
+          "duration": "2.041667",
+          "nb_frames": "49"
+        },
+        {
+          "index": 1,
+          "codec_name": "aac",
+          "profile": "LC",
+          "codec_type": "audio",
+          "sample_rate": "48000",
+          "channels": 2,
+          "r_frame_rate": "0/0",
+          "duration": "2.041667",
+          "nb_frames": "97"
+        }
+      ],
+      "format": {
+        "duration": "2.041667",
+        "bit_rate": "561983"
+      }
+    },
+    "sha256": "4077543b16d55926456264eebab3817477bf2c0ad134aad5396f8834555d9437"
+  },
+  "timing_s": {
+    "total_wall": 30.6
+  },
+  "memory": {
+    "mlx_peak_gib_whole_run": 7.7,
+    "process_max_rss_gib": 9.47,
+    "guard_gib": 46.0
+  },
+  "versions": {
+    "mlx": "0.32.2",
+    "python": "3.11.16",
+    "ltx_pipelines_mlx": "ltx-2-studio main e6e15b7",
+    "machine": "Darwin 27.2.0 arm64"
+  }
+}

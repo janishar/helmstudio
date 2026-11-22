@@ -202,7 +202,12 @@ export function segments(w: S<"Workflow">, run: Run, t?: RunTrack): Segment[] {
     const s = schema(id);
     if (sink(id)) return false;
     if (id in nodes || id === run.progress?.node) return true;
-    return !!s?.inputs.length && !!s.outputs.length && !emptyStack(w, id);
+    // a node that only hands a Model on (a LoRA stack, the IC-LoRA of Recipe: Detail) does no work of its own: its
+    // load shows under the sampler that uses it (docs/mock/LtxFeatures.dc.html frame 1)
+    const modelOnly = [...(s?.inputs ?? []), ...(s?.outputs ?? [])].every(
+      (x) => x.type === "Model",
+    );
+    return !!s?.inputs.length && !!s.outputs.length && !modelOnly && !emptyStack(w, id);
   });
   // a node the graph does not have still gets its piece, at the end
   for (const id of Object.keys(nodes)) if (!order.includes(id) && !sink(id)) order.push(id);

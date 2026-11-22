@@ -85,7 +85,8 @@
       "params": {
         "steps": 30,
         "cfg": 3,
-        "stg": 1
+        "stg": 1,
+        "detail": false
       }
     },
     "upscale": {
@@ -103,17 +104,29 @@
       },
       "params": {}
     },
+    "detail": {
+      "kind": "ltx/ic-lora",
+      "in": {
+        "model": "distill.model"
+      },
+      "params": {
+        "strength": 0.5
+      },
+      "bypass": true
+    },
     "sample2": {
       "kind": "ltx/sample",
       "in": {
-        "model": "distill.model",
+        "model": "detail.model",
         "cond": "keyframes.cond",
         "seed": "seed.seed",
-        "latent": "upscale.latent"
+        "latent": "upscale.latent",
+        "reference": "sample1.latent"
       },
       "params": {
         "role": "stage2",
-        "steps": 3
+        "steps": 3,
+        "detail": false
       }
     },
     "decode": {
@@ -154,13 +167,37 @@
       },
       {
         "title": "Quality",
-        "help": "Distilled runs its own 8 steps without guidance. Dev adds Steps, CFG and STG here.",
+        "help": "Distilled keeps the source sound frozen and runs its own 8 steps. Detail adds the detail pass, as on text to video. Mac only.",
         "items": [
           "model.precision",
           "sample1.steps",
           "sample1.cfg",
           "sample1.stg",
           "sample2.steps"
+        ],
+        "choices": [
+          {
+            "label": "Recipe",
+            "options": [
+              {
+                "name": "Two-stage",
+                "set": {
+                  "detail.bypass": true,
+                  "sample1.detail": false,
+                  "sample2.detail": false
+                }
+              },
+              {
+                "name": "Detail",
+                "help": "sharper, about a third slower",
+                "set": {
+                  "detail.bypass": false,
+                  "sample1.detail": true,
+                  "sample2.detail": true
+                }
+              }
+            ]
+          }
         ]
       },
       {

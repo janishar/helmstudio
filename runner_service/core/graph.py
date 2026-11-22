@@ -24,6 +24,7 @@ import secrets
 import time
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 import config
 from core import images
@@ -248,6 +249,8 @@ class Ctx:
     def lora_path(self, use):
         """The local file of a LoRA of this run (fetched to the host's LoRA cache first for an own one); called
         on the GPU thread by the loader."""
+        if use.path:  # a model component (ltx/ic-lora): its file in the model folder
+            return Path(use.path)
         if self.loras is None:
             raise RunError(f"LoRA {use.name}: this runner has no LoRA library")
         self.alive = time.monotonic()

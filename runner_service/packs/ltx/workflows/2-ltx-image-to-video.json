@@ -55,6 +55,16 @@
         "rows": []
       }
     },
+    "detail": {
+      "kind": "ltx/ic-lora",
+      "in": {
+        "model": "lora.model"
+      },
+      "params": {
+        "strength": 0.5
+      },
+      "bypass": true
+    },
     "encode": {
       "kind": "ltx/encode",
       "in": {
@@ -86,7 +96,8 @@
       },
       "params": {
         "role": "stage1",
-        "steps": 8
+        "steps": 8,
+        "detail": false
       }
     },
     "upscale": {
@@ -100,14 +111,16 @@
     "sample2": {
       "kind": "ltx/sample",
       "in": {
-        "model": "lora.model",
+        "model": "detail.model",
         "cond": "keyframes.cond",
         "seed": "seed.seed",
-        "latent": "upscale.latent"
+        "latent": "upscale.latent",
+        "reference": "sample1.latent"
       },
       "params": {
         "role": "stage2",
-        "steps": 3
+        "steps": 3,
+        "detail": false
       }
     },
     "decode": {
@@ -170,16 +183,35 @@
             "options": [
               {
                 "name": "Two-stage",
+                "help": "half size, then ×2 and 3 refine steps",
                 "set": {
                   "upscale.bypass": false,
-                  "sample2.bypass": false
+                  "sample2.bypass": false,
+                  "detail.bypass": true,
+                  "sample1.detail": false,
+                  "sample2.detail": false
                 }
               },
               {
                 "name": "One-stage",
+                "help": "the full size in one pass, softer",
                 "set": {
                   "upscale.bypass": true,
-                  "sample2.bypass": true
+                  "sample2.bypass": true,
+                  "detail.bypass": true,
+                  "sample1.detail": false,
+                  "sample2.detail": false
+                }
+              },
+              {
+                "name": "Detail",
+                "help": "Two-stage, then refines stage 2 with Lightricks' detailing LoRA against stage 1: sharper hair, edges and texture, about a third slower. Mac only; needs the Detailer add-on.",
+                "set": {
+                  "upscale.bypass": false,
+                  "sample2.bypass": false,
+                  "detail.bypass": false,
+                  "sample1.detail": true,
+                  "sample2.detail": true
                 }
               }
             ]

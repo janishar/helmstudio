@@ -38,6 +38,12 @@ Prompt Relay mask) are inert unless set or passed; the pack passes the audio rel
 (plan 19 phase 2), and none of the others. What the pack ported by hand is in
 GOTCHAS.md ("0.18 sync").
 
+Plan 19 phase 4 (Recipe Detail) added, unchanged from `e6e15b7`: `conditioning/types/keyframe_slots.py` (DFR's
+generated keyframe slots; it imports only modules already here). DFR's canvas layout (`ltx_pipelines_mlx.dfr_layout`
+`resolve_canvas`), its RoPE fps (`dfr.conditioning_fps`), the slots' noise (`helpers._noise_generated_keyframe_slots`),
+the IC reference (`iclora_utils.reference_conditioning_from_latent`) and the a2v padding (`a2vid_dfr.fit_audio_tokens`)
+are pipeline code, re-written in `../common.py` and `../mlx.py`.
+
 To refresh: copy the same files from a newer commit (re-walk the imports), re-record the goldens on the fork
 (`tests/golden/record_ltx.py`), re-run `tests/test_ltx_golden.py` and update this note.
 

@@ -153,7 +153,7 @@ def addon_plan(pack, c: str, api) -> list[Item]:
     """An add-on's files (API 1.36): its `source` into its folder."""
     src = pack.component(c)["addon"]["source"]
     commit, tree = listing(api, src["repo"], src["revision"])
-    dest = models.addon_folder(pack, c)
+    dest = models.addon_dest(pack, c)
     return [
         Item(src["repo"], commit, p, *tree[p], dest) for p in matching(tree, src["allow_patterns"])
     ]
@@ -209,7 +209,7 @@ def plan(pack, vid: str, api, progress: Progress) -> tuple[list[Item], list[str]
     owner = models.folder(pack, first)
     have = {r.as_posix() for r in models.own_files(owner)} if first != vid else set()
     for c in [
-        c for c in v.get("shares", []) if c in packs.needed(pack)
+        c for c in v.get("shares", []) if c in packs.needed(pack, vid)
     ]:  # an add-on downloads on its own
         theirs = {p: tree[p] for p in matching(tree, component_patterns(pack, c, first))}
         lfs = {p: sha for p, (_, sha) in theirs.items() if sha}

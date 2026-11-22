@@ -208,7 +208,7 @@ def own_globs(pack, vid: str) -> list[str] | None:
         x != vid and folder(pack, x) == root for x in pack.spec["variants"]
     ):
         return None
-    return [g for c in packs.needed(pack) if c not in v["shares"] for g in globs(pack, c, vid)]
+    return [g for c in packs.needed(pack, vid) if c not in v["shares"] for g in globs(pack, c, vid)]
 
 
 def addon_folder(pack, component: str) -> Path:
@@ -217,6 +217,13 @@ def addon_folder(pack, component: str) -> Path:
     return packs.models_root() / (
         own or pack.spec["variants"][next(iter(pack.spec["variants"]))]["dir"]
     )
+
+
+def addon_dest(pack, component: str) -> Path:
+    """Where a download of the add-on puts the repo's files: model.yaml `addon.source.dir` under the models root
+    (LTX's detailer: the repo's root file into ltx-2.5/loras, a folder inside the add-on's), else its folder."""
+    d = pack.component(component)["addon"].get("source", {}).get("dir")
+    return packs.models_root() / d if d else addon_folder(pack, component)
 
 
 def addon_globs_in(pack, root: Path) -> list[str]:
@@ -332,8 +339,8 @@ def variant_entry(pack, vid: str) -> dict:
     files, mismatch = manifest(pack, vid)
     comps, ok, unfinished = [], True, (folder(pack, vid) / MARKER).exists()
     found_by = {
-        c: ref.files(c) for c in packs.needed(pack)
-    }  # an add-on is no variant's (addon_entry)
+        c: ref.files(c) for c in packs.needed(pack, vid)
+    }  # an add-on is no variant's (addon_entry), nor a component scoped to other variants
     # a file several components read (LTX: vae and vae_encoder, the connector inside the transformer and text
     # encoder files) counts once, for the component listing the fewest files (the first on a tie): bytes add up
     counted: dict = {}
@@ -384,7 +391,11 @@ def addon_entry(pack, c: str) -> dict:
     root = addon_folder(pack, c)
     if mismatch:
         presence = "mismatch"
-    elif addon_weights(pack, c) and not (root / MARKER).exists():
+    elif (
+        addon_weights(pack, c)
+        and not (root / MARKER).exists()
+        and not (addon_dest(pack, c) / MARKER).exists()
+    ):
         presence = "present"
     else:
         presence = "partial" if files else "missing"
@@ -394,8 +405,8 @@ def addon_entry(pack, c: str) -> dict:
     out |= {"dir": root.relative_to(packs.models_root()).as_posix(), "presence": presence}
     if files:
         out["bytes"] = sum(f["bytes"] for f in files)
-    if "source" in spec["addon"]:
-        out["source"] = spec["addon"]["source"]
+    if "source" in spec["addon"]:  # its `dir` is model.yaml's (addon_dest), not the contract's
+        out["source"] = {k: v for k, v in spec["addon"]["source"].items() if k != "dir"}
     if mismatch:
         out["mismatch"] = mismatch[:64]
     return out

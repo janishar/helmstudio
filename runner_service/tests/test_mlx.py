@@ -242,6 +242,15 @@ def run_graph(nodes, impls, schemas):
     return asyncio.run(graph.run(nodes, impls, schemas, ctx, Cache()))
 
 
+def two_stage(nodes: dict) -> dict:
+    """A copy of a text / image to video template's nodes as studio sends Recipe Two-stage: the bypassed `detail`
+    (ltx/ic-lora) spliced out, sample2 on the LoRA stack's model."""
+    nodes = json.loads(json.dumps(nodes))
+    del nodes["detail"]
+    nodes["sample2"]["in"]["model"] = "lora.model"
+    return nodes
+
+
 @needs_mlx
 @pytest.mark.parametrize(
     ("edit", "error"),
@@ -259,7 +268,7 @@ def run_graph(nodes, impls, schemas):
 def test_ltx_role_rules_fail_the_run_before_anything_loads(edit, error):
     values, impls, _ = ltx()
     schemas = registry.node_schemas(values)
-    nodes = json.loads(json.dumps(values["workflows"]["workflows"][0]["nodes"]))
+    nodes = two_stage(values["workflows"]["workflows"][0]["nodes"])
     nodes["prompt"]["params"]["text"] = "a cat"
     edit(nodes)
     assert (
@@ -276,7 +285,7 @@ def test_steps_take_only_the_whole_distilled_table_of_the_role():
     from packs.ltx import mlx as ltx_mlx
 
     values, _, _ = ltx()
-    nodes = json.loads(json.dumps(values["workflows"]["workflows"][0]["nodes"]))
+    nodes = two_stage(values["workflows"]["workflows"][0]["nodes"])
     nodes["sample2"]["params"]["steps"] = 8
     nodes["sample1"]["params"]["steps"] = 4
     assert graph.validate(nodes, registry.node_schemas(values)) == [
@@ -289,7 +298,7 @@ def test_steps_take_only_the_whole_distilled_table_of_the_role():
 @needs_mlx
 def test_frames_off_the_grid_is_param_invalid_with_the_contract_text():
     values, _, _ = ltx()
-    nodes = json.loads(json.dumps(values["workflows"]["workflows"][0]["nodes"]))
+    nodes = two_stage(values["workflows"]["workflows"][0]["nodes"])
     nodes["duration"]["params"]["frames"] = 50
     assert graph.validate(nodes, registry.node_schemas(values)) == [
         "duration.frames: 50 is not on the frame grid 9 + 8k up to 321"
@@ -301,7 +310,7 @@ def test_frames_off_the_grid_is_param_invalid_with_the_contract_text():
 @needs_mlx
 def test_an_image_to_video_run_needs_one_keyframe():
     values, _, _ = ltx()
-    nodes = json.loads(json.dumps(values["workflows"]["workflows"][1]["nodes"]))
+    nodes = two_stage(values["workflows"]["workflows"][1]["nodes"])
     schemas = registry.node_schemas(values)
     assert graph.validate(nodes, schemas, run=False) == []  # the template holds no take
     assert graph.validate(nodes, schemas) == ["keyframes.images: at least 1 items"]
@@ -498,7 +507,7 @@ def test_sample_peak_counts_the_tokens_keyframes_append():
     _, impls, _ = ltx()
     peak = impls["ltx/sample"].peak
     mp = 1024 * 576 / 1e6
-    at = {"mp": mp, "frames": 121, "role": "stage2", "steps": 3, "mp_in": 1}
+    at = {"mp": mp, "frames": 121, "role": "stage2", "steps": 3, "mp_in": 1, "detail": False}
     extra = pack.evaluate(peak, at | {"images": 8}) - pack.evaluate(peak, at | {"images": 0})
     assert extra == pytest.approx(8 * (0.7 + 1.5 * mp) + 0.26 * 8 * mp)
     assert (

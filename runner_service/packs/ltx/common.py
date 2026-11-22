@@ -7,6 +7,7 @@ import logging
 import math
 import shutil
 import subprocess
+from dataclasses import replace
 from decimal import ROUND_HALF_UP, Decimal
 from io import BytesIO
 from pathlib import Path
@@ -15,6 +16,7 @@ import numpy as np
 import yaml
 from PIL import Image, ImageCms
 
+import config
 from core.graph import RunError
 
 FFMPEG = shutil.which("ffmpeg")
@@ -37,9 +39,11 @@ RELAY_EPSILON, RELAY_STRENGTH = (
 )  # the old CLI's Prompt Relay defaults (fixed: contracts README, Video)
 # upstream 0879826: Prompt Relay also gates audio_attn2 on the distilled paths at 1.0 (its epsilon: the video one)
 RELAY_AUDIO_STRENGTH = 1.0
-DURATION_HEAD = (
-    "model_patches/ltx-2.5-duration-head-bf16.safetensors"  # DurationHead (auto length), 3.8 MB
-)
+# plan 19 phase 4, Recipe Detail (DFR): the detailing IC-LoRA's fixed strength (upstream _DETAILING_LORA_STRENGTH) is
+# the workflows' ltx/ic-lora strength; dfr_layout.SEGMENT_CANDIDATES; the slots' noise (helpers
+# GENERATED_KEYFRAME_NOISE_SEED_OFFSET); above 30 fps DFR's RoPE fps snaps to 60 (dfr.conditioning_fps)
+SEGMENTS = (24, 32)
+SLOT_SEED = 20000
 _STAGES = yaml.safe_load((Path(__file__).parent / "model.yaml").read_text())["stages"]
 FRAMES = _STAGES["duration"]["params"]["frames"]
 CANVAS_MAX = max(
@@ -163,11 +167,48 @@ def keyframe_frames(cond, frames: int, fps: float) -> list[int]:
     return out
 
 
+def dfr_canvas(frames: int) -> tuple[int, list[int]]:
+    """dfr_layout.resolve_canvas: the clip (8k + 1 frames) padded to whole keyframe segments (24 or 32 frames: the
+    least padding, the longer on a tie) and one generated keyframe slot per segment boundary → (canvas frames, the
+    slots' pixel frames)."""
+    content = frames - 1
+    segment = min(SEGMENTS, key=lambda s: ((-content) % s, -s))
+    padded = content + (-content) % segment
+    return padded + 1, list(range(segment, padded + 1, segment))
+
+
+def dfr_fps(fps: float) -> float:
+    """dfr.conditioning_fps: the transformer's RoPE fps on the detail path (above 30 it snaps to 60)."""
+    return 60.0 if fps > 30 else fps
+
+
+def ic_lora(ctx, params: dict, inputs: dict) -> dict:
+    """The Model with the variant's IC-LoRA (component ic_lora) as one adapter use at `strength`: core's adapter
+    path attaches it to the transformer when a stage loads it (its file read in place, never through the LoRA
+    library). Pure (graph.keys builds it without a run, ctx None); a missing file fails the run here."""
+    from core import models
+    from core.pack import LoraUse
+
+    model = inputs["model"]
+    found = model.files("ic_lora")
+    if not found:
+        if ctx is not None:  # studio's run check refuses this first (API 1.36, Optional add-ons)
+            title = model.pack.component("ic_lora").get("addon", {}).get("title", "ic_lora")
+            raise RunError(f"{ctx.node}: {title} not downloaded on host {config.HOST}")
+        return {"model": model}
+    f = found[0]
+    use = LoraUse(f.stem, "component", f.stem, models.hashes.compute(f), f.stat().st_size,
+                  float(params["strength"]), "adapter", path=str(f))  # fmt: skip
+    return {"model": replace(model, loras=(*model.loras, use))}
+
+
 def check_sample(params: dict, wired: set, models: dict | None = None) -> str | None:
     """Before anything runs: the role fixes which inputs the node takes (contracts/README.md, Video), the steps
     (its whole distilled table) and the model (distilled; stage 2 also the dev model with the distilled LoRA baked,
-    ltx/distill)."""
+    ltx/distill, except for the detail pass, which is DFR's: distilled only)."""
     role, model = params.get("role"), (models or {}).get("model")
+    if model is not None and params.get("detail") and model.variant != "distilled":
+        return ".detail: needs model variant distilled"
     if (
         model is not None
         and model.variant != "distilled"

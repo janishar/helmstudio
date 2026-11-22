@@ -271,3 +271,26 @@ run each; before the cap the decode alone reached 49.1 / 49.8 GB footprint, 27 G
   20.5, sample2 22.4, decode 30.2 GiB MLX peak), no second transformer.
 - **IC-LoRAs** (`__metadata__.reference_downscale_factor`) are left out of the shared index and refused on upload; the
   header still reads, as `ltx/ic-lora` (phase 4) loads them as components.
+
+## Recipe Detail (plan 19 23.10 phases 4 and 4b, 2026-11-22: ltx-2-studio main e6e15b7, `LTX2_LORA_MODE=unfused`)
+
+- **Ported** from `DFRPipeline.generate_two_stage` at spatial x1 without temporal rounds (and `A2VidDFRPipeline`), the
+  conv decoder (it ignores the slots, as the fork's measured run): `common.dfr_canvas` is `dfr_layout.resolve_canvas`;
+  the slots are the vendored `VideoGeneratedKeyframeSlots`, appended after the image rows, and `noised_state` blends
+  them from `seed + 20000` after the scalar blend (`helpers._noise_generated_keyframe_slots`: without it they would
+  start as zeros); `upscale` upsamples the slots in a call of their own (a K-frame latent, as the fork: the
+  upsampler's 3D convs see them as one clip); stage 2 appends the upscaled slots, then the reference
+  (`VideoConditionByReferenceLatent` over stage 1's F x H x W tokens, positions at their own grid); stage 2 still
+  denoises its audio (it attends with the video), but the clip keeps stage 1's, trimmed with the video.
+- **The detailer is an adapter**: `ltx/ic-lora` adds a `LoraUse` with `path` (the component's file, read in place;
+  `ctx.lora_path` returns it), so stage 1 (its handle has none) and stage 2 share one resident transformer; the
+  adapter is detached on the next handle without it. The fork's default fuses in place, so its goldens run with
+  `LTX2_LORA_MODE=unfused`.
+- **Goldens** (448x256x49 s42 and 512x320x57 s7 @25: 57 frames pad to a 65-frame canvas; a2v 49 and 57): bit-exact on
+  mlx 0.32.2, all four (every frame, the WAV); the two t2v, i2v, kf, beats, LoRA bake and adapter, NAG, auto length,
+  dev a2v and distilled a2v goldens unchanged (bit-exact). 0.32.4: 25.49 / 22.68 dB, log-mel 0.816; 28.17 / 26.94, 0.881; a2v 25.70 / 24.56 and
+  26.30 / 25.20 (the source audio). Times on 0.32.2 (one harness process, warm): t2v 448 32.4 s against Two-stage's
+  27.0 (sample2 10.4 s against 5.6), 512x320x57 41.7 s against 38.7; a2v 36.7 s (57 f: 27.0) against the distilled
+  a2v's 19.6. The fork: 30.8 s / 41.0 s, a2v 30.6 / 33.8 s, MLX peak 21.3 / 21.7 GiB (a2v 7.7 / 8.8 after its last
+  reset), process RSS 9.5 GiB. MLX peaks in the pack (residents included): sample2 22.8 GiB against Two-stage's 22.6,
+  decode 30.5; the adapter keeps 0.30 GB on the resident transformer.

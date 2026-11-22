@@ -47,7 +47,6 @@ from packs.ltx.common import (  # the runtime-neutral part
     ANCESTRAL_SEED,
     ANCESTRAL_SEED_2,
     CANVAS_MAX,
-    DURATION_HEAD,
     FFMPEG,
     FRAMES,
     MAX_FRAMES,
@@ -65,6 +64,7 @@ from packs.ltx.common import (  # the runtime-neutral part
     cover,
     crf_round_trip,
     extend_map,
+    ic_lora,
     image_crf,
     keyframe_frames,
     ltx_floor,
@@ -135,6 +135,7 @@ BF16 = torch.bfloat16
 PATCH, AUDIO = VideoLatentPatchifier(patch_size=1), AudioPatchifier(patch_size=1)
 CONFIG = Path(__file__).parent / "transformer-config.json"
 NO_RELAY = "Prompt Relay (beats) is not available on NVIDIA hosts yet"
+NO_DETAIL = "the detail pass is Mac only for now"  # API 1.39, plan 19 phase 4: sample.detail (DFR) on NVIDIA
 NO_NAG = "NAG is Mac only for now"  # API 1.39: encode.negative (ltx-core has no NAG at the pin); `compute` is ignored
 NO_LORA = ": LoRAs are not available on the NVIDIA (fp8 / int8) variants yet"
 
@@ -727,9 +728,12 @@ def _duration_head(path: Path, size: int, mtime: int, device: str):
 
 def predict_frames(model, cond: Cond, fps: float) -> int:
     """Auto length: the DurationHead's seconds from the prompt embeddings on the frames grid."""
-    p = model.folder("transformer") / DURATION_HEAD
-    if not p.is_file():
-        raise RunError(f"auto length needs {DURATION_HEAD} in the model folder")
+    found = model.files("duration_head")  # model.yaml: a component of the distilled variants
+    if not found:
+        raise RunError(
+            "auto length needs the model's duration_head (model.yaml) in the model folder"
+        )
+    p = found[0]
     head = _duration_head(p, p.stat().st_size, p.stat().st_mtime_ns, str(cond.video.device))
     seconds = head(video_tokens=cond.video, audio_tokens=cond.audio)
     return auto_frames(float(seconds.float().item()), fps, FRAMES)
@@ -1146,9 +1150,16 @@ def _as_official(check):
     return run
 
 
-check_sample = _as_official(_check_sample)
+def _no_detail(check):
+    def run(params: dict, wired: set, models: dict | None = None) -> str | None:
+        return f".detail: {NO_DETAIL}" if params.get("detail") else check(params, wired, models)
+
+    return run
+
+
+check_sample = _no_detail(_as_official(_check_sample))
 check_retake = check_extend = _as_official(_needs_dev)
-globals()["check_sample-guided"] = check_retake
+globals()["check_sample-guided"] = _no_detail(check_retake)
 
 
 def check_distill(params: dict, wired: set, models: dict | None = None) -> str | None:
@@ -1165,4 +1176,4 @@ def check_distill(params: dict, wired: set, models: dict | None = None) -> str |
 
 
 globals().update({"encode-guided": encode_guided, "encode-video": encode_video, "encode-audio": encode_audio_,
-                  "sample-guided": sample_guided})  # fmt: skip
+                  "sample-guided": sample_guided, "ic-lora": ic_lora})  # fmt: skip

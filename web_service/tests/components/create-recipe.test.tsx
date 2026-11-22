@@ -44,8 +44,9 @@ const ltx = (id: string) =>
   }) as unknown as S<"Workflow">;
 
 /** The GETs Create makes, the takes picker's one take, and the plan answering `gb`; the plan bodies sent. */
-function serve(gb: number | null) {
+function serve(gb: number | null, models?: unknown) {
   answer("GET", {
+    ...(models ? { "/v1/studio/models": () => ({ data: models }) } : {}),
     "/v1/studio/sessions/{session_id}/runs": () => ({ data: { runs: [] } }),
     "/v1/studio/sessions/{session_id}/takes": () => ({ data: { takes: [] } }),
     "/v1/studio/library": () => ({ data: { items: [] } }),
@@ -141,8 +142,90 @@ describe("Create: LTX's Recipe tile (Q17)", () => {
     const q = (l: typeof studio) => l.inspector!.find((s) => s.title === "Quality")!;
     expect(q(unplace(studio, (p) => p === "upscale.bypass")).choices![0].options[1].set).toEqual({
       "sample2.bypass": true,
+      "detail.bypass": true,
+      "sample1.detail": false,
+      "sample2.detail": false,
     });
     // every key gone: no option left, so no choice
-    expect(q(unplace(studio, (p) => p.endsWith(".bypass"))).choices).toBeUndefined();
+    expect(
+      q(unplace(studio, (p) => p.endsWith(".bypass") || p.endsWith(".detail"))).choices,
+    ).toBeUndefined();
+  });
+
+  it("Recipe: Detail, its line in the menu; greyed while the Detailer is on no live host (plan 19 phase 4)", async () => {
+    const models = (detailer: string) => ({
+      hosts: [
+        {
+          host: "mac",
+          live: true,
+          envs: ["mlx"],
+          models_root: null,
+          free_bytes: null,
+          total_bytes: null,
+        },
+      ],
+      licences: [],
+      models: [
+        {
+          id: "ltx-2.5",
+          family: "ltx",
+          title: "LTX-2.5",
+          media: ["video", "audio"],
+          runtimes: [{ runtime: "mlx", env: "mlx" }],
+          variants: [
+            {
+              id: "distilled",
+              title: "Distilled",
+              precisions: ["int8"],
+              dir: "ltx-2.5",
+              licence: null,
+              gated: false,
+              download_bytes: null,
+              components: [],
+              hosts: [{ host: "mac", state: "present" }],
+            },
+          ],
+          addons: [
+            {
+              component: "ic_lora",
+              title: "Detailer",
+              dir: "ltx-2.5",
+              licence: null,
+              gated: true,
+              download_bytes: null,
+              hosts: [{ host: "mac", state: detailer }],
+            },
+          ],
+        },
+      ],
+    });
+    const quality = () => section("Quality");
+    const option = (name: string) => {
+      if (!within(quality()).queryByRole("group", { name: "Recipe" }))
+        fireEvent.click(within(quality()).getByRole("button", { name: /^Recipe/ }));
+      return within(within(quality()).getByRole("group", { name: "Recipe" })).getByRole("button", {
+        name,
+      });
+    };
+    serve(30, models("missing"));
+    start(ltx("ltx-text-to-video"));
+    await waitFor(() => expect(option("Detail").getAttribute("aria-disabled")).toBe("true"));
+    expect(option("Detail").textContent).toContain("Detailer not downloaded");
+    expect(option("Two-stage").textContent).toBe("Two-stagehalf size, then ×2 and 3 refine steps");
+    fireEvent.click(option("Detail")); // greyed: nothing changes
+    expect(within(quality()).getByRole("button", { name: /^Recipe/ }).textContent).toBe(
+      "RecipeTwo-stage",
+    );
+    cleanup();
+    const plans = serve(30, models("present"));
+    start(ltx("ltx-text-to-video"));
+    await waitFor(() => expect(option("Detail").getAttribute("aria-disabled")).toBeNull());
+    fireEvent.click(option("Detail"));
+    await waitFor(() => {
+      const inputs = plans.at(-1)?.inputs ?? {};
+      expect([inputs["detail.bypass"], inputs["sample1.detail"], inputs["sample2.detail"]]).toEqual(
+        [false, true, true],
+      );
+    });
   });
 });

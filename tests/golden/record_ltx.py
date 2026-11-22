@@ -25,6 +25,9 @@ A2VidPipelineTwoStage.generate_and_save). Retake and extend read the t2v golden'
 made by ltx_inputs.test_tones and saved beside the golden. Extra observations: the source latents, the positive and
 negative embeddings, each loop's states (latent / clean / denoise mask / keyframes mask / positions), guider params
 and sigmas, the distilled-LoRA fuse phase. A memory guard exits the process if MLX active memory passes 46 GiB.
+
+Plan 19 phases 4 / 4b (Recipe Detail): `detail-*` (CASES, `generate --dfr`) and `a2v-detail-*` (DISTILLED_CASES,
+`a2v --dfr`), with LTX2_LORA_MODE=unfused and the local detailing IC-LoRA (`--detailing-lora`, never downloaded).
 """
 
 from __future__ import annotations
@@ -98,7 +101,21 @@ CASES = [
      "studio": "ltx-2-studio main e6e15b7",
      "prompt": "A golden retriever puppy runs across a sunny park lawn toward the camera, barking happily, "
                "birds chirping in the trees behind it"},
+    # plan 19 phase 4: Recipe Detail, `ltx-2-mlx generate --dfr` (DFRPipeline: spatial x1, no temporal rounds, the conv
+    # decoder) with the local detailing IC-LoRA attached as run-time adapters (LTX2_LORA_MODE=unfused), as helmstudio
+    # attaches it; fork main e6e15b7
+    {"name": "detail-448x256-49f-s42", "out": "ltx-detail", "width": 448, "height": 256, "frames": 49, "fps": 24.0,
+     "seed": 42, "dfr": True, "lora_mode": "unfused", "studio": "ltx-2-studio main e6e15b7",
+     "prompt": "A golden retriever puppy runs across a sunny park lawn toward the camera, barking happily, "
+               "birds chirping in the trees behind it"},
+    # the larger size: 57 frames pad to a 65-frame canvas (slots at 32 and 64), at 25 fps
+    {"name": "detail-512x320-57f-s7", "out": "ltx-detail", "width": 512, "height": 320, "frames": 57, "fps": 25.0,
+     "seed": 7, "dfr": True, "lora_mode": "unfused", "studio": "ltx-2-studio main e6e15b7",
+     "prompt": "Ocean waves crash against black volcanic rocks at sunset, white spray in the air, "
+               "seagulls crying overhead and the wind roaring"},
 ]  # fmt: skip
+# the detailing IC-LoRA (Lightricks/LTX-2.5-22b-IC-LoRA-Pixel-Spatial-Upscaler), read in place: never downloaded
+DETAILER = MODELS / "ltx-2.5" / "loras" / "ltx-2.5-22b-ic-lora-pixel-spatial-upscaler-x2-1.0.safetensors"
 
 # DurationHead only (Gemma + connector + head; no DiT): the two t2v prompts (their embeddings are in those goldens)
 # plus a short and a long scene, at two frame rates and the UI's and the CLI's default bounds.
@@ -209,8 +226,14 @@ def record(case: dict, out: Path, scratch: Path) -> dict:
 
     # cli._cmd_generate, --distilled branch
     t0 = time.perf_counter()
-    pipe = distilled_mod.DistilledPipeline(model_dir=str(model), gemma_model_id=GEMMA_DEFAULT, low_memory=True,
-                                           low_ram_streaming=False, tile_count=None)  # fmt: skip
+    if case.get("dfr"):  # cli._cmd_generate, --dfr branch (spatial 1, temporal 0)
+        from ltx_pipelines_mlx.dfr import DFRPipeline
+
+        pipe = DFRPipeline(model_dir=str(model), gemma_model_id=GEMMA_DEFAULT, low_memory=True,
+                           low_ram_streaming=False, tile_count=None, detailing_lora=str(DETAILER))  # fmt: skip
+    else:
+        pipe = distilled_mod.DistilledPipeline(model_dir=str(model), gemma_model_id=GEMMA_DEFAULT, low_memory=True,
+                                               low_ram_streaming=False, tile_count=None)  # fmt: skip
     pipe.verbose = True
     pipe.stepwise = None
     pipe.generate_audio = True
@@ -366,12 +389,14 @@ def record(case: dict, out: Path, scratch: Path) -> dict:
         extra += f" --lora {lora_meta['file']} {case['lora_strength']:g}"
     if nag:
         extra += " --negative-prompt '...'"
+    mode = f"--dfr --detailing-lora {DETAILER.name}" if case.get("dfr") else "--distilled"
     env = f"LTX2_COMPUTE_DTYPE={case['compute']} " if case.get("compute") else ""
     env += f"LTX2_LORA_MODE={case['lora_mode']} " if case.get("lora_mode") else ""
     meta = {
         **case,
-        "pipeline": "DistilledPipeline (ltx-2-mlx generate --distilled)",
-        "argv_equivalent": f"{env}ltx-2-mlx generate --distilled --model {model} --quantize-on-load 8 "
+        "pipeline": "DFRPipeline (ltx-2-mlx generate --dfr)" if case.get("dfr") else
+        "DistilledPipeline (ltx-2-mlx generate --distilled)",
+        "argv_equivalent": f"{env}ltx-2-mlx generate {mode} --model {model} --quantize-on-load 8 "
         f"--width {case['width']} --height {case['height']} --frames {case['frames']} --frame-rate {case['fps']:g} "
         f"--seed {case['seed']} --prompt '...'{extra} -o {case['name']}.mp4",
         "images": image_meta or None, "image_preprocess": seen.get("image_preprocess"),
@@ -636,6 +661,11 @@ DISTILLED_CASES = [
     {**DEV_CASES[0], "name": "retake-distilled-448x256-49f-s42"},
     {**DEV_CASES[1], "name": "extend-distilled-448x256-49f+48-s42", "extend_frames": 6},
     {**DEV_CASES[2], "name": "a2v-distilled-448x256-49f-s42"},
+    # plan 19 phase 4b: `LTX2_LORA_MODE=unfused ltx-2-mlx a2v --dfr` (A2VidDFRPipeline: the frozen source audio
+    # zero-padded to DFR's canvas, the detailer as adapters)
+    {**DEV_CASES[2], "name": "a2v-detail-448x256-49f-s42", "dfr": True, "lora_mode": "unfused"},
+    # 57 frames: the audio padded with zero tokens to the 65-frame canvas
+    {**DEV_CASES[2], "name": "a2v-detail-448x256-57f-s42", "frames": 57, "dfr": True, "lora_mode": "unfused"},
 ]  # fmt: skip
 STUDIO_MAIN = "ltx-2-studio main e6e15b7"
 
@@ -662,13 +692,21 @@ def record_distilled(case: dict, out: Path) -> dict:
     inputs: dict = {}
     mx.reset_peak_memory()
     t0 = time.perf_counter()
+    if case.get("lora_mode"):  # read by the pipeline's __init__ (lora_mode_from_env)
+        os.environ["LTX2_LORA_MODE"] = case["lora_mode"]
     if kind == "a2v":
         from ltx_pipelines_mlx.a2vid_distilled import A2VidDistilledPipeline
 
         wav_in = out / f"{case['name']}-audio.wav"
         inputs["audio"] = {"file": wav_in.name, "sha256": ltx_inputs.test_tones(wav_in), "seconds": 3.0,
                            "rate": 48000, "channels": 2, "what": "ltx_inputs.test_tones"}  # fmt: skip
-        pipe = A2VidDistilledPipeline(model_dir=str(model), gemma_model_id=GEMMA_DEFAULT, low_ram_streaming=False)
+        if case.get("dfr"):
+            from ltx_pipelines_mlx.a2vid_dfr import A2VidDFRPipeline
+
+            pipe = A2VidDFRPipeline(model_dir=str(model), gemma_model_id=GEMMA_DEFAULT, low_ram_streaming=False,
+                                    detailing_lora=str(DETAILER))  # fmt: skip
+        else:
+            pipe = A2VidDistilledPipeline(model_dir=str(model), gemma_model_id=GEMMA_DEFAULT, low_ram_streaming=False)
         raw_save = pipe._save_waveform
 
         def save(w, path, sample_rate=48000):
@@ -680,7 +718,9 @@ def record_distilled(case: dict, out: Path) -> dict:
                                height=case["height"], width=case["width"], num_frames=case["frames"],
                                frame_rate=case["fps"], seed=case["seed"], images=None,
                                audio_start_time=case["audio_start"])  # fmt: skip
-        argv = (f"ltx-2-mlx a2v --distilled --model {model} --quantize-on-load 8 --width {case['width']} "
+        flag = f"--dfr --detailing-lora {DETAILER.name}" if case.get("dfr") else "--distilled"
+        env = f"LTX2_LORA_MODE={case['lora_mode']} " if case.get("lora_mode") else ""
+        argv = (f"{env}ltx-2-mlx a2v {flag} --model {model} --quantize-on-load 8 --width {case['width']} "
                 f"--height {case['height']} --frames {case['frames']} --frame-rate {case['fps']:g} "
                 f"--seed {case['seed']} --audio {wav_in.name} --prompt '...' -o {mp4.name}")  # fmt: skip
     else:

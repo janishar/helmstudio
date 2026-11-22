@@ -105,6 +105,9 @@ class LoraUse:
     strength: float
     mode: str  # adapter | bake
     key: str | None = None  # own only: u/<owner_id>/loras/<lora_id>.safetensors
+    path: str | None = (
+        None  # a model component's file, read in place (plan 19 phase 4: ltx/ic-lora's IC-LoRA)
+    )
 
     @classmethod
     def of(cls, row: dict) -> LoraUse:
@@ -436,9 +439,11 @@ def addons(pack: Pack) -> list[str]:
     return [c for c, s in pack.spec.get("components", {}).items() if "addon" in s]
 
 
-def needed(pack: Pack) -> list[str]:
-    """The components a variant needs to be present: every one but the add-ons."""
-    return [c for c in pack.spec.get("components", {}) if "addon" not in pack.component(c)]
+def needed(pack: Pack, variant: str | None = None) -> list[str]:
+    """The components a variant needs to be present: every one but the add-ons, and (plan 19 phase 4) with
+    `variant`, but those whose `variants` leaves it out (absent: all; LTX's duration head is the distilled ones')."""
+    return [c for c, s in pack.spec.get("components", {}).items()
+            if "addon" not in s and (variant is None or variant in s.get("variants", [variant]))]  # fmt: skip
 
 
 def model_schema(pack: Pack) -> dict:
@@ -548,7 +553,7 @@ def lora_block(pack: Pack) -> dict | None:
         spec, block = lora_spec(pack), None
         build = getattr(pack.module, "build", None)
         present = [v for v in pack.spec.get("variants", {}) if all(
-            ModelRef(pack, v, "bf16").files(c) for c in needed(pack))]  # fmt: skip
+            ModelRef(pack, v, "bf16").files(c) for c in needed(pack, v))]  # fmt: skip
         if spec and "modules" in spec:  # a model-free pack (the fake echo) names them itself
             block = {k: spec.get(k, []) for k in ("component", "modules", "renames", "ignore")}
         elif spec and build and present:

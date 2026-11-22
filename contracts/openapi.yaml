@@ -3105,6 +3105,7 @@ components:
                         additionalProperties: false
                         properties:
                           name: {type: string, minLength: 1, maxLength: 40, examples: [One-stage]}
+                          help: {type: string, minLength: 1, maxLength: 300, description: 'from 1.39: the option''s line under its name in the tile''s menu (LTX''s Recipe: Detail)'}
                           set:
                             type: object
                             minProperties: 1

@@ -145,6 +145,23 @@ components:
   audio_vae: {files: "vae/ltx-2.5-audio-vae-bf16.safetensors", dtype: stored}  # its decoder
   vocoder: {files: "vae/ltx-2.5-audio-vae-bf16.safetensors", dtype: fp32}      # BigVGAN + BWE, run in fp32
   audio_encoder: {files: "vae/ltx-2.5-audio-vae-bf16.safetensors", dtype: stored}  # encodes source sound (16 kHz mel)
+  # plan 19 phase 4: the DurationHead (auto length, 3.8 MB, read outside the residency manager), a part of the
+  # distilled variants only (auto length is text and image to video's), so Dev's shares stay 8
+  duration_head: {files: "model_patches/ltx-2.5-duration-head-bf16.safetensors", dtype: stored,
+                  variants: [distilled, distilled-fp8]}
+  # Recipe Detail's detailing IC-LoRA (Lightricks' Pixel-Spatial-Upscaler, reference_downscale_factor 2): an
+  # optional add-on (owner's decision, 23.11), attached by ltx/ic-lora as a run-time adapter of the transformer
+  ic_lora:
+    files: "loras/ltx-2.5-22b-ic-lora-pixel-spatial-upscaler-x2-1.0.safetensors"
+    dtype: stored
+    addon:
+      title: Detailer
+      help: "Recipe: Detail. Lightricks' Pixel-Spatial-Upscaler."
+      # dir (model.yaml only, not published): the folder the repo's file lands in, inside the add-on's folder
+      source: {repo: Lightricks/LTX-2.5-22b-IC-LoRA-Pixel-Spatial-Upscaler,
+               revision: 59f26f1e0c11af42f1affa924b4ef231e9e98b2a,
+               allow_patterns: [ltx-2.5-22b-ic-lora-pixel-spatial-upscaler-x2-1.0.safetensors], dir: ltx-2.5/loras,
+               licence: ltx-2-community, must_accept: true, gated: true, bytes: 327322640}
 # LoRAs: adapter (the default, as upstream's unfused LoRAs: core/loaders_mlx.py activate) or bake (the old MLX code's
 # fuse into the transformer). The renames are the old LTXV_LORA_COMFY_RENAMING_MAP as end-of-module-part rewrites;
 # kohya files match none: refused. MLX only (runtime: mlx): the torch path (NVIDIA) refuses LoRA rows (no bake into
@@ -244,6 +261,7 @@ stages:
       canvas: {type: Canvas, optional: true}
       duration: {type: Duration, optional: true}
       latent: {type: Latent, optional: true}
+      reference: {type: Latent, optional: true}   # the IC reference (stage 1's latent): read when the Model carries an IC-LoRA
     outputs: {latent: Latent}
     params:
       role: {type: enum, label: Stage, default: stage1, enum: [stage1, stage2],
@@ -253,11 +271,26 @@ stages:
       steps: {type: int, label: Steps, default: 8, min: 3, max: 8, step: 1,
               help: "Fixed by the stage's distilled schedule: stage 1 runs 8 steps, stage 2 runs 3 (fewer would stop with noise left in).",
               values: [3, 8], values_by: {param: role, values: {stage1: [8], stage2: [3]}}}
+      # plan 19 phase 4: DFR's layout (Recipe Detail), Mac only
+      detail: {type: bool, label: Detail pass, default: false,
+               help: "Stage 1 pads the clip to whole 24 or 32 frame segments with a generated keyframe slot at each boundary; stage 2 refines with them and the IC-LoRA's reference (stage 1's latent), keeps stage 1's sound and trims the padding. Distilled only; Mac only."}
     # video tokens ~ (frames / 8 + 1) * mp * 977 at full size, a quarter in stage 1; each keyframe appends a latent
     # frame of tokens (counted for every image, frame 0 too: an upper bound) and encodes its image at the stage's grid.
     # The fused attention keeps memory linear in tokens (stage 2 grew 0.85 GB for 5x the tokens).
     # measured (448x256x49 / 704x448x97 t2v, 448x256x49 i2v): stage 1 2.61 / 3.54 / 3.51; stage 2 3.33 / 4.18 / 4.20
-    peak_gb: "images * (0.7 + 1.5 * mp) + (3.15 + 0.26 * (frames / 8 + 1 + images) * mp if role == 'stage2' else 2.4 + 0.28 * (frames / 8 + 1 + images) * mp)"
+    # detail (plan 23.7): stage 1 + the padding (at most 31 frames) and one latent frame per slot; stage 2 + the IC
+    # reference (a quarter of the stage's tokens at factor 2) and the slots
+    peak_gb: "images * (0.7 + 1.5 * mp) + (3.15 + 0.26 * (frames / 8 + 1 + images) * mp + (0.26 * ((frames / 8 + 1) / 4 + frames / 24) * mp if detail else 0) if role == 'stage2' else 2.4 + 0.28 * ((frames + 32 if detail else frames) / 8 + 1 + images + (frames / 24 if detail else 0)) * mp)"
+  # plan 19 phase 4: Model -> Model, the IC-LoRA (ic_lora) added to the handle as an adapter use. Both runtimes publish
+  # it (so a host without the add-on is never eligible for a run that needs it); the torch path refuses the detail pass
+  ic-lora:
+    title: IC-LoRA
+    help: "Attaches the model's IC-LoRA to the transformer as a run-time adapter; a sampler fed a reference refines against it. Bypassed: the model as it is."
+    uses: [ic_lora]
+    inputs: {model: Model}
+    outputs: {model: Model}
+    params:
+      strength: {type: float, label: Strength, default: 1, min: 0, max: 2, step: 0.05}
   upscale:
     title: Upscale latent
     component: upscaler
@@ -379,7 +412,11 @@ stages:
       steps: *steps
       cfg: *cfg
       stg: *stg
-    peak_gb: "images * (0.7 + 1.5 * mp) + 1.2 + 0.7 * (frames / 8 + 1 + images) * mp / 4"
+      # plan 19 phase 4b: DFR on audio to video, the frozen source audio zero-padded to the canvas (a2vid_dfr)
+      # no `when`: a Recipe choice sets it on Dev too, which the run check refuses (board LtxFeatures frame 9)
+      detail: {type: bool, label: Detail pass, default: false,
+               help: "As text to video's: the padded canvas with keyframe slots, the source audio padded with silence. Distilled only; Mac only."}
+    peak_gb: "images * (0.7 + 1.5 * mp) + 1.2 + 0.7 * ((frames + 32 if detail else frames) / 8 + 1 + images + (frames / 24 if detail else 0)) * mp / 4"
   distill:
     title: Distilled LoRA
     help: "Fuses the distilled LoRA into the dev transformer at strength 1, so a stage-2 sampler can refine with the distilled schedule. Distilled has it fused in: passed through."

@@ -71,6 +71,7 @@ type StudioChoice struct {
 	Help    *string `json:"help,omitempty"`
 	Options []struct {
 		Name string         `json:"name"`
+		Help *string        `json:"help,omitempty"` // API 1.39: the option's line in the menu (LTX's Recipe: Detail)
 		Set  map[string]any `json:"set"`
 	} `json:"options"`
 }

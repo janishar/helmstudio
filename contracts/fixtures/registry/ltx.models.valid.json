@@ -222,6 +222,27 @@
           ]
         }
       ],
+      "addons": [
+        {
+          "component": "ic_lora",
+          "title": "Detailer",
+          "help": "Recipe: Detail. Lightricks' Pixel-Spatial-Upscaler.",
+          "dir": "ltx-2.5",
+          "presence": "present",
+          "bytes": 327322640,
+          "source": {
+            "repo": "Lightricks/LTX-2.5-22b-IC-LoRA-Pixel-Spatial-Upscaler",
+            "revision": "59f26f1e0c11af42f1affa924b4ef231e9e98b2a",
+            "allow_patterns": [
+              "ltx-2.5-22b-ic-lora-pixel-spatial-upscaler-x2-1.0.safetensors"
+            ],
+            "licence": "ltx-2-community",
+            "must_accept": true,
+            "gated": true,
+            "bytes": 327322640
+          }
+        }
+      ],
       "compute": {
         "components": [
           "transformer"

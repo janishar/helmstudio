@@ -2917,6 +2917,8 @@ export interface components {
                     options: {
                         /** @example One-stage */
                         name: string;
+                        /** @description from 1.39: the option's line under its name in the tile's menu (LTX's Recipe: Detail) */
+                        help?: string;
                         set: {
                             [key: string]: components["schemas"]["ParamValue"];
                         };

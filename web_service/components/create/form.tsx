@@ -451,6 +451,16 @@ export function Inspector({
         const x = fields.find((y) => y.key === k);
         return x && JSON.stringify(rawOf(x, raws)) === JSON.stringify(toRaw(v, x.param));
       });
+    // an option's line under its name, and why it is greyed: it switches on a node whose add-on is missing (Recipe:
+    // Detail without the Detailer, docs/mock/LtxFeatures.dc.html frame 16)
+    const facts = (name: string) => {
+      const o = c.options.find((x) => x.name === name);
+      const why = Object.entries(o?.set ?? {}).flatMap(([k, v]) => {
+        const [node, param] = k.split(".");
+        return param === "bypass" && v === false && blocks[node] ? [blocks[node]] : [];
+      })[0];
+      return { sub: o?.help, why };
+    };
     return (
       <Tile
         key={f.key}
@@ -458,6 +468,7 @@ export function Inspector({
         raw={c.options.find((o) => holds(o.set))?.name ?? "custom"}
         open={open === f.key}
         setOpen={setOpen}
+        facts={facts}
         onChange={(_, name) =>
           Object.entries(c.options.find((o) => o.name === name)?.set ?? {}).forEach(([k, v]) => {
             const x = fields.find((y) => y.key === k);
@@ -885,6 +896,9 @@ function Presets({
 
 type Stage1 = { by: number; clip: boolean };
 
+/** A choice option's line under its name (`help`) and why it is greyed (its add-on is missing). */
+type OptionFacts = { sub?: string; why?: string };
+
 type Choice = NonNullable<S<"StudioLayout">["inspector"]>[number]["choices"] extends
   (infer C)[] | undefined
   ? C
@@ -919,6 +933,7 @@ function Tile({
   choices,
   pair,
   setBy,
+  facts,
 }: {
   f: Field;
   raw: Raw;
@@ -932,6 +947,8 @@ function Tile({
   pair?: { f: Field; raw: Raw };
   /** an enum's value → the presets that set it (shown beside the value in its editor) */
   setBy?: (value: string) => string | undefined;
+  /** a choice option's line under its name and why it is greyed */
+  facts?: (value: string) => OptionFacts;
 }) {
   const id = idOf(f.key);
   const d = display(f, raw);
@@ -989,6 +1006,7 @@ function Tile({
             raw={e.raw}
             choices={i ? undefined : choices}
             setBy={i ? undefined : setBy}
+            facts={i ? undefined : facts}
             onChange={onChange}
             focus={!i}
             close={() => {
@@ -1013,6 +1031,7 @@ function Editor({
   choices,
   focus = true,
   setBy,
+  facts,
 }: {
   f: Field;
   raw: Raw;
@@ -1020,6 +1039,7 @@ function Editor({
   close: () => void;
   choices?: string[];
   setBy?: (value: string) => string | undefined;
+  facts?: (value: string) => OptionFacts;
   /** move focus into it when it opens (the first of a pair's editors) */
   focus?: boolean;
 }) {
@@ -1065,18 +1085,34 @@ function Editor({
       </span>
       {p.type === "enum" || choices ? (
         <div className="flex flex-wrap gap-1.5">
-          {(choices ?? p.enum)?.map((o) => (
-            <button
-              key={o}
-              type="button"
-              className="opt bevel min-w-16 px-3 text-[13px]"
-              aria-pressed={raw === o}
-              onClick={() => onChange(f.key, o)}
-            >
-              {optionText(p, o, f.kind)}
-              {setBy?.(o) && <em className="ml-1.5 text-[11px] text-t2 not-italic">{setBy(o)}</em>}
-            </button>
-          ))}
+          {(choices ?? p.enum)?.map((o) => {
+            const { sub, why } = facts?.(o) ?? {};
+            return (
+              <button
+                key={o}
+                type="button"
+                className={`opt bevel min-w-16 px-3 text-[13px] ${sub ? "flex flex-col items-start py-1.5 text-left" : ""} ${why ? "cursor-not-allowed" : ""}`}
+                aria-pressed={raw === o}
+                aria-label={sub || why ? optionText(p, o, f.kind) : undefined}
+                aria-disabled={why ? true : undefined}
+                title={
+                  why
+                    ? `${why}. An admin downloads it in Models, under the model's optional add-ons.`
+                    : undefined
+                }
+                onClick={() => !why && onChange(f.key, o)}
+              >
+                <span className={why ? "opacity-55" : undefined}>{optionText(p, o, f.kind)}</span>
+                {sub && (
+                  <small className={`text-[11px] text-t2 ${why ? "opacity-55" : ""}`}>{sub}</small>
+                )}
+                {why && <em className="text-[11px] text-t2 not-italic">{why}</em>}
+                {setBy?.(o) && (
+                  <em className="ml-1.5 text-[11px] text-t2 not-italic">{setBy(o)}</em>
+                )}
+              </button>
+            );
+          })}
         </div>
       ) : p.type === "seed" ? (
         <div className="flex items-center gap-1.5">
