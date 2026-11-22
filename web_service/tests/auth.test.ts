@@ -130,6 +130,20 @@ describe("BFF responses", () => {
     upstream({});
     expect((await call(false)).headers.get("cache-control")).toBeNull();
   });
+  it("passes X-Helm-Client (a timeline revision's label) to Kong, not a browser's other headers", async () => {
+    upstream({});
+    await bff(
+      new NextRequest("http://web/api/v1/studio/timelines/t/edits", {
+        method: "POST",
+        headers: { "x-helm-client": "web", "x-client-id": "spoof" },
+      }),
+      "/v1/studio/timelines/t/edits",
+      true,
+    );
+    const sent = (vi.mocked(fetch).mock.calls[0][1] as RequestInit).headers as Headers;
+    expect(sent.get("x-helm-client")).toBe("web");
+    expect(sent.has("x-client-id")).toBe(false);
+  });
 });
 
 describe("kongHeaders", () => {

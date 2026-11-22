@@ -8,6 +8,27 @@ export type S<K extends keyof components["schemas"]> = components["schemas"][K];
 /** The typed client: paths and bodies follow contracts/openapi.yaml. */
 export const api = createClient<paths>({ baseUrl: "/api" });
 
+/** GET …/timelines/{id}: the document (the GET also answers the agent view on `view=agent`, never asked here). */
+export const getTimeline = (id: string) =>
+  ok(
+    api.GET("/v1/studio/timelines/{timeline_id}", { params: { path: { timeline_id: id } } }),
+  ) as Promise<S<"Timeline">>;
+
+/** Saves edit ops on revision `t.revision` through POST …/edits (API 1.49; plan 24 28.8 A): the server's sequence,
+ * which wins over the local draft. `via` labels the revision's history (X-Helm-Client). */
+export const editTimeline = (
+  t: { id: string; revision: number },
+  ops: unknown[],
+  via: "web" | "assistant" = "web",
+) =>
+  ok(
+    api.POST("/v1/studio/timelines/{timeline_id}/edits", {
+      params: { path: { timeline_id: t.id } },
+      headers: { "X-Helm-Client": via },
+      body: { base_revision: t.revision, ops: ops as S<"TimelineOp">[] },
+    }),
+  ).then((r) => r.timeline);
+
 /** A failed API call: `message` is fit to show the user, `status` is the HTTP status. */
 export class ApiError extends Error {
   constructor(

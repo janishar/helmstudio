@@ -9,8 +9,16 @@ import { ACCESS_COOKIE, clientIp, kongHeaders, kongUrl } from "@/lib/session";
 /** The largest /api request body: Next's default proxyClientMaxBodySize. Raise both together if an endpoint needs more. */
 export const MAX_BODY = 10 * 1024 * 1024;
 
-/** The browser's request headers that reach Kong; all others stay here. */
-const REQUEST_HEADERS = ["content-type", "accept", "last-event-id", "range", "if-none-match"];
+/** The browser's request headers that reach Kong; all others stay here. X-Helm-Client only labels a timeline
+ * revision's `via` (API 1.49), never a permission. */
+const REQUEST_HEADERS = [
+  "content-type",
+  "accept",
+  "last-event-id",
+  "range",
+  "if-none-match",
+  "x-helm-client",
+];
 /** Kong's response headers that don't reach the browser. */
 const DROP_RESPONSE = new Set([
   "content-encoding",

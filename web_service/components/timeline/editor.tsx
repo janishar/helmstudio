@@ -2,8 +2,9 @@
 // The Timeline screen (docs/mock/Timeline.dc.html, its dialogs in TimelineDialogs.dc.html; plan 11-timeline 15): the
 // sequence bar (switcher, size · rate · length, cast and look defaults, undo / redo, New sequence, Export with its
 // plan), the player (preview across cuts, nothing rendered), New shot docked, the lanes and the clip inspector.
-// Every edit is lib/timeline's `apply` drawn at once, then a PUT with the revision it was made on; a 409 reloads,
-// says so and re-applies the edit to the new revision once.
+// Every edit is lib/timeline's `apply` drawn at once, then its op saved through POST …/edits with the revision it
+// was made on (plan 24 28.8 A; the server's answer replaces the draft); a 409 reloads, says so and re-applies the
+// edit to the new revision once.
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
@@ -34,7 +35,7 @@ import {
   Sequences,
   planLine,
 } from "@/components/timeline/dialogs";
-import { ApiError, api, message, ok, type S } from "@/lib/api";
+import { ApiError, api, editTimeline, getTimeline, message, ok, type S } from "@/lib/api";
 import { safeUrl } from "@/lib/format";
 import { useLibrary, useLooks, useVoices } from "@/lib/library";
 import { MAX_LOOKS, chosenFrom, type Chosen } from "@/lib/looks";
@@ -51,7 +52,6 @@ import {
   shortTime,
   span,
   timecode,
-  writable,
   type Clip,
   type Norm,
   type Op,
@@ -129,9 +129,7 @@ export function TimelineEditor({ id }: { id?: string }) {
         setNone(true);
         return;
       }
-      const t = await ok(
-        api.GET("/v1/studio/timelines/{timeline_id}", { params: { path: { timeline_id: tid } } }),
-      );
+      const t = await getTimeline(tid);
       rememberTimeline(t.id);
       tlRef.current = t;
       setError("");
@@ -165,9 +163,7 @@ export function TimelineEditor({ id }: { id?: string }) {
   const reload = useCallback(async () => {
     const cur = tlRef.current;
     if (!cur) return;
-    const t = await ok(
-      api.GET("/v1/studio/timelines/{timeline_id}", { params: { path: { timeline_id: cur.id } } }),
-    );
+    const t = await getTimeline(cur.id);
     if (!pending.current) setTl(t);
   }, []);
 
@@ -200,7 +196,7 @@ export function TimelineEditor({ id }: { id?: string }) {
   }, []);
 
   // ------------------------------------------------------------------ edits
-  /** PUT `op` applied to the latest stored revision; a 409 reloads and tries once more on the new one. */
+  /** Saves `op` on the latest stored revision through /edits; a 409 reloads and tries once more on the new one. */
   const save = useCallback(
     async (op: Op): Promise<void> => {
       for (let attempt = 0; attempt < 2; attempt++) {
@@ -209,22 +205,13 @@ export function TimelineEditor({ id }: { id?: string }) {
         const r = apply(cur, op, factsOf(cur.takes));
         if (!("document" in r)) return; // the clip it addressed is gone: the edit is dropped
         try {
-          const t = await ok(
-            api.PUT("/v1/studio/timelines/{timeline_id}", {
-              params: { path: { timeline_id: cur.id } },
-              body: { revision: cur.revision, ...writable(r.document) } as S<"TimelineUpdate">,
-            }),
-          );
+          const t = await editTimeline(cur, [op]);
           tlRef.current = t;
           setTl(t);
           return;
         } catch (e) {
           if (e instanceof ApiError && e.status === 409 && !attempt) {
-            const t = await ok(
-              api.GET("/v1/studio/timelines/{timeline_id}", {
-                params: { path: { timeline_id: cur.id } },
-              }),
-            );
+            const t = await getTimeline(cur.id);
             tlRef.current = t;
             setTl(t);
             setNotice(

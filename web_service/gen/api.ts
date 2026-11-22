@@ -2224,7 +2224,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description The sequence at its current revision, normalized, with `takes` (every take it names, signed), offline clips marked and each pending shot's status. */
+        /** @description The sequence at its current revision, normalized, with `takes` (every take it names, signed), offline clips marked and each pending shot's status. From 1.49 `view=agent` answers the agent view instead (`TimelineAgentView`: every clip flat, times in seconds and frames, no signed links; contracts/README.md, Timeline: edits by ops). */
         get: operations["studioGetTimeline"];
         /**
          * An edit: the whole document at the revision it was made on
@@ -2342,6 +2342,112 @@ export interface paths {
          * @description 409 when `revision` is not the current one, or `nothing to redo` (any edit after an undo clears redo).
          */
         post: operations["studioRedoTimeline"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/timelines/{timeline_id}/edits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * From 1.49: named edit ops applied in order, all or nothing (or tried: dry_run)
+         * @description contracts/README.md, Timeline: edits by ops. Applies `ops` (at most 200) in order with the timeline rules
+         *     (`t_apply`: edit, then normalize) to the current document, which must be `base_revision`, and stores the
+         *     result as one revision (one undo undoes the call). `dry_run: true` answers the same and stores nothing
+         *     (`revision` = `base_revision`). An op that makes clips and leaves out their ids gets ids from studio
+         *     (answered in `diff.added`). `X-Helm-Client` (`web`, `helm`, `mcp`, `assistant`) labels the revision's `via`.
+         *     409 `timeline changed since you opened it (now revision <n>)` when `base_revision` is not the current one (a
+         *     dry run too; nothing is re-applied: re-read and re-plan). 422 `TimelineEditError` when an op cannot apply
+         *     (`op_index`, `code`: an edit error such as `split_edge`, `unknown_clip`, `take_not_found`, or the first
+         *     problem's code with every problem of the document after that op) or `{detail}` for a body that does not fit
+         *     (`fill` is studio's; `too_many_ops` past 200). Nothing is stored on any error.
+         */
+        post: operations["studioEditTimeline"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/timelines/{timeline_id}/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** From 1.49: the kept revisions (the last 100), newest first */
+        get: operations["studioListTimelineRevisions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/timelines/{timeline_id}/revisions/{revision}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * From 1.49: one kept revision's document, as stored
+         * @description 404 when the revision is not kept (pruned, or never made).
+         */
+        get: operations["studioGetTimelineRevision"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/timelines/{timeline_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * From 1.49: write a kept revision's document forward as a new revision
+         * @description contracts/README.md, Timeline: edits by ops. Undo to any kept point: the document of `to`, reconciled as undo is, stored as revision + 1 (`undo_to` = the current, `redo_to` = null); history is never rewritten. 409 when `revision` is not the current one; 422 `revision <n> is not kept`.
+         */
+        post: operations["studioRestoreTimeline"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/timelines/{timeline_id}/frame": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * From 1.49: what V1 shows at a sequence time, as a stored image (for an agent to look)
+         * @description contracts/README.md, Timeline: edits by ops (`frame_at_time`). An empty slot or past the end: `empty`. An image take: its image. A video take: the nearest stored frame (its first frame = a run's poster, or the stored last frame), with the source time wanted and the one shown. No dissolve or sound is composited, and nothing is made: no take, no job. 404 unknown sequence.
+         */
+        post: operations["studioTimelineFrame"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6754,6 +6860,243 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        /** @description one named edit (contracts/README.md, Timeline rules: edits; check.py t_edit), from 1.49 the items of TimelineEdits.ops. `fill` is studio's and not one of them. Seconds are snapped to the frame grid (an audio track's in / out: samples). A new op is an openapi change and a version */
+        TimelineOp: {
+            /** @constant */
+            op: "move";
+            clip: components["schemas"]["TimelineClipId"];
+            index?: number;
+            at?: components["schemas"]["TimelineSeconds"];
+            track?: string;
+        } | {
+            /** @constant */
+            op: "trim";
+            clip: components["schemas"]["TimelineClipId"];
+            /** @enum {string} */
+            edge: "in" | "out";
+            delta: number;
+        } | {
+            /** @constant */
+            op: "split";
+            track: string;
+            at: components["schemas"]["TimelineSeconds"];
+            id?: components["schemas"]["TimelineClipId"];
+        } | {
+            /** @constant */
+            op: "remove";
+            clip: components["schemas"]["TimelineClipId"];
+        } | {
+            /** @constant */
+            op: "lift";
+            clip: components["schemas"]["TimelineClipId"];
+        } | {
+            /** @constant */
+            op: "replace";
+            clip: components["schemas"]["TimelineClipId"];
+            /** Format: uuid */
+            take_id: string;
+        } | {
+            /** @constant */
+            op: "set";
+            clip: components["schemas"]["TimelineClipId"];
+            gain_db?: number | null;
+            mute?: boolean | null;
+            hold?: number | null;
+            transition_in?: components["schemas"]["TimelineDissolve"] | null;
+        } | {
+            /** @constant */
+            op: "add";
+            take_ids: string[];
+            track?: string;
+            ids?: components["schemas"]["TimelineClipId"][];
+        } | {
+            /** @constant */
+            op: "insert";
+            at: components["schemas"]["TimelineSeconds"];
+            hold: number;
+            id?: components["schemas"]["TimelineClipId"];
+        } | {
+            /** @constant */
+            op: "place";
+            at: components["schemas"]["TimelineSeconds"];
+            hold: number;
+            id?: components["schemas"]["TimelineClipId"];
+            gap_id?: components["schemas"]["TimelineClipId"];
+        } | {
+            /** @constant */
+            op: "add_track";
+        } | {
+            /** @constant */
+            op: "remove_track";
+            track: string;
+        } | {
+            /** @constant */
+            op: "track";
+            track: string;
+            gain_db?: number;
+            mute?: boolean;
+        };
+        TimelineEdits: {
+            /** @description the revision the ops were planned on (409 when it is not the current one) */
+            base_revision: number;
+            ops: components["schemas"]["TimelineOp"][];
+            /**
+             * @description try it: the same answer, nothing stored
+             * @default false
+             */
+            dry_run?: boolean;
+        };
+        /** @description what changed between two normalized documents (check.py t_diff), by clip id; a field absent on one side is null */
+        TimelineDiff: {
+            /** @description new clip ids, in track order (studio-made ones included) */
+            added: components["schemas"]["TimelineClipId"][];
+            removed: components["schemas"]["TimelineClipId"][];
+            changed: {
+                clip: components["schemas"]["TimelineClipId"];
+                /** @description field → [before, after], among take_id, in, out, hold, at, gain_db, mute, transition_in, alternatives, shot, offline, track (a V1 ripple shows as `at` changes) */
+                fields: {
+                    [key: string]: unknown[];
+                };
+            }[];
+            tracks: {
+                added: string[];
+                removed: string[];
+                changed: {
+                    track: string;
+                    fields: {
+                        [key: string]: unknown[];
+                    };
+                }[];
+            };
+            /** @description [before, after] duration_s */
+            duration: number[];
+        };
+        TimelineEditResult: {
+            /** @description the stored revision; a dry run: base_revision */
+            revision: number;
+            dry_run: boolean;
+            /** @description as GET …/{timeline_id} answers it (a dry run: what it would be) */
+            timeline: components["schemas"]["Timeline"];
+            diff: components["schemas"]["TimelineDiff"];
+            /** @description what studio changed beyond the ops (a time snapped to the frame grid); never a refusal */
+            warnings: string[];
+        };
+        /** @description TimelineError plus the failing op: `ops[3]: split_edge`, or `ops[3]: timeline has 2 problems: …`; `{detail}` only when the body does not fit */
+        TimelineEditError: {
+            detail: string;
+            op_index?: number;
+            /** @description the edit's error code (unknown_op, unknown_clip, unknown_track, take_not_found, split_edge, split_none, split_shot, lift_track, video_track, too_many_tracks, not_alternative) or the first problem's code */
+            code?: string;
+            problems?: components["schemas"]["TimelineProblem"][];
+        };
+        TimelineRevisionItem: {
+            revision: number;
+            /** @enum {string} */
+            by: "user" | "studio";
+            /**
+             * @description a user write: where it came from (X-Helm-Client; a revision from before 1.49 reads web); studio's: null
+             * @enum {string|null}
+             */
+            via: "web" | "api" | "mcp" | "assistant" | null;
+            /** Format: date-time */
+            saved_at: string;
+            /** @description the op names of an /edits call (`split, remove`), else the write's kind (edit, add, shot, line, rerender, undo, redo, restore, fill); null before 1.49 */
+            ops_summary: string | null;
+            /** @description V1 clips */
+            clips: number;
+            duration_s: number;
+        };
+        TimelineRevisionList: {
+            revisions: components["schemas"]["TimelineRevisionItem"][];
+        };
+        TimelineRevisionDoc: {
+            document: components["schemas"]["TimelineNormalized"];
+        } & components["schemas"]["TimelineRevisionItem"];
+        TimelineRestore: {
+            /** @description the current revision, as the caller has it */
+            revision: number;
+            /** @description the kept revision to bring back */
+            to: number;
+        };
+        TimelineAgentClip: {
+            id: components["schemas"]["TimelineClipId"];
+            track: string;
+            /** @description its place on its track */
+            index: number;
+            /** Format: uuid */
+            take_id: string | null;
+            take_title: string | null;
+            /**
+             * @description slot: an empty slot (or a line placeholder)
+             * @enum {string}
+             */
+            kind: "video" | "image" | "audio" | "slot";
+            in: number | null;
+            out: number | null;
+            hold: number | null;
+            /** @description sequence seconds */
+            at: number;
+            end: number;
+            length: number;
+            /** @description frames, on the target's grid */
+            at_f: number;
+            end_f: number;
+            length_f: number;
+            gain_db: number;
+            mute: boolean;
+            /** @description a dissolve's frames */
+            transition_in: number | null;
+            alternatives: string[];
+            shot: components["schemas"]["TimelineShotRef"] | null;
+            /** @description V1: the shot number */
+            number: number | null;
+            offline: boolean;
+        };
+        /** @description GET …/{timeline_id}?view=agent (check.py t_agent_view, plus id, name, revision and take titles): plain data, no signed links */
+        TimelineAgentView: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            revision: number;
+            target: components["schemas"]["TimelineTarget"];
+            duration_s: number;
+            frames: number;
+            tracks: {
+                name: string;
+                kind: components["schemas"]["TimelineTrackKind"];
+                gain_db: number;
+                mute: boolean;
+                clips: number;
+            }[];
+            /** @description every clip, track by track, in order */
+            clips: components["schemas"]["TimelineAgentClip"][];
+        };
+        TimelineFrameRequest: {
+            /** @description sequence seconds */
+            at: components["schemas"]["TimelineSeconds"];
+        };
+        /** @description check.py frame_at_time, plus the signed image: what V1 shows at `at` */
+        TimelineFrame: {
+            /** @description an empty slot, or past the end */
+            empty: boolean;
+            clip: components["schemas"]["TimelineClipId"] | null;
+            /** Format: uuid */
+            take_id: string | null;
+            /** @enum {string|null} */
+            kind: "video" | "image" | null;
+            /** @description a video: the source time wanted */
+            t: number | null;
+            /**
+             * @description what the image is: the image take, the video's first or last frame, or (an upload's or import's video) its poster, whose time is not known
+             * @enum {string|null}
+             */
+            shown: "image" | "first" | "last" | "poster" | null;
+            /** @description the source time the image shows (null: an image, or a poster) */
+            shown_t: number | null;
+            /** @description the clip's take is gone: no image */
+            offline?: boolean;
+            url: components["schemas"]["SignedUrl"] | null;
+        };
         TimelineList: {
             timelines: components["schemas"]["TimelineSummary"][];
         };
@@ -7287,6 +7630,15 @@ export interface components {
             };
             content: {
                 "application/json": components["schemas"]["TimelineError"];
+            };
+        };
+        /** @description the body does not fit the schema (`{detail}` only), or an op cannot apply (`op_index`, `code`, `problems`) */
+        TimelineEditUnprocessable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["TimelineEditError"];
             };
         };
     };
@@ -10520,7 +10872,10 @@ export interface operations {
     };
     studioGetTimeline: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description from 1.49: `agent` = TimelineAgentView */
+                view?: "agent";
+            };
             header?: never;
             path: {
                 /** @description sequence UUID (malformed = 404) */
@@ -10536,7 +10891,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Timeline"];
+                    "application/json": components["schemas"]["Timeline"] | components["schemas"]["TimelineAgentView"];
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -10755,6 +11110,159 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioEditTimeline: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sequence UUID (malformed = 404) */
+                timeline_id: components["parameters"]["TimelineId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimelineEdits"];
+            };
+        };
+        responses: {
+            /** @description the result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimelineEditResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["TimelineEditUnprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioListTimelineRevisions: {
+        parameters: {
+            query?: {
+                /** @description only revisions below this one (paging) */
+                before?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description sequence UUID (malformed = 404) */
+                timeline_id: components["parameters"]["TimelineId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the history */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimelineRevisionList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioGetTimelineRevision: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sequence UUID (malformed = 404) */
+                timeline_id: components["parameters"]["TimelineId"];
+                revision: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the revision */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimelineRevisionDoc"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioRestoreTimeline: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sequence UUID (malformed = 404) */
+                timeline_id: components["parameters"]["TimelineId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimelineRestore"];
+            };
+        };
+        responses: {
+            /** @description the sequence */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Timeline"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["TimelineUnprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioTimelineFrame: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description sequence UUID (malformed = 404) */
+                timeline_id: components["parameters"]["TimelineId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimelineFrameRequest"];
+            };
+        };
+        responses: {
+            /** @description the frame */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimelineFrame"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
             503: components["responses"]["Unavailable"];
         };
     };

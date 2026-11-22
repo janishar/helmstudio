@@ -4,8 +4,7 @@
 // Create import it, the editor stays lazy.
 import Link from "next/link";
 import { useState } from "react";
-import { api, message, ok, type S } from "@/lib/api";
-import { edit, factsOf, writable, type Doc } from "@/lib/timeline";
+import { api, editTimeline, getTimeline, message, ok } from "@/lib/api";
 
 const LAST = "helm.timeline";
 
@@ -37,17 +36,11 @@ export async function addToTimeline(
   if (audio) {
     const path = (id: string) => ({ params: { path: { timeline_id: id } } });
     let tl = to
-      ? await ok(api.GET("/v1/studio/timelines/{timeline_id}", path(to.id)))
+      ? await getTimeline(to.id)
       : await ok(api.POST("/v1/studio/timelines", { body: {} }));
     let track = tl.tracks.find((t) => t.kind === "audio")?.name;
     if (!track) {
-      const d = edit(tl as Doc, { op: "add_track" }, factsOf(tl.takes)) as Doc;
-      tl = await ok(
-        api.PUT("/v1/studio/timelines/{timeline_id}", {
-          ...path(tl.id),
-          body: { revision: tl.revision, ...writable(d) } as S<"TimelineUpdate">,
-        }),
-      );
+      tl = await editTimeline(tl, [{ op: "add_track" }]);
       track = tl.tracks.find((t) => t.kind === "audio")!.name;
     }
     tl = await ok(

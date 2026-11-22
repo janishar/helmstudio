@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 // The Timeline's screen actions for the assistant (components/timeline/assistant.ts; plan 18 §22.5, §22.6; board
 // frame 2), run through the registry as the drawer runs them: the playhead and range are lines; edits are the Op union
-// saved with the revision they were made on (a 409 reloads and saves once more) and Undo is the sequence's own undo;
+// saved through POST …/edits with the revision they were made on, labelled `assistant` (plan 24; a 409 reloads and
+// saves once more), and Undo is the sequence's own undo; the screen's own gestures save through /edits too (`web`);
 // a refused edit says why; New shot, a take action, Re-render, Export and Delete are cards that send nothing until
 // Yes (Yes is the docked form's own Generate); Save as voice opens Clone from a clip and resolves "cancelled".
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -12,6 +13,7 @@ import { Registry, ToolsContext } from "@/components/assistant/tools";
 import { asked, type Asked, type Outcome } from "@/lib/assistant";
 import { api, type S } from "@/lib/api";
 import { editText } from "@/components/timeline/assistant";
+import { apply, factsOf, type Op } from "@/lib/timeline";
 import { answer, take } from "./helpers";
 
 const replace = vi.fn();
@@ -95,9 +97,17 @@ const reply = (data: unknown, status = 200) =>
     response: new Response(null, { status }),
   });
 
-function start({ workflows = [t2v] as S<"Workflow">[], conflict = false } = {}) {
+/** What /edits got: the body and its X-Helm-Client. */
+type Sent = S<"TimelineEdits"> & { via?: string };
+
+function start({
+  workflows = [t2v] as S<"Workflow">[],
+  conflict = false,
+  // what a parallel write does to the stored sequence before the 409
+  meanwhile = (t: S<"Timeline">) => t,
+} = {}) {
   let cur: S<"Timeline"> = structuredClone(TL);
-  const puts: S<"TimelineUpdate">[] = [];
+  const edits: Sent[] = [];
   const posts: { path: string; body: unknown }[] = [];
   const deletes: string[] = [];
   let conflicts = conflict ? 1 : 0;
@@ -122,7 +132,29 @@ function start({ workflows = [t2v] as S<"Workflow">[], conflict = false } = {}) 
       data: { actions: [] },
     }),
   });
-  vi.spyOn(api, "POST").mockImplementation(((path: string, init: { body?: unknown }) => {
+  vi.spyOn(api, "POST").mockImplementation(((
+    path: string,
+    init: { body?: unknown; headers?: Record<string, string> },
+  ) => {
+    if (path.endsWith("/edits")) {
+      // studio's apply, played by lib/timeline (the three are held equal by make contracts-check)
+      const body = init.body as S<"TimelineEdits">;
+      edits.push({ ...body, via: init.headers?.["X-Helm-Client"] });
+      if (conflicts) {
+        conflicts--;
+        cur = { ...meanwhile(cur), revision: cur.revision + 1 };
+        return reply(undefined, 409);
+      }
+      if (body.base_revision !== cur.revision) return reply(undefined, 409);
+      let d: S<"Timeline"> = cur;
+      for (const o of body.ops) {
+        const r = apply(d, o as Op, factsOf(cur.takes));
+        if (!("document" in r)) return reply(undefined, 422);
+        d = { ...d, ...r.document } as S<"Timeline">;
+      }
+      cur = { ...d, revision: cur.revision + 1, can_undo: true };
+      return reply({ revision: cur.revision, dry_run: false, timeline: cur, diff: {}, warnings: [] });
+    }
     posts.push({ path, body: init?.body });
     if (path.endsWith("/export/plan")) return reply({ ...plan, revision: cur.revision });
     if (path === "/v1/studio/runs/plan") return reply({ host: "mac", peak_gb: 21, reason: null });
@@ -166,16 +198,6 @@ function start({ workflows = [t2v] as S<"Workflow">[], conflict = false } = {}) 
     if (path.endsWith("/cancel")) return reply({ id: "j", status: "cancelled" });
     return reply(undefined, 404);
   }) as never);
-  vi.spyOn(api, "PUT").mockImplementation(((_: string, init: { body: S<"TimelineUpdate"> }) => {
-    puts.push(init.body);
-    if (conflicts) {
-      conflicts--;
-      cur = { ...cur, revision: cur.revision + 1 };
-      return reply(undefined, 409);
-    }
-    cur = { ...cur, ...init.body, revision: cur.revision + 1, can_undo: true } as S<"Timeline">;
-    return reply(cur);
-  }) as never);
   vi.spyOn(api, "PATCH").mockImplementation(((_: string, init: { body: { name: string } }) => {
     cur = { ...cur, name: init.body.name };
     return reply(cur);
@@ -212,7 +234,7 @@ function start({ workflows = [t2v] as S<"Workflow">[], conflict = false } = {}) 
         () => undefined,
       )
       .then((r) => r.out);
-  return { reg, call, live, puts, posts, deletes, now: () => cur };
+  return { reg, call, live, edits, posts, deletes, now: () => cur };
 }
 const out = (o: Outcome | Asked) => {
   if (asked(o)) throw new Error("a card");
@@ -245,15 +267,20 @@ describe("the Timeline's actions", () => {
   });
 
   it("an edit is saved with its revision; Undo and Redo are the sequence's own", async () => {
-    const { call, puts, posts } = start();
+    const { call, edits, posts, now } = start();
     await ready();
     const o = out(
       await call("edit", { ops: [{ op: "trim", clip: "c", edge: "out", delta: -0.25 }] }),
     );
     expect(o).toMatchObject({ status: "done", text: "Trimmed 1 clip" });
-    expect(puts).toHaveLength(1);
-    expect(puts[0].revision).toBe(4);
-    const c = puts[0].tracks[0].clips.find((x) => x.id === "c")!;
+    expect(edits).toEqual([
+      {
+        base_revision: 4,
+        ops: [{ op: "trim", clip: "c", edge: "out", delta: -0.25 }],
+        via: "assistant",
+      },
+    ]);
+    const c = now().tracks[0].clips.find((x) => x.id === "c")!;
     expect(c.out).toBeCloseTo(1.5);
     await act(async () => void (await o.undo!.undo()));
     expect(posts.at(-1)).toMatchObject({
@@ -268,16 +295,56 @@ describe("the Timeline's actions", () => {
   });
 
   it("a conflict reloads and saves once more; a refused edit says why and saves nothing", async () => {
-    const { call, puts } = start({ conflict: true });
+    const { call, edits } = start({ conflict: true });
     await ready();
     const o = out(await call("edit", { ops: [{ op: "remove", clip: "b" }] }));
     expect(o).toMatchObject({ status: "done", text: "Removed 1 clip" });
-    expect(puts.map((p) => p.revision)).toEqual([4, 5]);
+    expect(edits.map((p) => p.base_revision)).toEqual([4, 5]);
     expect(screen.getByText(/reloaded, and the edit applied to it/)).toBeTruthy();
     const bad = out(await call("edit", { ops: [{ op: "split", track: "V1", at: 0 }] }));
     expect(bad.status).toBe("failed");
     expect(bad.text).toMatch(/^Edit · /);
-    expect(puts).toHaveLength(2);
+    expect(edits).toHaveLength(2);
+  });
+
+  it("a gesture saves its op through /edits, labelled web; the answer is the sequence shown", async () => {
+    const { call, edits, now } = start();
+    await ready();
+    await call("setPlayhead", { at_s: 1 });
+    fireEvent.keyDown(document.body, { key: "s" });
+    await waitFor(() => expect(edits).toHaveLength(1));
+    expect(edits[0]).toMatchObject({
+      base_revision: 4,
+      ops: [{ op: "split", track: "V1", at: 1 }],
+      via: "web",
+    });
+    expect(edits[0].ops[0]).toHaveProperty("id");
+    await waitFor(() => expect(now().revision).toBe(5));
+    expect(now().tracks[0].clips).toHaveLength(5);
+  });
+
+  it("a gesture's 409 reloads and re-applies once; when it no longer applies the notice says so", async () => {
+    const a = start({ conflict: true });
+    await ready();
+    await a.call("setPlayhead", { at_s: 1 });
+    fireEvent.keyDown(document.body, { key: "s" });
+    await waitFor(() => expect(a.edits.map((p) => p.base_revision)).toEqual([4, 5]));
+    expect(await screen.findByText(/reloaded, and your edit applied to it/)).toBeTruthy();
+    cleanup();
+    vi.restoreAllMocks();
+    // a parallel write left only the running shot on V1: the split no longer applies, nothing more is sent
+    const b = start({
+      conflict: true,
+      meanwhile: (t) => ({
+        ...t,
+        tracks: t.tracks.map((k, i) => (i ? k : { ...k, clips: k.clips.filter((c) => c.id === "s") })),
+      }),
+    });
+    await ready();
+    await b.call("setPlayhead", { at_s: 1 });
+    fireEvent.keyDown(document.body, { key: "s" });
+    expect(await screen.findByText(/reloaded, and your edit applied to it/)).toBeTruthy();
+    expect(b.edits).toHaveLength(1);
   });
 
   it("New shot opens the composer prefilled and is a card: nothing runs until Yes, which is its Generate", async () => {

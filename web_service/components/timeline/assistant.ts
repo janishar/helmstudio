@@ -3,7 +3,7 @@
 // once more), each with Undo (the sequence's own undo); the playhead and range are lines; New shot, every take
 // action (extend, retake, insert, replace, redo), New line, Re-render and Export are cards whose Yes is the docked
 // form's own Generate (or the dialog's own button); Save as voice opens the clone dialog prefilled.
-import { ApiError, api, message, ok, type S } from "@/lib/api";
+import { ApiError, api, editTimeline, getTimeline, message, ok, type S } from "@/lib/api";
 import { done, failed, ordinal, placeInLine, type Asked, type Outcome } from "@/lib/assistant";
 import type { ScreenSpec } from "@/components/assistant/tools";
 import { hasSound, takeById, type LibraryAsk } from "@/components/assistant/library";
@@ -17,7 +17,6 @@ import {
   shortTime,
   shotBusy,
   timecode,
-  writable,
   type Clip,
   type Norm,
   type Op,
@@ -162,12 +161,10 @@ function withIds(o: Op, d: Norm): Op {
   return o;
 }
 
-const get1 = (id: string) =>
-  ok(api.GET("/v1/studio/timelines/{timeline_id}", { params: { path: { timeline_id: id } } }));
-
-/** Saves `ops` on the stored sequence as the screen does: the clips of an `add` through POST …/clips (studio reads
- * the takes), the rest applied here and PUT with the revision they were made on; a 409 reloads and tries once more.
- * Returns how many revisions it made (what Undo takes back), or why not. */
+/** Saves `ops` on the stored sequence as the screen does, through POST …/edits with the revision they were made on
+ * (labelled `assistant`): checked here op by op first (so a refusal says why and saves nothing), an `add` sent on
+ * its own (studio reads the takes); a 409 reloads and tries once more. Returns how many revisions it made (what Undo
+ * takes back), or why not. */
 async function save(c: TimelineCtx, ops: Op[]): Promise<{ revisions: number } | { error: string }> {
   for (let attempt = 0; attempt < 2; attempt++) {
     const first = c.get();
@@ -175,39 +172,25 @@ async function save(c: TimelineCtx, ops: Op[]): Promise<{ revisions: number } | 
     let cur: Timeline = first;
     let revisions = 0;
     let d: Norm = cur;
-    let dirty = false;
+    let pending: Op[] = [];
     try {
-      const flush = async () => {
-        if (!dirty) return;
-        const t: Timeline = await ok(
-          api.PUT("/v1/studio/timelines/{timeline_id}", {
-            params: { path: { timeline_id: cur.id } },
-            body: { revision: cur.revision, ...writable(d) } as S<"TimelineUpdate">,
-          }),
-        );
+      const send = async (list: Op[]) => {
+        const t = await editTimeline(cur, list, "assistant");
         c.set(t);
         cur = t;
         d = t;
-        dirty = false;
         revisions++;
+      };
+      const flush = async () => {
+        if (!pending.length) return;
+        await send(pending);
+        pending = [];
       };
       for (const [i, raw] of ops.entries()) {
         const o = withIds(raw, d);
         if (o.op === "add") {
           await flush();
-          const t: Timeline = await ok(
-            api.POST("/v1/studio/timelines/{timeline_id}/clips", {
-              params: { path: { timeline_id: cur.id } },
-              body: {
-                take_ids: o.take_ids,
-                ...(o.track && o.track !== "V1" && { track: o.track }),
-              },
-            }),
-          );
-          c.set(t);
-          cur = t;
-          d = t;
-          revisions++;
+          await send([o]);
           continue;
         }
         let r: ReturnType<typeof apply>;
@@ -219,14 +202,14 @@ async function save(c: TimelineCtx, ops: Op[]): Promise<{ revisions: number } | 
         if ("error" in r) return { error: say(r.error) };
         if ("problems" in r) return { error: say(r.problems[0][0]) };
         d = r.document;
-        dirty = true;
+        pending.push(o);
       }
       await flush();
       return { revisions };
     } catch (e) {
       if (e instanceof ApiError && e.status === 409 && !attempt && !revisions) {
         const now = c.get();
-        if (now) c.set(await get1(now.id));
+        if (now) c.set(await getTimeline(now.id));
         c.notice("The sequence changed since you opened it: reloaded, and the edit applied to it.");
         continue;
       }
