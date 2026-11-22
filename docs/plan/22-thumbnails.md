@@ -2,7 +2,7 @@
 
 [← Plan index](../README.md)
 
-Status: **decided by the owner (2026-11-22), being built**. API **1.48.0** (the next free number when built:
+Status: **decided by the owner (2026-11-22), built (2026-11-22)**. API **1.48.0** (the next free number when built:
 main was at 1.47.0; plan 23 reserved 1.46 and is unbuilt; numbers below that say 1.45 mean 1.48).
 
 The owner's ask, 2026-11-22: "thumbnail support so the loading image in gallery view or elsewhere is memory and
@@ -296,6 +296,19 @@ store). With one size there is no size in the key.
 About 18 h. Phases 3–4 for run outputs alone (no thumbs job) ship most of the win for new work in about 7 h; the
 backfill, uploads and imports follow. The web's poster change ships with the first phase that makes a video
 thumbnail.
+
+### 26.10a As built (2026-11-22)
+
+- API 1.48.0. Runners advertise `media.thumbs: true` in the hosts key and studio sends thumbs jobs only to them (an
+  older runner, such as a native Mac runner not yet restarted, would fail every job and spend each take's tries).
+- The loop picks the **newest** takes first, not the oldest: a new upload never waits behind a backfill.
+- No `width` / `height` attributes on list images (26.7: every tile has a fixed aspect).
+- Dev stack backfill (studio, runner and web rebuilt): 480 live image and video takes, 45 thumbs jobs, none failed;
+  231 got a thumbnail, 249 needed none (short side at most 512 px); no take over 512 px is left without one. Image
+  originals average 1.78 MB, their thumbnails 32 KB (largest 119 KB). A `pg_dump` of `takes` was taken before.
+- Left: the browser pass (network panel); a remote GPU host's S3 identity needs `make gpu-host-reload` to get the
+  `u/*/thumbs/*` prefix (local runners use the admin key); the native Mac runners advertise `media.thumbs` after their
+  next restart.
 
 ### 26.11 Open points for the owner
 
