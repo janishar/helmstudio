@@ -212,27 +212,30 @@ type toolArgs struct {
 	PipelineID *string `json:"pipeline_id"`
 	Row        *int    `json:"row"`
 	TimelineID *string `json:"timeline_id"`
+	Revision   *int    `json:"revision"` // timeline_revisions (API 1.49)
+	Before     *int    `json:"before"`
 }
 
 // toolInputs are the args each read tool takes, and which it needs.
 var toolInputs = map[string][2][]string{
-	"sessions":       {{"session_id", "limit"}},
-	"list_workflows": {},
-	"get_workflow":   {{"workflow_id"}, {"workflow_id"}},
-	"get_run":        {{"run_id"}, {"run_id"}},
-	"plan_run":       {{"workflow_id", "inputs", "host"}, {"workflow_id"}},
-	"models":         {},
-	"hosts":          {},
-	"search_takes":   {{"q", "kind", "starred", "session_id", "batch_id", "order", "limit"}},
-	"get_take":       {{"take_id"}, {"take_id"}},
-	"list_library":   {{"kind", "pipeline_id"}},
-	"pipelines":      {{"pipeline_id"}},
-	"batch_status":   {{"batch_id", "row", "limit"}},
-	"list_timelines": {},
-	"show_timeline":  {{"timeline_id"}, {"timeline_id"}},
-	"custom_nodes":   {},
-	"model_sources":  {},
-	"model_jobs":     {},
+	"sessions":           {{"session_id", "limit"}},
+	"list_workflows":     {},
+	"get_workflow":       {{"workflow_id"}, {"workflow_id"}},
+	"get_run":            {{"run_id"}, {"run_id"}},
+	"plan_run":           {{"workflow_id", "inputs", "host"}, {"workflow_id"}},
+	"models":             {},
+	"hosts":              {},
+	"search_takes":       {{"q", "kind", "starred", "session_id", "batch_id", "order", "limit"}},
+	"get_take":           {{"take_id"}, {"take_id"}},
+	"list_library":       {{"kind", "pipeline_id"}},
+	"pipelines":          {{"pipeline_id"}},
+	"batch_status":       {{"batch_id", "row", "limit"}},
+	"list_timelines":     {},
+	"show_timeline":      {{"timeline_id"}, {"timeline_id"}},
+	"timeline_revisions": {{"timeline_id", "revision", "before", "limit"}, {"timeline_id"}},
+	"custom_nodes":       {},
+	"model_sources":      {},
+	"model_jobs":         {},
 }
 
 // readTool runs one read tool through its routes.
@@ -398,9 +401,22 @@ func (s *Service) readTool(ctx context.Context, caller common.Caller, name strin
 		}
 	case "list_timelines":
 		return single(get("", "/timelines"), refused)
-	case "show_timeline":
-		get("timeline", "/timelines/"+esc(args.TimelineID))
+	case "show_timeline": // API 1.49: the agent view
+		get("timeline", "/timelines/"+esc(args.TimelineID)+"?view=agent")
 		get("exports", "/timelines/"+esc(args.TimelineID)+"/exports")
+	case "timeline_revisions":
+		switch base := "/timelines/" + esc(args.TimelineID) + "/revisions"; {
+		case args.Revision != nil && (*args.Revision < 1 || args.Before != nil):
+			return toolErr("invalid", "args: revision must be 1 or more, without before")
+		case args.Revision != nil:
+			get("revision", fmt.Sprintf("%s/%d", base, *args.Revision))
+		case args.Before != nil && *args.Before < 1:
+			return toolErr("invalid", "args: before must be 1 or more")
+		case args.Before != nil:
+			get("revisions", fmt.Sprintf("%s?limit=%d&before=%d", base, limit, *args.Before))
+		default:
+			get("revisions", fmt.Sprintf("%s?limit=%d", base, limit))
+		}
 	case "custom_nodes":
 		return single(get("", "/custom-nodes"), refused)
 	case "model_sources":

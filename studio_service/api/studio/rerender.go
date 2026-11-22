@@ -163,7 +163,7 @@ func (s *Service) RerenderTimeline(ctx context.Context, caller common.Caller, id
 				return err
 			}
 		}
-		return storeUser(ctx, tx, row, doc)
+		return storeUser(ctx, tx, row, doc, userWrite(caller, "rerender"))
 	})
 	out.Timeline = tl
 	return out, err

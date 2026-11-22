@@ -393,8 +393,17 @@ func (s *Service) liveDefaults(ctx context.Context, tx pgx.Tx, row timelineRow) 
 
 // ------------------------------------------------------------------ storing
 
+// write is who made a revision and what it was (API 1.49): by user or studio, via (a user's: common.ViaOf) and
+// ops, the op names of an /edits call or the write's kind.
+type write struct{ by, via, ops string }
+
+// userWrite is caller's write of kind ops.
+func userWrite(caller common.Caller, ops string) write {
+	return write{by: "user", via: common.ViaOf(caller.Via), ops: ops}
+}
+
 // store writes doc as the next revision with its undo and redo pointers and prunes the revisions past the last 100.
-func store(ctx context.Context, tx pgx.Tx, row *timelineRow, doc timeline.Doc, by string, undo, redo *int) error {
+func store(ctx context.Context, tx pgx.Tx, row *timelineRow, doc timeline.Doc, w write, undo, redo *int) error {
 	stored := row.doc()
 	data, err := json.Marshal(clean(doc, &stored))
 	if err != nil {
@@ -406,8 +415,9 @@ func store(ctx context.Context, tx pgx.Tx, row *timelineRow, doc timeline.Doc, b
 	if err != nil {
 		return err
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO timeline_revisions (timeline_id, owner_id, revision, doc, by, undo_to, redo_to)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)`, row.ID, row.OwnerID, next, data, by, undo, redo); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO timeline_revisions (timeline_id, owner_id, revision, doc, by, undo_to, redo_to,
+		via, ops_summary) VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), $9)`, row.ID, row.OwnerID, next, data, w.by,
+		undo, redo, w.via, w.ops); err != nil {
 		return err
 	}
 	_, err = tx.Exec(ctx, `DELETE FROM timeline_revisions WHERE timeline_id = $1 AND revision <= $2`, row.ID, next-keptRevisions)
@@ -416,18 +426,18 @@ func store(ctx context.Context, tx pgx.Tx, row *timelineRow, doc timeline.Doc, b
 }
 
 // storeUser is a user's write: undo goes back to the revision before, redo is cleared.
-func storeUser(ctx context.Context, tx pgx.Tx, row *timelineRow, doc timeline.Doc) error {
+func storeUser(ctx context.Context, tx pgx.Tx, row *timelineRow, doc timeline.Doc, w write) error {
 	before := row.Revision
-	return store(ctx, tx, row, doc, "user", &before, nil)
+	return store(ctx, tx, row, doc, w, &before, nil)
 }
 
-// storeStudio is studio's own write (a fill, a cancelled shot dropped): it keeps the pointers, so undo skips it.
-func storeStudio(ctx context.Context, tx pgx.Tx, row *timelineRow, doc timeline.Doc) error {
+// storeStudio is studio's own write (a fill, a cancelled shot dropped: ops): it keeps the pointers, so undo skips it.
+func storeStudio(ctx context.Context, tx pgx.Tx, row *timelineRow, doc timeline.Doc, ops string) error {
 	undo, redo, err := pointers(ctx, tx, row.ID, row.Revision)
 	if err != nil {
 		return err
 	}
-	return store(ctx, tx, row, doc, "studio", undo, redo)
+	return store(ctx, tx, row, doc, write{by: "studio", ops: ops}, undo, redo)
 }
 
 // newClipID is a clip id not in doc.
@@ -551,8 +561,8 @@ func (s *Service) CreateTimeline(ctx context.Context, caller common.Caller, body
 		if err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO timeline_revisions (timeline_id, owner_id, revision, doc, by)
-			VALUES ($1, $2, 1, $3, 'user')`, row.ID, caller.ID, data); err != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO timeline_revisions (timeline_id, owner_id, revision, doc, by, via, ops_summary)
+			VALUES ($1, $2, 1, $3, 'user', $4, 'create')`, row.ID, caller.ID, data, common.ViaOf(caller.Via)); err != nil {
 			return err
 		}
 		out, err = s.timelineDTO(ctx, tx, row)
@@ -677,7 +687,7 @@ func (s *Service) UpdateTimeline(ctx context.Context, caller common.Caller, id s
 		if probs != nil {
 			return problemsError(probs)
 		}
-		return storeUser(ctx, tx, row, *n)
+		return storeUser(ctx, tx, row, *n, userWrite(caller, "edit"))
 	})
 }
 
@@ -743,21 +753,28 @@ func (s *Service) AddTimelineClips(ctx context.Context, caller common.Caller, id
 		if doc, err = apply(doc, addOp(doc, body.Track, body.TakeIDs), rules); err != nil {
 			return err
 		}
-		return storeUser(ctx, tx, row, doc)
+		return storeUser(ctx, tx, row, doc, userWrite(caller, "add"))
 	})
 }
 
 // UndoTimeline writes the revision undo goes back to as the next one; RedoTimeline the one redo goes forward to.
 func (s *Service) UndoTimeline(ctx context.Context, caller common.Caller, id string, body *dto.TimelineRevision) (dto.Timeline, error) {
-	return s.restore(ctx, caller, id, body.Revision, true)
+	return s.restore(ctx, caller, id, body.Revision, true, nil)
 }
 
 // RedoTimeline: see UndoTimeline.
 func (s *Service) RedoTimeline(ctx context.Context, caller common.Caller, id string, body *dto.TimelineRevision) (dto.Timeline, error) {
-	return s.restore(ctx, caller, id, body.Revision, false)
+	return s.restore(ctx, caller, id, body.Revision, false, nil)
 }
 
-func (s *Service) restore(ctx context.Context, caller common.Caller, id string, revision int, undo bool) (dto.Timeline, error) {
+// RestoreTimeline writes kept revision body.To forward as the next one (API 1.49): undo to any point.
+func (s *Service) RestoreTimeline(ctx context.Context, caller common.Caller, id string, body *dto.TimelineRestore) (dto.Timeline, error) {
+	return s.restore(ctx, caller, id, body.Revision, false, &body.To)
+}
+
+// restore writes a kept revision forward: undo's (undo true), redo's, or (target set, API 1.49) the given one with
+// undo going back to the current and redo cleared.
+func (s *Service) restore(ctx context.Context, caller common.Caller, id string, revision int, undo bool, target *int) (dto.Timeline, error) {
 	return s.editTimeline(ctx, caller, id, func(tx pgx.Tx, row *timelineRow) error {
 		if revision != row.Revision {
 			return staleRevision(*row)
@@ -767,11 +784,18 @@ func (s *Service) restore(ctx context.Context, caller common.Caller, id string, 
 			return err
 		}
 		to, nothing := curRedo, "nothing to redo"
-		if undo {
+		switch {
+		case target != nil:
+			to = target
+		case undo:
 			to, nothing = curUndo, "nothing to undo"
 		}
 		if ok, err := kept(ctx, tx, row.ID, to); err != nil || !ok {
-			if err == nil {
+			switch {
+			case err != nil:
+			case target != nil:
+				err = network.NewUnprocessableError(fmt.Sprintf("revision %d is not kept", *target), nil)
+			default:
 				err = network.NewConflictError(nothing, nil)
 			}
 			return err
@@ -791,10 +815,13 @@ func (s *Service) restore(ctx context.Context, caller common.Caller, id string, 
 			return err
 		}
 		current := row.Revision
-		if undo {
-			return store(ctx, tx, row, doc, "user", toUndo, &current)
+		switch {
+		case target != nil:
+			return store(ctx, tx, row, doc, userWrite(caller, "restore"), &current, nil)
+		case undo:
+			return store(ctx, tx, row, doc, userWrite(caller, "undo"), toUndo, &current)
 		}
-		return store(ctx, tx, row, doc, "user", &current, toRedo)
+		return store(ctx, tx, row, doc, userWrite(caller, "redo"), &current, toRedo)
 	})
 }
 
@@ -911,7 +938,7 @@ func (s *Service) CreateShot(ctx context.Context, caller common.Caller, id strin
 			caller.ID, row.ID, clip, out.Run.ID); err != nil {
 			return err
 		}
-		return storeUser(ctx, tx, row, doc)
+		return storeUser(ctx, tx, row, doc, userWrite(caller, "shot"))
 	})
 	if err != nil {
 		return dto.TimelineShot{}, err
@@ -984,7 +1011,7 @@ func (s *Service) CreateLine(ctx context.Context, caller common.Caller, id strin
 			caller.ID, row.ID, clip, out.Run.ID); err != nil {
 			return err
 		}
-		return storeUser(ctx, tx, row, doc)
+		return storeUser(ctx, tx, row, doc, userWrite(caller, "line"))
 	})
 	if err != nil {
 		return dto.TimelineShot{}, err
@@ -1062,7 +1089,7 @@ func shotsOf(ctx context.Context, tx pgx.Tx, run model.Run) ([]timeline.ShotRef,
 
 // settleShot applies fn to every slot still waiting on run's shot, as studio revisions (in the projector's or a
 // cancel's transaction).
-func settleShot(ctx context.Context, tx pgx.Tx, run model.Run, extra []string,
+func settleShot(ctx context.Context, tx pgx.Tx, run model.Run, extra []string, kind string,
 	fn func(doc timeline.Doc, clip string, takes map[string]timeline.Take) (timeline.Doc, bool)) error {
 	refs, timelines, clips, err := shotsOf(ctx, tx, run)
 	if err != nil {
@@ -1085,7 +1112,7 @@ func settleShot(ctx context.Context, tx pgx.Tx, run model.Run, extra []string,
 			return err
 		}
 		if next, ok := fn(doc, clips[i], rules); ok {
-			if err := storeStudio(ctx, tx, &row, next); err != nil {
+			if err := storeStudio(ctx, tx, &row, next, kind); err != nil {
 				return err
 			}
 		}
@@ -1096,7 +1123,7 @@ func settleShot(ctx context.Context, tx pgx.Tx, run model.Run, extra []string,
 // fillShot fills the slots of run's shot with its first take (the projector, after storing it). A fill the rules
 // still refuse leaves the take as the slot's alternative and drops the shot: a succeeded shot never stays unfilled.
 func fillShot(ctx context.Context, tx pgx.Tx, run model.Run, takeID string) error {
-	return settleShot(ctx, tx, run, []string{takeID}, func(doc timeline.Doc, clip string, takes map[string]timeline.Take) (timeline.Doc, bool) {
+	return settleShot(ctx, tx, run, []string{takeID}, "fill", func(doc timeline.Doc, clip string, takes map[string]timeline.Take) (timeline.Doc, bool) {
 		r := timeline.Apply(doc, timeline.Op{Op: "fill", Clip: clip, TakeID: takeID}, takes)
 		if r.Document != nil {
 			return *r.Document, true
@@ -1151,7 +1178,7 @@ func batchShotsEnded(ctx context.Context, tx pgx.Tx, batchID, ownerID string) er
 			}
 		}
 		if changed {
-			if err := storeStudio(ctx, tx, &row, dropPlaceholders(doc)); err != nil {
+			if err := storeStudio(ctx, tx, &row, dropPlaceholders(doc), "drop_shot"); err != nil {
 				return err
 			}
 		}
@@ -1166,7 +1193,7 @@ func shotEnded(ctx context.Context, tx pgx.Tx, run model.Run) error {
 	if run.Status != "cancelled" || run.BatchID != nil {
 		return nil
 	}
-	return settleShot(ctx, tx, run, nil, func(doc timeline.Doc, clip string, takes map[string]timeline.Take) (timeline.Doc, bool) {
+	return settleShot(ctx, tx, run, nil, "drop_shot", func(doc timeline.Doc, clip string, takes map[string]timeline.Take) (timeline.Doc, bool) {
 		ti, k := findClip(doc, clip)
 		doc.Tracks[ti].Clips[k].Shot = nil
 		return dropPlaceholders(doc), true

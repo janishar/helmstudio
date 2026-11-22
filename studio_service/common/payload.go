@@ -12,6 +12,17 @@ type Caller struct {
 	Email    string
 	Roles    []string
 	ClientID string // X-Client-Id set by Kong's plugin; may be empty
+	Via      string // API 1.49: where a write came from, by X-Helm-Client (ViaOf); a label, never a permission
+}
+
+// ViaOf is a timeline revision's via for an X-Helm-Client value (contracts/README.md, Timeline: edits by ops): web,
+// mcp or assistant; helm, any other value or none is api.
+func ViaOf(client string) string {
+	switch client {
+	case "web", "mcp", "assistant":
+		return client
+	}
+	return "api"
 }
 
 // IsAdmin reports whether the caller has the admin role.

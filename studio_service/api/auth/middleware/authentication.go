@@ -39,5 +39,6 @@ func (m *authentication) handle(ctx *gin.Context) {
 		return
 	}
 	caller.ClientID = ctx.GetHeader("X-Client-Id")
+	caller.Via = common.ViaOf(ctx.GetHeader("X-Helm-Client"))
 	common.SetCaller(ctx, caller)
 }

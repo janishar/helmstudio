@@ -430,6 +430,21 @@ func TestAssistantTools(t *testing.T) {
 	if reply := ask(userA, id, "11", "look_at", map[string]any{"take_ids": []string{other}, "question": "?"}); reply.Code != "not_found" {
 		t.Fatal(reply)
 	}
+	// API 1.49 (after look_at: a sequence makes its own session): show_timeline is the agent view; timeline_revisions the history or one revision
+	tlID := e.call(userA, "POST", "/v1/studio/timelines", map[string]any{"take_ids": []string{take}}, 201)["id"].(string)
+	if got := result(ask(userA, id, "21", "show_timeline", map[string]any{"timeline_id": tlID})); got["timeline"].(map[string]any)["clips"] == nil ||
+		got["timeline"].(map[string]any)["takes"] != nil {
+		t.Fatal(got)
+	}
+	if got := result(ask(userA, id, "22", "timeline_revisions", map[string]any{"timeline_id": tlID})); len(got["revisions"].(map[string]any)["revisions"].([]any)) != 1 {
+		t.Fatal(got)
+	}
+	if got := result(ask(userA, id, "23", "timeline_revisions", map[string]any{"timeline_id": tlID, "revision": 1})); got["revision"].(map[string]any)["document"] == nil {
+		t.Fatal(got)
+	}
+	if reply := ask(userA, id, "24", "timeline_revisions", map[string]any{"timeline_id": tlID, "revision": 1, "before": 2}); reply.Code != "invalid" {
+		t.Fatal(reply)
+	}
 }
 
 func TestAssistantMemory(t *testing.T) {

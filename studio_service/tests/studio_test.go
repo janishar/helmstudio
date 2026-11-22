@@ -161,11 +161,17 @@ func fakeAuthentication(ctx *gin.Context) {
 	if id == admin {
 		roles = append(roles, "admin")
 	}
-	common.SetCaller(ctx, common.Caller{ID: id, Roles: roles})
+	common.SetCaller(ctx, common.Caller{ID: id, Roles: roles, Via: common.ViaOf(ctx.GetHeader("X-Helm-Client"))})
 }
 
 // call sends JSON (nil: no body) as user, wants the status and returns the decoded body.
 func (e *env) call(user, method, path string, body any, want int) map[string]any {
+	e.t.Helper()
+	return e.callVia(user, "", method, path, body, want)
+}
+
+// callVia is call with X-Helm-Client client (API 1.49; "" sends none).
+func (e *env) callVia(user, client, method, path string, body any, want int) map[string]any {
 	e.t.Helper()
 	var reader io.Reader = http.NoBody
 	if body != nil {
@@ -175,6 +181,9 @@ func (e *env) call(user, method, path string, body any, want int) map[string]any
 	request, _ := http.NewRequest(method, e.srv.URL+path, reader)
 	request.Header.Set("X-Test-User", user)
 	request.Header.Set("Content-Type", "application/json")
+	if client != "" {
+		request.Header.Set("X-Helm-Client", client)
+	}
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
 		e.t.Fatal(err)

@@ -47,7 +47,7 @@ type fixtureCase struct {
 	Mid         float64         `json:"mid"`
 	Frame       int             `json:"frame"`
 	Clips       []string        `json:"clips"`
-	Range       *[2]float64     `json:"range"` // make-shot (1.32): a selection inside the clip
+	Range       *[2]float64     `json:"range"`  // make-shot (1.32): a selection inside the clip
 	Before      Doc             `json:"before"` // diffs (1.49)
 	After       Doc             `json:"after"`
 	Workflow    struct {

@@ -33,8 +33,16 @@ func (c *controller) mountTimelines(group *gin.RouterGroup) {
 		replyTimeline(ctx, http.StatusCreated, out, err)
 	})
 	group.GET("/timelines/:id", func(ctx *gin.Context) {
-		out, err := c.service.GetTimeline(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"))
-		reply(ctx, http.StatusOK, out, err)
+		switch view, ok := ctx.GetQuery("view"); {
+		case ok && view == "agent": // API 1.49
+			out, err := c.service.GetTimelineAgent(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"))
+			reply(ctx, http.StatusOK, out, err)
+		case ok:
+			network.SendMixedError(ctx, network.NewUnprocessableError("view must be agent", nil))
+		default:
+			out, err := c.service.GetTimeline(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"))
+			reply(ctx, http.StatusOK, out, err)
+		}
 	})
 	group.PUT("/timelines/:id", timelineIDBody(c.service.UpdateTimeline, http.StatusOK))
 	group.PATCH("/timelines/:id", timelineIDBody(c.service.PatchTimeline, http.StatusOK))
@@ -62,6 +70,35 @@ func (c *controller) mountTimelines(group *gin.RouterGroup) {
 			bounds[0], bounds[1])
 		reply(ctx, http.StatusOK, out, err)
 	})
+	group.POST("/timelines/:id/edits", timelineIDBody(c.service.EditTimeline, http.StatusOK)) // API 1.49
+	group.GET("/timelines/:id/revisions", func(ctx *gin.Context) {
+		var before *int
+		limit := 20
+		for name, set := range map[string]func(int){"before": func(v int) { before = &v }, "limit": func(v int) { limit = v }} {
+			if text, ok := ctx.GetQuery(name); ok {
+				v, err := strconv.Atoi(text)
+				if err != nil || v < 1 || (name == "limit" && v > 100) {
+					network.SendMixedError(ctx, network.NewUnprocessableError("before must be a revision and limit 1 to 100", nil))
+					return
+				}
+				set(v)
+			}
+		}
+		out, err := c.service.ListTimelineRevisions(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"), before, limit)
+		reply(ctx, http.StatusOK, out, err)
+	})
+	group.GET("/timelines/:id/revisions/:revision", func(ctx *gin.Context) {
+		n, err := strconv.Atoi(ctx.Param("revision"))
+		var out dto.TimelineRevisionDoc
+		if err != nil || n < 1 {
+			err = errNotFound
+		} else {
+			out, err = c.service.GetTimelineRevision(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"), n)
+		}
+		reply(ctx, http.StatusOK, out, err)
+	})
+	group.POST("/timelines/:id/restore", timelineIDBody(c.service.RestoreTimeline, http.StatusOK))
+	group.POST("/timelines/:id/frame", timelineIDBody(c.service.TimelineFrame, http.StatusOK))
 	group.POST("/timelines/:id/undo", timelineIDBody(c.service.UndoTimeline, http.StatusOK))
 	group.POST("/timelines/:id/redo", timelineIDBody(c.service.RedoTimeline, http.StatusOK))
 	group.POST("/timelines/:id/shots", timelineIDBody(c.service.CreateShot, http.StatusAccepted))
@@ -120,6 +157,11 @@ func replyTimeline[T any](ctx *gin.Context, status int, out T, err error) {
 	var problems *TimelineError
 	if errors.As(err, &problems) {
 		network.SendJSON(ctx, http.StatusUnprocessableEntity, problems)
+		return
+	}
+	var failed *TimelineEditError // API 1.49: an op of /edits
+	if errors.As(err, &failed) {
+		network.SendJSON(ctx, http.StatusUnprocessableEntity, failed)
 		return
 	}
 	reply(ctx, status, out, err)
