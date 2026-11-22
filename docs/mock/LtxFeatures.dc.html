@@ -109,7 +109,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 .mi small{font-size:11px;line-height:15px;color:var(--t2)}
 .mi em{font-style:normal;font-size:11px;color:var(--t2);white-space:nowrap}
 .mi[aria-checked="true"]{background:var(--s4);font-weight:600}
-.mi[aria-checked="true"] small{font-weight:400}
+.mi[aria-checked="true"] small,.mi[aria-checked="true"] em{font-weight:400}
 .mi[aria-disabled="true"]{color:var(--t2);cursor:not-allowed}
 .mi[aria-disabled="true"]>span,.seg button[aria-disabled="true"]{opacity:.55}
 .seg button[aria-disabled="true"]{color:var(--t2);cursor:not-allowed}
@@ -251,13 +251,13 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 
 <!-- 3 -->
 <section class="frame" aria-label="Negative prompt, beats and LoRA mode">
-<p class="note">3 · Inspector, lower half. The new Negative prompt section, the beats' new help, and the LoRA row's Mode. <span class="ph">phases 2, 3</span></p>
+<p class="note">3 · Inspector, lower half. The new Negative prompt section, the beats' new help, and the LoRA row's mode word (as on LoraPicker). <span class="ph">phases 2, 3</span></p>
 <div class="insp">
 <div>
 <h2 class="h">Negative prompt<button class="i" aria-label="More information" title="What the clip should not show. Applied with NAG, about 10 % slower. Empty: off.">i</button></h2>
 <label for="neg" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%)">Negative prompt</label>
 <textarea id="neg" class="ta" rows="2">text, watermark, people, a second fox</textarea>
-<span class="mono" style="font-size: 11px">38 / 500 · NAG on · Mac only</span>
+<span class="mono" style="font-size: 11px">38 / 500</span>
 </div>
 <div>
 <h2 class="h">Prompt beats<button class="i" aria-label="More information" title="Each beat steers the picture and the sound for its stretch. The main prompt covers the rest.">i</button></h2>
@@ -266,12 +266,11 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 </div>
 </div>
 <div>
-<h2 class="h">LoRA<button class="i" aria-label="More information" title="Adapter: applied at run time, a strength change needs no reload. Bake: merged at load.">i</button></h2>
+<h2 class="h">LoRA<button class="i" aria-label="More information" title="The word after the rank is the mode; click it to switch. Adapter: applied at run time, a strength change needs no reload. Bake: merged at load.">i</button></h2>
 <div style="display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 10px; background: var(--s1); border: 1px solid var(--s3)">
 <div style="display: flex; justify-content: space-between; gap: 8px"><span>[YOUR LORA NAME]</span><span class="mono" style="font-size: 12px">0.80</span></div>
-<label for="lr1" style="font-size: 12px; color: var(--t2)">Strength · rank 32</label>
+<label for="lr1" style="font-size: 12px; color: var(--t2)">Strength · rank 8 · <button title="Mode: adapter. Click for bake." style="padding: 0; border: 0; background: transparent; color: var(--t1); font-size: 12px; text-decoration: underline dotted; box-shadow: none">adapter</button></label>
 <input id="lr1" type="range" min="0" max="2" step="0.05" value="0.8" style="width: 100%; accent-color: var(--a1)">
-<div style="display: flex; align-items: center; justify-content: space-between; gap: 8px"><span style="font-size: 12px; color: var(--t2)">Mode</span><div class="seg" role="group" aria-label="LoRA mode"><button aria-pressed="true">Adapter</button><button aria-pressed="false">Bake</button></div></div>
 </div>
 <button class="dash">Add LoRA</button>
 </div>
@@ -337,14 +336,10 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <div class="pair">
 <div style="display: flex; flex-direction: column; gap: 8px">
 <div role="dialog" aria-label="Model" class="menu" style="padding: 12px; gap: 10px">
-<div role="group" aria-label="Variant" style="display: flex; flex-direction: column; gap: 2px">
-<span class="hd" style="padding: 0 0 4px">Variant<button class="i" aria-label="More information" title="Distilled: 8 steps without guidance, about 10× faster. Dev: guided steps, CFG and STG, and Extend before.">i</button></span>
-<button role="menuitemradio" aria-checked="true" class="mi"><span>Distilled<small>8 steps, about 10× faster</small></span></button>
-<button role="menuitemradio" aria-checked="false" class="mi"><span>Dev<small>guided, 30 steps</small></span></button>
-</div>
-<div role="group" aria-label="Precision" style="display: flex; flex-direction: column; gap: 6px">
-<span class="hd" style="padding: 0">Precision</span>
-<div style="display: flex; flex-wrap: wrap; gap: 6px"><button class="opt" aria-pressed="false" style="height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--ln); background: transparent; font-size: 12px">bf16</button><button class="opt" aria-pressed="true" style="height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--a1); background: var(--s1); font-size: 12px">int8</button></div>
+<div role="group" aria-label="Model" style="display: flex; flex-direction: column; gap: 2px">
+<span class="hd" style="padding: 0 0 4px">Model<button class="i" aria-label="More information" title="Distilled: 8 steps without guidance, about 10× faster. Dev: guided steps, CFG and STG, and Extend before.">i</button></span>
+<button role="menuitemradio" aria-checked="true" class="mi"><span>Distilled<small>8 steps, about 10× faster</small></span><em>Mac only</em></button>
+<button role="menuitemradio" aria-checked="false" class="mi"><span>Dev<small>guided, 30 steps</small></span><em>Mac only</em></button>
 </div>
 </div>
 <div class="cbar">
@@ -709,14 +704,10 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <p class="note">17 · Audio to video without the Distilled LoRA. Distilled keeps working (the LoRA is fused into its transformer); only Dev, whose stage 2 fuses the LoRA, is greyed. <span class="ph">phase 1</span></p>
 <div style="display: flex; flex-direction: column; gap: 10px">
 <div role="dialog" aria-label="Model" class="menu" style="padding: 12px; gap: 10px">
-<div role="group" aria-label="Variant" style="display: flex; flex-direction: column; gap: 2px">
-<span class="hd" style="padding: 0 0 4px">Variant<button class="i" aria-label="More information" title="Distilled: 8 steps without guidance, about 10× faster. Dev: guided steps, CFG and STG.">i</button></span>
-<button role="menuitemradio" aria-checked="true" class="mi"><span>Distilled<small>8 steps, about 10× faster</small></span></button>
+<div role="group" aria-label="Model" style="display: flex; flex-direction: column; gap: 2px">
+<span class="hd" style="padding: 0 0 4px">Model<button class="i" aria-label="More information" title="Distilled: 8 steps without guidance, about 10× faster. Dev: guided steps, CFG and STG.">i</button></span>
+<button role="menuitemradio" aria-checked="true" class="mi"><span>Distilled<small>8 steps, about 10× faster</small></span><em>Mac only</em></button>
 <button role="menuitemradio" aria-checked="false" aria-disabled="true" class="mi" title="Distilled LoRA not downloaded. An admin downloads it in Models, under LTX-2.5 · Distilled."><span>Dev<small>guided, 30 steps</small></span><em>Distilled LoRA not downloaded</em></button>
-</div>
-<div role="group" aria-label="Precision" style="display: flex; flex-direction: column; gap: 6px">
-<span class="hd" style="padding: 0">Precision</span>
-<div style="display: flex; flex-wrap: wrap; gap: 6px"><button class="opt" aria-pressed="false" style="height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--ln); background: transparent; font-size: 12px">bf16</button><button class="opt" aria-pressed="true" style="height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--a1); background: var(--s1); font-size: 12px">int8</button></div>
 </div>
 </div>
 <div style="display: flex; flex-direction: column; gap: 6px">
