@@ -432,7 +432,24 @@ function LineIcon({ status, text }: { status: Line["status"]; text: string }) {
   return <Check {...p} />;
 }
 
+// Models answer in light markdown despite the prompt: show **bold** as bold and drop `code` ticks.
 function Text({ text }: { text: string }) {
+  return (
+    <>
+      {text
+        .split(/(\*\*[^*\n]+\*\*)/)
+        .map((s, j) =>
+          j % 2 ? (
+            <b key={j}>{s.slice(2, -2)}</b>
+          ) : (
+            <Mentions key={j} text={s.replace(/`([^`\n]+)`/g, "$1")} />
+          ),
+        )}
+    </>
+  );
+}
+
+function Mentions({ text }: { text: string }) {
   return (
     <>
       {mentionParts(text).map((p, i) =>

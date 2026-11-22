@@ -530,6 +530,16 @@ describe("other tabs, server cards, limits, memory", () => {
     expect(posts).toHaveLength(0);
   });
 
+  it("shows **bold** as bold and drops `code` ticks", async () => {
+    serve({
+      existing: thread(),
+      entries: [entry(1, { kind: "assistant", text: "Add **references** on the `fake` host" })],
+    });
+    await openDrawer(<Screen actions={{}} />);
+    expect((await screen.findByText("references")).tagName).toBe("B");
+    expect(screen.getByText(/on the fake host/)).toBeTruthy();
+  });
+
   it("the side panel sits beside the open drawer (board frame 5) and moves back when it closes", async () => {
     serve();
     await openDrawer(<aside aria-label="Inspector" className="aside beside-drawer" />);
