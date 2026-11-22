@@ -1526,7 +1526,7 @@ export function Create({
                   {menu && (
                     <TileMenu
                       id={id}
-                      label={`${it.take ? "Take" : "Answer"} ${name}`}
+                      label={`${it.take ? "Take" : "Answer"} ${seed != null ? name : items.length - i}`}
                       current={it === picked}
                       onDelete={() => setDeleting(it.take ? { take: it.take } : { run: it.run })}
                     />

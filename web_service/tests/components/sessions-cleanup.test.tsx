@@ -138,7 +138,7 @@ describe("Create: deleting from the strip", () => {
     const { del } = start({
       runs: [run("r2", "succeeded", { outputs: [out] as S<"Run">["outputs"] })],
     });
-    expect(within(strip()).getByRole("button", { name: "Answer take 1: more" })).toBeTruthy();
+    expect(within(strip()).getByRole("button", { name: "Answer 1: more" })).toBeTruthy();
     fireEvent.click(within(document.getElementById("tile-r2")!).getByText("Delete"));
     const card = await screen.findByRole("dialog", { name: "Delete this answer?" });
     fireEvent.click(within(card).getByRole("button", { name: "Delete" }));
