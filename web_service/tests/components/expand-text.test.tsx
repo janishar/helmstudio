@@ -124,6 +124,31 @@ describe("Expand on its hosts", () => {
     expect(await screen.findByRole("list", { name: "Script" })).toBeTruthy();
   });
 
+  it("dialogue script: Tab to Expand keeps editing (keyboard path)", () => {
+    const f = {
+      key: "dialogue.script",
+      node: "dialogue",
+      param: { name: "script", type: "text", label: "Script", max: 4000 },
+    } as unknown as Field;
+    render(
+      <ScriptEditor
+        f={f}
+        value="@mara: Noon."
+        onChange={() => {}}
+        errors={{}}
+        cast={[]}
+        onVoice={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByText("Noon."));
+    const box = screen.getByRole("combobox", { name: "Script" });
+    const b = screen.getByRole("button", { name: "Expand" });
+    fireEvent.blur(box, { relatedTarget: b });
+    expect(screen.queryByRole("list", { name: "Script" })).toBeNull();
+    fireEvent.blur(b, { relatedTarget: document.body });
+    expect(screen.getByRole("list", { name: "Script" })).toBeTruthy();
+  });
+
   it("a plain box: Memory's Add a note", async () => {
     answer("GET", {
       "/v1/studio/memory": () => ({ data: { items: [], counts: { judge_example: 0, note: 0 } } }),

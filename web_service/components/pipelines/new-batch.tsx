@@ -380,6 +380,7 @@ export function NewBatch({
                   {lineField?.param.type === "text" ? (
                     <PromptArea
                       expand="Lines"
+                      aria-label="Lines"
                       className="in h-40 resize-y py-2 leading-5"
                       placeholder={"a fox at dusk\n@fox in @snowfield"}
                       value={lines}
@@ -388,6 +389,7 @@ export function NewBatch({
                   ) : (
                     <TextArea
                       expand="Lines"
+                      aria-label="Lines"
                       className="in h-40 resize-y py-2 leading-5"
                       placeholder={
                         lineIsImage ? "a take id per line" : "a fox at dusk\na heron in the reeds"

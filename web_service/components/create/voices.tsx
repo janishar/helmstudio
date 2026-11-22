@@ -1047,6 +1047,7 @@ function Designer({
         </span>
         <TextArea
           expand="Description"
+          aria-label="Describe the voice"
           rows={3}
           maxLength={2000}
           value={text}

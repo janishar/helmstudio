@@ -223,7 +223,14 @@ export function ScriptEditor({
   const id = `script-${f.node}`;
   if (editing || !value.trim())
     return (
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
+      <div
+        className="flex min-w-0 flex-1 flex-col gap-1"
+        // editing ends when the focus leaves the box and its Expand (the button, or its dialog that edits the same
+        // script and gives the focus back on close)
+        onBlur={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setEditing(false);
+        }}
+      >
         <label htmlFor={id} className="sr-only">
           {f.param.label ?? "Script"}
         </label>
@@ -241,10 +248,6 @@ export function ScriptEditor({
           onChange={(v) => {
             setEditing(true);
             onChange(v);
-          }}
-          // the Expand dialog takes the focus to edit the same script: editing goes on (the focus comes back on close)
-          onBlur={(e) => {
-            if (!(e.relatedTarget as Element | null)?.closest("dialog")) setEditing(false);
           }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey))

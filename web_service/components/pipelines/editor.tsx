@@ -1643,6 +1643,7 @@ function WritePanel(props: PanelProps) {
         <span className="heading">Instruction</span>
         <TextArea
           expand="Instruction"
+          aria-label="Instruction"
           className="in h-auto py-2"
           rows={3}
           maxLength={2000}
@@ -1666,6 +1667,7 @@ function DecidePanel(props: PanelProps & { targets: [string, string][] }) {
         <span className="heading">Question</span>
         <TextArea
           expand="Question"
+          aria-label="Question"
           className="in h-auto py-2"
           rows={2}
           maxLength={1000}
@@ -1854,6 +1856,7 @@ function AgentPanel(props: PanelProps & { targets: [string, string][] }) {
         <span className="heading">Instruction</span>
         <TextArea
           expand="Instruction"
+          aria-label="Instruction"
           className="in h-auto py-2"
           rows={3}
           maxLength={4000}

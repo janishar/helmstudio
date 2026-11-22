@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { AdminTabs } from "@/components/admin/users";
 import { useUser } from "@/components/shell";
+import { TextArea } from "@/components/expand-text";
 import { api, message, ok, type S } from "@/lib/api";
 import { blankForm, formOf, putOf, testLine, toggled, type ProviderForm } from "@/lib/providers";
 
@@ -335,8 +336,9 @@ function ProviderPanel({
           <label htmlFor="p-models" className="label">
             Models, one per line (the first is the default)
           </label>
-          <textarea
+          <TextArea
             id="p-models"
+            expand="Models"
             className="in h-auto py-2"
             rows={2}
             value={f.models}

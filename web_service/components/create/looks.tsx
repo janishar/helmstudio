@@ -610,6 +610,7 @@ function Editor({
         </span>
         <TextArea
           expand="Text"
+          aria-label="Text"
           rows={2}
           maxLength={2000}
           value={text}
