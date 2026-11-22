@@ -144,6 +144,16 @@ describe("BFF responses", () => {
     expect(sent.get("x-helm-client")).toBe("web");
     expect(sent.has("x-client-id")).toBe(false);
   });
+  it("labels a request without X-Helm-Client web (undo, redo, add: the web's writes)", async () => {
+    upstream({});
+    await bff(
+      new NextRequest("http://web/api/v1/studio/timelines/t/undo", { method: "POST" }),
+      "/v1/studio/timelines/t/undo",
+      true,
+    );
+    const sent = (vi.mocked(fetch).mock.calls[0][1] as RequestInit).headers as Headers;
+    expect(sent.get("x-helm-client")).toBe("web");
+  });
 });
 
 describe("kongHeaders", () => {

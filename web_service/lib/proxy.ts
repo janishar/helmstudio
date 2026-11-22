@@ -42,6 +42,8 @@ export async function proxy(req: NextRequest, path: string, withAuth: boolean): 
     const v = req.headers.get(h);
     if (v) headers.set(h, v);
   }
+  // every write through the BFF is the web's: undo, redo, add, create… label their revision web too (API 1.49 `via`)
+  if (!headers.has("x-helm-client")) headers.set("x-helm-client", "web");
   const body =
     req.method !== "GET" && req.method !== "HEAD" && req.body ? await req.arrayBuffer() : undefined;
   let upstream: Response;

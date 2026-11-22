@@ -384,3 +384,15 @@ Built with today's ops only (plan 23's new ops, links and markers are not here).
   through `/edits` labelled web and shows the answer; a gesture's 409 re-applies once, and when the op no longer
   applies the notice shows and nothing more is sent; the assistant's edit saves through `/edits` labelled assistant,
   its 409 re-apply and Undo / Redo. `auth.test.ts`: the BFF passes `X-Helm-Client`, not other browser headers.
+
+### 28.17 Checked (2026-11-23)
+
+- **Web, dev stack** (a new "plan24 check" sequence, removed after): trim, split, move and remove each save through
+  `POST …/edits` and the answer replaces the draft; Undo and Redo work; `GET …/revisions` shows each op's
+  `ops_summary`. **Fixed**: only `/edits` sent `X-Helm-Client`, so the web's other writes (create, add, undo, redo,
+  shots, lines, re-render, restore) read `via: api`. The BFF (`lib/proxy.ts`) now labels any request without the
+  header `web`; the assistant's own label still passes (`auth.test.ts`).
+- **helm mcp, test stack** (the `mcp` Python client over stdio, a new user, three uploaded stills): the hints, the
+  agent view, `try_timeline_edit` (nothing stored), `edit_timeline`, a stale `base_revision` (`409: timeline changed
+  since you opened it`), an unknown clip (422), `timeline_revisions` (`via: mcp`, `trim, split, remove`),
+  `timeline_frame` (PNG image content) and `restore_timeline` all behave as built.
