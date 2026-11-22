@@ -102,7 +102,8 @@ make gpu-host-tunnel VM=<user>@<addr> ZONE=<port>   # or .tools/gpu-host-tunnel 
 
 Section 3's copies go the same way with `ssh -p <port> <user>@<addr>` in place of `gcloud compute ssh <vm> --zone
 <zone> --`. Without Docker (a pod with no container runtime), run the native runner straight from the copy, as the
-Mac's `make runner-native` does: `uv sync --frozen --no-dev` in `runner_service`, SGLang's venv in `/opt/sglang`
+Mac's `make runner-native` does but with the image's venv: `uv sync --frozen --no-dev --extra torch` in
+`runner_service` (the Turbo LoRA's prep needs torch and safetensors), SGLang's venv in `/opt/sglang`
 (the `sglang` stage of `Dockerfile.cuda` by hand: `uv venv --python 3.12 /opt/sglang`, `VIRTUAL_ENV=/opt/sglang uv
 pip sync sglang-requirements.txt`, the two `lib64` / `libcudart.so` links), `g++` and `ffmpeg` from apt, then
 `python main.py` under systemd with the compose file's `runner-native` environment (`RUNNER_HOST=<h>`,
