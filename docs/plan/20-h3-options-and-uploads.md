@@ -575,6 +575,8 @@ Order: after the 1.36 add-ons land and after A1 (Turbo sits among A1's presets).
 4. **Copy every weight** (`H3_ZERO_COPY_WEIGHTS=0`, +4.4 GB), no second h3 patch.
 5. Strength **fixed at 1**.
 6. **Keep both** Draft and Fast.
+7. NVIDIA (owner, 2026-11-22, after the gcp checks: Turbo LoRA 8 steps sharpness 49 at 117 s vs no LoRA 8 steps 71
+   at 77 s, the LoRA's AdaLN part left out on the pruned FP8 model): **keep the LoRA** on NVIDIA as built.
 
 The options as put to the owner (kept for the record; point 1's recommendation was not taken):
 
