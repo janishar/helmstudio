@@ -175,6 +175,9 @@ the op itself returns an error code when called past them, like `trim`.
   and cursor per tool, the tool bar and zoom control of the chosen option, the shortcut sheet, J/K/L in
   `timeline-preview.ts`, the virtualised lanes, the filmstrip and waveform workers).
 
+Agents and scripts get these ops without the browser through [24-timeline-edit-api.md](24-timeline-edit-api.md)
+(§28, `POST …/timelines/{id}/edits` runs them with `edit.go`), so every op here is exposed there once it is in `edit.go`.
+
 ### 27.7 Undo and 409s
 
 Each gesture is **one `Op` on pointer-up** (the drag itself only draws the draft), so one gesture is one revision and

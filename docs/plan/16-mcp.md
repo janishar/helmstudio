@@ -57,6 +57,10 @@ its own reads (`sessions`, `get_run`, `models`, `hosts`, …) in the same catalo
 Left out: admin tools (users, keys, providers, model downloads, host pins and unloads), deletes and the Timeline's
 clip-level editing. Add them on request, deletes and admin with MCP's `destructiveHint`.
 
+Clip-level editing is planned in [24-timeline-edit-api.md](24-timeline-edit-api.md) (§28): `edit_timeline` (ops, dry
+run), `timeline_revisions`, `restore_timeline` and `timeline_frame` over `POST …/timelines/{id}/edits`, with
+`destructiveHint` for remove ops.
+
 **Resources:** `helm://take/{id}` (the take's thumbnail and metadata) and `helm://workflow/{id}`, so a client can
 attach them to a conversation. **Prompts:** none at first.
 
