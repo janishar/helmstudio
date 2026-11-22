@@ -17,12 +17,14 @@ type Diff struct {
 	Changed  []Change   `json:"changed"`
 	Tracks   TrackDiff  `json:"tracks"`
 	Duration [2]float64 `json:"duration"`
+	Markers  TrackDiff  `json:"markers"` // 1.50: markers by id (changed: at, name, color)
 }
 
-// Change is one clip's or track's changed fields, each [before, after] (absent = null).
+// Change is one clip's, track's or (1.50) marker's changed fields, each [before, after] (absent = null).
 type Change struct {
 	Clip   string            `json:"clip,omitempty"`
 	Track  string            `json:"track,omitempty"`
+	Marker string            `json:"marker,omitempty"`
 	Fields map[string][2]any `json:"fields"`
 }
 
@@ -34,7 +36,7 @@ type TrackDiff struct {
 }
 
 var diffFields = []string{"take_id", "in", "out", "hold", "at", "gain_db", "mute", "transition_in", "alternatives",
-	"shot", "offline", "track"}
+	"shot", "offline", "track", "link"} // link: 1.50
 
 // fieldsOf is v as JSON fields (numbers as float64, as the reference compares them).
 func fieldsOf(v any) map[string]any {
@@ -109,6 +111,22 @@ func DiffDocs(before, after Doc) Diff {
 			out.Tracks.Removed = append(out.Tracks.Removed, t.Name)
 		}
 	}
+	out.Markers = TrackDiff{Added: []string{}, Removed: []string{}, Changed: []Change{}}
+	marker := func(d Doc, id string) int {
+		return slices.IndexFunc(d.Markers, func(m Marker) bool { return m.ID == id })
+	}
+	for _, m := range after.Markers {
+		if i := marker(before, m.ID); i < 0 {
+			out.Markers.Added = append(out.Markers.Added, m.ID)
+		} else if f := changes(fieldsOf(before.Markers[i]), fieldsOf(m), []string{"at", "name", "color"}); len(f) > 0 {
+			out.Markers.Changed = append(out.Markers.Changed, Change{Marker: m.ID, Fields: f})
+		}
+	}
+	for _, m := range before.Markers {
+		if marker(after, m.ID) < 0 {
+			out.Markers.Removed = append(out.Markers.Removed, m.ID)
+		}
+	}
 	return out
 }
 
@@ -135,6 +153,16 @@ type AgentClip struct {
 	Shot         *ShotRef `json:"shot"`
 	Number       *int     `json:"number"`
 	Offline      bool     `json:"offline"`
+	Link         *string  `json:"link"` // 1.50
+}
+
+// AgentMarker is one marker of the agent view (1.50).
+type AgentMarker struct {
+	ID    string  `json:"id"`
+	At    float64 `json:"at"`
+	AtF   int     `json:"at_f"`
+	Name  *string `json:"name"`
+	Color *string `json:"color"`
 }
 
 // AgentTrack is one track of the agent view.
@@ -148,17 +176,20 @@ type AgentTrack struct {
 
 // AgentView is t_agent_view: a normalized document flat for an agent.
 type AgentView struct {
-	Target    Target       `json:"target"`
-	DurationS float64      `json:"duration_s"`
-	Frames    int          `json:"frames"`
-	Tracks    []AgentTrack `json:"tracks"`
-	Clips     []AgentClip  `json:"clips"`
+	Target    Target              `json:"target"`
+	DurationS float64             `json:"duration_s"`
+	Frames    int                 `json:"frames"`
+	Tracks    []AgentTrack        `json:"tracks"`
+	Clips     []AgentClip         `json:"clips"`
+	Links     map[string][]string `json:"links"`   // 1.50: each V1 clip's linked sound clips, in track order
+	Markers   []AgentMarker       `json:"markers"` // 1.50
 }
 
 // Agent is t_agent_view(doc, takes).
 func Agent(doc Doc, takes map[string]Take) AgentView {
 	g := NewGrid(doc.Target)
-	out := AgentView{Target: doc.Target, DurationS: doc.DurationS, Frames: doc.Frames, Tracks: []AgentTrack{}, Clips: []AgentClip{}}
+	out := AgentView{Target: doc.Target, DurationS: doc.DurationS, Frames: doc.Frames, Tracks: []AgentTrack{}, Clips: []AgentClip{},
+		Links: map[string][]string{}, Markers: []AgentMarker{}}
 	for ti, t := range doc.Tracks {
 		out.Tracks = append(out.Tracks, AgentTrack{Name: t.Name, Kind: t.Kind, GainDB: val(t.GainDB), Mute: t.Mute != nil && *t.Mute,
 			Clips: len(t.Clips)})
@@ -167,7 +198,10 @@ func Agent(doc Doc, takes map[string]Take) AgentView {
 			ln := Len(c, kind, g, ti > 0)
 			ac := AgentClip{ID: c.ID, Track: t.Name, Index: i, TakeID: c.TakeID, Kind: kind, In: c.In, Out: c.Out, Hold: c.Hold,
 				At: val(c.At), AtF: a, EndF: a + ln, LengthF: ln, GainDB: val(c.GainDB), Mute: c.Mute != nil && *c.Mute,
-				Alternatives: append([]string{}, c.Alternatives...), Shot: c.Shot, Offline: c.Offline}
+				Alternatives: append([]string{}, c.Alternatives...), Shot: c.Shot, Offline: c.Offline, Link: c.Link}
+			if c.Link != nil {
+				out.Links[*c.Link] = append(out.Links[*c.Link], c.ID)
+			}
 			switch {
 			case ti == 0:
 				ac.Length, ac.End = g.S(ln), g.S(a+ln)
@@ -185,6 +219,9 @@ func Agent(doc Doc, takes map[string]Take) AgentView {
 			}
 			out.Clips = append(out.Clips, ac)
 		}
+	}
+	for _, m := range doc.Markers {
+		out.Markers = append(out.Markers, AgentMarker{ID: m.ID, At: m.At, AtF: g.F(m.At), Name: m.Name, Color: m.Color})
 	}
 	return out
 }

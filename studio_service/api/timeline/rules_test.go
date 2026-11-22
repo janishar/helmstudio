@@ -41,6 +41,7 @@ type fixtureCase struct {
 	Takes       map[string]Take `json:"takes"`
 	Op          Op              `json:"op"`
 	Exclude     string          `json:"exclude"`
+	Points      []float64       `json:"points"` // snap (1.50): the playhead, the range's in and out, markers
 	T           *float64        `json:"t"`
 	PxPerS      float64         `json:"px_per_s"`
 	Clip        string          `json:"clip"`
@@ -204,7 +205,7 @@ func TestSnapFixtures(t *testing.T) {
 		takes := takesOf(common, c.Takes)
 		var got any
 		if c.T != nil {
-			got = map[string]any{"to": SnapPoint(*c.T, Cuts(c.Document, takes, c.Exclude), c.PxPerS, NewGrid(c.Document.Target))}
+			got = map[string]any{"to": SnapPoint(*c.T, append(Cuts(c.Document, takes, c.Exclude), c.Points...), c.PxPerS, NewGrid(c.Document.Target))}
 		} else {
 			got = map[string]any{"index": DropIndex(c.Document, c.Clip, c.Mid, takes)}
 		}

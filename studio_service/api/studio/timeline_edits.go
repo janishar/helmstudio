@@ -117,9 +117,24 @@ func applyOps(doc timeline.Doc, ops []timeline.Op, rules map[string]timeline.Tak
 			for len(op.IDs) < len(op.TakeIDs) {
 				op.IDs = append(op.IDs, made())
 			}
+		case "marker": // 1.50: an id unused among the markers too
+			if op.ID == "" {
+				for _, m := range doc.Markers {
+					given = append(given, m.ID)
+				}
+				op.ID = made()
+			}
 		}
 		warnings = append(warnings, snapped(i, op, g)...)
 		r := timeline.Apply(doc, op, rules)
+		// 1.50: an op with `ids` gets as many as it needs (the rules say ids_short while one is missing)
+		if slices.Contains(dto.IDsOps, op.Op) {
+			op.IDs = slices.Clone(op.IDs)
+			for r.Error == "ids_short" && len(op.IDs) < 64 {
+				op.IDs = append(op.IDs, made())
+				r = timeline.Apply(doc, op, rules)
+			}
+		}
 		switch {
 		case r.Error != "":
 			text := r.Error
@@ -128,6 +143,8 @@ func applyOps(doc timeline.Doc, ops []timeline.Op, rules map[string]timeline.Tak
 				text = "unknown clip " + op.Clip
 			case "unknown_track":
 				text = "unknown track " + op.Track
+			case "unknown_marker":
+				text = "unknown marker " + op.ID
 			}
 			return doc, nil, &TimelineEditError{Detail: fmt.Sprintf("ops[%d]: %s", i, text), OpIndex: i, Code: r.Error,
 				Problems: []dto.TimelineProblem{}}
@@ -153,10 +170,16 @@ func snapped(i int, op timeline.Op, g timeline.Grid) []string {
 	if op.At != nil {
 		check("at", *op.At)
 	}
+	if op.From != nil {
+		check("from", *op.From)
+	}
+	if op.To != nil {
+		check("to", *op.To)
+	}
 	switch op.Op {
 	case "insert", "place":
 		check("hold", op.Hold)
-	case "trim":
+	case "trim", "roll", "slip", "slide":
 		check("delta", op.Delta)
 	}
 	return out
@@ -239,9 +262,10 @@ func (s *Service) GetTimelineAgent(ctx context.Context, caller common.Caller, id
 	for tid, t := range tl.Takes {
 		takes[tid] = timeline.Take{Kind: t.Kind}
 	}
-	v := timeline.Agent(timeline.Doc{Target: tl.Target, Tracks: tl.Tracks, DurationS: tl.DurationS, Frames: tl.Frames}, takes)
+	v := timeline.Agent(timeline.Doc{Target: tl.Target, Tracks: tl.Tracks, DurationS: tl.DurationS, Frames: tl.Frames,
+		Markers: tl.Markers}, takes)
 	out := dto.TimelineAgentView{ID: tl.ID, Name: tl.Name, Revision: tl.Revision, Target: v.Target, DurationS: v.DurationS,
-		Frames: v.Frames, Tracks: v.Tracks, Clips: []dto.TimelineAgentClip{}}
+		Frames: v.Frames, Tracks: v.Tracks, Clips: []dto.TimelineAgentClip{}, Links: v.Links, Markers: v.Markers}
 	for _, c := range v.Clips {
 		ac := dto.TimelineAgentClip{AgentClip: c}
 		if t, ok := tl.Takes[deref(c.TakeID)]; ok {

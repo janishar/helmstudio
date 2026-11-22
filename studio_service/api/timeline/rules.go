@@ -21,6 +21,7 @@ const (
 	MaxBytes       = 262144
 	MaxAlts        = 32
 	MaxRerender    = 22
+	MaxMarkers     = 200 // 1.50: markers on a sequence
 
 	// an export: at most 2 hours, an estimated 16 GiB written and 32 GiB of distinct takes read
 	MaxExportS      = 7200
@@ -119,6 +120,15 @@ type Clip struct {
 	Shot         *ShotRef  `json:"shot,omitempty"`
 	Number       int       `json:"number,omitempty"` // V1: the shot number (API 1.29; Number gives it)
 	Offline      bool      `json:"offline,omitempty"`
+	Link         *string   `json:"link,omitempty"` // 1.50, an audio-track clip: the V1 clip it is linked to
+}
+
+// Marker is a named point on the sequence (API 1.50).
+type Marker struct {
+	ID    string  `json:"id"`
+	At    float64 `json:"at"`
+	Name  *string `json:"name,omitempty"`
+	Color *string `json:"color,omitempty"`
 }
 
 // Take returns the clip's take id, "" for an empty slot.
@@ -147,10 +157,11 @@ type Track struct {
 
 // Doc is a document: as written (DurationS and Frames ignored) or normalized.
 type Doc struct {
-	Target    Target  `json:"target"`
-	Tracks    []Track `json:"tracks"`
-	DurationS float64 `json:"duration_s"`
-	Frames    int     `json:"frames"`
+	Target    Target   `json:"target"`
+	Tracks    []Track  `json:"tracks"`
+	DurationS float64  `json:"duration_s"`
+	Frames    int      `json:"frames"`
+	Markers   []Marker `json:"markers,omitempty"` // 1.50: absent = none
 }
 
 // Clone is a deep copy (through JSON: every float survives the round trip).
@@ -284,7 +295,7 @@ func aLen(c Clip, g Grid) int {
 func Normalize(doc Doc, takes map[string]Take, previous *Doc) (*Doc, []Problem) {
 	var probs []Problem
 	add := func(code, track, clip string) { probs = append(probs, Problem{code, track, clip}) }
-	if raw, _ := json.Marshal(Doc{Target: doc.Target, Tracks: doc.Tracks}); len(raw) > MaxBytes {
+	if raw, _ := json.Marshal(Doc{Target: doc.Target, Tracks: doc.Tracks, Markers: doc.Markers}); len(raw) > MaxBytes {
 		return nil, []Problem{{Code: "too_large"}}
 	}
 	tracks := doc.Tracks
@@ -328,6 +339,10 @@ func Normalize(doc Doc, takes map[string]Take, previous *Doc) (*Doc, []Problem) 
 		e           int
 	}
 	var ends []end
+	v1ids := map[string]bool{}
+	for _, c := range tracks[0].Clips {
+		v1ids[c.ID] = true
+	}
 	for ti, t := range tracks {
 		name, video := "V1", ti == 0
 		if !video {
@@ -425,6 +440,15 @@ func Normalize(doc Doc, takes map[string]Take, previous *Doc) (*Doc, []Problem) 
 				n.Hold = f64(g.Snap(*c.Hold))
 			}
 			n.GainDB, n.Mute = f64(val(c.GainDB)), boolp(c.Mute != nil && *c.Mute)
+			if c.Link != nil { // 1.50: an audio-track clip linked to a V1 clip
+				if video {
+					add("link_track", name, cid)
+				} else if !v1ids[*c.Link] {
+					add("link_not_v1", name, cid)
+				}
+				link := *c.Link
+				n.Link = &link
+			}
 			if c.TransitionIn != nil {
 				if video {
 					d := *c.TransitionIn
@@ -524,13 +548,29 @@ func Normalize(doc Doc, takes map[string]Take, previous *Doc) (*Doc, []Problem) 
 			frames = max(frames, g.F(float64(e.e)/float64(g.sr)))
 		}
 	}
+	var marks []Marker // 1.50: snapped to frames, sorted by time then id; none = no markers
+	if len(doc.Markers) > MaxMarkers {
+		add("too_many_markers", "", "")
+	}
+	mids := map[string]bool{}
+	for _, m := range doc.Markers {
+		if mids[m.ID] {
+			add("duplicate_marker", "", m.ID)
+		}
+		mids[m.ID] = true
+		if len(out[0].Clips) > 0 && g.F(m.At) > frames {
+			add("marker_past_end", "", m.ID)
+		}
+		marks = append(marks, Marker{ID: m.ID, At: g.Snap(m.At), Name: m.Name, Color: m.Color})
+	}
+	slices.SortStableFunc(marks, func(a, b Marker) int { return cmp.Or(cmp.Compare(a.At, b.At), cmp.Compare(a.ID, b.ID)) })
 	if len(probs) > 0 {
 		slices.SortStableFunc(probs, func(a, b Problem) int {
 			return cmp.Or(cmp.Compare(a.Code, b.Code), cmp.Compare(a.Track, b.Track), cmp.Compare(a.Clip, b.Clip))
 		})
 		return nil, probs
 	}
-	return &Doc{Target: doc.Target, Tracks: out, DurationS: g.S(frames), Frames: frames}, nil
+	return &Doc{Target: doc.Target, Tracks: out, DurationS: g.S(frames), Frames: frames, Markers: marks}, nil
 }
 
 // Number gives V1's shot numbers as studio stores doc over stored (nil: a new sequence; contracts/README.md,

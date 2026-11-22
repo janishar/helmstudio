@@ -216,3 +216,52 @@ func TestTimelineRestoreReconciles(t *testing.T) {
 	}
 	e.call(userA, "POST", base+"/restore", map[string]any{"revision": tl["revision"], "to": 1}, 422)
 }
+
+// TestTimelineToolOps: plan 23's ops through /edits (API 1.50): studio makes the ids split_all, the ranges and a
+// marker need; links and markers in the answer, the diff and the agent view; the new codes.
+func TestTimelineToolOps(t *testing.T) {
+	e := setup(t)
+	a, b, c := e.clipTake(userA, 2, true, nil), e.clipTake(userA, 2, true, nil), e.clipTake(userA, 2, true, nil)
+	tl := e.call(userA, "POST", "/v1/studio/timelines", map[string]any{"take_ids": []string{a, b, c}}, 201)
+	base, ids := "/v1/studio/timelines/"+tl["id"].(string), clipIDs(tl)
+	edits := func(revision int, ops ...map[string]any) map[string]any {
+		return map[string]any{"base_revision": revision, "ops": ops}
+	}
+	done := e.call(userA, "POST", base+"/edits", edits(1,
+		map[string]any{"op": "add_track"},
+		map[string]any{"op": "add", "take_ids": []string{a}, "track": "A2", "ids": []string{"s1"}},
+		map[string]any{"op": "set", "clip": "s1", "link": ids[1]},
+		map[string]any{"op": "split_all", "at": 1},
+		map[string]any{"op": "marker", "at": 0.5, "name": "Beat", "color": "red"},
+		map[string]any{"op": "trim", "clip": ids[1], "edge": "out", "delta": -0.5},
+		map[string]any{"op": "roll", "clip": ids[2], "delta": 0.25}), 200)
+	diff, got := done["diff"].(map[string]any), done["timeline"].(map[string]any)
+	marks := got["markers"].([]any)
+	if len(diff["added"].([]any)) != 3 || len(diff["markers"].(map[string]any)["added"].([]any)) != 1 || len(marks) != 1 ||
+		marks[0].(map[string]any)["name"] != "Beat" || len(v1(got)) != 4 || done["warnings"] == nil {
+		t.Fatal("apply", done)
+	}
+	view := e.call(userA, "GET", base+"?view=agent", nil, 200)
+	if links := view["links"].(map[string]any)[ids[1]].([]any); len(links) != 2 || len(view["markers"].([]any)) != 1 {
+		t.Fatal("agent view", view)
+	}
+	for _, x := range []struct {
+		op   map[string]any
+		code string
+	}{{map[string]any{"op": "remove_marker", "id": "zz"}, "unknown_marker"},
+		{map[string]any{"op": "roll", "clip": ids[0], "delta": 0.1}, "roll_first"},
+		{map[string]any{"op": "slide", "clip": "s1", "delta": 0.1}, "slide_track"},
+		{map[string]any{"op": "remove_range", "from": 1, "to": 1}, "range_empty"}} {
+		if bad := e.call(userA, "POST", base+"/edits", edits(2, x.op), 422); bad["code"] != x.code || bad["op_index"] != float64(0) {
+			t.Fatal(x.code, bad)
+		}
+	}
+	if bad := e.call(userA, "POST", base+"/edits", edits(2, map[string]any{"op": "marker", "at": 1, "color": "pink"}), 422); !strings.Contains(bad["detail"].(string), "color must be") {
+		t.Fatal(bad)
+	}
+	// a range with no ids: studio makes as many as it needs (V1 and A2 cut at 0.25)
+	done = e.call(userA, "POST", base+"/edits", edits(2, map[string]any{"op": "lift_range", "from": 0.25, "to": 0.5}), 200)
+	if done["revision"] != float64(3) || len(done["diff"].(map[string]any)["added"].([]any)) != 3 {
+		t.Fatal("lift_range", done["diff"])
+	}
+}

@@ -3,6 +3,7 @@ package dto
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -133,9 +134,10 @@ func CheckTarget(t timeline.Target) string {
 
 // TimelineUpdate is PUT /timelines/{id}: the whole document at the revision it was made on.
 type TimelineUpdate struct {
-	Revision int              `json:"revision"`
-	Target   *timeline.Target `json:"target"`
-	Tracks   []timeline.Track `json:"tracks"`
+	Revision int               `json:"revision"`
+	Target   *timeline.Target  `json:"target"`
+	Tracks   []timeline.Track  `json:"tracks"`
+	Markers  []timeline.Marker `json:"markers"` // 1.50: the whole list (absent = none)
 }
 
 // Validate checks the schema's shapes; the timeline rules are the service's.
@@ -166,6 +168,19 @@ func (b *TimelineUpdate) Validate() string {
 			if detail := checkClip(c); detail != "" {
 				return fmt.Sprintf("%s.clips[%d]%s", at, ci, detail)
 			}
+		}
+	}
+	for mi, m := range b.Markers { // 1.50; at most 200 is the rules' (too_many_markers)
+		at := fmt.Sprintf("markers[%d]", mi)
+		switch {
+		case !ClipID.MatchString(m.ID):
+			return at + ".id must be 1-16 lowercase letters or digits"
+		case m.At < 0 || m.At > 86400:
+			return at + ".at must be seconds from 0 to 86400"
+		case m.Name != nil && (*m.Name == "" || utf8.RuneCountInString(*m.Name) > 80):
+			return at + ".name must be 1-80 characters"
+		case m.Color != nil && !slices.Contains(MarkerColors, *m.Color):
+			return at + ".color must be one of " + strings.Join(MarkerColors, ", ")
 		}
 	}
 	return ""
@@ -440,6 +455,7 @@ type Timeline struct {
 	Tracks    []timeline.Track        `json:"tracks"`
 	DurationS float64                 `json:"duration_s"`
 	Frames    int                     `json:"frames"`
+	Markers   []timeline.Marker       `json:"markers,omitempty"` // 1.50
 	Defaults  TimelineDefaults        `json:"defaults"`
 	CanUndo   bool                    `json:"can_undo"`
 	CanRedo   bool                    `json:"can_redo"`

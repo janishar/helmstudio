@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/helmstudio/helmgo/utility"
 
@@ -22,18 +24,34 @@ const MaxOps = 200
 var opFields = map[string][2][]string{
 	"move":         {{"clip", "index", "at", "track"}, {"clip"}},
 	"trim":         {{"clip", "edge", "delta"}, {"clip", "edge", "delta"}},
-	"split":        {{"track", "at", "id"}, {"track", "at"}},
-	"remove":       {{"clip"}, {"clip"}},
+	"split":        {{"track", "at", "id", "ids"}, {"track", "at"}},
+	"remove":       {{"clip", "ripple"}, {"clip"}},
 	"lift":         {{"clip"}, {"clip"}},
 	"replace":      {{"clip", "take_id"}, {"clip", "take_id"}},
-	"set":          {{"clip", "gain_db", "mute", "hold", "transition_in"}, {"clip"}},
+	"set":          {{"clip", "gain_db", "mute", "hold", "transition_in", "link"}, {"clip"}},
 	"add":          {{"take_ids", "track", "ids"}, {"take_ids"}},
 	"insert":       {{"at", "hold", "id"}, {"at", "hold"}},
 	"place":        {{"at", "hold", "id", "gap_id"}, {"at", "hold"}},
 	"add_track":    {},
 	"remove_track": {{"track"}, {"track"}},
 	"track":        {{"track", "gain_db", "mute"}, {"track"}},
+	// 1.50: the Timeline tools' ops and the markers'
+	"roll":          {{"clip", "delta"}, {"clip", "delta"}},
+	"slip":          {{"clip", "delta"}, {"clip", "delta"}},
+	"slide":         {{"clip", "delta"}, {"clip", "delta"}},
+	"overwrite":     {{"clip", "at", "track", "ids"}, {"clip", "at"}},
+	"split_all":     {{"at", "ids"}, {"at"}},
+	"remove_range":  {{"from", "to", "ids"}, {"from", "to"}},
+	"lift_range":    {{"from", "to", "ids"}, {"from", "to"}},
+	"marker":        {{"id", "at", "name", "color"}, {"at"}},
+	"remove_marker": {{"id"}, {"id"}},
 }
+
+// IDsOps take ids for the clips they make in `ids` (not one per take, as add's).
+var IDsOps = []string{"split", "overwrite", "split_all", "remove_range", "lift_range"}
+
+// MarkerColors are a marker's colours (TimelineMarkerColor).
+var MarkerColors = []string{"red", "orange", "yellow", "green", "blue", "purple"}
 
 // TimelineEdits is POST /timelines/{id}/edits.
 type TimelineEdits struct {
@@ -88,8 +106,8 @@ func checkOp(op timeline.Op) string {
 		return ""
 	}
 	switch {
-	case !seconds(op.At):
-		return "at must be seconds from 0 to 86400"
+	case !seconds(op.At) || !seconds(op.From) || !seconds(op.To):
+		return "at, from and to must be seconds from 0 to 86400"
 	case op.Index != nil && *op.Index < 0:
 		return "index must be 0 or more"
 	case math.Abs(op.Delta) > 86400 || math.IsNaN(op.Delta):
@@ -104,8 +122,19 @@ func checkOp(op timeline.Op) string {
 		return "take " + op.TakeID + " not found"
 	case len(op.TakeIDs) > 100 || (op.Op == "add" && len(op.TakeIDs) == 0):
 		return "take_ids must have 1 to 100 items"
-	case len(op.IDs) > len(op.TakeIDs):
+	case op.Op == "add" && len(op.IDs) > len(op.TakeIDs):
 		return "ids: at most one per take"
+	case len(op.IDs) > 32:
+		return "ids: at most 32 items"
+	case op.Name != nil && (*op.Name == "" || utf8.RuneCountInString(*op.Name) > 80):
+		return "name must be 1-80 characters"
+	case op.Color != nil && !slices.Contains(MarkerColors, *op.Color):
+		return "color must be one of " + strings.Join(MarkerColors, ", ")
+	}
+	for _, key := range []string{"name", "color", "ripple"} { // a null is not a value here
+		if raw, ok := op.Set[key]; ok && string(raw) == "null" {
+			return key + " has the wrong type"
+		}
 	}
 	for _, d := range []string{id("clip", op.Clip), id("id", op.ID), id("gap_id", op.GapID)} {
 		if d != "" {
@@ -139,6 +168,10 @@ func checkOp(op timeline.Op) string {
 				err = json.Unmarshal(raw, &c.Hold)
 			case "transition_in":
 				err = json.Unmarshal(raw, &c.TransitionIn)
+			case "link":
+				if err = json.Unmarshal(raw, &c.Link); err == nil && !ClipID.MatchString(*c.Link) {
+					return "link must be 1-16 lowercase letters or digits"
+				}
 			}
 			if err != nil || string(raw) == "null" {
 				return key + " has the wrong type"
@@ -222,14 +255,16 @@ type TimelineAgentClip struct {
 
 // TimelineAgentView is GET /timelines/{id}?view=agent.
 type TimelineAgentView struct {
-	ID        string                `json:"id"`
-	Name      string                `json:"name"`
-	Revision  int                   `json:"revision"`
-	Target    timeline.Target       `json:"target"`
-	DurationS float64               `json:"duration_s"`
-	Frames    int                   `json:"frames"`
-	Tracks    []timeline.AgentTrack `json:"tracks"`
-	Clips     []TimelineAgentClip   `json:"clips"`
+	ID        string                 `json:"id"`
+	Name      string                 `json:"name"`
+	Revision  int                    `json:"revision"`
+	Target    timeline.Target        `json:"target"`
+	DurationS float64                `json:"duration_s"`
+	Frames    int                    `json:"frames"`
+	Tracks    []timeline.AgentTrack  `json:"tracks"`
+	Clips     []TimelineAgentClip    `json:"clips"`
+	Links     map[string][]string    `json:"links"`   // 1.50
+	Markers   []timeline.AgentMarker `json:"markers"` // 1.50
 }
 
 // TimelineFrame is POST /timelines/{id}/frame.

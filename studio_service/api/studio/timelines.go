@@ -98,6 +98,11 @@ var problemText = map[string]string{
 	"dissolve_gap":     "a dissolve needs a take on both sides of the cut",
 	"dissolve_handles": "the takes have too little handle for the dissolve",
 	"dissolve_length":  "its dissolves are longer than the clip",
+	"link_track":       "only an audio-track clip links to a V1 clip",
+	"link_not_v1":      "its link names no V1 clip",
+	"too_many_markers": fmt.Sprintf("a sequence has at most %d markers", timeline.MaxMarkers),
+	"duplicate_marker": "its id is used twice",
+	"marker_past_end":  "it is after the sequence's end",
 }
 
 // problemsError maps the rules' problems to the 422.
@@ -116,6 +121,9 @@ func problemsError(probs []timeline.Problem) error {
 		if p.Clip != "" {
 			q.Clip = &p.Clip
 			q.Message = "clip " + p.Clip + ": " + text
+			if strings.Contains(p.Code, "marker") { // 1.50: the clip field holds the marker's id
+				q.Message = "marker " + p.Clip + ": " + text
+			}
 		}
 		out.Problems = append(out.Problems, q)
 	}
@@ -347,7 +355,7 @@ func (s *Service) timelineDTO(ctx context.Context, tx pgx.Tx, row timelineRow) (
 		}
 	}
 	out := dto.Timeline{ID: row.ID, Name: row.Name, SessionID: row.SessionID, Revision: row.Revision, Target: doc.Target,
-		Tracks: doc.Tracks, DurationS: doc.DurationS, Frames: doc.Frames, Takes: map[string]dto.TimelineTake{},
+		Tracks: doc.Tracks, DurationS: doc.DurationS, Frames: doc.Frames, Markers: doc.Markers, Takes: map[string]dto.TimelineTake{},
 		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt}
 	for id, take := range rows {
 		out.Takes[id] = s.timelineTake(take)
@@ -678,7 +686,7 @@ func (s *Service) UpdateTimeline(ctx context.Context, caller common.Caller, id s
 		if body.Revision != row.Revision {
 			return staleRevision(*row)
 		}
-		doc, previous := timeline.Doc{Target: *body.Target, Tracks: body.Tracks}, row.doc()
+		doc, previous := timeline.Doc{Target: *body.Target, Tracks: body.Tracks, Markers: body.Markers}, row.doc()
 		rules, _, err := loadTakes(ctx, tx, caller.ID, docTakeIDs(doc))
 		if err != nil {
 			return err
