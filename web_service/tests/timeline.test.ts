@@ -59,7 +59,7 @@ run("snap", snapFx as unknown as Fx, (c, takes) => {
     ? {
         to: snapPoint(
           c.t as number,
-          cuts(doc, takes, c.exclude as string | undefined),
+          [...cuts(doc, takes, c.exclude as string | undefined), ...((c.points as number[]) ?? [])],
           c.px_per_s as number,
           new Grid(doc.target),
         ),

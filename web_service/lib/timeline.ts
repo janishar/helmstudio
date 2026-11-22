@@ -28,7 +28,12 @@ export type Clip = {
   /** V1: the shot number (API 1.29), given by studio */
   number?: number;
   offline?: boolean;
+  /** 1.50, an audio-track clip: the V1 clip it is linked to (its sound) */
+  link?: string;
 };
+export type MarkerColor = "red" | "orange" | "yellow" | "green" | "blue" | "purple";
+/** 1.50: a named point on the sequence. */
+export type Marker = { id: string; at: number; name?: string; color?: MarkerColor };
 export type Track = {
   name?: string;
   kind: "video" | "audio";
@@ -36,7 +41,14 @@ export type Track = {
   mute?: boolean;
   clips: Clip[];
 };
-export type Doc = { target: Target; tracks: Track[]; duration_s?: number; frames?: number };
+export type Doc = {
+  target: Target;
+  tracks: Track[];
+  duration_s?: number;
+  frames?: number;
+  /** 1.50: absent = none */
+  markers?: Marker[];
+};
 /** A normalized document: names, V1 `at`, defaults filled, every time snapped. */
 export type Norm = Doc & { duration_s: number; frames: number };
 /** What the rules need of a take. */
@@ -69,6 +81,7 @@ export const MAX_AUDIO_TRACKS = 8;
 const MAX_CLIPS = 1000;
 const MAX_BYTES = 262144;
 const MAX_ALTERNATIVES = 32;
+const MAX_MARKERS = 200; // 1.50
 
 /** Round half away from zero, exactly (Go math.Round); never JS Math.round on a negative half. */
 export const rnd = (x: number) => Math.sign(x) * Math.round(Math.abs(x)) + 0;
@@ -157,6 +170,7 @@ export function normalize(
   const ids = new Set<string>();
   const out: Track[] = [];
   const ends: [string, string, number][] = [];
+  const v1ids = new Set(tracks[0].clips.map((c) => c.id));
   tracks.forEach((t, ti) => {
     const name = ti === 0 ? "V1" : `A${ti + 1}`;
     const video = ti === 0;
@@ -229,6 +243,12 @@ export function normalize(
       }
       n.gain_db = c.gain_db ?? 0;
       n.mute = c.mute ?? false;
+      if (c.link !== undefined) {
+        // 1.50: an audio-track clip linked to a V1 clip
+        if (video) add("link_track", name, cid);
+        else if (!v1ids.has(c.link)) add("link_not_v1", name, cid);
+        n.link = c.link;
+      }
       if (c.transition_in) {
         if (video) n.transition_in = c.transition_in;
         else add("dissolve_track", name, cid);
@@ -295,6 +315,19 @@ export function normalize(
     frames = g.f(last.at!) + lenOf(last, kindOf(last, takes), g);
     for (const [name, cid, e] of ends) if (e > g.smp(g.s(frames))) add("past_end", name, cid);
   } else frames = Math.max(0, ...ends.map(([, , e]) => g.f(e / g.sr)));
+  // 1.50: markers snapped to frames, sorted by time then id; none = no `markers`
+  const marks: Marker[] = [];
+  const mids = new Set<string>();
+  if ((doc.markers ?? []).length > MAX_MARKERS) add("too_many_markers");
+  for (const m of doc.markers ?? []) {
+    if (mids.has(m.id)) add("duplicate_marker", null, m.id);
+    mids.add(m.id);
+    if (v1.length && g.f(m.at) > frames) add("marker_past_end", null, m.id);
+    const nm: Marker = { id: m.id, at: g.snap(m.at) };
+    if (m.name !== undefined) nm.name = m.name;
+    if (m.color !== undefined) nm.color = m.color;
+    marks.push(nm);
+  }
   if (probs.length) {
     const key = (p: Problem) => [p[0], p[1] ?? "", p[2] ?? ""];
     return {
@@ -305,7 +338,10 @@ export function normalize(
       }),
     };
   }
-  return { document: { target: doc.target, tracks: out, duration_s: g.s(frames), frames } };
+  const res: Norm = { target: doc.target, tracks: out, duration_s: g.s(frames), frames };
+  if (marks.length)
+    res.markers = marks.sort((a, b) => a.at - b.at || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  return { document: res };
 }
 
 /** An edit (contracts/README.md, Timeline rules: Edits). `delta` and every time are seconds. */
@@ -313,8 +349,8 @@ export type Op =
   | { op: "move"; clip: string; index: number }
   | { op: "move"; clip: string; at: number; track?: string }
   | { op: "trim"; clip: string; edge: "in" | "out"; delta: number }
-  | { op: "split"; track: string; at: number; id: string }
-  | { op: "remove" | "lift"; clip: string }
+  | { op: "split"; track: string; at: number; id: string; ids?: string[] }
+  | { op: "remove" | "lift"; clip: string; ripple?: boolean }
   | { op: "replace"; clip: string; take_id: string }
   | {
       op: "set";
@@ -323,6 +359,7 @@ export type Op =
       mute?: boolean | null;
       hold?: number | null;
       transition_in?: Dissolve | null;
+      link?: string | null;
     }
   | { op: "add"; take_ids: string[]; track?: string; ids: string[] }
   | { op: "insert"; at: number; hold: number; id: string }
@@ -330,10 +367,142 @@ export type Op =
   | { op: "fill"; clip: string; take_id: string }
   | { op: "add_track" }
   | { op: "remove_track"; track: string }
-  | { op: "track"; track: string; gain_db?: number; mute?: boolean };
+  | { op: "track"; track: string; gain_db?: number; mute?: boolean }
+  // 1.50: the Timeline tools' ops and the markers'
+  | { op: "roll" | "slip" | "slide"; clip: string; delta: number }
+  | { op: "overwrite"; clip: string; at: number; track?: string; ids?: string[] }
+  | { op: "split_all"; at: number; ids?: string[] }
+  | { op: "remove_range"; from: number; to: number; ids?: string[] }
+  | { op: "lift_range"; from: number; to: number; ids?: string[] }
+  | { op: "marker"; id: string; at: number; name?: string; color?: MarkerColor }
+  | { op: "remove_marker"; id: string };
 
-/** One edit on a normalized document → the document as written (normalize it next), or an error code (t_edit). */
+/** The ops that cut and move every track themselves (1.50): no linked clip follows after them. */
+const ALL_TRACKS = new Set(["split_all", "remove_range", "lift_range"]);
+
+/** One edit on a normalized document → the document as written (normalize it next), or an error code (t_edit). From
+ * 1.50 linked sound clips follow their V1 clip (t_follow). */
 export function edit(doc: Doc, op: Op, takes: Takes): Doc | string {
+  const raw = editOp(doc, op, takes);
+  return typeof raw === "string" ? raw : follow(doc, raw, op, takes);
+}
+
+/** t_follow (1.50): an audio-track clip whose V1 clip the edit removed goes too; one whose V1 clip moved moves by as
+ * many frames (its content's place: start − in for a video that stays a video, else its start), except after
+ * ALL_TRACKS. Moved before 0: `link_start`. */
+function follow(before: Doc, raw: Doc, op: Op, takes: Takes): Doc | string {
+  if (!raw.tracks.slice(1).some((t) => t.clips.some((c) => c.link !== undefined))) return raw;
+  const g = new Grid(raw.target);
+  const anchors = (d: Doc) => {
+    // a field an edit removed counts 0 (normalize refuses that document anyway)
+    const out = new Map<string, [Kind, number, number]>();
+    let pos = 0;
+    for (const c of d.tracks[0].clips) {
+      const kind = kindOf(c, takes);
+      const i_ = g.f(c.in ?? 0);
+      out.set(c.id, [kind, pos, kind === "video" ? pos - i_ : pos]);
+      pos += kind === "video" ? g.f(c.out ?? 0) - i_ : g.f(c.hold ?? 0);
+    }
+    return out;
+  };
+  const [b, a] = [anchors(before), anchors(raw)];
+  for (const t of raw.tracks.slice(1)) {
+    const keep: Clip[] = [];
+    for (const c of t.clips) {
+      const ln = c.link;
+      if (ln !== undefined && b.has(ln) && !a.has(ln)) continue;
+      if (ln !== undefined && b.has(ln) && !ALL_TRACKS.has(op.op)) {
+        const [kb, sb, nb] = b.get(ln)!;
+        const [ka, sa, na] = a.get(ln)!;
+        const sh = ka === kb ? na - nb : sa - sb;
+        if (sh) {
+          if (g.f(c.at!) + sh < 0) return "link_start";
+          c.at = g.s(g.f(c.at!) + sh);
+        }
+      }
+      keep.push(c);
+    }
+    t.clips = keep;
+  }
+  return raw;
+}
+
+/** V1's clip starts in frames, and its end (the clips' `at` may be stale while an edit runs). */
+function v1Starts(clips: Clip[], takes: Takes, g: Grid): [number[], number] {
+  const out: number[] = [];
+  let pos = 0;
+  for (const c of clips) {
+    out.push(pos);
+    pos += lenOf(c, kindOf(c, takes), g);
+  }
+  return [out, pos];
+}
+
+/** A V1 clip's end moves by df frames: a video's out, else its hold. */
+function grow(c: Clip, kind: Kind, df: number, g: Grid) {
+  if (kind === "video") c.out = g.s(g.f(c.out!) + df);
+  else c.hold = g.s(g.f(c.hold!) + df);
+}
+
+/** A V1 clip's start moves by df frames into it: a video's in, else its hold shrinks. */
+function front(c: Clip, kind: Kind, df: number, g: Grid) {
+  if (kind === "video") c.in = g.s(g.f(c.in!) + df);
+  else c.hold = g.s(g.f(c.hold!) - df);
+}
+
+/** The clip of t strictly around frame f: [index, start, length], else null. */
+function inside(t: Track, f: number, onV1: boolean, takes: Takes, g: Grid): [number, number, number] | null {
+  const starts = onV1 ? v1Starts(t.clips, takes, g)[0] : null;
+  let hit: [number, number, number] | null = null;
+  t.clips.forEach((c, k) => {
+    const a = starts ? starts[k] : g.f(c.at!);
+    const ln = lenOf(c, kindOf(c, takes), g, !onV1);
+    if (a < f && f < a + ln) hit = [k, a, ln];
+  });
+  return hit;
+}
+
+/** Cut clip k of t (start a, length ln frames) at frame f: the right part, inserted after it, gets id, keeps the take,
+ * alternatives and link, never the dissolve or the shot. */
+function cutClip(t: Track, k: number, f: number, a: number, ln: number, id: string, onV1: boolean, takes: Takes, g: Grid) {
+  const c = t.clips[k];
+  const c2: Clip = { ...structuredClone(c), id };
+  delete c2.transition_in;
+  delete c2.shot;
+  if (!onV1) {
+    const cut = g.smp(g.s(f)) - g.smp(c.at!) + g.smp(c.in!); // the left part ends on the right part's start sample
+    c.out = c2.in = cut / g.sr;
+    c2.at = g.s(f);
+  } else if (kindOf(c, takes) === "video") c.out = c2.in = g.s(g.f(c.in!) + f - a);
+  else {
+    c.hold = g.s(f - a);
+    c2.hold = g.s(ln - f + a);
+  }
+  t.clips.splice(k + 1, 0, c2);
+}
+
+/** t_relink (1.50): after V1 clips were cut (root: each new part's id → the clip it was cut from), a sound clip linked
+ * to one of the parts links to the part it starts in (the last starting at or before it; else the first). */
+function relink(d: Doc, root: Map<string, string>, takes: Takes, g: Grid) {
+  if (!root.size) return;
+  const v1 = d.tracks[0].clips;
+  const starts = v1Starts(v1, takes, g)[0];
+  const parts = new Map<string, [number, string][]>();
+  v1.forEach((c, i) => {
+    const r = root.get(c.id) ?? c.id;
+    parts.set(r, [...(parts.get(r) ?? []), [starts[i], c.id]]);
+  });
+  for (const t of d.tracks.slice(1))
+    for (const c of t.clips) {
+      const ps = c.link !== undefined ? parts.get(root.get(c.link) ?? c.link) : undefined;
+      if (!ps) continue;
+      const at = ps.filter(([a]) => a <= g.f(c.at!));
+      c.link = (at.length ? at[at.length - 1] : ps[0])[1];
+    }
+}
+
+/** t_edit's op itself. */
+function editOp(doc: Doc, op: Op, takes: Takes): Doc | string {
   const d: Doc = structuredClone(doc);
   const g = new Grid(d.target);
   const tracks: Record<string, Track> = Object.fromEntries(d.tracks.map((t) => [t.name, t]));
@@ -377,7 +546,7 @@ export function edit(doc: Doc, op: Op, takes: Takes): Doc | string {
     });
     const gap = v1[k];
     if (gap.take_id || gap.shot)
-      return edit(doc, { op: "insert", at: op.at, hold: g.s(n), id: op.id }, takes);
+      return editOp(doc, { op: "insert", at: op.at, hold: g.s(n), id: op.id }, takes);
     const [left, right] = [f - cuts[k], cuts[k + 1] - f - n];
     const parts: Clip[] = [
       ...(left ? [{ ...gap, hold: g.s(left) }] : []),
@@ -417,6 +586,84 @@ export function edit(doc: Doc, op: Op, takes: Takes): Doc | string {
     return d;
   }
   if (op.op === "split") return split(d, tracks[op.track], op, takes, g);
+  if (op.op === "split_all") {
+    // 1.50: blade on every track at frame `at`
+    const f = g.f(op.at);
+    const ids = [...(op.ids ?? [])];
+    const root = new Map<string, string>();
+    let made = false;
+    for (const [ti, t] of d.tracks.entries()) {
+      const hit = inside(t, f, ti === 0, takes, g);
+      if (!hit || t.clips[hit[0]].shot) continue;
+      const id = ids.shift();
+      if (id === undefined) return "ids_short";
+      cutClip(t, hit[0], f, hit[1], hit[2], id, ti === 0, takes, g);
+      if (ti === 0) root.set(id, t.clips[hit[0]].id);
+      made = true;
+    }
+    if (!made) return "split_none";
+    relink(d, root, takes, g);
+    return d;
+  }
+  if (op.op === "remove_range" || op.op === "lift_range") {
+    // 1.50: a range on every track, cut at both ends
+    const [lo, hi] = [g.f(op.from), g.f(op.to)];
+    if (hi <= lo) return "range_empty";
+    for (const [ti, t] of d.tracks.entries()) {
+      const starts = v1Starts(t.clips, takes, g)[0];
+      for (const [k, c] of t.clips.entries()) {
+        const a = ti === 0 ? starts[k] : g.f(c.at!);
+        if (c.shot && a < hi && a + lenOf(c, kindOf(c, takes), g, ti > 0) > lo) return "range_shot";
+      }
+    }
+    const ids = [...(op.ids ?? [])];
+    const root = new Map<string, string>();
+    for (const [ti, t] of d.tracks.entries())
+      for (const f of [lo, hi]) {
+        const hit = inside(t, f, ti === 0, takes, g);
+        if (!hit) continue;
+        const id = ids.shift();
+        if (id === undefined) return "ids_short";
+        cutClip(t, hit[0], f, hit[1], hit[2], id, ti === 0, takes, g);
+        if (ti === 0) {
+          const r = t.clips[hit[0]].id;
+          root.set(id, root.get(r) ?? r);
+        }
+      }
+    relink(d, root, takes, g);
+    const [starts, end] = v1Starts(v1, takes, g);
+    const gone = starts.flatMap((a, k) => (lo <= a && a < hi ? [k] : []));
+    if (gone.length) {
+      v1.splice(gone[0], gone.length);
+      if (op.op === "lift_range") {
+        const id = ids.shift();
+        if (id === undefined) return "ids_short";
+        v1.splice(gone[0], 0, { id, take_id: null, hold: g.s(Math.min(hi, end) - lo) });
+      }
+      cutAt(gone[0] + (op.op === "lift_range" ? 1 : 0));
+    }
+    for (const t of d.tracks.slice(1))
+      t.clips = t.clips.filter((c) => {
+        const a = g.f(c.at!);
+        if (lo <= a && a < hi) return false;
+        if (a >= hi && op.op === "remove_range") c.at = g.s(a - (hi - lo)); // open point 4: audio tracks ripple
+        return true;
+      });
+    return d;
+  }
+  if (op.op === "marker") {
+    // 1.50: a marker put (a new id adds one; a known id is replaced whole)
+    const m: Marker = { id: op.id, at: op.at };
+    if (op.name !== undefined) m.name = op.name;
+    if (op.color !== undefined) m.color = op.color;
+    d.markers = [...(d.markers ?? []).filter((x) => x.id !== op.id), m];
+    return d;
+  }
+  if (op.op === "remove_marker") {
+    if (!(d.markers ?? []).some((x) => x.id === op.id)) return "unknown_marker";
+    d.markers = d.markers!.filter((x) => x.id !== op.id);
+    return d;
+  }
 
   const t = d.tracks.find((x) => x.clips.some((c) => c.id === op.clip));
   if (!t) return "clip_not_found";
@@ -478,6 +725,48 @@ export function edit(doc: Doc, op: Op, takes: Takes): Doc | string {
     if (op.op === "lift") t.clips[i] = { id: c.id, take_id: null, hold: g.s(lenOf(c, kind, g)) };
     else t.clips.splice(i, 1);
     if (onV1) cutAt(op.op === "remove" ? i : i + 1);
+    else if (op.op === "remove" && op.ripple) {
+      // 1.50: the later clips of its audio track move left by its length
+      const [a, ln] = [g.f(c.at!), lenOf(c, kind, g, true)];
+      for (const x of t.clips) if (g.f(x.at!) >= a) x.at = g.s(g.f(x.at!) - ln);
+    }
+  } else if (op.op === "roll") {
+    // 1.50: the cut before the clip moves by delta; the length is kept
+    if (!onV1) return "roll_track";
+    if (i === 0) return "roll_first";
+    const [df, p] = [g.f(op.delta), v1[i - 1]];
+    const pk = kindOf(p, takes);
+    if (
+      lenOf(p, pk, g) + df < Math.max(1, Math.floor(din(i - 1) / 2) + Math.floor(din(i) / 2)) ||
+      lenOf(c, kind, g) - df < Math.max(1, Math.floor(din(i) / 2) + Math.floor(din(i + 1) / 2))
+    )
+      return "least";
+    grow(p, pk, df, g);
+    front(c, kind, df, g);
+  } else if (op.op === "slip") {
+    // 1.50: in and out move by delta; place and length kept
+    if (kind === "image" || kind === "slot") return "slip_still";
+    const df = g.f(op.delta);
+    if (onV1) [c.in, c.out] = [g.s(g.f(c.in!) + df), g.s(g.f(c.out!) + df)];
+    else {
+      const ds = g.smp(g.s(df)); // on the sample grid
+      [c.in, c.out] = [(g.smp(c.in!) + ds) / g.sr, (g.smp(c.out!) + ds) / g.sr];
+    }
+  } else if (op.op === "slide") {
+    // 1.50: the clip moves along V1 by delta; its neighbours give and take the frames
+    if (!onV1) return "slide_track";
+    if (i === 0 || i === v1.length - 1) return "slide_end";
+    const [df, p, nx] = [g.f(op.delta), v1[i - 1], v1[i + 1]];
+    const [pk, nk] = [kindOf(p, takes), kindOf(nx, takes)];
+    if (
+      lenOf(p, pk, g) + df < Math.max(1, Math.floor(din(i - 1) / 2) + Math.floor(din(i) / 2)) ||
+      lenOf(nx, nk, g) - df < Math.max(1, Math.floor(din(i + 1) / 2) + Math.floor(din(i + 2) / 2))
+    )
+      return "least";
+    grow(p, pk, df, g);
+    front(nx, nk, df, g);
+  } else if (op.op === "overwrite") {
+    return overwrite(d, t, i, op, takes, g);
   } else if (op.op === "replace") {
     if (!(c.alternatives ?? []).includes(op.take_id)) return "not_alternative";
     const take = takes[op.take_id];
@@ -496,7 +785,7 @@ export function edit(doc: Doc, op: Op, takes: Takes): Doc | string {
     }
     c.take_id = op.take_id;
   } else if (op.op === "set") {
-    for (const k of ["gain_db", "mute", "hold", "transition_in"] as const)
+    for (const k of ["gain_db", "mute", "hold", "transition_in", "link"] as const) // link: 1.50
       if (k in op) {
         if (op[k] === null) delete c[k];
         else (c as Record<string, unknown>)[k] = op[k];
@@ -545,11 +834,12 @@ export function edit(doc: Doc, op: Op, takes: Takes): Doc | string {
 }
 
 /** Split at the playhead `at` the clip of `t` under it; the right part gets `id`, keeps the take and alternatives,
- * never the dissolve or the shot. */
+ * never the dissolve or the shot. From 1.50 a V1 split cuts the clip's linked sound clips at that frame too (`ids`, in
+ * track order) and relinks them. */
 function split(
   d: Doc,
   t: Track,
-  op: { at: number; id: string },
+  op: { at: number; id: string; ids?: string[] },
   takes: Takes,
   g: Grid,
 ): Doc | string {
@@ -565,19 +855,127 @@ function split(
   const [k, c, p, ln] = hit as [number, Clip, number, number];
   if (p === 0) return "split_edge";
   if (c.shot) return "split_shot";
-  const c2: Clip = { ...structuredClone(c), id: op.id };
-  delete c2.transition_in;
-  delete c2.shot;
-  if (!onV1) {
-    const cut = g.smp(g.s(f)) - g.smp(c.at!) + g.smp(c.in!); // the left part ends on the right part's start sample
-    c.out = c2.in = cut / g.sr;
-    c2.at = g.s(f);
-  } else if (kindOf(c, takes) === "video") c.out = c2.in = g.s(g.f(c.in!) + p);
-  else {
-    c.hold = g.s(p);
-    c2.hold = g.s(ln - p);
+  cutClip(t, k, f, f - p, ln, op.id, onV1, takes, g);
+  if (onV1) {
+    const ids = [...(op.ids ?? [])];
+    for (const at of d.tracks.slice(1)) {
+      const hit = inside(at, f, false, takes, g);
+      if (!hit || at.clips[hit[0]].link !== c.id || at.clips[hit[0]].shot) continue;
+      const id = ids.shift();
+      if (id === undefined) return "ids_short";
+      cutClip(at, hit[0], f, hit[1], hit[2], id, false, takes, g);
+    }
+    relink(d, new Map([[op.id, c.id]]), takes, g);
   }
-  t.clips.splice(k + 1, 0, c2);
+  return d;
+}
+
+/** t_overwrite (1.50, Overwrite): the clip goes in at `at` over what is there. V1: it leaves an empty slot of its
+ * length, the frames [at, at + length) are cut out of V1 and it goes in there, an empty slot first past V1's end; no
+ * ripple. Audio (on `track`, default its own): the clips under it are cut around it, a right part starting on the first
+ * frame at or after its end. New ids from `ids`: a right part, then (V1) the slot it leaves, then the gap. */
+function overwrite(
+  d: Doc,
+  t: Track,
+  i: number,
+  op: { at: number; track?: string; ids?: string[] },
+  takes: Takes,
+  g: Grid,
+): Doc | string {
+  const c = t.clips[i];
+  const ids = [...(op.ids ?? [])];
+  const v1 = d.tracks[0].clips;
+  if (t === d.tracks[0]) {
+    if ((op.track ?? "V1") !== "V1") return "overwrite_track";
+    const kind = kindOf(c, takes);
+    const [n, lo] = [lenOf(c, kind, g), g.f(op.at)];
+    const hi = lo + n;
+    const moved: Clip = { ...c };
+    delete moved.transition_in;
+    const [starts, end] = v1Starts(v1, takes, g);
+    const hole: Clip = { id: "", take_id: null, hold: g.s(n) };
+    v1[i] = hole;
+    if (i + 1 < v1.length) delete v1[i + 1].transition_in;
+    const parts = v1.map((x, k) => {
+      const xk = kindOf(x, takes);
+      return [x, starts[k], starts[k] + lenOf(x, xk, g), xk] as [Clip, number, number, Kind];
+    });
+    if (parts.some(([x, a, b]) => x.shot && a < hi && b > lo)) return "overwrite_shot";
+    const root = new Map<string, string>();
+    let right: Clip | null = null;
+    const span = parts.find(([, a, b]) => a < lo && b > hi);
+    if (span) {
+      const id = ids.shift();
+      if (id === undefined) return "ids_short";
+      right = { ...structuredClone(span[0]), id };
+      delete right.transition_in;
+      delete right.shot;
+      front(right, span[3], hi - span[1], g);
+      root.set(id, span[0].id);
+    }
+    const holeId = ids.shift();
+    if (holeId === undefined) return "ids_short";
+    hole.id = holeId;
+    const gap: Clip[] = [];
+    if (lo > end) {
+      const id = ids.shift();
+      if (id === undefined) return "ids_short";
+      gap.push({ id, take_id: null, hold: g.s(lo - end) });
+    }
+    const before: Clip[] = [];
+    const after: Clip[] = right ? [right] : [];
+    for (const [x, a, b, xk] of parts) {
+      if (b <= lo) before.push(x);
+      else if (a >= hi) after.push(x);
+      else if (a < lo) {
+        grow(x, xk, lo - b, g);
+        before.push(x);
+      } else if (b > hi) {
+        front(x, xk, hi - a, g);
+        after.push(x);
+      }
+    }
+    if (after.length) delete after[0].transition_in;
+    v1.splice(0, v1.length, ...before, ...gap, moved, ...after);
+    relink(d, root, takes, g);
+    return d;
+  }
+  const tt = d.tracks.find((x) => x.name === (op.track ?? t.name));
+  if (!tt) return "unknown_track";
+  if (tt === d.tracks[0]) return "overwrite_track";
+  t.clips.splice(i, 1);
+  const at = g.snap(op.at);
+  const lo = g.smp(at);
+  const hi = lo + aLen(c, g);
+  let fe = g.f(hi / g.sr);
+  if (g.smp(g.s(fe)) < hi) fe += 1; // the first frame at or after its end
+  const re = g.smp(g.s(fe));
+  const under = (x: Clip) => g.smp(x.at!) < hi && g.smp(x.at!) + aLen(x, g) > lo;
+  if (tt.clips.some((x) => under(x) && x.shot)) return "overwrite_shot";
+  const keep: Clip[] = [];
+  for (const x of [...tt.clips].sort((p, q) => g.smp(p.at!) - g.smp(q.at!))) {
+    if (!under(x)) {
+      keep.push(x);
+      continue;
+    }
+    const [xs, is] = [g.smp(x.at!), g.smp(x.in!)];
+    const xe = xs + aLen(x, g);
+    if (xs < lo) {
+      const x2: Clip = { ...structuredClone(x), in: (is + re - xs) / g.sr, at: g.s(fe) };
+      x.out = (is + lo - xs) / g.sr;
+      keep.push(x);
+      if (xe > re) {
+        const id = ids.shift();
+        if (id === undefined) return "ids_short";
+        keep.push({ ...x2, id });
+      }
+    } else if (xe > re) {
+      x.in = (is + re - xs) / g.sr;
+      x.at = g.s(fe);
+      keep.push(x);
+    }
+  }
+  tt.clips = [...keep, { ...c, at }];
   return d;
 }
 

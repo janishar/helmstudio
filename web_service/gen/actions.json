@@ -1258,7 +1258,16 @@
                         "fill",
                         "add_track",
                         "remove_track",
-                        "track"
+                        "track",
+                        "roll",
+                        "slip",
+                        "slide",
+                        "overwrite",
+                        "split_all",
+                        "remove_range",
+                        "lift_range",
+                        "marker",
+                        "remove_marker"
                       ]
                     }
                   },

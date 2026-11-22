@@ -6717,6 +6717,22 @@ export interface components {
             number?: number;
             /** @description answers only, true when the take is deleted or gone: the clip keeps its place and length, plays as offline and blocks an export */
             offline?: boolean;
+            /** @description From 1.50, an audio-track clip only: the V1 clip it is linked to (its sound clip: it follows that clip's ripples, goes when it goes and is cut with it; contracts/README.md, Timeline rules: linked clips) */
+            link?: components["schemas"]["TimelineClipId"];
+        };
+        /**
+         * @description a marker's colour, drawn with the theme's own shade
+         * @enum {string}
+         */
+        TimelineMarkerColor: "red" | "orange" | "yellow" | "green" | "blue" | "purple";
+        /** @description From 1.50: a named point on the sequence (snapped to frames; drawn on the ruler, a snap target) */
+        TimelineMarker: {
+            /** @description unique among the markers */
+            id: components["schemas"]["TimelineClipId"];
+            /** @description sequence seconds; with V1 clips never past the end (`marker_past_end`) */
+            at: components["schemas"]["TimelineSeconds"];
+            name?: string;
+            color?: components["schemas"]["TimelineMarkerColor"];
         };
         /** @enum {string} */
         TimelineTrackKind: "video" | "audio";
@@ -6734,6 +6750,8 @@ export interface components {
         TimelineDoc: {
             target: components["schemas"]["TimelineTarget"];
             tracks: components["schemas"]["TimelineTrack"][];
+            /** @description From 1.50: at most 200 (`too_many_markers`); absent = none; answers sort them by time, then id, and leave the list out when empty */
+            markers?: components["schemas"]["TimelineMarker"][];
         };
         /** @description a document as studio stores and answers it: names, V1 `at`, defaults filled, every time snapped */
         TimelineNormalized: {
@@ -6767,6 +6785,8 @@ export interface components {
             revision: number;
             target: components["schemas"]["TimelineTarget"];
             tracks: components["schemas"]["TimelineDoc"]["tracks"];
+            /** @description From 1.50: the whole list (absent = none) */
+            markers?: components["schemas"]["TimelineDoc"]["markers"];
         };
         TimelinePatch: {
             /** @description trimmed; blank = 422 */
@@ -6881,10 +6901,14 @@ export interface components {
             track: string;
             at: components["schemas"]["TimelineSeconds"];
             id?: components["schemas"]["TimelineClipId"];
+            /** @description from 1.50, V1: ids for the right parts of its linked sound clips cut with it, in track order (absent ones: studio makes them) */
+            ids?: components["schemas"]["TimelineClipId"][];
         } | {
             /** @constant */
             op: "remove";
             clip: components["schemas"]["TimelineClipId"];
+            /** @description from 1.50, an audio-track clip: the later clips of its track move left by its length (V1 always ripples) */
+            ripple?: boolean;
         } | {
             /** @constant */
             op: "lift";
@@ -6903,6 +6927,8 @@ export interface components {
             mute?: boolean | null;
             hold?: number | null;
             transition_in?: components["schemas"]["TimelineDissolve"] | null;
+            /** @description from 1.50, an audio-track clip: the V1 clip it is linked to (null unlinks) */
+            link?: components["schemas"]["TimelineClipId"] | null;
         } | {
             /** @constant */
             op: "add";
@@ -6935,6 +6961,63 @@ export interface components {
             track: string;
             gain_db?: number;
             mute?: boolean;
+        } | {
+            /** @constant */
+            op: "roll";
+            clip: components["schemas"]["TimelineClipId"];
+            /** @description seconds, snapped to frames */
+            delta: number;
+        } | {
+            /** @constant */
+            op: "slip";
+            clip: components["schemas"]["TimelineClipId"];
+            /** @description seconds, snapped to frames */
+            delta: number;
+        } | {
+            /** @constant */
+            op: "slide";
+            clip: components["schemas"]["TimelineClipId"];
+            /** @description seconds, snapped to frames */
+            delta: number;
+        } | {
+            /** @constant */
+            op: "overwrite";
+            clip: components["schemas"]["TimelineClipId"];
+            at: components["schemas"]["TimelineSeconds"];
+            track?: string;
+            /** @description ids for the clips it makes, in track order, then left to right (absent ones: studio makes them; too few in a web replay: ids_short) */
+            ids?: components["schemas"]["TimelineClipId"][];
+        } | {
+            /** @constant */
+            op: "split_all";
+            at: components["schemas"]["TimelineSeconds"];
+            /** @description ids for the clips it makes, in track order, then left to right (absent ones: studio makes them; too few in a web replay: ids_short) */
+            ids?: components["schemas"]["TimelineClipId"][];
+        } | {
+            /** @constant */
+            op: "remove_range";
+            from: components["schemas"]["TimelineSeconds"];
+            to: components["schemas"]["TimelineSeconds"];
+            /** @description ids for the clips it makes, in track order, then left to right (absent ones: studio makes them; too few in a web replay: ids_short) */
+            ids?: components["schemas"]["TimelineClipId"][];
+        } | {
+            /** @constant */
+            op: "lift_range";
+            from: components["schemas"]["TimelineSeconds"];
+            to: components["schemas"]["TimelineSeconds"];
+            /** @description ids for the clips it makes, in track order, then left to right (absent ones: studio makes them; too few in a web replay: ids_short) */
+            ids?: components["schemas"]["TimelineClipId"][];
+        } | {
+            /** @constant */
+            op: "marker";
+            id?: components["schemas"]["TimelineClipId"];
+            at: components["schemas"]["TimelineSeconds"];
+            name?: string;
+            color?: components["schemas"]["TimelineMarkerColor"];
+        } | {
+            /** @constant */
+            op: "remove_marker";
+            id: components["schemas"]["TimelineClipId"];
         };
         TimelineEdits: {
             /** @description the revision the ops were planned on (409 when it is not the current one) */
@@ -6953,7 +7036,7 @@ export interface components {
             removed: components["schemas"]["TimelineClipId"][];
             changed: {
                 clip: components["schemas"]["TimelineClipId"];
-                /** @description field → [before, after], among take_id, in, out, hold, at, gain_db, mute, transition_in, alternatives, shot, offline, track (a V1 ripple shows as `at` changes) */
+                /** @description field → [before, after], among take_id, in, out, hold, at, gain_db, mute, transition_in, alternatives, shot, offline, track and (1.50) link (a V1 ripple shows as `at` changes) */
                 fields: {
                     [key: string]: unknown[];
                 };
@@ -6970,6 +7053,18 @@ export interface components {
             };
             /** @description [before, after] duration_s */
             duration: number[];
+            /** @description from 1.50: markers by id */
+            markers: {
+                added: components["schemas"]["TimelineClipId"][];
+                removed: components["schemas"]["TimelineClipId"][];
+                changed: {
+                    marker: components["schemas"]["TimelineClipId"];
+                    /** @description among at, name, color */
+                    fields: {
+                        [key: string]: unknown[];
+                    };
+                }[];
+            };
         };
         TimelineEditResult: {
             /** @description the stored revision; a dry run: base_revision */
@@ -6985,7 +7080,7 @@ export interface components {
         TimelineEditError: {
             detail: string;
             op_index?: number;
-            /** @description the edit's error code (unknown_op, unknown_clip, unknown_track, take_not_found, split_edge, split_none, split_shot, lift_track, video_track, too_many_tracks, not_alternative) or the first problem's code */
+            /** @description the edit's error code (unknown_op, unknown_clip, unknown_track, take_not_found, split_edge, split_none, split_shot, lift_track, video_track, too_many_tracks, not_alternative; from 1.50 roll_track, roll_first, least, slip_still, slide_track, slide_end, overwrite_track, overwrite_shot, range_empty, range_shot, ids_short, unknown_marker, link_start) or the first problem's code */
             code?: string;
             problems?: components["schemas"]["TimelineProblem"][];
         };
@@ -7051,6 +7146,8 @@ export interface components {
             /** @description V1: the shot number */
             number: number | null;
             offline: boolean;
+            /** @description from 1.50, an audio-track clip: the V1 clip it is linked to */
+            link: components["schemas"]["TimelineClipId"] | null;
         };
         /** @description GET …/{timeline_id}?view=agent (check.py t_agent_view, plus id, name, revision and take titles): plain data, no signed links */
         TimelineAgentView: {
@@ -7070,6 +7167,18 @@ export interface components {
             }[];
             /** @description every clip, track by track, in order */
             clips: components["schemas"]["TimelineAgentClip"][];
+            /** @description from 1.50: each V1 clip that has linked sound clips → their ids, in track order */
+            links: {
+                [key: string]: components["schemas"]["TimelineClipId"][];
+            };
+            /** @description from 1.50: the markers by time, `at_f` in frames */
+            markers: {
+                id: components["schemas"]["TimelineClipId"];
+                at: number;
+                at_f: number;
+                name: string | null;
+                color: components["schemas"]["TimelineMarkerColor"] | null;
+            }[];
         };
         TimelineFrameRequest: {
             /** @description sequence seconds */

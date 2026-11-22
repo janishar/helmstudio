@@ -116,6 +116,15 @@ const VERB: Record<Op["op"], [string, string]> = {
   add_track: ["Added", "audio track"],
   remove_track: ["Removed", "audio track"],
   track: ["Set", "track"],
+  roll: ["Rolled", "cut"],
+  slip: ["Slipped", "clip"],
+  slide: ["Slid", "clip"],
+  overwrite: ["Overwrote with", "clip"],
+  split_all: ["Split every track", "time"],
+  remove_range: ["Removed", "range"],
+  lift_range: ["Lifted", "range"],
+  marker: ["Set", "marker"],
+  remove_marker: ["Removed", "marker"],
 };
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
 
@@ -136,7 +145,7 @@ export function editText(ops: Op[]): string {
       const at =
         "at" in o &&
         typeof o.at === "number" &&
-        (o.op === "place" || o.op === "insert" || o.op === "split")
+        (o.op === "place" || o.op === "insert" || o.op === "split" || o.op === "split_all" || o.op === "marker")
           ? ` at ${shortTime(o.at)}`
           : "";
       return `${verb} ${plural(n, noun)}${at}`;
@@ -144,10 +153,31 @@ export function editText(ops: Op[]): string {
     .join(" · ");
 }
 
-/** The op with the clip ids it makes filled in (a split's new clip, an add's clips, a slot and its gap). */
+/** The op with the clip ids it makes filled in (a split's new clip, an add's clips, a slot and its gap; from 1.50
+ * the `ids` of the tools' ops, as many as any cut could need, and a marker's id). */
 function withIds(o: Op, d: Norm): Op {
   const id = () => newId(d);
-  if (o.op === "split" || o.op === "insert") return { ...o, id: o.id || id() };
+  const fresh = (n: number) => {
+    const ids: string[] = [];
+    while (ids.length < n) {
+      const x = id();
+      if (!ids.includes(x)) ids.push(x);
+    }
+    return ids;
+  };
+  const many = 2 * d.tracks.length + 3; // a range cuts each track twice, then a slot; unused ones are ignored
+  if (o.op === "split") {
+    const [first, ...rest] = fresh(many + 1);
+    return { ...o, id: o.id || first, ids: o.ids?.length ? o.ids : rest };
+  }
+  if (o.op === "split_all" || o.op === "remove_range" || o.op === "lift_range" || o.op === "overwrite")
+    return { ...o, ids: o.ids?.length ? o.ids : fresh(many) };
+  if (o.op === "marker" && !o.id) {
+    let x = id();
+    while (d.markers?.some((m) => m.id === x)) x = id();
+    return { ...o, id: x };
+  }
+  if (o.op === "insert") return { ...o, id: o.id || id() };
   if (o.op === "place") return { ...o, id: o.id || id(), gap_id: o.gap_id || id() };
   if (o.op === "add") {
     const ids: string[] = [];
