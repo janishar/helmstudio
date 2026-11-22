@@ -21,6 +21,7 @@ import {
 import { HANDLE, handleFrom } from "@/lib/mentions";
 import { VoicePicker, type VoiceCtx } from "@/components/create/voices";
 import { voiceLine } from "@/lib/voices";
+import { TextArea } from "@/components/expand-text";
 
 type Item = S<"LibraryItem">;
 type Img = { take_id: string; thumb_url: string };
@@ -502,7 +503,8 @@ function Editor({
           Text
           <span className="mono">{[...text.trim()].length} / 2000</span>
         </span>
-        <textarea
+        <TextArea
+          expand="Text"
           rows={3}
           maxLength={2000}
           value={text}

@@ -10,8 +10,8 @@ import {
   useState,
   type TextareaHTMLAttributes,
 } from "react";
-import { MapPin, Maximize2, Package, UserRound } from "lucide-react";
-import { Modal } from "@/components/kit";
+import { MapPin, Package, UserRound } from "lucide-react";
+import { Expand } from "@/components/expand-text";
 import { api, ok, type S } from "@/lib/api";
 import { safeUrl } from "@/lib/format";
 import { groupLabel, reloadLibrary, useLibrary } from "@/lib/library";
@@ -79,17 +79,6 @@ export function PromptArea({
   }, [q]);
   const items = q != null && found ? found.items : [];
   const open = q != null && !!found;
-  const [over, setOver] = useState(false);
-  const [big, setBig] = useState(false);
-  useLayoutEffect(() => {
-    const t = ta.current;
-    // ponytail: measured on each change of the text only, not when the box is resized
-    if (expand && t) setOver(t.scrollHeight > t.clientHeight);
-  }, [expand, value]);
-  // the dialog's textarea takes the focus once the dialog is open (its own effect runs first)
-  useEffect(() => {
-    if (big) document.getElementById(`${uid}-x`)?.focus();
-  }, [big, uid]);
 
   useLayoutEffect(() => {
     const m = menu.current;
@@ -282,57 +271,23 @@ export function PromptArea({
         </span>
       </div>
       {expand && (
-        <>
-          <button
-            type="button"
-            aria-label="Expand"
-            title="Expand"
-            aria-haspopup="dialog"
-            onClick={() => setBig(true)}
-            className={`absolute top-0 right-0 grid size-7 place-items-center rounded-lg bg-s3 text-t2 hover:text-t1 ${over ? "" : "opacity-0 group-focus-within:opacity-100 focus-visible:opacity-100"}`}
-          >
-            <Maximize2 size={16} aria-hidden />
-          </button>
-          {big && (
-            <Modal
-              open
-              onClose={() => {
-                setBig(false);
-                // after the browser puts the focus back on the button
-                requestAnimationFrame(() => ta.current?.focus());
-              }}
-              title={expand}
-              width="w-[min(94vw,880px)]"
-            >
-              <div className="flex flex-col gap-3.5">
-                <PromptArea
-                  id={`${uid}-x`}
-                  aria-label={expand}
-                  maxLength={rest.maxLength}
-                  placeholder={rest.placeholder}
-                  value={value}
-                  onChange={onChange}
-                  className="block h-[min(420px,60vh)] w-full resize-none rounded-xl border border-a1 bg-s1 px-4 py-3.5 text-[15px] leading-6 text-t1 outline-0 placeholder:text-t2"
-                />
-                <div className="flex items-center gap-2 text-[12px] text-t2">
-                  {rest.maxLength != null && (
-                    <span className="mono">
-                      {value.length} / {rest.maxLength}
-                    </span>
-                  )}
-                  <span>· @ adds an element · Esc closes</span>
-                  <button
-                    type="button"
-                    onClick={(e) => e.currentTarget.closest("dialog")?.close()}
-                    className="ml-auto h-9 rounded-[10px] bg-a1 px-4 text-[13px] font-semibold text-[var(--on1)]"
-                  >
-                    Done
-                  </button>
-                </div>
-              </div>
-            </Modal>
+        <Expand
+          title={expand}
+          value={value}
+          box={ta}
+          maxLength={rest.maxLength}
+          placeholder={rest.placeholder}
+          mentions
+          editor={(p) => (
+            <PromptArea
+              {...p}
+              // a mono box (the dialogue script) stays mono in the dialog
+              className={`${p.className} ${/\bmono\b/.test(className ?? "") ? "mono" : ""}`}
+              value={value}
+              onChange={onChange}
+            />
           )}
-        </>
+        />
       )}
     </div>
   );

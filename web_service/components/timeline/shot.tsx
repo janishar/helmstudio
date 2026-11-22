@@ -321,6 +321,7 @@ export function ShotComposer({
           </label>
           <PromptArea
             id="shot"
+            expand="Shot prompt"
             rows={1}
             value={prompt}
             onChange={(v) => setRaws((r) => ({ ...r, [promptField.key]: v }))}

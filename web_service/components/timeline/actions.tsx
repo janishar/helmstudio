@@ -303,6 +303,7 @@ function ActionForm({
           </label>
           <PromptArea
             id={`act-${prompt.key}`}
+            expand={prompt.param.label ?? "Prompt"}
             rows={2}
             value={String(raw(prompt))}
             onChange={(x) => setRaws((r) => ({ ...r, [prompt.key]: x }))}

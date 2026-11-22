@@ -47,6 +47,7 @@ import {
   type Raw,
   type Update,
 } from "@/lib/workflow";
+import { TextArea } from "@/components/expand-text";
 
 /** Props shared by the form parts: the fields, what the controls hold, and the errors by field key. */
 export type FormProps = {
@@ -1297,8 +1298,9 @@ function Line({
         <label htmlFor={id} className="sr-only">
           {f.param.label ?? f.param.name}
         </label>
-        <textarea
+        <TextArea
           id={id}
+          expand={f.param.label ?? f.param.name}
           className="in h-auto resize-none py-2 leading-[19px]"
           rows={2}
           maxLength={f.param.max}

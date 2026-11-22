@@ -15,6 +15,7 @@ import {
   withDirector,
   type ChatView,
 } from "@/lib/chat";
+import { TextArea } from "@/components/expand-text";
 
 const TONE: Record<S<"BatchDirector">["state"], string> = {
   idle: "st",
@@ -175,8 +176,9 @@ export function ChatPanel({
         <label htmlFor="chat-in" className="sr-only">
           Message the director
         </label>
-        <textarea
+        <TextArea
           id="chat-in"
+          expand="Message"
           className="in h-auto py-2"
           rows={3}
           maxLength={2000}

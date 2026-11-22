@@ -32,6 +32,7 @@ import {
   type Field,
   type Raw,
 } from "@/lib/workflow";
+import { TextArea } from "@/components/expand-text";
 
 type Workflow = S<"Workflow">;
 type Timeline = S<"Timeline">;
@@ -247,8 +248,9 @@ export function LineComposer({
           <label htmlFor="line-text" className="sr-only">
             {scriptField ? "Script" : "Text to speak"}
           </label>
-          <textarea
+          <TextArea
             id="line-text"
+            expand={scriptField ? "Script" : "Words to speak"}
             rows={scriptField ? Math.max(3, text.split("\n").length) : 2}
             value={text}
             maxLength={textField.param.max}

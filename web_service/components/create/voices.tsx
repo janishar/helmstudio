@@ -37,6 +37,7 @@ import {
   voiceTileText,
 } from "@/lib/voices";
 import { fields as fieldsOf, isVoice, type Field, type Raw } from "@/lib/workflow";
+import { TextArea } from "@/components/expand-text";
 
 type Item = S<"LibraryItem">;
 type Take = S<"Take">;
@@ -1044,7 +1045,8 @@ function Designer({
           Describe the voice
           <span className="mono">{text.length} / 2000</span>
         </span>
-        <textarea
+        <TextArea
+          expand="Description"
           rows={3}
           maxLength={2000}
           value={text}

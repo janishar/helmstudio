@@ -22,6 +22,7 @@ import { remember } from "@/lib/take-cache";
 import { MODEL_KINDS, nodeLabel, pipelineBounds, pipelineFields } from "@/lib/pipeline";
 import { egressLines, remoteLine, reservedLines } from "@/lib/egress";
 import { boundsLine } from "@/lib/pipeline-run";
+import { TextArea } from "@/components/expand-text";
 import { ApiError, api, message, ok, type S } from "@/lib/api";
 import {
   MAX_AXES,
@@ -378,13 +379,15 @@ export function NewBatch({
                   </span>
                   {lineField?.param.type === "text" ? (
                     <PromptArea
+                      expand="Lines"
                       className="in h-40 resize-y py-2 leading-5"
                       placeholder={"a fox at dusk\n@fox in @snowfield"}
                       value={lines}
                       onChange={setLines}
                     />
                   ) : (
-                    <textarea
+                    <TextArea
+                      expand="Lines"
                       className="in h-40 resize-y py-2 leading-5"
                       placeholder={
                         lineIsImage ? "a take id per line" : "a fox at dusk\na heron in the reeds"
@@ -425,7 +428,8 @@ export function NewBatch({
                     or paste a table; the first line names the settings
                   </span>
                 </div>
-                <textarea
+                <TextArea
+                  expand="Table"
                   aria-label="CSV table"
                   className="in mono h-28 resize-y py-2 text-[12px] leading-5"
                   placeholder={
@@ -535,6 +539,7 @@ export function NewBatch({
                     </div>
                     {byKey(a.key)?.param.type === "text" ? (
                       <PromptArea
+                        expand={`Axis ${i + 1}`}
                         aria-label={`Axis ${i + 1} values, one per line`}
                         className="in h-20 resize-y py-2 leading-5"
                         placeholder="One value per line"
@@ -544,7 +549,8 @@ export function NewBatch({
                         }
                       />
                     ) : (
-                      <textarea
+                      <TextArea
+                        expand={`Axis ${i + 1}`}
                         aria-label={`Axis ${i + 1} values, one per line`}
                         className="in h-20 resize-y py-2 leading-5"
                         placeholder="One value per line"

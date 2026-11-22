@@ -229,6 +229,7 @@ export function ScriptEditor({
         </label>
         <PromptArea
           id={id}
+          expand="Script"
           autoFocus={editing}
           rows={Math.max(3, lines.length)}
           maxLength={f.param.max}
@@ -236,8 +237,15 @@ export function ScriptEditor({
             "@mara (quiet): You said you'd be back by noon.\n@jon: I know. The road was closed."
           }
           value={value}
-          onChange={onChange}
-          onBlur={() => setEditing(false)}
+          // typing into an empty script (or in the Expand dialog) is editing: the box stays until it loses the focus
+          onChange={(v) => {
+            setEditing(true);
+            onChange(v);
+          }}
+          // the Expand dialog takes the focus to edit the same script: editing goes on (the focus comes back on close)
+          onBlur={(e) => {
+            if (!(e.relatedTarget as Element | null)?.closest("dialog")) setEditing(false);
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey))
               e.currentTarget.form?.requestSubmit();

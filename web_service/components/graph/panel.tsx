@@ -514,6 +514,7 @@ function ParamControl({
         {p.type === "text" ? (
           <PromptArea
             id={id}
+            expand={label}
             rows={3}
             maxLength={p.max}
             value={String(raw)}

@@ -68,6 +68,7 @@ import {
   type PProblem,
   type RuleEnv,
 } from "@/lib/pipeline";
+import { TextArea } from "@/components/expand-text";
 
 type Pipeline = S<"Pipeline">;
 type Workflow = S<"Workflow">;
@@ -1640,7 +1641,8 @@ function WritePanel(props: PanelProps) {
       )}
       <label className="flex flex-col gap-1.5">
         <span className="heading">Instruction</span>
-        <textarea
+        <TextArea
+          expand="Instruction"
           className="in h-auto py-2"
           rows={3}
           maxLength={2000}
@@ -1662,7 +1664,8 @@ function DecidePanel(props: PanelProps & { targets: [string, string][] }) {
     <>
       <label className="flex flex-col gap-1.5">
         <span className="heading">Question</span>
-        <textarea
+        <TextArea
+          expand="Question"
           className="in h-auto py-2"
           rows={2}
           maxLength={1000}
@@ -1849,7 +1852,8 @@ function AgentPanel(props: PanelProps & { targets: [string, string][] }) {
       </p>
       <label className="flex flex-col gap-1.5">
         <span className="heading">Instruction</span>
-        <textarea
+        <TextArea
+          expand="Instruction"
           className="in h-auto py-2"
           rows={3}
           maxLength={4000}

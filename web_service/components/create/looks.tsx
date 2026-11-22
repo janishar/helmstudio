@@ -31,6 +31,7 @@ import {
   type Chosen,
   type Tile as TileName,
 } from "@/lib/looks";
+import { TextArea } from "@/components/expand-text";
 
 type Item = S<"LibraryItem">;
 type Group = S<"LibraryGroup">;
@@ -607,7 +608,8 @@ function Editor({
           Text
           <span className="mono">{[...text.trim()].length} / 2000</span>
         </span>
-        <textarea
+        <TextArea
+          expand="Text"
           rows={2}
           maxLength={2000}
           value={text}

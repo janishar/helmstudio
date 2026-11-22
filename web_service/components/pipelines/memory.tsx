@@ -9,6 +9,7 @@ import { api, message, ok, type S } from "@/lib/api";
 import { safeUrl, when } from "@/lib/format";
 import { useHydrated } from "@/lib/hydrated";
 import { memorySource } from "@/lib/pipeline-run";
+import { TextArea } from "@/components/expand-text";
 
 type List = S<"MemoryList">;
 
@@ -159,8 +160,9 @@ export function MemoryPanel({
       <label htmlFor={`mem-note-${pipelineId}`} className="heading">
         Add a note
       </label>
-      <textarea
+      <TextArea
         id={`mem-note-${pipelineId}`}
+        expand="Note"
         className="in h-auto py-2"
         rows={2}
         maxLength={2000}
