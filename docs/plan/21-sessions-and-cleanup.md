@@ -2,7 +2,7 @@
 
 [← Plan index](../README.md)
 
-Status: **design, for the owner to approve**. A plan, not in a milestone yet: it becomes one in
+Status: **approved by the owner on 2026-11-22 (boards v76), building**. A plan, not in a milestone yet: it becomes one in
 [08-milestones.md](08-milestones.md) when the owner schedules it. Nothing here is built. API target **1.43.0**
 (main is at 1.41.0; branch `assistant` reserves 1.42.0).
 
@@ -232,6 +232,15 @@ one row each, in the Model providers style (a table, an editor beside it):
 About 24 h. (a) and (b) can ship before (c): phases 2–3 and 5 without the naming parts.
 
 ### 25.11 Open points for the owner
+
+**Decided by the owner, 2026-11-22 (one by one):** 1. the namer may replace "Untitled" and the 60-character prompt
+slice, never a user's title. 2. The first run that succeeds triggers it. 3. Local LLM servers on the network (Ollama
+and the like) are listed under Remote, marked "on this network". 4. With a remote model, one line at the foot of the
+session menu says names are written by it (sends the prompt). 5. Every finished run can be deleted; a done run's
+takes stay. 6. "N failed · Clear" counts and clears failed and stopped runs. 7. No card for ✕ or Clear (takes and
+sessions keep theirs). 8. On the assistant merge its admin settings move into AI agents in the same merge.
+9. Session names use the model set in Admin › AI agents, else Off ("from ai agent setting else off").
+
 
 Each with the recommended option first.
 
