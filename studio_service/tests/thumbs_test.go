@@ -3,10 +3,14 @@ package tests
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/pressly/goose/v3"
 
 	"github.com/helmstudio/helmgo/micro"
 	"github.com/helmstudio/helmgo/utility"
@@ -314,5 +318,41 @@ func TestThumbsSweepAndFrames(t *testing.T) {
 	}
 	if _, err := e.store.Stat(ctx, prefix+"frame.png"); err != nil {
 		t.Fatal("the shared last frame survives", err)
+	}
+}
+
+// Migration 00032 (owner, 2026-11-23: a thumbnail once the short side is over 360, was 512): the takes the old rule
+// skipped get their tries back; bigger or smaller ones, ones with a thumbnail and deleted ones keep theirs.
+func TestThumbsMigrationRetriesTheSkipped(t *testing.T) {
+	e := setup(t)
+	take := func(kind string, w, h int) string {
+		id := e.image(userA, kind)
+		e.exec(`UPDATE takes SET width = $2, height = $3, thumb_tries = 3 WHERE id = $1`, id, w, h)
+		return id
+	}
+	still, portrait, tall := take("image", 864, 480), take("image", 480, 864), take("image", 600, 400)
+	big, small, edge := take("image", 1024, 600), take("image", 640, 360), take("image", 1024, 512)
+	poster, smallPoster := take("video", 64, 32), take("video", 1280, 720)
+	e.exec(`UPDATE takes SET video = '{"poster": {"key": "k", "width": 864, "height": 480, "bytes": 9}}' WHERE id = $1`, poster)
+	e.exec(`UPDATE takes SET video = '{"poster": {"key": "k", "width": 320, "height": 180, "bytes": 9}}' WHERE id = $1`, smallPoster)
+	gone, made := take("image", 864, 480), take("image", 864, 480)
+	e.exec(`UPDATE takes SET deleted_at = now() WHERE id = $1`, gone)
+	e.thumbOf(made, "u/"+userA+"/thumbs/old/0.webp")
+
+	sqldb, err := sql.Open("pgx", os.Getenv("TEST_DATABASE_URL"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sqldb.Close()
+	if err = goose.DownTo(sqldb, ".", 31); err != nil {
+		t.Fatal(err)
+	}
+	if err = goose.Up(sqldb, "."); err != nil {
+		t.Fatal(err)
+	}
+	retried := []string{still, portrait, tall, edge, poster}
+	if n := e.count(`SELECT count(*) FROM takes WHERE thumb_tries = 0`); n != len(retried) ||
+		e.count(`SELECT count(*) FROM takes WHERE thumb_tries = 0 AND id = ANY($1::uuid[])`, retried) != len(retried) {
+		t.Fatal("only the live takes without a thumbnail whose short side is 361–512 are picked again", n, big, small, smallPoster)
 	}
 }

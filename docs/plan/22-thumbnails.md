@@ -104,7 +104,7 @@ thumbnails, a CDN.
   device px on a 2× screen. A long-side rule (512 long) would leave a portrait or square take soft in a landscape
   tile; a short-side rule fills any tile up to 256 CSS px wide at 2×. The 1024 cap keeps a panorama small. The
   biggest list tiles (pipelines studio's two columns, about 400 CSS px) are a little soft at 2×; accepted.
-- **No thumbnail when it saves nothing**: when the original's short side is already at most 512 px, or the WebP is not
+- **No thumbnail when it saves nothing**: when the original's short side is at most 360 px (2026-11-23; was 512), or the WebP is not
   smaller than the original, none is stored and the original stays the thumbnail (no wasted object, nothing to sweep).
 - **Format: WebP quality 80** (PIL `method=4`), alpha kept. JPEG quality 82 only where WebP cannot be written (a
   browser without a WebP encoder, if open point 4 picks the browser). Measured on six dev takes (PIL, Lanczos):
@@ -315,6 +315,9 @@ thumbnail.
 - Left: a remote GPU host's S3 identity needs `make gpu-host-reload` to get the
   `u/*/thumbs/*` prefix (local runners use the admin key); the native Mac runners advertise `media.thumbs` after their
   next restart.
+- **Owner, 2026-11-23 ("Lower to 360 px")**: a thumbnail once the short side is over 360 px (was 512); size rules
+  unchanged (an 864×480 still gives an 864×480 WebP). Runner `THUMB_MIN`; studio migration 00032 gives the skipped
+  takes with a short side of 361–512 their tries back, so the loop picks them again on any stack.
 
 ### 26.11 Open points for the owner
 

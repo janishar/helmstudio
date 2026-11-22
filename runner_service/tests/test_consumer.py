@@ -80,7 +80,11 @@ async def test_echo_run_succeeds_with_progress_and_a_png():
         "height": image.height,
         "bytes": len(data),
         "etag": hashlib.md5(data).hexdigest(),
+        "thumb": out["thumb"],
     }
+    assert (
+        out["thumb"]["key"] == PREFIX + "0.thumb.webp" and out["thumb"]["width"] == image.width
+    )  # never upscaled
     assert msg.log == [("ack", len(js.sent))]  # acked after the terminal status
     assert c.host.run_id is None and json.loads(c.host.kv.data["fake.fake"])["state"] == "idle"
 
@@ -558,7 +562,10 @@ async def test_a_slow_upload_keeps_the_hosts_key_fresh_and_reports_saving(monkey
     check_events(js)
     assert {k: js.events()[2]["data"][k] for k in ("node", "step", "of", "phase")} == {
         "node": "output", "step": 1, "of": 1, "phase": "saving"}  # fmt: skip
-    assert list(store.s3.objects) == [PREFIX + "0.png"]
+    assert list(store.s3.objects) == [
+        PREFIX + "0.thumb.webp",
+        PREFIX + "0.png",
+    ]  # a 512 px echo gets one (over 360)
 
 
 async def test_a_slow_hosts_put_does_not_stretch_the_beat(monkeypatch):

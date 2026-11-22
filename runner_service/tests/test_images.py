@@ -312,9 +312,11 @@ def noisy(size, mode="RGB") -> Image.Image:
 @pytest.mark.parametrize(
     "size, want",
     [((2048, 1152), (910, 512)), ((1152, 2048), (512, 910)), ((1024, 1024), (512, 512)),
-     ((6000, 1000), (1024, 171)), ((513, 2000), (263, 1024)), ((512, 4000), None), ((300, 200), None)],
+     ((6000, 1000), (1024, 171)), ((513, 2000), (263, 1024)), ((512, 4000), (131, 1024)), ((864, 480), (864, 480)),
+     ((480, 864), (480, 864)), ((361, 400), (361, 400)), ((640, 360), None), ((300, 200), None)],
 )  # fmt: skip
 def test_thumb_size_short_side_512_long_side_at_most_1024_never_upscaled(size, want):
+    # owner, 2026-11-23: a thumbnail once the short side is over 360 (was 512)
     assert images.thumb_size(*size) == want
 
 
@@ -327,7 +329,7 @@ def test_thumb_is_a_webp_at_that_size_with_its_alpha():
 
 
 def test_no_thumb_when_it_saves_nothing():
-    assert images.thumb(noisy((500, 900))) is None  # short side at most 512
+    assert images.thumb(noisy((360, 900))) is None  # short side at most 360
     assert images.thumb(noisy((1200, 800)), original=100) is None  # not smaller than the original
 
 
@@ -349,6 +351,17 @@ def test_thumb_of_refuses_a_broken_or_huge_file_and_skips_a_small_one():
     with pytest.raises(ValueError, match="MP"):
         images.thumb_of(png((8000, 7000)))
     assert images.thumb_of(png((400, 300))) is None
+
+
+def test_a_864_x_480_still_gets_a_webp_of_its_own_size():
+    buf = io.BytesIO()
+    Image.new("RGB", (864, 480), (40, 90, 160)).save(buf, "PNG", compress_level=0)
+    data, w, h = images.thumb_of(buf.getvalue())
+    assert (
+        (w, h) == (864, 480)
+        and Image.open(io.BytesIO(data)).format == "WEBP"
+        and len(data) < len(buf.getvalue())
+    )
 
 
 async def test_an_image_output_writes_its_thumb_before_the_png_and_reports_it():

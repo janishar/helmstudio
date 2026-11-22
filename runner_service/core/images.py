@@ -95,17 +95,18 @@ def decode(data: bytes, take_id: str) -> Image.Image:
         raise graph.RunError(f"input image {take_id} is not a readable image") from e
 
 
-# API 1.48 (contracts/README.md, Thumbnails): one WebP per image or poster, short side 512, long side at most 1024
-THUMB_SHORT, THUMB_LONG, THUMB_QUALITY = 512, 1024, 80
+# API 1.48 (contracts/README.md, Thumbnails): one WebP per image or poster whose short side is over THUMB_MIN, short
+# side 512, long side at most 1024, never upscaled (owner, 2026-11-23: the cut-off was 512)
+THUMB_MIN, THUMB_SHORT, THUMB_LONG, THUMB_QUALITY = 360, 512, 1024, 80
 
 
 def thumb_size(width: int, height: int) -> tuple[int, int] | None:
-    """The thumbnail's size for a width x height picture, or None when its short side is already at most
-    THUMB_SHORT (never upscaled)."""
+    """The thumbnail's size for a width x height picture, or None when its short side is at most THUMB_MIN. Short
+    side THUMB_SHORT, long side at most THUMB_LONG, never upscaled (a 864 x 480 keeps its size)."""
     short, long = min(width, height), max(width, height)
-    if short <= THUMB_SHORT:
+    if short <= THUMB_MIN:
         return None
-    s = min(THUMB_SHORT / short, THUMB_LONG / long)
+    s = min(1.0, THUMB_SHORT / short, THUMB_LONG / long)
     return max(1, round(width * s)), max(1, round(height * s))
 
 
@@ -113,7 +114,7 @@ def thumb(
     img: Image.Image, original: int | None = None, size: tuple[int, int] | None = None
 ) -> tuple[bytes, int, int] | None:
     """`img` as its thumbnail (WebP q80, alpha kept): (bytes, width, height); None when it saves nothing (a short
-    side at most THUMB_SHORT, or a WebP not smaller than the `original` file's bytes). `size`: the thumbnail's size
+    side at most THUMB_MIN, or a WebP not smaller than the `original` file's bytes). `size`: the thumbnail's size
     when `img` was decoded smaller than the original (a JPEG draft)."""
     size = size or thumb_size(*img.size)
     if size is None:

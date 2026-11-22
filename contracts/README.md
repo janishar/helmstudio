@@ -904,10 +904,12 @@ Lists draw `thumb_url`; viewers, compare, export and every model input use `url`
 `poster` is `video.poster_url` (full size).
 
 - **The thumbnail**: one WebP (quality 80, PIL `method=4`, alpha kept) of an image take, or of a video's poster, with
-  its short side 512 px and its long side at most 1024 (the short side shrinks to fit), never upscaled; an image is
-  read upright (EXIF applied) and refused past 50 MP before decoding. **None is made** when the original's short side
-  is at most 512 px or the WebP is not smaller than the original: the original stays the thumbnail. Audio takes have
-  none (the web draws a sound tile).
+  its short side 512 px and its long side at most 1024 (the short side shrinks to fit), never upscaled (an 864 × 480
+  poster gives an 864 × 480 WebP); an image is read upright (EXIF applied) and refused past 50 MP before decoding.
+  **None is made** when the original's short side is at most 360 px (until 2026-11-23: 512) or the WebP is not
+  smaller than the original: the original stays the thumbnail. Studio's migration 00032 gives the takes the old rule
+  skipped (short side 361–512) their tries back, so the thumbs job picks them again. Audio takes have none (the web
+  draws a sound tile).
 - **`takes.thumb`** `{key, width, height, bytes}` (null until made). `thumb_url` signs `coalesce(thumb.key, the
   video's poster, the take's key)` everywhere a take is listed (the gallery, parents, refs, the library's images and
   looks, LoRAs, batch rows, review, rows and decisions, memory, timelines); `RunOutput.thumb_url` is its take's. A

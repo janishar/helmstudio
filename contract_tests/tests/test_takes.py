@@ -75,12 +75,15 @@ def test_run_output_is_a_take(api, anon, echo_done):
         "model": None,
         "host": "fake",  # API 1.18: the run's host
     }
-    for link in (take["url"], take["thumb_url"]):
-        r = anon.get(link)
-        assert r.status_code == 200 and r.headers["content-type"] == "image/png"
-        assert len(r.content) == take["bytes"]
-        size = Image.open(io.BytesIO(r.content)).size
-        assert (take["width"], take["height"]) in ((None, None), size)  # as the runner reported
+    r = anon.get(take["url"])
+    assert r.status_code == 200 and r.headers["content-type"] == "image/png"
+    assert len(r.content) == take["bytes"]
+    size = Image.open(io.BytesIO(r.content)).size
+    assert (take["width"], take["height"]) in ((None, None), size)  # as the runner reported
+    # the echo's 512 px PNG has a short side over 360: its thumbnail is a WebP of the same size (never upscaled)
+    r = anon.get(take["thumb_url"])
+    assert r.status_code == 200 and r.headers["content-type"] == "image/webp"
+    assert Image.open(io.BytesIO(r.content)).size == size and len(r.content) < take["bytes"]
 
 
 def test_titles(gallery):
