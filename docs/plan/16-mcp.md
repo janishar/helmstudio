@@ -126,5 +126,12 @@ merges. 2. Stdio only (local); no remote endpoint. 3. Test with Claude Code and 
 - Tests: `cli/mcp_test.go` (schemas and annotations against the catalog, the calls each write makes, errors as the
   `{"detail"}` text, the queue cap, progress, the thumbnail, resources); `contract_tests/tests/test_mcp.py` builds the
   CLI and drives `helm mcp` over stdio on `helmstudio-test` (echo run, wait, take; another user's take is 404).
-- Not done: the by-hand pass in Claude Code and Claude Desktop (20.4, third point). Plan 24's clip-level edit tools
-  are not built here.
+- Checked (2026-11-23), in place of the by-hand pass: the official Python MCP client (`mcp` 2.3) drove the built
+  `helm mcp` over stdio. On `helmstudio-test` (fake mode, new users) every tool family worked: annotations, resources,
+  echo run with progress, the thumbnail, search, upload, plan, cancel, a batch, a Timeline export to MP4, deletes, and
+  another user's take as 404 (get and delete). On the dev stack, read tools only as the owner's `helm login`. Stdout
+  held only JSON-RPC. One fix: `batch_status` read the director's chat for every batch, and the chat is 404 for a
+  batch without a director, so the tool failed on plain workflow batches; it now reads the chat only when
+  `Batch.director` is set.
+- Not done: asking Claude Code / Claude Desktop for a Qwen still, an LTX clip and an export on real models (20.4,
+  third point). Plan 24's clip-level edit tools are not built here.

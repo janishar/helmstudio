@@ -367,3 +367,24 @@ func TestMCPPickNeverSendsRejectFalse(t *testing.T) {
 		t.Fatalf("sent %v: the API's reject is const true", body)
 	}
 }
+
+// batch_status reads the chat only for a batch with a director: the chat is 404 for a plain workflow batch.
+func TestMCPBatchStatusChatOnlyWithDirector(t *testing.T) {
+	f, cs, _ := mcpSession(t, "")
+	const id = "aaaaaaaa-0000-4000-8000-000000000001"
+	director := "null"
+	f.extra["GET /v1/studio/batches/"+id] = func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprintf(w, `{"id":%q,"status":"done","director":%s}`, id, director)
+	}
+	f.extra["GET /v1/studio/batches/"+id+"/rows"] = func(w http.ResponseWriter, _ *http.Request) { fmt.Fprint(w, `{"rows":[]}`) }
+	f.extra["GET /v1/studio/batches/"+id+"/review"] = func(w http.ResponseWriter, _ *http.Request) { fmt.Fprint(w, `{"items":[]}`) }
+	res, out := call(t, cs, "batch_status", map[string]any{"batch_id": id})
+	if res.IsError || out["batch"] == nil || out["chat"] != nil {
+		t.Fatalf("no director: %v %q %v", res.IsError, text(res), out)
+	}
+	director = `{"state":"idle"}`
+	f.extra["GET /v1/studio/batches/"+id+"/chat"] = func(w http.ResponseWriter, _ *http.Request) { fmt.Fprint(w, `{"messages":[]}`) }
+	if res, out = call(t, cs, "batch_status", map[string]any{"batch_id": id}); res.IsError || out["chat"] == nil {
+		t.Fatalf("with a director: %v %q %v", res.IsError, text(res), out)
+	}
+}

@@ -235,8 +235,19 @@ func (s *mcpServer) handlers() map[string]toolFunc {
 				return s.gets("execution", fmt.Sprintf("/batches/%s/rows/%d/execution", id, int(row)),
 					"decisions", fmt.Sprintf("/batches/%s/rows/%d/decisions", id, int(row)))
 			}
-			return s.gets("batch", "/batches/"+id, "rows", fmt.Sprintf("/batches/%s/rows?limit=%d", id, limit),
-				"review", "/batches/"+id+"/review", "chat", "/batches/"+id+"/chat")
+			out, err := s.gets("batch", "/batches/"+id, "rows", fmt.Sprintf("/batches/%s/rows?limit=%d", id, limit),
+				"review", "/batches/"+id+"/review")
+			if err != nil {
+				return nil, err
+			}
+			// the chat is 404 for a batch without a director (a plain workflow batch, a pipeline with none)
+			var b struct{ Director json.RawMessage }
+			if json.Unmarshal(out["batch"], &b) == nil && len(b.Director) > 0 && string(b.Director) != "null" {
+				if out["chat"], err = s.get("/batches/" + id + "/chat"); err != nil {
+					return nil, err
+				}
+			}
+			return out, nil
 		}),
 		"list_timelines": plain(func(args) (any, error) { return s.get("/timelines") }),
 		"show_timeline": plain(func(in args) (any, error) {
