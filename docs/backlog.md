@@ -72,6 +72,10 @@ Notes from the owner while using the app. Not scheduled; each is picked up when 
   cause is inside h3.c, not found; the goldens use PSNR bars.
 - **Create header wraps with a long session title** (M7 pack 3). The memory chip drops to a second line; the board
   shows one row. Let the title and the top label truncate (web_service/components/create/create.tsx).
+- **Exact Timeline frames for agents** (owner, 2026-11-23: backlog; plan 24 open point 8). `POST …/timelines/{id}/frame`
+  and the MCP `timeline_frame` answer a video clip's nearest stored frame (its poster or last frame), not the frame at
+  that time. Exact: the media job `frame` with `at` widened to `first | last | index`, the runner's media worker
+  (ffmpeg, no GPU), idempotent per (take, index), its image a frame take; about 5 h (plan 24 §28.5).
 - **Enter a remote provider's API key in Admin › Model providers** (owner, 2026-11-21: "add to the todo"). Today the
   form takes only a key file name, and the admin puts the key in `deploy/secrets/providers/` and restarts pipelines.
   Proposed: a write-only API key field (after saving it shows only "key set" and the last 4 characters, never the
