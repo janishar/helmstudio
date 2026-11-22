@@ -202,7 +202,7 @@
     },
     "Models.dc.html": {
       "expand": "fill",
-      "h": 1040,
+      "h": 1200,
       "is_interactive": true,
       "title": "Models",
       "w": 1440,
@@ -400,9 +400,9 @@
     },
     "H3Options.dc.html": {
       "expand": "fill",
-      "h": 3240,
+      "h": 4600,
       "is_interactive": true,
-      "title": "Create · MiniMax H3 options: presets, Advanced speed controls, NVIDIA Mode and flow shift, replace a video's sound, last / first frame in…, H3 New shot",
+      "title": "Create · MiniMax H3 options: presets, Advanced speed controls, NVIDIA Mode and flow shift, replace a video's sound, last / first frame in…, H3 New shot, Turbo preset (an optional add-on)",
       "w": 1440,
       "x": -3040,
       "y": 0
@@ -414,7 +414,7 @@
       "title": "Uploads · optimised in the browser: Optimising… on reference, audio and Gallery tiles, voice clips kept as WAV, fallbacks; video uploads (backlog)",
       "w": 1440,
       "x": -3040,
-      "y": 3360
+      "y": 4720
     }
   },
   "createdOnFiles": {

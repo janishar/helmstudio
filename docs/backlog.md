@@ -30,7 +30,7 @@ Notes from the owner while using the app. Not scheduled; each is picked up when 
   host by the family's runtime), with the MLX-only nodes (ltx/lora-stack) spliced out on torch, as the registry's
   memory plan already does (e4a32e8). Contract change first (Several hosts eligibility, Workflow.env). The VM check
   used two owner-data copies set to env torch.
-- **MiniMax H3 Turbo 4-step LoRA** (owner: backlog, 2026-11-22; the 8-step v1.2 is the one checked for a build).
+- **MiniMax H3 Turbo 4-step LoRA** (owner: backlog, 2026-11-22; the 8-step v1.2 is the one checked for a build: plan 20 24.11).
   lightx2v/Minimax-h3-Turbo `minimax_h3_fl2v_turbo_4step_v1.3_768p_bf16` (and `ref2v_turbo_4step`): shift 6 (h3.c
   needs an override), alpha 8/128 from metadata, separate FL2V and Ref2V files, regression reports on v1.3. Mac spike
   at 864x480: denoise 31 s vs 45 s for the 6-step draft, same total (the CPU merge adds ~14 s), a little softer.

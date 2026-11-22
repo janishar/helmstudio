@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Create: MiniMax H3 presets, speed, sound and frames</title>
+<title>Create: MiniMax H3 presets, speed, sound, frames and Turbo</title>
 <script src="./support.js"></script>
 </head>
 <body>
@@ -175,10 +175,10 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 
 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
 <button style="height: 40px; padding: 0 12px; border-radius: 10px; border: 0; background: transparent; display: flex; align-items: center; gap: 8px; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 18px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em">[YOUR PROJECT]<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></button>
-<span style="padding: 4px 10px; border-radius: 999px; background: var(--s2); color: var(--t2); font-size: 12px; font-weight: 500">MiniMax H3 · presets, speed, sound, frames</span>
+<span style="padding: 4px 10px; border-radius: 999px; background: var(--s2); color: var(--t2); font-size: 12px; font-weight: 500">MiniMax H3 · presets, speed, sound, frames, Turbo</span>
 </div>
 
-<p class="note" style="display: flex; align-items: center; max-width: 960px; font-size: 13px">Each frame is the existing screen with only the new control added; everything else is as on CreateMediaRefs, TakeActions, GalleryPicker and Timeline. The tag is the item in 20-h3-options-and-uploads.md 24.9. Base runs on a Mac (h3), Base fp8 on NVIDIA (SGLang).<button class="i" aria-label="More information" title="Labels and help come from the minimax-h3 params in model.yaml. Red lines are the studio's 422 texts under the input they name, or the run's own refusals, verbatim.">i</button></p>
+<p class="note" style="display: flex; align-items: center; max-width: 960px; font-size: 13px">Each frame is the existing screen with only the new control added; everything else is as on CreateMediaRefs, TakeActions, GalleryPicker and Timeline. The tag is the item in 20-h3-options-and-uploads.md 24.9 (A) or 24.11 (C). Base runs on a Mac (h3), Base fp8 on NVIDIA (SGLang).<button class="i" aria-label="More information" title="Labels and help come from the minimax-h3 params in model.yaml. Red lines are the studio's 422 texts under the input they name, or the run's own refusals, verbatim.">i</button></p>
 
 <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 32px; align-items: start">
 
@@ -191,9 +191,10 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <div class="pair">
 <div class="insp">
 <div>
-<h2 class="h">Preset<button class="i" aria-label="More information" title="Draft 4 steps; Fast 20 steps, 45 layers, reuse 2, token reduction; Default the same without token reduction; Reference 50 steps, every layer. On NVIDIA a preset sets only the steps.">i</button></h2>
+<h2 class="h">Preset<button class="i" aria-label="More information" title="Draft 4 steps; Turbo 8 steps with the Turbo LoRA (an add-on); Fast 20 steps, 45 layers, reuse 2, token reduction; Default the same without token reduction; Reference 50 steps, every layer. On NVIDIA a preset sets only the steps and the LoRA.">i</button></h2>
 <div style="display: flex; flex-wrap: wrap; gap: 8px">
 <button style="height: 36px; padding: 0 14px; border-radius: 999px; border: 0; background: var(--s3); font-size: 13px">Draft</button>
+<button style="height: 36px; padding: 0 14px; border-radius: 999px; border: 0; background: var(--s3); font-size: 13px">Turbo</button>
 <button style="height: 36px; padding: 0 14px; border-radius: 999px; border: 0; background: var(--s3); font-size: 13px">Fast</button>
 <button aria-pressed="true" style="height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--a2); background: var(--s1); font-size: 13px">Default</button>
 <button style="height: 36px; padding: 0 14px; border-radius: 999px; border: 0; background: var(--s3); font-size: 13px">Reference</button>
@@ -204,6 +205,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <div class="g2">
 <button class="set"><small>Precision</small><b>int8</b></button>
 <button class="set"><small>Steps</small><b>20</b></button>
+<button class="set"><small>LoRA</small><b>none</b></button>
 </div>
 </div>
 <div>
@@ -278,13 +280,14 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 
 <!-- 3 -->
 <section class="frame" aria-label="Preset and Quality on Base fp8">
-<p class="note">3 · Base fp8. The presets set only Steps here, so Fast and Default run the same. Mode, Flow shift and Audio flow shift are new; there is no Advanced. <span class="ph">A1</span> <span class="ph">A5</span></p>
+<p class="note">3 · Base fp8. The presets set only Steps (and Turbo the LoRA) here, so Fast and Default run the same. Mode, Flow shift and Audio flow shift are new; there is no Advanced. Turbo is greyed: gcp has no Turbo LoRA yet (frame 12). <span class="ph">A1</span> <span class="ph">A5</span> <span class="ph">C3</span></p>
 <div class="pair">
 <div class="insp">
 <div>
-<h2 class="h">Preset<button class="i" aria-label="More information" title="NVIDIA: a preset sets only the steps (Draft 4, Fast and Default 20, Reference 50).">i</button></h2>
+<h2 class="h">Preset<button class="i" aria-label="More information" title="NVIDIA: a preset sets only the steps and the LoRA (Draft 4, Turbo 8 with the Turbo LoRA, Fast and Default 20, Reference 50).">i</button></h2>
 <div style="display: flex; flex-wrap: wrap; gap: 8px">
 <button style="height: 36px; padding: 0 14px; border-radius: 999px; border: 0; background: var(--s3); font-size: 13px">Draft</button>
+<button aria-disabled="true" title="Turbo LoRA not downloaded on gcp. An admin downloads it in Models, under MiniMax H3's optional add-ons." style="height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--ln); background: transparent; font-size: 13px; color: var(--t2); cursor: not-allowed"><span style="opacity: 0.55">Turbo</span></button>
 <button style="height: 36px; padding: 0 14px; border-radius: 999px; border: 0; background: var(--s3); font-size: 13px">Fast</button>
 <button aria-pressed="true" style="height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--a2); background: var(--s1); font-size: 13px">Default</button>
 <button style="height: 36px; padding: 0 14px; border-radius: 999px; border: 0; background: var(--s3); font-size: 13px">Reference</button>
@@ -298,6 +301,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <button class="set" aria-expanded="true" style="outline: 2px solid var(--a1)"><small>Mode</small><b>Lossless</b></button>
 <button class="set"><small>Flow shift</small><b>12</b></button>
 <button class="set"><small>Audio flow shift</small><b>3</b></button>
+<button class="set"><small>LoRA</small><b>none</b></button>
 </div>
 </div>
 </div>
@@ -469,11 +473,150 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <p class="note">The gap's length snaps to H3's 5 + 17k grid (124 frames · 5.2 s). The shot's First frame is Shot 2's last frame, its Last frame Shot 3's first.</p>
 </section>
 
+<!-- ============ Turbo ============ -->
+<h2 class="sec">Create · Turbo: the 8-step Turbo LoRA (an optional add-on)</h2>
+
+<!-- 10 -->
+<section class="frame" aria-label="Turbo picked on Base">
+<p class="note">10 · Turbo picked on a Mac. It sets 8 steps, LoRA turbo and the Draft-like exact settings (50 layers, reuse 1). Encode takes about 17 s longer: h3 merges the LoRA as it loads the transformer. <span class="ph">C3</span> <span class="ph">C4</span></p>
+<div class="pair">
+<div class="insp">
+<div>
+<h2 class="h">Preset<button class="i" aria-label="More information" title="Draft 4 steps; Turbo 8 steps with the Turbo LoRA (an add-on); Fast 20 steps, 45 layers, reuse 2, token reduction; Default the same without token reduction; Reference 50 steps, every layer.">i</button></h2>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<button style="height: 36px; padding: 0 14px; border-radius: 999px; border: 0; background: var(--s3); font-size: 13px">Draft</button>
+<button aria-pressed="true" style="height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--a2); background: var(--s1); font-size: 13px">Turbo</button>
+<button style="height: 36px; padding: 0 14px; border-radius: 999px; border: 0; background: var(--s3); font-size: 13px">Fast</button>
+<button style="height: 36px; padding: 0 14px; border-radius: 999px; border: 0; background: var(--s3); font-size: 13px">Default</button>
+<button style="height: 36px; padding: 0 14px; border-radius: 999px; border: 0; background: var(--s3); font-size: 13px">Reference</button>
+</div>
+</div>
+<div>
+<h2 class="h">Quality</h2>
+<div class="g2">
+<button class="set"><small>Precision</small><b>int8</b></button>
+<button class="set"><small>Steps</small><b>8</b></button>
+<button class="set" aria-expanded="true" style="outline: 2px solid var(--a1)"><small>LoRA</small><b>turbo</b></button>
+</div>
+</div>
+<div>
+<h2 class="h">Advanced</h2>
+<div class="g2">
+<button class="set"><small>Layers</small><b>50</b></button>
+<button class="set"><small>Reuse</small><b>1</b></button>
+<button class="set"><small>Core reuse</small><b>1</b></button>
+<button class="set"><small>Render</small><b>Full</b></button>
+</div>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 14px">
+<div role="menu" aria-label="LoRA" class="menu">
+<span class="hd">LoRA<button class="i" aria-label="More information" title="turbo: lightx2v's 8-step Turbo LoRA (an add-on); use 8 steps. Merged at load on a Mac, applied by SGLang on NVIDIA.">i</button></span>
+<button role="menuitemradio" aria-checked="false" class="mi"><span>none<small>the model as it is</small></span></button>
+<button role="menuitemradio" aria-checked="true" class="mi"><span>turbo<small>8 steps, near the 50-step look</small></span><em>Turbo</em></button>
+</div>
+<div class="stage" style="aspect-ratio: 864 / 480; max-height: 150px">The take plays here</div>
+</div>
+</div>
+<div aria-label="Run progress" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+<span class="step"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg>Encode <span class="mono">27 s</span></span>
+<span class="step" style="background: var(--s2); border: 1px solid var(--s5); font-weight: 500; gap: 10px">Sample<span style="width: 70px; height: 4px; border-radius: 2px; background: var(--s5); display: block"><span style="display: block; width: 37.5%; height: 4px; border-radius: 2px; background: var(--a2)"></span></span><span class="mono" style="font-weight: 400">3 / 8</span></span>
+<span class="step" style="color: var(--t2)">Decode audio</span>
+<span class="step" style="color: var(--t2)">Decode video</span>
+<span class="step" style="color: var(--t2)">Saving</span>
+</div>
+<div class="cbar">
+<button class="chip">Base · int8</button>
+<button class="chip" title="Run on: Auto picks a free machine (see Create · Run on)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 auto"><rect x="4" y="4" width="16" height="16" rx="2"></rect><rect x="9" y="9" width="6" height="6" rx="1"></rect><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"></path></svg>Auto</button>
+<button class="chip">864 × 480</button>
+<button class="chip">5.2 s</button>
+<button class="key"><b>Generate</b><span>≈ 5:40 · 31 GB</span></button>
+</div>
+<p class="note">At 864 × 480 × 124 the spike measured 340 s (today's 6 steps 279 s, 50 steps 1505 s). The estimate adds about 4.5 GB: a Turbo run copies the transformer weights instead of mapping them.</p>
+</section>
+
+<!-- 11 -->
+<section class="frame" aria-label="Turbo LoRA not downloaded">
+<p class="note">11 · No live host has the Turbo LoRA: the Turbo pill and the turbo option stay visible, greyed, with the reason. The other presets work as before. <span class="ph">C3</span></p>
+<div class="insp">
+<div>
+<h2 class="h">Preset<button class="i" aria-label="More information" title="Draft 4 steps; Turbo 8 steps with the Turbo LoRA (an add-on); Fast 20 steps, 45 layers, reuse 2, token reduction; Default the same without token reduction; Reference 50 steps, every layer.">i</button></h2>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<button style="height: 36px; padding: 0 14px; border-radius: 999px; border: 0; background: var(--s3); font-size: 13px">Draft</button>
+<button aria-disabled="true" title="Turbo LoRA not downloaded. An admin downloads it in Models, under MiniMax H3's optional add-ons." style="height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--ln); background: transparent; font-size: 13px; color: var(--t2); cursor: not-allowed"><span style="opacity: 0.55">Turbo</span></button>
+<button style="height: 36px; padding: 0 14px; border-radius: 999px; border: 0; background: var(--s3); font-size: 13px">Fast</button>
+<button aria-pressed="true" style="height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--a2); background: var(--s1); font-size: 13px">Default</button>
+<button style="height: 36px; padding: 0 14px; border-radius: 999px; border: 0; background: var(--s3); font-size: 13px">Reference</button>
+</div>
+<span style="font-size: 12px; color: var(--t2)">Turbo LoRA not downloaded</span>
+</div>
+<div>
+<h2 class="h">Quality</h2>
+<div class="g2">
+<button class="set"><small>Precision</small><b>int8</b></button>
+<button class="set"><small>Steps</small><b>20</b></button>
+<button class="set" aria-expanded="true" style="outline: 2px solid var(--a1)"><small>LoRA</small><b>none</b></button>
+</div>
+</div>
+</div>
+<div role="menu" aria-label="LoRA" class="menu">
+<span class="hd">LoRA</span>
+<button role="menuitemradio" aria-checked="true" class="mi"><span>none<small>the model as it is</small></span></button>
+<button role="menuitemradio" aria-checked="false" aria-disabled="true" class="mi" title="An admin downloads it in Models, under MiniMax H3's optional add-ons."><span>turbo<small>8 steps, near the 50-step look</small></span><em>Turbo LoRA not downloaded</em></button>
+</div>
+<p class="note">The pill's tooltip says where to get it: "An admin downloads it in Models, under MiniMax H3's optional add-ons."</p>
+</section>
+
+<!-- 12 -->
+<section class="frame" aria-label="Turbo held, per host through Run on" style="grid-column: 1 / -1">
+<p class="note">12 · Per host. The Mac has the Turbo LoRA, gcp not. A Remix of a Turbo take, switched to Base fp8: Turbo stays picked and greyed, Run on says why per machine, and Generate is blocked (it never drops to LoRA none on its own). Run on NVIDIA set by hand: "generate: Turbo LoRA not downloaded on host gcp". <span class="ph">C3</span> <span class="ph">C5</span></p>
+<div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+<div class="insp" style="flex: 1 1 380px">
+<div>
+<h2 class="h">Preset</h2>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<button style="height: 36px; padding: 0 14px; border-radius: 999px; border: 0; background: var(--s3); font-size: 13px">Draft</button>
+<button aria-disabled="true" aria-pressed="true" title="Turbo LoRA not downloaded on gcp. An admin downloads it in Models, under MiniMax H3's optional add-ons." style="height: 36px; padding: 0 14px; border-radius: 999px; border: 1px dashed var(--a2); background: transparent; font-size: 13px; color: var(--t2); cursor: not-allowed"><span style="opacity: 0.55">Turbo</span></button>
+<button style="height: 36px; padding: 0 14px; border-radius: 999px; border: 0; background: var(--s3); font-size: 13px">Fast</button>
+<button style="height: 36px; padding: 0 14px; border-radius: 999px; border: 0; background: var(--s3); font-size: 13px">Default</button>
+<button style="height: 36px; padding: 0 14px; border-radius: 999px; border: 0; background: var(--s3); font-size: 13px">Reference</button>
+</div>
+<span style="font-size: 12px; color: var(--t2)">Turbo LoRA not downloaded on gcp</span>
+</div>
+<div>
+<h2 class="h">Quality</h2>
+<div class="g2">
+<button class="set"><small>Precision</small><b>fp8</b></button>
+<button class="set"><small>Steps</small><b>8</b></button>
+<button class="set" style="outline: 2px solid #ff8a80"><small>LoRA</small><b>turbo</b></button>
+</div>
+<p class="err">Turbo LoRA not downloaded on gcp</p>
+</div>
+</div>
+<div style="flex: 1 1 380px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+<div role="menu" aria-label="Run on" class="menu">
+<span class="hd">Run on</span>
+<button role="menuitemradio" aria-checked="true" class="mi"><span>Auto<small>picks a free machine</small></span></button>
+<button role="menuitemradio" aria-checked="false" aria-disabled="true" class="mi"><span>Mac<small>mac · Apple M5 Pro</small></span><em>Base fp8 is NVIDIA only</em></button>
+<button role="menuitemradio" aria-checked="false" aria-disabled="true" class="mi"><span>NVIDIA<small>gcp · RTX PRO 6000</small></span><em>Turbo LoRA not downloaded on gcp</em></button>
+</div>
+<div class="cbar">
+<button class="chip">Base · fp8</button>
+<button class="chip" title="Run on: Auto picks a free machine (see Create · Run on)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 auto"><rect x="4" y="4" width="16" height="16" rx="2"></rect><rect x="9" y="9" width="6" height="6" rx="1"></rect><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"></path></svg>Auto</button>
+<button class="chip">864 × 480</button>
+<button class="chip">5.2 s</button>
+<button class="key" aria-disabled="true" style="opacity: .55"><b>Generate</b><span>Turbo LoRA not downloaded</span></button>
+</div>
+<p class="note">Back on Base, Auto picks the Mac and Generate works. On gcp once downloaded, Turbo runs SGLang with the LoRA (8 steps, the model's shifts).</p>
+</div>
+</div>
+</section>
+
 </div>
 </main>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":3240}}'>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":4600}}'>
 class Component extends DCLogic {
 state = { theme: null };
 renderVals() {

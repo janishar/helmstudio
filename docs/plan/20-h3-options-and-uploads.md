@@ -3,13 +3,15 @@
 [← Plan index](../README.md)
 
 Status: a plan, not in a milestone yet: it becomes one in [08-milestones.md](08-milestones.md) when the owner
-schedules it. Design only: nothing here is built. Two independent parts that ship apart:
+schedules it. Design only: nothing here is built. Three parts that ship apart (C after A1):
 
 - **A. MiniMax H3 options** the owner picked on 2026-11-22 from the h3c-studio parity audit: quality presets, chaining
   from a take's frame, Mac speed controls, replacing a video reference's sound, NVIDIA quality modes and flow shift.
   Not picked (not planned): live preview, keep-loaded, more aspects, memory options, reference image size, prompt
   history.
 - **B. Optimised uploads**: the browser shrinks and re-encodes every media upload before it goes to storage.
+- **C. Turbo** (added 2026-11-22, after the spike in `docs/reference-notes/h3-turbo-spike`): lightx2v's 8-step
+  Turbo LoRA as an optional add-on of MiniMax H3 and a **Turbo** preset beside A1's four (24.11).
 
 Facts come from a read-only scout on 2026-11-22 of:
 - h3c-studio (`static/app.js`, `static/canvas.js`, `static/index.html`, `server/params.go`, `h3c/README.md`);
@@ -20,7 +22,8 @@ Facts come from a read-only scout on 2026-11-22 of:
 - `web_service` (`lib/takes.ts`, `components/create/refs.tsx`, `components/gallery/{gallery,picker}.tsx`,
   `components/timeline/shot.tsx`), `files_service/api/file/controller.go`, `kong/kong.yml`, `contracts/`.
 
-Boards: [H3Options](../mock/H3Options.dc.html) (A) and [UploadOptimise](../mock/UploadOptimise.dc.html) (B), drawn
+Boards: [H3Options](../mock/H3Options.dc.html) (A, and C's Turbo frames), [Models](../mock/Models.dc.html) (C's
+add-on row) and [UploadOptimise](../mock/UploadOptimise.dc.html) (B), drawn
 before any code (owner rule: boards first). Short button and chip text throughout.
 
 ## 24. MiniMax H3 options and optimised uploads
@@ -344,3 +347,179 @@ audio references, LTX audio to video sources) becomes AAC. The board's video-upl
    or only audio and images (B4 is most of B's hours).
 9. **Voice clips on AAC**: ZONOS3 cloning reads the take; a WAV clip becomes AAC 256 kb/s. Keep WAV for audio
    uploads instead? Recommended: AAC, check one clone against the WAV.
+
+### 24.11 C. MiniMax H3 Turbo (8-step LoRA)
+
+Design only, owner to approve (2026-11-22). Built against the shared optional add-on rule (API 1.36, contracts/README
+"Optional add-ons"; plan 19 23.11 "Changed"), which a concurrent build is implementing now; C adds one small
+extension to it (C3). Board: [H3Options](../mock/H3Options.dc.html) frames 10-12, [Models](../mock/Models.dc.html)
+under MiniMax H3. The 4-step v1.3 stays in the [backlog](../backlog.md).
+
+**C1. What the spike found** (`docs/reference-notes/h3-turbo-spike`, `docs/mock/checks/h3-turbo/grid8.png`):
+
+| Run, 864 × 480 × 124, seed 42, Mac M5 Pro | Denoise | Total | Sharpness |
+|---|---|---|---|
+| Base, 6 steps (today's draft) | 159 s | 279 s | 49 |
+| **Turbo v1.2, 8 steps, strength 1** | 207 s | **340 s** | **65** |
+| Base, 50 steps | 1390 s | 1505 s | 69 |
+
+Close to the 50-step for 1.2× today's 6-step draft (4.4× faster than 50 steps; A1's Draft is 4 steps, so about
+1.5× that). All three runs used `H3_ZERO_COPY_WEIGHTS=0` (the spike's `render124.sh`), so the base timings are of a
+copied load, not today's mapped one. The recipe is h3's own defaults: Euler,
+no CFG, shift 12 / audio shift 3, so on the Mac only the merge is new. Not yet checked: other prompts, image to
+video, sound, 1344 × 768, references (C7), NVIDIA.
+
+**The file** (HF API, 2026-11-22): `lightx2v/Minimax-h3-Turbo` @ `c2bf13b837e33bd851b370285fc7db99482d2ab2`,
+`minimax_h3_fl2v_turbo_8step_v1.2_768p_bf16.safetensors`, 1,543,291,302 B, sha256
+`4c94278f9207209c193efd489e89c992d225e3fb3986c3658cf992c1e51f7b39`; not gated; licence the MiniMax H3 Community
+License (the model's own, `minimax-h3-community`). Diffusers / PEFT layout, 1089 tensors, a per-layer `.alpha` each;
+363 modules merge (spike log). The authors say it covers FL2VA and Ref2VA.
+
+**C2. The add-on** (model.yaml, the 1.36 shape; no model names in studio or the web):
+
+```yaml
+components:
+  turbo:                          # lightx2v's MiniMax-H3 Turbo v1.2 (8 steps): one file for both partitions
+    dir: MiniMax-H3-Turbo         # its own folder: the same on a Mac (base) and NVIDIA (base-fp8) host
+    addon:
+      title: Turbo LoRA
+      help: "lightx2v's 8-step Turbo LoRA (1.5 GB). The Turbo preset needs it; every variant works without it."
+      source: {repo: lightx2v/Minimax-h3-Turbo, revision: c2bf13b837e33bd851b370285fc7db99482d2ab2,
+               allow_patterns: [minimax_h3_fl2v_turbo_8step_v1.2_768p_bf16.safetensors],
+               licence: minimax-h3-community, must_accept: true, gated: false, bytes: 1543291302}
+    files: minimax_h3_fl2v_turbo_8step_v1.2_768p_bf16.safetensors
+    dtype: stored
+    precision: [int8]             # as the other components: a component without one counts as [bf16]
+                                  # (pack.component_precisions) and would add bf16 to Base's Precision enum
+```
+
+- An add-on of **both** variants: Base and Base fp8 are present without it; Models lists **Turbo LoRA · 1.5 GB ·
+  add-on** under MiniMax H3 with its hosts, **Download…** and **Delete** (the 1.36 model jobs, `addon: turbo`).
+- Its own folder, not `MiniMax-H3/loras/` (the spike's place): the first variant's folder does not exist on an
+  NVIDIA host. The owner's Mac already has the file from the spike: the build moves it into `MiniMax-H3-Turbo/`
+  (no download; presence checks the hash).
+
+**C3. How a run carries Turbo** (data, contracts first):
+- A new `generate` param on both variants, in the Quality section:
+  `lora: {type: enum, label: LoRA, default: none, enum: [none, turbo], addons: {turbo: [turbo]}, help: "turbo:
+  lightx2v's 8-step Turbo LoRA (an add-on); use 8 steps. Merged at load on a Mac, applied by SGLang on NVIDIA."}`.
+  An enum leaves room for the 4-step (`turbo4`) without a new param.
+- **The contract extension**: today an add-on is needed by a whole node (`nodeSchema.addons`, while the node is not
+  bypassed). Turbo is needed by one **value** of a param of a node that is never bypassed, so an enum param gains
+  `addons: {<value>: [<component>]}` (each an add-on of the node's family; `contracts/check.py` refuses others). The
+  run check (Several hosts: eligibility, step 2b) adds, for each such param, the add-ons its resolved value lists:
+  the same texts (`generate: Turbo LoRA not downloaded on host gcp`; `… on any live host for env native`), the same
+  `POST /v1/studio/runs/plan` reason, the same Run on rule. The UI greys the option and every **preset whose values
+  pick it** (`Turbo LoRA not downloaded`; per host in Run on, `Turbo LoRA not downloaded on gcp`). One API version
+  (it can ride with A's).
+- **A form that already holds `lora: turbo`** (a saved workflow, a take's Remix) where no host has it: the option
+  shows picked and greyed and Generate is blocked with the reason (it never drops to `none` silently: 8 steps
+  without the LoRA is a bad run; open point 2).
+- **The Turbo preset**, in the three workflows' `studio.presets` (A1), order by time: **Draft · Turbo · Fast ·
+  Default · Reference**:
+
+| Preset | steps | lora | layers | reuse | core reuse | token reduction | flow shift / audio (A5) |
+|---|---|---|---|---|---|---|---|
+| Turbo | 8 | turbo | 50 | 1 | 1 | off | 12 / 3 |
+
+  Every other preset sets `lora: none`, so leaving Turbo turns the LoRA off. On Base fp8 the Mac keys are ignored as
+  for the others; the shifts are the model's own, set so a leftover shift never bends the distilled schedule (only
+  if A5 is built). Picking `turbo` by hand at 50 steps is allowed (slower, no gain); no refusal.
+- Lineage and Take info show `LoRA turbo` like any param.
+
+**C4. Mac (h3.c)**:
+- **A documented helmstudio patch** in `runner_service/vendor/h3c`: add `h3_lora.c` / `h3_lora.h` (the spike's code:
+  env `H3_LORA` = the file, `H3_LORA_STRENGTH` 1; the PEFT → native key map; per-layer `.alpha`, never the metadata
+  alpha; stochastic rounding seeded by the tensor name, so a merge repeats bit for bit and h3's int8 quantizer keeps
+  the small delta), the 6-line hook in `h3_weights.c` `load_tensor` (bf16 2-D tensors under `/transformer/`, both
+  partitions) and the one Makefile `LIB_C` word. The spike's `H3_VIDEO_SHIFT` hook is **left out** (the 8-step uses
+  shift 12; only the 4-step needs it). Everything else stays the upstream copy: `VERSION` says "changed: the
+  helmstudio LoRA patch (patches/h3-lora.diff)", the diff is kept beside it, and `THIRD_PARTY_NOTICES.md` notes that
+  `h3_lora.*` are helmstudio's, not upstream. A re-vendor re-applies the diff.
+- **Quiet**: the merge prints one line (`h3 lora: merged 363 modules in 17.2 s`), not one per module, and exits 1
+  with `h3: cannot merge LoRA into <name>` on a bad file (`child.run` shows the last `h3:` line, as today). The
+  spike's own failures (`h3_lora.c` init, `read_f32`, `add_module`) `exit(2)` after an `h3 lora:` line, which
+  `child.run` does not keep (its prefix is `h3: `), so the run would say only "exited with status 2": the build makes
+  them return 0 to the hook, which fails with h3's own line. The spike's debug knobs go (`H3_LORA_DUMP`,
+  `H3_LORA_VERBOSE`, `H3_LORA_ROUND`, `H3_LORA_INT8`, `H3_LORA_ALPHA`); `H3_LORA_STRENGTH` stays (open point 5).
+- **native.py**: with `lora: turbo` the child gets `H3_LORA=<the add-on's file>` and `H3_ZERO_COPY_WEIGHTS=0`; argv
+  is unchanged (steps from the param). With `none` it gets `H3_LORA=` (empty): `child_env` passes every `H3_*` of the
+  runner's own environment, so a stray one never merges. `core.child.run` gains an `env` argument (merged over
+  `child_env`, through `_Child`), the one core change.
+- **Zero copy**: h3 maps the bf16 transformer shards copy-on-write; merging into them dirties those pages, which the
+  spike saw stay resident and swap the Mac. So a Turbo run copies the weights (`H3_ZERO_COPY_WEIGHTS=0`). Copying
+  only the merged tensors is a second, larger h3 patch (open point 4), and may save little: the int8-quantized
+  linears' bf16 copies are freed after quantizing (`h3_dit.c` `quantize_block_*`), so what stays mapped is the bf16
+  h3 keeps (adaLN and the like), which the LoRA largely touches too. Unmeasured.
+- **Memory** (`peak_gb`): a copied load adds about 4.4 GB to the child's footprint (GOTCHAS: 20.7 → 25.0 GB at
+  864 × 480 × 124); the merge itself adds nothing on top (the spike's copied-load peaks by `/usr/bin/time`: Turbo
+  27.2 GB, base 6 steps 28.3, base 50 steps 28.9). So `peak_gb` gains `+ (4.5 if lora == 'turbo' else 0)` (a stage's
+  own params are formula variables; `pack.compile_formula` allows `a if c else b` and `==`): about 31 GB at
+  864 × 480 × 124 on the Generate key. The stage is shared, so Base fp8 also gets the +4.5 on its host-RAM budget
+  (unmeasured there anyway; harmless). Measured with the runner's
+  own measure in the build, recorded in GOTCHAS.
+- **Load time**: the CPU merge adds about 17 s per run (h3 is a fresh process each run; nothing is cached). Shown in
+  the Encode chip. ponytail: CPU sgemm per tensor; a Metal merge if it ever matters (merged files on disk are a
+  no-go: the spike's route B).
+
+**C5. NVIDIA (sgl.py)**:
+- SGLang 0.5.23's `MiniMaxH3Pipeline` is a `LoRAPipeline`: with `lora: turbo`, `argv` adds `--lora-path <the add-on's
+  file>` to the run's server for its partition (fl2va or ref2va: one server per run, so no `/set_lora`). Checked in
+  the v0.5.23 source (2026-11-22): `--lora-path` is a server arg; the default `--lora-merge-mode auto` keeps an
+  adapter unmerged when a merge would round away over half of it (its comment names MiniMax-H3 Turbo: 75 %), so it
+  runs dynamically on the FP8 weights with no extra flag, at some cost per step (SGLang's note: up to +50 % on small
+  models; the VM render measures it); the pruned Comfy-Org DiT is fine: `prepare_lora_adapter` projects a released
+  checkpoint's AdaLN LoRA onto the pruned coordinates; `guidance_scale` is fixed at 1 (no CFG, as the recipe). It
+  refuses an AdaLN LoRA only with an AdaLN cache (`--minimax-h3-adaln-cache-path`), which sgl.py never sets.
+- The request carries `num_inference_steps` 8; `flow_shift` / `audio_flow_shift` only when not 12 / 3 (A5's rule),
+  so a Turbo run sends none. Unverified on the VM, like every SGLang path: one render when the VM is next on.
+
+**C6. Tests** (lean):
+- **Pack unit** (no GPU): the Turbo preset's argv and child env (`H3_LORA`, `H3_ZERO_COPY_WEIGHTS=0`, `--steps 8`),
+  none without it; `sgl.argv` has `--lora-path` only with `turbo`; the peak formula with and without.
+- **Contract**: `check.py` refuses a param `addons` value not in `enum` or a component that is not an add-on; a
+  dispatch fixture (`place.addon-param.json`): `lora: turbo` on a host without the add-on → the reason, `none` →
+  eligible; the contract suite creates a Turbo run set to that host → 422 with the text.
+- **Web**: one vitest over the greyed option and preset from the hosts' `addons` (beside `run-on.test.ts`).
+- **Golden** (Mac): one T2VA at the Turbo preset, 512 × 512 × 22, 8 steps (T2VA and the merge repeat bit for bit,
+  so it compares hashes as the other T2VA golden); skipped where the add-on is missing.
+- **VM** (manual): one Turbo T2VA at 864 × 480 × 124 when the VM is next on: s/step, VRAM, a look beside the Mac's.
+- Board parity for frames 10-12 and the Models row.
+
+**C7. Ref2VA check** (before the build commits to it): one Mac render of H3 References (an image reference, 864 ×
+480 × 124, seed 42) at Turbo vs Base 50 steps, graded like grid8. If it holds, Turbo goes in all three workflows'
+presets. If not: Turbo is left out of workflow 3's presets (data only), or the add-on gains lightx2v's
+`minimax_h3_ref2v_turbo_8step_v1.1_768p_bf16.safetensors` (1,383,677,808 B, sha256 `46c64fc9…937d`), picked by
+partition (open point 1).
+
+**C8. Phases and effort**
+
+| # | Phase | Hours |
+|---|---|---|
+| 0 | Boards (frames 10-12, the Models row), approved by the owner | done in this pass |
+| C0 | The Ref2VA render (C7) | 1 |
+| C1 | Contract: param `addons`, run check 2b, plan reason, check.py, fixtures, README | 3-4 |
+| C2 | Studio: the run check and plan reason for param add-ons | 2-3 |
+| C3 | Web: greyed option and preset, Run on reason, Generate blocked | 3-4 |
+| C4 | Runner: the add-on, `lora` param, Turbo in the three workflows, child `env`, native env, `sgl.argv`, peak | 2-3 |
+| C5 | h3.c patch (quiet log), VERSION / THIRD_PARTY / the diff, `make h3`, the golden, one memory measure, GOTCHAS | 3-4 |
+| C6 | The VM render | 1-2 |
+| | **C total** | **about 15-21** |
+
+Order: after the 1.36 add-ons land and after A1 (Turbo sits among A1's presets). C0 first; C1 before C2-C4.
+
+### 24.12 Open points for the owner (C)
+
+1. **References**: use the FL2V file for Ref2VA if C7's render holds (recommended, the authors' word, one file), else
+   add the ref2v 8-step v1.1 file (+1.4 GB) or leave Turbo off References.
+2. **A form holding `lora: turbo` without the add-on**: block Generate with the reason (recommended) or drop to `none`
+   silently with a note.
+3. **Preset order**: Draft · Turbo · Fast · Default · Reference, by time (recommended), or Turbo last. By time is
+   an estimate: Fast (20 steps, 45 layers, reuse 2, token reduction) is about 7.5 full passes, Turbo 8 plus the
+   17 s merge, so the two may be close; the build measures Fast once and swaps them if Fast is quicker. The templates
+   still open on Default (Turbo is greyed where it is missing).
+4. **Zero copy**: a Turbo run copies every transformer weight (`H3_ZERO_COPY_WEIGHTS=0`, +4.4 GB, no new h3 code;
+   recommended) or a second h3 patch that copies only the merged tensors.
+5. **Strength**: fixed at 1 (recommended; the authors' value) or a Strength param (0-1.5) under LoRA.
+6. **Draft and Fast**: keep both (recommended: no add-on, every host) though Turbo is far sharper for 1.2× the time
+   of today's 6-step draft and may be about as quick as Fast.

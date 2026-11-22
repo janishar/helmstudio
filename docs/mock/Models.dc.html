@@ -198,6 +198,16 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <div style="display: flex; flex-wrap: wrap; gap: 6px"><span class="host"><span class="dot" style="background: var(--a1)"></span>gcp</span></div>
 </div>
 </div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<h3 class="h" style="display: flex; align-items: center">Optional add-ons<button class="i" aria-label="More information" title="Parts a few controls need, downloaded and deleted on their own. Base and Base fp8 both work without it; the Turbo preset is greyed with &quot;Turbo LoRA not downloaded&quot; until it is on the host.">i</button></h3>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+<div style="display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 12px; background: var(--s2); border: 1px dashed var(--ln)">
+<div style="display: flex; align-items: center; gap: 8px"><span class="tag">add-on</span><b style="font-size: 13px">Turbo LoRA</b><span class="m" style="color: var(--t2)">v1.2 · 8 steps</span><div style="flex-grow: 1"></div><span class="m">1.5 GB</span></div>
+<span style="font-size: 12px; color: var(--t2)">lightx2v's MiniMax-H3 Turbo. The Turbo preset needs it; for Base and Base fp8.</span>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px"><span class="host"><span class="dot" style="background: var(--a1)"></span>mac</span><span class="host" style="color: var(--t2)"><span class="dot" style="box-shadow: inset 0 0 0 1.5px var(--t2)"></span>gcp</span><div style="flex-grow: 1"></div><button style="height: 28px; padding: 0 10px; border-radius: 8px; border: 0; background: var(--s4); font-size: 12px; font-weight: 500">Download…</button><button style="height: 28px; padding: 0 10px; border-radius: 8px; border: 0; background: var(--s4); font-size: 12px; font-weight: 500; color: var(--a2)">Delete</button></div>
+</div>
+</div>
+</div>
 </section>
 
 <section aria-label="LTX-2.5" style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 16px; display: flex; flex-direction: column; gap: 12px">
@@ -255,7 +265,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 </aside>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":960}}'>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":1200}}'>
 class Component extends DCLogic {
 state = { theme: null };
 renderVals() {
