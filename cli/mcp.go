@@ -656,7 +656,7 @@ func (s *mcpServer) exportTimeline(ctx context.Context, req *mcp.CallToolRequest
 	if out == "" {
 		return map[string]any{"plan": plan, "job": raw}, nil, nil
 	}
-	tool := ctx // the download after the wait: the tool call's, not cut by the wait's limit
+	tool := ctx // the job reads and the download: the tool call's, not cut by the wait's limit
 	ctx, cancel := context.WithTimeout(ctx, waitMax)
 	defer cancel()
 	p := &progress{ctx: ctx, req: req}
@@ -684,7 +684,7 @@ func (s *mcpServer) exportTimeline(ctx context.Context, req *mcp.CallToolRequest
 			return map[string]any{"plan": plan, "job": raw}, nil, nil // still running: show_timeline lists it
 		case <-time.After(pollEvery):
 		}
-		if raw, err = s.get(ctx, "/media-jobs/"+url.PathEscape(j.ID)); err != nil {
+		if raw, err = s.get(tool, "/media-jobs/"+url.PathEscape(j.ID)); err != nil { // also after the wait ran out
 			return nil, nil, err
 		}
 	}

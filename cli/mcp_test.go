@@ -510,3 +510,26 @@ func TestMCPHungAPI(t *testing.T) {
 		t.Fatalf("cancel took %v", time.Since(start))
 	}
 }
+
+// export_timeline's wait running out during a slow job read answers "still running", not the cut read's error.
+func TestMCPExportWaitEndsMidRead(t *testing.T) {
+	f, cs, _ := mcpSession(t, "")
+	const id = "aaaaaaaa-0000-4000-8000-000000000001"
+	f.extra["POST /v1/studio/timelines/"+id+"/export/plan"] = func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, `{"revision":3}`)
+	}
+	f.extra["POST /v1/studio/timelines/"+id+"/export"] = func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusAccepted)
+		fmt.Fprint(w, `{"id":"j1","status":"running"}`)
+	}
+	f.extra["GET /v1/studio/media-jobs/j1"] = func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(300 * time.Millisecond) // answers after the wait ran out
+		fmt.Fprint(w, `{"id":"j1","status":"running"}`)
+	}
+	defer func(w, p time.Duration) { waitMax, pollEvery = w, p }(waitMax, pollEvery)
+	waitMax, pollEvery = 150*time.Millisecond, 10*time.Millisecond
+	res, out := call(t, cs, "export_timeline", map[string]any{"timeline_id": id, "out": t.TempDir() + "/cut.mp4"})
+	if res.IsError || out["job"] == nil || out["saved"] != nil {
+		t.Fatalf("export: %s", text(res))
+	}
+}

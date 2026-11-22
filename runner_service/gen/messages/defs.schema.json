@@ -3282,7 +3282,7 @@
       }
     },
     "takeThumb": {
-      "description": "API 1.48 (contracts/README.md, Thumbnails): a take's thumbnail, a WebP (quality 80, alpha kept) of the image or the poster with its short side 512 px (never upscaled) and its long side at most 1024; made only when it is smaller than the original and the original's short side is over 512",
+      "description": "API 1.48 (contracts/README.md, Thumbnails): a take's thumbnail, a WebP (quality 80, alpha kept) of the image or the poster with its short side 512 px (never upscaled) and its long side at most 1024; made only when it is smaller than the original and the original's short side is over 360 (until 2026-11-23: 512)",
       "type": "object",
       "required": [
         "key",
