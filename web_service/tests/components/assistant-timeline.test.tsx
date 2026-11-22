@@ -153,7 +153,13 @@ function start({
         d = { ...d, ...r.document } as S<"Timeline">;
       }
       cur = { ...d, revision: cur.revision + 1, can_undo: true };
-      return reply({ revision: cur.revision, dry_run: false, timeline: cur, diff: {}, warnings: [] });
+      return reply({
+        revision: cur.revision,
+        dry_run: false,
+        timeline: cur,
+        diff: {},
+        warnings: [],
+      });
     }
     posts.push({ path, body: init?.body });
     if (path.endsWith("/export/plan")) return reply({ ...plan, revision: cur.revision });
@@ -326,7 +332,7 @@ describe("the Timeline's actions", () => {
     const { call, edits, now } = start();
     await ready();
     await call("setPlayhead", { at_s: 1 });
-    fireEvent.keyDown(document.body, { key: "s" });
+    fireEvent.keyDown(document.body, { key: "s", code: "KeyS" });
     await waitFor(() => expect(edits).toHaveLength(1));
     expect(edits[0]).toMatchObject({
       base_revision: 4,
@@ -342,7 +348,7 @@ describe("the Timeline's actions", () => {
     const a = start({ conflict: true });
     await ready();
     await a.call("setPlayhead", { at_s: 1 });
-    fireEvent.keyDown(document.body, { key: "s" });
+    fireEvent.keyDown(document.body, { key: "s", code: "KeyS" });
     await waitFor(() => expect(a.edits.map((p) => p.base_revision)).toEqual([4, 5]));
     expect(await screen.findByText(/reloaded, and your edit applied to it/)).toBeTruthy();
     cleanup();
@@ -352,13 +358,18 @@ describe("the Timeline's actions", () => {
       conflict: true,
       meanwhile: (t) => ({
         ...t,
-        tracks: t.tracks.map((k, i) => (i ? k : { ...k, clips: k.clips.filter((c) => c.id === "s") })),
+        tracks: t.tracks.map((k, i) =>
+          i ? k : { ...k, clips: k.clips.filter((c) => c.id === "s") },
+        ),
       }),
     });
     await ready();
     await b.call("setPlayhead", { at_s: 1 });
-    fireEvent.keyDown(document.body, { key: "s" });
-    expect(await screen.findByText(/reloaded, and your edit applied to it/)).toBeTruthy();
+    fireEvent.keyDown(document.body, { key: "s", code: "KeyS" });
+    // plan 23 §27.7: dropped, and said, not silently
+    expect(
+      await screen.findByText("The sequence changed: your cut no longer fits and was not saved."),
+    ).toBeTruthy();
     expect(b.edits).toHaveLength(1);
   });
 
@@ -486,6 +497,60 @@ describe("the Timeline's actions", () => {
         text: "Clone a voice · cancelled",
       }),
     );
+  });
+});
+
+describe("the tools (plan 23)", () => {
+  const key = (code: string, more: object = {}) =>
+    fireEvent.keyDown(document.body, { code, ...more });
+
+  it("holding [ merges the repeats into one trim, saved once after 400 ms", async () => {
+    const { call, edits } = start();
+    await ready();
+    await call("setPlayhead", { at_s: 1 }); // clip a is under the playhead
+    key("BracketLeft");
+    key("BracketLeft", { repeat: true });
+    key("BracketLeft", { repeat: true });
+    expect(edits).toHaveLength(0);
+    await waitFor(() => expect(edits).toHaveLength(1), { timeout: 2000 });
+    expect(edits[0].ops).toEqual([{ op: "trim", clip: "a", edge: "in", delta: 3 / 24 }]);
+    expect(await screen.findByText(/^Trimmed .*'s start \+3 f$/)).toBeTruthy();
+  });
+
+  it("a tool key taps sticky, Esc goes back to Select; ⇧⌘B cuts every track at the playhead", async () => {
+    const { call, edits } = start();
+    await ready();
+    const radio = (name: string) => screen.getByRole("radio", { name });
+    expect(radio("Select").getAttribute("aria-checked")).toBe("true");
+    key("KeyB");
+    fireEvent.keyUp(document.body, { code: "KeyB" });
+    expect(radio("Blade").getAttribute("aria-checked")).toBe("true");
+    key("Escape");
+    expect(radio("Select").getAttribute("aria-checked")).toBe("true");
+    await call("setPlayhead", { at_s: 1 });
+    key("KeyB", { metaKey: true, shiftKey: true });
+    await waitFor(() => expect(edits).toHaveLength(1));
+    expect(edits[0].ops[0]).toMatchObject({ op: "split_all", at: 1 });
+    expect((edits[0].ops[0] as { ids: string[] }).ids.length).toBeGreaterThan(0);
+    expect(screen.getByText("Cut every track at 0:01.00")).toBeTruthy();
+  });
+
+  it("M adds a marker at the playhead; N and ⇧S toggle snapping and hover scrub; ? opens the sheet", async () => {
+    const { call, edits } = start();
+    await ready();
+    await call("setPlayhead", { at_s: 2 });
+    key("KeyM");
+    await waitFor(() => expect(edits).toHaveLength(1));
+    expect(edits[0].ops[0]).toMatchObject({ op: "marker", at: 2 });
+    const toggle = (name: string) =>
+      screen.getByRole("button", { name }).getAttribute("aria-pressed");
+    expect([toggle("Snapping"), toggle("Hover scrub")]).toEqual(["true", "true"]);
+    key("KeyN");
+    key("KeyS", { shiftKey: true });
+    expect([toggle("Snapping"), toggle("Hover scrub")]).toEqual(["false", "false"]);
+    key("Slash", { shiftKey: true });
+    expect(await screen.findByRole("dialog", { name: "Keyboard shortcuts" })).toBeTruthy();
+    expect(screen.getByText("Blade all tracks")).toBeTruthy();
   });
 });
 

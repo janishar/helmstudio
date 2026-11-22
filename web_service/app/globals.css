@@ -512,6 +512,249 @@
     width: 7px;
     cursor: ew-resize;
   }
+  /* the Timeline tools' row and overlays (docs/mock/TimelineTools.dc.html, option B and the shared states) */
+  .tl-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .tl-seg {
+    display: flex;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 12px;
+    background: var(--s3);
+  }
+  .tl-tb {
+    height: 32px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--t2);
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .tl-tb[aria-checked="true"] {
+    background: var(--s5);
+    color: var(--t1);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.1),
+      0 2px 5px color-mix(in srgb, var(--shd) 45%, transparent);
+  }
+  .tl-tb[aria-checked="true"] svg {
+    color: var(--a2);
+  }
+  .tl-bar kbd,
+  .tl-ks kbd {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 14px;
+    padding: 0 4px;
+    border-radius: 4px;
+    background: var(--s2);
+    color: var(--t2);
+  }
+  .tl-tb[aria-checked="true"] kbd {
+    background: var(--s3);
+  }
+  .tl-tg {
+    width: 36px;
+    height: 36px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 10px;
+    background: var(--s4);
+    color: var(--t2);
+    font-weight: 600;
+    font-size: 14px;
+  }
+  .tl-tg[aria-pressed="true"] {
+    background: color-mix(in srgb, var(--a1) 22%, var(--s4));
+    color: var(--a1);
+  }
+  .tl-sep {
+    width: 1px;
+    height: 24px;
+    background: var(--s5);
+  }
+  .tl-zf {
+    display: flex;
+    align-items: center;
+    height: 36px;
+    border-radius: 10px;
+    background: var(--s4);
+  }
+  .tl-zf button {
+    height: 36px;
+    min-width: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 0 8px;
+    border: 0;
+    background: transparent;
+    color: var(--t1);
+  }
+  .tl-zf .fit {
+    border-left: 1px solid var(--s5);
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .tl-zv {
+    min-width: 52px;
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--t1);
+  }
+  .tl-tag {
+    position: absolute;
+    z-index: 20;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 20px;
+    padding: 0 8px;
+    border-radius: 6px;
+    background: var(--a2);
+    color: var(--on2);
+    font: 500 11px/20px var(--font-mono);
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  .tl-tag.warn {
+    background: var(--t1);
+    color: var(--g);
+  }
+  .tl-tag.ok {
+    background: var(--a1);
+    color: var(--on1);
+  }
+  .tl-bl {
+    position: absolute;
+    z-index: 20;
+    width: 0;
+    border-left: 2px dashed var(--a2);
+    pointer-events: none;
+  }
+  .tl-cur {
+    position: absolute;
+    z-index: 20;
+    width: 24px;
+    height: 24px;
+    display: grid;
+    place-items: center;
+    border-radius: 8px;
+    background: var(--a2);
+    color: var(--on2);
+    pointer-events: none;
+    box-shadow: 0 6px 12px -4px color-mix(in srgb, var(--shd) 80%, transparent);
+  }
+  .tl-snapl {
+    position: absolute;
+    z-index: 20;
+    width: 0;
+    border-left: 2px solid var(--a1);
+    box-shadow: 0 0 8px var(--a1);
+    pointer-events: none;
+  }
+  .tl-ghost {
+    position: absolute;
+    z-index: 5;
+    height: 56px;
+    border: 1px dashed var(--dash);
+    border-radius: 8px;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      135deg,
+      transparent 0 6px,
+      color-mix(in srgb, var(--t2) 12%, transparent) 6px 8px
+    );
+  }
+  .tl-edgebar {
+    position: absolute;
+    z-index: 20;
+    width: 6px;
+    height: 56px;
+    border-radius: 3px;
+    background: var(--t1);
+    pointer-events: none;
+  }
+  .tl-edgebar.warn {
+    background: var(--bad);
+  }
+  .tl-src {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    border-radius: 16px 16px 16px 8px;
+    background: var(--in);
+  }
+  .tl-pv {
+    width: 150px;
+    aspect-ratio: 16/9;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    border-radius: 8px;
+    border: 1px dashed var(--dash);
+    font-size: 11px;
+    color: var(--t2);
+  }
+  .tl-take {
+    position: relative;
+    width: 100%;
+    height: 16px;
+    border-radius: 5px;
+    background: repeating-linear-gradient(90deg, var(--s3) 0 5px, var(--s2) 5px 6px);
+  }
+  .tl-used {
+    position: absolute;
+    top: -2px;
+    bottom: -2px;
+    border: 2px solid var(--a2);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--a2) 18%, transparent);
+  }
+  .tl-ks {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 20px;
+  }
+  .tl-ks dl {
+    margin: 8px 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .tl-ks dl div {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .tl-ks dt {
+    flex: 0 0 96px;
+  }
+  .tl-ks dd {
+    margin: 0;
+    font-size: 13px;
+  }
+  .tl-ks kbd {
+    font-size: 11px;
+    line-height: 18px;
+    padding: 0 6px;
+    background: var(--s3);
+    color: var(--t1);
+  }
   /* the Assistant drawer (docs/mock/Assistant.dc.html: .drw, the phone .sheet and their parts), scoped to .ast */
   .dock-item[aria-expanded="true"]:not([aria-current]) .tile {
     filter: none;

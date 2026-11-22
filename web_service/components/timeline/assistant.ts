@@ -9,11 +9,11 @@ import type { ScreenSpec } from "@/components/assistant/tools";
 import { hasSound, takeById, type LibraryAsk } from "@/components/assistant/library";
 import type { VoiceCtx } from "@/components/create/voices";
 import type { ShotSlot } from "@/components/timeline/shot";
+import { withIds } from "@/lib/timeline-tools";
 import {
   Grid,
   apply,
   factsOf,
-  newId,
   shortTime,
   shotBusy,
   timecode,
@@ -40,6 +40,20 @@ const WORDS: Record<string, string> = {
   trim: "That trim is outside the take.",
   hold: "A still lasts at least one frame.",
   no_audio: "That take has no sound.",
+  // 1.50, the tools (plan 23)
+  roll_first: "The first clip has no cut before it to roll.",
+  roll_track: "Roll works on V1's cuts.",
+  slide_end: "Slide needs a clip on both sides.",
+  slide_track: "Slide works on V1.",
+  slip_still: "A still or an empty slot has nothing to slip.",
+  least: "That leaves a clip shorter than its dissolves.",
+  overwrite_shot: "A clip being generated cannot be overwritten.",
+  overwrite_track: "Overwrite keeps a clip on its kind of track.",
+  range_empty: "The range is empty.",
+  range_shot: "A clip being generated is inside the range.",
+  link_start: "A linked sound clip would start before 0.",
+  marker_past_end: "A marker would be past the end of the picture.",
+  too_many_markers: "A sequence has at most 200 markers.",
 };
 export const say = (code: string) =>
   WORDS[code] ?? `The edit was refused (${code.replace(/_/g, " ")}).`;
@@ -145,50 +159,16 @@ export function editText(ops: Op[]): string {
       const at =
         "at" in o &&
         typeof o.at === "number" &&
-        (o.op === "place" || o.op === "insert" || o.op === "split" || o.op === "split_all" || o.op === "marker")
+        (o.op === "place" ||
+          o.op === "insert" ||
+          o.op === "split" ||
+          o.op === "split_all" ||
+          o.op === "marker")
           ? ` at ${shortTime(o.at)}`
           : "";
       return `${verb} ${plural(n, noun)}${at}`;
     })
     .join(" · ");
-}
-
-/** The op with the clip ids it makes filled in (a split's new clip, an add's clips, a slot and its gap; from 1.50
- * the `ids` of the tools' ops, as many as any cut could need, and a marker's id). */
-function withIds(o: Op, d: Norm): Op {
-  const id = () => newId(d);
-  const fresh = (n: number) => {
-    const ids: string[] = [];
-    while (ids.length < n) {
-      const x = id();
-      if (!ids.includes(x)) ids.push(x);
-    }
-    return ids;
-  };
-  const many = 2 * d.tracks.length + 3; // a range cuts each track twice, then a slot; unused ones are ignored
-  if (o.op === "split") {
-    const [first, ...rest] = fresh(many + 1);
-    return { ...o, id: o.id || first, ids: o.ids?.length ? o.ids : rest };
-  }
-  if (o.op === "split_all" || o.op === "remove_range" || o.op === "lift_range" || o.op === "overwrite")
-    return { ...o, ids: o.ids?.length ? o.ids : fresh(many) };
-  if (o.op === "marker" && !o.id) {
-    let x = id();
-    while (d.markers?.some((m) => m.id === x)) x = id();
-    return { ...o, id: x };
-  }
-  if (o.op === "insert") return { ...o, id: o.id || id() };
-  if (o.op === "place") return { ...o, id: o.id || id(), gap_id: o.gap_id || id() };
-  if (o.op === "add") {
-    const ids: string[] = [];
-    for (let k = 0; k < (o.take_ids ?? []).length; k++) {
-      let x = id();
-      while (ids.includes(x)) x = id();
-      ids.push(x);
-    }
-    return { ...o, ids: o.ids?.length === o.take_ids?.length ? o.ids : ids };
-  }
-  return o;
 }
 
 /** Saves `ops` on the stored sequence as the screen does, in one POST …/edits with the revision they were made on

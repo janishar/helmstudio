@@ -2,8 +2,9 @@
 
 [← Plan index](../README.md)
 
-Status: **decided by the owner (2026-11-22); the contract and server part of phases 2 and 8 and the web's pure edits
-(phase 3's `lib/timeline.ts`) built (2026-11-23)**, as-built notes in 27.14; the UI (phases 4-7) is still to come. A
+Status: **decided by the owner (2026-11-22); the contract and server part of phases 2 and 8, the web's edits (phase
+3) and the tools (phase 4, with links and markers in the UI) built (2026-11-23)**, as-built notes in 27.14 and 27.15;
+the zoom engine, moving and playing, and the detail (phases 5-7) are still to come. A
 plan, not in a milestone: it becomes one in [08-milestones.md](08-milestones.md) when the owner schedules it. Since plan
 24 (1.49) made `TimelineOp` part of openapi, every new op is an openapi change, so the tools, linked sound clips and
 markers took API **1.50.0** together (the next free version when they were built; the plan first said 1.46.0).
@@ -312,3 +313,22 @@ Each with the recommended option first.
   ripple, move, slide and slip carry it and roll does not; a V1 split, `split_all`, the ranges and `overwrite` relink
   a linked clip to the part it starts in; markers never move with edits and an edit leaving one past the end is
   refused (`marker_past_end`, like `past_end`); `marker` with a known id replaces it whole.
+
+### 27.15 As built: the tools in the web (phases 3 and 4; 2026-11-23)
+
+- **Where.** `lib/timeline-tools.ts` (pure: the tools, `KEYMAP` on `e.code`, held vs tapped, Trim's grab zones,
+  `snapTo` naming its target, `clampFrames`, the repeat `merge`, `withIds` (moved from the assistant), the live
+  region's words, the zoom field's text); `components/timeline/tools.tsx` (option B's row, the shortcut sheet, Slip's
+  source window); `lanes.tsx` (the drags per tool, the blade line, hover scrub's line, the snap line and chip, the
+  ripple ghost, markers on the ruler); `editor.tsx` (tool state, the key map, the merge, the live region, linked
+  selection, the marker inspector, Linked to on a sound clip, the 409 notice); `Preview.peek` for hover scrub.
+- **Trim's zones** (px from a clip's edge): within 4 of a cut with a V1 neighbour = roll; within 10 = ripple trim;
+  the body = slip, ⌥ body = slide (V1). Drags clamp by halving to the last frame the op accepts (the edge turns the
+  warning colour). Slip moves the window the way the pointer moves (drag right: later frames).
+- **Keys** as the board's sheet, plus **M** (a marker at the hover line, else the playhead). Delete with no clip
+  selected and a range: `remove_range`; ⇧Delete: `lift_range`; with a marker selected: `remove_marker`. ↑ / ↓ and
+  Home / End work; J plays backward at 1× and K / L stop or play at 1× (speeds ×2 … ×8 are phase 6).
+- **Zoom** is only wired: −, + (×0.8 / ×1.25), Fit, ⌘= / ⌘−, ⇧Z and the wheel set `pps` within fit … 64 px per frame;
+  the field shows the visible span. The engine (log scale, pointer anchoring, frame ruler, virtual lanes) is phase 5.
+- **Not built:** D's overview bar (later), no collapsible side panel (the owner removed it).
+

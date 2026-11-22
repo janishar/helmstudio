@@ -53,6 +53,16 @@ export class Preview {
     this.onFrame(this.frame);
   }
 
+  /** Hover scrub (plan 23 §27.3): shows frame `f` without moving the playhead (null: back to it); silent, not while
+   * playing. */
+  peek(f: number | null) {
+    if (this.playing || !this.doc) return;
+    const keep = this.frame;
+    this.frame = f === null ? keep : Math.max(0, Math.min(Math.round(f), this.doc.frames));
+    this.apply(true);
+    this.frame = keep;
+  }
+
   play() {
     if (!this.doc || this.playing || !this.doc.frames) return;
     if (this.frame >= this.doc.frames) this.frame = 0;

@@ -1,33 +1,59 @@
 "use client";
-// The tracks (docs/mock/Timeline.dc.html, the lanes panel): the ruler, V1's clips, A1 (V1's own sound), the extra
-// audio tracks and the playhead. Drag a clip to reorder (V1, by midpoint) or move it (audio: snapping, another audio
-// lane); drag an edge (7 px) to trim, snapping to frames and cuts within 6 px; click the ruler to seek; Ctrl/⌘ +
-// wheel zooms. Every drag is an Op handed to the editor, which applies and saves it.
-import { useRef, useState } from "react";
-import { Ellipsis, X } from "lucide-react";
+// The tracks (docs/mock/Timeline.dc.html, the lanes panel) and the tools on them (plan 23 §27.2, §27.5; board
+// docs/mock/TimelineTools.dc.html): the tool row above, the ruler with its markers, V1's clips, A1 (V1's own sound),
+// the extra audio tracks and the playhead. Select: drag a clip to reorder (V1, by midpoint) or move it (audio: another
+// audio lane), an edge (7 px) to ripple trim. Trim: an edge ripple trims, the cut between two V1 clips rolls, the body
+// slips (⌥: slides). Blade: a dashed cut line follows the pointer; a click cuts (⇧: every track). Range: drag marks in
+// and out. Overwrite: drag a clip over what is there. Drags snap (N; ⌘ inverts) to cuts, the playhead, the range and
+// markers within 6 px, clamp at their bounds, and draw the draft; the op goes to the editor on release. Hover scrub
+// draws a line under the pointer; Ctrl/⌘ + wheel zooms.
+import { useEffect, useRef, useState } from "react";
+import { Ellipsis, Link2, X } from "lucide-react";
 import type { S } from "@/lib/api";
 import { safeUrl } from "@/lib/format";
 import { actionShot } from "@/components/timeline/actions";
+import { MagnetIcon, ToolIcon } from "@/components/timeline/tools";
 import {
   Grid,
   cuts,
   dropIndex,
   kindOf,
   lenOf,
-  snapPoint,
   shortTime,
+  timecode,
   type Clip,
   type Norm,
   type Op,
   type Takes,
   shotBusy,
 } from "@/lib/timeline";
+import {
+  clampFrames,
+  fits,
+  signed,
+  snapTo,
+  trimZone,
+  withIds,
+  type SnapPt,
+  type Tool,
+} from "@/lib/timeline-tools";
 
 type TTake = S<"TimelineTake">;
 
 const HEAD = 72; // the lane name column (px)
 const EDGE_PX = 7;
 const DRAG_PX = 3;
+const TOP = 20; // the lines' top: below the ruler
+
+/** Marker colours (TimelineMarkerColor); none: the accent. */
+export const MARKER_COLORS: Record<string, string> = {
+  red: "#ff6b6b",
+  orange: "#ff9f43",
+  yellow: "#f2c14e",
+  green: "#8bd17c",
+  blue: "#6cb6ff",
+  purple: "#c9a7ff",
+};
 
 /** A V1 clip's shot number as a name ("Shot 4", API 1.29), else its take's title. */
 export function shotName(c: Clip, title?: string): string {
@@ -90,15 +116,6 @@ export function clipText(
   };
 }
 
-type Drag = {
-  id: string;
-  track: number;
-  mode: "in" | "out" | "move";
-  x0: number;
-  started: boolean;
-  span: [number, number];
-};
-
 /** "0:09": whole seconds of a clip's length. */
 const clock = (s: number) => {
   const t = Math.round(s);
@@ -123,6 +140,40 @@ export function cueTicks(
     }));
 }
 
+type Mode = "in" | "out" | "move" | "roll" | "slip" | "slide" | "overwrite" | "range";
+type Drag = {
+  id: string;
+  track: number;
+  mode: Mode;
+  x0: number;
+  started: boolean;
+  /** the dragged clip's (roll: the incoming clip's) start and end */
+  span: [number, number];
+  /** the document at pointer down: every draft is computed from it, not from the draft drawn */
+  doc: Norm;
+  /** overwrite: the ids its op makes, fixed for the drag */
+  ids?: string[];
+  /** range: where it started (s) */
+  t0?: number;
+};
+/** What a drag shows: its op so far, the snap point it holds on, whether it stopped at a bound. */
+type Shown = { d: Drag; op: Op | null; to: SnapPt | null; clamped: boolean };
+
+const CURSOR: Record<Tool, string> = {
+  select: "default",
+  trim: "ew-resize",
+  blade: "crosshair",
+  range: "text",
+  overwrite: "move",
+};
+const ZONE_CURSOR = {
+  roll: "col-resize",
+  roll_next: "col-resize",
+  in: "w-resize",
+  out: "e-resize",
+  body: "grab",
+};
+
 export function Lanes({
   doc,
   takes,
@@ -143,6 +194,15 @@ export function Lanes({
   range,
   onMenu,
   nameOf,
+  tool = "select",
+  snap = true,
+  scrub = false,
+  onHover,
+  onRange,
+  marker,
+  onMarker,
+  toolbar,
+  onView,
 }: {
   doc: Norm;
   takes: Record<string, TTake>;
@@ -155,7 +215,8 @@ export function Lanes({
   track: string | null;
   /** clip id → its shot's progress ("3 / 8") */
   progress: Record<string, string>;
-  onSelect: (id: string, add: boolean) => void;
+  /** a click on a clip (`add`: Shift / ⌘; `one`: ⌥, only this clip, not its linked ones) */
+  onSelect: (id: string, add: boolean, one?: boolean) => void;
   onTrack: (name: string) => void;
   onSeek: (frame: number) => void;
   /** a drag in progress (null: none): drawn at once, not saved */
@@ -171,70 +232,239 @@ export function Lanes({
   onMenu?: (id: string) => void;
   /** a cue's speaker ("Mara"), from its voice */
   nameOf?: (voiceId: string) => string;
+  /** the active tool (plan 23) */
+  tool?: Tool;
+  /** snapping on (N) */
+  snap?: boolean;
+  /** hover scrub on (⇧S): a line under the pointer, and `onHover` with its frame */
+  scrub?: boolean;
+  /** the frame under the pointer (null: it left), for hover scrub and M */
+  onHover?: (frame: number | null) => void;
+  /** the Range tool's drag: the new range */
+  onRange?: (r: [number, number] | null) => void;
+  /** the selected marker's id */
+  marker?: string | null;
+  /** a marker's flag clicked */
+  onMarker?: (id: string) => void;
+  /** the tool row, above the scrolling lanes */
+  toolbar?: React.ReactNode;
+  /** the visible track width (px), for the zoom field and Fit */
+  onView?: (width: number) => void;
 }) {
   const g = new Grid(doc.target);
   const drag = useRef<Drag | null>(null);
   const [shift, setShift] = useState<{ id: string; dx: number; track?: number } | null>(null);
+  const [shown, setShown] = useState<Shown | null>(null);
+  const [hover, setHover] = useState<{ t: number; all: boolean; to: SnapPt | null } | null>(null);
   const suppress = useRef(false);
+  const content = useRef<HTMLDivElement>(null);
+  const scroller = useRef<HTMLDivElement>(null);
   const end = g.s(doc.frames);
   const width = Math.max(end * pps + 160, 600);
   const steps = [1, 2, 5, 10, 15, 30, 60, 120, 300];
   const step = steps.find((s) => s * pps >= 80) ?? 600;
   const ticks = Array.from({ length: Math.floor(width / pps / step) + 1 }, (_, i) => i * step);
   const v1 = doc.tracks[0];
+  const markers = doc.markers ?? [];
 
-  /** The op a drag makes so far, or null (nothing changes). */
-  function opOf(d: Drag, dx: number, x: number, y: number): Op | null {
-    const dt = dx / pps;
-    const c = doc.tracks[d.track].clips.find((x) => x.id === d.id)!;
-    const list = cuts(doc, facts, d.id);
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el || !onView || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => onView(Math.max(1, el.clientWidth - HEAD)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [onView]);
+
+  /** The snap points besides the cuts: the playhead, the range's ends and the markers. */
+  const extra: SnapPt[] = [
+    { t: g.s(frame), kind: "playhead" },
+    ...(range ? range.map((t) => ({ t, kind: "range" as const })) : []),
+    ...markers.map((m) => ({ t: m.at, kind: "marker" as const })),
+  ];
+  const points = (base: Norm, exclude?: string): SnapPt[] => [
+    ...cuts(base, facts, exclude).map((t) => ({ t, kind: "cut" as const })),
+    ...extra,
+  ];
+  /** Sequence seconds under a client x. */
+  const timeAt = (clientX: number) => {
+    const r = content.current?.getBoundingClientRect();
+    return Math.max(0, (clientX - (r?.left ?? 0) - HEAD) / pps);
+  };
+  const snapOn = (e: { metaKey: boolean; ctrlKey: boolean }) => snap !== (e.metaKey || e.ctrlKey);
+
+  /** The op a drag makes so far (null: nothing changes), the snap point and whether it stopped at a bound. */
+  function opOf(
+    d: Drag,
+    e: { clientX: number; clientY: number; metaKey: boolean; ctrlKey: boolean },
+  ): Omit<Shown, "d"> {
+    const base = d.doc;
+    const dt = (e.clientX - d.x0) / pps;
+    const on = snapOn(e);
+    const pts = points(base, d.id);
+    // the edge's own place is no target: a small drag would snap back to it
+    const sn = (t: number, from: number) =>
+      snapTo(
+        t,
+        pts.filter((p) => p.t !== from),
+        pps,
+        g,
+        on,
+      );
+    const none = { op: null, to: null, clamped: false };
+    const bt = base.tracks[d.track];
+    const c = bt.clips.find((x) => x.id === d.id)!;
+    const clamp = (df: number, mk: (k: number) => Op) => {
+      const r = clampFrames(df, (k) => fits(base, mk(k), facts));
+      return { op: r.df ? mk(r.df) : null, clamped: r.clamped };
+    };
     if (d.mode === "move") {
       if (d.track === 0) {
-        const index = dropIndex(doc, d.id, (d.span[0] + d.span[1]) / 2 + dt, facts);
-        return index === v1.clips.findIndex((x) => x.id === d.id)
-          ? null
-          : { op: "move", clip: d.id, index };
+        const index = dropIndex(base, d.id, (d.span[0] + d.span[1]) / 2 + dt, facts);
+        return index === bt.clips.findIndex((x) => x.id === d.id)
+          ? none
+          : { op: { op: "move", clip: d.id, index }, to: null, clamped: false };
       }
-      const at = Math.max(0, snapPoint(c.at! + dt, list, pps, g));
-      const lane = laneAt(x, y);
-      const name = lane > 0 ? doc.tracks[lane]?.name : undefined;
-      return { op: "move", clip: d.id, at, ...(name && { track: name }) };
+      const s = sn(c.at! + dt, c.at!);
+      const lane = laneAt(e.clientX, e.clientY);
+      const name = lane > 0 ? base.tracks[lane]?.name : undefined;
+      return {
+        op: { op: "move", clip: d.id, at: Math.max(0, s.t), ...(name && { track: name }) },
+        to: s.to,
+        clamped: false,
+      };
     }
-    const edge = d.mode === "in" ? d.span[0] : d.span[1];
-    const delta = snapPoint(edge + dt, list, pps, g) - edge;
-    return g.f(delta) ? { op: "trim", clip: d.id, edge: d.mode, delta } : null;
+    if (d.mode === "in" || d.mode === "out") {
+      const edgeT = d.mode === "in" ? d.span[0] : d.span[1];
+      const s = sn(edgeT + dt, edgeT);
+      const edge = d.mode;
+      return {
+        ...clamp(g.f(s.t - edgeT), (k) => ({ op: "trim", clip: d.id, edge, delta: g.s(k) })),
+        to: s.to,
+      };
+    }
+    if (d.mode === "roll" || d.mode === "slide") {
+      const s = sn(d.span[0] + dt, d.span[0]);
+      const op = d.mode;
+      return {
+        ...clamp(g.f(s.t - d.span[0]), (k) => ({ op, clip: d.id, delta: g.s(k) })),
+        to: s.to,
+      };
+    }
+    if (d.mode === "slip")
+      return {
+        ...clamp(g.f(dt), (k) => ({ op: "slip", clip: d.id, delta: g.s(k) })),
+        to: null,
+      };
+    if (d.mode === "overwrite") {
+      const s = sn(d.span[0] + dt, d.span[0]);
+      const lane = d.track > 0 ? laneAt(e.clientX, e.clientY) : 0;
+      const name = lane > 0 ? base.tracks[lane]?.name : undefined;
+      if (g.f(s.t) === g.f(d.span[0]) && (!name || name === bt.name)) return none;
+      return {
+        op: {
+          op: "overwrite",
+          clip: d.id,
+          at: Math.max(0, s.t),
+          ...(name && { track: name }),
+          ids: d.ids,
+        },
+        to: s.to,
+        clamped: false,
+      };
+    }
+    return none;
   }
   const laneAt = (x: number, y: number) => {
     const el = document
-      .elementsFromPoint(x, y)
+      .elementsFromPoint?.(x, y)
       .find((e) => e instanceof HTMLElement && e.dataset.lane !== undefined);
     return el ? Number((el as HTMLElement).dataset.lane) : -1;
   };
 
   function down(e: React.PointerEvent<HTMLButtonElement>, c: Clip, ti: number) {
-    if (e.button !== 0 || shotBusy(c)) return;
+    // Range drags on the lanes themselves; Blade cuts on the click
+    if (e.button !== 0 || shotBusy(c) || tool === "range" || tool === "blade") return;
+    e.stopPropagation();
     const r = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - r.left;
-    const mode = x < EDGE_PX ? "in" : r.width - x < EDGE_PX ? "out" : "move";
-    const a = c.at!;
+    const clips = doc.tracks[ti].clips;
+    const i = clips.findIndex((k) => k.id === c.id);
+    let id = c.id;
+    let mode: Mode;
+    if (tool === "select") mode = x < EDGE_PX ? "in" : r.width - x < EDGE_PX ? "out" : "move";
+    else if (tool === "overwrite") mode = "overwrite";
+    else {
+      const z = trimZone(x, r.width, ti === 0 && i > 0, ti === 0 && i < clips.length - 1);
+      if (z === "roll_next") id = clips[i + 1].id;
+      mode =
+        z === "roll" || z === "roll_next"
+          ? "roll"
+          : z === "body"
+            ? e.altKey && ti === 0
+              ? "slide"
+              : "slip"
+            : z;
+    }
+    const k = clips.find((x) => x.id === id)!;
+    const a = k.at!;
     drag.current = {
-      id: c.id,
+      id,
       track: ti,
       mode,
       x0: e.clientX,
       started: false,
-      span: [a, g.s(g.f(a) + lenOf(c, kindOf(c, facts), g, ti > 0))],
+      span: [a, g.s(g.f(a) + lenOf(k, kindOf(k, facts), g, ti > 0))],
+      doc,
+      ids:
+        mode === "overwrite"
+          ? (withIds({ op: "overwrite", clip: id, at: 0 }, doc) as { ids: string[] }).ids
+          : undefined,
     };
     e.currentTarget.setPointerCapture(e.pointerId);
   }
+  /** The Range tool: a drag anywhere on the lanes or the ruler marks in and out. */
+  function rangeDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (tool !== "range" || e.button !== 0) return;
+    const r0 = content.current?.getBoundingClientRect();
+    if (e.clientX - (r0?.left ?? 0) < HEAD) return; // the track names and their buttons
+    const t = snapTo(timeAt(e.clientX), points(doc), pps, g, snapOn(e)).t;
+    drag.current = {
+      id: "",
+      track: 0,
+      mode: "range",
+      x0: e.clientX,
+      started: false,
+      span: [t, t],
+      doc,
+      t0: t,
+    };
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  }
   function move(e: React.PointerEvent) {
     const d = drag.current;
-    if (!d) return;
+    if (!d) {
+      // the pointer over the lanes: the blade line and hover scrub
+      if (tool !== "blade" && !scrub) return;
+      const s = snapTo(timeAt(e.clientX), points(doc), pps, g, tool === "blade" && snapOn(e));
+      const t = Math.min(s.t, end);
+      if (hover?.t !== t || hover.all !== e.shiftKey || hover.to !== s.to)
+        setHover({ t, all: e.shiftKey, to: tool === "blade" ? s.to : null });
+      if (scrub) onHover?.(g.f(t));
+      return;
+    }
     const dx = e.clientX - d.x0;
     if (!d.started && Math.abs(dx) < DRAG_PX) return;
     d.started = true;
-    if (d.mode === "move") setShift({ id: d.id, dx });
-    else onPreview(opOf(d, dx, e.clientX, e.clientY));
+    if (d.mode === "range") {
+      const t = snapTo(timeAt(e.clientX), points(d.doc), pps, g, snapOn(e)).t;
+      const r: [number, number] = [Math.min(d.t0!, t), Math.min(Math.max(d.t0!, t), end)];
+      onRange?.(g.f(r[1]) > g.f(r[0]) ? r : null);
+      return;
+    }
+    const r = opOf(d, e);
+    setShown({ d, ...r });
+    if (d.mode === "move" && tool === "select") setShift({ id: d.id, dx });
+    else onPreview(r.op);
   }
   function up(e: React.PointerEvent) {
     const d = drag.current;
@@ -242,15 +472,26 @@ export function Lanes({
     if (!d?.started) return;
     suppress.current = true;
     setShift(null);
+    setShown(null);
     onPreview(null);
-    const op = opOf(d, e.clientX - d.x0, e.clientX, e.clientY);
+    if (d.mode === "range") return;
+    const { op } = opOf(d, e);
     if (op) onCommit(op);
   }
+  function cancel() {
+    drag.current = null;
+    setShift(null);
+    setShown(null);
+    onPreview(null);
+  }
 
-  const seekAt = (e: React.PointerEvent<HTMLElement>) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    onSeek(g.f(Math.max(0, (e.clientX - r.left) / pps)));
-  };
+  /** Blade: cut the clip under the pointer on its track (⇧: every track) at the cut line's frame. */
+  function blade(e: React.MouseEvent, trackName: string) {
+    const at = Math.min(snapTo(timeAt(e.clientX), points(doc), pps, g, snapOn(e)).t, end);
+    onCommit(e.shiftKey ? { op: "split_all", at } : { op: "split", track: trackName, at, id: "" });
+  }
+
+  const seekAt = (e: React.PointerEvent<HTMLElement>) => onSeek(g.f(timeAt(e.clientX)));
 
   const clipButton = (c: Clip, ti: number, height: number) => {
     const audio = ti > 0;
@@ -277,27 +518,36 @@ export function Lanes({
     const ticks = wave && height > 40 ? cueTicks(c, t) : [];
     const menu = audio && !!c.take_id && !c.offline && !!onMenu;
     const failedLine = audio && !c.take_id && c.shot?.status === "failed";
+    const linked = audio && c.link !== undefined;
     const button = (
       <button
         key={c.id}
         type="button"
         data-clip={c.id}
         aria-pressed={on}
-        aria-label={`${title}, ${line}${on ? ", selected" : ""}`}
+        aria-label={`${title}, ${line}${linked ? ", linked" : ""}${on ? ", selected" : ""}`}
         onPointerDown={(e) => down(e, c, ti)}
-        onPointerMove={move}
-        onPointerUp={up}
-        onPointerCancel={() => {
-          drag.current = null;
-          setShift(null);
-          onPreview(null);
+        onPointerMove={(e) => {
+          // Trim's grab zone shows in the cursor
+          if (tool !== "trim" || drag.current) return;
+          const r = e.currentTarget.getBoundingClientRect();
+          const clips = doc.tracks[ti].clips;
+          const i = clips.findIndex((k) => k.id === c.id);
+          const z = trimZone(
+            e.clientX - r.left,
+            r.width,
+            ti === 0 && i > 0,
+            ti === 0 && i < clips.length - 1,
+          );
+          e.currentTarget.style.cursor = ZONE_CURSOR[z];
         }}
         onClick={(e) => {
           if (suppress.current) {
             suppress.current = false;
             return;
           }
-          onSelect(c.id, e.shiftKey || e.metaKey || e.ctrlKey);
+          if (tool === "blade") return blade(e, ti === 0 ? "V1" : doc.tracks[ti].name!);
+          onSelect(c.id, e.shiftKey || e.metaKey || e.ctrlKey, e.altKey);
         }}
         className={`tl-clip absolute top-0 ${failedLine ? "border border-bad bg-s2" : audio && c.shot && !c.take_id ? "border border-[#86cdea] bg-s2" : look} ${on ? "border-2! border-t1!" : ""} ${shift?.id === c.id ? "z-10 opacity-80" : ""}`}
         style={{
@@ -311,10 +561,15 @@ export function Lanes({
           backgroundSize: bg ? "auto, auto 100%" : undefined,
           backgroundPosition: bg ? "0 0, right center" : undefined,
           backgroundRepeat: "no-repeat",
-          cursor: shotBusy(c) ? "default" : undefined,
+          cursor: shotBusy(c) ? "default" : tool === "trim" ? undefined : CURSOR[tool],
         }}
       >
-        {height > 40 && <b className={menu ? "pr-6" : ""}>{title}</b>}
+        {height > 40 && (
+          <b className={`flex items-center gap-1 ${menu ? "pr-6" : ""}`}>
+            {linked && <Link2 size={11} aria-hidden className="shrink-0" />}
+            {title}
+          </b>
+        )}
         {wave && (
           <span
             aria-hidden
@@ -358,7 +613,7 @@ export function Lanes({
             {height > 40 ? line : `${title === "Clip" ? "" : title} · ${line}`}
           </small>
         )}
-        {!shotBusy(c) && (
+        {!shotBusy(c) && tool === "select" && (
           <>
             <span aria-hidden className="tl-edge left-0" />
             <span aria-hidden className="tl-edge right-0" />
@@ -390,147 +645,303 @@ export function Lanes({
     );
   };
 
+  // ---- what a drag shows (the board's shared states): the ripple ghost and edge, the tool's tag, the snap line
+  const xOf = (t: number) => HEAD + t * pps;
+  const overlay = (() => {
+    if (!shown?.op) return null;
+    const { d, op, clamped } = shown;
+    const [a, b] = d.span;
+    const out: React.ReactNode[] = [];
+    const tag = (x: number, text: string, warn = false) =>
+      out.push(
+        <span key="tag" className={`tl-tag ${warn ? "warn" : ""}`} style={{ left: x - 4, top: 2 }}>
+          {text}
+        </span>,
+      );
+    if (op.op === "trim") {
+      const delta = op.delta;
+      // V1 ripples: the clip's length changes at its end; an audio clip's edge itself moves
+      const onV1 = d.track === 0;
+      const grow = op.edge === "out" ? delta : -delta;
+      const edgeT = onV1
+        ? op.edge === "out"
+          ? b + grow
+          : a
+        : op.edge === "out"
+          ? b + delta
+          : a + delta;
+      const ghost: [number, number] | null = onV1
+        ? grow < 0
+          ? [b + grow, b]
+          : null
+        : op.edge === "out" && delta < 0
+          ? [b + delta, b]
+          : op.edge === "in" && delta > 0
+            ? [a, a + delta]
+            : null;
+      const top = d.track === 0 ? 24 : 128 + 62 * (d.track - 1); // the ruler, V1 and A1 above
+      if (ghost)
+        out.push(
+          <span
+            key="ghost"
+            aria-hidden
+            className="tl-ghost"
+            style={{ left: xOf(ghost[0]), width: (ghost[1] - ghost[0]) * pps, top }}
+          />,
+        );
+      out.push(
+        <span
+          key="edge"
+          aria-hidden
+          className={`tl-edgebar ${clamped ? "warn" : ""}`}
+          style={{ left: xOf(edgeT) - 3, top }}
+        />,
+      );
+      tag(
+        xOf(edgeT),
+        onV1
+          ? `Ripple ${signed(grow, g)} · later clips move ${grow < 0 ? "left" : "right"}`
+          : `Trim ${signed(delta, g)}`,
+        onV1,
+      );
+    } else if (op.op === "slip") tag(xOf(a), `Slip ${signed(op.delta, g)} · place and length kept`);
+    else if (op.op === "slide") tag(xOf(a + op.delta), `Slide ${signed(op.delta, g)}`);
+    else if (op.op === "roll") tag(xOf(a + op.delta), `Roll ${signed(op.delta, g)} · length kept`);
+    else if (op.op === "overwrite") tag(xOf(op.at), `Overwrite at ${timecode(op.at)}`);
+    if (clamped && op.op !== "trim")
+      out.push(
+        <span
+          key="edge"
+          aria-hidden
+          className="tl-edgebar warn"
+          style={{ left: xOf(a) - 3, top: 24 }}
+        />,
+      );
+    return out;
+  })();
+  const snapLine = shown?.to;
+  const kindWord = { cut: "cut", playhead: "playhead", range: "range", marker: "marker" };
+
   return (
-    <div
-      className="panel shrink-0 overflow-x-auto rounded-[28px_28px_28px_12px] px-3.5 pt-3 pb-3.5"
-      onWheel={(e) => {
-        if (!e.ctrlKey && !e.metaKey) return;
-        e.preventDefault();
-        onZoom(Math.min(400, Math.max(5, pps * (e.deltaY < 0 ? 1.25 : 0.8))));
-      }}
-    >
-      <div className="relative flex flex-col gap-1.5" style={{ width: width + HEAD }}>
+    <div className="panel flex shrink-0 flex-col gap-2 rounded-[28px_28px_28px_12px] px-3.5 pt-3 pb-3.5">
+      {toolbar}
+      <div
+        ref={scroller}
+        className="overflow-x-auto"
+        onWheel={(e) => {
+          if (!e.ctrlKey && !e.metaKey) return;
+          e.preventDefault();
+          onZoom(pps * (e.deltaY < 0 ? 1.25 : 0.8));
+        }}
+      >
         <div
-          role="slider"
-          tabIndex={-1}
-          aria-label="Time ruler: click to move the playhead"
-          aria-valuemin={0}
-          aria-valuemax={doc.frames}
-          aria-valuenow={frame}
-          aria-valuetext={shortTime(g.s(frame))}
-          className="mono relative h-[18px] cursor-pointer text-[10px] text-t2"
-          style={{ marginLeft: HEAD }}
-          onPointerDown={(e) => {
-            seekAt(e);
-            e.currentTarget.setPointerCapture(e.pointerId);
+          ref={content}
+          className="relative flex flex-col gap-1.5"
+          style={{ width: width + HEAD, cursor: CURSOR[tool] }}
+          onPointerDown={rangeDown}
+          onPointerMove={move}
+          onPointerUp={up}
+          onPointerCancel={cancel}
+          onPointerLeave={() => {
+            if (drag.current) return;
+            setHover(null);
+            onHover?.(null);
           }}
-          onPointerMove={(e) => e.buttons === 1 && seekAt(e)}
         >
-          {ticks.map((s) => (
-            <span key={s} className="absolute top-0" style={{ left: s * pps }}>
-              {shortTime(s)}
-            </span>
-          ))}
-        </div>
-
-        <div className="flex h-14 items-stretch" data-lane={0}>
-          <span className="mono flex w-[72px] shrink-0 items-center text-[11px] text-t2">V1</span>
-          <div className="relative flex-1" role="group" aria-label="V1: the picture">
-            {v1.clips.map((c) => clipButton(c, 0, 56))}
-            {!v1.clips.length && (
-              <span className="flex h-full items-center text-[13px] text-t2">
-                No clips yet: add some from the gallery.
+          <div
+            role="slider"
+            tabIndex={-1}
+            aria-label="Time ruler: click to move the playhead"
+            aria-valuemin={0}
+            aria-valuemax={doc.frames}
+            aria-valuenow={frame}
+            aria-valuetext={shortTime(g.s(frame))}
+            className="mono relative h-[18px] cursor-pointer text-[10px] text-t2"
+            style={{ marginLeft: HEAD }}
+            onPointerDown={(e) => {
+              if (tool === "range") return;
+              seekAt(e);
+              e.currentTarget.setPointerCapture(e.pointerId);
+            }}
+            onPointerMove={(e) => tool !== "range" && e.buttons === 1 && seekAt(e)}
+          >
+            {ticks.map((s) => (
+              <span key={s} className="absolute top-0" style={{ left: s * pps }}>
+                {shortTime(s)}
               </span>
-            )}
-          </div>
-        </div>
-
-        <div className="flex h-9 items-stretch">
-          <span className="mono flex w-[72px] shrink-0 items-center text-[11px] text-t2">A1</span>
-          <div className="relative flex-1" aria-label="A1: the clips' own sound" role="group">
-            {v1.clips.map((c) => {
-              const t = c.take_id ? takes[c.take_id] : undefined;
-              if (!t?.video?.has_audio || c.offline) return null;
-              const w = g.s(lenOf(c, "video", g)) * pps;
-              const gain = (c.gain_db ?? 0) + (v1.gain_db ?? 0);
-              return (
-                <button
-                  key={c.id}
-                  type="button"
-                  tabIndex={-1}
-                  aria-hidden
-                  onClick={() => onSelect(c.id, false)}
-                  className={`tl-clip absolute top-0 h-9 justify-center border border-line bg-s2 ${c.mute ? "opacity-50" : ""}`}
-                  style={{ left: c.at! * pps, width: Math.max(w, 6) }}
-                >
-                  <small>
-                    {c.number ? `Shot ${c.number} sound` : "clip audio"} ·{" "}
-                    {c.mute ? "muted" : `${gain > 0 ? "+" : ""}${gain} dB`}
-                  </small>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {doc.tracks.slice(1).map((t, i) => (
-          <div key={t.name} className="flex h-14 items-stretch" data-lane={i + 1}>
-            <span className="flex w-[72px] shrink-0 items-center gap-1.5">
+            ))}
+            {markers.map((m) => (
               <button
+                key={m.id}
                 type="button"
-                aria-pressed={track === t.name}
-                onClick={() => onTrack(t.name!)}
-                className={`mono text-left text-[11px] aria-pressed:text-a1 ${t.mute ? "text-t2 line-through" : "text-t2"}`}
-                aria-label={`Track ${t.name}${t.mute ? ", muted" : ""}: settings`}
-              >
-                {t.name}
-              </button>
-              {onRemoveTrack && (
-                <button
-                  type="button"
-                  aria-label={`Remove ${t.name}`}
-                  title="Remove track"
-                  onClick={() => onRemoveTrack(t.name!)}
-                  className="grid size-[22px] place-items-center rounded-lg bg-s3 text-t2"
-                >
-                  <X size={12} aria-hidden />
-                </button>
+                aria-pressed={marker === m.id}
+                aria-label={`Marker${m.name ? ` ${m.name}` : ""} at ${timecode(m.at)}`}
+                title={`${m.name ?? "Marker"} · ${timecode(m.at)}`}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={() => {
+                  onSeek(g.f(m.at));
+                  onMarker?.(m.id);
+                }}
+                className="absolute top-0 z-10 h-[14px] w-[10px] -translate-x-1/2 p-0 aria-pressed:outline-2 aria-pressed:outline-t1"
+                style={{
+                  left: m.at * pps,
+                  background: m.color ? MARKER_COLORS[m.color] : "var(--a1)",
+                  clipPath: "polygon(0 0, 100% 0, 100% 65%, 50% 100%, 0 65%)",
+                }}
+              />
+            ))}
+          </div>
+
+          <div className="flex h-14 items-stretch" data-lane={0}>
+            <span className="mono flex w-[72px] shrink-0 items-center text-[11px] text-t2">V1</span>
+            <div className="relative flex-1" role="group" aria-label="V1: the picture">
+              {v1.clips.map((c) => clipButton(c, 0, 56))}
+              {!v1.clips.length && (
+                <span className="flex h-full items-center text-[13px] text-t2">
+                  No clips yet: add some from the gallery.
+                </span>
               )}
-            </span>
-            <div className="relative flex-1" role="group" aria-label={`${t.name}: sound`}>
-              {t.clips.map((c) => clipButton(c, i + 1, 56))}
             </div>
           </div>
-        ))}
-        {onAddTrack && doc.tracks.length < 9 && (
-          <button
-            type="button"
-            className="chip bevel h-8 w-fit rounded-[10px] text-[12px]"
-            onClick={onAddTrack}
-          >
-            + Audio track
-          </button>
-        )}
 
-        {range && (
+          <div className="flex h-9 items-stretch">
+            <span className="mono flex w-[72px] shrink-0 items-center text-[11px] text-t2">A1</span>
+            <div className="relative flex-1" aria-label="A1: the clips' own sound" role="group">
+              {v1.clips.map((c) => {
+                const t = c.take_id ? takes[c.take_id] : undefined;
+                if (!t?.video?.has_audio || c.offline) return null;
+                const w = g.s(lenOf(c, "video", g)) * pps;
+                const gain = (c.gain_db ?? 0) + (v1.gain_db ?? 0);
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    tabIndex={-1}
+                    aria-hidden
+                    onClick={(e) =>
+                      tool === "blade" ? blade(e, "V1") : onSelect(c.id, false, e.altKey)
+                    }
+                    className={`tl-clip absolute top-0 h-9 justify-center border border-line bg-s2 ${c.mute ? "opacity-50" : ""}`}
+                    style={{ left: c.at! * pps, width: Math.max(w, 6), cursor: CURSOR[tool] }}
+                  >
+                    <small>
+                      {c.number ? `Shot ${c.number} sound` : "clip audio"} ·{" "}
+                      {c.mute ? "muted" : `${gain > 0 ? "+" : ""}${gain} dB`}
+                    </small>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {doc.tracks.slice(1).map((t, i) => (
+            <div key={t.name} className="flex h-14 items-stretch" data-lane={i + 1}>
+              <span className="flex w-[72px] shrink-0 items-center gap-1.5">
+                <button
+                  type="button"
+                  aria-pressed={track === t.name}
+                  onClick={() => onTrack(t.name!)}
+                  className={`mono text-left text-[11px] aria-pressed:text-a1 ${t.mute ? "text-t2 line-through" : "text-t2"}`}
+                  aria-label={`Track ${t.name}${t.mute ? ", muted" : ""}: settings`}
+                >
+                  {t.name}
+                </button>
+                {onRemoveTrack && (
+                  <button
+                    type="button"
+                    aria-label={`Remove ${t.name}`}
+                    title="Remove track"
+                    onClick={() => onRemoveTrack(t.name!)}
+                    className="grid size-[22px] place-items-center rounded-lg bg-s3 text-t2"
+                  >
+                    <X size={12} aria-hidden />
+                  </button>
+                )}
+              </span>
+              <div className="relative flex-1" role="group" aria-label={`${t.name}: sound`}>
+                {t.clips.map((c) => clipButton(c, i + 1, 56))}
+              </div>
+            </div>
+          ))}
+          {onAddTrack && doc.tracks.length < 9 && (
+            <button
+              type="button"
+              className="chip bevel h-8 w-fit rounded-[10px] text-[12px]"
+              onClick={onAddTrack}
+            >
+              + Audio track
+            </button>
+          )}
+
+          {range && (
+            <span
+              aria-label={`Range ${shortTime(range[0])} to ${shortTime(range[1])}`}
+              className="pointer-events-none absolute top-[18px] bottom-0 block border-x-2 border-a2"
+              style={{
+                left: HEAD + range[0] * pps,
+                width: (range[1] - range[0]) * pps,
+                background: "color-mix(in srgb, var(--a2) 12%, transparent)",
+              }}
+            >
+              <span
+                aria-hidden
+                className="mono absolute -top-[18px] -left-0.5 rounded bg-a2 px-1 text-[10px] text-[var(--on2)]"
+              >
+                I
+              </span>
+              <span
+                aria-hidden
+                className="mono absolute -top-[18px] -right-0.5 rounded bg-a2 px-1 text-[10px] text-[var(--on2)]"
+              >
+                O
+              </span>
+            </span>
+          )}
           <span
-            aria-label={`Range ${shortTime(range[0])} to ${shortTime(range[1])}`}
-            className="pointer-events-none absolute top-[18px] bottom-0 block border-x-2 border-a2"
-            style={{
-              left: HEAD + range[0] * pps,
-              width: (range[1] - range[0]) * pps,
-              background: "color-mix(in srgb, var(--a2) 12%, transparent)",
-            }}
-          >
+            aria-hidden
+            className="pointer-events-none absolute top-3.5 bottom-0 block w-0.5 bg-t1"
+            style={{ left: HEAD + g.s(frame) * pps }}
+          />
+          {overlay}
+          {snapLine && (
+            <>
+              <span
+                aria-hidden
+                className="tl-snapl"
+                style={{ left: xOf(snapLine.t) - 1, top: TOP, bottom: 0 }}
+              />
+              <span className="tl-tag ok" style={{ left: xOf(snapLine.t) - 4, top: 2 }}>
+                <MagnetIcon size={12} /> Snap · {kindWord[snapLine.kind]} {timecode(snapLine.t)}
+              </span>
+            </>
+          )}
+          {hover && !shown && !shift && tool === "blade" && (
+            <>
+              <span
+                aria-hidden
+                className="tl-bl"
+                style={{ left: xOf(hover.t) - 1, top: TOP, bottom: 0 }}
+              />
+              <span aria-hidden className="tl-cur" style={{ left: xOf(hover.t) + 5, top: 38 }}>
+                <ToolIcon tool="blade" size={14} />
+              </span>
+              <span className="tl-tag" style={{ left: xOf(hover.t) - 4, top: 2 }}>
+                Cut {timecode(hover.t)} · {hover.all ? "all tracks" : `frame ${g.f(hover.t)}`}
+              </span>
+            </>
+          )}
+          {hover && !shown && !shift && tool !== "blade" && scrub && (
             <span
               aria-hidden
-              className="mono absolute -top-[18px] -left-0.5 rounded bg-a2 px-1 text-[10px] text-[var(--on2)]"
+              className="pointer-events-none absolute top-0 bottom-0 z-10 block w-px bg-t2"
+              style={{ left: xOf(hover.t) }}
             >
-              I
+              <span className="mono absolute top-0 left-1 rounded bg-s3 px-1 text-[10px] whitespace-nowrap text-t1">
+                {timecode(hover.t)}
+              </span>
             </span>
-            <span
-              aria-hidden
-              className="mono absolute -top-[18px] -right-0.5 rounded bg-a2 px-1 text-[10px] text-[var(--on2)]"
-            >
-              O
-            </span>
-          </span>
-        )}
-        <span
-          aria-hidden
-          className="pointer-events-none absolute top-3.5 bottom-0 block w-0.5 bg-t1"
-          style={{ left: HEAD + g.s(frame) * pps }}
-        />
+          )}
+        </div>
       </div>
     </div>
   );

@@ -17,7 +17,8 @@ import { markRange, rangeInTake, removeTrack } from "@/lib/source";
 import { ElementsPicker } from "@/components/create/elements";
 import { LooksPicker } from "@/components/create/looks";
 import { GalleryPicker } from "@/components/gallery/picker";
-import { Lanes, clipText, shotName } from "@/components/timeline/lanes";
+import { Lanes, MARKER_COLORS, clipText, shotName } from "@/components/timeline/lanes";
+import { ShortcutSheet, SlipSource, ToolRow } from "@/components/timeline/tools";
 import { ShotComposer, type ShotSlot } from "@/components/timeline/shot";
 import { FrameIn } from "@/components/create/frame-in";
 import { LineComposer } from "@/components/timeline/line";
@@ -45,6 +46,7 @@ import {
   Grid,
   apply,
   clipAt,
+  cuts,
   factsOf,
   frameAt,
   kindOf,
@@ -53,16 +55,55 @@ import {
   span,
   timecode,
   type Clip,
+  type MarkerColor,
   type Norm,
   type Op,
   type Problem,
   type Track,
   shotBusy,
 } from "@/lib/timeline";
+import {
+  MERGE_MS,
+  describe,
+  keyOf,
+  merge,
+  noun,
+  signed,
+  spanText,
+  sticky,
+  withIds,
+  zoomBounds,
+  type KeyId,
+  type Tool,
+} from "@/lib/timeline-tools";
 
 type Timeline = S<"Timeline">;
 
 const sayProblems = (p: Problem[]) => say(p[0][0]);
+const sameSet = (a: string[], b: string[]) =>
+  a.length === b.length && a.every((x) => b.includes(x));
+
+/** A clip's name in the live region ("Shot 3", a take's title). */
+function nameIn(d: Norm, cid: string, takes: Timeline["takes"]): string {
+  const ti = d.tracks.findIndex((t) => t.clips.some((c) => c.id === cid));
+  const c = d.tracks[ti]?.clips.find((x) => x.id === cid);
+  if (!c) return "the clip";
+  const title = c.take_id ? takes[c.take_id]?.title : undefined;
+  return ti === 0 ? shotName(c, title ?? "the empty slot") : (title ?? "the line");
+}
+
+/** The V1 clip ids and the audio-track clips linked to each (plan 23 §27.5: selecting either selects both). */
+function linkedTo(d: Norm, cid: string): string[] {
+  const audio = d.tracks.slice(1).flatMap((t) => t.clips);
+  const v1 = d.tracks[0].clips.some((c) => c.id === cid)
+    ? cid
+    : audio.find((c) => c.id === cid)?.link;
+  if (!v1) return [cid];
+  return [
+    cid,
+    ...[v1, ...audio.filter((c) => c.link === v1).map((c) => c.id)].filter((x) => x !== cid),
+  ];
+}
 
 /** The editor; `id` is the sequence to open (else the one opened last, else the newest). */
 export function TimelineEditor({ id }: { id?: string }) {
@@ -76,7 +117,16 @@ export function TimelineEditor({ id }: { id?: string }) {
   const [unplayable, setUnplayable] = useState<string[]>([]);
   const [sel, setSel] = useState<string[]>([]);
   const [track, setTrack] = useState<string | null>(null);
-  const [pps, setPps] = useState(40);
+  const [pps, setPpsRaw] = useState(40);
+  // the tools (plan 23): the active tool, snapping (N), hover scrub (⇧S, on by default: owner point 7), the sheet
+  const [tool, setTool] = useState<Tool>("select");
+  const [snap, setSnap] = useState(true);
+  const [scrub, setScrub] = useState(true);
+  const [sheet, setSheet] = useState(false);
+  // the visible track width (px), the live region's last edit, the selected marker
+  const [viewW, setViewW] = useState(0);
+  const [said, setSaid] = useState("");
+  const [marker, setMarker] = useState<string | null>(null);
   const [notice, setNotice] = useState<React.ReactNode>("");
   const [error, setError] = useState("");
   const [dialog, setDialog] = useState<
@@ -203,20 +253,26 @@ export function TimelineEditor({ id }: { id?: string }) {
         const cur = tlRef.current;
         if (!cur) return;
         const r = apply(cur, op, factsOf(cur.takes));
-        if (!("document" in r)) return; // the clip it addressed is gone: the edit is dropped
+        // it no longer fits the newer revision (a slide past a handle another tab just trimmed): dropped, and said
+        // (plan 23 §27.7)
+        if (!("document" in r))
+          return setNotice(
+            `The sequence changed: your ${noun(op)} no longer fits and was not saved.`,
+          );
         try {
           const t = await editTimeline(cur, [op]);
           tlRef.current = t;
           setTl(t);
+          if (attempt)
+            setNotice(
+              "The sequence changed since you opened it: reloaded, and your edit applied to it.",
+            );
           return;
         } catch (e) {
           if (e instanceof ApiError && e.status === 409 && !attempt) {
             const t = await getTimeline(cur.id);
             tlRef.current = t;
             setTl(t);
-            setNotice(
-              "The sequence changed since you opened it: reloaded, and your edit applied to it.",
-            );
             continue;
           }
           setError(message(e));
@@ -229,14 +285,16 @@ export function TimelineEditor({ id }: { id?: string }) {
   );
 
   const commit = useCallback(
-    (op: Op) => {
+    (raw: Op) => {
       const b = draft ?? tlRef.current;
       if (!b) return;
+      const op = withIds(raw, b); // the ids it makes, the same on a 409 re-apply
       const r = apply(b, op, facts);
       if ("error" in r) return setNotice(say(r.error));
       if ("problems" in r) return setNotice(sayProblems(r.problems));
       setNotice("");
       setError("");
+      setSaid(describe(op, b, facts, (cid) => nameIn(b, cid, tlRef.current?.takes ?? {})));
       setDraft(r.document);
       pending.current++;
       queue.current = queue.current.then(async () => {
@@ -357,7 +415,12 @@ export function TimelineEditor({ id }: { id?: string }) {
   // ------------------------------------------------------------------ selection and helpers
   const all = doc?.tracks.flatMap((t, ti) => t.clips.map((c) => ({ c, ti, t }))) ?? [];
   const selected = all.filter((x) => sel.includes(x.c.id));
-  const one = selected.length === 1 ? selected[0] : null;
+  // one clip, or one clip and its linked ones (selected together, plan 23 §27.5): the first is the one clicked
+  const linkedSel =
+    !!doc && sel.length > 1 && sameSet(sel, linkedTo(doc, sel[0]))
+      ? selected.find((x) => x.c.id === sel[0])
+      : undefined;
+  const one = selected.length === 1 ? selected[0] : (linkedSel ?? null);
   const v1 = doc?.tracks[0].clips ?? [];
   const at = g ? g.s(frame) : 0;
   const menuClip = all.find((x) => x.c.id === menuFor && x.ti > 0)?.c;
@@ -391,8 +454,15 @@ export function TimelineEditor({ id }: { id?: string }) {
       if (index !== i) commit({ op: "move", clip: one.c.id, index });
     } else commit({ op: "move", clip: one.c.id, at: Math.max(0, g.s(g.f(one.c.at!) + dir)) });
   }
-  function remove() {
-    for (const x of selected) if (!shotBusy(x.c)) commit({ op: "remove", clip: x.c.id });
+  /** Delete: ripple delete (V1 closes the gap; an audio track's later clips move left); `lift`: ⇧Delete, V1 leaves
+   * an empty slot, an audio clip a gap. A linked sound clip goes with its V1 clip. */
+  function remove(lift = false) {
+    const v1Ids = new Set(selected.filter((x) => x.ti === 0).map((x) => x.c.id));
+    for (const x of selected) {
+      if (shotBusy(x.c) || (x.ti > 0 && x.c.link && v1Ids.has(x.c.link))) continue;
+      if (x.ti === 0) commit({ op: lift ? "lift" : "remove", clip: x.c.id });
+      else commit({ op: "remove", clip: x.c.id, ...(!lift && { ripple: true }) });
+    }
     setSel([]);
   }
   /** Removes an audio track: an empty one at once, one with clips after the confirm. */
@@ -406,59 +476,264 @@ export function TimelineEditor({ id }: { id?: string }) {
   const mark = (edge: "in" | "out") =>
     doc && setRange((r) => markRange(r, edge, at, doc.duration_s));
 
-  // keys (contracts/README.md, Timeline rules: interaction): never while typing or in a dialog
+  // zoom (the zoom field, −, +, Fit, keys and the wheel): pps within fit … 64 px per frame (plan 23 §27.4; the zoom
+  // engine, pointer-anchored and on a log scale, comes next)
+  const fitPps = doc && viewW ? viewW / Math.max(doc.duration_s, 5) : 0;
+  const zoomTo = (v: number) => {
+    if (!doc) return;
+    const [lo, hi] = zoomBounds(viewW || 600, doc.duration_s, doc.target.fps);
+    setPpsRaw(Math.min(hi, Math.max(lo, v)));
+  };
+  const fit = () => fitPps && setPpsRaw(fitPps);
+  const atFit = !!fitPps && Math.abs(pps - fitPps) / fitPps < 0.005;
+
+  // hover scrub: the viewer shows the frame under the pointer, one seek per animation frame (plan 23 §27.3)
+  const hoverAt = useRef<number | null>(null);
+  const peekRaf = useRef(0);
+  const onHover = useCallback((f: number | null) => {
+    hoverAt.current = f;
+    if (peekRaf.current) return;
+    peekRaf.current = requestAnimationFrame(() => {
+      peekRaf.current = 0;
+      pv.current?.peek(hoverAt.current);
+    });
+  }, []);
+  useEffect(() => {
+    if (!scrub) pv.current?.peek(null);
+  }, [scrub]);
+
+  // J: play backward at 1× (a timed seek per frame, silent); K and L stop it
+  const backward = useRef(0);
+  const stopBack = () => {
+    clearInterval(backward.current);
+    backward.current = 0;
+  };
+  useEffect(() => {
+    const b = backward;
+    return () => clearInterval(b.current);
+  }, []);
+
+  // key repeats (holding [) merge into one op sent after MERGE_MS; the draft shows each press (plan 23 §27.7)
+  const pend = useRef<{ op: Op; timer: number } | null>(null);
+  const commitRef = useRef(commit);
+  useEffect(() => {
+    commitRef.current = commit;
+  });
+  const flush = () => {
+    const p = pend.current;
+    if (!p) return;
+    clearTimeout(p.timer);
+    pend.current = null;
+    setDragOp(null);
+    commitRef.current(p.op);
+  };
+  function press(op: Op) {
+    if (!g) return;
+    const p = pend.current;
+    const m = merge(p?.op ?? null, op, g);
+    if (p && !m) flush();
+    const next = m ?? op;
+    const b = draft ?? tl;
+    const r = b && apply(b, next, facts);
+    if (!r || !("document" in r)) {
+      // past a bound: this press is refused, the presses before it stay
+      if (r) setNotice("error" in r ? say(r.error) : sayProblems(r.problems));
+      return;
+    }
+    if (pend.current) clearTimeout(pend.current.timer);
+    pend.current = { op: next, timer: window.setTimeout(flush, MERGE_MS) };
+    setDragOp(next);
+  }
+
+  // a tool key held past HOLD_MS is temporary: back to the tool before on release (plan 23 §27.2)
+  const held = useRef<{ code: string; at: number; prev: Tool } | null>(null);
+
+  // keys (plan 23's key map, lib/timeline-tools KEYMAP, on e.code): never while typing or in a dialog
   const keys = useRef<(e: KeyboardEvent) => void>(() => {});
   const onKey = (e: KeyboardEvent) => {
     const el = e.target as HTMLElement;
     if (!doc || !g || el.closest("input, textarea, select, dialog, [contenteditable]")) return;
-    const mod = e.metaKey || e.ctrlKey;
-    if (mod && e.key.toLowerCase() === "z") {
-      e.preventDefault();
-      if (e.shiftKey ? tl?.can_redo : tl?.can_undo) undo(e.shiftKey);
+    const id: KeyId | null = keyOf(e);
+    if (!id) return;
+    if (id === "play" && el.closest("button, a")) return;
+    e.preventDefault(); // ⌘= / ⌘− (page zoom), ⇧⌘B (the bookmarks bar), Space (the page's scroll)
+    if (!/^(trim_(in|out)(_back)?|(roll|slip|slide)_(back|fwd))$/.test(id)) flush();
+    // the clip a key edit works on: the selected one, else V1's under the playhead
+    const here = v1[clipAt(doc, frame, facts)];
+    const target = one ?? (here ? { c: here, ti: 0, t: doc.tracks[0] } : null);
+    const editable = target && !shotBusy(target.c) ? target : null;
+    const f1 = g.s(1);
+    const cutList = (withMarkers: boolean) =>
+      [
+        ...new Set([
+          ...cuts(doc, facts),
+          doc.duration_s,
+          ...(withMarkers ? (doc.markers ?? []).map((m) => m.at) : []),
+        ]),
+      ]
+        .map((t) => g.f(t))
+        .sort((a, b) => a - b);
+    if (id.startsWith("tool:")) {
+      if (e.repeat) return;
+      held.current = { code: e.code, at: e.timeStamp, prev: tool };
+      setTool(id.slice(5) as Tool);
       return;
     }
-    if (mod) return;
-    const k = e.key;
-    if (k === " " && !el.closest("button, a")) {
-      e.preventDefault();
-      if (playing) pv.current?.pause();
-      else pv.current?.play();
-    } else if ((k === "ArrowLeft" || k === "ArrowRight") && e.altKey) {
-      e.preventDefault();
-      nudge(k === "ArrowLeft" ? -1 : 1);
-    } else if (k === "ArrowLeft" || k === "ArrowRight") {
-      e.preventDefault();
-      const step = e.shiftKey ? g.f(1) : 1;
-      pv.current?.seek(frame + (k === "ArrowLeft" ? -step : step));
-    } else if ((k === "[" || k === "]" || k === "{" || k === "}") && one && !shotBusy(one.c)) {
-      e.preventDefault();
-      const rev = e.shiftKey ? -1 : 1;
-      const edge = k === "[" || k === "{" ? "in" : "out";
-      commit({ op: "trim", clip: one.c.id, edge, delta: g.s(edge === "in" ? rev : -rev) });
-    } else if ((k === "Delete" || k === "Backspace") && selected.length) {
-      e.preventDefault();
-      remove();
-    } else if (k === "s" || k === "S") {
-      e.preventDefault();
-      splitHere();
-    } else if (k === "i" || k === "I" || k === "o" || k === "O") {
-      e.preventDefault();
-      mark(k.toLowerCase() === "i" ? "in" : "out");
-    } else if (k === "=" || k === "+" || k === "-") {
-      setPps((p) => Math.min(400, Math.max(5, p * (k === "-" ? 0.8 : 1.25))));
-    } else if (k === "Escape") {
-      setSel([]);
-      setTrack(null);
-      setRange(null);
+    switch (id) {
+      case "escape":
+        if (tool !== "select") return setTool("select");
+        setSel([]);
+        setTrack(null);
+        setRange(null);
+        setMarker(null);
+        return;
+      case "undo":
+      case "redo":
+        if (id === "redo" ? tl?.can_redo : tl?.can_undo) undo(id === "redo");
+        return;
+      case "play":
+      case "fwd":
+        stopBack();
+        if (id === "play" && playing) pv.current?.pause();
+        else pv.current?.play();
+        return;
+      case "stop":
+        stopBack();
+        pv.current?.pause();
+        return;
+      case "back":
+        pv.current?.pause();
+        stopBack();
+        backward.current = window.setInterval(() => {
+          const p = pv.current;
+          if (!p || p.frame <= 0) return stopBack();
+          p.seek(p.frame - 1);
+        }, 1000 / doc.target.fps);
+        return;
+      case "frame_back":
+      case "frame_fwd":
+      case "second_back":
+      case "second_fwd": {
+        const n = id.startsWith("second") ? g.f(1) : 1;
+        return pv.current?.seek(frame + (id.endsWith("back") ? -n : n));
+      }
+      case "move_back":
+      case "move_fwd":
+        return nudge(id === "move_back" ? -1 : 1);
+      case "cut_prev":
+      case "mark_prev":
+        return pv.current?.seek(
+          cutList(id === "mark_prev")
+            .filter((x) => x < frame)
+            .pop() ?? 0,
+        );
+      case "cut_next":
+      case "mark_next":
+        return pv.current?.seek(cutList(id === "mark_next").find((x) => x > frame) ?? doc.frames);
+      case "start":
+        return pv.current?.seek(0);
+      case "end":
+        return pv.current?.seek(doc.frames);
+      case "trim_in":
+      case "trim_out":
+      case "trim_in_back":
+      case "trim_out_back": {
+        if (!editable) return;
+        const edge = id.startsWith("trim_in") ? "in" : "out";
+        const rev = id.endsWith("back") ? -1 : 1;
+        return press({
+          op: "trim",
+          clip: editable.c.id,
+          edge,
+          delta: g.s(edge === "in" ? rev : -rev),
+        });
+      }
+      case "trim_in_here":
+      case "trim_out_here": {
+        if (!editable) return;
+        const [a, b] = span(editable.c, editable.ti, facts, g);
+        const edge = id === "trim_in_here" ? "in" : "out";
+        const delta = g.s(g.f(at) - g.f(edge === "in" ? a : b));
+        if (g.f(delta)) commit({ op: "trim", clip: editable.c.id, edge, delta });
+        return;
+      }
+      case "roll_back":
+      case "roll_fwd":
+      case "slip_back":
+      case "slip_fwd":
+      case "slide_back":
+      case "slide_fwd": {
+        if (!editable) return;
+        const op = id.split("_")[0] as "roll" | "slip" | "slide";
+        return press({ op, clip: editable.c.id, delta: id.endsWith("back") ? -f1 : f1 });
+      }
+      case "delete":
+      case "lift":
+        if (selected.length) return remove(id === "lift");
+        if (range)
+          return commit({
+            op: id === "lift" ? "lift_range" : "remove_range",
+            from: range[0],
+            to: range[1],
+          });
+        if (marker && id === "delete") {
+          commit({ op: "remove_marker", id: marker });
+          setMarker(null);
+        }
+        return;
+      case "split":
+        return splitHere();
+      case "blade":
+      case "blade_all": {
+        if (id === "blade_all") return commit({ op: "split_all", at });
+        const name = one && one.ti > 0 ? one.t.name! : (track ?? "V1");
+        return commit({ op: "split", track: name, at, id: "" });
+      }
+      case "mark_in":
+      case "mark_out":
+        return mark(id === "mark_in" ? "in" : "out");
+      case "mark_clip":
+        if (here) setRange(span(here, 0, facts, g));
+        return;
+      case "clear_range":
+        return setRange(null);
+      case "zoom_in":
+      case "zoom_out":
+        return zoomTo(pps * (id === "zoom_out" ? 0.8 : 1.25));
+      case "fit":
+        return void fit();
+      case "snap":
+        return setSnap((x) => !x);
+      case "scrub":
+        return setScrub((x) => !x);
+      case "marker": {
+        const f = scrub && hoverAt.current !== null ? hoverAt.current : frame;
+        return commit({ op: "marker", id: "", at: g.s(Math.min(f, doc.frames)) });
+      }
+      case "sheet":
+        return setSheet(true);
     }
   };
+  const onKeyUp = (e: KeyboardEvent) => {
+    const h = held.current;
+    if (!h || h.code !== e.code) return;
+    held.current = null;
+    if (!sticky(h.at, e.timeStamp)) setTool(h.prev);
+  };
+  const keysUp = useRef<(e: KeyboardEvent) => void>(() => {});
   useEffect(() => {
     keys.current = onKey;
+    keysUp.current = onKeyUp;
   });
   useEffect(() => {
     const f = (e: KeyboardEvent) => keys.current(e);
+    const u = (e: KeyboardEvent) => keysUp.current(e);
     window.addEventListener("keydown", f);
-    return () => window.removeEventListener("keydown", f);
+    window.addEventListener("keyup", u);
+    return () => {
+      window.removeEventListener("keydown", f);
+      window.removeEventListener("keyup", u);
+    };
   }, []);
 
   // ------------------------------------------------------------------ the assistant (plan 18 §22.5)
@@ -572,6 +847,9 @@ export function TimelineEditor({ id }: { id?: string }) {
   const fa = frameAt(doc, Math.min(frame, Math.max(0, doc.frames - 1)), facts);
   const offlineHere = fa.pictures.some((p) => p.offline);
   const under = v1[clipAt(doc, frame, facts)];
+  // Slip's drag: the clip as slipped so far, for the source window
+  const slipping =
+    dragOp?.op === "slip" ? all.find((x) => x.c.id === dragOp.clip && x.c.take_id)?.c : undefined;
   const rangeClip = range ? v1[clipAt(doc, g.f(range[0]), facts)] : undefined;
   const stageNote = !v1.length
     ? "Sequence preview · plays across cuts without rendering"
@@ -851,6 +1129,14 @@ export function TimelineEditor({ id }: { id?: string }) {
           />
         )}
 
+        {slipping && (
+          <SlipSource
+            url={slipping.take_id ? urls[slipping.take_id] : undefined}
+            clip={{ in: slipping.in ?? 0, out: slipping.out ?? 0 }}
+            take={facts[slipping.take_id!]?.duration_s ?? slipping.out ?? 1}
+            delta={dragOp?.op === "slip" ? signed(dragOp.delta, g) : ""}
+          />
+        )}
         <Lanes
           doc={doc}
           takes={tl.takes}
@@ -860,28 +1146,68 @@ export function TimelineEditor({ id }: { id?: string }) {
           sel={sel}
           track={track}
           progress={progress}
-          onSelect={(cid, add) => {
+          onSelect={(cid, add, alone) => {
             setAsk(null);
             setTrack(null);
+            setMarker(null);
             setReplacing(false);
+            // a linked pair selects together; ⌥ picks the one clip
+            const ids = alone ? [cid] : linkedTo(doc, cid);
             setSel((s) =>
-              add ? (s.includes(cid) ? s.filter((x) => x !== cid) : [...s, cid]) : [cid],
+              add
+                ? s.includes(cid)
+                  ? s.filter((x) => !ids.includes(x))
+                  : [...s, ...ids.filter((x) => !s.includes(x))]
+                : ids,
             );
           }}
           onTrack={(name) => {
             setSel([]);
+            setMarker(null);
             setTrack((x) => (x === name ? null : name));
           }}
           onSeek={(f) => pv.current?.seek(f)}
           onPreview={setDragOp}
           onCommit={commit}
-          onZoom={setPps}
+          onZoom={zoomTo}
           onAddTrack={() => commit({ op: "add_track" })}
           onRemoveTrack={askRemove}
           range={range}
           onMenu={setMenuFor}
           nameOf={(v) => speakerOf(library, v)}
+          tool={tool}
+          snap={snap}
+          scrub={scrub}
+          onHover={onHover}
+          onRange={setRange}
+          marker={marker}
+          onMarker={(mid) => {
+            setSel([]);
+            setTrack(null);
+            setMarker(mid);
+          }}
+          onView={setViewW}
+          toolbar={
+            <ToolRow
+              tool={tool}
+              onTool={setTool}
+              snap={snap}
+              onSnap={() => setSnap((x) => !x)}
+              scrub={scrub}
+              onScrub={() => setScrub((x) => !x)}
+              zoom={spanText(viewW / pps, t.fps, atFit ? doc.duration_s : null)}
+              onZoomOut={() => zoomTo(pps * 0.8)}
+              onZoomIn={() => zoomTo(pps * 1.25)}
+              onFit={fit}
+              onSheet={() => setSheet(true)}
+            />
+          }
         />
+        {/* the live region: each edit said (plan 23 §27.9) */}
+        <p role="status" className="m-0 -mt-2 min-h-4 px-1 text-[12px] text-t2">
+          {said}
+        </p>
+        <ShortcutSheet open={sheet} onClose={() => setSheet(false)} />
         <ClipMenu
           clip={menuClip}
           title={menuClip ? clipText(menuClip, true, tl.takes, facts, g!).title : ""}
@@ -940,10 +1266,16 @@ export function TimelineEditor({ id }: { id?: string }) {
                 Re-render…
               </button>
             )}
-            <button type="button" className="act text-bad" onClick={remove}>
+            <button type="button" className="act text-bad" onClick={() => remove()}>
               Remove clips
             </button>
           </div>
+        ) : marker && doc.markers?.some((m) => m.id === marker) ? (
+          <MarkerPanel
+            marker={doc.markers.find((m) => m.id === marker)!}
+            onCommit={commit}
+            onRemoved={() => setMarker(null)}
+          />
         ) : track ? (
           <TrackPanel
             track={doc.tracks.find((x) => x.name === track)!}
@@ -956,7 +1288,8 @@ export function TimelineEditor({ id }: { id?: string }) {
             <h2 className="m-0 font-display text-base font-bold tracking-[0.03em]">{tl.name}</h2>
             <span className="text-[12px] text-t2">
               Select a clip to trim, dissolve, set its gain or replace it. Keys: Space plays, ← →
-              step a frame, [ ] trim, Alt+← → move, S splits, Delete removes.
+              step a frame, [ ] trim, Alt+← → move, S splits, M adds a marker, Delete removes; ?
+              lists them all.
             </span>
             {v1.some((c) => c.take_id && !c.offline) && (
               <button type="button" className="act" onClick={() => setDialog("rerender")}>
@@ -1340,6 +1673,27 @@ function ClipPanel({
                 Mute
               </button>
             </div>
+          </Cell>
+        )}
+        {ti > 0 && (
+          // 1.50, linked sound (plan 23 §27.5): a sound clip that follows a V1 clip's edits
+          <Cell label="Linked to">
+            <select
+              aria-label="Linked to"
+              className="w-full bg-transparent font-semibold text-t1 outline-0"
+              disabled={busy}
+              value={c.link ?? ""}
+              onChange={(e) => onCommit({ op: "set", clip: c.id, link: e.target.value || null })}
+            >
+              <option value="" className="bg-s2">
+                None
+              </option>
+              {doc.tracks[0].clips.map((v) => (
+                <option key={v.id} value={v.id} className="bg-s2">
+                  {shotName(v, v.take_id ? tl.takes[v.take_id]?.title : "Empty slot")}
+                </option>
+              ))}
+            </select>
           </Cell>
         )}
       </div>
@@ -1824,6 +2178,77 @@ function TrackPanel({
 }
 
 /** A field's typed text, reset to the document's value whenever that changes (undo, redo, a reload after 409). */
+/** A marker (1.50, plan 23 §27.5): its name and colour, Remove; edits replace it whole (`marker` with its id). */
+function MarkerPanel({
+  marker: m,
+  onCommit,
+  onRemoved,
+}: {
+  marker: { id: string; at: number; name?: string; color?: MarkerColor };
+  onCommit: (op: Op) => void;
+  onRemoved: () => void;
+}) {
+  const [name, setName] = useDraft(m.name ?? "");
+  const save = (patch: { name?: string; color?: MarkerColor | "" }) => {
+    const next = { ...m, ...patch };
+    onCommit({
+      op: "marker",
+      id: m.id,
+      at: m.at,
+      ...(next.name && { name: next.name }),
+      ...(next.color && { color: next.color }),
+    });
+  };
+  return (
+    <div className="flex flex-col gap-2">
+      <h2 className="m-0 font-display text-base font-bold tracking-[0.03em]">
+        {m.name || "Marker"}
+      </h2>
+      <span className="mono text-[12px] text-t2">at {timecode(m.at)}</span>
+      <div className="grid grid-cols-2 gap-2">
+        <Cell label="Name">
+          <input
+            aria-label="Marker name"
+            className={num}
+            maxLength={80}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onBlur={() => name !== (m.name ?? "") && save({ name: name.trim() })}
+            onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+          />
+        </Cell>
+        <Cell label="Colour">
+          <select
+            aria-label="Marker colour"
+            className="w-full bg-transparent font-semibold text-t1 outline-0"
+            value={m.color ?? ""}
+            onChange={(e) => save({ color: e.target.value as MarkerColor | "" })}
+          >
+            <option value="" className="bg-s2">
+              Accent
+            </option>
+            {Object.keys(MARKER_COLORS).map((k) => (
+              <option key={k} value={k} className="bg-s2">
+                {k[0].toUpperCase() + k.slice(1)}
+              </option>
+            ))}
+          </select>
+        </Cell>
+      </div>
+      <button
+        type="button"
+        className="act text-bad"
+        onClick={() => {
+          onCommit({ op: "remove_marker", id: m.id });
+          onRemoved();
+        }}
+      >
+        Remove marker
+      </button>
+    </div>
+  );
+}
+
 function useDraft(value: string): [string, (v: string) => void] {
   const [draft, setDraft] = useState(value);
   const [seen, setSeen] = useState(value);
