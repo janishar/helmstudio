@@ -83,7 +83,7 @@ make -C contract_tests check-contracts   # exit 1 on any failure
 | `studio.tools` | core request/reply, queue group `studio` | bare JSON (`req.studio.tools`) | pipelines → studio (5 s; API 1.15) |
 | `pipelines.providers.test` | core request/reply, queue group `pipelines` | bare JSON (`req.pipelines.providers.test`) | studio → pipelines (30 s; API 1.15) |
 | `pipelines.judge.test` | core request/reply, queue group `pipelines` | bare JSON (`req.pipelines.judge.test`) | studio → pipelines (5 s; API 1.28) |
-| `cmd.assistant.turn`, `cmd.assistant.delete` | stream `CMD` (work queue) | `cmd.assistant.<same>`, `Nats-Msg-Id <thread_id>:<turn>` (delete: `<thread_id>:delete`) | studio outbox relay → pipelines (durable `pipelines`; API 1.42) |
+| `cmd.assistant.turn`, `cmd.assistant.delete` | stream `CMD` (work queue) | `cmd.assistant.<same>`, `Nats-Msg-Id <thread_id>:<turn>` (delete: `<thread_id>:delete`) | studio outbox relay → pipelines (durable `pipelines-assistant`, filter `cmd.assistant.>`: chats handled concurrently, each in order; API 1.42) |
 | `evt.assistant.<thread_id>.step` | stream `EVT` | `evt.assistant.step`, `Nats-Msg-Id <thread_id>:<seq>` | pipelines → studio projector (durable `studio-assistant`; API 1.42) |
 | `pipelines.assistant.memory` | core request/reply, queue group `pipelines` | bare JSON (`req.pipelines.assistant.memory`) | studio → pipelines (5 s; API 1.42) |
 | `cmd.run.<host>.server` | stream `CMD` (work queue) | `cmd.run.execute` of a `server-ask` run | studio outbox relay → pipelines' server executor (durable `runner-<host>-server`; API 1.15) |

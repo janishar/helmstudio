@@ -60,7 +60,7 @@ async def tool(nc, request: dict) -> dict:
         try:
             msg = await nc.request(TOOLS, body, timeout=TIMEOUT)
             reply = json.loads(msg.data)
-            errs = schemas.tools_errors("reply", reply)
+            errs = _reply_errors(request, reply)
             if not errs and reply.get("code") != "internal":
                 return reply
             log.warning("%s %s: %s", TOOLS, request["call_id"], errs or reply)
@@ -68,3 +68,13 @@ async def tool(nc, request: dict) -> dict:
             log.warning("%s %s: %r", TOOLS, request["call_id"], e)
         await asyncio.sleep(delay)
         delay = min(delay * 2, BACKOFF_MAX)
+
+
+def _reply_errors(request: dict, reply) -> list[str]:
+    """An assistant read's result is checked for its envelope only (`tool` and an object): its shape is
+    openapi.yaml's, which pipelines does not carry; the result only ever reaches the model, fenced, as data.
+    Everything else is checked whole."""
+    if "thread_id" in request and isinstance(reply, dict) and "error" not in reply:
+        ok = set(reply) == {"tool", "result"} and reply["tool"] == request["tool"]
+        return [] if ok and isinstance(reply["result"], dict) else ["not an assistant tool reply"]
+    return schemas.tools_errors("reply", reply)

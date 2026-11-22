@@ -12,6 +12,9 @@ called in tests. Stdlib only, so it also runs on its own in the fake compose ove
                              request whose `tools` is not a list is refused with 400, as a real provider does
 - GET  /__requests           every request received: {path, headers, body}; POST /__reset clears both
 
+- GET  /v1/web/search?q=…    a web search in the Brave Search API's shape: the `__search` script's next
+                             {results: [{title, url, description}]} or {status, body}; none scripted: no results
+
 An unscripted model answers `OK`. No key is needed; an Authorization header is recorded like any."""
 
 import argparse
@@ -74,6 +77,15 @@ def handler(fake: Fake):
         def do_GET(self) -> None:
             if self.path == "/__requests":
                 return self._send(200, fake.requests)
+            if self.path.split("?")[0].endswith(
+                "/web/search"
+            ):  # the Brave Search API's shape (API 1.42)
+                fake.requests.append({"path": self.path, "headers": {k.lower(): v for k, v in self.headers.items()},
+                                      "body": None})  # fmt: skip
+                r = fake.next("__search")
+                if "status" in r:
+                    return self._send(r["status"], r.get("body", {"error": "scripted"}))
+                return self._send(200, {"web": {"results": r.get("results", [])}})
             if self.path.rstrip("/").endswith("/models"):
                 fake.requests.append(
                     {

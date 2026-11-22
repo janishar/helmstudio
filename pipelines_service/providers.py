@@ -39,6 +39,10 @@ log = logging.getLogger(__name__)
 SUBJECT = "pipelines.providers.test"
 DELAYS = [1.0, 4.0, 16.0]  # seconds before each network retry (tests set them short)
 RETRY_AFTER_MAX = 60.0
+OUTSIDE = (
+    "remote",
+    "search",
+)  # kinds that leave the machine (API 1.42: search, the assistant's web search)
 ALLOWED = [ipaddress.ip_network(n) for n in
            ("127.0.0.0/8", "::1/128", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7")]  # fmt: skip
 
@@ -60,7 +64,7 @@ def allowed_ip(ip: str, kind: str = "server") -> bool:
     a = _addr(ip)
     if a.is_link_local or a.is_unspecified or a.is_multicast:
         return False
-    if kind != "remote":
+    if kind not in OUTSIDE:
         return any(a in n for n in ALLOWED)
     return a.is_global or (config.REMOTE_ALLOW_PRIVATE and (a.is_private or a.is_loopback))
 
@@ -73,7 +77,7 @@ async def resolve(name: str, kind: str, host: str, port: int) -> list[str]:
         raise CallError("network", f"{name}: cannot resolve {host}: {e}") from None
     ips = list(dict.fromkeys(i[4][0] for i in infos))
     if not ips or not all(allowed_ip(ip, kind) for ip in ips):
-        what = "a public" if kind == "remote" else "a loopback or private"
+        what = "a public" if kind in OUTSIDE else "a loopback or private"
         raise CallError("refused", f"{name}: {host} is not {what} address")
     return ips
 
@@ -83,7 +87,7 @@ async def check_host(name: str, p: dict) -> None:
     u = urlsplit(p["base_url"])
     if u.username or u.password or u.query or u.fragment:
         raise CallError("refused", f"{name}: the base URL may hold no user, query or fragment")
-    if p["kind"] == "remote":
+    if p["kind"] in OUTSIDE:
         if not config.REMOTE_MODELS:
             raise CallError("off", "remote models are off on this deployment")
         if u.scheme != "https":
@@ -114,7 +118,7 @@ class _Pinned(httpcore2.AsyncNetworkBackend):
 
 def api_key(name: str, p: dict) -> str:
     """The provider's key (a server has none). Never logged; an error names the file, never its content."""
-    if p["kind"] != "remote" or not p.get("key_secret"):
+    if p["kind"] not in OUTSIDE or not p.get("key_secret"):
         return "none"
     f = config.PROVIDER_KEYS_DIR / p["key_secret"]
     try:
@@ -131,7 +135,7 @@ def _http(name: str, p: dict):
     """The HTTP client of one call: no redirects followed, no proxy from the environment, connections only to
     addresses that pass the host rule (_Pinned). A provider without a key (a server) sends no Authorization at
     all: the SDK insists on some api_key, so the header it builds from the "none" placeholder is dropped here."""
-    keyless = p["kind"] != "remote" or not p.get("key_secret")
+    keyless = p["kind"] not in OUTSIDE or not p.get("key_secret")
     transport = httpx2.AsyncHTTPTransport()
     transport._pool._network_backend = _Pinned(
         name, p["kind"]
@@ -292,6 +296,42 @@ def answer_of(got: dict) -> dict:
         t["tool_calls"] = got["tool_calls"]
     return {"tries": [t], "seen": [], "tokens_in": got["tokens_in"], "tokens_out": got["tokens_out"],
             "seconds": got["seconds"]}  # fmt: skip
+
+
+SEARCH_RESULTS, SEARCH_TEXT = 5, 500
+
+
+async def search(name: str, p: dict, query: str) -> list[dict]:
+    """The assistant's web search (API 1.42, kind search, api brave): GET <base_url>/web/search through the host
+    rule, the same pinned client and failure classes as a chat. At most SEARCH_RESULTS results [{title, url,
+    text}] cut to the contract's lengths; CallError else."""
+    await check_host(name, p)
+    headers = {"Accept": "application/json", "X-Subscription-Token": api_key(name, p)}
+    try:
+        async with _http(name, p) as http:
+            r = await http.get(f"{p['base_url'].rstrip('/')}/web/search", headers=headers,
+                               params={"q": query, "count": SEARCH_RESULTS}, timeout=p["timeout_s"])  # fmt: skip
+            if r.status_code == 429 or r.status_code >= 500:
+                raise CallError("network", f"{name}: network error: HTTP {r.status_code}")
+            if r.status_code >= 400:
+                raise CallError("answer", f"{name}: HTTP {r.status_code}")
+            found = ((r.json().get("web") or {}).get("results")) or []
+    except CallError:
+        raise
+    except Exception as e:  # noqa: BLE001 - every failure is classed
+        cause = e
+        while cause is not None:  # the host rule refused at connect (wrapped by httpx)
+            if isinstance(cause, CallError):
+                raise cause from None
+            cause = cause.__cause__ or cause.__context__
+        if isinstance(e, (httpx2.TransportError, TimeoutError)):
+            raise CallError("network", f"{name}: network error: {type(e).__name__}") from None
+        raise CallError(
+            "answer", f"{name}: the answer is not a search result ({type(e).__name__})"
+        ) from None
+    return [{"title": str(x.get("title") or "")[:200], "url": str(x.get("url") or "")[:500],
+             "text": str(x.get("description") or "")[:SEARCH_TEXT]}
+            for x in found[:SEARCH_RESULTS] if isinstance(x, dict)]  # fmt: skip
 
 
 # --- pipelines.providers.test

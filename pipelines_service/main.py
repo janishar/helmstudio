@@ -9,7 +9,9 @@ continue from their checkpoints on the next start (after the user's Resume).
 Stage B: publishes the custom nodes (registry `pipelines.engine.custom`), answers pipelines.providers.test, sends
 queued remote calls (remote.py; only with PIPELINES_REMOTE_MODELS on and a pipeline that enables them) and is the
 `server` env runner of each host in PIPELINES_SERVER_HOSTS (server.py). Agent tools reach studio by studio.tools.
-API 1.28: answers pipelines.judge.test (judge_test.py). API 1.43: names untitled sessions (names.py)."""
+API 1.28: answers pipelines.judge.test (judge_test.py). API 1.43: names untitled sessions (names.py). API 1.42: the
+in-app assistant (assistant.py): pulls cmd.assistant.> from CMD (durable `pipelines-assistant`, chats handled
+concurrently, each in order) and answers pipelines.assistant.memory (assistant_memory.py)."""
 
 import asyncio
 import contextlib
@@ -36,6 +38,8 @@ from nats.js.api import AckPolicy, ConsumerConfig, DeliverPolicy
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
+import assistant
+import assistant_memory
 import config
 import consumer
 import custom
@@ -161,11 +165,15 @@ async def main() -> None:
         )
         runs = await durable(js, "EVT", "pipelines-runs", "evt.studio.>", events.ACK_WAIT, 64)
         namer = names.Names(js, studio.create_run)  # API 1.43: session names
+        helper = assistant.Assistant(pool, saver, store, js, studio.tool)
+        asks = await durable(js, "CMD", "pipelines-assistant", "cmd.assistant.>", assistant.ACK_WAIT, 16,
+                             max_deliver=-1)  # fmt: skip
         server = await health.serve(nc, pool)
         state_sub = await states.serve(nc, engine)
         memory_sub = await memory.serve(nc, store)
         test_sub = await providers.serve(nc)
         judge_sub = await judge_test.serve(nc, store)
+        assistant_sub = await assistant_memory.serve(nc, store)
         executors = [server_env.Executor(js, pool, h.strip()) for h in config.SERVER_HOSTS]
         server_subs = [await x.start() for x in executors]
 
@@ -177,6 +185,7 @@ async def main() -> None:
         await asyncio.gather(
             pull(cmds, consumer.Commands(engine, pool, js, namer).handle, stop, 1),
             pull(runs, events.RunEvents(engine, namer).handle, stop, 16),
+            assistant.pull(asks, assistant.Commands(helper, pool, js).handle, stop),
             engine.remote.run(stop),
             *[pull(sub, x.handle, stop, 1) for x, sub in zip(executors, server_subs)],
             *[x.beat(stop) for x in executors],
@@ -187,6 +196,7 @@ async def main() -> None:
         await memory_sub.unsubscribe()
         await test_sub.unsubscribe()
         await judge_sub.unsubscribe()
+        await assistant_sub.unsubscribe()
         await engine.close()
     finally:
         # close, not drain: every publish was awaited; draining pull subscriptions is slow

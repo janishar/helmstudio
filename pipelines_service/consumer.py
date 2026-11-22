@@ -22,6 +22,8 @@ RETRY_DELAY = 5  # seconds before a failed delivery comes back
 
 
 class Commands:
+    types = TYPES
+
     def __init__(self, engine, pool, js, names=None) -> None:
         self.engine, self.pool, self.js, self.names = engine, pool, js, names
 
@@ -31,7 +33,7 @@ class Commands:
         except ValueError:
             cmd = None
         errs = schemas.message_errors(cmd) if isinstance(cmd, dict) else ["not a JSON object"]
-        if errs or cmd["type"] not in TYPES:
+        if errs or cmd["type"] not in self.types:
             log.error(
                 "rejecting %s: %s", msg.subject, "; ".join(errs[:3]) or "not a pipeline command"
             )
