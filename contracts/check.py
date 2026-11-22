@@ -15,7 +15,8 @@ fixtures/video/ through the reference auto length and keyframe position rules (R
 through the reference host admission (`admit`), dispatch order (`simulate`) (README, The hand-over) and placement
 among several hosts (`place`) (README, Several hosts);
 fixtures/timelines/ through the reference timeline rules (`t_normalize`, `t_edit`, `snap_point`, `frame_at`,
-`export_plan`, `shot_keyframes`, `rerender_steps`) (README, Timeline rules); fixtures/voices/ through the reference voice rules (README, Voices; from
+`export_plan`, `shot_keyframes`, `rerender_steps`; from 1.49 `t_diff`, `t_agent_view`, `frame_at_time`) (README, Timeline rules), and
+edits.json replayed through studio's edit.go and the web's lib/timeline.ts (needs go and node on PATH); fixtures/voices/ through the reference voice rules (README, Voices; from
 API 1.32 Dialogue and Timeline audio: `expand_script`, `echo_dialogue`, `script_check`, `make_shot`).
 Exit code 1 on any failure."""
 
@@ -23,10 +24,14 @@ import copy
 import hashlib
 import json
 import math
+import os
 from decimal import ROUND_HALF_UP, Decimal
 from fnmatch import fnmatchcase
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import yaml
@@ -3238,6 +3243,82 @@ def frame_at(doc: dict, f: int, takes: dict) -> dict:
     return {"pictures": pics, "sounds": sounds}
 
 
+DIFF_FIELDS = ("take_id", "in", "out", "hold", "at", "gain_db", "mute", "transition_in", "alternatives", "shot",
+               "offline", "track")
+
+
+def t_diff(before: dict, after: dict) -> dict:
+    """What changed from one normalized document to another (README, Timeline: edits by ops), by clip id: added (in
+    the new document's order), removed (in the old one's), changed fields as [before, after] (absent = null; V1 has
+    `at`, so a ripple shows as `at` changes), tracks by name (gain_db, mute) and [before, after] duration_s."""
+    def clips(d: dict) -> dict:
+        return {c["id"]: c | {"track": t["name"]} for t in d["tracks"] for c in t["clips"]}
+
+    a, b = clips(before), clips(after)
+    changed = []
+    for cid, c in b.items():
+        if cid in a and (f := {k: [a[cid].get(k), c.get(k)] for k in DIFF_FIELDS if a[cid].get(k) != c.get(k)}):
+            changed.append({"clip": cid, "fields": f})
+    ta, tb = ({t["name"]: t for t in d["tracks"]} for d in (before, after))
+    tchanged = []
+    for n, t in tb.items():
+        if n in ta and (f := {k: [ta[n].get(k), t.get(k)] for k in ("gain_db", "mute") if ta[n].get(k) != t.get(k)}):
+            tchanged.append({"track": n, "fields": f})
+    return {"added": [i for i in b if i not in a], "removed": [i for i in a if i not in b], "changed": changed,
+            "tracks": {"added": [n for n in tb if n not in ta], "removed": [n for n in ta if n not in tb],
+                       "changed": tchanged},
+            "duration": [before["duration_s"], after["duration_s"]]}
+
+
+def t_agent_view(doc: dict, takes: dict) -> dict:
+    """A normalized document flat for an agent (README, Timeline: edits by ops; studio adds id, name, revision and
+    each clip's take_title): every clip track by track with its index, kind, times in seconds and frames (target
+    grid; an audio-track clip's length in seconds is its own, hold or out − in), dissolve frames, shot and number."""
+    g, tracks, clips = Grid(doc["target"]), [], []
+    for ti, t in enumerate(doc["tracks"]):
+        tracks.append({"name": t["name"], "kind": t["kind"], "gain_db": t["gain_db"], "mute": t["mute"],
+                       "clips": len(t["clips"])})
+        for i, c in enumerate(t["clips"]):
+            kind, a = t_kind(c, takes), g.f(c["at"])
+            ln = t_len(c, kind, g, audio=ti > 0)
+            length = (c["hold"] if "hold" in c else c["out"] - c["in"]) if ti else g.s(ln)
+            clips.append({"id": c["id"], "track": t["name"], "index": i, "take_id": c.get("take_id"), "kind": kind,
+                          "in": c.get("in"), "out": c.get("out"), "hold": c.get("hold"), "at": c["at"],
+                          "end": c["at"] + length if ti else g.s(a + ln), "length": length,
+                          "at_f": a, "end_f": a + ln, "length_f": ln, "gain_db": c["gain_db"], "mute": c["mute"],
+                          "transition_in": c.get("transition_in", {}).get("frames"),
+                          "alternatives": c.get("alternatives", []), "shot": c.get("shot"),
+                          "number": c.get("number"), "offline": c.get("offline", False)})
+    return {"target": doc["target"], "duration_s": doc["duration_s"], "frames": doc["frames"], "tracks": tracks,
+            "clips": clips}
+
+
+def frame_at_time(doc: dict, t: float, takes: dict) -> dict:
+    """What V1 shows at sequence seconds t, for an agent to look (README, Timeline: edits by ops): the V1 clip under
+    frame frames(t), no dissolve composited. Past the end or an empty slot: empty; offline: the clip, no image; an
+    image: the image; a video: the source time wanted (as frame_at maps it) and the nearer stored frame, first (0)
+    or last (the take's last frame on the target grid, seconds(frames(duration) − 1); a tie: first)."""
+    g = Grid(doc["target"])
+    f = g.f(t)
+    out = {"empty": True, "clip": None, "take_id": None, "kind": None, "t": None, "shown": None, "shown_t": None}
+    for c in doc["tracks"][0]["clips"]:
+        kind, a = t_kind(c, takes), g.f(c["at"])
+        if not a <= f < a + t_len(c, kind, g):
+            continue
+        out["clip"] = c["id"]
+        if kind == "slot":
+            return out
+        out |= {"empty": False, "take_id": c["take_id"], "kind": kind}
+        if c.get("offline"):
+            return out | {"offline": True}
+        if kind == "image":
+            return out | {"shown": "image"}
+        src, last = g.s(g.f(c["in"]) + f - a), g.s(g.f(takes[c["take_id"]]["duration_s"]) - 1)
+        first = 2 * g.f(src) <= g.f(last)
+        return out | {"t": src, "shown": "first" if first else "last", "shown_t": 0 if first else last}
+    return out
+
+
 def ratio(s: str) -> tuple[int, int]:
     a, _, b = s.partition("/")
     return int(a), int(b or 1)
@@ -3446,6 +3527,14 @@ def check_timelines(registry: Registry, palette: dict) -> None:
                     if "t" in c else {"index": drop_index(c["document"], c["clip"], c["mid"], takes)}
             elif p.name.startswith("frame-at."):
                 got = frame_at(c["document"], c["frame"], takes)
+            elif p.name.startswith("diffs."):  # 1.49
+                got = t_diff(c["before"], c["after"])
+                if not shape(where + " (result)", ref("TimelineDiff"), got):
+                    continue
+            elif p.name.startswith("agent_view."):  # 1.49
+                got = t_agent_view(c["document"], takes)
+            elif p.name.startswith("frame_time."):  # 1.49
+                got = frame_at_time(c["document"], c["t"], takes)
             elif p.name.startswith("plan."):
                 got = export_plan(c["document"], takes)
             elif p.name.startswith("shot-keyframes."):
@@ -3465,6 +3554,51 @@ def check_timelines(registry: Registry, palette: dict) -> None:
             if got != c["expect"]:
                 fail(f"{where}: got {json.dumps(got)}, want {json.dumps(c['expect'])}")
         print(f"ok   {name}")
+
+
+def canon(x):
+    """JSON by value: an integral float is its int (Go and JS write 2, Python 2.0)."""
+    if isinstance(x, float) and x.is_integer():
+        return int(x)
+    if isinstance(x, list):
+        return [canon(v) for v in x]
+    if isinstance(x, dict):
+        return {k: canon(v) for k, v in x.items()}
+    return x
+
+
+def check_edit_replay() -> None:
+    """The three implementations of the edits (README, Timeline rules; plan 24 28.9): every fixtures/timelines/
+    edits.json case through check.py's t_apply, studio's edit.go Apply (go test TestEditReplay) and the web's
+    lib/timeline.ts apply (node, its types stripped), compared as canonical JSON, byte for byte."""
+    root, name = HERE.parent, "fixtures/timelines/edits.json"
+    fx = json.loads((HERE / name).read_text())
+    want = [canon(t_apply(c["document"], c["op"], fx.get("takes", {}) | c.get("takes", {}))) for c in fx["cases"]]
+    with tempfile.TemporaryDirectory() as tmp:
+        runs = {
+            "studio_service (edit.go)": (["go", "test", "-count=1", "-run", "^TestEditReplay$", "./api/timeline/"],
+                                         root / "studio_service", f"{tmp}/go.json"),
+            "web_service (lib/timeline.ts)": (["node", "--no-warnings", str(HERE / "replay_edits.mjs"),
+                                               str(root / "web_service" / "lib" / "timeline.ts"), str(HERE / name)],
+                                              root, f"{tmp}/ts.json"),
+        }
+        for who, (cmd, cwd, out) in runs.items():
+            if not shutil.which(cmd[0]):
+                fail(f"{name} replay: {cmd[0]} is not on PATH ({who})")
+                continue
+            r = subprocess.run(cmd, cwd=cwd, env=os.environ | {"TIMELINE_REPLAY_OUT": out}, capture_output=True,
+                               text=True, timeout=600)
+            if r.returncode != 0 or not Path(out).exists():
+                fail(f"{name} replay: {who} failed: {(r.stdout + r.stderr).strip()[-800:]}")
+                continue
+            got = json.loads(Path(out).read_text())
+            if len(got) != len(want):
+                fail(f"{name} replay: {who} answered {len(got)} cases, not {len(want)}")
+                continue
+            for c, g, w in zip(fx["cases"], got, want):
+                if json.dumps(canon(g), sort_keys=True) != json.dumps(w, sort_keys=True):
+                    fail(f"{name} replay {c['description']!r}: {who} differs from check.py: {json.dumps(canon(g))}")
+    print(f"ok   {name} replayed through check.py, edit.go and lib/timeline.ts")
 
 
 # ---------------------------------------------------------------- the dispatcher's hand-over (README, "The hand-over")
@@ -3992,6 +4126,14 @@ def check_tools(schemas: dict[str, dict], registry: Registry) -> None:
             used.add(t["card"])
             if t["card"] not in cards:
                 fail(f"{w}: no card {t['card']!r} in actions.json")
+    union = sorted(o["properties"]["op"]["const"] for o in spec["components"]["schemas"]["TimelineOp"]["oneOf"])
+    for n in ("try_timeline_edit", "edit_timeline"):  # 1.49: the ops written out are openapi's TimelineOp
+        if n in catalog["tools"]:
+            ops = catalog["tools"][n]["input"]["properties"]["ops"]["items"]["oneOf"]
+            if sorted(o["properties"]["op"]["const"] for o in ops) != union:
+                fail(f"tools/catalog.json {n}: ops must be openapi TimelineOp's: {union}")
+            if any(not o.get("description") for o in ops):
+                fail(f"tools/catalog.json {n}: every op needs a one-line description")
     shell = set(actions["screens"]["shell"]["actions"])
     to = set(actions["screens"]["shell"]["actions"]["navigate"]["input"]["properties"]["to"]["enum"])
     for sn, sc in actions["screens"].items():
@@ -4050,6 +4192,7 @@ def main() -> int:
     check_video(registry, palette)
     check_voices(registry, palette)
     check_timelines(registry, palette)
+    check_edit_replay()
     check_dispatch(registry)
     check_tools(schemas, registry)
     check_openapi()

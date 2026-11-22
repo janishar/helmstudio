@@ -3242,7 +3242,7 @@ A **sequence** (`Timeline`) is one owner's edit: `target {width, height, fps, sa
 which also deletes its revisions.
 Storage (studio internal): `timelines(id, owner_id, name, target, tracks jsonb, defaults, revision, session_id,
 deleted_at, …)`, `timeline_revisions(timeline_id, revision, target, tracks, by user|studio, undo_to, redo_to,
-saved_at)` (the last 100: `revision <= current - 100` is pruned), and a shot index `(owner, run_id | batch_id+step) →
+saved_at, via, ops_summary)` (from 1.49 `via` and `ops_summary`: Edits by ops; the last 100: `revision <= current - 100` is pruned), and a shot index `(owner, run_id | batch_id+step) →
 (timeline_id, clip id)`.
 
 - **Document.** V1 (`kind: video`) first, then 0–8 audio tracks (names by position: `V1`, `A2`…`A9`; A1 is the board's
@@ -3261,7 +3261,9 @@ saved_at)` (the last 100: `revision <= current - 100` is pruned), and a shot ind
   revision without one: `POST …/clips` (Add to timeline), `…/shots`, (1.32) `…/lines`, `…/rerender`, and the
   projector's fills. Each
   stored change is revision + 1. On 409 the web re-reads and re-applies its pending edit (edits address clips by
-  `id`, so one whose clip is gone is dropped). Name and defaults change by PATCH, outside revisions.
+  `id`, so one whose clip is gone is dropped). Name and defaults change by PATCH, outside revisions. From 1.49 the
+  same edits can also be sent **by name** (`POST …/edits`, Edits by ops below): the write path of agents, the CLI and
+  `helm mcp`, and (plan 24 28.8) of the web's gestures.
 - **Revisions, undo, redo.** Every stored document is a revision with `undo_to` / `redo_to`. A user write (PUT, clips,
   shots, re-render): `undo_to` = the previous revision, `redo_to` = null. `POST …/undo {revision}` writes the document of
   `undo_to` as a new revision n (`undo_to(n)` = that revision's `undo_to`, `redo_to(n)` = the revision undone);
@@ -3279,6 +3281,65 @@ saved_at)` (the last 100: `revision <= current - 100` is pruned), and a shot ind
 - **Defaults for new shots** (`defaults {cast, looks}`, library items: plan 10): New shot's composer starts with the
   looks as `RunRequest.looks` and the cast as `@handle` mentions typed into an empty prompt (and first in the mention
   list). Studio applies nothing itself: the run is what the composer sends.
+
+### Edits by ops (API 1.49; plan 24; normative)
+
+The scriptable editor's way: named ops sent to studio, applied with the one set of rules, answered with the new
+document and a diff, and tried first without saving. Studio applies them with `edit.go` `Apply` (the Go port of
+`t_apply`; three implementations, check.py the reference, held equal by `fixtures/timelines/edits.json` and its
+three-way replay in `make contracts-check`).
+
+- **`POST …/timelines/{id}/edits {base_revision, ops, dry_run?}`**: `ops` (`TimelineOp`, 1 to **200**; more =
+  `too_many_ops`) are today's union (Timeline rules: edits) without `fill`, which is studio's (the projector's; 422
+  `fill is studio's`). Applied in order to the current document under the sequence's row lock; `base_revision` is
+  **required** and must be the current revision, else the 409 `timeline changed since you opened it (now revision
+  <n>)` (a dry run too, so a dry run's diff is the diff an apply at that revision makes; no silent re-apply: re-read
+  and re-plan). The takes the ops name (`take_id`, `take_ids`) are loaded with the document's, owner-scoped: another
+  user's is `take <id> not found`. **All or nothing**: one stored revision for the whole call (`by` user, `undo_to`
+  the revision before), so one undo undoes it. 200 `TimelineEditResult {revision, dry_run, timeline, diff,
+  warnings}`: `timeline` as GET answers it, `diff` = `t_diff(before, after)`, `warnings` = what studio changed beyond
+  the ops (an op's `at`, `hold` or `delta` snapped to the frame grid), never a refusal. `dry_run: true`: the same
+  answer, `revision` = `base_revision`, nothing stored.
+- **422 per op** (`TimelineEditError` = `TimelineError` + `op_index`, `code`): an edit error, `ops[3]: split_edge`
+  (`code` the edit's: `unknown_op`, `unknown_clip` (`ops[3]: unknown clip k3`), `unknown_track`, `take_not_found`,
+  `split_edge`, `split_none`, `split_shot`, `lift_track`, `video_track`, `too_many_tracks`, `not_alternative`), or a
+  rule broken by the document after that op, `ops[3]: timeline has 2 problems: …` (`code` = the first problem's,
+  `problems` = all). A body that does not fit (an unknown field, a missing one, `fill`) is the usual `{detail}` 422
+  (`ops[2]: …`). Nothing is stored.
+- **New clip ids**: an op that makes clips (`split` `id`, `insert` / `place` `id` and `gap_id`, `add` `ids`) may give
+  them (`[a-z0-9]{1,16}`, unused; a later op in the same call can name only those); absent ones studio makes (8
+  random `[a-z0-9]`, unused in the document and by every id the call gives) and answers in `diff.added`.
+- **`via`**: the client's `X-Helm-Client` header (Kong passes it) labels a user write: `web`, `mcp`, `assistant`;
+  `helm`, any other value or none = `api`. A label, never a permission. `ops_summary`: an /edits call's distinct op
+  names in order (`split, remove`); every other write its kind (`edit` a PUT, `add`, `shot`, `line`, `rerender`,
+  `undo`, `redo`, `restore`; studio's `fill`, `drop_shot`). Revisions from before 1.49 have neither (`via` reads
+  `web`).
+- **Revisions**: `GET …/revisions?before=&limit=` (default 20, at most 100) `{revisions: [{revision, by, via,
+  saved_at, ops_summary, clips (V1), duration_s}]}` newest first, the kept 100 only; `GET …/revisions/{n}` one with
+  its stored `document` (404 when not kept). **`POST …/restore {revision, to}`**: the document of `to` written as
+  revision + 1 (`undo_to` = the current, `redo_to` = null; history is never rewritten), reconciled as undo is; 409 on
+  a stale `revision`, 422 `revision <n> is not kept`. Undo to any point: the safety net for an agent's run of edits.
+  Still 100 kept: agents batch their ops.
+- **The agent view**: `GET …/timelines/{id}?view=agent` = `TimelineAgentView`, `t_agent_view(document, takes)` of
+  the document as GET normalizes it (shots with their status) plus `id`, `name`, `revision` and each clip's
+  `take_title`: every clip flat, track by track, `{id, track, index, take_id, kind (video | image | audio | slot), in,
+  out, hold, at, end, length (seconds; an audio-track clip's own), at_f, end_f, length_f (frames on the target's
+  grid), gain_db, mute, transition_in (frames), alternatives, shot, number, offline}`; tracks `{name, kind, gain_db,
+  mute, clips}`. Plain data, no signed links.
+- **A frame at a time**: `POST …/timelines/{id}/frame {at}` = `frame_at_time(document, at, takes)` plus the signed
+  `url`: the V1 clip under frames(at), no dissolve or sound composited. Past the end or an empty slot: `empty`; an
+  offline clip: `offline`, no image; an image take: its image (`shown: image`); a video take: the source time wanted
+  `t` (as `frame_at` maps it) and the **nearest stored frame**, `first` (source 0) or `last` (seconds(frames(duration)
+  − 1) on the target grid; a tie: first), `shown_t` its time. Studio signs the stored object as it is (a run's poster
+  is its frame 0; the stored last frame, `video.last`), never copies it nor makes a take or a job: a video whose
+  wanted frame is not stored answers the other one, and one with neither (an upload's or import's poster is the
+  client's) answers its poster, `shown: poster`, `shown_t` null. Exact frames (a media job) are later (plan 24
+  open point 8).
+- **Tools** (`tools/catalog.json`): `show_timeline` answers the agent view; `timeline_revisions` (assistant, mcp);
+  `try_timeline_edit` (mcp, read-only: a dry run), `edit_timeline` and `restore_timeline` (mcp, destructive: the
+  client asks before each), `timeline_frame` (mcp, read-only; `helm mcp` answers the image as image content). Their
+  `ops` are `TimelineOp` written out (check.py checks the names match). The in-app assistant keeps its screen action
+  `timeline.edit` (plan 18): no assistant write tool.
 
 ### New shot (plan 15.3)
 
@@ -3523,10 +3584,11 @@ New shot machinery (references `make_shot`, `t_edit` `place`, `rerender_steps`; 
 
 ## Timeline rules (normative)
 
-studio_service (Go: normalizes every write and restore, runs `add`, `insert`, `fill`, plans exports) and the web
+studio_service (Go: normalizes every write and restore, runs `add`, `insert`, `fill` and, from 1.49, every edit of `POST …/edits`, plans exports) and the web
 (TypeScript: every edit, snapping, the preview) implement exactly these rules and test against `fixtures/timelines/`;
 `check.py` holds the reference (`t_normalize`, `t_edit` / `t_apply`, `t_cuts`, `snap_point`, `drop_index`, `frame_at`,
-`export_plan`, `shot_keyframes`, `rerender_steps`). Numbers in fixtures compare by value (1 = 1.0).
+`export_plan`, `shot_keyframes`, `rerender_steps`; from 1.49 `t_diff`, `t_agent_view`, `frame_at_time`: Edits by ops).
+Numbers in fixtures compare by value (1 = 1.0).
 
 - **Time** is JSON seconds on the target's exact grid. Rates: 23.976 → 24000/1001, 24, 25, 29.97 → 30000/1001, 30, 48,
   50, 59.94 → 60000/1001, 60 (the fps matching within 1e-6). `frames(s) = rnd(s × num / den)`, `seconds(f) = f × den /
@@ -3698,8 +3760,8 @@ chats (threads), their rows, roles, caps and SSE in studio_service.
   checks the role again (`forbidden`).
 - A write is mcp only, or the assistant's behind a `card`; only memory writes (`remember`) go without one.
 - (plan 16) A tool for `mcp` only is called by `helm mcp` over Kong as the signed-in user; its `routes` are the calls
-  it makes and `served_by` stays studio, but studio never serves it on `studio.tools`. `destructive` (the deletes) is
-  an mcp-only write; `helm mcp` sends it as `destructiveHint` (and every other write as `destructiveHint` false), so
+  it makes and `served_by` stays studio, but studio never serves it on `studio.tools`. `destructive` (the deletes; from 1.49
+  `edit_timeline` and `restore_timeline`) is an mcp-only write; `helm mcp` sends it as `destructiveHint` (and every other write as `destructiveHint` false), so
   the client asks before each call.
 - `offered_tools(roles, web_search, look_at)`: surface assistant, every role held, `web_search` only when on,
   `look_at` only when an ask workflow can run now.

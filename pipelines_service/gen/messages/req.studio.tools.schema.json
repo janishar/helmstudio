@@ -168,6 +168,7 @@
             "batch_status",
             "list_timelines",
             "show_timeline",
+            "timeline_revisions",
             "custom_nodes",
             "model_sources",
             "model_jobs",
@@ -407,6 +408,22 @@
           "if": {
             "properties": {
               "tool": {
+                "const": "timeline_revisions"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "args": {
+                "$ref": "../tools/catalog.json#/tools/timeline_revisions/input"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "tool": {
                 "const": "custom_nodes"
               }
             }
@@ -553,6 +570,7 @@
             "batch_status",
             "list_timelines",
             "show_timeline",
+            "timeline_revisions",
             "custom_nodes",
             "model_sources",
             "model_jobs",
@@ -826,6 +844,25 @@
             "properties": {
               "result": {
                 "$ref": "../tools/catalog.json#/tools/show_timeline/output"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "tool"
+            ],
+            "properties": {
+              "tool": {
+                "const": "timeline_revisions"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "result": {
+                "$ref": "../tools/catalog.json#/tools/timeline_revisions/output"
               }
             }
           }

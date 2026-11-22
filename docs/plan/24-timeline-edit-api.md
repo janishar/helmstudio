@@ -3,10 +3,9 @@
 [← Plan index](../README.md)
 
 Status: **decided by the owner (2026-11-22), queued to build (first slice with today's edits).** It becomes a milestone in
-[08-milestones.md](08-milestones.md) when the owner schedules it. API version: main is at **1.47.0** (the Plan 20
-gaps), while plan 22 (1.45) and plan 23's links and markers (1.46) are still unbuilt, so numbers are not landing in
-plan order. This plan takes **the next free number when it merges** (1.48.0 if it lands first); a plan that lands
-after it renumbers then, never below main's version. Plan 23's new ops need a bump here once `TimelineOp` is in
+[08-milestones.md](08-milestones.md) when the owner schedules it. API version: **1.49.0** (main was at 1.48.0, plan 22's
+thumbnails, when the first slice was built; plan 23's links and markers are still unbuilt, so numbers are not landing
+in plan order). A plan that lands after it renumbers then, never below main's version. Plan 23's new ops need a bump here once `TimelineOp` is in
 openapi (28.10).
 
 The owner's ask, 2026-11-22: "if I have to power the coding agent to plan and edit the clips, what's the standard way
@@ -224,7 +223,7 @@ Three copies of the edit rules is the real cost. Options:
 - **C: one (Go compiled to WebAssembly for the web).** One copy, but a Go-wasm build in `web_service` (a toolchain and
   about 2 MB more to load) for drafts during drags; not worth it at this size.
 
-### 28.10 Contract changes (API 1.48.0)
+### 28.10 Contract changes (API 1.49.0)
 
 - `openapi.yaml`: `POST …/edits` (`TimelineEdits` request, `TimelineEditResult` with `diff`, `TimelineEditError` =
   `TimelineError` plus `op_index`, `code`), `GET …/revisions`, `GET …/revisions/{n}`, `POST …/restore`, `POST

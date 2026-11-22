@@ -25,7 +25,8 @@
         "remember",
         "search_takes",
         "sessions",
-        "show_timeline"
+        "show_timeline",
+        "timeline_revisions"
       ]
     },
     {
@@ -58,6 +59,7 @@
         "search_takes",
         "sessions",
         "show_timeline",
+        "timeline_revisions",
         "web_search"
       ]
     },

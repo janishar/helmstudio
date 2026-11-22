@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helmstudio.local/contracts/tools/catalog.json",
   "title": "The tools the in-app assistant and helm mcp share (API 1.44)",
-  "description": "Not a message: one entry per tool (plan 18, 22.7). `input` is model-facing and self-contained (no $ref); `output` is what the tool answers, in the API's own shapes. `surfaces`: assistant (the in-app assistant) and mcp (helm mcp, plan 16). `served_by`: studio answers it on studio.tools as the thread's owner (`routes` are the API calls it stands for), pipelines answers it itself (memory, web search). `roles`: empty = every user; an admin tool is never offered to anyone else and studio checks the role again. `card`: the card kind (actions.json) the user's Yes must answer first. A tool for mcp only is called by helm mcp over Kong as the signed-in user (`routes` are the calls it makes; served_by stays studio). `destructive` (plan 16, the deletes): helm mcp marks it destructiveHint so the client asks before each call.",
+  "description": "Not a message: one entry per tool (plan 18, 22.7). `input` is model-facing and self-contained (no $ref); `output` is what the tool answers, in the API's own shapes. `surfaces`: assistant (the in-app assistant) and mcp (helm mcp, plan 16). `served_by`: studio answers it on studio.tools as the thread's owner (`routes` are the API calls it stands for), pipelines answers it itself (memory, web search). `roles`: empty = every user; an admin tool is never offered to anyone else and studio checks the role again. `card`: the card kind (actions.json) the user's Yes must answer first. A tool for mcp only is called by helm mcp over Kong as the signed-in user (`routes` are the calls it makes; served_by stays studio). `destructive` (plan 16, the deletes; plan 24, edit_timeline and restore_timeline): helm mcp marks it destructiveHint so the client asks before each call.",
   "tools": {
     "sessions": {
       "description": "Your Create sessions, newest first; with session_id, that session's runs and takes.",
@@ -523,7 +523,7 @@
       }
     },
     "show_timeline": {
-      "description": "One sequence: tracks, clips, shots, and its exports and media jobs.",
+      "description": "One sequence for an agent: its revision, tracks and every clip flat (id, track, index, take, kind, times in seconds and frames, dissolve, shot), and its exports. Clip ids and the revision are what the edit tools take.",
       "surfaces": [
         "assistant",
         "mcp"
@@ -554,7 +554,7 @@
         "additionalProperties": false,
         "properties": {
           "timeline": {
-            "$ref": "../openapi.yaml#/components/schemas/Timeline"
+            "$ref": "../openapi.yaml#/components/schemas/TimelineAgentView"
           },
           "exports": {
             "$ref": "../openapi.yaml#/components/schemas/MediaJobList"
@@ -563,6 +563,62 @@
         "required": [
           "timeline"
         ]
+      }
+    },
+    "timeline_revisions": {
+      "description": "A sequence's history (the last 100 revisions, newest first: who, via what, which ops, when), or one revision's document with revision.",
+      "surfaces": [
+        "assistant",
+        "mcp"
+      ],
+      "served_by": "studio",
+      "read_only": true,
+      "roles": [],
+      "routes": [
+        "GET /v1/studio/timelines/{timeline_id}/revisions",
+        "GET /v1/studio/timelines/{timeline_id}/revisions/{revision}"
+      ],
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "timeline_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "the sequence"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "read this kept revision's document"
+          },
+          "before": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "only revisions below this one"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20,
+            "description": "default 10"
+          }
+        },
+        "required": [
+          "timeline_id"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "revisions": {
+            "$ref": "../openapi.yaml#/components/schemas/TimelineRevisionList"
+          },
+          "revision": {
+            "$ref": "../openapi.yaml#/components/schemas/TimelineRevisionDoc"
+          }
+        }
       }
     },
     "custom_nodes": {
@@ -1393,6 +1449,959 @@
             "type": "string"
           }
         }
+      }
+    },
+    "try_timeline_edit": {
+      "description": "Try edits on a sequence without saving: the result it would have (diff, warnings, the new timeline) or the op that fails and why. Then apply the same ops with edit_timeline.",
+      "surfaces": [
+        "mcp"
+      ],
+      "served_by": "studio",
+      "read_only": true,
+      "roles": [],
+      "routes": [
+        "POST /v1/studio/timelines/{timeline_id}/edits"
+      ],
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "timeline_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "the sequence"
+          },
+          "base_revision": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "the revision the ops were planned on (show_timeline's revision); a stale one is refused: re-read and re-plan"
+          },
+          "ops": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 200,
+            "items": {
+              "type": "object",
+              "required": [
+                "op"
+              ],
+              "oneOf": [
+                {
+                  "description": "move: V1: to `index` (V1 ripples); an audio clip: a new start `at`, optionally on another audio `track`",
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "clip"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "move"
+                    },
+                    "clip": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9]{1,16}$",
+                      "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+                    },
+                    "index": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "at": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 86400,
+                      "description": "seconds, snapped by studio onto the frame grid (an audio track's in/out: the sample grid); contracts/README.md, Timeline rules: time"
+                    },
+                    "track": {
+                      "type": "string",
+                      "pattern": "^(V1|A[2-9])$"
+                    }
+                  }
+                },
+                {
+                  "description": "trim: move one edge by `delta` seconds (snapped to frames), clamped to the take and the dissolves",
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "clip",
+                    "edge",
+                    "delta"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "trim"
+                    },
+                    "clip": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9]{1,16}$",
+                      "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+                    },
+                    "edge": {
+                      "type": "string",
+                      "enum": [
+                        "in",
+                        "out"
+                      ]
+                    },
+                    "delta": {
+                      "type": "number",
+                      "minimum": -86400,
+                      "maximum": 86400
+                    }
+                  }
+                },
+                {
+                  "description": "split: cut the clip of `track` under the playhead `at`; the right part gets `id` (absent: studio makes one)",
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "track",
+                    "at"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "split"
+                    },
+                    "track": {
+                      "type": "string",
+                      "pattern": "^(V1|A[2-9])$"
+                    },
+                    "at": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 86400,
+                      "description": "seconds, snapped by studio onto the frame grid (an audio track's in/out: the sample grid); contracts/README.md, Timeline rules: time"
+                    },
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9]{1,16}$",
+                      "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+                    }
+                  }
+                },
+                {
+                  "description": "remove: remove the clip (V1 ripples)",
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "clip"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "remove"
+                    },
+                    "clip": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9]{1,16}$",
+                      "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+                    }
+                  }
+                },
+                {
+                  "description": "lift: V1 only: an empty slot of the clip's length, same id",
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "clip"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "lift"
+                    },
+                    "clip": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9]{1,16}$",
+                      "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+                    }
+                  }
+                },
+                {
+                  "description": "replace: the clip's take becomes `take_id`, one of its alternatives",
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "clip",
+                    "take_id"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "replace"
+                    },
+                    "clip": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9]{1,16}$",
+                      "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+                    },
+                    "take_id": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                },
+                {
+                  "description": "set: set the clip's fields; null removes one",
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "clip"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "set"
+                    },
+                    "clip": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9]{1,16}$",
+                      "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+                    },
+                    "gain_db": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "minimum": -60,
+                      "maximum": 12
+                    },
+                    "mute": {
+                      "type": [
+                        "boolean",
+                        "null"
+                      ]
+                    },
+                    "hold": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "exclusiveMinimum": 0,
+                      "maximum": 3600
+                    },
+                    "transition_in": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "required": [
+                            "type",
+                            "frames"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "dissolve"
+                            },
+                            "frames": {
+                              "type": "integer",
+                              "minimum": 2,
+                              "maximum": 240,
+                              "multipleOf": 2,
+                              "description": "centred on the cut: half before it, half after"
+                            }
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "description": "add: append takes in order to `track` (default V1); `ids` for the new clips, in order (absent ones: studio makes them)",
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "take_ids"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "add"
+                    },
+                    "take_ids": {
+                      "type": "array",
+                      "minItems": 1,
+                      "maxItems": 100,
+                      "items": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    },
+                    "track": {
+                      "type": "string",
+                      "pattern": "^(V1|A[2-9])$"
+                    },
+                    "ids": {
+                      "type": "array",
+                      "maxItems": 100,
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9]{1,16}$",
+                        "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+                      }
+                    }
+                  }
+                },
+                {
+                  "description": "insert: an empty slot of `hold` seconds at the V1 cut nearest `at`",
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "at",
+                    "hold"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "insert"
+                    },
+                    "at": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 86400,
+                      "description": "seconds, snapped by studio onto the frame grid (an audio track's in/out: the sample grid); contracts/README.md, Timeline rules: time"
+                    },
+                    "hold": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "maximum": 3600
+                    },
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9]{1,16}$",
+                      "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+                    }
+                  }
+                },
+                {
+                  "description": "place: an empty slot of `hold` seconds at exactly `at` on V1 (Make shot's edit); `gap_id` for a gap it needs",
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "at",
+                    "hold"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "place"
+                    },
+                    "at": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 86400,
+                      "description": "seconds, snapped by studio onto the frame grid (an audio track's in/out: the sample grid); contracts/README.md, Timeline rules: time"
+                    },
+                    "hold": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "maximum": 3600
+                    },
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9]{1,16}$",
+                      "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+                    },
+                    "gap_id": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9]{1,16}$",
+                      "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+                    }
+                  }
+                },
+                {
+                  "description": "add_track: a new audio track at the end",
+                  "type": "object",
+                  "required": [
+                    "op"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "add_track"
+                    }
+                  }
+                },
+                {
+                  "description": "remove_track: remove an audio track and its clips",
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "track"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "remove_track"
+                    },
+                    "track": {
+                      "type": "string",
+                      "pattern": "^(V1|A[2-9])$"
+                    }
+                  }
+                },
+                {
+                  "description": "track: a track's gain or mute",
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "track"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "track"
+                    },
+                    "track": {
+                      "type": "string",
+                      "pattern": "^(V1|A[2-9])$"
+                    },
+                    "gain_db": {
+                      "type": "number",
+                      "minimum": -60,
+                      "maximum": 12
+                    },
+                    "mute": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              ]
+            },
+            "description": "edits applied in order, all or nothing; seconds snap to the frame grid; clip ids come from show_timeline"
+          }
+        },
+        "required": [
+          "timeline_id",
+          "base_revision",
+          "ops"
+        ]
+      },
+      "output": {
+        "$ref": "../openapi.yaml#/components/schemas/TimelineEditResult"
+      }
+    },
+    "edit_timeline": {
+      "description": "Apply edits to a sequence (all or nothing, one undo step): the new revision, the diff (new clip ids in added) and warnings, or the op that fails and why. Batch ops: the last 100 revisions are kept.",
+      "surfaces": [
+        "mcp"
+      ],
+      "served_by": "studio",
+      "read_only": false,
+      "roles": [],
+      "routes": [
+        "POST /v1/studio/timelines/{timeline_id}/edits"
+      ],
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "timeline_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "the sequence"
+          },
+          "base_revision": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "the revision the ops were planned on (show_timeline's revision); a stale one is refused: re-read and re-plan"
+          },
+          "ops": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 200,
+            "items": {
+              "type": "object",
+              "required": [
+                "op"
+              ],
+              "oneOf": [
+                {
+                  "description": "move: V1: to `index` (V1 ripples); an audio clip: a new start `at`, optionally on another audio `track`",
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "clip"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "move"
+                    },
+                    "clip": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9]{1,16}$",
+                      "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+                    },
+                    "index": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "at": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 86400,
+                      "description": "seconds, snapped by studio onto the frame grid (an audio track's in/out: the sample grid); contracts/README.md, Timeline rules: time"
+                    },
+                    "track": {
+                      "type": "string",
+                      "pattern": "^(V1|A[2-9])$"
+                    }
+                  }
+                },
+                {
+                  "description": "trim: move one edge by `delta` seconds (snapped to frames), clamped to the take and the dissolves",
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "clip",
+                    "edge",
+                    "delta"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "trim"
+                    },
+                    "clip": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9]{1,16}$",
+                      "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+                    },
+                    "edge": {
+                      "type": "string",
+                      "enum": [
+                        "in",
+                        "out"
+                      ]
+                    },
+                    "delta": {
+                      "type": "number",
+                      "minimum": -86400,
+                      "maximum": 86400
+                    }
+                  }
+                },
+                {
+                  "description": "split: cut the clip of `track` under the playhead `at`; the right part gets `id` (absent: studio makes one)",
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "track",
+                    "at"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "split"
+                    },
+                    "track": {
+                      "type": "string",
+                      "pattern": "^(V1|A[2-9])$"
+                    },
+                    "at": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 86400,
+                      "description": "seconds, snapped by studio onto the frame grid (an audio track's in/out: the sample grid); contracts/README.md, Timeline rules: time"
+                    },
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9]{1,16}$",
+                      "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+                    }
+                  }
+                },
+                {
+                  "description": "remove: remove the clip (V1 ripples)",
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "clip"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "remove"
+                    },
+                    "clip": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9]{1,16}$",
+                      "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+                    }
+                  }
+                },
+                {
+                  "description": "lift: V1 only: an empty slot of the clip's length, same id",
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "clip"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "lift"
+                    },
+                    "clip": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9]{1,16}$",
+                      "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+                    }
+                  }
+                },
+                {
+                  "description": "replace: the clip's take becomes `take_id`, one of its alternatives",
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "clip",
+                    "take_id"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "replace"
+                    },
+                    "clip": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9]{1,16}$",
+                      "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+                    },
+                    "take_id": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                },
+                {
+                  "description": "set: set the clip's fields; null removes one",
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "clip"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "set"
+                    },
+                    "clip": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9]{1,16}$",
+                      "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+                    },
+                    "gain_db": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "minimum": -60,
+                      "maximum": 12
+                    },
+                    "mute": {
+                      "type": [
+                        "boolean",
+                        "null"
+                      ]
+                    },
+                    "hold": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "exclusiveMinimum": 0,
+                      "maximum": 3600
+                    },
+                    "transition_in": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "required": [
+                            "type",
+                            "frames"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "dissolve"
+                            },
+                            "frames": {
+                              "type": "integer",
+                              "minimum": 2,
+                              "maximum": 240,
+                              "multipleOf": 2,
+                              "description": "centred on the cut: half before it, half after"
+                            }
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "description": "add: append takes in order to `track` (default V1); `ids` for the new clips, in order (absent ones: studio makes them)",
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "take_ids"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "add"
+                    },
+                    "take_ids": {
+                      "type": "array",
+                      "minItems": 1,
+                      "maxItems": 100,
+                      "items": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    },
+                    "track": {
+                      "type": "string",
+                      "pattern": "^(V1|A[2-9])$"
+                    },
+                    "ids": {
+                      "type": "array",
+                      "maxItems": 100,
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9]{1,16}$",
+                        "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+                      }
+                    }
+                  }
+                },
+                {
+                  "description": "insert: an empty slot of `hold` seconds at the V1 cut nearest `at`",
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "at",
+                    "hold"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "insert"
+                    },
+                    "at": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 86400,
+                      "description": "seconds, snapped by studio onto the frame grid (an audio track's in/out: the sample grid); contracts/README.md, Timeline rules: time"
+                    },
+                    "hold": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "maximum": 3600
+                    },
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9]{1,16}$",
+                      "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+                    }
+                  }
+                },
+                {
+                  "description": "place: an empty slot of `hold` seconds at exactly `at` on V1 (Make shot's edit); `gap_id` for a gap it needs",
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "at",
+                    "hold"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "place"
+                    },
+                    "at": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 86400,
+                      "description": "seconds, snapped by studio onto the frame grid (an audio track's in/out: the sample grid); contracts/README.md, Timeline rules: time"
+                    },
+                    "hold": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "maximum": 3600
+                    },
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9]{1,16}$",
+                      "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+                    },
+                    "gap_id": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9]{1,16}$",
+                      "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+                    }
+                  }
+                },
+                {
+                  "description": "add_track: a new audio track at the end",
+                  "type": "object",
+                  "required": [
+                    "op"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "add_track"
+                    }
+                  }
+                },
+                {
+                  "description": "remove_track: remove an audio track and its clips",
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "track"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "remove_track"
+                    },
+                    "track": {
+                      "type": "string",
+                      "pattern": "^(V1|A[2-9])$"
+                    }
+                  }
+                },
+                {
+                  "description": "track: a track's gain or mute",
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "track"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "track"
+                    },
+                    "track": {
+                      "type": "string",
+                      "pattern": "^(V1|A[2-9])$"
+                    },
+                    "gain_db": {
+                      "type": "number",
+                      "minimum": -60,
+                      "maximum": 12
+                    },
+                    "mute": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              ]
+            },
+            "description": "edits applied in order, all or nothing; seconds snap to the frame grid; clip ids come from show_timeline"
+          }
+        },
+        "required": [
+          "timeline_id",
+          "base_revision",
+          "ops"
+        ]
+      },
+      "output": {
+        "$ref": "../openapi.yaml#/components/schemas/TimelineEditResult"
+      },
+      "destructive": true
+    },
+    "restore_timeline": {
+      "description": "Bring back a kept revision of a sequence (timeline_revisions lists them), written as a new revision: the safety net after a run of edits.",
+      "surfaces": [
+        "mcp"
+      ],
+      "served_by": "studio",
+      "read_only": false,
+      "roles": [],
+      "routes": [
+        "POST /v1/studio/timelines/{timeline_id}/restore"
+      ],
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "timeline_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "the sequence"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "the current revision"
+          },
+          "to": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "the revision to bring back"
+          }
+        },
+        "required": [
+          "timeline_id",
+          "revision",
+          "to"
+        ]
+      },
+      "output": {
+        "$ref": "../openapi.yaml#/components/schemas/Timeline"
+      },
+      "destructive": true
+    },
+    "timeline_frame": {
+      "description": "Look at a sequence at a time: the V1 picture there as an image (an image take, or a video's nearest stored frame: its first or last; shown_t says which), or empty.",
+      "surfaces": [
+        "mcp"
+      ],
+      "served_by": "studio",
+      "read_only": true,
+      "roles": [],
+      "routes": [
+        "POST /v1/studio/timelines/{timeline_id}/frame"
+      ],
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "timeline_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "the sequence"
+          },
+          "at": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 86400,
+            "description": "sequence seconds"
+          }
+        },
+        "required": [
+          "timeline_id",
+          "at"
+        ]
+      },
+      "output": {
+        "$ref": "../openapi.yaml#/components/schemas/TimelineFrame"
       }
     },
     "delete_take": {

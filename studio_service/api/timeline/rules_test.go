@@ -48,6 +48,8 @@ type fixtureCase struct {
 	Frame       int             `json:"frame"`
 	Clips       []string        `json:"clips"`
 	Range       *[2]float64     `json:"range"` // make-shot (1.32): a selection inside the clip
+	Before      Doc             `json:"before"` // diffs (1.49)
+	After       Doc             `json:"after"`
 	Workflow    struct {
 		Nodes  map[string]registry.Node `json:"nodes"`
 		Studio struct {
@@ -149,6 +151,50 @@ func TestEditFixtures(t *testing.T) {
 			got = map[string]any{"problems": r.Problems}
 		}
 		check(t, "edits", c, got)
+	}
+}
+
+// TestEditReplay writes every edits.json result to TIMELINE_REPLAY_OUT for contracts/check.py's three-way replay
+// (plan 24 28.9); without it, it skips.
+func TestEditReplay(t *testing.T) {
+	path := os.Getenv("TIMELINE_REPLAY_OUT")
+	if path == "" {
+		t.Skip("TIMELINE_REPLAY_OUT is not set (contracts/check.py sets it)")
+	}
+	common, _, cases := load(t, "edits.json")
+	out := make([]any, len(cases))
+	for i, c := range cases {
+		switch r := Apply(c.Document, c.Op, takesOf(common, c.Takes)); {
+		case r.Error != "":
+			out[i] = map[string]any{"error": r.Error}
+		case r.Document != nil:
+			out[i] = map[string]any{"document": r.Document}
+		default:
+			out[i] = map[string]any{"problems": r.Problems}
+		}
+	}
+	raw, err := json.Marshal(out)
+	if err == nil {
+		err = os.WriteFile(path, raw, 0o600)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestAgentFixtures runs diffs.json, agent_view.json and frame_time.json (API 1.49).
+func TestAgentFixtures(t *testing.T) {
+	_, _, cases := load(t, "diffs.json")
+	for _, c := range cases {
+		check(t, "diffs", c, DiffDocs(c.Before, c.After))
+	}
+	common, _, cases := load(t, "agent_view.json")
+	for _, c := range cases {
+		check(t, "agent_view", c, Agent(c.Document, takesOf(common, c.Takes)))
+	}
+	common, _, cases = load(t, "frame_time.json")
+	for _, c := range cases {
+		check(t, "frame_time", c, FrameAtTime(c.Document, *c.T, takesOf(common, c.Takes)))
 	}
 }
 

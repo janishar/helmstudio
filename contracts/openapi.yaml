@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.48.0
+  version: 1.49.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -27,7 +27,7 @@ servers:
 security:
   - {ApiKey: [], BearerJWT: []}
 tags:
-  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media); from 1.23 LoRA strengths 0..2 (looks saved before are clamped when read; contracts/README.md, Looks); from 1.24 the model component a node loads (NodeSchema.component); from 1.25 an inspector section''s help, the presets'' order (StudioLayout.preset_order) and a run''s planned peak before it is sent (POST /v1/studio/runs/plan); from 1.26 an inspector section''s choice tiles (LTX''s Recipe: two-stage or one-stage); from 1.28 a judge''s branch without `then` (Ask me) and a judge test on picked takes (POST /v1/studio/pipelines/{pipeline_id}/judge-tests); from 1.29 a V1 clip''s shot number (TimelineClip.number: "Shot 4"); from 1.30 voices: audio takes made by runs (the `Audio` port, `Workflow.media` audio), the `voice` param, saved voices in the library (designed voices and the packs'' starter voices; contracts/README.md, Voices); from 1.31 cloned voices (a 3–30 s clip of an audio take or a video''s sound, with consent), designed voices that keep a clip, Save as voice (`from_take` with `kind: voice`) and the zonos3 family (contracts/README.md, Voices: cloned voices); from 1.32 dialogue and Timeline audio: dialogue scripts (`script` text params expanded into `lines` rows whose items carry a voice), an element''s `voice_id`, cues on a dialogue''s take, audio takes on the audio tracks, New line (POST /v1/studio/timelines/{timeline_id}/lines), Make shot (a slot `exact` at an audio clip''s time), an export plan''s `sounds`, offers and pipeline binds into rows of one media field, `library.read` voices and the write node''s `form: script` (contracts/README.md, Dialogue and Timeline audio); from 1.44 the in-app assistant: chats, their events and memory, the admin''s assistant settings, search providers (kind `search`) and the Gallery''s `order` (contracts/README.md, Assistant); from 1.47 rules (refusals as data, ParamSchema.rules), option help (ParamSchema.option_help), a native node''s peak formula and sound limits (NodeSchema.peak_gb, sounds: the planned peak per run) and the Preset heading''s help (StudioLayout.preset_help); from 1.48 thumbnails: every list''s `thumb_url` is a small WebP of the image or the poster once made, `RunOutput.thumb_url` (contracts/README.md, Thumbnails)'}
+  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media); from 1.23 LoRA strengths 0..2 (looks saved before are clamped when read; contracts/README.md, Looks); from 1.24 the model component a node loads (NodeSchema.component); from 1.25 an inspector section''s help, the presets'' order (StudioLayout.preset_order) and a run''s planned peak before it is sent (POST /v1/studio/runs/plan); from 1.26 an inspector section''s choice tiles (LTX''s Recipe: two-stage or one-stage); from 1.28 a judge''s branch without `then` (Ask me) and a judge test on picked takes (POST /v1/studio/pipelines/{pipeline_id}/judge-tests); from 1.29 a V1 clip''s shot number (TimelineClip.number: "Shot 4"); from 1.30 voices: audio takes made by runs (the `Audio` port, `Workflow.media` audio), the `voice` param, saved voices in the library (designed voices and the packs'' starter voices; contracts/README.md, Voices); from 1.31 cloned voices (a 3–30 s clip of an audio take or a video''s sound, with consent), designed voices that keep a clip, Save as voice (`from_take` with `kind: voice`) and the zonos3 family (contracts/README.md, Voices: cloned voices); from 1.32 dialogue and Timeline audio: dialogue scripts (`script` text params expanded into `lines` rows whose items carry a voice), an element''s `voice_id`, cues on a dialogue''s take, audio takes on the audio tracks, New line (POST /v1/studio/timelines/{timeline_id}/lines), Make shot (a slot `exact` at an audio clip''s time), an export plan''s `sounds`, offers and pipeline binds into rows of one media field, `library.read` voices and the write node''s `form: script` (contracts/README.md, Dialogue and Timeline audio); from 1.44 the in-app assistant: chats, their events and memory, the admin''s assistant settings, search providers (kind `search`) and the Gallery''s `order` (contracts/README.md, Assistant); from 1.47 rules (refusals as data, ParamSchema.rules), option help (ParamSchema.option_help), a native node''s peak formula and sound limits (NodeSchema.peak_gb, sounds: the planned peak per run) and the Preset heading''s help (StudioLayout.preset_help); from 1.48 thumbnails: every list''s `thumb_url` is a small WebP of the image or the poster once made, `RunOutput.thumb_url` (contracts/README.md, Thumbnails); from 1.49 timeline edits by named ops (POST …/timelines/{timeline_id}/edits: a dry run, a diff, studio-made clip ids), the revision history and restore to any kept revision, the agent view (`view=agent`) and a stored frame at a sequence time (contracts/README.md, Timeline: edits by ops)'}
   - {name: files, description: signed file downloads and uploads}
   - name: auth
     description: 'auth_service: users, sessions (JWT access + rotating refresh tokens), roles, client API keys'
@@ -2330,10 +2330,12 @@ paths:
     get:
       tags: [studio]
       operationId: studioGetTimeline
-      description: 'The sequence at its current revision, normalized, with `takes` (every take it names, signed), offline clips marked and each pending shot''s status.'
-      parameters: [{$ref: '#/components/parameters/TimelineId'}]
+      description: 'The sequence at its current revision, normalized, with `takes` (every take it names, signed), offline clips marked and each pending shot''s status. From 1.49 `view=agent` answers the agent view instead (`TimelineAgentView`: every clip flat, times in seconds and frames, no signed links; contracts/README.md, Timeline: edits by ops).'
+      parameters:
+        - {$ref: '#/components/parameters/TimelineId'}
+        - {name: view, in: query, required: false, schema: {type: string, enum: [agent]}, description: 'from 1.49: `agent` = TimelineAgentView'}
       responses:
-        '200': {description: the sequence, content: {application/json: {schema: {$ref: '#/components/schemas/Timeline'}}}}
+        '200': {description: the sequence, content: {application/json: {schema: {oneOf: [{$ref: '#/components/schemas/Timeline'}, {$ref: '#/components/schemas/TimelineAgentView'}]}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
         '503': {$ref: '#/components/responses/Unavailable'}
@@ -2474,6 +2476,100 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/timelines/{timeline_id}/edits:
+    post:
+      tags: [studio]
+      operationId: studioEditTimeline
+      summary: 'From 1.49: named edit ops applied in order, all or nothing (or tried: dry_run)'
+      description: |
+        contracts/README.md, Timeline: edits by ops. Applies `ops` (at most 200) in order with the timeline rules
+        (`t_apply`: edit, then normalize) to the current document, which must be `base_revision`, and stores the
+        result as one revision (one undo undoes the call). `dry_run: true` answers the same and stores nothing
+        (`revision` = `base_revision`). An op that makes clips and leaves out their ids gets ids from studio
+        (answered in `diff.added`). `X-Helm-Client` (`web`, `helm`, `mcp`, `assistant`) labels the revision's `via`.
+        409 `timeline changed since you opened it (now revision <n>)` when `base_revision` is not the current one (a
+        dry run too; nothing is re-applied: re-read and re-plan). 422 `TimelineEditError` when an op cannot apply
+        (`op_index`, `code`: an edit error such as `split_edge`, `unknown_clip`, `take_not_found`, or the first
+        problem's code with every problem of the document after that op) or `{detail}` for a body that does not fit
+        (`fill` is studio's; `too_many_ops` past 200). Nothing is stored on any error.
+      parameters: [{$ref: '#/components/parameters/TimelineId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/TimelineEdits'}}}
+      responses:
+        '200': {description: the result, content: {application/json: {schema: {$ref: '#/components/schemas/TimelineEditResult'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/TimelineEditUnprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/timelines/{timeline_id}/revisions:
+    get:
+      tags: [studio]
+      operationId: studioListTimelineRevisions
+      summary: 'From 1.49: the kept revisions (the last 100), newest first'
+      parameters:
+        - {$ref: '#/components/parameters/TimelineId'}
+        - {name: before, in: query, required: false, schema: {type: integer, minimum: 1}, description: 'only revisions below this one (paging)'}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+      responses:
+        '200': {description: the history, content: {application/json: {schema: {$ref: '#/components/schemas/TimelineRevisionList'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/timelines/{timeline_id}/revisions/{revision}:
+    get:
+      tags: [studio]
+      operationId: studioGetTimelineRevision
+      summary: 'From 1.49: one kept revision''s document, as stored'
+      description: '404 when the revision is not kept (pruned, or never made).'
+      parameters:
+        - {$ref: '#/components/parameters/TimelineId'}
+        - {name: revision, in: path, required: true, schema: {type: integer, minimum: 1}}
+      responses:
+        '200': {description: the revision, content: {application/json: {schema: {$ref: '#/components/schemas/TimelineRevisionDoc'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/timelines/{timeline_id}/restore:
+    post:
+      tags: [studio]
+      operationId: studioRestoreTimeline
+      summary: 'From 1.49: write a kept revision''s document forward as a new revision'
+      description: 'contracts/README.md, Timeline: edits by ops. Undo to any kept point: the document of `to`, reconciled as undo is, stored as revision + 1 (`undo_to` = the current, `redo_to` = null); history is never rewritten. 409 when `revision` is not the current one; 422 `revision <n> is not kept`.'
+      parameters: [{$ref: '#/components/parameters/TimelineId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/TimelineRestore'}}}
+      responses:
+        '200': {description: the sequence, content: {application/json: {schema: {$ref: '#/components/schemas/Timeline'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/TimelineUnprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/timelines/{timeline_id}/frame:
+    post:
+      tags: [studio]
+      operationId: studioTimelineFrame
+      summary: 'From 1.49: what V1 shows at a sequence time, as a stored image (for an agent to look)'
+      description: 'contracts/README.md, Timeline: edits by ops (`frame_at_time`). An empty slot or past the end: `empty`. An image take: its image. A video take: the nearest stored frame (its first frame = a run''s poster, or the stored last frame), with the source time wanted and the one shown. No dissolve or sound is composited, and nothing is made: no take, no job. 404 unknown sequence.'
+      parameters: [{$ref: '#/components/parameters/TimelineId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/TimelineFrameRequest'}}}
+      responses:
+        '200': {description: the frame, content: {application/json: {schema: {$ref: '#/components/schemas/TimelineFrame'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
         '503': {$ref: '#/components/responses/Unavailable'}
 
   /v1/studio/timelines/{timeline_id}/shots:
@@ -3030,6 +3126,9 @@ components:
     TimelineUnprocessable:
       description: 'the body does not fit the schema (`{detail}` only), or the document breaks a timeline rule (`problems`: every problem)'
       content: {application/json: {schema: {$ref: '#/components/schemas/TimelineError'}}}
+    TimelineEditUnprocessable:
+      description: 'the body does not fit the schema (`{detail}` only), or an op cannot apply (`op_index`, `code`, `problems`)'
+      content: {application/json: {schema: {$ref: '#/components/schemas/TimelineEditError'}}}
 
   schemas:
     # ---------------------------------------------------------- errors
@@ -6575,6 +6674,250 @@ components:
         clips: {type: integer, minimum: 0, description: V1 clips}
         thumb_url: {oneOf: [{$ref: '#/components/schemas/SignedUrl'}, {type: 'null'}], description: 'the first V1 take''s thumbnail; null when none'}
         updated_at: {type: string, format: date-time}
+    TimelineOp:
+      description: 'one named edit (contracts/README.md, Timeline rules: edits; check.py t_edit), from 1.49 the items of TimelineEdits.ops. `fill` is studio''s and not one of them. Seconds are snapped to the frame grid (an audio track''s in / out: samples). A new op is an openapi change and a version'
+      type: object
+      required: [op]
+      oneOf:
+        - title: move
+          description: 'V1: to `index` (V1 ripples); an audio clip: a new start `at`, optionally on another audio `track`'
+          type: object
+          required: [op, clip]
+          additionalProperties: false
+          properties: {op: {const: move}, clip: {$ref: '#/components/schemas/TimelineClipId'}, index: {type: integer, minimum: 0}, at: {$ref: '#/components/schemas/TimelineSeconds'}, track: {type: string, pattern: '^(V1|A[2-9])$'}}
+        - title: trim
+          description: 'move one edge by `delta` seconds (snapped to frames), clamped to the take and the dissolves'
+          type: object
+          required: [op, clip, edge, delta]
+          additionalProperties: false
+          properties: {op: {const: trim}, clip: {$ref: '#/components/schemas/TimelineClipId'}, edge: {type: string, enum: [in, out]}, delta: {type: number, minimum: -86400, maximum: 86400}}
+        - title: split
+          description: 'cut the clip of `track` under the playhead `at`; the right part gets `id` (absent: studio makes one)'
+          type: object
+          required: [op, track, at]
+          additionalProperties: false
+          properties: {op: {const: split}, track: {type: string, pattern: '^(V1|A[2-9])$'}, at: {$ref: '#/components/schemas/TimelineSeconds'}, id: {$ref: '#/components/schemas/TimelineClipId'}}
+        - title: remove
+          description: 'remove the clip (V1 ripples)'
+          type: object
+          required: [op, clip]
+          additionalProperties: false
+          properties: {op: {const: remove}, clip: {$ref: '#/components/schemas/TimelineClipId'}}
+        - title: lift
+          description: 'V1 only: an empty slot of the clip''s length, same id'
+          type: object
+          required: [op, clip]
+          additionalProperties: false
+          properties: {op: {const: lift}, clip: {$ref: '#/components/schemas/TimelineClipId'}}
+        - title: replace
+          description: 'the clip''s take becomes `take_id`, one of its alternatives'
+          type: object
+          required: [op, clip, take_id]
+          additionalProperties: false
+          properties: {op: {const: replace}, clip: {$ref: '#/components/schemas/TimelineClipId'}, take_id: {type: string, format: uuid}}
+        - title: set
+          description: 'set the clip''s fields; null removes one'
+          type: object
+          required: [op, clip]
+          additionalProperties: false
+          properties:
+            op: {const: set}
+            clip: {$ref: '#/components/schemas/TimelineClipId'}
+            gain_db: {type: [number, 'null'], minimum: -60, maximum: 12}
+            mute: {type: [boolean, 'null']}
+            hold: {type: [number, 'null'], exclusiveMinimum: 0, maximum: 3600}
+            transition_in: {oneOf: [{$ref: '#/components/schemas/TimelineDissolve'}, {type: 'null'}]}
+        - title: add
+          description: 'append takes in order to `track` (default V1); `ids` for the new clips, in order (absent ones: studio makes them)'
+          type: object
+          required: [op, take_ids]
+          additionalProperties: false
+          properties:
+            op: {const: add}
+            take_ids: {type: array, minItems: 1, maxItems: 100, items: {type: string, format: uuid}}
+            track: {type: string, pattern: '^(V1|A[2-9])$'}
+            ids: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/TimelineClipId'}}
+        - title: insert
+          description: 'an empty slot of `hold` seconds at the V1 cut nearest `at`'
+          type: object
+          required: [op, at, hold]
+          additionalProperties: false
+          properties: {op: {const: insert}, at: {$ref: '#/components/schemas/TimelineSeconds'}, hold: {type: number, exclusiveMinimum: 0, maximum: 3600}, id: {$ref: '#/components/schemas/TimelineClipId'}}
+        - title: place
+          description: 'an empty slot of `hold` seconds at exactly `at` on V1 (Make shot''s edit); `gap_id` for a gap it needs'
+          type: object
+          required: [op, at, hold]
+          additionalProperties: false
+          properties: {op: {const: place}, at: {$ref: '#/components/schemas/TimelineSeconds'}, hold: {type: number, exclusiveMinimum: 0, maximum: 3600}, id: {$ref: '#/components/schemas/TimelineClipId'}, gap_id: {$ref: '#/components/schemas/TimelineClipId'}}
+        - title: add_track
+          description: 'a new audio track at the end'
+          type: object
+          required: [op]
+          additionalProperties: false
+          properties: {op: {const: add_track}}
+        - title: remove_track
+          description: 'remove an audio track and its clips'
+          type: object
+          required: [op, track]
+          additionalProperties: false
+          properties: {op: {const: remove_track}, track: {type: string, pattern: '^(V1|A[2-9])$'}}
+        - title: track
+          description: 'a track''s gain or mute'
+          type: object
+          required: [op, track]
+          additionalProperties: false
+          properties: {op: {const: track}, track: {type: string, pattern: '^(V1|A[2-9])$'}, gain_db: {type: number, minimum: -60, maximum: 12}, mute: {type: boolean}}
+    TimelineEdits:
+      type: object
+      required: [base_revision, ops]
+      additionalProperties: false
+      properties:
+        base_revision: {type: integer, minimum: 1, description: 'the revision the ops were planned on (409 when it is not the current one)'}
+        ops: {type: array, minItems: 1, maxItems: 200, items: {$ref: '#/components/schemas/TimelineOp'}}
+        dry_run: {type: boolean, default: false, description: 'try it: the same answer, nothing stored'}
+    TimelineDiff:
+      type: object
+      required: [added, removed, changed, tracks, duration]
+      additionalProperties: false
+      description: 'what changed between two normalized documents (check.py t_diff), by clip id; a field absent on one side is null'
+      properties:
+        added: {type: array, items: {$ref: '#/components/schemas/TimelineClipId'}, description: 'new clip ids, in track order (studio-made ones included)'}
+        removed: {type: array, items: {$ref: '#/components/schemas/TimelineClipId'}}
+        changed:
+          type: array
+          items:
+            type: object
+            required: [clip, fields]
+            additionalProperties: false
+            properties:
+              clip: {$ref: '#/components/schemas/TimelineClipId'}
+              fields: {type: object, description: 'field → [before, after], among take_id, in, out, hold, at, gain_db, mute, transition_in, alternatives, shot, offline, track (a V1 ripple shows as `at` changes)', additionalProperties: {type: array, minItems: 2, maxItems: 2}}
+        tracks:
+          type: object
+          required: [added, removed, changed]
+          additionalProperties: false
+          properties:
+            added: {type: array, items: {type: string}}
+            removed: {type: array, items: {type: string}}
+            changed:
+              type: array
+              items:
+                type: object
+                required: [track, fields]
+                additionalProperties: false
+                properties: {track: {type: string}, fields: {type: object, additionalProperties: {type: array, minItems: 2, maxItems: 2}}}
+        duration: {type: array, minItems: 2, maxItems: 2, items: {type: number, minimum: 0}, description: '[before, after] duration_s'}
+    TimelineEditResult:
+      type: object
+      required: [revision, dry_run, timeline, diff, warnings]
+      properties:
+        revision: {type: integer, minimum: 1, description: 'the stored revision; a dry run: base_revision'}
+        dry_run: {type: boolean}
+        timeline: {$ref: '#/components/schemas/Timeline', description: 'as GET …/{timeline_id} answers it (a dry run: what it would be)'}
+        diff: {$ref: '#/components/schemas/TimelineDiff'}
+        warnings: {type: array, items: {type: string}, description: 'what studio changed beyond the ops (a time snapped to the frame grid); never a refusal'}
+    TimelineEditError:
+      type: object
+      required: [detail]
+      description: 'TimelineError plus the failing op: `ops[3]: split_edge`, or `ops[3]: timeline has 2 problems: …`; `{detail}` only when the body does not fit'
+      properties:
+        detail: {type: string}
+        op_index: {type: integer, minimum: 0}
+        code: {type: string, description: 'the edit''s error code (unknown_op, unknown_clip, unknown_track, take_not_found, split_edge, split_none, split_shot, lift_track, video_track, too_many_tracks, not_alternative) or the first problem''s code'}
+        problems: {type: array, items: {$ref: '#/components/schemas/TimelineProblem'}}
+    TimelineRevisionItem:
+      type: object
+      required: [revision, by, via, saved_at, ops_summary, clips, duration_s]
+      properties:
+        revision: {type: integer, minimum: 1}
+        by: {type: string, enum: [user, studio]}
+        via: {type: [string, 'null'], enum: [web, api, mcp, assistant, null], description: 'a user write: where it came from (X-Helm-Client; a revision from before 1.49 reads web); studio''s: null'}
+        saved_at: {type: string, format: date-time}
+        ops_summary: {type: [string, 'null'], description: 'the op names of an /edits call (`split, remove`), else the write''s kind (edit, add, shot, line, rerender, undo, redo, restore, fill); null before 1.49'}
+        clips: {type: integer, minimum: 0, description: V1 clips}
+        duration_s: {type: number, minimum: 0}
+    TimelineRevisionList:
+      type: object
+      required: [revisions]
+      properties: {revisions: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/TimelineRevisionItem'}}}
+    TimelineRevisionDoc:
+      allOf: [{$ref: '#/components/schemas/TimelineRevisionItem'}]
+      type: object
+      required: [document]
+      properties: {document: {$ref: '#/components/schemas/TimelineNormalized'}}
+    TimelineRestore:
+      type: object
+      required: [revision, to]
+      additionalProperties: false
+      properties:
+        revision: {type: integer, minimum: 1, description: 'the current revision, as the caller has it'}
+        to: {type: integer, minimum: 1, description: 'the kept revision to bring back'}
+    TimelineAgentClip:
+      type: object
+      required: [id, track, index, take_id, take_title, kind, in, out, hold, at, end, length, at_f, end_f, length_f, gain_db, mute, transition_in, alternatives, shot, number, offline]
+      additionalProperties: false
+      properties:
+        id: {$ref: '#/components/schemas/TimelineClipId'}
+        track: {type: string}
+        index: {type: integer, minimum: 0, description: 'its place on its track'}
+        take_id: {type: [string, 'null'], format: uuid}
+        take_title: {type: [string, 'null']}
+        kind: {type: string, enum: [video, image, audio, slot], description: 'slot: an empty slot (or a line placeholder)'}
+        in: {type: [number, 'null']}
+        out: {type: [number, 'null']}
+        hold: {type: [number, 'null']}
+        at: {type: number, minimum: 0, description: 'sequence seconds'}
+        end: {type: number, minimum: 0}
+        length: {type: number, minimum: 0}
+        at_f: {type: integer, minimum: 0, description: 'frames, on the target''s grid'}
+        end_f: {type: integer, minimum: 0}
+        length_f: {type: integer, minimum: 0}
+        gain_db: {type: number}
+        mute: {type: boolean}
+        transition_in: {type: [integer, 'null'], description: 'a dissolve''s frames'}
+        alternatives: {type: array, items: {type: string, format: uuid}}
+        shot: {oneOf: [{$ref: '#/components/schemas/TimelineShotRef'}, {type: 'null'}]}
+        number: {type: [integer, 'null'], description: 'V1: the shot number'}
+        offline: {type: boolean}
+    TimelineAgentView:
+      type: object
+      required: [id, name, revision, target, duration_s, frames, tracks, clips]
+      additionalProperties: false
+      description: 'GET …/{timeline_id}?view=agent (check.py t_agent_view, plus id, name, revision and take titles): plain data, no signed links'
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        revision: {type: integer, minimum: 1}
+        target: {$ref: '#/components/schemas/TimelineTarget'}
+        duration_s: {type: number, minimum: 0}
+        frames: {type: integer, minimum: 0}
+        tracks:
+          type: array
+          items:
+            type: object
+            required: [name, kind, gain_db, mute, clips]
+            additionalProperties: false
+            properties: {name: {type: string}, kind: {$ref: '#/components/schemas/TimelineTrackKind'}, gain_db: {type: number}, mute: {type: boolean}, clips: {type: integer, minimum: 0}}
+        clips: {type: array, items: {$ref: '#/components/schemas/TimelineAgentClip'}, description: 'every clip, track by track, in order'}
+    TimelineFrameRequest:
+      type: object
+      required: [at]
+      additionalProperties: false
+      properties: {at: {$ref: '#/components/schemas/TimelineSeconds', description: 'sequence seconds'}}
+    TimelineFrame:
+      type: object
+      required: [empty, clip, take_id, kind, t, shown, shown_t, url]
+      description: 'check.py frame_at_time, plus the signed image: what V1 shows at `at`'
+      properties:
+        empty: {type: boolean, description: 'an empty slot, or past the end'}
+        clip: {oneOf: [{$ref: '#/components/schemas/TimelineClipId'}, {type: 'null'}]}
+        take_id: {type: [string, 'null'], format: uuid}
+        kind: {type: [string, 'null'], enum: [video, image, null]}
+        t: {type: [number, 'null'], description: 'a video: the source time wanted'}
+        shown: {type: [string, 'null'], enum: [image, first, last, poster, null], description: 'what the image is: the image take, the video''s first or last frame, or (an upload''s or import''s video) its poster, whose time is not known'}
+        shown_t: {type: [number, 'null'], description: 'the source time the image shows (null: an image, or a poster)'}
+        offline: {type: boolean, description: 'the clip''s take is gone: no image'}
+        url: {oneOf: [{$ref: '#/components/schemas/SignedUrl'}, {type: 'null'}]}
     TimelineList:
       type: object
       required: [timelines]

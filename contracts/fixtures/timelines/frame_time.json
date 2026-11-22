@@ -1,0 +1,875 @@
+{
+ "description": "frame_at_time(document, t, takes) (README, Timeline: edits by ops; API 1.49): what POST \u2026/{timeline_id}/frame answers before the signed image. Takes: edits.json's.",
+ "takes": {
+  "aaaaaaaa-0000-4000-8000-000000000001": {
+   "kind": "video",
+   "duration_s": 2.0416666666666665,
+   "fps": 24,
+   "frames": 49,
+   "has_audio": true,
+   "width": 256,
+   "height": 128,
+   "bytes": 400000,
+   "stream": {
+    "container": "mp4",
+    "codec": "h264",
+    "profile": "High",
+    "level": 21,
+    "pix_fmt": "yuv420p",
+    "width": 256,
+    "height": 128,
+    "sar": "1:1",
+    "field_order": "progressive",
+    "frame_rate": "24/1",
+    "time_base": "1/12288",
+    "color": {
+     "range": null,
+     "space": null,
+     "primaries": null,
+     "transfer": null
+    },
+    "extradata_sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+   }
+  },
+  "aaaaaaaa-0000-4000-8000-000000000002": {
+   "kind": "video",
+   "duration_s": 2.0416666666666665,
+   "fps": 24,
+   "frames": 49,
+   "has_audio": true,
+   "width": 256,
+   "height": 128,
+   "bytes": 380000,
+   "stream": {
+    "container": "mp4",
+    "codec": "h264",
+    "profile": "High",
+    "level": 21,
+    "pix_fmt": "yuv420p",
+    "width": 256,
+    "height": 128,
+    "sar": "1:1",
+    "field_order": "progressive",
+    "frame_rate": "24/1",
+    "time_base": "1/12288",
+    "color": {
+     "range": null,
+     "space": null,
+     "primaries": null,
+     "transfer": null
+    },
+    "extradata_sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+   }
+  },
+  "aaaaaaaa-0000-4000-8000-000000000003": {
+   "kind": "video",
+   "duration_s": 5.041666666666667,
+   "fps": 24,
+   "frames": 121,
+   "has_audio": true,
+   "width": 704,
+   "height": 448,
+   "bytes": 400000,
+   "stream": {
+    "container": "mp4",
+    "codec": "h264",
+    "profile": "High",
+    "level": 30,
+    "pix_fmt": "yuv420p",
+    "width": 704,
+    "height": 448,
+    "sar": "1:1",
+    "field_order": "progressive",
+    "frame_rate": "24/1",
+    "time_base": "1/12288",
+    "color": {
+     "range": null,
+     "space": null,
+     "primaries": null,
+     "transfer": null
+    },
+    "extradata_sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+   }
+  },
+  "bbbbbbbb-0000-4000-8000-000000000001": {
+   "kind": "image",
+   "width": 256,
+   "height": 128,
+   "bytes": 90000
+  },
+  "aaaaaaaa-0000-4000-8000-000000000004": {
+   "kind": "video",
+   "duration_s": 1.0416666666666667,
+   "fps": 24,
+   "frames": 25,
+   "has_audio": false,
+   "width": 256,
+   "height": 128,
+   "bytes": 400000,
+   "stream": {
+    "container": "mp4",
+    "codec": "h264",
+    "profile": "High",
+    "level": 21,
+    "pix_fmt": "yuv420p",
+    "width": 256,
+    "height": 128,
+    "sar": "1:1",
+    "field_order": "progressive",
+    "frame_rate": "24/1",
+    "time_base": "1/12288",
+    "color": {
+     "range": null,
+     "space": null,
+     "primaries": null,
+     "transfer": null
+    },
+    "extradata_sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+   }
+  },
+  "aaaaaaaa-0000-4000-8000-000000000005": {
+   "kind": "video",
+   "duration_s": 2.0,
+   "fps": 25,
+   "frames": 50,
+   "has_audio": true,
+   "width": 256,
+   "height": 128,
+   "bytes": 400000,
+   "stream": {
+    "container": "mp4",
+    "codec": "h264",
+    "profile": "High",
+    "level": 21,
+    "pix_fmt": "yuv420p",
+    "width": 256,
+    "height": 128,
+    "sar": "1:1",
+    "field_order": "progressive",
+    "frame_rate": "25/1",
+    "time_base": "1/12288",
+    "color": {
+     "range": null,
+     "space": null,
+     "primaries": null,
+     "transfer": null
+    },
+    "extradata_sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+   }
+  }
+ },
+ "cases": [
+  {
+   "description": "early in a video clip: its first frame is nearer",
+   "document": {
+    "target": {
+     "width": 256,
+     "height": 128,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "tracks": [
+     {
+      "name": "V1",
+      "kind": "video",
+      "gain_db": 0,
+      "mute": false,
+      "clips": [
+       {
+        "id": "a",
+        "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+        "in": 0.0,
+        "out": 2.0416666666666665,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [
+         "aaaaaaaa-0000-4000-8000-000000000001"
+        ],
+        "at": 0.0
+       },
+       {
+        "id": "b",
+        "take_id": "bbbbbbbb-0000-4000-8000-000000000001",
+        "hold": 2.0,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [
+         "bbbbbbbb-0000-4000-8000-000000000001"
+        ],
+        "at": 2.0416666666666665
+       },
+       {
+        "id": "c",
+        "take_id": "aaaaaaaa-0000-4000-8000-000000000002",
+        "in": 0.25,
+        "out": 1.75,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [
+         "aaaaaaaa-0000-4000-8000-000000000003",
+         "aaaaaaaa-0000-4000-8000-000000000002"
+        ],
+        "at": 4.041666666666667
+       }
+      ]
+     },
+     {
+      "name": "A2",
+      "kind": "audio",
+      "gain_db": 0,
+      "mute": false,
+      "clips": [
+       {
+        "id": "m",
+        "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+        "in": 0.0,
+        "out": 1.0,
+        "at": 1.0,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [
+         "aaaaaaaa-0000-4000-8000-000000000001"
+        ]
+       }
+      ]
+     }
+    ],
+    "duration_s": 5.541666666666667,
+    "frames": 133
+   },
+   "t": 0.5,
+   "expect": {
+    "empty": false,
+    "clip": "a",
+    "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+    "kind": "video",
+    "t": 0.5,
+    "shown": "first",
+    "shown_t": 0
+   }
+  },
+  {
+   "description": "late in a video clip: its stored last frame is nearer",
+   "document": {
+    "target": {
+     "width": 256,
+     "height": 128,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "tracks": [
+     {
+      "name": "V1",
+      "kind": "video",
+      "gain_db": 0,
+      "mute": false,
+      "clips": [
+       {
+        "id": "a",
+        "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+        "in": 0.0,
+        "out": 2.0416666666666665,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [
+         "aaaaaaaa-0000-4000-8000-000000000001"
+        ],
+        "at": 0.0
+       },
+       {
+        "id": "b",
+        "take_id": "bbbbbbbb-0000-4000-8000-000000000001",
+        "hold": 2.0,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [
+         "bbbbbbbb-0000-4000-8000-000000000001"
+        ],
+        "at": 2.0416666666666665
+       },
+       {
+        "id": "c",
+        "take_id": "aaaaaaaa-0000-4000-8000-000000000002",
+        "in": 0.25,
+        "out": 1.75,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [
+         "aaaaaaaa-0000-4000-8000-000000000003",
+         "aaaaaaaa-0000-4000-8000-000000000002"
+        ],
+        "at": 4.041666666666667
+       }
+      ]
+     },
+     {
+      "name": "A2",
+      "kind": "audio",
+      "gain_db": 0,
+      "mute": false,
+      "clips": [
+       {
+        "id": "m",
+        "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+        "in": 0.0,
+        "out": 1.0,
+        "at": 1.0,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [
+         "aaaaaaaa-0000-4000-8000-000000000001"
+        ]
+       }
+      ]
+     }
+    ],
+    "duration_s": 5.541666666666667,
+    "frames": 133
+   },
+   "t": 1.5,
+   "expect": {
+    "empty": false,
+    "clip": "a",
+    "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+    "kind": "video",
+    "t": 1.5,
+    "shown": "last",
+    "shown_t": 2.0
+   }
+  },
+  {
+   "description": "on an image clip: the image",
+   "document": {
+    "target": {
+     "width": 256,
+     "height": 128,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "tracks": [
+     {
+      "name": "V1",
+      "kind": "video",
+      "gain_db": 0,
+      "mute": false,
+      "clips": [
+       {
+        "id": "a",
+        "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+        "in": 0.0,
+        "out": 2.0416666666666665,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [
+         "aaaaaaaa-0000-4000-8000-000000000001"
+        ],
+        "at": 0.0
+       },
+       {
+        "id": "b",
+        "take_id": "bbbbbbbb-0000-4000-8000-000000000001",
+        "hold": 2.0,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [
+         "bbbbbbbb-0000-4000-8000-000000000001"
+        ],
+        "at": 2.0416666666666665
+       },
+       {
+        "id": "c",
+        "take_id": "aaaaaaaa-0000-4000-8000-000000000002",
+        "in": 0.25,
+        "out": 1.75,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [
+         "aaaaaaaa-0000-4000-8000-000000000003",
+         "aaaaaaaa-0000-4000-8000-000000000002"
+        ],
+        "at": 4.041666666666667
+       }
+      ]
+     },
+     {
+      "name": "A2",
+      "kind": "audio",
+      "gain_db": 0,
+      "mute": false,
+      "clips": [
+       {
+        "id": "m",
+        "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+        "in": 0.0,
+        "out": 1.0,
+        "at": 1.0,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [
+         "aaaaaaaa-0000-4000-8000-000000000001"
+        ]
+       }
+      ]
+     }
+    ],
+    "duration_s": 5.541666666666667,
+    "frames": 133
+   },
+   "t": 3.0,
+   "expect": {
+    "empty": false,
+    "clip": "b",
+    "take_id": "bbbbbbbb-0000-4000-8000-000000000001",
+    "kind": "image",
+    "t": null,
+    "shown": "image",
+    "shown_t": null
+   }
+  },
+  {
+   "description": "a trimmed clip: the source time is in + the offset",
+   "document": {
+    "target": {
+     "width": 256,
+     "height": 128,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "tracks": [
+     {
+      "name": "V1",
+      "kind": "video",
+      "gain_db": 0,
+      "mute": false,
+      "clips": [
+       {
+        "id": "a",
+        "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+        "in": 0.0,
+        "out": 2.0416666666666665,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [
+         "aaaaaaaa-0000-4000-8000-000000000001"
+        ],
+        "at": 0.0
+       },
+       {
+        "id": "b",
+        "take_id": "bbbbbbbb-0000-4000-8000-000000000001",
+        "hold": 2.0,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [
+         "bbbbbbbb-0000-4000-8000-000000000001"
+        ],
+        "at": 2.0416666666666665
+       },
+       {
+        "id": "c",
+        "take_id": "aaaaaaaa-0000-4000-8000-000000000002",
+        "in": 0.25,
+        "out": 1.75,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [
+         "aaaaaaaa-0000-4000-8000-000000000003",
+         "aaaaaaaa-0000-4000-8000-000000000002"
+        ],
+        "at": 4.041666666666667
+       }
+      ]
+     },
+     {
+      "name": "A2",
+      "kind": "audio",
+      "gain_db": 0,
+      "mute": false,
+      "clips": [
+       {
+        "id": "m",
+        "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+        "in": 0.0,
+        "out": 1.0,
+        "at": 1.0,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [
+         "aaaaaaaa-0000-4000-8000-000000000001"
+        ]
+       }
+      ]
+     }
+    ],
+    "duration_s": 5.541666666666667,
+    "frames": 133
+   },
+   "t": 4.5,
+   "expect": {
+    "empty": false,
+    "clip": "c",
+    "take_id": "aaaaaaaa-0000-4000-8000-000000000002",
+    "kind": "video",
+    "t": 0.7083333333333334,
+    "shown": "first",
+    "shown_t": 0
+   }
+  },
+  {
+   "description": "past the end: empty, no clip",
+   "document": {
+    "target": {
+     "width": 256,
+     "height": 128,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "tracks": [
+     {
+      "name": "V1",
+      "kind": "video",
+      "gain_db": 0,
+      "mute": false,
+      "clips": [
+       {
+        "id": "a",
+        "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+        "in": 0.0,
+        "out": 2.0416666666666665,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [
+         "aaaaaaaa-0000-4000-8000-000000000001"
+        ],
+        "at": 0.0
+       },
+       {
+        "id": "b",
+        "take_id": "bbbbbbbb-0000-4000-8000-000000000001",
+        "hold": 2.0,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [
+         "bbbbbbbb-0000-4000-8000-000000000001"
+        ],
+        "at": 2.0416666666666665
+       },
+       {
+        "id": "c",
+        "take_id": "aaaaaaaa-0000-4000-8000-000000000002",
+        "in": 0.25,
+        "out": 1.75,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [
+         "aaaaaaaa-0000-4000-8000-000000000003",
+         "aaaaaaaa-0000-4000-8000-000000000002"
+        ],
+        "at": 4.041666666666667
+       }
+      ]
+     },
+     {
+      "name": "A2",
+      "kind": "audio",
+      "gain_db": 0,
+      "mute": false,
+      "clips": [
+       {
+        "id": "m",
+        "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+        "in": 0.0,
+        "out": 1.0,
+        "at": 1.0,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [
+         "aaaaaaaa-0000-4000-8000-000000000001"
+        ]
+       }
+      ]
+     }
+    ],
+    "duration_s": 5.541666666666667,
+    "frames": 133
+   },
+   "t": 10.0,
+   "expect": {
+    "empty": true,
+    "clip": null,
+    "take_id": null,
+    "kind": null,
+    "t": null,
+    "shown": null,
+    "shown_t": null
+   }
+  },
+  {
+   "description": "an empty slot: empty, its clip",
+   "document": {
+    "target": {
+     "width": 256,
+     "height": 128,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "tracks": [
+     {
+      "name": "V1",
+      "kind": "video",
+      "gain_db": 0,
+      "mute": false,
+      "clips": [
+       {
+        "id": "a",
+        "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+        "in": 0.0,
+        "out": 2.0416666666666665,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [
+         "aaaaaaaa-0000-4000-8000-000000000001"
+        ],
+        "at": 0.0
+       },
+       {
+        "id": "b",
+        "take_id": null,
+        "hold": 2.0,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [],
+        "at": 2.0416666666666665
+       },
+       {
+        "id": "c",
+        "take_id": "aaaaaaaa-0000-4000-8000-000000000002",
+        "in": 0.25,
+        "out": 1.75,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [
+         "aaaaaaaa-0000-4000-8000-000000000003",
+         "aaaaaaaa-0000-4000-8000-000000000002"
+        ],
+        "at": 4.041666666666667
+       }
+      ]
+     },
+     {
+      "name": "A2",
+      "kind": "audio",
+      "gain_db": 0,
+      "mute": false,
+      "clips": [
+       {
+        "id": "m",
+        "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+        "in": 0.0,
+        "out": 1.0,
+        "at": 1.0,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [
+         "aaaaaaaa-0000-4000-8000-000000000001"
+        ]
+       }
+      ]
+     }
+    ],
+    "duration_s": 5.541666666666667,
+    "frames": 133
+   },
+   "t": 3.0,
+   "expect": {
+    "empty": true,
+    "clip": "b",
+    "take_id": null,
+    "kind": null,
+    "t": null,
+    "shown": null,
+    "shown_t": null
+   }
+  },
+  {
+   "description": "an offline clip: the clip, no image",
+   "document": {
+    "target": {
+     "width": 256,
+     "height": 128,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "tracks": [
+     {
+      "name": "V1",
+      "kind": "video",
+      "gain_db": 0,
+      "mute": false,
+      "clips": [
+       {
+        "id": "a",
+        "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+        "in": 0.0,
+        "out": 2.0416666666666665,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [
+         "aaaaaaaa-0000-4000-8000-000000000001"
+        ],
+        "at": 0.0
+       },
+       {
+        "id": "b",
+        "take_id": "bbbbbbbb-0000-4000-8000-000000000001",
+        "hold": 2.0,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [
+         "bbbbbbbb-0000-4000-8000-000000000001"
+        ],
+        "at": 2.0416666666666665
+       },
+       {
+        "id": "c",
+        "take_id": "aaaaaaaa-0000-4000-8000-000000000002",
+        "in": 0.25,
+        "out": 1.75,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [
+         "aaaaaaaa-0000-4000-8000-000000000003",
+         "aaaaaaaa-0000-4000-8000-000000000002"
+        ],
+        "at": 4.041666666666667,
+        "offline": true
+       }
+      ]
+     },
+     {
+      "name": "A2",
+      "kind": "audio",
+      "gain_db": 0,
+      "mute": false,
+      "clips": [
+       {
+        "id": "m",
+        "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+        "in": 0.0,
+        "out": 1.0,
+        "at": 1.0,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [
+         "aaaaaaaa-0000-4000-8000-000000000001"
+        ]
+       }
+      ]
+     }
+    ],
+    "duration_s": 5.541666666666667,
+    "frames": 133
+   },
+   "t": 4.5,
+   "expect": {
+    "empty": false,
+    "clip": "c",
+    "take_id": "aaaaaaaa-0000-4000-8000-000000000002",
+    "kind": "video",
+    "t": null,
+    "shown": null,
+    "shown_t": null,
+    "offline": true
+   }
+  },
+  {
+   "description": "on a cut: the clip that starts there",
+   "document": {
+    "target": {
+     "width": 256,
+     "height": 128,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "tracks": [
+     {
+      "name": "V1",
+      "kind": "video",
+      "gain_db": 0,
+      "mute": false,
+      "clips": [
+       {
+        "id": "a",
+        "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+        "in": 0.0,
+        "out": 2.0416666666666665,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [
+         "aaaaaaaa-0000-4000-8000-000000000001"
+        ],
+        "at": 0.0
+       },
+       {
+        "id": "b",
+        "take_id": "bbbbbbbb-0000-4000-8000-000000000001",
+        "hold": 2.0,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [
+         "bbbbbbbb-0000-4000-8000-000000000001"
+        ],
+        "at": 2.0416666666666665
+       },
+       {
+        "id": "c",
+        "take_id": "aaaaaaaa-0000-4000-8000-000000000002",
+        "in": 0.25,
+        "out": 1.75,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [
+         "aaaaaaaa-0000-4000-8000-000000000003",
+         "aaaaaaaa-0000-4000-8000-000000000002"
+        ],
+        "at": 4.041666666666667
+       }
+      ]
+     },
+     {
+      "name": "A2",
+      "kind": "audio",
+      "gain_db": 0,
+      "mute": false,
+      "clips": [
+       {
+        "id": "m",
+        "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+        "in": 0.0,
+        "out": 1.0,
+        "at": 1.0,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [
+         "aaaaaaaa-0000-4000-8000-000000000001"
+        ]
+       }
+      ]
+     }
+    ],
+    "duration_s": 5.541666666666667,
+    "frames": 133
+   },
+   "t": 2.0416666666666665,
+   "expect": {
+    "empty": false,
+    "clip": "b",
+    "take_id": "bbbbbbbb-0000-4000-8000-000000000001",
+    "kind": "image",
+    "t": null,
+    "shown": "image",
+    "shown_t": null
+   }
+  }
+ ]
+}
