@@ -227,3 +227,21 @@ describe("the screen summary and the actions", () => {
     });
   });
 });
+
+// A reload (or a redeploy) keeps this tab's drawer id and its open state; another tab gets its own id.
+describe("the tab's id and drawer state survive a reload", () => {
+  it("keeps the id in sessionStorage and remembers open", async () => {
+    const { tabClientId, tabOpen, rememberOpen } = await import("@/lib/assistant");
+    sessionStorage.clear();
+    const a = tabClientId();
+    expect(a).toMatch(/^[A-Za-z0-9]{8,64}$/);
+    expect(tabClientId()).toBe(a);
+    sessionStorage.clear();
+    expect(tabClientId()).not.toBe(a);
+    expect(tabOpen()).toBe(false);
+    rememberOpen(true);
+    expect(tabOpen()).toBe(true);
+    rememberOpen(false);
+    expect(tabOpen()).toBe(false);
+  });
+});

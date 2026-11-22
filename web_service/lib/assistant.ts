@@ -65,12 +65,49 @@ export function toResult(id: string, o: Outcome): Result {
   };
 }
 
-/** This tab's drawer (a fresh id per page load: a reloaded tab is a new tab, and Continue here moves a chat to it). */
+/** A fresh id. */
 export const newClientId = () =>
   (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}${Math.random()}`).replace(
     /[^A-Za-z0-9]/g,
     "",
   );
+
+const CID_KEY = "hs.assistant.cid";
+export const OPEN_KEY = "hs.assistant.open";
+
+/** This tab's drawer id: kept in sessionStorage, so a reload (or a redeploy) stays the same tab and keeps its chat;
+ * another tab gets its own. Without storage, a fresh id per load (Continue here moves the chat).
+ * ponytail: a duplicated browser tab copies sessionStorage and so shares the id; add a BroadcastChannel check if
+ * that ever matters. */
+export function tabClientId(): string {
+  try {
+    const s = globalThis.sessionStorage;
+    const had = s?.getItem(CID_KEY);
+    if (had && /^[A-Za-z0-9]{8,64}$/.test(had)) return had;
+    const id = newClientId();
+    s?.setItem(CID_KEY, id);
+    return id;
+  } catch {
+    return newClientId();
+  }
+}
+
+/** Whether this tab had the drawer open before a reload. */
+export function tabOpen(): boolean {
+  try {
+    return globalThis.sessionStorage?.getItem(OPEN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function rememberOpen(open: boolean) {
+  try {
+    globalThis.sessionStorage?.setItem(OPEN_KEY, open ? "1" : "0");
+  } catch {
+    /* no storage: the drawer starts closed after a reload */
+  }
+}
 
 /** A chat's events folded: an entry with a known id replaces it (a line going from running to done), a thread
  * event replaces the chat's state. */

@@ -20,7 +20,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/app/(auth)/actions", () => ({ signout: () => undefined }));
 vi.mock("@/lib/assistant", async (orig) => ({
   ...(await orig<typeof import("@/lib/assistant")>()),
-  newClientId: () => "tabA00000001",
+  tabClientId: () => "tabA00000001",
 }));
 let onEvent: ((e: S<"AssistantEvent">) => void) | null = null;
 vi.mock("@/lib/runs", async (orig) => ({
@@ -40,6 +40,8 @@ beforeAll(() => {
   Element.prototype.scrollIntoView ??= () => undefined;
 });
 beforeEach(() => {
+  sessionStorage.clear(); // the drawer's open state and tab id live per tab
+
   path = "/";
   history.replaceState(null, "", "/");
   push.mockReset();

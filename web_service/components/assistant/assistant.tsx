@@ -36,7 +36,9 @@ import {
   elsewhere,
   limitOf,
   mentionParts,
-  newClientId,
+  tabClientId,
+  tabOpen,
+  rememberOpen,
   sourceText,
   toResult,
   waitingText,
@@ -94,10 +96,11 @@ const words = (name: string) =>
 export function useAssistant(me: S<"User"> | null) {
   const router = useRouter();
   const [reg] = useState(() => new Registry());
-  const [cid] = useState(newClientId);
+  const [cid] = useState(tabClientId);
   const [status, setStatus] = useState<S<"AssistantStatus"> | null>(null);
   const [view, setView] = useState<ThreadView | null>(null);
-  const [open, setOpenState] = useState(false);
+  // reopen after a reload of this tab (false on the server; the drawer only renders once the status has loaded)
+  const [open, setOpenState] = useState(tabOpen);
   const [shrunk, setShrunk] = useState(false);
   const [local, setLocalState] = useState<Record<string, Local>>({});
   const [undone, setUndone] = useState<Record<string, boolean>>({});
@@ -120,7 +123,11 @@ export function useAssistant(me: S<"User"> | null) {
   }, [reg, me, router]);
 
   const setOpen = useCallback((o: boolean | ((x: boolean) => boolean)) => {
-    setOpenState(o);
+    setOpenState((x) => {
+      const next = typeof o === "function" ? o(x) : o;
+      rememberOpen(next);
+      return next;
+    });
     setShrunk(false);
   }, []);
   const setLocal = (id: string, l: Local) => setLocalState((m) => ({ ...m, [id]: l }));
