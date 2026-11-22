@@ -126,7 +126,7 @@ func Run() error {
 			}
 			return reply, err
 		},
-		// the assistant's memory: the same 5 s (API 1.42)
+		// the assistant's memory: the same 5 s (API 1.44)
 		assistantMemory: func(ctx context.Context, req message.AssistantMemoryRequest) (message.AssistantMemoryReply, error) {
 			var reply message.AssistantMemoryReply
 			body, _ := json.Marshal(req)

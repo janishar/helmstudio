@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.43.0
+  version: 1.44.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -27,7 +27,7 @@ servers:
 security:
   - {ApiKey: [], BearerJWT: []}
 tags:
-  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media); from 1.23 LoRA strengths 0..2 (looks saved before are clamped when read; contracts/README.md, Looks); from 1.24 the model component a node loads (NodeSchema.component); from 1.25 an inspector section''s help, the presets'' order (StudioLayout.preset_order) and a run''s planned peak before it is sent (POST /v1/studio/runs/plan); from 1.26 an inspector section''s choice tiles (LTX''s Recipe: two-stage or one-stage); from 1.28 a judge''s branch without `then` (Ask me) and a judge test on picked takes (POST /v1/studio/pipelines/{pipeline_id}/judge-tests); from 1.29 a V1 clip''s shot number (TimelineClip.number: "Shot 4"); from 1.30 voices: audio takes made by runs (the `Audio` port, `Workflow.media` audio), the `voice` param, saved voices in the library (designed voices and the packs'' starter voices; contracts/README.md, Voices); from 1.31 cloned voices (a 3–30 s clip of an audio take or a video''s sound, with consent), designed voices that keep a clip, Save as voice (`from_take` with `kind: voice`) and the zonos3 family (contracts/README.md, Voices: cloned voices); from 1.32 dialogue and Timeline audio: dialogue scripts (`script` text params expanded into `lines` rows whose items carry a voice), an element''s `voice_id`, cues on a dialogue''s take, audio takes on the audio tracks, New line (POST /v1/studio/timelines/{timeline_id}/lines), Make shot (a slot `exact` at an audio clip''s time), an export plan''s `sounds`, offers and pipeline binds into rows of one media field, `library.read` voices and the write node''s `form: script` (contracts/README.md, Dialogue and Timeline audio); from 1.42 the in-app assistant: chats, their events and memory, the admin''s assistant settings, search providers (kind `search`) and the Gallery''s `order` (contracts/README.md, Assistant)'}
+  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media); from 1.23 LoRA strengths 0..2 (looks saved before are clamped when read; contracts/README.md, Looks); from 1.24 the model component a node loads (NodeSchema.component); from 1.25 an inspector section''s help, the presets'' order (StudioLayout.preset_order) and a run''s planned peak before it is sent (POST /v1/studio/runs/plan); from 1.26 an inspector section''s choice tiles (LTX''s Recipe: two-stage or one-stage); from 1.28 a judge''s branch without `then` (Ask me) and a judge test on picked takes (POST /v1/studio/pipelines/{pipeline_id}/judge-tests); from 1.29 a V1 clip''s shot number (TimelineClip.number: "Shot 4"); from 1.30 voices: audio takes made by runs (the `Audio` port, `Workflow.media` audio), the `voice` param, saved voices in the library (designed voices and the packs'' starter voices; contracts/README.md, Voices); from 1.31 cloned voices (a 3–30 s clip of an audio take or a video''s sound, with consent), designed voices that keep a clip, Save as voice (`from_take` with `kind: voice`) and the zonos3 family (contracts/README.md, Voices: cloned voices); from 1.32 dialogue and Timeline audio: dialogue scripts (`script` text params expanded into `lines` rows whose items carry a voice), an element''s `voice_id`, cues on a dialogue''s take, audio takes on the audio tracks, New line (POST /v1/studio/timelines/{timeline_id}/lines), Make shot (a slot `exact` at an audio clip''s time), an export plan''s `sounds`, offers and pipeline binds into rows of one media field, `library.read` voices and the write node''s `form: script` (contracts/README.md, Dialogue and Timeline audio); from 1.44 the in-app assistant: chats, their events and memory, the admin''s assistant settings, search providers (kind `search`) and the Gallery''s `order` (contracts/README.md, Assistant)'}
   - {name: files, description: signed file downloads and uploads}
   - name: auth
     description: 'auth_service: users, sessions (JWT access + rotating refresh tokens), roles, client API keys'
@@ -994,7 +994,7 @@ paths:
         leading `@` of the word is ignored there), the workflow title or id (`made_with.workflow_title`,
         `workflow_id`) or the model id (`made_with.model.id`, which names its family). A `session_id` or (from 1.27)
         `batch_id` that is unknown or another user's just matches nothing. A malformed filter value or cursor is 422.
-        From 1.42 `order`: `newest` (the default), `oldest` (`created_at`, then `id`, ascending), `starred` (starred
+        From 1.44 `order`: `newest` (the default), `oldest` (`created_at`, then `id`, ascending), `starred` (starred
         first, each part newest first), `name` (the title, case-insensitively, then newest first). A cursor belongs to
         its order: one from another order is 422.
       parameters:
@@ -1004,7 +1004,7 @@ paths:
         - {name: session_id, in: query, required: false, schema: {type: string, format: uuid}, description: only takes of this session}
         - {name: batch_id, in: query, required: false, schema: {type: string, format: uuid}, description: 'from 1.27: only takes of this batch (`Take.batch_id`, its collection)'}
         - {name: q, in: query, required: false, schema: {type: string, maxLength: 200}, description: 'text search over title, prompt and (from 1.27) element handles, workflow and model; blank = no filter'}
-        - {name: order, in: query, required: false, schema: {type: string, enum: [newest, oldest, starred, name], default: newest}, description: 'from 1.42: the Gallery''s sort'}
+        - {name: order, in: query, required: false, schema: {type: string, enum: [newest, oldest, starred, name], default: newest}, description: 'from 1.44: the Gallery''s sort'}
         - {$ref: '#/components/parameters/Cursor'}
         - {$ref: '#/components/parameters/Limit'}
       responses:
@@ -1703,7 +1703,7 @@ paths:
       tags: [studio]
       operationId: studioListModelSources
       summary: The local servers and remote providers a pipeline may name (names and models only)
-      description: 'From 1.15. Enabled providers, redacted for every user: no base_url, key_secret, host or limits. Remote ones only when the deployment has remote models on. Never a search provider (1.42).'
+      description: 'From 1.15. Enabled providers, redacted for every user: no base_url, key_secret, host or limits. Remote ones only when the deployment has remote models on. Never a search provider (1.44).'
       responses:
         '200': {description: the sources, content: {application/json: {schema: {$ref: '#/components/schemas/ModelSourceList'}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -1818,12 +1818,12 @@ paths:
         '503': {$ref: '#/components/responses/Unavailable'}
 
   # ------------------------------------------------------------------ studio: models and model jobs (API 1.16, contracts/README.md, Models and model jobs)
-  # ------------------------------------------------------------------ studio: the assistant (from 1.42, plan 18 22)
+  # ------------------------------------------------------------------ studio: the assistant (from 1.44, plan 18 22)
   /v1/studio/assistant/threads:
     get:
       tags: [studio]
       operationId: studioListAssistantThreads
-      summary: 'From 1.42: your assistant chats, newest first, and the assistant''s state for you'
+      summary: 'From 1.44: your assistant chats, newest first, and the assistant''s state for you'
       description: |
         At most 200 chats (`updated_at`, then `id`, newest first). `status` says whether the assistant is on, where its
         model runs (a remote provider: the drawer shows the notice first), whether web search is on, your caps and what
@@ -1835,7 +1835,7 @@ paths:
     post:
       tags: [studio]
       operationId: studioCreateAssistantThread
-      summary: 'From 1.42: New chat'
+      summary: 'From 1.44: New chat'
       description: |
         Creates an empty chat. Your previous chat (the newest with a message) gets its summary written
         (`cmd.assistant.turn` input `summarize`). 409 `the assistant is off` while the admin has it off.
@@ -1853,7 +1853,7 @@ paths:
     get:
       tags: [studio]
       operationId: studioGetAssistantThread
-      summary: 'From 1.42: one chat with its newest 200 entries, oldest first'
+      summary: 'From 1.44: one chat with its newest 200 entries, oldest first'
       description: 'Another user''s chat is 404. New entries arrive on `GET …/events`.'
       parameters: [{$ref: '#/components/parameters/ThreadId'}]
       responses:
@@ -1864,7 +1864,7 @@ paths:
     delete:
       tags: [studio]
       operationId: studioDeleteAssistantThread
-      summary: 'From 1.42: delete a chat, its checkpoints and its summary'
+      summary: 'From 1.44: delete a chat, its checkpoints and its summary'
       description: |
         Deletes the chat's rows and writes `cmd.assistant.delete` in one transaction (pipelines drops its checkpoints
         and the chat's summary; the other items it saved stay). A card waiting in it is cancelled.
@@ -1879,7 +1879,7 @@ paths:
     post:
       tags: [studio]
       operationId: studioPostAssistantMessage
-      summary: 'From 1.42: a message, the actions'' results, a card''s answer, or Continue here'
+      summary: 'From 1.44: a message, the actions'' results, a card''s answer, or Continue here'
       description: |
         `message` stores your message and writes `cmd.assistant.turn` in one transaction (202; the turn's steps arrive
         on `…/events`); a chat parked on actions of a tab that went away resumes first, each of them `did_not_run`
@@ -1907,7 +1907,7 @@ paths:
     get:
       tags: [studio]
       operationId: studioAssistantEvents
-      summary: 'From 1.42: chat events after a cursor — JSON polling, or server-sent events with `Accept text/event-stream`'
+      summary: 'From 1.44: chat events after a cursor — JSON polling, or server-sent events with `Accept text/event-stream`'
       description: |
         Like the batch events, numbered by a per-chat `seq`: JSON gives the events with `seq > since` (at most 500) and
         `last_seq`; SSE replays `seq > since` (or `Last-Event-ID`, which wins), then streams, `id:` = seq, `event:` =
@@ -1933,7 +1933,7 @@ paths:
     get:
       tags: [studio]
       operationId: studioListAssistantMemory
-      summary: 'From 1.42: what the assistant remembers about you, newest first — the Memory list'
+      summary: 'From 1.44: what the assistant remembers about you, newest first — the Memory list'
       description: |
         Studio asks pipelines_service (`pipelines.assistant.memory` `list`, 5 s: else 503) in your namespace only.
         `kind`: preference (Likes), project (Projects), worked (Worked), summary (Chats). Each item names its chat
@@ -1948,7 +1948,7 @@ paths:
     delete:
       tags: [studio]
       operationId: studioClearAssistantMemory
-      summary: 'From 1.42: Clear all'
+      summary: 'From 1.44: Clear all'
       responses:
         '204': {description: cleared}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -1958,7 +1958,7 @@ paths:
     patch:
       tags: [studio]
       operationId: studioEditAssistantMemoryItem
-      summary: 'From 1.42: edit one item''s text'
+      summary: 'From 1.44: edit one item''s text'
       description: '`text` is trimmed (blank: 422). Another user''s item is 404.'
       parameters:
         - {name: item_id, in: path, required: true, schema: {type: string}, description: 'memory item UUID (unknown, another user''s or malformed = 404)'}
@@ -1974,7 +1974,7 @@ paths:
     delete:
       tags: [studio]
       operationId: studioDeleteAssistantMemoryItem
-      summary: 'From 1.42: delete one item (Delete, or Undo on a Remembered line)'
+      summary: 'From 1.44: delete one item (Delete, or Undo on a Remembered line)'
       parameters:
         - {name: item_id, in: path, required: true, schema: {type: string}, description: 'memory item UUID (unknown, another user''s or malformed = 404)'}
       responses:
@@ -1987,7 +1987,7 @@ paths:
     get:
       tags: [studio]
       operationId: studioAdminGetAssistant
-      summary: 'From 1.42: the assistant''s settings (Admin › Model providers)'
+      summary: 'From 1.44: the assistant''s settings (Admin › Model providers)'
       description: 'Admin only (403). Off, with no provider, until the admin sets it.'
       responses:
         '200': {description: the settings, content: {application/json: {schema: {$ref: '#/components/schemas/AssistantSettings'}}}}
@@ -1997,7 +1997,7 @@ paths:
     put:
       tags: [studio]
       operationId: studioAdminPutAssistant
-      summary: 'From 1.42: set the assistant on or off, its provider and model, web search and the caps'
+      summary: 'From 1.44: set the assistant on or off, its provider and model, web search and the caps'
       description: |
         Admin only (403). Applies from each chat's next input. 422 when `enabled` without a provider, for a provider
         that is not an enabled server or remote, a model not in its models, or a search provider that is not an
@@ -2999,7 +2999,7 @@ components:
     Limit: {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200, default: 60}}
     TimelineId: {name: timeline_id, in: path, required: true, schema: {type: string}, description: sequence UUID (malformed = 404)}
     MediaJobId: {name: job_id, in: path, required: true, schema: {type: string}, description: media job UUID (malformed = 404)}
-    ThreadId: {name: thread_id, in: path, required: true, schema: {type: string}, description: 'from 1.42: an assistant chat''s UUID (another user''s or malformed = 404)'}
+    ThreadId: {name: thread_id, in: path, required: true, schema: {type: string}, description: 'from 1.44: an assistant chat''s UUID (another user''s or malformed = 404)'}
 
   responses:
     Unauthorized: {description: 'missing or invalid x-api-key (Kong), or missing/invalid/expired/revoked bearer token', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
@@ -5607,7 +5607,7 @@ components:
         state: {type: object, description: 'the thread''s state after the step, read-only plain JSON (row inputs, run and take ids, picks, loop counters; never media)'}
 
     # ---------------------------------------------------------- studio: model providers, custom nodes (1.15)
-    ProviderKind: {type: string, enum: [server, remote, search], description: 'server: a local server you run (loopback or private address); remote: outside the machine (https; only when the deployment has remote models on); from 1.42 search: a web search provider for the assistant (https, `api` brave, `key_secret`; only with remote models on; never a model source)'}
+    ProviderKind: {type: string, enum: [server, remote, search], description: 'server: a local server you run (loopback or private address); remote: outside the machine (https; only when the deployment has remote models on); from 1.44 search: a web search provider for the assistant (https, `api` brave, `key_secret`; only with remote models on; never a model source)'}
     Provider:
       type: object
       required: [name, kind, api, base_url, models, default_model, enabled, timeout_s, created_at, updated_at]
@@ -5615,7 +5615,7 @@ components:
       properties:
         name: {type: string, pattern: '^[a-z][a-z0-9-]{0,31}$'}
         kind: {$ref: '#/components/schemas/ProviderKind'}
-        api: {type: string, enum: [openai, brave], description: 'openai: OpenAI-compatible /v1/chat/completions (ChatOpenAI(base_url=…)); from 1.42 brave: the Brave Search API (kind search only)'}
+        api: {type: string, enum: [openai, brave], description: 'openai: OpenAI-compatible /v1/chat/completions (ChatOpenAI(base_url=…)); from 1.44 brave: the Brave Search API (kind search only)'}
         title: {type: string, maxLength: 60, description: 'what users see (`Ollama on the Mac`); absent = name'}
         base_url: {type: string, maxLength: 300, examples: ['http://host.docker.internal:11434/v1', 'https://api.example.com/v1']}
         models: {type: array, minItems: 1, maxItems: 16, uniqueItems: true, items: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$'}, description: 'the models pipelines may name'}
@@ -5632,10 +5632,10 @@ components:
       type: object
       required: [kind, base_url, models]
       additionalProperties: false
-      description: 'create or replace a provider. server: http(s) base_url whose host is a loopback or private address or a name that resolves only to such (checked again at every call); `host` and `memory_gb` required. remote: https base_url, `key_secret` required, refused (409) unless the deployment has remote models on. From 1.42 search: like remote, with `api` brave and `models` [web]'
+      description: 'create or replace a provider. server: http(s) base_url whose host is a loopback or private address or a name that resolves only to such (checked again at every call); `host` and `memory_gb` required. remote: https base_url, `key_secret` required, refused (409) unless the deployment has remote models on. From 1.44 search: like remote, with `api` brave and `models` [web]'
       properties:
         kind: {$ref: '#/components/schemas/ProviderKind'}
-        api: {type: string, enum: [openai, brave], description: 'from 1.42: absent = openai; kind search needs brave, the others openai (422)'}
+        api: {type: string, enum: [openai, brave], description: 'from 1.44: absent = openai; kind search needs brave, the others openai (422)'}
         title: {type: string, minLength: 1, maxLength: 60}
         base_url: {type: string, minLength: 8, maxLength: 300, pattern: '^https?://[^\s/?#@]+(/[^\s?#]*)?$'}
         models: {type: array, minItems: 1, maxItems: 16, uniqueItems: true, items: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$'}}
@@ -5695,11 +5695,11 @@ components:
             additionalProperties: false
             properties:
               name: {type: string}
-              kind: {type: string, enum: [server, remote], description: 'never search (1.42)'}
+              kind: {type: string, enum: [server, remote], description: 'never search (1.44)'}
               title: {type: string}
               models: {type: array, items: {type: string}}
               default_model: {type: string}
-    # ---------------------------------------------------------- studio: the assistant (from 1.42; plan 18 22; the twins
+    # ---------------------------------------------------------- studio: the assistant (from 1.44; plan 18 22; the twins
     # of messages/assistant.schema.json are marked, check.py runs their fixtures against both)
     AssistantCallId: {type: string, pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[1-9][0-9]{0,5}:([0-9]|[12][0-9])$', description: '<thread_id>:<turn>:<n>'}
     AssistantClientId: {type: string, pattern: '^[A-Za-z0-9_-]{8,64}$', description: 'one drawer (a browser tab)'}

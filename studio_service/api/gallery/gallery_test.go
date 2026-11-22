@@ -150,7 +150,7 @@ func TestParseFilter(t *testing.T) {
 	if !ok || !back.CreatedAt.Equal(at) || back.ID != userB || back.Order != "newest" {
 		t.Fatal(back, ok)
 	}
-	// API 1.42: a cursor of another order keeps its sort keys
+	// API 1.44: a cursor of another order keeps its sort keys
 	named := cursor{CreatedAt: at, ID: userB, Order: "name", Name: "Fox | 2"}.encode()
 	if back, ok := decodeCursor(named); !ok || back.Name != "Fox | 2" || back.Order != "name" {
 		t.Fatal(back, ok)

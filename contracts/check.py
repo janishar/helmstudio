@@ -61,7 +61,7 @@ REGISTRY_KEYS = [
     "custom",
     "settings",
 ]  # registry.schema.json $defs; fixtures/registry/<key>.*
-# API 1.42: openapi.yaml schemas that copy a messages/assistant.schema.json $def; their fixtures must agree on both
+# API 1.44: openapi.yaml schemas that copy a messages/assistant.schema.json $def; their fixtures must agree on both
 TWINS = {
     "AssistantScreen": "screen", "AssistantAction": "action", "AssistantActionResult": "result", "AssistantLine": "line",
     "AssistantCard": "card", "AssistantCaps": "caps", "AssistantError": "error", "AssistantLimits": "limits",

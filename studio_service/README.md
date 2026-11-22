@@ -332,7 +332,7 @@ consumes `evt.run.>` (durable `studio-projector`) and `evt.pipeline.>` (durable 
 | `api/studio/batch*.go` | batches: `batches.go` (Submit, reads, control, events, `studio.runs.create`), `batch_rows.go` (rows from lines/table/grid/seeds), `batch_projector.go` (`evt.pipeline.*`), `batch_record.go` (`run_finished`, the batch log) |
 | `migrations/` | `00001` platform (RLS function, outbox, projector dedupe), `00002` sessions, runs, run_outputs, run_events, … `00007` batches, batch_rows, batch_events, run batch columns, `outbox.msg_id`, … `00012` loras, `runs.loras`, `00013` looks (`library_items.loras`, `from_take_id`, `runs.looks`, `batches.looks`, `batch_rows.looks`), … `00016` providers, batch_chat, tool_calls, stage B columns, `00017` model_jobs, host_settings, takes.import_key / legacy / import_wait, import_edges |
 
-## The assistant (API 1.42)
+## The assistant (API 1.44)
 
 Plan 18 section 22; contracts/README.md "Assistant". `api/studio/assistant.go`: chats (`assistant_threads`, their
 `assistant_entries` and `assistant_events`, row-level security), the admin's settings (`assistant_settings`, one row)

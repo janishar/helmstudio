@@ -148,7 +148,7 @@ func (s *Service) hostRule(ctx context.Context, kind, raw string) string {
 	if detail != "" {
 		return detail
 	}
-	if kind != "server" { // remote and (API 1.42) search
+	if kind != "server" { // remote and (API 1.44) search
 		if !strings.HasPrefix(raw, "https://") {
 			return "a remote provider's base_url must be https"
 		}
@@ -212,7 +212,7 @@ func (s *Service) PutProvider(ctx context.Context, caller common.Caller, name st
 	if !dto.ProviderName.MatchString(name) {
 		return dto.Provider{}, false, errNotFound
 	}
-	if body.Kind != "server" && !s.remoteOn { // remote and (API 1.42) search
+	if body.Kind != "server" && !s.remoteOn { // remote and (API 1.44) search
 		return dto.Provider{}, false, network.NewConflictError("remote models are off on this deployment", nil)
 	}
 	if detail := s.hostRule(ctx, body.Kind, body.BaseURL); detail != "" {
@@ -326,7 +326,7 @@ func (s *Service) ModelSources(ctx context.Context, caller common.Caller) (dto.M
 	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
 		rows, err := readProviders(ctx, tx, true)
 		for _, p := range rows {
-			if p.Kind == "search" || p.Kind == "remote" && !s.remoteOn { // never a search provider (1.42)
+			if p.Kind == "search" || p.Kind == "remote" && !s.remoteOn { // never a search provider (1.44)
 				continue
 			}
 			out.Sources = append(out.Sources, dto.ModelSource{Name: p.Name, Kind: p.Kind, Title: cmp.Or(deref(p.Title), p.Name),

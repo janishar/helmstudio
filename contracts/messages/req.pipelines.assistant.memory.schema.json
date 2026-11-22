@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helmstudio.local/contracts/messages/req.pipelines.assistant.memory.schema.json",
   "title": "NATS request/reply pipelines.assistant.memory (studio → pipelines)",
-  "description": "From API 1.42 (plan 18, 22.8). Core NATS request/reply on subject `pipelines.assistant.memory` (queue group `pipelines`), bare JSON, for /v1/studio/assistant/memory (the drawer's Memory list). pipelines owns the assistant's memory (LangGraph's Postgres store, namespace (<owner_id>, \"assistant\", <kind>)) and answers only inside owner_id's namespace: another user's item is not_found. Studio sets owner_id from the caller's token and waits 5 s (no answer: 503). `list`: every item, newest first (`kind` filters); `edit`: one item's text; `delete`: one item; `clear`: every item of the owner.",
+  "description": "From API 1.44 (plan 18, 22.8). Core NATS request/reply on subject `pipelines.assistant.memory` (queue group `pipelines`), bare JSON, for /v1/studio/assistant/memory (the drawer's Memory list). pipelines owns the assistant's memory (LangGraph's Postgres store, namespace (<owner_id>, \"assistant\", <kind>)) and answers only inside owner_id's namespace: another user's item is not_found. Studio sets owner_id from the caller's token and waits 5 s (no answer: 503). `list`: every item, newest first (`kind` filters); `edit`: one item's text; `delete`: one item; `clear`: every item of the owner.",
   "$defs": {
     "request": {
       "type": "object",

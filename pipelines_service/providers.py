@@ -42,7 +42,7 @@ RETRY_AFTER_MAX = 60.0
 OUTSIDE = (
     "remote",
     "search",
-)  # kinds that leave the machine (API 1.42: search, the assistant's web search)
+)  # kinds that leave the machine (API 1.44: search, the assistant's web search)
 ALLOWED = [ipaddress.ip_network(n) for n in
            ("127.0.0.0/8", "::1/128", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7")]  # fmt: skip
 
@@ -302,7 +302,7 @@ SEARCH_RESULTS, SEARCH_TEXT = 5, 500
 
 
 async def search(name: str, p: dict, query: str) -> list[dict]:
-    """The assistant's web search (API 1.42, kind search, api brave): GET <base_url>/web/search through the host
+    """The assistant's web search (API 1.44, kind search, api brave): GET <base_url>/web/search through the host
     rule, the same pinned client and failure classes as a chat. At most SEARCH_RESULTS results [{title, url,
     text}] cut to the contract's lengths; CallError else."""
     await check_host(name, p)

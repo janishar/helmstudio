@@ -1,5 +1,5 @@
 -- +goose Up
--- The in-app assistant (contracts/README.md "Assistant", API 1.42; plan 18, 22.3): chats (threads) and their rows,
+-- The in-app assistant (contracts/README.md "Assistant", API 1.44; plan 18, 22.3): chats (threads) and their rows,
 -- events and the admin's settings. Pipelines runs the agent and keeps its checkpoints and memory; studio keeps what
 -- the drawer shows, the tab that runs a chat's actions and what a parked turn waits on.
 CREATE TABLE assistant_threads (

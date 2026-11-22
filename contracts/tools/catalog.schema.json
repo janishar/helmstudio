@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helmstudio.local/contracts/tools/catalog.schema.json",
-  "title": "The shape of the tool files tools/catalog.json and tools/actions.json (API 1.42)",
+  "title": "The shape of the tool files tools/catalog.json and tools/actions.json (API 1.44)",
   "description": "Not a message. check.py validates tools/catalog.json against $defs/toolsFile and tools/actions.json against $defs/actionsFile, then the rules JSON Schema can't say (contracts/README.md, Assistant: tools).",
   "$defs": {
     "name": {

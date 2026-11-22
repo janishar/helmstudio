@@ -98,13 +98,13 @@ type Filter struct {
 	Kind, Source, SessionID, BatchID string
 	Starred                          *bool
 	Words                            []string // q split on whitespace
-	Order                            string   // API 1.42: newest (default), oldest, starred, name
+	Order                            string   // API 1.44: newest (default), oldest, starred, name
 	After                            *cursor
 	Limit                            int
 }
 
 // cursor is the last take of a page: the next page starts after it. Order is the page's order (a newest cursor keeps
-// the format of before 1.42); Starred and Name are the sort keys of starred and name.
+// the format of before 1.44); Starred and Name are the sort keys of starred and name.
 type cursor struct {
 	CreatedAt time.Time `json:"at"`
 	ID        string    `json:"id"`
@@ -138,7 +138,7 @@ func decodeCursor(text string) (*cursor, bool) {
 	return &cursor{CreatedAt: at, ID: id, Order: "newest"}, true
 }
 
-// takeOrders are GET /takes's `order` values (API 1.42), the default first.
+// takeOrders are GET /takes's `order` values (API 1.44), the default first.
 var takeOrders = []string{"newest", "oldest", "starred", "name"}
 
 // takeSources are TakeSource's values (contracts/openapi.yaml): import from 1.16, export and frame from 1.17.

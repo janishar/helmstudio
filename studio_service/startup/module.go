@@ -35,7 +35,7 @@ type Module struct {
 	remoteModels    bool                                                       // the deployment's remote switch (API 1.15)
 	providerTest    studio.ProviderTestAsk                                     // pipelines.providers.test
 	judgeTest       studio.JudgeTestAsk                                        // pipelines.judge.test (API 1.28)
-	assistantMemory studio.AssistantMemoryAsk                                  // pipelines.assistant.memory (API 1.42)
+	assistantMemory studio.AssistantMemoryAsk                                  // pipelines.assistant.memory (API 1.44)
 	lookup          studio.Lookup                                              // a server provider's host name (nil: the system resolver)
 	purge           func(ctx context.Context, subject string) error            // a CMD subject's messages (API 1.16)
 	putSettings     func(ctx context.Context, host string, value []byte) error // KV host_settings (API 1.16)
@@ -74,7 +74,7 @@ func (m *Module) Controllers() []micro.Controller {
 		gallery.NewController(galleryService),
 		lora.NewController(lora.NewService(m.db, m.signer, m.store, m.registry)),
 	}
-	// the assistant's read tools ask these routes in process (API 1.42)
+	// the assistant's read tools ask these routes in process (API 1.44)
 	local, err := common.LocalEngine(api[0], api[1], api[2])
 	if err != nil {
 		panic(err) // network.NewRouter fails only on a malformed trusted proxy; LocalEngine passes none

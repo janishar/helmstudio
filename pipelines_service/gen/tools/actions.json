@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helmstudio.local/contracts/tools/actions.json",
-  "title": "The assistant's screen actions and cards (API 1.42)",
+  "title": "The assistant's screen actions and cards (API 1.44)",
   "description": "Not a message: what a screen registers for the assistant (plan 18, 22.5 and 22.6), assistant only. Each action calls the screen's existing entry point in the tab that sent the message. `effect`: line (an action line), undo (a line with Undo), card (the card of kind `card` first; Yes is the user's click), dialog (opens the screen's own dialog prefilled; resolves on close with the new id and @handle, or cancelled). The shell's actions are on every screen; a screen with `roles` registers only for them. `input` is model-facing and self-contained.",
   "tags": {
     "gpu": "uses the GPU",

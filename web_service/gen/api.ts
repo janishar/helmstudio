@@ -844,7 +844,7 @@ export interface paths {
          *     leading `@` of the word is ignored there), the workflow title or id (`made_with.workflow_title`,
          *     `workflow_id`) or the model id (`made_with.model.id`, which names its family). A `session_id` or (from 1.27)
          *     `batch_id` that is unknown or another user's just matches nothing. A malformed filter value or cursor is 422.
-         *     From 1.42 `order`: `newest` (the default), `oldest` (`created_at`, then `id`, ascending), `starred` (starred
+         *     From 1.44 `order`: `newest` (the default), `oldest` (`created_at`, then `id`, ascending), `starred` (starred
          *     first, each part newest first), `name` (the title, case-insensitively, then newest first). A cursor belongs to
          *     its order: one from another order is 422.
          */
@@ -1585,7 +1585,7 @@ export interface paths {
         };
         /**
          * The local servers and remote providers a pipeline may name (names and models only)
-         * @description From 1.15. Enabled providers, redacted for every user: no base_url, key_secret, host or limits. Remote ones only when the deployment has remote models on. Never a search provider (1.42).
+         * @description From 1.15. Enabled providers, redacted for every user: no base_url, key_secret, host or limits. Remote ones only when the deployment has remote models on. Never a search provider (1.44).
          */
         get: operations["studioListModelSources"];
         put?: never;
@@ -1720,7 +1720,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * From 1.42: your assistant chats, newest first, and the assistant's state for you
+         * From 1.44: your assistant chats, newest first, and the assistant's state for you
          * @description At most 200 chats (`updated_at`, then `id`, newest first). `status` says whether the assistant is on, where its
          *     model runs (a remote provider: the drawer shows the notice first), whether web search is on, your caps and what
          *     you used today. When the admin has it off, `status.enabled` is false and the list is still served.
@@ -1728,7 +1728,7 @@ export interface paths {
         get: operations["studioListAssistantThreads"];
         put?: never;
         /**
-         * From 1.42: New chat
+         * From 1.44: New chat
          * @description Creates an empty chat. Your previous chat (the newest with a message) gets its summary written
          *     (`cmd.assistant.turn` input `summarize`). 409 `the assistant is off` while the admin has it off.
          */
@@ -1747,14 +1747,14 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * From 1.42: one chat with its newest 200 entries, oldest first
+         * From 1.44: one chat with its newest 200 entries, oldest first
          * @description Another user's chat is 404. New entries arrive on `GET …/events`.
          */
         get: operations["studioGetAssistantThread"];
         put?: never;
         post?: never;
         /**
-         * From 1.42: delete a chat, its checkpoints and its summary
+         * From 1.44: delete a chat, its checkpoints and its summary
          * @description Deletes the chat's rows and writes `cmd.assistant.delete` in one transaction (pipelines drops its checkpoints
          *     and the chat's summary; the other items it saved stay). A card waiting in it is cancelled.
          */
@@ -1774,7 +1774,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * From 1.42: a message, the actions' results, a card's answer, or Continue here
+         * From 1.44: a message, the actions' results, a card's answer, or Continue here
          * @description `message` stores your message and writes `cmd.assistant.turn` in one transaction (202; the turn's steps arrive
          *     on `…/events`); a chat parked on actions of a tab that went away resumes first, each of them `did_not_run`
          *     (`the tab was closed`). `results` and `answer` resume the parked turn; they are accepted only from the tab that
@@ -1800,7 +1800,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * From 1.42: chat events after a cursor — JSON polling, or server-sent events with `Accept text/event-stream`
+         * From 1.44: chat events after a cursor — JSON polling, or server-sent events with `Accept text/event-stream`
          * @description Like the batch events, numbered by a per-chat `seq`: JSON gives the events with `seq > since` (at most 500) and
          *     `last_seq`; SSE replays `seq > since` (or `Last-Event-ID`, which wins), then streams, `id:` = seq, `event:` =
          *     `entry` (a stored entry: your message, the assistant's words, a line, a card) or `thread` (the chat's state and
@@ -1824,7 +1824,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * From 1.42: what the assistant remembers about you, newest first — the Memory list
+         * From 1.44: what the assistant remembers about you, newest first — the Memory list
          * @description Studio asks pipelines_service (`pipelines.assistant.memory` `list`, 5 s: else 503) in your namespace only.
          *     `kind`: preference (Likes), project (Projects), worked (Worked), summary (Chats). Each item names its chat
          *     (title, or null once the chat is deleted).
@@ -1832,7 +1832,7 @@ export interface paths {
         get: operations["studioListAssistantMemory"];
         put?: never;
         post?: never;
-        /** From 1.42: Clear all */
+        /** From 1.44: Clear all */
         delete: operations["studioClearAssistantMemory"];
         options?: never;
         head?: never;
@@ -1849,12 +1849,12 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** From 1.42: delete one item (Delete, or Undo on a Remembered line) */
+        /** From 1.44: delete one item (Delete, or Undo on a Remembered line) */
         delete: operations["studioDeleteAssistantMemoryItem"];
         options?: never;
         head?: never;
         /**
-         * From 1.42: edit one item's text
+         * From 1.44: edit one item's text
          * @description `text` is trimmed (blank: 422). Another user's item is 404.
          */
         patch: operations["studioEditAssistantMemoryItem"];
@@ -1868,12 +1868,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * From 1.42: the assistant's settings (Admin › Model providers)
+         * From 1.44: the assistant's settings (Admin › Model providers)
          * @description Admin only (403). Off, with no provider, until the admin sets it.
          */
         get: operations["studioAdminGetAssistant"];
         /**
-         * From 1.42: set the assistant on or off, its provider and model, web search and the caps
+         * From 1.44: set the assistant on or off, its provider and model, web search and the caps
          * @description Admin only (403). Applies from each chat's next input. 422 when `enabled` without a provider, for a provider
          *     that is not an enabled server or remote, a model not in its models, or a search provider that is not an
          *     enabled provider of kind search; 409 `remote models are off on this deployment` for a remote provider or web
@@ -5740,7 +5740,7 @@ export interface components {
             state: Record<string, never>;
         };
         /**
-         * @description server: a local server you run (loopback or private address); remote: outside the machine (https; only when the deployment has remote models on); from 1.42 search: a web search provider for the assistant (https, `api` brave, `key_secret`; only with remote models on; never a model source)
+         * @description server: a local server you run (loopback or private address); remote: outside the machine (https; only when the deployment has remote models on); from 1.44 search: a web search provider for the assistant (https, `api` brave, `key_secret`; only with remote models on; never a model source)
          * @enum {string}
          */
         ProviderKind: "server" | "remote" | "search";
@@ -5749,7 +5749,7 @@ export interface components {
             name: string;
             kind: components["schemas"]["ProviderKind"];
             /**
-             * @description openai: OpenAI-compatible /v1/chat/completions (ChatOpenAI(base_url=…)); from 1.42 brave: the Brave Search API (kind search only)
+             * @description openai: OpenAI-compatible /v1/chat/completions (ChatOpenAI(base_url=…)); from 1.44 brave: the Brave Search API (kind search only)
              * @enum {string}
              */
             api: "openai" | "brave";
@@ -5779,11 +5779,11 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
-        /** @description create or replace a provider. server: http(s) base_url whose host is a loopback or private address or a name that resolves only to such (checked again at every call); `host` and `memory_gb` required. remote: https base_url, `key_secret` required, refused (409) unless the deployment has remote models on. From 1.42 search: like remote, with `api` brave and `models` [web] */
+        /** @description create or replace a provider. server: http(s) base_url whose host is a loopback or private address or a name that resolves only to such (checked again at every call); `host` and `memory_gb` required. remote: https base_url, `key_secret` required, refused (409) unless the deployment has remote models on. From 1.44 search: like remote, with `api` brave and `models` [web] */
         ProviderPut: {
             kind: components["schemas"]["ProviderKind"];
             /**
-             * @description from 1.42: absent = openai; kind search needs brave, the others openai (422)
+             * @description from 1.44: absent = openai; kind search needs brave, the others openai (422)
              * @enum {string}
              */
             api?: "openai" | "brave";
@@ -5857,7 +5857,7 @@ export interface components {
             sources: {
                 name: string;
                 /**
-                 * @description never search (1.42)
+                 * @description never search (1.44)
                  * @enum {string}
                  */
                 kind: "server" | "remote";
@@ -7303,7 +7303,7 @@ export interface components {
         TimelineId: string;
         /** @description media job UUID (malformed = 404) */
         MediaJobId: string;
-        /** @description from 1.42: an assistant chat's UUID (another user's or malformed = 404) */
+        /** @description from 1.44: an assistant chat's UUID (another user's or malformed = 404) */
         ThreadId: string;
     };
     requestBodies: never;
@@ -8569,7 +8569,7 @@ export interface operations {
                 batch_id?: string;
                 /** @description text search over title, prompt and (from 1.27) element handles, workflow and model; blank = no filter */
                 q?: string;
-                /** @description from 1.42: the Gallery's sort */
+                /** @description from 1.44: the Gallery's sort */
                 order?: "newest" | "oldest" | "starred" | "name";
                 /** @description `next_cursor` of the previous page; opaque (malformed = 422) */
                 cursor?: components["parameters"]["Cursor"];
@@ -9786,7 +9786,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description from 1.42: an assistant chat's UUID (another user's or malformed = 404) */
+                /** @description from 1.44: an assistant chat's UUID (another user's or malformed = 404) */
                 thread_id: components["parameters"]["ThreadId"];
             };
             cookie?: never;
@@ -9812,7 +9812,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description from 1.42: an assistant chat's UUID (another user's or malformed = 404) */
+                /** @description from 1.44: an assistant chat's UUID (another user's or malformed = 404) */
                 thread_id: components["parameters"]["ThreadId"];
             };
             cookie?: never;
@@ -9836,7 +9836,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description from 1.42: an assistant chat's UUID (another user's or malformed = 404) */
+                /** @description from 1.44: an assistant chat's UUID (another user's or malformed = 404) */
                 thread_id: components["parameters"]["ThreadId"];
             };
             cookie?: never;
@@ -9875,7 +9875,7 @@ export interface operations {
                 "Last-Event-ID"?: string;
             };
             path: {
-                /** @description from 1.42: an assistant chat's UUID (another user's or malformed = 404) */
+                /** @description from 1.44: an assistant chat's UUID (another user's or malformed = 404) */
                 thread_id: components["parameters"]["ThreadId"];
             };
             cookie?: never;

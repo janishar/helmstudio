@@ -79,7 +79,7 @@ def handler(fake: Fake):
                 return self._send(200, fake.requests)
             if self.path.split("?")[0].endswith(
                 "/web/search"
-            ):  # the Brave Search API's shape (API 1.42)
+            ):  # the Brave Search API's shape (API 1.44)
                 fake.requests.append({"path": self.path, "headers": {k.lower(): v for k, v in self.headers.items()},
                                       "body": None})  # fmt: skip
                 r = fake.next("__search")

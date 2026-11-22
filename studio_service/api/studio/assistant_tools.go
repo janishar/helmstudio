@@ -29,7 +29,7 @@ import (
 	"github.com/helmstudio/studio_service/registry"
 )
 
-// The assistant's studio tools (contracts/README.md "Assistant: tools", API 1.42): tools/catalog.json's tools served
+// The assistant's studio tools (contracts/README.md "Assistant: tools", API 1.44): tools/catalog.json's tools served
 // by studio, each one or more of the API routes it names, asked in process (common.LocalEngine) as the thread's owner
 // with the roles of its last input; their answers are the API's own shapes. An admin tool is checked against those
 // roles first (forbidden). Idempotent on call_id (assistant_tool_calls): asking again returns the first final reply.

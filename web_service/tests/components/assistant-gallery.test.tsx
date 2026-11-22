@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // The Gallery's screen actions for the assistant (components/gallery/assistant.ts; plan 18 §22.5): search, filter
-// and sort send the list's own query (sort is the API 1.42 `order`, shown as a clearable chip); select; star and
+// and sort send the list's own query (sort is the API 1.44 `order`, shown as a clearable chip); select; star and
 // rename with Undo; Save as pipeline opens it; delete is a card and deletes nothing until its Yes.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";

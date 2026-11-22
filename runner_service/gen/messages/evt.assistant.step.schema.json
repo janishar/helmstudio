@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helmstudio.local/contracts/messages/evt.assistant.step.schema.json",
   "title": "pipelines → studio's projector: one step of an assistant turn",
-  "description": "From API 1.42 (plan 18, 22.3). Subject `evt.assistant.<thread_id>.step` (stream EVT, durable `studio-assistant`), Nats-Msg-Id `<thread_id>:<seq>`. Published when the graph parks (`wait`: actions or cards pending) and when the turn ends (`done`). Studio stores the text, lines and cards in the chat's rows, sets the thread's state and appends a `step` event to the chat's stream (GET …/events); the drawer of `client_id` runs `actions` in order and posts their results. A republish (same seq) replaces, never duplicates.",
+  "description": "From API 1.44 (plan 18, 22.3). Subject `evt.assistant.<thread_id>.step` (stream EVT, durable `studio-assistant`), Nats-Msg-Id `<thread_id>:<seq>`. Published when the graph parks (`wait`: actions or cards pending) and when the turn ends (`done`). Studio stores the text, lines and cards in the chat's rows, sets the thread's state and appends a `step` event to the chat's stream (GET …/events); the drawer of `client_id` runs `actions` in order and posts their results. A republish (same seq) replaces, never duplicates.",
   "allOf": [{"$ref": "envelope.schema.json"}],
   "properties": {
     "type": {"const": "evt.assistant.step"},

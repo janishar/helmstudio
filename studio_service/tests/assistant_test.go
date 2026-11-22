@@ -16,7 +16,7 @@ import (
 	"github.com/helmstudio/studio_service/gen"
 )
 
-// The in-app assistant in studio (plan 18, 22.3 and 22.11; contracts/README.md "Assistant", API 1.42).
+// The in-app assistant in studio (plan 18, 22.3 and 22.11; contracts/README.md "Assistant", API 1.44).
 
 const tabA, tabB = "tab-aaaaaaaa", "tab-bbbbbbbb"
 

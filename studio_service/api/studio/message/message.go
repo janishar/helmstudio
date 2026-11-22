@@ -429,7 +429,7 @@ type ProviderTestReply struct {
 }
 
 // ToolsRequest is the studio.tools request (pipelines → studio): one agent tool call, as the batch's owner; from API
-// 1.42 an assistant chat's call, with ThreadID in place of BatchID, Row and Node.
+// 1.44 an assistant chat's call, with ThreadID in place of BatchID, Row and Node.
 type ToolsRequest struct {
 	OwnerID  string          `json:"owner_id"`
 	ThreadID string          `json:"thread_id"`
@@ -443,7 +443,7 @@ type ToolsRequest struct {
 
 // ToolsReply is its reply: {result, row?} or {error, code: invalid | conflict | cap | not_found | internal}.
 type ToolsReply struct {
-	Tool   string    `json:"tool,omitempty"` // API 1.42: an assistant call's ok reply names its tool
+	Tool   string    `json:"tool,omitempty"` // API 1.44: an assistant call's ok reply names its tool
 	Result any       `json:"result,omitempty"`
 	Row    *ToolsRow `json:"row,omitempty"`
 	Error  string    `json:"error,omitempty"`
@@ -625,7 +625,7 @@ type Named struct {
 	NamedBy   string `json:"named_by"`
 }
 
-// ------------------------------------------------------------------ the assistant (API 1.42)
+// ------------------------------------------------------------------ the assistant (API 1.44)
 
 // AssistantTurn is cmd.assistant.turn's data: one input to a chat.
 type AssistantTurn struct {

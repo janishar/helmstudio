@@ -24,7 +24,7 @@ import (
 	"github.com/helmstudio/studio_service/messaging"
 )
 
-// The in-app assistant (contracts/README.md "Assistant", API 1.42; plan 18, 22.3). Studio keeps the chats (threads),
+// The in-app assistant (contracts/README.md "Assistant", API 1.44; plan 18, 22.3). Studio keeps the chats (threads),
 // their entries and events, roles, caps and the admin's settings; pipelines runs the agent. One input = one
 // command: an input is stored and its cmd.assistant.turn written in one transaction (owner from the thread row, roles
 // from the caller's token); each evt.assistant.step is stored as entries and sets the thread's state.

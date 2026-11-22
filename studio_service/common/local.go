@@ -10,7 +10,7 @@ import (
 	"github.com/helmstudio/helmgo/network"
 )
 
-// The assistant's read tools (API 1.42) answer with the API's own shapes, so studio asks its own routes in process:
+// The assistant's read tools (API 1.44) answer with the API's own shapes, so studio asks its own routes in process:
 // LocalEngine mounts the same controllers on an engine that is never served, whose /v1/ guard takes the caller from
 // the request's context (WithLocalCaller), never from a header.
 

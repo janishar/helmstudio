@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helmstudio.local/contracts/messages/assistant.schema.json",
-  "title": "The in-app assistant's shared shapes (API 1.42)",
+  "title": "The in-app assistant's shared shapes (API 1.44)",
   "description": "Not a message: what cmd.assistant.turn, evt.assistant.step and req.pipelines.assistant.memory share (plan 18, 22.3). The HTTP bodies in openapi.yaml (Assistant*) carry the same shapes. Ids of calls are `<thread_id>:<turn>:<n>`: the thread, its input counter, the call's index in that message (from 0), so a replay after a crash names the same call.",
   "$defs": {
     "callId": {

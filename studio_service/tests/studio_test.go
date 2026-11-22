@@ -131,7 +131,7 @@ func setup(t *testing.T) *env {
 	api := []network.Controller{studio.NewController(e.service, recheck, shutdown), gallery.NewController(e.gallery),
 		lora.NewController(lora.NewService(pool, signer, e.store, e.registry))}
 	router.LoadControllers(api...)
-	local, err := common.LocalEngine(api...) // the assistant's read tools (API 1.42)
+	local, err := common.LocalEngine(api...) // the assistant's read tools (API 1.44)
 	if err != nil {
 		t.Fatal(err)
 	}

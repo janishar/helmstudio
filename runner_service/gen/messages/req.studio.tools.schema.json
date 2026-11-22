@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helmstudio.local/contracts/messages/req.studio.tools.schema.json",
   "title": "NATS request/reply studio.tools (pipelines → studio)",
-  "description": "From API 1.15. Core NATS request/reply on subject `studio.tools` (queue group `studio`), bare JSON: one Agent tool call that needs studio's data, made as the batch's owner (row-level security, WithUser). Studio serves gallery.search and library.read (read-only views of the owner's data, result caps in tools.schema.json) and rows.add / rows.edit (the batch's rows, through Submit's checks for that row); memory.read and memory.write never come here (pipelines owns memory). Nothing else is reachable. owner_id, batch_id must be one batch of that owner (else not_found); rows.edit only for row 0 (the director's chat). Idempotent on call_id: asking again returns the first reply (a re-run node after a crash adds no second row). From API 1.42 also the in-app assistant's studio tools (tools/catalog.json, `served_by` studio, surface assistant), with thread_id in place of batch_id, row and node: made as the thread's owner, taken from studio's thread row (an owner_id that is not the thread's is not_found); an admin tool (`roles` admin) is checked against the owner's roles again (forbidden); args are the tool's `input`, an ok reply carries `tool` and the tool's `output`. Studio answers within 5 s; a timeout or `internal` is retried under the same call_id with backoff.",
+  "description": "From API 1.15. Core NATS request/reply on subject `studio.tools` (queue group `studio`), bare JSON: one Agent tool call that needs studio's data, made as the batch's owner (row-level security, WithUser). Studio serves gallery.search and library.read (read-only views of the owner's data, result caps in tools.schema.json) and rows.add / rows.edit (the batch's rows, through Submit's checks for that row); memory.read and memory.write never come here (pipelines owns memory). Nothing else is reachable. owner_id, batch_id must be one batch of that owner (else not_found); rows.edit only for row 0 (the director's chat). Idempotent on call_id: asking again returns the first reply (a re-run node after a crash adds no second row). From API 1.44 also the in-app assistant's studio tools (tools/catalog.json, `served_by` studio, surface assistant), with thread_id in place of batch_id, row and node: made as the thread's owner, taken from studio's thread row (an owner_id that is not the thread's is not_found); an admin tool (`roles` admin) is checked against the owner's roles again (forbidden); args are the tool's `input`, an ok reply carries `tool` and the tool's `output`. Studio answers within 5 s; a timeout or `internal` is retried under the same call_id with backoff.",
   "$defs": {
     "request": {
       "oneOf": [
@@ -141,7 +141,7 @@
         "args"
       ],
       "additionalProperties": false,
-      "description": "from API 1.42: an assistant chat's call",
+      "description": "from API 1.44: an assistant chat's call",
       "properties": {
         "owner_id": {
           "$ref": "defs.schema.json#/$defs/uuid"
@@ -535,7 +535,7 @@
         "result"
       ],
       "additionalProperties": false,
-      "description": "from API 1.42: an assistant call's result, the tool's `output`",
+      "description": "from API 1.44: an assistant call's result, the tool's `output`",
       "properties": {
         "tool": {
           "enum": [
@@ -931,7 +931,7 @@
             "forbidden",
             "internal"
           ],
-          "description": "invalid: the args or the row fail Submit's checks (final); conflict: rows.edit of a row that has started, or the batch has ended (final); cap: 500 rows, or 100 rows added to this batch (final); not_found: no such batch for this owner, or rows.edit of an unknown row (final); internal: retry; forbidden (API 1.42): an admin tool for an owner without the admin role (final)"
+          "description": "invalid: the args or the row fail Submit's checks (final); conflict: rows.edit of a row that has started, or the batch has ended (final); cap: 500 rows, or 100 rows added to this batch (final); not_found: no such batch for this owner, or rows.edit of an unknown row (final); internal: retry; forbidden (API 1.44): an admin tool for an owner without the admin role (final)"
         }
       }
     }

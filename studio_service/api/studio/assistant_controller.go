@@ -16,7 +16,7 @@ import (
 	"github.com/helmstudio/studio_service/gen"
 )
 
-// mountAssistant registers the assistant's routes (API 1.42).
+// mountAssistant registers the assistant's routes (API 1.44).
 func (c *controller) mountAssistant(group *gin.RouterGroup) {
 	group.GET("/assistant/threads", func(ctx *gin.Context) {
 		out, err := c.service.ListAssistantThreads(ctx.Request.Context(), common.MustCaller(ctx))

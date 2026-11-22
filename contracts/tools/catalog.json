@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helmstudio.local/contracts/tools/catalog.json",
-  "title": "The tools the in-app assistant and helm mcp share (API 1.42)",
+  "title": "The tools the in-app assistant and helm mcp share (API 1.44)",
   "description": "Not a message: one entry per tool (plan 18, 22.7). `input` is model-facing and self-contained (no $ref); `output` is what the tool answers, in the API's own shapes. `surfaces`: assistant (the in-app assistant) and mcp (helm mcp, plan 16). `served_by`: studio answers it on studio.tools as the thread's owner (`routes` are the API calls it stands for), pipelines answers it itself (memory, web search). `roles`: empty = every user; an admin tool is never offered to anyone else and studio checks the role again. `card`: the card kind (actions.json) the user's Yes must answer first. Write tools for mcp only (runs, batches, timeline edits) come with helm mcp.",
   "tools": {
     "sessions": {

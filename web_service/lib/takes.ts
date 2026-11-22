@@ -16,7 +16,7 @@ export type Filter = {
   source?: S<"TakeSource">;
   session_id?: string;
   batch_id?: string;
-  /** API 1.42: the Gallery's sort (absent = newest) */
+  /** API 1.44: the Gallery's sort (absent = newest) */
   order?: "newest" | "oldest" | "starred" | "name";
 };
 

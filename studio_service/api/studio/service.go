@@ -51,7 +51,7 @@ type Service struct {
 	// host_settings key <host>. nil: not reachable (tests)
 	purge       func(ctx context.Context, subject string) error
 	putSettings func(ctx context.Context, host string, value []byte) error
-	// API 1.42: the assistant's memory in pipelines (nil answers 503) and the in-process engine its read tools ask
+	// API 1.44: the assistant's memory in pipelines (nil answers 503) and the in-process engine its read tools ask
 	assistantMemory AssistantMemoryAsk
 	local           http.Handler
 }

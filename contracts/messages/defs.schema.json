@@ -2605,14 +2605,14 @@
             "remote",
             "search"
           ],
-          "description": "from API 1.42 also search: the assistant's web search provider (pipelines calls it, never a run)"
+          "description": "from API 1.44 also search: the assistant's web search provider (pipelines calls it, never a run)"
         },
         "api": {
           "enum": [
             "openai",
             "brave"
           ],
-          "description": "openai: OpenAI-compatible /v1/chat/completions; from API 1.42 brave: the Brave Search API (kind search only)"
+          "description": "openai: OpenAI-compatible /v1/chat/completions; from API 1.44 brave: the Brave Search API (kind search only)"
         },
         "base_url": {
           "type": "string",

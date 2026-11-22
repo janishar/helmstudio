@@ -1,4 +1,4 @@
-"""The in-app assistant through studio and pipelines (API 1.42; plan 18, 22.3 and 22.11) on the fake stack: the admin's
+"""The in-app assistant through studio and pipelines (API 1.44; plan 18, 22.3 and 22.11) on the fake stack: the admin's
 settings, a chat whose turn calls a studio read tool (studio.tools as the thread's owner) and answers, its entries and
 events, and isolation (another user's chat and memory item are 404). The model is the fake OpenAI-compatible server
 as a local server, scripted per model (test_director's `fake`); nothing real is ever called."""

@@ -23,8 +23,8 @@ var (
 
 // ProviderPut creates or replaces a provider (admin only).
 type ProviderPut struct {
-	Kind         string   `json:"kind"` // server | remote | search (API 1.42)
-	API          *string  `json:"api"`  // API 1.42: absent = openai; search needs brave
+	Kind         string   `json:"kind"` // server | remote | search (API 1.44)
+	API          *string  `json:"api"`  // API 1.44: absent = openai; search needs brave
 	Title        *string  `json:"title"`
 	BaseURL      string   `json:"base_url"`
 	Models       []string `json:"models"`

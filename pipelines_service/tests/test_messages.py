@@ -164,7 +164,7 @@ def test_the_contract_copy_is_current():
 
 
 def test_assistant_tool_calls_resolve_into_the_tools_copy():
-    """req.studio.tools' assistant args $ref gen/tools/catalog.json (API 1.42)."""
+    """req.studio.tools' assistant args $ref gen/tools/catalog.json (API 1.44)."""
     ref = f"{schemas.BASE}req.studio.tools.schema.json#/$defs/request"
     call = {
         "owner_id": OWNER,
