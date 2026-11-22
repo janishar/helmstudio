@@ -895,7 +895,8 @@ def check_distill(params: dict, wired: set, models: dict | None = None) -> str |
     if why := _needs_dev(params, wired, models):
         return why
     if model is not None and not model.files("distilled_lora"):
-        return f": {model.pack.component('distilled_lora')['addon']['title']} not downloaded on host {config.HOST}"
+        addon = model.pack.component("distilled_lora")["addon"]
+        return f": {addon.get('short', addon['title'])} not downloaded on host {config.HOST}"
     return None
 
 

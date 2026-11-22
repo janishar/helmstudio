@@ -195,7 +195,9 @@ describe("Create: an add-on scoped to a variant (API 1.40)", () => {
     const dev = [...document.querySelectorAll<HTMLButtonElement>("#model-pick button")].find((b) =>
       b.textContent?.startsWith("Dev"),
     )!;
-    expect(dev.disabled).toBe(true);
+    expect(dev.getAttribute("aria-disabled")).toBe("true"); // as the board's, its tooltip kept
+    fireEvent.click(dev); // greyed: not picked
+    expect(dev.getAttribute("aria-checked")).toBe("false");
   });
 });
 

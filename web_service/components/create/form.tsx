@@ -1452,13 +1452,13 @@ export function Chips({
                       role="menuitemradio"
                       aria-checked={rawOf(f, raws) === o}
                       className={`mi ${r?.dim || r?.why ? "dim" : ""}`}
-                      disabled={!!r?.why}
+                      aria-disabled={r?.why ? true : undefined}
                       title={
                         r?.why
                           ? `${r.why}. An admin downloads it in Models, under the model's optional add-ons.`
                           : undefined
                       }
-                      onClick={() => onChange(f.key, o)}
+                      onClick={() => !r?.why && onChange(f.key, o)}
                     >
                       <span>
                         {r?.title ?? pretty(o)}
