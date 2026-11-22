@@ -1,6 +1,6 @@
 # helmstudio logo plan
 
-Status: round 2 (organic) concepts, design-reviewed, for the owner to choose · 2026-11-22 · board: [docs/mock/Logo.dc.html](../mock/Logo.dc.html) (canvas page "Brand")
+Status: two final candidates (Playhead h, A as drawn and B softer) for the owner to choose · 2026-11-22 · board: [docs/mock/Logo.dc.html](../mock/Logo.dc.html) (canvas page "Brand")
 
 ## Brief
 
@@ -18,7 +18,54 @@ Status: round 2 (organic) concepts, design-reviewed, for the owner to choose · 
 - **Must.** Read at 16 px; work in one colour; work on dark and light; 3:1 contrast or better for the mark
   (lime and orange on `--g` are both above 7:1; on parchment the mark uses ink `#1f1a14` and `#c8553d`).
 
-## Round 2 · organic (current)
+## Final candidates (current)
+
+Decisions, 2026-11-22:
+
+- Owner picked round 1's **Playhead h**: "option 2 keep for comparison", then chose it over the round-2 concepts.
+- Asked "softer touch or keep as drawn", the owner answered **"both option"**: two finals side by side, owner to choose.
+
+Both are on the top of the board (frames A and B, then a side-by-side strip at 64, 32 and 16 px). Files:
+`docs/brand/logo/a-as-drawn/` and `docs/brand/logo/b-softer/`, each with `mark.svg`, `mark-mono.svg`,
+`lockup-horizontal.svg`, `lockup-stacked.svg`, `app-icon.svg` and `favicon.svg`. The wordmark is outlined to paths
+from Bricolage Grotesque (no font needed to show the files); the generator is kept out of the repo.
+
+**A · Playhead h, as drawn.** Round 1's geometry kept and polished: one 3.2 stroke (24 grid) for stem and arch with
+round ends; the playhead flag centred on the stem and lifted clear of the shoulder; the mark balanced in its square;
+arch in lime, stem and playhead in orange (round 1 had a cream arch). Wordmark: Bricolage Grotesque 700, tracking
+−0.02em, optically kerned on top of the font's kerning (lm opened, st and tu closed, di opened).
+
+**B · Playhead h, softer.** Same idea and silhouette in round 2's organic line: filled shapes, no even strokes. The
+stem bows and tapers (heavy foot, lighter top), the flag has bowed sides and soft corners, the arch is thin where it
+leaves the stem and full on the leg, ending in a soft foot. Wordmark: round 2's soft treatment, Bricolage Grotesque
+500 with a 0.045em same-colour round-join stroke, tracking −0.01em, kerned like A.
+
+**Checks.** Rendered at 64, 32 and 16 px on forest ink and on a light tab. Both read as an h with a playhead at
+16 px through their own 16 px cut (whole-pixel stems in A, the same taper simplified in B). Neither resembles a known
+brand: no wheel, play triangle, sound bars or AI spark; the closest shapes (a pin, a bookmark, a torch) need the arch
+missing to be seen. B's flag is kept close to A's pentagon so it never reads as a goblet or a flame.
+
+### Usage rules (both candidates)
+
+- **Colour.** On dark: arch `--a1` (lime `#b9e37a`), stem and playhead `--a2` (orange `#ff8552`), word `--t1`. On
+  light: arch and word ink `#1f1a14`, stem and playhead `#c8553d`. In the dock tile and favicon: the mark in `--on1`
+  on the 155° `--a1 → --a2` tile with the organic radius. One colour: all white or all black (`mark-mono.svg` uses
+  `currentColor`). Inside the app use the tokens so the mark follows the theme; the fixed hex set is for anything
+  outside the app (README, social, installer). The colour files are drawn for dark grounds.
+- **Lockups.** Horizontal: mark box 1.18× the font size, gap 0.4× the font size, baseline on the foot of the stem.
+  Stacked: mark centred above the word, gap 0.3× the font size. Always lowercase, one word.
+- **Clear space.** One flag height (a quarter of the mark) on every side; never on a busy image without the tile.
+- **Minimum size.** Full mark from 24 px; the 16 px cut (`favicon.svg`, drawn on a 16 grid) at 16–23 px; never
+  below 16 px. Horizontal lockup from 96 px wide.
+- **Motion.** Loading: the playhead slides down the stem and back (1.6 s, ease-in-out), drawn over the arch; the
+  arch stays still. For known progress the playhead stops at the share done. Reduced motion: the still mark.
+- **Don't.** Stretch, rotate, outline, add shadows to the flat mark, recolour outside the theme tokens, or mix A's
+  mark with B's wordmark (or the reverse).
+
+**Open for the owner:** A or B. After the choice: export the favicon .ico/.png set and the app icon sizes from the
+chosen folder, delete the other folder, and swap the helm-wheel glyph on Landing, Sign in and the browser tab.
+
+## Round 2 · organic (for reference)
 
 Owner's feedback on round 1, 2026-11-22: **"more organic logo"**.
 
@@ -135,7 +182,7 @@ keeps continuity with the wheel on Landing and Sign in, holds at 16 px with the 
 loading state (the wheel turns in sixths; the iris opens as a take finishes). Keep the lens o (concept 4) as a
 type-only fallback.
 
-## Usage rules (for whichever concept is chosen)
+## Usage rules · round 1 (superseded by the final candidates' rules above)
 
 - **Colour.** On dark: ring and handles `--a1`, hub `--a2`. On light: ink `#1f1a14` and `#c8553d`. In the dock
   tile and favicon: the mark in `--on1` on the `--a1 → --a2` gradient. One colour: all white or all black, never
@@ -152,7 +199,7 @@ type-only fallback.
 
 ## Open choice for the owner
 
-Round 1's choice (concept 1, lens o wordmark, accent split) is replaced by the round 2 questions above.
+Replaced by the final candidates above: the owner picks A or B.
 
 After the choice: final SVGs (mark, small cut, lockup, dock icon, favicon .ico/.png set) and the swap on Landing,
 Sign in and the browser tab. No code changes until then.
