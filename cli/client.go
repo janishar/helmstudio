@@ -12,7 +12,13 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
+
+// apiTimeout bounds one plain API call (send, answer, decode): a healthy API answers in well under a second, but a
+// complete can check a large file first (a LoRA's hash). Event streams and file transfers are not cut by it: they
+// run under their caller's ctx (helm mcp: the tool call, which the client's cancel ends).
+var apiTimeout = 2 * time.Minute
 
 // config is ~/.config/helm/config.json (0600). The API key itself is never stored: it comes from HELM_API_KEY or
 // the file at APIKeyFile.
@@ -199,7 +205,14 @@ func (c *client) refresh(ctx context.Context, stale string) error {
 
 // call sends a JSON request and decodes a JSON answer into out (nil = discard); a status other than want is an error.
 func (c *client) call(method, path string, in any, want int, out any) error {
-	resp, err := c.do(context.Background(), method, path, in, nil)
+	return c.callCtx(context.Background(), method, path, in, want, out)
+}
+
+// callCtx is call under ctx, and at most apiTimeout.
+func (c *client) callCtx(ctx context.Context, method, path string, in any, want int, out any) error {
+	ctx, cancel := context.WithTimeout(ctx, apiTimeout)
+	defer cancel()
+	resp, err := c.do(ctx, method, path, in, nil)
 	if err != nil {
 		return err
 	}

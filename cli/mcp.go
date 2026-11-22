@@ -155,23 +155,23 @@ func newMCPServer(c *client) *mcp.Server {
 }
 
 // get answers one GET as raw JSON.
-func (s *mcpServer) get(path string) (json.RawMessage, error) {
+func (s *mcpServer) get(ctx context.Context, path string) (json.RawMessage, error) {
 	var out json.RawMessage
-	err := s.c.call(http.MethodGet, "/v1/studio"+path, nil, http.StatusOK, &out)
+	err := s.c.callCtx(ctx, http.MethodGet, "/v1/studio"+path, nil, http.StatusOK, &out)
 	return out, err
 }
 
-func (s *mcpServer) send(method, path string, body any, want int) (json.RawMessage, error) {
+func (s *mcpServer) send(ctx context.Context, method, path string, body any, want int) (json.RawMessage, error) {
 	var out json.RawMessage
-	err := s.c.call(method, "/v1/studio"+path, body, want, &out)
+	err := s.c.callCtx(ctx, method, "/v1/studio"+path, body, want, &out)
 	return out, err
 }
 
 // gets is several GETs into one object, by key.
-func (s *mcpServer) gets(paths ...string) (map[string]json.RawMessage, error) {
+func (s *mcpServer) gets(ctx context.Context, paths ...string) (map[string]json.RawMessage, error) {
 	out := map[string]json.RawMessage{}
 	for i := 0; i < len(paths); i += 2 {
-		b, err := s.get(paths[i+1])
+		b, err := s.get(ctx, paths[i+1])
 		if err != nil {
 			return nil, err
 		}
@@ -181,62 +181,62 @@ func (s *mcpServer) gets(paths ...string) (map[string]json.RawMessage, error) {
 }
 
 func (s *mcpServer) handlers() map[string]toolFunc {
-	plain := func(f func(args) (any, error)) toolFunc {
-		return func(_ context.Context, _ *mcp.CallToolRequest, in args) (any, []mcp.Content, error) {
-			out, err := f(in)
+	plain := func(f func(context.Context, args) (any, error)) toolFunc {
+		return func(ctx context.Context, _ *mcp.CallToolRequest, in args) (any, []mcp.Content, error) {
+			out, err := f(ctx, in)
 			return out, nil, err
 		}
 	}
 	del := func(path, key string) toolFunc {
-		return plain(func(in args) (any, error) {
-			if err := s.c.call(http.MethodDelete, "/v1/studio"+path+in.esc(key), nil, http.StatusNoContent, nil); err != nil {
+		return plain(func(ctx context.Context, in args) (any, error) {
+			if err := s.c.callCtx(ctx, http.MethodDelete, "/v1/studio"+path+in.esc(key), nil, http.StatusNoContent, nil); err != nil {
 				return nil, err
 			}
 			return map[string]string{"deleted": in.str(key)}, nil
 		})
 	}
 	return map[string]toolFunc{
-		"list_workflows": plain(func(args) (any, error) { return s.get("/workflows") }),
+		"list_workflows": plain(func(ctx context.Context, _ args) (any, error) { return s.get(ctx, "/workflows") }),
 		"get_workflow":   plain(s.getWorkflow),
-		"plan_run": plain(func(in args) (any, error) {
+		"plan_run": plain(func(ctx context.Context, in args) (any, error) {
 			body := in.pick("workflow_id", "inputs", "host")
 			if body["inputs"] == nil {
 				body["inputs"] = map[string]any{}
 			}
-			return s.send(http.MethodPost, "/runs/plan", body, http.StatusOK)
+			return s.send(ctx, http.MethodPost, "/runs/plan", body, http.StatusOK)
 		}),
-		"search_takes": plain(func(in args) (any, error) {
+		"search_takes": plain(func(ctx context.Context, in args) (any, error) {
 			q := url.Values{"limit": {"10"}}
 			for k, v := range in {
 				q.Set(k, fmt.Sprint(v))
 			}
-			return s.get("/takes?" + q.Encode())
+			return s.get(ctx, "/takes?"+q.Encode())
 		}),
 		"get_take": s.getTake,
-		"list_library": plain(func(in args) (any, error) {
+		"list_library": plain(func(ctx context.Context, in args) (any, error) {
 			switch k := in.str("kind"); {
 			case in.str("pipeline_id") != "":
-				return s.gets("memory", "/memory?pipeline_id="+in.esc("pipeline_id"))
+				return s.gets(ctx, "memory", "/memory?pipeline_id="+in.esc("pipeline_id"))
 			case k == "lora":
-				return s.gets("loras", "/loras")
+				return s.gets(ctx, "loras", "/loras")
 			case k != "":
-				return s.gets("items", "/library?kind="+url.QueryEscape(k))
+				return s.gets(ctx, "items", "/library?kind="+url.QueryEscape(k))
 			}
-			return s.gets("items", "/library", "loras", "/loras")
+			return s.gets(ctx, "items", "/library", "loras", "/loras")
 		}),
-		"batch_status": plain(func(in args) (any, error) {
+		"batch_status": plain(func(ctx context.Context, in args) (any, error) {
 			id, limit := in.esc("batch_id"), 10
 			if l, ok := in["limit"].(float64); ok {
 				limit = int(l)
 			}
 			switch row, hasRow := in["row"].(float64); {
 			case id == "":
-				return s.gets("batches", fmt.Sprintf("/batches?limit=%d", limit))
+				return s.gets(ctx, "batches", fmt.Sprintf("/batches?limit=%d", limit))
 			case hasRow:
-				return s.gets("execution", fmt.Sprintf("/batches/%s/rows/%d/execution", id, int(row)),
+				return s.gets(ctx, "execution", fmt.Sprintf("/batches/%s/rows/%d/execution", id, int(row)),
 					"decisions", fmt.Sprintf("/batches/%s/rows/%d/decisions", id, int(row)))
 			}
-			out, err := s.gets("batch", "/batches/"+id, "rows", fmt.Sprintf("/batches/%s/rows?limit=%d", id, limit),
+			out, err := s.gets(ctx, "batch", "/batches/"+id, "rows", fmt.Sprintf("/batches/%s/rows?limit=%d", id, limit),
 				"review", "/batches/"+id+"/review")
 			if err != nil {
 				return nil, err
@@ -244,20 +244,20 @@ func (s *mcpServer) handlers() map[string]toolFunc {
 			// the chat is 404 for a batch without a director (a plain workflow batch, a pipeline with none)
 			var b struct{ Director json.RawMessage }
 			if json.Unmarshal(out["batch"], &b) == nil && len(b.Director) > 0 && string(b.Director) != "null" {
-				if out["chat"], err = s.get("/batches/" + id + "/chat"); err != nil {
+				if out["chat"], err = s.get(ctx, "/batches/"+id+"/chat"); err != nil {
 					return nil, err
 				}
 			}
 			return out, nil
 		}),
-		"list_timelines": plain(func(args) (any, error) { return s.get("/timelines") }),
-		"show_timeline": plain(func(in args) (any, error) { // API 1.49: the agent view
-			return s.gets("timeline", "/timelines/"+in.esc("timeline_id")+"?view=agent", "exports", "/timelines/"+in.esc("timeline_id")+"/exports")
+		"list_timelines": plain(func(ctx context.Context, _ args) (any, error) { return s.get(ctx, "/timelines") }),
+		"show_timeline": plain(func(ctx context.Context, in args) (any, error) { // API 1.49: the agent view
+			return s.gets(ctx, "timeline", "/timelines/"+in.esc("timeline_id")+"?view=agent", "exports", "/timelines/"+in.esc("timeline_id")+"/exports")
 		}),
-		"timeline_revisions": plain(func(in args) (any, error) {
+		"timeline_revisions": plain(func(ctx context.Context, in args) (any, error) {
 			base := "/timelines/" + in.esc("timeline_id") + "/revisions"
 			if r, ok := in["revision"].(float64); ok {
-				return s.gets("revision", fmt.Sprintf("%s/%d", base, int(r)))
+				return s.gets(ctx, "revision", fmt.Sprintf("%s/%d", base, int(r)))
 			}
 			q := url.Values{"limit": {"10"}}
 			for _, k := range []string{"before", "limit"} {
@@ -265,42 +265,44 @@ func (s *mcpServer) handlers() map[string]toolFunc {
 					q.Set(k, fmt.Sprint(int(v)))
 				}
 			}
-			return s.gets("revisions", base+"?"+q.Encode())
+			return s.gets(ctx, "revisions", base+"?"+q.Encode())
 		}),
-		"try_timeline_edit": plain(func(in args) (any, error) { return s.editTimeline(in, true) }),
-		"edit_timeline":     plain(func(in args) (any, error) { return s.editTimeline(in, false) }),
-		"restore_timeline": plain(func(in args) (any, error) {
-			return s.send(http.MethodPost, "/timelines/"+in.esc("timeline_id")+"/restore", in.pick("revision", "to"), http.StatusOK)
+		"try_timeline_edit": plain(func(ctx context.Context, in args) (any, error) { return s.editTimeline(ctx, in, true) }),
+		"edit_timeline":     plain(func(ctx context.Context, in args) (any, error) { return s.editTimeline(ctx, in, false) }),
+		"restore_timeline": plain(func(ctx context.Context, in args) (any, error) {
+			return s.send(ctx, http.MethodPost, "/timelines/"+in.esc("timeline_id")+"/restore", in.pick("revision", "to"), http.StatusOK)
 		}),
 		"timeline_frame": s.timelineFrame,
 		"run_workflow":   plain(s.runWorkflow),
 		"wait_run":       s.waitRun,
-		"cancel_run": plain(func(in args) (any, error) {
-			return s.send(http.MethodPost, "/runs/"+in.esc("run_id")+"/cancel", nil, http.StatusAccepted)
+		"cancel_run": plain(func(ctx context.Context, in args) (any, error) {
+			return s.send(ctx, http.MethodPost, "/runs/"+in.esc("run_id")+"/cancel", nil, http.StatusAccepted)
 		}),
-		"upload": plain(func(in args) (any, error) {
+		"upload": plain(func(ctx context.Context, in args) (any, error) {
 			p, err := in.localPath("path")
 			if err != nil {
 				return nil, err
 			}
-			return s.c.upload(p)
+			return s.c.upload(ctx, p)
 		}),
-		"start_batch": plain(func(in args) (any, error) {
-			return s.send(http.MethodPost, "/batches", map[string]any(in), http.StatusAccepted)
+		"start_batch": plain(func(ctx context.Context, in args) (any, error) {
+			return s.send(ctx, http.MethodPost, "/batches", map[string]any(in), http.StatusAccepted)
 		}),
-		"review_batch": plain(func(in args) (any, error) { return s.get("/batches/" + in.esc("batch_id") + "/review") }),
-		"pick":         plain(s.pick),
-		"batch_chat": plain(func(in args) (any, error) {
-			return s.send(http.MethodPost, "/batches/"+in.esc("batch_id")+"/chat", in.pick("text"), http.StatusAccepted)
+		"review_batch": plain(func(ctx context.Context, in args) (any, error) {
+			return s.get(ctx, "/batches/"+in.esc("batch_id")+"/review")
 		}),
-		"add_to_timeline": plain(func(in args) (any, error) {
+		"pick": plain(s.pick),
+		"batch_chat": plain(func(ctx context.Context, in args) (any, error) {
+			return s.send(ctx, http.MethodPost, "/batches/"+in.esc("batch_id")+"/chat", in.pick("text"), http.StatusAccepted)
+		}),
+		"add_to_timeline": plain(func(ctx context.Context, in args) (any, error) {
 			if in.str("timeline_id") == "" {
 				if in.str("track") != "" && in.str("track") != "V1" {
 					return nil, errors.New("a new sequence starts on V1: add sound to it after")
 				}
-				return s.send(http.MethodPost, "/timelines", in.pick("take_ids", "name"), http.StatusCreated)
+				return s.send(ctx, http.MethodPost, "/timelines", in.pick("take_ids", "name"), http.StatusCreated)
 			}
-			return s.send(http.MethodPost, "/timelines/"+in.esc("timeline_id")+"/clips", in.pick("take_ids", "track"), http.StatusOK)
+			return s.send(ctx, http.MethodPost, "/timelines/"+in.esc("timeline_id")+"/clips", in.pick("take_ids", "track"), http.StatusOK)
 		}),
 		"export_timeline": s.exportTimeline,
 		"delete_take":     del("/takes/", "take_id"),
@@ -311,15 +313,15 @@ func (s *mcpServer) handlers() map[string]toolFunc {
 
 // editTimeline sends the ops to /edits (dry run: try_timeline_edit). An op that cannot apply is the API's 422
 // detail (`ops[3]: split_edge`), as a tool error.
-func (s *mcpServer) editTimeline(in args, dry bool) (any, error) {
+func (s *mcpServer) editTimeline(ctx context.Context, in args, dry bool) (any, error) {
 	body := in.pick("base_revision", "ops")
 	body["dry_run"] = dry
-	return s.send(http.MethodPost, "/timelines/"+in.esc("timeline_id")+"/edits", body, http.StatusOK)
+	return s.send(ctx, http.MethodPost, "/timelines/"+in.esc("timeline_id")+"/edits", body, http.StatusOK)
 }
 
 // timelineFrame is what V1 shows at a time, with its stored image as image content.
-func (s *mcpServer) timelineFrame(_ context.Context, _ *mcp.CallToolRequest, in args) (any, []mcp.Content, error) {
-	raw, err := s.send(http.MethodPost, "/timelines/"+in.esc("timeline_id")+"/frame", in.pick("at"), http.StatusOK)
+func (s *mcpServer) timelineFrame(ctx context.Context, _ *mcp.CallToolRequest, in args) (any, []mcp.Content, error) {
+	raw, err := s.send(ctx, http.MethodPost, "/timelines/"+in.esc("timeline_id")+"/frame", in.pick("at"), http.StatusOK)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -327,15 +329,15 @@ func (s *mcpServer) timelineFrame(_ context.Context, _ *mcp.CallToolRequest, in 
 		URL string `json:"url"`
 	}
 	_ = json.Unmarshal(raw, &f)
-	if img, mime := s.image(f.URL, 16<<20); img != nil {
+	if img, mime := s.image(ctx, f.URL, 16<<20); img != nil {
 		return raw, []mcp.Content{&mcp.ImageContent{Data: img, MIMEType: mime}}, nil
 	}
 	return raw, nil, nil
 }
 
 // getWorkflow is the workflow and the node schemas of the kinds it uses (as the assistant's get_workflow).
-func (s *mcpServer) getWorkflow(in args) (any, error) {
-	wf, err := s.get("/workflows/" + in.esc("workflow_id"))
+func (s *mcpServer) getWorkflow(ctx context.Context, in args) (any, error) {
+	wf, err := s.get(ctx, "/workflows/"+in.esc("workflow_id"))
 	if err != nil {
 		return nil, err
 	}
@@ -352,7 +354,7 @@ func (s *mcpServer) getWorkflow(in args) (any, error) {
 	}
 	nodes := []map[string]any{}
 	if json.Unmarshal(wf, &w) == nil {
-		raw, err := s.get("/nodes?env=" + url.QueryEscape(w.Env))
+		raw, err := s.get(ctx, "/nodes?env="+url.QueryEscape(w.Env))
 		if err != nil {
 			return nil, err
 		}
@@ -374,13 +376,13 @@ func (s *mcpServer) getWorkflow(in args) (any, error) {
 }
 
 // getTake is the take, its uses and decisions, and its small thumbnail as image content (not an audio take's).
-func (s *mcpServer) getTake(_ context.Context, _ *mcp.CallToolRequest, in args) (any, []mcp.Content, error) {
-	out, err := s.gets("take", "/takes/"+in.esc("take_id"), "uses", "/takes/"+in.esc("take_id")+"/uses",
+func (s *mcpServer) getTake(ctx context.Context, _ *mcp.CallToolRequest, in args) (any, []mcp.Content, error) {
+	out, err := s.gets(ctx, "take", "/takes/"+in.esc("take_id"), "uses", "/takes/"+in.esc("take_id")+"/uses",
 		"decisions", "/takes/"+in.esc("take_id")+"/decisions")
 	if err != nil {
 		return nil, nil, err
 	}
-	img, mime := s.thumb(out["take"])
+	img, mime := s.thumb(ctx, out["take"])
 	if img == nil {
 		return out, nil, nil
 	}
@@ -388,7 +390,7 @@ func (s *mcpServer) getTake(_ context.Context, _ *mcp.CallToolRequest, in args) 
 }
 
 // thumb fetches a take's thumb_url (plan 22: a WebP, short side 512 px); nil for audio or on any failure.
-func (s *mcpServer) thumb(take json.RawMessage) ([]byte, string) {
+func (s *mcpServer) thumb(ctx context.Context, take json.RawMessage) ([]byte, string) {
 	var t struct {
 		Kind     string `json:"kind"`
 		ThumbURL string `json:"thumb_url"`
@@ -396,11 +398,11 @@ func (s *mcpServer) thumb(take json.RawMessage) ([]byte, string) {
 	if json.Unmarshal(take, &t) != nil || t.Kind == "audio" {
 		return nil, ""
 	}
-	return s.image(t.ThumbURL, 4<<20)
+	return s.image(ctx, t.ThumbURL, 4<<20)
 }
 
 // image fetches a signed image link (relative to the API) of at most limit bytes; nil when empty or on any failure.
-func (s *mcpServer) image(link string, limit int64) ([]byte, string) {
+func (s *mcpServer) image(ctx context.Context, link string, limit int64) ([]byte, string) {
 	if link == "" {
 		return nil, ""
 	}
@@ -412,7 +414,13 @@ func (s *mcpServer) image(link string, limit int64) ([]byte, string) {
 	if err != nil {
 		return nil, ""
 	}
-	resp, err := s.c.http.Get(abs.String())
+	ctx, cancel := context.WithTimeout(ctx, apiTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, abs.String(), nil)
+	if err != nil {
+		return nil, ""
+	}
+	resp, err := s.c.http.Do(req)
 	if err != nil {
 		return nil, ""
 	}
@@ -426,10 +434,10 @@ func (s *mcpServer) image(link string, limit int64) ([]byte, string) {
 }
 
 // runWorkflow starts a run (in a new session unless one is given), at most maxQueued of this process's at once.
-func (s *mcpServer) runWorkflow(in args) (any, error) {
+func (s *mcpServer) runWorkflow(ctx context.Context, in args) (any, error) {
 	s.startMu.Lock()
 	defer s.startMu.Unlock()
-	if err := s.roomForRun(); err != nil {
+	if err := s.roomForRun(ctx); err != nil {
 		return nil, err
 	}
 	sid := in.str("session_id")
@@ -437,13 +445,13 @@ func (s *mcpServer) runWorkflow(in args) (any, error) {
 		var sess struct {
 			ID string `json:"id"`
 		}
-		if err := s.c.call(http.MethodPost, "/v1/studio/sessions", map[string]string{"title": in.str("workflow_id")}, http.StatusCreated, &sess); err != nil {
+		if err := s.c.callCtx(ctx, http.MethodPost, "/v1/studio/sessions", map[string]string{"title": in.str("workflow_id")}, http.StatusCreated, &sess); err != nil {
 			return nil, err
 		}
 		sid = sess.ID
 	}
 	body := in.pick("workflow_id", "inputs", "looks", "host")
-	raw, err := s.send(http.MethodPost, "/sessions/"+url.PathEscape(sid)+"/runs", body, http.StatusAccepted)
+	raw, err := s.send(ctx, http.MethodPost, "/sessions/"+url.PathEscape(sid)+"/runs", body, http.StatusAccepted)
 	if err != nil {
 		return nil, err
 	}
@@ -461,7 +469,7 @@ func ended(status string) bool {
 }
 
 // roomForRun drops the tracked runs that ended, then refuses when maxQueued are still waiting or running.
-func (s *mcpServer) roomForRun() error {
+func (s *mcpServer) roomForRun(ctx context.Context) error {
 	s.mu.Lock()
 	ids := make([]string, 0, len(s.runs))
 	for id := range s.runs {
@@ -474,7 +482,7 @@ func (s *mcpServer) roomForRun() error {
 	live := 0
 	for _, id := range ids {
 		var r run
-		err := s.c.call(http.MethodGet, "/v1/studio/runs/"+url.PathEscape(id), nil, http.StatusOK, &r)
+		err := s.c.callCtx(ctx, http.MethodGet, "/v1/studio/runs/"+url.PathEscape(id), nil, http.StatusOK, &r)
 		var apiErr *apiError
 		if (err == nil && ended(r.Status)) || (errors.As(err, &apiErr) && apiErr.status == http.StatusNotFound) {
 			s.mu.Lock()
@@ -530,6 +538,7 @@ func (s *mcpServer) waitRun(ctx context.Context, req *mcp.CallToolRequest, in ar
 	if t, ok := in["timeout_s"].(float64); ok {
 		limit = min(limit, time.Duration(t*float64(time.Second)))
 	}
+	tool := ctx // the download after the wait: the tool call's, not cut by the wait's limit
 	ctx, cancel := context.WithTimeout(ctx, limit)
 	defer cancel()
 	id := in.str("run_id")
@@ -538,7 +547,7 @@ func (s *mcpServer) waitRun(ctx context.Context, req *mcp.CallToolRequest, in ar
 		SessionID string `json:"session_id"`
 	}
 	getRun := func() (json.RawMessage, error) {
-		raw, err := s.get("/runs/" + url.PathEscape(id))
+		raw, err := s.get(tool, "/runs/"+url.PathEscape(id)) // also after the wait ran out
 		if err == nil {
 			err = json.Unmarshal(raw, &r)
 		}
@@ -573,7 +582,7 @@ func (s *mcpServer) waitRun(ctx context.Context, req *mcp.CallToolRequest, in ar
 	out := map[string]any{"run": raw, "still_running": !ended(r.Status)}
 	if dir != "" && r.Status == "succeeded" {
 		var log bytes.Buffer
-		if err := s.c.download(r.run, dir, &log); err != nil {
+		if err := s.c.download(tool, r.run, dir, &log); err != nil {
 			return nil, nil, err
 		}
 		saved := []string{}
@@ -593,13 +602,13 @@ func (s *mcpServer) waitRun(ctx context.Context, req *mcp.CallToolRequest, in ar
 }
 
 // pick answers the gate the row waits at (read from the review when not given).
-func (s *mcpServer) pick(in args) (any, error) {
+func (s *mcpServer) pick(ctx context.Context, in args) (any, error) {
 	row, _ := in["row"].(float64)
 	reject, _ := in["reject"].(bool)
 	if reject == (in["take_ids"] != nil) {
 		return nil, errors.New("give take_ids to keep, or reject: true")
 	}
-	items, err := s.c.review(in.str("batch_id"))
+	items, err := s.c.review(ctx, in.str("batch_id"))
 	if err != nil {
 		return nil, err
 	}
@@ -617,7 +626,7 @@ func (s *mcpServer) pick(in args) (any, error) {
 	if reject {
 		body["reject"] = true // the API's reject is const true: never send false next to take_ids
 	}
-	return s.send(http.MethodPost, fmt.Sprintf("/batches/%s/rows/%d/pick", in.esc("batch_id"), int(row)), body, http.StatusAccepted)
+	return s.send(ctx, http.MethodPost, fmt.Sprintf("/batches/%s/rows/%d/pick", in.esc("batch_id"), int(row)), body, http.StatusAccepted)
 }
 
 // exportTimeline plans, then exports the current revision; with out it waits (bounded) and saves the MP4.
@@ -628,7 +637,7 @@ func (s *mcpServer) exportTimeline(ctx context.Context, req *mcp.CallToolRequest
 	}
 	base := "/timelines/" + in.esc("timeline_id")
 	body := in.pick("host")
-	plan, err := s.send(http.MethodPost, base+"/export/plan", body, http.StatusOK)
+	plan, err := s.send(ctx, http.MethodPost, base+"/export/plan", body, http.StatusOK)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -640,13 +649,14 @@ func (s *mcpServer) exportTimeline(ctx context.Context, req *mcp.CallToolRequest
 	}
 	_ = json.Unmarshal(plan, &pl)
 	body["revision"] = pl.Revision
-	raw, err := s.send(http.MethodPost, base+"/export", body, http.StatusAccepted)
+	raw, err := s.send(ctx, http.MethodPost, base+"/export", body, http.StatusAccepted)
 	if err != nil {
 		return nil, nil, err
 	}
 	if out == "" {
 		return map[string]any{"plan": plan, "job": raw}, nil, nil
 	}
+	tool := ctx // the download after the wait: the tool call's, not cut by the wait's limit
 	ctx, cancel := context.WithTimeout(ctx, waitMax)
 	defer cancel()
 	p := &progress{ctx: ctx, req: req}
@@ -662,7 +672,7 @@ func (s *mcpServer) exportTimeline(ctx context.Context, req *mcp.CallToolRequest
 		}
 		switch j.Status {
 		case "succeeded":
-			if err := s.c.saveExport(deref(j.TakeID), out, io.Discard); err != nil {
+			if err := s.c.saveExport(tool, deref(j.TakeID), out, io.Discard); err != nil {
 				return nil, nil, err
 			}
 			return map[string]any{"plan": plan, "job": raw, "saved": out}, nil, nil
@@ -674,14 +684,14 @@ func (s *mcpServer) exportTimeline(ctx context.Context, req *mcp.CallToolRequest
 			return map[string]any{"plan": plan, "job": raw}, nil, nil // still running: show_timeline lists it
 		case <-time.After(pollEvery):
 		}
-		if raw, err = s.get("/media-jobs/" + url.PathEscape(j.ID)); err != nil {
+		if raw, err = s.get(ctx, "/media-jobs/"+url.PathEscape(j.ID)); err != nil {
 			return nil, nil, err
 		}
 	}
 }
 
 // readResource answers helm://take/{id} (metadata and thumbnail) and helm://workflow/{id}.
-func (s *mcpServer) readResource(_ context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+func (s *mcpServer) readResource(ctx context.Context, req *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
 	uri := req.Params.URI
 	path := ""
 	if id, ok := strings.CutPrefix(uri, "helm://take/"); ok {
@@ -692,7 +702,7 @@ func (s *mcpServer) readResource(_ context.Context, req *mcp.ReadResourceRequest
 	if path == "" {
 		return nil, mcp.ResourceNotFoundError(uri)
 	}
-	raw, err := s.get(path)
+	raw, err := s.get(ctx, path)
 	var apiErr *apiError
 	if errors.As(err, &apiErr) && apiErr.status == http.StatusNotFound {
 		return nil, mcp.ResourceNotFoundError(uri)
@@ -702,7 +712,7 @@ func (s *mcpServer) readResource(_ context.Context, req *mcp.ReadResourceRequest
 	}
 	res := &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{URI: uri, MIMEType: "application/json", Text: string(raw)}}}
 	if strings.HasPrefix(path, "/takes/") {
-		if img, mime := s.thumb(raw); img != nil {
+		if img, mime := s.thumb(ctx, raw); img != nil {
 			res.Contents = append(res.Contents, &mcp.ResourceContents{URI: uri, MIMEType: mime, Blob: img})
 		}
 	}

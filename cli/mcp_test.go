@@ -473,3 +473,40 @@ func TestMCPTimelineEdits(t *testing.T) {
 		t.Fatalf("fill: %v %s", res.IsError, text(res))
 	}
 }
+
+// A hung API fails a plain call after apiTimeout, and the MCP client's cancel stops the request at once.
+func TestMCPHungAPI(t *testing.T) {
+	f, cs, _ := mcpSession(t, "")
+	gone := make(chan struct{}, 4) // one per request the server saw end
+	f.extra["GET /v1/studio/timelines"] = func(_ http.ResponseWriter, r *http.Request) {
+		select { // never answers
+		case <-r.Context().Done():
+		case <-time.After(10 * time.Second):
+		}
+		gone <- struct{}{}
+	}
+	defer func(d time.Duration) { apiTimeout = d }(apiTimeout)
+	apiTimeout = 200 * time.Millisecond
+	start := time.Now()
+	res, _ := call(t, cs, "list_timelines", map[string]any{})
+	if !res.IsError || time.Since(start) > 5*time.Second {
+		t.Fatalf("hung call: error %v after %v", res.IsError, time.Since(start))
+	}
+	<-gone
+
+	apiTimeout = time.Minute
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	start = time.Now()
+	if _, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "list_timelines", Arguments: map[string]any{}}); err == nil {
+		t.Fatal("a cancelled call succeeded")
+	}
+	select {
+	case <-gone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the client's cancel did not stop the API request")
+	}
+	if time.Since(start) > 5*time.Second {
+		t.Fatalf("cancel took %v", time.Since(start))
+	}
+}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -438,7 +439,7 @@ func (c *client) exportTimeline(base, out, host string, planOnly bool, stdout io
 		}
 		switch j.Status {
 		case "succeeded":
-			return c.saveExport(deref(j.TakeID), out, stdout)
+			return c.saveExport(context.Background(), deref(j.TakeID), out, stdout)
 		case "failed", "cancelled":
 			if j.Failure != nil {
 				return fmt.Errorf("export %s: %s: %s", j.Status, j.Failure.Class, j.Failure.Detail)
@@ -461,7 +462,7 @@ func (c *client) exportTimeline(base, out, host string, planOnly bool, stdout io
 }
 
 // saveExport prints the export's take and, with out, saves its MP4 through the signed link.
-func (c *client) saveExport(takeID, out string, stdout io.Writer) error {
+func (c *client) saveExport(ctx context.Context, takeID, out string, stdout io.Writer) error {
 	fmt.Fprintf(stdout, "take %s\n", takeID)
 	if out == "" {
 		return nil
@@ -469,7 +470,7 @@ func (c *client) saveExport(takeID, out string, stdout io.Writer) error {
 	var t struct {
 		URL string `json:"url"`
 	}
-	if err := c.call(http.MethodGet, "/v1/studio/takes/"+url.PathEscape(takeID), nil, http.StatusOK, &t); err != nil {
+	if err := c.callCtx(ctx, http.MethodGet, "/v1/studio/takes/"+url.PathEscape(takeID), nil, http.StatusOK, &t); err != nil {
 		return err
 	}
 	base, err := url.Parse(c.cfg.URL + "/")
@@ -480,7 +481,7 @@ func (c *client) saveExport(takeID, out string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if err := fetch(c.http, link.String(), out); err != nil {
+	if err := fetch(ctx, c.http, link.String(), out); err != nil {
 		return err
 	}
 	fmt.Fprintln(stdout, out)

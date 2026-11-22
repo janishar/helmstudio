@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/csv"
 	"encoding/json"
 	"errors"
@@ -207,11 +208,11 @@ type reviewItem struct {
 	Model     string   `json:"model"`
 }
 
-func (c *client) review(id string) ([]reviewItem, error) {
+func (c *client) review(ctx context.Context, id string) ([]reviewItem, error) {
 	var r struct {
 		Items []reviewItem `json:"items"`
 	}
-	err := c.call(http.MethodGet, "/v1/studio/batches/"+url.PathEscape(id)+"/review", nil, http.StatusOK, &r)
+	err := c.callCtx(ctx, http.MethodGet, "/v1/studio/batches/"+url.PathEscape(id)+"/review", nil, http.StatusOK, &r)
 	return r.Items, err
 }
 
@@ -224,7 +225,7 @@ func batchReview(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	items, err := c.review(args[0])
+	items, err := c.review(context.Background(), args[0])
 	if err != nil {
 		return err
 	}
@@ -284,7 +285,7 @@ func batchPick(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	items, err := c.review(rest[0])
+	items, err := c.review(context.Background(), rest[0])
 	if err != nil {
 		return err
 	}

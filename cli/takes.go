@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -93,7 +94,7 @@ func uploadCmd(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	t, err := c.upload(args[0])
+	t, err := c.upload(context.Background(), args[0])
 	if err != nil {
 		return err
 	}
@@ -102,7 +103,7 @@ func uploadCmd(args []string, stdout io.Writer) error {
 }
 
 // upload stores a png, jpeg or webp file as a take: start the upload, PUT the bytes to the signed link, complete it.
-func (c *client) upload(file string) (take, error) {
+func (c *client) upload(ctx context.Context, file string) (take, error) {
 	var t take
 	f, err := os.Open(file)
 	if err != nil {
@@ -127,18 +128,18 @@ func (c *client) upload(file string) (take, error) {
 		UploadURL string `json:"upload_url"`
 	}
 	body := map[string]any{"filename": filepath.Base(file), "content_type": ct, "bytes": st.Size()}
-	if err := c.call(http.MethodPost, "/v1/studio/uploads", body, http.StatusCreated, &up); err != nil {
+	if err := c.callCtx(ctx, http.MethodPost, "/v1/studio/uploads", body, http.StatusCreated, &up); err != nil {
 		return t, err
 	}
-	if err := c.put(up.UploadURL, f, st.Size(), ct); err != nil {
+	if err := c.put(ctx, up.UploadURL, f, st.Size(), ct); err != nil {
 		return t, err
 	}
-	err = c.call(http.MethodPost, "/v1/studio/uploads/"+url.PathEscape(up.TakeID)+"/complete", nil, http.StatusOK, &t)
+	err = c.callCtx(ctx, http.MethodPost, "/v1/studio/uploads/"+url.PathEscape(up.TakeID)+"/complete", nil, http.StatusOK, &t)
 	return t, err
 }
 
 // put sends a file's bytes to a signed files_service link (the signature is the auth: no key, no token).
-func (c *client) put(uploadURL string, body io.Reader, size int64, ct string) error {
+func (c *client) put(ctx context.Context, uploadURL string, body io.Reader, size int64, ct string) error {
 	base, err := url.Parse(c.cfg.URL + "/")
 	if err != nil {
 		return err
@@ -147,7 +148,7 @@ func (c *client) put(uploadURL string, body io.Reader, size int64, ct string) er
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequest(http.MethodPut, link.String(), body)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, link.String(), body)
 	if err != nil {
 		return err
 	}

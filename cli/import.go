@@ -491,7 +491,7 @@ func (c *client) putFile(link string, f fileRef) error {
 		return err
 	}
 	defer r.Close()
-	return c.put(link, r, f.size, f.ct)
+	return c.put(context.Background(), link, r, f.size, f.ct)
 }
 
 // readSize sets width and height from a png or jpeg header (the old db's values stay for webp or on error).

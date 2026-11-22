@@ -222,7 +222,7 @@ func runCmd(args []string, stdout, stderr io.Writer, stop <-chan os.Signal) erro
 		return fmt.Errorf("workflow %s: %w", wfID, err)
 	}
 	wf.upload = func(file string) (string, error) {
-		t, err := c.upload(file)
+		t, err := c.upload(context.Background(), file)
 		if err == nil {
 			fmt.Fprintf(stdout, "uploaded %s as take %s\n", file, t.ID)
 		}
@@ -289,7 +289,7 @@ func runCmd(args []string, stdout, stderr io.Writer, stop <-chan os.Signal) erro
 	if err := c.call(http.MethodGet, "/v1/studio/runs/"+r.ID, nil, http.StatusOK, &r); err != nil {
 		return err
 	}
-	return c.download(r, *out, stdout)
+	return c.download(context.Background(), r, *out, stdout)
 }
 
 // waitQueued prints the run's queue position while it waits for a host. An interrupt cancels it (a run not yet
@@ -484,7 +484,7 @@ func printEvent(e event, stdout io.Writer) string {
 }
 
 // download saves each output through its signed link (no credentials) as <dir>/<run_id>_<file name>.
-func (c *client) download(r run, dir string, stdout io.Writer) error {
+func (c *client) download(ctx context.Context, r run, dir string, stdout io.Writer) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
@@ -498,7 +498,7 @@ func (c *client) download(r run, dir string, stdout io.Writer) error {
 			return err
 		}
 		dest := filepath.Join(dir, r.ID+"_"+path.Base(o.Key))
-		if err := fetch(c.http, link.String(), dest); err != nil {
+		if err := fetch(ctx, c.http, link.String(), dest); err != nil {
 			return fmt.Errorf("output %d: %w", o.Index, err)
 		}
 		if o.TakeID != "" {
@@ -509,8 +509,12 @@ func (c *client) download(r run, dir string, stdout io.Writer) error {
 	return nil
 }
 
-func fetch(hc *http.Client, link, dest string) error {
-	resp, err := hc.Get(link)
+func fetch(ctx context.Context, hc *http.Client, link, dest string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, link, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := hc.Do(req)
 	if err != nil {
 		return err
 	}

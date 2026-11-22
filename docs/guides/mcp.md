@@ -79,6 +79,9 @@ client's folder (Claude Desktop starts it in `/`), not yours.
 Resources: `helm://take/{id}` (metadata and thumbnail) and `helm://workflow/{id}`. No prompts. Admin tools are not
 offered. Errors come back as the API's own text (for example `404: take not found`).
 
+An API call that gets no answer fails after 2 minutes; file saves and `wait_run`'s wait run longer. Cancelling a
+tool call in the client stops its requests.
+
 ## Try it
 
 Ask: "make a Qwen still of a lighthouse at dusk, then a short LTX clip from it, and put both on a new Timeline and

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -112,7 +113,7 @@ func (c *client) uploadLora(file string) (lora, error) {
 	if err := c.call(http.MethodPost, "/v1/studio/loras", body, http.StatusCreated, &up); err != nil {
 		return l, err
 	}
-	if err := c.put(up.UploadURL, f, st.Size(), up.ContentType); err != nil {
+	if err := c.put(context.Background(), up.UploadURL, f, st.Size(), up.ContentType); err != nil {
 		return l, err
 	}
 	err = c.call(http.MethodPost, "/v1/studio/loras/"+url.PathEscape(up.Lora.ID)+"/complete", nil, http.StatusOK, &l)
