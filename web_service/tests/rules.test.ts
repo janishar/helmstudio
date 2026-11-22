@@ -48,6 +48,14 @@ describe("rules.json cases: every rule the form's values break", () => {
     });
 });
 
+it("a field Generate does not send reads its initial value, as studio fills it", () => {
+  const w = workflow("minimax-h3-text-to-video");
+  const all = fields(w);
+  const raws: Record<string, Raw> = { "canvas.width": "832", "generate.render": "75%" };
+  expect(ruleErrors(w, all, raws, all)).toHaveLength(1);
+  expect(ruleErrors(w, all, raws, all.filter((f) => f.key !== "generate.render"))).toEqual([]);
+});
+
 describe("preset help and option help (H3Options frames 1, 3, 11)", () => {
   const w = workflow("minimax-h3-text-to-video");
   const all = fields(w);

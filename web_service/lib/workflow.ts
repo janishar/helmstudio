@@ -330,18 +330,21 @@ function sentValue(f: Field, raws: Record<string, Raw>): ExprValue {
 
 /** API 1.47 (contracts/README.md, Param rules; check.py rule_errors): every rule the form's values break, each with
  * the field it shows under (an item field's: its rows field) and studio's 422 text; node id order, param order, then
- * items. `all` is every field of `w` (an expression may read an unplaced one). */
+ * items. `all` is every field of `w` (an expression may read an unplaced one); `sent` the fields Generate sends
+ * (absent = all): any other reads its initial value, as studio fills it. */
 export function ruleErrors(
   w: S<"Workflow"> | undefined,
   all: Field[],
   raws: Record<string, Raw>,
+  sent?: Field[],
 ): { key: string; text: string }[] {
   if (!w) return [];
   const out: { key: string; text: string }[] = [];
   const byKey = new Map(all.map((f) => [f.key, f]));
+  const sentKeys = sent && new Set(sent.map((f) => f.key));
   const read = (key: string) => {
     const f = byKey.get(key);
-    if (f) return sentValue(f, raws);
+    if (f) return sentValue(f, !sentKeys || sentKeys.has(key) ? raws : {});
     const [node, name] = key.split(".");
     const v = (w.nodes[node]?.params as Record<string, unknown> | undefined)?.[name];
     if (v !== undefined) return v;

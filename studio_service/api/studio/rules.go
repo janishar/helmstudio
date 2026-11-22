@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"math"
 	"regexp"
 	"slices"
 	"strconv"
@@ -197,12 +198,8 @@ func (p *exprParser) unary() any {
 	}
 	v := p.atom()
 	if p.take("**") != "" {
-		b, e := p.num(v), p.num(p.unary())
-		out := 1.0
-		for range int(e) { // ponytail: whole exponents only (none of the formulas uses another)
-			out *= b
-		}
-		v = out
+		b := p.num(v)
+		v = math.Pow(b, p.num(p.unary()))
 	}
 	return v
 }

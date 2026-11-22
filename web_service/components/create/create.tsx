@@ -583,7 +583,7 @@ export function Create({
   const fields = visible(layout ? layout.shown : all, raws, all);
   // API 1.47 (contracts/README.md, Param rules): what studio would refuse, in red under its param before Generate,
   // which they block ("fix 2 problems"); an item field's line is its row's (MediaRows), studio's 422s after a send
-  const rules = ruleErrors(workflow, all, raws);
+  const rules = ruleErrors(workflow, all, raws, fields);
   const errors: Record<string, string> = { ...sentErrors };
   for (const r of rules) if (!r.text.startsWith(`${r.key}[`)) errors[r.key] ??= r.text;
   // a dialogue's script (API 1.32) and the rows it writes, which no editor of their own shows
