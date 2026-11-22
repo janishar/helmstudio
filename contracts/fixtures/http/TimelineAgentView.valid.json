@@ -1,0 +1,164 @@
+{
+ "id": "c3a1f2e4-5b6d-4e7f-8a9b-0c1d2e3f4a5b",
+ "name": "Fox at dusk",
+ "revision": 4,
+ "target": {
+  "width": 256,
+  "height": 128,
+  "fps": 24,
+  "sample_rate": 48000
+ },
+ "duration_s": 8.541666666666666,
+ "frames": 205,
+ "tracks": [
+  {
+   "name": "V1",
+   "kind": "video",
+   "gain_db": 0,
+   "mute": false,
+   "clips": 4
+  },
+  {
+   "name": "A2",
+   "kind": "audio",
+   "gain_db": 0,
+   "mute": false,
+   "clips": 1
+  }
+ ],
+ "clips": [
+  {
+   "id": "a",
+   "track": "V1",
+   "index": 0,
+   "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+   "kind": "video",
+   "in": 0.0,
+   "out": 2.0416666666666665,
+   "hold": null,
+   "at": 0.0,
+   "end": 2.0416666666666665,
+   "length": 2.0416666666666665,
+   "at_f": 0,
+   "end_f": 49,
+   "length_f": 49,
+   "gain_db": 0,
+   "mute": false,
+   "transition_in": null,
+   "alternatives": [
+    "aaaaaaaa-0000-4000-8000-000000000001"
+   ],
+   "shot": null,
+   "number": null,
+   "offline": false,
+   "take_title": "a fox trots in"
+  },
+  {
+   "id": "b",
+   "track": "V1",
+   "index": 1,
+   "take_id": "bbbbbbbb-0000-4000-8000-000000000001",
+   "kind": "image",
+   "in": null,
+   "out": null,
+   "hold": 2.0,
+   "at": 2.0416666666666665,
+   "end": 4.041666666666667,
+   "length": 2.0,
+   "at_f": 49,
+   "end_f": 97,
+   "length_f": 48,
+   "gain_db": 0,
+   "mute": false,
+   "transition_in": null,
+   "alternatives": [
+    "bbbbbbbb-0000-4000-8000-000000000001"
+   ],
+   "shot": null,
+   "number": null,
+   "offline": false,
+   "take_title": "a fox trots in"
+  },
+  {
+   "id": "c",
+   "track": "V1",
+   "index": 2,
+   "take_id": "aaaaaaaa-0000-4000-8000-000000000002",
+   "kind": "video",
+   "in": 0.25,
+   "out": 1.75,
+   "hold": null,
+   "at": 4.041666666666667,
+   "end": 5.541666666666667,
+   "length": 1.5,
+   "at_f": 97,
+   "end_f": 133,
+   "length_f": 36,
+   "gain_db": 0,
+   "mute": false,
+   "transition_in": null,
+   "alternatives": [
+    "aaaaaaaa-0000-4000-8000-000000000003",
+    "aaaaaaaa-0000-4000-8000-000000000002"
+   ],
+   "shot": null,
+   "number": null,
+   "offline": false,
+   "take_title": "a fox trots in"
+  },
+  {
+   "id": "s",
+   "track": "V1",
+   "index": 3,
+   "take_id": null,
+   "kind": "slot",
+   "in": null,
+   "out": null,
+   "hold": 3.0,
+   "at": 5.541666666666667,
+   "end": 8.541666666666666,
+   "length": 3.0,
+   "at_f": 133,
+   "end_f": 205,
+   "length_f": 72,
+   "gain_db": 0,
+   "mute": false,
+   "transition_in": null,
+   "alternatives": [],
+   "shot": {
+    "run_id": "cccccccc-0000-4000-8000-000000000001",
+    "status": "running",
+    "error": null
+   },
+   "number": null,
+   "offline": false,
+   "take_title": null
+  },
+  {
+   "id": "m",
+   "track": "A2",
+   "index": 0,
+   "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+   "kind": "video",
+   "in": 0.0,
+   "out": 1.0,
+   "hold": null,
+   "at": 1.0,
+   "end": 2.0,
+   "length": 1.0,
+   "at_f": 24,
+   "end_f": 48,
+   "length_f": 24,
+   "gain_db": 0,
+   "mute": false,
+   "transition_in": null,
+   "alternatives": [
+    "aaaaaaaa-0000-4000-8000-000000000001"
+   ],
+   "shot": null,
+   "number": null,
+   "offline": false,
+   "take_title": "a fox trots in"
+  }
+ ]
+}

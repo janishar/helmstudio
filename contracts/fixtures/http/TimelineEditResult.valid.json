@@ -1,0 +1,216 @@
+{
+ "revision": 5,
+ "dry_run": false,
+ "timeline": {
+  "target": {
+   "width": 256,
+   "height": 128,
+   "fps": 24,
+   "sample_rate": 48000
+  },
+  "tracks": [
+   {
+    "name": "V1",
+    "kind": "video",
+    "gain_db": 0,
+    "mute": false,
+    "clips": [
+     {
+      "id": "a",
+      "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+      "in": 0.0,
+      "out": 2.0416666666666665,
+      "gain_db": 0,
+      "mute": false,
+      "alternatives": [
+       "aaaaaaaa-0000-4000-8000-000000000001"
+      ],
+      "at": 0.0
+     },
+     {
+      "id": "b",
+      "take_id": "bbbbbbbb-0000-4000-8000-000000000001",
+      "hold": 2.0,
+      "gain_db": 0,
+      "mute": false,
+      "alternatives": [
+       "bbbbbbbb-0000-4000-8000-000000000001"
+      ],
+      "at": 2.0416666666666665
+     },
+     {
+      "id": "c",
+      "take_id": "aaaaaaaa-0000-4000-8000-000000000002",
+      "in": 0.25,
+      "out": 1.75,
+      "gain_db": 0,
+      "mute": false,
+      "alternatives": [
+       "aaaaaaaa-0000-4000-8000-000000000003",
+       "aaaaaaaa-0000-4000-8000-000000000002"
+      ],
+      "at": 4.041666666666667
+     },
+     {
+      "id": "s",
+      "take_id": null,
+      "hold": 3.0,
+      "at": 5.541666666666667,
+      "gain_db": 0,
+      "mute": false,
+      "alternatives": [],
+      "shot": {
+       "run_id": "cccccccc-0000-4000-8000-000000000001",
+       "status": "running",
+       "error": null
+      }
+     }
+    ]
+   },
+   {
+    "name": "A2",
+    "kind": "audio",
+    "gain_db": 0,
+    "mute": false,
+    "clips": [
+     {
+      "id": "m",
+      "take_id": "aaaaaaaa-0000-4000-8000-000000000001",
+      "in": 0.0,
+      "out": 1.0,
+      "at": 1.0,
+      "gain_db": 0,
+      "mute": false,
+      "alternatives": [
+       "aaaaaaaa-0000-4000-8000-000000000001"
+      ]
+     }
+    ]
+   }
+  ],
+  "duration_s": 8.541666666666666,
+  "frames": 205,
+  "id": "c3a1f2e4-5b6d-4e7f-8a9b-0c1d2e3f4a5b",
+  "name": "Fox at dusk",
+  "session_id": "0b5c1f8e-7a2d-4c1e-9a4f-3d6f2b1c9e10",
+  "revision": 5,
+  "defaults": {
+   "cast": [
+    "e1e1e1e1-0000-4000-8000-000000000001"
+   ],
+   "looks": [
+    "qwen-image/window-light"
+   ]
+  },
+  "can_undo": true,
+  "can_redo": false,
+  "takes": {
+   "aaaaaaaa-0000-4000-8000-000000000001": {
+    "id": "aaaaaaaa-0000-4000-8000-000000000001",
+    "kind": "video",
+    "source": "create",
+    "title": "a fox trots in",
+    "url": "/files/u/7d1e.../runs/3c9a.../0.mp4?exp=1767225600&sig=ab12",
+    "thumb_url": "/files/u/7d1e.../runs/3c9a.../0.poster.png?exp=1767225600&sig=ab12",
+    "width": 256,
+    "height": 128,
+    "seed": 42,
+    "workflow_id": "echo-video",
+    "workflow_title": "Echo video",
+    "video": {
+     "duration_s": 2.0416666666666665,
+     "fps": 24,
+     "frames": 49,
+     "has_audio": true,
+     "poster_url": "/files/u/7d1e.../runs/3c9a.../0.poster.png?exp=1767225600&sig=ab12"
+    }
+   },
+   "aaaaaaaa-0000-4000-8000-000000000002": {
+    "id": "aaaaaaaa-0000-4000-8000-000000000002",
+    "kind": "video",
+    "source": "create",
+    "title": "a fox trots in",
+    "url": "/files/u/7d1e.../runs/3c9a.../0.mp4?exp=1767225600&sig=ab12",
+    "thumb_url": "/files/u/7d1e.../runs/3c9a.../0.poster.png?exp=1767225600&sig=ab12",
+    "width": 256,
+    "height": 128,
+    "seed": 43,
+    "workflow_id": "echo-video",
+    "workflow_title": "Echo video",
+    "video": {
+     "duration_s": 2.0416666666666665,
+     "fps": 24,
+     "frames": 49,
+     "has_audio": true,
+     "poster_url": "/files/u/7d1e.../runs/3c9a.../0.poster.png?exp=1767225600&sig=ab12"
+    }
+   },
+   "bbbbbbbb-0000-4000-8000-000000000001": {
+    "id": "bbbbbbbb-0000-4000-8000-000000000001",
+    "kind": "image",
+    "source": "upload",
+    "title": "a fox trots in",
+    "url": "/files/u/7d1e.../runs/3c9a.../0.mp4?exp=1767225600&sig=ab12",
+    "thumb_url": "/files/u/7d1e.../runs/3c9a.../0.poster.png?exp=1767225600&sig=ab12",
+    "width": 256,
+    "height": 128,
+    "seed": null,
+    "workflow_id": null,
+    "workflow_title": null
+   },
+   "aaaaaaaa-0000-4000-8000-000000000003": {
+    "id": "aaaaaaaa-0000-4000-8000-000000000003",
+    "kind": "video",
+    "source": "create",
+    "title": "a fox trots in",
+    "url": "/files/u/7d1e.../runs/3c9a.../0.mp4?exp=1767225600&sig=ab12",
+    "thumb_url": "/files/u/7d1e.../runs/3c9a.../0.poster.png?exp=1767225600&sig=ab12",
+    "width": 256,
+    "height": 128,
+    "seed": 44,
+    "workflow_id": "echo-video",
+    "workflow_title": "Echo video",
+    "video": {
+     "duration_s": 2.0416666666666665,
+     "fps": 24,
+     "frames": 49,
+     "has_audio": true,
+     "poster_url": "/files/u/7d1e.../runs/3c9a.../0.poster.png?exp=1767225600&sig=ab12"
+    }
+   }
+  },
+  "created_at": "2026-11-16T09:00:00Z",
+  "updated_at": "2026-11-16T10:00:00Z"
+ },
+ "diff": {
+  "added": [
+   "k9"
+  ],
+  "removed": [
+   "b"
+  ],
+  "changed": [
+   {
+    "clip": "c",
+    "fields": {
+     "at": [
+      4.041666666666667,
+      2.0416666666666665
+     ]
+    }
+   }
+  ],
+  "tracks": {
+   "added": [],
+   "removed": [],
+   "changed": []
+  },
+  "duration": [
+   8.541666666666666,
+   6.541666666666667
+  ]
+ },
+ "warnings": [
+  "ops[0]: at 1.01 snapped to 1"
+ ]
+}

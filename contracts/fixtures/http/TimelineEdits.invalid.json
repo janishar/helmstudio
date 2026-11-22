@@ -1,0 +1,10 @@
+{
+ "base_revision": 4,
+ "ops": [
+  {
+   "op": "fill",
+   "clip": "s",
+   "take_id": "aaaaaaaa-0000-4000-8000-000000000001"
+  }
+ ]
+}
