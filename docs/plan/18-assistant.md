@@ -308,3 +308,8 @@ two tabs; `await` past its cap; a resumed checkpoint after a pipelines restart; 
 - Whether "always allow" is offered for the Undo-able writes or web searches in a chat (never for runs or deletes).
 - Whether `look_at` (a short local GPU ask, capped per hour) should get a card too; today it runs with a line.
 - Voice input and spoken replies with the voices packs: later.
+
+**Owner, 2026-11-22 (plan 24 §28.14 point 1, changed):** the assistant edits the Timeline through the server edit API
+(`try_timeline_edit`, then `edit_timeline`) instead of the browser action `timeline.edit`, for efficiency. It is the
+assistant's one server write tool besides memory: a batch that removes clips stops at a delete card with the dry-run
+diff; every other batch applies at once with an Undo line (restore the previous revision).
