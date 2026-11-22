@@ -206,5 +206,68 @@ def test_two_add_ons_in_one_folder_go_by_their_own_files(tmp_path, monkeypatch):
     }  # turbo_ref's download is unfinished
     (root / models.MARKER).unlink()
     assert state() == {"turbo": "present", "turbo_ref": "present"}
-    assert models.delete_addon(p, "turbo_ref") == (1, 4)
+    copy = (
+        root
+        / models.SGLANG_COPIES
+        / "minimax_h3_ref2v_turbo_8step_v1.1_768p_bf16-0123456789ab.safetensors"
+    )
+    other = (
+        root
+        / models.SGLANG_COPIES
+        / "minimax_h3_fl2v_turbo_8step_v1.2_768p_bf16-0123456789ab.safetensors"
+    )
+    for f in (copy, other):
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_bytes(b"z")
+    assert models.delete_addon(p, "turbo_ref") == (
+        1,
+        4,
+    )  # its SGLang-ready copy goes with it, the other's stays
     assert state() == {"turbo": "present", "turbo_ref": "missing"}
+    assert not copy.exists() and other.exists()
+
+
+def test_sglang_gets_a_lora_copy_with_alpha_folded(tmp_path):
+    """sgl.ready_lora: lora_B × alpha / rank (the module's .alpha, else the metadata's, else the rank: h3_lora.c's), no
+    alpha left for SGLang, bf16 kept, written once next to the file and reused."""
+    torch = pytest.importorskip("torch")
+    from safetensors import safe_open
+    from safetensors.torch import load_file, save_file
+
+    def lora(name, with_alpha, meta):
+        g, t = torch.Generator().manual_seed(0), {}
+        for m, r in (("blocks.0.attn.to_q", 4), ("blocks.0.attn.to_k", 2)):
+            t[f"{m}.lora_A.default.weight"] = torch.randn(r, 8, generator=g).bfloat16()
+            t[f"{m}.lora_B.default.weight"] = torch.randn(8, r, generator=g).bfloat16()
+            if with_alpha:
+                t[f"{m}.alpha"] = torch.tensor(float(r * 2)).bfloat16()  # alpha 2 × rank: scale 2
+        save_file(t, str(tmp_path / name), metadata=meta)
+        return t
+
+    cases = {"own.safetensors": (True, {"alpha": "128", "format": "pt"}, lambda r: 2.0),
+             "meta.safetensors": (False, {"alpha": "8", "format": "pt"}, lambda r: 8 / r),
+             "none.safetensors": (False, {"format": "pt"}, lambda r: 1.0)}  # fmt: skip
+    for name, (with_alpha, meta, scale) in cases.items():
+        src = lora(name, with_alpha, meta)
+        out = sgl.ready_lora(tmp_path / name)
+        assert out.parent == tmp_path / ".cache/helmstudio/sglang" and out.name.startswith(
+            name[:-12] + "-"
+        )
+        got = load_file(str(out))
+        assert not any(k.endswith(".alpha") for k in got)
+        with safe_open(str(out), "pt") as f:
+            assert f.metadata() == {"format": "pt"}
+        for k, v in got.items():
+            assert v.dtype == torch.bfloat16
+            r = src[k].shape[0 if ".lora_A." in k else 1]
+            want = src[k].float() * (scale(r) if ".lora_B." in k else 1)
+            assert torch.equal(v, want.bfloat16()), (name, k)
+    t = out.stat().st_mtime_ns
+    assert (
+        sgl.ready_lora(tmp_path / "none.safetensors") == out and out.stat().st_mtime_ns == t
+    )  # reused
+    lora(
+        "none.safetensors", False, {"format": "pt", "x": "1"}
+    )  # replaced: a new copy, the old one gone
+    new = sgl.ready_lora(tmp_path / "none.safetensors")
+    assert new != out and not out.exists() and new.exists()

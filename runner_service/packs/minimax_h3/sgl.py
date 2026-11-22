@@ -14,12 +14,15 @@ unchanged (plan 20 24.3 A5; unverified on the VM). SGLang derives the canvas fro
 here) and the frames from the duration (4-15 s, snapped up to 5 + 17k), so only canvases and lengths it can make
 exactly are accepted (cuda_error). API 1.41: `lora: turbo` starts the server with `--lora-path` the add-on file
 native.lora_file picked for the partition (Turbo LoRA for fl2va, Turbo Ref LoRA for ref2va; one server per run, so
-no /set_lora); SGLang's default `--lora-merge-mode auto` keeps it unmerged on the FP8 weights (unverified on the VM). Polled every POLL s: `progress` (0-99, the denoise) → phase sampling (phase id
+no /set_lora) as an SGLang-ready copy (ready_lora: alpha folded into lora_B, GOTCHAS.md); SGLang's default
+`--lora-merge-mode auto` keeps it unmerged on the FP8 weights (unverified on the VM). Polled every POLL s: `progress` (0-99, the denoise) → phase sampling (phase id
 sample; the server's start is encode, and once the denoise reaches 99, decode_video: SGLang reports nothing of its
 decode); cancel kills the server (SGLang has no abort). Its MP4 (H.264 + AAC 32 kHz, 24 fps) is the output."""
 
+import hashlib
 import json
 import math
+import os
 import re
 import socket
 import time
@@ -27,7 +30,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from core import child, media
+from core import child, media, models
 from core.graph import RunError
 
 SGLANG = Path("/opt/sglang/bin/sglang")  # Dockerfile.cuda
@@ -123,6 +126,40 @@ def argv(model, partition: str, port: int, tmp: Path, lora: Path | None = None) 
             *(["--lora-path", str(lora)] if lora else [])]  # fmt: skip
 
 
+def ready_lora(src: Path) -> Path:
+    """The LoRA as SGLang should load it: each module's lora_B times alpha / rank (alpha: its `.alpha`, else the
+    metadata's, else the rank; h3_lora.c's), no `.alpha` tensors or metadata alpha, so SGLang's scale is rank / rank
+    at lora_scale 1. Its fused qkv cannot take per-module `.alpha` (a 3-element .item()), and it would truncate a
+    fractional alpha. Written once (tmp + rename) to models.SGLANG_COPIES next to the file, keyed by its size and
+    mtime; the add-on's delete removes it with its file."""
+    st = src.stat()
+    key = hashlib.sha256(f"{st.st_size}:{st.st_mtime_ns}".encode()).hexdigest()[:12]
+    out = src.parent / models.SGLANG_COPIES / f"{src.stem}-{key}{src.suffix}"
+    if out.is_file():
+        return out
+    from safetensors import safe_open  # the torch env only (CUDA hosts)
+    from safetensors.torch import load_file, save_file
+
+    with safe_open(str(src), "pt") as f:
+        meta = f.metadata() or {}
+    t = load_file(str(src))
+    file_alpha = float(meta.get("alpha") or 0)
+    for kb in [k for k in t if ".lora_B." in k]:
+        prefix, rank = kb.split(".lora_B.")[0], t[kb.replace(".lora_B.", ".lora_A.")].shape[0]
+        a = t.pop(f"{prefix}.alpha", None)
+        alpha = float(a) if a is not None else file_alpha if file_alpha > 0 else rank
+        t[kb] = (t[kb].float() * (alpha / rank)).to(t[kb].dtype)
+    t = {k: v for k, v in t.items() if not k.endswith(".alpha")}
+    meta = {k: v for k, v in meta.items() if k not in ("alpha", "lora_alpha", "network_alpha")}
+    out.parent.mkdir(parents=True, exist_ok=True)
+    for old in out.parent.glob(f"{src.stem}-*{src.suffix}"):  # an older copy of a replaced file
+        old.unlink(missing_ok=True)
+    tmp = out.with_name(f".{out.name}.{os.getpid()}.tmp")
+    save_file(t, str(tmp), metadata=meta)
+    tmp.replace(out)
+    return out
+
+
 def free_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
@@ -185,6 +222,7 @@ def generate(ctx, model, body: dict, out: Path, tmp: Path, lora: Path | None = N
         )
     partition = "ref2va" if body["task"] == "ref2va" else "fl2va"
     ctx.progress(1, 1, "starting sglang", "encode")  # a phase without steps: 1 of 1
+    lora = ready_lora(lora) if lora else None
     with child.serve(ctx, argv(model, partition, free_port(), tmp, lora), cwd=tmp, name="sglang",
                      ready=READY, ready_s=READY_S) as port:  # fmt: skip
         job = json.loads(call(ctx.node, port, "/v1/videos", body))["id"]

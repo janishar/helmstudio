@@ -113,9 +113,19 @@ The pack runs the pinned h3 binary (`vendor/h3c`, h3.c 4cafd17, `make h3`) as a 
   copy-on-write pages that stay resident (the spike swapped). The peak formula adds 4.5 GB on Turbo (20.7 → 25.0 GB at
   864 × 480 × 124 copied; the merge adds nothing on top). `H3_LORA` is always sent (empty with `none`): a stray one in
   the runner's environment never merges. `H3_LORA_STRENGTH` is sent as 1 (owner: fixed).
-- **SGLang (NVIDIA)** gets the same file as `--lora-path` on the run's one server (no `/set_lora`); its default merge
-  mode keeps the adapter unmerged on the FP8 weights. Turbo sends no flow shifts (12 / 3 are the model's).
+- **SGLang (NVIDIA)** gets an SGLang-ready copy as `--lora-path` on the run's one server (no `/set_lora`); on the FP8
+  weights it applies it dynamically ("quantized weights cannot be merged in place"). Turbo sends no flow shifts.
   Unverified on the VM: s/step, VRAM, the look.
+- **SGLang cannot take the files as they are (sglang 0.5.23, read 2026-11-22).** Its fused qkv gathers to_q/k/v's
+  `.alpha` into one 3-element tensor, then `_apply_lora_to_layers` calls `.item()` on it: FL2V fails "a Tensor with 3
+  elements cannot be converted to Scalar". Its alpha otherwise: the layer's `.alpha` (cast to int), else
+  `lora_alpha` from an `adapter_config.json` beside the file or the safetensors metadata (`alpha`, `lora_alpha`,
+  `network_alpha`), else the rank; scale = lora_scale (1) × alpha / rank. So `sgl.ready_lora` writes a copy with
+  every lora_B × h3_lora.c's alpha / rank, no `.alpha` tensors and no metadata alpha: SGLang's scale is then 1, the
+  same delta as the Mac. At `<add-on dir>/.cache/helmstudio/sglang/<stem>-<key12>.safetensors` (key: the source's
+  size and mtime; tmp + rename, bf16 kept, an older copy of the same file removed), reused after; ~2 s per file on
+  the VM. The add-on's delete removes its copy with its file (core.models `SGLANG_COPIES`). Measured 2026-11-22 by
+  hand in runner-native: FL2V copy loads, "applied to 259 layers", server ready.
 - **Preset order by time** (owner 24.12 point 3: swap Turbo and Fast if Fast is quicker): measured 2026-11-22 through
   the pack at 864 × 480 × 124, seed 42, one after the other (the contract suite building on the same Mac, so both
   slower than the spike's 340 s): Fast 344.5 s (peak 19.1 GB), Turbo 420.0 s (peak 24.6 GB, the runner's measure;

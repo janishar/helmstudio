@@ -39,6 +39,9 @@ log = logging.getLogger("models")
 
 SIDECARS = Path(".cache/huggingface/download")
 MARKER = Path(".cache/helmstudio/download.json")
+SGLANG_COPIES = Path(
+    ".cache/helmstudio/sglang"
+)  # minimax_h3 sgl.ready_lora: <stem>-<key12><suffix> per file
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 MAX_FILES = 4096  # registry: files[] maxItems
 
@@ -602,9 +605,11 @@ def delete_in(base: Path, only: list[str] | None, addon: list[str]) -> tuple[int
     lent = linked_from_outside(root, base)
 
     def kept(rel: str) -> bool:
-        side = SIDECARS.as_posix() + "/"
+        side, copies = SIDECARS.as_posix() + "/", SGLANG_COPIES.as_posix() + "/"
         if rel.startswith(side):  # a sidecar goes with its file
             rel = re.sub(r"\.(metadata|lock)$", "", rel[len(side) :])
+        elif rel.startswith(copies):  # so does an SGLang-ready copy
+            rel = re.sub(r"-[0-9a-f]{12}(\.[^.]+)$", r"\1", rel[len(copies) :])
         if rel in lent or any(fnmatchcase(rel, g) for g in addon):
             return True
         if only is None:
