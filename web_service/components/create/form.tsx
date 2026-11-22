@@ -103,6 +103,13 @@ export function TextFields({
               : (f.param.label ?? f.param.name)
           }
           rows={2}
+          expand={
+            f.param.name === "text"
+              ? spoken
+                ? "Words to speak"
+                : "Prompt"
+              : (f.param.label ?? f.param.name)
+          }
           className="w-full resize-none border-0 bg-transparent text-[15px] leading-[22px] text-t1 outline-0 placeholder:text-t2"
           value={String(rawOf(f, raws))}
           aria-invalid={!!errors[f.key] || undefined}
