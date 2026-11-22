@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 // config is ~/.config/helm/config.json (0600). The API key itself is never stored: it comes from HELM_API_KEY or
@@ -81,10 +82,19 @@ func apiKey(c config) (string, error) {
 }
 
 // client calls the API with the client's key and the user's token; a 401 refreshes the tokens once and retries.
+// helm mcp calls it from several goroutines: mu guards the tokens, and one refresh runs at a time (rmu).
 type client struct {
 	cfg  config
 	key  string
 	http *http.Client
+	mu   sync.Mutex
+	rmu  sync.Mutex
+}
+
+func (c *client) token() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.cfg.AccessToken
 }
 
 func newClient(c config) (*client, error) {
@@ -128,8 +138,8 @@ func (c *client) send(ctx context.Context, method, path string, body []byte, hdr
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if c.cfg.AccessToken != "" {
-		req.Header.Set("Authorization", "Bearer "+c.cfg.AccessToken)
+	if tok := c.token(); tok != "" {
+		req.Header.Set("Authorization", "Bearer "+tok)
 	}
 	return c.http.Do(req)
 }
@@ -143,18 +153,27 @@ func (c *client) do(ctx context.Context, method, path string, in any, hdr http.H
 			return nil, err
 		}
 	}
+	c.mu.Lock()
+	stale, canRefresh := c.cfg.AccessToken, c.cfg.RefreshToken != ""
+	c.mu.Unlock()
 	resp, err := c.send(ctx, method, path, body, hdr)
-	if err != nil || resp.StatusCode != http.StatusUnauthorized || c.cfg.RefreshToken == "" {
+	if err != nil || resp.StatusCode != http.StatusUnauthorized || !canRefresh {
 		return resp, err
 	}
 	resp.Body.Close()
-	if err := c.refresh(ctx); err != nil {
+	if err := c.refresh(ctx, stale); err != nil {
 		return nil, err
 	}
 	return c.send(ctx, method, path, body, hdr)
 }
 
-func (c *client) refresh(ctx context.Context) error {
+// refresh gets new tokens unless another call already replaced the stale one.
+func (c *client) refresh(ctx context.Context, stale string) error {
+	c.rmu.Lock()
+	defer c.rmu.Unlock()
+	if c.token() != stale {
+		return nil
+	}
 	var s session
 	resp, err := c.send(ctx, http.MethodPost, "/auth/refresh", mustJSON(map[string]string{"refresh_token": c.cfg.RefreshToken}), nil)
 	if err != nil {
@@ -167,8 +186,11 @@ func (c *client) refresh(ctx context.Context) error {
 	if err := json.NewDecoder(resp.Body).Decode(&s); err != nil {
 		return err
 	}
+	c.mu.Lock()
 	c.cfg.AccessToken, c.cfg.RefreshToken = s.AccessToken, s.RefreshToken
-	return saveConfig(c.cfg)
+	cfg := c.cfg
+	c.mu.Unlock()
+	return saveConfig(cfg)
 }
 
 // call sends a JSON request and decodes a JSON answer into out (nil = discard); a status other than want is an error.

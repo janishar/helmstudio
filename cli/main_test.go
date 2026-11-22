@@ -38,12 +38,13 @@ type fakeAPI struct {
 	inputs      map[string]any
 	workflowID  string // the last run's workflow_id
 	cancelled   chan struct{}
-	positions   []int          // queue positions GET /runs/r1 answers before the run starts
-	query       string         // the last GET /v1/studio/takes query
-	uploaded    []byte         // the body PUT to the upload link
-	batchBody   map[string]any // the last POST /v1/studio/batches body
-	batchEvents []string       // the BatchEvents GET /v1/studio/batches/b1/events serves, seq = index + 1
-	useBody     map[string]any // the last POST /v1/studio/takes/t1/use body
+	positions   []int                       // queue positions GET /runs/r1 answers before the run starts
+	query       string                      // the last GET /v1/studio/takes query
+	uploaded    []byte                      // the body PUT to the upload link
+	batchBody   map[string]any              // the last POST /v1/studio/batches body
+	batchEvents []string                    // the BatchEvents GET /v1/studio/batches/b1/events serves, seq = index + 1
+	useBody     map[string]any              // the last POST /v1/studio/takes/t1/use body
+	extra       map[string]http.HandlerFunc // more routes ("METHOD /path"), answered first (helm mcp's tests)
 }
 
 func (f *fakeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -102,6 +103,10 @@ func (f *fakeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"detail":"invalid or expired token"}`, 401)
 		return
 	}
+	if h := f.extra[route]; h != nil {
+		h(w, r)
+		return
+	}
 	switch route {
 	case "GET /auth/me":
 		fmt.Fprint(w, `{"email":"a@example.com","name":"a","roles":["user"]}`)
@@ -149,16 +154,16 @@ func (f *fakeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		if len(f.positions) > 0 {
-			fmt.Fprintf(w, `{"id":"r1","status":"queued","position":%d,"outputs":[]}`, f.positions[0])
+			fmt.Fprintf(w, `{"id":"r1","session_id":"s1","status":"queued","position":%d,"outputs":[]}`, f.positions[0])
 			f.positions = f.positions[1:]
 			return
 		}
 		if f.workflowID == "echo-video" {
-			fmt.Fprint(w, `{"id":"r1","status":"succeeded","outputs":[{"index":0,"key":"u/o1/runs/r1/0.mp4","kind":"video","url":"/files/u/o1/runs/r1/0.mp4?exp=1&sig=ok","take_id":"t9",
+			fmt.Fprint(w, `{"id":"r1","session_id":"s1","status":"succeeded","outputs":[{"index":0,"key":"u/o1/runs/r1/0.mp4","kind":"video","url":"/files/u/o1/runs/r1/0.mp4?exp=1&sig=ok","take_id":"t9",
 			 "width":256,"height":128,"video":{"duration_s":2.125,"fps":8,"frames":17,"has_audio":true,"poster_url":"/files/u/o1/runs/r1/0.poster.png?exp=1&sig=ok"}}]}`)
 			return
 		}
-		fmt.Fprint(w, `{"id":"r1","status":"succeeded","outputs":[{"index":0,"key":"u/o1/runs/r1/0.png","kind":"image","url":"/files/u/o1/runs/r1/0.png?exp=1&sig=ok","take_id":"t9"}]}`)
+		fmt.Fprint(w, `{"id":"r1","session_id":"s1","status":"succeeded","outputs":[{"index":0,"key":"u/o1/runs/r1/0.png","kind":"image","url":"/files/u/o1/runs/r1/0.png?exp=1&sig=ok","take_id":"t9"}]}`)
 	case "GET /v1/studio/takes":
 		f.query = r.URL.RawQuery
 		fmt.Fprint(w, `{"takes":[`+takeJSON+`,`+videoTakeJSON+`],"next_cursor":"c2"}`)

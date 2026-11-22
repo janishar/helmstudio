@@ -87,6 +87,7 @@ A prompt may mention your elements as @handle (@@ is a literal @): helm sends it
   helm keys list | new <client> | revoke <id>   (admin) application API keys; a new key is shown once
   helm import <path> --user <email> [--dry-run] [--limit n]   (admin) an old helmstudio gallery (~/.helmstudio,
              read only) into the user's gallery; idempotent; --dry-run only counts
+  helm mcp                            an MCP server over stdio (Claude Code, Claude Desktop): the studio as tools
   helm whoami
   helm logout
 
@@ -171,6 +172,8 @@ func helm(args []string, stdin io.Reader, stdout, stderr io.Writer, stop <-chan 
 		err = keysCmd(args[1:], stdout)
 	case "import":
 		err = importCmd(args[1:], stdout, stderr)
+	case "mcp":
+		err = mcpCmd(args[1:], stdin, stdout)
 	case "whoami":
 		err = whoami(stdout)
 	case "logout":
