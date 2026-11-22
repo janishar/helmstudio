@@ -27,6 +27,8 @@ export class Preview {
   private ctx: AudioContext | null = null;
   frame = 0;
   playing = false;
+  /** the shuttle's speed (J / K / L, plan 23 §27.3): 1, 2, 4, 8 forward, negative backward */
+  rate = 1;
 
   constructor(
     private stage: HTMLElement,
@@ -63,9 +65,19 @@ export class Preview {
     this.frame = keep;
   }
 
-  play() {
-    if (!this.doc || this.playing || !this.doc.frames) return;
-    if (this.frame >= this.doc.frames) this.frame = 0;
+  /** Plays at `rate` (default 1×); a playing preview changes speed in place. Forward sets every element's
+   * playbackRate; backward is a timed seek each frame, parked (paused, so silent): browsers do not play backward. */
+  play(rate = 1) {
+    if (!this.doc || !this.doc.frames || !rate) return;
+    if (this.playing) {
+      this.clock = { base: this.g.s(this.frame), at: performance.now() };
+      this.rate = rate;
+      if (rate < 0) for (const e of this.els.values()) if ("pause" in e.el) e.el.pause();
+      return;
+    }
+    this.rate = rate;
+    if (rate > 0 && this.frame >= this.doc.frames) this.frame = 0;
+    if (rate < 0 && this.frame <= 0) return;
     // Web Audio needs a user gesture: play() is one
     if (!this.ctx && typeof AudioContext !== "undefined") this.ctx = new AudioContext();
     void this.ctx?.resume();
@@ -73,10 +85,10 @@ export class Preview {
     this.clock = { base: this.g.s(this.frame), at: performance.now() };
     const tick = () => {
       if (!this.playing || !this.doc) return;
-      const t = this.clock.base + (performance.now() - this.clock.at) / 1000;
+      const t = this.clock.base + (this.rate * (performance.now() - this.clock.at)) / 1000;
       const f = Math.floor((t * this.g.num) / this.g.den + 1e-9);
-      if (f >= this.doc.frames) {
-        this.frame = this.doc.frames;
+      if (f >= this.doc.frames || f < 0) {
+        this.frame = f < 0 ? 0 : this.doc.frames;
         this.pause();
         this.onFrame(this.frame);
         return;
@@ -85,7 +97,7 @@ export class Preview {
         this.frame = f;
         this.onFrame(f);
       }
-      this.apply(false);
+      this.apply(this.rate < 0);
       this.raf = requestAnimationFrame(tick);
     };
     this.raf = requestAnimationFrame(tick);
@@ -167,7 +179,8 @@ export class Preview {
       if (Math.abs(m.currentTime - at) > 1e-3) m.currentTime = at;
       return;
     }
-    if (Math.abs(m.currentTime - at) > DRIFT_S) m.currentTime = at;
+    if (m.playbackRate !== this.rate) m.playbackRate = this.rate;
+    if (Math.abs(m.currentTime - at) > DRIFT_S * this.rate) m.currentTime = at;
     if (m.paused) void m.play().catch(() => undefined);
   }
 

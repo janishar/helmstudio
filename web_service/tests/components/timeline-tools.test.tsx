@@ -108,3 +108,64 @@ it("draws a marker on the ruler and a linked sound clip's link", () => {
   expect(screen.getByRole("button", { name: "Marker Beat at 0:03.00" })).toBeTruthy();
   expect(screen.getByRole("button", { name: /^Empty, .*, linked$/ })).toBeTruthy();
 });
+
+it("virtualises the lanes and zooms about the pointer (plan 23 §27.4, §27.8)", () => {
+  // laid out: an 800 px track; jsdom has no layout, so the width and the observer are stubbed
+  const width = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
+  Object.defineProperty(HTMLElement.prototype, "clientWidth", { configurable: true, get: () => 872 });
+  const RO = globalThis.ResizeObserver;
+  globalThis.ResizeObserver = class {
+    constructor(private f: () => void) {}
+    observe() {
+      this.f();
+    }
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
+  try {
+    // 200 slots of 2 s at 40 px a second: 16 000 px of V1
+    const long: Norm = {
+      ...doc,
+      tracks: [
+        {
+          name: "V1",
+          kind: "video",
+          clips: Array.from({ length: 200 }, (_, i) => ({ id: `c${i}`, take_id: null, hold: 2, at: 2 * i })),
+        },
+      ],
+      markers: [],
+      duration_s: 400,
+      frames: 9600,
+    };
+    const noop = vi.fn();
+    const props = {
+      doc: long,
+      takes: {},
+      facts: {},
+      frame: 0,
+      sel: [],
+      track: null,
+      progress: {},
+      onSelect: noop,
+      onTrack: noop,
+      onSeek: noop,
+      onPreview: noop,
+      onCommit: noop,
+      onZoom: noop,
+    };
+    const { container, rerender } = render(<Lanes {...props} pps={40} />);
+    // the window is the screen and one each side: [−800, 1600] px, 20 clips of 80 px and the one at its edge, not 200
+    expect(container.querySelectorAll("[data-clip]").length).toBe(21);
+    const scroller = container.querySelector(".overflow-x-auto") as HTMLDivElement;
+    scroller.scrollLeft = 4000;
+    fireEvent.scroll(scroller);
+    expect(container.querySelector('[data-clip="c50"]')).toBeTruthy();
+    expect(container.querySelector('[data-clip="c0"]')).toBeNull();
+    // a zoom keeps the centre still when the playhead is off screen: t under x = 436 stays there
+    const t = (4000 + 436 - 72) / 40;
+    rerender(<Lanes {...props} pps={80} />);
+    expect(Math.abs((scroller.scrollLeft + 436 - 72) / 80 - t) * 80).toBeLessThan(0.5);
+  } finally {
+    if (width) Object.defineProperty(HTMLElement.prototype, "clientWidth", width);
+    globalThis.ResizeObserver = RO;
+  }
+});

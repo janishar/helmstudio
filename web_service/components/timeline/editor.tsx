@@ -67,6 +67,7 @@ import {
   describe,
   keyOf,
   merge,
+  shuttle,
   noun,
   signed,
   spanText,
@@ -117,7 +118,7 @@ export function TimelineEditor({ id }: { id?: string }) {
   const [unplayable, setUnplayable] = useState<string[]>([]);
   const [sel, setSel] = useState<string[]>([]);
   const [track, setTrack] = useState<string | null>(null);
-  const [pps, setPpsRaw] = useState(40);
+  const [ppsRaw, setPpsRaw] = useState(40);
   // the tools (plan 23): the active tool, snapping (N), hover scrub (⇧S, on by default: owner point 7), the sheet
   const [tool, setTool] = useState<Tool>("select");
   const [snap, setSnap] = useState(true);
@@ -476,14 +477,13 @@ export function TimelineEditor({ id }: { id?: string }) {
   const mark = (edge: "in" | "out") =>
     doc && setRange((r) => markRange(r, edge, at, doc.duration_s));
 
-  // zoom (the zoom field, −, +, Fit, keys and the wheel): pps within fit … 64 px per frame (plan 23 §27.4; the zoom
-  // engine, pointer-anchored and on a log scale, comes next)
-  const fitPps = doc && viewW ? viewW / Math.max(doc.duration_s, 5) : 0;
-  const zoomTo = (v: number) => {
-    if (!doc) return;
-    const [lo, hi] = zoomBounds(viewW || 600, doc.duration_s, doc.target.fps);
-    setPpsRaw(Math.min(hi, Math.max(lo, v)));
-  };
+  // zoom (plan 23 §27.4): a log scale (each step ×1.25; a pinch by its delta) from fit to 64 px per frame; the lanes
+  // keep the time under the pointer, else the playhead, still. Not laid out yet (no width): only the top bound.
+  const [zLo, zHi] = doc ? zoomBounds(viewW, doc.duration_s, doc.target.fps) : [5, Infinity];
+  const inZoom = (v: number) => Math.min(zHi, Math.max(viewW ? zLo : 5, v));
+  const pps = inZoom(ppsRaw);
+  const fitPps = doc && viewW ? zLo : 0;
+  const zoomTo = (v: number) => doc && setPpsRaw(inZoom(v));
   const fit = () => fitPps && setPpsRaw(fitPps);
   const atFit = !!fitPps && Math.abs(pps - fitPps) / fitPps < 0.005;
 
@@ -502,16 +502,8 @@ export function TimelineEditor({ id }: { id?: string }) {
     if (!scrub) pv.current?.peek(null);
   }, [scrub]);
 
-  // J: play backward at 1× (a timed seek per frame, silent); K and L stop it
-  const backward = useRef(0);
-  const stopBack = () => {
-    clearInterval(backward.current);
-    backward.current = 0;
-  };
-  useEffect(() => {
-    const b = backward;
-    return () => clearInterval(b.current);
-  }, []);
+  // K held: J / L step a frame (plan 23 §27.3)
+  const kDown = useRef(false);
 
   // key repeats (holding [) merge into one op sent after MERGE_MS; the draft shows each press (plan 23 §27.7)
   const pend = useRef<{ op: Op; timer: number } | null>(null);
@@ -592,24 +584,22 @@ export function TimelineEditor({ id }: { id?: string }) {
         if (id === "redo" ? tl?.can_redo : tl?.can_undo) undo(id === "redo");
         return;
       case "play":
-      case "fwd":
-        stopBack();
-        if (id === "play" && playing) pv.current?.pause();
-        else pv.current?.play();
+        if (playing) pv.current?.pause();
+        else pv.current?.play(1);
         return;
       case "stop":
-        stopBack();
+        kDown.current = true;
         pv.current?.pause();
         return;
       case "back":
-        pv.current?.pause();
-        stopBack();
-        backward.current = window.setInterval(() => {
-          const p = pv.current;
-          if (!p || p.frame <= 0) return stopBack();
-          p.seek(p.frame - 1);
-        }, 1000 / doc.target.fps);
-        return;
+      case "fwd": {
+        const p = pv.current;
+        if (!p) return;
+        // K+J / K+L: a frame; else the shuttle: again ×2, ×4, ×8 (J backward)
+        if (kDown.current) return p.seek(frame + (id === "back" ? -1 : 1));
+        const rate = shuttle(p.playing ? p.rate : 0, id);
+        return p.play(rate);
+      }
       case "frame_back":
       case "frame_fwd":
       case "second_back":
@@ -715,6 +705,7 @@ export function TimelineEditor({ id }: { id?: string }) {
     }
   };
   const onKeyUp = (e: KeyboardEvent) => {
+    if (e.code === "KeyK") kDown.current = false;
     const h = held.current;
     if (!h || h.code !== e.code) return;
     held.current = null;

@@ -6,13 +6,17 @@
 // slips (⌥: slides). Blade: a dashed cut line follows the pointer; a click cuts (⇧: every track). Range: drag marks in
 // and out. Overwrite: drag a clip over what is there. Drags snap (N; ⌘ inverts) to cuts, the playhead, the range and
 // markers within 6 px, clamp at their bounds, and draw the draft; the op goes to the editor on release. Hover scrub
-// draws a line under the pointer; Ctrl/⌘ + wheel zooms.
-import { useEffect, useRef, useState } from "react";
+// draws a line under the pointer. Zoom (§27.4): Ctrl / ⌘ / ⌥ + wheel and a trackpad pinch zoom about the pointer;
+// every other zoom (keys, the row's buttons) keeps the playhead still when it is on screen, else the centre; Fit
+// starts at 0. Only what meets the virtual window (the screen and one each side, §27.8) is drawn: clips, the ruler's
+// canvas, filmstrips and waveforms. The playhead brought off screen (playing, ↑ ↓, End) pages the view to it.
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Ellipsis, Link2, X } from "lucide-react";
 import type { S } from "@/lib/api";
 import { safeUrl } from "@/lib/format";
 import { actionShot } from "@/components/timeline/actions";
 import { MagnetIcon, ToolIcon } from "@/components/timeline/tools";
+import { Filmstrip, RulerCanvas, Waveform } from "@/components/timeline/detail";
 import {
   Grid,
   cuts,
@@ -29,7 +33,11 @@ import {
 } from "@/lib/timeline";
 import {
   clampFrames,
+  cutText,
   fits,
+  virtualWindow,
+  wheelZoom,
+  zoomAbout,
   signed,
   snapTo,
   trimZone,
@@ -43,7 +51,10 @@ type TTake = S<"TimelineTake">;
 const HEAD = 72; // the lane name column (px)
 const EDGE_PX = 7;
 const DRAG_PX = 3;
-const TOP = 20; // the lines' top: below the ruler
+const RULER = 22; // the board's ruler
+const TOP = RULER + 2; // the lines' top: below the ruler
+/** A clip narrower than this is a colour block, no text (the board's "Zoomed out to fit"). */
+const TEXT_PX = 70;
 
 /** Marker colours (TimelineMarkerColor); none: the accent. */
 export const MARKER_COLORS: Record<string, string> = {
@@ -261,19 +272,97 @@ export function Lanes({
   const scroller = useRef<HTMLDivElement>(null);
   const end = g.s(doc.frames);
   const width = Math.max(end * pps + 160, 600);
-  const steps = [1, 2, 5, 10, 15, 30, 60, 120, 300];
-  const step = steps.find((s) => s * pps >= 80) ?? 600;
-  const ticks = Array.from({ length: Math.floor(width / pps / step) + 1 }, (_, i) => i * step);
   const v1 = doc.tracks[0];
   const markers = doc.markers ?? [];
+  // the visible track width and the virtual window (track px; not laid out yet: everything)
+  const [view, setView] = useState(0);
+  const [win, setWin] = useState<[number, number]>([-Infinity, Infinity]);
+  const showing = (x0: number, w: number) => x0 + w >= win[0] && x0 <= win[1];
 
   useEffect(() => {
     const el = scroller.current;
-    if (!el || !onView || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(() => onView(Math.max(1, el.clientWidth - HEAD)));
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      const w = Math.max(1, el.clientWidth - HEAD);
+      setView(w);
+      setWin(virtualWindow(el.scrollLeft, w));
+      onView?.(w);
+    });
     ro.observe(el);
     return () => ro.disconnect();
   }, [onView]);
+  const onScroll = () => {
+    const el = scroller.current;
+    if (!el || !view) return;
+    const w = virtualWindow(el.scrollLeft, view);
+    if (w[0] !== win[0] || w[1] !== win[1]) setWin(w);
+  };
+
+  // zoom about a point: the pointer's x for a wheel or pinch, else the playhead on screen, else the centre
+  const anchor = useRef<number | null>(null);
+  const seen = useRef(pps);
+  const now = g.s(frame);
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    const was = seen.current;
+    seen.current = pps;
+    if (!el || was === pps) return;
+    const phWas = HEAD + now * was - el.scrollLeft;
+    const x = anchor.current ?? (phWas >= HEAD && phWas <= el.clientWidth ? phWas : el.clientWidth / 2);
+    anchor.current = null;
+    // Fit shows the whole sequence from 0
+    el.scrollLeft = view && pps * Math.max(end, 5) <= view + 1 ? 0 : zoomAbout(el.scrollLeft, x, was, pps, HEAD);
+    if (view) setWin(virtualWindow(el.scrollLeft, view));
+  }, [pps, now, view, end]);
+  // the playhead moved off screen (playing, ↑ ↓, Home / End): page the view so it sits a tenth in
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (!el || !view) return;
+    const x = HEAD + now * pps - el.scrollLeft;
+    if (x >= HEAD && x <= el.clientWidth - 2) return;
+    el.scrollLeft = Math.max(0, now * pps - view / 10);
+    setWin(virtualWindow(el.scrollLeft, view));
+    // only a move of the playhead, not a zoom, pages
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [now]);
+  // Ctrl / ⌘ / ⌥ + wheel and pinch (a wheel with ctrlKey; Safari's gesture events) zoom at the pointer; React's
+  // wheel listener is passive, so this one is the element's own
+  const zoomRef = useRef({ pps, onZoom });
+  useEffect(() => {
+    zoomRef.current = { pps, onZoom };
+  });
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const at = (clientX: number) => (anchor.current = clientX - el.getBoundingClientRect().left);
+    const wheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey && !e.altKey) return;
+      e.preventDefault();
+      at(e.clientX);
+      const z = zoomRef.current;
+      z.onZoom(z.pps * wheelZoom(e.deltaY, e.deltaMode));
+    };
+    let scale = 1;
+    const gesture = (e: Event) => {
+      const ge = e as Event & { scale: number; clientX: number };
+      e.preventDefault();
+      if (e.type === "gesturestart") scale = 1;
+      else {
+        at(ge.clientX);
+        const z = zoomRef.current;
+        z.onZoom((z.pps * ge.scale) / scale);
+      }
+      scale = ge.scale;
+    };
+    el.addEventListener("wheel", wheel, { passive: false });
+    el.addEventListener("gesturestart", gesture);
+    el.addEventListener("gesturechange", gesture);
+    return () => {
+      el.removeEventListener("wheel", wheel);
+      el.removeEventListener("gesturestart", gesture);
+      el.removeEventListener("gesturechange", gesture);
+    };
+  }, []);
 
   /** The snap points besides the cuts: the playhead, the range's ends and the markers. */
   const extra: SnapPt[] = [
@@ -495,10 +584,14 @@ export function Lanes({
 
   const clipButton = (c: Clip, ti: number, height: number) => {
     const audio = ti > 0;
+    const x0 = c.at! * pps;
+    const wAll = g.s(lenOf(c, kindOf(c, facts), g, audio)) * pps;
+    // virtualised (§27.8): off the window and not selected, not drawn
+    if (!showing(x0, Math.max(wAll, 6)) && !sel.includes(c.id)) return null;
     const { title, line } = clipText(c, audio, takes, facts, g, progress[c.id]);
     const t = c.take_id ? takes[c.take_id] : undefined;
     const kind = kindOf(c, facts);
-    const w = g.s(lenOf(c, kind, g, audio)) * pps;
+    const w = wAll;
     const on = sel.includes(c.id);
     const look = c.shot
       ? "border border-a2 bg-s2"
@@ -512,11 +605,13 @@ export function Lanes({
               ? "border border-a1 bg-[color-mix(in_srgb,var(--a1)_14%,transparent)]"
               : "border border-a2 bg-[rgba(255,122,89,0.14)]";
     const pct = c.shot && progress[c.id]?.match(/(\d+) \/ (\d+)$/);
-    const bg = !audio && t && !c.shot && !c.offline ? safeUrl(t.thumb_url) : undefined;
+    // a V1 take's filmstrip at the clip's foot (§27.4), the poster its stand-in while frames load
+    const film = !audio && !!t && !c.shot && !c.offline && (kind === "video" || kind === "image");
+    const tiny = w < TEXT_PX;
     // an audio take's clip: a waveform strip, its dialogue's cue ticks and the ⋯ menu (docs/mock/TimelineAudio.dc.html)
     const wave = audio && t?.kind === "audio" && !c.offline;
-    const ticks = wave && height > 40 ? cueTicks(c, t) : [];
-    const menu = audio && !!c.take_id && !c.offline && !!onMenu;
+    const ticks = wave && height > 40 && !tiny ? cueTicks(c, t) : [];
+    const menu = audio && !!c.take_id && !c.offline && !!onMenu && !tiny;
     const failedLine = audio && !c.take_id && c.shot?.status === "failed";
     const linked = audio && c.link !== undefined;
     const button = (
@@ -549,37 +644,59 @@ export function Lanes({
           if (tool === "blade") return blade(e, ti === 0 ? "V1" : doc.tracks[ti].name!);
           onSelect(c.id, e.shiftKey || e.metaKey || e.ctrlKey, e.altKey);
         }}
-        className={`tl-clip absolute top-0 ${failedLine ? "border border-bad bg-s2" : audio && c.shot && !c.take_id ? "border border-[#86cdea] bg-s2" : look} ${on ? "border-2! border-t1!" : ""} ${shift?.id === c.id ? "z-10 opacity-80" : ""}`}
+        className={`tl-clip absolute top-0 ${film ? "fs" : ""} ${wave ? "wv" : ""} ${failedLine ? "border border-bad bg-s2" : audio && c.shot && !c.take_id ? "border border-[#86cdea] bg-s2" : look} ${on ? "border-2! border-t1!" : ""} ${shift?.id === c.id ? "z-10 opacity-80" : ""}`}
         style={{
           left: c.at! * pps,
           width: Math.max(w, 6),
           height,
           transform: shift?.id === c.id ? `translateX(${shift.dx}px)` : undefined,
-          backgroundImage: bg
-            ? `linear-gradient(90deg, var(--s1) 30%, color-mix(in srgb, var(--s1) 40%, transparent)), url("${bg}")`
-            : undefined,
-          backgroundSize: bg ? "auto, auto 100%" : undefined,
-          backgroundPosition: bg ? "0 0, right center" : undefined,
-          backgroundRepeat: "no-repeat",
           cursor: shotBusy(c) ? "default" : tool === "trim" ? undefined : CURSOR[tool],
         }}
       >
-        {height > 40 && (
+        {film && (
+          <Filmstrip
+            id={c.id}
+            take={c.take_id!}
+            url={kind === "video" ? safeUrl(t.url) : undefined}
+            posterUrl={safeUrl(t.thumb_url) ?? (kind === "image" ? safeUrl(t.url) : undefined)}
+            still={kind === "image"}
+            x0={x0}
+            w={Math.max(w, 6)}
+            src={[c.in ?? 0, g.s(lenOf(c, kind, g))]}
+            pps={pps}
+            fps={doc.target.fps}
+            win={win}
+          />
+        )}
+        {wave && (
+          <Waveform
+            take={c.take_id!}
+            url={safeUrl(t.url)}
+            duration={t.audio?.duration_s ?? 0}
+            x0={x0}
+            w={Math.max(w, 6)}
+            h={height}
+            src={c.in ?? 0}
+            pps={pps}
+            win={win}
+            fallback={
+              <span
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 top-[21px] block h-4 opacity-70"
+                style={{
+                  background:
+                    "repeating-linear-gradient(90deg, transparent 0 2px, color-mix(in srgb, #86cdea 70%, transparent) 2px 3px)",
+                  maskImage: "linear-gradient(180deg, transparent 20%, #000 20% 80%, transparent 80%)",
+                }}
+              />
+            }
+          />
+        )}
+        {height > 40 && !tiny && (
           <b className={`flex items-center gap-1 ${menu ? "pr-6" : ""}`}>
             {linked && <Link2 size={11} aria-hidden className="shrink-0" />}
             {title}
           </b>
-        )}
-        {wave && (
-          <span
-            aria-hidden
-            className="pointer-events-none absolute inset-x-0 top-[21px] block h-4 opacity-70"
-            style={{
-              background:
-                "repeating-linear-gradient(90deg, transparent 0 2px, color-mix(in srgb, #86cdea 70%, transparent) 2px 3px)",
-              maskImage: "linear-gradient(180deg, transparent 20%, #000 20% 80%, transparent 80%)",
-            }}
-          />
         )}
         {ticks.map((k) => (
           <span key={k.line} aria-hidden>
@@ -595,7 +712,7 @@ export function Lanes({
             </small>
           </span>
         ))}
-        {pct ? (
+        {tiny ? null : pct ? (
           <span className="flex items-center gap-1.5">
             <span className="block h-1 flex-1 rounded-[2px] bg-s5">
               <span
@@ -679,7 +796,8 @@ export function Lanes({
           : op.edge === "in" && delta > 0
             ? [a, a + delta]
             : null;
-      const top = d.track === 0 ? 24 : 128 + 62 * (d.track - 1); // the ruler, V1 and A1 above
+      // the ruler, V1 and A1 above
+      const top = d.track === 0 ? RULER + 6 : RULER + 110 + 62 * (d.track - 1);
       if (ghost)
         out.push(
           <span
@@ -714,7 +832,7 @@ export function Lanes({
           key="edge"
           aria-hidden
           className="tl-edgebar warn"
-          style={{ left: xOf(a) - 3, top: 24 }}
+          style={{ left: xOf(a) - 3, top: RULER + 6 }}
         />,
       );
     return out;
@@ -728,11 +846,7 @@ export function Lanes({
       <div
         ref={scroller}
         className="overflow-x-auto"
-        onWheel={(e) => {
-          if (!e.ctrlKey && !e.metaKey) return;
-          e.preventDefault();
-          onZoom(pps * (e.deltaY < 0 ? 1.25 : 0.8));
-        }}
+        onScroll={onScroll}
       >
         <div
           ref={content}
@@ -756,7 +870,7 @@ export function Lanes({
             aria-valuemax={doc.frames}
             aria-valuenow={frame}
             aria-valuetext={shortTime(g.s(frame))}
-            className="mono relative h-[18px] cursor-pointer text-[10px] text-t2"
+            className="mono relative h-[22px] cursor-pointer text-[10px] text-t2"
             style={{ marginLeft: HEAD }}
             onPointerDown={(e) => {
               if (tool === "range") return;
@@ -765,11 +879,7 @@ export function Lanes({
             }}
             onPointerMove={(e) => tool !== "range" && e.buttons === 1 && seekAt(e)}
           >
-            {ticks.map((s) => (
-              <span key={s} className="absolute top-0" style={{ left: s * pps }}>
-                {shortTime(s)}
-              </span>
-            ))}
+            <RulerCanvas pps={pps} fps={doc.target.fps} win={win} width={width} />
             {markers.map((m) => (
               <button
                 key={m.id}
@@ -811,6 +921,7 @@ export function Lanes({
                 const t = c.take_id ? takes[c.take_id] : undefined;
                 if (!t?.video?.has_audio || c.offline) return null;
                 const w = g.s(lenOf(c, "video", g)) * pps;
+                if (!showing(c.at! * pps, Math.max(w, 6))) return null;
                 const gain = (c.gain_db ?? 0) + (v1.gain_db ?? 0);
                 return (
                   <button
@@ -821,13 +932,26 @@ export function Lanes({
                     onClick={(e) =>
                       tool === "blade" ? blade(e, "V1") : onSelect(c.id, false, e.altKey)
                     }
-                    className={`tl-clip absolute top-0 h-9 justify-center border border-line bg-s2 ${c.mute ? "opacity-50" : ""}`}
+                    className={`tl-clip wv absolute top-0 h-9 justify-center border border-line bg-s2 ${c.mute ? "opacity-50" : ""}`}
                     style={{ left: c.at! * pps, width: Math.max(w, 6), cursor: CURSOR[tool] }}
                   >
-                    <small>
-                      {c.number ? `Shot ${c.number} sound` : "clip audio"} ·{" "}
-                      {c.mute ? "muted" : `${gain > 0 ? "+" : ""}${gain} dB`}
-                    </small>
+                    <Waveform
+                      take={c.take_id!}
+                      url={safeUrl(t.url)}
+                      duration={t.video?.duration_s ?? 0}
+                      x0={c.at! * pps}
+                      w={Math.max(w, 6)}
+                      h={36}
+                      src={c.in ?? 0}
+                      pps={pps}
+                      win={win}
+                    />
+                    {w >= TEXT_PX && (
+                      <small>
+                        {c.number ? `Shot ${c.number} sound` : "clip audio"} ·{" "}
+                        {c.mute ? "muted" : `${gain > 0 ? "+" : ""}${gain} dB`}
+                      </small>
+                    )}
                   </button>
                 );
               })}
@@ -876,7 +1000,7 @@ export function Lanes({
           {range && (
             <span
               aria-label={`Range ${shortTime(range[0])} to ${shortTime(range[1])}`}
-              className="pointer-events-none absolute top-[18px] bottom-0 block border-x-2 border-a2"
+              className="pointer-events-none absolute top-[22px] bottom-0 block border-x-2 border-a2"
               style={{
                 left: HEAD + range[0] * pps,
                 width: (range[1] - range[0]) * pps,
@@ -897,11 +1021,7 @@ export function Lanes({
               </span>
             </span>
           )}
-          <span
-            aria-hidden
-            className="pointer-events-none absolute top-3.5 bottom-0 block w-0.5 bg-t1"
-            style={{ left: HEAD + g.s(frame) * pps }}
-          />
+          <span aria-hidden className="tl-ph" style={{ left: HEAD + g.s(frame) * pps - 1 }} />
           {overlay}
           {snapLine && (
             <>
@@ -922,11 +1042,11 @@ export function Lanes({
                 className="tl-bl"
                 style={{ left: xOf(hover.t) - 1, top: TOP, bottom: 0 }}
               />
-              <span aria-hidden className="tl-cur" style={{ left: xOf(hover.t) + 5, top: 38 }}>
+              <span aria-hidden className="tl-cur" style={{ left: xOf(hover.t) + 5, top: TOP + 18 }}>
                 <ToolIcon tool="blade" size={14} />
               </span>
               <span className="tl-tag" style={{ left: xOf(hover.t) - 4, top: 2 }}>
-                Cut {timecode(hover.t)} · {hover.all ? "all tracks" : `frame ${g.f(hover.t)}`}
+                Cut {cutText(hover.t, pps, g, hover.all)}
               </span>
             </>
           )}

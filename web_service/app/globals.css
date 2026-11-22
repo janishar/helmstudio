@@ -505,6 +505,46 @@
     font-size: 10px;
     white-space: nowrap;
   }
+  /* the detail (docs/mock/TimelineTools.dc.html .fs and .wv): the text above the canvases; a V1 clip with a filmstrip
+     keeps its text at the top, the strip at its foot; a waveform's text sits on a plate */
+  .tl-clip > b,
+  .tl-clip > small {
+    position: relative;
+  }
+  .tl-clip.fs {
+    justify-content: flex-start;
+    gap: 1px;
+    padding: 4px 7px;
+    line-height: 13px;
+  }
+  .tl-clip.wv > b,
+  .tl-clip.wv > small:not(.flex) {
+    width: fit-content;
+    max-width: 100%;
+    padding: 0 4px;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--s1) 82%, transparent);
+  }
+  /* the playhead (the board's .ph): a line with its head on the ruler */
+  .tl-ph {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 15;
+    width: 2px;
+    background: var(--t1);
+    pointer-events: none;
+  }
+  .tl-ph::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -5px;
+    width: 12px;
+    height: 10px;
+    background: var(--t1);
+    clip-path: polygon(0 0, 100% 0, 50% 100%);
+  }
   .tl-edge {
     position: absolute;
     top: 0;

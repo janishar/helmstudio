@@ -369,8 +369,92 @@ export function spanText(visible: number, fps: number, fit: number | null): stri
   return visible < 10 ? `${visible.toFixed(1)} s` : `${Math.round(visible)} s`;
 }
 
-/** The zoom's bounds in px per second: fit (the sequence, at least 5 s, fills `width`) up to 64 px per frame. */
+/** The zoom's bounds in px per second (§27.4): fit (the sequence, at least 5 s, fills `width`) up to 64 px per frame. */
 export function zoomBounds(width: number, duration: number, fps: number): [number, number] {
-  const fit = width / Math.max(duration, 5);
-  return [Math.min(5, fit), MAX_PX_PER_FRAME * fps];
+  const hi = MAX_PX_PER_FRAME * fps;
+  return [Math.min(hi, width / Math.max(duration, 5)), hi];
+}
+
+/** The scrollLeft that keeps the time under `x` (px from the scroller's left edge) still when the zoom goes from
+ * `pps` to `next` (§27.4: scrollLeft' = t × pps' − x); `head` is the name column before time 0. */
+export function zoomAbout(scroll: number, x: number, pps: number, next: number, head: number) {
+  const t = (scroll + x - head) / pps;
+  return Math.max(0, head + t * next - x);
+}
+
+/** A wheel's zoom factor: a trackpad pinch (ctrlKey, small deltas) zooms smoothly, a wheel notch ×1.25 / ×0.8. */
+export function wheelZoom(deltaY: number, deltaMode = 0): number {
+  const px = deltaY * (deltaMode === 1 ? 33 : deltaMode === 2 ? 800 : 1);
+  if (Math.abs(px) < 50) return Math.exp(-px / 100);
+  return px < 0 ? 1.25 : 0.8;
+}
+
+/** Ruler ticks (§27.4; the board's rulers): the first step with room, frames (≥ 40 px: a frame number fits) then
+ * 1 s … 10 min (≥ 70 px: the board's 2 s ruler sits at 79 px, its fit ruler steps 30 s at 73 px). */
+const FRAME_STEPS = [1, 2, 5, 10];
+const SECOND_STEPS = [1, 2, 5, 10, 30, 60, 300, 600];
+export function tickStep(pps: number, fps: number): { frames: number } | { seconds: number } {
+  const f = FRAME_STEPS.find((k) => k < fps && (k / fps) * pps >= 40);
+  if (f) return { frames: f };
+  return { seconds: SECOND_STEPS.find((k) => k * pps >= 70) ?? 600 };
+}
+export type Tick = { t: number; label: string; major: boolean };
+/** The ticks over [a, b] seconds: majors labelled "0:10", at frame steps each frame's number in its second ("7",
+ * the second's own frame "0:10"), and 4 minors between second steps (the board's `.mn`). */
+export function rulerTicks(a: number, b: number, pps: number, g: Grid): Tick[] {
+  const st = tickStep(pps, g.num / g.den);
+  const out: Tick[] = [];
+  if ("frames" in st) {
+    for (let sec = Math.max(0, Math.floor(a)); sec <= b; sec++) {
+      const f0 = g.f(sec);
+      for (let f = f0; f < g.f(sec + 1); f += st.frames) {
+        const t = g.s(f);
+        if (t < a || t > b) continue;
+        out.push(f === f0 ? { t, label: clock(sec), major: true } : { t, label: String(f - f0), major: false });
+      }
+    }
+    return out;
+  }
+  const k = st.seconds;
+  for (let i = Math.max(0, Math.floor(a / k)); i * k <= b; i++) {
+    if (i * k >= a) out.push({ t: i * k, label: clock(i * k), major: true });
+    for (let m = 1; m < 5; m++) {
+      const t = i * k + (m * k) / 5;
+      if (t >= a && t <= b) out.push({ t, label: "", major: false });
+    }
+  }
+  return out;
+}
+const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+
+/** The blade's tag (§27.4): "0:10.12 · frame 252", at frame steps "0:10 · 7" (the frame in its second). */
+export function cutText(t: number, pps: number, g: Grid, all: boolean): string {
+  const f = g.f(t);
+  const sec = Math.floor(g.s(f) + 1e-9);
+  if ("frames" in tickStep(pps, g.num / g.den) && !all) return `${clock(sec)} · ${f - g.f(sec)}`;
+  return `${timecode(t)} · ${all ? "all tracks" : `frame ${f}`}`;
+}
+
+/** The virtual window (§27.8), in track px: the screen plus one each side, stepped by whole screens so a scroll
+ * redraws only when it crosses one; no width yet (not laid out): everything. */
+export function virtualWindow(scroll: number, view: number): [number, number] {
+  if (view <= 0) return [-Infinity, Infinity];
+  const k = Math.floor(Math.max(0, scroll) / view);
+  return [(k - 1) * view, (k + 2) * view];
+}
+
+/** A filmstrip tile's width (§27.4): 16:9 of the board's 26 px strip (44 px with its 2 px gap), one frame once a
+ * frame is wider. */
+export const tileWidth = (pps: number, fps: number) => Math.max(44, pps / fps);
+/** The source frame a tile shows, on a power-of-two frame step at least the tile's span, so zooming reuses tiles. */
+export function bucketFrame(src: number, tileS: number, fps: number): number {
+  const step = 2 ** Math.max(0, Math.ceil(Math.log2(Math.max(1, tileS * fps))));
+  return Math.round(Math.floor(src * fps + 1e-9) / step) * step;
+}
+
+/** J / K / L (§27.3): L plays forward, again ×2, ×4, ×8; J the same backward; K stops. */
+export function shuttle(rate: number, key: "back" | "stop" | "fwd"): number {
+  if (key === "stop") return 0;
+  if (key === "fwd") return rate <= 0 ? 1 : Math.min(8, rate * 2);
+  return rate >= 0 ? -1 : Math.max(-8, rate * 2);
 }
