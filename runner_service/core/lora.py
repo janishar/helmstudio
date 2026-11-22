@@ -46,6 +46,11 @@ DTYPES = {"F32", "F16", "BF16"}
 MAX_HEADER, MAX_TENSORS, MAX_RANK = 8388608, 20000, 4096
 
 
+# an IC-LoRA (Lightricks' LTX-2.5 IC-LoRAs) conditions on a reference video: never a stack row (upload checks)
+IC_LORA = "reference_downscale_factor"
+IC_LORA_REASON = "an IC-LoRA (it needs a reference video), not a stack LoRA"
+
+
 class LoraFileError(ValueError):
     """The file is not an acceptable LoRA; the message is the contract's reason."""
 
@@ -312,6 +317,9 @@ class Library:
         for p in files:
             try:
                 tensors, meta = read_header(p, ignore)
+                # the last upload check; not in read_header: ltx/ic-lora loads these files
+                if IC_LORA in meta:
+                    raise LoraFileError(IC_LORA_REASON)
             except Exception as e:  # noqa: BLE001 (one bad file never stops the scan)
                 log.warning("shared LoRA %s left out: %s", p, e)
                 continue

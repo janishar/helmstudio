@@ -145,10 +145,11 @@ components:
   audio_vae: {files: "vae/ltx-2.5-audio-vae-bf16.safetensors", dtype: stored}  # its decoder
   vocoder: {files: "vae/ltx-2.5-audio-vae-bf16.safetensors", dtype: fp32}      # BigVGAN + BWE, run in fp32
   audio_encoder: {files: "vae/ltx-2.5-audio-vae-bf16.safetensors", dtype: stored}  # encodes source sound (16 kHz mel)
-# LoRAs: bake only (the old MLX code fuses every LoRA into the transformer; no adapter exists to copy or prove). The
-# renames are the old LTXV_LORA_COMFY_RENAMING_MAP as end-of-module-part rewrites; kohya files match none: refused.
-# MLX only (runtime: mlx): the torch path (NVIDIA) refuses LoRA rows (no bake into FP8 or ConvRot weights), so the
-# torch runner publishes no lora block and no ltx/lora-stack; the renames are MLX's module names.
+# LoRAs: adapter (the default, as upstream's unfused LoRAs: core/loaders_mlx.py activate) or bake (the old MLX code's
+# fuse into the transformer). The renames are the old LTXV_LORA_COMFY_RENAMING_MAP as end-of-module-part rewrites;
+# kohya files match none: refused. MLX only (runtime: mlx): the torch path (NVIDIA) refuses LoRA rows (no bake into
+# FP8 or ConvRot weights, no adapter yet), so the torch runner publishes no lora block and no ltx/lora-stack; the
+# renames are MLX's module names.
 lora:
   runtime: mlx
   component: transformer
@@ -161,12 +162,11 @@ lora:
     - {from: ".linear_1", to: ".linear1", at: end}
     - {from: ".linear_2", to: ".linear2", at: end}
   ignore: []
-  modes: [bake]
+  modes: [adapter, bake]
   max_rows: 8
   strength: {min: 0, max: 2, default: 1}
-  help: "Bakes LoRAs into the model's transformer at load, in order. Empty: the model as it is."
   rows_help: "Each row: a LoRA that fits this model and its strength."
-  mode_help: "Bake: merged into the transformer at load (its own copy in memory; a strength change reloads it). LTX on MLX has no adapter yet."
+  mode_help: "Adapter: applied at run time, a strength change needs no reload. Bake: merged at load."
   # the distilled transformer is the dev one with this LoRA fused in: a row naming it would apply it twice
   prefused: [{file: loras/ltx-2.5-22b-distilled-lora-450-bf16.safetensors, variant: distilled}]
 stages:

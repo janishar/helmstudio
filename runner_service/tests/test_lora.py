@@ -281,6 +281,28 @@ def test_alpha_only_or_deeply_nested_files_are_refused_and_never_stop_the_scan(t
     assert lora.Library(models, tmp_path / "cache").scan({FAMILY: BLOCK}) == []
 
 
+def test_an_ic_lora_is_left_out_of_the_index_but_still_reads(tmp_path, caplog):
+    """plan 19 23.4 phase 3: a file whose metadata has reference_downscale_factor (Lightricks' IC-LoRAs) is no stack
+    LoRA; the header still reads (ltx/ic-lora loads it as a component)."""
+    fx = json.loads((FIXTURES / "ltx-comfyui.json").read_text())
+    models = tmp_path / "models"
+    shapes = {k: (t["dtype"], t["shape"]) for k, t in fx["tensors"].items()}
+    safetensors_file(models / "ltx-2.5" / "loras" / "style.safetensors", shapes)
+    ic = models / "ltx-2.5" / "loras" / "ic.safetensors"
+    safetensors_file(ic, shapes)
+    raw = ic.read_bytes()
+    n = int.from_bytes(raw[:8], "little")
+    header = json.loads(raw[8 : 8 + n]) | {"__metadata__": {"reference_downscale_factor": "2"}}
+    blob = json.dumps(header).encode()
+    ic.write_bytes(len(blob).to_bytes(8, "little") + blob + raw[8 + n :])
+    entries = lora.Library(models, tmp_path / "cache").scan(BLOCKS)
+    assert [(e["name"], e["family"]) for e in entries] == [("style", "ltx")]
+    assert (
+        f"{ic} left out: an IC-LoRA (it needs a reference video), not a stack LoRA" in caplog.text
+    )
+    assert lora.read_header(ic)[1] == {"reference_downscale_factor": "2"}
+
+
 async def test_a_failed_fetch_leaves_no_part_file_and_stale_ones_are_dropped(tmp_path):
     class Broken(FakeStore):
         async def download(self, key, dest, limit):

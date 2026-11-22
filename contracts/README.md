@@ -2653,10 +2653,11 @@ Sharing a user's LoRA with others is not in this version.
 - **The stack node** `<family>/lora-stack` (`qwen-image/lora-stack`, title `LoRA Stack`): input `model: Model`, output
   `model: Model` (so it is bypassable: bypassed = the model as it is), one param `rows` (label `LoRAs`, default `[]`,
   `min` 0, `max` 8 = the family's row cap) with item `{lora: Lora, strength: float 0..2 default 1 step 0.05, mode:
-  enum adapter|bake default adapter}`. A family that cannot run adapters yet publishes `enum: [bake]` default `bake`
-  (**ltx**: `ltx/lora-stack`, same item, bake only: the old MLX code fuses every LoRA; no adapter exists to copy or
-  prove); `mode: adapter` then fails the enum like any value (`param_invalid`; 422 `lora.rows[1].mode: must be one of
-  bake`) and the rows editor draws no Mode control (an enum item field with one value is not drawn). Graph rules:
+  enum adapter|bake default adapter}`. **ltx**: bake and adapter (MLX, from API 1.39: `ltx/lora-stack`, the same item;
+  rows saved before keep the `bake` they hold); NVIDIA LTX publishes none yet. A family that cannot run adapters
+  publishes `enum: [bake]` default `bake`; `mode: adapter` then fails the enum like any value (`param_invalid`; 422
+  `lora.rows[1].mode: must be one of bake`) and the rows editor draws no Mode control (an enum item field with one
+  value is not drawn). Graph rules:
   Model → Model within one family (the handle rules), `lora_duplicate`, `lora_unknown`, `lora_family` (Graph rules).
   Stacks may chain: the Model's LoRA set is the upstream set followed by this node's rows. An empty stack is the
   identity: same handle, same cache identity, same pixels (the template carries one, so M2 goldens hold).
@@ -2695,6 +2696,11 @@ Sharing a user's LoRA with others is not in this version.
     64 GB host the budget holds one transformer, so a run with another baked set (or none) evicts and reloads it
     (about 19 GB at int8). The dispatcher's "resident" test already compares the baked list, so runs with the same
     LoRAs and strengths go first.
+  - **MLX adapter (ltx, API 1.39)**, as upstream's unfused LoRAs (`LTX2_LORA_MODE=unfused`; the adapter golden is
+    bit-exact on mlx 0.32.2): a plain or int8 / int4 Linear of the resident transformer computes `base(x) + s · (x
+    Aᵀ) Bᵀ`, the factors in the transformer's compute dtype (float16 with `compute: float16`, else the file's), `s` a
+    held scalar; the Linear keeps its arrays and names, and removing its last adapter makes it the plain Linear again.
+    No reload, no second transformer: the entry grows by the factors' size.
 - **Cache keys** (plan 6.1). The Model handle carries its ordered LoRA set `[(sha256, strength, mode)]`. A stage's key
   hashes a Model input per component it `uses`, and the LoRA set only with the family's `lora.component`: Sample
   (`uses: [transformer]`) includes it; Encode (`text_encoder`, `vae`) and Decode (`vae`) never do. So a strength
@@ -2776,7 +2782,10 @@ outside the data or overlapping: `tensor <key> lies outside the file`; a dtype o
 has dtype <d>; LoRAs must be F32, F16 or BF16`; no style: `no LoRA keys found (is it a full model?)`; a key that does
 not parse in the style and matches no published family's `ignore`: `<key> is not a LoRA weight`; a group with A but
 not B (or B but not A): `<module part>: lora_B is missing` (`lora_A`); ranks that differ: `<module part>: lora_A and
-lora_B ranks differ`; a rank over 4096: `rank <r> is over 4096`. The first failing key in code-point order is named.
+lora_B ranks differ`; a rank over 4096: `rank <r> is over 4096`; from API 1.39 a `__metadata__` with
+`reference_downscale_factor` (an IC-LoRA, as Lightricks' LTX-2.5 IC-LoRAs: it conditions on a reference video, so it is
+never a stack row): `an IC-LoRA (it needs a reference video), not a stack LoRA`. The first failing key in code-point
+order is named.
 `licence` = `__metadata__` `modelspec.license`, else `license`, trimmed, cut to 200; null when neither.
 
 ## Models and model jobs (API 1.16, M5a; plan 06-platform 9.2; normative)

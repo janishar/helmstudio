@@ -55,12 +55,12 @@ func TestResolveFillsWorkflowRowItems(t *testing.T) {
 }
 
 // A LoRA the family's block lists as prefused for the graph's model variant is refused (it would apply twice); on
-// another variant it is fine. A bake-only stack refuses mode adapter by its enum.
+// another variant it is fine. A row without a mode takes the stack's default (ltx: adapter, from API 1.39).
 func TestPrefusedLoraIsRefused(t *testing.T) {
 	workflow := ltxWorkflow(t, "ltx-text-to-video")
 	row := `{"lora.rows": [{"lora": {"lora_id": "` + sixtyFour + `"}, "strength": 0.5}]}`
 	nodes, detail := resolve(workflow, inputs(t, row))
-	if detail != "" || nodes["lora"].Params["rows"].([]any)[0].(map[string]any)["mode"] != "bake" {
+	if detail != "" || nodes["lora"].Params["rows"].([]any)[0].(map[string]any)["mode"] != "adapter" {
 		t.Fatal(detail)
 	}
 	usable := map[string]lora.Info{sixtyFour: {ID: sixtyFour, Source: "shared", Name: "distilled-lora", Family: "ltx"}}
@@ -70,7 +70,7 @@ func TestPrefusedLoraIsRefused(t *testing.T) {
 		t.Fatalf("%q", detail)
 	}
 	nodes["model"].Params["variant"] = "dev"
-	if used, detail := checkLoras(values, nodes, blocks, usable); detail != "" || len(used) != 1 || used[0].Mode != "bake" {
+	if used, detail := checkLoras(values, nodes, blocks, usable); detail != "" || len(used) != 1 || used[0].Mode != "adapter" {
 		t.Fatal(detail, used)
 	}
 }

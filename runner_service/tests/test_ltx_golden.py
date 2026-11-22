@@ -38,7 +38,8 @@ DIRS = {"t2v": "ltx-text-to-video", "i2v": "ltx-image-to-video", "kf": "ltx-imag
         "beats": "ltx-prompt-beats", "lora": "ltx-lora", "retake": "ltx-retake", "extend": "ltx-extend",
         "a2v": "ltx-audio-to-video", "nag": "ltx-nag"}  # fmt: skip
 CASES = ["t2v-448x256-49f-s42", "t2v-512x320-57f-s7", "i2v-448x256-49f-s42", "kf-448x256-49f-s42",
-         "beats-448x256-49f-s42", "lora-448x256-49f-s42", "nag-448x256-49f-s42", "auto-duration"]  # fmt: skip
+         "beats-448x256-49f-s42", "lora-448x256-49f-s42", "lora-adapter-448x256-49f-s42", "nag-448x256-49f-s42",
+         "auto-duration"]  # fmt: skip
 # M7 pack 1 (the dev transformer, guided; 2-5 min each): `python tests/test_ltx_golden.py retake-… extend-… a2v-…`
 DEV_CASES = ["retake-448x256-49f-s42", "extend-448x256-49f+8-s42", "a2v-448x256-49f-s42"]
 # plan 19 23.10 phase 1 (the distilled transformer, no guidance; ~30 s each): recorded from ltx-2-studio main e6e15b7's
@@ -79,6 +80,13 @@ BARS = {
     # plan 19 phase 2 (2026-11-22, recorded on ltx-2-studio main e6e15b7; bit-exact on 0.32.2): beats re-recorded
     # with the audio relay on, 0.32.4 25.37 / 21.60 / 1.001 (its bar above holds); NAG at float16 25.23 / 18.44 / 1.048
     "nag-448x256-49f-s42": {"video_mean_db": 24.5, "video_worst_db": 18.0, "logmel_db": 1.15},
+    # plan 19 phase 3 (2026-11-22, fork main e6e15b7 with LTX2_LORA_MODE=unfused; bit-exact on 0.32.2): the synthetic
+    # LoRA as an adapter, 0.32.4 24.67 / 23.31 / 1.242
+    "lora-adapter-448x256-49f-s42": {
+        "video_mean_db": 24.0,
+        "video_worst_db": 22.5,
+        "logmel_db": 1.35,
+    },
 }
 
 
@@ -316,7 +324,8 @@ class Bench:
         self.files[meta["sha256"]] = f
         value = {"lora_id": meta["sha256"], "source": "shared", "name": f.stem, "sha256": meta["sha256"],
                  "bytes": meta["bytes"]}  # fmt: skip
-        return {"lora": value, "strength": case["lora_strength"], "mode": "bake"}
+        return {"lora": value, "strength": case["lora_strength"],
+                "mode": "adapter" if case.get("lora_mode") == "unfused" else "bake"}  # fmt: skip
 
     def pack_file(self, rel: str) -> Path:
         from core.pack import models_root

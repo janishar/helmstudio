@@ -1,5 +1,5 @@
 {
-  "description": "a bake-only family (ltx/lora-stack mode enum [bake]) refuses an adapter row: param_invalid",
+  "description": "ltx/lora-stack takes an adapter row (mode enum [adapter, bake], API 1.39)",
   "workflow": {
     "title": "LTX-2.5 Text to video",
     "family": "ltx",
@@ -185,11 +185,5 @@
   "loras": {
     "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc": "ltx"
   },
-  "problems": [
-    {
-      "code": "param_invalid",
-      "node": "lora",
-      "param": "rows"
-    }
-  ]
+  "problems": []
 }

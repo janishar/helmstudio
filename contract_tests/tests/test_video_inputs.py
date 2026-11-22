@@ -324,8 +324,8 @@ def test_pipeline_image_gate_first_frame(api):
 
 
 def test_adapter_row_on_a_bake_only_family_is_422(api):
-    """A family whose lora-stack offers only `bake` (ltx) refuses `mode: adapter` before anything runs. The fake
-    family offers both, so this needs a live host publishing such a stack."""
+    """A family whose lora-stack offers only `bake` refuses `mode: adapter` before anything runs. The fake family
+    offers both, and so does ltx from API 1.39, so this needs a live host publishing such a stack."""
     for w in ok(api.get(f"{STUDIO}/workflows"))["workflows"]:
         full = ok(api.get(f"{STUDIO}/workflows/{w['id']}"))
         for node, n in full["nodes"].items():
@@ -342,7 +342,7 @@ def test_adapter_row_on_a_bake_only_family_is_422(api):
             assert f"{node}.rows[1].mode: must be one of bake" in r.json()["detail"], r.text
             assert ok(api.get(f"{STUDIO}/sessions/{s}/runs"))["runs"] == []
             return
-    pytest.skip("no live host publishes a bake-only lora-stack (ltx on mlx)")
+    pytest.skip("no live host publishes a bake-only lora-stack")
 
 
 # ---------------------------------------------------------------- isolation

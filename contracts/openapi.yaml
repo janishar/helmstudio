@@ -705,7 +705,8 @@ paths:
         safetensors`, `not a safetensors file`, `safetensors header is larger than 8 MB`, `tensor <key> lies outside
         the file`, `tensor <key> has dtype <d>; LoRAs must be F32, F16 or BF16`, `no LoRA keys found (is it a full
         model?)`, `<key> is not a LoRA weight`, `<module>: lora_A and lora_B ranks differ`, `<module>: lora_B is
-        missing`, `rank <r> is over 4096`, `more than 20000 tensors`. 409 `upload not received` while the object is
+        missing`, `rank <r> is over 4096`, `more than 20000 tensors`, from 1.39 `an IC-LoRA (it needs a reference
+        video), not a stack LoRA`. 409 `upload not received` while the object is
         not there yet (PUT it, then call again). Calling again after it ended answers the same (200 ready, or the same
         422). 404 for an id that is unknown, another user's or shared.
       parameters: [{$ref: '#/components/parameters/LoraId'}]

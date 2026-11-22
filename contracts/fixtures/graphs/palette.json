@@ -1755,7 +1755,7 @@
           "kind": "ltx/lora-stack",
           "title": "LoRA Stack",
           "family": "ltx",
-          "help": "Bakes LoRAs into the model's transformer at load, in order. Empty: the model as it is.",
+          "help": "Applies LoRAs to the model's transformer, in order. Empty: the model as it is.",
           "params": [
             {
               "name": "rows",
@@ -1777,11 +1777,12 @@
                 "mode": {
                   "type": "enum",
                   "label": "Mode",
-                  "default": "bake",
+                  "default": "adapter",
                   "enum": [
+                    "adapter",
                     "bake"
                   ],
-                  "help": "Bake: merged into the transformer at load (its own copy in memory; a strength change reloads it). LTX on MLX has no adapter yet."
+                  "help": "Adapter: applied at run time, a strength change needs no reload. Bake: merged at load."
                 }
               },
               "help": "Each row: a LoRA that fits this model and its strength."

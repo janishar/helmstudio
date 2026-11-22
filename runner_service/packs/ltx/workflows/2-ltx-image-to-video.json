@@ -202,7 +202,7 @@
       },
       {
         "title": "LoRA",
-        "help": "Only LoRAs made for LTX-2.5 can be added. Each is baked into the transformer at load: a strength change reloads it.",
+        "help": "Adapter: applied at run time, a strength change needs no reload. Bake: merged at load.",
         "items": [
           "lora.rows"
         ]

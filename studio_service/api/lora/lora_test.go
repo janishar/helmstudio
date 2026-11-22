@@ -290,4 +290,10 @@ func TestCheck(t *testing.T) {
 			t.Errorf("%s: %q %q, want %q", name, reason, got, test.want)
 		}
 	}
+	// an IC-LoRA (its metadata names a reference downscale factor) is refused last, after every key check
+	good := map[string]fileTensor{"a.lora_A.weight": {"F16", []int64{4, 8}}, "a.lora_B.weight": {"F16", []int64{8, 4}}}
+	header, _ := read(synth(t, good, map[string]string{"reference_downscale_factor": "2"}))
+	if _, _, got := Check(header, nil); got != "an IC-LoRA (it needs a reference video), not a stack LoRA" {
+		t.Errorf("IC-LoRA: %q", got)
+	}
 }

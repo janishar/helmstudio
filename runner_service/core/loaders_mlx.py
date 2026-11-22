@@ -11,13 +11,15 @@ after the kept tensors are evaluated: quantizing can evict lazy buffers) → `nn
 `load_weights(strict=True)`: a missing or extra key fails the load. Nothing is written anywhere. A pack whose library
 loads its own checkpoint format (llm: mlx-vlm) defines `load_component(component, model, ctx)` instead.
 
-LoRA (contracts/README.md "LoRAs", MLX bake): bake only, no adapters. The rows of mode bake are normalised against
+LoRA (contracts/README.md "LoRAs", MLX bake and adapter). The rows of mode bake are normalised against
 the family's lora block (core/lora.py: no key is silently dropped) and merged after quantization, module by module
 and evaluated as it goes, in the old studio's order (ltx_core_mlx.loader.fuse_loras): delta = sum (B · s) @ A in
 float32 (s = strength · alpha / rank); a quantized Linear is dequantized, + delta, requantized with its scales and
 biases kept at their dtype (mx.quantize gives float32 from the float32 sum, which made quantized_matmul promote the
 layer to float32), a float one is (W.f32 + delta) cast back to W's dtype. A baked component is its own residency
-entry (core.pack.ModelRef.key).
+entry (core.pack.ModelRef.key). Adapters (`activate`, the twin of loaders_torch's LoraLinear, as upstream's unfused
+LoRAs: the vendored ltx_core_mlx lora_adapters.py, not imported) wrap a resident component's Linears in place:
+y = base(x) + s * (x A^T) B^T, s a held float, so a strength change never reloads the base.
 
 Memory: `measure_gb` is the process's physical footprint (core.residency.footprint_gb); `free` is gc +
 `mx.clear_cache()`; the Metal buffer cache is capped at CACHE_GB (never raising a stricter cap already set)."""
@@ -89,11 +91,79 @@ def linears(module: nn.Module) -> list[str]:
     return [n for n, m in module.named_modules() if isinstance(m, (nn.Linear, nn.QuantizedLinear))]
 
 
+class LoraLinear:
+    """Mixed into an adapted Linear / QuantizedLinear (`activate` swaps the layer's class to `Lora<class>` in place, so
+    its arrays, names and attributes stay as they were): y = base(x) + sum s * (x A^T) B^T. The factors are the
+    layer's parameters `loras` {sha256: {a [r, in], b [out, r]}}, so a compute-dtype cast of the module casts them
+    too (LTXModel.set_compute_dtype); each s is a float in `_lora_s` (hidden from the parameters), so a strength
+    change is an assignment. The class goes back when the last adapter goes."""
+
+    def __call__(self, x: mx.array) -> mx.array:
+        y = super().__call__(x)
+        for sha, f in self["loras"].items():
+            z = (x @ f["a"].T) @ f["b"].T  # upstream's order (lora_adapters.LoRAAdapter)
+            y = y + (z * self._lora_s[sha]).astype(y.dtype)
+        return y
+
+
+_ADAPTED: dict[type, type] = {}
+
+
+def _adapted(cls: type) -> type:
+    if cls not in _ADAPTED:
+        _ADAPTED[cls] = type(f"Lora{cls.__name__}", (LoraLinear, cls), {})
+    return _ADAPTED[cls]
+
+
+def _in_out(m: nn.Module) -> tuple[int, int]:
+    w = m["weight"]
+    packed = isinstance(m, nn.QuantizedLinear)  # bits per element packed into uint32
+    return (w.shape[1] * 32 // m.bits if packed else w.shape[1]), w.shape[0]
+
+
 def activate(model, component: str, module: nn.Module, ctx) -> float:
-    """MLX has no LoRA adapters (bake only: model.yaml `lora.modes` [bake], so studio refuses adapter rows)."""
-    if model.adapters(component):
-        raise RunError(f"{ctx.node}: LoRA adapters are not available on MLX; use mode bake")
-    return 0.0
+    """Make `module` carry exactly `model`'s adapter LoRAs for `component`: detach the extra, attach the missing
+    (read from the LoRA's file, fetched for an own one) in the module's compute dtype (else the file's), set every
+    s to strength * alpha / rank. Returns the adapters' GB. The base arrays are never written."""
+    want = model.adapters(component)
+    state = module.__dict__.setdefault("_lora_adapters", {})  # sha256 → {module name: factor}
+    if not want and not state:
+        return 0.0  # nothing to walk (every run of a model without adapters)
+    lins = dict(module.named_modules())
+    for sha in [s for s in state if s not in want]:
+        for name in state.pop(sha):
+            m = lins[name]
+            del m["loras"][sha], m._lora_s[sha]
+            if not m["loras"]:  # the plain Linear again, exactly as it was
+                del m["loras"], m["_lora_s"]
+                m.__class__ = type(m).__bases__[1]  # Lora<cls>'s bases: (LoraLinear, cls)
+    shapes = {n: _in_out(lins[n]) for n in linears(module)}
+    target = getattr(module, "compute_dtype", None)
+    new = []
+    for sha, (use, _) in want.items():
+        if sha in state:
+            continue
+        ctx.check()
+        # a bad file fails before any attach
+        tensors = lora_tensors(model, use, ctx.lora_path(use), shapes)
+        state[sha] = {}
+        for name, (a, b, factor) in tensors.items():
+            m = lins[name]
+            if not isinstance(m, LoraLinear):
+                m.__class__ = _adapted(type(m))
+                m["loras"], m["_lora_s"] = {}, {}
+            dtype = target or a.dtype
+            m["loras"][sha] = {"a": a.astype(dtype), "b": b.astype(dtype)}
+            new += m["loras"][sha].values()
+            state[sha][name] = factor
+    mx.eval(new)
+    total = 0
+    for sha, (_, strength) in want.items():
+        for name, factor in state[sha].items():
+            m = lins[name]
+            m._lora_s[sha] = strength * factor
+            total += sum(v.nbytes for v in m["loras"][sha].values())
+    return total / 2**30
 
 
 def extra_gb(module: nn.Module) -> float:

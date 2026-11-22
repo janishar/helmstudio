@@ -56,7 +56,7 @@ func TestResolveVideoRules(t *testing.T) {
 		`{"keyframes.images": [` + row + `, ` + row + `]}`:                                                                  "keyframes.images[2].seconds: frame 0 is already used by row 1",
 		`{"keyframes.images": [` + row + `], "encode.beats": [{"seconds": 1}]}`:                                             "encode.beats[1].text: must be between 1 and 500 characters long",
 		`{"keyframes.images": [` + row + `], "encode.beats": [{"text": "a fox runs"}], "decode.audio": false}`:              "",
-		`{"keyframes.images": [` + row + `], "lora.rows": [{"lora": {"lora_id": "` + sixtyFour + `"}, "mode": "adapter"}]}`: "lora.rows[1].mode: must be one of bake",
+		`{"keyframes.images": [` + row + `], "lora.rows": [{"lora": {"lora_id": "` + sixtyFour + `"}, "mode": "unfused"}]}`: "lora.rows[1].mode: must be one of adapter, bake",
 		`{"keyframes.bypass": true}`: "",
 	} {
 		if _, detail := resolve(i2v, inputs(t, body)); detail != want {

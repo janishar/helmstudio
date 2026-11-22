@@ -609,6 +609,114 @@ def test_a_bake_keeps_the_scales_and_biases_dtype():
 
 
 @needs_mlx
+def test_mlx_adapters_detach_exactly_and_change_strength_without_a_reload(tmp_path, on_cpu):
+    """plan 19 23.4 phase 3: activate wraps plain and int8 Linears in place (y = base(x) + s (x A^T) B^T), keeps
+    their arrays and names, takes the compute dtype, rewrites only s on a strength change, and puts the plain
+    classes back when the last adapter goes."""
+    from core import loaders_mlx as lm
+    from core.pack import LoraUse, ModelRef, Pack
+
+    class Net(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.blocks = [nn.Linear(128, 128), nn.Linear(128, 64)]
+
+        def __call__(self, x):
+            return self.blocks[1](mx.tanh(self.blocks[0](x)))
+
+    mx.random.seed(0)
+    net = Net()
+    nn.quantize(net, group_size=64, bits=8, class_predicate=lambda p, m: p == "blocks.0")
+    pack_ = Pack(
+        "t", None, {"family": "t", "id": "t-1", "lora": {"component": "transformer"}}, "mlx", None
+    )
+    files, factors = {}, {}
+    for n, alpha in ((1, 2.0), (2, None)):  # rank 4: alpha 2 gives s = strength / 2
+        t = {}
+        for name, (i, o) in {"blocks.0": (128, 128), "blocks.1": (128, 64)}.items():
+            a, b = (
+                mx.random.normal((4, i)).astype(mx.bfloat16),
+                mx.random.normal((o, 4)).astype(mx.bfloat16),
+            )
+            t |= {
+                f"diffusion_model.{name}.lora_A.weight": a,
+                f"diffusion_model.{name}.lora_B.weight": b,
+            }
+            t |= {f"diffusion_model.{name}.alpha": mx.array(alpha)} if alpha else {}
+            factors[(n, name)] = (a, b, alpha / 4 if alpha else 1.0)
+        files[f"{n:064x}"] = tmp_path / f"l{n}.safetensors"
+        mx.save_safetensors(
+            str(files[f"{n:064x}"]), t, {"format": "pt"}
+        )  # metadata None is no safetensors
+    fetched = []
+    ctx = SimpleNamespace(
+        check=lambda: None, lora_path=lambda u: fetched.append(u.name) or files[u.sha256]
+    )
+
+    def model(*rows):
+        uses = [
+            LoraUse(f"{n:064x}", "shared", f"l{n}", f"{n:064x}", 1, st, "adapter") for n, st in rows
+        ]
+        return ModelRef(pack_, "v", "bf16", tuple(uses))
+
+    x = mx.random.normal((3, 128))
+    keys = sorted(k for k, _ in __import__("mlx.utils").utils.tree_flatten(net.parameters()))
+    base = net(x)
+    assert lm.activate(model(), "transformer", net, ctx) == 0.0
+    gb = lm.activate(model((1, 0.8), (2, -1.5)), "transformer", net, ctx)
+    assert gb * 2**30 == 2 * (4 * 128 + 128 * 4 + 4 * 128 + 64 * 4) * 2  # bf16 factors of two files
+    assert type(net.blocks[0]).__name__ == "LoraQuantizedLinear" and isinstance(
+        net.blocks[1], lm.LoraLinear
+    )
+
+    def want(strengths):
+        h = net.blocks[0].__class__.__bases__[1].__call__(net.blocks[0], x)
+        for n, st in strengths:
+            a, b, f = factors[(n, "blocks.0")]
+            h = h + (x @ a.T) @ b.T * (st * f)
+        h = mx.tanh(h)
+        y = nn.Linear.__call__(net.blocks[1], h)
+        for n, st in strengths:
+            a, b, f = factors[(n, "blocks.1")]
+            y = y + (h @ a.T) @ b.T * (st * f)
+        return y
+
+    assert mx.allclose(net(x), want([(1, 0.8), (2, -1.5)]), atol=1e-4) and not mx.allclose(
+        net(x), base
+    )
+    a1 = net.blocks[0]["loras"][f"{1:064x}"]["a"]
+    lm.activate(
+        model((1, 0.2)), "transformer", net, ctx
+    )  # a strength change and one detached: no read, no reload
+    assert fetched == ["l1", "l2"] and net.blocks[0]["loras"][f"{1:064x}"]["a"] is a1
+    assert (
+        list(net.blocks[1]["loras"]) == [f"{1:064x}"]
+        and net.blocks[0]._lora_s[f"{1:064x}"] == 0.2 * 0.5
+    )
+    assert mx.allclose(net(x), want([(1, 0.2)]), atol=1e-4)
+    lm.activate(
+        model(), "transformer", net, ctx
+    )  # the last adapter gone: the very layers as they were
+    assert type(net.blocks[0]) is nn.QuantizedLinear and type(net.blocks[1]) is nn.Linear
+    assert (
+        sorted(k for k, _ in __import__("mlx.utils").utils.tree_flatten(net.parameters())) == keys
+    )
+    assert mx.array_equal(net(x), base)
+    net.compute_dtype = (
+        mx.float16
+    )  # attached to a float16 transformer: the factors in its compute dtype
+    lm.activate(model((2, 1.0)), "transformer", net, ctx)
+    assert net.blocks[1]["loras"][f"{2:064x}"]["b"].dtype == mx.float16
+    # a file that does not fit fails before anything attaches
+    files[f"{9:064x}"] = tmp_path / "bad.safetensors"
+    mx.save_safetensors(str(files[f"{9:064x}"]), {"diffusion_model.nowhere.lora_A.weight": mx.zeros((4, 8)),
+                                                  "diffusion_model.nowhere.lora_B.weight": mx.zeros((8, 4))}, {"format": "pt"})  # fmt: skip
+    with pytest.raises(RunError, match="LoRA l9: 0 of 2 keys apply"):
+        lm.activate(model((2, 1.0), (9, 1.0)), "transformer", net, ctx)
+    assert f"{9:064x}" not in net.__dict__["_lora_adapters"]
+
+
+@needs_mlx
 def test_a_baked_entry_counts_its_float32_scales():
     from core import loaders_mlx
 

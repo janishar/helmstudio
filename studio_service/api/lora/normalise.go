@@ -240,7 +240,8 @@ func cmpOr(a, b string) string {
 
 // Check runs the upload checks that follow the header's (contracts/README.md "LoRA upload checks"): a style, every
 // key a LoRA weight of it or matching one of ignore (every published family's ignore globs), each module part with
-// both lora_A and lora_B of one rank, at most MaxRank. It answers the file's style and largest rank, or the 422 detail.
+// both lora_A and lora_B of one rank, at most MaxRank, and no IC-LoRA metadata. It answers the file's style and
+// largest rank, or the 422 detail.
 func Check(header Header, ignore []string) (style string, rank int, detail string) {
 	keys := header.Keys()
 	if style = Style(keys); style == "" {
@@ -291,6 +292,9 @@ func Check(header Header, ignore []string) (style string, rank int, detail strin
 	}
 	if largest == 0 {
 		return "", 0, "no LoRA keys found (is it a full model?)" // alphas only
+	}
+	if _, ok := header.Metadata["reference_downscale_factor"]; ok { // API 1.39: Lightricks' LTX-2.5 IC-LoRAs
+		return "", 0, "an IC-LoRA (it needs a reference video), not a stack LoRA"
 	}
 	return style, int(largest), ""
 }

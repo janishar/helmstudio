@@ -256,3 +256,18 @@ run each; before the cap the decode alone reached 49.1 / 49.8 GB footprint, 27 G
   in one harness process on 0.32.4 (encode 11.8 s with the negative and the Gemma load; sample1 14.0 s with the
   float16 load: a float32 transformer from the run before stays resident beside it, so the nodes' MLX peaks there
   read 42 GiB, 23 GiB over one transformer).
+
+## LoRA adapters (plan 19 23.10 phase 3, 2026-11-22: ltx-2-studio main e6e15b7, `LTX2_LORA_MODE=unfused`)
+
+- **Ported** as core's `loaders_mlx.activate` (family-neutral; the vendored `lora_adapters.py` is the reference, not
+  imported): the layer's class is swapped in place for `Lora<class>`, so its arrays and names stay; `(x @ A.T) @ B.T`
+  in upstream's order, `s` a held float (at strength 1 the product is upstream's `B · 1` bit for bit). The first
+  activate runs before the stage's `set_compute_dtype`, so the factors are cast with their compute module's parameters
+  as upstream; an adapter attached later to a float16 resident takes float16 for every factor (upstream would keep
+  the ones outside attention / feed-forward in the file's dtype: a few non-block Linears).
+- **Golden** `lora-adapter` (the synthetic rank-8 LoRA, strength 1, int8, 448x256x49 seed 42): bit-exact on mlx 0.32.2,
+  and the t2v golden right after it on the same resident transformer too (detach restores it exactly). 0.32.4: 24.67
+  / 23.31 dB, log-mel 1.242. Times: the fork 27.6 s (MLX peak 20.75 GiB); the pack 28.5 s cold on 0.32.2 (sample1
+  20.5, sample2 22.4, decode 30.2 GiB MLX peak), no second transformer.
+- **IC-LoRAs** (`__metadata__.reference_downscale_factor`) are left out of the shared index and refused on upload; the
+  header still reads, as `ltx/ic-lora` (phase 4) loads them as components.

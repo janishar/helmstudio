@@ -86,6 +86,11 @@ CASES = [
      "seed": 42, "lora_strength": 1.0,
      "prompt": "A golden retriever puppy runs across a sunny park lawn toward the camera, barking happily, "
                "birds chirping in the trees behind it"},
+    # plan 19 phase 3: the same synthetic LoRA as a run-time adapter (LTX2_LORA_MODE=unfused: upstream's attach_loras)
+    {"name": "lora-adapter-448x256-49f-s42", "out": "ltx-lora", "width": 448, "height": 256, "frames": 49,
+     "fps": 24.0, "seed": 42, "lora_strength": 1.0, "lora_mode": "unfused", "studio": "ltx-2-studio main e6e15b7",
+     "prompt": "A golden retriever puppy runs across a sunny park lawn toward the camera, barking happily, "
+               "birds chirping in the trees behind it"},
     # plan 19 phase 2: the Fast preset with a negative prompt, float16 compute (LTX2_COMPUTE_DTYPE) and NAG (the CLI's
     # --negative-prompt on --distilled, NAGConfig() defaults) in one render, on fork main e6e15b7
     {"name": "nag-448x256-49f-s42", "out": "ltx-nag", "width": 448, "height": 256, "frames": 49, "fps": 24.0,
@@ -194,6 +199,8 @@ def record(case: dict, out: Path, scratch: Path) -> dict:
 
     if case.get("compute"):  # what the CLI's users set: the pipelines apply it at the DiT load
         os.environ["LTX2_COMPUTE_DTYPE"] = case["compute"]
+    if case.get("lora_mode"):  # read by the pipeline's __init__ (lora_mode_from_env)
+        os.environ["LTX2_LORA_MODE"] = case["lora_mode"]
     nag = None
     if case.get("negative_prompt"):  # cli._build_nag_config with no overrides: NAGConfig() (audio too)
         from ltx_core_mlx.guidance.nag import NAGConfig
@@ -281,7 +288,7 @@ def record(case: dict, out: Path, scratch: Path) -> dict:
 
     def load():
         raw_load()
-        if lora_meta and "lora_fused_weights" not in seen:
+        if lora_meta and not case.get("lora_mode") and "lora_fused_weights" not in seen:
             from mlx.utils import tree_flatten
 
             p = dict(tree_flatten(pipe.dit.parameters()))
@@ -360,6 +367,7 @@ def record(case: dict, out: Path, scratch: Path) -> dict:
     if nag:
         extra += " --negative-prompt '...'"
     env = f"LTX2_COMPUTE_DTYPE={case['compute']} " if case.get("compute") else ""
+    env += f"LTX2_LORA_MODE={case['lora_mode']} " if case.get("lora_mode") else ""
     meta = {
         **case,
         "pipeline": "DistilledPipeline (ltx-2-mlx generate --distilled)",

@@ -165,9 +165,10 @@ describe("the First frame tile", () => {
   });
 });
 
-describe("a bake-only LoRA stack", () => {
-  it("draws no mode control for a one-value enum", () => {
-    expect(choosable(modeOf(param("ltx/lora-stack", "rows"))?.[1])).toBe(false);
-    expect(choosable({ enum: ["adapter", "bake"] })).toBe(true);
+describe("the LoRA stack's mode", () => {
+  it("is drawn for ltx (adapter and bake) and not for a one-value enum", () => {
+    expect(modeOf(param("ltx/lora-stack", "rows"))?.[1]).toMatchObject({ default: "adapter", enum: ["adapter", "bake"] });
+    expect(choosable(modeOf(param("ltx/lora-stack", "rows"))?.[1])).toBe(true);
+    expect(choosable({ enum: ["bake"] })).toBe(false);
   });
 });

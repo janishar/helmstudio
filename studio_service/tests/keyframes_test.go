@@ -32,7 +32,7 @@ func TestImageToVideo(t *testing.T) {
 		"keyframes.images[2].seconds: frame 0 is already used by row 1":          {"keyframes.images": []any{frame(first, 0), frame(last, 0.02)}},
 		"sample2.steps: must be one of 3":                                        {"keyframes.images": []any{frame(first, 0)}, "sample2.steps": 8},
 		"encode.beats[1].text: must be between 1 and 500 characters long":        {"keyframes.images": []any{frame(first, 0)}, "encode.beats": []any{map[string]any{"seconds": 1}}},
-		"lora.rows[1].mode: must be one of bake":                                 {"keyframes.images": []any{frame(first, 0)}, "lora.rows": []any{map[string]any{"lora": map[string]any{"lora_id": strings.Repeat("c", 64)}, "mode": "adapter"}}},
+		"lora.rows[1].mode: must be one of adapter, bake":                        {"keyframes.images": []any{frame(first, 0)}, "lora.rows": []any{map[string]any{"lora": map[string]any{"lora_id": strings.Repeat("c", 64)}, "mode": "unfused"}}},
 	} {
 		if got := run(userA, inputs, 422); got["detail"] != detail {
 			t.Errorf("%v: %v, want %s", inputs, got["detail"], detail)
