@@ -2,9 +2,9 @@
 
 [← Plan index](../README.md)
 
-Status: **decided by the owner (2026-11-22); the contract and server part of phases 2 and 8, the web's edits (phase
-3) and the tools (phase 4, with links and markers in the UI) built (2026-11-23)**, as-built notes in 27.14 and 27.15;
-the zoom engine, moving and playing, and the detail (phases 5-7) are still to come. A
+Status: **built (2026-11-23)**: the contract and server part of phases 2 and 8, the web's edits (phase 3), the tools
+(phase 4, with links and markers in the UI), and the zoom, moving and playing and the detail (phases 5-7); as-built
+notes in 27.14, 27.15 and 27.16. The browser pass on the `helmstudio-test` stack (27.11's last item) is still open. A
 plan, not in a milestone: it becomes one in [08-milestones.md](08-milestones.md) when the owner schedules it. Since plan
 24 (1.49) made `TimelineOp` part of openapi, every new op is an openapi change, so the tools, linked sound clips and
 markers took API **1.50.0** together (the next free version when they were built; the plan first said 1.46.0).
@@ -328,7 +328,50 @@ Each with the recommended option first.
 - **Keys** as the board's sheet, plus **M** (a marker at the hover line, else the playhead). Delete with no clip
   selected and a range: `remove_range`; ⇧Delete: `lift_range`; with a marker selected: `remove_marker`. ↑ / ↓ and
   Home / End work; J plays backward at 1× and K / L stop or play at 1× (speeds ×2 … ×8 are phase 6).
-- **Zoom** is only wired: −, + (×0.8 / ×1.25), Fit, ⌘= / ⌘−, ⇧Z and the wheel set `pps` within fit … 64 px per frame;
-  the field shows the visible span. The engine (log scale, pointer anchoring, frame ruler, virtual lanes) is phase 5.
+- **Zoom** is only wired here: −, + (×0.8 / ×1.25), Fit, ⌘= / ⌘−, ⇧Z and the wheel set `pps`; the field shows the
+  visible span. The engine is phase 5 (27.16).
 - **Not built:** D's overview bar (later), no collapsible side panel (the owner removed it).
 
+
+### 27.16 As built: zoom, moving and playing, detail (phases 5-7; 2026-11-23)
+
+- **Where.** `lib/timeline-tools.ts` (pure: `zoomBounds`, `zoomAbout`, `wheelZoom`, `tickStep` / `rulerTicks`,
+  `cutText`, `virtualWindow`, `tileWidth` / `bucketFrame`, `shuttle`); `lib/timeline-detail.ts` (frame and peak
+  extraction, their caches, `followDetail` for redraws); `components/timeline/detail.tsx` (the ruler's canvas, a V1
+  clip's filmstrip, an audio clip's waveform); `lanes.tsx` (anchoring, pinch, the virtual window, the playhead
+  paging the view); `editor.tsx` (the bounds, J / K / L); `Preview.play(rate)`.
+- **Zoom.** A log scale: each step ×1.25 (−, +, ⌘= / ⌘−, = / −), a wheel notch the same, a trackpad pinch (a wheel
+  with ctrlKey, small deltas) by e^(−δ/100), Safari's gesture events by their scale; Ctrl, ⌘ or ⌥ + wheel. Bounds:
+  fit (`width / max(duration, 5 s)`, so a short sequence no longer zooms out past fit) to 64 px per frame. A wheel or
+  pinch keeps the time under the pointer still (`zoomAbout`, tested within half a pixel); keys and buttons keep the
+  playhead still when it is on screen, else the centre; Fit starts at 0. The lanes' wheel listener is the element's
+  own (React's is passive, so the page zoomed too).
+- **Ruler** (the board's 22 px ruler, on a canvas): the first step with room: 1, 2, 5, 10 frames at ≥ 40 px (each
+  frame's number in its second, the second itself `0:10`), then 1, 2, 5, 10, 30 s, 1, 5, 10 min at ≥ 70 px with 4
+  minors between. **Deviation:** the plan said ≥ 80 px; the board's own rulers step 2 s at 79 px and 30 s at 73 px,
+  and its frame state numbers every frame at 56 px. At frame steps the blade's tag reads `Cut 0:10 · 7`.
+- **Virtual lanes** (§27.8): only clips meeting the window (the screen and one each side, stepped by whole screens so
+  a scroll re-renders once per screen) are in the DOM, plus the selected ones; the ruler's canvas, filmstrips and
+  waveforms cover the window only. Clips stay buttons. Not laid out (no width, as in tests): everything is drawn and
+  no canvas is made. Below 70 px a clip is a colour block without text (the board's fit state); the playhead has the
+  board's head.
+- **Moving and playing.** L plays, again ×2, ×4, ×8 (every element's playbackRate); J the same backward (a timed seek
+  per animation frame, parked, so silent); K stops; K held + J / L steps a frame; Space plays at 1× or pauses. ↑ / ↓,
+  Home / End and hover scrub were built in phase 4. A playhead moved off screen (playing, keys) pages the view so it
+  sits a tenth in.
+- **Detail** (owner point 8). Filmstrip: tiles of 44 px (16:9 of the board's 26 px strip with its 2 px gap) on the
+  sequence's grid, one per frame once a frame is wider; each the take's frame at the tile's source time, on a
+  power-of-two frame bucket so zooming reuses tiles; 2 hidden `<video>` decoders on idle time, an LRU of 300 tiles,
+  a strip that scrolls away drops what it wanted; the poster stands in while frames load; a still shows its picture.
+  Waveform: the take's file fetched and decoded into a mono 8 kHz `OfflineAudioContext`, a max-|x| pyramid (64
+  samples, ×2 per level; the plan said min/max: the bars are drawn centred, so the max of |x| is enough), 2 decoders,
+  takes over 20 min skipped (the stripe stays, as it does until the peaks come); bars as the board's (2 px every
+  4 px), on A1 from the video's own sound and on audio-track clips. Offline clips never decode. Canvases redraw on a
+  new tile or peaks and on a theme change.
+- **Not built, as the board shows none:** a zoom slider (§27.9's `<input type="range">`); option B's zoom field is
+  the board's control. D's overview bar is a later add; no collapsible side panel (the owner removed it).
+- **Tests.** tests/timeline-tools.test.ts: zoom about the pointer (half a pixel), fit, the wheel, the tick step and
+  ticks (the board's rulers), the blade tag, the virtual window, the shuttle, tiles, buckets and peaks.
+  tests/components/timeline-tools.test.tsx: the lanes virtualised (21 of 200 clips) and a zoom keeping the centre
+  still. Checked in Chromium on a harness of the lanes with a real video and sound (not the stack): the filmstrip,
+  waveforms, the frame ruler, Fit and a pinch-style ⌃-wheel at the pointer.
