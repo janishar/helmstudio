@@ -161,53 +161,43 @@ function withIds(o: Op, d: Norm): Op {
   return o;
 }
 
-/** Saves `ops` on the stored sequence as the screen does, through POST …/edits with the revision they were made on
- * (labelled `assistant`): checked here op by op first (so a refusal says why and saves nothing), an `add` sent on
- * its own (studio reads the takes); a 409 reloads and tries once more. Returns how many revisions it made (what Undo
- * takes back), or why not. */
+/** Saves `ops` on the stored sequence as the screen does, in one POST …/edits with the revision they were made on
+ * (labelled `assistant`; studio applies all or nothing, so a refusal saves nothing): checked here op by op first so
+ * a refusal says why, up to the first `add` (its takes are studio's to read; from there studio checks and makes the
+ * new clip ids); a 409 reloads and tries once more. Returns how many revisions it made (what Undo takes back), or
+ * why not. */
 async function save(c: TimelineCtx, ops: Op[]): Promise<{ revisions: number } | { error: string }> {
   for (let attempt = 0; attempt < 2; attempt++) {
-    const first = c.get();
-    if (!first) return { error: "no sequence is open" };
-    let cur: Timeline = first;
-    let revisions = 0;
-    let d: Norm = cur;
-    let pending: Op[] = [];
-    try {
-      const send = async (list: Op[]) => {
-        const t = await editTimeline(cur, list, "assistant");
-        c.set(t);
-        cur = t;
-        d = t;
-        revisions++;
-      };
-      const flush = async () => {
-        if (!pending.length) return;
-        await send(pending);
-        pending = [];
-      };
-      for (const [i, raw] of ops.entries()) {
-        const o = withIds(raw, d);
-        if (o.op === "add") {
-          await flush();
-          await send([o]);
-          continue;
-        }
-        let r: ReturnType<typeof apply>;
-        try {
-          r = apply(d, o, factsOf(cur.takes));
-        } catch {
-          return { error: `edit ${i + 1} is not a Timeline edit` };
-        }
-        if ("error" in r) return { error: say(r.error) };
-        if ("problems" in r) return { error: say(r.problems[0][0]) };
-        d = r.document;
-        pending.push(o);
+    const cur = c.get();
+    if (!cur) return { error: "no sequence is open" };
+    let d: Norm | null = cur;
+    const list: Op[] = [];
+    for (const [i, raw] of ops.entries()) {
+      if (!d) {
+        list.push(raw);
+        continue;
       }
-      await flush();
-      return { revisions };
+      const o = withIds(raw, d);
+      list.push(o);
+      if (o.op === "add") {
+        d = null;
+        continue;
+      }
+      let r: ReturnType<typeof apply>;
+      try {
+        r = apply(d, o, factsOf(cur.takes));
+      } catch {
+        return { error: `edit ${i + 1} is not a Timeline edit` };
+      }
+      if ("error" in r) return { error: say(r.error) };
+      if ("problems" in r) return { error: say(r.problems[0][0]) };
+      d = r.document;
+    }
+    try {
+      c.set(await editTimeline(cur, list, "assistant"));
+      return { revisions: 1 };
     } catch (e) {
-      if (e instanceof ApiError && e.status === 409 && !attempt && !revisions) {
+      if (e instanceof ApiError && e.status === 409 && !attempt) {
         const now = c.get();
         if (now) c.set(await getTimeline(now.id));
         c.notice("The sequence changed since you opened it: reloaded, and the edit applied to it.");

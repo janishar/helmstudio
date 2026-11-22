@@ -307,6 +307,21 @@ describe("the Timeline's actions", () => {
     expect(edits).toHaveLength(2);
   });
 
+  it("an edit with an add is one /edits call: a later op refused saves nothing", async () => {
+    const { call, edits, now } = start();
+    await ready();
+    const ops = [
+      { op: "remove", clip: "b" },
+      { op: "add", take_ids: ["aaaaaaaa-0000-4000-8000-000000000001"] },
+      { op: "remove", clip: "zz" },
+    ];
+    const bad = out(await call("edit", { ops }));
+    expect(bad.status).toBe("failed");
+    expect(edits).toHaveLength(1);
+    expect(edits[0].ops).toHaveLength(3);
+    expect(now().revision).toBe(4);
+  });
+
   it("a gesture saves its op through /edits, labelled web; the answer is the sequence shown", async () => {
     const { call, edits, now } = start();
     await ready();

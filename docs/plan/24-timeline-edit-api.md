@@ -370,10 +370,11 @@ Built with today's ops only (plan 23's new ops, links and markers are not here).
   `X-Helm-Client: web`); the answer's `timeline` replaces the draft. A 409 re-reads, says "reloaded, and your edit
   applied to it" and re-applies the op once on the new document (dropped when it no longer applies, as before); any
   other error shows and reloads. Undo and redo are unchanged (`…/undo`, `…/redo`). No UI change.
-- **The assistant's `timeline.edit`** (`components/timeline/assistant.ts` `save`) checks each op locally first (a
-  refusal says why and saves nothing), then sends the run of ops in one `/edits` call labelled `assistant`; an `add`
-  is its own call (studio reads the takes; it went through `POST …/clips` before). Its 409 re-apply and its Undo
-  (the sequence's own, once per revision made) are unchanged.
+- **The assistant's `timeline.edit`** (`components/timeline/assistant.ts` `save`) checks each op locally up to the first
+  `add` (a refusal says why), then sends all of them in one `/edits` call labelled `assistant`, so a refusal at any
+  op saves nothing and Undo is one step (review fix: an `add` was its own call, so an op refused after it left the
+  earlier calls saved). From an `add` on, studio checks the ops (it reads the takes) and makes their new clip ids.
+  Its 409 re-apply is unchanged.
 - **Add to timeline** (`components/timeline/add.tsx`) makes the missing audio track with an `add_track` op through
   `/edits` too, so no web code sends the PUT any more; the PUT stays on the server for now.
 - **The BFF** (`lib/proxy.ts`) passes `X-Helm-Client` to Kong (a label, not a permission).
