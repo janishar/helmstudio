@@ -2,8 +2,8 @@
 
 [← Plan index](../README.md)
 
-Status: **decided by the owner (2026-11-22), queued to build (first slice with today's edits).** It becomes a milestone in
-[08-milestones.md](08-milestones.md) when the owner schedules it. API version: **1.49.0** (main was at 1.48.0, plan 22's
+Status: **decided by the owner (2026-11-22); the first slice (today's edits) built (2026-11-23)**, as-built notes in
+28.15 and 28.16. Plan 23's ops, links and markers and exact frames are still to come. API version: **1.49.0** (main was at 1.48.0, plan 22's
 thumbnails, when the first slice was built; plan 23's links and markers are still unbuilt, so numbers are not landing
 in plan order). A plan that lands after it renumbers then, never below main's version. Plan 23's new ops need a bump here once `TimelineOp` is in
 openapi (28.10).
@@ -318,8 +318,7 @@ Each with the recommended option first.
 
 ### 28.15 As built: the first slice (phases 2, 3, 4 and 6; 2026-11-23)
 
-Built with today's ops only (plan 23's new ops, links and markers are not here). **Phase 5 (web) is not built yet**,
-so the plan is not marked built.
+Built with today's ops only (plan 23's new ops, links and markers are not here). Phase 5 (web) came after: 28.16.
 
 - **Contract (API 1.49.0).** openapi: `POST …/edits` (`TimelineEdits`, `TimelineOp` as a `oneOf` of today's ops
   without `fill`, `TimelineEditResult {revision, dry_run, timeline, diff, warnings}`, `TimelineDiff`,
@@ -363,3 +362,24 @@ so the plan is not marked built.
   `duration`, as the house names it. (5) **The web's generated types (`web_service/gen/api.ts`) are not regenerated
   here**: the GET 200 is now a union, and three uses in `components/timeline/editor.tsx` need narrowing; that is
   phase 5's first step (the web agent).
+
+### 28.16 As built: the web (phase 5, 28.8 A; 2026-11-23)
+
+- **The editor** (`components/timeline/editor.tsx`) still draws every edit with `lib/timeline.ts` `apply`, then
+  `save` sends the op to `POST …/edits` (`editTimeline` in `lib/api.ts`: `{base_revision, ops: [op]}`,
+  `X-Helm-Client: web`); the answer's `timeline` replaces the draft. A 409 re-reads, says "reloaded, and your edit
+  applied to it" and re-applies the op once on the new document (dropped when it no longer applies, as before); any
+  other error shows and reloads. Undo and redo are unchanged (`…/undo`, `…/redo`). No UI change.
+- **The assistant's `timeline.edit`** (`components/timeline/assistant.ts` `save`) checks each op locally first (a
+  refusal says why and saves nothing), then sends the run of ops in one `/edits` call labelled `assistant`; an `add`
+  is its own call (studio reads the takes; it went through `POST …/clips` before). Its 409 re-apply and its Undo
+  (the sequence's own, once per revision made) are unchanged.
+- **Add to timeline** (`components/timeline/add.tsx`) makes the missing audio track with an `add_track` op through
+  `/edits` too, so no web code sends the PUT any more; the PUT stays on the server for now.
+- **The BFF** (`lib/proxy.ts`) passes `X-Helm-Client` to Kong (a label, not a permission).
+- `gen/api.ts` regenerated for 1.49; the GET's 200 is a union, narrowed to `Timeline` by `getTimeline` (the web never
+  asks `view=agent`).
+- **Tests**: `assistant-timeline.test.tsx` (its mock plays studio with `lib/timeline`): a gesture (S, split) saves
+  through `/edits` labelled web and shows the answer; a gesture's 409 re-applies once, and when the op no longer
+  applies the notice shows and nothing more is sent; the assistant's edit saves through `/edits` labelled assistant,
+  its 409 re-apply and Undo / Redo. `auth.test.ts`: the BFF passes `X-Helm-Client`, not other browser headers.
