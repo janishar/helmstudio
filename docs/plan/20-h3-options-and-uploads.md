@@ -24,7 +24,7 @@ Facts come from a read-only scout on 2026-11-22 of:
   `components/timeline/shot.tsx`), `files_service/api/file/controller.go`, `kong/kong.yml`, `contracts/`.
 
 Boards: [H3Options](../mock/H3Options.dc.html) (A, and C's Turbo frames), [Models](../mock/Models.dc.html) (C's
-add-on row) and [UploadOptimise](../mock/UploadOptimise.dc.html) (B), drawn
+two add-on cards) and [UploadOptimise](../mock/UploadOptimise.dc.html) (B), drawn
 before any code (owner rule: boards first). Short button and chip text throughout.
 
 ## 24. MiniMax H3 options and optimised uploads
@@ -352,8 +352,9 @@ audio references, LTX audio to video sources) becomes AAC. The board's video-upl
 ### 24.11 C. MiniMax H3 Turbo (8-step LoRA)
 
 Design approved by the owner (2026-11-22, decisions in 24.12), with one change folded in here: References use
-lightx2v's separate ref2v 8-step v1.1 file as their own add-on (+1.4 GB), not the FL2V file. Built against the shared optional add-on rule (API 1.36, contracts/README
-"Optional add-ons"; plan 19 23.11 "Changed"), which a concurrent build is implementing now; C adds one small
+lightx2v's separate ref2v 8-step v1.1 file as their own add-on (+1.4 GB), not the FL2V file. Built against the
+shared optional add-on rule (API 1.36, contracts/README "Optional add-ons"; plan 19 23.11 "Changed"), which a
+concurrent build is implementing now; C adds one small
 extension to it (C3: an add-on picked by a param value, and swapped when references are wired). Board:
 [H3Options](../mock/H3Options.dc.html) frames 10-13, [Models](../mock/Models.dc.html)
 under MiniMax H3 (two add-on cards). The 4-step v1.3 stays in the [backlog](../backlog.md).
@@ -425,8 +426,9 @@ components:
   does not exist on an NVIDIA host. A delete removes only that add-on's file (`DELETE …?addon=` removes only its
   files). The build checks the 1.36 download marker is per add-on, not per folder; if it is per folder,
   `turbo_ref` takes its own `MiniMax-H3-Turbo-Ref/` instead (data only). The owner's Mac already has the FL2V file
-  from the spike: the build moves it into `MiniMax-H3-Turbo/` (no download; presence checks the hash). The ref2v file is on no host yet: the owner downloads it in Models (Download…,
-  accepting the licence there) before C0; nothing in this pass downloads it.
+  from the spike: the build moves it into `MiniMax-H3-Turbo/` (no download; presence checks the hash). The ref2v
+  file is on no host yet: the owner downloads it in Models (Download…, accepting the licence there) before C0;
+  nothing in this pass downloads it.
 
 **C3. How a run carries Turbo** (data, contracts first):
 - A new `generate` param on both variants, in the Quality section:
@@ -507,7 +509,8 @@ components:
   the same transformer; Ref2VA's own Turbo peak is unmeasured (references add their own encode). Both measured with
   the runner's own measure in the build (one FL2VA, one Ref2VA), recorded in GOTCHAS.
 - **Load time**: the CPU merge adds about 17 s per run (h3 is a fresh process each run; nothing is cached); about the
-  same with the ref2v file (a slightly smaller file, unmeasured). Shown in the Encode chip. ponytail: CPU sgemm per tensor; a Metal merge if it ever matters (merged files on disk are a
+  same with the ref2v file (a slightly smaller file, unmeasured). Shown in the Encode chip.
+  ponytail: CPU sgemm per tensor; a Metal merge if it ever matters (merged files on disk are a
   no-go: the spike's route B).
 
 **C5. NVIDIA (sgl.py)**:
@@ -550,7 +553,7 @@ the owner decides on the add-on; the FL2V file is not tried for References (owne
 
 | # | Phase | Hours |
 |---|---|---|
-| 0 | Boards (frames 10-13, the Models row's two cards), approved by the owner | done (v70 adds the ref2v card) |
+| 0 | Boards (frames 10-13, the Models row's two cards), approved by the owner | done (v70 adds frame 13 and the ref2v card) |
 | C0 | The ref2v file's keys and the Ref2VA render (C7) | 1-2 |
 | C1 | Contract: param `addons` and `addons_with`, run check 2b, plan reason, check.py, fixtures, README | 4-5 |
 | C2 | Studio: the run check and plan reason for param add-ons, swapped by a wired input | 2-3 |
@@ -572,6 +575,8 @@ Order: after the 1.36 add-ons land and after A1 (Turbo sits among A1's presets).
 4. **Copy every weight** (`H3_ZERO_COPY_WEIGHTS=0`, +4.4 GB), no second h3 patch.
 5. Strength **fixed at 1**.
 6. **Keep both** Draft and Fast.
+
+The options as put to the owner (kept for the record; point 1's recommendation was not taken):
 
 1. **References**: use the FL2V file for Ref2VA if C7's render holds (recommended, the authors' word, one file), else
    add the ref2v 8-step v1.1 file (+1.4 GB) or leave Turbo off References.
