@@ -162,7 +162,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <div style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 6px 8px">
 <table style="border-collapse: collapse; width: 100%">
 <thead><tr><th>Job</th><th>Model</th><th>Status</th></tr></thead>
-<tbody><tr><td style="font-weight: 600">Session names</td><td class="m">Off</td><td style="color: var(--t2)">Off<br><span style="font-size: 12px">titles stay as typed</span></td></tr></tbody>
+<tbody><tr><td style="font-weight: 600">Session names</td><td class="m">Off</td><td style="color: var(--t2)">Off<br><span style="font-size: 12px">titles stay as they are</span></td></tr></tbody>
 </table>
 </div>
 </div>
@@ -181,7 +181,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <h2 style="margin: 0; display: flex; align-items: center; gap: 8px; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 16px; font-weight: 700">Session names<button class="i" aria-label="More information" title="When a session nobody titled finishes its first run, this model writes a 2-5 word title from that run's prompt. A title you typed is never replaced. Off until you turn it on.">i</button></h2>
 <span style="font-size: 13px; color: var(--t2)">Names an untitled session from its first prompt.</span>
 <div role="radiogroup" aria-label="Session names" style="display: flex; flex-direction: column; gap: 8px">
-<label style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--s1); font-size: 13px"><input type="radio" name="sn" style="accent-color: var(--a1); margin-top: 3px"><span style="display: flex; flex-direction: column; gap: 2px"><b style="font-weight: 600">Off</b><span style="font-size: 12px; color: var(--t2)">Titles stay Untitled until renamed</span></span></label>
+<label style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--s1); font-size: 13px"><input type="radio" name="sn" style="accent-color: var(--a1); margin-top: 3px"><span style="display: flex; flex-direction: column; gap: 2px"><b style="font-weight: 600">Off</b><span style="font-size: 12px; color: var(--t2)">Titles stay as they are</span></span></label>
 <label aria-disabled="true" title="An admin downloads Qwen3.8 27B in Models" style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--s1); font-size: 13px; color: var(--t2)"><input type="radio" name="sn" disabled style="margin-top: 3px"><span style="display: flex; flex-direction: column; gap: 2px"><b style="font-weight: 600; opacity: 0.55">Local LLM</b><span style="font-size: 12px">Qwen3.8 27B not downloaded · <a href="#">Models</a></span><span style="font-size: 12px">Uses the GPU queue · sends nothing out</span></span></label>
 <label style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--s2); box-shadow: inset 0 0 0 2px var(--a1); font-size: 13px"><input type="radio" name="sn" checked style="accent-color: var(--a1); margin-top: 3px"><span style="display: flex; flex-direction: column; gap: 2px"><b style="font-weight: 600">Remote</b><span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--t2)">DeepSeek · deepseek-chat</span></span></label>
 </div>

@@ -69,8 +69,12 @@ tile goes, the next tile is picked. Nothing new in the API.
 **Run tiles.** A failed or stopped run tile gets a small ✕ in its corner (no card: a failed run holds nothing to
 lose; its error is in the tile's title). When the session has any, a chip after the tiles reads **"2 failed ·
 Clear"** (the count is failed plus stopped runs; its title says "1 failed, 1 stopped"); Clear removes them all
-(no card, same reason). A running or queued tile has no ✕; its title says "Stop it first". Clear never touches a
-running run.
+(no card, same reason). A running or queued tile has no ✕; its title says "Stop it first". A batch's run (`batch_id` set) has no ✕
+either and Clear skips it (it goes with its batch). Clear never touches a running run.
+
+**Text answers.** A succeeded run shown as a tile (text outputs, no take) gets the take tile's ⋯ menu with
+**Delete**; its card reads **"Delete this answer?"** · "This can't be undone." · Cancel / Delete (the run
+delete below). So every creation in the strip, failed or not, can be deleted.
 
 **The rule (API).** `DELETE /v1/studio/runs/{run_id}` removes a **finished** run from its session:
 
@@ -93,8 +97,8 @@ current row, two small text buttons, **Rename** and **Delete** (as the workflow 
 
 - **Rename** turns the row into a text box with the title selected; Enter or Save saves (`PATCH`, trimmed, 1–200
   characters, blank keeps the old one), Esc cancels. A rename marks the title as the user's (25.5).
-- **Delete** opens the card **"Delete this session?"** · "Its runs go. Its takes stay in the gallery. This can't
-  be undone." · Cancel / Delete (existing `DELETE`). While a run of the session is queued or running, or a batch in
+- **Delete** opens the card **"Delete this session?"** · "<title>: its runs go. Its takes stay in the gallery.
+  This can't be undone." · Cancel / Delete (existing `DELETE`). While a run of the session is queued or running, or a batch in
   it is active, the row shows "running" and its Delete is greyed with "Stop its runs first" (the 409 detail is
   shown if it races). The menu knows which sessions are busy from `GET /v1/studio/queue` (the caller's queued and
   running runs, every session; a naming run does not count); an active batch is caught by the 409. After a delete
@@ -117,19 +121,19 @@ worker → EVT):
 
 ```
 studio projector: run succeeded, session unnamed, naming on
-   └─ outbox: cmd.session.name {session_id, owner_id, run_id, prompt, mode, provider snapshot | local}
-pipelines_service names.py (durable consumer on CMD)
+   └─ outbox: cmd.pipeline.name {session_id, owner_id, run_id, prompt, mode, provider snapshot | local}
+pipelines_service names.py (its durable `pipelines` consumer on CMD, cmd.pipeline.>)
    ├─ remote: providers.chat_retried(provider, model) · system "a 2-5 word title" · schema {title} · max 24 tokens
    └─ local:  studio.runs.create {purpose: name} → a hidden llm-ask run (batch lane) → evt.studio.run_finished.answer
-   └─ cleans the answer (2-5 words, ≤ 60 chars, one line, no quotes or markup) → outbox: evt.session.named
-studio consumer: UPDATE sessions SET title, title_source 'model', named_by
+   └─ cleans the answer (2-5 words, ≤ 60 chars, one line, no quotes or markup) → evt.pipeline.<session>.named
+studio projector (evt.pipeline.>): UPDATE sessions SET title, title_source 'model', named_by
                  WHERE id AND title_source IN ('default','prompt') → session event `session` on the session's SSE
 ```
 
 - **studio_service**: `sessions` gains `title_source` (`default` | `prompt` | `user` | `model`; backfill: "Untitled"
   → `default`, others → `user`), `named_by` (the model's short name, e.g. `Qwen3.8`, `DeepSeek`) and `name_asked`.
   `SessionCreate` gains `from_prompt` (the web's Generate-with-no-session sets it, so the slice is stored as
-  `prompt`). The projector writes `cmd.session.name` in the same transaction that makes the session's first
+  `prompt`). The projector writes `cmd.pipeline.name` in the same transaction that makes the session's first
   succeeded run terminal. It keeps the setting (25.6) and sends the provider snapshot, as batches do.
 - **The hidden naming run** (local only): `studio.runs.create` accepts `purpose: "name"` with no batch (owner and
   session from the session row, workflow `llm-ask`, idempotency key `name:<session_id>`). It runs in the batch lane
@@ -139,7 +143,11 @@ studio consumer: UPDATE sessions SET title, title_source 'model', named_by
 - **pipelines_service** `names.py`: the prompt template (`name.v1`), the call, the answer checks. Remote goes
   through `providers.chat_retried` (host rule, key files, failure classes; network retries only). Local skips
   quietly when no live host can run `llm-ask` (not downloaded, host down). Any failure: the title stays, a log line,
-  nothing shown to the user.
+  nothing shown to the user. `cmd.pipeline.name` joins `consumer.TYPES`; the handler only records the job and acks,
+  so the in-order consumer never waits on a model: the remote call runs as a task, the local answer comes on the
+  existing `pipelines-runs` consumer (`run_finished`). It publishes `evt.pipeline.<session>.named` as it publishes
+  batch events (Nats-Msg-Id `name:<session_id>`), so no NATS permission or new durable is needed. A restart may lose
+  one name; naming is best-effort.
 - **web_service**: on the `session` event it replaces the session's title. The first time a user sees a
   model-written title, a small hint under the title chip reads **"named by Qwen3.8"** (or "named by DeepSeek")
   and fades after a few seconds (remembered per browser, so it shows once). With Remote picked, the session menu
@@ -177,7 +185,7 @@ one row each, in the Model providers style (a table, an editor beside it):
     not in its models, 409 `remote models are off on this deployment`, 422 `Qwen3.8 27B is not downloaded` for
     local with no host);
   - `Run` gains `purpose` (null, or `name` for the hidden run; only `GET /v1/studio/queue` ever lists one).
-- `messages/`: `cmd.session.name`, `evt.session.named` (new); `req.studio.runs.create` gains `purpose: name` without
+- `messages/`: `cmd.pipeline.name`, `evt.pipeline.named` (new; on `evt.pipeline.<session>.named`); `req.studio.runs.create` gains `purpose: name` without
   a batch; `evt.studio.run_finished` allows `batch_id` null for it.
 - `contracts/README.md`: "Sessions: titles and naming", "Deleting runs".
 - Services copy what they need with `make gen`; `make contracts-check`.
@@ -192,8 +200,8 @@ one row each, in the Model providers style (a table, an editor beside it):
   every remote call does.
 - **Model text is data**: the title is checked (2–5 words, ≤ 60 characters, one line, no markup) and shown as text;
   a prompt that tries to steer the namer can at most produce an odd title the user can rename.
-- **Deletes** are soft, need a click, and a card where something is lost (a take, a session); a running run cannot
-  be deleted.
+- **Deletes** are soft, need a click, and a card where something is lost (a take, a text answer, a session); a
+  running run cannot be deleted.
 
 ### 25.9 Tests
 
@@ -205,9 +213,9 @@ one row each, in the Model providers style (a table, an editor beside it):
   with remote off (`off`, never a connection), local via the fake `studio.runs.create`, a failed answer leaves the
   title.
 - contract suite on `helmstudio-test`: the new paths and messages; another user's ids are 404.
-- web (Vitest + the browser pass): take menu Delete and its card; ✕ and Clear (none on a running tile); session
-  Rename (Enter, Esc, blank) and Delete (greyed while running); the `session` event swaps the title and the hint
-  shows once; the AI agents tab, greyed Local and Remote states.
+- web (Vitest + the browser pass): take menu Delete and its card, a text answer's Delete; ✕ and Clear (none on a
+  running or batch tile); session Rename (Enter, Esc, blank) and Delete (greyed while running); the `session` event
+  swaps the title and the hint shows once; the AI agents tab, greyed Local and Remote states.
 
 ### 25.10 Phases
 
