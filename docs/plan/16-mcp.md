@@ -87,6 +87,11 @@ attach them to a conversation. **Prompts:** none at first.
 
 ### 20.6 Open choices
 
+**Decided by the owner, 2026-11-22 (one by one):** 1. Build all four steps (§20.5) as one build, after the assistant
+merges. 2. Stdio only (local); no remote endpoint. 3. Test with Claude Code and Claude Desktop. 4. Add delete tools
+(takes, finished runs, sessions) marked `destructiveHint`, so MCP clients ask before each one; admin tools stay out.
+
+
 - Is it a milestone (M9) now, or after the backlog items? (Recommended: M9, steps 1–2 first.)
 - Stdio only (recommended), or the remote endpoint too?
 - Which agent clients matter: Claude Code and Claude Desktop (recommended), others?
