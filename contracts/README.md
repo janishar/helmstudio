@@ -112,7 +112,8 @@ the native MLX runner is host `mac`, env `mlx` (durable `runner-mac-mlx`, subjec
   `{kind, params, in}`, `in` wires an input port to `<node id>.<output>`. A node schema (registry `nodes`) gives a
   kind's ordered `params` (`int`, `float`, `bool`, `string`, `text`, `enum`, `seed`, `image`, `rows`, `frames`, from 1.19
   `media`, `span` with
-  `default`, `min`, `max`, `step`, `enum`, `item`, `mention`, `fps`, `auto`, `values`, `values_by`, `help`, `when`;
+  `default`, `min`, `max`, `step`, `enum`, `item`, `mention`, `fps`, `auto`, `values`, `values_by`, `help`, `when`,
+  from 1.47 `rules` and `option_help` (Param rules, option help and memory per run);
   item fields may add `position`; see Image inputs, Video) and typed
   `inputs` / `outputs`. Port types: `Text`, `Image`, `Video`, `Int`, `Float`, `Seed`, `Canvas`, `Duration`, the
   input-only `Media` (accepts `Image` or `Video`: the output node's input), and the family-scoped handles `Model`,
@@ -381,7 +382,8 @@ holds the reference (`admit`, `simulate`). One run at a time per host (The dispa
   `variant`, that variant's `memory` item for the node's `precision`. **Needs** = the plan's `components` as entries
   of X's env (each with its own `variant` and `precision`), the family's `lora.component` carrying X's baked LoRAs (its
   `bake` rows, as for resident below), and (API 1.39) each component the model's `compute.components` names carrying
-  X's `<family>/model` `compute` when it is not float32. **Planned peak** P = `peak_gb` + the bytes of X's LoRA files / 2^30. No plan
+  X's `<family>/model` `compute` when it is not float32. **Planned peak** P = `peak_gb` (from 1.47, a plan with no
+  `components`: the run's own, Param rules, option help and memory per run) + the bytes of X's LoRA files / 2^30. No plan
   (no models key, no `memory` item for that precision): P = B. A run larger than its plan (the item's `planned_at`:
   some node's `width` × `height` / 10^6 above its `mp`, or a numeric `frames` above its `frames`), or one with two
   `<family>/model` nodes: P = B, its needs still reused. (API 1.21) P = B asks for whatever the host can give, not a
@@ -1273,7 +1275,8 @@ unchanged; a video never fills them.
   values are merged and type-checked, `optional` image nodes left empty are dropped with their wires (Graph rules),
   `not_with` is checked, then the items and `max_total_s`, then mentions and looks. In `cmd.run.execute` the field is
   defs `media` (with `in` / `out` on `trim`); the claim-check rules hold. **Lineage**: `parents` add each item's
-  take (node, then item, then field order); `made_with.inputs` keep the rows as studio checked them.
+  take (node, then item, then field order; from 1.47 an item's `optional` media fields after its others: a
+  soundtrack after its video); `made_with.inputs` keep the rows as studio checked them.
 - **`only`** (`GraphNode.only`, registry and user workflows): enum param → the values this workflow allows (a subset of
   its `enum`, holding its value). The form offers only those; another value is 422 / `param_invalid`
   (`model.variant: must be one of dev`). Studio drops it from `cmd.run.execute`. Why: `ltx/model.variant` gains `dev`,
@@ -1707,6 +1710,42 @@ graph is saved first: "Save" for one's own, "Save as my workflow" for a template
   filled and ignored). An unwired optional input is simply absent from the stage's inputs.
 - **Before studio's registry watches have delivered**, POST/PUT `/workflows`, `/workflows/validate`, `/nodes` and
   runs of user workflows answer 503.
+
+## Param rules, option help and memory per run (API 1.47; plan 20-h3-options-and-uploads; normative)
+
+- **One expression language** for `when`, rules, `preset_help` and `peak_gb` (`fixtures/video/rules.json`
+  `expressions`; check.py `expr_eval`): numbers, `'strings'`, `true` / `false` / `null` (and Python's spellings),
+  names, `!` and unary `-` (`not`), `*` `/` `**`, `+` `-`, `==` `!=` `<` `<=` `>` `>=` (`==` between a number and
+  a string is false), `&&` (`and`), `||` (`or`), `a if c else b`, `len(x)` (a rows param's items; null is 0),
+  `min`, `max` and `gcd(a, b)` (whole numbers). A name that resolves to nothing fails the expression.
+- **Rules** (`ParamSchema.rules`, model.yaml `rules`): `[{when, error}]` on a param, or on a rows item field. In a
+  param's rule a bare name is a param of the same node and `<a>.<b>` is param `b` of the node wired into the node's
+  input `a`, else of node `a` (`canvas.width`, `model.variant`); in an item field's rule a bare name is a field of the
+  same item (its default when left out). While `when` holds the run is refused `<node>: <error>` (an item field's
+  `<node>.<param>[<i>].<field>: <error>`, items from 1), each `{<expression>}` in `error` replaced by its value (a
+  whole number without its point); a rule whose expression fails does not hold. Studio checks every non-bypassed
+  node's rules after the other checks of Resolving a run, node id order, then param order, then items: POST …/runs
+  and `/runs/plan` answer the first as their 422; the form shows each under its param (in red) and blocks Generate
+  ("fix 2 problems"). The runner ignores them (a pack may keep its own backstop: `native.generate_error`).
+  `fixtures/video/rules.json` `cases`: every rule that holds in a filled canonical workflow (check.py `rule_errors`).
+  MiniMax H3's: Render on a canvas with no smaller size of the same shape, token reduction with 40 layers or fewer and
+  reuse 3, token reduction where h3 renders 256 × 256 (all on Base only), Replace without a soundtrack, a soundtrack
+  without Replace, audio references alone, more than 12 references.
+- **Option help** (`ParamSchema.option_help`, enum or int with `values`): value as text → the line under it in the
+  param's menu (`none` → `the model as it is`); the menu lists the values with their lines.
+- **Preset help** (`StudioLayout.preset_help`): the Preset heading's (i) is the first item whose `when` holds over
+  the workflow's paths (`model.variant == 'base-fp8'`), or that has none.
+- **Sound limits** (`NodeSchema.sounds {max_s, max_inputs}`, model.yaml `stages.<name>.sounds`): the sound a node's
+  references carry together. The composer counts it under the rows, `3.0 s of 15.0 s sound · 1 of 3 sound inputs`:
+  each audio row's part, and each video row whose `sound` is `keep` (the take has sound) or `replace` (with its
+  soundtrack), reading min(its part, the soundtrack's part, frames / fps).
+- **Memory per run** (`NodeSchema.peak_gb`): a stage that uses no component (a native child process, whose memory plan
+  is its formula alone) publishes its `peak_gb` formula. For a plan with no `components`, studio's planned peak is the
+  run's own: the largest of its nodes' formulas over the node's params (rows as lists), `mp` (the largest `width` ×
+  `height` / 10^6 of any node) and `frames` (the largest numeric `frames`); a formula naming anything else (`images`,
+  `mp_in`, `speech_seconds`, `fps`), or none, keeps the plan's `peak_gb` (check.py `run_peak`, `rules.json`
+  `peak_gb`). A run larger than `planned_at` still has no plan. So MiniMax H3's Generate estimate follows Render,
+  Turbo's +4.5 GB and its video references, and the dispatcher admits it at that peak.
 
 ## Graph rules (normative)
 

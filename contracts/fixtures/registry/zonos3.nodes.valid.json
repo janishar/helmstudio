@@ -227,7 +227,8 @@
         }
       ],
       "component": "whole model",
-      "help": "Reads the text in one voice, a preset or a clip it clones, at 44.1 kHz. Long text is split on sentences and joined; at most 900 characters (about 60 s)."
+      "help": "Reads the text in one voice, a preset or a clip it clones, at 44.1 kHz. Long text is split on sentences and joined; at most 900 characters (about 60 s).",
+      "peak_gb": "2.0"
     },
     {
       "kind": "zonos3/dialogue",
@@ -416,7 +417,8 @@
         }
       ],
       "component": "whole model",
-      "help": "Speaks each line in its speaker's voice (a preset, or a clip it clones) at 44.1 kHz, with pauses, as one take; reports each line's start and end."
+      "help": "Speaks each line in its speaker's voice (a preset, or a clip it clones) at 44.1 kHz, with pauses, as one take; reports each line's start and end.",
+      "peak_gb": "2.0"
     },
     {
       "kind": "output",

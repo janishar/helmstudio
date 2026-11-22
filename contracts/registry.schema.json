@@ -349,6 +349,41 @@
           "type": "boolean",
           "const": true,
           "description": "text only (API 1.32): the param is a dialogue script. Studio expands it at create time into the node's rows param `lines` (item fields voice, text, style, pause_s), each non-empty line `@handle: text` or `@handle (style): text` speaking in that element's voice; the run gets the script empty. Not scanned for ordinary mentions; it takes no wire (contracts/README.md, Dialogue)"
+        },
+        "rules": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "required": [
+              "when",
+              "error"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "when": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              "error": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              }
+            }
+          },
+          "description": "from API 1.47 (contracts/README.md, Param rules): refusals as data (model.yaml `rules`). While `when` holds (the `when` grammar plus <, <=, >, >=, + - * /, len(<rows>) and gcd(a, b); a bare name is a param of the same node, or in a rows item field's rule a field of the same item; <a>.<b> is param b of the node wired into input a, else of node a) the run is refused `<node>: <error>` (an item field's `<node>.<param>[<i>].<field>: <error>`), `{<expression>}` in error replaced by its value; a reference that resolves to nothing makes the rule not hold. Studio checks them (422), the form shows them under the param; the runner ignores them"
+        },
+        "option_help": {
+          "type": "object",
+          "maxProperties": 32,
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "description": "from API 1.47, enum or int with values: value (as text) -> its line under the value in the param's menu (model.yaml `option_help`)"
         }
       },
       "allOf": [
@@ -1036,6 +1071,41 @@
         "optional": {
           "const": true,
           "description": "media only (API 1.37): the field may be left empty (null or absent) in an item; its default is null. Absent = required in every item. A rows param's `max_total_s` and Use in\u2026 offers go by the item's one required media field (contracts/README.md, Media inputs: rows of media)"
+        },
+        "rules": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "required": [
+              "when",
+              "error"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "when": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              "error": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              }
+            }
+          },
+          "description": "from API 1.47 (contracts/README.md, Param rules): refusals as data (model.yaml `rules`). While `when` holds (the `when` grammar plus <, <=, >, >=, + - * /, len(<rows>) and gcd(a, b); a bare name is a param of the same node, or in a rows item field's rule a field of the same item; <a>.<b> is param b of the node wired into input a, else of node a) the run is refused `<node>: <error>` (an item field's `<node>.<param>[<i>].<field>: <error>`), `{<expression>}` in error replaced by its value; a reference that resolves to nothing makes the rule not hold. Studio checks them (422), the form shows them under the param; the runner ignores them"
+        },
+        "option_help": {
+          "type": "object",
+          "maxProperties": 32,
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "description": "from API 1.47, enum or int with values: value (as text) -> its line under the value in the param's menu (model.yaml `option_help`)"
         }
       },
       "allOf": [
@@ -1463,6 +1533,31 @@
             }
           },
           "description": "from API 1.36: the ordered phases of a node that runs one engine end to end (model.yaml `stages.<name>.phases`; MiniMax H3's generate: encode, sample, decode_audio, decode_video), ids unique. Its evt.run.progress carries `phase_id`, one of these ids (contracts/README.md, Phases); the UI draws one chip per phase, the current one with its step n/N. Absent = none"
+        },
+        "peak_gb": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 400,
+          "description": "from API 1.47: the stage's peak_gb formula (model.yaml), published only for a stage that uses no component (a native child process: its memory plan is the formula alone, contracts/README.md Memory per run); studio evaluates it per run. Absent = none"
+        },
+        "sounds": {
+          "type": "object",
+          "required": [
+            "max_s",
+            "max_inputs"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "max_s": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "max_inputs": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "description": "from API 1.47: the limits on the sound the node's references carry together (model.yaml `stages.<name>.sounds`; MiniMax H3: 15 s, 3 inputs): audio rows, and video rows whose sound is kept or replaced; the composer counts them"
         }
       }
     },
@@ -3112,6 +3207,30 @@
               "$ref": "messages/defs.schema.json#/$defs/paramValue"
             }
           }
+        },
+        "preset_help": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "required": [
+              "text"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "text": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              "when": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              }
+            }
+          },
+          "description": "from API 1.47: the Preset heading's (i) text: the first item whose `when` holds over the workflow's paths, or that has none"
         },
         "preset_order": {
           "type": "array",

@@ -589,7 +589,15 @@ func planOf(reg *registry.Registry, host string, run model.Run) plan {
 		}
 	}
 	if !larger { // larger than its plan: planned at the whole budget, its own entries still reused
-		out.peak = hundredths(memory.PeakGB + float64(bytes)/(1<<30))
+		peak := memory.PeakGB
+		// API 1.47 (contracts/README.md, Memory per run): a plan of no components is its formula alone, so the run's
+		// own settings plan it (Render, Turbo, video references)
+		if len(memory.Components) == 0 {
+			if own, ok := runPeak(graph, reg.Schemas()); ok {
+				peak = own
+			}
+		}
+		out.peak = hundredths(peak + float64(bytes)/(1<<30))
 	}
 	return out
 }

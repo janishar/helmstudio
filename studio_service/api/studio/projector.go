@@ -202,7 +202,7 @@ func (p *Projector) applyOutput(ctx context.Context, tx pgx.Tx, run model.Run, e
 	if err != nil {
 		return nil, err
 	}
-	lineage := runParents(run.Nodes, run.Mentions)
+	lineage := runParents(run.Nodes, run.Mentions, p.Workflows.Schemas())
 	if sm := data.SourceMap; sm != nil && (data.Kind != "video" || !slices.Contains(lineage, sm.TakeID)) {
 		data.SourceMap = nil // only a video, and only from one of the run's own media takes
 	}

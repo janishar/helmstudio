@@ -151,7 +151,7 @@ func TestReferenceRowsNotWith(t *testing.T) {
 func TestParentsOfMediaRows(t *testing.T) {
 	graph := `{"generate": {"kind": "minimax-h3/generate", "params": {"refs": [{"image": {"take_id": "a"}}],
 		"videos": [{"video": {"take_id": "v", "in": 0, "out": 2}, "sound": "keep"}], "audios": [{"audio": {"take_id": "s", "in": 1, "out": 3}}]}}}`
-	if got := parents([]byte(graph)); !reflect.DeepEqual(got, []string{"s", "a", "v"}) {
+	if got := parents([]byte(graph), nil); !reflect.DeepEqual(got, []string{"s", "a", "v"}) {
 		t.Fatal(got)
 	}
 }

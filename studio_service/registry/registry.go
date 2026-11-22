@@ -64,6 +64,16 @@ type Param struct {
 	// them while it is wired or holds a row (MiniMax H3's lora: turbo, with a reference turbo_ref)
 	Addons     map[string][]string            `json:"addons,omitempty"`
 	AddonsWith map[string]map[string][]string `json:"addons_with,omitempty"`
+	// API 1.47 (contracts/README.md, Param rules, option help and memory per run): refusals as data, checked by
+	// resolve, and each value's line in the param's menu (served as is)
+	Rules      []Rule            `json:"rules,omitempty"`
+	OptionHelp map[string]string `json:"option_help,omitempty"`
+}
+
+// Rule is one of a param's refusals (API 1.47): while When holds the run is refused with Error.
+type Rule struct {
+	When  string `json:"when"`
+	Error string `json:"error"`
 }
 
 // ValueAddons is the add-ons the param asks for at value (API 1.41): the lists of its AddonsWith names in wired,
@@ -233,11 +243,20 @@ type NodeSchema struct {
 	Component string `json:"component,omitempty"`
 	Help      string `json:"help,omitempty"`
 	// API 1.36: the optional add-ons the node loads (its family's Model.Addons) and a one-engine node's phases
-	Addons  []string `json:"addons,omitempty"`
-	Phases  []Phase  `json:"phases,omitempty"`
-	Params  []Param  `json:"params"`
-	Inputs  []Port   `json:"inputs"`
-	Outputs []Port   `json:"outputs"`
+	Addons []string `json:"addons,omitempty"`
+	Phases []Phase  `json:"phases,omitempty"`
+	// API 1.47: a native stage's peak_gb formula (studio plans its runs by it) and its references' sound limits
+	PeakGB  string  `json:"peak_gb,omitempty"`
+	Sounds  *Sounds `json:"sounds,omitempty"`
+	Params  []Param `json:"params"`
+	Inputs  []Port  `json:"inputs"`
+	Outputs []Port  `json:"outputs"`
+}
+
+// Sounds are a node's limits on the sound its references carry together (API 1.47, MiniMax H3: 15 s, 3 inputs).
+type Sounds struct {
+	MaxS      float64 `json:"max_s"`
+	MaxInputs int     `json:"max_inputs"`
 }
 
 // Node is one node of a workflow graph. Bypass and Position belong to an edited workflow: a command never carries them.
@@ -1271,6 +1290,9 @@ func (r *Registry) NodeAddons(source string, node Node) []string {
 
 // Schemas returns every kind any runner publishes, live or not (its host present): the schema of the newest publish.
 func (r *Registry) Schemas() map[string]NodeSchema {
+	if r == nil { // no registry (a projector without one)
+		return nil
+	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	out := map[string]NodeSchema{}

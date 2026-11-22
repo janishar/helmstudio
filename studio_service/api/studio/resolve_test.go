@@ -177,7 +177,7 @@ func TestResolveImages(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 	graph, _ := json.Marshal(nodes)
-	if p := parents(graph); len(p) != 2 || p[0] != takeA || p[1] != takeB {
+	if p := parents(graph, nil); len(p) != 2 || p[0] != takeA || p[1] != takeB {
 		t.Fatalf("parents %v", p)
 	}
 	eleven := `[` + strings.Repeat(`{"image": {"take_id": "`+takeA+`"}},`, 10) + `{"image": {"take_id": "` + takeA + `"}}]`

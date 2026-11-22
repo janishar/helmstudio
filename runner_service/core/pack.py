@@ -427,9 +427,18 @@ def stage_schema(name: str, stage: dict, family: str | None) -> dict:
         "outputs": [{"name": p, "type": t} for p, t in (stage.get("outputs") or {}).items()],
     }
     # component: API 1.24, the inspector's "uses the <component>"; phases: API 1.36, a one-engine node's chips
-    for key in ("component", "help", "phases"):
+    for key in (
+        "component",
+        "help",
+        "phases",
+        "sounds",
+    ):  # sounds: API 1.47, the references' sound limits
         if key in stage:
             schema[key] = stage[key]
+    # API 1.47 (contracts/README.md, Memory per run): a stage that loads no component (a native child process) is
+    # planned by its formula alone, so studio evaluates it per run
+    if "peak_gb" in stage and stage.get("uses") == []:
+        schema["peak_gb"] = str(stage["peak_gb"])
     return schema
 
 

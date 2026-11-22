@@ -3116,6 +3116,11 @@
                 50
               ],
               "when": "model.variant == 'base'",
+              "option_help": {
+                "50": "exact",
+                "45": "fast",
+                "40": "aggressive"
+              },
               "help": "DiT blocks: 50 exact, 45 fast, 40 aggressive; fewer also hold less of the transformer."
             },
             {
@@ -3132,6 +3137,11 @@
                 3
               ],
               "when": "model.variant == 'base'",
+              "option_help": {
+                "1": "every step fresh",
+                "2": "at 20 steps, 11 fresh passes",
+                "3": "at 20 steps, 8 fresh passes"
+              },
               "help": "1 close, 2 fast, 3 aggressive; at 20 steps 20, 11 or 8 fresh passes."
             },
             {
@@ -3151,15 +3161,12 @@
                 6
               ],
               "when": "model.variant == 'base' && generate.reuse == 1",
+              "option_help": {
+                "1": "every step",
+                "4": "fast",
+                "6": "a rough preview"
+              },
               "help": "Runs the costly core every n steps: 4 fast, 6 a rough preview. Only with Reuse 1."
-            },
-            {
-              "name": "token_reduction",
-              "type": "bool",
-              "label": "Token reduction",
-              "default": false,
-              "when": "model.variant == 'base'",
-              "help": "Pairs video tokens in the middle blocks: about 25 % faster, can shift the composition."
             },
             {
               "name": "render",
@@ -3172,7 +3179,36 @@
                 "62.5%"
               ],
               "when": "model.variant == 'base'",
+              "option_help": {
+                "Full": "the canvas size",
+                "75%": "faster, a little softer",
+                "62.5%": "a quick look; loses fine detail"
+              },
+              "rules": [
+                {
+                  "when": "model.variant == 'base' && render != 'Full' && gcd(canvas.width / 32, canvas.height / 32) == 1",
+                  "error": "the canvas {canvas.width} × {canvas.height} has no smaller size of the same shape; use Full"
+                }
+              ],
               "help": "Renders smaller and scales up after decoding: faster, less fine detail. The size keeps the canvas's shape."
+            },
+            {
+              "name": "token_reduction",
+              "type": "bool",
+              "label": "Token reduction",
+              "default": false,
+              "when": "model.variant == 'base'",
+              "rules": [
+                {
+                  "when": "model.variant == 'base' && token_reduction && layers <= 40 && reuse == 3",
+                  "error": "token reduction with 40 layers or fewer and reuse 3 gives colour ringing; use reuse 2 or more layers"
+                },
+                {
+                  "when": "model.variant == 'base' && token_reduction && canvas.width == canvas.height && (render == 'Full' && canvas.width == 256 || render == '75%' && (canvas.width == 320 || canvas.width == 352) || render == '62.5%' && (canvas.width == 384 || canvas.width == 416))",
+                  "error": "token reduction does not run when h3 renders 256 × 256; switch it off or render larger"
+                }
+              ],
+              "help": "Pairs video tokens in the middle blocks: about 25 % faster, can shift the composition."
             },
             {
               "name": "quality",
@@ -3184,6 +3220,10 @@
                 "exact"
               ],
               "when": "model.variant == 'base-fp8'",
+              "option_help": {
+                "lossless": "SGLang's fast paths, the same maths",
+                "exact": "bit for bit the reference path, slower"
+              },
               "help": "Lossless: SGLang's default fast paths, the same maths. Exact: bit-identical to the reference path, slower. High is not offered: SGLang allows it only on its audited 4-GPU setup."
             },
             {
@@ -3222,6 +3262,10 @@
                   "turbo"
                 ]
               },
+              "option_help": {
+                "none": "the model as it is",
+                "turbo": "8 steps, near the 50-step look"
+              },
               "addons_with": {
                 "refs": {
                   "turbo": [
@@ -3252,6 +3296,12 @@
                 "image": "Image"
               },
               "mention": "<Picture {n}>",
+              "rules": [
+                {
+                  "when": "len(refs) + len(videos) + len(audios) > 12",
+                  "error": "at most 12 references in all ({len(refs) + len(videos) + len(audios)})"
+                }
+              ],
               "help": "Images the prompt names <Picture 1>, <Picture 2>, …; any reference (image, video or audio) switches to the Ref2VA model and cannot go with a first or last frame.",
               "not_with": [
                 "first",
@@ -3300,6 +3350,16 @@
                   "trim": true,
                   "min_s": 2.34,
                   "max_s": 15,
+                  "rules": [
+                    {
+                      "when": "sound == 'replace' && soundtrack == null",
+                      "error": "Replace needs a soundtrack"
+                    },
+                    {
+                      "when": "sound != 'replace' && soundtrack != null",
+                      "error": "a soundtrack is read only with Sound: Replace"
+                    }
+                  ],
                   "help": "With Sound: replace, the sound the model hears with this video: an audio take or a video's sound, cut to the video part's length."
                 }
               },
@@ -3337,6 +3397,12 @@
               "not_with": [
                 "first",
                 "last"
+              ],
+              "rules": [
+                {
+                  "when": "len(audios) > 0 && len(refs) == 0 && len(videos) == 0",
+                  "error": "audio references need an image or video reference"
+                }
               ],
               "help": "Sounds the prompt names <Audio 1>, <Audio 2>, <Audio 3>: 2 to 15 s each, 15 s in all; needs an image or video reference too."
             }
@@ -3381,7 +3447,12 @@
           ],
           "envs": [
             "native"
-          ]
+          ],
+          "sounds": {
+            "max_s": 15,
+            "max_inputs": 3
+          },
+          "peak_gb": "24 + 0.05 * (mp * (1 if render == 'Full' else 0.75 if render == '75%' else 0.6) * frames + 1.04 * min(len(videos) * frames, 360)) + (4.5 if lora == 'turbo' else 0)"
         }
       ]
     },
@@ -3813,7 +3884,8 @@
           "help": "Reads the text in one voice, a preset or a clip it clones, at 44.1 kHz. Long text is split on sentences and joined; at most 900 characters (about 60 s).",
           "envs": [
             "native"
-          ]
+          ],
+          "peak_gb": "2.0"
         },
         {
           "kind": "zonos3/dialogue",
@@ -4005,7 +4077,8 @@
           "help": "Speaks each line in its speaker's voice (a preset, or a clip it clones) at 44.1 kHz, with pauses, as one take; reports each line's start and end.",
           "envs": [
             "native"
-          ]
+          ],
+          "peak_gb": "2.0"
         }
       ]
     }

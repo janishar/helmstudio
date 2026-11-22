@@ -1,6 +1,7 @@
 package studio
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -635,17 +636,54 @@ func images(nodes map[string]registry.Node) []imageAt {
 	return out
 }
 
-// parents are the takes of a stored graph's Image values, each once, in input order: a take's lineage.
-func parents(graph []byte) []string {
+// parents are the takes of a stored graph's Image values, each once, in input order: a take's lineage. From API
+// 1.47 an item's optional media fields (schemas: MiniMax H3's soundtrack) come after its others: a soundtrack after
+// its video.
+func parents(graph []byte, schemas map[string]registry.NodeSchema) []string {
 	var nodes map[string]registry.Node
 	_ = json.Unmarshal(graph, &nodes)
+	optional := func(path string) bool { // <node>.<param>[<i>].<field>
+		id, rest, _ := strings.Cut(path, ".")
+		param, field, ok := strings.Cut(rest, "[")
+		if _, field, ok = strings.Cut(field, "]."); !ok {
+			return false
+		}
+		for _, p := range schemas[nodes[id].Kind].Params {
+			for _, f := range itemFields(p) {
+				if p.Name == param && f.Name == field {
+					return f.Optional
+				}
+			}
+		}
+		return false
+	}
+	ats := images(nodes)
+	for i := 0; i < len(ats); { // each item's run of values: the optional ones last, in order
+		item, _, _ := strings.Cut(ats[i].Path, "]")
+		j := i + 1
+		for j < len(ats) && strings.HasPrefix(ats[j].Path, item+"]") {
+			j++
+		}
+		slices.SortStableFunc(ats[i:j], func(a, b imageAt) int {
+			return cmp.Compare(boolInt(optional(a.Path)), boolInt(optional(b.Path)))
+		})
+		i = j
+	}
 	var out []string
-	for _, at := range images(nodes) {
+	for _, at := range ats {
 		if !slices.Contains(out, at.TakeID) {
 			out = append(out, at.TakeID)
 		}
 	}
 	return out
+}
+
+// boolInt is 1 for true.
+func boolInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // bounds checks number against the param's min and max; unit follows the numbers in the detail.

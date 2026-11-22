@@ -44,8 +44,16 @@ type StudioLayout struct {
 	Presets   map[string]map[string]any `json:"presets,omitempty"`
 	// API 1.25: every preset name once, in the order Create shows them (a map's order is not kept)
 	PresetOrder []string `json:"preset_order,omitempty"`
+	// API 1.47: the Preset heading's (i): the first item whose when holds (or has none)
+	PresetHelp []PresetHelp `json:"preset_help,omitempty"`
 	// API 1.37: the image params a New shot binds its frames into (Workflow.keyframes)
 	Keyframes *timeline.FrameParams `json:"keyframes,omitempty"`
+}
+
+// PresetHelp is one of the Preset heading's texts (API 1.47).
+type PresetHelp struct {
+	Text string `json:"text"`
+	When string `json:"when,omitempty"`
 }
 
 // FrameParams is the layout's studio.keyframes (API 1.37), nil without a layout or without it.
@@ -330,6 +338,14 @@ func (l *StudioLayout) validate() string {
 			if !reference.MatchString(path) {
 				return fmt.Sprintf("studio.presets.%s: %q is not <node>.<param>", name, path)
 			}
+		}
+	}
+	if len(l.PresetHelp) > 4 {
+		return "studio.preset_help: at most 4"
+	}
+	for i, h := range l.PresetHelp {
+		if n := utf8.RuneCountInString(h.Text); n == 0 || n > 300 || utf8.RuneCountInString(h.When) > 200 {
+			return fmt.Sprintf("studio.preset_help[%d]: a text of 1-300 characters, a when of at most 200", i)
 		}
 	}
 	if l.PresetOrder != nil {

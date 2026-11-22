@@ -365,8 +365,8 @@ func clipTakes(ctx context.Context, tx pgx.Tx, ownerID string, ids []string, del
 
 // runParents is a run's lineage: the takes of its stored graph's Image and media values (parents of the typed view),
 // then (API 1.31) the clip take of each voice it sent by its clip, path order, each take once.
-func runParents(graph, mentions []byte) []string {
-	out := parents(typedView(graph, mentions))
+func runParents(graph, mentions []byte, schemas map[string]registry.NodeSchema) []string {
+	out := parents(typedView(graph, mentions), schemas)
 	var exp expansion
 	if len(mentions) == 0 || json.Unmarshal(mentions, &exp) != nil {
 		return out

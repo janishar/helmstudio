@@ -1,0 +1,378 @@
+{
+  "description": "API 1.47 (contracts/README.md, Rules and Memory per run). `expressions`: the one expression language of `when`, rules and peak_gb formulas, evaluated over `values` (a name not in them resolves to nothing: \"error\"). `cases`: a canonical workflow of `families`, its params filled (schema defaults, the workflow's values, then `inputs`): `errors` = every rule that holds (check.py rule_errors: node id order, then param order, an item field's per item; studio answers the first as its 422, the form shows each under its param); `peak_gb` = the run's own planned peak (check.py run_peak: the largest of its nodes' peak_gb formulas over the node's params, mp and frames).",
+  "families": [
+    "minimax-h3"
+  ],
+  "expressions": [
+    {
+      "expr": "1 + 2 * 3",
+      "values": {},
+      "expect": 7
+    },
+    {
+      "expr": "(1 + 2) * 3 - 4 / 2",
+      "values": {},
+      "expect": 7
+    },
+    {
+      "expr": "gcd(c.w / 32, c.h / 32)",
+      "values": {
+        "c.w": 864,
+        "c.h": 480
+      },
+      "expect": 3
+    },
+    {
+      "expr": "gcd(c.w / 32, c.h / 32) == 1",
+      "values": {
+        "c.w": 832,
+        "c.h": 480
+      },
+      "expect": true
+    },
+    {
+      "expr": "r == '75%' && n <= 40 || false",
+      "values": {
+        "r": "75%",
+        "n": 40
+      },
+      "expect": true
+    },
+    {
+      "expr": "!t && x != null",
+      "values": {
+        "t": false,
+        "x": null
+      },
+      "expect": false
+    },
+    {
+      "expr": "len(rows) + len(none)",
+      "values": {
+        "rows": [
+          1,
+          2
+        ],
+        "none": null
+      },
+      "expect": 2
+    },
+    {
+      "expr": "1 if r == 'Full' else 0.75 if r == '75%' else 0.6",
+      "values": {
+        "r": "75%"
+      },
+      "expect": 0.75
+    },
+    {
+      "expr": "min(a, 360) + max(1, 2) + 2 ** 3",
+      "values": {
+        "a": 400
+      },
+      "expect": 370
+    },
+    {
+      "expr": "a == 1",
+      "values": {
+        "a": "1"
+      },
+      "expect": false
+    },
+    {
+      "expr": "missing.param == 1",
+      "values": {},
+      "expect": "error"
+    },
+    {
+      "expr": "1 +",
+      "values": {},
+      "expect": "error"
+    }
+  ],
+  "cases": [
+    {
+      "description": "the template's defaults: no refusal, the plan's peak",
+      "workflow": "minimax-h3-text-to-video",
+      "inputs": {},
+      "errors": [],
+      "peak_gb": 26.57
+    },
+    {
+      "description": "75% on 832 × 480 (g = 1): no smaller size of the same shape",
+      "workflow": "minimax-h3-text-to-video",
+      "inputs": {
+        "canvas.width": 832,
+        "generate.render": "75%"
+      },
+      "errors": [
+        "generate: the canvas 832 × 480 has no smaller size of the same shape; use Full"
+      ],
+      "peak_gb": 25.86
+    },
+    {
+      "description": "75% on 864 × 480 renders 576 × 320: the peak follows Render",
+      "workflow": "minimax-h3-text-to-video",
+      "inputs": {
+        "generate.render": "75%"
+      },
+      "errors": [],
+      "peak_gb": 25.93
+    },
+    {
+      "description": "Base fp8 ignores Render: no refusal",
+      "workflow": "minimax-h3-text-to-video",
+      "inputs": {
+        "model.variant": "base-fp8",
+        "model.precision": "fp8",
+        "canvas.width": 832,
+        "generate.render": "75%"
+      },
+      "errors": []
+    },
+    {
+      "description": "token reduction with 40 layers and reuse 3",
+      "workflow": "minimax-h3-image-to-video",
+      "inputs": {
+        "first.image": {
+          "take_id": "11111111-0000-4000-8000-000000000003"
+        },
+        "generate.layers": 40,
+        "generate.reuse": 3,
+        "generate.token_reduction": true
+      },
+      "errors": [
+        "generate: token reduction with 40 layers or fewer and reuse 3 gives colour ringing; use reuse 2 or more layers"
+      ]
+    },
+    {
+      "description": "token reduction where h3 renders 256 × 256 (384² at 62.5%)",
+      "workflow": "minimax-h3-text-to-video",
+      "inputs": {
+        "canvas.width": 384,
+        "canvas.height": 384,
+        "generate.render": "62.5%",
+        "generate.token_reduction": true
+      },
+      "errors": [
+        "generate: token reduction does not run when h3 renders 256 × 256; switch it off or render larger"
+      ]
+    },
+    {
+      "description": "token reduction at 512² Full renders 512²: fine",
+      "workflow": "minimax-h3-text-to-video",
+      "inputs": {
+        "canvas.width": 512,
+        "canvas.height": 512,
+        "generate.token_reduction": true
+      },
+      "errors": []
+    },
+    {
+      "description": "two at once, in param order (Render, then Token reduction): the board's fix 2 problems",
+      "workflow": "minimax-h3-text-to-video",
+      "inputs": {
+        "canvas.width": 832,
+        "generate.render": "62.5%",
+        "generate.layers": 40,
+        "generate.reuse": 3,
+        "generate.token_reduction": true
+      },
+      "errors": [
+        "generate: the canvas 832 × 480 has no smaller size of the same shape; use Full",
+        "generate: token reduction with 40 layers or fewer and reuse 3 gives colour ringing; use reuse 2 or more layers"
+      ]
+    },
+    {
+      "description": "Replace without a soundtrack; a video row adds 1.04 MP × frames to the peak",
+      "workflow": "minimax-h3-references",
+      "inputs": {
+        "generate.videos": [
+          {
+            "video": {
+              "take_id": "11111111-0000-4000-8000-000000000001",
+              "in": 0,
+              "out": 3
+            },
+            "sound": "replace"
+          }
+        ]
+      },
+      "errors": [
+        "generate.videos[1].soundtrack: Replace needs a soundtrack"
+      ],
+      "peak_gb": 33.02
+    },
+    {
+      "description": "a soundtrack with Sound keep",
+      "workflow": "minimax-h3-references",
+      "inputs": {
+        "generate.videos": [
+          {
+            "video": {
+              "take_id": "11111111-0000-4000-8000-000000000001",
+              "in": 0,
+              "out": 3
+            },
+            "sound": "silent"
+          },
+          {
+            "video": {
+              "take_id": "11111111-0000-4000-8000-000000000001",
+              "in": 0,
+              "out": 3
+            },
+            "sound": "keep",
+            "soundtrack": {
+              "take_id": "11111111-0000-4000-8000-000000000002",
+              "in": 0,
+              "out": 3
+            }
+          }
+        ]
+      },
+      "errors": [
+        "generate.videos[2].soundtrack: a soundtrack is read only with Sound: Replace"
+      ]
+    },
+    {
+      "description": "Replace with its soundtrack: fine",
+      "workflow": "minimax-h3-references",
+      "inputs": {
+        "generate.videos": [
+          {
+            "video": {
+              "take_id": "11111111-0000-4000-8000-000000000001",
+              "in": 0,
+              "out": 3
+            },
+            "sound": "replace",
+            "soundtrack": {
+              "take_id": "11111111-0000-4000-8000-000000000002",
+              "in": 0,
+              "out": 3
+            }
+          }
+        ]
+      },
+      "errors": []
+    },
+    {
+      "description": "an audio reference alone",
+      "workflow": "minimax-h3-references",
+      "inputs": {
+        "generate.audios": [
+          {
+            "audio": {
+              "take_id": "11111111-0000-4000-8000-000000000002",
+              "in": 0,
+              "out": 3
+            }
+          }
+        ]
+      },
+      "errors": [
+        "generate: audio references need an image or video reference"
+      ]
+    },
+    {
+      "description": "13 references in all",
+      "workflow": "minimax-h3-references",
+      "inputs": {
+        "generate.refs": [
+          {
+            "image": {
+              "take_id": "11111111-0000-4000-8000-000000000003"
+            }
+          },
+          {
+            "image": {
+              "take_id": "11111111-0000-4000-8000-000000000003"
+            }
+          },
+          {
+            "image": {
+              "take_id": "11111111-0000-4000-8000-000000000003"
+            }
+          },
+          {
+            "image": {
+              "take_id": "11111111-0000-4000-8000-000000000003"
+            }
+          },
+          {
+            "image": {
+              "take_id": "11111111-0000-4000-8000-000000000003"
+            }
+          },
+          {
+            "image": {
+              "take_id": "11111111-0000-4000-8000-000000000003"
+            }
+          },
+          {
+            "image": {
+              "take_id": "11111111-0000-4000-8000-000000000003"
+            }
+          },
+          {
+            "image": {
+              "take_id": "11111111-0000-4000-8000-000000000003"
+            }
+          },
+          {
+            "image": {
+              "take_id": "11111111-0000-4000-8000-000000000003"
+            }
+          }
+        ],
+        "generate.videos": [
+          {
+            "video": {
+              "take_id": "11111111-0000-4000-8000-000000000001",
+              "in": 0,
+              "out": 3
+            },
+            "sound": "silent"
+          },
+          {
+            "video": {
+              "take_id": "11111111-0000-4000-8000-000000000001",
+              "in": 0,
+              "out": 3
+            },
+            "sound": "silent"
+          },
+          {
+            "video": {
+              "take_id": "11111111-0000-4000-8000-000000000001",
+              "in": 0,
+              "out": 3
+            },
+            "sound": "silent"
+          }
+        ],
+        "generate.audios": [
+          {
+            "audio": {
+              "take_id": "11111111-0000-4000-8000-000000000002",
+              "in": 0,
+              "out": 3
+            }
+          }
+        ]
+      },
+      "errors": [
+        "generate: at most 12 references in all (13)"
+      ]
+    },
+    {
+      "description": "Turbo adds 4.5 GB to the peak",
+      "workflow": "minimax-h3-text-to-video",
+      "inputs": {
+        "generate.lora": "turbo"
+      },
+      "errors": [],
+      "peak_gb": 31.07
+    }
+  ]
+}

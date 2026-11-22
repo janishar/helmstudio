@@ -116,6 +116,9 @@ stages:
     # API 1.36: the chips Create draws for this one-engine node; native.py / sgl.py send each progress's phase id
     phases: [{id: encode, label: Encode}, {id: sample, label: Sample}, {id: decode_audio, label: Decode audio},
              {id: decode_video, label: Decode video}]
+    # API 1.47: h3's limits on the references' sound together (audio rows, videos with sound kept or replaced): the
+    # composer's "3.0 s of 15.0 s sound · 1 of 3 sound inputs"; native.generate_error refuses past them
+    sounds: {max_s: 15, max_inputs: 3}
     inputs:
       model: Model
       prompt: Text
@@ -131,19 +134,38 @@ stages:
       # API 1.37 (plan 20 24.3): h3's speed flags, Base (Mac) only: the SGLang path (Base fp8) ignores them
       layers: {type: int, label: Layers, default: 50, min: 35, max: 50, step: 1,
                values: [35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50], when: "model.variant == 'base'",
+               option_help: {"50": exact, "45": fast, "40": aggressive},
                help: "DiT blocks: 50 exact, 45 fast, 40 aggressive; fewer also hold less of the transformer."}
       reuse: {type: int, label: Reuse, default: 1, min: 1, max: 3, step: 1, values: [1, 2, 3],
               when: "model.variant == 'base'",
+              option_help: {"1": every step fresh, "2": "at 20 steps, 11 fresh passes", "3": "at 20 steps, 8 fresh passes"},
               help: "1 close, 2 fast, 3 aggressive; at 20 steps 20, 11 or 8 fresh passes."}
       core_reuse: {type: int, label: Core reuse, default: 1, min: 1, max: 6, step: 1, values: [1, 2, 3, 4, 5, 6],
                    when: "model.variant == 'base' && generate.reuse == 1",
+                   option_help: {"1": every step, "4": fast, "6": a rough preview},
                    help: "Runs the costly core every n steps: 4 fast, 6 a rough preview. Only with Reuse 1."}
-      token_reduction: {type: bool, label: Token reduction, default: false, when: "model.variant == 'base'",
-                        help: "Pairs video tokens in the middle blocks: about 25 % faster, can shift the composition."}
+      # API 1.47 (contracts/README.md, Rules): the speed refusals as data, checked by studio and the form before h3 starts
+      # (native.generate_error keeps them as the backstop); the canvas is the node wired into `canvas`
       render: {type: enum, label: Render, default: Full, enum: [Full, 75%, 62.5%], when: "model.variant == 'base'",
+               option_help: {Full: the canvas size, 75%: "faster, a little softer", 62.5%: a quick look; loses fine detail},
+               rules: [{when: "model.variant == 'base' && render != 'Full' && gcd(canvas.width / 32, canvas.height / 32) == 1",
+                        error: "the canvas {canvas.width} × {canvas.height} has no smaller size of the same shape; use Full"}],
                help: "Renders smaller and scales up after decoding: faster, less fine detail. The size keeps the canvas's shape."}
+      # 256 x 256 renders: Full at 256², 75% at 320² and 352², 62.5% at 384² and 416² (h3_render_size)
+      token_reduction:
+        type: bool
+        label: Token reduction
+        default: false
+        when: "model.variant == 'base'"
+        rules:
+          - {when: "model.variant == 'base' && token_reduction && layers <= 40 && reuse == 3",
+             error: "token reduction with 40 layers or fewer and reuse 3 gives colour ringing; use reuse 2 or more layers"}
+          - {when: "model.variant == 'base' && token_reduction && canvas.width == canvas.height && (render == 'Full' && canvas.width == 256 || render == '75%' && (canvas.width == 320 || canvas.width == 352) || render == '62.5%' && (canvas.width == 384 || canvas.width == 416))",
+             error: "token reduction does not run when h3 renders 256 × 256; switch it off or render larger"}
+        help: "Pairs video tokens in the middle blocks: about 25 % faster, can shift the composition."
       # API 1.37 (plan 20 24.3 A5): SGLang's quality mode and flow shifts, Base fp8 (NVIDIA) only; sent only when changed
       quality: {type: enum, label: Mode, default: lossless, enum: [lossless, exact], when: "model.variant == 'base-fp8'",
+                option_help: {lossless: "SGLang's fast paths, the same maths", exact: "bit for bit the reference path, slower"},
                 help: "Lossless: SGLang's default fast paths, the same maths. Exact: bit-identical to the reference path, slower. High is not offered: SGLang allows it only on its audited 4-GPU setup."}
       flow_shift: {type: float, label: Flow shift, default: 12, min: 1, max: 20, step: 0.5, when: "model.variant == 'base-fp8'",
                    help: "How the noise schedule spends its steps on the picture; the model's value is 12."}
@@ -153,10 +175,13 @@ stages:
       # API 1.41 (plan 20 24.11 C3): lightx2v's 8-step Turbo LoRA, an optional add-on per value: turbo needs Turbo
       # LoRA, with any reference (Ref2VA) Turbo Ref LoRA instead. Strength fixed at 1 (owner, 24.12 point 5)
       lora: {type: enum, label: LoRA, default: none, enum: [none, turbo], addons: {turbo: [turbo]},
+             option_help: {none: the model as it is, turbo: "8 steps, near the 50-step look"},
              addons_with: {refs: {turbo: [turbo_ref]}, videos: {turbo: [turbo_ref]}, audios: {turbo: [turbo_ref]}},
              help: "turbo: lightx2v's 8-step Turbo LoRA (an add-on; References use their own, Turbo Ref LoRA); use 8 steps. Merged at load on a Mac, applied by SGLang on NVIDIA."}
       refs: {type: rows, label: References, default: [], min: 0, max: 9, item: {image: Image},
              mention: "<Picture {n}>",
+             rules: [{when: "len(refs) + len(videos) + len(audios) > 12",
+                      error: "at most 12 references in all ({len(refs) + len(videos) + len(audios)})"}],
              help: "Images the prompt names <Picture 1>, <Picture 2>, …; any reference (image, video or audio) switches to the Ref2VA model and cannot go with a first or last frame.",
              not_with: [first, last]}
       videos:
@@ -173,6 +198,9 @@ stages:
           # API 1.37: an optional media field (empty unless Sound is replace), cut to the video part's length
           soundtrack: {type: media, label: Soundtrack, default: null, optional: true, accepts: [audio], trim: true,
                        min_s: 2.34, max_s: 15,
+                       rules: [{when: "sound == 'replace' && soundtrack == null", error: Replace needs a soundtrack},
+                               {when: "sound != 'replace' && soundtrack != null",
+                                error: "a soundtrack is read only with Sound: Replace"}],
                        help: "With Sound: replace, the sound the model hears with this video: an audio take or a video's sound, cut to the video part's length."}
         mention: "<Video {n}>"
         max_total_s: 15
@@ -190,6 +218,7 @@ stages:
         mention: "<Audio {n}>"
         max_total_s: 15
         not_with: [first, last]
+        rules: [{when: "len(audios) > 0 && len(refs) == 0 && len(videos) == 0", error: audio references need an image or video reference}]
         help: "Sounds the prompt names <Audio 1>, <Audio 2>, <Audio 3>: 2 to 15 s each, 15 s in all; needs an image or video reference too."
     # a video reference joins the denoise sequence at its own size (h3_reference_video_canvas: its size on the 32 px
     # grid, at most h3's adapted canvas, <= 1.04 MP) for up to the clip's frames, and all video parts read <= 15 s

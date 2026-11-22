@@ -167,6 +167,15 @@
             "generate.lora": "none"
           }
         },
+        "preset_help": [
+          {
+            "text": "NVIDIA: a preset sets only the steps and the LoRA (Draft 4, Turbo 8 with the Turbo LoRA, Fast and Default 20, Reference 50).",
+            "when": "model.variant == 'base-fp8'"
+          },
+          {
+            "text": "Draft 4 steps; Turbo 8 steps with the Turbo LoRA (an add-on); Fast 20 steps, 45 layers, reuse 2, token reduction; Default the same without token reduction; Reference 50 steps, every layer. On NVIDIA a preset sets only the steps and the LoRA."
+          }
+        ],
         "preset_order": [
           "Draft",
           "Fast",
@@ -360,6 +369,15 @@
             "generate.lora": "none"
           }
         },
+        "preset_help": [
+          {
+            "text": "NVIDIA: a preset sets only the steps and the LoRA (Draft 4, Turbo 8 with the Turbo LoRA, Fast and Default 20, Reference 50).",
+            "when": "model.variant == 'base-fp8'"
+          },
+          {
+            "text": "Draft 4 steps; Turbo 8 steps with the Turbo LoRA (an add-on); Fast 20 steps, 45 layers, reuse 2, token reduction; Default the same without token reduction; Reference 50 steps, every layer. On NVIDIA a preset sets only the steps and the LoRA."
+          }
+        ],
         "preset_order": [
           "Draft",
           "Fast",
@@ -539,6 +557,15 @@
             "generate.lora": "none"
           }
         },
+        "preset_help": [
+          {
+            "text": "NVIDIA: a preset sets only the steps and the LoRA (Draft 4, Turbo 8 with the Turbo LoRA, Fast and Default 20, Reference 50).",
+            "when": "model.variant == 'base-fp8'"
+          },
+          {
+            "text": "Draft 4 steps; Turbo 8 steps with the Turbo LoRA (an add-on); Fast 20 steps, 45 layers, reuse 2, token reduction; Default the same without token reduction; Reference 50 steps, every layer. On NVIDIA a preset sets only the steps and the LoRA."
+          }
+        ],
         "preset_order": [
           "Draft",
           "Fast",

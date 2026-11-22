@@ -144,7 +144,7 @@ func checkMedia(ctx context.Context, tx pgx.Tx, store storage.Store, ownerID str
 	schemas map[string]registry.NodeSchema) (string, error) {
 	slots := mediaSlots(nodes, schemas)
 	if len(slots) == 0 && len(paramsOf(nodes, schemas, "span")) == 0 {
-		return "", nil
+		return firstRule(nodes, schemas), nil
 	}
 	var ids []string
 	for _, slot := range slots {
@@ -243,7 +243,13 @@ func mediaRules(nodes map[string]registry.Node, schemas map[string]registry.Node
 		}
 		nodes[id].Params[name] = map[string]any{"start": start, "end": end}
 	}
-	return ""
+	return firstRule(nodes, schemas)
+}
+
+// firstRule is the first rule the graph breaks (API 1.47, contracts/README.md Param rules), "" when none: checked
+// after every other check, the media ones included.
+func firstRule(nodes map[string]registry.Node, schemas map[string]registry.NodeSchema) string {
+	return append(ruleErrors(nodes, schemas), "")[0]
 }
 
 // snapMedia is a trim value with in / out snapped to the take's grid and filled (in 0, out min(d, max_s)), or why the

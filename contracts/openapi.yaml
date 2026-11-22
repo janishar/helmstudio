@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.44.0
+  version: 1.47.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -27,7 +27,7 @@ servers:
 security:
   - {ApiKey: [], BearerJWT: []}
 tags:
-  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media); from 1.23 LoRA strengths 0..2 (looks saved before are clamped when read; contracts/README.md, Looks); from 1.24 the model component a node loads (NodeSchema.component); from 1.25 an inspector section''s help, the presets'' order (StudioLayout.preset_order) and a run''s planned peak before it is sent (POST /v1/studio/runs/plan); from 1.26 an inspector section''s choice tiles (LTX''s Recipe: two-stage or one-stage); from 1.28 a judge''s branch without `then` (Ask me) and a judge test on picked takes (POST /v1/studio/pipelines/{pipeline_id}/judge-tests); from 1.29 a V1 clip''s shot number (TimelineClip.number: "Shot 4"); from 1.30 voices: audio takes made by runs (the `Audio` port, `Workflow.media` audio), the `voice` param, saved voices in the library (designed voices and the packs'' starter voices; contracts/README.md, Voices); from 1.31 cloned voices (a 3–30 s clip of an audio take or a video''s sound, with consent), designed voices that keep a clip, Save as voice (`from_take` with `kind: voice`) and the zonos3 family (contracts/README.md, Voices: cloned voices); from 1.32 dialogue and Timeline audio: dialogue scripts (`script` text params expanded into `lines` rows whose items carry a voice), an element''s `voice_id`, cues on a dialogue''s take, audio takes on the audio tracks, New line (POST /v1/studio/timelines/{timeline_id}/lines), Make shot (a slot `exact` at an audio clip''s time), an export plan''s `sounds`, offers and pipeline binds into rows of one media field, `library.read` voices and the write node''s `form: script` (contracts/README.md, Dialogue and Timeline audio); from 1.44 the in-app assistant: chats, their events and memory, the admin''s assistant settings, search providers (kind `search`) and the Gallery''s `order` (contracts/README.md, Assistant)'}
+  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media); from 1.23 LoRA strengths 0..2 (looks saved before are clamped when read; contracts/README.md, Looks); from 1.24 the model component a node loads (NodeSchema.component); from 1.25 an inspector section''s help, the presets'' order (StudioLayout.preset_order) and a run''s planned peak before it is sent (POST /v1/studio/runs/plan); from 1.26 an inspector section''s choice tiles (LTX''s Recipe: two-stage or one-stage); from 1.28 a judge''s branch without `then` (Ask me) and a judge test on picked takes (POST /v1/studio/pipelines/{pipeline_id}/judge-tests); from 1.29 a V1 clip''s shot number (TimelineClip.number: "Shot 4"); from 1.30 voices: audio takes made by runs (the `Audio` port, `Workflow.media` audio), the `voice` param, saved voices in the library (designed voices and the packs'' starter voices; contracts/README.md, Voices); from 1.31 cloned voices (a 3–30 s clip of an audio take or a video''s sound, with consent), designed voices that keep a clip, Save as voice (`from_take` with `kind: voice`) and the zonos3 family (contracts/README.md, Voices: cloned voices); from 1.32 dialogue and Timeline audio: dialogue scripts (`script` text params expanded into `lines` rows whose items carry a voice), an element''s `voice_id`, cues on a dialogue''s take, audio takes on the audio tracks, New line (POST /v1/studio/timelines/{timeline_id}/lines), Make shot (a slot `exact` at an audio clip''s time), an export plan''s `sounds`, offers and pipeline binds into rows of one media field, `library.read` voices and the write node''s `form: script` (contracts/README.md, Dialogue and Timeline audio); from 1.44 the in-app assistant: chats, their events and memory, the admin''s assistant settings, search providers (kind `search`) and the Gallery''s `order` (contracts/README.md, Assistant); from 1.47 rules (refusals as data, ParamSchema.rules), option help (ParamSchema.option_help), a native node''s peak formula and sound limits (NodeSchema.peak_gb, sounds: the planned peak per run) and the Preset heading''s help (StudioLayout.preset_help)'}
   - {name: files, description: signed file downloads and uploads}
   - name: auth
     description: 'auth_service: users, sessions (JWT access + rotating refresh tokens), roles, client API keys'
@@ -3218,6 +3218,22 @@ components:
         addons: {type: object, additionalProperties: {type: array, items: {type: string}}, description: 'from 1.41, enum only: value → the optional add-ons (Model.addons[].component of the node''s family) a run needs while the param holds that value (MiniMax H3''s `lora`: `turbo` → [turbo]); the run check counts them as the node''s `addons` on its resolved value (never while the node is bypassed) and the form greys that option, and every preset that sets it, with `<title> not downloaded` (contracts/README.md, Optional add-ons). Absent = none'}
         addons_with: {type: object, additionalProperties: {type: object, additionalProperties: {type: array, items: {type: string}}}, description: 'from 1.41, with `addons`: `<name>` (an optional input of the node, or one of its rows params) → {value → add-ons}: while that input is wired or that rows param holds a row its list replaces the value''s `addons` list, several names'' lists together (MiniMax H3: any reference runs Ref2VA, so `turbo` then needs `turbo_ref`)'}
         optional: {type: boolean, description: 'from 1.37, a rows item''s media field only: it may be left empty (null or absent; MiniMax H3''s `soundtrack`); `max_total_s` and Use in… go by the item''s one required media field'}
+        rules:
+          type: array
+          maxItems: 8
+          description: 'from 1.47 (contracts/README.md, Param rules): refusals as data. Each `when` is an expression (the `when` grammar plus `<`, `<=`, `>`, `>=`, `+`, `-`, `*`, `/`, `len(<rows>)` and `gcd(a, b)`; a bare name is a param of the same node, or in a rows item field''s rule a field of the same item; `<a>.<b>` is param `b` of the node wired into this node''s input `a`, else of node `a`); while it holds the run is 422 `<node>: <error>` (an item field''s: `<node>.<param>[<i>].<field>: <error>`, items from 1), each `{<expression>}` in `error` replaced by its value. A reference that resolves to nothing makes the rule not hold. Studio checks them after the other checks, in param order (POST …/runs and /runs/plan); the form shows each under its param and blocks Generate'
+          items:
+            type: object
+            required: [when, error]
+            additionalProperties: false
+            properties:
+              when: {type: string, minLength: 1, maxLength: 300}
+              error: {type: string, minLength: 1, maxLength: 200}
+        option_help:
+          type: object
+          maxProperties: 32
+          additionalProperties: {type: string, minLength: 1, maxLength: 80}
+          description: 'from 1.47, enum or int with `values`: value (as text) → its line under the value in the param''s menu (MiniMax H3''s LoRA: `none` → `the model as it is`); absent = none'
         fps: {type: string, description: 'frames only: the name of the same node''s int or float param holding frames per second'}
         auto:
           type: object
@@ -3260,6 +3276,15 @@ components:
           type: array
           description: 'from 1.36: the ordered phases of a node that runs one engine end to end (MiniMax H3: Encode, Sample, Decode audio, Decode video); its progress carries `phase_id` (contracts/README.md, Phases). Absent = none'
           items: {type: object, required: [id, label], properties: {id: {type: string}, label: {type: string}}}
+        peak_gb: {type: string, minLength: 1, maxLength: 400, description: 'from 1.47: the stage''s peak_gb formula (model.yaml), published for a stage that loads no component (a native child process, whose memory plan is the formula alone): studio evaluates it per run over the node''s params, `len(<rows>)`, `mp` and `frames` (contracts/README.md, Memory per run). Absent = none'}
+        sounds:
+          type: object
+          required: [max_s, max_inputs]
+          additionalProperties: false
+          description: 'from 1.47: the node''s limits on the sound its references carry together (MiniMax H3: 15 s, 3 inputs): audio rows, and video rows whose `sound` keeps the take''s sound or replaces it with a `soundtrack`; the composer counts them (`3.0 s of 15.0 s sound · 1 of 3 sound inputs`). Absent = none'
+          properties:
+            max_s: {type: number, exclusiveMinimum: 0}
+            max_inputs: {type: integer, minimum: 1}
         params: {type: array, items: {$ref: '#/components/schemas/ParamSchema'}, description: in form order}
         inputs: {type: array, items: {$ref: '#/components/schemas/Port'}}
         outputs: {type: array, items: {$ref: '#/components/schemas/Port'}}
@@ -3415,6 +3440,17 @@ components:
             additionalProperties: {$ref: '#/components/schemas/ParamValue'}
           description: 'named sets of values over this workflow''s paths (Draft, Final); choosing one sets them in the form'
           examples: [{Draft: {model.variant: turbo, model.precision: int8}}]
+        preset_help:
+          type: array
+          maxItems: 4
+          description: 'from 1.47: the Preset heading''s (i) text: the first item whose `when` (the `when` grammar over the workflow''s paths) holds, or that has none; absent = no (i)'
+          items:
+            type: object
+            required: [text]
+            additionalProperties: false
+            properties:
+              text: {type: string, minLength: 1, maxLength: 300}
+              when: {type: string, minLength: 1, maxLength: 200}
         preset_order:
           type: array
           maxItems: 8
@@ -3996,7 +4032,7 @@ components:
       description: 'from 1.25: POST /v1/studio/runs/plan'
       properties:
         host: {type: [string, 'null'], description: 'the host the run would be eligible on, the first by name (from 1.35 with RunRequest.host: that host); null = none'}
-        peak_gb: {type: [number, 'null'], minimum: 0, description: 'its planned peak there in GB (the plan''s peak_gb + its LoRA files); null = no plan (the whole host budget) or no host'}
+        peak_gb: {type: [number, 'null'], minimum: 0, description: 'its planned peak there in GB (the plan''s peak_gb + its LoRA files; from 1.47 a plan with no components is the run''s own: its nodes'' `peak_gb` formulas over its settings, contracts/README.md Memory per run); null = no plan (the whole host budget) or no host'}
         reason: {type: [string, 'null'], description: 'why no host is eligible (the text the run would fail with, `no live host for env mlx`); null when one is'}
     LookId:
       type: string
