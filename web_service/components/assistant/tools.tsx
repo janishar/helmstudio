@@ -262,6 +262,15 @@ const what = {
     async () => {
       const r = await ok(api.GET("/v1/studio/runs/{run_id}", { params: { path: { run_id: id } } }));
       const n = r.outputs.length;
+      // an ask run (look_at) answers in text, never a take: the answer comes back for the model to read
+      if (r.status === "succeeded" && r.answer) {
+        const a = r.answer.text.trim();
+        return {
+          end: "done",
+          text: `Answered · ${a.length > 120 ? `${a.slice(0, 120)}…` : a}`,
+          result: { status: r.status, answer: a.slice(0, 4000) },
+        };
+      }
       if (r.status === "succeeded")
         return {
           end: "done",

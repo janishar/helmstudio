@@ -544,8 +544,19 @@ def test_tools_and_actions_never_share_a_name_and_actions_follow_the_route():
     acts = {n for s in screens.values() for n in s["actions"]}
     assert not acts & set(cat)
     assert (
-        assistant.action_spec("addNode", "/pipelines/abc")
+        assistant.action_spec("addNode", "/pipelines/abc", set())
         == screens["pipeline_editor"]["actions"]["addNode"]
     )
-    assert assistant.action_spec("addNode", "/?s=1") == screens["graph"]["actions"]["addNode"]
-    assert assistant.action_spec("delete", "/models") == screens["models"]["actions"]["delete"]
+    assert (
+        assistant.action_spec("addNode", "/?s=1", set()) == screens["graph"]["actions"]["addNode"]
+    )
+    admin = {"admin", "user"}
+    assert (
+        assistant.action_spec("delete", "/models", admin) == screens["models"]["actions"]["delete"]
+    )
+    # the Models screen's actions are an admin's: never offered to a user, whatever the tab lists
+    assert assistant.action_spec("openRow", "/models", {"user"}) is None
+    assert (
+        assistant.action_spec("delete", "/models", {"user"})
+        != screens["models"]["actions"]["delete"]
+    )

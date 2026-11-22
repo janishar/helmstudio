@@ -44,6 +44,21 @@ describe("await", () => {
     ]);
   });
 
+  it("an ask run (look_at) comes back with its answer, not takes", async () => {
+    answer("GET", {
+      "/v1/studio/runs/{run_id}": () =>
+        run("succeeded", {
+          outputs: [],
+          answer: { text: "Take 3 is sharpest.", tokens_in: 1, tokens_out: 1, seconds: 1 },
+        }),
+    });
+    expect(await awaitIt({ what: "run", id: "r1" }, () => undefined)).toEqual({
+      status: "done",
+      text: "Answered · Take 3 is sharpest.",
+      result: { status: "succeeded", answer: "Take 3 is sharpest." },
+    });
+  });
+
   it("a failed run fails the line with its reason", async () => {
     answer("GET", { "/v1/studio/runs/{run_id}": () => run("failed") });
     expect(await awaitIt({ what: "run", id: "r1" }, () => undefined)).toMatchObject({

@@ -118,10 +118,12 @@ def _on(pattern: str, route: str) -> bool:
     )
 
 
-def action_spec(name: str, route: str) -> dict | None:
-    """The action's entry: the one of the screen on `route` when several screens register the name."""
+def action_spec(name: str, route: str, roles: set[str]) -> dict | None:
+    """The action's entry: the one of the screen on `route` when several screens register the name; none of a
+    screen whose roles are not all held (the Models screen's are an admin's)."""
     found = [(not any(_on(r, route) for r in s["routes"]), i, s["actions"][name])
-             for i, s in enumerate(_files()[1].values()) if name in s["actions"]]  # fmt: skip
+             for i, s in enumerate(_files()[1].values())
+             if name in s["actions"] and set(s.get("roles", [])) <= roles]  # fmt: skip
     return min(found)[2] if found else None
 
 
@@ -137,7 +139,7 @@ def offered(data: dict, route: str) -> dict[str, dict]:
             continue
         out[n] = {"kind": "tool", "spec": t}
     for n in data["actions"]:
-        if n not in out and (a := action_spec(n, route)):
+        if n not in out and (a := action_spec(n, route, roles)):
             out[n] = {"kind": "action", "spec": a}
     return out
 
