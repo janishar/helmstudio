@@ -308,6 +308,13 @@ def test_checks_refuse_lora_rows_beats_and_take_the_variants_as_the_official_one
         == ".negative: NAG is Mac only for now"
     )
     assert ltx.check_encode({"beats": [], "negative": "  "}, set()) is None
+    # API 1.39: image bindings other than auto are Mac only (plan 19 phase 5, board LtxFeatures frame 5)
+    auto = {"image": None, "seconds": 0}
+    assert ltx.check_keyframes({"images": [auto, auto | {"binding": "auto"}]}, set()) is None
+    assert (
+        ltx.check_keyframes({"images": [auto | {"binding": "guide"}]}, set())
+        == ".images[1].binding: Replace and Guide are Mac only for now"
+    )
     # distill needs its distill_from variant's transformer on this host (the contract's text, as the dispatcher's)
     assert (
         ltx.check_distill({}, set(), {"model": int8})

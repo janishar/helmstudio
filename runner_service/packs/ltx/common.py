@@ -151,20 +151,39 @@ def cover(rgb: np.ndarray, side: int) -> np.ndarray:
     return np.asarray(Image.fromarray(rgb, mode="RGB").resize(size, Image.LANCZOS))
 
 
+def _at(frame: int, fps: float) -> str:
+    """A frame's time on the fewest decimals (1-3) that land on it again (round(s·fps))."""
+    for d in (1, 2, 3):
+        if round(round(frame / fps, d) * fps) == frame:
+            break
+    return f"{frame / fps:.{d}f} s"
+
+
 def keyframe_frames(cond, frames: int, fps: float) -> list[int]:
     """Each row's pixel frame min(round(s·fps), frames − 1) (contracts README, Video: keyframes), or RunError with
-    the contract's text for a row past the clip or on a frame an earlier row has (rows from 1)."""
+    the contract's text for a row past the clip, on a frame an earlier row has, or (API 1.39, plan 19 phase 5) bound
+    `replace` off the latent grid (0 or 1 + 8k: the fork's ImageReplace), naming the nearest grid frame in the clip
+    (rows from 1)."""
     out, seen = [], {}
-    for i, (_, seconds, _) in enumerate(cond.images, 1):
+    for i, (_, seconds, _, binding) in enumerate(cond.images, 1):
         f, where = round(seconds * fps), f"{cond.images_at}[{i}].seconds"
         if f > frames:
             raise RunError(f"{where}: frame {f} is past the clip's last frame {frames - 1}")
         f = min(f, frames - 1)
         if f in seen:
             raise RunError(f"{where}: frame {f} is already used by row {seen[f]}")
+        if binding == "replace" and f % 8 != 1 and f != 0:
+            g = min((0, *range(1, frames, 8)), key=lambda x: abs(x - f))  # the earlier on a tie
+            raise RunError(f"{cond.images_at}[{i}].binding: Replace needs frame 0 or 1 + 8k ({_at(f, fps)} is frame "
+                           f"{f}; the nearest is {_at(g, fps)}, frame {g})")  # fmt: skip
         seen[f] = i
         out.append(f)
     return out
+
+
+def latent_index(frame: int) -> int:
+    """The latent a replace at pixel frame `frame` writes (the fork's replacement_latent_index: 0, else 1 + (f-1)//8)."""
+    return 0 if frame == 0 else 1 + (frame - 1) // 8
 
 
 def dfr_canvas(frames: int) -> tuple[int, list[int]]:

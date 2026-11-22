@@ -70,6 +70,7 @@ from packs.ltx.common import (  # the runtime-neutral part
     image_crf,
     is_distilled,
     keyframe_frames,
+    latent_index,
     lora_block_prefused,
     ltx_floor,
     model_version,
@@ -147,7 +148,7 @@ class Cond:
     audio: mx.array  # [1, 1024, 2048]
     beats: tuple = ()  # each beat's seconds (0 = an equal share of what the pinned ones leave)
     ranges: tuple = ()  # each beat's [start, end) columns of the encoded prompt (Prompt Relay)
-    images: tuple = ()  # keyframe rows (H.264-round-tripped RGB uint8, seconds, strength), unresolved
+    images: tuple = ()  # keyframe rows (H.264-round-tripped RGB uint8, seconds, strength, binding), unresolved
     # where the rows came from, for the run's error texts (`encode.beats`, `keyframes.images`); ponytail: a cached
     # Cond reused by a node of another id keeps the first id in these texts
     beats_at: str = ""
@@ -357,15 +358,19 @@ def _conditionings(
     encoder = ctx.component(model, "vae_encoder")
     ctx.progress(1, 1, "encoding images")
     out = []
-    for (rgb, _, strength), frame in zip(cond.images, at, strict=True):
+    for (rgb, _, strength, binding), frame in zip(cond.images, at, strict=True):
         latent = encoder.encode(
             to_pixels(rgb, fhw[1] * 32, fhw[2] * 32)[:, :, None, :, :]
         )  # (1, 128, 1, H, W)
         tokens = latent.transpose(0, 2, 3, 4, 1).reshape(1, -1, 128)
         mx.eval(tokens)
-        out.append(VideoConditionByLatentIndex(frame_indices=[0], clean_latent=tokens, strength=strength) if frame == 0
-                   else VideoConditionByKeyframeIndex(frame_idx=frame, keyframe_latent=tokens, spatial_dims=fhw,
-                                                      frame_rate=rope or fps, strength=strength))  # fmt: skip
+        # API 1.39 binding (the fork's combined_image_conditionings): auto replaces at frame 0 and guides elsewhere
+        if binding == "replace" or (binding == "auto" and frame == 0):
+            out.append(VideoConditionByLatentIndex(frame_indices=[latent_index(frame)], clean_latent=tokens,
+                                                   strength=strength))  # fmt: skip
+        else:
+            out.append(VideoConditionByKeyframeIndex(frame_idx=frame, keyframe_latent=tokens, spatial_dims=fhw,
+                                                     frame_rate=rope or fps, strength=strength))  # fmt: skip
     return out
 
 
@@ -434,7 +439,8 @@ def keyframes(ctx, params: dict, inputs: dict) -> dict:
     for r in params["images"]:
         if id(r["image"]) not in trips:
             trips[id(r["image"])] = cover(crf_round_trip(r["image"], crf), CANVAS_MAX)
-    rows = tuple((trips[id(r["image"])], float(r["seconds"]), float(r["strength"])) for r in params["images"])  # fmt: skip
+    rows = tuple((trips[id(r["image"])], float(r["seconds"]), float(r["strength"]), r.get("binding", "auto"))
+                 for r in params["images"])  # fmt: skip
     if not rows:
         raise RunError(f"{ctx.node}.images: at least 1 items")
     return {"cond": replace(inputs["cond"], images=rows, images_at=f"{ctx.node}.images")}

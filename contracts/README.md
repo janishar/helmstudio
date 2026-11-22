@@ -1014,7 +1014,13 @@ audio track) plus a poster image; uploads stay images.
   last frame need no other rule); a frame an earlier row has → `keyframes.images[2].seconds: frame 0 is already used by
   row 1`. With `"auto"` (or no single frames param) only the second check runs at studio; the runner checks both on
   the resolved length and fails the run with the same text. Frame 0 replaces latent frame 0, any other appends
-  tokens; one strength for both stages; CRF 33 and the resize are internal. A rows param with an Image field and
+  tokens; one strength for both stages; CRF 33 and the resize are internal. From API 1.39 (plan 19 phase 5, board
+  LtxFeatures frame 4) the item has `binding: enum auto | replace | guide` default `auto` (today's rule, bit for bit):
+  `replace` replaces latent `0` (frame 0) or `1 + (f − 1) / 8` and needs frame 0 or `1 + 8k`, which the runner
+  checks on the resolved length before the transformer loads (`keyframes.images[2].binding: Replace needs frame 0 or
+  1 + 8k (2.0 s is frame 48; the nearest is 1.7 s, frame 41)` on 49 frames at 24 fps, the nearest grid frame inside the clip, the earlier on
+  a tie, each time on the fewest decimals that land on its frame); `guide` appends tokens at any frame. On NVIDIA the
+  run check refuses a non-auto row (`keyframes.images[1].binding: Replace and Guide are Mac only for now`). A rows param with an Image field and
   `min` ≥ 1 holds `[]` in a workflow (it holds no take) and needs `min` items at run (`keyframes.images: at least 1
   items`); the pipeline rule `unbound_input` already covers it. Item fields left out take their defaults, and the
   merged item is checked. The board draws only a "First frame" tile; the keyframe rows editor needs a new board.

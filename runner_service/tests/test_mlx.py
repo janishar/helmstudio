@@ -11,6 +11,7 @@ from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 from conftest import CONTRACTS, safetensors_file
 
@@ -441,7 +442,8 @@ def test_keyframe_positions_follow_the_contract_fixture():
         if d["frames"] == "auto" or kf.get("bypass") or "keyframes" not in nodes:
             continue
         rows = tuple(
-            (None, r.get("seconds", 0), r.get("strength", 1)) for r in kf["params"]["images"]
+            (None, r.get("seconds", 0), r.get("strength", 1), "auto")
+            for r in kf["params"]["images"]
         )
         cond = ltx_mlx.Cond(None, None, images=rows, images_at="keyframes.images")
         try:
@@ -450,6 +452,80 @@ def test_keyframe_positions_follow_the_contract_fixture():
         except RunError as e:
             got = [str(e)]
         assert got == c["errors"][:1], c["description"]
+
+
+@needs_mlx
+def test_image_bindings_map_to_the_forks_conditionings(on_cpu):
+    """Plan 19 phase 5: auto is today's rule (frame 0 replaces latent 0, later frames append), bit for bit; replace
+    writes latent 1 + (f - 1) // 8 (frame 0: latent 0), guide appends at any frame; replace off the grid is refused
+    with the nearest grid frame in the clip."""
+    from packs.ltx import mlx as ltx_mlx
+
+    fhw, hw = (7, 2, 2), 4
+
+    class Encoder:  # each image's latent from its pixels: a row's tokens tell the rows apart
+        def encode(self, px):
+            return mx.broadcast_to(px.mean().astype(mx.float32), (1, 128, 1, 2, 2))
+
+    ctx = SimpleNamespace(component=lambda model, name: Encoder(), progress=lambda *a: None)
+    img = [np.full((64, 64, 3), v, np.uint8) for v in (10, 200)]
+
+    def conds(*rows):
+        cond = ltx_mlx.Cond(None, None, images=rows, images_at="keyframes.images")
+        return ltx_mlx._conditionings(ctx, None, cond, fhw, 49, 24.0)
+
+    def today(rows):  # the rule before bindings (a763d77), inline
+        frames = ltx_mlx.keyframe_frames(
+            ltx_mlx.Cond(None, None, images=rows, images_at="k"), 49, 24.0
+        )
+        out = []
+        for (rgb, _, strength, _), f in zip(rows, frames, strict=True):
+            px = ltx_mlx.to_pixels(rgb, 64, 64)[:, :, None]
+            t = Encoder().encode(px).transpose(0, 2, 3, 4, 1).reshape(1, -1, 128)
+            out.append(
+                ltx_mlx.VideoConditionByLatentIndex(
+                    frame_indices=[0], clean_latent=t, strength=strength
+                )
+                if f == 0
+                else ltx_mlx.VideoConditionByKeyframeIndex(
+                    frame_idx=f,
+                    keyframe_latent=t,
+                    spatial_dims=fhw,
+                    frame_rate=24.0,
+                    strength=strength,
+                )
+            )
+        return out
+
+    rows = ((img[0], 0.0, 1.0, "auto"), (img[1], 1.7, 0.8, "auto"))
+    pos = ltx_mlx.compute_video_positions(*fhw, frame_rate=24.0)
+    got, want = conds(*rows), today(rows)
+    assert [type(c) for c in got] == [type(c) for c in want]
+    a = ltx_mlx.noised_state((1, 7 * hw, 128), got, fhw, pos, 42, 1.0)
+    b = ltx_mlx.noised_state((1, 7 * hw, 128), want, fhw, pos, 42, 1.0)
+    for x, y in (
+        (a.latent, b.latent),
+        (a.positions, b.positions),
+        (a.denoise_mask, b.denoise_mask),
+    ):
+        assert mx.array_equal(x, y).item()
+
+    first, later = conds((img[0], 0.0, 1.0, "guide"), (img[1], 41 / 24, 0.8, "replace"))
+    assert isinstance(first, ltx_mlx.VideoConditionByKeyframeIndex) and first.frame_idx == 0
+    assert isinstance(later, ltx_mlx.VideoConditionByLatentIndex) and later.frame_indices == [6]
+    (zero,) = conds((img[0], 0.0, 1.0, "replace"))
+    assert isinstance(zero, ltx_mlx.VideoConditionByLatentIndex) and zero.frame_indices == [0]
+    (mid,) = conds((img[0], 1.0, 1.0, "guide"))
+    assert isinstance(mid, ltx_mlx.VideoConditionByKeyframeIndex) and mid.frame_idx == 24
+
+    with pytest.raises(RunError) as e:
+        conds((img[0], 0.0, 1.0, "auto"), (img[1], 2.0, 1.0, "replace"))
+    assert str(e.value) == ("keyframes.images[2].binding: Replace needs frame 0 or 1 + 8k (2.0 s is frame 48; "
+                            "the nearest is 1.7 s, frame 41)")  # the board's line: 49 has no frame 49  # fmt: skip
+    with pytest.raises(
+        RunError, match=r"\[1\].binding: .*frame 3; the nearest is 0.04 s, frame 1\)"
+    ):
+        conds((img[0], 0.125, 1.0, "replace"))
 
 
 @needs_mlx
@@ -542,7 +618,11 @@ def test_keyframes_round_trip_each_take_once_and_keep_at_most_the_largest_canvas
         ((4000, 2400), 18),
     ]  # the repeated take once, at the Cond's CRF
     assert [r[0].shape for r in got] == [(400, 640, 3), (1920, 3200, 3), (400, 640, 3)]
-    assert got[0][0] is got[2][0] and [r[1:] for r in got] == [(0.0, 1.0), (1.0, 1.0), (2.0, 0.5)]
+    assert got[0][0] is got[2][0] and [r[1:] for r in got] == [
+        (0.0, 1.0, "auto"),
+        (1.0, 1.0, "auto"),
+        (2.0, 0.5, "auto"),
+    ]
 
 
 def test_the_generation_rules_come_from_model_version():

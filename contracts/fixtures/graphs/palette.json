@@ -1938,9 +1938,20 @@
                   "max": 1,
                   "step": 0.05,
                   "help": "1 holds the frame to the image; lower lets the model drift from it."
+                },
+                "binding": {
+                  "type": "enum",
+                  "label": "Binding",
+                  "default": "auto",
+                  "enum": [
+                    "auto",
+                    "replace",
+                    "guide"
+                  ],
+                  "help": "Auto: a frame at 0 s replaces the start, later ones guide. Replace pins the frame exactly. Guide lets the clip pass near it."
                 }
               },
-              "help": "Each row: an image, where it goes and how strongly it holds."
+              "help": "Each row: an image, where it goes, how strongly it holds and how it binds."
             }
           ],
           "inputs": [

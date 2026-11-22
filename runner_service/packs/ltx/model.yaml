@@ -246,7 +246,10 @@ stages:
                     help: "Where in the clip, in seconds: 0 is the first frame, the clip's length its last."}
           strength: {type: float, label: Strength, default: 1, min: 0, max: 1, step: 0.05,
                      help: "1 holds the frame to the image; lower lets the model drift from it."}
-        help: "Each row: an image, where it goes and how strongly it holds."
+          # plan 19 phase 5 (API 1.39): replace needs a frame on the latent grid (0 or 1 + 8k); NVIDIA: auto only
+          binding: {type: enum, label: Binding, default: auto, enum: [auto, replace, guide],
+                    help: "Auto: a frame at 0 s replaces the start, later ones guide. Replace pins the frame exactly. Guide lets the clip pass near it."}
+        help: "Each row: an image, where it goes, how strongly it holds and how it binds."
     # one libx264 round trip of the largest image at a time (host memory, not MLX); not measured: an estimate
     peak_gb: "0.5 + 0.03 * mp_in"
   sample:

@@ -51,16 +51,16 @@ export function ItemFields({
         </span>
       );
       const v = itemValue(row, [k, s]);
+      // an enum: its label, then a segmented choice on the same line (docs/mock/LtxFeatures.dc.html frame 4)
       if (s.type === "enum")
         return (
-          <div key={k} role="group" aria-label={s.label ?? k} className="flex flex-col gap-1.5">
+          <div key={k} className="flex items-center justify-between gap-2">
             <span className="text-[12px] text-t2">{label}</span>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="seg" role="group" aria-label={s.label ?? k}>
               {s.enum?.map((o) => (
                 <button
                   key={o}
                   type="button"
-                  className="opt bevel min-w-16 px-3 text-[13px]"
                   aria-pressed={v === o}
                   onClick={() => onRow({ [k]: o })}
                 >

@@ -333,4 +333,31 @@ describe("RowsEditor: keyframe cards on the clip", () => {
     expect((seen.at(-1) as S<"RowItem">[])[0].seconds).toBe(2);
     expect(screen.getByText("frame 48 · 2.0 s")).toBeTruthy();
   });
+
+  it("an enum item field is a segmented choice on its row (LTX binding)", () => {
+    const a = take();
+    remember([a]);
+    const seen: Raw[] = [];
+    const bound = field("bound", {
+      ...keys.param,
+      item: {
+        ...(keys.param.item as object),
+        binding: { type: "enum", label: "Binding", default: "auto", enum: ["auto", "replace", "guide"] },
+      } as unknown as S<"ParamSchema">["item"],
+    });
+    render(
+      <Host
+        initial={[{ image: { take_id: a.id }, seconds: 0 }]}
+        seen={seen}
+        render={(raw, onChange) => (
+          <RowsEditor f={bound} raw={raw} onChange={onChange} uploads={uploads} clip={clip} />
+        )}
+      />,
+    );
+    const seg = screen.getByRole("group", { name: "Binding" });
+    expect(seg.className).toContain("seg");
+    expect(within(seg).getByRole("button", { name: "Auto" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(within(seg).getByRole("button", { name: "Replace" }));
+    expect((seen.at(-1) as S<"RowItem">[])[0].binding).toBe("replace");
+  });
 });

@@ -144,7 +144,7 @@ NO_LORA = ": LoRAs are not available on the NVIDIA (fp8 / int8) variants yet"
 class Cond:
     video: torch.Tensor  # [1, 1024, 4096]
     audio: torch.Tensor  # [1, 1024, 2048]
-    images: tuple = ()  # keyframe rows (H.264-round-tripped RGB uint8, seconds, strength), unresolved
+    images: tuple = ()  # keyframe rows (H.264-round-tripped RGB uint8, seconds, strength, binding), unresolved
     images_at: str = (
         ""  # where the rows came from, for the run's error texts (no beats: check_encode)
     )
@@ -502,7 +502,9 @@ def _conditionings(ctx, model, cond: Cond, fhw, frames: int, fps: float) -> list
     encoder = ctx.component(model, "vae_encoder")
     ctx.progress(1, 1, "encoding images")
     out = []
-    for (rgb, _, strength), frame in zip(cond.images, at, strict=True):
+    for (rgb, _, strength, _), frame in zip(
+        cond.images, at, strict=True
+    ):  # auto only (check_keyframes)
         tokens = PATCH.patchify(
             encoder(to_pixels(rgb, fhw[1] * 32, fhw[2] * 32, ctx.device)[:, :, None])
         )
@@ -700,6 +702,14 @@ def encode_guided(ctx, params: dict, inputs: dict) -> dict:
     }
 
 
+def check_keyframes(params: dict, wired: set, models: dict | None = None) -> str | None:
+    """API 1.39 bindings (plan 19 phase 5) are Mac only: a non-auto row is refused before anything loads."""
+    for i, r in enumerate(params.get("images") or [], 1):
+        if r.get("binding", "auto") != "auto":
+            return f".images[{i}].binding: Replace and Guide are Mac only for now"
+    return None
+
+
 def keyframes(ctx, params: dict, inputs: dict) -> dict:
     """mlx.py keyframes: the rows onto the conditioning, the decode and the H.264 round trip done here, once."""
     trips: dict[int, np.ndarray] = {}
@@ -708,7 +718,9 @@ def keyframes(ctx, params: dict, inputs: dict) -> dict:
             trips[id(r["image"])] = cover(
                 crf_round_trip(r["image"], inputs["cond"].crf), CANVAS_MAX
             )
-    rows = tuple((trips[id(r["image"])], float(r["seconds"]), float(r["strength"])) for r in params["images"])  # fmt: skip
+    if why := check_keyframes(params, set()):
+        raise RunError(f"{ctx.node}{why}")
+    rows = tuple((trips[id(r["image"])], float(r["seconds"]), float(r["strength"]), "auto") for r in params["images"])  # fmt: skip
     if not rows:
         raise RunError(f"{ctx.node}.images: at least 1 items")
     return {"cond": replace(inputs["cond"], images=rows, images_at=f"{ctx.node}.images")}
