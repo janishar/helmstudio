@@ -86,6 +86,7 @@ func apiKey(c config) (string, error) {
 type client struct {
 	cfg  config
 	key  string
+	app  string // X-Helm-Client (API 1.49: a timeline revision's via): helm, or mcp in helm mcp
 	http *http.Client
 	mu   sync.Mutex
 	rmu  sync.Mutex
@@ -102,7 +103,7 @@ func newClient(c config) (*client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &client{cfg: c, key: key, http: &http.Client{}}, nil
+	return &client{cfg: c, key: key, app: "helm", http: &http.Client{}}, nil
 }
 
 // apiError is a non-2xx answer; detail is the server's {"detail"} when it sent one.
@@ -135,6 +136,9 @@ func (c *client) send(ctx context.Context, method, path string, body []byte, hdr
 		req.Header[k] = v
 	}
 	req.Header.Set("X-API-Key", c.key)
+	if c.app != "" {
+		req.Header.Set("X-Helm-Client", c.app)
+	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}

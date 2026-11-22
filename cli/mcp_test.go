@@ -117,12 +117,17 @@ func TestMCPToolsAreTheCatalogs(t *testing.T) {
 			t.Errorf("%s: annotations %+v, catalog read_only %v destructive %v", name, a, ct.ReadOnly, ct.Destructive)
 		}
 	}
-	for _, name := range []string{"delete_take", "delete_run", "delete_session"} {
+	for _, name := range []string{"delete_take", "delete_run", "delete_session", "edit_timeline", "restore_timeline"} {
 		if a := got[name].Annotations; a.ReadOnlyHint || !*a.DestructiveHint {
 			t.Errorf("%s: not destructive: %+v", name, a)
 		}
 	}
-	for _, name := range []string{"sessions", "get_run", "models", "edit_timeline"} { // the assistant's, or not built
+	for _, name := range []string{"try_timeline_edit", "timeline_frame", "timeline_revisions", "show_timeline"} { // API 1.49: never asks
+		if a := got[name].Annotations; !a.ReadOnlyHint {
+			t.Errorf("%s: not read-only: %+v", name, a)
+		}
+	}
+	for _, name := range []string{"sessions", "get_run", "models"} { // the assistant's
 		if got[name] != nil {
 			t.Errorf("%s is not an mcp tool", name)
 		}
@@ -386,5 +391,85 @@ func TestMCPBatchStatusChatOnlyWithDirector(t *testing.T) {
 	f.extra["GET /v1/studio/batches/"+id+"/chat"] = func(w http.ResponseWriter, _ *http.Request) { fmt.Fprint(w, `{"messages":[]}`) }
 	if res, out = call(t, cs, "batch_status", map[string]any{"batch_id": id}); res.IsError || out["chat"] == nil {
 		t.Fatalf("with a director: %v %q %v", res.IsError, text(res), out)
+	}
+}
+
+// API 1.49 (plan 24): the timeline edit tools call the API with X-Helm-Client mcp; timeline_frame answers the image.
+func TestMCPTimelineEdits(t *testing.T) {
+	f, cs, _ := mcpSession(t, "")
+	const id = "aaaaaaaa-0000-4000-8000-000000000001"
+	base := "/v1/studio/timelines/" + id
+	var got []string
+	record := func(answer string) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			var b map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&b)
+			got = append(got, fmt.Sprintf("%s %s?%s %v %s", r.Method, r.URL.Path, r.URL.RawQuery, b, r.Header.Get("X-Helm-Client")))
+			if strings.HasSuffix(r.URL.Path, "/edits") && b["ops"].([]any)[0].(map[string]any)["clip"] == "zz" {
+				w.WriteHeader(422)
+				fmt.Fprint(w, `{"detail":"ops[0]: unknown clip zz","op_index":0,"code":"unknown_clip","problems":[]}`)
+				return
+			}
+			fmt.Fprint(w, answer)
+		}
+	}
+	f.extra["GET "+base] = record(`{"id":"` + id + `","clips":[]}`)
+	f.extra["GET "+base+"/exports"] = record(`{"jobs":[]}`)
+	f.extra["POST "+base+"/edits"] = record(`{"revision":5,"diff":{"added":["k9"]}}`)
+	f.extra["GET "+base+"/revisions"] = record(`{"revisions":[]}`)
+	f.extra["GET "+base+"/revisions/3"] = record(`{"revision":3}`)
+	f.extra["POST "+base+"/restore"] = record(`{"revision":6}`)
+	f.extra["POST "+base+"/frame"] = record(`{"empty":false,"shown":"first","url":"/files/u/o1/runs/r1/0.png?exp=1&sig=ok"}`) // the fake API's png
+	ops := []any{map[string]any{"op": "split", "track": "V1", "at": 1}}
+	calls := []struct {
+		tool string
+		in   map[string]any
+	}{
+		{"show_timeline", map[string]any{"timeline_id": id}},
+		{"try_timeline_edit", map[string]any{"timeline_id": id, "base_revision": 4, "ops": ops}},
+		{"edit_timeline", map[string]any{"timeline_id": id, "base_revision": 4, "ops": ops}},
+		{"timeline_revisions", map[string]any{"timeline_id": id, "before": 5}},
+		{"timeline_revisions", map[string]any{"timeline_id": id, "revision": 3}},
+		{"restore_timeline", map[string]any{"timeline_id": id, "revision": 5, "to": 3}},
+	}
+	for _, c := range calls {
+		if res, _ := call(t, cs, c.tool, c.in); res.IsError {
+			t.Fatalf("%s: %s", c.tool, text(res))
+		}
+	}
+	res, out := call(t, cs, "timeline_frame", map[string]any{"timeline_id": id, "at": 0.5})
+	images := 0
+	for _, c := range res.Content {
+		if img, ok := c.(*mcp.ImageContent); ok && img.MIMEType == "image/png" && bytes.Equal(img.Data, png) {
+			images++
+		}
+	}
+	if res.IsError || images != 1 || out["shown"] != "first" {
+		t.Fatalf("frame: %v %s", out, text(res))
+	}
+	want := []string{
+		"GET " + base + "?view=agent map[] mcp",
+		"GET " + base + "/exports? map[] mcp",
+		"POST " + base + "/edits? map[base_revision:4 dry_run:true ops:[map[at:1 op:split track:V1]]] mcp",
+		"POST " + base + "/edits? map[base_revision:4 dry_run:false ops:[map[at:1 op:split track:V1]]] mcp",
+		"GET " + base + "/revisions?before=5&limit=10 map[] mcp",
+		"GET " + base + "/revisions/3? map[] mcp",
+		"POST " + base + "/restore? map[revision:5 to:3] mcp",
+		"POST " + base + "/frame? map[at:0.5] mcp",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("calls:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	// an op that cannot apply: the API's detail as a tool error
+	res, _ = call(t, cs, "try_timeline_edit", map[string]any{"timeline_id": id, "base_revision": 4,
+		"ops": []any{map[string]any{"op": "remove", "clip": "zz"}}})
+	if !res.IsError || !strings.Contains(text(res), "422: ops[0]: unknown clip zz") {
+		t.Fatalf("422: %s", text(res))
+	}
+	// the catalog refuses fill before any call (not one of the ops)
+	res, _ = call(t, cs, "edit_timeline", map[string]any{"timeline_id": id, "base_revision": 4,
+		"ops": []any{map[string]any{"op": "fill", "clip": "a", "take_id": id}}})
+	if !res.IsError || len(got) != 9 {
+		t.Fatalf("fill: %v %s", res.IsError, text(res))
 	}
 }

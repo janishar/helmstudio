@@ -19,6 +19,8 @@ const tlID = "c3a1f2e4-5b6d-4e7f-8a9b-0c1d2e3f4a5b"
 type fakeTimelines struct {
 	mu        sync.Mutex
 	got       map[string]map[string]any // "METHOD path" → its JSON body
+	client    string                    // the last X-Helm-Client
+	query     string                    // the last query
 	polls     int
 	cancelled bool
 }
@@ -39,7 +41,7 @@ func timelineServer(t *testing.T, polls int) (*fakeTimelines, *httptest.Server) 
 		var body map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		key := r.Method + " " + r.URL.Path
-		f.got[key] = body
+		f.got[key], f.client, f.query = body, r.Header.Get("X-Helm-Client"), r.URL.RawQuery
 		base := "/v1/studio/timelines/" + tlID
 		jobPath := "/v1/studio/media-jobs/" + job["id"].(string)
 		send := func(status int, v any) {
@@ -53,8 +55,18 @@ func timelineServer(t *testing.T, polls int) (*fakeTimelines, *httptest.Server) 
 		switch key {
 		case "GET /v1/studio/timelines":
 			send(200, list)
-		case "GET " + base, "POST " + base + "/clips":
+		case "GET " + base:
+			if r.URL.Query().Get("view") == "agent" {
+				send(200, fixture(t, "TimelineAgentView.valid.json"))
+				break
+			}
 			send(200, tl)
+		case "POST " + base + "/clips", "POST " + base + "/restore":
+			send(200, tl)
+		case "POST " + base + "/edits": // API 1.49
+			send(200, fixture(t, "TimelineEditResult.valid.json"))
+		case "GET " + base + "/revisions":
+			send(200, fixture(t, "TimelineRevisionList.valid.json"))
 		case "POST " + base + "/export/plan":
 			send(200, plan)
 		case "POST " + base + "/export":
@@ -158,5 +170,56 @@ func TestTimelineExportCancelOnInterrupt(t *testing.T) {
 	}
 	if !f.cancelled {
 		t.Fatal("no cancel sent")
+	}
+}
+
+func TestTimelineEditByOps(t *testing.T) {
+	f, _ := timelineServer(t, 1)
+	ops := filepath.Join(t.TempDir(), "ops.json")
+	if err := os.WriteFile(ops, []byte(`[{"op":"split","track":"V1","at":1.01},{"op":"remove","clip":"b"}]`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out := helmOK(t, "timeline", "edit", tlID, "-f", ops, "--revision", "4", "--dry-run")
+	body, _ := json.Marshal(f.got["POST /v1/studio/timelines/"+tlID+"/edits"])
+	if string(body) != `{"base_revision":4,"dry_run":true,"ops":[{"at":1.01,"op":"split","track":"V1"},{"clip":"b","op":"remove"}]}` ||
+		f.client != "helm" {
+		t.Fatalf("body %s client %q", body, f.client)
+	}
+	for _, want := range []string{"revision 5 (dry run: nothing stored)\n", "  added: k9\n", "  removed: b\n", "  changed: c (at)\n",
+		"  duration 8.54s -> 6.54s\n", "  warning: ops[0]: at 1.01 snapped to 1\n", "Fox at dusk  revision 5"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("edit lacks %q:\n%s", want, out)
+		}
+	}
+	// {base_revision, ops} in the file; without a revision it is refused before any call
+	if err := os.WriteFile(ops, []byte(`{"base_revision":4,"ops":[{"op":"remove","clip":"b"}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	helmOK(t, "timeline", "edit", tlID, "-f", ops)
+	if b := f.got["POST /v1/studio/timelines/"+tlID+"/edits"]; b["base_revision"] != float64(4) || b["dry_run"] != false {
+		t.Fatal(b)
+	}
+	if err := os.WriteFile(ops, []byte(`[{"op":"remove","clip":"b"}]`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	helmFails(t, "--revision n", "timeline", "edit", tlID, "-f", ops)
+	helmFails(t, "-f ops.json", "timeline", "edit", tlID)
+}
+
+func TestTimelineRevisionsRestoreAgent(t *testing.T) {
+	f, _ := timelineServer(t, 1)
+	out := helmOK(t, "timeline", "revisions", tlID, "--before", "6", "--limit", "3")
+	if f.query != "before=6&limit=3" || !strings.Contains(out, "r5    user mcp    2026-11-23T10:00:00Z   4 clips    6.54s  split, remove\n") ||
+		!strings.Contains(out, "r4    studio      ") {
+		t.Fatalf("revisions %q:\n%s", f.query, out)
+	}
+	helmOK(t, "timeline", "restore", tlID, "--to", "3", "--revision", "5")
+	if b, _ := json.Marshal(f.got["POST /v1/studio/timelines/"+tlID+"/restore"]); string(b) != `{"revision":5,"to":3}` {
+		t.Fatalf("restore %s", b)
+	}
+	helmFails(t, "--to and --revision", "timeline", "restore", tlID, "--to", "3")
+	out = helmOK(t, "timeline", "show", tlID, "--agent")
+	if f.query != "view=agent" || !strings.Contains(out, `"at_f": 0`) || !strings.Contains(out, `"take_title": "a fox trots in"`) {
+		t.Fatalf("agent %q:\n%s", f.query, out)
 	}
 }

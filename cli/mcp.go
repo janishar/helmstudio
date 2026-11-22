@@ -114,9 +114,10 @@ func (nopWriteCloser) Close() error { return nil }
 
 // newMCPServer registers every catalog tool marked mcp and the two resources.
 func newMCPServer(c *client) *mcp.Server {
+	c.app = "mcp" // its timeline edits are labelled via mcp
 	s := &mcpServer{c: c, runs: map[string]bool{}}
 	srv := mcp.NewServer(&mcp.Implementation{Name: "helmstudio", Version: "1"}, &mcp.ServerOptions{
-		Instructions: "helmstudio: find a workflow (list_workflows, get_workflow), run_workflow, wait_run, then get_take to see a take. Inputs are take ids; upload turns a local image into one.",
+		Instructions: "helmstudio: find a workflow (list_workflows, get_workflow), run_workflow, wait_run, then get_take to see a take. Inputs are take ids; upload turns a local image into one. To edit a sequence: show_timeline (clip ids, revision), try_timeline_edit, then edit_timeline with the same ops and base_revision; timeline_frame to look at a time; restore_timeline goes back.",
 	})
 	handlers := s.handlers()
 	for name, t := range mcpCatalog() {
@@ -250,11 +251,30 @@ func (s *mcpServer) handlers() map[string]toolFunc {
 			return out, nil
 		}),
 		"list_timelines": plain(func(args) (any, error) { return s.get("/timelines") }),
-		"show_timeline": plain(func(in args) (any, error) {
-			return s.gets("timeline", "/timelines/"+in.esc("timeline_id"), "exports", "/timelines/"+in.esc("timeline_id")+"/exports")
+		"show_timeline": plain(func(in args) (any, error) { // API 1.49: the agent view
+			return s.gets("timeline", "/timelines/"+in.esc("timeline_id")+"?view=agent", "exports", "/timelines/"+in.esc("timeline_id")+"/exports")
 		}),
-		"run_workflow": plain(s.runWorkflow),
-		"wait_run":     s.waitRun,
+		"timeline_revisions": plain(func(in args) (any, error) {
+			base := "/timelines/" + in.esc("timeline_id") + "/revisions"
+			if r, ok := in["revision"].(float64); ok {
+				return s.gets("revision", fmt.Sprintf("%s/%d", base, int(r)))
+			}
+			q := url.Values{"limit": {"10"}}
+			for _, k := range []string{"before", "limit"} {
+				if v, ok := in[k].(float64); ok {
+					q.Set(k, fmt.Sprint(int(v)))
+				}
+			}
+			return s.gets("revisions", base+"?"+q.Encode())
+		}),
+		"try_timeline_edit": plain(func(in args) (any, error) { return s.editTimeline(in, true) }),
+		"edit_timeline":     plain(func(in args) (any, error) { return s.editTimeline(in, false) }),
+		"restore_timeline": plain(func(in args) (any, error) {
+			return s.send(http.MethodPost, "/timelines/"+in.esc("timeline_id")+"/restore", in.pick("revision", "to"), http.StatusOK)
+		}),
+		"timeline_frame": s.timelineFrame,
+		"run_workflow":   plain(s.runWorkflow),
+		"wait_run":       s.waitRun,
 		"cancel_run": plain(func(in args) (any, error) {
 			return s.send(http.MethodPost, "/runs/"+in.esc("run_id")+"/cancel", nil, http.StatusAccepted)
 		}),
@@ -287,6 +307,30 @@ func (s *mcpServer) handlers() map[string]toolFunc {
 		"delete_run":      del("/runs/", "run_id"),
 		"delete_session":  del("/sessions/", "session_id"),
 	}
+}
+
+// editTimeline sends the ops to /edits (dry run: try_timeline_edit). An op that cannot apply is the API's 422
+// detail (`ops[3]: split_edge`), as a tool error.
+func (s *mcpServer) editTimeline(in args, dry bool) (any, error) {
+	body := in.pick("base_revision", "ops")
+	body["dry_run"] = dry
+	return s.send(http.MethodPost, "/timelines/"+in.esc("timeline_id")+"/edits", body, http.StatusOK)
+}
+
+// timelineFrame is what V1 shows at a time, with its stored image as image content.
+func (s *mcpServer) timelineFrame(_ context.Context, _ *mcp.CallToolRequest, in args) (any, []mcp.Content, error) {
+	raw, err := s.send(http.MethodPost, "/timelines/"+in.esc("timeline_id")+"/frame", in.pick("at"), http.StatusOK)
+	if err != nil {
+		return nil, nil, err
+	}
+	var f struct {
+		URL string `json:"url"`
+	}
+	_ = json.Unmarshal(raw, &f)
+	if img, mime := s.image(f.URL, 16<<20); img != nil {
+		return raw, []mcp.Content{&mcp.ImageContent{Data: img, MIMEType: mime}}, nil
+	}
+	return raw, nil, nil
 }
 
 // getWorkflow is the workflow and the node schemas of the kinds it uses (as the assistant's get_workflow).
@@ -349,23 +393,31 @@ func (s *mcpServer) thumb(take json.RawMessage) ([]byte, string) {
 		Kind     string `json:"kind"`
 		ThumbURL string `json:"thumb_url"`
 	}
-	if json.Unmarshal(take, &t) != nil || t.ThumbURL == "" || t.Kind == "audio" {
+	if json.Unmarshal(take, &t) != nil || t.Kind == "audio" {
+		return nil, ""
+	}
+	return s.image(t.ThumbURL, 4<<20)
+}
+
+// image fetches a signed image link (relative to the API) of at most limit bytes; nil when empty or on any failure.
+func (s *mcpServer) image(link string, limit int64) ([]byte, string) {
+	if link == "" {
 		return nil, ""
 	}
 	base, err := url.Parse(s.c.cfg.URL + "/")
 	if err != nil {
 		return nil, ""
 	}
-	link, err := base.Parse(t.ThumbURL)
+	abs, err := base.Parse(link)
 	if err != nil {
 		return nil, ""
 	}
-	resp, err := s.c.http.Get(link.String())
+	resp, err := s.c.http.Get(abs.String())
 	if err != nil {
 		return nil, ""
 	}
 	defer resp.Body.Close()
-	b, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	b, err := io.ReadAll(io.LimitReader(resp.Body, limit))
 	mime := resp.Header.Get("Content-Type")
 	if err != nil || resp.StatusCode != http.StatusOK || !strings.HasPrefix(mime, "image/") {
 		return nil, ""

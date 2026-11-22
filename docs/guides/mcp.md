@@ -41,7 +41,10 @@ Reads (never ask):
 | `search_takes`, `get_take` | The gallery; one take with a small thumbnail the agent can see |
 | `list_library` | Elements, looks, voices and LoRAs |
 | `batch_status`, `review_batch` | A batch's rows, steps, decisions and chat; the rows waiting at a gate |
-| `list_timelines`, `show_timeline` | Sequences; one with its exports |
+| `list_timelines`, `show_timeline` | Sequences; one for an agent (every clip flat: ids, times in seconds and frames, its revision) with its exports |
+| `try_timeline_edit` | Tries edit ops on a sequence without saving: the diff it would make, or the op that fails and why |
+| `timeline_revisions` | A sequence's history (the last 100: who, via what, which ops), or one revision's document |
+| `timeline_frame` | The picture at a time as an image (an image take, or a video's nearest stored frame: first or last) |
 | `wait_run` | Waits for a run (up to 10 min, with progress) and returns its take ids; `out_dir` saves the files |
 
 Writes (your client may ask, depending on its settings):
@@ -54,13 +57,21 @@ Writes (your client may ask, depending on its settings):
 | `start_batch`, `pick`, `batch_chat` | Start a batch; answer a gate or judge; talk to the director |
 | `add_to_timeline`, `export_timeline` | Append takes (a new sequence without an id); export the MP4 (`out` waits and saves it) |
 
-Deletes (marked `destructiveHint`: the client asks before each one; they cannot be undone):
+Marked `destructiveHint` (the client asks before each one). The deletes cannot be undone; a sequence edit can
+(Undo in the app, or `restore_timeline`):
 
 | Tool | Does |
 |---|---|
+| `edit_timeline` | Applies edit ops (split, trim, move, remove, lift, replace, set, add, insert, …) in order, all or nothing, on the `base_revision` it was planned on; one Undo step |
+| `restore_timeline` | Brings back a kept revision as a new one |
 | `delete_take` | A take leaves the gallery |
 | `delete_run` | A finished run (its takes stay) |
 | `delete_session` | A session with nothing running (its takes stay) |
+
+Editing a sequence: `show_timeline` (the clip ids and the revision), `try_timeline_edit`, then `edit_timeline` with
+the same ops and revision. A stale revision is refused (`409 … now revision <n>`): read again and plan again. Clips
+an op makes get ids from the server when the op leaves them out (in the answer's `diff.added`). Batch ops into one
+call: 100 revisions are kept. The history shows these edits as `via mcp`.
 
 Local paths (`upload`'s `path`, `out_dir`, `out`) must be absolute or start with `~/`: the server runs in the
 client's folder (Claude Desktop starts it in `/`), not yours.
@@ -71,4 +82,5 @@ offered. Errors come back as the API's own text (for example `404: take not foun
 ## Try it
 
 Ask: "make a Qwen still of a lighthouse at dusk, then a short LTX clip from it, and put both on a new Timeline and
-export it to ~/Desktop/lighthouse.mp4".
+export it to ~/Desktop/lighthouse.mp4". Then: "cut the clip at 1 s, drop the second half and show me the frame at
+0.5 s".

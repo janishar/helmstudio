@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -8,11 +9,12 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"time"
 )
 
-const timelineUse = "usage: helm timeline show <id> | add <id> [--track A2] <take_id>... | export <id> [-o file] [--plan] [--host h]"
+const timelineUse = "usage: helm timeline show <id> [--agent] | add <id> [--track A2] <take_id>... | edit <id> -f ops.json [--revision n] [--dry-run] | revisions <id> [--before n] [--limit k] | restore <id> --to n --revision n | export <id> [-o file] [--plan] [--host h]"
 
 type tlTarget struct {
 	Width      int     `json:"width"`
@@ -96,7 +98,7 @@ func timelinesCmd(stdout io.Writer) error {
 }
 
 // timelineCmd: helm timeline show|add|export.
-func timelineCmd(args []string, stdout, stderr io.Writer, stop <-chan os.Signal) error {
+func timelineCmd(args []string, stdin io.Reader, stdout, stderr io.Writer, stop <-chan os.Signal) error {
 	if len(args) < 2 {
 		return errors.New(timelineUse)
 	}
@@ -106,6 +108,13 @@ func timelineCmd(args []string, stdout, stderr io.Writer, stop <-chan os.Signal)
 	out := fs.String("o", "", "export: save the MP4 here")
 	plan := fs.Bool("plan", false, "export: only print the export plan")
 	host := fs.String("host", "", "export: run it on this host")
+	agent := fs.Bool("agent", false, "show: the agent view as JSON (every clip flat, seconds and frames)")
+	file := fs.String("f", "", "edit: the ops, a JSON list or {base_revision, ops} (- = stdin)")
+	dry := fs.Bool("dry-run", false, "edit: try the ops, store nothing")
+	revision := fs.Int("revision", 0, "edit, restore: the revision the change was planned on (helm timeline show prints it)")
+	to := fs.Int("to", 0, "restore: the kept revision to bring back")
+	before := fs.Int("before", 0, "revisions: only those below this one")
+	limit := fs.Int("limit", 20, "revisions: at most this many")
 	pos, err := parseMixed(fs, args[1:])
 	if err != nil {
 		return err
@@ -121,7 +130,25 @@ func timelineCmd(args []string, stdout, stderr io.Writer, stop <-chan os.Signal)
 	var t timelineDoc
 	switch args[0] {
 	case "show":
+		if *agent { // API 1.49
+			var view json.RawMessage
+			if err := c.call(http.MethodGet, base+"?view=agent", nil, http.StatusOK, &view); err != nil {
+				return err
+			}
+			return printJSON(stdout, view)
+		}
 		if err := c.call(http.MethodGet, base, nil, http.StatusOK, &t); err != nil {
+			return err
+		}
+	case "edit":
+		return c.editTimeline(base, *file, *revision, *dry, stdin, stdout)
+	case "revisions":
+		return c.timelineRevisions(base, *before, *limit, stdout)
+	case "restore":
+		if *revision < 1 || *to < 1 {
+			return errors.New("restore needs --to and --revision (the current one: helm timeline show prints it)")
+		}
+		if err := c.call(http.MethodPost, base+"/restore", map[string]int{"revision": *revision, "to": *to}, http.StatusOK, &t); err != nil {
 			return err
 		}
 	case "add":
@@ -197,6 +224,130 @@ func (cl tlClip) describe(t timelineDoc) string {
 		s += "  [" + strings.Join(tags, ", ") + "]"
 	}
 	return s
+}
+
+// printJSON writes raw indented.
+func printJSON(w io.Writer, raw json.RawMessage) error {
+	b, err := json.MarshalIndent(raw, "", "  ")
+	if err == nil {
+		_, err = fmt.Fprintln(w, string(b))
+	}
+	return err
+}
+
+// editTimeline sends the ops of file (- = stdin; a JSON list, or {base_revision, ops}) to /edits at revision
+// (--revision, else the file's base_revision) and prints the diff, the warnings and the sequence.
+func (c *client) editTimeline(base, file string, revision int, dry bool, stdin io.Reader, stdout io.Writer) error {
+	if file == "" {
+		return errors.New("edit needs -f ops.json")
+	}
+	var raw []byte
+	var err error
+	if file == "-" {
+		raw, err = io.ReadAll(stdin)
+	} else {
+		raw, err = os.ReadFile(file)
+	}
+	if err != nil {
+		return err
+	}
+	var body struct {
+		BaseRevision int               `json:"base_revision"`
+		Ops          []json.RawMessage `json:"ops"`
+	}
+	if err := json.Unmarshal(raw, &body.Ops); err != nil {
+		if err := json.Unmarshal(raw, &body); err != nil {
+			return fmt.Errorf("%s: a JSON list of ops or {base_revision, ops}: %w", file, err)
+		}
+	}
+	if revision > 0 {
+		body.BaseRevision = revision
+	}
+	if body.BaseRevision < 1 {
+		return errors.New("edit needs the revision the ops were planned on: --revision n (helm timeline show prints it)")
+	}
+	var out struct {
+		Revision int `json:"revision"`
+		Diff     struct {
+			Added   []string `json:"added"`
+			Removed []string `json:"removed"`
+			Changed []struct {
+				Clip   string                     `json:"clip"`
+				Fields map[string]json.RawMessage `json:"fields"`
+			} `json:"changed"`
+			Tracks struct {
+				Added   []string `json:"added"`
+				Removed []string `json:"removed"`
+			} `json:"tracks"`
+			Duration [2]float64 `json:"duration"`
+		} `json:"diff"`
+		Warnings []string    `json:"warnings"`
+		Timeline timelineDoc `json:"timeline"`
+	}
+	req := map[string]any{"base_revision": body.BaseRevision, "ops": body.Ops, "dry_run": dry}
+	if err := c.call(http.MethodPost, base+"/edits", req, http.StatusOK, &out); err != nil {
+		return err
+	}
+	head := fmt.Sprintf("revision %d", out.Revision)
+	if dry {
+		head += " (dry run: nothing stored)"
+	}
+	fmt.Fprintln(stdout, head)
+	d := out.Diff
+	var changed []string
+	for _, ch := range d.Changed {
+		var fields []string
+		for f := range ch.Fields {
+			fields = append(fields, f)
+		}
+		slices.Sort(fields)
+		changed = append(changed, ch.Clip+" ("+strings.Join(fields, ", ")+")")
+	}
+	for _, part := range []struct {
+		name string
+		list []string
+	}{{"added", d.Added}, {"removed", d.Removed}, {"changed", changed}, {"tracks added", d.Tracks.Added},
+		{"tracks removed", d.Tracks.Removed}} {
+		if len(part.list) > 0 {
+			fmt.Fprintf(stdout, "  %s: %s\n", part.name, strings.Join(part.list, ", "))
+		}
+	}
+	fmt.Fprintf(stdout, "  duration %.2fs -> %.2fs\n", d.Duration[0], d.Duration[1])
+	for _, w := range out.Warnings {
+		fmt.Fprintln(stdout, "  warning: "+w)
+	}
+	out.Timeline.print(stdout)
+	return nil
+}
+
+// timelineRevisions prints the kept revisions, newest first.
+func (c *client) timelineRevisions(base string, before, limit int, stdout io.Writer) error {
+	q := url.Values{"limit": {fmt.Sprint(limit)}}
+	if before > 0 {
+		q.Set("before", fmt.Sprint(before))
+	}
+	var list struct {
+		Revisions []struct {
+			Revision   int     `json:"revision"`
+			By         string  `json:"by"`
+			Via        *string `json:"via"`
+			SavedAt    string  `json:"saved_at"`
+			OpsSummary *string `json:"ops_summary"`
+			Clips      int     `json:"clips"`
+			DurationS  float64 `json:"duration_s"`
+		} `json:"revisions"`
+	}
+	if err := c.call(http.MethodGet, base+"/revisions?"+q.Encode(), nil, http.StatusOK, &list); err != nil {
+		return err
+	}
+	for _, r := range list.Revisions {
+		via := r.By
+		if r.Via != nil {
+			via += " " + *r.Via
+		}
+		fmt.Fprintf(stdout, "r%-4d %-11s %s %3d clips %7.2fs  %s\n", r.Revision, via, r.SavedAt, r.Clips, r.DurationS, deref(r.OpsSummary))
+	}
+	return nil
 }
 
 type exportReason struct {
