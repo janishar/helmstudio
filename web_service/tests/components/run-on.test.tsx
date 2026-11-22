@@ -181,7 +181,7 @@ describe("Create: Run on", () => {
 
   it("a host is greyed by the version; a pick sends the host; a version it cannot run resets to Auto", async () => {
     const { runs, plans, composer } = start();
-    await waitFor(() => expect(versions()).toHaveLength(4));
+    await waitFor(() => expect(versions()).toHaveLength(2));
     // Distilled (Mac only) is chosen: NVIDIA cannot take it
     await waitFor(() =>
       expect(rows()[2]).toEqual({
@@ -191,47 +191,38 @@ describe("Create: Run on", () => {
       }),
     );
     // under Auto each version keeps its note, nothing dimmed
-    expect(versions()).toEqual([
-      "DistilledMac only",
-      "DevMac only",
-      "Distilled fp8NVIDIA only",
-      "Dev int8NVIDIA only",
-    ]);
+    // API 1.39: text to video offers Distilled and Distilled fp8 only (`only`; Dev is refused there)
+    expect(versions()).toEqual(["DistilledMac only", "Distilled fp8NVIDIA only"]);
     pickVersion("Distilled fp8");
     expect(rows()[1].text).toBe("Macmac · Apple M5 ProDistilled fp8 is NVIDIA only");
     expect(rows()[2].disabled).toBe(false);
     fireEvent.click(menu().querySelectorAll("button")[2]);
     const pinned = within(composer).getByRole("button", { name: "Run on NVIDIA" });
     expect([pinned.textContent, pinned.title]).toEqual(["NVIDIA", "Run on: gcp · RTX PRO 6000"]);
-    expect(versions()).toEqual([
-      "Distillednot on NVIDIA (dim)",
-      "Devnot on NVIDIA (dim)",
-      "Distilled fp8NVIDIA only",
-      "Dev int8NVIDIA only",
-    ]);
+    expect(versions()).toEqual(["Distillednot on NVIDIA (dim)", "Distilled fp8NVIDIA only"]);
     // the estimate is planned on that host
     await waitFor(() => expect(plans.at(-1)?.host).toBe("gcp"));
     fireEvent.click(generate(composer));
     await waitFor(() => expect(runs).toHaveLength(1));
     expect(runs[0].host).toBe("gcp");
     // a dimmed version is still picked: Run on goes back to Auto and says why
-    pickVersion("Dev");
+    pickVersion("Distilled");
     expect(within(composer).getByRole("button", { name: "Run on Auto" })).toBeTruthy();
-    expect(screen.getByText("Run on set to Auto: Dev is Mac only")).toBeTruthy();
-    expect(within(composer).getByRole("button", { name: "Dev · int8" })).toBeTruthy();
+    expect(screen.getByText("Run on set to Auto: Distilled is Mac only")).toBeTruthy();
+    expect(within(composer).getByRole("button", { name: "Distilled · int8" })).toBeTruthy();
   });
 
   it("a workflow without a studio block: the version chip opens the same rows", async () => {
     const { studio: _, ...plain } = workflow;
     const { composer } = start("idle", plain as S<"Workflow">);
-    await waitFor(() => expect(versions()).toHaveLength(4));
+    await waitFor(() => expect(versions()).toHaveLength(2));
     const chip = within(composer).getByRole("button", { name: "Distilled · int8" });
     expect(chip.getAttribute("popovertarget")).toBe("model-pick");
   });
 
   it("the chosen host went offline: the chip warns, Generate says so and queues nothing", async () => {
     const { runs, composer, setGcp } = start();
-    await waitFor(() => expect(versions()).toHaveLength(4));
+    await waitFor(() => expect(versions()).toHaveLength(2));
     pickVersion("Distilled fp8");
     await waitFor(() => expect(rows()[2].disabled).toBe(false));
     fireEvent.click(menu().querySelectorAll("button")[2]);

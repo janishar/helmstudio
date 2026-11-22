@@ -105,10 +105,10 @@ describe("Create: the Studio block's help, preset order and planned peak", () =>
     const presets = within(section("Preset")).getAllByRole("button");
     expect(presets.map((b) => b.textContent)).toEqual(["Fast", "Quality", "Low memory"]);
     expect(section("Quality").querySelector("h2")!.textContent).toContain(
-      "Distilled models run without guidance. Switch the model to Dev for guidance and a negative prompt.",
+      "Distilled models run their own steps without guidance.",
     );
     expect(section("Prompt beats").querySelector("h2")!.textContent).toContain(
-      "A beat steers one part of the clip.",
+      "Each beat steers the picture and the sound for its stretch.",
     );
     const submit = screen
       .getByRole("form", { name: "Composer" })

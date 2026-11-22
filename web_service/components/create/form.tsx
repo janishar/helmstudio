@@ -268,6 +268,12 @@ export function Inspector({
      * that size (one-stage) */
     stage1?: Stage1;
   }) {
+  // the presets that set an enum field to a value, in their order ("Quality, Low memory"; board LtxFeatures frame
+  // 2's Compute menu): a preset sets only the keys it names
+  const setBy = (f: Field) => (o: string) =>
+    (presetOrder ?? Object.keys(presets ?? {}))
+      .filter((n) => presets?.[n]?.[f.key] === o)
+      .join(", ") || undefined;
   const s = sections(fields);
   const ext = extensionOf(fields);
   const clip = clipOf(fields, raws);
@@ -398,6 +404,7 @@ export function Inspector({
           (f.model && f.param.enum?.length === 1 ? [display(f, f.param.enum[0]).value] : undefined)
         }
         pair={cfg && stg && f === cfg ? { f: stg, raw: rawOf(stg, raws) } : undefined}
+        setBy={f.param.type === "enum" ? setBy(f) : undefined}
       />
     );
   };
@@ -911,6 +918,7 @@ function Tile({
   onChange,
   choices,
   pair,
+  setBy,
 }: {
   f: Field;
   raw: Raw;
@@ -922,6 +930,8 @@ function Tile({
   choices?: string[];
   /** a second field shown and edited with this one ("CFG · STG 3.0 · 1.0") */
   pair?: { f: Field; raw: Raw };
+  /** an enum's value → the presets that set it (shown beside the value in its editor) */
+  setBy?: (value: string) => string | undefined;
 }) {
   const id = idOf(f.key);
   const d = display(f, raw);
@@ -978,6 +988,7 @@ function Tile({
             f={e.f}
             raw={e.raw}
             choices={i ? undefined : choices}
+            setBy={i ? undefined : setBy}
             onChange={onChange}
             focus={!i}
             close={() => {
@@ -1001,12 +1012,14 @@ function Editor({
   close,
   choices,
   focus = true,
+  setBy,
 }: {
   f: Field;
   raw: Raw;
   onChange: (key: string, raw: Raw) => void;
   close: () => void;
   choices?: string[];
+  setBy?: (value: string) => string | undefined;
   /** move focus into it when it opens (the first of a pair's editors) */
   focus?: boolean;
 }) {
@@ -1061,6 +1074,7 @@ function Editor({
               onClick={() => onChange(f.key, o)}
             >
               {optionText(p, o, f.kind)}
+              {setBy?.(o) && <em className="ml-1.5 text-[11px] text-t2 not-italic">{setBy(o)}</em>}
             </button>
           ))}
         </div>
@@ -1214,6 +1228,33 @@ function Line({
   counted,
 }: { f: Field; raw: Raw; counted?: boolean } & Omit<FormProps, "fields" | "raws">) {
   const id = idOf(f.key);
+  // a multi-line text param (not a voice line): a box under its section's title, the label for screen readers, and
+  // its count (docs/mock/LtxFeatures.dc.html frame 3, the Negative prompt)
+  if (f.param.type === "text" && !counted)
+    return (
+      <div className="col-span-2 flex flex-col gap-1.5">
+        <label htmlFor={id} className="sr-only">
+          {f.param.label ?? f.param.name}
+        </label>
+        <textarea
+          id={id}
+          className="in h-auto resize-none py-2 leading-[19px]"
+          rows={2}
+          maxLength={f.param.max}
+          title={f.param.help}
+          value={String(raw)}
+          aria-invalid={!!errors[f.key] || undefined}
+          aria-describedby={errors[f.key] ? id + "-err" : undefined}
+          onChange={(e) => onChange(f.key, e.target.value)}
+        />
+        {f.param.max != null && (
+          <span className="mono text-[11px] text-t2">
+            {String(raw).length} / {f.param.max}
+          </span>
+        )}
+        <FieldError k={f.key} errors={errors} />
+      </div>
+    );
   if (counted)
     return (
       <div className="col-span-2 flex flex-col gap-2.5">

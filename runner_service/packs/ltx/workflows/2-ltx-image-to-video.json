@@ -36,7 +36,14 @@
       "kind": "ltx/model",
       "params": {
         "variant": "distilled",
-        "precision": "int8"
+        "precision": "int8",
+        "compute": "float32"
+      },
+      "only": {
+        "variant": [
+          "distilled",
+          "distilled-fp8"
+        ]
       }
     },
     "lora": {
@@ -55,7 +62,8 @@
         "prompt": "prompt.text"
       },
       "params": {
-        "beats": []
+        "beats": [],
+        "negative": ""
       }
     },
     "keyframes": {
@@ -148,9 +156,10 @@
       },
       {
         "title": "Quality",
-        "help": "Distilled models run without guidance. Switch the model to Dev for guidance and a negative prompt.",
+        "help": "Distilled models run their own steps without guidance.",
         "items": [
           "model.precision",
+          "model.compute",
           "sample1.steps",
           "sample2.steps"
         ],
@@ -178,8 +187,15 @@
         ]
       },
       {
+        "title": "Negative prompt",
+        "help": "What the clip should not show. Applied with NAG, about 10 % slower. Empty: off.",
+        "items": [
+          "encode.negative"
+        ]
+      },
+      {
         "title": "Prompt beats",
-        "help": "A beat steers one part of the clip. The main prompt covers the rest.",
+        "help": "Each beat steers the picture and the sound for its stretch. The main prompt covers the rest.",
         "items": [
           "encode.beats"
         ]
@@ -199,13 +215,16 @@
     },
     "presets": {
       "Fast": {
-        "model.precision": "int8"
+        "model.precision": "int8",
+        "model.compute": "float16"
       },
       "Quality": {
-        "model.precision": "bf16"
+        "model.precision": "bf16",
+        "model.compute": "float32"
       },
       "Low memory": {
-        "model.precision": "int4"
+        "model.precision": "int4",
+        "model.compute": "float32"
       }
     }
   }

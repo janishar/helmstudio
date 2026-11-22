@@ -36,9 +36,9 @@ import pytest
 GOLDENS = Path(__file__).resolve().parent / "golden"
 DIRS = {"t2v": "ltx-text-to-video", "i2v": "ltx-image-to-video", "kf": "ltx-image-to-video",
         "beats": "ltx-prompt-beats", "lora": "ltx-lora", "retake": "ltx-retake", "extend": "ltx-extend",
-        "a2v": "ltx-audio-to-video"}  # fmt: skip
+        "a2v": "ltx-audio-to-video", "nag": "ltx-nag"}  # fmt: skip
 CASES = ["t2v-448x256-49f-s42", "t2v-512x320-57f-s7", "i2v-448x256-49f-s42", "kf-448x256-49f-s42",
-         "beats-448x256-49f-s42", "lora-448x256-49f-s42", "auto-duration"]  # fmt: skip
+         "beats-448x256-49f-s42", "lora-448x256-49f-s42", "nag-448x256-49f-s42", "auto-duration"]  # fmt: skip
 # M7 pack 1 (the dev transformer, guided; 2-5 min each): `python tests/test_ltx_golden.py retake-… extend-… a2v-…`
 DEV_CASES = ["retake-448x256-49f-s42", "extend-448x256-49f+8-s42", "a2v-448x256-49f-s42"]
 # plan 19 23.10 phase 1 (the distilled transformer, no guidance; ~30 s each): recorded from ltx-2-studio main e6e15b7's
@@ -76,6 +76,9 @@ BARS = {
     "kf-448x256-49f-s42": {"video_mean_db": 42.5, "video_worst_db": 41.5, "logmel_db": 1.6},
     "beats-448x256-49f-s42": {"video_mean_db": 22.5, "video_worst_db": 16.0, "logmel_db": 1.65},
     "lora-448x256-49f-s42": {"video_mean_db": 22.0, "video_worst_db": 18.0, "logmel_db": 2.25},
+    # plan 19 phase 2 (2026-11-22, recorded on ltx-2-studio main e6e15b7; bit-exact on 0.32.2): beats re-recorded
+    # with the audio relay on, 0.32.4 25.37 / 21.60 / 1.001 (its bar above holds); NAG at float16 25.23 / 18.44 / 1.048
+    "nag-448x256-49f-s42": {"video_mean_db": 24.5, "video_worst_db": 18.0, "logmel_db": 1.15},
 }
 
 
@@ -131,13 +134,18 @@ class Bench:
             if self.wav:
                 shutil.copy(path, self.wav)
 
-        def loop(ctx, x0, video, audio, cond, sigmas, phase, noise_seed, cross_mask=None):
+        def loop(
+            ctx, x0, video, audio, cond, sigmas, phase, noise_seed, cross_mask=None, audio_mask=None
+        ):
             row = {"video_in": stats(video.latent), "audio_in": stats(audio.latent),
                    "video_clean_in": stats(video.clean_latent), "video_denoise_mask": stats(video.denoise_mask),
                    "video_keyframes_mask": opt(video.keyframes_mask), "video_positions_stats": stats(video.positions),
-                   "video_cross_attention_mask": opt(cross_mask), "video_tokens_total": video.latent.shape[1]}  # fmt: skip
+                   "video_cross_attention_mask": opt(cross_mask), "audio_cross_attention_mask": opt(audio_mask),
+                   "video_tokens_total": video.latent.shape[1]}  # fmt: skip
             self.reset_peak()  # the loop's own peak (the image encode before it is in the node's)
-            vx, ax = denoise(ctx, x0, video, audio, cond, sigmas, phase, noise_seed, cross_mask)
+            vx, ax = denoise(
+                ctx, x0, video, audio, cond, sigmas, phase, noise_seed, cross_mask, audio_mask
+            )
             row |= {"video_out_tokens": stats(vx), "audio_out_tokens": stats(ax),
                     "loop_peak_gib": round(mx.get_peak_memory() / 2**30, 2)}  # fmt: skip
             self.stages.append(row)
@@ -206,6 +214,10 @@ class Bench:
                     row["video"], row["audio"] = opt(v.video), stats(v.audio)
                     if getattr(v, "neg_video", None) is not None:  # encode-guided
                         row["neg_video"], row["neg_audio"] = stats(v.neg_video), stats(v.neg_audio)
+                    if (
+                        getattr(v, "nag_video", None) is not None
+                    ):  # encode with a negative prompt (NAG)
+                        row["nag_video"], row["nag_audio"] = stats(v.nag_video), stats(v.nag_audio)
             self.rows[ctx.node] = row
             return outs
 
@@ -333,6 +345,12 @@ class Bench:
                                                        "seconds": sg["length"] * 8 / case["fps"] if sg["length"] else 0})  # fmt: skip
         if case.get("lora"):
             nodes["lora"]["params"]["rows"] = [self.lora(case)]
+        if case.get(
+            "negative_prompt"
+        ):  # plan 19 phase 2: NAG, at the Fast preset's float16 compute
+            nodes["encode"]["params"]["negative"] = case["negative_prompt"]
+        if case.get("compute"):
+            nodes["model"]["params"]["compute"] = case["compute"]
         return nodes
 
     def ctx(self, progress=None, output=None):
@@ -527,12 +545,14 @@ def compare(name: str, r: dict, out: Path, bench: Bench) -> dict:
     }
     if g.get("images"):  # the golden's stage-2 clean latent is the upscaled one after conditioning
         del points["upscaled"]
+    if g.get("nag"):  # the negative prompt's embeddings
+        points["nag_embeds"] = (g["nag"]["embeds"]["video"], "encode", "nag_video")
     latents = {k: (w, r["nodes"][n][x]) for k, (w, n, x) in points.items() if n in r["nodes"]}
     for i, (wrow, hrow) in enumerate(
         zip(stages, bench.stages, strict=True), 1
     ):  # each loop's state
         for k in ("video_in", "audio_in", "video_clean_in", "video_denoise_mask", "video_keyframes_mask",
-                  "video_positions_stats", "video_cross_attention_mask"):  # fmt: skip
+                  "video_positions_stats", "video_cross_attention_mask", "audio_cross_attention_mask"):  # fmt: skip
             if k in wrow:
                 latents[f"loop{i}.{k}"] = (wrow[k], hrow[k])
     for i, row in enumerate(

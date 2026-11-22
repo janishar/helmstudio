@@ -1,0 +1,69 @@
+{
+  "description": "API 1.39: a Fast (compute float16) LTX run needs the transformer at float16; the resident float32 transformer is not reused but counted, and it is the victim (a float16 entry is its own entry); the VAE is reused as it is",
+  "host": "mac",
+  "keys": {
+    "torch": {
+      "state": "fresh",
+      "budget_gb": 52,
+      "resident": []
+    },
+    "mlx": {
+      "state": "fresh",
+      "budget_gb": 48,
+      "resident": [
+        {
+          "component": "transformer",
+          "model": "ltx-2.5",
+          "variant": "distilled",
+          "precision": "int8",
+          "gb": 19.18,
+          "pinned": false,
+          "last_used": "2026-11-15T10:02:00Z"
+        },
+        {
+          "component": "vae",
+          "model": "ltx-2.5",
+          "variant": "distilled",
+          "precision": "bf16",
+          "gb": 0.76,
+          "pinned": false,
+          "last_used": "2026-11-15T10:02:30Z"
+        }
+      ]
+    }
+  },
+  "run": {
+    "env": "mlx",
+    "peak_gb": 30,
+    "needs": [
+      {
+        "component": "transformer",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "int8",
+        "compute": "float16"
+      },
+      {
+        "component": "vae",
+        "model": "ltx-2.5",
+        "variant": "distilled",
+        "precision": "bf16"
+      }
+    ]
+  },
+  "expect": {
+    "decision": "unload",
+    "unload": {
+      "mlx": [
+        {
+          "component": "transformer",
+          "model": "ltx-2.5",
+          "variant": "distilled",
+          "precision": "int8"
+        }
+      ]
+    },
+    "budget_gb": null,
+    "error": null
+  }
+}

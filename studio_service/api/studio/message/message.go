@@ -124,6 +124,7 @@ type Component struct {
 	Model     string          `json:"model"`
 	Variant   string          `json:"variant"`
 	Precision string          `json:"precision"`
+	Compute   string          `json:"compute,omitempty"` // API 1.39 (absent = float32)
 	Loras     []ComponentLora `json:"loras,omitempty"`
 }
 

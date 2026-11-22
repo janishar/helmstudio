@@ -704,8 +704,11 @@ export function Create({
           ]
             .filter(Boolean)
             .join(" · ");
-  // the workflow's model choices: the model chip names them all ("Base · int8"), its menu picks a placed variant
-  const chipModels = all.filter((f) => f.model && f.param.type === "enum");
+  // the workflow's model choices: the model chip names them ("Base · int8"), its menu picks a placed variant; a load
+  // option beside them (API 1.39 `compute`) is a Quality tile only (docs/mock/LtxFeatures.dc.html: "Distilled · int8")
+  const chipModels = all.filter(
+    (f) => f.model && f.param.type === "enum" && ["variant", "precision"].includes(f.param.name),
+  );
   // the composer holds the quick switches and one-value choices; a quick rows editor is its own inspector section
   const quick =
     layout?.groups.find((g) => g.title === "Quick")?.fields.filter((f) => fields.includes(f)) ?? [];

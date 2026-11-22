@@ -186,6 +186,7 @@ type PinRef struct {
 	Model     string    `json:"model"`
 	Variant   string    `json:"variant"`
 	Precision string    `json:"precision"`
+	Compute   string    `json:"compute,omitempty"` // API 1.39 (absent = float32)
 	Loras     []PinLora `json:"loras,omitempty"`
 }
 
@@ -198,6 +199,9 @@ type PinLora struct {
 // Key identifies the entry (env, component, model, variant, precision, baked set in order).
 func (p PinRef) Key() string {
 	key := p.Env + " " + p.Component + " " + p.Model + " " + p.Variant + " " + p.Precision
+	if p.Compute != "" && p.Compute != "float32" {
+		key += " " + p.Compute
+	}
 	for _, l := range p.Loras {
 		key += fmt.Sprintf(" %s@%v", l.LoraID, l.Strength)
 	}

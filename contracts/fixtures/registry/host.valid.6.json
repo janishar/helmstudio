@@ -21,6 +21,15 @@
       "pinned": true
     },
     {
+      "component": "transformer",
+      "model": "ltx-2.5",
+      "variant": "distilled",
+      "precision": "int8",
+      "compute": "float16",
+      "gb": 19.2,
+      "pinned": false
+    },
+    {
       "component": "upscaler",
       "model": "ltx-2.5",
       "variant": "distilled",

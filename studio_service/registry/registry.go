@@ -356,12 +356,14 @@ type Memory struct {
 
 // Resident is one model component a runner holds loaded; it names no run or owner.
 type Resident struct {
-	Component string  `json:"component"`
-	Model     string  `json:"model"`
-	Variant   string  `json:"variant"`
-	Precision string  `json:"precision"`
-	GB        float64 `json:"gb"`
-	Pinned    bool    `json:"pinned"`
+	Component string `json:"component"`
+	Model     string `json:"model"`
+	Variant   string `json:"variant"`
+	Precision string `json:"precision"`
+	// API 1.39: the load option compute of the entry (absent = float32)
+	Compute string  `json:"compute,omitempty"`
+	GB      float64 `json:"gb"`
+	Pinned  bool    `json:"pinned"`
 	// when the runner last used it (absent from older runners)
 	LastUsed *time.Time `json:"last_used,omitempty"`
 	// a component with LoRAs baked in: those LoRAs in order (absent = the plain component)
@@ -437,6 +439,13 @@ type Model struct {
 	Media    []string   `json:"media,omitempty"`    // API 1.16
 	Runtimes []Runtime  `json:"runtimes,omitempty"` // API 1.16: every runtime of the pack
 	Addons   []Addon    `json:"addons,omitempty"`   // API 1.36: its optional add-ons on the host
+	// API 1.39: the components the model node's compute applies to (absent: it applies to none here)
+	Compute *ModelCompute `json:"compute,omitempty"`
+}
+
+// ModelCompute names the components a model node's compute (a load option) keys apart.
+type ModelCompute struct {
+	Components []string `json:"components"`
 }
 
 // Runtime is one runtime of a model's pack and its env.

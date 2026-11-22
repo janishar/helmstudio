@@ -119,7 +119,7 @@
         "precision"
       ],
       "additionalProperties": false,
-      "description": "names one resident entry of the hosts value: the same component, model, variant, precision and baked LoRAs (lora_id and strength, in order; absent or empty = the plain component)",
+      "description": "names one resident entry of the hosts value: the same component, model, variant, precision, compute (from API 1.39; absent = float32) and baked LoRAs (lora_id and strength, in order; absent or empty = the plain component)",
       "properties": {
         "component": {
           "type": "string",
@@ -142,6 +142,13 @@
             "fp8",
             "fp32"
           ]
+        },
+        "compute": {
+          "enum": [
+            "float32",
+            "float16"
+          ],
+          "description": "from API 1.39: the entry's compute (hosts value resident[].compute); absent = float32"
         },
         "loras": {
           "type": "array",

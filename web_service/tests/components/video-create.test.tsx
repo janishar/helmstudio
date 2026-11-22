@@ -85,9 +85,7 @@ describe("Create on LTX video", () => {
     start(ltx("ltx-text-to-video"));
     const composer = screen.getByRole("form", { name: "Composer" });
     // the model chip names the variant and precision; the family leads the top bar's label
-    expect(
-      await within(composer).findByRole("button", { name: "Distilled · int8" }),
-    ).toBeTruthy();
+    expect(await within(composer).findByRole("button", { name: "Distilled · int8" })).toBeTruthy();
     expect(
       screen.getByRole("button", {
         name: /^Workflow: LTX-2\.5 · Text to video · add a first frame/,
@@ -98,12 +96,22 @@ describe("Create on LTX video", () => {
     expect(menu.getAttribute("aria-label")).toBe("Model");
     expect([...menu.querySelectorAll("[role=menuitemradio]")].map((b) => b.textContent)).toEqual([
       "Distilled",
-      "Dev",
       "Distilled fp8",
-      "Dev int8",
-    ]);
+    ]); // API 1.39: `only` (Dev is refused on text to video)
     const inspector = screen.getByRole("complementary", { name: "Inspector" });
     expect(within(inspector).queryByText("Model")).toBeNull();
+    // API 1.39 (docs/mock/LtxFeatures.dc.html frames 2, 3): the Negative prompt box with its count; Compute in
+    // Quality, its values naming the presets that set them; the model chip leaves Compute out
+    const negative = within(inspector).getByRole("textbox", { name: "Negative prompt" });
+    fireEvent.change(negative, { target: { value: "text, watermark" } });
+    expect(within(inspector).getByText("15 / 500")).toBeTruthy();
+    fireEvent.click(within(inspector).getByRole("button", { name: /^Compute/ }));
+    const compute = within(inspector).getByRole("group", { name: "Compute" });
+    expect([...compute.querySelectorAll("button.opt")].map((b) => b.textContent)).toEqual([
+      "float32Quality, Low memory",
+      "float16Fast",
+    ]);
+    expect(within(composer).getByRole("button", { name: "Distilled · int8" })).toBeTruthy();
     expect(within(inspector).queryByText("Frame rate")).toBeNull();
     // + and @ before the chips; Seeds although the block does not place the seed
     expect(

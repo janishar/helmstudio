@@ -395,6 +395,7 @@ function HostSection({
                 <b className="truncate text-[13px] font-semibold">{name}</b>
                 <small className="mono truncate text-[10px] text-t2">
                   {e.env} · {e.r.precision}
+                  {e.r.compute && e.r.compute !== "float32" && ` · ${e.r.compute}`}
                   {e.r.device === "cpu" ? " · host RAM" : ""}
                   {baked ? ` · ${baked} LoRA${baked === 1 ? "" : "s"} baked` : ""}
                   {e.r.pinned_why === "in_use" ? " · in use" : ""}

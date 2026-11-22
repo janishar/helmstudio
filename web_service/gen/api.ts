@@ -3887,6 +3887,11 @@ export interface components {
                  * @enum {string}
                  */
                 precision: "bf16" | "fp16" | "int8" | "int4" | "fp8" | "fp32";
+                /**
+                 * @description from 1.39: the load option the model node's `compute` set (LTX on MLX: the transformer at float16 is its own entry); absent = float32
+                 * @enum {string}
+                 */
+                compute?: "float32" | "float16";
                 gb: number;
                 pinned: boolean;
                 /**
@@ -5795,6 +5800,11 @@ export interface components {
             model: string;
             variant: string;
             precision: components["schemas"]["Precision"];
+            /**
+             * @description from 1.39: the entry's compute as GET /v1/studio/hosts shows it; absent = float32
+             * @enum {string}
+             */
+            compute?: "float32" | "float16";
             /** @description a baked set, in order (lora_id and strength as the admin's hosts view shows them); absent or empty = the plain component */
             loras?: {
                 lora_id: string;

@@ -441,10 +441,13 @@ type entry struct {
 // hundredths is gb in integer hundredths (the hand-over's arithmetic), rounding half to even as check.py does.
 func hundredths(gb float64) int { return int(math.RoundToEven(gb * 100)) }
 
-// entryKey identifies a resident entry or a planned component: component, model, variant, precision and its baked
-// LoRAs (lora_id and strength, in order; none = the plain component).
-func entryKey(component, model, variant, precision string, loras []registry.ResidentLora) string {
+// entryKey identifies a resident entry or a planned component: component, model, variant, precision, compute (API
+// 1.39; "" and float32 alike) and its baked LoRAs (lora_id and strength, in order; none = the plain component).
+func entryKey(component, model, variant, precision, compute string, loras []registry.ResidentLora) string {
 	key := component + " " + model + " " + variant + " " + precision
+	if compute = plainCompute(compute); compute != "" {
+		key += " " + compute
+	}
 	for _, l := range loras {
 		key += fmt.Sprintf(" %s@%v", deref(l.LoraID), deref(l.Strength))
 	}
@@ -453,7 +456,24 @@ func entryKey(component, model, variant, precision string, loras []registry.Resi
 
 // newEntry is r of env's key.
 func newEntry(env string, r registry.Resident, fresh bool) entry {
-	return entry{env: env, key: entryKey(r.Component, r.Model, r.Variant, r.Precision, r.Loras), res: r, gb: hundredths(r.GB), fresh: fresh}
+	return entry{env: env, key: entryKey(r.Component, r.Model, r.Variant, r.Precision, r.Compute, r.Loras), res: r, gb: hundredths(r.GB), fresh: fresh}
+}
+
+// plainCompute is compute with its default (float32) as "" (API 1.39: the runner sends only another value).
+func plainCompute(compute string) string {
+	if compute == "float32" {
+		return ""
+	}
+	return compute
+}
+
+// computeOf is the compute a run's model m loads component c at in found ("" = the default): m's, when the models
+// key's compute.components names c.
+func computeOf(found registry.Model, m runModel, c string) string {
+	if found.Compute == nil || !slices.Contains(found.Compute.Components, c) {
+		return ""
+	}
+	return plainCompute(m.compute)
 }
 
 // keyEntries are the entries of one present key of env holding resident: fresh only when the key is live and names no
@@ -503,7 +523,7 @@ func held(value registry.Host) int {
 
 // component names the entry in an unload request.
 func (e entry) component() message.Component {
-	out := message.Component{Component: e.res.Component, Model: e.res.Model, Variant: e.res.Variant, Precision: e.res.Precision}
+	out := message.Component{Component: e.res.Component, Model: e.res.Model, Variant: e.res.Variant, Precision: e.res.Precision, Compute: e.res.Compute}
 	for _, l := range e.res.Loras {
 		out.Loras = append(out.Loras, message.ComponentLora{LoraID: deref(l.LoraID), Strength: deref(l.Strength)})
 	}
@@ -559,7 +579,7 @@ func planOf(reg *registry.Registry, host string, run model.Run) plan {
 		if found.Lora != nil && c.Component == found.Lora.Component {
 			loras = bake
 		}
-		out.needs = append(out.needs, entryKey(c.Component, found.ID, c.Variant, c.Precision, loras))
+		out.needs = append(out.needs, entryKey(c.Component, found.ID, c.Variant, c.Precision, computeOf(found, models[0], c.Component), loras))
 	}
 	var bytes int64
 	seen := map[string]bool{}
@@ -1173,6 +1193,7 @@ func eligibleIn(reg *registry.Registry, values []registry.Host, reserved map[str
 			found, _ := reg.Model(host+"."+env, m.family)
 			all = all && slices.ContainsFunc(value.Resident, func(r registry.Resident) bool {
 				return r.Model == found.ID && r.Variant == m.variant && r.Precision == found.RunsAt(m.variant, m.precision) && sameBaked(r.Loras, bake) &&
+					plainCompute(r.Compute) == computeOf(found, m, r.Component) &&
 					(found.Lora == nil || r.Component == found.Lora.Component) && registry.OnDevice(r.Device)
 			})
 		}
@@ -1196,7 +1217,7 @@ func deletes(reg *registry.Registry, source, kind, name string, run model.Run) b
 }
 
 // runModel is what a <family>/model node of a run loads.
-type runModel struct{ family, variant, precision string }
+type runModel struct{ family, variant, precision, compute string }
 
 // runModels lists the graph's <family>/model nodes by node id.
 func runModels(graph map[string]registry.Node) []runModel {
@@ -1205,7 +1226,8 @@ func runModels(graph map[string]registry.Node) []runModel {
 		if family, found := strings.CutSuffix(graph[id].Kind, "/model"); found {
 			variant, _ := graph[id].Params["variant"].(string)
 			precision, _ := graph[id].Params["precision"].(string)
-			out = append(out, runModel{family, variant, precision})
+			compute, _ := graph[id].Params["compute"].(string) // API 1.39, absent = float32
+			out = append(out, runModel{family, variant, precision, compute})
 		}
 	}
 	return out

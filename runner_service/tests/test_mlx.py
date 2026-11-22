@@ -9,6 +9,7 @@ import subprocess
 import sys
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from conftest import CONTRACTS, safetensors_file
@@ -466,6 +467,12 @@ def test_prompt_beats_give_the_goldens_ranges_and_relay_masks(on_cpu):
     for stage, fhw in zip(g["stages"], [(7, 4, 7), (7, 8, 14)], strict=True):
         mask = ltx_mlx.relay_mask(cond, fhw, stage["video_tokens_total"], g["fps"])
         assert sha(mask) == stage["video_cross_attention_mask"]["sha256_f32"]
+        # plan 19 phase 2: the audio mask too (upstream's distilled default, strength 1); none for a frozen audio
+        audio = SimpleNamespace(latent=mx.zeros(stage["audio_positions"][:2] + [128]), frozen=False)
+        amask = ltx_mlx.relay_audio_mask(cond, fhw, audio, g["fps"])
+        assert sha(amask) == stage["audio_cross_attention_mask"]["sha256_f32"]
+        frozen = SimpleNamespace(latent=audio.latent, frozen=True)
+        assert ltx_mlx.relay_audio_mask(cond, fhw, frozen, g["fps"]) is None
     with pytest.raises(
         RunError, match=r"encode\.beats\[2\]: no frames left for this beat \(the clip has 2 latent"
     ):

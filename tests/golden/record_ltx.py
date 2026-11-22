@@ -77,12 +77,20 @@ CASES = [
      "prompt": "A red ball and a blue cube slide past each other and swap places on a smooth pastel gradient "
                "floor, soft electronic hum"},
     {"name": "beats-448x256-49f-s42", "out": "ltx-prompt-beats", "width": 448, "height": 256, "frames": 49,
-     "fps": 24.0, "seed": 42, "relay_epsilon": 1e-3, "relay_strength": 1.0, "relay_audio_strength": 0.0,
+     "fps": 24.0, "seed": 42, "relay_epsilon": 1e-3, "relay_strength": 1.0, "relay_audio_strength": 1.0,
+     "studio": "ltx-2-studio main e6e15b7",  # plan 19 phase 2: audio relay on (upstream 0879826's distilled default)
      "segments": [{"text": "the puppy sits still and looks at the camera", "length": 3},
                   {"text": "the puppy jumps up and runs away to the left, barking", "length": None}],
      "prompt": "A golden retriever puppy on a sunny park lawn, birds chirping in the trees behind it"},
     {"name": "lora-448x256-49f-s42", "out": "ltx-lora", "width": 448, "height": 256, "frames": 49, "fps": 24.0,
      "seed": 42, "lora_strength": 1.0,
+     "prompt": "A golden retriever puppy runs across a sunny park lawn toward the camera, barking happily, "
+               "birds chirping in the trees behind it"},
+    # plan 19 phase 2: the Fast preset with a negative prompt, float16 compute (LTX2_COMPUTE_DTYPE) and NAG (the CLI's
+    # --negative-prompt on --distilled, NAGConfig() defaults) in one render, on fork main e6e15b7
+    {"name": "nag-448x256-49f-s42", "out": "ltx-nag", "width": 448, "height": 256, "frames": 49, "fps": 24.0,
+     "seed": 42, "compute": "float16", "negative_prompt": "blurry, cartoon, text, watermark, people",
+     "studio": "ltx-2-studio main e6e15b7",
      "prompt": "A golden retriever puppy runs across a sunny park lawn toward the camera, barking happily, "
                "birds chirping in the trees behind it"},
 ]  # fmt: skip
@@ -184,6 +192,14 @@ def record(case: dict, out: Path, scratch: Path) -> dict:
         lora_meta = ltx_inputs.synthetic_lora(lora_path, model / "diffusion_models" / "ltx-2.5-22b-distilled-transformer-bf16.safetensors")  # fmt: skip
         lora_meta["strength"] = case["lora_strength"]
 
+    if case.get("compute"):  # what the CLI's users set: the pipelines apply it at the DiT load
+        os.environ["LTX2_COMPUTE_DTYPE"] = case["compute"]
+    nag = None
+    if case.get("negative_prompt"):  # cli._build_nag_config with no overrides: NAGConfig() (audio too)
+        from ltx_core_mlx.guidance.nag import NAGConfig
+
+        nag = NAGConfig()
+
     # cli._cmd_generate, --distilled branch
     t0 = time.perf_counter()
     pipe = distilled_mod.DistilledPipeline(model_dir=str(model), gemma_model_id=GEMMA_DEFAULT, low_memory=True,
@@ -254,7 +270,10 @@ def record(case: dict, out: Path, scratch: Path) -> dict:
     def encode(prompt):
         v, a = raw_encode(prompt)
         mx.eval(v, a)
-        seen["video_embeds"], seen["audio_embeds"] = stats(v), stats(a)
+        if "video_embeds" in seen:  # the NAG negative prompt, encoded after the prompt
+            seen["nag_embeds"] = {"video": stats(v), "audio": stats(a)}
+        else:
+            seen["video_embeds"], seen["audio_embeds"] = stats(v), stats(a)
         return v, a
 
     enc.encode = ph.wrap("text_encode", encode)
@@ -323,7 +342,8 @@ def record(case: dict, out: Path, scratch: Path) -> dict:
     mx.reset_peak_memory()
     pipe.generate_and_save(prompt=case["prompt"], output_path=str(mp4), height=case["height"], width=case["width"],
                            num_frames=case["frames"], frame_rate=case["fps"], seed=case["seed"], images=images,
-                           generated_keyframes=0, **({"prompt_relay": relay} if relay else {}))  # fmt: skip
+                           generated_keyframes=0, **({"prompt_relay": relay} if relay else {}),
+                           **({"negative_prompt": case["negative_prompt"], "nag": nag} if nag else {}))  # fmt: skip
     total = time.perf_counter() - t0
     probe = ffprobe(mp4)
     vstream = next(s for s in probe["streams"] if s["codec_type"] == "video")
@@ -337,10 +357,13 @@ def record(case: dict, out: Path, scratch: Path) -> dict:
                   f" --relay-audio-strength {case['relay_audio_strength']:g}")  # fmt: skip
     if lora_meta:
         extra += f" --lora {lora_meta['file']} {case['lora_strength']:g}"
+    if nag:
+        extra += " --negative-prompt '...'"
+    env = f"LTX2_COMPUTE_DTYPE={case['compute']} " if case.get("compute") else ""
     meta = {
         **case,
         "pipeline": "DistilledPipeline (ltx-2-mlx generate --distilled)",
-        "argv_equivalent": f"ltx-2-mlx generate --distilled --model {model} --quantize-on-load 8 "
+        "argv_equivalent": f"{env}ltx-2-mlx generate --distilled --model {model} --quantize-on-load 8 "
         f"--width {case['width']} --height {case['height']} --frames {case['frames']} --frame-rate {case['fps']:g} "
         f"--seed {case['seed']} --prompt '...'{extra} -o {case['name']}.mp4",
         "images": image_meta or None, "image_preprocess": seen.get("image_preprocess"),
@@ -354,6 +377,7 @@ def record(case: dict, out: Path, scratch: Path) -> dict:
                         "stage2_video_and_audio": case["seed"] + 2,
                         "stage2_ancestral_loop": case["seed"] + distilled_mod.ANCESTRAL_STAGE_2_NOISE_SEED_OFFSET},
         "prompt_embeds": {"video": seen.get("video_embeds"), "audio": seen.get("audio_embeds")},
+        "nag": None if not nag else {**nag.__dict__, "embeds": seen.get("nag_embeds")},
         "stages": seen["stages"],
         "final_video_latent": seen.get("final_video_latent"),
         "final_audio_latent": seen.get("final_audio_latent"),
@@ -368,7 +392,7 @@ def record(case: dict, out: Path, scratch: Path) -> dict:
         "env": {k: v for k, v in os.environ.items() if k.startswith(("LTX2_", "LTX_MLX_", "LTX_MODEL"))},
         "versions": {"mlx": mx.__version__, "python": platform.python_version(), "numpy": np.__version__,
                      "ffmpeg": subprocess.run(["ffmpeg", "-version"], check=True, capture_output=True, text=True).stdout.split("\n")[0],
-                     "ltx_pipelines_mlx": STUDIO,
+                     "ltx_pipelines_mlx": case.get("studio", STUDIO),
                      "machine": f"{platform.system()} {platform.release()} {platform.machine()}",
                      "metal": {k: v for k, v in mx.device_info().items() if k in ("architecture", "memory_size")}},
     }  # fmt: skip

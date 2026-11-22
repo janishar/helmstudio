@@ -358,7 +358,8 @@ holds the reference (`admit`, `simulate`). One run at a time per host (The dispa
   key declares (its stage's peak is not in `resident`), so X **waits** (Admission 2) and nothing is asked; its pins
   are not victims; the next write, idle, decides (or the time limit).
 - **Entry**: one `resident` item of a present key, identified by (env, `component`, `model`, `variant`, `precision`,
-  baked LoRAs = its `loras` as `(lora_id, strength)` in order; none = the plain component). Memory arithmetic is in
+  `compute` (from API 1.39; absent = float32), baked LoRAs = its `loras` as `(lora_id, strength)` in order; none =
+  the plain component). Memory arithmetic is in
   integer hundredths of a GB: `round(gb × 100)` per value, then sums.
 - **Host budget** B = the smallest `memory.budget_gb` among H's present keys (each runner reports physical RAM minus
   its reserve; they share the RAM, so the strictest wins). No present key reports memory (the fake host): no
@@ -366,7 +367,8 @@ holds the reference (`admit`, `simulate`). One run at a time per host (The dispa
 - **Plan** of run X: in `<H>.<X.env>.models`, the model of X's `<family>/model` node (a workflow is one family), its
   `variant`, that variant's `memory` item for the node's `precision`. **Needs** = the plan's `components` as entries
   of X's env (each with its own `variant` and `precision`), the family's `lora.component` carrying X's baked LoRAs (its
-  `bake` rows, as for resident below). **Planned peak** P = `peak_gb` + the bytes of X's LoRA files / 2^30. No plan
+  `bake` rows, as for resident below), and (API 1.39) each component the model's `compute.components` names carrying
+  X's `<family>/model` `compute` when it is not float32. **Planned peak** P = `peak_gb` + the bytes of X's LoRA files / 2^30. No plan
   (no models key, no `memory` item for that precision): P = B. A run larger than its plan (the item's `planned_at`:
   some node's `width` × `height` / 10^6 above its `mp`, or a numeric `frames` above its `frames`), or one with two
   `<family>/model` nodes: P = B, its needs still reused. (API 1.21) P = B asks for whatever the host can give, not a
@@ -388,7 +390,8 @@ holds the reference (`admit`, `simulate`). One run at a time per host (The dispa
   03-runtime 6.2, "a pin never blocks a run") a pin is a **last-resort victim**: it never fails or holds a run by
   itself, it goes only after every unpinned victim and only when the run would not fit otherwise, and its pin stays
   set (the component is loaded again the next time a run uses it, and is pinned again).
-- **Resident** (for order and placement): X's env key on H has an entry of X's model id, variant and precision whose
+- **Resident** (for order and placement): X's env key on H has an entry of X's model id, variant, precision and
+  compute (API 1.39: X's `<family>/model` `compute`, absent and float32 alike) whose
   component is the family's `lora.component` (`transformer` in every family so far) with X's baked LoRAs (one LoRA in
   two chained stacks once, with the summed strength; none = plain); a family without a `lora` block: any entry of that
   model, variant and precision.
@@ -891,9 +894,10 @@ audio track) plus a poster image; uploads stay images.
   Workflow `ltx-text-to-video` (title `LTX-2.5 Text to video`, env `mlx`, `media: video`):
   `prompt` (`text`) · `seed` (`seed` -1) · `canvas` (`ltx/canvas`: `width` 704, `height` 448, 128–1920 step 64) ·
   `duration` (`ltx/duration`: `frames` 49, 9–321 step 8, `fps` = `fps`, `auto` `{min_s: 1, max_s: 20}`; `fps` 24,
-  1–60) · `model` (`ltx/model`: `variant` distilled, `precision` int8 | int4 | bf16 default int8) → `lora`
+  1–60) · `model` (`ltx/model`: `variant` distilled, `precision` int8 | int4 | bf16 default int8; from 1.39 `compute`
+  float32 | float16 default float32) → `lora`
   (`ltx/lora-stack`, in `model`, `rows` `[]`; LoRAs, below) · `encode` (`ltx/encode`, in `model` (the plain model),
-  `prompt`; `beats` rows `[]`: Prompt beats) → `sample1` (`ltx/sample`, `role` stage1, `steps` 8; in `model` =
+  `prompt`; `beats` rows `[]`: Prompt beats; from 1.39 `negative` `""`) → `sample1` (`ltx/sample`, `role` stage1, `steps` 8; in `model` =
   `lora.model`, `cond`, `seed`, `canvas`, `duration`) → `upscale` (`ltx/upscale`, in `model`, `latent`) → `sample2`
   (`ltx/sample`, `role` stage2, `steps` 3; in `model` = `lora.model`, `cond`, `seed`, `latent`) → `decode`
   (`ltx/decode`, in `model`, `latent`; `audio` true; output `video`: Video) → `output`. The empty stack, no beats and
@@ -944,6 +948,21 @@ audio track) plus a poster image; uploads stay images.
   schema's) that allows it ("Before needs Dev"). **Offers rule**: a take offer whose pre-fill falls outside the
   template's `values_by` also sets the named param to that V (the Timeline's Extend at a clip's start: `model.variant:
   dev`; `offer_values_by`, fixtures/video/uses.json).
+- **Audio relay, compute, negative prompts** (API 1.39; plan 19-ltx-studio-features 23.4 phase 2, board LtxFeatures
+  frames 2, 3 and 5; normative). Prompt Relay beats gate the audio cross-attention too on the distilled samplers
+  (`ltx/sample`: upstream's audio mask at strength 1.0, a fixed constant; a frozen audio stream gets none); the Dev
+  paths have no beats. `ltx/model.compute` (`float32 | float16`, default float32) is a **load option**: the models
+  key's `compute.components` (`[transformer]`) load with their attention and feed-forward internals in that dtype
+  (`LTXModel.set_compute_dtype`, which also casts their float parameters), so a non-default compute is its own
+  residency entry (the hosts value's `resident[].compute`, `req.runner.unload` names it) and its own cache key; float32
+  adds nothing to any key. Upstream's overflow guard (a non-finite step drops the dtype for the rest of the run) evicts
+  that entry after the stage. The torch runner publishes the same schema and ignores it (no `compute` in its models
+  key). Text and Image to video place it in Quality; the **Fast** preset sets float16, Quality and Low memory float32;
+  their templates pin `only {variant: [distilled, distilled-fp8]}`. `ltx/encode.negative` (text, 0–500, default
+  `""`): non-blank, the encode also encodes it and both samplers apply NAG (upstream `NAGConfig` defaults: scale 11,
+  alpha 0.25, tau 2.5, video and audio; a frozen audio stream unguided); blank adds nothing. On NVIDIA the run check
+  refuses it: `encode.negative: NAG is Mac only for now`. `ltx/encode-guided.negative` (text, 0–500, `when` Dev):
+  Dev's CFG negative, blank = the fixed one (both runtimes); Distilled has none.
 - **Auto length** (`auto` on a `frames` param). The value `"auto"` asks the model to choose the length (LTX: a 3.8 MB
   DurationHead on the encoded prompt, beats included; deterministic, no seed). Allowed only when the param declares
   `auto` (else 422 / `param_invalid`: `<node>.<param>: auto length is not offered`); it may sit in a workflow, a preset,
@@ -972,8 +991,8 @@ audio track) plus a poster image; uploads stay images.
   items`); the pipeline rule `unbound_input` already covers it. Item fields left out take their defaults, and the
   merged item is checked. The board draws only a "First frame" tile; the keyframe rows editor needs a new board.
 - **Prompt beats** (Prompt Relay). `ltx/encode.beats`: rows, `min` 0 (off), `max` 8 (our cap), item `{text: string
-  1–500 default "" (so required), seconds: float 0–20 step 0.1 default 0}`: each beat steers the **video** (not the
-  audio) for `seconds` of the clip, in order, 0 = an equal share of what the pinned ones leave; the prompt holds for the
+  1–500 default "" (so required), seconds: float 0–20 step 0.1 default 0}`: each beat steers the **video** and,
+  from API 1.39, the **audio** for `seconds` of the clip, in order, 0 = an equal share of what the pinned ones leave; the prompt holds for the
   whole clip. The runner encodes the prompt and the beats as one prompt (`prompt + "".join(" " + beat)`), turns
   seconds into latent frames `max(1, round(s·fps/8))` and fails the run with `encode.beats[<i>]: no frames left for
   this beat (the clip has <n> latent frames)` or `encode.beats: the prompt and its beats are longer than 1024

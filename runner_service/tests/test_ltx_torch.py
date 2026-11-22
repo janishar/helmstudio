@@ -302,6 +302,12 @@ def test_checks_refuse_lora_rows_beats_and_take_the_variants_as_the_official_one
         == f".beats: {ltx.NO_RELAY}"
     )
     assert ltx.check_encode({"beats": []}, set()) is None
+    # API 1.39: NAG is Mac only (board LtxFeatures frame 5); a blank negative is no NAG
+    assert (
+        ltx.check_encode({"beats": [], "negative": "text"}, set())
+        == ".negative: NAG is Mac only for now"
+    )
+    assert ltx.check_encode({"beats": [], "negative": "  "}, set()) is None
     # distill needs its distill_from variant's transformer on this host (the contract's text, as the dispatcher's)
     assert (
         ltx.check_distill({}, set(), {"model": int8})

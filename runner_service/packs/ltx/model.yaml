@@ -33,6 +33,10 @@ model:
     default: int8
     enum: [int8, int4, bf16, fp8]
     help: "Quantized at load: int8 about 19 GB for the transformer, bf16 about 38 GB."
+  # API 1.39: a load option, not a per-run cast (set_compute_dtype also casts the float parameters, which a baked
+  # layer's float32 scales would not survive): core keys the transformer by it; torch.py ignores it (bf16)
+  compute: {label: Compute, default: float32, enum: [float32, float16], components: [transformer], runtime: mlx,
+            help: "float16 runs attention and feed-forward in half precision: 10–20 % faster, the picture changes slightly. NVIDIA ignores it."}
 media: [video, audio]
 licences:
   ltx-2-community: {title: LTX-2 Community License, url: https://huggingface.co/Lightricks/LTX-2.5}
@@ -186,7 +190,7 @@ stages:
   encode:
     title: Encode
     component: text encoder
-    help: "Encodes the prompt (and its beats, as one prompt) for video and audio with Gemma 4 and the connector; the text encoder is unloaded before sampling."
+    help: "Encodes the prompt (and its beats, as one prompt) for video and audio with Gemma 4 and the connector, and a negative prompt for NAG; the text encoder is unloaded before sampling."
     uses: [text_encoder, connector]
     unload_after: [text_encoder, connector]   # Gemma never sits beside the DiT (GOTCHAS: watchdog, jetsam)
     inputs: {model: Model, prompt: Text}
@@ -202,7 +206,10 @@ stages:
           text: {type: string, label: Beat, default: "", min: 1, max: 500}
           seconds: {type: float, label: Length, default: 0, min: 0, max: 20, step: 0.1,
                     help: "How long this beat lasts, in seconds; 0 shares what the others leave equally."}
-        help: "Prompt Relay: each beat steers the picture (not the sound) for its stretch of the clip, in order; the prompt above holds for the whole clip."
+        help: "Prompt Relay: each beat steers the picture and the sound for its stretch of the clip, in order; the prompt above holds for the whole clip."
+      # API 1.39: NAG (Normalized Attention Guidance) on the distilled path, upstream's NAGConfig defaults
+      negative: {type: text, label: Negative prompt, default: "", min: 0, max: 500,
+                 help: "What the clip should not show, applied with NAG (about 10 % slower). Empty: off. Mac only."}
     peak_gb: "5.3"   # measured 4.9 / 5.0 (t2v), 5.1 (i2v): Gemma's int8 load transient and the encode
   keyframes:
     title: Keyframes
@@ -279,12 +286,17 @@ stages:
   encode-guided:
     title: Encode (guided)
     component: text encoder
-    help: "Encodes the prompt and, for Dev's guided samplers, the fixed negative prompt for video and audio with Gemma 4 and the connector (Distilled: the prompt only); the text encoder is unloaded before sampling."
+    help: "Encodes the prompt and, for Dev's guided samplers, the negative prompt (typed, else the fixed one) for video and audio with Gemma 4 and the connector (Distilled: the prompt only); the text encoder is unloaded before sampling."
     uses: [text_encoder, connector]
     unload_after: [text_encoder, connector]
     by_variant: true   # Dev and Distilled share Gemma and the connector; only Dev's Conditioning holds the negative
     inputs: {model: Model, prompt: Text}
     outputs: {cond: Conditioning}
+    params:
+      # API 1.39 (owner's decision 9): a typed negative for Dev's CFG; a distilled model ignores it
+      negative: {type: text, label: Negative prompt, default: "", min: 0, max: 500,
+                 when: "model.variant == 'dev' || model.variant == 'dev-int8'",
+                 help: "What the clip should not show, for Dev's guidance (CFG). Empty: the fixed negative prompt. Distilled ignores this."}
     peak_gb: "5.3"
   encode-video:
     title: Source video

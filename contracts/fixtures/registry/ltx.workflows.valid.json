@@ -42,7 +42,14 @@
           "kind": "ltx/model",
           "params": {
             "variant": "distilled",
-            "precision": "int8"
+            "precision": "int8",
+            "compute": "float32"
+          },
+          "only": {
+            "variant": [
+              "distilled",
+              "distilled-fp8"
+            ]
           }
         },
         "lora": {
@@ -61,7 +68,8 @@
             "prompt": "prompt.text"
           },
           "params": {
-            "beats": []
+            "beats": [],
+            "negative": ""
           }
         },
         "sample1": {
@@ -144,9 +152,10 @@
           },
           {
             "title": "Quality",
-            "help": "Distilled models run without guidance. Switch the model to Dev for guidance and a negative prompt.",
+            "help": "Distilled models run their own steps without guidance.",
             "items": [
               "model.precision",
+              "model.compute",
               "sample1.steps",
               "sample2.steps"
             ],
@@ -174,8 +183,15 @@
             ]
           },
           {
+            "title": "Negative prompt",
+            "help": "What the clip should not show. Applied with NAG, about 10 % slower. Empty: off.",
+            "items": [
+              "encode.negative"
+            ]
+          },
+          {
             "title": "Prompt beats",
-            "help": "A beat steers one part of the clip. The main prompt covers the rest.",
+            "help": "Each beat steers the picture and the sound for its stretch. The main prompt covers the rest.",
             "items": [
               "encode.beats"
             ]
@@ -194,13 +210,16 @@
         },
         "presets": {
           "Fast": {
-            "model.precision": "int8"
+            "model.precision": "int8",
+            "model.compute": "float16"
           },
           "Quality": {
-            "model.precision": "bf16"
+            "model.precision": "bf16",
+            "model.compute": "float32"
           },
           "Low memory": {
-            "model.precision": "int4"
+            "model.precision": "int4",
+            "model.compute": "float32"
           }
         },
         "preset_order": [
@@ -248,7 +267,14 @@
           "kind": "ltx/model",
           "params": {
             "variant": "distilled",
-            "precision": "int8"
+            "precision": "int8",
+            "compute": "float32"
+          },
+          "only": {
+            "variant": [
+              "distilled",
+              "distilled-fp8"
+            ]
           }
         },
         "lora": {
@@ -267,7 +293,8 @@
             "prompt": "prompt.text"
           },
           "params": {
-            "beats": []
+            "beats": [],
+            "negative": ""
           }
         },
         "keyframes": {
@@ -360,9 +387,10 @@
           },
           {
             "title": "Quality",
-            "help": "Distilled models run without guidance. Switch the model to Dev for guidance and a negative prompt.",
+            "help": "Distilled models run their own steps without guidance.",
             "items": [
               "model.precision",
+              "model.compute",
               "sample1.steps",
               "sample2.steps"
             ],
@@ -390,8 +418,15 @@
             ]
           },
           {
+            "title": "Negative prompt",
+            "help": "What the clip should not show. Applied with NAG, about 10 % slower. Empty: off.",
+            "items": [
+              "encode.negative"
+            ]
+          },
+          {
             "title": "Prompt beats",
-            "help": "A beat steers one part of the clip. The main prompt covers the rest.",
+            "help": "Each beat steers the picture and the sound for its stretch. The main prompt covers the rest.",
             "items": [
               "encode.beats"
             ]
@@ -411,13 +446,16 @@
         },
         "presets": {
           "Fast": {
-            "model.precision": "int8"
+            "model.precision": "int8",
+            "model.compute": "float16"
           },
           "Quality": {
-            "model.precision": "bf16"
+            "model.precision": "bf16",
+            "model.compute": "float32"
           },
           "Low memory": {
-            "model.precision": "int4"
+            "model.precision": "int4",
+            "model.compute": "float32"
           }
         },
         "preset_order": [
@@ -470,7 +508,9 @@
             "model": "model.model",
             "prompt": "prompt.text"
           },
-          "params": {}
+          "params": {
+            "negative": ""
+          }
         },
         "source": {
           "kind": "ltx/encode-video",
@@ -536,6 +576,13 @@
               "retake.cfg",
               "retake.stg"
             ]
+          },
+          {
+            "title": "Negative prompt",
+            "help": "What the clip should not show, for Dev's guidance. Empty: the fixed negative prompt. Distilled has none.",
+            "items": [
+              "encode.negative"
+            ]
           }
         ],
         "presets": {
@@ -595,7 +642,9 @@
             "model": "model.model",
             "prompt": "prompt.text"
           },
-          "params": {}
+          "params": {
+            "negative": ""
+          }
         },
         "source": {
           "kind": "ltx/encode-video",
@@ -660,6 +709,13 @@
               "extend.steps",
               "extend.cfg",
               "extend.stg"
+            ]
+          },
+          {
+            "title": "Negative prompt",
+            "help": "What the clip should not show, for Dev's guidance. Empty: the fixed negative prompt. Distilled has none.",
+            "items": [
+              "encode.negative"
             ]
           }
         ],
@@ -727,7 +783,9 @@
             "model": "model.model",
             "prompt": "prompt.text"
           },
-          "params": {}
+          "params": {
+            "negative": ""
+          }
         },
         "audio": {
           "kind": "ltx/encode-audio",
@@ -838,6 +896,13 @@
               "sample1.cfg",
               "sample1.stg",
               "sample2.steps"
+            ]
+          },
+          {
+            "title": "Negative prompt",
+            "help": "What the clip should not show, for Dev's guidance. Empty: the fixed negative prompt. Distilled has none.",
+            "items": [
+              "encode.negative"
             ]
           }
         ],

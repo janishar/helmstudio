@@ -35,6 +35,8 @@ RELAY_EPSILON, RELAY_STRENGTH = (
     1e-3,
     1.0,
 )  # the old CLI's Prompt Relay defaults (fixed: contracts README, Video)
+# upstream 0879826: Prompt Relay also gates audio_attn2 on the distilled paths at 1.0 (its epsilon: the video one)
+RELAY_AUDIO_STRENGTH = 1.0
 DURATION_HEAD = (
     "model_patches/ltx-2.5-duration-head-bf16.safetensors"  # DurationHead (auto length), 3.8 MB
 )

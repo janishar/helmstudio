@@ -122,6 +122,15 @@ class ModelRef:
     variant: str
     precision: str
     loras: tuple[LoraUse, ...] = ()
+    compute: str | None = None  # the model node's `compute` (API 1.39, model.yaml `model.compute`)
+
+    def compute_of(self, component: str) -> str | None:
+        """The load option `compute` of `component` (model.yaml `model.compute.components`), None at its default:
+        the default adds nothing to any key."""
+        spec = compute_spec(self.pack)
+        if not spec or component not in spec.get("components", []):
+            return None
+        return None if self.compute in (None, spec.get("default", "float32")) else self.compute
 
     @property
     def lora_component(self) -> str | None:
@@ -161,13 +170,16 @@ class ModelRef:
         return self.precision if self.precision in offered else offered[0]
 
     def key(self, component: str) -> tuple:
-        """The residency key: (model id, owning variant, component, precision), one file set at one precision."""
+        """The residency key: (model id, owning variant, component, precision[, compute]), one file set at one
+        precision; a compute other than the default (a str) is its own entry, as it casts the loaded parameters."""
         key = (
             self.pack.spec["id"],
             self.owner(component),
             component,
             self.precision_of(component),
         )
+        if compute := self.compute_of(component):
+            key += (compute,)
         # a baked component is its own entry: + the baked (sha256, strength) in order (`resident_loras` is what the
         # hosts value lists; a rename is not a new entry)
         if baked := self.baked(component):
@@ -201,7 +213,7 @@ class ModelRef:
         out = []
         for c in sorted(components):
             stats = [(str(p), p.stat().st_size, p.stat().st_mtime_ns) for p in self.files(c)]
-            out.append([*self.key(c)[:4], stats])
+            out.append([*self.key(c)[:4], *filter(None, [self.compute_of(c)]), stats])
             if c == self.lora_component and self.loras:  # an empty set adds nothing to any key
                 out[-1].append([[u.sha256, u.strength, u.mode] for u in self.loras])
         return out
@@ -449,6 +461,10 @@ def model_schema(pack: Pack) -> dict:
         "inputs": [],
         "outputs": [{"name": "model", "type": "Model"}],
     }
+    if compute := extra.get(
+        "compute"
+    ):  # API 1.39: a load option of `components` (ModelRef.compute_of)
+        schema["params"].append({"name": "compute", "type": "enum"} | {k: v for k, v in compute.items() if k not in ("components", "runtime")})  # fmt: skip
     if "help" in extra:
         schema["help"] = extra["help"]
     return schema
@@ -509,6 +525,13 @@ def lora_stack(ctx, params: dict, inputs: dict) -> dict:
     return {"model": replace(model, loras=model.loras + tuple(LoraUse.of(r) for r in rows))}
 
 
+def compute_spec(pack: Pack) -> dict | None:
+    """model.yaml `model.compute` when it holds for the pack's runtime (`runtime`, as `lora.runtime`; ltx: mlx, the
+    torch path runs bf16 and ignores the param, which both publish); None elsewhere."""
+    spec = pack.spec.get("model", {}).get("compute")
+    return spec if spec and spec.get("runtime", pack.runtime) == pack.runtime else None
+
+
 def lora_spec(pack: Pack) -> dict | None:
     """model.yaml `lora` when it holds for the pack's runtime: `lora.runtime` scopes it to one (ltx: mlx; its torch
     path takes no LoRA, so that runner publishes no block and no lora-stack node); absent, every runtime."""
@@ -547,7 +570,11 @@ def lora_block(pack: Pack) -> dict | None:
 
 def model_node(pack: Pack):
     def model(ctx, params: dict, inputs: dict) -> dict:
-        return {"model": ModelRef(pack, params["variant"], params["precision"])}
+        return {
+            "model": ModelRef(
+                pack, params["variant"], params["precision"], compute=params.get("compute")
+            )
+        }
 
     return model
 

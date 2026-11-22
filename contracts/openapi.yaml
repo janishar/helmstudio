@@ -3955,6 +3955,7 @@ components:
               model: {type: string}
               variant: {type: string}
               precision: {type: string, enum: [bf16, fp16, int8, int4, fp8, fp32], description: 'fp8 from 1.33 (NVIDIA hosts: a community pre-quantized variant). fp32 from 1.20: a component kept at its stored float32 (the MiniMax H3 Image VAE)'}
+              compute: {type: string, enum: [float32, float16], description: 'from 1.39: the load option the model node''s `compute` set (LTX on MLX: the transformer at float16 is its own entry); absent = float32'}
               gb: {type: number}
               pinned: {type: boolean}
               last_used: {type: string, format: date-time, description: 'from 1.13: when the runner last used it; absent from older runners'}
@@ -5609,6 +5610,7 @@ components:
         model: {type: string, pattern: '^[a-z0-9][a-z0-9_.-]{0,63}$'}
         variant: {type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,63}$'}
         precision: {$ref: '#/components/schemas/Precision'}
+        compute: {type: string, enum: [float32, float16], description: 'from 1.39: the entry''s compute as GET /v1/studio/hosts shows it; absent = float32'}
         loras:
           type: array
           maxItems: 32

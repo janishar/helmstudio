@@ -284,3 +284,36 @@ def test_footprint_is_this_process_and_grows_with_what_it_touches():
     block = bytearray(256 * 2**20)  # touched (zeroed) pages count
     assert 0 < before < footprint_gb() and footprint_gb() - before >= 0.2
     del block
+
+
+def test_a_compute_entry_is_its_own_and_named_with_its_compute():
+    """API 1.39: (…, precision, "float16") is apart from the plain entry, reported and named with `compute`; a baked
+    float16 set's plain copy is the float16 entry (the after-run rule strips only the LoRAs)."""
+    from core.residency import ident
+
+    half, baked = A + ("float16",), A + ("float16", (("sha", 1.0),))
+    res, _ = manager(budget=52)
+    lora = [{"lora_id": "sha", "name": "x", "strength": 1.0, "bytes": 1}]
+    for k in (A, half, baked):
+        res.get(k, 1.0, 0, object, lora if k == baked else None)
+    rows = res.state()["resident"]
+    assert [r.get("compute") for r in rows] == [None, "float16", "float16"]
+    assert ident({"component": "a", "model": "m", "variant": "base", "precision": "bf16", "compute": "float32"}) == ident(
+        {"component": "a", "model": "m", "variant": "base", "precision": "bf16"})  # fmt: skip
+    res.done()
+    freed, _ = res.unload_named([{"component": "a", "model": "m", "variant": "base", "precision": "bf16", "compute": "float16"}])  # fmt: skip
+    assert freed == [
+        {
+            "component": "a",
+            "model": "m",
+            "variant": "base",
+            "precision": "bf16",
+            "compute": "float16",
+        }
+    ]
+    assert set(res.entries) == {A, baked}
+    res.get(half, 1.0, 0, object)
+    res.done()
+    res.get(baked, 1.0, 0, object, lora)
+    res.after_run("keep_warm")
+    assert set(res.entries) == {A, baked}  # the float16 plain copy went, the float32 one stays

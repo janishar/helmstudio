@@ -20,6 +20,7 @@ has_audio[, source_map]}, which the core `output` node stores."""
 import functools
 import itertools
 import json
+import logging
 import math
 import subprocess
 import sys
@@ -45,6 +46,7 @@ from packs.ltx.common import (  # the runtime-neutral part
     MAX_FRAMES,
     MAX_TOKENS,
     NEGATIVE_PROMPT,
+    RELAY_AUDIO_STRENGTH,
     RELAY_EPSILON,
     RELAY_STRENGTH,
     SAMPLE_RATE,
@@ -86,6 +88,7 @@ from ltx_core_mlx.components.patchifiers import (
 from ltx_core_mlx.conditioning.mask_utils import first_frame_keyframes_mask
 from ltx_core_mlx.conditioning.prompt_relay import (
     build_relay_mask,
+    build_relay_mask_audio,
     distribute_segment_lengths,
     map_token_ranges,
 )
@@ -98,6 +101,7 @@ from ltx_core_mlx.conditioning.types.latent_cond import (
     noise_latent_state,
 )
 from ltx_core_mlx.duration_head import load_duration_head
+from ltx_core_mlx.guidance.nag import NAGConfig, NAGGuidance
 from ltx_core_mlx.guidance.perturbations import (
     BatchedPerturbationConfig,
     Perturbation,
@@ -126,6 +130,7 @@ from ltx_core_mlx.utils.positions import (
 from mlx_arsenal.diffusion import dynamic_shift_schedule, euler_step
 
 PATCH = VideoLatentPatchifier()
+log = logging.getLogger("ltx")
 
 
 @dataclass(frozen=True)
@@ -139,8 +144,11 @@ class Cond:
     # Cond reused by a node of another id keeps the first id in these texts
     beats_at: str = ""
     images_at: str = ""
-    neg_video: mx.array | None = None  # the fixed negative prompt's (encode-guided: CFG)
+    # the negative prompt's, typed or the fixed one (encode-guided: CFG)
+    neg_video: mx.array | None = None
     neg_audio: mx.array | None = None
+    nag_video: mx.array | None = None  # encode.negative's (NAG on the samplers); None: off
+    nag_audio: mx.array | None = None
     crf: int | None = (
         None  # the keyframe images' CRF, from the encoding model's generation (common.image_crf)
     )
@@ -359,8 +367,10 @@ def duration(ctx, params: dict, inputs: dict) -> dict:
 
 def encode(ctx, params: dict, inputs: dict) -> dict:
     """Gemma 4 (all 49 hidden states, the last one post-norm) → the connector → video and audio embeddings. With
-    beats (Prompt Relay) the encoded prompt is `prompt + "".join(" " + beat)` and each beat's token range is kept."""
+    beats (Prompt Relay) the encoded prompt is `prompt + "".join(" " + beat)` and each beat's token range is kept. A
+    negative prompt (API 1.39) is encoded after it, for NAG (blank: none)."""
     model, text, beats = inputs["model"], inputs["prompt"], params["beats"]
+    negative = params.get("negative", "")
     if not text.strip():
         raise RunError(f"{ctx.node}: the prompt is empty")
     for i, b in enumerate(beats, 1):
@@ -386,8 +396,15 @@ def encode(ctx, params: dict, inputs: dict) -> dict:
     hidden, mask = encoder.encode_all_layers(text, max_length=MAX_TOKENS)
     video, audio = extractor(hidden, attention_mask=mask)
     mx.eval(video, audio)
+    nag = {}
+    # _base._encode_nag: one global prompt, materialised on its own (the GPU watchdog)
+    if negative.strip():
+        hidden, mask = encoder.encode_all_layers(negative, max_length=MAX_TOKENS)
+        nv, na = extractor(hidden, attention_mask=mask)
+        mx.eval(nv, na)
+        nag = {"nag_video": nv, "nag_audio": na}
     return {"cond": Cond(video, audio, tuple(float(b["seconds"]) for b in beats), tuple(tuple(r) for r in ranges),
-                         beats_at=f"{ctx.node}.beats", crf=image_crf(_version(model)))}  # fmt: skip
+                         beats_at=f"{ctx.node}.beats", crf=image_crf(_version(model)), **nag)}  # fmt: skip
 
 
 def keyframes(ctx, params: dict, inputs: dict) -> dict:
@@ -447,6 +464,44 @@ def relay_mask(cond: Cond, fhw, tokens: int, fps: float) -> mx.array | None:
                             num_text_tokens=cond.video.shape[1], epsilon=RELAY_EPSILON, strength=RELAY_STRENGTH)  # fmt: skip
 
 
+def relay_audio_mask(cond: Cond, fhw, audio: LatentState, fps: float) -> mx.array | None:
+    """_base._prompt_relay_audio_mask_builder at the distilled paths' strength (1.0, fixed): the additive audio→text
+    bias (1, 1, Na, 1024), audio token i at i * F / Na latent frames; None without beats or for a frozen audio."""
+    if not cond.ranges or audio.frozen:
+        return None
+    return build_relay_mask_audio(token_ranges=list(cond.ranges), segment_lengths=beat_lengths(cond, fhw[0], fps),
+                                  num_audio_tokens=audio.latent.shape[1], latent_frames=fhw[0],
+                                  num_text_tokens=cond.video.shape[1], epsilon=RELAY_EPSILON,
+                                  strength=RELAY_AUDIO_STRENGTH)  # fmt: skip
+
+
+def _f16(model) -> bool:
+    """Whether the Model loads its transformer at compute float16 (a test's stand-in model has no compute)."""
+    return getattr(model, "compute_of", lambda c: None)("transformer") == "float16"
+
+
+def _dit(ctx, model) -> X0Model:
+    """The transformer as an x0 model, its compute dtype set once at load (API 1.39: `compute` is in its residency
+    key, so a resident float16 entry already has it)."""
+    dit = ctx.component(model, "transformer")
+    if _f16(model) and dit.compute_dtype is None:
+        dit.set_compute_dtype(mx.float16)
+    return X0Model(dit)
+
+
+def _settled(ctx, model, x0_model: X0Model) -> None:
+    """After a float16 denoise: upstream's overflow guard drops the compute dtype for good on a non-finite step,
+    leaving float16-cast parameters under a float16 key; that entry goes (the next run reloads it) and the run says
+    so in its progress."""
+    if _f16(model) and x0_model.model.compute_dtype is None:
+        log.warning(
+            "%s: float16 overflowed; the transformer runs float32 activations until it reloads",
+            ctx.node,
+        )
+        ctx.residency.release({model.key("transformer")})
+        ctx.progress(1, 1, "float16 overflowed: float32 activations, reloads next run")
+
+
 def noised_state(
     shape, conditionings, fhw, positions, seed: int, sigma: float, initial=None, scalar_blend=True
 ):
@@ -486,7 +541,7 @@ def _frozen(video: LatentState, audio: LatentState, batch: int) -> dict:
 
 
 def _denoise(ctx, x0_model, video: LatentState, audio: LatentState, cond: Cond, sigmas, phase: str,
-             noise_seed: int | None, cross_mask=None):  # fmt: skip
+             noise_seed: int | None, cross_mask=None, audio_mask=None):  # fmt: skip
     """samplers.denoise_loop (noise_seed None: deterministic Euler) or euler_ancestral_denoising_loop (eta 1,
     s_noise 1, the loop's noise drawn video then audio from mx.random.seed(noise_seed)), with a cancel point and a
     progress event per step. A conditioned state (mask not all 1) passes per-token timesteps mask * sigma, a frozen
@@ -496,14 +551,22 @@ def _denoise(ctx, x0_model, video: LatentState, audio: LatentState, cond: Cond, 
     vdtype, adtype = vx.dtype, ax.dtype
     stepper = EulerAncestralDiffusionStep(eta=1.0, s_noise=1.0)
     v_uniform, a_uniform = _uniform(video.denoise_mask), _uniform(audio.denoise_mask)
+    extra = {} if audio_mask is None else {"audio_cross_attention_mask": audio_mask}
+    # NAG (upstream NAGConfig defaults); a frozen audio stream is not guided
+    if cond.nag_video is not None:
+        extra["nag"] = NAGGuidance.from_config(
+            NAGConfig(), cond.nag_video, None if audio.frozen else cond.nag_audio
+        )
     if noise_seed is not None:
         mx.random.seed(noise_seed)
     steps = list(itertools.pairwise(sigmas))
     for i, (sigma, sigma_next) in enumerate(steps):
         ctx.check()
         sig = mx.broadcast_to(mx.array([sigma], dtype=mx.bfloat16), (vx.shape[0],))
-        kw = _frozen(video, audio, vx.shape[0]) | (
-            {} if cross_mask is None else {"video_cross_attention_mask": cross_mask}
+        kw = (
+            _frozen(video, audio, vx.shape[0])
+            | extra
+            | ({} if cross_mask is None else {"video_cross_attention_mask": cross_mask})
         )
         if not v_uniform:
             kw["video_timesteps"] = (video.denoise_mask * sigma).squeeze(-1)
@@ -557,7 +620,7 @@ def sample(ctx, params: dict, inputs: dict) -> dict:
         fhw = compute_video_latent_shape(frames, height // 2, width // 2)
         keyframe_frames(cond, frames, fps)  # a bad row or beat fails before anything loads
         beat_lengths(cond, fhw[0], fps)
-        x0_model = X0Model(ctx.component(model, "transformer"))
+        x0_model = _dit(ctx, model)
         audio_t = compute_audio_token_count(frames, frame_rate=fps)
         video = noised_state((1, fhw[0] * fhw[1] * fhw[2], 128), _conditionings(ctx, model, cond, fhw, frames, fps), fhw,
                              compute_video_positions(*fhw, frame_rate=fps), seed, 1.0)  # fmt: skip
@@ -566,11 +629,12 @@ def sample(ctx, params: dict, inputs: dict) -> dict:
         )
         mask = relay_mask(cond, fhw, video.latent.shape[1], fps)
         vx, ax = _denoise(ctx, x0_model, video, audio, cond, STAGE1_SIGMAS, "stage 1",
-                          seed + ANCESTRAL_SEED if anc else None, mask)  # fmt: skip
+                          seed + ANCESTRAL_SEED if anc else None, mask, relay_audio_mask(cond, fhw, audio, fps))  # fmt: skip
+        _settled(ctx, model, x0_model)
         return {"latent": Latent(vx, ax, fhw, frames, fps)}
     latent: Latent = inputs["latent"]
     fhw, sigmas = latent.fhw, STAGE2_SIGMAS
-    x0_model = X0Model(ctx.component(model, "transformer"))
+    x0_model = _dit(ctx, model)
     conds = _conditionings(ctx, model, cond, fhw, latent.frames, latent.fps)
     positions = compute_video_positions(*fhw, frame_rate=latent.fps)
     video = noised_state(
@@ -587,7 +651,9 @@ def sample(ctx, params: dict, inputs: dict) -> dict:
     # the dev audio to video's stage 2 is deterministic (A2VidPipelineTwoStage); the distilled one ancestral
     # (A2VidDistilledPipeline: DistilledPipeline's stage 2 with the source audio frozen)
     noise = seed + ANCESTRAL_SEED_2 if anc and not latent.guided else None
-    vx, ax = _denoise(ctx, x0_model, video, audio, cond, sigmas, "stage 2", noise, mask)
+    vx, ax = _denoise(ctx, x0_model, video, audio, cond, sigmas, "stage 2", noise, mask,
+                      relay_audio_mask(cond, fhw, audio, latent.fps))  # fmt: skip
+    _settled(ctx, model, x0_model)
     return {"latent": replace(latent, video=vx, audio=ax)}
 
 
@@ -744,8 +810,9 @@ ENV = (
 
 
 def encode_guided(ctx, params: dict, inputs: dict) -> dict:
-    """_base._encode_text_with_negative: the prompt, then the fixed negative prompt, each materialised on its own
-    (the GPU watchdog), with Gemma loaded once; then Gemma and the connector go (unload_after)."""
+    """_base._encode_text_with_negative: the prompt, then the negative prompt (API 1.39: the typed one, blank = the
+    fixed one), each materialised on its own (the GPU watchdog), with Gemma loaded once; then Gemma and the connector
+    go (unload_after)."""
     model, text = inputs["model"], inputs["prompt"]
     if not text.strip():
         raise RunError(f"{ctx.node}: the prompt is empty")
@@ -757,7 +824,8 @@ def encode_guided(ctx, params: dict, inputs: dict) -> dict:
     ctx.progress(1, 1, "encoding")
     out = []
     # a distilled model runs without CFG: no negative prompt (retake --distilled: _encode_prompts, positive only)
-    for t in (text,) if is_distilled(model) else (text, NEGATIVE_PROMPT):
+    negative = params.get("negative", "") if params.get("negative", "").strip() else NEGATIVE_PROMPT
+    for t in (text,) if is_distilled(model) else (text, negative):
         hidden, mask = encoder.encode_all_layers(t, max_length=MAX_TOKENS)
         video, audio = extractor(hidden, attention_mask=mask)
         mx.eval(video, audio)
@@ -971,7 +1039,7 @@ def _edit(
     seed, cond, model = inputs["seed"], inputs["cond"], inputs["model"]
     distilled = is_distilled(model)
     factories = None if distilled else _guiders(params, cond, audio_guided=True)
-    x0_model = X0Model(ctx.component(model, "transformer"))
+    x0_model = _dit(ctx, model)
     video = noise_latent_state(video, sigma=1.0, seed=seed)
     audio = noise_latent_state(audio, sigma=1.0, seed=seed + 1)
     if (
@@ -981,6 +1049,7 @@ def _edit(
     else:
         sigmas = ltx2_schedule(params["steps"], fhw[0] * fhw[1] * fhw[2])
         vx, ax = _guided(ctx, x0_model, video, audio, cond, factories, sigmas, "guided")
+    _settled(ctx, model, x0_model)
     return {
         "latent": Latent(
             vx, ax, fhw, frames, src.fps, source_map={"take_id": src.source_map["take_id"]} | smap
@@ -1102,7 +1171,7 @@ def _extend_distilled(ctx, inputs: dict, src: Latent, m: dict) -> dict:
     # stage 1: half size, the carry pinned (video seed, audio seed + 1, the legacy scalar blend)
     fhw1 = compute_video_latent_shape(window, h * 16, w * 16)
     at = compute_audio_token_count(window, frame_rate=fps)
-    x0_model = X0Model(ctx.component(model, "transformer"))
+    x0_model = _dit(ctx, model)
     video = noised_state((1, fhw1[0] * fhw1[1] * fhw1[2], 128), [_pin(video_half, fhw1[1] * fhw1[2])], fhw1,
                          compute_video_positions(*fhw1, frame_rate=fps), seed, 1.0)  # fmt: skip
     a_state = noised_state((1, at, 128), [_pin(audio_carry, 1)], (at, 1, 1), compute_audio_positions(at), seed + 1, 1.0)  # fmt: skip
@@ -1116,6 +1185,7 @@ def _extend_distilled(ctx, inputs: dict, src: Latent, m: dict) -> dict:
                            STAGE2_SIGMAS[0], ax, scalar_blend=False)  # fmt: skip
     vx, ax = _denoise(ctx, x0_model, video, a_state, cond, STAGE2_SIGMAS, "stage 2",
                       seed + ANCESTRAL_SEED_2 if anc else None)  # fmt: skip
+    _settled(ctx, model, x0_model)
     new_v = vx[:, carry * h * w : fhw2[0] * h * w, :].astype(src.video.dtype)
     new_a = ax[:, carry_t:, :].astype(audio.dtype)
     out = Latent(mx.concatenate([src.video, new_v], axis=1), mx.concatenate([audio, new_a], axis=1),
@@ -1138,7 +1208,7 @@ def sample_guided(ctx, params: dict, inputs: dict) -> dict:
     keyframe_frames(cond, frames, fps)  # a bad row fails before anything loads
     distilled = is_distilled(model)
     factories = None if distilled else _guiders(params, cond, audio_guided=False)
-    x0_model = X0Model(ctx.component(model, "transformer"))
+    x0_model = _dit(ctx, model)
     video = noised_state((1, fhw[0] * fhw[1] * fhw[2], 128), _conditionings(ctx, model, cond, fhw, frames, fps), fhw,
                          compute_video_positions(*fhw, frame_rate=fps), seed, 1.0)  # fmt: skip
     audio = _audio_state(
@@ -1152,6 +1222,7 @@ def sample_guided(ctx, params: dict, inputs: dict) -> dict:
     else:
         sigmas = ltx2_schedule(params["steps"], fhw[0] * fhw[1] * fhw[2])
         vx, ax = _guided(ctx, x0_model, video, audio, cond, factories, sigmas, "guided")
+    _settled(ctx, model, x0_model)
     return {
         "latent": Latent(
             vx, ax, fhw, frames, fps, source_map=a.source_map, sound=a.sound, guided=not distilled

@@ -34,7 +34,8 @@ retake source's sound and audio-to-video's input). The retake / extend / audio-t
 `fuse_loras.py`, `loader/__init__.py`, `video_vae.py` / `tiling.py`, `diffusion_steps.py`, `guidance/__init__.py`) and
 4 added because they import them (`guidance/nag.py`, `model/transformer/sparse_attention.py`, `loader/helpers.py`,
 `loader/lora_adapters.py`). Their new switches (NAG, `LTX2_COMPUTE_DTYPE`, `LTX2_SOL_TAU`, `LTX2_LORA_MODE`, the audio
-Prompt Relay mask) are inert unless set or passed; the pack passes none. What the pack ported by hand is in
+Prompt Relay mask) are inert unless set or passed; the pack passes the audio relay mask, NAG and the compute dtype
+(plan 19 phase 2), and none of the others. What the pack ported by hand is in
 GOTCHAS.md ("0.18 sync").
 
 To refresh: copy the same files from a newer commit (re-walk the imports), re-record the goldens on the fork

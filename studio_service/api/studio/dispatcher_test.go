@@ -608,7 +608,7 @@ func TestMinimaxPlan(t *testing.T) {
 	graph, _ := json.Marshal(map[string]registry.Node{"model": {Kind: "minimax-h3-image/model",
 		Params: map[string]any{"variant": "base", "precision": "int8"}}})
 	got := planOf(reg, "mac", model.Run{WorkflowID: "minimax-h3-image", Env: "torch", Nodes: graph})
-	vae := entryKey("vae", "minimax-h3-image", "base", "fp32", nil)
+	vae := entryKey("vae", "minimax-h3-image", "base", "fp32", "", nil)
 	if got.peak != 4100 || len(got.needs) != 4 || !slices.Contains(got.needs, vae) {
 		t.Fatal(got)
 	}

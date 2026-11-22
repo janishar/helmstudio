@@ -135,6 +135,7 @@ BF16 = torch.bfloat16
 PATCH, AUDIO = VideoLatentPatchifier(patch_size=1), AudioPatchifier(patch_size=1)
 CONFIG = Path(__file__).parent / "transformer-config.json"
 NO_RELAY = "Prompt Relay (beats) is not available on NVIDIA hosts yet"
+NO_NAG = "NAG is Mac only for now"  # API 1.39: encode.negative (ltx-core has no NAG at the pin); `compute` is ignored
 NO_LORA = ": LoRAs are not available on the NVIDIA (fp8 / int8) variants yet"
 
 
@@ -671,25 +672,28 @@ def _encode(ctx, model, texts: list[str]) -> list:
 
 
 def check_encode(params: dict, wired: set, models: dict | None = None) -> str | None:
-    return f".beats: {NO_RELAY}" if params.get("beats") else None
+    if params.get("beats"):
+        return f".beats: {NO_RELAY}"
+    return f".negative: {NO_NAG}" if params.get("negative", "").strip() else None
 
 
 @torch.no_grad()
 def encode(ctx, params: dict, inputs: dict) -> dict:
     if not inputs["prompt"].strip():
         raise RunError(f"{ctx.node}: the prompt is empty")
-    if params["beats"]:
-        raise RunError(f"{ctx.node}.beats: {NO_RELAY}")
+    if why := check_encode(params, set()):
+        raise RunError(f"{ctx.node}{why}")
     ((video, audio),) = _encode(ctx, inputs["model"], [inputs["prompt"]])
     return {"cond": Cond(video, audio, crf=image_crf(_version(inputs["model"])))}
 
 
 @torch.no_grad()
 def encode_guided(ctx, params: dict, inputs: dict) -> dict:
-    """The prompt, then the fixed negative prompt, with Gemma loaded once."""
+    """The prompt, then the negative prompt (API 1.39: the typed one, blank = the fixed one), with Gemma loaded once."""
     if not inputs["prompt"].strip():
         raise RunError(f"{ctx.node}: the prompt is empty")
-    (v, a), (nv, na) = _encode(ctx, inputs["model"], [inputs["prompt"], NEGATIVE_PROMPT])
+    negative = params.get("negative", "") if params.get("negative", "").strip() else NEGATIVE_PROMPT
+    (v, a), (nv, na) = _encode(ctx, inputs["model"], [inputs["prompt"], negative])
     return {
         "cond": Cond(v, a, neg_video=nv, neg_audio=na, crf=image_crf(_version(inputs["model"])))
     }

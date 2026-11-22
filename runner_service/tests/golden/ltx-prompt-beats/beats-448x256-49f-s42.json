@@ -8,7 +8,8 @@
   "seed": 42,
   "relay_epsilon": 0.001,
   "relay_strength": 1.0,
-  "relay_audio_strength": 0.0,
+  "relay_audio_strength": 1.0,
+  "studio": "ltx-2-studio main e6e15b7",
   "segments": [
     {
       "text": "the puppy sits still and looks at the camera",
@@ -21,7 +22,7 @@
   ],
   "prompt": "A golden retriever puppy on a sunny park lawn, birds chirping in the trees behind it",
   "pipeline": "DistilledPipeline (ltx-2-mlx generate --distilled)",
-  "argv_equivalent": "ltx-2-mlx generate --distilled --model ~/GenAI/models/ltx-2.5 --quantize-on-load 8 --width 448 --height 256 --frames 49 --frame-rate 24 --seed 42 --prompt '...' --segment 'the puppy sits still and looks at the camera' 3 --segment 'the puppy jumps up and runs away to the left, barking' --relay-epsilon 0.001 --relay-strength 1 --relay-audio-strength 0 -o beats-448x256-49f-s42.mp4",
+  "argv_equivalent": "ltx-2-mlx generate --distilled --model ~/GenAI/models/ltx-2.5 --quantize-on-load 8 --width 448 --height 256 --frames 49 --frame-rate 24 --seed 42 --prompt '...' --segment 'the puppy sits still and looks at the camera' 3 --segment 'the puppy jumps up and runs away to the left, barking' --relay-epsilon 0.001 --relay-strength 1 --relay-audio-strength 1 -o beats-448x256-49f-s42.mp4",
   "images": null,
   "image_preprocess": null,
   "image_conditionings": null,
@@ -85,6 +86,7 @@
       "sha256_f32": "db8f2cec11ae8bb1772ff13b8fe0c35c3178b289da0a07e9f9f8b2c96cd66596"
     }
   },
+  "nag": null,
   "stages": [
     {
       "stage": 1,
@@ -212,7 +214,21 @@
         "abs_mean": 3.914795,
         "sha256_f32": "5dd3957030f58aa15f2b60d534e2bc1181fdfd30e9c3acc097806e79eb7546c6"
       },
-      "audio_cross_attention_mask": null,
+      "audio_cross_attention_mask": {
+        "shape": [
+          1,
+          1,
+          51,
+          1024
+        ],
+        "dtype": "bfloat16",
+        "mean": -3.923595,
+        "std": 40.919434,
+        "min": -820.0,
+        "max": -0.0,
+        "abs_mean": 3.923595,
+        "sha256_f32": "70274ebd4d17090f4397609f7e2459a7b5a1713f8f8b1000e1a244a0d8a354eb"
+      },
       "video_out_tokens": {
         "shape": [
           1,
@@ -220,12 +236,12 @@
           128
         ],
         "dtype": "bfloat16",
-        "mean": -0.013374,
-        "std": 1.204345,
-        "min": -5.625,
-        "max": 4.84375,
-        "abs_mean": 0.965031,
-        "sha256_f32": "6e5cf4bd7b0ff4fa4b4837d591ba1b98829034d2f9dc4d3e3cc6627d20954011"
+        "mean": -0.002082,
+        "std": 1.221917,
+        "min": -5.34375,
+        "max": 4.625,
+        "abs_mean": 0.983707,
+        "sha256_f32": "83ced788bf9711e6019818239d76bee148897e18f8b0859912073acf69e3d97f"
       },
       "audio_out_tokens": {
         "shape": [
@@ -234,12 +250,12 @@
           128
         ],
         "dtype": "bfloat16",
-        "mean": -0.52642,
-        "std": 1.60105,
-        "min": -6.09375,
-        "max": 5.3125,
-        "abs_mean": 1.434199,
-        "sha256_f32": "c93c35e6ffea5f395047fa6d5887378b379e73d6736c5f962fee0ad3b79cd994"
+        "mean": -0.609166,
+        "std": 1.648601,
+        "min": -6.0,
+        "max": 5.21875,
+        "abs_mean": 1.469341,
+        "sha256_f32": "e34aa0130cb358f2d6db456f4aa8271d7043f1c3f716f0f432fca4d37f8c340a"
       }
     },
     {
@@ -259,12 +275,12 @@
           128
         ],
         "dtype": "bfloat16",
-        "mean": -0.003315,
-        "std": 0.916685,
+        "mean": -0.003149,
+        "std": 0.91651,
         "min": -4.0,
-        "max": 4.09375,
-        "abs_mean": 0.731373,
-        "sha256_f32": "8e08aa660d28eb004f4b2b9fc08661644596f7af7cf6bacf10f2e825076b698e"
+        "max": 4.125,
+        "abs_mean": 0.731262,
+        "sha256_f32": "0659f3d553cde44196533f4f555ca58adac048ab5126ceb752a4badb7b12f7c1"
       },
       "audio_in": {
         "shape": [
@@ -273,12 +289,12 @@
           128
         ],
         "dtype": "bfloat16",
-        "mean": -0.042291,
-        "std": 0.911836,
-        "min": -3.25,
-        "max": 3.40625,
-        "abs_mean": 0.727062,
-        "sha256_f32": "e6b8c605318bb9aa3dcc069b2e8a675757fdff1e6e85fa60432dcd6feb75dce3"
+        "mean": -0.049685,
+        "std": 0.911513,
+        "min": -3.15625,
+        "max": 3.4375,
+        "abs_mean": 0.727436,
+        "sha256_f32": "c618826653f98fb8030f3f81331e3c476619db56f5bed1544cb9629c53ac30f6"
       },
       "video_positions": [
         1,
@@ -298,12 +314,12 @@
           128
         ],
         "dtype": "bfloat16",
-        "mean": -0.020818,
-        "std": 1.356037,
-        "min": -6.75,
-        "max": 5.9375,
-        "abs_mean": 1.073773,
-        "sha256_f32": "e462956f98f89c3d99c142be75f2bc380431b09cf8eccdda6c5d96c799240402"
+        "mean": -0.01901,
+        "std": 1.354114,
+        "min": -6.0625,
+        "max": 6.1875,
+        "abs_mean": 1.073818,
+        "sha256_f32": "a05d64f5082c7249635981e08f43f1053cd971b3db95d57be24d9165295d5d0f"
       },
       "video_denoise_mask": {
         "shape": [
@@ -363,7 +379,21 @@
         "abs_mean": 3.914795,
         "sha256_f32": "98ced587ae19c9421f99558714fe1d8f25830318bc96c9e2677e3e91ffea4ebe"
       },
-      "audio_cross_attention_mask": null,
+      "audio_cross_attention_mask": {
+        "shape": [
+          1,
+          1,
+          51,
+          1024
+        ],
+        "dtype": "bfloat16",
+        "mean": -3.923595,
+        "std": 40.919434,
+        "min": -820.0,
+        "max": -0.0,
+        "abs_mean": 3.923595,
+        "sha256_f32": "70274ebd4d17090f4397609f7e2459a7b5a1713f8f8b1000e1a244a0d8a354eb"
+      },
       "video_upscaled": {
         "shape": [
           1,
@@ -371,12 +401,12 @@
           128
         ],
         "dtype": "bfloat16",
-        "mean": -0.020818,
-        "std": 1.356037,
-        "min": -6.75,
-        "max": 5.9375,
-        "abs_mean": 1.073773,
-        "sha256_f32": "e462956f98f89c3d99c142be75f2bc380431b09cf8eccdda6c5d96c799240402"
+        "mean": -0.01901,
+        "std": 1.354114,
+        "min": -6.0625,
+        "max": 6.1875,
+        "abs_mean": 1.073818,
+        "sha256_f32": "a05d64f5082c7249635981e08f43f1053cd971b3db95d57be24d9165295d5d0f"
       },
       "audio_from_stage1": {
         "shape": [
@@ -385,12 +415,12 @@
           128
         ],
         "dtype": "bfloat16",
-        "mean": -0.52642,
-        "std": 1.60105,
-        "min": -6.09375,
-        "max": 5.3125,
-        "abs_mean": 1.434199,
-        "sha256_f32": "c93c35e6ffea5f395047fa6d5887378b379e73d6736c5f962fee0ad3b79cd994"
+        "mean": -0.609166,
+        "std": 1.648601,
+        "min": -6.0,
+        "max": 5.21875,
+        "abs_mean": 1.469341,
+        "sha256_f32": "e34aa0130cb358f2d6db456f4aa8271d7043f1c3f716f0f432fca4d37f8c340a"
       },
       "video_out_tokens": {
         "shape": [
@@ -399,12 +429,12 @@
           128
         ],
         "dtype": "bfloat16",
-        "mean": -0.02686,
-        "std": 1.21002,
-        "min": -5.65625,
-        "max": 4.875,
-        "abs_mean": 0.968198,
-        "sha256_f32": "5f6881b9667e6d66e75142b2dfbe90ff8a1a9040eec8e1f7a4c8969db6d56379"
+        "mean": -0.016943,
+        "std": 1.218217,
+        "min": -5.5625,
+        "max": 4.84375,
+        "abs_mean": 0.975648,
+        "sha256_f32": "ec07942c105a2ea88d750b846f3ee91198b194cead0844e1a4d932e344586356"
       },
       "audio_out_tokens": {
         "shape": [
@@ -413,12 +443,12 @@
           128
         ],
         "dtype": "bfloat16",
-        "mean": -0.50912,
-        "std": 1.737405,
-        "min": -6.03125,
-        "max": 5.625,
-        "abs_mean": 1.523084,
-        "sha256_f32": "1bc182a6ee98b18f0fd42924ec4c91b29129968dacfe7417ab75959cff4c1d44"
+        "mean": -0.603781,
+        "std": 1.748733,
+        "min": -6.53125,
+        "max": 6.5,
+        "abs_mean": 1.557778,
+        "sha256_f32": "66dd166dc3df3b325762ec9228a32646f89f1bf75e43b50b58a5be9dd281b83b"
       }
     }
   ],
@@ -431,12 +461,12 @@
       14
     ],
     "dtype": "bfloat16",
-    "mean": -0.02686,
-    "std": 1.21002,
-    "min": -5.65625,
-    "max": 4.875,
-    "abs_mean": 0.968198,
-    "sha256_f32": "3a7318414c404460ee99e516617642262ecdc1d599fedca03745f2637bdae49d"
+    "mean": -0.016943,
+    "std": 1.218217,
+    "min": -5.5625,
+    "max": 4.84375,
+    "abs_mean": 0.975648,
+    "sha256_f32": "48b21c8ffce3e9a76f7bd83dd5bf1f76abd468ba2e93ef9d4eb6a3f5c618ed9b"
   },
   "final_audio_latent": {
     "shape": [
@@ -446,12 +476,12 @@
       16
     ],
     "dtype": "bfloat16",
-    "mean": -0.50912,
-    "std": 1.737405,
-    "min": -6.03125,
-    "max": 5.625,
-    "abs_mean": 1.523084,
-    "sha256_f32": "8741d18e0cee7575182d1efbddedac688e6eb90065d43f0a28ed539641212661"
+    "mean": -0.603781,
+    "std": 1.748733,
+    "min": -6.53125,
+    "max": 6.5,
+    "abs_mean": 1.557778,
+    "sha256_f32": "6b7f8e99f760bb887474aae881837fd0ca1dd0ed3e441ea3c1ddbdbdaa14eca8"
   },
   "waveform": {
     "shape": [
@@ -460,12 +490,12 @@
       96480
     ],
     "dtype": "bfloat16",
-    "mean": -0.000263,
-    "std": 0.101946,
-    "min": -0.566406,
-    "max": 0.652344,
-    "abs_mean": 0.036817,
-    "sha256_f32": "800cf4f26b85a76b2e97de38be7e23aa09a16a88f70c31e2727de21b8b6f4bd0"
+    "mean": -1e-06,
+    "std": 0.006142,
+    "min": -0.041748,
+    "max": 0.037842,
+    "abs_mean": 0.00442,
+    "sha256_f32": "f4af517c936edd67442f524fe7313d824a1b79aba28a1b7d81e7bde7f278fa1b"
   },
   "wav": {
     "sample_rate": 48000,
@@ -488,7 +518,7 @@
   },
   "mp4": {
     "file": "beats-448x256-49f-s42.mp4",
-    "bytes": 281470,
+    "bytes": 310893,
     "ffprobe": {
       "programs": [],
       "stream_groups": [],
@@ -519,83 +549,83 @@
       ],
       "format": {
         "duration": "2.041667",
-        "bit_rate": "1102902"
+        "bit_rate": "1218192"
       }
     },
-    "sha256": "71b6cf86604e94f17a8aa1e090bf61f430814d43a620ba42f1030d4b333d0d7c"
+    "sha256": "99a959acc14729e2245cf20e78c4886b944a1c3a5979d837f104d2fbbeadd395"
   },
   "timing_s": {
     "pipeline_init": 0.02,
-    "text_encoder_load": 5.97,
-    "text_encode": 5.57,
-    "dit_vae_encoder_upsampler_load": 13.19,
-    "stage1_denoise": 18.73,
-    "stage2_denoise": 7.43,
-    "generate_two_stage_total": 52.87,
-    "decoders_load": 0.09,
-    "audio_decode": 0.42,
-    "decode_video_audio_mux": 2.34,
-    "total_wall": 55.6
+    "text_encoder_load": 4.35,
+    "text_encode": 2.18,
+    "dit_vae_encoder_upsampler_load": 4.86,
+    "stage1_denoise": 6.54,
+    "stage2_denoise": 5.51,
+    "generate_two_stage_total": 23.81,
+    "decoders_load": 0.06,
+    "audio_decode": 0.39,
+    "decode_video_audio_mux": 1.93,
+    "total_wall": 26.0
   },
   "memory": {
     "phases": {
       "text_encoder_load": {
-        "s": 5.97,
-        "peak_gib": 12.73,
+        "s": 4.35,
+        "peak_gib": 12.74,
         "calls": 3,
         "active_after_gib": 12.66
       },
       "text_encode": {
-        "s": 5.57,
+        "s": 2.18,
         "peak_gib": 20.28,
         "calls": 1,
         "active_after_gib": 18.59
       },
       "dit_vae_encoder_upsampler_load": {
-        "s": 13.19,
-        "peak_gib": 19.35,
+        "s": 4.86,
+        "peak_gib": 19.29,
         "calls": 1,
         "active_after_gib": 19.19
       },
       "stage1_denoise": {
-        "s": 18.73,
+        "s": 6.54,
         "peak_gib": 20.79,
         "calls": 1,
         "active_after_gib": 19.19
       },
       "stage2_denoise": {
-        "s": 7.43,
+        "s": 5.51,
         "peak_gib": 20.9,
         "calls": 1,
         "active_after_gib": 19.19
       },
       "generate_two_stage_total": {
-        "s": 52.87,
+        "s": 23.81,
         "peak_gib": 20.9,
         "calls": 1,
         "active_after_gib": 19.18
       },
       "decoders_load": {
-        "s": 0.09,
+        "s": 0.06,
         "peak_gib": 0.0,
         "calls": 1,
         "active_after_gib": 0.0
       },
       "audio_decode": {
-        "s": 0.42,
-        "peak_gib": 3.3,
+        "s": 0.39,
+        "peak_gib": 3.41,
         "calls": 1,
         "active_after_gib": 0.54
       },
       "decode_video_audio_mux": {
-        "s": 2.34,
+        "s": 1.93,
         "peak_gib": 8.24,
         "calls": 1,
         "active_after_gib": 1.3
       }
     },
     "mlx_peak_gib_whole_run": 20.9,
-    "process_max_rss_gib": 7.46
+    "process_max_rss_gib": 9.62
   },
   "env": {
     "LTX_MLX_CACHE_DIR": "<scratch>",
@@ -603,10 +633,10 @@
   },
   "versions": {
     "mlx": "0.32.2",
-    "python": "3.13.14",
+    "python": "3.11.16",
     "numpy": "2.4.3",
     "ffmpeg": "ffmpeg version 9.0.2 Copyright (c) 2000-2026 the FFmpeg developers",
-    "ltx_pipelines_mlx": "0.18.0 (ltx-2-studio main 4b2f609, upstream ltx-2-mlx 747b30e)",
+    "ltx_pipelines_mlx": "ltx-2-studio main e6e15b7",
     "machine": "Darwin 27.2.0 arm64",
     "metal": {
       "memory_size": 68719476736,

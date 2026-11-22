@@ -262,7 +262,7 @@ func (s *Service) AdminUnload(ctx context.Context, caller common.Caller, host st
 			}
 			request := requests[p.Env]
 			request.ForEnv = p.Env
-			c := message.Component{Component: p.Component, Model: p.Model, Variant: p.Variant, Precision: p.Precision}
+			c := message.Component{Component: p.Component, Model: p.Model, Variant: p.Variant, Precision: p.Precision, Compute: p.Compute}
 			for _, l := range p.Loras {
 				c.Loras = append(c.Loras, message.ComponentLora{LoraID: l.LoraID, Strength: l.Strength})
 			}

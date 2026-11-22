@@ -2012,6 +2012,25 @@
                         }
                       }
                     }
+                  },
+                  "compute": {
+                    "type": "object",
+                    "required": [
+                      "components"
+                    ],
+                    "additionalProperties": false,
+                    "description": "from API 1.39 (contracts/README.md, Video: Audio relay, compute, negative prompts): present when the model node's `compute` holds on this runner's runtime (ltx: mlx; model.yaml `model.compute`): the components it applies to. A run whose `compute` is not float32 needs those entries at its compute (Order and Admission: Entry, Plan, Resident)",
+                    "properties": {
+                      "components": {
+                        "type": "array",
+                        "minItems": 1,
+                        "uniqueItems": true,
+                        "items": {
+                          "type": "string",
+                          "pattern": "^[a-z][a-z0-9_]{0,63}$"
+                        }
+                      }
+                    }
                   }
                 }
               }
@@ -2310,6 +2329,13 @@
                   "fp8",
                   "fp32"
                 ]
+              },
+              "compute": {
+                "enum": [
+                  "float32",
+                  "float16"
+                ],
+                "description": "from API 1.39: the entry's load option `compute` (the model node's, for the components the models key's `compute.components` names); absent = float32, which the runner never sends. A float16 entry is its own entry, beside a float32 one of the same component"
               },
               "gb": {
                 "type": "number",
@@ -3109,6 +3135,13 @@
             "fp8",
             "fp32"
           ]
+        },
+        "compute": {
+          "enum": [
+            "float32",
+            "float16"
+          ],
+          "description": "from API 1.39: the entry's compute; absent = float32"
         },
         "loras": {
           "type": "array",

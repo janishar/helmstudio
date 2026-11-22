@@ -1,8 +1,9 @@
 """The residency manager (docs/plan/03-runtime.md section 6.2): which model components are loaded, within a memory
 budget of the device's memory (physical RAM; VRAM on CUDA) minus RUNNER_RESERVE_GB.
 
-- An entry is one component keyed by (model id, owning variant, component, precision[, baked LoRAs]): one file
-  set at one precision, with LoRAs merged at load (mode bake) its own entry. Adapters live on an entry's module and
+- An entry is one component keyed by (model id, owning variant, component, precision[, compute][, baked LoRAs]): one
+  file set at one precision, with a load option `compute` (API 1.39, a str) and LoRAs merged at load (mode bake,
+  a tuple) each its own entry. Adapters live on an entry's module and
   are counted in its size, so they go when it is evicted. Its size is computed from the target dtype (pack.size_gb), not from header bytes.
 - Admission, before a stage runs: need = the stage's components not yet loaded + its peak_gb. When short, cached
   node results are dropped first, then the least recently used components, those the rest of the run does not
@@ -228,7 +229,7 @@ class Residency:
         ) -> (
             tuple
         ):  # unpinned first (a pin is the last resort); not needed later; a baked set unused; LRU
-            return self.pinned(k), k in later, not (len(k) > 4 and k not in self.used), lru.index(k)
+            return self.pinned(k), k in later, not (_baked(k) and k not in self.used), lru.index(k)
 
         evicted = False
         for k in sorted((k for k in lru if k not in self.in_use), key=order):
@@ -292,7 +293,7 @@ class Residency:
         run's activations, which the allocator keeps) goes back after every run, not only after an eviction."""
         try:
             # a baked set the run used makes the plain copy dead weight (38 GB together for LTX): it goes now
-            plain = {k[:4] for k in self.used if len(k) > 4} - self.used
+            plain = {k[:-1] for k in self.used if _baked(k)} - self.used
             for k in [k for k in plain if k in self.entries and not self.pinned(k)]:
                 self._evict(k)
         finally:
@@ -324,11 +325,21 @@ def _stamp(at: float) -> str:
     return datetime.fromtimestamp(at, UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
+def _baked(key: tuple) -> tuple:
+    """The baked LoRAs of an entry's key (its last item when that is a tuple), () for a plain component."""
+    return key[-1] if len(key) > 4 and isinstance(key[-1], tuple) else ()
+
+
+def _compute(key: tuple) -> dict:
+    """{"compute": c} of an entry keyed at a compute other than the default (API 1.39), else {}."""
+    return {"compute": key[4]} if len(key) > 4 and isinstance(key[4], str) else {}
+
+
 def _resident(key: tuple, gb: float, why: str | None, loras: list | None, at: float) -> dict:
     """One hosts value `resident` entry (`why`: pinned_why, None = not pinned); one with baked LoRAs
     (core.pack.ModelRef.resident_loras) lists them."""
     model, variant, component, precision, *_ = key
-    out = {"component": component, "model": model, "variant": variant, "precision": precision,
+    out = {"component": component, "model": model, "variant": variant, "precision": precision, **_compute(key),
            "gb": round(gb, 2), "pinned": why is not None} | ({"pinned_why": why} if why else {})  # fmt: skip
     out["last_used"] = _stamp(at)
     if loras:
@@ -339,7 +350,13 @@ def _resident(key: tuple, gb: float, why: str | None, loras: list | None, at: fl
 def _name(key: tuple, loras: list | None) -> dict:
     """The req.runner.unload `component` naming the entry `key` (its baked LoRAs by id and strength)."""
     model, variant, component, precision, *_ = key
-    out = {"component": component, "model": model, "variant": variant, "precision": precision}
+    out = {
+        "component": component,
+        "model": model,
+        "variant": variant,
+        "precision": precision,
+        **_compute(key),
+    }
     if loras:
         out["loras"] = [{"lora_id": x["lora_id"], "strength": x["strength"]} for x in loras]
     return out
@@ -353,5 +370,8 @@ def ident(name: dict) -> tuple:
         name.get("model"),
         name.get("variant"),
         name.get("precision"),
+        None
+        if name.get("compute") in (None, "float32")
+        else name["compute"],  # absent = float32 (API 1.39)
         loras,
     )

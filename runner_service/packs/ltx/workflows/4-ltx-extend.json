@@ -41,7 +41,9 @@
         "model": "model.model",
         "prompt": "prompt.text"
       },
-      "params": {}
+      "params": {
+        "negative": ""
+      }
     },
     "source": {
       "kind": "ltx/encode-video",
@@ -106,6 +108,13 @@
           "extend.steps",
           "extend.cfg",
           "extend.stg"
+        ]
+      },
+      {
+        "title": "Negative prompt",
+        "help": "What the clip should not show, for Dev's guidance. Empty: the fixed negative prompt. Distilled has none.",
+        "items": [
+          "encode.negative"
         ]
       }
     ],

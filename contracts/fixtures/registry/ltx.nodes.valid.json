@@ -156,6 +156,17 @@
             "fp8"
           ],
           "help": "Quantized at load: int8 about 19 GB for the transformer, bf16 about 38 GB."
+        },
+        {
+          "name": "compute",
+          "type": "enum",
+          "label": "Compute",
+          "default": "float32",
+          "enum": [
+            "float32",
+            "float16"
+          ],
+          "help": "float16 runs attention and feed-forward in half precision: 10–20 % faster, the picture changes slightly. NVIDIA ignores it."
         }
       ],
       "inputs": [],
@@ -220,7 +231,7 @@
       "title": "Encode",
       "family": "ltx",
       "component": "text encoder",
-      "help": "Encodes the prompt (and its beats, as one prompt) for video and audio with Gemma 4 and the connector; the text encoder is unloaded before sampling.",
+      "help": "Encodes the prompt (and its beats, as one prompt) for video and audio with Gemma 4 and the connector, and a negative prompt for NAG; the text encoder is unloaded before sampling.",
       "params": [
         {
           "name": "beats",
@@ -247,7 +258,16 @@
               "help": "How long this beat lasts, in seconds; 0 shares what the others leave equally."
             }
           },
-          "help": "Prompt Relay: each beat steers the picture (not the sound) for its stretch of the clip, in order; the prompt above holds for the whole clip."
+          "help": "Prompt Relay: each beat steers the picture and the sound for its stretch of the clip, in order; the prompt above holds for the whole clip."
+        },
+        {
+          "name": "negative",
+          "type": "text",
+          "label": "Negative prompt",
+          "default": "",
+          "min": 0,
+          "max": 500,
+          "help": "What the clip should not show, applied with NAG (about 10 % slower). Empty: off. Mac only."
         }
       ],
       "inputs": [
@@ -459,8 +479,19 @@
       "title": "Encode (guided)",
       "family": "ltx",
       "component": "text encoder",
-      "help": "Encodes the prompt and, for Dev's guided samplers, the fixed negative prompt for video and audio with Gemma 4 and the connector (Distilled: the prompt only); the text encoder is unloaded before sampling.",
-      "params": [],
+      "help": "Encodes the prompt and, for Dev's guided samplers, the negative prompt (typed, else the fixed one) for video and audio with Gemma 4 and the connector (Distilled: the prompt only); the text encoder is unloaded before sampling.",
+      "params": [
+        {
+          "name": "negative",
+          "type": "text",
+          "label": "Negative prompt",
+          "default": "",
+          "min": 0,
+          "max": 500,
+          "when": "model.variant == 'dev' || model.variant == 'dev-int8'",
+          "help": "What the clip should not show, for Dev's guidance (CFG). Empty: the fixed negative prompt. Distilled ignores this."
+        }
+      ],
       "inputs": [
         {
           "name": "model",

@@ -29,7 +29,7 @@ func TestAskPlan(t *testing.T) {
 		Params: map[string]any{"variant": "turbo", "precision": "int8"}}})
 	thumbs := func(n int) *int { return &n }
 	ask := model.Run{WorkflowID: "qwen-image-ask", Env: "torch", Nodes: graph, Thumbs: thumbs(4)}
-	if got := planOf(&reg, "mac", ask); got.peak != 1700 || !slices.Equal(got.needs, []string{entryKey("text_encoder", "qwen-image-2.1", "base", "int8", nil)}) {
+	if got := planOf(&reg, "mac", ask); got.peak != 1700 || !slices.Equal(got.needs, []string{entryKey("text_encoder", "qwen-image-2.1", "base", "int8", "", nil)}) {
 		t.Fatalf("%+v", got)
 	}
 	ask.Thumbs = thumbs(5) // more than planned_at.images: planned at the whole budget, its entries still reused
@@ -116,5 +116,37 @@ func TestFirstStepPastRoutes(t *testing.T) {
 	}
 	if got := (storedPipeline{Doc: doc}).firstStep(); got != "still" {
 		t.Fatalf("firstStep = %q", got)
+	}
+}
+
+// API 1.39: a Fast LTX run (compute float16) needs the models key's compute components at its compute; float32 (or
+// absent) plans as before; a float16 transformer is resident only for a float16 run.
+func TestComputePlan(t *testing.T) {
+	var reg registry.Registry
+	withHosts(&reg, "mac.mlx")
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "contracts", "fixtures", "registry", "ltx.models.valid.json"))
+	if err == nil {
+		err = reg.SetRegistry("mac.mlx.models", data)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := func(compute string) model.Run {
+		graph, _ := json.Marshal(map[string]registry.Node{"model": {Kind: "ltx/model",
+			Params: map[string]any{"variant": "distilled", "precision": "int8", "compute": compute}}})
+		return model.Run{WorkflowID: "ltx-text-to-video", Env: "mlx", Nodes: graph}
+	}
+	plain := planOf(&reg, "mac", run("float32")).needs
+	half := planOf(&reg, "mac", run("float16")).needs
+	if !slices.Contains(plain, entryKey("transformer", "ltx-2.5", "distilled", "int8", "", nil)) ||
+		!slices.Contains(half, "transformer ltx-2.5 distilled int8 float16") ||
+		!slices.Contains(half, entryKey("vae", "ltx-2.5", "distilled", "bf16", "", nil)) {
+		t.Fatalf("float32 %v\nfloat16 %v", plain, half)
+	}
+	found, _ := reg.Model("mac.mlx", "ltx")
+	tr := registry.Resident{Component: "transformer", Compute: "float16"}
+	if computeOf(found, runModel{compute: "float16"}, tr.Component) != plainCompute(tr.Compute) ||
+		computeOf(found, runModel{compute: "float32"}, tr.Component) == plainCompute(tr.Compute) {
+		t.Fatal("resident compute")
 	}
 }

@@ -222,6 +222,11 @@
           ]
         }
       ],
+      "compute": {
+        "components": [
+          "transformer"
+        ]
+      },
       "lora": {
         "component": "transformer",
         "modules": [

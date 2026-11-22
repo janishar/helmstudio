@@ -3202,7 +3202,8 @@ def cgb(x: float) -> int:
 def entry_key(e: dict) -> tuple:
     """A resident entry's (or an unload component's) identity; no loras = the plain component."""
     loras = tuple((x["lora_id"], x["strength"]) for x in e.get("loras") or [])
-    return e["component"], e["model"], e["variant"], e["precision"], loras
+    compute = None if e.get("compute") in (None, "float32") else e["compute"]  # API 1.39: absent = float32
+    return e["component"], e["model"], e["variant"], e["precision"], loras, compute
 
 
 def admit(host: str, entries: list[tuple], budget: int | None, env: str, peak: int | None, needs: set,
@@ -3250,6 +3251,8 @@ def admit(host: str, entries: list[tuple], budget: int | None, env: str, peak: i
 
 def as_component(key: tuple) -> dict:
     out = dict(zip(("component", "model", "variant", "precision"), key[:4]))
+    if key[5]:
+        out["compute"] = key[5]
     if key[4]:
         out["loras"] = [{"lora_id": i, "strength": s} for i, s in key[4]]
     return out
@@ -3274,7 +3277,7 @@ def host_view(keys: dict) -> tuple[list, int | None, int | None, str | None]:
             entries.append((env, entry_key(e), cgb(e["gb"]), e["pinned"], fresh, used))
         extra = cgb(k["used_gb"]) - sum(cgb(e["gb"]) for e in on_device) if "used_gb" in k else 0
         if extra > 0:  # measured beyond the entries: counted (the run's own env too), never a victim
-            entries.append((env, ("(measured)", "", "", "", ()), extra, False, False, None))
+            entries.append((env, ("(measured)", "", "", "", (), None), extra, False, False, None))
     running = next((env for env, k in sorted(keys.items()) if k["state"] != "gone" and k.get("run_id")), None)
     return entries, min(budgets) if budgets else None, min(rams) if rams else None, running
 

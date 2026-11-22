@@ -420,6 +420,9 @@ def entry(pack) -> dict:
         ]
         if (extra := packs.addons(pack)) and out["variants"]:
             out["addons"] = [addon_entry(pack, c) for c in extra]
+        # API 1.39: the components a non-default compute keys apart
+        if compute := packs.compute_spec(pack):
+            out["compute"] = {"components": compute["components"]}
     if block := packs.lora_block(pack):
         out["lora"] = block
     return out

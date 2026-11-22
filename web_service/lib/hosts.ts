@@ -145,6 +145,7 @@ export function pinRef({ env, r }: HostEntry): PinRef | null {
     model: r.model,
     variant: r.variant,
     precision: r.precision,
+    ...(r.compute && r.compute !== "float32" ? { compute: r.compute } : {}), // API 1.39: its own entry
   };
   if (!r.loras?.length) return ref;
   if (r.loras.some((l) => l.lora_id == null || l.strength == null)) return null;
@@ -158,6 +159,7 @@ const key = (p: PinRef) =>
     p.model,
     p.variant,
     p.precision,
+    p.compute && p.compute !== "float32" ? p.compute : null,
     (p.loras ?? []).map((l) => [l.lora_id, l.strength]),
   ]);
 

@@ -658,3 +658,29 @@ def test_minimax_h3_presets_and_advanced_map_onto_h3_flags(tmp_path):
         "--use-int8-row-fc2",
     ]
     assert "--render-width" not in flags(steps=4, render=(864, 480))
+
+
+def test_compute_is_a_load_option_keyed_only_off_its_default(tmp_path, monkeypatch):
+    """API 1.39 (model.yaml `model.compute`): the model node gets the param; float16 keys `components` apart (and
+    their cache fingerprint), float32 adds nothing to any key; another runtime ignores it; the models key names the
+    components."""
+    q = FakeQwen(tmp_path, monkeypatch)
+    q.pack.spec["model"]["compute"] = {"label": "Compute", "default": "float32", "enum": ["float32", "float16"],
+                                       "components": ["transformer"], "runtime": "torch"}  # fmt: skip
+    p = next(x for x in pack.model_schema(q.pack)["params"] if x["name"] == "compute")
+    assert p == {"name": "compute", "type": "enum", "label": "Compute", "default": "float32", "enum": ["float32", "float16"]}  # fmt: skip
+    plain, f32, f16 = (
+        pack.ModelRef(q.pack, "base", "bf16", compute=c) for c in (None, "float32", "float16")
+    )
+    assert plain.key("transformer") == f32.key("transformer") == f16.key("transformer")[:4]
+    assert f16.key("transformer")[4:] == ("float16",) and f16.key("vae") == plain.key("vae")
+    assert (
+        plain.fingerprint(["transformer"])
+        == f32.fingerprint(["transformer"])
+        != f16.fingerprint(["transformer"])
+    )
+    assert pack.models_entry(q.pack)["compute"] == {"components": ["transformer"]}
+    q.pack.spec["model"]["compute"]["runtime"] = "mlx"
+    assert f16.key("transformer") == plain.key(
+        "transformer"
+    ) and "compute" not in pack.models_entry(q.pack)

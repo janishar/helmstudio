@@ -239,3 +239,20 @@ run each; before the cap the decode alone reached 49.1 / 49.8 GB footprint, 27 G
   32.3 s (26.3). MLX peaks per node with the int8 transformer resident (19.2 GiB): retake 21.5 GiB, extend 25.7,
   sample-guided 23.6, sample2 23.8, decode 29.9-32.4; the fork's recorded peaks 8.2 / 9.9 / 7.7 GiB are its decode's
   alone (its tiled decode resets MLX's peak counter). The formulas stay upper bounds; extend's gets the half-size encode's term.
+
+## Audio relay, compute, NAG (plan 19 23.10 phase 2, 2026-11-22: ltx-2-studio main e6e15b7)
+
+- **Ported**: the audio Prompt Relay mask (0879826: `build_relay_mask_audio`, strength 1.0 as the fork's distilled
+  default, its epsilon the video one; none for a frozen audio stream), NAG on `ltx/sample` from `encode.negative`
+  (`_encode_nag`: the negative encoded after the prompt, one global prompt; `NAGConfig()` defaults; a frozen audio
+  stream gets no audio negative, `_nag_for_states`), and `compute` float16 (`LTXModel.set_compute_dtype` once after
+  the load, as `apply_compute_dtype_from_env`; `ModelRef.compute_of` keys the transformer apart, so a resident entry
+  never changes dtype under a key). The overflow guard's drop is caught after the denoise (`_settled`: the entry is
+  released, the next stage reloads). `encode-guided.negative` replaces the fixed negative on Dev (blank: the fixed one).
+- **Goldens** (recorded on the fork's CLI: `beats` with `--relay-audio-strength 1`; `nag` with
+  `LTX2_COMPUTE_DTYPE=float16` and `--negative-prompt`, int8, 448x256x49 seed 42): bit-exact on mlx 0.32.2 (every
+  point, every frame, the WAV; the t2v golden unchanged too). On 0.32.4: beats 25.37 / 21.60 dB, log-mel 1.001; nag
+  25.23 / 18.44, 1.048. Times: the fork beats 26.0 s, nag 28.3 s (MLX peak 20.9 / 21.9 GiB); the pack 25.5 / 34.7 s
+  in one harness process on 0.32.4 (encode 11.8 s with the negative and the Gemma load; sample1 14.0 s with the
+  float16 load: a float32 transformer from the run before stays resident beside it, so the nodes' MLX peaks there
+  read 42 GiB, 23 GiB over one transformer).

@@ -45,7 +45,7 @@ func componentKey(c message.Component) string {
 	for _, l := range c.Loras {
 		loras = append(loras, registry.ResidentLora{LoraID: &l.LoraID, Strength: &l.Strength})
 	}
-	return entryKey(c.Component, c.Model, c.Variant, c.Precision, loras)
+	return entryKey(c.Component, c.Model, c.Variant, c.Precision, c.Compute, loras)
 }
 
 // jsonOf is v as generic JSON (for comparing with a fixture's expect).
@@ -213,7 +213,7 @@ func TestOrderFixtures(t *testing.T) {
 			t.Fatal(name, err)
 		}
 		key := func(plan string, c registry.PlanComponent) string {
-			return entryKey(c.Component, fx.Plans[plan].Model, c.Variant, c.Precision, nil)
+			return entryKey(c.Component, fx.Plans[plan].Model, c.Variant, c.Precision, "", nil)
 		}
 		resident := map[string]entry{} // "<env> <key>" → the entry
 		hold := func(plan string, used func(j int) time.Time) {
