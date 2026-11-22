@@ -6,7 +6,9 @@
 // Delete. The LoRAs tab is the library (components/models/loras.tsx). While anything is
 // downloading the list is read every 2 s (GET /v1/studio/models carries each job's bytes), else every 15 s.
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { until, useDialogWait, useScreenTools } from "@/components/assistant/tools";
+import { modelsTools, type Row } from "@/components/models/assistant";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { LorasTab } from "@/components/models/loras";
 import { useUser } from "@/components/shell";
@@ -78,9 +80,38 @@ export function ModelsScreen({ tab }: { tab: "models" | "loras" }) {
   const { list, jobs, error, reload } = useModels(admin);
   const [host, setHost] = useState("");
   const [sel, setSel] = useState<{ model: string; variant: string } | null>(null);
+  // the assistant's openRow: the row's target host, and the row as the panel shows it
+  const [aim, setAim] = useState("");
+  const row = useRef<Row | null>(null);
+  const bind = useCallback((r: Row | null) => {
+    row.current = r;
+  }, []);
   const models = forHost(list?.models ?? [], host);
   const model = models.find((m) => m.id === sel?.model) ?? models[0];
   const variant = model?.variants.find((v) => v.id === sel?.variant) ?? model?.variants[0];
+  useScreenTools(
+    // eslint-disable-next-line react-hooks/refs -- the row is read when an action runs, after render
+    modelsTools({
+      admin,
+      tab,
+      list,
+      jobs,
+      host,
+      shown: model && variant ? { m: model, v: variant, host: aim || host } : null,
+      row: () => row.current,
+      openRow: async (model, variant, h) => {
+        setHost((x) => (x && x !== h ? h : x));
+        setSel({ model, variant });
+        setAim(h);
+        return until(
+          () =>
+            row.current?.m.id === model && row.current.v.id === variant && row.current.target === h,
+          3000,
+        );
+      },
+      reload,
+    }),
+  );
   const states = new Set(
     models.flatMap((m) => parts(m).flatMap((v) => v.hosts.map((h) => h.state))),
   );
@@ -166,7 +197,9 @@ export function ModelsScreen({ tab }: { tab: "models" | "loras" }) {
       </main>
       {list && model && variant && (
         <VariantPanel
-          key={`${model.id}/${variant.id}`}
+          key={`${model.id}/${variant.id}/${aim}`}
+          aim={aim}
+          bind={bind}
           list={list}
           m={model}
           v={list.models.find((x) => x.id === model.id)!.variants.find((x) => x.id === variant.id)!}
@@ -543,6 +576,8 @@ function VariantPanel({
   host,
   jobs,
   onChanged,
+  aim,
+  bind,
 }: {
   list: List;
   m: Model;
@@ -551,12 +586,34 @@ function VariantPanel({
   host: string;
   jobs: S<"ModelJob">[];
   onChanged: () => void;
+  /** the target host the assistant opened the row on */
+  aim?: string;
+  bind?: (r: Row | null) => void;
 }) {
   const targets = list.hosts.map((h) => h.host);
   const [target, setTarget] = useState(
-    host || v.hosts.find((h) => h.state !== "present")?.host || targets[0] || "",
+    aim || host || v.hosts.find((h) => h.state !== "present")?.host || targets[0] || "",
   );
   const [dialog, setDialog] = useState<"download" | "delete" | null>(null);
+  // the assistant's Download: this row's own dialog, resolved with its job when it closes
+  const dl = useDialogWait<S<"ModelJob">>();
+  const closeDownload = () => {
+    setDialog(null);
+    dl.closed();
+  };
+  useEffect(() => {
+    bind?.({
+      m,
+      v,
+      target,
+      download: () => {
+        const p = dl.wait();
+        setDialog("download");
+        return p;
+      },
+    });
+    return () => bind?.(null);
+  });
   const [notice, setNotice] = useState<{ job: string; text: string } | null>(null);
   const [error, setError] = useState("");
   const shown = host || target;
@@ -715,7 +772,7 @@ function VariantPanel({
       )}
       <Modal
         open={dialog === "download"}
-        onClose={() => setDialog(null)}
+        onClose={closeDownload}
         title={`Download ${m.title} · ${v.title}`}
         width="w-[min(94vw,560px)]"
       >
@@ -724,9 +781,10 @@ function VariantPanel({
           m={m}
           v={v}
           host={target}
-          onClose={() => setDialog(null)}
+          onClose={closeDownload}
           onDone={(j) => {
-            setDialog(null);
+            dl.saved(j);
+            closeDownload();
             setNotice({ job: j.id, text: `Download queued on ${j.host}.` });
             onChanged();
           }}

@@ -198,7 +198,7 @@ describe("Create's actions", () => {
     const s = reg.summary();
     expect(s.ids).toEqual({ session_id: "s1", workflow_id: "ltx-text-to-video" });
     expect(s.actions).toContain("generate");
-    expect(s.actions).not.toContain("saveAsLook"); // the library dialogs come with phase 7
+    expect(s.actions).toEqual(expect.arrayContaining(["saveAsLook", "cloneVoice", "hear"]));
     const f = () => reg.summary().fields as unknown as Record<string, Record<string, unknown>>;
     await waitFor(() =>
       expect(f().run_on).toEqual({

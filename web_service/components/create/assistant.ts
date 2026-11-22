@@ -13,6 +13,8 @@ import {
   type Outcome,
 } from "@/lib/assistant";
 import type { ScreenSpec } from "@/components/assistant/tools";
+import { hasSound, takeById, type LibraryAsk } from "@/components/assistant/library";
+import type { VoiceCtx } from "@/components/create/voices";
 import { canvasOf } from "@/components/create/form";
 import { frameTake } from "@/components/create/frame-in";
 import { reloadLibrary } from "@/lib/library";
@@ -93,6 +95,10 @@ export type CreateCtx = {
   applyOffer: (o: S<"TakeOffer">) => void;
   handles: string[];
   prompt: string;
+  /** opens a library dialog prefilled; resolves on its close (components/assistant/library) */
+  dialog: (a: LibraryAsk, progress: (text: string) => void) => Promise<Outcome>;
+  /** the voice picker's workflows (Design, Clone) for the open workflow */
+  voiceCtx?: VoiceCtx;
 };
 
 const MEDIA: Record<string, string> = { image: "Image", video: "Video", audio: "Audio" };
@@ -541,6 +547,56 @@ export function createTools(c: CreateCtx): ScreenSpec {
           },
         );
       },
+      saveAsLook: async ({ take_id, name }, { progress }) => {
+        const t = take_id ? await takeById(take_id, c.takes) : c.shownTake;
+        if (!t) return failed("Save as look · no such take");
+        return c.dialog({ kind: "look", take: t, name: name as string | undefined }, progress);
+      },
+      saveAsElement: async ({ take_id, handle }, { progress }) => {
+        const t = take_id ? await takeById(take_id, c.takes) : c.shownTake;
+        if (take_id && !t) return failed("Save as element · no such take");
+        if (t && t.kind !== "image")
+          return failed("Save as element · an element's pictures are images");
+        const h = handle === undefined ? undefined : String(handle).replace(/^@/, "");
+        return c.dialog({ kind: "element", takes: t ? [t] : [], handle: h }, progress);
+      },
+      editItem: ({ item_id }, { progress }) => {
+        const it = [...(c.library ?? []), ...(c.looks ?? [])].find((x) => x.id === item_id);
+        if (!it) return failed("Edit · no such library item");
+        return c.dialog({ kind: "edit", item: it }, progress);
+      },
+      cloneVoice: async ({ take_id, from_s, to_s, name }, { progress }) => {
+        const t = await takeById(take_id, c.takes);
+        if (!t) return failed("Clone · no such take");
+        if (!hasSound(t)) return failed("Clone · that take has no sound");
+        if (!c.voiceCtx) return failed("Clone · open an audio workflow first");
+        return c.dialog(
+          {
+            kind: "clone",
+            take: t,
+            ctx: c.voiceCtx,
+            from_s: from_s as number | undefined,
+            to_s: to_s as number | undefined,
+            name: name as string | undefined,
+          },
+          progress,
+        );
+      },
+      designVoice: ({ description, name }, { progress }) => {
+        if (!c.voiceCtx?.design)
+          return failed("Design · no workflow here designs a voice: open an audio workflow");
+        return c.dialog(
+          {
+            kind: "design",
+            ctx: c.voiceCtx,
+            text: description as string | undefined,
+            name: name as string | undefined,
+          },
+          progress,
+        );
+      },
+      // the drawer can't be clicked while a dialog is open: Hear it stays the dialog's own button
+      hear: () => failed("Hear · Hear it is yours: click it in Clone a voice or Design a voice"),
       deleteItem: ({ item_id }) => {
         const it = [...(c.library ?? []), ...(c.looks ?? [])].find((x) => x.id === item_id);
         if (!it) return failed("Delete · no such library item");

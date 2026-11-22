@@ -2,7 +2,7 @@
 // The screen-action registry (plan 18 §22.3, §22.5): a context in the app shell next to UserContext. Each screen
 // registers its actions and its summary once it has loaded (useScreenTools), always calling its own entry points; the
 // shell adds navigate and await. The drawer runs a turn's actions through it, in the tab that sent the message.
-import { createContext, use, useCallback, useEffect, useRef, useState } from "react";
+import { createContext, use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, message, ok } from "@/lib/api";
 import {
   SCREENS,
@@ -204,6 +204,31 @@ export function useAssistantChanges<D extends { nodes: object }>(
       clear();
     },
   };
+}
+
+/** A dialog of the screen the assistant opened prefilled (plan 18 §22.5, "dialog"): `wait` resolves once it closes,
+ * with what its Save made (the last one), else null: cancelled. A screen that unmounts cancels it. */
+export function useDialogWait<T>() {
+  const cur = useRef<{ saved: T | null; done: (v: T | null) => void } | null>(null);
+  useEffect(() => () => cur.current?.done(null), []);
+  return useMemo(
+    () => ({
+      wait: () =>
+        new Promise<T | null>((done) => {
+          cur.current?.done(null);
+          cur.current = { saved: null, done };
+        }),
+      saved: (v: T) => {
+        if (cur.current) cur.current.saved = v;
+      },
+      closed: () => {
+        const c = cur.current;
+        cur.current = null;
+        c?.done(c.saved);
+      },
+    }),
+    [],
+  );
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

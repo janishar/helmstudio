@@ -321,11 +321,17 @@ export function ElementEditor({
   onClose,
   item,
   takes,
+  handle,
+  onSaved,
 }: {
   open: boolean;
   onClose: () => void;
   item?: Item;
   takes?: S<"Take">[];
+  /** the handle to start from (the assistant's Save as element, prefilled) */
+  handle?: string;
+  /** the element its Save made or changed */
+  onSaved?: (x: Item) => void;
 }) {
   return (
     <Modal
@@ -334,7 +340,14 @@ export function ElementEditor({
       title={item ? "Edit element" : "New element"}
       width="w-[min(94vw,600px)]"
     >
-      <Editor key={item?.id ?? "new"} item={item} takes={takes} onClose={onClose} />
+      <Editor
+        key={item?.id ?? "new"}
+        item={item}
+        takes={takes}
+        handle={handle}
+        onSaved={onSaved}
+        onClose={onClose}
+      />
     </Modal>
   );
 }
@@ -346,15 +359,19 @@ const fromTakes = (ts: S<"Take">[]): Img[] =>
 function Editor({
   item,
   takes,
+  handle: h0,
+  onSaved,
   onClose,
 }: {
   item?: Item;
   takes?: S<"Take">[];
+  handle?: string;
+  onSaved?: (x: Item) => void;
   onClose: () => void;
 }) {
-  const [name, setName] = useState(item?.name ?? "");
-  const [handle, setHandle] = useState(item?.handle ?? "");
-  const [touched, setTouched] = useState(!!item);
+  const [name, setName] = useState(item?.name ?? h0 ?? "");
+  const [handle, setHandle] = useState(item?.handle ?? h0 ?? "");
+  const [touched, setTouched] = useState(!!item || !!h0);
   const [group, setGroup] = useState<S<"LibraryGroup">>(item?.group ?? "character");
   const [text, setText] = useState(item?.text ?? "");
   const [images, setImages] = useState<Img[]>(
@@ -388,7 +405,7 @@ function Editor({
       voice_id: group === "character" ? voiceId : null,
     };
     try {
-      await ok(
+      const x = await ok(
         item
           ? api.PUT("/v1/studio/library/{item_id}", {
               params: { path: { item_id: item.id } },
@@ -397,6 +414,7 @@ function Editor({
           : api.POST("/v1/studio/library", { body: { ...body, kind: "element" } }),
       );
       await reloadLibrary();
+      onSaved?.(x);
       onClose();
     } catch (err) {
       setError(message(err));

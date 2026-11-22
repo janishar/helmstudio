@@ -4,6 +4,8 @@
 import { api, ok, type S } from "@/lib/api";
 import { done, failed } from "@/lib/assistant";
 import type { ScreenSpec } from "@/components/assistant/tools";
+import { takeById, type LibraryAsk } from "@/components/assistant/library";
+import type { Outcome } from "@/lib/assistant";
 import { safeUrl } from "@/lib/format";
 import type { Filter } from "@/lib/takes";
 
@@ -51,6 +53,8 @@ export type GalleryCtx = {
   replace: (t: Take) => void;
   remove: (ids: string[]) => void;
   push: (url: string) => void;
+  /** opens Save as element or Save as look prefilled; resolves on its close */
+  dialog: (a: LibraryAsk, progress: (text: string) => void) => Promise<Outcome>;
 };
 
 const patch = (id: string, body: S<"TakePatch">) =>
@@ -168,6 +172,18 @@ export function galleryTools(c: GalleryCtx): ScreenSpec {
         );
         c.push(`/pipelines/${p.id}`);
         return done(`Saved as pipeline · ${p.title}`, { result: { pipeline_id: p.id } });
+      },
+      saveAsElement: async ({ take_id, handle }, { progress }) => {
+        const t = await takeById(take_id, shown);
+        if (!t) return failed("Save as element · no such take");
+        if (t.kind !== "image") return failed("Save as element · an element's pictures are images");
+        const h = handle === undefined ? undefined : String(handle).replace(/^@/, "");
+        return c.dialog({ kind: "element", takes: [t], handle: h }, progress);
+      },
+      saveAsLook: async ({ take_id, name }, { progress }) => {
+        const t = await takeById(take_id, shown);
+        if (!t) return failed("Save as look · no such take");
+        return c.dialog({ kind: "look", take: t, name: name as string | undefined }, progress);
       },
       delete: ({ take_ids }) => {
         const ids = [...new Set(take_ids as string[])];

@@ -21,7 +21,8 @@ import {
   retakeMap,
   type Placement,
 } from "@/lib/source";
-import { newId, timecode, type Clip, type Norm } from "@/lib/timeline";
+import { newId, shortTime, timecode, type Clip, type Norm } from "@/lib/timeline";
+import type { FormSlot, Started, Want } from "@/components/timeline/assistant";
 import {
   blockNotes,
   buildInputs,
@@ -71,6 +72,8 @@ export function ClipActions({
   disabled,
   onDone,
   openFirst,
+  ask,
+  onForm,
 }: {
   tl: Timeline;
   doc: Norm;
@@ -81,6 +84,10 @@ export function ClipActions({
   onDone: (t: Timeline) => void;
   /** opens the first action's form once they are read (an audio clip's menu: Make shot) */
   openFirst?: boolean;
+  /** the take action the assistant asked for (extend, retake, insert, replace), prefilled */
+  ask?: Want;
+  /** its form once open, for the assistant's card; "none" when the clip offers no such action */
+  onForm?: (f: FormSlot) => void;
 }) {
   const [got, setGot] = useState<{ key: string; actions: Offer[] } | null>(null);
   // null: none chosen yet ("" closed)
@@ -109,7 +116,24 @@ export function ClipActions({
   const extend = (o: Offer) => Object.keys(o.inputs).some((k) => k.endsWith(".direction"));
   const actions = got?.key === key ? [...got.actions].sort((a, b) => +extend(b) - +extend(a)) : [];
   const idOf = (o: Offer) => `${o.workflow_id} ${o.param}`;
-  const open = chosen ?? (openFirst && actions[0] ? idOf(actions[0]) : null);
+  // the assistant's: an extend, a retake (a section), or the first that places its result (insert, replace)
+  const words = (o: Offer) => (o.action ?? o.title).toLowerCase();
+  const asked = ask?.kind
+    ? actions.find(
+        (o) =>
+          !o.slot &&
+          (ask.kind === "extend"
+            ? extend(o)
+            : ask.kind === "retake"
+              ? words(o).startsWith("retake")
+              : true),
+      )
+    : undefined;
+  const loaded = got?.key === key;
+  useEffect(() => {
+    if (ask?.kind && loaded && !asked) onForm?.("none");
+  }, [ask, loaded, asked, onForm]);
+  const open = chosen ?? (asked ? idOf(asked) : openFirst && actions[0] ? idOf(actions[0]) : null);
   // an audio clip's offers are Make shot (API 1.32): one per family, named by it when there are several
   const makes = actions.filter((o) => o.slot).length;
   return actions.map((o) => {
@@ -139,6 +163,7 @@ export function ClipActions({
                 setOpen("");
                 onDone(t);
               }}
+              {...(o === asked && { ask, onForm })}
             />
           ) : (
             <ErrorNote>The workflow {o.workflow_id} is not available any more.</ErrorNote>
@@ -157,6 +182,8 @@ function ActionForm({
   offer,
   workflow,
   onDone,
+  ask,
+  onForm,
 }: {
   tl: Timeline;
   doc: Norm;
@@ -164,14 +191,32 @@ function ActionForm({
   offer: Offer;
   workflow: S<"Workflow">;
   onDone: (t: Timeline) => void;
+  ask?: Want;
+  onForm?: (f: FormSlot) => void;
 }) {
   const fields = useMemo(() => fieldsOf(workflow), [workflow]);
-  const [raws, setRaws] = useState<Record<string, Raw>>(() => rawsFrom(fields, offer.inputs));
+  const [raws, setRaws] = useState<Record<string, Raw>>(() => {
+    const r = rawsFrom(fields, offer.inputs);
+    // the assistant's prompt and seconds, as typed into the form
+    const p = fields.find((f) => f.param.type === "text");
+    const x = extensionOf(fields);
+    if (p && ask?.prompt) r[p.key] = ask.prompt;
+    if (x && ask?.seconds != null) r[x.seconds.key] = String(ask.seconds);
+    return r;
+  });
   const before = insertsBefore(offer);
   const extendsAfter = Object.entries(offer.inputs).some(
     ([k, v]) => k.endsWith(".direction") && v === "after",
   );
-  const [place, setPlace] = useState<Placement>(extendsAfter ? "insert" : "replace");
+  const [place, setPlace] = useState<Placement>(
+    ask?.kind === "insert"
+      ? "insert"
+      : ask?.kind === "replace"
+        ? "replace"
+        : extendsAfter
+          ? "insert"
+          : "replace",
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const grid = useFrameGrid(offer.family);
@@ -229,7 +274,7 @@ function ActionForm({
   const chosen = place === "insert" ? [inserted, replaced] : [replaced, inserted];
   const note = ext ? chosen.join(" ") : chosen[0];
 
-  async function generate() {
+  async function generate(): Promise<Started> {
     setBusy(true);
     setError("");
     try {
@@ -260,12 +305,30 @@ function ActionForm({
         source: clip.number,
       });
       onDone(res.timeline);
+      return { timeline: res.timeline, clip: "clip" in slot ? slot.clip : id };
     } catch (e) {
       setError(message(e));
+      return { error: message(e) };
     } finally {
       setBusy(false);
     }
   }
+
+  // the form as the assistant's card reads it; its Generate is this one
+  useEffect(() => {
+    if (!onForm) return;
+    const built = buildInputs(fields, raws);
+    onForm({
+      model: [model[0]?.nodeTitle, ...prettyModel(model.map((f) => String(raw(f))))]
+        .filter(Boolean)
+        .join(" · "),
+      detail: `${offer.action ?? offer.title} · ${name} at ${shortTime(clip.at ?? 0)} · ${s1(length)} · ${place === "insert" ? (before ? "insert before" : "insert after") : "replace"}`,
+      prompt: prompt ? String(raw(prompt)) : "",
+      run: { workflow_id: workflow.id, inputs: built.inputs },
+      generate,
+    });
+    return () => onForm(null);
+  });
 
   return (
     <div className="flex flex-col gap-2.5 rounded-[18px_18px_18px_8px] bg-s2 p-3">

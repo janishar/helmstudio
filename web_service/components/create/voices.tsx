@@ -66,6 +66,10 @@ export type VoiceCtx = {
 export const designedOf = (t: Pick<Take, "made_with">) =>
   t.made_with?.voices?.find((v) => v.source === "designed");
 
+/** What the assistant prefills in Design a voice (its description, the name) or Clone from a clip (the part, the
+ * name). The consent tick, Hear it and Save stay the user's. */
+export type Prefill = { text?: string; name?: string; from_s?: number; to_s?: number };
+
 /** Hear it's line in Clone from a clip until it is changed. */
 const SAMPLE_LINE = "Hello. This is how I sound when I read a line.";
 
@@ -239,6 +243,8 @@ export function VoicePicker({
   onPick,
   ctx,
   take,
+  start,
+  onSaved,
 }: {
   open: boolean;
   onClose: () => void;
@@ -246,8 +252,13 @@ export function VoicePicker({
   onPick: (voiceId: string) => void;
   ctx: VoiceCtx;
   take?: Take;
+  /** opened by the assistant on Design or Clone, prefilled (plan 18 §22.5) */
+  start?: Prefill & { view: "design" | "clone" };
+  /** the voice its Save made */
+  onSaved?: (x: Item) => void;
 }) {
-  const [view, setView] = useState<"list" | "design" | "clone">(take && open ? "clone" : "list");
+  const first = start?.view ?? (take ? "clone" : "list");
+  const [view, setView] = useState<"list" | "design" | "clone">(open ? first : "list");
   // a voice Hear it made here and not saved: Cancel deletes it
   const [draft, setDraft] = useState<Item | null>(null);
   const drop = () => {
@@ -268,10 +279,11 @@ export function VoicePicker({
     setWas(open);
     if (open) {
       setPicked(value);
-      if (take) setView("clone");
+      if (first !== "list") setView(first);
     }
   }
   const saved = (x: Item) => {
+    onSaved?.(x);
     setDraft(null);
     setPicked(x.id);
     setTab("mine");
@@ -324,6 +336,7 @@ export function VoicePicker({
             setDraft={setDraft}
             onCancel={close}
             onSaved={saved}
+            prefill={start}
           />
         )
       ) : (
@@ -334,6 +347,7 @@ export function VoicePicker({
           setDraft={setDraft}
           onCancel={close}
           onSaved={saved}
+          prefill={start}
         />
       )}
     </Modal>
@@ -994,16 +1008,18 @@ function Designer({
   setDraft,
   onCancel,
   onSaved,
+  prefill,
 }: {
   design: Tries;
   draft: Item | null;
   setDraft: (x: Item | null) => void;
   onCancel: () => void;
   onSaved: (x: Item) => void;
+  prefill?: Prefill;
 }) {
-  const [text, setText] = useState("");
-  const [line, setLine] = useState("");
-  const [name, setName] = useState("");
+  const [text, setText] = useState(prefill?.text?.slice(0, 2000) ?? "");
+  const [line, setLine] = useState(prefill?.text ? SAMPLE_LINE : "");
+  const [name, setName] = useState(prefill?.name ?? "");
   const t = useTries(design, draft, setDraft);
   const named = name.trim() || "Untitled voice";
 
@@ -1173,6 +1189,7 @@ function Cloner({
   setDraft,
   onCancel,
   onSaved,
+  prefill,
 }: {
   ctx: VoiceCtx;
   start?: Take;
@@ -1180,6 +1197,7 @@ function Cloner({
   setDraft: (x: Item | null) => void;
   onCancel: () => void;
   onSaved: (x: Item) => void;
+  prefill?: Prefill;
 }) {
   const list = useClipTakes();
   // Upload a clip (docs/mock/UploadOptimise.dc.html frame 3): kept as it is, a wav stays WAV; it leads the list
@@ -1199,7 +1217,17 @@ function Cloner({
     const d = factsOf(t).duration_s ?? 0;
     return { take_id: t.id, in: 0, out: Math.min(d, CLIP.max_s ?? d) };
   };
-  const [part, setPart] = useState<S<"MediaRef"> | null>(start ? whole(start) : null);
+  const [part, setPart] = useState<S<"MediaRef"> | null>(() => {
+    if (!start) return null;
+    const w = whole(start);
+    // the assistant's part of the clip: kept inside the take (clipError says what is wrong with it)
+    const a = Math.min(Math.max(0, prefill?.from_s ?? w.in ?? 0), w.out ?? 0);
+    return {
+      ...w,
+      in: a,
+      out: Math.max(a, Math.min(prefill?.to_s ?? w.out ?? 0, factsOf(start).duration_s ?? 0)),
+    };
+  });
   function uploadClip(f: File) {
     const stop = new AbortController();
     const mine = (next: (u: NonNullable<typeof up>) => typeof up) =>
@@ -1223,7 +1251,7 @@ function Cloner({
   }
   const take = takes.find((t) => t.id === part?.take_id);
   const designed = start && part?.take_id === start.id ? designedOf(start) : undefined;
-  const [name, setName] = useState(designed?.name ?? "");
+  const [name, setName] = useState(prefill?.name ?? designed?.name ?? "");
   const [line, setLine] = useState(SAMPLE_LINE);
   const [consent, setConsent] = useState(false);
   // Hear it where the open workflow clones a clip (ZONOS3); elsewhere the note says which model does

@@ -490,12 +490,15 @@ export function LookEditor({
   item,
   group = "lighting",
   text,
+  onSaved,
 }: {
   open: boolean;
   onClose: () => void;
   item?: Item;
   group?: Group;
   text?: string;
+  /** the look its Save made or changed */
+  onSaved?: (x: Item) => void;
 }) {
   return (
     <Modal
@@ -504,7 +507,14 @@ export function LookEditor({
       title={item ? "Edit look" : "New look"}
       width="w-[min(94vw,600px)]"
     >
-      <Editor key={item?.id ?? "new"} item={item} group={group} text={text} onClose={onClose} />
+      <Editor
+        key={item?.id ?? "new"}
+        item={item}
+        group={group}
+        text={text}
+        onSaved={onSaved}
+        onClose={onClose}
+      />
     </Modal>
   );
 }
@@ -536,11 +546,13 @@ function Editor({
   item,
   group: g0,
   text: t0 = "",
+  onSaved,
   onClose,
 }: {
   item?: Item;
   group: Group;
   text?: string;
+  onSaved?: (x: Item) => void;
   onClose: () => void;
 }) {
   const library = useLoras();
@@ -574,7 +586,7 @@ function Editor({
       loras: loras.map((l) => ({ lora: { lora_id: l.id }, strength: l.strength })),
     };
     try {
-      await ok(
+      const x = await ok(
         item
           ? api.PUT("/v1/studio/library/{item_id}", {
               params: { path: { item_id: item.id } },
@@ -583,6 +595,7 @@ function Editor({
           : api.POST("/v1/studio/library", { body: { ...body, kind: "look" } }),
       );
       await reloadLibrary();
+      onSaved?.(x);
       onClose();
     } catch (err) {
       setError(message(err));
@@ -768,17 +781,40 @@ function Editor({
 
 /** The gallery's Save as look: a name, a group, and what to copy from the take (its prompt and its LoRAs, which
  * studio copies; the take itself as a reference image). */
-export function SaveAsLook({ take, onClose }: { take: S<"Take"> | null; onClose: () => void }) {
+export function SaveAsLook({
+  take,
+  name,
+  onSaved,
+  onClose,
+}: {
+  take: S<"Take"> | null;
+  /** the name to start from (the assistant's Save as look, prefilled) */
+  name?: string;
+  onSaved?: (x: Item) => void;
+  onClose: () => void;
+}) {
   return (
     <Modal open={!!take} onClose={onClose} title="Save as look" width="w-[min(94vw,560px)]">
-      {take && <SaveForm key={take.id} take={take} onClose={onClose} />}
+      {take && (
+        <SaveForm key={take.id} take={take} name={name} onSaved={onSaved} onClose={onClose} />
+      )}
     </Modal>
   );
 }
 
-function SaveForm({ take: t, onClose }: { take: S<"Take">; onClose: () => void }) {
+function SaveForm({
+  take: t,
+  name: n0,
+  onSaved,
+  onClose,
+}: {
+  take: S<"Take">;
+  name?: string;
+  onSaved?: (x: Item) => void;
+  onClose: () => void;
+}) {
   const m = t.made_with;
-  const [name, setName] = useState(t.title.slice(0, 80));
+  const [name, setName] = useState((n0 ?? t.title).slice(0, 80));
   const [group, setGroup] = useState<Group>("lighting");
   const [prompt, setPrompt] = useState(!!m?.prompt);
   const [withLoras, setWithLoras] = useState(!!m?.loras?.length);
@@ -801,7 +837,7 @@ function SaveForm({ take: t, onClose }: { take: S<"Take">; onClose: () => void }
     setBusy(true);
     setError("");
     try {
-      await ok(
+      const x = await ok(
         api.POST("/v1/studio/library", {
           body: {
             kind: "look",
@@ -813,6 +849,7 @@ function SaveForm({ take: t, onClose }: { take: S<"Take">; onClose: () => void }
         }),
       );
       await reloadLibrary();
+      onSaved?.(x);
       setDone(true);
     } catch (err) {
       setError(message(err));

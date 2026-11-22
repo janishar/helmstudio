@@ -157,6 +157,7 @@ import {
 } from "@/lib/refs";
 import type { GraphProps } from "@/components/graph/graph";
 import { useScreenTools } from "@/components/assistant/tools";
+import { useLibraryDialog } from "@/components/assistant/library";
 import { createTools } from "@/components/create/assistant";
 import {
   buildInputs,
@@ -1394,73 +1395,74 @@ export function Create({
         workflow ? send(workflow, fields) : Promise.resolve({ ids: [], error: "no workflow" }),
     };
   });
-  const tools =
-    // eslint-disable-next-line react-hooks/refs -- `live` is read only on a card's Yes, after render
-    createTools({
-      workflow,
-      workflows,
-      all,
-      fields,
-      raws,
-      held,
-      inputs: formInputs,
-      change: (k, raw) => change(k, raw),
-      restore: (k, old) =>
-        setRaws((r) => {
-          const next = { ...r };
-          if (old === undefined) delete next[k];
-          else next[k] = old;
-          return next;
-        }),
-      switchTo,
-      media,
-      family: familyName,
-      count,
-      setCount,
-      seedField,
-      machines: machineList,
-      runOn,
-      setRunOn: (h) => {
-        setRunOnHost(h);
-        setRunNote("");
-      },
-      picks: runOnPicks,
-      needs: runOnNeeds,
-      blocks,
-      modelList,
-      hosts,
-      view,
-      setView,
-      newSession: () => newSession(),
-      session,
-      takes,
-      shownTake,
-      selected,
-      select: setSelected,
-      runs,
-      star,
-      stop: cancel,
-      generate: () => live.current.generate(),
-      cannot: () => live.current.cannot(),
-      plan,
-      took,
-      budgetGb: host?.budget_gb ?? null,
-      looks,
-      chosenLooks: looksChosen,
-      setLooks: setLooksChosen,
-      tiles,
-      loras,
-      loraFamilies,
-      library,
-      onWorkflow,
-      onDeleted: (id) => {
-        setWorkflows((list) => list?.filter((x) => x.id !== id) ?? null);
-        if (chosen === id) setChosen("");
-      },
-      applyOffer,
-      handles,
-      prompt: texts[0] ?? "",
-    });
+  const lib = useLibraryDialog();
+  const tools = createTools({
+    workflow,
+    workflows,
+    all,
+    fields,
+    raws,
+    held,
+    inputs: formInputs,
+    change: (k, raw) => change(k, raw),
+    restore: (k, old) =>
+      setRaws((r) => {
+        const next = { ...r };
+        if (old === undefined) delete next[k];
+        else next[k] = old;
+        return next;
+      }),
+    switchTo,
+    media,
+    family: familyName,
+    count,
+    setCount,
+    seedField,
+    machines: machineList,
+    runOn,
+    setRunOn: (h) => {
+      setRunOnHost(h);
+      setRunNote("");
+    },
+    picks: runOnPicks,
+    needs: runOnNeeds,
+    blocks,
+    modelList,
+    hosts,
+    view,
+    setView,
+    newSession: () => newSession(),
+    session,
+    takes,
+    shownTake,
+    selected,
+    select: setSelected,
+    runs,
+    star,
+    stop: cancel,
+    generate: () => live.current.generate(),
+    cannot: () => live.current.cannot(),
+    plan,
+    took,
+    budgetGb: host?.budget_gb ?? null,
+    looks,
+    chosenLooks: looksChosen,
+    setLooks: setLooksChosen,
+    tiles,
+    loras,
+    loraFamilies,
+    library,
+    onWorkflow,
+    onDeleted: (id) => {
+      setWorkflows((list) => list?.filter((x) => x.id !== id) ?? null);
+      if (chosen === id) setChosen("");
+    },
+    applyOffer,
+    handles,
+    prompt: texts[0] ?? "",
+    dialog: lib.ask,
+    voiceCtx,
+  });
   useScreenTools(tools);
 
   if (view === "graph" && workflow)
@@ -1498,6 +1500,7 @@ export function Create({
           busy={busy}
           anyActive={anyActive}
         />
+        {lib.node}
       </>
     );
 
@@ -2155,6 +2158,7 @@ export function Create({
         )}
         {audio && !elementsAside && <SpeechOutput take={rateTake} text={texts[0] ?? ""} />}
       </aside>
+      {lib.node}
     </>
   );
 }

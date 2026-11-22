@@ -9,6 +9,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { ActionsNote, ClipActions } from "@/components/timeline/actions";
+import { say, timelineTools, type FormSlot, type Want } from "@/components/timeline/assistant";
+import { until, useScreenTools } from "@/components/assistant/tools";
+import { useLibraryDialog } from "@/components/assistant/library";
 import { markRange, rangeInTake, removeTrack } from "@/lib/source";
 import { ElementsPicker } from "@/components/create/elements";
 import { LooksPicker } from "@/components/create/looks";
@@ -59,24 +62,6 @@ import {
 
 type Timeline = S<"Timeline">;
 
-/** What a refused edit says (lib/timeline codes; studio's 422 carries its own messages). */
-const WORDS: Record<string, string> = {
-  split_none: "No clip is under the playhead.",
-  split_edge: "The playhead is on a cut: move it into a clip to split.",
-  split_shot: "A clip being generated cannot be split.",
-  too_many_tracks: "A sequence has at most 8 audio tracks.",
-  not_alternative: "That take was not made for this slot.",
-  dissolve_first: "The first clip cannot dissolve in.",
-  dissolve_gap: "A dissolve needs a clip on both sides of the cut.",
-  dissolve_handles: "Not enough footage past the cut for that dissolve: trim the clips first.",
-  dissolve_length: "The dissolve is longer than the clip.",
-  overlap: "Clips on an audio track cannot overlap.",
-  past_end: "Sound cannot run past the end of the picture.",
-  trim: "That trim is outside the take.",
-  hold: "A still lasts at least one frame.",
-  no_audio: "That take has no sound.",
-};
-const say = (code: string) => WORDS[code] ?? `The edit was refused (${code.replace(/_/g, " ")}).`;
 const sayProblems = (p: Problem[]) => say(p[0][0]);
 
 /** The editor; `id` is the sequence to open (else the one opened last, else the newest). */
@@ -115,6 +100,13 @@ export function TimelineEditor({ id }: { id?: string }) {
   const [removing, setRemoving] = useState<string | null>(null);
   const library = useLibrary();
   const looks = useLooks();
+  // what the assistant asked of a docked form (New shot, a take action, New line), and that form once open
+  const [ask, setAsk] = useState<Want | null>(null);
+  const form = useRef<FormSlot>(null);
+  const setForm = useCallback((f: FormSlot) => {
+    form.current = f;
+  }, []);
+  const lib = useLibraryDialog();
 
   const tlRef = useRef<Timeline | null>(null);
   useEffect(() => {
@@ -482,6 +474,69 @@ export function TimelineEditor({ id }: { id?: string }) {
     return () => window.removeEventListener("keydown", f);
   }, []);
 
+  // ------------------------------------------------------------------ the assistant (plan 18 §22.5)
+  const stored = useCallback((t: Timeline) => {
+    tlRef.current = t;
+    setTl(t);
+    setDraft(null);
+  }, []);
+  useScreenTools(
+    // eslint-disable-next-line react-hooks/refs -- the refs are read when an action runs, after render
+    timelineTools({
+      tl,
+      doc,
+      frame,
+      range,
+      sel,
+      plan: plan?.revision === tl?.revision ? plan : null,
+      open: shot ? "shot" : line ? "line" : null,
+      get: () => tlRef.current,
+      set: stored,
+      inQueue: (f) => {
+        const p = queue.current.then(f);
+        queue.current = p.then(
+          () => undefined,
+          () => undefined,
+        );
+        return p;
+      },
+      seek: (f) => pv.current?.seek(f),
+      setRange,
+      select: (ids) => {
+        setTrack(null);
+        setSel(ids);
+      },
+      goTo,
+      reopen: () => {
+        router.replace("/timeline");
+        void open();
+      },
+      notice: setNotice,
+      lineTrack,
+      dock: async (to, want) => {
+        form.current = null;
+        setAsk(want);
+        if ("shot" in to) {
+          setLine(false);
+          setReplacing(false);
+          setShot(to.shot);
+        } else if ("line" in to) {
+          setShot(null);
+          setLine(true);
+        } else {
+          setShot(null);
+          setLine(false);
+          setTrack(null);
+          setSel([to.clip]);
+        }
+        await until(() => form.current !== null, 8000);
+        return form.current;
+      },
+      dialog: lib.ask,
+      voiceCtx: ANY,
+    }),
+  );
+
   // ------------------------------------------------------------------ empty states
   if (error && !tl && !none)
     return (
@@ -763,34 +818,47 @@ export function TimelineEditor({ id }: { id?: string }) {
 
         {line && (
           <LineComposer
+            key={JSON.stringify(ask)}
             tl={tl}
             doc={doc}
             at={at}
             track={lineTrack}
             workflows={workflows}
-            onClose={() => setLine(false)}
+            ask={ask ?? undefined}
+            onForm={ask ? setForm : undefined}
+            onClose={() => {
+              setLine(false);
+              setAsk(null);
+            }}
             onDone={(nt) => {
               tlRef.current = nt;
               setTl(nt);
               setDraft(null);
               setLine(false);
+              setAsk(null);
             }}
           />
         )}
         {shot && (
           <ShotComposer
-            key={JSON.stringify(shot)}
+            key={JSON.stringify([shot, ask])}
             tl={tl}
             doc={doc}
             facts={facts}
             slot={shot}
             workflows={workflows}
-            onClose={() => setShot(null)}
+            ask={ask ?? undefined}
+            onForm={ask ? setForm : undefined}
+            onClose={() => {
+              setShot(null);
+              setAsk(null);
+            }}
             onDone={(nt, note) => {
               tlRef.current = nt;
               setTl(nt);
               setDraft(null);
               setShot(null);
+              setAsk(null);
               if (note) setNotice(note);
             }}
           />
@@ -806,6 +874,7 @@ export function TimelineEditor({ id }: { id?: string }) {
           track={track}
           progress={progress}
           onSelect={(cid, add) => {
+            setAsk(null);
             setTrack(null);
             setReplacing(false);
             setSel((s) =>
@@ -849,7 +918,9 @@ export function TimelineEditor({ id }: { id?: string }) {
       >
         {one ? (
           <ClipPanel
-            key={one.c.id}
+            key={`${one.c.id}:${JSON.stringify(ask?.kind ? ask : null)}`}
+            ask={ask?.kind ? ask : undefined}
+            onForm={ask?.kind ? setForm : undefined}
             tl={tl}
             doc={doc}
             clip={one.c}
@@ -941,6 +1012,7 @@ export function TimelineEditor({ id }: { id?: string }) {
       </aside>
 
       <SaveVoice takeId={voiceTake} onClose={() => setVoiceTake(null)} />
+      {lib.node}
       <GalleryPicker
         open={!!picker}
         onClose={() => setPicker(null)}
@@ -1084,7 +1156,11 @@ function ClipPanel({
   opened,
   onOpened,
   onSaveVoice,
+  ask,
+  onForm,
 }: {
+  ask?: Want;
+  onForm?: (f: FormSlot) => void;
   tl: Timeline;
   doc: Norm;
   clip: Clip;
@@ -1319,6 +1395,8 @@ function ClipPanel({
               workflows={workflows}
               disabled={busy}
               onDone={onShotStarted}
+              ask={ask}
+              onForm={onForm}
             />
           )}
           {!c.take_id && (

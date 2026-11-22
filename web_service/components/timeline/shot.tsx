@@ -25,6 +25,7 @@ import {
   toRaw,
   type Raw,
 } from "@/lib/workflow";
+import type { FormSlot, Started, Want } from "@/components/timeline/assistant";
 import {
   Grid,
   kindOf,
@@ -85,12 +86,18 @@ export function ShotComposer({
   workflows,
   onDone,
   onClose,
+  ask,
+  onForm,
 }: {
   tl: Timeline;
   doc: Norm;
   facts: Takes;
   slot: ShotSlot;
   workflows: Workflow[];
+  /** what the assistant prefilled (its prompt, its length) */
+  ask?: Want;
+  /** the form for the assistant's card: its Generate is this one's */
+  onForm?: (f: FormSlot) => void;
   /** the shot made; `note`: what did not run (more seeds with no session to run them in) */
   onDone: (t: Timeline, note?: string) => void;
   onClose: () => void;
@@ -139,12 +146,18 @@ export function ShotComposer({
         if (stop) return;
         if (!w) return setError(`The workflow ${r.workflow_id} is not available any more.`);
         setWorkflowId(w.id);
-        setRaws(rawsFrom(fieldsOf(w), r.inputs));
+        const p = fieldsOf(w).find((f) => f.param.type === "text");
+        setRaws({
+          ...rawsFrom(fieldsOf(w), r.inputs),
+          ...(p && ask?.prompt && { [p.key]: ask.prompt }),
+        });
       })
       .catch((e) => !stop && setError(message(e)));
     return () => {
       stop = true;
     };
+    // the assistant's prompt is read once, as the composer opens
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [redoTake, workflows]);
 
   const workflow = video.find((w) => w.id === workflowId);
@@ -170,13 +183,14 @@ export function ShotComposer({
   const prompt = promptField
     ? String(
         raws[promptField.key] ??
+          ask?.prompt ??
           (redoTake ? toRaw(promptField.initial, promptField.param) : castText),
       )
     : "";
 
   const fps = clipOf(fields, raws)?.fps ?? 24;
   const grid = framesField ? gridOf(framesField.param) : null;
-  const want = fixedLen ?? (frames !== null ? frames / fps : 3);
+  const want = fixedLen ?? (frames !== null ? frames / fps : (ask?.seconds ?? 3));
   const nFrames = framesField ? snapFrames(framesField.param, want * fps) : null;
   const choices = grid
     ? Array.from(
@@ -197,8 +211,9 @@ export function ShotComposer({
     (which === "start" ? setStart : setEnd)((v) => !v);
   };
 
-  async function generate() {
-    if (!workflow || runOnOffline) return;
+  async function generate(): Promise<Started> {
+    if (!workflow) return { error: "no video workflow is installed" };
+    if (runOnOffline) return { error: `${runOn.label} is offline` };
     setBusy(true);
     setError("");
     try {
@@ -233,10 +248,11 @@ export function ShotComposer({
         ...(tl.defaults.looks.length && { looks: tl.defaults.looks }),
         ...(runOn && { host: runOn.host }),
       };
+      const made = "clip" in slot ? slot.clip : newId(doc);
       const shotSlot: S<"TimelineSlot"> =
         "clip" in slot
           ? { clip: slot.clip }
-          : { at: slot.at, length: (nFrames ?? 3 * fps) / fps, id: newId(doc) };
+          : { at: slot.at, length: (nFrames ?? 3 * fps) / fps, id: made };
       const res = await ok(
         api.POST("/v1/studio/timelines/{timeline_id}/shots", {
           params: { path: { timeline_id: tl.id } },
@@ -261,12 +277,39 @@ export function ShotComposer({
           ? "Only the first seed ran: this sequence has no session."
           : undefined,
       );
+      return { timeline: res.timeline, clip: made };
     } catch (e) {
       setError(message(e));
+      return { error: message(e) };
     } finally {
       setBusy(false);
     }
   }
+
+  // the form as the assistant's card reads it (plan 18 §22.6 Generate); its Generate is this one
+  useEffect(() => {
+    if (!onForm) return;
+    if (!workflow) {
+      onForm("none");
+      return () => onForm(null);
+    }
+    const r: Record<string, Raw> = { ...raws };
+    if (promptField) r[promptField.key] = prompt;
+    if (framesField && nFrames) r[framesField.key] = String(nFrames);
+    const built = workflow && buildInputs(fields, r);
+    onForm({
+      model: modelText,
+      size: `${doc.target.width} × ${doc.target.height} · ${fps} fps`,
+      detail: `at ${shortTime(at)} · ${((nFrames ?? want * fps) / fps).toFixed(1)} s · ${count} seed${count === 1 ? "" : "s"}`,
+      prompt,
+      run:
+        workflow && built
+          ? { workflow_id: workflow.id, inputs: built.inputs, ...(runOn && { host: runOn.host }) }
+          : null,
+      generate,
+    });
+    return () => onForm(null);
+  });
 
   const where =
     "clip" in slot
@@ -326,7 +369,7 @@ export function ShotComposer({
             value={prompt}
             onChange={(v) => setRaws((r) => ({ ...r, [promptField.key]: v }))}
             placeholder="What happens in this shot"
-            className="w-full resize-none border-0 bg-transparent text-[15px] leading-[22px] text-t1 outline-0"
+            className={`w-full resize-none border-0 bg-transparent text-[15px] leading-[22px] text-t1 ${ask?.prompt && prompt === ask.prompt ? "rounded-md outline-2 outline-offset-2 outline-a2" : "outline-0"}`}
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void generate();
             }}

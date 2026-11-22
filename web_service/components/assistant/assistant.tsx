@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   ArrowUp,
+  Brain,
   Check,
   ChevronDown,
   ChevronUp,
@@ -28,12 +29,15 @@ import {
 } from "lucide-react";
 import { api, message, ok, type S } from "@/lib/api";
 import {
+  MEMORY_TABS,
+  ago,
   applyEvent,
   asked,
   elsewhere,
   limitOf,
   mentionParts,
   newClientId,
+  sourceText,
   toResult,
   waitingText,
   type Action,
@@ -411,12 +415,19 @@ const TONE: Record<Line["status"], string> = {
 function LineIcon({ status, text }: { status: Line["status"]; text: string }) {
   const p = { size: 14, strokeWidth: 2.5, "aria-hidden": true, className: TONE[status] } as const;
   if (status === "running")
-    return /^Look/.test(text) ? <Eye {...p} strokeWidth={2} /> : <LoaderCircle {...p} />;
+    return /^Look/.test(text) ? (
+      <Eye {...p} strokeWidth={2} />
+    ) : /^Waiting for you/.test(text) ? (
+      <Clock3 {...p} strokeWidth={2} className={TONE.waiting} />
+    ) : (
+      <LoaderCircle {...p} />
+    );
   if (status === "waiting") return <Clock3 {...p} strokeWidth={2} />;
   if (status === "failed") return <X {...p} />;
   if (status === "did_not_run" || status === "cancelled")
     return <CircleMinus {...p} strokeWidth={2} />;
   if (/^(Opened|Went to)/.test(text)) return <ArrowRight {...p} strokeWidth={2} />;
+  if (/^Remembered/.test(text)) return <Brain {...p} strokeWidth={2} />;
   return <Check {...p} />;
 }
 
@@ -596,7 +607,7 @@ function Thread({ a, entries }: { a: AssistantApi; entries: Entry[] }) {
           .map((l) => (
             <ol key={`s${l.id}`} className="src">
               {l.sources!.map((s) => (
-                <li key={s.url}>{s.title || s.url}</li>
+                <li key={s.url}>{sourceText(s)}</li>
               ))}
             </ol>
           ))}
@@ -656,6 +667,190 @@ function Thread({ a, entries }: { a: AssistantApi; entries: Entry[] }) {
   return <>{out}</>;
 }
 
+type MemoryItem = S<"AssistantMemoryItem">;
+type MemoryKind = S<"AssistantMemoryKind">;
+
+/** The Memory list (§22.8, board frame 6): the four kinds as tabs, each item with its chat, Edit and Delete (your
+ * clicks), and Clear all behind a card. Items are text, never orders. */
+function MemoryList() {
+  const [kind, setKind] = useState<MemoryKind>("preference");
+  const [items, setItems] = useState<MemoryItem[] | null>(null);
+  const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
+  const [clearing, setClearing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const load = useCallback(
+    () =>
+      ok(api.GET("/v1/studio/assistant/memory"))
+        .then((l) => {
+          setItems(l.items);
+          setError("");
+        })
+        .catch((e) => setError(message(e))),
+    [],
+  );
+  useEffect(() => {
+    void load();
+  }, [load]);
+  const act = async (f: () => Promise<unknown>) => {
+    setBusy(true);
+    try {
+      await f();
+      setError("");
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const save = (id: string, text: string) =>
+    act(async () => {
+      const x = await ok(
+        api.PATCH("/v1/studio/assistant/memory/{item_id}", {
+          params: { path: { item_id: id } },
+          body: { text: text.trim() },
+        }),
+      );
+      setItems((l) => l?.map((y) => (y.id === id ? x : y)) ?? null);
+      setEditing(null);
+    });
+  const remove = (id: string) =>
+    act(async () => {
+      await ok(
+        api.DELETE("/v1/studio/assistant/memory/{item_id}", { params: { path: { item_id: id } } }),
+      );
+      setItems((l) => l?.filter((y) => y.id !== id) ?? null);
+    });
+  const shown = (items ?? []).filter((x) => x.kind === kind);
+  return (
+    <div className="thr justify-start! overflow-y-auto [mask-image:none]!">
+      <div role="tablist" aria-label="Memory" className="flex gap-1 rounded-xl bg-s3 p-[3px]">
+        {MEMORY_TABS.map(([k, label]) => (
+          <button
+            key={k}
+            type="button"
+            role="tab"
+            aria-selected={kind === k}
+            onClick={() => setKind(k)}
+            className={`h-[30px] flex-1 rounded-[9px] border-0 text-[11px] font-semibold shadow-none! ${kind === k ? "bg-s5" : "bg-transparent text-t2"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {items === null && !error ? (
+        <p className="note">Reading what it remembers…</p>
+      ) : shown.length === 0 ? (
+        <p className="note">Nothing here yet.</p>
+      ) : (
+        <ul className="al m-0 bg-s2" aria-label={MEMORY_TABS.find(([k]) => k === kind)![1]}>
+          {shown.map((x) =>
+            editing?.id === x.id ? (
+              <li key={x.id} className="min-h-10">
+                <label htmlFor={`mem-${x.id}`} className="sr-only">
+                  Edit
+                </label>
+                <input
+                  id={`mem-${x.id}`}
+                  className="in h-8 min-w-0 flex-1 text-[13px]"
+                  maxLength={500}
+                  value={editing.text}
+                  autoFocus
+                  onChange={(e) => setEditing({ id: x.id, text: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void save(x.id, editing.text);
+                    if (e.key === "Escape") setEditing(null);
+                  }}
+                />
+                <button
+                  type="button"
+                  className="un"
+                  disabled={busy || !editing.text.trim()}
+                  onClick={() => void save(x.id, editing.text)}
+                >
+                  Save
+                </button>
+                <button type="button" className="un" onClick={() => setEditing(null)}>
+                  Cancel
+                </button>
+              </li>
+            ) : (
+              <li key={x.id} className="min-h-10">
+                <span>
+                  {x.text}
+                  <small className="block text-[10px] text-t2">
+                    chat · {x.thread?.title || "deleted"} · {ago(x.updated_at)}
+                  </small>
+                </span>
+                <button
+                  type="button"
+                  className="un"
+                  onClick={() => setEditing({ id: x.id, text: x.text })}
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  className="un"
+                  disabled={busy}
+                  onClick={() => void remove(x.id)}
+                >
+                  Delete
+                </button>
+              </li>
+            ),
+          )}
+        </ul>
+      )}
+      {error && (
+        <p role="alert" className="fine text-bad">
+          {error}
+        </p>
+      )}
+      <p className="fine">
+        Yours only; never sent as orders. Deleting a chat deletes its summary in Chats.
+      </p>
+      {clearing ? (
+        <Card
+          card={{
+            kind: "delete",
+            title: "Clear all memory?",
+            rows: [
+              ["Goes", "every item in Likes, Projects, Worked and Chats"],
+              ["Stays", "your chats"],
+            ],
+            tags: [],
+            go: "CLEAR ALL",
+            danger: true,
+            fine: "This can't be undone.",
+          }}
+          waiting
+          busy={busy}
+          onYes={() =>
+            void act(async () => {
+              await ok(api.DELETE("/v1/studio/assistant/memory"));
+              setItems([]);
+              setClearing(false);
+            })
+          }
+          onNo={() => setClearing(false)}
+        />
+      ) : (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            className="no h-8 text-xs text-[#ff8a80]"
+            disabled={!items?.length}
+            onClick={() => setClearing(true)}
+          >
+            Clear all
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const mac = () =>
   typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform ?? "");
 export const shortcut = () => (mac() ? "⌘J" : "Ctrl J");
@@ -665,6 +860,7 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [top, setTop] = useState<number | null>(null);
+  const [memory, setMemory] = useState(false);
   const phone = usePhone();
   const end = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -770,176 +966,214 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
       style={phone && top !== null ? { top } : undefined}
     >
       {phone && <span className="grab" aria-hidden onPointerDown={drag} />}
-      <div className="dh">
-        <h2>
-          <Sparkles aria-hidden strokeWidth={2} />
-          Assistant
-        </h2>
-        {chip}
-        <button
-          type="button"
-          className="ib"
-          aria-label="New chat"
-          title="New chat"
-          onClick={() => void a.newChat()}
-        >
-          <SquarePen size={15} strokeWidth={1.75} aria-hidden />
-        </button>
-        {phone && (
-          <button
-            type="button"
-            className="ib"
-            aria-label="Shrink"
-            onClick={() => a.setShrunk(true)}
-          >
-            <ChevronDown size={15} strokeWidth={2} aria-hidden />
-          </button>
-        )}
-        <button
-          type="button"
-          className="x"
-          aria-label={`Close (${shortcut()})`}
-          title={`Close (${shortcut()})`}
-          onClick={() => a.setOpen(false)}
-        >
-          <X size={16} strokeWidth={1.75} aria-hidden />
-        </button>
-      </div>
-      {!phone && sees.length > 0 && (
-        <div className="where">
-          Sees
-          {sees.map((s) => (
-            <span key={s}>{s}</span>
-          ))}
-        </div>
-      )}
-      {remote && !a.remoteAcked ? (
-        <div role="note" className="bar2 remote">
-          <span className="flex items-center gap-2 text-[13px] font-semibold text-[#f2c14e]">
-            <Globe size={16} strokeWidth={1.75} aria-hidden />
-            Remote provider: your messages leave this machine ({st!.provider!.title})
-          </span>
-          <span>Sent: what you type, a short summary of this screen, and what it looks up.</span>
-          <span>Never sent: images, video, audio or files.</span>
-          <span className="flex justify-end">
-            <button type="button" className="no h-8 text-xs" onClick={a.ackRemote}>
-              OK
+      {memory ? (
+        <>
+          <div className="dh">
+            <h2>
+              <Sparkles aria-hidden strokeWidth={2} />
+              Memory
+            </h2>
+            <button
+              type="button"
+              className="x"
+              aria-label="Close Memory"
+              title="Close Memory"
+              onClick={() => setMemory(false)}
+            >
+              <X size={16} strokeWidth={1.75} aria-hidden />
             </button>
-          </span>
-        </div>
+          </div>
+          <MemoryList />
+        </>
       ) : (
-        where && (
-          <div className={`rem ${remote ? "" : "local"}`}>
-            <Globe size={13} strokeWidth={1.75} aria-hidden />
-            {where}
-          </div>
-        )
-      )}
-
-      <div className={`thr ${a.readOnly ? "ro" : ""}`} aria-live="polite">
-        {entries.length === 0 && !a.asking ? (
-          <div className="flex flex-col gap-2.5">
-            <p className="m-0 font-display text-lg font-bold">Hi. What should we make?</p>
-            <p className="note">
-              I can fill this screen for you. Anything that uses the GPU waits for your OK.
-            </p>
-            {(screen?.examples ?? EXAMPLES).map((x) => (
+        <>
+          <div className="dh">
+            <h2>
+              <Sparkles aria-hidden strokeWidth={2} />
+              Assistant
+            </h2>
+            {chip}
+            <button
+              type="button"
+              className="ib"
+              aria-label="Memory"
+              title="Memory"
+              onClick={() => setMemory(true)}
+            >
+              <Brain size={15} strokeWidth={1.75} aria-hidden />
+            </button>
+            <button
+              type="button"
+              className="ib"
+              aria-label="New chat"
+              title="New chat"
+              onClick={() => void a.newChat()}
+            >
+              <SquarePen size={15} strokeWidth={1.75} aria-hidden />
+            </button>
+            {phone && (
               <button
-                key={x.text}
                 type="button"
-                className="ex"
-                disabled={sending || !!limit}
-                onClick={() => void sendExample(x.text)}
+                className="ib"
+                aria-label="Shrink"
+                onClick={() => a.setShrunk(true)}
               >
-                <Text text={x.text} />
-                <small>{x.sub}</small>
+                <ChevronDown size={15} strokeWidth={2} aria-hidden />
               </button>
-            ))}
+            )}
+            <button
+              type="button"
+              className="x"
+              aria-label={`Close (${shortcut()})`}
+              title={`Close (${shortcut()})`}
+              onClick={() => a.setOpen(false)}
+            >
+              <X size={16} strokeWidth={1.75} aria-hidden />
+            </button>
           </div>
-        ) : (
-          <Thread a={a} entries={entries} />
-        )}
-        <div ref={end} />
-      </div>
+          {!phone && sees.length > 0 && (
+            <div className="where">
+              Sees
+              {sees.map((s) => (
+                <span key={s}>{s}</span>
+              ))}
+            </div>
+          )}
+          {remote && !a.remoteAcked ? (
+            <div role="note" className="bar2 remote">
+              <span className="flex items-center gap-2 text-[13px] font-semibold text-[#f2c14e]">
+                <Globe size={16} strokeWidth={1.75} aria-hidden />
+                Remote provider: your messages leave this machine ({st!.provider!.title})
+              </span>
+              <span>
+                Sent: what you type, a short summary of this screen, and what it looks up.
+              </span>
+              <span>Never sent: images, video, audio or files.</span>
+              <span className="flex justify-end">
+                <button type="button" className="no h-8 text-xs" onClick={a.ackRemote}>
+                  OK
+                </button>
+              </span>
+            </div>
+          ) : (
+            where && (
+              <div className={`rem ${remote ? "" : "local"}`}>
+                <Globe size={13} strokeWidth={1.75} aria-hidden />
+                {where}
+              </div>
+            )
+          )}
 
-      {a.readOnly && (
-        <>
-          <div className="bar2 bg-s2">
-            <Monitor size={18} strokeWidth={1.75} aria-hidden className="shrink-0 text-t2" />
-            <span className="flex-1">
-              This chat is working in another tab. Its actions run there.
-            </span>
+          <div className={`thr ${a.readOnly ? "ro" : ""}`} aria-live="polite">
+            {entries.length === 0 && !a.asking ? (
+              <div className="flex flex-col gap-2.5">
+                <p className="m-0 font-display text-lg font-bold">Hi. What should we make?</p>
+                <p className="note">
+                  I can fill this screen for you. Anything that uses the GPU waits for your OK.
+                </p>
+                {(screen?.examples ?? EXAMPLES).map((x) => (
+                  <button
+                    key={x.text}
+                    type="button"
+                    className="ex"
+                    disabled={sending || !!limit}
+                    onClick={() => void sendExample(x.text)}
+                  >
+                    <Text text={x.text} />
+                    <small>{x.sub}</small>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <Thread a={a} entries={entries} />
+            )}
+            <div ref={end} />
           </div>
-          <button type="button" className="go normal-case tracking-normal" onClick={a.continueHere}>
-            Continue here
-          </button>
-          <p className="fine">
-            Continue here moves the chat to this tab. The other tab turns read-only.
-          </p>
-        </>
-      )}
-      {limit && (
-        <>
-          <div role="alert" className="bar2 limit">
-            <CircleAlert size={18} strokeWidth={1.75} aria-hidden className="shrink-0" />
-            <span className="cap">
-              <b>{limit.title}</b>
-              <span>{limit.text}</span>
-            </span>
-          </div>
-          <p className="fine">Your message is kept. The screen still works as usual.</p>
-        </>
-      )}
-      {a.error && (
-        <p role="alert" className="fine text-bad">
-          {a.error}
-        </p>
-      )}
-      {!a.readOnly && (
-        <form className={`cmp ${limit ? "opacity-50" : ""}`} onSubmit={(e) => void submit(e)}>
-          <label htmlFor="assistant-in" className="sr-only">
-            Message the assistant
-          </label>
-          <textarea
-            id="assistant-in"
-            ref={input}
-            rows={phone ? 1 : 2}
-            maxLength={4000}
-            disabled={!!limit}
-            placeholder={limit ? limit.until : "Ask, or say what to do"}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-                e.preventDefault();
-                void submit();
-              }
-            }}
-          />
-          <div className="cmpb">
-            <small>
-              {!phone && (
-                <>
-                  <span className="kbd">{shortcut()}</span> open or close
-                  {screen?.screen === "create" && (
+
+          {a.readOnly && (
+            <>
+              <div className="bar2 bg-s2">
+                <Monitor size={18} strokeWidth={1.75} aria-hidden className="shrink-0 text-t2" />
+                <span className="flex-1">
+                  This chat is working in another tab. Its actions run there.
+                </span>
+              </div>
+              <button
+                type="button"
+                className="go normal-case tracking-normal"
+                onClick={a.continueHere}
+              >
+                Continue here
+              </button>
+              <p className="fine">
+                Continue here moves the chat to this tab. The other tab turns read-only.
+              </p>
+            </>
+          )}
+          {limit && (
+            <>
+              <div role="alert" className="bar2 limit">
+                <CircleAlert size={18} strokeWidth={1.75} aria-hidden className="shrink-0" />
+                <span className="cap">
+                  <b>{limit.title}</b>
+                  <span>{limit.text}</span>
+                </span>
+              </div>
+              <p className="fine">Your message is kept. The screen still works as usual.</p>
+            </>
+          )}
+          {a.error && (
+            <p role="alert" className="fine text-bad">
+              {a.error}
+            </p>
+          )}
+          {!a.readOnly && (
+            <form className={`cmp ${limit ? "opacity-50" : ""}`} onSubmit={(e) => void submit(e)}>
+              <label htmlFor="assistant-in" className="sr-only">
+                Message the assistant
+              </label>
+              <textarea
+                id="assistant-in"
+                ref={input}
+                rows={phone ? 1 : 2}
+                maxLength={4000}
+                disabled={!!limit}
+                placeholder={limit ? limit.until : "Ask, or say what to do"}
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                    e.preventDefault();
+                    void submit();
+                  }
+                }}
+              />
+              <div className="cmpb">
+                <small>
+                  {!phone && (
                     <>
-                      {" · "}
-                      <span className="kbd">@</span> elements
+                      <span className="kbd">{shortcut()}</span> open or close
+                      {screen?.screen === "create" && (
+                        <>
+                          {" · "}
+                          <span className="kbd">@</span> elements
+                        </>
+                      )}
                     </>
                   )}
-                </>
-              )}
-            </small>
-            <button
-              type="submit"
-              className="snd"
-              aria-label="Send"
-              disabled={!!limit || sending || !text.trim()}
-            >
-              <ArrowUp size={16} strokeWidth={2} aria-hidden />
-            </button>
-          </div>
-        </form>
+                </small>
+                <button
+                  type="submit"
+                  className="snd"
+                  aria-label="Send"
+                  disabled={!!limit || sending || !text.trim()}
+                >
+                  <ArrowUp size={16} strokeWidth={2} aria-hidden />
+                </button>
+              </div>
+            </form>
+          )}
+        </>
       )}
     </div>
   );

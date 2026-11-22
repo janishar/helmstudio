@@ -246,3 +246,30 @@ export function limitOf(
 /** The text with each @handle marked (rendered as text: the parts, never HTML). */
 export const mentionParts = (text: string) =>
   text.split(/(@[a-z][a-z0-9_-]*)/g).map((t) => ({ t, at: /^@[a-z]/.test(t) }));
+
+/** A web source as its line lists it: "example-forum.org · LTX camera prompts" (text, never a link). */
+export function sourceText(s: { title: string; url: string }) {
+  let host = "";
+  try {
+    host = new URL(s.url).hostname.replace(/^www\./, "");
+  } catch {
+    /* not a URL: the title alone */
+  }
+  return [host, s.title.trim()].filter(Boolean).join(" · ") || s.url;
+}
+
+/** When a memory item was saved, as the Memory list says it: "today", "yesterday", "3 days ago". */
+export function ago(iso: string, now = Date.now()) {
+  const day = (t: number) =>
+    Math.floor((t - new Date(t).getTimezoneOffset() * 60_000) / 86_400_000);
+  const n = day(now) - day(Date.parse(iso));
+  return n <= 0 ? "today" : n === 1 ? "yesterday" : `${n} days ago`;
+}
+
+/** The Memory list's tabs (§22.8): the kinds as the board names them. */
+export const MEMORY_TABS = [
+  ["preference", "Likes"],
+  ["project", "Projects"],
+  ["worked", "Worked"],
+  ["summary", "Chats"],
+] as const;

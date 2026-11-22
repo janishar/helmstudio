@@ -6,7 +6,8 @@
 // playhead; the run's take fills it.
 import Link from "next/link";
 import { X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { FormSlot, Started, Want } from "@/components/timeline/assistant";
 import { ErrorNote } from "@/components/kit";
 import { TileWords, tileClass } from "@/components/create/elements";
 import { VoiceTile } from "@/components/create/voices";
@@ -54,6 +55,8 @@ export function LineComposer({
   workflows,
   onDone,
   onClose,
+  ask,
+  onForm,
 }: {
   tl: Timeline;
   doc: Norm;
@@ -62,6 +65,10 @@ export function LineComposer({
   /** the audio track it goes on; null: none is free there */
   track: string | null;
   workflows: Workflow[];
+  /** what the assistant prefilled: the line (`prompt`) and the voice (an id, a voice's name or an @element) */
+  ask?: Want;
+  /** the form for the assistant's card: its Generate is this one's */
+  onForm?: (f: FormSlot) => void;
   onDone: (t: Timeline) => void;
   onClose: () => void;
 }) {
@@ -110,8 +117,19 @@ export function LineComposer({
   const [raws, setRaws] = useState<Record<string, Raw>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const raw = (f: Field) => raws[f.key] ?? toRaw(f.initial, f.param);
-  const text = textField ? String(raws[textField.key] ?? (scriptField ? prefill : "")) : "";
+  // the assistant's voice: a voice by id or name, or the voice of an @element
+  const said = ask?.voice?.replace(/^@/, "").toLowerCase();
+  const askVoice = said
+    ? (voices?.find((v) => v.id === ask?.voice || v.name.toLowerCase() === said)?.id ??
+      library?.find((x) => x.handle === said)?.voice_id ??
+      undefined)
+    : undefined;
+  const raw = (f: Field) =>
+    raws[f.key] ??
+    (f === voiceField && askVoice ? { voice_id: askVoice } : toRaw(f.initial, f.param));
+  const text = textField
+    ? String(raws[textField.key] ?? ask?.prompt ?? (scriptField ? prefill : ""))
+    : "";
   const speakers = useCast(scriptField ? text : "", workflow);
   const pause = pauseField ? Number(raw(pauseField)) : 0.35;
   const seconds = Math.max(1, plannedSeconds(text, !!scriptField, pause));
@@ -134,12 +152,21 @@ export function LineComposer({
     setRaws(t && !!scriptFieldOf(fs) === !!scriptField ? { [t.key]: text } : {});
   }
 
-  async function generate() {
-    if (!workflow || !track) return;
+  const filled = {
+    ...raws,
+    ...(textField && { [textField.key]: text }),
+    ...(voiceField &&
+      askVoice &&
+      !(voiceField.key in raws) && { [voiceField.key]: raw(voiceField) }),
+  };
+  async function generate(): Promise<Started> {
+    if (!workflow) return { error: "no voice workflow is installed" };
+    if (!track) return { error: "no audio track is free at the playhead" };
     setBusy(true);
     setError("");
+    const id = newId(doc);
     try {
-      const r = { ...raws, ...(textField && { [textField.key]: text }) };
+      const r = filled;
       const built = buildInputs(all, r);
       const bad = Object.entries(built.errors).find(([k]) => k !== linesKey);
       if (bad) throw new Error(`${bad[0]}: ${bad[1]}`);
@@ -147,23 +174,23 @@ export function LineComposer({
         api.POST("/v1/studio/timelines/{timeline_id}/lines", {
           params: { path: { timeline_id: tl.id } },
           body: {
-            slot: { track, at, length: seconds, id: newId(doc) },
+            slot: { track, at, length: seconds, id },
             run: { workflow_id: workflow.id, inputs: built.inputs },
           },
         }),
       );
       onDone(res.timeline);
+      return { timeline: res.timeline, clip: id };
     } catch (e) {
       setError(message(e));
+      return { error: message(e) };
     } finally {
       setBusy(false);
     }
   }
 
   // the planned peak beside the time, as Create's Generate ("≈ 0:08 · 6 GB")
-  const built = workflow
-    ? buildInputs(all, { ...raws, ...(textField && { [textField.key]: text }) })
-    : null;
+  const built = workflow ? buildInputs(all, filled) : null;
   const gb = usePlannedPeak(
     workflow && built ? { workflow_id: workflow.id, inputs: built.inputs } : null,
   );
@@ -174,6 +201,33 @@ export function LineComposer({
   const voiceName = (s: (typeof speakers)[number]) =>
     s.voice ? `${s.voice.name} (${s.voice.source === "mine" ? s.voice.group : "preset"})` : "";
   const places = cast.filter((x) => x.group !== "character");
+  // the form as the assistant's card reads it; its Generate is this one
+  const voiceNow = voiceField ? raw(voiceField) : null;
+  const voiceText =
+    voiceNow && typeof voiceNow === "object" && "voice_id" in voiceNow
+      ? (voices?.find((v) => v.id === voiceNow.voice_id)?.name ?? "a voice")
+      : "";
+  useEffect(() => {
+    if (!onForm) return;
+    if (!workflow) {
+      onForm("none");
+      return () => onForm(null);
+    }
+    onForm({
+      model: modelText,
+      detail: [
+        `at ${shortTime(at)}${track ? ` on ${track}` : ""}`,
+        `about ${Math.round(seconds)} s`,
+        voiceText,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      prompt: text,
+      run: workflow && built ? { workflow_id: workflow.id, inputs: built.inputs } : null,
+      generate,
+    });
+    return () => onForm(null);
+  });
   return (
     <section
       aria-label="New line"

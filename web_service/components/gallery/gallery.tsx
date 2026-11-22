@@ -23,6 +23,7 @@ import { useLoras } from "@/lib/lora-library";
 import { madeWithLine } from "@/lib/loras";
 import { FrameIn } from "@/components/create/frame-in";
 import { useScreenTools } from "@/components/assistant/tools";
+import { useLibraryDialog } from "@/components/assistant/library";
 import { ORDERS, galleryTools } from "@/components/gallery/assistant";
 import {
   AUDIO_ACCEPT,
@@ -317,6 +318,7 @@ export function Gallery({
       return n;
     });
   const router = useRouter();
+  const lib = useLibraryDialog();
   useScreenTools(
     galleryTools({
       q,
@@ -336,6 +338,7 @@ export function Gallery({
       replace,
       remove,
       push: (url) => router.push(url),
+      dialog: lib.ask,
     }),
   );
   const filtered = !!(
@@ -645,6 +648,7 @@ export function Gallery({
 
       <ElementEditor open={!!making} onClose={() => setMaking(null)} takes={making ?? undefined} />
       <SaveAsLook take={lookOf} onClose={() => setLookOf(null)} />
+      {lib.node}
       <Modal
         open={modal === "rename" && !!current}
         onClose={() => setModal(null)}
