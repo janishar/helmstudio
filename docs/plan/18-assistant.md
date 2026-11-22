@@ -18,7 +18,7 @@ assistant"):
 2. **Cards for every costly, deleting or data-leaving action**, one layout, with "uses the GPU", "sends to
    DeepSeek" (or the search provider) or "can't be undone". Yes calls the screen's own button.
 3. **Downloads**: an admin gets the Models row and a card (size, machine, licence); the licence tick and Download
-   stay the admin's clicks; then `await`, then back to Create. A non-admin is told to ask an admin.
+   stay the admin's clicks; then `await`, then back to Create (which reads `/models` again when it mounts). A non-admin is told to ask an admin.
 4. **Run on**: it may pick Auto, Mac or NVIDIA among the rows the form allows, with a reason. Every user gets the
    hosts read (up, busy, memory, queue; no pins or settings). The Generate card names the machine and place in line.
 5. **Library** (looks, elements, voices, clone and design): it opens the screen's own dialog prefilled; the user's
@@ -89,17 +89,22 @@ Replaces the 2026-11-21 design of one stateless `cmd.assistant.turn` worker.
 
 ```
 start ─▶ model ─▶ tools ─▶ model … ─▶ reply (end of turn)
-                    │
+                    │  ▲
+                    │  └─ wait: interrupt({pending}) ─▶ resumed by the browser's results, a card answer, a run
                     ├─ server tools: reads (req.studio.tools), memory (store), web_search, look_at
-                    └─ screen actions, await, cards ─▶ interrupt({actions}) ─▶ resumed by the browser's results
+                    └─ screen actions, await, cards ─▶ pending ─▶ wait
 ```
 
 - `model`: one call with the fenced context (22.9), the tool list and the transcript (cut oldest first, as
   `agents._fit_oldest`). An answer that fails its schema is asked once more, then the turn ends with an error line.
-- `tools`: runs the calls in order. Server tools return at once (`look_at` and `web_search` park on their own
-  interrupt: a run, a card). Screen actions are collected and the node calls `interrupt()` with them; the step is
-  published, the drawer runs them in the sending tab and posts the results, studio sends them on, and the graph
-  resumes (`Command(resume=results)`) in the same node.
+- `tools`: runs the calls in order, each result kept in state under its call id. Server reads and memory return
+  at once. A screen action, `await`, a card, a `look_at` run or a `web_search` card stops the node with that work
+  as `pending`, and the next calls wait for its result.
+- `wait` only calls `interrupt(pending)`, as `agent_loop.py`'s wait does (a resumed node runs again from its start,
+  so nothing with an effect sits before the interrupt). The step is published, the drawer runs the actions in the
+  sending tab and posts the results, studio sends them on, and the graph resumes (`Command(resume=results)`) back
+  into `tools`. Server calls are idempotent on their call id (`req.studio.tools` already is; a memory write is
+  keyed by it), so a replay after a crash does nothing twice.
 - **await** is a screen action like any other: the browser resolves it from the tab's existing state (the session
   SSE in `lib/runs.ts`, the batch events, the Models row, the export and media jobs, the dialog's close) with a cap
   of 10 min, then "still running"; a hidden tab waits until shown and its line says "Waiting for the tab". Nothing
@@ -118,7 +123,7 @@ start ─▶ model ─▶ tools ─▶ model … ─▶ reply (end of turn)
 | `cmd.assistant.turn` | thread, owner, roles, tool names, and one input: a user message (with the screen summary), the browser's action results, or a card answer |
 | `cmd.assistant.delete` | thread, owner: drop the checkpoints and the summary |
 | `evt.assistant.step` | text, lines, the actions to run (with ids), cards, `done`, caps used |
-| `req.studio.tools` | extended with the catalog's read tools when the caller is the assistant |
+| `req.studio.tools` | extended with the catalog's read tools when the caller is the assistant, with `thread_id` in place of batch, row and node |
 | `req.pipelines.assistant.memory` | list, edit, delete, clear: the Memory list's calls, only in the request owner's namespace |
 
 ### 22.4 What it sees and where it can go
@@ -170,7 +175,7 @@ prefilled and resolves on close with the new id and `@handle`, or "cancelled".
 | Screen | Actions |
 |---|---|
 | Shell | `navigate` (line), `await(run \| job \| download \| export \| clone)` (line) |
-| Create | `change(key, value)` and `switchTo(workflow)` (Undo; variant, Enhance, Think, references, bindings, source, LoRAs, looks, dialogue are all form keys); `preset(name)` (Undo, refused when greyed); `runOn(auto \| host, reason)` (Undo); `seeds(n)` (Undo, at most 4); `view(studio \| graph)` (line); `newSession` (line); `renameWorkflow`, `duplicateWorkflow` (line); `deleteWorkflow` (card); `frameIn(take, first \| last)` (line); `select(take)`, `star(take)` (Undo); `stop(run)` (line); `generate` (card); `saveAsLook`, `saveAsElement`, `cloneVoice`, `designVoice` (dialog; Hear tries is a card); LoRA `rename` (line), `delete` (card) |
+| Create | `change(key, value)` and `switchTo(workflow)` (Undo; variant, Enhance, Think, references, bindings, source, LoRAs, looks, dialogue are all form keys); `preset(name)` (Undo, refused when greyed); `runOn(auto \| host, reason)` (Undo); `seeds(n)` (Undo, at most 4); `view(studio \| graph)` (line); `newSession` (line); `renameWorkflow`, `duplicateWorkflow` (line); `deleteWorkflow` (card); `frameIn(take, first \| last)` (line); `select(take)`, `star(take)` (Undo); `stop(run)` (line); `generate` (card); `saveAsLook`, `saveAsElement`, `editItem`, `cloneVoice`, `designVoice` (dialog; Hear tries is a card); `deleteItem` (card); LoRA `rename` (line), `delete` (card) |
 | Graph | the edit helpers in `lib/graph-edit.ts` and their validators (one "Undo assistant changes"); `generate` (card) |
 | Pipeline editor | `lib/pipeline.ts` edits (one "Undo assistant changes"); `new`, `rename` (line); `delete` (card); `judgeTest` (card); memory `add` (dialog), `delete` (card); Studio `runStep` (card), `pickTake` (Undo) |
 | Batches | `newBatch` fill (Undo), `start`, `resume`, `retry(row)`, `again`, `stop` (card); `pause` (line); `pick(row, take)` (card); review note (dialog) |
@@ -196,7 +201,7 @@ function in the tab that owns it; a card is cancelled when its screen unmounts o
 | Judge test | pipeline editor | takes, criteria, provider | uses the GPU, sends to DeepSeek |
 | Export | Timeline | preset, size, fps, time from `export/plan` | uses the machine |
 | Hear | clone and design dialogs | tries, voice model | uses the GPU |
-| Download | Models (admin) | size, machine, licence state ("tick I accept on the row"); Yes is the row's own Download, enabled only once ticked | uses the disk and network |
+| Download | Models (admin) | size, machine, licence state ("tick I accept on the row"); Yes is the row's own Download, enabled only once ticked | uses disk and network |
 | Web search | any | the query, the provider | sends to <provider> |
 | Delete | workflows, LoRAs, library items, pipelines, pipeline memory, assistant memory (`forget`), sequences, takes | what goes, what stays | can't be undone |
 
@@ -208,20 +213,21 @@ The licence "I accept" tick is never set or sent by the assistant. Starter looks
 route it maps to, `read_only`, the roles it needs, and its surfaces (`assistant`, `mcp`). Studio copies it with
 `make gen` (Go embed) to build the assistant's tool list and run the read tools; `cli/` copies it for `helm mcp`,
 which registers the same tools over Kong. Write tools in it (run, batch, timeline edits) are `mcp` only; for the
-assistant writes are screen actions and cards. The screen actions and card kinds are in
+assistant writes are screen actions and cards (`wait_run` is `mcp` only; the assistant uses `await`). A tool on
+both surfaces has plan 16's name. The screen actions and card kinds are in
 `contracts/tools/actions.json` (assistant only).
 
 | Tool | Reads | Who |
 |---|---|---|
 | `sessions` | `/sessions`, a session's runs and takes | every user |
-| `workflows` | `/workflows`, `/workflows/{id}`, `/nodes` | every user |
-| `get_run` | `/runs/{id}`: status, stage, error, enhanced prompt; `/runs/plan` | every user |
+| `list_workflows`, `get_workflow` | `/workflows`, `/workflows/{id}`, `/nodes` | every user |
+| `get_run`, `plan_run` | `/runs/{id}`: status, stage, error, enhanced prompt; `/runs/plan` | every user |
 | `models` | `/models`: variants, add-ons, licences, per-host presence | every user |
 | `hosts` | `/hosts` (redacted: up, busy, memory) and `/queue` (place in line) | every user |
 | `search_takes`, `get_take` | `/takes` (the director's `gallery.search`), a take with uses and decisions | every user |
-| `library` | `/library`, `/loras`, pipeline `/memory` (the director's `library.read`) | every user |
-| `pipelines`, `batches` | pipelines; batches with rows, execution, step state, decisions, review, the director chat (read) | every user |
-| `timelines` | a sequence, its exports, media jobs | every user |
+| `list_library` | `/library`, `/loras`, pipeline `/memory` (the director's `library.read`) | every user |
+| `pipelines`, `batch_status` | pipelines; batches with rows, execution, step state, decisions, review, the director chat (read) | every user |
+| `list_timelines`, `show_timeline` | sequences; one with its exports and media jobs | every user |
 | `custom_nodes`, `model_sources` | `/custom-nodes`, `/model-sources` | every user |
 | `model_jobs` | `/admin/model-jobs` | admin |
 | `look_at` | the local ask stage (below) | every user |
