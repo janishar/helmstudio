@@ -365,10 +365,12 @@ type Device struct {
 // cuda host) is in host RAM and never counted in the memory budget (API 1.18).
 func OnDevice(device string) bool { return device != "cpu" }
 
-// Media is what a runner's media worker has: ffmpeg's version and its H.264 encoders (API 1.17).
+// Media is what a runner's media worker has: ffmpeg's version and its H.264 encoders (API 1.17); Thumbs: it runs
+// thumbs jobs (API 1.48; an older runner does not).
 type Media struct {
 	FFmpeg   string   `json:"ffmpeg"`
 	Encoders []string `json:"encoders"`
+	Thumbs   bool     `json:"thumbs,omitempty"`
 }
 
 // ModelsDisk is the volume holding a runner's models root (API 1.16).

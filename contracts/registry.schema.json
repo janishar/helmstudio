@@ -77,7 +77,7 @@
     },
     "paramSchema": {
       "type": "object",
-      "description": "one param of a node; the UI derives a form field from it. int, float and seed: min/max bound the value, step is the field's increment; string and text (multi-line): min/max bound the length; enum: one of `enum`. seed: an int where null or -1 means random (the runner picks one and reports it in evt.run.status resolved.seed and each output's seed). image: one Image, written {take_id} by clients (default null = none; a run needs one). rows: an ordered list of items (default []), min/max bound the count, `item` names each item's fields, `mention` is how the prompt refers to item n (from 1). frames: a frame count on the family's frame grid, min + k \u00d7 step (k \u2265 0) up to max (LTX: 9 + 8k, 9..321); `fps` names the node's fps param; the UI renders it as the Duration slider (one notch per step, labelled frames and seconds). frames may declare `auto` (the model predicts the length: the value \"auto\"). int may declare `values` (the only allowed values) and `values_by` (the allowed values per value of an enum param of the same node: LTX steps per role); from API 1.39 an enum may declare `values_by` too, and its `param` may name another node's enum param (`model.variant`: LTX extend's direction per model variant). From API 1.19: media: one video or audio take (`accepts`), written {take_id[, in, out]} by clients (default null; a run needs one); `trim`: it reads the part in..out (the UI's trim control over the take); `grid`: a video's sides must be multiples of it; `max_s`: the longest take (or part) it reads; `max_frames`: the most frames of a video take it reads. span: a time range {start, end} on the workflow's one video media source (default null; a run needs one; the UI's range control over that take). contracts/README.md, Media inputs. From API 1.30: voice: one saved voice (a library item of kind voice), written {voice_id} by clients (default null; a run needs one); `accepts` names the voice sources it takes: preset (a pack's starter voice of the node's family), clip (from API 1.31: a voice with a clip, cloned or designed; studio sends its clip as a media value), design (a voice from a description). It takes no wire; from API 1.32 it may be a rows item field (a dialogue's `lines`). contracts/README.md, Voices. From API 1.32: a `text` param may declare `script: true` (a dialogue script: studio expands it into the same node's `lines` rows at create time; contracts/README.md, Dialogue)",
+      "description": "one param of a node; the UI derives a form field from it. int, float and seed: min/max bound the value, step is the field's increment; string and text (multi-line): min/max bound the length; enum: one of `enum`. seed: an int where null or -1 means random (the runner picks one and reports it in evt.run.status resolved.seed and each output's seed). image: one Image, written {take_id} by clients (default null = none; a run needs one). rows: an ordered list of items (default []), min/max bound the count, `item` names each item's fields, `mention` is how the prompt refers to item n (from 1). frames: a frame count on the family's frame grid, min + k × step (k ≥ 0) up to max (LTX: 9 + 8k, 9..321); `fps` names the node's fps param; the UI renders it as the Duration slider (one notch per step, labelled frames and seconds). frames may declare `auto` (the model predicts the length: the value \"auto\"). int may declare `values` (the only allowed values) and `values_by` (the allowed values per value of an enum param of the same node: LTX steps per role); from API 1.39 an enum may declare `values_by` too, and its `param` may name another node's enum param (`model.variant`: LTX extend's direction per model variant). From API 1.19: media: one video or audio take (`accepts`), written {take_id[, in, out]} by clients (default null; a run needs one); `trim`: it reads the part in..out (the UI's trim control over the take); `grid`: a video's sides must be multiples of it; `max_s`: the longest take (or part) it reads; `max_frames`: the most frames of a video take it reads. span: a time range {start, end} on the workflow's one video media source (default null; a run needs one; the UI's range control over that take). contracts/README.md, Media inputs. From API 1.30: voice: one saved voice (a library item of kind voice), written {voice_id} by clients (default null; a run needs one); `accepts` names the voice sources it takes: preset (a pack's starter voice of the node's family), clip (from API 1.31: a voice with a clip, cloned or designed; studio sends its clip as a media value), design (a voice from a description). It takes no wire; from API 1.32 it may be a rows item field (a dialogue's `lines`). contracts/README.md, Voices. From API 1.32: a `text` param may declare `script: true` (a dialogue script: studio expands it into the same node's `lines` rows at create time; contracts/README.md, Dialogue)",
       "required": [
         "name",
         "type",
@@ -181,7 +181,7 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 200,
-              "description": "from API 1.40, a cross-node values_by only: the line the UI shows under the choice of `param` while this refuses one of its options (LTX extend: `Dev: the only model that extends before. About 10\u00d7 slower.`, board LtxFeatures frame 8). Absent = each refusal (`Extend before needs Dev`)"
+              "description": "from API 1.40, a cross-node values_by only: the line the UI shows under the choice of `param` while this refuses one of its options (LTX extend: `Dev: the only model that extends before. About 10× slower.`, board LtxFeatures frame 8). Absent = each refusal (`Extend before needs Dev`)"
             },
             "values": {
               "type": "object",
@@ -220,7 +220,7 @@
         },
         "item": {
           "type": "object",
-          "description": "rows only: field name \u2192 a ref kind (the field holds a value of that kind, required in every item: Image = an image take {take_id}; Media (API 1.14) = an image or a video take {take_id}, an ask node's `media`; Lora = a LoRA {lora_id}, contracts/README.md, LoRAs) or a param schema (without name; not rows); from API 1.22 that may be a `media` param (a video or audio take {take_id[, in, out]}, required in every item; from API 1.37 one with `optional` may be null)",
+          "description": "rows only: field name → a ref kind (the field holds a value of that kind, required in every item: Image = an image take {take_id}; Media (API 1.14) = an image or a video take {take_id}, an ask node's `media`; Lora = a LoRA {lora_id}, contracts/README.md, LoRAs) or a param schema (without name; not rows); from API 1.22 that may be a `media` param (a video or audio take {take_id[, in, out]}, required in every item; from API 1.37 one with `optional` may be null)",
           "minProperties": 1,
           "propertyNames": {
             "pattern": "^[a-z][a-z0-9_]{0,63}$"
@@ -293,7 +293,7 @@
             "type": "string",
             "pattern": "^[a-z][a-z0-9_]{0,63}$"
           },
-          "description": "rows only (API 1.22): optional inputs of the same node; while any of them is wired the rows must stay empty (studio 422 `<node>.<param>: must stay empty while <node>.<input> is wired`), mentions add no rows to it and \"Use in\u2026\" does not count it (MiniMax H3: references cannot go with a first or last frame). contracts/README.md, Media inputs: rows of media"
+          "description": "rows only (API 1.22): optional inputs of the same node; while any of them is wired the rows must stay empty (studio 422 `<node>.<param>: must stay empty while <node>.<input> is wired`), mentions add no rows to it and \"Use in…\" does not count it (MiniMax H3: references cannot go with a first or last frame). contracts/README.md, Media inputs: rows of media"
         },
         "addons": {
           "type": "object",
@@ -311,7 +311,7 @@
               "pattern": "^[a-z][a-z0-9_]{0,63}$"
             }
           },
-          "description": "enum only (API 1.41, contracts/README.md \"Optional add-ons\"): value \u2192 the optional add-ons (components of the node family's models entry `addons`) a run needs while the param holds that value (MiniMax H3's `lora`: `turbo` \u2192 [turbo]); each key one of `enum`. The run check counts them as the node's own `addons` (Several hosts: eligibility, step 2b), on the node's resolved value, never while the node is bypassed. Absent = no value needs one"
+          "description": "enum only (API 1.41, contracts/README.md \"Optional add-ons\"): value → the optional add-ons (components of the node family's models entry `addons`) a run needs while the param holds that value (MiniMax H3's `lora`: `turbo` → [turbo]); each key one of `enum`. The run check counts them as the node's own `addons` (Several hosts: eligibility, step 2b), on the node's resolved value, never while the node is bypassed. Absent = no value needs one"
         },
         "addons_with": {
           "type": "object",
@@ -333,7 +333,7 @@
               }
             }
           },
-          "description": "enum with `addons` only (API 1.41): `<name>` \u2192 {value \u2192 add-ons}, `<name>` an optional input of the same node or one of its rows params, and the values those of `addons`. While that input is wired, or that rows param holds a row, its list replaces the value's `addons` list (several such names: their lists together): MiniMax H3's generate runs Ref2VA with any reference, so `lora: turbo` then needs `turbo_ref` instead of `turbo`"
+          "description": "enum with `addons` only (API 1.41): `<name>` → {value → add-ons}, `<name>` an optional input of the same node or one of its rows params, and the values those of `addons`. While that input is wired, or that rows param holds a row, its list replaces the value's `addons` list (several such names: their lists together): MiniMax H3's generate runs Ref2VA with any reference, so `lora: turbo` then needs `turbo_ref` instead of `turbo`"
         },
         "max_total_s": {
           "type": "number",
@@ -343,7 +343,7 @@
         "min_s": {
           "type": "number",
           "exclusiveMinimum": 0,
-          "description": "media only (API 1.22): the shortest it reads, in seconds: a take shorter is refused (`take <id> lasts <d> s; this input takes at least <min_s> s`), and with trim so is a shorter part (`the part lasts <d> s; \u2026`)"
+          "description": "media only (API 1.22): the shortest it reads, in seconds: a take shorter is refused (`take <id> lasts <d> s; this input takes at least <min_s> s`), and with trim so is a shorter part (`the part lasts <d> s; …`)"
         },
         "script": {
           "type": "boolean",
@@ -1066,11 +1066,11 @@
         "min_s": {
           "type": "number",
           "exclusiveMinimum": 0,
-          "description": "media only (API 1.22): the shortest it reads, in seconds: a take shorter is refused (`take <id> lasts <d> s; this input takes at least <min_s> s`), and with trim so is a shorter part (`the part lasts <d> s; \u2026`)"
+          "description": "media only (API 1.22): the shortest it reads, in seconds: a take shorter is refused (`take <id> lasts <d> s; this input takes at least <min_s> s`), and with trim so is a shorter part (`the part lasts <d> s; …`)"
         },
         "optional": {
           "const": true,
-          "description": "media only (API 1.37): the field may be left empty (null or absent) in an item; its default is null. Absent = required in every item. A rows param's `max_total_s` and Use in\u2026 offers go by the item's one required media field (contracts/README.md, Media inputs: rows of media)"
+          "description": "media only (API 1.37): the field may be left empty (null or absent) in an item; its default is null. Absent = required in every item. A rows param's `max_total_s` and Use in… offers go by the item's one required media field (contracts/README.md, Media inputs: rows of media)"
         },
         "rules": {
           "type": "array",
@@ -1473,7 +1473,7 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 40,
-          "description": "from API 1.24: the model component the node loads, in words (model.yaml `stages.<name>.component`: transformer, text encoder, vae); the Graph inspector reads `<family> \u00b7 runs on <runtime> \u00b7 uses the <component>`. Absent = it loads none (core nodes, canvas, duration, the model and LoRA stack nodes)"
+          "description": "from API 1.24: the model component the node loads, in words (model.yaml `stages.<name>.component`: transformer, text encoder, vae); the Graph inspector reads `<family> · runs on <runtime> · uses the <component>`. Absent = it loads none (core nodes, canvas, duration, the model and LoRA stack nodes)"
         },
         "help": {
           "type": "string",
@@ -1608,7 +1608,7 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 40,
-          "description": "API 1.19: the take action's label when this workflow is offered for a take (\"Use in\u2026\", a Timeline clip's actions): Animate, Edit, Extend, Retake a section; absent = the title"
+          "description": "API 1.19: the take action's label when this workflow is offered for a take (\"Use in…\", a Timeline clip's actions): Animate, Edit, Extend, Retake a section; absent = the title"
         }
       }
     },
@@ -1771,7 +1771,7 @@
                                   "frames"
                                 ],
                                 "additionalProperties": false,
-                                "description": "from API 1.13: the largest sizes peak_gb was planned at, over its stages (the formulas' mp and frames). A run larger than either (any node's width \u00d7 height / 10^6, any numeric frames) has no plan: it is planned at the whole host budget. Absent: every run uses peak_gb",
+                                "description": "from API 1.13: the largest sizes peak_gb was planned at, over its stages (the formulas' mp and frames). A run larger than either (any node's width × height / 10^6, any numeric frames) has no plan: it is planned at the whole host budget. Absent: every run uses peak_gb",
                                 "properties": {
                                   "mp": {
                                     "type": "number",
@@ -2474,7 +2474,7 @@
             "runtime": {
               "type": "string",
               "maxLength": 80,
-              "description": "the compute stack (`torch 2.15.0 \u00b7 CUDA 13.2`, `torch 2.15.0 \u00b7 MPS`, `mlx 0.30.0`; native: the binary, `h3 4cafd17`)"
+              "description": "the compute stack (`torch 2.15.0 · CUDA 13.2`, `torch 2.15.0 · MPS`, `mlx 0.30.0`; native: the binary, `h3 4cafd17`)"
             }
           }
         },
@@ -2645,7 +2645,7 @@
             "ram_gb"
           ],
           "additionalProperties": false,
-          "description": "from API 1.16: what the runner runs on (the Hosts screen's `Apple Silicon \u00b7 Metal \u00b7 native`)",
+          "description": "from API 1.16: what the runner runs on (the Hosts screen's `Apple Silicon · Metal · native`)",
           "properties": {
             "os": {
               "enum": [
@@ -2744,6 +2744,10 @@
                 ]
               },
               "description": "the H.264 encoders it will use, preferred first (h264_videotoolbox, from API 1.18 h264_nvenc: hardware; libx264: software)"
+            },
+            "thumbs": {
+              "const": true,
+              "description": "from API 1.48: this env also runs thumbs jobs (contracts/README.md, Thumbnails); absent = an older runner: studio sends it none"
             }
           }
         }
@@ -3315,7 +3319,7 @@
         "type",
         "properties"
       ],
-      "description": "an object JSON schema whose top-level properties are the fields; a field a pipeline may bind is `{type: string}` (text) or `{type: array, items: {type: string, format: uuid}, maxItems \u2264 8}` (take ids); any other field takes only a fixed value",
+      "description": "an object JSON schema whose top-level properties are the fields; a field a pipeline may bind is `{type: string}` (text) or `{type: array, items: {type: string, format: uuid}, maxItems ≤ 8}` (take ids); any other field takes only a fixed value",
       "properties": {
         "type": {
           "const": "object"
@@ -3447,7 +3451,7 @@
           "type": "number",
           "minimum": 0,
           "maximum": 1024,
-          "description": "memory.budget_gb = machine.ram_gb \u2212 reserve_gb"
+          "description": "memory.budget_gb = machine.ram_gb − reserve_gb"
         },
         "pins": {
           "type": "array",

@@ -17,6 +17,17 @@ import (
 
 // Thumbnails (contracts/README.md "Thumbnails", API 1.48).
 
+// thumbsHost is mediaHost with a runner that runs thumbs jobs (API 1.48).
+func (e *env) thumbsHost() {
+	e.t.Helper()
+	value, _ := json.Marshal(map[string]any{"schema_version": 1, "host": "fake", "env": "fake", "state": "idle", "run_id": nil,
+		"updated_at": time.Now().UTC(), "published_by": "test",
+		"media": map[string]any{"ffmpeg": "7.1", "encoders": []string{"libx264"}, "thumbs": true}})
+	if err := e.registry.SetHost("fake.fake", value); err != nil {
+		e.t.Fatal(err)
+	}
+}
+
 // putObject stores body at key in the test store.
 func (e *env) putObject(key, body string) {
 	e.t.Helper()
@@ -108,6 +119,10 @@ func TestThumbsJob(t *testing.T) {
 	}
 	e.mediaHost(0)
 	a1, a2 := e.image(userA), e.image(userA)
+	if id, err := studio.QueueThumbs(ctx, e.pool, e.registry); err != nil || id != "" {
+		t.Fatal("an older runner (no media.thumbs) is sent none", id, err)
+	}
+	e.thumbsHost()
 	video := e.clipTake(userA, 2, true, nil) // poster u/A/runs/<id>/1/0.poster.png
 	posterless := e.image(userA, "video")
 	e.exec(`UPDATE takes SET video = NULL WHERE id = $1`, posterless)
@@ -213,6 +228,7 @@ func TestThumbsJob(t *testing.T) {
 	}
 
 	// a thumbs job never counts toward MaxOpenMediaJobs
+	e.thumbsHost()
 	e.exec(`UPDATE takes SET thumb_tries = 0 WHERE id = $1`, c)
 	if id, _ := studio.QueueThumbs(ctx, e.pool, e.registry); id == "" {
 		t.Fatal("queued")

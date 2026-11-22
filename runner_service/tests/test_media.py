@@ -443,6 +443,7 @@ def test_the_fake_reports_the_stream_facts_ffprobe_reads():
 def test_detect_names_the_hosts_key_media():
     value = media.detect()
     assert value["encoders"][-1] == "libx264" and value["ffmpeg"][0].isdigit()
+    assert value["thumbs"] is True  # API 1.48
 
 
 LOOP = {"mode": "conform", "frames": 86400, "samples": 172800000,

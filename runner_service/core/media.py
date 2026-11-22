@@ -31,8 +31,9 @@ def _out(*args: str) -> str:
 
 
 def detect() -> dict | None:
-    """{ffmpeg: version, encoders: [...]} when ffmpeg >= 6 has xfade, apad, amix, aac and an H.264 encoder, else
-    None (this env runs no media jobs). Encoders as `usable` finds them, preferred first."""
+    """{ffmpeg: version, encoders: [...], thumbs: true} when ffmpeg >= 6 has xfade, apad, amix, aac and an H.264
+    encoder, else None (this env runs no media jobs). Encoders as `usable` finds them, preferred first; `thumbs`
+    (API 1.48): this runner also runs thumbs jobs."""
     if not (FFMPEG and FFPROBE):
         return None
     m = re.search(r"version\s+n?(\d+(?:\.\d+)*)", _out(FFMPEG, "-hide_banner", "-version"))
@@ -46,7 +47,7 @@ def detect() -> dict | None:
     h264 = [e for e in H264 if e in encoders and usable(e)]
     if not h264 or "aac" not in encoders or not all(f in filters for f in NEEDS):
         return None
-    return {"ffmpeg": m.group(1)[:40], "encoders": h264}
+    return {"ffmpeg": m.group(1)[:40], "encoders": h264, "thumbs": True}
 
 
 def usable(encoder: str) -> bool:

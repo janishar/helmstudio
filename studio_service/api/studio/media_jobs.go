@@ -110,13 +110,17 @@ func (c mediaCommand) Subject() string { return "cmd.media." + c.host + "." + c.
 
 // mediaEnv is the env that would run a media job now: the named host's media envs, else every live one;
 // VideoToolbox first, then NVENC (API 1.18), then host, env by name; never a server env.
-func (s *Service) mediaEnv(host *string) (registry.Host, bool) { return mediaEnvOf(s.registry, host) }
+func (s *Service) mediaEnv(host *string) (registry.Host, bool) {
+	return mediaEnvOf(s.registry, host, false)
+}
 
-func mediaEnvOf(reg *registry.Registry, host *string) (registry.Host, bool) {
+// mediaEnvOf is mediaEnv over reg; thumbs: only an env whose runner runs thumbs jobs (API 1.48).
+func mediaEnvOf(reg *registry.Registry, host *string, thumbs bool) (registry.Host, bool) {
 	now := time.Now()
 	var envs []registry.Host
 	for _, h := range reg.Hosts() {
-		if h.Media != nil && len(h.Media.Encoders) > 0 && h.Live(now) && h.Env != "server" && (host == nil || h.Host == *host) {
+		if h.Media != nil && len(h.Media.Encoders) > 0 && h.Live(now) && h.Env != "server" && (host == nil || h.Host == *host) &&
+			(!thumbs || h.Media.Thumbs) {
 			envs = append(envs, h)
 		}
 	}
