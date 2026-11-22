@@ -167,7 +167,8 @@ import {
   isVoice,
   queueInputs,
   rawsFrom,
-  replaceUnmet,
+  presetHelp,
+  ruleErrors,
   toRaw,
   visible,
   type Field,
@@ -272,7 +273,7 @@ export function Create({
   useEffect(() => {
     ok(api.GET("/v1/studio/models")).then(setModelList, () => undefined);
   }, []);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [sentErrors, setErrors] = useState<Record<string, string>>({});
   const [runs, setRuns] = useState<Run[] | null>(initial?.runs ?? null);
   const [takes, setTakes] = useState<Take[]>(initial?.takes ?? []);
   const [tracks, setTracks] = useState<Record<string, RunTrack>>({});
@@ -580,6 +581,11 @@ export function Create({
   const layout = useMemo(() => (workflow ? studioView(workflow, all) : null), [workflow, all]);
   // the params whose `when` holds now: the others are neither shown nor sent
   const fields = visible(layout ? layout.shown : all, raws, all);
+  // API 1.47 (contracts/README.md, Param rules): what studio would refuse, in red under its param before Generate,
+  // which they block ("fix 2 problems"); an item field's line is its row's (MediaRows), studio's 422s after a send
+  const rules = ruleErrors(workflow, all, raws);
+  const errors: Record<string, string> = { ...sentErrors };
+  for (const r of rules) if (!r.text.startsWith(`${r.key}[`)) errors[r.key] ??= r.text;
   // a dialogue's script (API 1.32) and the rows it writes, which no editor of their own shows
   const scriptField = scriptFieldOf(fields);
   const linesKey = linesKeyOf(fields);
@@ -1367,8 +1373,8 @@ export function Create({
         ? "Generate is already sending"
         : blocked
           ? `${blocked} problem${blocked === 1 ? "" : "s"} in the graph`
-          : fields.some((f) => replaceUnmet(f.param, raws[f.key] ?? f.initial))
-            ? "a Replace sound needs its soundtrack"
+          : rules.length
+            ? `fix ${rules.length} problem${rules.length === 1 ? "" : "s"}`
             : noVoice
               ? "pick a voice first"
               : badLine
@@ -2024,8 +2030,8 @@ export function Create({
                   !workflow ||
                   busy ||
                   blocked > 0 ||
-                  // a Replace sound without its soundtrack (the row says why; docs/mock/H3Options.dc.html frame 6)
-                  fields.some((f) => replaceUnmet(f.param, raws[f.key] ?? f.initial)) ||
+                  // a broken rule: its line says why (docs/mock/H3Options.dc.html frames 4 and 6)
+                  rules.length > 0 ||
                   noVoice ||
                   badLine > 0 ||
                   notDownloaded ||
@@ -2050,6 +2056,10 @@ export function Create({
                 </span>
                 {badLine > 0 && !busy ? (
                   <span className="mono text-[11px] font-medium">Fix line {badLine} first</span>
+                ) : rules.length > 0 && !busy ? (
+                  <span className="mono text-[11px] font-medium">
+                    fix {rules.length} problem{rules.length === 1 ? "" : "s"}
+                  </span>
                 ) : heldBlock && !busy && !runOnOffline ? (
                   <span className="mono text-[11px] font-medium">{heldBlock}</span>
                 ) : runOnOffline && !busy ? (
@@ -2129,6 +2139,7 @@ export function Create({
             resolved={shown?.workflow_id === workflow?.id ? shown?.resolved?.params : undefined}
             presets={workflow?.studio?.presets}
             presetOrder={presetNames(workflow?.studio)}
+            presetHelp={presetHelp(workflow?.studio, all, raws)}
             presetScope={all}
             fields={fields}
             raws={raws}

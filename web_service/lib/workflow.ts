@@ -2,7 +2,6 @@
 import type { S } from "@/lib/api";
 import { frameError } from "@/lib/media";
 import { languageName, narrowed, voiceField } from "@/lib/voices";
-import { optionalMedia } from "@/lib/source";
 import { allowedInts, clipOf, positionErrors, positionOf } from "@/lib/video";
 
 type Param = S<"ParamSchema">;
@@ -29,6 +28,8 @@ export type Field = {
   siblings?: Record<string, Value>;
   /** an `optional` image node's param (API 1.22): may stay empty (null), studio then drops the node */
   optional?: boolean;
+  /** API 1.47: the node's limits on its references' sound together (MiniMax H3: 15 s, 3 inputs) */
+  sounds?: NonNullable<S<"NodeSchema">["sounds"]>;
 };
 
 /** What a form control holds: a switch's boolean, the text typed ("" in a seed field is random), an image param's
@@ -80,6 +81,7 @@ export function fields(w: Pick<S<"Workflow">, "nodes" | "node_schemas">): Field[
           family: schema.family,
           siblings,
           ...(n.optional && { optional: true }),
+          ...(schema.sounds && { sounds: schema.sounds }),
         }))
     );
   });
@@ -177,15 +179,16 @@ export function blockNotes(f: Field, fields: Field[], raws: Record<string, Raw>)
   return [...out];
 }
 
-type ExprValue = string | number | boolean | null | undefined;
+type ExprValue = unknown;
 
-/** Evaluates a `when` / `requires` expression (contracts/README.md): `node.param` references, 'string' / "string",
- * number, true / false / null literals, ==, !=, &&, ||, ! and parentheses. `get` reads a reference. Throws on a
- * syntax error. */
+/** Evaluates an expression (API 1.47, contracts/README.md "Param rules": one language for `when`, rules, preset help
+ * and peak_gb; check.py expr_eval): numbers, 'strings' / "strings", true / false / null, names (`get` reads one:
+ * `a` or `a.b`), ! and unary -, * / **, + -, == != < <= > >=, && (and), || (or), `a if c else b`, len, min, max,
+ * gcd and parentheses. Throws on a syntax or type error. */
 export function evaluate(expr: string, get: (ref: string) => ExprValue): ExprValue {
   const tokens: string[] = [];
   const re =
-    /\s*(?:(-?\d+(?:\.\d+)?|'[^']*'|"[^"]*"|==|!=|&&|\|\||[!()]|[A-Za-z_][\w-]*(?:\.[A-Za-z_][\w-]*)?))/y;
+    /\s*(\d+(?:\.\d+)?|'[^']*'|"[^"]*"|==|!=|<=|>=|&&|\|\||\*\*|[-+*/<>!(),]|[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)/y;
   while (re.lastIndex < expr.length) {
     const at = re.lastIndex;
     const m = re.exec(expr);
@@ -196,49 +199,255 @@ export function evaluate(expr: string, get: (ref: string) => ExprValue): ExprVal
     tokens.push(m[1]);
   }
   let i = 0;
-  const peek = () => tokens[i];
-  const take = (t: string) => (tokens[i] === t ? (i++, true) : false);
+  const take = (...ts: string[]) => (ts.includes(tokens[i]) ? tokens[i++] : undefined);
+  const num = (v: ExprValue): number => {
+    if (typeof v !== "number") throw new Error(`${String(v)} is not a number`);
+    return v;
+  };
+  const words: Record<string, ExprValue> = {
+    true: true,
+    false: false,
+    null: null,
+    True: true,
+    False: false,
+    None: null,
+  };
+  const call = (name: string, args: ExprValue[]): ExprValue => {
+    if (name === "len") return args[0] == null ? 0 : (args[0] as unknown[]).length;
+    if (name === "min") return Math.min(...args.map(num));
+    if (name === "max") return Math.max(...args.map(num));
+    if (name === "gcd") {
+      let [a, b] = args.map(num).map(Math.abs);
+      if (!Number.isInteger(a) || !Number.isInteger(b)) throw new Error("gcd takes whole numbers");
+      while (b) [a, b] = [b, a % b];
+      return a;
+    }
+    throw new Error(`unknown function ${name}`);
+  };
   const atom = (): ExprValue => {
     const t = tokens[i++];
     if (t === undefined) throw new Error("unexpected end");
     if (t === "(") {
-      const v = or();
+      const v = ternary();
       if (!take(")")) throw new Error('missing ")"');
       return v;
     }
     if (/^['"]/.test(t)) return t.slice(1, -1);
-    if (/^-?\d/.test(t)) return Number(t);
-    if (t === "true" || t === "false") return t === "true";
-    if (t === "null") return null;
-    if (/^[A-Za-z_][\w-]*\.[A-Za-z_][\w-]*$/.test(t)) return get(t);
-    throw new Error(`unexpected "${t}"`);
+    if (/^\d/.test(t)) return Number(t);
+    if (t in words) return words[t];
+    if (!/^[A-Za-z_]\w*(\.[A-Za-z_]\w*)?$/.test(t)) throw new Error(`unexpected "${t}"`);
+    if (take("(")) {
+      const args: ExprValue[] = [];
+      while (!take(")")) {
+        if (tokens[i] === undefined) throw new Error('missing ")"');
+        args.push(ternary());
+        take(",");
+      }
+      return call(t, args);
+    }
+    return get(t);
   };
-  const not = (): ExprValue => (take("!") ? !not() : atom());
+  const unary = (): ExprValue => {
+    if (take("!", "not")) return !unary();
+    if (take("-")) return -num(unary());
+    const v = atom();
+    return take("**") ? num(v) ** num(unary()) : v;
+  };
+  const term = (): ExprValue => {
+    let v = unary();
+    for (let op = take("*", "/"); op; op = take("*", "/")) {
+      const r = num(unary());
+      if (op === "/" && r === 0) throw new Error("division by zero");
+      v = op === "*" ? num(v) * r : num(v) / r;
+    }
+    return v;
+  };
+  const sum = (): ExprValue => {
+    let v = term();
+    for (let op = take("+", "-"); op; op = take("+", "-")) {
+      const r = num(term());
+      v = op === "+" ? num(v) + r : num(v) - r;
+    }
+    return v;
+  };
+  const same = (a: ExprValue, b: ExprValue) =>
+    a === b || (typeof a === "object" && JSON.stringify(a) === JSON.stringify(b));
   const cmp = (): ExprValue => {
-    const a = not();
-    if (take("==")) return a === not();
-    if (take("!=")) return a !== not();
-    return a;
+    let v = sum();
+    for (
+      let op = take("==", "!=", "<", "<=", ">", ">=");
+      op;
+      op = take("==", "!=", "<", "<=", ">", ">=")
+    ) {
+      const r = sum();
+      if (op === "==" || op === "!=") v = same(v, r) === (op === "==");
+      else {
+        const [a, b] = [num(v), num(r)];
+        v = op === "<" ? a < b : op === "<=" ? a <= b : op === ">" ? a > b : a >= b;
+      }
+    }
+    return v;
   };
+  const truthy = (v: ExprValue) => (Array.isArray(v) ? v.length > 0 : !!v);
   const and = (): ExprValue => {
     let v = cmp();
-    while (take("&&")) {
+    while (take("&&", "and")) {
       const r = cmp();
-      v = v && r;
+      v = truthy(v) ? r : v;
     }
     return v;
   };
   const or = (): ExprValue => {
     let v = and();
-    while (take("||")) {
+    while (take("||", "or")) {
       const r = and();
-      v = v || r;
+      v = truthy(v) ? v : r;
     }
     return v;
   };
-  const v = or();
-  if (peek() !== undefined) throw new Error(`unexpected "${peek()}"`);
+  const ternary = (): ExprValue => {
+    const v = or();
+    if (!take("if")) return v;
+    const c = or();
+    if (!take("else")) throw new Error("missing else");
+    const other = ternary();
+    return truthy(c) ? v : other;
+  };
+  const v = ternary();
+  if (tokens[i] !== undefined) throw new Error(`unexpected "${tokens[i]}"`);
   return v;
+}
+
+/** A value in a rule's text: a whole number without its point. */
+const exprText = (v: ExprValue) => (v == null ? "null" : String(v));
+
+/** What a field sends: its control's value, the initial one when its control holds none; throws when it does not read. */
+function sentValue(f: Field, raws: Record<string, Raw>): ExprValue {
+  const r = readValue(f.param, raws[f.key] ?? toRaw(f.initial, f.param));
+  if (!("value" in r)) throw new Error(r.error);
+  return r.value === "" && f.param.type === "image" ? null : (r.value as ExprValue);
+}
+
+/** API 1.47 (contracts/README.md, Param rules; check.py rule_errors): every rule the form's values break, each with
+ * the field it shows under (an item field's: its rows field) and studio's 422 text; node id order, param order, then
+ * items. `all` is every field of `w` (an expression may read an unplaced one). */
+export function ruleErrors(
+  w: S<"Workflow"> | undefined,
+  all: Field[],
+  raws: Record<string, Raw>,
+): { key: string; text: string }[] {
+  if (!w) return [];
+  const out: { key: string; text: string }[] = [];
+  const byKey = new Map(all.map((f) => [f.key, f]));
+  const read = (key: string) => {
+    const f = byKey.get(key);
+    if (f) return sentValue(f, raws);
+    const [node, name] = key.split(".");
+    const v = (w.nodes[node]?.params as Record<string, unknown> | undefined)?.[name];
+    if (v !== undefined) return v;
+    const kind = w.nodes[node]?.kind;
+    const p = kind ? w.node_schemas[kind]?.params.find((x) => x.name === name) : undefined;
+    if (!p) throw new Error(`no ${key}`);
+    return p.default;
+  };
+  const getter =
+    (node: string) =>
+    (ref: string): ExprValue => {
+      const [a, b] = ref.split(".");
+      if (b === undefined) return read(`${node}.${a}`);
+      const src = w.nodes[node]?.in?.[a]?.split(".")[0] ?? a;
+      return read(`${src}.${b}`);
+    };
+  for (const node of Object.keys(w.nodes).sort()) {
+    const n = w.nodes[node];
+    if ((raws[`${node}.bypass`] ?? n.bypass) === true) continue;
+    for (const p of w.node_schemas[n.kind]?.params ?? []) {
+      const key = `${node}.${p.name}`;
+      for (const r of p.rules ?? []) {
+        const t = ruleText(r, getter(node));
+        if (t !== null) out.push({ key, text: `${node}: ${t}` });
+      }
+      if (p.type !== "rows" || !itemFields(p).some(([, f]) => f.rules?.length)) continue;
+      let items: unknown;
+      try {
+        items = read(key);
+      } catch {
+        continue;
+      }
+      for (const text of itemRuleErrors(node, p, items, getter(node))) out.push({ key, text });
+    }
+  }
+  return out;
+}
+
+/** A rule's text when its expression holds (its `{…}` filled in), else null (also when it fails). */
+function ruleText(rule: { when: string; error: string }, get: (ref: string) => ExprValue) {
+  try {
+    const v = evaluate(rule.when, get);
+    if (!(Array.isArray(v) ? v.length : v)) return null;
+    return rule.error.replace(/\{([^{}]+)\}/g, (_, e: string) => exprText(evaluate(e, get)));
+  } catch {
+    return null;
+  }
+}
+
+/** A rows param's item params, by field. */
+const itemFields = (p: Param) =>
+  Object.entries(p.item ?? {}).flatMap(([k, f]) =>
+    typeof f === "object" ? [[k, f as unknown as Param] as const] : [],
+  );
+
+/** The rules of a rows param's item fields that its items break, studio's texts (`generate.videos[1].soundtrack:
+ * Replace needs a soundtrack`); a bare name is a field of the item (its default when left out), another name goes
+ * to `graph` (none: the rule does not hold). */
+export function itemRuleErrors(
+  node: string,
+  p: Param,
+  items: unknown,
+  graph: (ref: string) => ExprValue = (ref) => {
+    throw new Error(`no ${ref}`);
+  },
+): string[] {
+  const fields = itemFields(p);
+  const out: string[] = [];
+  for (const [i, it] of ((items as Record<string, unknown>[] | null) ?? []).entries()) {
+    const item: Record<string, unknown> = {
+      ...Object.fromEntries(fields.map(([k, f]) => [k, f.default ?? null])),
+      ...Object.fromEntries(
+        Object.entries(it).map(([k, v]) => [k, v === "" || v === undefined ? null : v]),
+      ),
+    };
+    const get = (ref: string) => {
+      if (ref.includes(".")) return graph(ref);
+      if (!(ref in item)) throw new Error(`no ${ref}`);
+      return item[ref];
+    };
+    for (const [k, f] of fields)
+      for (const r of f.rules ?? []) {
+        const t = ruleText(r, get);
+        if (t !== null) out.push(`${node}.${p.name}[${i + 1}].${k}: ${t}`);
+      }
+  }
+  return out;
+}
+
+/** API 1.47: the Preset heading's (i), the first `studio.preset_help` item whose `when` holds (or has none). */
+export function presetHelp(
+  studio: S<"StudioLayout"> | undefined,
+  all: Field[],
+  raws: Record<string, Raw>,
+): string | undefined {
+  const get = (ref: string) => {
+    const f = all.find((x) => x.key === ref);
+    return f ? (raws[f.key] ?? toRaw(f.initial, f.param)) : undefined;
+  };
+  return studio?.preset_help?.find((h) => {
+    try {
+      return !h.when || !!evaluate(h.when, get);
+    } catch {
+      return false;
+    }
+  })?.text;
 }
 
 /** The fields whose `when` holds for the values in the controls now (an expression that does not parse shows its
@@ -395,25 +604,12 @@ export function buildInputs(fs: Field[], raws: Record<string, Raw>) {
         ? positionErrors(f.param, r.value as S<"RowItem">[], clipOf(fs, raws))
         : [];
       const i = all.findIndex(Boolean);
-      const unmet = replaceUnmet(f.param, r.value);
       if (i >= 0) errors[f.key] = `row ${i + 1}: ${all[i]}`;
-      else if (unmet) errors[f.key] = unmet;
       else if (!same(r.value, f.initial) && !(r.value === -1 && f.initial === null))
         inputs[f.key] = r.value;
     }
   }
   return { inputs, errors };
-}
-
-/** API 1.37 (MiniMax H3, docs/mock/H3Options.dc.html frame 6): a row whose Sound is Replace needs its optional media
- * item (the soundtrack) before Generate; the runner's text for the first such row, else null. */
-export function replaceUnmet(p: Param, v: unknown): string | null {
-  if (p.type !== "rows" || !Array.isArray(v)) return null;
-  for (const [i, r] of (v as S<"RowItem">[]).entries())
-    for (const [k, s] of optionalMedia(p))
-      if (Object.values(r).includes("replace") && !isRef(r[k]))
-        return `row ${i + 1}: Replace needs a ${(s.label ?? k).toLowerCase()}`;
-  return null;
 }
 
 /** Equal values; a list or an image compares by content. */

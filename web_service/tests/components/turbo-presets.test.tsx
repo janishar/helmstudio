@@ -136,3 +136,71 @@ describe("Create: Turbo without its add-on", () => {
     ).toBeNull();
   });
 });
+
+// API 1.47 (docs/mock/H3Options.dc.html frames 1, 3 and 4): the rules in red under their inputs before Generate,
+// Generate blocked, the Preset heading's (i) and the menus' lines from the schema
+describe("Create: MiniMax H3's rules and help", () => {
+  it("shows the two refusals under Render and Token reduction and blocks Generate", async () => {
+    const odd = structuredClone(workflow) as unknown as {
+      nodes: Record<string, { params?: Record<string, unknown> }>;
+    };
+    odd.nodes.canvas.params = { width: 832, height: 480 };
+    odd.nodes.generate.params = {
+      ...odd.nodes.generate.params,
+      render: "62.5%",
+      layers: 40,
+      reuse: 3,
+      token_reduction: true,
+    };
+    answer("GET", {
+      "/v1/studio/sessions/{session_id}/runs": () => ({ data: { runs: [done] } }),
+      "/v1/studio/sessions/{session_id}/takes": () => ({ data: { takes: [] } }),
+      "/v1/studio/library": () => ({ data: { items: [] } }),
+      "/v1/studio/loras": () => ({ data: { loras: [] } }),
+      "/v1/studio/models": () => ({ data: models }),
+      "/v1/studio/hosts": () => ({ data: { hosts: [] } }),
+    });
+    answer("POST", {
+      "/v1/studio/runs/plan": () => ({ data: { host: "mac", peak_gb: 26, reason: null } }),
+    });
+    render(
+      <Create
+        initial={{
+          sessions: [],
+          workflows: [odd as unknown as S<"Workflow">],
+          sessionId: "s1",
+          runs: [done],
+          takes: [],
+        }}
+      />,
+    );
+    const inspector = () => screen.getByRole("complementary", { name: "Inspector" });
+    await waitFor(() =>
+      expect(
+        within(inspector()).getByText(
+          "generate: the canvas 832 × 480 has no smaller size of the same shape; use Full",
+        ),
+      ).toBeTruthy(),
+    );
+    expect(
+      within(inspector()).getByText(
+        "generate: token reduction with 40 layers or fewer and reuse 3 gives colour ringing; use reuse 2 or more layers",
+      ),
+    ).toBeTruthy();
+    const generate = screen.getByRole("button", { name: /Generate/ }) as HTMLButtonElement;
+    expect(generate.disabled).toBe(true);
+    expect(generate.textContent).toContain("fix 2 problems");
+    // the Preset heading's (i): the Mac's text on Base
+    const preset = within(inspector()).getByRole("heading", { name: /Preset/ });
+    expect(preset.textContent).toContain("Preset");
+    expect(within(preset).getByRole("button").getAttribute("aria-label") ?? "").toBeTruthy();
+    // the Render menu: each value with its line
+    within(inspector())
+      .getByRole("button", { name: /Render/ })
+      .click();
+    await waitFor(() =>
+      expect(within(inspector()).getByText("a quick look; loses fine detail")).toBeTruthy(),
+    );
+    expect(within(inspector()).getByText("the canvas size")).toBeTruthy();
+  });
+});

@@ -37,6 +37,7 @@ export function GalleryPicker({
   sub,
   audioUpload,
   help,
+  frames,
 }: {
   open: boolean;
   onClose: () => void;
@@ -53,6 +54,9 @@ export function GalleryPicker({
   audioUpload?: boolean;
   /** a line under the footer (docs/mock/GalleryPicker: what the picks join, the limit) */
   help?: string;
+  /** API 1.37 (docs/mock/H3Options.dc.html frame 8): tabs Images | Video; a video picked offers Use first frame and
+   * Use last frame, which make the frame (an image take) */
+  frames?: (t: Take, at: "first" | "last") => Promise<void>;
 }) {
   return (
     <Modal open={open} onClose={onClose} title={title} width="w-[min(94vw,880px)]">
@@ -65,6 +69,7 @@ export function GalleryPicker({
         sub={sub}
         audioUpload={audioUpload}
         help={help}
+        frames={frames}
       />
     </Modal>
   );
@@ -152,6 +157,7 @@ function Picker({
   sub,
   audioUpload,
   help,
+  frames,
 }: {
   max: number;
   onClose: () => void;
@@ -161,8 +167,12 @@ function Picker({
   sub?: (t: Take) => string;
   audioUpload?: boolean;
   help?: string;
+  frames?: (t: Take, at: "first" | "last") => Promise<void>;
 }) {
   const [filter, setFilter] = useState<Filter>({ kind });
+  const [frameError, setFrameError] = useState<string | null>(null);
+  const [making, setMaking] = useState(false);
+  const video = !!frames && filter.kind === "video";
   const [q, setQ] = useState("");
   const pages = useTakePages(filter, q, undefined, 40);
   const { next, loading, error, fetchPage, sentinel } = pages;
@@ -175,6 +185,24 @@ function Picker({
     );
   return (
     <div className="flex max-h-[76dvh] flex-col gap-3">
+      {frames && (
+        <div role="group" aria-label="Kind" className="seg self-start">
+          {(["image", "video"] as const).map((k) => (
+            <button
+              key={k}
+              type="button"
+              aria-pressed={filter.kind === k}
+              onClick={() => {
+                setPicked([]);
+                setFrameError(null);
+                setFilter((f) => ({ ...f, kind: k }));
+              }}
+            >
+              {k === "image" ? "Images" : "Video"}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <label htmlFor="pick-q" className="sr-only">
           Search prompts
@@ -264,18 +292,44 @@ function Picker({
         <button type="button" className="chip bevel" onClick={onClose}>
           Cancel
         </button>
-        <button
-          type="button"
-          className="chip bevel bg-a1 font-semibold text-on1"
-          disabled={!picked.length}
-          onClick={() => {
-            onPick(picked);
-            onClose();
-          }}
-        >
-          Add {picked.length || ""}
-        </button>
+        {video ? (
+          (["first", "last"] as const).map((at) => (
+            <button
+              key={at}
+              type="button"
+              className={`chip bevel ${at === "last" ? "bg-a1 font-semibold text-on1" : ""}`}
+              disabled={!picked.length || making}
+              onClick={() => {
+                setMaking(true);
+                setFrameError(null);
+                frames(picked[0], at)
+                  .then(onClose)
+                  .catch((e) => setFrameError(message(e)))
+                  .finally(() => setMaking(false));
+              }}
+            >
+              Use {at} frame
+            </button>
+          ))
+        ) : (
+          <button
+            type="button"
+            className="chip bevel bg-a1 font-semibold text-on1"
+            disabled={!picked.length}
+            onClick={() => {
+              onPick(picked);
+              onClose();
+            }}
+          >
+            Add {picked.length || ""}
+          </button>
+        )}
       </div>
+      {frameError && (
+        <p role="alert" className="mono m-0 text-[12px] text-bad">
+          {frameError}
+        </p>
+      )}
       {help && <p className="m-0 text-[12px] text-t2">{help}</p>}
     </div>
   );

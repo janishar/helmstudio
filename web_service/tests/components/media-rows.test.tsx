@@ -244,11 +244,19 @@ const replaceable = field("generate", {
       trim: true,
       min_s: 2.34,
       max_s: 15,
+      // API 1.47: the soundtrack's rules, as model.yaml has them
+      rules: [
+        { when: "sound == 'replace' && soundtrack == null", error: "Replace needs a soundtrack" },
+        {
+          when: "sound != 'replace' && soundtrack != null",
+          error: "a soundtrack is read only with Sound: Replace",
+        },
+      ],
     },
   } as unknown as S<"ParamSchema">["item"],
 });
 
-describe("MediaRows: a replaced sound (API 1.37)", () => {
+describe("MediaRows: a replaced sound (API 1.37; its texts the 1.47 rules)", () => {
   it("asks for a soundtrack only with Replace, and shows a picked one with its part", () => {
     const a = video(3);
     const s = audio(12);
@@ -293,5 +301,41 @@ describe("MediaRows: a replaced sound (API 1.37)", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Clear soundtrack" }));
     expect((seen.at(-1) as S<"RowItem">[])[0].soundtrack).toBeNull();
+  });
+});
+
+// API 1.47 (docs/mock/H3Options.dc.html frame 5): with the node's sound limits the card counts the sound across rows
+describe("MediaRows: the sound count", () => {
+  it("counts a replaced video's soundtrack and the audio rows: 3.0 + 2.5 s, 2 of 3 inputs", () => {
+    const a = video(3);
+    const s = audio(12);
+    remember([a, s]);
+    const f = { ...replaceable, sounds: { max_s: 15, max_inputs: 3 } };
+    const rows = [
+      {
+        video: { take_id: a.id, in: 0, out: 3 },
+        sound: "replace",
+        soundtrack: { take_id: s.id, in: 4, out: 7 },
+      },
+    ] as S<"RowItem">[];
+    render(
+      <MediaRows
+        f={f}
+        raw={rows}
+        onChange={() => undefined}
+        sound={{
+          limits: f.sounds,
+          clipS: 124 / 24,
+          rows: [
+            { p: f.param, items: rows },
+            { p: audios.param, items: [{ audio: { take_id: s.id, in: 0, out: 2.5 } }] },
+          ],
+        }}
+      />,
+    );
+    expect(screen.getByText("5.5 s of 15.0 s sound · 2 of 3 sound inputs").className).toContain(
+      "text-t2",
+    );
+    expect(screen.queryByText(/in all$/)).toBeNull();
   });
 });

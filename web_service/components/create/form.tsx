@@ -23,6 +23,7 @@ import {
   clipOf,
   firstFrameRow,
   fpsOf,
+  soundRowsOf,
   positionOf,
   setFirstFrame,
 } from "@/lib/video";
@@ -236,6 +237,7 @@ export function Inspector({
   resolved,
   presets,
   presetOrder,
+  presetHelp,
   presetScope,
   grid = null,
   stage1,
@@ -274,6 +276,8 @@ export function Inspector({
     presets?: Record<string, Record<string, S<"ParamValue">>>;
     /** the presets' names in the pack's order (`presetNames`); absent = as the object lists them */
     presetOrder?: string[];
+    /** API 1.47: the Preset heading's (i) */
+    presetHelp?: string;
     /** every field of the workflow, hidden ones too: a preset sets and reads a field its `when` hides (MiniMax H3's
      * Layers on Base fp8), so it reads picked on every variant; absent = `fields` */
     presetScope?: Field[];
@@ -379,7 +383,8 @@ export function Inspector({
           />
         )
       );
-    if (f.param.type === "bool") return <Switch key={f.key} f={f} raw={raw} onChange={onChange} />;
+    if (f.param.type === "bool")
+      return <Switch key={f.key} f={f} raw={raw} onChange={onChange} error={errors[f.key]} />;
     if (
       voice &&
       (f.param.type === "float" || f.param.type === "int") &&
@@ -430,7 +435,14 @@ export function Inspector({
   };
   const rowsEditor = (f: Field) =>
     mediaItem(f.param) ? (
-      <MediaRows key={f.key} f={f} raw={raws[f.key]} error={errors[f.key]} onChange={onChange} />
+      <MediaRows
+        key={f.key}
+        f={f}
+        raw={raws[f.key]}
+        error={errors[f.key]}
+        onChange={onChange}
+        sound={soundRowsOf(f, presetScope ?? fields, raws)}
+      />
     ) : s.rows.includes(f) ? (
       <PlainRows
         key={f.key}
@@ -456,6 +468,7 @@ export function Inspector({
       key="presets"
       presets={presets}
       order={presetOrder ?? Object.keys(presets)}
+      help={presetHelp}
       fields={presetScope ?? fields}
       raws={raws}
       onChange={onChange}
@@ -860,9 +873,11 @@ function Presets({
   blocks = {},
   valueBlocks = {},
   owner,
+  help,
 }: Omit<FormProps, "errors"> & {
   presets: Record<string, Record<string, S<"ParamValue">>>;
   order: string[];
+  help?: string;
   blocks?: Record<string, string>;
   valueBlocks?: Record<string, Record<string, string>>;
   /** the model's name in a value block's tooltip */
@@ -887,8 +902,9 @@ function Presets({
   const reason = order.map((n) => presets[n] && byValue(presets[n])).find(Boolean);
   return (
     <section aria-labelledby="sec-preset" className="flex flex-col gap-2">
-      <h2 id="sec-preset" className="heading">
+      <h2 id="sec-preset" className="heading flex items-center">
         Preset
+        {help && <Info>{help}</Info>}
       </h2>
       <div className="flex flex-wrap gap-2">
         {order
@@ -1124,9 +1140,19 @@ function Editor({
         {p.help && <Info>{p.help}</Info>}
       </span>
       {p.type === "enum" || choices ? (
-        <div className="flex flex-wrap gap-1.5">
+        // API 1.47: a short menu whose values have lines is a list (docs/mock/H3Options.dc.html: Render, Reuse, LoRA)
+        <div
+          className={
+            (choices ?? p.enum ?? []).length <= 6 &&
+            (choices ?? p.enum)?.some((o) => facts?.(o)?.sub ?? p.option_help?.[o])
+              ? "flex flex-col gap-1.5 [&>button]:w-full"
+              : "flex flex-wrap gap-1.5"
+          }
+        >
           {(choices ?? p.enum)?.map((o) => {
-            const { sub, why, owner } = facts?.(o) ?? {};
+            const { why, owner, sub: own } = facts?.(o) ?? {};
+            // API 1.47: the value's line from the schema (option_help) unless the choice gives its own
+            const sub = own ?? p.option_help?.[o];
             return (
               <button
                 key={o}
@@ -1191,10 +1217,13 @@ export function Switch({
   note,
   dim,
   why,
+  error,
 }: {
   f: Field;
   raw: Raw;
   onChange: (key: string, raw: Raw) => void;
+  /** API 1.47: a broken rule's text, in red under the switch (docs/mock/H3Options.dc.html frame 4) */
+  error?: string;
   /** the help as a line under the label, not an (i) (a span's switch, docs/mock/VideoSource.dc.html) */
   note?: boolean;
   /** its node is bypassed: shown dimmed, still usable (docs/mock/CreateEnhance.dc.html, "Enhance is off") */
@@ -1204,7 +1233,7 @@ export function Switch({
 }) {
   const id = idOf(f.key);
   const on = raw === true;
-  return (
+  const row = (
     <div className={`col-span-2 flex items-center justify-between gap-3 ${why ? "text-t2" : ""}`}>
       {why ? (
         <span className="flex flex-col gap-0.5">
@@ -1244,6 +1273,16 @@ export function Switch({
         />
       </button>
     </div>
+  );
+  return error ? (
+    <div className="col-span-2 flex flex-col gap-1">
+      {row}
+      <span id={id + "-err"} className="mono text-[12px] text-bad">
+        {error}
+      </span>
+    </div>
+  ) : (
+    row
   );
 }
 

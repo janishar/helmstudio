@@ -15,8 +15,8 @@ import {
   fields,
   optionBlocked,
   rawsFrom,
+  itemRuleErrors,
   readValue,
-  replaceUnmet,
   visible,
 } from "@/lib/workflow";
 import {
@@ -28,6 +28,7 @@ import {
   floorGrid,
   markRange,
   mediaFit,
+  soundCount,
   mediaItem,
   mediaRowsError,
   progressive,
@@ -77,18 +78,46 @@ describe("media-rows.json (API 1.22: rows of media, per item then in all)", () =
       ["videos", "video"],
       ["audios", "audio"],
     ]));
-  it("Replace without a soundtrack blocks Generate (frame 6), with one it does not", () => {
+  it("Replace without a soundtrack is the soundtrack's rule (frame 6, API 1.47), with one it holds no more", () => {
     const videos = rowsParams.find((p) => p.name === "videos")!;
     const v = { take_id: "v1" };
     expect(
-      replaceUnmet(videos, [
+      itemRuleErrors("generate", videos, [
         { video: v, sound: "keep" },
         { video: v, sound: "replace" },
       ]),
-    ).toBe("row 2: Replace needs a soundtrack");
+    ).toEqual(["generate.videos[2].soundtrack: Replace needs a soundtrack"]);
     expect(
-      replaceUnmet(videos, [{ video: v, sound: "replace", soundtrack: { take_id: "a1" } }]),
-    ).toBe(null);
+      itemRuleErrors("generate", videos, [
+        { video: v, sound: "replace", soundtrack: { take_id: "a1" } },
+      ]),
+    ).toEqual([]);
+  });
+  it("counts the sound across rows: audio parts, kept sound, a replaced one (frame 5)", () => {
+    const [videos, audios] = rowsParams;
+    const own: Record<string, Facts> = {
+      v: { id: "v", kind: "video", duration_s: 6, has_audio: true },
+      q: { id: "q", kind: "video", duration_s: 6, has_audio: false },
+      a: { id: "a", kind: "audio", duration_s: 12, has_audio: true },
+    };
+    const rows = [
+      {
+        p: videos,
+        items: [
+          { video: { take_id: "v", in: 0, out: 4 }, sound: "keep" },
+          { video: { take_id: "q", in: 0, out: 3 }, sound: "keep" },
+          {
+            video: { take_id: "q", in: 0, out: 3 },
+            sound: "replace",
+            soundtrack: { take_id: "a", in: 4, out: 7 },
+          },
+        ],
+      },
+      { p: audios, items: [{ audio: { take_id: "a", in: 0, out: 2.5 } }] },
+    ] as { p: S<"ParamSchema">; items: S<"RowItem">[] }[];
+    // 4 (kept, cut to the 5.2 s clip: 4) + 3 (replaced: min(3, 3)) + 2.5; the silent take's keep is no sound
+    expect(soundCount(rows, (id) => own[id], 124 / 24)).toEqual({ s: 9.5, n: 3 });
+    expect(soundCount(rows, (id) => own[id], 2)).toEqual({ s: 6.5, n: 3 });
   });
   // the item and total checks; the drop of an optional node and not_with are studio's (the form sends neither)
   for (const c of mediaRows.cases.filter((x) => x.workflow === "minimax-h3-references"))

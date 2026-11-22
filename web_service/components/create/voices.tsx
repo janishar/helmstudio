@@ -14,7 +14,7 @@ import { TileWords, tileClass } from "@/components/create/elements";
 import { usePlayer } from "@/components/create/audio";
 import { RangeBar } from "@/components/create/source";
 import { api, message, ok, type S } from "@/lib/api";
-import { safeUrl } from "@/lib/format";
+import { mb, safeUrl } from "@/lib/format";
 import { reloadLibrary, useVoices, voicesError } from "@/lib/library";
 import { audioFormat } from "@/lib/media";
 import { isActive } from "@/lib/runs";
@@ -1232,7 +1232,7 @@ function Cloner({
     const stop = new AbortController();
     const mine = (next: (u: NonNullable<typeof up>) => typeof up) =>
       setUp((u) => (u?.stop === stop ? next(u) : u));
-    const facts = `${audioFormat(typeOf(f))} · ${(f.size / 1_048_576).toFixed(1)} MB, uploaded as it is.`;
+    const facts = `${audioFormat(typeOf(f))} · ${mb(f.size)} MB, uploaded as it is.`;
     const tag = typeOf(f) === "audio/wav" ? "voice clip · kept as WAV" : "voice clip · as it is";
     // never optimised, so no Optimising step (docs/mock/UploadOptimise.dc.html frame 3)
     setUp({ name: f.name, facts, tag, p: { step: "uploading", f: 0 }, stop });

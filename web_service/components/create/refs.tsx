@@ -523,19 +523,9 @@ export function FirstFrameTile({
   openerRef?: Opener;
 }) {
   const [picking, setPicking] = useState(false);
-  // a video picked for its frame: Use last frame / Use first frame, then why making it failed
-  const [video, setVideo] = useState<{ id: string; title: string; error?: string } | null>(null);
   useEffect(() => {
     if (openerRef) openerRef.current = () => setPicking(true);
   }, [openerRef]);
-  const takeFrame = async (at: "first" | "last") => {
-    try {
-      onPick(await frameTake(video!.id, at));
-      setVideo(null);
-    } catch (e) {
-      setVideo((v) => v && { ...v, error: message(e) });
-    }
-  };
   const t = useTakes(id ? [id] : [])(id ?? "");
   const thumb = t ? safeUrl(t.thumb_url) : undefined;
   const name = id ? (t?.title ?? (t === null ? "gone" : "…")) : empty;
@@ -588,48 +578,22 @@ export function FirstFrameTile({
           </>
         )}
       </button>
-      {video && (
-        <span
-          role="group"
-          aria-label={`${label} from ${video.title}`}
-          className="flex flex-wrap items-center gap-1.5"
-        >
-          {(["last", "first"] as const).map((at) => (
-            <button
-              key={at}
-              type="button"
-              className="chip bevel h-8 rounded-lg text-[12px]"
-              onClick={() => void takeFrame(at)}
-            >
-              Use {at} frame
-            </button>
-          ))}
-          <button
-            type="button"
-            aria-label="Cancel"
-            className="grid size-6 place-items-center rounded text-t2"
-            onClick={() => setVideo(null)}
-          >
-            <X size={12} aria-hidden />
-          </button>
-          {video.error && (
-            <span role="alert" className="mono text-[12px] text-bad">
-              {video.error}
-            </span>
-          )}
-        </span>
-      )}
       <GalleryPicker
         open={picking}
         onClose={() => setPicking(false)}
         max={1}
-        kind={frames ? null : "image"}
-        only={frames ? (x) => x.kind !== "audio" : undefined}
+        title={frames ? label : undefined}
+        frames={
+          frames
+            ? async (v, at) => {
+                remember([v]);
+                onPick(await frameTake(v.id, at));
+              }
+            : undefined
+        }
         onPick={(takes) => {
           remember(takes);
-          const t = takes[0];
-          if (t?.kind === "video") setVideo({ id: t.id, title: t.title });
-          else if (t) onPick(t.id);
+          if (takes[0]) onPick(takes[0].id);
         }}
       />
     </>

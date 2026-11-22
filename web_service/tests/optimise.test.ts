@@ -31,9 +31,9 @@ describe("the decisions", () => {
     expect(keepOriginal(false, 1000, 900)).toBe(false);
     expect(keepOriginal(true, 1000, 2000)).toBe(false);
   });
-  it("says the sizes and the type", () => {
-    expect(imageLine(13_002_342, 1_992_294, "image/webp", false)).toBe("12.4 → 1.9 MB · WebP");
-    expect(imageLine(3_355_443, 943_718, "image/webp", true)).toBe(
+  it("says the sizes and the type, in decimal MB (the Gallery's rule)", () => {
+    expect(imageLine(12_400_000, 1_900_000, "image/webp", false)).toBe("12.4 → 1.9 MB · WebP");
+    expect(imageLine(3_200_000, 900_000, "image/webp", true)).toBe(
       "3.2 → 0.9 MB · WebP, transparent",
     );
   });
@@ -160,7 +160,7 @@ describe("optimise", () => {
     const out = await optimise(png(13_000_000), "image/png", LIMITS, (s) => steps.push(s));
     expect(made).toEqual([{ width: 8192, height: 4096 }]);
     expect(out.type).toBe("image/webp");
-    expect(out.line).toBe("12.4 → 1.9 MB · WebP");
+    expect(out.line).toBe("13.0 → 2.0 MB · WebP");
     expect(steps).toEqual([{ line: "12000 × 6000" }]);
   });
 

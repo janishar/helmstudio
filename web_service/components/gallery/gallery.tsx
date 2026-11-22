@@ -18,7 +18,7 @@ import { useLooks } from "@/lib/library";
 import { offerLabel } from "@/lib/source";
 import { remember, useTakes, useUses } from "@/lib/take-cache";
 import { api, message, ok, type S } from "@/lib/api";
-import { safeUrl } from "@/lib/format";
+import { mb, safeUrl } from "@/lib/format";
 import { useLoras } from "@/lib/lora-library";
 import { madeWithLine } from "@/lib/loras";
 import { FrameIn } from "@/components/create/frame-in";
@@ -802,7 +802,7 @@ function TakePanel({
         {!!m?.loras?.length && (
           <Row label="LoRAs" value={m.loras.map((l) => madeWithLine(l, loras)).join("\n")} />
         )}
-        {!m && <Row label="File" value={`${t.content_type} · ${mb(t.bytes)}`} />}
+        {!m && <Row label="File" value={`${t.content_type} · ${mb(t.bytes)} MB`} />}
         {size && <Row label={m?.seed != null ? "Size · seed" : "Size"} value={size} />}
         {t.video && <Row label="Length" value={videoLine(t.video)} />}
         {t.audio && (
@@ -929,9 +929,6 @@ function TakePanel({
     </>
   );
 }
-
-const mb = (n: number) =>
-  n >= 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`;
 
 /** A label and its mono value (the mock's .row). */
 function Row({ label, value }: { label: string; value: string }) {

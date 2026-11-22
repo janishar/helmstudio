@@ -27,6 +27,7 @@ import {
   partOf,
   pickable,
   retakeMap,
+  soundCount,
   spanEdge,
   trimmed,
   type FrameGrid,
@@ -34,9 +35,11 @@ import {
 import { mentionOf, move } from "@/lib/refs";
 import { remember, useTakes } from "@/lib/take-cache";
 import { timecode } from "@/lib/timeline";
+import type { soundRowsOf } from "@/lib/video";
 import {
   isRef,
   isSpan,
+  itemRuleErrors,
   optionBlocked,
   toRaw,
   type Field,
@@ -751,7 +754,10 @@ export function ExtendControl({
       {Object.values(blocked)
         .filter(Boolean)
         .map((why) => (
-          <span key={why} className={`text-right text-[12px] ${blocked[dir] ? "text-bad" : "text-t2"}`}>
+          <span
+            key={why}
+            className={`text-right text-[12px] ${blocked[dir] ? "text-bad" : "text-t2"}`}
+          >
             {why}
           </span>
         ))}
@@ -785,16 +791,14 @@ function ItemMedia({
   spec,
   value,
   part,
-  path,
-  replace,
+  rule,
   onSet,
 }: {
   spec: S<"ParamSchema">;
   value: S<"MediaRef"> | null;
   part: number | null;
-  path: string;
-  /** the row's Sound is Replace: a soundtrack is read only then (the runner refuses it otherwise) */
-  replace: boolean;
+  /** API 1.47: the field's broken rule, studio's text (Replace without it, or it without Replace) */
+  rule?: string;
   onSet: (v: S<"MediaRef"> | null) => void;
 }) {
   const [picking, setPicking] = useState(false);
@@ -817,9 +821,11 @@ function ItemMedia({
           >
             Pick {label.toLowerCase()}
           </button>
-          <span role="alert" className="mono text-[12px] text-bad">
-            {path}: Replace needs a {label.toLowerCase()}
-          </span>
+          {rule && (
+            <span role="alert" className="mono text-[12px] text-bad">
+              {rule}
+            </span>
+          )}
         </>
       ) : (
         <>
@@ -855,9 +861,9 @@ function ItemMedia({
               />
             </>
           )}
-          {(issue || !replace) && (
+          {(issue || rule) && (
             <span role="alert" className="mono text-[12px] text-bad">
-              {issue ?? `${path}: a ${label.toLowerCase()} is read only with Sound: Replace`}
+              {issue ?? rule}
             </span>
           )}
         </>
@@ -880,6 +886,24 @@ function ItemMedia({
   );
 }
 
+/** API 1.47 (docs/mock/H3Options.dc.html frame 5): the sound a node's references carry together and its limits. */
+function SoundLine({
+  sound,
+  facts,
+}: {
+  sound: NonNullable<ReturnType<typeof soundRowsOf>>;
+  facts: (id: string) => ReturnType<typeof factsOf> | null | undefined;
+}) {
+  const { s, n } = soundCount(sound.rows, facts, sound.clipS);
+  const over = s > sound.limits.max_s + 1e-9 || n > sound.limits.max_inputs;
+  return (
+    <span className={`mono text-[12px] ${over ? "text-bad" : "text-t2"}`}>
+      {s.toFixed(1)} s of {sound.limits.max_s.toFixed(1)} s sound · {n} of {sound.limits.max_inputs}{" "}
+      sound inputs
+    </span>
+  );
+}
+
 /** A rows param of media (API 1.22, docs/mock/CreateMediaRefs.dc.html: MiniMax H3's video and audio references):
  * `compact` is the composer's chips (the mention, Remove, Add video / Add audio); else the inspector's cards, each
  * the take (poster or sound tile, facts), its trim with In / Out and the part's length, the item's other fields
@@ -890,12 +914,15 @@ export function MediaRows({
   error,
   onChange,
   compact = false,
+  sound,
 }: {
   f: Field;
   raw: Raw | undefined;
   error?: string;
   onChange: Change;
   compact?: boolean;
+  /** API 1.47: the node's rows of media and clip length, for "3.0 s of 15.0 s sound · 1 of 3 sound inputs" */
+  sound?: ReturnType<typeof soundRowsOf>;
 }) {
   const [picking, setPicking] = useState(false);
   const list = useRef<HTMLOListElement>(null);
@@ -907,7 +934,12 @@ export function MediaRows({
       ? (f.initial as S<"RowItem">[])
       : [];
   const refs = rows.map((r) => (isRef(r[k]) ? (r[k] as S<"MediaRef">) : null));
-  const get = useTakes(refs.flatMap((v) => (v ? [v.take_id] : [])));
+  // this field's takes and (API 1.47) every take its node's sound count reads
+  const soundIds = (sound?.rows ?? []).flatMap(({ items }) =>
+    items.flatMap((it) => Object.values(it).flatMap((v) => (isRef(v) ? [v.take_id] : []))),
+  );
+  const get = useTakes([...refs.flatMap((v) => (v ? [v.take_id] : [])), ...soundIds]);
+  const itemErrs = itemRuleErrors(f.node, p, rows);
   const facts = (id: string) => {
     const t = get(id);
     return t === undefined ? undefined : t && factsOf(t);
@@ -1114,8 +1146,7 @@ export function MediaRows({
                         spec={ospec}
                         value={isRef(r[o]) ? (r[o] as S<"MediaRef">) : null}
                         part={part ? part[1] - part[0] : null}
-                        path={`${f.key}[${i + 1}].${o}`}
-                        replace={Object.values(r).includes("replace")}
+                        rule={itemErrs.find((x) => x.startsWith(`${f.key}[${i + 1}].${o}: `))}
                         onSet={(x) =>
                           set((old) => old.map((it, j) => (j === i ? { ...it, [o]: x } : it)))
                         }
@@ -1132,12 +1163,17 @@ export function MediaRows({
           })}
         </ol>
       )}
-      {p.max_total_s != null && rows.length > 0 && (
-        <span
-          className={`mono text-[12px] ${total > p.max_total_s + 1e-9 ? "text-bad" : "text-t2"}`}
-        >
-          {total.toFixed(1)} s of {p.max_total_s.toFixed(1)} s in all
-        </span>
+      {sound ? (
+        <SoundLine sound={sound} facts={facts} />
+      ) : (
+        p.max_total_s != null &&
+        rows.length > 0 && (
+          <span
+            className={`mono text-[12px] ${total > p.max_total_s + 1e-9 ? "text-bad" : "text-t2"}`}
+          >
+            {total.toFixed(1)} s of {p.max_total_s.toFixed(1)} s in all
+          </span>
+        )
       )}
       {addButton}
       {audio && (

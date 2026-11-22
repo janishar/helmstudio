@@ -1,5 +1,11 @@
 // Display helpers shared by the pages.
 
+/** A size in decimal megabytes, the one rule for uploads and the Gallery (plan 20 gaps): "1.9", "0.05" below 0.1 MB. */
+export function mb(bytes: number): string {
+  const m = bytes / 1e6;
+  return m < 0.1 ? m.toFixed(2) : m.toFixed(1);
+}
+
 /** An ISO time in the viewer's locale; an unparsable value comes back as it is, a missing one as "". */
 export function when(iso: string | null | undefined): string {
   if (!iso) return "";

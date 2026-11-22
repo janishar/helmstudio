@@ -351,3 +351,49 @@ export function markRange(
   const r: [number, number] = edge === "in" ? [at, b > at ? b : end] : [a < at ? a : 0, at];
   return r[0] < r[1] ? r : null;
 }
+
+/** API 1.47 (contracts/README.md "Sound limits"): the seconds and inputs of sound a node's rows of media carry
+ * together: each audio row's part; each video row whose `sound` is keep (the take has sound) or replace (with its
+ * soundtrack), reading min(its part, the soundtrack's part, the clip's seconds). */
+export function soundCount(
+  rows: { p: Param; items: S<"RowItem">[] }[],
+  facts: (id: string) => Facts | null | undefined,
+  clipS: number,
+): { s: number; n: number } {
+  let s = 0;
+  let n = 0;
+  const len = (v: unknown, spec: Param) => {
+    if (!v || typeof v !== "object" || !("take_id" in v)) return null;
+    const ref = v as S<"MediaRef">;
+    const [a, b] = partOf(ref, facts(ref.take_id)?.duration_s ?? 0, spec);
+    return b - a;
+  };
+  for (const { p, items } of rows) {
+    const m = mediaItem(p);
+    if (!m) continue;
+    const [k, spec] = m;
+    const sound = (p.item?.sound as Param | undefined)?.default;
+    for (const r of items) {
+      const part = len(r[k], spec);
+      if (part == null) continue;
+      if (!spec.accepts?.includes("video")) {
+        s += part;
+        n++;
+        continue;
+      }
+      const how = (r.sound as string | undefined) ?? sound;
+      const ref = r[k] as S<"MediaRef">;
+      if (how === "keep" && facts(ref.take_id)?.has_audio) {
+        s += Math.min(part, clipS);
+        n++;
+      } else if (how === "replace") {
+        const [o, ospec] = optionalMedia(p)[0] ?? [];
+        const st = o && ospec ? len(r[o], ospec) : null;
+        if (st == null) continue;
+        s += Math.min(part, st, clipS);
+        n++;
+      }
+    }
+  }
+  return { s, n };
+}

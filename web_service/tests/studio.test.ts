@@ -424,7 +424,7 @@ describe("when expressions and tile labels", () => {
     expect(evaluate("sample.steps == 41 || x.on", get)).toBe(true);
     expect(evaluate("!(model.variant == 'base') && (x.on == true)", get)).toBe(true);
     expect(evaluate("a.b == null", get)).toBe(false);
-    for (const bad of ["model.variant ==", "(x.on", "variant == 'a'", "x.on = 1", "x.on x.on"])
+    for (const bad of ["model.variant ==", "(x.on", "x.on = 1", "x.on x.on"])
       expect(() => evaluate(bad, get)).toThrow();
   });
 

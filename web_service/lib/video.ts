@@ -169,3 +169,19 @@ export const fpsOf = (f: Field, fs: Field[], raws: Record<string, Raw>) => {
     Number(r ? (raws[r.key] ?? toRaw(r.initial, r.param)) : f.siblings?.[f.param.fps ?? ""]) || 0
   );
 };
+
+/** API 1.47: what the sound count of `f`'s node reads: the node's rows of media as the form holds them and the clip's
+ * seconds (its frames field over its frame rate); null when the node has no `sounds`. */
+export function soundRowsOf(f: Field, fs: Field[], raws: Record<string, Raw>) {
+  if (!f.sounds) return null;
+  const rows = fs
+    .filter((x) => x.node === f.node && x.param.type === "rows" && x.sounds)
+    .map((x) => {
+      const raw = raws[x.key] ?? toRaw(x.initial, x.param);
+      return { p: x.param, items: Array.isArray(raw) ? raw : [] };
+    });
+  const frames = fs.find((x) => x.param.type === "frames");
+  const n = frames ? Number(raws[frames.key] ?? toRaw(frames.initial, frames.param)) : 0;
+  const fps = frames ? fpsOf(frames, fs, raws) : 0;
+  return { limits: f.sounds, rows, clipS: n && fps ? n / fps : Infinity };
+}

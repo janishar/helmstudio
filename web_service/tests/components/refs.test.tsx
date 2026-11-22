@@ -3,7 +3,7 @@
 // frame, the optional Last frame, References as chips) and keyframe cards on the clip.
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { RowsEditor, type RefUploads } from "@/components/create/refs";
+import { FirstFrameTile, RowsEditor, type RefUploads } from "@/components/create/refs";
 import { RefChips } from "@/components/create/form";
 import { remember } from "@/lib/take-cache";
 import { buildInputs, type Field, type Raw, type Update } from "@/lib/workflow";
@@ -342,7 +342,12 @@ describe("RowsEditor: keyframe cards on the clip", () => {
       ...keys.param,
       // the API sends the item's keys sorted, so the enum comes first; it is drawn under the sliders
       item: {
-        binding: { type: "enum", label: "Binding", default: "auto", enum: ["auto", "replace", "guide"] },
+        binding: {
+          type: "enum",
+          label: "Binding",
+          default: "auto",
+          enum: ["auto", "replace", "guide"],
+        },
         ...(keys.param.item as object),
       } as unknown as S<"ParamSchema">["item"],
     });
@@ -359,8 +364,49 @@ describe("RowsEditor: keyframe cards on the clip", () => {
     expect(seg.className).toContain("seg");
     const slider = screen.getAllByRole("slider").at(-1)!;
     expect(slider.compareDocumentPosition(seg) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(within(seg).getByRole("button", { name: "Auto" }).getAttribute("aria-pressed")).toBe("true");
+    expect(within(seg).getByRole("button", { name: "Auto" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
     fireEvent.click(within(seg).getByRole("button", { name: "Replace" }));
     expect((seen.at(-1) as S<"RowItem">[])[0].binding).toBe("replace");
+  });
+});
+
+// API 1.37, as the board draws it (docs/mock/H3Options.dc.html frame 8): the Last frame tile's picker has tabs Images |
+// Video, and on Video its footer's Use first frame / Use last frame make the frame (an image take) and pick it
+describe("FirstFrameTile: a frame of a video from the picker", () => {
+  it("Video tab, a video picked, Use last frame", async () => {
+    const v = take({ kind: "video", title: "Shot 3 · tree line" });
+    const kinds: unknown[] = [];
+    const asked: unknown[] = [];
+    answer("GET", {
+      "/v1/studio/takes": (init) => {
+        const q = (init.params as { query: { kind?: string } }).query;
+        kinds.push(q.kind);
+        return { data: { takes: q.kind === "video" ? [v] : [], next_cursor: null } };
+      },
+    });
+    answer("POST", {
+      "/v1/studio/takes/{take_id}/frame": (init) => {
+        asked.push(init);
+        return { data: { take: { id: "frame-1" } } };
+      },
+    });
+    const picked: string[] = [];
+    render(<FirstFrameTile label="Last frame" frames onPick={(id) => picked.push(id)} />);
+    fireEvent.click(screen.getByRole("button", { name: /^Last frame:/ }));
+    const tabs = screen.getByRole("group", { name: "Kind" });
+    expect(
+      within(tabs)
+        .getAllByRole("button")
+        .map((b) => b.textContent),
+    ).toEqual(["Images", "Video"]);
+    fireEvent.click(within(tabs).getByRole("button", { name: "Video" }));
+    fireEvent.click(await screen.findByText("Shot 3 · tree line"));
+    expect(screen.queryByRole("button", { name: /^Add/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Use last frame" }));
+    await waitFor(() => expect(picked).toEqual(["frame-1"]));
+    expect(asked).toEqual([{ params: { path: { take_id: v.id } }, body: { at: "last" } }]);
+    expect(kinds).toContain("video");
   });
 });

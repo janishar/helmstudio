@@ -4,6 +4,7 @@
 // original when nothing was scaled and the new file is not 10 % smaller. A wav: AAC-LC in an m4a via WebCodecs (the
 // MP4 box is written here: one audio track). Anything the browser can't do uploads as it is.
 import type { S } from "@/lib/api";
+import { mb } from "@/lib/format";
 
 export type Limits = S<"UploadLimits">;
 /** What uploads, its type and the tile's mono line ("12.4 → 1.9 MB · WebP", "as is"). */
@@ -11,10 +12,6 @@ export type Optimised = { blob: Blob; type: string; line: string };
 /** The optimising step's report: a fraction (audio) and a line (an image's size once decoded). */
 export type Step = { f?: number; line?: string };
 
-const mb = (n: number) => {
-  const m = n / 1_048_576;
-  return m < 0.1 ? m.toFixed(2) : m.toFixed(1);
-};
 /** "12.4 → 1.9 MB". */
 export const sizes = (from: number, to: number) => `${mb(from)} → ${mb(to)} MB`;
 

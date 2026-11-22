@@ -2982,6 +2982,15 @@ export interface components {
             };
             /** @description from 1.37, a rows item's media field only: it may be left empty (null or absent; MiniMax H3's `soundtrack`); `max_total_s` and Use in… go by the item's one required media field */
             optional?: boolean;
+            /** @description from 1.47 (contracts/README.md, Param rules): refusals as data. Each `when` is an expression (the `when` grammar plus `<`, `<=`, `>`, `>=`, `+`, `-`, `*`, `/`, `len(<rows>)` and `gcd(a, b)`; a bare name is a param of the same node, or in a rows item field's rule a field of the same item; `<a>.<b>` is param `b` of the node wired into this node's input `a`, else of node `a`); while it holds the run is 422 `<node>: <error>` (an item field's: `<node>.<param>[<i>].<field>: <error>`, items from 1), each `{<expression>}` in `error` replaced by its value. A reference that resolves to nothing makes the rule not hold. Studio checks them after the other checks, in param order (POST …/runs and /runs/plan); the form shows each under its param and blocks Generate */
+            rules?: {
+                when: string;
+                error: string;
+            }[];
+            /** @description from 1.47, enum or int with `values`: value (as text) → its line under the value in the param's menu (MiniMax H3's LoRA: `none` → `the model as it is`); absent = none */
+            option_help?: {
+                [key: string]: string;
+            };
             /** @description frames only: the name of the same node's int or float param holding frames per second */
             fps?: string;
             /** @description frames only: present = the value `"auto"` is allowed (the model predicts the length, clamped to min_s..max_s seconds and to min..max frames); absent = it is 422 (`<node>.<param>: auto length is not offered`) */
@@ -3036,6 +3045,13 @@ export interface components {
                 id: string;
                 label: string;
             }[];
+            /** @description from 1.47: the stage's peak_gb formula (model.yaml), published for a stage that loads no component (a native child process, whose memory plan is the formula alone): studio evaluates it per run over the node's params, `len(<rows>)`, `mp` and `frames` (contracts/README.md, Memory per run). Absent = none */
+            peak_gb?: string;
+            /** @description from 1.47: the node's limits on the sound its references carry together (MiniMax H3: 15 s, 3 inputs): audio rows, and video rows whose `sound` keeps the take's sound or replaces it with a `soundtrack`; the composer counts them (`3.0 s of 15.0 s sound · 1 of 3 sound inputs`). Absent = none */
+            sounds?: {
+                max_s: number;
+                max_inputs: number;
+            };
             /** @description in form order */
             params: components["schemas"]["ParamSchema"][];
             inputs: components["schemas"]["Port"][];
@@ -3206,6 +3222,11 @@ export interface components {
                     [key: string]: components["schemas"]["ParamValue"];
                 };
             };
+            /** @description from 1.47: the Preset heading's (i) text: the first item whose `when` (the `when` grammar over the workflow's paths) holds, or that has none; absent = no (i) */
+            preset_help?: {
+                text: string;
+                when?: string;
+            }[];
             /**
              * @description from 1.25: every name of `presets` once, in the order Create shows them (an object's key order is not kept); absent = by name. Else 422 `studio.preset_order: every preset once`
              * @example [
@@ -3866,7 +3887,7 @@ export interface components {
         RunPlan: {
             /** @description the host the run would be eligible on, the first by name (from 1.35 with RunRequest.host: that host); null = none */
             host: string | null;
-            /** @description its planned peak there in GB (the plan's peak_gb + its LoRA files); null = no plan (the whole host budget) or no host */
+            /** @description its planned peak there in GB (the plan's peak_gb + its LoRA files; from 1.47 a plan with no components is the run's own: its nodes' `peak_gb` formulas over its settings, contracts/README.md Memory per run); null = no plan (the whole host budget) or no host */
             peak_gb: number | null;
             /** @description why no host is eligible (the text the run would fail with, `no live host for env mlx`); null when one is */
             reason: string | null;
