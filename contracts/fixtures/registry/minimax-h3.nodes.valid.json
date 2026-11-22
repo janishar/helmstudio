@@ -346,7 +346,7 @@
               ]
             }
           },
-          "help": "turbo: lightx2v's 8-step Turbo LoRA (an add-on; References use their own); use 8 steps. Merged at load on a Mac, applied by SGLang on NVIDIA."
+          "help": "turbo: lightx2v's 8-step Turbo LoRA (an add-on; References use their own, Turbo Ref LoRA); use 8 steps. Merged at load on a Mac, applied by SGLang on NVIDIA."
         },
         {
           "name": "refs",

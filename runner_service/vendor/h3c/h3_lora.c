@@ -175,7 +175,9 @@ static int add_module(float *weight, uint64_t rows, uint64_t cols,
         return 1;
     }
     uint64_t want_rows = grouped >= 0 ? rows / 3 : rows;
-    if (ac != cols || bc != ar || br != want_rows) {
+    /* grouped: whole 128-row heads of q, k and v, so every dst row fits */
+    if (!ar || ac != cols || bc != ar || br != want_rows ||
+        (grouped >= 0 && rows % 384)) {
         fprintf(stderr, "h3 lora: %s is A[%llu,%llu] B[%llu,%llu]; the "
                 "weight is [%llu,%llu]\n", prefix,
                 (unsigned long long)ar, (unsigned long long)ac,

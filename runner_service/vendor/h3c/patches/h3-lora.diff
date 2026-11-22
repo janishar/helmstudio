@@ -61,10 +61,10 @@ index 0000000..0edfcd7
 +#endif
 diff --git a/h3_lora.c b/h3_lora.c
 new file mode 100644
-index 0000000..7088280
+index 0000000..3588d06
 --- /dev/null
 +++ b/h3_lora.c
-@@ -0,0 +1,328 @@
+@@ -0,0 +1,330 @@
 +/* helmstudio's patch, not upstream h3.c (VERSION, patches/h3-lora.diff):
 + * merge a Diffusers/PEFT MiniMax-H3 LoRA (lightx2v's Turbo layout) into the
 + * DiT's BF16 weights as h3 loads them, before its int8 quantizer sees them.
@@ -242,7 +242,9 @@ index 0000000..7088280
 +        return 1;
 +    }
 +    uint64_t want_rows = grouped >= 0 ? rows / 3 : rows;
-+    if (ac != cols || bc != ar || br != want_rows) {
++    /* grouped: whole 128-row heads of q, k and v, so every dst row fits */
++    if (!ar || ac != cols || bc != ar || br != want_rows ||
++        (grouped >= 0 && rows % 384)) {
 +        fprintf(stderr, "h3 lora: %s is A[%llu,%llu] B[%llu,%llu]; the "
 +                "weight is [%llu,%llu]\n", prefix,
 +                (unsigned long long)ar, (unsigned long long)ac,

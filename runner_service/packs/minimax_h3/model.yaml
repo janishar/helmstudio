@@ -87,7 +87,8 @@ components:
                allow_patterns: [minimax_h3_ref2v_turbo_8step_v1.1_768p_bf16.safetensors],
                licence: minimax-h3-community, must_accept: true, gated: false, bytes: 1383677808}
     # sha256 46c64fc94509489f18dd1f545172e30c8df7d4cc50a30e96744409b4288c937d; 624 tensors: 312 modules (attention,
-    # MLP, token refiner; no AdaLN or norm_out), no .alpha tensors (alpha = rank: scale 1), metadata alpha 8 unread
+    # MLP, token refiner; no AdaLN or norm_out), no .alpha tensors, rank 128 and metadata alpha 8:
+    # h3_lora.c scales it 8 / 128 (at scale 1 a References render was noise, GOTCHAS.md)
     files: minimax_h3_ref2v_turbo_8step_v1.1_768p_bf16.safetensors
     dtype: stored
     precision: [int8]
@@ -153,7 +154,7 @@ stages:
       # LoRA, with any reference (Ref2VA) Turbo Ref LoRA instead. Strength fixed at 1 (owner, 24.12 point 5)
       lora: {type: enum, label: LoRA, default: none, enum: [none, turbo], addons: {turbo: [turbo]},
              addons_with: {refs: {turbo: [turbo_ref]}, videos: {turbo: [turbo_ref]}, audios: {turbo: [turbo_ref]}},
-             help: "turbo: lightx2v's 8-step Turbo LoRA (an add-on; References use their own); use 8 steps. Merged at load on a Mac, applied by SGLang on NVIDIA."}
+             help: "turbo: lightx2v's 8-step Turbo LoRA (an add-on; References use their own, Turbo Ref LoRA); use 8 steps. Merged at load on a Mac, applied by SGLang on NVIDIA."}
       refs: {type: rows, label: References, default: [], min: 0, max: 9, item: {image: Image},
              mention: "<Picture {n}>",
              help: "Images the prompt names <Picture 1>, <Picture 2>, …; any reference (image, video or audio) switches to the Ref2VA model and cannot go with a first or last frame.",
