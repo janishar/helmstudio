@@ -20,6 +20,9 @@ Status: two final candidates (Playhead h, A as drawn and B softer) for the owner
 
 ## Final candidates (current)
 
+**Decided by the owner, 2026-11-22: A, "Playhead h · as drawn"** (files in `docs/brand/logo/a-as-drawn/`). B stays as a reference.
+
+
 Decisions, 2026-11-22:
 
 - Owner picked round 1's **Playhead h**: "option 2 keep for comparison", then chose it over the round-2 concepts.
