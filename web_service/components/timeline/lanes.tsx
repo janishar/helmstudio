@@ -291,8 +291,12 @@ export function Lanes({
     ro.observe(el);
     return () => ro.disconnect();
   }, [onView]);
+  // the scroll before a re-render: a zoom out shrinks the lanes, and the browser clamps scrollLeft before the zoom's
+  // layout effect can read where the view was
+  const scrolled = useRef(0);
   const onScroll = () => {
     const el = scroller.current;
+    if (el) scrolled.current = el.scrollLeft;
     if (!el || !view) return;
     const w = virtualWindow(el.scrollLeft, view);
     if (w[0] !== win[0] || w[1] !== win[1]) setWin(w);
@@ -307,11 +311,13 @@ export function Lanes({
     const was = seen.current;
     seen.current = pps;
     if (!el || was === pps) return;
-    const phWas = HEAD + now * was - el.scrollLeft;
+    const phWas = HEAD + now * was - scrolled.current;
     const x = anchor.current ?? (phWas >= HEAD && phWas <= el.clientWidth ? phWas : el.clientWidth / 2);
     anchor.current = null;
     // Fit shows the whole sequence from 0
-    el.scrollLeft = view && pps * Math.max(end, 5) <= view + 1 ? 0 : zoomAbout(el.scrollLeft, x, was, pps, HEAD);
+    el.scrollLeft =
+      view && pps * Math.max(end, 5) <= view + 1 ? 0 : zoomAbout(scrolled.current, x, was, pps, HEAD);
+    scrolled.current = el.scrollLeft;
     if (view) setWin(virtualWindow(el.scrollLeft, view));
   }, [pps, now, view, end]);
   // the playhead moved off screen (playing, ↑ ↓, Home / End): page the view so it sits a tenth in
@@ -321,6 +327,7 @@ export function Lanes({
     const x = HEAD + now * pps - el.scrollLeft;
     if (x >= HEAD && x <= el.clientWidth - 2) return;
     el.scrollLeft = Math.max(0, now * pps - view / 10);
+    scrolled.current = el.scrollLeft;
     setWin(virtualWindow(el.scrollLeft, view));
     // only a move of the playhead, not a zoom, pages
     // eslint-disable-next-line react-hooks/exhaustive-deps

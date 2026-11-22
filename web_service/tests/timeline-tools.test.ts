@@ -1,7 +1,7 @@
 // The Timeline tools' pure parts (plan 23 §27.11): the key map (no collisions; held vs tapped), Trim's grab zones,
 // snapping with what it held on, the clamp at a bound, the repeat merge, the ids an op makes and the words said; the
 // zoom (about the pointer, fit, the tick step, the virtual window), the shuttle and the detail's buckets and peaks.
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Grid, type Norm } from "@/lib/timeline";
 import {
   HOLD_MS,
@@ -27,7 +27,7 @@ import {
   wheelZoom,
   zoomAbout,
 } from "@/lib/timeline-tools";
-import { peakAt, pyramid } from "@/lib/timeline-detail";
+import { peakAt, peaksOf, pyramid } from "@/lib/timeline-detail";
 
 const g = new Grid({ fps: 24, sample_rate: 48000 });
 const ev = (code: string, m = "") => ({
@@ -253,4 +253,17 @@ it("filmstrip tiles and peaks", () => {
   expect(peakAt(p, 0, 0.4)).toBeLessThanOrEqual(0.1);
   expect(peakAt(p, 0.6, 0.9)).toBeGreaterThan(0.8);
   expect(peakAt(p, 0, 1)).toBeCloseTo(p.at(-1)![0], 6);
+});
+
+it("decodes at most 2 takes' peaks at once, however many strips ask in one render (§27.8)", async () => {
+  const fetch = vi.fn(() => new Promise<Response>(() => {})); // never answers: the decoders stay busy
+  vi.stubGlobal("fetch", fetch);
+  vi.stubGlobal("OfflineAudioContext", class {});
+  try {
+    for (let i = 0; i < 6; i++) expect(peaksOf(`cap-${i}`, `/m/${i}.wav`, 10)).toBeNull();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(fetch).toHaveBeenCalledTimes(2);
+  } finally {
+    vi.unstubAllGlobals();
+  }
 });

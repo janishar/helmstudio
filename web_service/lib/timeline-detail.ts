@@ -187,8 +187,8 @@ export function peaksOf(take: string, url: string | undefined, duration: number)
     return null;
   }
   peaks.set(take, "loading");
+  // counted when scheduled, not when run: many strips ask in one render, before any idle callback runs
   const run = () => {
-    decoding++;
     void decode(url)
       .then((p) => peaks.set(take, p ?? "none"))
       .catch(() => peaks.set(take, "none"))
@@ -198,8 +198,12 @@ export function peaksOf(take: string, url: string | undefined, duration: number)
         changed();
       });
   };
-  if (decoding < DECODERS) idle(run);
-  else waiting.push(() => idle(run));
+  const start = () => {
+    decoding++;
+    idle(run);
+  };
+  if (decoding < DECODERS) start();
+  else waiting.push(start);
   return null;
 }
 

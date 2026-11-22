@@ -164,6 +164,23 @@ it("virtualises the lanes and zooms about the pointer (plan 23 §27.4, §27.8)",
     const t = (4000 + 436 - 72) / 40;
     rerender(<Lanes {...props} pps={80} />);
     expect(Math.abs((scroller.scrollLeft + 436 - 72) / 80 - t) * 80).toBeLessThan(0.5);
+    // a zoom out at the end: the lanes shrink, and a browser clamps scrollLeft to the new width before the zoom
+    // reads it; the time under the pointer still stays put
+    const content = scroller.firstElementChild as HTMLDivElement;
+    let raw = 0;
+    Object.defineProperty(scroller, "scrollLeft", {
+      configurable: true,
+      get: () => Math.max(0, Math.min(raw, parseFloat(content.style.width) - 872)),
+      set: (v: number) => (raw = v),
+    });
+    rerender(<Lanes {...props} pps={40} />);
+    scroller.scrollLeft = 1e9;
+    fireEvent.scroll(scroller);
+    const end = scroller.scrollLeft;
+    const at = (end + 800 - 72) / 40;
+    fireEvent.wheel(scroller, { ctrlKey: true, deltaY: 100, clientX: 800 });
+    rerender(<Lanes {...props} pps={32} />);
+    expect(Math.abs((scroller.scrollLeft + 800 - 72) / 32 - at) * 32).toBeLessThan(0.5);
   } finally {
     if (width) Object.defineProperty(HTMLElement.prototype, "clientWidth", width);
     globalThis.ResizeObserver = RO;
