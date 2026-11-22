@@ -91,6 +91,25 @@ connection, `-R 127.0.0.1:8333:127.0.0.1:8443` (`NATS_HOST_PORT`, `S3_TLS_HOST_P
 no public port. Two connections, not one: in a shared one an output upload queues every NATS frame behind it and the
 hosts key's writes time out (the host looks offline mid-upload). On the GPU host, `ss -ltn | grep -E ':(4222|8333) '` shows both on 127.0.0.1.
 
+### A host with a plain SSH port (Packet and the like)
+
+For a host reached by `ssh -p <port> <user>@<addr>` (key auth, host key already known) instead of gcloud, give the
+tunnel the user and address and the port in place of the instance and zone; the rest is the same:
+
+```sh
+make gpu-host-tunnel VM=<user>@<addr> ZONE=<port>   # or .tools/gpu-host-tunnel start <user>@<addr> <port>
+```
+
+Section 3's copies go the same way with `ssh -p <port> <user>@<addr>` in place of `gcloud compute ssh <vm> --zone
+<zone> --`. Without Docker (a pod with no container runtime), run the native runner straight from the copy, as the
+Mac's `make runner-native` does: `uv sync --frozen --no-dev` in `runner_service`, SGLang's venv in `/opt/sglang`
+(the `sglang` stage of `Dockerfile.cuda` by hand: `uv venv --python 3.12 /opt/sglang`, `VIRTUAL_ENV=/opt/sglang uv
+pip sync sglang-requirements.txt`, the two `lib64` / `libcudart.so` links), `g++` and `ffmpeg` from apt, then
+`python main.py` under systemd with the compose file's `runner-native` environment (`RUNNER_HOST=<h>`,
+`RUNNER_ENV=native`, `RUNNER_DEVICE=cuda`, the `_FILE` paths into `secrets/`, `HELMSTUDIO_MODELS`, `RUNNER_CACHE`,
+`TMPDIR`, `CONTRACTS_DIR`, and `/opt/sglang/bin` plus the venv's `nvidia/cu13/bin` at the end of `PATH`). Such pods'
+disks are often ephemeral: the weights go when the pod stops.
+
 ## 5. Build and start
 
 ```sh

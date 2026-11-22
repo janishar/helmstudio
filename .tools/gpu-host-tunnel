@@ -5,12 +5,21 @@
 # 127.0.0.1:4222 and 127.0.0.1:8333. Nothing is published to the internet; no firewall or IAM change. TLS runs end to
 # end inside the tunnel (the runner verifies the stack's cert against tls_ca).
 #   .tools/gpu-host-tunnel start <instance> <zone>   in the background; restarts after a drop (spot preemption, sleep)
+#   .tools/gpu-host-tunnel start <user>@<addr> <port> plain ssh instead of gcloud (a host with an SSH port, e.g. Packet)
 #   .tools/gpu-host-tunnel stop | status
 # GCLOUD_PROJECT=<id> adds --project. Run `gcloud compute ssh <instance> --zone <zone> -- true` once by hand first, so
 # its key and host-key prompts are answered. Pid file and log: deploy/gpu-host/.run/tunnel.{pid,log} (git-ignored).
 set -eu
 run="$(cd "$(dirname "$0")/.." && pwd)/deploy/gpu-host/.run"
 pidf="$run/tunnel.pid" log="$run/tunnel.log"
+
+# gcloud for an instance name, plain ssh (key auth, no prompts) for <user>@<addr>; the rest goes after the host
+gsh() {
+  case $1 in
+  *@*) t=$1 p=$2; shift 2; ssh -o BatchMode=yes -p "$p" "$t" "$@" ;;
+  *) t=$1 z=$2; shift 2; gcloud compute ssh "$t" --zone "$z" ${GCLOUD_PROJECT:+--project "$GCLOUD_PROJECT"} -- "$@" ;;
+  esac
+}
 
 running() { pid=$(cat "$pidf" 2>/dev/null) && [ -n "$pid" ] && ps -p "$pid" -o command= | grep -q gpu-host-tunnel; }
 
@@ -31,13 +40,11 @@ loop) # the supervisor: one ssh pair at a time, each in its own process group, s
     echo "$(date '+%F %T') connecting"
     # a dropped link leaves the old sshd session holding the GPU host's 4222/8333 until its TCP times out (sshd has
     # no ClientAliveInterval by default), so every reconnect fails "remote port forwarding failed" (M6): free them
-    gcloud compute ssh "$2" --zone "$3" ${GCLOUD_PROJECT:+--project "$GCLOUD_PROJECT"} -- \
-      'sudo -n fuser -k 4222/tcp 8333/tcp >/dev/null 2>&1; true' || :
+    gsh "$2" "$3" 'sudo -n fuser -k 4222/tcp 8333/tcp >/dev/null 2>&1; true' || :
     # one SSH connection per port: in a shared one, an output upload queues every NATS frame behind megabytes of S3
     # data (one TCP stream), the hosts key's puts time out and the host looks offline
     fwd() {
-      gcloud compute ssh "$2" --zone "$3" ${GCLOUD_PROJECT:+--project "$GCLOUD_PROJECT"} -- -N \
-        -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -R "$1" &
+      gsh "$2" "$3" -N -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -R "$1" &
     }
     fwd "127.0.0.1:4222:127.0.0.1:${NATS_HOST_PORT:-4322}" "$2" "$3"; n=$!
     fwd "127.0.0.1:8333:127.0.0.1:${S3_TLS_HOST_PORT:-8443}" "$2" "$3"; s=$!
