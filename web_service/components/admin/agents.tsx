@@ -1,9 +1,9 @@
 "use client";
 // Admin > AI agents (docs/mock/AdminAgents.dc.html; plan 21 25.6): each AI job and the model that does it, a table
-// with the editor beside it, as Model providers. Until branch assistant merges the table holds Session names alone
-// (the board's "Before branch assistant merges"). Session names: Off · Local LLM (the llm pack, greyed while no host
-// has it) · Remote (an enabled provider of Model providers: a remote one sends the prompt out and needs the
-// deployment's switch, a local server is "on this network").
+// with the editor beside it, as Model providers. Assistant (plan 18, /v1/studio/admin/assistant): on or off, provider
+// and model, web search and the caps, edited in its section under the table. Session names: Off · Local LLM (the llm
+// pack, greyed while no host has it) · Remote (an enabled provider of Model providers: a remote one sends the prompt
+// out and needs the deployment's switch, a local server is "on this network").
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ErrorNote, Info } from "@/components/kit";
@@ -12,14 +12,20 @@ import { useUser } from "@/components/shell";
 import { api, message, ok, type S } from "@/lib/api";
 
 type Names = S<"SessionNames">;
+type Settings = S<"AssistantSettings">;
+type Limits = S<"AssistantLimits">;
 type Provider = S<"Provider">;
 type Mode = Names["mode"];
 
 const LOCAL = "Qwen3.8 27B";
 
-/** The providers Remote offers: enabled ones, a remote one only while the deployment's switch is on. */
+/** The model providers a job may pick: enabled servers, and remote ones while the deployment's switch is on. */
 export const pickable = (ps: Provider[], remoteOn: boolean) =>
-  ps.filter((p) => p.enabled && (p.kind === "server" || remoteOn));
+  ps.filter((p) => p.enabled && (p.kind === "server" || (p.kind === "remote" && remoteOn)));
+
+/** Web search's providers: enabled ones of kind search, only while the switch is on (a search leaves the machine). */
+export const searchable = (ps: Provider[], remoteOn: boolean) =>
+  remoteOn ? ps.filter((p) => p.enabled && p.kind === "search") : [];
 
 const titleOf = (p: Provider) => p.title || p.name;
 
@@ -30,15 +36,18 @@ export const sendsTo = (p: Provider) =>
 export function AgentsAdmin() {
   const me = useUser();
   const [names, setNames] = useState<Names | null>(null);
+  const [assistant, setAssistant] = useState<Settings | null>(null);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [error, setError] = useState("");
   const load = useCallback(() => {
     Promise.all([
       ok(api.GET("/v1/studio/admin/session-names")),
       ok(api.GET("/v1/studio/admin/providers")),
+      ok(api.GET("/v1/studio/admin/assistant")),
     ])
-      .then(([n, p]) => {
+      .then(([n, p, a]) => {
         setNames(n);
+        setAssistant(a);
         setProviders(p.providers);
         setError("");
       })
@@ -55,6 +64,8 @@ export function AgentsAdmin() {
       </main>
     );
   const provider = providers.find((p) => p.name === names?.provider);
+  const aProvider = providers.find((p) => p.name === assistant?.provider);
+  const aSearch = providers.find((p) => p.name === assistant?.search_provider);
   const cell = "border-b border-s3 p-2.5 align-top";
   return (
     <>
@@ -87,6 +98,58 @@ export function AgentsAdmin() {
               </tr>
             </thead>
             <tbody>
+              {assistant && (
+                <tr>
+                  <td className={cell}>
+                    Assistant
+                    <br />
+                    <span className="mono text-[12px] text-t2">the in-app assistant</span>
+                  </td>
+                  <td className={`${cell} mono text-[12px] text-t2`}>
+                    {aProvider
+                      ? `${titleOf(aProvider)} · ${assistant.model ?? aProvider.default_model}`
+                      : "—"}
+                    {assistant.web_search && (
+                      <>
+                        <br />
+                        web search: {aSearch ? titleOf(aSearch) : assistant.search_provider}
+                      </>
+                    )}
+                  </td>
+                  <td className={cell}>
+                    {aProvider ? (
+                      <>
+                        <span className={`tag ${aProvider.kind === "remote" ? "tag-accent" : ""}`}>
+                          {aProvider.kind === "remote" ? "remote" : "on this network"}
+                        </span>
+                        <br />
+                        <span
+                          className={`text-[12px] ${aProvider.kind === "remote" ? "text-[#f2c14e]" : "text-t2"}`}
+                        >
+                          your messages to {titleOf(aProvider)}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-[12px] text-t2">—</span>
+                    )}
+                  </td>
+                  <td className={cell}>
+                    {assistant.enabled ? "On" : "Off"}
+                    <br />
+                    <span className="text-[12px] text-t2">
+                      {assistant.enabled ? capsLine(assistant.limits) : "no Assistant in the dock"}
+                    </span>
+                  </td>
+                  <td className={cell}>
+                    <a
+                      href="#assistant-settings"
+                      className="chip bevel inline-flex h-[30px] items-center"
+                    >
+                      Edit
+                    </a>
+                  </td>
+                </tr>
+              )}
               {names && (
                 <tr>
                   <td className={cell}>
@@ -138,6 +201,15 @@ export function AgentsAdmin() {
             </tbody>
           </table>
         </div>
+        {assistant && (
+          <AssistantPanel
+            key={assistant.updated_at ?? "unset"}
+            settings={assistant}
+            providers={pickable(providers, assistant.remote_enabled)}
+            search={searchable(providers, assistant.remote_enabled)}
+            onSaved={setAssistant}
+          />
+        )}
       </main>
       {names && (
         <NamesPanel
@@ -323,5 +395,249 @@ function NamesPanel({
         </button>
       </form>
     </aside>
+  );
+}
+
+/** "200 calls · 2 M tokens a day" */
+export const capsLine = (l: Limits) =>
+  `${l.model_calls_per_day} calls · ${
+    l.tokens_per_day >= 1e6 && l.tokens_per_day % 1e5 === 0
+      ? `${l.tokens_per_day / 1e6} M`
+      : l.tokens_per_day.toLocaleString("en")
+  } tokens a day`;
+
+const capsText = (l: Limits) =>
+  Object.fromEntries(CAPS.map(([k]) => [k, String(l[k])])) as Record<keyof Limits, string>;
+
+const CAPS: [keyof Limits, string][] = [
+  ["model_calls_per_day", "Model calls a day"],
+  ["tokens_per_day", "Tokens a day"],
+  ["look_at_per_hour", "Look at, an hour"],
+  ["messages_per_minute", "Messages a minute"],
+];
+
+/** The Assistant's settings under the table: on or off, provider and model, web search, caps, then Cancel and Save. */
+function AssistantPanel({
+  settings,
+  providers,
+  search,
+  onSaved,
+}: {
+  settings: Settings;
+  /** enabled servers, and remote ones while the switch is on */
+  providers: Provider[];
+  /** enabled search providers while the switch is on */
+  search: Provider[];
+  onSaved: (s: Settings) => void;
+}) {
+  const [enabled, setEnabled] = useState(settings.enabled);
+  const [name, setName] = useState(settings.provider ?? providers[0]?.name ?? "");
+  const p = providers.find((x) => x.name === name) ?? providers[0];
+  const [model, setModel] = useState(settings.model ?? "");
+  const [web, setWeb] = useState(settings.web_search && search.length > 0);
+  const [sName, setSName] = useState(settings.search_provider ?? search[0]?.name ?? "");
+  const sp = search.find((x) => x.name === sName) ?? search[0];
+  const [caps, setCaps] = useState(() => capsText(settings.limits));
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  // "" = its default_model (sent as null)
+  const chosenModel = p?.models.includes(model) && model !== p.default_model ? model : "";
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      onSaved(
+        await ok(
+          api.PUT("/v1/studio/admin/assistant", {
+            body: {
+              enabled,
+              provider: p?.name ?? null,
+              model: chosenModel || null,
+              web_search: web && !!sp,
+              search_provider: web && sp ? sp.name : null,
+              limits: Object.fromEntries(
+                CAPS.map(([k]) => [k, Number(caps[k])]),
+              ) as unknown as Limits,
+            },
+          }),
+        ),
+      );
+    } catch (err) {
+      setError(message(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+  function cancel() {
+    setEnabled(settings.enabled);
+    setName(settings.provider ?? providers[0]?.name ?? "");
+    setModel(settings.model ?? "");
+    setWeb(settings.web_search && search.length > 0);
+    setSName(settings.search_provider ?? search[0]?.name ?? "");
+    setCaps(capsText(settings.limits));
+    setError("");
+  }
+  const field = "flex min-w-0 flex-col gap-1.5";
+  return (
+    <form
+      id="assistant-settings"
+      aria-label="Assistant settings"
+      onSubmit={save}
+      className="panel flex flex-col gap-3 px-[18px] py-4"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <h2 id="a-on-l" className="flex items-center font-display text-base font-bold">
+          Assistant
+          <Info>
+            The in-app assistant: it answers in a drawer and can act on the screen. Applies from
+            each chat&apos;s next message. Off hides it from the dock.
+          </Info>
+        </h2>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={enabled}
+          aria-label="Assistant on"
+          onClick={() => setEnabled(!enabled)}
+          className="flex h-[26px] w-11 shrink-0 rounded-full border border-line p-0.5"
+          style={{ background: enabled ? "var(--a1)" : "var(--s1)" }}
+        >
+          <span
+            className="block size-5 rounded-full transition-transform"
+            style={{
+              background: enabled ? "var(--on1)" : "var(--t2)",
+              transform: enabled ? "translateX(18px)" : undefined,
+            }}
+          />
+        </button>
+      </div>
+      {providers.length ? (
+        <div className="grid grid-cols-2 gap-2">
+          <div className={field}>
+            <label htmlFor="a-prov" className="label">
+              Provider
+            </label>
+            <select
+              id="a-prov"
+              className="in"
+              value={p?.name}
+              onChange={(e) => {
+                setName(e.target.value);
+                setModel("");
+              }}
+            >
+              {providers.map((x) => (
+                <option key={x.name} value={x.name}>
+                  {titleOf(x)} ({x.kind === "remote" ? "remote" : "local server"})
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className={field}>
+            <label htmlFor="a-model" className="label">
+              Model
+            </label>
+            <select
+              id="a-model"
+              className="in"
+              value={chosenModel}
+              onChange={(e) => setModel(e.target.value)}
+            >
+              {p?.models.map((m) => (
+                <option key={m} value={m === p.default_model ? "" : m}>
+                  {m}
+                  {m === p.default_model ? " (default)" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      ) : (
+        <span className="text-[13px] text-t2">
+          {settings.remote_enabled
+            ? "No enabled provider: add one in Model providers"
+            : "No enabled server: add one in Model providers (remote models are off on this deployment)"}
+        </span>
+      )}
+      <div className="grid grid-cols-2 items-end gap-2">
+        <label
+          aria-disabled={!search.length || undefined}
+          title={
+            search.length
+              ? undefined
+              : settings.remote_enabled
+                ? "Add a search provider in Model providers"
+                : "remote models are off on this deployment"
+          }
+          className="flex min-h-[38px] items-center gap-2.5 text-[13px] aria-disabled:opacity-55"
+        >
+          <input
+            type="checkbox"
+            className="accent-[var(--a1)]"
+            checked={web}
+            disabled={!search.length}
+            onChange={(e) => setWeb(e.target.checked)}
+          />
+          Web search
+        </label>
+        {web && sp && (
+          <div className={field}>
+            <label htmlFor="a-search" className="label">
+              Search provider
+            </label>
+            <select
+              id="a-search"
+              className="in"
+              value={sp.name}
+              onChange={(e) => setSName(e.target.value)}
+            >
+              {search.map((x) => (
+                <option key={x.name} value={x.name}>
+                  {titleOf(x)} (search)
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+      <span className="text-[12px] font-semibold tracking-[0.04em] text-t2">Caps per user</span>
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+        {CAPS.map(([k, label]) => (
+          <div key={k} className={field}>
+            <label htmlFor={`a-${k}`} className="label">
+              {label}
+            </label>
+            <input
+              id={`a-${k}`}
+              className="in"
+              type="number"
+              min={1}
+              required
+              value={caps[k]}
+              onChange={(e) => setCaps({ ...caps, [k]: e.target.value })}
+            />
+          </div>
+        ))}
+      </div>
+      {error && <ErrorNote>{error}</ErrorNote>}
+      <div className="flex flex-wrap items-center gap-2">
+        {p && (
+          <span
+            className={`text-[12px] ${p.kind === "remote" ? "text-[#f2c14e]" : "text-t2"}`}
+          >
+            Sends your messages, the screen summary and tool results to {titleOf(p)}
+            {p.kind === "server" ? ", on this network" : ""}; never images.
+          </span>
+        )}
+        <div className="grow" />
+        <button type="button" className="chip bevel" onClick={cancel}>
+          Cancel
+        </button>
+        <button type="submit" className="key h-[38px] px-[18px] text-[13px]" disabled={busy}>
+          Save
+        </button>
+      </div>
+    </form>
   );
 }

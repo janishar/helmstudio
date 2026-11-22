@@ -50,6 +50,7 @@ import {
 } from "@/lib/assistant";
 import { followEvents } from "@/lib/runs";
 import { Registry, awaitIt, navigateTo } from "@/components/assistant/tools";
+import { TextArea } from "@/components/expand-text";
 
 type Line = S<"AssistantLine">;
 /** A line this tab ran (or is running): shown until the server's entry of the same id comes. */
@@ -1132,8 +1133,9 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
               <label htmlFor="assistant-in" className="sr-only">
                 Message the assistant
               </label>
-              <textarea
+              <TextArea
                 id="assistant-in"
+                expand="Message"
                 ref={input}
                 rows={phone ? 1 : 2}
                 maxLength={4000}

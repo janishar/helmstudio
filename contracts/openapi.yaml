@@ -1987,7 +1987,7 @@ paths:
     get:
       tags: [studio]
       operationId: studioAdminGetAssistant
-      summary: 'From 1.44: the assistant''s settings (Admin › Model providers)'
+      summary: 'From 1.44: the assistant''s settings (Admin › AI agents)'
       description: 'Admin only (403). Off, with no provider, until the admin sets it.'
       responses:
         '200': {description: the settings, content: {application/json: {schema: {$ref: '#/components/schemas/AssistantSettings'}}}}
@@ -5981,7 +5981,7 @@ components:
     AssistantSettings:
       type: object
       required: [enabled, provider, model, web_search, search_provider, limits, remote_enabled, updated_at]
-      description: 'the admin''s assistant settings (Admin › Model providers)'
+      description: 'the admin''s assistant settings (Admin › AI agents)'
       properties:
         enabled: {type: boolean}
         provider: {type: [string, 'null'], description: 'a server or remote provider''s name'}

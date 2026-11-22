@@ -190,6 +190,17 @@ describe("the drawer", () => {
     expect(screen.queryByText(/Remote provider/)).toBeNull();
   });
 
+  it("Expand opens the message in a dialog titled Message", async () => {
+    HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
+      this.open = true;
+    };
+    serve();
+    await openDrawer();
+    fireEvent.click(screen.getByRole("button", { name: "Expand" }));
+    expect(screen.getByRole("dialog", { name: "Message" })).toBeTruthy();
+    expect(screen.getByText(/^· Esc closes$/)).toBeTruthy();
+  });
+
   it("is hidden when the admin has it off", async () => {
     answer("GET", {
       "/v1/studio/assistant/threads": () => ({

@@ -1868,7 +1868,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * From 1.44: the assistant's settings (Admin › Model providers)
+         * From 1.44: the assistant's settings (Admin › AI agents)
          * @description Admin only (403). Off, with no provider, until the admin sets it.
          */
         get: operations["studioAdminGetAssistant"];
@@ -6102,7 +6102,7 @@ export interface components {
             /** @description trimmed; blank = 422 */
             text: string;
         };
-        /** @description the admin's assistant settings (Admin › Model providers) */
+        /** @description the admin's assistant settings (Admin › AI agents) */
         AssistantSettings: {
             enabled: boolean;
             /** @description a server or remote provider's name */

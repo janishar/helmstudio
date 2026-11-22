@@ -280,7 +280,7 @@ characters come back fenced as data, and the line lists the sources.
 
 - `openapi.yaml`: `assistant/threads` (list, create, get, delete), `…/messages` (202: a message, action results, or
   a card answer), `…/events` (SSE); `assistant/memory` (list by kind, clear all), `assistant/memory/{id}` (edit,
-  delete); admin settings under Model providers (assistant on or off, provider and model, search provider, caps:
+  delete); admin settings under Admin › AI agents since the merge (plan 21 §25.11; assistant on or off, provider and model, search provider, caps:
   model calls and tokens per user per day, `look_at` per hour, messages per minute); a Gallery `order` parameter
   (newest, oldest, starred first, name).
 - `messages/`: `cmd.assistant.turn`, `cmd.assistant.delete`, `evt.assistant.step`, `req.pipelines.assistant.memory`;
