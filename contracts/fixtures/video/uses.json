@@ -640,7 +640,7 @@
       }
     },
     {
-      "description": "a Timeline range from the take's start: Extend before; from 1.32 no MiniMax H3 References (the part offered is under its rows' min_s, 2 s)",
+      "description": "a Timeline range from the take's start: Extend before, which sets the model to Dev (API 1.39: extend.direction's values_by allows before on Dev only); from 1.32 no MiniMax H3 References (the part offered is under its rows' min_s, 2 s)",
       "take": "11111111-0000-4000-8000-000000000001",
       "range": [
         0,
@@ -676,7 +676,8 @@
               "source.source": {
                 "take_id": "11111111-0000-4000-8000-000000000001"
               },
-              "extend.direction": "before"
+              "extend.direction": "before",
+              "model.variant": "dev"
             }
           },
           {

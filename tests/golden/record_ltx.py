@@ -596,6 +596,108 @@ def record_dev(case: dict, out: Path) -> dict:
     return meta
 
 
+# --- plan 19 23.10 phase 1: the distilled retake, extend and audio to video, as `ltx-2-mlx retake --distilled`,
+# `extend --distilled` and `a2v --distilled` run them (fork main e6e15b7): the same sources and prompts as DEV_CASES;
+# extend adds 6 latent frames (2 s at 24 fps, the node's default). Observed: time, MLX peak and process RSS, the
+# final latents, the decoded waveform before AAC (a2v: the source muxed, as the dev case).
+DISTILLED_CASES = [
+    {**DEV_CASES[0], "name": "retake-distilled-448x256-49f-s42"},
+    {**DEV_CASES[1], "name": "extend-distilled-448x256-49f+48-s42", "extend_frames": 6},
+    {**DEV_CASES[2], "name": "a2v-distilled-448x256-49f-s42"},
+]  # fmt: skip
+STUDIO_MAIN = "ltx-2-studio main e6e15b7"
+
+
+def record_distilled(case: dict, out: Path) -> dict:
+    """One distilled case through the CLI's own pipeline classes and calls (cli._cmd_retake / _cmd_extend_distilled /
+    _cmd_a2v with --distilled)."""
+    from ltx_pipelines_mlx import cli
+
+    model, kind = MODELS / "ltx-2.5", case["kind"]
+    memory_guard()
+    seen: dict = {}
+    wav, mp4 = out / f"{case['name']}.wav", out / f"{case['name']}.mp4"
+    raw_audio_call = blocks.AudioDecoder.__call__
+
+    def audio_call(self, latent):
+        seen["final_audio_latent"] = stats(latent)
+        w = raw_audio_call(self, latent)
+        mx.eval(w)
+        save_waveform(w, str(wav), sample_rate=48000)
+        return w
+
+    blocks.AudioDecoder.__call__ = audio_call
+    inputs: dict = {}
+    mx.reset_peak_memory()
+    t0 = time.perf_counter()
+    if kind == "a2v":
+        from ltx_pipelines_mlx.a2vid_distilled import A2VidDistilledPipeline
+
+        wav_in = out / f"{case['name']}-audio.wav"
+        inputs["audio"] = {"file": wav_in.name, "sha256": ltx_inputs.test_tones(wav_in), "seconds": 3.0,
+                           "rate": 48000, "channels": 2, "what": "ltx_inputs.test_tones"}  # fmt: skip
+        pipe = A2VidDistilledPipeline(model_dir=str(model), gemma_model_id=GEMMA_DEFAULT, low_ram_streaming=False)
+        raw_save = pipe._save_waveform
+
+        def save(w, path, sample_rate=48000):
+            save_waveform(w, str(wav), sample_rate=sample_rate)
+            return raw_save(w, path, sample_rate=sample_rate)
+
+        pipe._save_waveform = save
+        pipe.generate_and_save(prompt=case["prompt"], output_path=str(mp4), audio_path=str(wav_in),
+                               height=case["height"], width=case["width"], num_frames=case["frames"],
+                               frame_rate=case["fps"], seed=case["seed"], images=None,
+                               audio_start_time=case["audio_start"])  # fmt: skip
+        argv = (f"ltx-2-mlx a2v --distilled --model {model} --quantize-on-load 8 --width {case['width']} "
+                f"--height {case['height']} --frames {case['frames']} --frame-rate {case['fps']:g} "
+                f"--seed {case['seed']} --audio {wav_in.name} --prompt '...' -o {mp4.name}")  # fmt: skip
+    else:
+        inputs["video"] = {"file": str(T2V_SOURCE.relative_to(REPO)),
+                           "sha256": hashlib.sha256(T2V_SOURCE.read_bytes()).hexdigest()}  # fmt: skip
+        if kind == "retake":
+            from ltx_pipelines_mlx.retake import RetakePipeline
+
+            pipe = RetakePipeline(model_dir=str(model), gemma_model_id=GEMMA_DEFAULT, low_ram_streaming=False,
+                                  distilled=True)  # fmt: skip
+            v, a = pipe.retake_from_video(prompt=case["prompt"], video_path=str(T2V_SOURCE), start_frame=case["start"],
+                                          end_frame=case["end"], seed=case["seed"],
+                                          regenerate_audio=case["regenerate_audio"])  # fmt: skip
+            argv = f"ltx-2-mlx retake --distilled --video {T2V_SOURCE.name} --start {case['start']} --end {case['end']}"
+        else:
+            from ltx_pipelines_mlx.extend_distilled import ExtendDistilledPipeline
+
+            pipe = ExtendDistilledPipeline(model_dir=str(model), gemma_model_id=GEMMA_DEFAULT, low_ram_streaming=False)
+            v, a = pipe.extend_from_video(prompt=case["prompt"], video_path=str(T2V_SOURCE),
+                                          extend_frames=case["extend_frames"], seed=case["seed"], images=None)  # fmt: skip
+            argv = f"ltx-2-mlx extend --distilled --video {T2V_SOURCE.name} --extend-frames {case['extend_frames']}"
+        argv = f"{argv} --model {model} --quantize-on-load 8 --seed {case['seed']} --prompt '...' -o {mp4.name}"
+        mx.eval(v, a)
+        seen["final_video_latent"], seen["final_audio_latent_out"] = stats(v), stats(a)
+        cli._decode_and_save(pipe, v, a, argparse.Namespace(output=str(mp4)))
+    total = time.perf_counter() - t0
+    probe = ffprobe(mp4)
+    vstream = next(s for s in probe["streams"] if s["codec_type"] == "video")
+    picks = frames(mp4, out, case["name"], int(vstream["nb_frames"]))
+    ru = resource.getrusage(resource.RUSAGE_SELF)
+    meta = {**case, "argv_equivalent": argv, "inputs": inputs, "quantize_on_load": 8, "low_ram": False,
+            "final_video_latent": seen.get("final_video_latent"),
+            "final_audio_latent": seen.get("final_audio_latent") or seen.get("final_audio_latent_out"),
+            "wav": {"sample_rate": 48000, "file": wav.name,
+                    "what": "the input audio trimmed to the video (a2v muxes it)" if kind == "a2v"
+                    else "the decoded waveform before AAC"},
+            "frames_png": {k: {"index": v_, "file": f"{case['name']}-{k}.png"} for k, v_ in picks.items()},
+            "mp4": {"file": mp4.name, "bytes": mp4.stat().st_size, "ffprobe": probe,
+                    "sha256": hashlib.sha256(mp4.read_bytes()).hexdigest()},
+            "timing_s": {"total_wall": round(total, 1)},
+            "memory": {"mlx_peak_gib_whole_run": gib(mx.get_peak_memory()),
+                       "process_max_rss_gib": gib(ru.ru_maxrss), "guard_gib": MEMORY_GUARD_GIB},
+            "versions": {"mlx": mx.__version__, "python": platform.python_version(), "ltx_pipelines_mlx": STUDIO_MAIN,
+                         "machine": f"{platform.system()} {platform.release()} {platform.machine()}"}}  # fmt: skip
+    (out / f"{case['name']}.json").write_text(json.dumps(meta, indent=2, default=str) + "\n")
+    print(case["name"], json.dumps({"timing_s": meta["timing_s"], "memory": meta["memory"]}), flush=True)
+    return meta
+
+
 def record_duration(out: Path) -> dict:
     """DurationHead predictions (cli: no --frames, --auto-duration MIN:MAX) for DURATION_PROMPTS; no DiT is loaded."""
     from ltx_pipelines_mlx.utils.types import AutoDuration
@@ -662,6 +764,10 @@ def main() -> None:
         out = args.out or GOLDEN / case["out"]
         out.mkdir(parents=True, exist_ok=True)
         record_dev(case, out)
+    for case in [c for c in DISTILLED_CASES if args.cases and c["name"] in args.cases]:
+        out = args.out or GOLDEN / case["out"]
+        out.mkdir(parents=True, exist_ok=True)
+        record_distilled(case, out)
 
 
 if __name__ == "__main__":

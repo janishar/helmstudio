@@ -2682,7 +2682,8 @@ export interface components {
          *     params: `step` is the grid, `min` / `max` the bounds. From 1.12: a `frames` param may declare `auto` (the model
          *     predicts the length; the value `"auto"`, the Duration slider's Auto length switch; contracts/README.md, Video);
          *     an `int` may declare `values` (the only allowed values: a choice, one value a read-only readout) and
-         *     `values_by` (the allowed values per value of an enum param of the same node: LTX `steps` per `role`); a
+         *     `values_by` (the allowed values per value of an enum param of the same node: LTX `steps` per `role`; from 1.39 on
+         *     an enum too, and per value of another node's param: LTX extend's `direction` per `model.variant`); a
          *     float item field may declare `position: seconds` (a keyframe's time on the clip). From 1.19 (contracts/README.md,
          *     Media inputs): `media`: one video or audio take (`MediaRef`, default null; a run needs one) of the kinds in
          *     `accepts`; with `trim` the value may carry `in` / `out` (the UI draws the take's poster or waveform with a trim
@@ -2739,11 +2740,11 @@ export interface components {
             };
             /** @description int only: the only allowed values, ascending (`<node>.<param>: must be one of 3, 8`) */
             values?: number[];
-            /** @description int with values only: the allowed values per value of the same node's enum param `param` (a value not listed allows all of `values`); the message names the subset (`sample2.steps: must be one of 3`) */
+            /** @description int with values (from 1.39 an enum too): the allowed values per value of an enum param `param`, the same node's or, from 1.39, another node's in the `when` reference form `<node>.<param>` (`model.variant`, the graph's merged value; a graph without that node, or a value not listed, allows all of `values` / `enum`). The message names the subset (`sample2.steps: must be one of 3`, `extend.direction: must be one of after`). The UI shows a value outside the subset faded with its reason, `<value> needs <first value of the named param that allows it>` (`Before needs Dev`); a take offer whose pre-fill it refuses also sets the named param to that value (contracts/README.md, Video: Distilled actions) */
             values_by?: {
                 param: string;
                 values: {
-                    [key: string]: number[];
+                    [key: string]: (number | string)[];
                 };
             };
             /** @description absent = the name */

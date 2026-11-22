@@ -217,3 +217,25 @@ run each; before the cap the decode alone reached 49.1 / 49.8 GB footprint, 27 G
   `--relay-audio-strength 0`, as the pack). The pack is bit-exact against all ten on 0.32.2 (every point, every frame,
   the WAV) and the auto / noaudio / reseed variants pass; on 0.32.4 the bars were re-measured
   (tests/test_ltx_golden.py).
+
+## Distilled actions (plan 19 23.10 phase 1, 2026-11-22: ltx-2-studio main e6e15b7)
+
+- **Ported** from the fork's `retake --distilled` (`RetakePipeline(distilled=True)`: the 8-step table, one pass per
+  step, deterministic Euler: upstream does not switch retake to ancestral on 2.5), `extend --distilled`
+  (`ExtendDistilledPipeline`: the source's last 25 frames, 4 latent frames re-encoded at half size, pinned with
+  `VideoConditionByLatentIndex` at the start of a 4 + N latent-frame window, and the audio tokens under them likewise;
+  DistilledPipeline's two stages over the window; the window's new frames appended to the source's own latent) and
+  `a2v --distilled` (`A2VidDistilledPipeline`: DistilledPipeline's stage 1 with the source audio frozen, and stage 2
+  **ancestral** with seed + 20000, where the dev a2v's stage 2 is deterministic: `Latent.guided` tells them apart).
+  On Distilled `encode-guided` encodes the prompt only; its cache key holds the variant (`by_variant`), since Dev and
+  Distilled share Gemma and the connector. `distill` passes a distilled model through.
+- **A distilled extend re-reads the source MP4** (`Latent.clip`, set by encode-video) for its half-size tail: the
+  causal VAE's last latent frames depend on the whole clip, so the half-size encode covers all of it. Its refusals
+  (64 px grid, 25 frames) come before the transformer loads, after encode-video (the check sees no media facts).
+- **Measured** (int8, 448x256x49, the dev cases' sources and prompts; extend + 2 s): on mlx 0.32.2 all three are
+  bit-exact against the fork (every frame PSNR inf, WAV equal). On 0.32.4 (`DISTILLED_BARS`): retake 35.45 / 33.51 dB,
+  log-mel 0.407; extend 28.34 / 17.11, 0.898; a2v 22.48 / 20.89, 0.000. Times (0.32.4, one runner, retake cold):
+  retake 30.7 s (the fork's CLI 32.2), extend 34.2 s (34.2: the node 31 s, both stages and the half-size encode), a2v
+  32.3 s (26.3). MLX peaks per node with the int8 transformer resident (19.2 GiB): retake 21.5 GiB, extend 25.7,
+  sample-guided 23.6, sample2 23.8, decode 29.9-32.4; the fork's recorded peaks 8.2 / 9.9 / 7.7 GiB are its decode's
+  alone (its tiled decode resets MLX's peak counter). The formulas stay upper bounds; extend's gets the half-size encode's term.

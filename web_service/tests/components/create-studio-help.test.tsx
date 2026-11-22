@@ -124,9 +124,11 @@ describe("Create: the Studio block's help, preset order and planned peak", () =>
     expect(estimateText(null, null)).toBeNull();
   });
 
-  it("extend: one CFG · STG tile that opens both editors", () => {
+  it("extend: one CFG · STG tile that opens both editors (on Dev: Distilled has none)", () => {
     serve(null);
     start(ltx("ltx-extend"));
+    expect(within(section("Quality")).queryByRole("button", { name: /CFG · STG/ })).toBeNull();
+    fireEvent.click(screen.getByRole("menuitemradio", { name: /^Dev/, hidden: true }));
     const quality = section("Quality");
     const tile = within(quality).getByRole("button", { name: /CFG · STG\s*3\.0 · 1\.0/ });
     expect(within(quality).queryByRole("button", { name: /^STG/ })).toBeNull();

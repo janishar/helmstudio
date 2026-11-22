@@ -39,6 +39,7 @@ from packs.ltx.common import (  # the runtime-neutral part
     ANCESTRAL_SEED_2,
     CANVAS_MAX,
     DURATION_HEAD,
+    EXTEND_CARRY,
     FFMPEG,
     FRAMES,
     MAX_FRAMES,
@@ -62,6 +63,7 @@ from packs.ltx.common import (  # the runtime-neutral part
     distilled_lora,  # noqa: F401 (tests use it from here)
     extend_map,
     image_crf,
+    is_distilled,
     keyframe_frames,
     lora_block_prefused,
     ltx_floor,
@@ -157,6 +159,12 @@ class Latent:
     )
     sound: tuple | None = (
         None  # audio to video: (the source file's bytes, in seconds), muxed by decode
+    )
+    clip: bytes | None = (
+        None  # a source video's MP4 (encode-video): a distilled extend re-encodes it at half size
+    )
+    guided: bool = (
+        False  # the dev guided stage 1 of audio to video made it: stage 2 refines deterministically
     )
 
 
@@ -576,7 +584,9 @@ def sample(ctx, params: dict, inputs: dict) -> dict:
         audio = noised_state(latent.audio.shape, [], fhw, compute_audio_positions(latent.audio.shape[1]), seed + 2,
                              sigmas[0], latent.audio, scalar_blend=False)  # fmt: skip
     mask = relay_mask(cond, fhw, video.latent.shape[1], latent.fps)
-    noise = seed + ANCESTRAL_SEED_2 if anc and not latent.sound else None
+    # the dev audio to video's stage 2 is deterministic (A2VidPipelineTwoStage); the distilled one ancestral
+    # (A2VidDistilledPipeline: DistilledPipeline's stage 2 with the source audio frozen)
+    noise = seed + ANCESTRAL_SEED_2 if anc and not latent.guided else None
     vx, ax = _denoise(ctx, x0_model, video, audio, cond, sigmas, "stage 2", noise, mask)
     return {"latent": replace(latent, video=vx, audio=ax)}
 
@@ -588,18 +598,24 @@ def upscale(ctx, params: dict, inputs: dict) -> dict:
     # a second pass would double it past the canvas the run was admitted for (and past memory)
     if latent.upscaled:
         raise RunError(f"{ctx.node}: the latent is already upscaled (one upscale per latent)")
+    ctx.progress(1, 1, "upscaling")
+    tokens, fhw = _upsample(ctx, model, latent.video, latent.fhw)
+    return {"latent": replace(latent, video=tokens, fhw=fhw, upscaled=True)}
+
+
+def _upsample(ctx, model, video: mx.array, fhw) -> tuple[mx.array, tuple]:
+    """DistilledPipeline._upsample_latent on tokens: the first F * H * W (appended keyframe tokens dropped)."""
     upsampler = ctx.component(model, "upscaler")
     stats = ctx.component(model, "vae").per_channel_statistics
-    ctx.progress(1, 1, "upscaling")
-    f, h, w = latent.fhw
+    f, h, w = fhw
     mean, std = stats.mean.reshape(1, 1, 1, 1, -1), stats.std.reshape(1, 1, 1, 1, -1)
-    x = PATCH.unpatchify(latent.video[:, : f * h * w, :], latent.fhw).transpose(0, 2, 3, 4, 1)
+    x = PATCH.unpatchify(video[:, : f * h * w, :], fhw).transpose(0, 2, 3, 4, 1)
     x = upsampler((x * std + mean).transpose(0, 4, 1, 2, 3)).transpose(0, 2, 3, 4, 1)
     x = ((x - mean) / std).transpose(0, 4, 1, 2, 3)
     mx.eval(x)
     tokens, _ = PATCH.patchify(x)
     mx.eval(tokens)
-    return {"latent": replace(latent, video=tokens, fhw=(f, h * 2, w * 2), upscaled=True)}
+    return tokens, (f, h * 2, w * 2)
 
 
 def _save_wav(waveform: mx.array, path: Path) -> None:
@@ -710,6 +726,8 @@ def check_distill(params: dict, wired: set, models: dict | None = None) -> str |
     from core.pack import models_root
 
     model = (models or {}).get("model")
+    if model is not None and is_distilled(model):
+        return None  # the identity: the LoRA is fused in already
     if why := _needs_dev(params, wired, models):
         return why
     spec = model.pack.spec if model is not None else {}
@@ -720,9 +738,9 @@ def check_distill(params: dict, wired: set, models: dict | None = None) -> str |
     return None
 
 
-check_retake = check_extend = _needs_dev
-globals()["check_sample-guided"] = _needs_dev
-ENV = "mlx"
+ENV = (
+    "mlx"  # retake, extend and the guided stage 1 run on Distilled and Dev (plan 19 23.4, phase 1)
+)
 
 
 def encode_guided(ctx, params: dict, inputs: dict) -> dict:
@@ -738,16 +756,14 @@ def encode_guided(ctx, params: dict, inputs: dict) -> dict:
     ctx.check()
     ctx.progress(1, 1, "encoding")
     out = []
-    for t in (text, NEGATIVE_PROMPT):
+    # a distilled model runs without CFG: no negative prompt (retake --distilled: _encode_prompts, positive only)
+    for t in (text,) if is_distilled(model) else (text, NEGATIVE_PROMPT):
         hidden, mask = encoder.encode_all_layers(t, max_length=MAX_TOKENS)
         video, audio = extractor(hidden, attention_mask=mask)
         mx.eval(video, audio)
         out += [video, audio]
-    return {
-        "cond": Cond(
-            out[0], out[1], neg_video=out[2], neg_audio=out[3], crf=image_crf(_version(model))
-        )
-    }
+    neg = dict(zip(("neg_video", "neg_audio"), out[2:]))
+    return {"cond": Cond(out[0], out[1], **neg, crf=image_crf(_version(model)))}
 
 
 def load_video_frames(path: Path, height: int, width: int, frames: int) -> mx.array:
@@ -804,22 +820,33 @@ def encode_video(ctx, params: dict, inputs: dict) -> dict:
         if info.num_frames > MAX_FRAMES:
             raise RunError(f"{where}: take {tid} has {info.num_frames} frames; this input takes at most {MAX_FRAMES}")  # fmt: skip
         frames = ltx_floor(info.num_frames)
-        pixels = load_video_frames(path, info.height, info.width, frames)
-        encoder, tiling = ctx.component(model, "vae_encoder"), TilingConfig.default()
-        if len(prepare_tiles_for_encoding(pixels.shape, tiling)) > 1:  # fmt: skip
-            # float32 blend buffers, back to bf16 (upstream's .to(dtype))
-            latent = encoder.tiled_encode(pixels, tiling).astype(mx.bfloat16)
-        else:
-            latent = encoder.encode(pixels)
-        mx.eval(latent)
-        del pixels
+        latent = _encode_clip(
+            ctx.component(model, "vae_encoder"), path, info.height, info.width, frames
+        )
         sound = _audio_tokens(ctx, model, path, frames, info.fps) if info.has_audio else None
     audio = sound[0] if sound else mx.zeros((1, 8, compute_audio_token_count(frames, frame_rate=info.fps), 16),
                                             dtype=mx.bfloat16)  # fmt: skip
     video, _ = PATCH.patchify(latent)
     tokens, _ = AudioPatchifier().patchify(audio)
     fhw = tuple(latent.shape[2:5])
-    return {"latent": Latent(video, tokens, fhw, frames, info.fps, source_map={"take_id": tid})}
+    return {
+        "latent": Latent(
+            video, tokens, fhw, frames, info.fps, source_map={"take_id": tid}, clip=src["data"]
+        )
+    }
+
+
+def _encode_clip(encoder, path: Path, height: int, width: int, frames: int) -> mx.array:
+    """retake.encode_video_tensor over the clip's first `frames` frames at height x width: tiled with
+    TilingConfig.default() when it spans more than one tile, else at once; evaluated before the DiT loads."""
+    pixels, tiling = load_video_frames(path, height, width, frames), TilingConfig.default()
+    if len(prepare_tiles_for_encoding(pixels.shape, tiling)) > 1:
+        # float32 blend buffers, back to bf16 (upstream's .to(dtype))
+        latent = encoder.tiled_encode(pixels, tiling).astype(mx.bfloat16)
+    else:
+        latent = encoder.encode(pixels)
+    mx.eval(latent)
+    return latent
 
 
 def encode_audio_(ctx, params: dict, inputs: dict) -> dict:
@@ -939,14 +966,21 @@ def _edit(
     smap,
 ):
     """The guided loop of retake / extend over the whole clip (noised at sigma 1 inside the masks, video `seed`,
-    audio `seed + 1`) → the whole clip's latent with its source map."""
-    seed, cond = inputs["seed"], inputs["cond"]
-    factories = _guiders(params, cond, audio_guided=True)
-    x0_model = X0Model(ctx.component(inputs["model"], "transformer"))
+    audio `seed + 1`), or on a distilled model the distilled 8 steps without guidance (retake) → the whole clip's
+    latent with its source map."""
+    seed, cond, model = inputs["seed"], inputs["cond"], inputs["model"]
+    distilled = is_distilled(model)
+    factories = None if distilled else _guiders(params, cond, audio_guided=True)
+    x0_model = X0Model(ctx.component(model, "transformer"))
     video = noise_latent_state(video, sigma=1.0, seed=seed)
     audio = noise_latent_state(audio, sigma=1.0, seed=seed + 1)
-    sigmas = ltx2_schedule(params["steps"], fhw[0] * fhw[1] * fhw[2])
-    vx, ax = _guided(ctx, x0_model, video, audio, cond, factories, sigmas, "guided")
+    if (
+        distilled
+    ):  # RetakePipeline(distilled=True): the 8-step table, one pass per step, deterministic Euler
+        vx, ax = _denoise(ctx, x0_model, video, audio, cond, STAGE1_SIGMAS, "distilled", None)
+    else:
+        sigmas = ltx2_schedule(params["steps"], fhw[0] * fhw[1] * fhw[2])
+        vx, ax = _guided(ctx, x0_model, video, audio, cond, factories, sigmas, "guided")
     return {
         "latent": Latent(
             vx, ax, fhw, frames, src.fps, source_map={"take_id": src.source_map["take_id"]} | smap
@@ -995,6 +1029,8 @@ def extend(ctx, params: dict, inputs: dict) -> dict:
     m = extend_map(params["seconds"], params["direction"], src.fps, src.frames)
     if "error" in m:
         raise _failed(ctx.node, m["error"])
+    if is_distilled(inputs.get("model")):
+        return _extend_distilled(ctx, inputs, src, m)
     (f, h, w), k, after = src.fhw, m["latent"], params["direction"] == "after"
     t = src.audio.shape[1]
     extra = max(0, compute_audio_token_count(src.frames + 8 * k, frame_rate=src.fps) - t)
@@ -1025,6 +1061,69 @@ def extend(ctx, params: dict, inputs: dict) -> dict:
     )
 
 
+def _pin(tokens: mx.array, per_frame: int) -> VideoConditionByLatentIndex:
+    """extend_distilled._pin_prefix: `tokens` pinned over the first frames of a state (strength 1)."""
+    return VideoConditionByLatentIndex(frame_indices=list(range(tokens.shape[1] // per_frame)), clean_latent=tokens,
+                                       strength=1.0)  # fmt: skip
+
+
+def _extend_distilled(ctx, inputs: dict, src: Latent, m: dict) -> dict:
+    """ExtendDistilledPipeline.extend_from_video (after only: the graph check refuses before, as values_by): the
+    source's last 25 frames (4 latent frames, re-encoded at half size for stage 1) and the audio tokens under them
+    pinned at the start of a window of 4 + N latent frames, which DistilledPipeline's two stages generate (8 ancestral
+    steps at half size, x2, 3 at full size); the window's new frames and audio are appended to the source's own."""
+    model, cond, seed = inputs["model"], inputs["cond"], inputs["seed"]
+    (f, h, w), k = src.fhw, m["latent"]
+    if (h * 32) % 64 or (w * 32) % 64:
+        raise RunError(
+            f"Distilled extend needs sides on a 64 px grid (this take is {w * 32} × {h * 32}); pick Dev"
+        )
+    if src.frames < EXTEND_CARRY:
+        raise RunError(
+            f"Distilled extend needs at least {EXTEND_CARRY} source frames (this take has {src.frames})"
+        )
+    carry, fps, anc = (EXTEND_CARRY - 1) // 8 + 1, src.fps, ancestral(_version(model))
+    carry_t = max(1, compute_audio_token_count(EXTEND_CARRY, frame_rate=fps))
+    # the source audio spans the clip exactly (extend_distilled.fit_audio_latent: zero-padded or cut)
+    t = compute_audio_token_count(src.frames, frame_rate=fps)
+    audio = src.audio[:, :t, :]
+    if audio.shape[1] < t:
+        audio = mx.concatenate(
+            [audio, mx.zeros((1, t - audio.shape[1], 128), dtype=audio.dtype)], axis=1
+        )
+    ctx.progress(1, 1, "encoding the tail")
+    with tempfile.TemporaryDirectory(prefix="ltx-") as tmp:
+        path = Path(tmp) / "source.mp4"
+        path.write_bytes(src.clip)
+        half = _encode_clip(ctx.component(model, "vae_encoder"), path, h * 16, w * 16, src.frames)
+    video_half = PATCH.patchify(half[:, :, -carry:])[0]
+    video_full, audio_carry = src.video[:, -carry * h * w :, :], audio[:, -carry_t:, :]
+    window = 1 + 8 * (carry + k - 1)
+    # stage 1: half size, the carry pinned (video seed, audio seed + 1, the legacy scalar blend)
+    fhw1 = compute_video_latent_shape(window, h * 16, w * 16)
+    at = compute_audio_token_count(window, frame_rate=fps)
+    x0_model = X0Model(ctx.component(model, "transformer"))
+    video = noised_state((1, fhw1[0] * fhw1[1] * fhw1[2], 128), [_pin(video_half, fhw1[1] * fhw1[2])], fhw1,
+                         compute_video_positions(*fhw1, frame_rate=fps), seed, 1.0)  # fmt: skip
+    a_state = noised_state((1, at, 128), [_pin(audio_carry, 1)], (at, 1, 1), compute_audio_positions(at), seed + 1, 1.0)  # fmt: skip
+    vx, ax = _denoise(ctx, x0_model, video, a_state, cond, STAGE1_SIGMAS, "stage 1",
+                      seed + ANCESTRAL_SEED if anc else None)  # fmt: skip
+    # stage 2: x2, the full-size carry pinned, renoised at sigma 0.909375 with seed + 2 (audio: the mask blend)
+    up, fhw2 = _upsample(ctx, model, vx, fhw1)
+    video = noised_state(up.shape, [_pin(video_full, fhw2[1] * fhw2[2])], fhw2,
+                         compute_video_positions(*fhw2, frame_rate=fps), seed + 2, STAGE2_SIGMAS[0], up)  # fmt: skip
+    a_state = noised_state(ax.shape, [_pin(audio_carry, 1)], (at, 1, 1), compute_audio_positions(at), seed + 2,
+                           STAGE2_SIGMAS[0], ax, scalar_blend=False)  # fmt: skip
+    vx, ax = _denoise(ctx, x0_model, video, a_state, cond, STAGE2_SIGMAS, "stage 2",
+                      seed + ANCESTRAL_SEED_2 if anc else None)  # fmt: skip
+    new_v = vx[:, carry * h * w : fhw2[0] * h * w, :].astype(src.video.dtype)
+    new_a = ax[:, carry_t:, :].astype(audio.dtype)
+    out = Latent(mx.concatenate([src.video, new_v], axis=1), mx.concatenate([audio, new_a], axis=1),
+                 (f + k, h, w), m["frames"], fps, source_map={"take_id": src.source_map["take_id"]} | m["map"])  # fmt: skip
+    mx.eval(out.video, out.audio)
+    return {"latent": out}
+
+
 def sample_guided(ctx, params: dict, inputs: dict) -> dict:
     """a2vid_two_stage stage 1: half the canvas (64 px grid), pure noise (`seed`, the legacy scalar blend) with
     optional keyframe rows as i2v, the source audio frozen (mask 0: it steers the video through the A<->V cross
@@ -1037,16 +1136,27 @@ def sample_guided(ctx, params: dict, inputs: dict) -> dict:
     )
     fhw = compute_video_latent_shape(frames, height // 2, width // 2)
     keyframe_frames(cond, frames, fps)  # a bad row fails before anything loads
-    factories = _guiders(params, cond, audio_guided=False)
+    distilled = is_distilled(model)
+    factories = None if distilled else _guiders(params, cond, audio_guided=False)
     x0_model = X0Model(ctx.component(model, "transformer"))
     video = noised_state((1, fhw[0] * fhw[1] * fhw[2], 128), _conditionings(ctx, model, cond, fhw, frames, fps), fhw,
                          compute_video_positions(*fhw, frame_rate=fps), seed, 1.0)  # fmt: skip
     audio = _audio_state(
         a.audio, mx.zeros((1, a.audio.shape[1], 1), dtype=mx.bfloat16), frozen=True
     )
-    sigmas = ltx2_schedule(params["steps"], fhw[0] * fhw[1] * fhw[2])
-    vx, ax = _guided(ctx, x0_model, video, audio, cond, factories, sigmas, "guided")
-    return {"latent": Latent(vx, ax, fhw, frames, fps, source_map=a.source_map, sound=a.sound)}
+    if (
+        distilled
+    ):  # A2VidDistilledPipeline: DistilledPipeline's stage 1 (8 ancestral steps), the audio frozen
+        noise = seed + ANCESTRAL_SEED if ancestral(_version(model)) else None
+        vx, ax = _denoise(ctx, x0_model, video, audio, cond, STAGE1_SIGMAS, "stage 1", noise)
+    else:
+        sigmas = ltx2_schedule(params["steps"], fhw[0] * fhw[1] * fhw[2])
+        vx, ax = _guided(ctx, x0_model, video, audio, cond, factories, sigmas, "guided")
+    return {
+        "latent": Latent(
+            vx, ax, fhw, frames, fps, source_map=a.source_map, sound=a.sound, guided=not distilled
+        )
+    }
 
 
 def distill(ctx, params: dict, inputs: dict) -> dict:
@@ -1056,6 +1166,10 @@ def distill(ctx, params: dict, inputs: dict) -> dict:
     from core.pack import LoraUse, models_root
 
     model = inputs["model"]
+    if is_distilled(
+        model
+    ):  # the LoRA is fused into the distilled transformer: a second fuse would apply it twice
+        return {"model": model}
     spec = next(x for x in model.pack.spec["lora"]["prefused"] if x["variant"] == "distilled")
     # the shared index's id (its SHA-256), filled in at start (registry.fill_prefused); "" before: check_distill
     # fails such a run before anything loads

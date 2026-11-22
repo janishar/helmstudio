@@ -28,11 +28,12 @@
     "model": {
       "kind": "ltx/model",
       "params": {
-        "variant": "dev",
+        "variant": "distilled",
         "precision": "int8"
       },
       "only": {
         "variant": [
+          "distilled",
           "dev"
         ],
         "precision": [
@@ -136,6 +137,7 @@
       "audio.source"
     ],
     "quick": [
+      "model.variant",
       "keyframes.bypass",
       "keyframes.images",
       "decode.audio"
@@ -150,7 +152,7 @@
       },
       {
         "title": "Quality",
-        "help": "Euler steps of the guided loop; each runs the model four times over the whole clip.",
+        "help": "Distilled runs its own 8 steps without guidance. Dev adds Steps, CFG and STG here.",
         "items": [
           "model.precision",
           "sample1.steps",

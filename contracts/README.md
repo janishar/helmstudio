@@ -920,6 +920,30 @@ audio track) plus a poster image; uploads stay images.
   of 3`; an enum value not listed allows all of `values`). A user workflow that changes `role` and keeps the default
   steps is `param_invalid` on `steps`. The UI draws a choice of the allowed subset; one value is a read-only readout
   (the board's "Stage 1 steps 8", "Stage 2 steps 3"). Nothing is hidden and nothing invalid can be picked.
+- **Distilled actions** (API 1.39; plan 19-ltx-studio-features 23.4 phase 1, board LtxFeatures frames 6-8; normative).
+  Retake, Extend and Audio to video run on **Distilled** (the default) or Dev: their templates pin `only {variant:
+  [distilled, dev]}` and place `model.variant` in `quick` (the model chip's menu). `steps`, `cfg` and `stg` of
+  `ltx/retake`, `ltx/extend` and `ltx/sample-guided` carry `when: "model.variant == 'dev' || model.variant ==
+  'dev-int8'"` (hidden and not sent on Distilled, which ignores them). On a distilled model: `ltx/encode-guided`
+  encodes the prompt only (no negative prompt); `ltx/retake` runs the 8-step distilled table, one pass per step,
+  deterministic Euler (`retake --distilled`); `ltx/extend` continues the source's last 25 frames (4 latent frames,
+  re-encoded at half size) pinned at the start of a window of 4 + N latent frames, generated in two stages inside
+  the node (8 ancestral steps at half size, the upscaler, 3 at full size; `extend --distilled`), so it also `uses`
+  vae_encoder, upscaler and vae; `ltx/sample-guided` runs the distilled stage 1 (8 ancestral steps) with the source
+  audio frozen, and `sample2` refines ancestrally (`a2v --distilled`); `ltx/distill` passes the model through (the
+  LoRA is fused in). A distilled extend fails before the transformer loads with `Distilled extend needs sides on a
+  64 px grid (this take is <W> × <H>); pick Dev` and `Distilled extend needs at least 25 source frames (this take has
+  <n>)`.
+  **Cross-node `values_by`** (API 1.39): `values_by.param` may name another node's enum param in the `when` reference
+  form (`<node>.<param>`), read from the graph's merged values (a graph without that node, or a value not listed,
+  allows all), and `values_by` may sit on an enum (subsets of its `enum`; a cross-node one allows the default for
+  every value). `ltx/extend.direction`: `{param: model.variant, values: {distilled: [after], dev: [after, before],
+  distilled-fp8: [after], dev-int8: [after, before]}}`. Studio's run check (`extend.direction: must be one of
+  after`, 422), the Graph's `param_invalid`, presets and the runner's graph check use it. The UI shows a value outside
+  the subset faded with `<Value> needs <V>`, V the first value of the named param's enum (its `only`, else the
+  schema's) that allows it ("Before needs Dev"). **Offers rule**: a take offer whose pre-fill falls outside the
+  template's `values_by` also sets the named param to that V (the Timeline's Extend at a clip's start: `model.variant:
+  dev`; `offer_values_by`, fixtures/video/uses.json).
 - **Auto length** (`auto` on a `frames` param). The value `"auto"` asks the model to choose the length (LTX: a 3.8 MB
   DurationHead on the encoded prompt, beats included; deterministic, no seed). Allowed only when the param declares
   `auto` (else 422 / `param_invalid`: `<node>.<param>: auto length is not offered`); it may sit in a workflow, a preset,
@@ -1220,11 +1244,13 @@ unchanged; a video never fills them.
   Templates: `ltx-retake` (prompt, seed, model dev, encode-guided, `source` encode-video → `retake` → decode → output),
   `ltx-extend` (the same with `extend`), `ltx-audio-to-video` (canvas, model dev, encode-guided, `audio`
   encode-audio, `keyframes` bypassed (on: optional image rows, as i2v) → `sample1` sample-guided → upscale → `sample2`
-  (`ltx/sample` stage2, 3 steps, model ← `distill`) → decode → output). Each pins `only {variant: [dev], precision: [int8, int4]}` and has
+  (`ltx/sample` stage2, 3 steps, model ← `distill`) → decode → output). Each pins `only {variant: [dev], precision: [int8, int4]}`
+  (from 1.39 `variant: [distilled, dev]`, Distilled the default: Video, Distilled actions) and has
   no Quality (bf16) preset: bf16 is unmeasured (the scout's estimate for a2v, 47–50 GiB plus the LoRA fuse's
   transient, is too close to the 52 GB budget); offered when a measured bf16 memory item exists.
-- **The runner** checks before it loads: `<node>: needs model variant dev` (retake, extend, sample-guided, distill),
-  `<node>: needs model variant distilled` (`ltx/sample` stage 1; stage 2 also takes a model through `ltx/distill`).
+- **The runner** checks before it loads: `<node>: needs model variant distilled` (`ltx/sample` stage 1; stage 2 also
+  takes a model through `ltx/distill`); from 1.39 retake, extend and sample-guided run on Distilled too (Video,
+  Distilled actions), and on NVIDIA they still need `dev` (`<node>: needs model variant dev`, the torch runner).
   The maps (`retake_map`, `extend_map`, `audio_map`, `fixtures/video/sources.json`): retake on whole frames f =
   rnd(t·fps) (the span arrives snapped), S = ⌊(f_start + 4)/8⌋, E = max(⌊(f_end + 4)/8⌋, S + 1) clamped to F, in
   integer arithmetic (f/8 rounded half up: the old UI's `Math.round`, tasks.js; scripts/ltx_run.py's half to even is
@@ -3117,7 +3143,9 @@ session; the batch limits apply). Order and binds are `rerender_steps` (`fixture
   own time `t − at + in` (snapped to the take's frames), put in every span param and a trim media param's `in` /
   `out`. Extend works from an end of the take, so an extend template (`ltx-extend`, `echo-extend`) is offered only at one: `extend.direction` `after`
   when the range ends at the take's end (within one frame), else `before` when it starts at 0, else not at all
-  (`extend_room`; a trimmed clip's hidden tail would otherwise be skipped or restored). Empty for an empty slot, an
+  (`extend_room`; a trimmed clip's hidden tail would otherwise be skipped or restored); from 1.39 an offer whose
+  pre-fill a cross-node `values_by` refuses also sets the named param (`offer_values_by`: Extend before on a
+  Distilled template → `model.variant: dev`; Video, Distilled actions). Empty for an empty slot, an
   offline clip, or nothing fitting. 422 `unknown clip <id>`, `start must be before end` (1.19's `clip <id> is not on
   V1` is gone in 1.32: an audio clip answers Make shot).
   The inspector shows them as the board's "Extend" and "Retake a section" (labels from `action`), each with Replace

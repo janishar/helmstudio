@@ -780,13 +780,11 @@ def dev_workflow(name: str) -> tuple[dict, dict, dict]:
     ("name", "edit", "error"),
     [
         (
-            "ltx-retake",
-            lambda n: n["model"]["params"].update(variant="distilled"),
-            "retake: needs model variant dev",
-        ),
-        (
             "ltx-audio-to-video",
-            lambda n: n["sample2"]["in"].update(model="model.model"),
+            lambda n: (
+                n["model"]["params"].update(variant="dev"),
+                n["sample2"]["in"].update(model="model.model"),
+            ),
             "sample2: needs model variant distilled",
         ),
         (
@@ -837,6 +835,32 @@ def test_distill_is_the_dev_model_with_the_distilled_lora_baked():
 
 
 @needs_mlx
+def test_distilled_actions_pass_distill_through_and_key_the_encode_by_variant():
+    """Plan 19 23.4 phase 1: on Distilled, ltx/distill is the identity (the LoRA is fused in) and its check passes;
+    encode-guided's cache key holds the variant (Dev's Conditioning carries the negative prompt, Distilled's not)."""
+    from packs.ltx import mlx as ltx_mlx
+
+    _, _, p = ltx()
+    distilled = pack.ModelRef(p, "distilled", "int8")
+    assert ltx_mlx.distill(None, {}, {"model": distilled})["model"] is distilled
+    assert ltx_mlx.check_distill({}, {"model"}, {"model": distilled}) is None
+    nodes, impls, schemas = dev_workflow("ltx-retake")
+    nodes["prompt"]["params"]["text"] = "a cat"
+    nodes, _ = graph.resolve(nodes, schemas)
+    keys = graph.keys(nodes, impls, schemas, "o")
+    nodes["model"]["params"]["variant"] = "dev"
+    dev = graph.keys(nodes, impls, schemas, "o")
+    assert keys["encode"] != dev["encode"] and keys["source"] == dev["source"]
+    # Extend on Distilled (the default) offers after only: the graph check refuses before (a cross-node values_by)
+    nodes, _, _ = dev_workflow("ltx-extend")
+    nodes["extend"]["params"]["direction"] = "before"
+    nodes, _ = graph.resolve(nodes, schemas)
+    assert "extend.direction: must be one of after" in graph.validate(nodes, schemas, run=False)
+    nodes["model"]["params"]["variant"] = "dev"
+    assert not [e for e in graph.validate(nodes, schemas, run=False) if "direction" in e]
+
+
+@needs_mlx
 def test_dev_memory_plans_cover_only_the_runs_that_can_use_it():
     """Retake and extend in one item at the goldens' source size, audio to video its own; text to video is planned on
     the distilled variant only, and nothing is planned at bf16 for the dev templates (`only`)."""
@@ -851,7 +875,10 @@ def test_dev_memory_plans_cover_only_the_runs_that_can_use_it():
         "dev"
     }
     assert registry.memory_plans(p, "dev", "bf16", impls, schemas) == []
-    assert all(
-        x.get("workflow") is None
-        for x in registry.memory_plans(p, "distilled", "int8", impls, schemas)
-    )
+    # from API 1.39 retake, extend and audio to video run on Distilled too: audio to video gets its own item there
+    assert [
+        x.get("workflow") for x in registry.memory_plans(p, "distilled", "int8", impls, schemas)
+    ] == [
+        None,
+        "ltx-audio-to-video",
+    ]

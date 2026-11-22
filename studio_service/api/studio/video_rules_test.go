@@ -81,6 +81,23 @@ func TestResolveVideoRules(t *testing.T) {
 	}
 }
 
+// The distilled actions (API 1.39, contracts/README.md "Video: Distilled actions"): Extend defaults to Distilled,
+// whose cross-node values_by on direction refuses Before (the 422 the board's frame 7 names); Dev allows it.
+func TestResolveDistilledExtend(t *testing.T) {
+	extend := ltxWorkflow(t, "ltx-extend")
+	src := `"source.source": {"take_id": "` + takeA + `"}`
+	for body, want := range map[string]string{
+		`{` + src + `}`: "",
+		`{` + src + `, "extend.direction": "before"}`:                              "extend.direction: must be one of after",
+		`{` + src + `, "extend.direction": "before", "model.variant": "dev"}`:      "",
+		`{` + src + `, "extend.direction": "after", "model.variant": "distilled"}`: "",
+	} {
+		if _, detail := resolve(extend, inputs(t, body)); detail != want {
+			t.Errorf("%s: %q, want %q", body, detail, want)
+		}
+	}
+}
+
 const sixtyFour = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
 
 // ltxWorkflow is a canonical ltx template with its node schemas.

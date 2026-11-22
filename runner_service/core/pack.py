@@ -66,6 +66,9 @@ class Node:
     max_seconds: float | None = (
         None  # model.yaml: caps peak_gb's `speech_seconds`; memory plans plan at it
     )
+    by_variant: bool = (
+        False  # its cache key holds its Model's variant (it branches on it over shared components)
+    )
 
 
 @dataclass(eq=False)
@@ -597,7 +600,8 @@ def _nodes(stages: dict, family: str | None, code: str, pack: Pack | None, modul
             )
         check = getattr(module, f"check_{name}", None)
         node = Node(fn, uses, peak, stage.get("stall_s", STALL_S), code, pack, check, unload,
-                    bool(stage.get("alone")), dict(stage.get("sees") or {}), tuple(stage.get("reports", ())), cap)  # fmt: skip
+                    bool(stage.get("alone")), dict(stage.get("sees") or {}), tuple(stage.get("reports", ())), cap,
+                    bool(stage.get("by_variant")))  # fmt: skip
         outs = {o["name"]: o["type"] for o in schema["outputs"]}
         if bad := [o for o in (*node.sees.values(), *node.reports) if outs.get(o) != "Text"]:
             raise ValueError(

@@ -155,10 +155,47 @@ func Offers(t MediaTake, workflows []registry.Workflow, rng *[2]float64) []dto.T
 		if !ok {
 			continue
 		}
+		offerValuesBy(wf, inputs)
 		out = append(out, dto.TakeOffer{WorkflowID: wf.ID, Title: wf.Title, Action: wf.Action, Family: wf.Family,
 			Media: cmp.Or(wf.Media, "image"), Param: path, Inputs: inputs})
 	}
 	return out
+}
+
+// offerValuesBy is the offers rule (API 1.39, check.py offer_values_by): a pre-filled value that a cross-node
+// values_by refuses under the workflow's value of the named param (Extend before on Distilled) also sets that param,
+// to the first value of its enum (the node's only, else the schema's) that allows the pre-fill (model.variant dev).
+func offerValuesBy(wf registry.Workflow, inputs map[string]any) {
+	for _, id := range slices.Sorted(maps.Keys(wf.Nodes)) {
+		for _, p := range wf.NodeSchemas[wf.Nodes[id].Kind].Params {
+			pre, given := inputs[id+"."+p.Name]
+			if p.ValuesBy == nil || !given {
+				continue
+			}
+			on, name, cross := strings.Cut(p.ValuesBy.Param, ".")
+			ref, exists := wf.Nodes[on]
+			i := slices.IndexFunc(wf.NodeSchemas[ref.Kind].Params, func(q registry.Param) bool { return q.Name == name })
+			if !cross || !exists || i < 0 {
+				continue
+			}
+			spec := wf.NodeSchemas[ref.Kind].Params[i]
+			allows := func(v string) bool {
+				list, listed := p.ValuesBy.Values[v]
+				return !listed || slices.Contains(list, pre)
+			}
+			current := cmp.Or[any](inputs[on+"."+name], ref.Params[name], spec.Default)
+			if v, _ := current.(string); allows(v) {
+				continue
+			}
+			pool := ref.Only[name]
+			if pool == nil {
+				pool = spec.Enum
+			}
+			if j := slices.IndexFunc(pool, allows); j >= 0 {
+				inputs[on+"."+name] = pool[j]
+			}
+		}
+	}
 }
 
 // Counts reports whether param p of node id is an input "Use in…" may fill (API 1.22): on a known node that is not

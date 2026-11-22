@@ -1,0 +1,134 @@
+{
+  "description": "API 1.39 cross-node values_by: ltx/extend.direction reads model.variant (Distilled: after only), so Before on the Distilled model is param_invalid and so is a preset that sets only Before; a preset that also sets the model to Dev holds (presets are checked on the graph's values with the preset's on top)",
+  "workflow": {
+    "title": "LTX-2.5 Extend",
+    "family": "ltx",
+    "env": "mlx",
+    "nodes": {
+      "prompt": {
+        "kind": "prompt",
+        "params": {
+          "text": ""
+        }
+      },
+      "seed": {
+        "kind": "seed",
+        "params": {
+          "seed": -1
+        }
+      },
+      "model": {
+        "kind": "ltx/model",
+        "params": {
+          "variant": "distilled",
+          "precision": "int8"
+        },
+        "only": {
+          "variant": [
+            "distilled",
+            "dev"
+          ],
+          "precision": [
+            "int8",
+            "int4"
+          ]
+        }
+      },
+      "encode": {
+        "kind": "ltx/encode-guided",
+        "in": {
+          "model": "model.model",
+          "prompt": "prompt.text"
+        },
+        "params": {}
+      },
+      "source": {
+        "kind": "ltx/encode-video",
+        "in": {
+          "model": "model.model"
+        },
+        "params": {
+          "source": null
+        }
+      },
+      "extend": {
+        "kind": "ltx/extend",
+        "in": {
+          "model": "model.model",
+          "cond": "encode.cond",
+          "seed": "seed.seed",
+          "latent": "source.latent"
+        },
+        "params": {
+          "seconds": 2,
+          "direction": "before",
+          "steps": 30,
+          "cfg": 3,
+          "stg": 1
+        }
+      },
+      "decode": {
+        "kind": "ltx/decode",
+        "in": {
+          "model": "model.model",
+          "latent": "extend.latent"
+        },
+        "params": {
+          "audio": true
+        }
+      },
+      "output": {
+        "kind": "output",
+        "in": {
+          "media": "decode.video"
+        }
+      }
+    },
+    "studio": {
+      "composer": [
+        "prompt.text",
+        "source.source"
+      ],
+      "quick": [
+        "elements",
+        "model.variant",
+        "extend.seconds",
+        "extend.direction",
+        "decode.audio"
+      ],
+      "inspector": [
+        {
+          "title": "Quality",
+          "help": "Distilled runs its own 8 steps without guidance. Dev adds Steps, CFG and STG here.",
+          "items": [
+            "model.precision",
+            "extend.steps",
+            "extend.cfg",
+            "extend.stg"
+          ]
+        }
+      ],
+      "presets": {
+        "Before": {
+          "extend.direction": "before"
+        },
+        "Dev before": {
+          "model.variant": "dev",
+          "extend.direction": "before"
+        }
+      }
+    }
+  },
+  "problems": [
+    {
+      "code": "param_invalid",
+      "node": "extend",
+      "param": "direction"
+    },
+    {
+      "code": "preset_invalid",
+      "node": "extend",
+      "param": "direction"
+    }
+  ]
+}

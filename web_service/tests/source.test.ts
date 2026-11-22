@@ -9,7 +9,15 @@ import h3Workflows from "../../contracts/fixtures/registry/minimax-h3.workflows.
 import ltxNodes from "../../contracts/fixtures/registry/ltx.nodes.valid.json";
 import ltxWorkflows from "../../contracts/fixtures/registry/ltx.workflows.valid.json";
 import type { S } from "@/lib/api";
-import { buildInputs, fields, rawsFrom, readValue, replaceUnmet } from "@/lib/workflow";
+import {
+  buildInputs,
+  fields,
+  optionBlocked,
+  rawsFrom,
+  readValue,
+  replaceUnmet,
+  visible,
+} from "@/lib/workflow";
 import {
   actionSlot,
   audioMap,
@@ -252,7 +260,7 @@ describe("the form of a template with media inputs", () => {
   const retake = of("ltx-retake");
   const byKey = (k: string) => retake.find((f) => f.key === k)!;
   it("offers only the values `only` allows", () => {
-    expect(byKey("model.variant").param.enum).toEqual(["dev"]);
+    expect(byKey("model.variant").param.enum).toEqual(["distilled", "dev"]);
     expect(byKey("model.precision").param.enum).toEqual(["int8", "int4"]);
   });
   it("needs a take and a range, worded as studio's 422", () => {
@@ -263,6 +271,28 @@ describe("the form of a template with media inputs", () => {
     expect(readValue(byKey("retake.span").param, { start: 1, end: 1 })).toEqual({
       error: "start must be before end",
     });
+  });
+  // API 1.39 (README, Video: Distilled actions; docs/mock/LtxFeatures frames 6-8)
+  it("hides Steps, CFG and STG on Distilled (the default) and shows them on Dev", () => {
+    const guided = ["retake.steps", "retake.cfg", "retake.stg"];
+    const shown = (raws: Record<string, string>) =>
+      visible(retake, raws).map((f) => f.key).filter((k) => guided.includes(k));
+    expect(byKey("model.variant").initial).toBe("distilled");
+    expect(shown({})).toEqual([]);
+    expect(shown({ "model.variant": "dev" })).toEqual(guided);
+  });
+  it("fades Extend's Before on Distilled with its reason, and Distilled under Before", () => {
+    const extend = of("ltx-extend");
+    const f = (k: string) => extend.find((x) => x.key === k)!;
+    const dir = f("extend.direction");
+    expect(optionBlocked(dir, "before", extend, {})).toBe("Before needs Dev");
+    expect(optionBlocked(dir, "after", extend, {})).toBeNull();
+    expect(optionBlocked(dir, "before", extend, { "model.variant": "dev" })).toBeNull();
+    const model = f("model.variant");
+    expect(optionBlocked(model, "distilled", extend, { "extend.direction": "before" })).toBe(
+      "Extend before needs Dev",
+    );
+    expect(optionBlocked(model, "dev", extend, { "extend.direction": "before" })).toBeNull();
   });
   it("takes an offer's inputs as sent", () => {
     const inputs = {

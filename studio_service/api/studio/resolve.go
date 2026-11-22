@@ -130,7 +130,7 @@ func resolve(workflow registry.Workflow, inputs map[string]any) (map[string]regi
 					return nil, fmt.Sprintf("%s.%s: at least %s items", id, param.Name, format(*param.Min))
 				}
 			}
-			if detail := valuesByDetail(param, node.Params); detail != "" {
+			if detail := valuesByDetail(param, node.Params, nodeValue(nodes)); detail != "" {
 				return nil, id + "." + param.Name + ": " + detail
 			}
 			if detail := onlyDetail(workflow.Nodes[id].Only, param.Name, node.Params); detail != "" {
@@ -455,24 +455,53 @@ func number(value any) (float64, bool) {
 	return 0, false
 }
 
-// valuesByDetail says why the node's merged value of an int param with values_by is not allowed for the node's value
-// of its enum param (an enum value not listed allows all of values); "" when it is, or when the value is not one of
-// values at all (check says so).
-func valuesByDetail(param registry.Param, params map[string]any) string {
+// valuesByDetail says why the merged value of a param with values_by (an int with values, from API 1.39 an enum) is
+// not allowed for the value of the param it names: the node's own (params) or, from 1.39, another node's
+// ("model.variant", read with other; a node that is not there, or a value not listed, allows the whole pool); "" when it
+// is, or when the value is not in the pool at all (check says so).
+func valuesByDetail(param registry.Param, params map[string]any, other func(node, name string) any) string {
 	by := param.ValuesBy
 	if by == nil {
 		return ""
 	}
-	choice, _ := params[by.Param].(string)
-	allowed, listed := by.Values[choice]
-	if !listed {
-		allowed = param.Values
+	choice := params[by.Param]
+	if node, name, cross := strings.Cut(by.Param, "."); cross {
+		choice = nil
+		if other != nil {
+			choice = other(node, name)
+		}
 	}
-	n, ok := number(params[param.Name])
-	if !ok || n != math.Trunc(n) || !slices.Contains(param.Values, int64(n)) || slices.Contains(allowed, int64(n)) {
+	pool := param.Pool()
+	text, _ := choice.(string)
+	allowed, listed := by.Values[text]
+	if !listed {
+		allowed = pool
+	}
+	value := params[param.Name]
+	if !inPool(pool, value) || inPool(allowed, value) {
 		return ""
 	}
-	return "must be one of " + joinInts(allowed)
+	parts := make([]string, len(allowed))
+	for i, v := range allowed {
+		parts[i] = fmt.Sprint(v)
+	}
+	return "must be one of " + strings.Join(parts, ", ")
+}
+
+// inPool reports whether value is one of pool (JSON numbers by value, an int never matching a fraction).
+func inPool(pool []any, value any) bool {
+	n, isNumber := number(value)
+	return slices.ContainsFunc(pool, func(v any) bool {
+		if m, ok := number(v); ok {
+			return isNumber && m == n
+		}
+		return v == value
+	})
+}
+
+// nodeValue reads another node's merged param (a cross-node values_by, API 1.39); nil for a node not in nodes.
+func nodeValue(nodes map[string]registry.Node) func(node, name string) any {
+	return func(node, name string) any { return nodes[node].Params[name] }
 }
 
 // merged is a node's params over its schema's defaults.

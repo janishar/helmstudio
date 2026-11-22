@@ -174,9 +174,10 @@ func graphProblems(doc dto.WorkflowDoc, palette map[string]registry.PaletteNode,
 				loraProblems(id, node, param, loras, add)
 			}
 		}
-		for _, param := range schema.Params { // steps per role, on the node's merged values (Video: Steps)
+		for _, param := range schema.Params { // steps per role, on the node's merged values (Video: Steps); 1.39 cross-node
 			value, given := node.Params[param.Name]
-			if detail := valuesByDetail(param, merged(schema, node.Params)); detail != "" && (!given || !valueBad(param, value)) {
+			detail := valuesByDetail(param, merged(schema, node.Params), docValue(nodes, palette, nil))
+			if detail != "" && (!given || !valueBad(param, value)) {
 				add("param_invalid", id, "", param.Name, "%s.%s: %s", id, param.Name, detail)
 			}
 		}
@@ -444,13 +445,32 @@ func studioProblems(doc dto.WorkflowDoc, palette map[string]registry.PaletteNode
 				param, _ := paramOf(kind.NodeSchema, name)
 				if valueBad(param, value) {
 					add("preset_invalid", id, "", name, "preset %s: %s: %s", preset, path, invalidReason(param, value))
-				} else if detail := valuesByDetail(param, merged(kind.NodeSchema, values)); detail != "" {
+				} else if detail := valuesByDetail(param, merged(kind.NodeSchema, values), docValue(doc.Nodes, palette, sets[preset])); detail != "" {
 					add("preset_invalid", id, "", name, "preset %s: %s: %s", preset, path, detail)
 				} else if detail := onlyProblems(kind.NodeSchema, node.Only, merged(kind.NodeSchema, values))[name]; detail != "" {
 					add("preset_invalid", id, "", name, "preset %s: %s: %s", preset, path, detail)
 				}
 			}
 		}
+	}
+}
+
+// docValue reads another node's param in a document (a cross-node values_by, API 1.39): its value over its kind's
+// default, with a preset's set ("<node>.<param>" → value) on top; nil for a node not in the document.
+func docValue(nodes map[string]registry.Node, palette map[string]registry.PaletteNode, set map[string]any) func(node, name string) any {
+	return func(node, name string) any {
+		if v, ok := set[node+"."+name]; ok {
+			return v
+		}
+		n, ok := nodes[node]
+		if !ok {
+			return nil
+		}
+		if v, ok := n.Params[name]; ok {
+			return v
+		}
+		p, _ := paramOf(palette[n.Kind].NodeSchema, name)
+		return p.Default
 	}
 }
 

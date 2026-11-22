@@ -41,6 +41,10 @@ CASES = ["t2v-448x256-49f-s42", "t2v-512x320-57f-s7", "i2v-448x256-49f-s42", "kf
          "beats-448x256-49f-s42", "lora-448x256-49f-s42", "auto-duration"]  # fmt: skip
 # M7 pack 1 (the dev transformer, guided; 2-5 min each): `python tests/test_ltx_golden.py retake-… extend-… a2v-…`
 DEV_CASES = ["retake-448x256-49f-s42", "extend-448x256-49f+8-s42", "a2v-448x256-49f-s42"]
+# plan 19 23.10 phase 1 (the distilled transformer, no guidance; ~30 s each): recorded from ltx-2-studio main e6e15b7's
+# `retake | extend | a2v --distilled` (tests/golden/record_ltx.py DISTILLED_CASES); matched on frames and the WAV
+DISTILLED_CASES = ["retake-distilled-448x256-49f-s42", "extend-distilled-448x256-49f+48-s42",
+                   "a2v-distilled-448x256-49f-s42"]  # fmt: skip
 DEV = ("retake", "extend", "a2v")
 INPUTS = (
     Path(__file__).resolve().parents[2] / "tests" / "golden"
@@ -237,6 +241,10 @@ class Bench:
         nodes["prompt"]["params"]["text"] = case["prompt"]
         nodes["seed"]["params"]["seed"] = case["seed"]
         nodes["model"]["params"]["precision"] = f"int{case['quantize_on_load']}"
+        # the templates default to Distilled from API 1.39: a dev golden asks for Dev
+        nodes["model"]["params"]["variant"] = (
+            "distilled" if "-distilled-" in case["name"] else "dev"
+        )
         if kind == "a2v":
             f = GOLDENS / "ltx-audio-to-video" / case["inputs"]["audio"]["file"]
             out = round(case["frames"] / case["fps"], 3)
@@ -252,7 +260,12 @@ class Bench:
                 }
             return nodes
         src = GOLDENS.parent.parent.parent / case["inputs"]["video"]["file"]
-        meta = case["source"]["meta"]
+        meta = (case.get("source") or {}).get("meta") or {
+            "width": 448,
+            "height": 256,
+            "frame_rate": 24.0,
+            "num_frames": 49,
+        }
         fps, n = meta["frame_rate"], meta["num_frames"]
         nodes["source"]["params"]["source"] = self.take(src, kind="video", content_type="video/mp4", has_audio=True,
                                                         width=meta["width"], height=meta["height"], fps=fps,
@@ -652,6 +665,59 @@ def compare_dev(name: str, r: dict, out: Path, bench: Bench) -> dict:
     return res
 
 
+# On the goldens' mlx (0.32.2) every frame >= 40 dB from the fork's render (the plan's bar, 23.8; measured
+# 2026-11-22: bit-exact, PSNR inf and the WAV equal, all three). On another mlx the bars sit just under what 0.32.4
+# measured (mean / worst frame dB, log-mel dB): retake 35.45 / 33.51 / 0.407; extend 28.34 / 17.11 / 0.898 (the new
+# part drifts most, ancestral); a2v 22.48 / 20.89 / 0.000 (the source audio is kept).
+DISTILLED_BAR_DB = 40.0
+DISTILLED_BARS = {
+    "retake-distilled-448x256-49f-s42": {
+        "video_mean_db": 35.0,
+        "video_worst_db": 33.0,
+        "logmel_db": 0.45,
+    },
+    "extend-distilled-448x256-49f+48-s42": {
+        "video_mean_db": 28.0,
+        "video_worst_db": 16.5,
+        "logmel_db": 0.95,
+    },
+    "a2v-distilled-448x256-49f-s42": {
+        "video_mean_db": 22.0,
+        "video_worst_db": 20.5,
+        "logmel_db": 0.1,
+    },
+}
+
+
+def compare_distilled(name: str, r: dict, out: Path) -> dict:
+    """A distilled golden: every frame's PSNR against the fork's MP4 and the WAV (log-mel, SNR)."""
+    import mlx.core as mx
+
+    g = json.loads((golden_dir(name) / f"{name}.json").read_text())
+    mp4 = out / f"{name}.mp4"
+    mp4.write_bytes(r["mp4"])
+    got, probe = frames(mp4)
+    want, gprobe = frames(golden_dir(name) / f"{name}.mp4")
+    per = [psnr(a, b) for a, b in zip(got, want, strict=True)] if got.shape == want.shape else []
+    a, b = read_wav(out / f"{name}.wav"), read_wav(golden_dir(name) / g["wav"]["file"])
+    audio = {"samples": [a.shape[0], b.shape[0]]}
+    if a.shape == b.shape:
+        audio["logmel_db"] = round(float(np.mean([np.abs(logmel(a[:, c]) - logmel(b[:, c])).mean()
+                                                   for c in range(a.shape[1])])), 3)  # fmt: skip
+        noise = float(np.sum((a - b) ** 2))
+        audio["snr_db"] = (
+            round(10 * np.log10(float(np.sum(b**2)) / noise), 2) if noise else float("inf")
+        )
+    worst = float(np.min(per)) if per else None
+    return {"video": {"frames": [len(got), len(want)], "mean_db": round(float(np.mean(per)), 2) if per else None,
+                      "worst_db": round(worst, 2) if per else None,
+                      "same_streams": [s["codec_type"] for s in probe] == [s["codec_type"] for s in gprobe]},
+            "audio": audio, "fork": {"total_s": g["timing_s"]["total_wall"], "memory": g["memory"]},
+            "pass": bool(per) and (worst >= DISTILLED_BAR_DB if g["versions"]["mlx"] == mx.__version__ else
+                                   (b := DISTILLED_BARS[name])["video_mean_db"] <= np.mean(per)
+                                   and b["video_worst_db"] <= worst and audio.get("logmel_db", 99) <= b["logmel_db"])}  # fmt: skip
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("cases", nargs="*", default=CASES)
@@ -683,7 +749,10 @@ def main(argv=None) -> int:
             bench.prefuse()
         r = bench.run(bench.dev_nodes(case) if dev else bench.nodes(case), wav=out / f"{name}.wav")
         r["mlx"] = mx.__version__
-        c = compare_dev(name, r, out, bench) if dev else compare(name, r, out, bench)
+        if "-distilled-" in name:
+            c = compare_distilled(name, r, out)
+        else:
+            c = compare_dev(name, r, out, bench) if dev else compare(name, r, out, bench)
         c["loops"] = [{k: v for k, v in x.items() if k == "loop_peak_gib"} for x in bench.stages]
         c["loads"], bench.loads = bench.loads, {}
         bench.fused = {}  # drop the baked weights it held for the compare
@@ -719,6 +788,13 @@ def main(argv=None) -> int:
 def test_ltx_goldens():
     pytest.importorskip("mlx")
     assert main([*CASES, "auto", "noaudio", "--reseed"]) == 0
+
+
+@pytest.mark.gpu
+def test_ltx_distilled_goldens():
+    """Distilled retake, extend and audio to video (plan 19 phase 1): every frame >= 40 dB from the fork's."""
+    pytest.importorskip("mlx")
+    assert main(DISTILLED_CASES) == 0
 
 
 @pytest.mark.gpu

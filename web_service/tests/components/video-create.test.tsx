@@ -178,12 +178,13 @@ describe("Create on LTX video", () => {
     await waitFor(() => expect(picker()).toHaveLength(1));
   });
 
-  it("retake: the Dev-only chip, Regenerate audio pressed, its line, CFG to one decimal", async () => {
+  it("retake: Distilled by default (Dev pickable), Regenerate audio pressed, its line, CFG on Dev only", async () => {
     serve();
     start(ltx("ltx-retake"));
     const composer = screen.getByRole("form", { name: "Composer" });
-    const chip = await within(composer).findByText("Dev · int8");
-    expect(chip.getAttribute("title")).toBe("This workflow runs on Dev only");
+    // API 1.39 (docs/mock/LtxFeatures frame 6): the chip opens the version menu, Distilled · Dev
+    expect(await within(composer).findByText("Distilled · int8")).toBeTruthy();
+    const dev = screen.getByRole("menuitemradio", { name: /^Dev/, hidden: true });
     // a label without its state looks pressed, and clicking it lets go
     const regen = within(composer).getByRole("button", { name: "Regenerate audio" });
     expect(regen.getAttribute("aria-pressed")).toBe("true");
@@ -199,7 +200,10 @@ describe("Create on LTX video", () => {
         "Off: the sound is not regenerated (it is re-encoded through the audio VAE).",
       ),
     ).toBeTruthy();
-    expect(within(inspector).getByRole("button", { name: /CFG\s*3\.0/ })).toBeTruthy();
+    // Distilled runs its own 8 steps without guidance: no Steps, CFG or STG until Dev is picked
+    expect(within(inspector).queryByRole("button", { name: /CFG\s*3\.0/ })).toBeNull();
+    fireEvent.click(dev);
+    expect(await within(inspector).findByRole("button", { name: /CFG\s*3\.0/ })).toBeTruthy();
   });
 
   it("videoTitle: the family, then the action when it says more than the title's rest", () => {

@@ -187,19 +187,43 @@ export function valueError(
   return null;
 }
 
-/** [param, message] for each int whose `values_by` refuses the node's merged value (defaults, then `values`): the
- * subset for the node's value of its enum param (README, Video: Steps). A value outside `values` is valueError's. */
-export function valuesByErrors(s: { params: Param[] }, values: Record<string, unknown>) {
+/** [param, message] for each int (from API 1.39 enum) whose `values_by` refuses the node's merged value (defaults,
+ * then `values`): the subset for the value of its enum param, the node's own or (1.39) `<node>.<param>` of another
+ * node, read with `other` (absent: allows all) (README, Video: Steps; Video: Distilled actions). A value outside the
+ * pool is valueError's. */
+export function valuesByErrors(
+  s: { params: Param[] },
+  values: Record<string, unknown>,
+  other?: (ref: string) => unknown,
+) {
   const merged = { ...Object.fromEntries(s.params.map((p) => [p.name, p.default])), ...values };
   return s.params.flatMap((p): [string, string][] => {
     const vb = p.values_by;
-    if (!vb || !p.values) return [];
-    const allowed = vb.values[String(merged[vb.param])] ?? p.values;
-    const v = merged[p.name] as number;
-    return p.values.includes(v) && !allowed.includes(v)
+    const pool: unknown[] | undefined = p.values ?? p.enum;
+    if (!vb || !pool) return [];
+    const by = vb.param.includes(".") ? other?.(vb.param) : merged[vb.param];
+    const allowed: unknown[] = (typeof by === "string" && vb.values[by]) || pool;
+    const v = merged[p.name];
+    return pool.includes(v) && !allowed.includes(v)
       ? [[p.name, `must be one of ${allowed.join(", ")}`]]
       : [];
   });
+}
+
+/** A document's `<node>.<param>` as its node holds it (its kind's default, a preset's `set` on top): what a cross-node
+ * `values_by` reads (API 1.39). */
+export function docValue(
+  nodes: Record<string, { kind: string; params?: Record<string, unknown> }>,
+  palette: Record<string, { params: Param[] }>,
+  set: Record<string, unknown> = {},
+) {
+  return (ref: string): unknown => {
+    if (ref in set) return set[ref];
+    const [id, name] = splitRef(ref);
+    const n = nodes[id];
+    if (!n) return undefined;
+    return n.params?.[name] ?? palette[n.kind]?.params.find((p) => p.name === name)?.default;
+  };
 }
 
 /** [param, message] for a node's `only` (API 1.19): an enum param, a subset of its enum, holding the node's value;
@@ -326,7 +350,7 @@ export function graphProblems(
         }
       }
     }
-    for (const [k, msg] of valuesByErrors(s, n.params ?? {}))
+    for (const [k, msg] of valuesByErrors(s, n.params ?? {}, docValue(nodes, palette)))
       if (
         !(k in (n.params ?? {})) ||
         !valueError(
@@ -448,7 +472,11 @@ export function graphProblems(
         const merged = { ...nodes[id].params };
         for (const [k, x] of Object.entries(values))
           if (splitRef(k)[0] === id && splitRef(k)[1] !== "bypass") merged[splitRef(k)[1]] = x;
-        const byErr = valuesByErrors(palette[nodes[id].kind], merged).some(([k]) => k === param);
+        const byErr = valuesByErrors(
+          palette[nodes[id].kind],
+          merged,
+          docValue(nodes, palette, values),
+        ).some(([k]) => k === param);
         const onlyErr = onlyErrors(palette[nodes[id].kind], { ...nodes[id], params: merged }).some(
           ([k]) => k === param,
         );

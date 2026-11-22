@@ -135,6 +135,7 @@ def graph_errors(workflow: dict, kinds: dict[str, dict]) -> list[str]:
     """What the schema can't say about a workflow: known kinds, declared params and ports, wires whose output
     exists and has the input's type."""
     out, nodes = [], workflow["nodes"]
+    merged = graph_values(nodes, kinds)
     for nid, node in nodes.items():
         schema = kinds.get(node["kind"])
         if not schema:
@@ -146,7 +147,7 @@ def graph_errors(workflow: dict, kinds: dict[str, dict]) -> list[str]:
                 out.append(f"{nid}.{k}: not a param of {node['kind']}")
             elif err := value_error(params[k], v):
                 out.append(f"{nid}.{k}: {err}")
-        out += [f"{nid}.{k}: {err}" for k, err in values_by_errors(schema, node.get("params", {}))]
+        out += [f"{nid}.{k}: {err}" for k, err in values_by_errors(schema, node.get("params", {}), merged)]
         out += [f"{nid}.{k}: {err}" for k, err in only_errors(schema, node)]
         inputs = {p["name"]: p["type"] for p in schema["inputs"]}
         for port, ref in node.get("in", {}).items():
@@ -269,16 +270,34 @@ def only_errors(schema: dict, node: dict) -> list[tuple[str, str]]:
     return out
 
 
-def values_by_errors(schema: dict, values: dict) -> list[tuple[str, str]]:
-    """(param, message) for every int param whose `values_by` refuses the node's merged value (schema defaults, then
-    `values`): its allowed subset for the node's value of `values_by.param` (README, Video: steps)."""
+def values_by_errors(schema: dict, values: dict, graph: dict | None = None) -> list[tuple[str, str]]:
+    """(param, message) for every int or (API 1.39) enum param whose `values_by` refuses the node's merged value (schema
+    defaults, then `values`): its allowed subset for the value of `values_by.param`, the node's own param or (1.39)
+    `<node>.<param>` of another node, read from `graph` (node id → its merged values; absent: allows all) (README,
+    Video: steps; Video: Distilled actions)."""
     merged = {p["name"]: p["default"] for p in schema["params"]} | values
     out = []
     for p in schema["params"]:
-        vb = p.get("values_by")
-        allowed = vb["values"].get(merged.get(vb["param"]), p["values"]) if vb else None
-        if allowed is not None and merged.get(p["name"]) in p["values"] and merged[p["name"]] not in allowed:
+        if not (vb := p.get("values_by")):
+            continue
+        pool = p.get("values") or p.get("enum", [])
+        nid, _, name = vb["param"].rpartition(".")
+        by = (graph or {}).get(nid, {}).get(name) if nid else merged.get(name)
+        allowed = vb["values"].get(by, pool) if isinstance(by, str) else pool
+        if merged.get(p["name"]) in pool and merged[p["name"]] not in allowed:
             out.append((p["name"], f"must be one of {', '.join(map(str, allowed))}"))
+    return out
+
+
+def graph_values(nodes: dict, kinds: dict, overlay: dict | None = None) -> dict[str, dict]:
+    """Each node's merged values (its kind's defaults, its params, then `overlay` paths "<node>.<param>"), what a
+    cross-node `values_by` reads (API 1.39)."""
+    out = {nid: {p["name"]: p["default"] for p in kinds.get(n["kind"], {}).get("params", [])} | n.get("params", {})
+           for nid, n in nodes.items()}
+    for path, v in (overlay or {}).items():
+        nid, _, name = path.partition(".")
+        if nid in out and name != "bypass":
+            out[nid][name] = v
     return out
 
 
@@ -289,12 +308,15 @@ def schema_errors(n: dict) -> list[str]:
         vs, vb, auto = p.get("values"), p.get("values_by"), p.get("auto")
         if vs and (vs != sorted(vs) or p["default"] not in vs or not all(p.get("min", x) <= x <= p.get("max", x) for x in vs)):
             out.append(f"{p['name']}: values must ascend, lie within min..max and hold the default")
-        if vb:
-            ep = params.get(vb["param"])
-            if not ep or ep["type"] != "enum" or set(vb["values"]) - set(ep["enum"]) or any(
-                    set(x) - set(vs) for x in vb["values"].values()):
-                out.append(f"{p['name']}: values_by must name an enum param of the node, its values, subsets of values")
-            elif p["default"] not in vb["values"].get(ep["default"], vs):
+        if vb:  # API 1.39: on an enum too, and `<node>.<param>` names another node's (checked in the graph)
+            pool, cross = vs or p.get("enum") or [], "." in vb["param"]
+            ep = None if cross else params.get(vb["param"])
+            if (not cross and (not ep or ep["type"] != "enum" or set(vb["values"]) - set(ep["enum"]))) or any(
+                    set(x) - set(pool) for x in vb["values"].values()):
+                out.append(f"{p['name']}: values_by must name an enum param, its values, subsets of the param's values")
+            elif cross and any(p["default"] not in x for x in vb["values"].values()):
+                out.append(f"{p['name']}: a cross-node values_by must allow the default for every value")
+            elif not cross and p["default"] not in vb["values"].get(ep["default"], pool):
                 out.append(f"{p['name']}: the default is not allowed for {vb['param']} {ep['default']}")
         if auto and not 0 < auto["min_s"] < auto["max_s"]:
             out.append(f"{p['name']}: auto needs 0 < min_s < max_s")
@@ -444,6 +466,7 @@ def graph_problems(doc: dict, palette: dict[str, dict], loras: dict[str, str] | 
              for p in palette[n["kind"]]["params"] if p["type"] == "seed" and p["name"] not in n.get("in", {})]
     if len(seeds) > 1:
         add("too_many_seeds")
+    vals = graph_values(nodes, palette)
     for nid, n in nodes.items():
         kind, wires = n["kind"], n.get("in", {})
         if family(kind) and family(kind) != doc["family"]:
@@ -469,7 +492,7 @@ def graph_problems(doc: dict, palette: dict[str, dict], loras: dict[str, str] | 
                         add("lora_unknown", nid, param=k)
                     if any(i in loras and loras[i] != family(kind) for i in ids):
                         add("lora_family", nid, param=k)
-        for k, _ in values_by_errors(s, n.get("params", {})):
+        for k, _ in values_by_errors(s, n.get("params", {}), vals):
             if k not in n.get("params", {}) or not value_error(params[k], n["params"][k]):
                 add("param_invalid", nid, param=k)
         for k, _ in only_errors(s, n):
@@ -557,7 +580,7 @@ def graph_problems(doc: dict, palette: dict[str, dict], loras: dict[str, str] | 
                 spec = {"type": "bool"} if param == "bypass" else next(p for p in s["params"] if p["name"] == param)
                 merged = nodes[nid].get("params", {}) | {k.split(".")[1]: x for k, x in values.items()
                                                          if k.split(".")[0] == nid and k.split(".")[1] != "bypass"}
-                if (value_error(spec, v) or param in dict(values_by_errors(s, merged))
+                if (value_error(spec, v) or param in dict(values_by_errors(s, merged, graph_values(nodes, palette, values)))
                         or param in dict(only_errors(s, nodes[nid] | {"params": merged}))):
                     add("preset_invalid", nid, param=param)
     return out
@@ -1882,6 +1905,26 @@ def extend_room(take: dict, rng: tuple | None) -> dict | None:
     return out
 
 
+def offer_values_by(wf: dict, palette: dict, inputs: dict) -> dict:
+    """The offers rule (API 1.39): a pre-filled value that a cross-node `values_by` refuses under the workflow's value of
+    the named param (Extend before on Distilled) also sets that param, to the first value of its enum (the node's
+    `only`, else the schema's) that allows the pre-fill (model.variant dev)."""
+    out, g = {}, graph_values(wf["nodes"], palette, inputs)
+    for nid in sorted(wf["nodes"]):
+        for p in palette.get(wf["nodes"][nid]["kind"], {}).get("params", []):
+            vb, path = p.get("values_by"), f"{nid}.{p['name']}"
+            if not vb or "." not in vb["param"] or path not in inputs:
+                continue
+            on, _, name = vb["param"].partition(".")
+            ref = wf["nodes"].get(on)
+            spec = next((q for q in palette.get(ref["kind"], {}).get("params", []) if q["name"] == name), None) if ref else None
+            ok = lambda v: inputs[path] in vb["values"].get(v, [inputs[path]])  # noqa: E731 (not listed: allows all)
+            if spec and not ok(g[on][name]):
+                first = next((v for v in ref.get("only", {}).get(name, spec.get("enum", [])) if ok(v)), None)
+                out |= {vb["param"]: first} if first else {}
+    return out
+
+
 def take_uses(take: dict, workflows: list[dict], palette: dict, rng: tuple | None = None) -> list[dict]:
     """"Use in…" offers (README, Media inputs: offers): every workflow with exactly one unwired input of the take's
     sort on a known, not bypassed, not optional node (an image: an image param or Image rows; a video or audio take: a
@@ -1930,6 +1973,7 @@ def take_uses(take: dict, workflows: list[dict], palette: dict, rng: tuple | Non
                 if ext and (room := extend_room(take, rng)) is None:
                     continue
                 inputs |= {f"{x}.{k}": v for x in ext for k, v in room.items()} if ext else {}
+        inputs |= offer_values_by(wf, palette, inputs)
         out.append({"workflow_id": wf["id"], "title": wf["title"]} | ({"action": wf["action"]} if "action" in wf else {})
                    | {"family": wf["family"], "media": wf.get("media", "image"), "param": path, "inputs": inputs})
     return out

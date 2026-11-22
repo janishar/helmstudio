@@ -270,6 +270,17 @@ def lora_block_prefused(pack) -> list[dict]:
     return (packs.lora_block(pack) or {}).get("prefused", [])
 
 
+# extend_distilled.EXTEND_CARRY_PIXEL_FRAMES (upstream ChunkConfig.next_video_carry_frames): a distilled extend
+# continues the source's last 25 frames (4 latent frames), pinned at the start of its new window
+EXTEND_CARRY = 25
+
+
+def is_distilled(model) -> bool:
+    """A distilled transformer (the distilled LoRA fused in): retake, extend and audio to video run upstream's
+    distilled paths on it (plan 19 23.4, phase 1). The dev variants' ids start with dev (model.yaml)."""
+    return model is not None and not model.variant.startswith("dev")
+
+
 def _needs_dev(params: dict, wired: set, models: dict | None = None) -> str | None:
     """Retake, extend, the guided stage 1 and distill run the dev transformer (the run's check, before loading)."""
     model = (models or {}).get("model")

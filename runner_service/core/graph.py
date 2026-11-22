@@ -530,9 +530,15 @@ def problems(
             elif why := _check_param(spec, params[name]):
                 sep = "" if why.startswith(":") else " "
                 add("param_invalid", nid, param=name, message=f"{nid}.{name}{sep}{why}")
-            elif (vb := spec.get("values_by")) and params[name] not in (
-                ok := vb["values"].get(params.get(vb["param"]), spec["values"])
-            ):  # README, Video: steps allowed for the node's role
+            elif (
+                (vb := spec.get("values_by"))
+                and params[name]
+                not in (
+                    ok := vb["values"].get(
+                        _by(nodes, params, vb["param"]), spec.get("values") or spec["enum"]
+                    )
+                )
+            ):  # README, Video: steps allowed for the node's role; 1.39: Extend's direction for model.variant
                 add("param_invalid", nid, param=name,
                     message=f"{nid}.{name}: must be one of {', '.join(map(str, ok))}")  # fmt: skip
             elif (
@@ -617,6 +623,12 @@ def problems(
     if not any(n["kind"] in SINKS for n in nodes.values()):
         add("no_output", message="the graph has no output node")
     return out
+
+
+def _by(nodes: dict, params: dict, ref: str):
+    """The value a `values_by` reads: the node's own param, or (API 1.39) `<node>.<param>` of another node."""
+    nid, _, name = ref.rpartition(".")
+    return (nodes.get(nid, {}).get("params", {}) if nid else params).get(name)
 
 
 def validate(nodes: dict, schemas: dict[str, dict], run: bool = True) -> list[str]:
@@ -810,7 +822,10 @@ def keys(nodes: dict, impls: dict, schemas: dict, owner: str) -> dict[str, str]:
         ins = {}
         for port, ref in node.get("in", {}).items():
             if types.get(port) == "Model":
-                ins[port] = _model(nodes, impls, schemas, ref).fingerprint(impl.uses)
+                model = _model(nodes, impls, schemas, ref)
+                ins[port] = model.fingerprint(impl.uses) + (
+                    [model.variant] if impl.by_variant else []
+                )
             else:
                 src, _, name = ref.partition(".")
                 ins[port] = [out[src], name]

@@ -34,7 +34,15 @@ import {
 import { mentionOf, move } from "@/lib/refs";
 import { remember, useTakes } from "@/lib/take-cache";
 import { timecode } from "@/lib/timeline";
-import { isRef, isSpan, toRaw, type Field, type Raw, type Update } from "@/lib/workflow";
+import {
+  isRef,
+  isSpan,
+  optionBlocked,
+  toRaw,
+  type Field,
+  type Raw,
+  type Update,
+} from "@/lib/workflow";
 
 type Take = S<"Take">;
 type Change = (key: string, u: Update) => void;
@@ -685,6 +693,9 @@ export function ExtendControl({
   const t = useTakes(ref ? [ref.take_id] : [])(ref?.take_id ?? "");
   const s = Number(rawOf(seconds, raws));
   const dir = String(rawOf(direction, raws));
+  const blocked = Object.fromEntries(
+    (direction.param.enum ?? []).map((o) => [o, optionBlocked(direction, o, fields, raws)]),
+  );
   const p = seconds.param;
   const v = t?.video;
   const cap = src?.param.max_frames ?? grid?.max;
@@ -726,13 +737,24 @@ export function ExtendControl({
               key={o}
               type="button"
               aria-pressed={dir === o}
-              onClick={() => onChange(direction.key, o)}
+              aria-disabled={blocked[o] ? true : undefined}
+              title={blocked[o] ?? undefined}
+              className={blocked[o] ? "opacity-55" : undefined}
+              onClick={() => !blocked[o] && onChange(direction.key, o)}
             >
               {o[0].toUpperCase() + o.slice(1)}
             </button>
           ))}
         </div>
       </div>
+      {/* API 1.39: a value the model does not allow stays visible, faded, with its reason (docs/mock/LtxFeatures 7) */}
+      {Object.values(blocked)
+        .filter(Boolean)
+        .map((why) => (
+          <span key={why} className={`text-right text-[12px] ${blocked[dir] ? "text-bad" : "text-t2"}`}>
+            {why}
+          </span>
+        ))}
       {r && v && grid && (
         <>
           <Row

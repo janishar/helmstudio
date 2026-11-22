@@ -77,7 +77,7 @@
     },
     "paramSchema": {
       "type": "object",
-      "description": "one param of a node; the UI derives a form field from it. int, float and seed: min/max bound the value, step is the field's increment; string and text (multi-line): min/max bound the length; enum: one of `enum`. seed: an int where null or -1 means random (the runner picks one and reports it in evt.run.status resolved.seed and each output's seed). image: one Image, written {take_id} by clients (default null = none; a run needs one). rows: an ordered list of items (default []), min/max bound the count, `item` names each item's fields, `mention` is how the prompt refers to item n (from 1). frames: a frame count on the family's frame grid, min + k \u00d7 step (k \u2265 0) up to max (LTX: 9 + 8k, 9..321); `fps` names the node's fps param; the UI renders it as the Duration slider (one notch per step, labelled frames and seconds). frames may declare `auto` (the model predicts the length: the value \"auto\"). int may declare `values` (the only allowed values) and `values_by` (the allowed values per value of an enum param of the same node: LTX steps per role). From API 1.19: media: one video or audio take (`accepts`), written {take_id[, in, out]} by clients (default null; a run needs one); `trim`: it reads the part in..out (the UI's trim control over the take); `grid`: a video's sides must be multiples of it; `max_s`: the longest take (or part) it reads; `max_frames`: the most frames of a video take it reads. span: a time range {start, end} on the workflow's one video media source (default null; a run needs one; the UI's range control over that take). contracts/README.md, Media inputs. From API 1.30: voice: one saved voice (a library item of kind voice), written {voice_id} by clients (default null; a run needs one); `accepts` names the voice sources it takes: preset (a pack's starter voice of the node's family), clip (from API 1.31: a voice with a clip, cloned or designed; studio sends its clip as a media value), design (a voice from a description). It takes no wire; from API 1.32 it may be a rows item field (a dialogue's `lines`). contracts/README.md, Voices. From API 1.32: a `text` param may declare `script: true` (a dialogue script: studio expands it into the same node's `lines` rows at create time; contracts/README.md, Dialogue)",
+      "description": "one param of a node; the UI derives a form field from it. int, float and seed: min/max bound the value, step is the field's increment; string and text (multi-line): min/max bound the length; enum: one of `enum`. seed: an int where null or -1 means random (the runner picks one and reports it in evt.run.status resolved.seed and each output's seed). image: one Image, written {take_id} by clients (default null = none; a run needs one). rows: an ordered list of items (default []), min/max bound the count, `item` names each item's fields, `mention` is how the prompt refers to item n (from 1). frames: a frame count on the family's frame grid, min + k \u00d7 step (k \u2265 0) up to max (LTX: 9 + 8k, 9..321); `fps` names the node's fps param; the UI renders it as the Duration slider (one notch per step, labelled frames and seconds). frames may declare `auto` (the model predicts the length: the value \"auto\"). int may declare `values` (the only allowed values) and `values_by` (the allowed values per value of an enum param of the same node: LTX steps per role); from API 1.39 an enum may declare `values_by` too, and its `param` may name another node's enum param (`model.variant`: LTX extend's direction per model variant). From API 1.19: media: one video or audio take (`accepts`), written {take_id[, in, out]} by clients (default null; a run needs one); `trim`: it reads the part in..out (the UI's trim control over the take); `grid`: a video's sides must be multiples of it; `max_s`: the longest take (or part) it reads; `max_frames`: the most frames of a video take it reads. span: a time range {start, end} on the workflow's one video media source (default null; a run needs one; the UI's range control over that take). contracts/README.md, Media inputs. From API 1.30: voice: one saved voice (a library item of kind voice), written {voice_id} by clients (default null; a run needs one); `accepts` names the voice sources it takes: preset (a pack's starter voice of the node's family), clip (from API 1.31: a voice with a clip, cloned or designed; studio sends its clip as a media value), design (a voice from a description). It takes no wire; from API 1.32 it may be a rows item field (a dialogue's `lines`). contracts/README.md, Voices. From API 1.32: a `text` param may declare `script: true` (a dialogue script: studio expands it into the same node's `lines` rows at create time; contracts/README.md, Dialogue)",
       "required": [
         "name",
         "type",
@@ -171,11 +171,11 @@
             "values"
           ],
           "additionalProperties": false,
-          "description": "int with `values` only: the allowed values depend on the node's value of enum param `param`: values[that value] (a subset of `values`; an enum value not listed allows all of `values`). The message names that subset (LTX sample: role stage1 -> [8], stage2 -> [3])",
+          "description": "int with `values`, or (API 1.39) enum: the allowed values depend on the value of an enum param `param`: of the same node (`role`), or (API 1.39) of another node of the graph in the `when` reference form `<node id>.<param>` (`model.variant`, read from the graph's merged values; a graph without that node, or a value not listed, allows all). values[that value] is a subset of `values` (int) or `enum` (enum); an enum's default is in every subset of a cross-node values_by, so a node placed with its defaults never breaks it. The message names that subset (LTX sample: role stage1 -> [8], stage2 -> [3]; LTX extend: model.variant distilled -> [after], `extend.direction: must be one of after`)",
           "properties": {
             "param": {
               "type": "string",
-              "pattern": "^[a-z][a-z0-9_]{0,63}$"
+              "pattern": "^([a-z][a-z0-9_]{0,63}\\.)?[a-z][a-z0-9_]{0,63}$"
             },
             "values": {
               "type": "object",
@@ -185,7 +185,10 @@
                 "minItems": 1,
                 "uniqueItems": true,
                 "items": {
-                  "type": "integer"
+                  "type": [
+                    "integer",
+                    "string"
+                  ]
                 }
               }
             }
@@ -644,17 +647,27 @@
           },
           "else": {
             "not": {
-              "anyOf": [
-                {
-                  "required": [
-                    "values"
-                  ]
-                },
-                {
-                  "required": [
-                    "values_by"
-                  ]
-                }
+              "required": [
+                "values"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "int",
+                  "enum"
+                ]
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "required": [
+                "values_by"
               ]
             }
           }

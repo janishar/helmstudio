@@ -1712,7 +1712,7 @@
                 "distilled-fp8",
                 "dev-int8"
               ],
-              "help": "Distilled: few fixed steps, no guidance (text and image to video). Dev: the full model with guidance, 30 steps (retake, extend, audio to video). fp8 / int8: smaller community weights, NVIDIA hosts only."
+              "help": "Distilled: 8 steps without guidance, about 10× faster. Dev: guided steps, CFG and STG, and Extend before (retake, extend, audio to video). fp8 / int8: smaller community weights, NVIDIA hosts only."
             },
             {
               "name": "precision",
@@ -2056,7 +2056,7 @@
           "title": "Encode (guided)",
           "family": "ltx",
           "component": "text encoder",
-          "help": "Encodes the prompt and the fixed negative prompt for video and audio with Gemma 4 and the connector, for the guided (dev) samplers; the text encoder is unloaded before sampling.",
+          "help": "Encodes the prompt and, for Dev's guided samplers, the fixed negative prompt for video and audio with Gemma 4 and the connector (Distilled: the prompt only); the text encoder is unloaded before sampling.",
           "params": [],
           "inputs": [
             {
@@ -2175,7 +2175,7 @@
           "title": "Retake",
           "family": "ltx",
           "component": "transformer",
-          "help": "Regenerates a stretch of the source clip (and, unless kept, its sound) with guidance; the rest of the clip is kept as context. The result is the whole clip.",
+          "help": "Regenerates a stretch of the source clip (and, unless kept, its sound): Dev with guidance, Distilled in its 8 steps without; the rest of the clip is kept as context. The result is the whole clip.",
           "params": [
             {
               "name": "span",
@@ -2199,7 +2199,8 @@
               "min": 1,
               "max": 60,
               "step": 1,
-              "help": "Euler steps of the guided loop; each runs the model four times over the whole clip."
+              "help": "Euler steps of the guided loop; each runs the model four times over the whole clip. Distilled runs its own 8 steps and ignores this.",
+              "when": "model.variant == 'dev' || model.variant == 'dev-int8'"
             },
             {
               "name": "cfg",
@@ -2209,7 +2210,8 @@
               "min": 1,
               "max": 10,
               "step": 0.1,
-              "help": "How strongly the prompt is followed against the fixed negative prompt."
+              "help": "How strongly the prompt is followed against the fixed negative prompt. Distilled ignores this.",
+              "when": "model.variant == 'dev' || model.variant == 'dev-int8'"
             },
             {
               "name": "stg",
@@ -2219,7 +2221,8 @@
               "min": 0,
               "max": 3,
               "step": 0.1,
-              "help": "Spatio-temporal guidance (block 28 skipped); 0 turns it off."
+              "help": "Spatio-temporal guidance (block 28 skipped); 0 turns it off. Distilled ignores this.",
+              "when": "model.variant == 'dev' || model.variant == 'dev-int8'"
             }
           ],
           "inputs": [
@@ -2256,7 +2259,7 @@
           "title": "Extend",
           "family": "ltx",
           "component": "transformer",
-          "help": "Generates new frames (and sound) after or before the source clip, with the whole clip as context. The result is the whole extended clip.",
+          "help": "Generates new frames (and sound) after or before the source clip. Dev: guided, with the whole clip as context. Distilled: after only, two stages over the clip's last 25 frames and the new part (sides on a 64 px grid). The result is the whole extended clip.",
           "params": [
             {
               "name": "seconds",
@@ -2276,7 +2279,26 @@
               "enum": [
                 "after",
                 "before"
-              ]
+              ],
+              "values_by": {
+                "param": "model.variant",
+                "values": {
+                  "distilled": [
+                    "after"
+                  ],
+                  "dev": [
+                    "after",
+                    "before"
+                  ],
+                  "distilled-fp8": [
+                    "after"
+                  ],
+                  "dev-int8": [
+                    "after",
+                    "before"
+                  ]
+                }
+              }
             },
             {
               "name": "steps",
@@ -2286,7 +2308,8 @@
               "min": 1,
               "max": 60,
               "step": 1,
-              "help": "Euler steps of the guided loop; each runs the model four times over the whole clip."
+              "help": "Euler steps of the guided loop; each runs the model four times over the whole clip. Distilled runs its own 8 steps and ignores this.",
+              "when": "model.variant == 'dev' || model.variant == 'dev-int8'"
             },
             {
               "name": "cfg",
@@ -2296,7 +2319,8 @@
               "min": 1,
               "max": 10,
               "step": 0.1,
-              "help": "How strongly the prompt is followed against the fixed negative prompt."
+              "help": "How strongly the prompt is followed against the fixed negative prompt. Distilled ignores this.",
+              "when": "model.variant == 'dev' || model.variant == 'dev-int8'"
             },
             {
               "name": "stg",
@@ -2306,7 +2330,8 @@
               "min": 0,
               "max": 3,
               "step": 0.1,
-              "help": "Spatio-temporal guidance (block 28 skipped); 0 turns it off."
+              "help": "Spatio-temporal guidance (block 28 skipped); 0 turns it off. Distilled ignores this.",
+              "when": "model.variant == 'dev' || model.variant == 'dev-int8'"
             }
           ],
           "inputs": [
@@ -2343,7 +2368,7 @@
           "title": "Sample (guided)",
           "family": "ltx",
           "component": "transformer",
-          "help": "Stage 1 of audio to video: denoises the video at half size with guidance while the source audio stays fixed and steers it.",
+          "help": "Stage 1 of audio to video: denoises the video at half size (Dev with guidance, Distilled in its 8 steps) while the source audio stays fixed and steers it.",
           "params": [
             {
               "name": "steps",
@@ -2353,7 +2378,8 @@
               "min": 1,
               "max": 60,
               "step": 1,
-              "help": "Euler steps of the guided loop; each runs the model four times over the whole clip."
+              "help": "Euler steps of the guided loop; each runs the model four times over the whole clip. Distilled runs its own 8 steps and ignores this.",
+              "when": "model.variant == 'dev' || model.variant == 'dev-int8'"
             },
             {
               "name": "cfg",
@@ -2363,7 +2389,8 @@
               "min": 1,
               "max": 10,
               "step": 0.1,
-              "help": "How strongly the prompt is followed against the fixed negative prompt."
+              "help": "How strongly the prompt is followed against the fixed negative prompt. Distilled ignores this.",
+              "when": "model.variant == 'dev' || model.variant == 'dev-int8'"
             },
             {
               "name": "stg",
@@ -2373,7 +2400,8 @@
               "min": 0,
               "max": 3,
               "step": 0.1,
-              "help": "Spatio-temporal guidance (block 28 skipped); 0 turns it off."
+              "help": "Spatio-temporal guidance (block 28 skipped); 0 turns it off. Distilled ignores this.",
+              "when": "model.variant == 'dev' || model.variant == 'dev-int8'"
             }
           ],
           "inputs": [
@@ -2417,7 +2445,7 @@
           "kind": "ltx/distill",
           "title": "Distilled LoRA",
           "family": "ltx",
-          "help": "Fuses the distilled LoRA into the dev transformer at strength 1, so a stage-2 sampler can refine with the distilled schedule.",
+          "help": "Fuses the distilled LoRA into the dev transformer at strength 1, so a stage-2 sampler can refine with the distilled schedule. Distilled has it fused in: passed through.",
           "params": [],
           "inputs": [
             {

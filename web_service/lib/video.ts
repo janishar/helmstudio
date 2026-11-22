@@ -133,7 +133,7 @@ export function allowedInts(f: Field, raws: Record<string, Raw>): number[] | nul
   const vb = p.values_by;
   if (!vb) return p.values;
   const v = raws[`${f.node}.${vb.param}`] ?? f.siblings?.[vb.param];
-  return vb.values[String(v)] ?? p.values;
+  return (vb.values[String(v)] as number[] | undefined) ?? p.values;
 }
 
 /** Whether an enum item field offers a choice (a one-value enum, as a bake-only LoRA mode, is not drawn). */

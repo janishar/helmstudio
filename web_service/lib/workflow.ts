@@ -120,6 +120,44 @@ export function display(f: Field, raw: Raw): { label: string; value: string } {
   return { label, value: f.param.type === "enum" ? optionText(f.param, v, f.kind) : v };
 }
 
+/** API 1.39 (contracts/README.md, Video: Distilled actions): why enum option `o` of field `f` cannot be picked now,
+ * else null. Either `f`'s own `values_by` refuses `o` under the value of the field it names ("Before needs Dev": the
+ * first value of that field's enum that allows it), or another field's cross-node `values_by` names `f` and refuses
+ * that field's value under `o` ("Extend before needs Dev"). */
+export function optionBlocked(
+  f: Field,
+  o: string,
+  fields: Field[],
+  raws: Record<string, Raw>,
+): string | null {
+  const refOf = (x: Field) => {
+    const p = x.param.values_by?.param ?? "";
+    return p.includes(".") ? p : `${x.node}.${p}`;
+  };
+  const now = (x: Field) => String(raws[x.key] ?? toRaw(x.initial, x.param));
+  const pool = (x: Field): unknown[] => x.param.values ?? x.param.enum ?? [];
+  const vb = f.param.values_by;
+  const by = vb && f.param.type === "enum" ? fields.find((x) => x.key === refOf(f)) : undefined;
+  if (vb && by) {
+    const under = (v: string): unknown[] => vb.values[v] ?? pool(f);
+    if (!under(now(by)).includes(o)) {
+      const first = by.param.enum?.find((v) => under(v).includes(o));
+      return first ? `${pretty(o)} needs ${pretty(first)}` : `${pretty(o)} is not offered`;
+    }
+  }
+  for (const g of fields) {
+    const gb = g.param.values_by;
+    if (!gb || g === f || refOf(g) !== f.key || g.param.type !== "enum") continue;
+    const v = now(g);
+    const under = (x: string): unknown[] => gb.values[x] ?? pool(g);
+    if (!under(o).includes(v)) {
+      const first = f.param.enum?.find((x) => under(x).includes(v));
+      return `${g.nodeTitle} ${v} needs ${first ? pretty(first) : "another model"}`;
+    }
+  }
+  return null;
+}
+
 type ExprValue = string | number | boolean | null | undefined;
 
 /** Evaluates a `when` / `requires` expression (contracts/README.md): `node.param` references, 'string' / "string",

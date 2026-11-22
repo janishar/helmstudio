@@ -240,7 +240,9 @@ Keys the core understands; anything else is ignored:
   (Text outputs sent as the run's `resolved.texts` `{"<node>.<output>": …}` on succeeded, a cache hit too), and (API
   1.36) `phases` (`[{id, label}]`, ids unique: the ordered phases of a node that runs one engine end to end, published
   as is; its progress then names one with `ctx.progress(step, of, phase, phase_id)`, and core.child's `phases`
-  mapping may give `(text, phase id)`: MiniMax H3's generate). A stage
+  mapping may give `(text, phase id)`: MiniMax H3's generate), and `by_variant` (true: its cache key also holds its Model
+  input's variant, for a stage whose output depends on it over components variants share: ltx/encode-guided encodes
+  the negative prompt on Dev only). A stage
   with `uses` and no Model input loads from `core.pack.default_model` (the first variant at the model node's default
   precision): minimax/enhance.
   - `params`: name → a registry `paramSchema` without `name`, copied verbatim (`type` int | float | bool |

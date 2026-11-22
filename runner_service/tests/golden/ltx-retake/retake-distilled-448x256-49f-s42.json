@@ -1,0 +1,121 @@
+{
+  "name": "retake-distilled-448x256-49f-s42",
+  "out": "ltx-retake",
+  "kind": "retake",
+  "seed": 42,
+  "start": 2,
+  "end": 5,
+  "regenerate_audio": true,
+  "prompt": "A golden retriever puppy stops on a sunny park lawn, sits down and wags its tail, panting, birds chirping in the trees behind it",
+  "argv_equivalent": "ltx-2-mlx retake --distilled --video t2v-448x256-49f-s42.mp4 --start 2 --end 5 --model ~/GenAI/models/ltx-2.5 --quantize-on-load 8 --seed 42 --prompt '...' -o retake-distilled-448x256-49f-s42.mp4",
+  "inputs": {
+    "video": {
+      "file": "runner_service/tests/golden/ltx-text-to-video/t2v-448x256-49f-s42.mp4",
+      "sha256": "5c91f5c1333e4734499009d91241d45993703a02772859bf08dfb1dc8185a2c2"
+    }
+  },
+  "quantize_on_load": 8,
+  "low_ram": false,
+  "final_video_latent": {
+    "shape": [
+      1,
+      128,
+      7,
+      8,
+      14
+    ],
+    "dtype": "float32",
+    "mean": 0.020539,
+    "std": 1.334625,
+    "min": -5.678717,
+    "max": 5.5,
+    "abs_mean": 1.063828,
+    "sha256_f32": "40a08e571627f78c4ffd60e28105160254c39f2e379dc3e58542059b317abc9b"
+  },
+  "final_audio_latent": {
+    "shape": [
+      1,
+      8,
+      51,
+      16
+    ],
+    "dtype": "float32",
+    "mean": -0.394341,
+    "std": 1.226826,
+    "min": -5.417463,
+    "max": 4.009347,
+    "abs_mean": 1.099293,
+    "sha256_f32": "2e4944e935812d0fe9c250f56b14f53400ec81f50c69ee80c7c36bb856cbef53"
+  },
+  "wav": {
+    "sample_rate": 48000,
+    "file": "retake-distilled-448x256-49f-s42.wav",
+    "what": "the decoded waveform before AAC"
+  },
+  "frames_png": {
+    "first": {
+      "index": 0,
+      "file": "retake-distilled-448x256-49f-s42-first.png"
+    },
+    "mid": {
+      "index": 24,
+      "file": "retake-distilled-448x256-49f-s42-mid.png"
+    },
+    "last": {
+      "index": 48,
+      "file": "retake-distilled-448x256-49f-s42-last.png"
+    }
+  },
+  "mp4": {
+    "file": "retake-distilled-448x256-49f-s42.mp4",
+    "bytes": 526373,
+    "ffprobe": {
+      "programs": [],
+      "stream_groups": [],
+      "streams": [
+        {
+          "index": 0,
+          "codec_name": "h264",
+          "profile": "High",
+          "codec_type": "video",
+          "width": 448,
+          "height": 256,
+          "pix_fmt": "yuv420p",
+          "r_frame_rate": "24/1",
+          "duration": "2.041667",
+          "nb_frames": "49"
+        },
+        {
+          "index": 1,
+          "codec_name": "aac",
+          "profile": "LC",
+          "codec_type": "audio",
+          "sample_rate": "48000",
+          "channels": 2,
+          "r_frame_rate": "0/0",
+          "duration": "2.010000",
+          "nb_frames": "96"
+        }
+      ],
+      "format": {
+        "duration": "2.041667",
+        "bit_rate": "2062522"
+      }
+    },
+    "sha256": "9e9a8e678a42f9a4042b785ebc64c5e7108a0805ac6f29bb099a0363de8237f0"
+  },
+  "timing_s": {
+    "total_wall": 32.2
+  },
+  "memory": {
+    "mlx_peak_gib_whole_run": 8.24,
+    "process_max_rss_gib": 8.99,
+    "guard_gib": 46.0
+  },
+  "versions": {
+    "mlx": "0.32.2",
+    "python": "3.11.16",
+    "ltx_pipelines_mlx": "ltx-2-studio main e6e15b7",
+    "machine": "Darwin 27.2.0 arm64"
+  }
+}

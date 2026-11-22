@@ -24,9 +24,12 @@ import {
 import { newId, timecode, type Clip, type Norm } from "@/lib/timeline";
 import {
   buildInputs,
+  display,
   fields as fieldsOf,
   isRef,
   isSpan,
+  optionBlocked,
+  pretty,
   prettyModel,
   rawsFrom,
   readValue,
@@ -183,6 +186,12 @@ function ActionForm({
   const trim = fields.find((f) => f.param.type === "media" && f.param.trim);
   const ext = extensionOf(fields);
   const model = fields.filter((f) => f.model && f.param.type === "enum");
+  // the model row (docs/mock/LtxFeatures frame 8): a variant with a choice; an option another input's values_by
+  // refuses (Extend before on Distilled) is faded with its reason (API 1.39)
+  const variant = model.find((f) => f.param.name === "variant" && (f.param.enum?.length ?? 0) > 1);
+  const blocked = Object.fromEntries(
+    (variant?.param.enum ?? []).map((o) => [o, variant && optionBlocked(variant, o, fields, raws)]),
+  );
   const name = take?.title ?? "this clip";
 
   // what the run makes of the range, the extension or the part (lib/source: check.py's maps)
@@ -259,6 +268,35 @@ function ActionForm({
 
   return (
     <div className="flex flex-col gap-2.5 rounded-[18px_18px_18px_8px] bg-s2 p-3">
+      {variant && (
+        <>
+          <div className="flex items-center justify-between gap-2">
+            <span>{display(variant, "").label}</span>
+            <div className="seg" role="group" aria-label={display(variant, "").label}>
+              {variant.param.enum?.map((o) => (
+                <button
+                  key={o}
+                  type="button"
+                  aria-pressed={raw(variant) === o}
+                  aria-disabled={blocked[o] ? true : undefined}
+                  title={blocked[o] ?? undefined}
+                  className={blocked[o] ? "opacity-55" : undefined}
+                  onClick={() => !blocked[o] && setRaws((r) => ({ ...r, [variant.key]: o }))}
+                >
+                  {pretty(o)}
+                </button>
+              ))}
+            </div>
+          </div>
+          {Object.values(blocked)
+            .filter(Boolean)
+            .map((why) => (
+              <span key={String(why)} className="text-[12px] text-t2">
+                {why}
+              </span>
+            ))}
+        </>
+      )}
       {prompt && (
         <>
           <label htmlFor={`act-${prompt.key}`} className="text-[12px] text-t2">

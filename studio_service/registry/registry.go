@@ -37,7 +37,8 @@ type Param struct {
 	FPS     string                     `json:"fps,omitempty"`     // frames only: the same node's frame-rate param
 	// frames only: present = the value "auto" is allowed (the model predicts the length within min_s..max_s)
 	Auto *Auto `json:"auto,omitempty"`
-	// int only: the only allowed values; ValuesBy narrows them per value of an enum param of the same node
+	// int only: the only allowed values; ValuesBy narrows them (from API 1.39 an enum's too) per value of an enum param
+	// of the same node or, from 1.39, of another node ("model.variant")
 	Values   []int64   `json:"values,omitempty"`
 	ValuesBy *ValuesBy `json:"values_by,omitempty"`
 	Position string    `json:"position,omitempty"` // a float item field: "seconds" = a time on the clip (a keyframe's)
@@ -66,10 +67,27 @@ type Auto struct {
 	MaxS float64 `json:"max_s"`
 }
 
-// ValuesBy is an int param's allowed values per value of the node's enum param Param.
+// ValuesBy is an int's (from API 1.39 an enum's) allowed values per value of enum param Param: the node's own, or
+// (1.39) another node's in the `when` reference form "<node>.<param>". Values hold JSON numbers or strings.
 type ValuesBy struct {
-	Param  string             `json:"param"`
-	Values map[string][]int64 `json:"values"`
+	Param  string           `json:"param"`
+	Values map[string][]any `json:"values"`
+}
+
+// Pool is what values_by narrows: an int's values, else an enum's.
+func (p Param) Pool() []any {
+	if p.Type == "enum" {
+		out := make([]any, len(p.Enum))
+		for i, v := range p.Enum {
+			out[i] = v
+		}
+		return out
+	}
+	out := make([]any, len(p.Values))
+	for i, v := range p.Values {
+		out[i] = float64(v)
+	}
+	return out
 }
 
 // IsImageField reports whether a rows item field holds an Image.
