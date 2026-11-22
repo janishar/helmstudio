@@ -306,7 +306,13 @@ thumbnail.
 - Dev stack backfill (studio, runner and web rebuilt): 480 live image and video takes, 45 thumbs jobs, none failed;
   231 got a thumbnail, 249 needed none (short side at most 512 px); no take over 512 px is left without one. Image
   originals average 1.78 MB, their thumbnails 32 KB (largest 119 KB). A `pg_dump` of `takes` was taken before.
-- Left: the browser pass (network panel); a remote GPU host's S3 identity needs `make gpu-host-reload` to get the
+- Browser pass (dev stack, studio rebuilt with the review fixes): Gallery, the gallery picker, the Create strip and
+  the Timeline draw `thumb_url`; tiles are lazy WebP of 7–119 KB; the details panel, the full screen and compare load
+  the original, the details panel painting the thumbnail under it until it arrives. One Gallery page (60 takes, 35
+  picture tiles, 21 with a thumbnail) fell from 91.8 MB of originals to 5.3 MB. No web fix needed. Noted: 864×480
+  PNG video posters and uploads (short side 480) keep their ~250–400 KB original as the tile under the "short side at
+  most 512" rule; a WebP would be ~30 KB (a rule change, not made).
+- Left: a remote GPU host's S3 identity needs `make gpu-host-reload` to get the
   `u/*/thumbs/*` prefix (local runners use the admin key); the native Mac runners advertise `media.thumbs` after their
   next restart.
 
