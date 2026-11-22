@@ -8,8 +8,9 @@
  *
  * Env: H3_LORA = the file (unset or empty: off), H3_LORA_STRENGTH (default
  * 1). Scale = strength x alpha / rank, alpha the module's own `.alpha`
- * tensor, else the rank (never the file's metadata alpha: the FL2V file's 128
- * is wrong for its rank-16 AdaLN modules).
+ * tensor (FL2V: every module; its metadata 128 is wrong for its rank-16
+ * AdaLN), else the file's metadata "alpha" (ref2v: no `.alpha`, metadata 8
+ * at rank 128, so 1/16; at 1 its References render is noise), else the rank.
  *
  * Key map (PEFT -> native): transformer_blocks.N -> blocks.N,
  * token_refiner.refiner_blocks.N -> token_refiner.blocks.N; attn.to_q/k/v ->
@@ -42,7 +43,7 @@ static const char lora_a[] = ".lora_A.default.weight";
 
 static int initialized, lora_open, lora_bad, reported;
 static h3_st_header lora;
-static float strength = 1.0f;
+static float strength = 1.0f, file_alpha = 0.0f; /* 0: none in the file */
 static int modules_total, merged_count;
 static double merge_seconds;
 
@@ -62,6 +63,27 @@ static void report(void) {
     else
         fprintf(stderr, "\nh3 lora: merged %d of %d modules in %.1f s\n",
                 merged_count, modules_total, merge_seconds);
+}
+
+/* The metadata's "alpha" (a JSON string), which h3's parser skips. */
+static float metadata_alpha(void) {
+    FILE *f = fopen(lora.path, "rb");
+    char *json = f ? malloc(lora.header_size + 1) : NULL;
+    float alpha = 0.0f;
+    if (json && fseek(f, 8, SEEK_SET) == 0 &&
+        fread(json, 1, lora.header_size, f) == lora.header_size) {
+        json[lora.header_size] = '\0';
+        char *meta = strstr(json, "\"__metadata__\"");
+        char *end = meta ? strchr(meta, '}') : NULL;
+        char *key = meta ? strstr(meta, "\"alpha\"") : NULL;
+        if (key && key < end) {
+            key = strchr(key + 7, '"');
+            if (key && key < end) alpha = strtof(key + 1, NULL);
+        }
+    }
+    free(json);
+    if (f) fclose(f);
+    return alpha > 0.0f ? alpha : 0.0f;
 }
 
 static void init(void) {
@@ -90,6 +112,7 @@ static void init(void) {
     }
     const char *s = getenv("H3_LORA_STRENGTH");
     if (s && *s) strength = strtof(s, NULL);
+    file_alpha = metadata_alpha();
     atexit(report); /* fewer layers load fewer modules: said at exit */
 }
 
@@ -162,7 +185,7 @@ static int add_module(float *weight, uint64_t rows, uint64_t cols,
         free(b);
         return 0;
     }
-    float alpha = (float)ar;
+    float alpha = file_alpha > 0.0f ? file_alpha : (float)ar;
     snprintf(name, sizeof(name), "%s.alpha", prefix);
     if (!read_f32(name, &alpha_t, NULL, NULL)) {
         free(a);

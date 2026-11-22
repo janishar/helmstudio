@@ -98,10 +98,11 @@ The pack runs the pinned h3 binary (`vendor/h3c`, h3.c 4cafd17, `make h3`) as a 
 - **The two files differ (C0, headers read 2026-11-22).** FL2V: 1089 tensors, 363 modules (50 blocks × attention
   q/k/v/out, MLP fc1/fc2, AdaLN; 2 token-refiner blocks; norm_out), each with its own `.alpha` (128; AdaLN and
   norm_out rank 16 alpha 16), metadata alpha 128. ref2v: 624 tensors, 312 modules (no AdaLN, no norm_out), **no
-  `.alpha` tensors** and metadata alpha 8. h3_lora.c takes alpha = rank without a `.alpha` (scale 1, as diffusers /
-  ComfyUI read a file without one), never the metadata (FL2V's 128 would scale its AdaLN 8×). If a References render
-  looks over-cooked, the authors' intended scale may be 8 / 128 (H3_LORA_STRENGTH=0.0625 tries it on a Mac by hand;
-  the runner sends 1). Same key layout and shapes as FL2V for the modules both have: one key map.
+  `.alpha` tensors**, rank 128 and metadata alpha 8. h3_lora.c's alpha: the module's `.alpha`, else the file's
+  metadata `alpha`, else the rank. FL2V has `.alpha` everywhere (its metadata 128 would scale its rank-16 AdaLN 8×),
+  so it never reads the metadata; ref2v takes 8 / 128 = 1/16. At scale 1 (alpha = rank, the first build) a References
+  render is noise (C7, `docs/mock/checks/h3-turbo/grid_ref2va.jpg`, sharpness 8). Same key layout and shapes as FL2V
+  for the modules both have: one key map.
 - **h3 (Mac)** merges at load (vendor/h3c `h3_lora.c`, helmstudio's patch: `patches/h3-lora.diff`) every BF16 2-D
   transformer tensor it loads, so only the run's partition; CPU sgemm per weight, stochastic rounding seeded by the
   tensor name (repeats bit for bit; h3's int8 quantizer keeps the small delta). Measured 2026-11-22 (M5 Pro, 512 × 512
@@ -120,4 +121,12 @@ The pack runs the pinned h3 binary (`vendor/h3c`, h3.c 4cafd17, `make h3`) as a 
   slower than the spike's 340 s): Fast 344.5 s (peak 19.1 GB), Turbo 420.0 s (peak 24.6 GB, the runner's measure;
   the formula plans 31.1). So the order is Draft · Fast · Turbo · Default · Reference.
 - **Golden** `t2v-turbo` (512 × 512 × 22, 8 steps, seed 42): two pack runs bit-identical (62 s, peak 23.2 GB).
-- **Not measured yet:** Ref2VA at Turbo (the C7 render: the ref2v file's scale is the open question above).
+- **C7, Ref2VA at Turbo** (2026-11-22, M5 Pro, the h3 binary as the pack runs it, 512 × 512 × 62, one image
+  reference, seed 42, copied weights; `docs/mock/checks/h3-turbo/ref2va-*`, `grid_ref2va.jpg`): Turbo Ref LoRA,
+  8 steps: 128 s in all (merge 312 modules 15.0 s, denoise 56 s), peak footprint 25.7 GB, sharpness 74; Base 50
+  steps: 490 s (denoise 426 s), 26.9 GB, sharpness 78. It holds: Turbo stays in References' presets. Ref2VA is not
+  bit-repeatable in h3 (two Turbo runs 34.8 dB apart), so no Ref2VA Turbo golden.
+- **Fast vs Turbo rechecked** (2026-11-22, the Mac otherwise idle, 864 × 480 × 124, seed 42, the binary): Fast 317 s
+  (denoise 180 s, mapped, peak 20.5 GB, sharpness 39), Turbo 413 s (merge 19.3 s, denoise 259 s, copied, peak
+  27.0 GB, sharpness 59; `grid_fast_turbo.jpg`). Fast stays before Turbo. The golden still matches exactly after
+  the metadata-alpha change (59 s, peak 23.0 GB).
