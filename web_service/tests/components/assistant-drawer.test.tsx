@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // The Assistant drawer in the shell (components/assistant; plan 18 §22.1, §22.3, §22.6; docs/mock/Assistant.dc.html):
-// the dock item and ⌘J, the remote notice, a message with the screen summary, a parked turn's actions run in this tab
+// the dock item and ⌘J, no remote disclaimer, a message with the screen summary, a parked turn's actions run in this tab
 // with their lines and Undo, a card whose Yes is the only way the costly action runs (Not now and leaving the screen
 // cancel it), navigate dropping the rest of the batch, another tab's chat read-only with Continue here, a server
 // card's answer, the daily limit, a Remembered line's Undo, and model text that stays text.
@@ -153,15 +153,10 @@ function park(list: { id: string; name: string; args: Record<string, unknown> }[
 }
 
 describe("the drawer", () => {
-  it("opens with ⌘J, shows the remote notice first, then sends a message with the screen summary", async () => {
+  it("opens with ⌘J, then sends a message with the screen summary", async () => {
     const posts = serve({ remote: true });
     await openDrawer(<Screen actions={{ change: () => done("x") }} />);
     expect(screen.getByText("Hi. What should we make?")).toBeTruthy();
-    expect(
-      screen.getByText(/Remote provider: your messages leave this machine \(DeepSeek\)/),
-    ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "OK" }));
-    expect(screen.getByText("DeepSeek · your messages leave this machine")).toBeTruthy();
     expect(screen.getByText("Sees")).toBeTruthy();
     expect(screen.getByText("Qwen Image · Turbo")).toBeTruthy();
     const box = screen.getByRole("textbox", { name: "Message the assistant" });
@@ -185,11 +180,11 @@ describe("the drawer", () => {
     expect(screen.getByRole("complementary", { name: "Assistant" })).toBeTruthy();
   });
 
-  it("a local model says so and shows no notice", async () => {
-    serve();
+  it.each([true, false])("no remote disclaimer for any provider (remote %s)", async (remote) => {
+    serve({ remote });
     await openDrawer();
-    expect(screen.getByText("Runs on this machine")).toBeTruthy();
-    expect(screen.queryByText(/Remote provider/)).toBeNull();
+    expect(screen.queryByText(/leave this machine|Remote provider/)).toBeNull();
+    expect(!!screen.queryByText("Runs on this machine")).toBe(!remote);
   });
 
   it("Expand opens the message in a dialog titled Message", async () => {

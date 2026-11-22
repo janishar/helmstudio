@@ -66,15 +66,6 @@ const page = (id: string) => (since: number) =>
     }),
   ) as Promise<S<"AssistantEventPage">>;
 
-const ackKey = (p: string) => `helm.assistant.remote.${p}`;
-function readAck(p: string) {
-  try {
-    return localStorage.getItem(ackKey(p)) === "1";
-  } catch {
-    return false;
-  }
-}
-
 /** Phone width: the dock is the bar at the top and the drawer a bottom sheet. */
 const PHONE = "(max-width: 767px)";
 const usePhone = () =>
@@ -107,7 +98,6 @@ export function useAssistant(me: S<"User"> | null) {
   const [asking, setAsking] = useState<Asking | null>(null);
   const [running, setRunning] = useState<{ n: number; of: number; text: string } | null>(null);
   const [error, setError] = useState("");
-  const [, setAckTick] = useState(0);
   const undoFns = useRef<Record<string, NonNullable<Outcome["undo"]>>>({});
   const answerRef = useRef<((a: "yes" | "no" | "gone") => void) | null>(null);
   const handled = useRef(new Set<string>());
@@ -354,14 +344,6 @@ export function useAssistant(me: S<"User"> | null) {
       setError(message(e));
     }
   };
-  const ackRemote = () => {
-    try {
-      localStorage.setItem(ackKey(status?.provider?.title ?? ""), "1");
-    } catch {
-      /* the notice shows again next time */
-    }
-    setAckTick((n) => n + 1);
-  };
 
   const enabled = !!status?.enabled;
   // ⌘J (Ctrl J) opens and closes it on any screen
@@ -405,8 +387,6 @@ export function useAssistant(me: S<"User"> | null) {
     toggleUndo,
     readOnly,
     cardWaits: !!asking || serverCardWaits,
-    remoteAcked: status?.provider ? readAck(status.provider.title) : true,
-    ackRemote,
   };
 }
 export type AssistantApi = ReturnType<typeof useAssistant>;
@@ -928,12 +908,7 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
     await a.send(x);
     setSending(false);
   };
-  const remote = st?.provider?.remote;
-  const where = st?.provider
-    ? remote
-      ? `${st.provider.title} · your messages leave this machine`
-      : "Runs on this machine"
-    : "";
+  const onMachine = st?.provider && !st.provider.remote;
 
   if (phone && a.shrunk)
     return (
@@ -1064,29 +1039,11 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
               ))}
             </div>
           )}
-          {remote && !a.remoteAcked ? (
-            <div role="note" className="bar2 remote">
-              <span className="flex items-center gap-2 text-[13px] font-semibold text-[#f2c14e]">
-                <Globe size={16} strokeWidth={1.75} aria-hidden />
-                Remote provider: your messages leave this machine ({st!.provider!.title})
-              </span>
-              <span>
-                Sent: what you type, a short summary of this screen, and what it looks up.
-              </span>
-              <span>Never sent: images, video, audio or files.</span>
-              <span className="flex justify-end">
-                <button type="button" className="no h-8 text-xs" onClick={a.ackRemote}>
-                  OK
-                </button>
-              </span>
+          {onMachine && (
+            <div className="rem local">
+              <Globe size={13} strokeWidth={1.75} aria-hidden />
+              Runs on this machine
             </div>
-          ) : (
-            where && (
-              <div className={`rem ${remote ? "" : "local"}`}>
-                <Globe size={13} strokeWidth={1.75} aria-hidden />
-                {where}
-              </div>
-            )
           )}
 
           <div className={`thr ${a.readOnly ? "ro" : ""}`} aria-live="polite">

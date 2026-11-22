@@ -271,7 +271,8 @@ characters come back fenced as data, and the line lists the sources.
   card you can refuse.
 - **Mentions**: handles you wrote, handles already in the form, and handles from a library read or a dialog result.
 - **What leaves the machine is shown**: a remote model provider (your messages, the summary, tool results, memory
-  put in the turn; never images) as a notice and a line; web search per card.
+  put in the turn; never images) in Admin › AI agents; web search per card. Owner, 2026-11-22: no remote disclaimer
+  in the drawer.
 - **Owner scoping**: studio takes the owner from its thread row; pipelines checks it against the graph's state;
   idempotent message and call ids; long work 202; admin tools never reach a non-admin and each admin read checks the
   role again.

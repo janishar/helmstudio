@@ -979,13 +979,6 @@
     line-height: 17px;
     color: var(--t1b);
   }
-  .ast .bar2.remote {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
-    background: color-mix(in srgb, #f2c14e 10%, transparent);
-    box-shadow: inset 0 0 0 1px #f2c14e;
-  }
   .ast .bar2.limit {
     align-items: flex-start;
     color: #ff8a80;
