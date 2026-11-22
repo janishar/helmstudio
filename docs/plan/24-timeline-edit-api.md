@@ -279,12 +279,8 @@ About 28 h with assistant option A (24 h without phase 5); B adds 4 h. Exact fra
 
 ### 28.14 Open points for the owner
 
-**Decided by the owner, 2026-11-22 (one by one, all the recommended options):** 1. ~~The assistant keeps plan 18's
-browser action `timeline.edit`.~~ **Changed by the owner the same day ("adopt mcp way then for the assistant"): the
-assistant edits through `/edits` like MCP agents** (try_timeline_edit then edit_timeline; one call per batch, no tab
-needed). It asks first **only when a batch removes clips** (a delete card with the dry-run diff); cuts, trims and
-moves apply at once with an Undo line that restores the previous revision. This is the one server write tool the
-assistant has besides memory (plan 18 §22.9 updated). About +4 h in the first slice. 2. A first slice now with today's ops; plan 23's ops join when built; MCP tools when
+**Decided by the owner, 2026-11-22 (one by one, all the recommended options):** 1. The assistant keeps plan 18's
+browser action `timeline.edit`. 2. A first slice now with today's ops; plan 23's ops join when built; MCP tools when
 helm mcp lands. 3. The web editor keeps local drafts and saves each op through `/edits` (the server's answer wins).
 4. 100 revisions kept; agents batch ops. 5. `base_revision` required. 6. Studio makes missing clip ids and returns
 them in the diff. 7. `view=agent` on the existing GET. 8. Stored frames now, exact frames later. 9. Keep the three
