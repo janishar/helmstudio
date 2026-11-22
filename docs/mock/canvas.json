@@ -373,9 +373,9 @@
     },
     "Assistant.dc.html": {
       "expand": "fill",
-      "h": 4281,
+      "h": 7614,
       "is_interactive": true,
-      "title": "Assistant · the drawer on Create and Timeline, phone, confirm cards, small states",
+      "title": "Assistant · the drawer on Create, Graph and Timeline, phone, cards, chains, memory, web search",
       "w": 1440,
       "x": 21280,
       "y": 0

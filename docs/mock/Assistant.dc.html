@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Assistant: the drawer on Create and Timeline, phone, confirm cards</title>
+<title>Assistant: the drawer on Create, Graph and Timeline, phone, cards, chains, memory</title>
 <script src="./support.js"></script>
 </head>
 <body>
@@ -254,7 +254,7 @@ nav button[aria-label="Assistant"][aria-expanded="true"] svg{filter:none;outline
 <button class="ib" aria-label="New chat" title="New chat"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.4 2.6a1 1 0 0 1 3 3l-9 9a2 2 0 0 1-.85.5l-2.87.84a.5.5 0 0 1-.62-.62l.84-2.87a2 2 0 0 1 .5-.85z"></path></svg></button>
 <button class="x" aria-label="Close (⌘J)" title="Close (⌘J)"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg></button>
 </div>
-<div class="where">Sees<span>Create · Image</span><span>New session</span><span>@mara</span></div>
+<div class="where">Sees<span>Create · Image</span><span>Qwen Image · Turbo</span><span>Run on: Auto → Mac</span><span>New session</span><span>@mara</span></div>
 <div class="rem"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20M2 12h20"></path></svg>DeepSeek · your messages leave this machine</div>
 
 <div class="thr">
@@ -623,9 +623,276 @@ nav button[aria-label="Assistant"][aria-expanded="true"] svg{filter:none;outline
 </div>
 </section>
 
+
+<!-- ============ 5 · Graph with the drawer: the side panel moves beside it ============ -->
+<section class="board" aria-label="Graph with the Assistant drawer" style="min-height: 960px; height: 960px">
+<span class="lbl" style="top: auto; bottom: -1px; border-radius: 10px 10px 0 0">5 · Create, Graph view · the side panel moves left beside the drawer and the canvas narrows; the same on the pipeline editor and Studio view</span>
+<nav aria-label="Sections" style="flex: 0 0 64px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 0; border-right: 1px solid var(--s3)">
+<button aria-label="Create" aria-current="page" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: var(--s2); color: var(--a1); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"></path><circle cx="12" cy="12" r="3"></circle></svg></button>
+<button aria-label="Pipelines" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="6" height="6" rx="1.5"></rect><rect x="15" y="14" width="6" height="6" rx="1.5"></rect><path d="M9 7h4a2 2 0 0 1 2 2v5"></path></svg></button>
+<button aria-label="Gallery" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="9" cy="10" r="2"></circle><path d="m21 16-5-5L5 20"></path></svg></button>
+<button aria-label="Timeline" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 17h18"></path><rect x="5" y="4" width="6" height="6" rx="1.5"></rect><rect x="12" y="14" width="7" height="6" rx="1.5"></rect></svg></button>
+<button aria-label="Models" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"></path><path d="m3 8 9 5 9-5M12 13v8"></path></svg></button>
+<button aria-label="Assistant" aria-expanded="true" title="Assistant (⌘J)" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path><path d="M20 3v4M22 5h-4"></path></svg></button>
+<details style="position: relative; margin-top: 6px">
+<summary aria-label="Settings" style="list-style: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10px; font-weight: 500; color: var(--t2)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 36px; height: 36px; padding: 8px; box-sizing: border-box; border-radius: 12px; color: #fff; background: linear-gradient(155deg, #a7b0c2, #4b5468); box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg>Settings</summary>
+<div style="position: absolute; left: 70px; bottom: 0; z-index: 40; width: 220px; box-sizing: border-box; padding: 14px; border-radius: 18px 18px 18px 8px; background: var(--s2); box-shadow: 0 24px 40px -12px color-mix(in srgb, var(--shd) 80%, transparent); display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 12px; font-weight: 600; color: var(--t2)">Settings</span>
+<label for="theme" style="font-size: 13px; color: var(--t1)">Theme</label>
+<select id="theme" value="{{theme}}" onChange="{{setTheme}}" style="width: 100%; height: 36px; padding: 0 10px; border-radius: 10px; border: 0; background: var(--s4); color: var(--t1); font: inherit; font-size: 13px">
+<option value="forest">Forest ink</option>
+<option value="ocean">Deep ocean</option>
+<option value="aubergine">Aubergine dusk</option>
+<option value="espresso">Espresso</option>
+<option value="oxblood">Oxblood</option>
+<option value="indigo">Indigo night</option>
+<option value="parchment">Parchment (light)</option>
+</select>
+</div>
+</details>
+</nav>
+
+<main style="flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 14px; padding: 16px 20px 20px; align-self: stretch">
+<div style="display: flex; align-items: center; gap: 10px">
+<b style="font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 18px">Rain still · v4</b>
+<span class="chip" style="display: inline-flex; align-items: center">Studio</span><span class="chip" style="display: inline-flex; align-items: center; background: var(--s5)">Graph</span>
+<div style="flex-grow: 1"></div>
+<button class="chip">Undo assistant changes</button>
+<button class="go" style="height: 36px">GENERATE</button>
+</div>
+<div style="position: relative; flex: 1 1 auto; border-radius: 16px; background: var(--in); border: 1px solid var(--s3); overflow: hidden">
+<div class="n" style="position: absolute; left: 30px; top: 60px; width: 150px; padding: 10px 12px; box-sizing: border-box; border: 1px solid var(--s4); font-size: 12px; line-height: 16px"><b style="display: block; font-size: 13px">Prompt</b><span class="mono" style="font-size: 10px">text</span></div>
+<div class="n by" style="position: absolute; left: 30px; top: 190px; width: 150px; padding: 10px 12px; box-sizing: border-box; border: 1px solid var(--s4); font-size: 12px; line-height: 16px"><b style="display: block; font-size: 13px">Load LoRA</b><span class="mono" style="font-size: 10px">rain_v2 · 0.8</span></div>
+<div class="n" style="position: absolute; left: 230px; top: 120px; width: 150px; padding: 10px 12px; box-sizing: border-box; border: 1px solid var(--s4); font-size: 12px; line-height: 16px"><b style="display: block; font-size: 13px">Qwen Image</b><span class="mono" style="font-size: 10px">Turbo · 8 steps</span></div>
+<div class="n by" style="position: absolute; left: 230px; top: 280px; width: 150px; padding: 10px 12px; box-sizing: border-box; border: 1px solid var(--s4); font-size: 12px; line-height: 16px"><b style="display: block; font-size: 13px">Look</b><span class="mono" style="font-size: 10px">Blue hour</span></div>
+<div class="n" style="position: absolute; left: 430px; top: 180px; width: 150px; padding: 10px 12px; box-sizing: border-box; border: 1px solid var(--s4); font-size: 12px; line-height: 16px"><b style="display: block; font-size: 13px">Save image</b><span class="mono" style="font-size: 10px">png</span></div>
+<svg aria-hidden="true" style="position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none" fill="none" stroke="var(--ln)" stroke-width="2"><path d="M180 85 C205 85 205 145 230 145"></path><path d="M180 215 C205 215 205 150 230 150"></path><path d="M180 215 C205 215 205 305 230 305"></path><path d="M380 145 C405 145 405 205 430 205"></path></svg>
+<span class="mono" style="position: absolute; left: 14px; bottom: 12px; font-size: 11px">ringed = added by the assistant</span>
+</div>
+</main>
+
+<aside aria-label="Node inspector" style="flex: 0 0 280px; box-sizing: border-box; padding: 16px 18px 24px; background: var(--p0); display: flex; flex-direction: column; gap: 14px; align-self: stretch; margin-right: 368px">
+<b style="font-size: 14px">Load LoRA</b>
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--t2)">LoRA<span class="chip" style="display: flex; align-items: center; color: var(--t1)">rain_v2</span></label>
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--t2)">Strength<input type="range" min="0" max="2" step="0.1" value="0.8"></label>
+<p class="fine">The side panel keeps its width and sits left of the drawer. Closing the drawer puts it back at the edge.</p>
+</aside>
+
+<div class="drw" role="complementary" aria-label="Assistant">
+<div class="dh"><h2><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path></svg>Assistant</h2><button class="x" aria-label="Close"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg></button></div>
+<div class="where">Sees<span>Create · Graph</span><span>Rain still · v4</span><span>Load LoRA</span></div>
+<div class="thr">
+<div class="msg me">Add my rain LoRA at 0.8 and a Blue hour look, then fix whatever is red</div>
+<div class="msg">
+<p>Done. The graph is valid now.</p>
+<ul class="al" aria-label="What it did">
+<li><svg class="ok" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg><span>Added Load LoRA · rain_v2 · 0.8</span></li>
+<li><svg class="ok" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg><span>Added Look · Blue hour</span></li>
+<li><svg class="ok" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg><span>Wired both into Qwen Image</span></li>
+<li><svg class="ok" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg><span>Fixed: Save image had no input</span></li>
+</ul>
+<p style="margin-top: 6px">One Undo above the graph takes all four back.</p>
+</div>
+</div>
+<div class="cmp"><textarea aria-label="Message the assistant" rows="2" placeholder="Ask, or say what to do"></textarea><div class="cmpb"><small><span class="kbd">⌘J</span> open or close</small><button class="snd" aria-label="Send"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 7-7 7 7M12 19V5"></path></svg></button></div></div>
+</div>
+</section>
+
+<!-- ============ 6 · Chains, tools and memory ============ -->
+<section class="board" aria-label="Chains, tools and memory" style="padding: 64px 40px 56px 96px; display: grid; grid-template-columns: repeat(3, 340px); gap: 32px 48px; align-items: start">
+<span class="lbl" style="top: auto; bottom: -1px; border-radius: 10px 10px 0 0">6 · Chains, tools and memory · a chained ask, Run on, downloads, a library dialog, egress and delete cards, yours only, Remembered, Memory, web search</span>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<p class="note">Chained ask, 1 · waiting for the run</p>
+<div class="mini" aria-label="Chained ask, waiting">
+<div class="dh"><h2><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path></svg>Assistant</h2><span class="st" style="padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; box-shadow: inset 0 0 0 1px var(--a2); color: var(--a2)">Working</span><button class="x" aria-label="Close"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg></button></div>
+<div class="msg me">Make a rainy London still of <span class="mn">@mara</span>, then animate the best one for 5 s</div>
+<div class="msg"><ul class="al" style="margin-top: 0">
+<li><svg class="ok" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg><span>Wrote prompt · Qwen Image · Turbo</span><button class="un">Undo</button></li>
+<li><svg class="ok" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg><span>You clicked GENERATE · 4 images</span></li>
+<li><svg class="wait" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg><span>Waiting for run · 2nd in line · 0:40</span></li>
+</ul></div>
+<ul class="al" style="margin: 0; background: var(--s2)">
+<li><svg class="wait" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg><span>Still running · 10 min passed. Say go on when it is done</span></li>
+<li><svg class="skip" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M8 12h8"></path></svg><span><span style="color: var(--t2)">Waiting for the tab · it is hidden</span></span></li>
+</ul>
+<p class="fine">Other states of the waiting line. Nothing runs on its own: each Generate is your click.</p>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<p class="note">Chained ask, 2 · the run is done, the next step waits</p>
+<div class="mini" aria-label="Chained ask, next step">
+<div class="dh"><h2><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path></svg>Assistant</h2><button class="x" aria-label="Close"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg></button></div>
+<div class="msg"><ul class="al" style="margin-top: 0">
+<li><svg class="ok" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg><span>Run done · 4 takes</span></li>
+<li><svg class="ok" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg><span>Looked at 4 takes · take 3 is sharpest</span></li>
+<li><svg class="ok" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg><span>Switched to Video · LTX 2.3 · Distilled</span><button class="un">Undo</button></li>
+<li><svg class="ok" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg><span>Set image: take 3</span><button class="un">Undo</button></li>
+<li><svg class="ok" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg><span>Set length: 5 s</span><button class="un">Undo</button></li>
+</ul></div>
+<section class="cf" aria-label="Confirm: Generate a 5 s clip?">
+<h3><b>Generate a 5 s clip?</b><span class="gpu">uses the GPU</span></h3>
+<dl><dt>Model</dt><dd>LTX 2.3 · Distilled</dd><dt>Runs on</dt><dd>Mac · 1st in line</dd><dt>From</dt><dd>take 3 · 1280 × 704</dd></dl>
+<div class="est">about 2 min 10 s · 38 of 64 GB</div>
+<div class="cfb"><button class="go">GENERATE</button><button class="no">Not now</button></div>
+<p class="fine">Same as Generate on the screen.</p>
+</section>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<p class="note">Run on, with a reason; the card names the machine</p>
+<div class="mini" aria-label="Run on pick">
+<div class="dh"><h2><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path></svg>Assistant</h2><button class="x" aria-label="Close"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg></button></div>
+<div class="where">Sees<span>Create · Video</span><span>LTX 2.3 · Distilled</span><span>Run on: NVIDIA</span></div>
+<div class="msg me">The Mac is slow today, go faster</div>
+<div class="msg"><p>The Mac has 3 runs ahead of you. NVIDIA is free and fits this one.</p><ul class="al">
+<li><svg class="ok" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg><span>Set Run on: NVIDIA · Mac busy, 3 in line</span><button class="un">Undo</button></li>
+</ul></div>
+<section class="cf" aria-label="Confirm: Generate a 5 s clip?">
+<h3><b>Generate a 5 s clip?</b><span class="gpu">uses the GPU</span></h3>
+<dl><dt>Model</dt><dd>LTX 2.3 · Distilled</dd><dt>Runs on</dt><dd>NVIDIA · 1st in line</dd><dt>Runs</dt><dd>1 · seed 4411</dd></dl>
+<div class="est">about 1 min 30 s · 19 of 24 GB</div>
+<div class="cfb"><button class="go">GENERATE</button><button class="no">Not now</button></div>
+<p class="fine">It picks only machines the form allows; greyed ones stay greyed.</p>
+</section>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<p class="note">Download on Models (admin): the licence and Download stay yours</p>
+<div class="mini" aria-label="Download card">
+<div class="dh"><h2><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path></svg>Assistant</h2><button class="x" aria-label="Close"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg></button></div>
+<div class="where">Sees<span>Models</span><span>LTX 2.3 · fp8</span><span>NVIDIA</span></div>
+<div class="msg"><ul class="al" style="margin-top: 0">
+<li><svg class="ok" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"></path></svg><span>Opened Models · LTX 2.3 · fp8 · NVIDIA</span></li>
+</ul></div>
+<section class="cf" aria-label="Confirm: Download LTX 2.3 · fp8?">
+<h3><b>Download LTX 2.3 · fp8?</b><span class="gpu">uses disk and network</span></h3>
+<dl><dt>Size</dt><dd>27.4 GB</dd><dt>Machine</dt><dd>NVIDIA · 212 GB free</dd><dt>Licence</dt><dd>not accepted yet</dd></dl>
+<div class="rem" style="align-items: flex-start"><span>Tick I accept on the row first. Download turns on after.</span></div>
+<div class="cfb"><button class="go" disabled style="opacity: .45">DOWNLOAD</button><button class="no">Not now</button></div>
+<p class="fine">Same as Download on the row. After it, I wait for it and go back to Create.</p>
+</section>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<p class="note">Not an admin: ask an admin</p>
+<div class="mini" aria-label="Ask an admin">
+<div class="dh"><h2><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path></svg>Assistant</h2><button class="x" aria-label="Close"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg></button></div>
+<div class="msg me">Make it with LTX 2.3 fp8</div>
+<div class="msg"><p>fp8 isn't downloaded on any machine yet, and only an admin can download it. Ask your admin to get <b>LTX 2.3 · fp8</b> on Models.</p><p style="margin-top: 6px">Distilled is ready now. Use that instead?</p></div>
+<div style="display: flex; gap: 8px"><button class="no" style="height: 32px; font-size: 12px">Use Distilled</button></div>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<p class="note">Clone voice: your dialog, prefilled; the line waits for Save</p>
+<div class="mini" aria-label="Clone voice prefilled">
+<div style="display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 18px 18px 18px 8px; background: var(--s2)">
+<b style="font-size: 14px">Clone a voice</b>
+<span class="mono" style="font-size: 11px">Clip · take 7 · 0:03 – 0:11 <span class="by" style="border-radius: 4px; padding: 0 3px">prefilled</span></span>
+<label style="display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--t2)">Name<span class="chip by" style="display: flex; align-items: center; color: var(--t1)">Narrator</span></label>
+<label style="display: flex; align-items: flex-start; gap: 8px; font-size: 12px"><input type="checkbox"> I have the rights to use this voice</label>
+<div style="display: flex; gap: 8px"><button class="no" style="height: 34px; font-size: 12px">Hear tries</button><div style="flex-grow: 1"></div><button class="go" style="height: 34px; opacity: .45" disabled>SAVE</button></div>
+</div>
+<ul class="al" style="margin: 0; background: var(--s2)">
+<li><svg class="wait" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg><span>Waiting for you · Save in Clone a voice</span></li>
+</ul>
+<p class="fine">The rights tick and Save are yours. On close the line says the new <span class="mn">@narrator</span> or "cancelled", and the chain goes on.</p>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<p class="note">Card with the egress line: judge test</p>
+<div class="mini" aria-label="Judge test card">
+<section class="cf" aria-label="Confirm: Test the judge on 6 takes?">
+<h3><b>Test the judge on 6 takes?</b><span class="gpu">uses the GPU</span><span class="gpu">sends to DeepSeek</span></h3>
+<dl><dt>Pipeline</dt><dd>[YOUR PIPELINE] · Judge</dd><dt>Takes</dt><dd>6 · from Seq 2</dd><dt>Criteria</dt><dd>sharp, on prompt</dd></dl>
+<div class="rem" style="align-items: flex-start"><svg aria-hidden="true" width="13" height="13" style="flex: 0 0 auto; margin-top: 1px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20M2 12h20"></path></svg><span>Sends the criteria and the judge's reasons to DeepSeek; no thumbnails.</span></div>
+<div class="cfb"><button class="go">TEST</button><button class="no">Not now</button></div>
+<p class="fine">Same as Test on the Judge node.</p>
+</section>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<p class="note">Card with the egress line: web search</p>
+<div class="mini" aria-label="Web search card">
+<section class="cf" aria-label="Confirm: Search the web?">
+<h3><b>Search the web?</b><span class="gpu">sends to Brave</span></h3>
+<dl><dt>Query</dt><dd>ltx 2.3 prompt tips camera motion</dd><dt>Provider</dt><dd>Brave · set by your admin</dd></dl>
+<div class="rem" style="align-items: flex-start"><svg aria-hidden="true" width="13" height="13" style="flex: 0 0 auto; margin-top: 1px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20M2 12h20"></path></svg><span>Only the query leaves this machine. Results come back as text to read, never as orders.</span></div>
+<div class="cfb"><button class="go">SEARCH</button><button class="no">Not now</button></div>
+<p class="fine">Off unless your admin turns it on.</p>
+</section>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<p class="note">Can't be undone: delete a workflow</p>
+<div class="mini" aria-label="Delete workflow card">
+<section class="cf" aria-label="Confirm: Delete Rain still?" style="box-shadow: inset 0 0 0 1px #ff8a80">
+<h3><b>Delete Rain still?</b></h3>
+<dl><dt>Goes</dt><dd>workflow Rain still · v4</dd><dt>Stays</dt><dd>its 23 takes in the Gallery</dd></dl>
+<div class="cfb"><button class="go" style="background: #ff8a80; color: #1a0d0c">DELETE</button><button class="no">Not now</button></div>
+<p class="fine">This can't be undone. Same as Delete on the workflow menu.</p>
+</section>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<p class="note">Yours only: asked to upload a file</p>
+<div class="mini" aria-label="Yours only">
+<div class="dh"><h2><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path></svg>Assistant</h2><button class="x" aria-label="Close"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg></button></div>
+<div class="msg me">Upload my photo from Downloads and use it as the reference</div>
+<div class="msg"><p>Files from your computer are yours to pick. Click <b>Add reference</b> on the left and choose the photo; I'll pick it up from there.</p><ul class="al">
+<li><svg class="skip" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="10" x="4" y="11" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg><span><span style="color: var(--t2)">Yours only · upload a file</span></span></li>
+<li><svg class="wait" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg><span>Waiting for the upload</span></li>
+</ul></div>
+<p class="fine">The same for Export file, sign in and out, password, theme, admin settings and the director chat.</p>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<p class="note">"Remembered" lines, with Undo</p>
+<div class="mini" aria-label="Remembered lines">
+<div class="dh"><h2><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path></svg>Assistant</h2><button class="x" aria-label="Close"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg></button></div>
+<div class="msg me">I always want 16:9 and no text in the image</div>
+<div class="msg"><p>Got it.</p><ul class="al">
+<li><svg class="ok" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"></path><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"></path></svg><span>Remembered: you like 16:9</span><button class="un">Undo</button></li>
+<li><svg class="ok" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"></path><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"></path></svg><span>Remembered: no text in images</span><button class="un">Undo</button></li>
+</ul></div>
+<div class="msg"><ul class="al" style="margin-top: 0">
+<li><svg class="ok" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"></path><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"></path></svg><span>Remembered: what worked · take 3 · Blue hour, 8 steps</span><button class="un">Undo</button></li>
+</ul></div>
+<p class="fine">Saved on its own when you star or pick a take it made. Undo deletes it.</p>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<p class="note">Memory, in the drawer</p>
+<div class="mini" aria-label="Memory list">
+<div class="dh"><h2><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path></svg>Memory</h2><button class="x" aria-label="Close"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg></button></div>
+<div role="tablist" style="display: flex; gap: 4px; padding: 3px; border-radius: 12px; background: var(--s3)"><button role="tab" aria-selected="true" style="flex: 1 1 0; height: 30px; border: 0; border-radius: 9px; font-size: 11px; font-weight: 600; background: var(--s5)">Likes</button><button role="tab" aria-selected="false" style="flex: 1 1 0; height: 30px; border: 0; border-radius: 9px; font-size: 11px; font-weight: 600; background: transparent; color: var(--t2)">Projects</button><button role="tab" aria-selected="false" style="flex: 1 1 0; height: 30px; border: 0; border-radius: 9px; font-size: 11px; font-weight: 600; background: transparent; color: var(--t2)">Worked</button><button role="tab" aria-selected="false" style="flex: 1 1 0; height: 30px; border: 0; border-radius: 9px; font-size: 11px; font-weight: 600; background: transparent; color: var(--t2)">Chats</button></div>
+<ul class="al" style="margin: 0; background: var(--s2)">
+<li style="min-height: 40px"><span>You like 16:9<small style="display: block; font-size: 10px; color: var(--t2)">chat · Rain still · today</small></span><button class="un">Edit</button><button class="un">Delete</button></li>
+<li style="min-height: 40px"><span>No text in images<small style="display: block; font-size: 10px; color: var(--t2)">chat · Rain still · today</small></span><button class="un">Edit</button><button class="un">Delete</button></li>
+<li style="min-height: 40px"><span>Narrator voice for voice-overs<small style="display: block; font-size: 10px; color: var(--t2)">chat · Bus stop · 3 days ago</small></span><button class="un">Edit</button><button class="un">Delete</button></li>
+</ul>
+<p class="fine">Yours only; never sent as orders. Deleting a chat deletes its summary in Chats.</p>
+<div style="display: flex; justify-content: flex-end"><button class="no" style="height: 32px; font-size: 12px; color: #ff8a80">Clear all</button></div>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<p class="note">A web search line, with its sources</p>
+<div class="mini" aria-label="Web search sources">
+<div class="dh"><h2><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path></svg>Assistant</h2><button class="x" aria-label="Close"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg></button></div>
+<div class="msg me">How do people get slow dolly moves in LTX?</div>
+<div class="msg"><ul class="al" style="margin-top: 0">
+<li><svg class="ok" aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg><span>Searched the web · Brave · "ltx 2.3 prompt tips camera motion"</span></li>
+</ul>
+<p style="margin-top: 6px">Most say: name the move first ("slow dolly in"), keep one subject, and use 5 s or less.</p>
+<ol style="font-size: 11px; line-height: 16px; color: var(--t2)"><li>example-forum.org · LTX camera prompts</li><li>example-blog.dev · Dolly moves in LTX 2</li><li>example-docs.io · Prompting guide</li></ol></div>
+<p class="fine">Sources are shown as text. Nothing in them can start an action.</p>
+</div>
+</div>
+</section>
+
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":4281}}'>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":7614}}'>
 class Component extends DCLogic {
 state = { theme: null };
 renderVals() {

@@ -34,6 +34,10 @@ agent must reach the studio from another machine; it would then be its own `mcp_
 ### 20.2 Tools
 
 Task-sized tools, not one per endpoint (there are about 100). Each maps to calls the CLI already makes.
+The tools are defined once in the shared catalog `contracts/tools/catalog.json` ([18-assistant.md](18-assistant.md)
+22.7), which the in-app assistant also reads: `cli/` copies it with `make gen` and registers every tool marked `mcp`.
+The table below is its `mcp` surface; the read tools there (`sessions`, `get_run`, `models`, `hosts`, `batches`, …) are
+shared with the assistant.
 
 | Tool | Does | API |
 |---|---|---|
