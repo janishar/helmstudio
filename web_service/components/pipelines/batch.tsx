@@ -32,6 +32,8 @@ import { useHydrated } from "@/lib/hydrated";
 import { clock } from "@/lib/runs";
 import { canPick, countFacts } from "@/lib/pipeline-run";
 import type { PDoc } from "@/lib/pipeline";
+import { useScreenTools } from "@/components/assistant/tools";
+import { batchTools } from "@/components/pipelines/assistant";
 
 type Row = S<"BatchRow">;
 
@@ -207,6 +209,42 @@ export function BatchRun({
   const hydrated = useHydrated();
   // the director's chat, when the batch's pipeline has a director (Batch.director)
   const chat = useChat(view?.batch.director ? id : null);
+  // the assistant's batch actions (plan 18 §22.5): the header's own calls; resume, retry, again and stop are cards
+  const showRow = (row: Row) =>
+    setView((v) => v && applyBatchEvent(v, { seq: 0, type: "row", ts: "", data: row }));
+  useScreenTools(
+    view
+      ? batchTools({
+          view,
+          pipeline,
+          control: async (op) => {
+            const batch = await ok(controlBatch(id, op));
+            setView((v) => v && { ...v, batch });
+            return batch;
+          },
+          retry: async (row, fromStep) => {
+            const r = await ok(
+              api.POST("/v1/studio/batches/{batch_id}/rows/{row}/retry", {
+                params: { path: { batch_id: id, row: String(row) } },
+                ...(fromStep && { body: { from_step: fromStep } }),
+              }),
+            );
+            showRow(r);
+            return r;
+          },
+          again: async (decisions) => {
+            const batch = await ok(
+              api.POST("/v1/studio/batches/{batch_id}/again", {
+                params: { path: { batch_id: id } },
+                body: { decisions },
+              }),
+            );
+            router.push(`/pipelines/batches/${batch.id}`);
+            return batch;
+          },
+        })
+      : { screen: "batches", sees: ["Batch"], summary: () => ({ loading: true }), actions: {} },
+  );
   if (!view)
     return (
       <main id="main" className="flex min-w-0 flex-1 flex-col gap-4 px-5 pt-4 pb-6">

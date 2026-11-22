@@ -75,6 +75,7 @@ type Ctx = {
   models?: Record<string, string>;
   /** the card's title edited in place (absent: read-only) */
   rename?: (id: string, title: string) => void;
+  added?: string[];
 };
 const CanvasCtx = createContext<Ctx | null>(null);
 
@@ -98,6 +99,8 @@ export type CanvasProps = {
   custom?: S<"CustomNode">[];
   /** node id → the model it resolves to */
   models?: Record<string, string>;
+  /** the nodes the assistant added (ringed) */
+  added?: string[];
 };
 
 export function PipelineCanvas(props: CanvasProps) {
@@ -121,6 +124,7 @@ function Canvas({
   flowKey,
   custom = [],
   models,
+  added,
 }: CanvasProps) {
   const rf = useReactFlow();
   const readOnly = !edit;
@@ -205,6 +209,7 @@ function Canvas({
     ? undefined
     : (id: string, t: string) => change((d) => renameNode(d, id, t));
   const ctx: Ctx = {
+    added,
     doc,
     titles,
     problems,
@@ -574,7 +579,12 @@ function Card({ id }: NodeProps) {
         opacity: g.marks && !m ? 0.5 : undefined,
         borderColor:
           m?.current || p?.state === "running" ? "var(--a2)" : isAgent(n.kind) ? AGENT : undefined,
-        outline: g.selected === id ? "2px solid var(--t2)" : undefined,
+        outline:
+          g.selected === id
+            ? "2px solid var(--t2)"
+            : g.added?.includes(id)
+              ? "2px solid var(--a2)"
+              : undefined,
         outlineOffset: 2,
         // a fanned-out step: two cards behind it, as the mock draws the branches
         boxShadow: fanned

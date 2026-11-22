@@ -135,3 +135,8 @@
   stroke: var(--t2);
   stroke-width: 2;
 }
+/* a node the assistant added (docs/mock/Assistant.dc.html frame 5: "ringed = added by the assistant") */
+.gv .gn[data-ai] {
+  outline: 2px solid var(--a2);
+  outline-offset: 2px;
+}

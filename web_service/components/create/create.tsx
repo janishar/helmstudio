@@ -1275,7 +1275,9 @@ export function Create({
     workflow?.env,
     runOn?.host ?? (runs?.find((r) => isActive(r.status) && r.host) ?? shown)?.host,
   );
-  const topBar = (badge?: string) => (
+  const session = sessions?.find((s) => s.id === sessionId);
+
+  const topBar = (badge?: string, extra?: React.ReactNode) => (
     <div className="flex flex-wrap items-center gap-3">
       <SessionMenu
         sessions={sessions}
@@ -1330,6 +1332,7 @@ export function Create({
         </div>
       )}
       <div className="grow" />
+      {extra}
       {workflow && (
         <div
           role="group"
@@ -1391,7 +1394,7 @@ export function Create({
         workflow ? send(workflow, fields) : Promise.resolve({ ids: [], error: "no workflow" }),
     };
   });
-  useScreenTools(
+  const tools =
     // eslint-disable-next-line react-hooks/refs -- `live` is read only on a card's Yes, after render
     createTools({
       workflow,
@@ -1457,8 +1460,8 @@ export function Create({
       applyOffer,
       handles,
       prompt: texts[0] ?? "",
-    }),
-  );
+    });
+  useScreenTools(tools);
 
   if (view === "graph" && workflow)
     return (
@@ -1466,9 +1469,9 @@ export function Create({
         <GraphView
           workflow={workflow}
           palette={palette}
-          topBar={(badge) => (
+          topBar={(badge, extra) => (
             <>
-              {topBar(badge)}
+              {topBar(badge, extra)}
               {error && <ErrorNote>{error}</ErrorNote>}
             </>
           )}
@@ -1487,10 +1490,11 @@ export function Create({
           track={shown && tracks[shown.id]}
           take={shownTake}
           hosts={hosts}
-          generate={async (w) => {
+          generate={(w) => {
             const fs = fieldsOf(w);
-            await send(w, visible(studioView(w, fs)?.shown ?? fs, raws, fs));
+            return send(w, visible(studioView(w, fs)?.shown ?? fs, raws, fs));
           }}
+          askGenerate={async () => tools.actions.generate({}, { progress: () => undefined })}
           busy={busy}
           anyActive={anyActive}
         />

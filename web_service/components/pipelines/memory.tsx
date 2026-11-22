@@ -39,16 +39,19 @@ export function MemoryPanel({
   pipelineId,
   title,
   name = (x) => x,
+  text: prefill = "",
 }: {
   pipelineId: string;
   /** the pipeline's title */
   title: string;
   /** a node id as the panel names it */
   name?: (node: string) => string;
+  /** Add a note prefilled (the assistant's addMemory) */
+  text?: string;
 }) {
   const { list, error, load } = useMemory(pipelineId);
   const hydrated = useHydrated();
-  const [text, setText] = useState("");
+  const [text, setText] = useState(prefill);
   const [busy, setBusy] = useState("");
   const [failed, setFailed] = useState("");
 

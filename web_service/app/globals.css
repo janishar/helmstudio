@@ -547,6 +547,14 @@
       -30px 0 60px -24px color-mix(in srgb, var(--shd) 90%, transparent),
       0 40px 80px -20px color-mix(in srgb, var(--shd) 90%, transparent);
   }
+  /* Graph, the pipeline editor and its Studio view (board frame 5): at lg and up the side panel keeps its width and
+     sits left of the open drawer (340 px and its 14 px edges), so the canvas narrows and nothing is covered */
+  @media (min-width: 1024px) {
+    /* !important: it beats the panel's own m-3.5 utility from this lower layer */
+    [data-drawer] .beside-drawer {
+      margin-right: 368px !important;
+    }
+  }
   .ast.drw {
     top: 14px;
     right: 14px;

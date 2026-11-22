@@ -518,4 +518,45 @@ describe("other tabs, server cards, limits, memory", () => {
     expect(push).not.toHaveBeenCalled();
     expect(posts).toHaveLength(0);
   });
+
+  it("the side panel sits beside the open drawer (board frame 5) and moves back when it closes", async () => {
+    serve();
+    await openDrawer(<aside aria-label="Inspector" className="aside beside-drawer" />);
+    const aside = screen.getByRole("complementary", { name: "Inspector" });
+    expect(aside.closest("[data-drawer]")).not.toBeNull();
+    fireEvent.keyDown(window, { key: "j", ctrlKey: true });
+    expect(aside.closest("[data-drawer]")).toBeNull();
+  });
+
+  it("a screen inside another (Graph in Create) is on top; the one under still answers its own actions", async () => {
+    serve();
+    const view = vi.fn(() => done("Opened Studio view"));
+    function Graph() {
+      useScreenTools({
+        screen: "graph",
+        sees: ["Create · Graph", "Rain still · v4"],
+        ids: { node: "lora" },
+        summary: () => ({ node_count: 5 }),
+        actions: { addNode: () => done("Added Load LoRA") },
+      });
+      return null;
+    }
+    await openDrawer(
+      <>
+        <Screen actions={{ view }} />
+        <Graph />
+      </>,
+    );
+    expect(screen.getByText("Rain still · v4")).toBeTruthy();
+    const s = reg!.summary();
+    expect(s.fields).toMatchObject({ screen: "graph", node_count: 5, prompt: "a rainy street" });
+    expect(s.ids).toEqual({ session_id: "s1", node: "lora" });
+    expect(s.actions).toEqual(["navigate", "await", "addNode", "view"]);
+    const r = await reg!.run(
+      { id: id(0), name: "view", args: { view: "studio" } as never },
+      () => undefined,
+    );
+    expect(r.out).toMatchObject({ text: "Opened Studio view" });
+    expect(view).toHaveBeenCalledTimes(1);
+  });
 });

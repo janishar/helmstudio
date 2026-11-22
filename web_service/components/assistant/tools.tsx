@@ -2,7 +2,7 @@
 // The screen-action registry (plan 18 §22.3, §22.5): a context in the app shell next to UserContext. Each screen
 // registers its actions and its summary once it has loaded (useScreenTools), always calling its own entry points; the
 // shell adds navigate and await. The drawer runs a turn's actions through it, in the tab that sent the message.
-import { createContext, use, useEffect, useRef } from "react";
+import { createContext, use, useCallback, useEffect, useRef, useState } from "react";
 import { api, message, ok } from "@/lib/api";
 import {
   SCREENS,
@@ -70,23 +70,34 @@ export class Registry {
     this.path = p;
     this.notify();
   }
-  /** The screen now: the newest registration whose routes hold the path. */
-  current(): { key: number; spec: ScreenSpec } | null {
+  /** The screens on the path, newest first: a screen inside another on the same route (Graph in Create, the Studio
+   * view in the pipeline editor) is on top, the one under it still answers its own actions. */
+  private stack(): { key: number; spec: ScreenSpec }[] {
+    const out = [];
     for (let i = this.entries.length - 1; i >= 0; i--) {
       const spec = this.entries[i].get();
       if (onRoute(SCREENS[spec.screen]?.routes ?? [], this.path))
-        return { key: this.entries[i].key, spec };
+        out.push({ key: this.entries[i].key, spec });
     }
-    return null;
+    return out;
+  }
+  /** The screen now: the newest registration whose routes hold the path. */
+  current(): { key: number; spec: ScreenSpec } | null {
+    return this.stack()[0] ?? null;
   }
   alive = (key: number) => this.entries.some((e) => e.key === key);
 
   /** The summary sent with a message (§22.4): route, open ids, roles, as of now, hidden or not, the actions. */
   summary(): Screen {
-    const c = this.current()?.spec;
+    const all = this.stack();
+    const c = all[0]?.spec;
     let fields: Record<string, unknown> = {};
     try {
-      fields = c ? { screen: c.screen, ...c.summary() } : { screen: screenLabel(this.path) };
+      fields = c
+        ? Object.assign({}, ...[...all].reverse().map((x) => x.spec.summary()), {
+            screen: c.screen,
+          })
+        : { screen: screenLabel(this.path) };
     } catch (e) {
       fields = { screen: c?.screen, error: message(e) };
     }
@@ -94,15 +105,20 @@ export class Registry {
     return fitScreen({
       route: route.slice(0, 200) || "/",
       ids: Object.fromEntries(
-        Object.entries(c?.ids ?? {})
+        Object.entries(Object.assign({}, ...[...all].reverse().map((x) => x.spec.ids ?? {})))
           .filter(([, v]) => !!v)
           .slice(0, 16)
-          .map(([k, v]) => [k, v.slice(0, 80)]),
+          .map(([k, v]) => [k, String(v).slice(0, 80)]),
       ),
       roles: this.roles.slice(0, 8),
       as_of: new Date().toISOString(),
       hidden: typeof document !== "undefined" && document.hidden,
-      actions: [...new Set([...Object.keys(this.shell), ...Object.keys(c?.actions ?? {})])],
+      actions: [
+        ...new Set([
+          ...Object.keys(this.shell),
+          ...all.flatMap((x) => Object.keys(x.spec.actions)),
+        ]),
+      ],
       fields: fields as Screen["fields"],
     });
   }
@@ -113,8 +129,8 @@ export class Registry {
     a: Action,
     progress: (text: string) => void,
   ): Promise<{ out: Outcome | Asked; key: number | null }> {
-    const c = this.current();
     const shellOwn = a.name in this.shell;
+    const c = shellOwn ? null : this.stack().find((x) => a.name in x.spec.actions);
     const h = shellOwn ? this.shell[a.name] : c?.spec.actions[a.name];
     if (!h) return { out: failed(`${a.name} · not on this screen`), key: null };
     const why = argsError(shellOwn ? "shell" : (c?.spec.screen ?? ""), a.name, a.args);
@@ -143,6 +159,51 @@ export function useScreenTools(spec: ScreenSpec) {
     const off = reg.register(() => ref.current);
     return () => off();
   }, [reg]);
+}
+
+/** The assistant's edits of a document (Graph, the pipeline editor; plan 18 §22.5): each is an edit of the screen's
+ * own history made on the freshest document (several in one batch run before a render), the document before the
+ * first one kept for one "Undo assistant changes", and the nodes it added (ringed on the canvas). The screen calls
+ * `clear` on a hand edit or a reload: from then on ⌘Z is the undo. */
+export function useAssistantChanges<D extends { nodes: object }>(
+  latestRef: React.RefObject<D>,
+  apply: (d: D) => void,
+) {
+  const base = useRef<D | null>(null);
+  const [state, setState] = useState<{ base: D | null; added: string[] }>({
+    base: null,
+    added: [],
+  });
+  const clear = useCallback(() => {
+    base.current = null;
+    setState((s) => (s.base ? { base: null, added: [] } : s));
+  }, []);
+  return {
+    changed: !!state.base,
+    added: state.added,
+    clear,
+    /** `f` on the freshest document; the result (unchanged when `f` changed nothing) */
+    edit(f: (d: D) => D): D {
+      const before = latestRef.current;
+      const next = f(before);
+      if (next === before) return next;
+      base.current ??= before;
+      const fresh = Object.keys(next.nodes).filter((k) => !(k in before.nodes));
+      const b = base.current;
+      setState((s) => ({ base: b, added: [...s.added, ...fresh] }));
+      latestRef.current = next;
+      apply(next);
+      return next;
+    },
+    /** "Undo assistant changes": back to the document before its first edit, as one more step of the history */
+    undo() {
+      const b = base.current;
+      if (!b) return;
+      latestRef.current = b;
+      apply(b);
+      clear();
+    },
+  };
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

@@ -16,6 +16,8 @@ import { api, message, ok, okOr, type S } from "@/lib/api";
 import { inputSummary } from "@/lib/batches";
 import { safeUrl } from "@/lib/format";
 import { gridMove, initialPick, rejectLabel, togglePick } from "@/lib/pipeline-run";
+import { useScreenTools } from "@/components/assistant/tools";
+import { reviewTools, sendPick } from "@/components/pipelines/assistant";
 
 type Item = S<"BatchReviewItem">;
 
@@ -89,6 +91,18 @@ export function Review({
         document.querySelector<HTMLElement>(`#row-${next.row} [role=group] button`)?.focus(),
       );
   };
+  // the assistant's pick at a gate (plan 18 §22.5): a card whose Yes sends the row's pick
+  useScreenTools(
+    // eslint-disable-next-line react-hooks/refs -- `done` reads its refs on the card's Yes, after render
+    reviewTools({
+      batch,
+      items,
+      pick: async (it, takeIds) => {
+        await sendPick(id, it, takeIds);
+        done(it.row);
+      },
+    }),
+  );
   const summarise = inputSummary(
     (items ?? []).map((x) => ({ inputs: x.inputs }) as unknown as S<"BatchRow">),
   );

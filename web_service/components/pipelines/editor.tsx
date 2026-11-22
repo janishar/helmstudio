@@ -11,6 +11,7 @@
 // Studio | Graph switch (⌘\) opens the pipeline's Studio view (components/pipelines/studio, docs/mock/Pipeline.dc.html).
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { Activity, Plus, X } from "lucide-react";
 import { ErrorNote, Info } from "@/components/kit";
@@ -33,9 +34,12 @@ import { api, ApiError, errorText, message, ok, type S } from "@/lib/api";
 import { applyBatchEvent, type BatchView } from "@/lib/batches";
 import { docOf, mergeProblems, paletteOf, type Doc, type Palette, type Problem } from "@/lib/graph";
 import { history, historyOf } from "@/lib/graph-edit";
+import { until, useAssistantChanges, useScreenTools } from "@/components/assistant/tools";
+import { editorTools } from "@/components/pipelines/assistant";
 import { presetNames } from "@/lib/studio";
 import {
   addRewrite,
+  blankPipeline,
   AGENT_TOOLS,
   agentCaps,
   bindCandidates,
@@ -208,6 +212,16 @@ export function PipelineEditor({
   const [selected, setSelected] = useState<string | null>(null);
   const [flowKey, setFlowKey] = useState(0);
   const [running, setRunning] = useState(false);
+  const router = useRouter();
+  // the assistant's edits: one "Undo assistant changes"; a hand edit or a reload ends them
+  const ai = useAssistantChanges(latest, (d) => dispatch({ type: "edit", doc: d }));
+  const clearAi = ai.clear;
+  // Add note opened by the assistant, prefilled; open as a ref for its wait
+  const [notePrefill, setNotePrefill] = useState("");
+  const memoryOpenRef = useRef(false);
+  useEffect(() => {
+    memoryOpenRef.current = memoryOpen;
+  });
 
   const client = useMemo(
     () => pipelineProblems(doc, wfDocs, palette, undefined, {}, undefined, env),
@@ -221,10 +235,16 @@ export function PipelineEditor({
     [client, server, doc],
   );
 
-  const edit: Edit = useCallback((f) => {
-    const next = f(latest.current);
-    if (next !== latest.current) dispatch({ type: "edit", doc: next });
-  }, []);
+  const edit: Edit = useCallback(
+    (f) => {
+      const next = f(latest.current);
+      if (next !== latest.current) {
+        clearAi();
+        dispatch({ type: "edit", doc: next });
+      }
+    },
+    [clearAi],
+  );
 
   // ---------------------------------------------------------------- check and save
   const save = useCallback(
@@ -256,6 +276,7 @@ export function PipelineEditor({
           setCur(fresh);
           saved.current = docOfPipeline(fresh);
           dispatch({ type: "reset", doc: saved.current });
+          clearAi();
           setFlowKey((k) => k + 1);
           setNotice(
             `This pipeline was changed elsewhere; it is reloaded at version ${fresh.version}. Your last edits were not saved.`,
@@ -276,7 +297,7 @@ export function PipelineEditor({
         setError(message(e));
       }
     },
-    [wfDocs, palette, env],
+    [wfDocs, palette, env, clearAi],
   );
   const queue = useRef<Promise<void>>(Promise.resolve());
   const flush = useCallback(() => {
@@ -418,6 +439,58 @@ export function PipelineEditor({
   const sel = selected && doc.nodes[selected] ? selected : null;
   const blocked = problems.length > 0;
 
+  // the assistant's editor actions (plan 18 §22.5): lib/pipeline edits on the freshest document, checked after each
+  useScreenTools(
+    // eslint-disable-next-line react-hooks/refs -- the refs are read when an action runs, after render
+    editorTools({
+      pipeline: cur,
+      doc: () => latest.current,
+      edit: ai.edit,
+      wfDocs,
+      palette,
+      env,
+      titles,
+      models,
+      problems,
+      selected: sel,
+      select: setSelected,
+      view,
+      unsaved: () => latest.current !== saved.current,
+      defaultWorkflow: firstWorkflow,
+      custom,
+      save: flush,
+      newPipeline: async (title) => {
+        const p = (await ok(
+          api.POST("/v1/studio/pipelines", { body: blankPipeline(title) }),
+        )) as Pipeline;
+        router.push(`/pipelines/${p.id}`);
+        return p;
+      },
+      deletePipeline: async () => {
+        await ok(
+          api.DELETE("/v1/studio/pipelines/{pipeline_id}", {
+            params: { path: { pipeline_id: pipeline.id } },
+          }),
+        );
+        router.push("/pipelines");
+      },
+      memory: memory.list?.items ?? null,
+      reloadMemory: memory.load,
+      addNote: async (text) => {
+        const before = new Set((memory.list?.items ?? []).map((m) => m.id));
+        setNotePrefill(text);
+        setMemoryOpen(true);
+        await until(() => memoryOpenRef.current, 2000);
+        // ponytail: waits while the dialog is open (no cap), as the user's Save is the click
+        await until(() => !memoryOpenRef.current, 24 * 3600_000);
+        const now = await ok(
+          api.GET("/v1/studio/memory", { params: { query: { pipeline_id: pipeline.id } } }),
+        );
+        return now.items.find((m) => !before.has(m.id))?.id ?? null;
+      },
+    }),
+  );
+
   const studioBadge = `Pipeline · ${plural(count("step"), "step")}`;
   const head = (
     <div className="flex flex-wrap items-center gap-3">
@@ -446,6 +519,11 @@ export function PipelineEditor({
         </Link>
       )}
       <div className="grow" />
+      {ai.changed && (
+        <button type="button" className="chip bevel" onClick={ai.undo}>
+          Undo assistant changes
+        </button>
+      )}
       <ViewSwitch view={view} onView={setView} />
       {host && <Memory memory={host} />}
     </div>
@@ -493,6 +571,7 @@ export function PipelineEditor({
             custom={custom}
             models={models}
             progress={progress}
+            added={ai.added}
           />
         </div>
         {last && run && (
@@ -519,7 +598,7 @@ export function PipelineEditor({
       </main>
       <aside
         aria-label="Inspector"
-        className="aside m-3.5 flex flex-[1_1_320px] flex-col gap-[18px] px-[18px] pt-4 pb-6 md:ml-0"
+        className="aside beside-drawer m-3.5 flex flex-[1_1_320px] flex-col gap-[18px] px-[18px] pt-4 pb-6 md:ml-0"
       >
         {chatOpen && run?.batch.director ? (
           <ChatPanel batch={run.batch} chat={chat} onClose={() => setChatOpen(false)} />
@@ -580,9 +659,12 @@ export function PipelineEditor({
       </aside>
       {running && <NewBatch open onClose={() => setRunning(false)} pipeline={{ ...cur, ...doc }} />}
       <MemoryDialog
+        key={notePrefill}
+        text={notePrefill}
         open={memoryOpen}
         onClose={() => {
           setMemoryOpen(false);
+          setNotePrefill("");
           void memory.load();
         }}
         pipelineId={pipeline.id}

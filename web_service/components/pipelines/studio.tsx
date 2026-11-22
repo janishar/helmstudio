@@ -31,6 +31,8 @@ import {
   type HostEntry,
 } from "@/lib/hosts";
 import { nodeLabel, stepNumbers, type PDoc } from "@/lib/pipeline";
+import { useScreenTools } from "@/components/assistant/tools";
+import { studioTools, type StudioLive } from "@/components/pipelines/assistant";
 import {
   currentStep,
   loadStudio,
@@ -199,12 +201,13 @@ export function PipelineStudio({
   };
   const uploads = useRefUploads(change);
 
-  async function run() {
-    if (!w || !step || busy) return;
+  async function run(): Promise<string[]> {
+    const ids: string[] = [];
+    if (!w || !step || busy) return ids;
     const q = queueInputs(sendFields, built.inputs, seeds);
     const errs = { ...built.errors, ...q.errors };
     setErrors(errs);
-    if (Object.keys(errs).length) return;
+    if (Object.keys(errs).length) return ids;
     setBusy(true);
     setError("");
     try {
@@ -221,6 +224,7 @@ export function PipelineStudio({
           }),
         );
         put(mergeRuns(runsRef.current, [r]));
+        ids.push(r.id);
         update((s) => ({
           ...s,
           session: sid,
@@ -243,9 +247,10 @@ export function PipelineStudio({
     } finally {
       setBusy(false);
     }
+    return ids;
   }
 
-  const pick = (src: string, id: string) =>
+  const pick = (src: string, id: string | undefined) =>
     update((s) => ({
       ...s,
       steps: { ...s.steps, [src]: { runs: s.steps[src]?.runs ?? [], picked: id } },
@@ -272,6 +277,35 @@ export function PipelineStudio({
         .join(" · "),
     };
   };
+
+  // the assistant's Studio actions (plan 18 §22.5): Run step is a card whose Yes is Run step; a pick has Undo
+  const now: StudioLive = {
+    title: doc.title,
+    step: step ?? null,
+    steps,
+    label: (id) => nodeLabel(doc, id, titles),
+    nums,
+    seeds,
+    missing,
+    estimate: estimate ?? "",
+    workflow: w?.id,
+    picks,
+    takesOf,
+    states: Object.fromEntries(steps.map((id) => [id, status(id).text])),
+    choose: (id) => {
+      setChosen(id);
+      setOpenKey(null);
+      setErrors({});
+    },
+    pick,
+    run,
+  };
+  const liveRef = useRef(now);
+  useEffect(() => {
+    liveRef.current = now;
+  });
+  // eslint-disable-next-line react-hooks/refs -- the ref is read when an action runs, after render
+  useScreenTools(studioTools(now, () => liveRef.current));
 
   const upstream = from ? takesOf(from) : [];
   const own = step ? takesOf(step) : [];
@@ -442,7 +476,7 @@ export function PipelineStudio({
       </main>
       <aside
         aria-label="Memory and step settings"
-        className="aside m-3.5 flex flex-[1_1_320px] flex-col gap-[22px] px-[18px] pt-4 pb-6 md:ml-0"
+        className="aside beside-drawer m-3.5 flex flex-[1_1_320px] flex-col gap-[22px] px-[18px] pt-4 pb-6 md:ml-0"
       >
         {w && <MemoryCard hosts={hosts} env={w.env} />}
         {w && (

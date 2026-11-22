@@ -12,6 +12,8 @@ import { ArrowRight, MoreHorizontal } from "lucide-react";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { MemoryDialog, useMemory } from "@/components/pipelines/memory";
 import { NewBatch } from "@/components/pipelines/new-batch";
+import { useScreenTools } from "@/components/assistant/tools";
+import { listTools, type Draft } from "@/components/pipelines/assistant";
 import { MENU_ITEM } from "@/components/pipelines/title-menu";
 import { useUser } from "@/components/shell";
 import { api, message, ok, type S } from "@/lib/api";
@@ -326,6 +328,19 @@ export function Pipelines({
       p.title.toLowerCase().includes(q.trim().toLowerCase()),
   );
   const selected = pipelines?.find((p) => p.id === selectedId) ?? null;
+  // the assistant's list actions (plan 18 §22.5): New batch filled (Undo) and Submit as a card
+  const draft = useRef<Draft | null>(null);
+  useScreenTools(
+    // eslint-disable-next-line react-hooks/refs -- the draft is read when an action runs, after render
+    listTools({
+      pipelines,
+      batches,
+      selected,
+      drafting: creating || !!running,
+      draft: () => draft.current,
+      openDraft: () => (selected ? setRunning(selected) : setCreating(true)),
+    }),
+  );
 
   return (
     <>
@@ -568,8 +583,15 @@ export function Pipelines({
           </table>
         </div>
 
-        <NewBatch open={creating} onClose={() => setCreating(false)} workflows={workflows} />
-        {running && <NewBatch open onClose={() => setRunning(null)} pipeline={running} />}
+        <NewBatch
+          open={creating}
+          onClose={() => setCreating(false)}
+          workflows={workflows}
+          draftRef={draft}
+        />
+        {running && (
+          <NewBatch open onClose={() => setRunning(null)} pipeline={running} draftRef={draft} />
+        )}
       </main>
 
       {selected && (

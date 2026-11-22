@@ -72,6 +72,9 @@ import {
 import { sizeText } from "@/components/create/form";
 import { etaText, isActive, segments, type RunTrack, type Segment } from "@/lib/runs";
 import { useLoras } from "@/lib/lora-library";
+import { useAssistantChanges, useScreenTools } from "@/components/assistant/tools";
+import { graphTools } from "@/components/graph/assistant";
+import { asked, done, failed, type Asked, type Outcome } from "@/lib/assistant";
 import { loraFieldOf, rowIds, strengthOf, usable } from "@/lib/loras";
 
 type Workflow = S<"Workflow">;
@@ -117,6 +120,8 @@ type Ctx = {
   loras: S<"Lora">[] | null;
   /** a card's Add LoRA: select the node and open its picker in the inspector */
   addLora: (node: string) => void;
+  /** the nodes the assistant added (ringed) */
+  added: Set<string>;
 };
 const GraphCtx = createContext<Ctx | null>(null);
 
@@ -125,7 +130,8 @@ export type GraphProps = {
   /** the live palette (GET /v1/studio/nodes) and its groups; null when it can't be read (the workflow's own kinds
    * stand in, so the graph can still be seen) */
   palette: { map: Palette; groups: S<"NodePalette">["groups"] } | null;
-  topBar: (badge: string) => React.ReactNode;
+  /** the top bar; `extra` goes on its right (the assistant's Undo) */
+  topBar: (badge: string, extra?: React.ReactNode) => React.ReactNode;
   overrides: Record<string, ParamValue>;
   onParamSet: (key: string) => void;
   /** a workflow saved, copied or reloaded here; `open`: it is the one this view holds (open it) */
@@ -135,7 +141,9 @@ export type GraphProps = {
   run?: S<"Run">;
   track?: RunTrack;
   take?: S<"Take">;
-  generate: (w: Workflow) => Promise<void>;
+  generate: (w: Workflow) => Promise<unknown>;
+  /** Create's Generate card for the assistant (plan 18 §22.6); its Yes is this view's Generate */
+  askGenerate?: () => Promise<Outcome | Asked>;
   busy: boolean;
   anyActive: boolean;
   /** the runner hosts (Create's poll): what torch runs on */
@@ -166,6 +174,7 @@ function Graph({
   busy,
   anyActive,
   hosts,
+  askGenerate,
 }: GraphProps) {
   const rf = useReactFlow();
   const [h, dispatch] = useReducer(history, workflow, (w) => historyOf(docOf(w)));
@@ -209,6 +218,9 @@ function Graph({
   useEffect(() => {
     latest.current = doc;
   });
+  // the assistant's edits: one "Undo assistant changes"; a hand edit or a reload ends them
+  const ai = useAssistantChanges(latest, (d) => dispatch({ type: "edit", doc: d }));
+  const clearAi = ai.clear;
   // the freshest saved version of each workflow this view has held, and the copy each template became
   const known = useRef<Record<string, Workflow>>({ [workflow.id]: workflow });
   const copies = useRef<Record<string, string>>({});
@@ -238,9 +250,12 @@ function Graph({
     (f: (d: Doc) => Doc) => {
       const withPos = auto && missing ? moveNodes(doc, auto) : doc;
       const next = f(withPos);
-      if (next !== withPos) dispatch({ type: "edit", doc: next });
+      if (next !== withPos) {
+        clearAi();
+        dispatch({ type: "edit", doc: next });
+      }
     },
-    [doc, auto, missing],
+    [doc, auto, missing, clearAi],
   );
 
   // ---------------------------------------------------------------- check and save
@@ -302,6 +317,7 @@ function Graph({
           setBase(fresh);
           setSaved(docOf(fresh));
           dispatch({ type: "reset", doc: saved.current });
+          clearAi();
           onWorkflow(fresh, true);
           setNotice(
             `This workflow was changed elsewhere; it is reloaded at version ${fresh.version}. Your last edits were not saved.`,
@@ -325,7 +341,7 @@ function Graph({
         onError(message(e));
       }
     },
-    [palette, onWorkflow, onError],
+    [palette, onWorkflow, onError, clearAi],
   );
 
   // the document last checked: each is checked (and saved) once, so a failing check is not retried in a loop
@@ -355,11 +371,12 @@ function Graph({
     const d = docOf(workflow);
     setSaved(d);
     dispatch({ type: "reset", doc: d });
+    clearAi();
     setAuto(null);
     setServer(null);
     setNotice("");
     setFlowKey(workflow.id);
-  }, [workflow]);
+  }, [workflow, clearAi]);
 
   useEffect(() => {
     if (checked.current === doc) return;
@@ -402,6 +419,7 @@ function Graph({
     short,
     loras,
     addLora: setLoraPick,
+    added: new Set(ai.added),
   };
 
   const [nodes, setNodes] = useState<Node[]>([]);
@@ -474,7 +492,7 @@ function Graph({
   // undo / redo, add node (A) and generate (⌘↵), while the graph is open and focus is not in a field
   const generateNow = useCallback(async () => {
     await flush();
-    await generate(base.current);
+    return generate(base.current);
   }, [flush, generate]);
   const blocked = problems.length > 0 && (cur.source === "mine" || doc !== savedDoc);
   useEffect(() => {
@@ -535,6 +553,54 @@ function Graph({
     requestAnimationFrame(() => frame(p, 200));
   };
 
+  // the assistant's Graph actions (plan 18 §22.5): lib/graph-edit on the freshest document, checked first
+  const blockedRef = useRef(blocked);
+  useEffect(() => {
+    blockedRef.current = blocked;
+  });
+  useScreenTools(
+    // eslint-disable-next-line react-hooks/refs -- the refs are read when an action runs, after render
+    graphTools({
+      workflow: cur,
+      doc: () => latest.current,
+      palette,
+      schemas,
+      loras: library,
+      selected,
+      select: (id) => {
+        pick.current = id; // a node added by the same edit is selected once it is drawn
+        setNodes((ns) =>
+          ns.map((n) => (n.selected === (n.id === id) ? n : { ...n, selected: n.id === id })),
+        );
+      },
+      edit: (f) =>
+        ai.edit((d) => {
+          const w =
+            auto && Object.values(d.nodes).some((n) => !n.position) ? moveNodes(d, auto) : d;
+          const r = f(w);
+          return r === w ? d : r;
+        }),
+      onParamSet,
+      problems,
+      unsaved: doc !== savedDoc,
+      generate: async () => {
+        if (!askGenerate) return failed("Generate · not on this screen");
+        const o = await askGenerate();
+        if (!asked(o)) return o;
+        return {
+          card: o.card,
+          yes: async () => {
+            if (blockedRef.current) return failed("Generate · the graph has problems");
+            const r = (await generateNow()) as { ids?: string[]; error?: string } | undefined;
+            return r?.ids?.length
+              ? done("You clicked GENERATE", { result: { run_ids: r.ids } })
+              : failed(`Generate failed · ${r?.error || "see the screen"}`);
+          },
+        };
+      },
+    }),
+  );
+
   const count = Object.keys(doc.nodes).length;
   const badge = [
     cur.title,
@@ -553,7 +619,14 @@ function Graph({
   return (
     <GraphCtx value={ctx}>
       <main id="main" className="flex min-w-0 flex-[999_1_560px] flex-col gap-3.5 px-5 pt-4 pb-5">
-        {topBar(badge)}
+        {topBar(
+          badge,
+          ai.changed && (
+            <button type="button" className="chip bevel" onClick={ai.undo}>
+              Undo assistant changes
+            </button>
+          ),
+        )}
         {notice && (
           <p role="status" className="rounded-xl bg-s2 px-3 py-2 text-[13px]">
             {notice}
@@ -717,6 +790,9 @@ function Graph({
                     {l}
                   </span>
                 ))}
+                {ai.added.length > 0 && (
+                  <span className="mono">ringed = added by the assistant</span>
+                )}
               </span>
             </div>
             <div
@@ -766,7 +842,7 @@ function Graph({
       </main>
       <aside
         aria-label="Inspector"
-        className="aside m-3.5 flex flex-[1_1_320px] flex-col gap-5 px-[18px] pt-4 pb-6 md:ml-0"
+        className="aside beside-drawer m-3.5 flex flex-[1_1_320px] flex-col gap-5 px-[18px] pt-4 pb-6 md:ml-0"
       >
         {selected && doc.nodes[selected] ? (
           <Panel
@@ -889,6 +965,7 @@ function Card({ id }: NodeProps) {
       data-state={state === "active" ? "running" : undefined}
       data-bypass={n.bypass || undefined}
       data-bad={mine.length ? true : undefined}
+      data-ai={g.added.has(id) || undefined}
     >
       <div className="gn-h">
         <span title={s.title}>{n.kind === `${s.family}/model` ? "Model" : s.title}</span>

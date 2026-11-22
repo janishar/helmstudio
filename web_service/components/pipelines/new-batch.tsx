@@ -4,7 +4,7 @@
 // here; the server's 422 is shown against its row. A pipeline's Submit shows what leaves the machine and the memory
 // local servers keep reserved (docs/mock/SubmitEgress.dc.html), as POST /pipelines/validate answers for it.
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { Inspector, TextFields } from "@/components/create/form";
@@ -23,6 +23,8 @@ import { MODEL_KINDS, nodeLabel, pipelineBounds, pipelineFields } from "@/lib/pi
 import { egressLines, remoteLine, reservedLines } from "@/lib/egress";
 import { boundsLine } from "@/lib/pipeline-run";
 import { TextArea } from "@/components/expand-text";
+import { done, failed } from "@/lib/assistant";
+import { looksChosen as namedLooks, toCsv, type Draft } from "@/components/pipelines/assistant";
 import { ApiError, api, message, ok, type S } from "@/lib/api";
 import {
   MAX_AXES,
@@ -71,12 +73,15 @@ export function NewBatch({
   onClose,
   workflows: given,
   pipeline,
+  draftRef,
 }: {
   open: boolean;
   onClose: () => void;
   workflows?: S<"Workflow">[];
   /** a batch of this saved pipeline instead of a workflow */
   pipeline?: S<"Pipeline">;
+  /** the open draft for the assistant (plan 18 §22.5): its fill and its Submit */
+  draftRef?: React.RefObject<Draft | null>;
 }) {
   const router = useRouter();
   const [workflows, setWorkflows] = useState(given ?? null);
@@ -227,18 +232,24 @@ export function NewBatch({
     setAxes([{ key: "", text: "" }]);
   }
 
-  async function submit(e: React.FormEvent) {
+  function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!(workflow || pipeline) || !built.rows || busy) return;
+    void submitNow();
+  }
+
+  /** Submit: the new batch (the page moves to it), or why not (shown on the form too). */
+  async function submitNow(): Promise<{ id: string } | { error: string }> {
+    if (!(workflow || pipeline) || !built.rows || busy) return { error: "nothing to submit" };
     const b = buildInputs(base, raws);
     setErrors(b.errors);
     setError("");
     setServerRow(null);
-    if (Object.keys(b.errors).length || built.errors.length || tooBig) return;
+    if (Object.keys(b.errors).length || built.errors.length || tooBig)
+      return { error: tooBig || "some settings are not valid: see New batch" };
     const start = seedStart.trim();
     if (seedField && start && !/^\d+$/.test(start)) {
       setError("The first seed must be a whole number, or empty for random.");
-      return;
+      return { error: "the first seed is not a whole number" };
     }
     setBusy(true);
     try {
@@ -257,13 +268,102 @@ export function NewBatch({
         }),
       );
       router.push(`/pipelines/batches/${batch.id}`);
+      return { id: batch.id };
     } catch (err) {
       const r = err instanceof ApiError && err.status === 422 ? rowError(err.message) : null;
       if (r) setServerRow(r);
       else setError(message(err));
       setBusy(false);
+      return { error: r ? `row ${r.row}: ${r.text}` : message(err) };
     }
   }
+
+  // the draft the assistant fills (newBatch, with Undo) and starts (a card whose Yes is this Submit)
+  const restore = (x: {
+    mode: Mode;
+    csv: string;
+    mapping: string[] | null;
+    seeds: number;
+    looks: Chosen;
+  }) => {
+    setMode(x.mode);
+    setCsv(x.csv);
+    setMapping(x.mapping);
+    setSeedCount(x.seeds);
+    setLooksChosen(x.looks);
+  };
+  const now: Draft = {
+    source: pipeline
+      ? { kind: "pipeline", id: pipeline.id, title: pipeline.title }
+      : { kind: "workflow", id: workflowId, title: workflow?.title ?? "" },
+    rows: built.count,
+    seeds: seedField ? seedCount : null,
+    looks: lookIds,
+    errors: [...built.errors, ...(serverRow ? [serverRow] : [])].map(
+      (r) => `row ${r.row}: ${r.text}`,
+    ),
+    summary: summary(built.count, seedField ? seedCount : null, !!pipeline),
+    pipeline,
+    fill: ({ rows, seeds, looks: names }) => {
+      const before = { mode, csv, mapping, seeds: seedCount, looks: looksPicked };
+      const next = { ...before };
+      const said: string[] = [];
+      if (rows) {
+        const fs = rowFields(all);
+        const bad = [...new Set(rows.flatMap((r) => Object.keys(r)))].find(
+          (h) => !matchColumn(h, fs),
+        );
+        if (bad)
+          return failed(
+            `New batch · no input ${bad}: ${fs.map((f) => f.param.name).join(", ") || "none"}`,
+          );
+        Object.assign(next, { mode: "table", csv: toCsv(rows), mapping: null });
+        said.push(`${rows.length} row${rows.length === 1 ? "" : "s"}`);
+      }
+      if (seeds !== undefined) {
+        if (!seedField) return failed(`New batch · ${sourceTitle} has no seed`);
+        if (!Number.isInteger(seeds) || seeds < 1 || seeds > MAX_SEEDS)
+          return failed(`New batch · seeds are 1 to ${MAX_SEEDS}`);
+        next.seeds = seeds;
+        said.push(`seeds ${seeds}`);
+      }
+      if (names) {
+        if (pipeline) return failed("New batch · a pipeline batch takes its looks from its steps");
+        const ch = namedLooks(names, looks, workflow, loraFamilies);
+        if ("error" in ch) return failed(`New batch · ${ch.error}`);
+        next.looks = ch;
+        said.push(names.length ? `looks ${names.join(", ")}` : "no looks");
+      }
+      restore(next);
+      return done(`Filled New batch · ${said.join(" · ") || "nothing changed"}`, {
+        undo: { undo: () => restore(before), redo: () => restore(next) },
+      });
+    },
+    submit: submitNow,
+    cannot: () =>
+      !(workflow || pipeline)
+        ? "no workflow chosen"
+        : busy
+          ? "Submit is already sending"
+          : !built.rows || !built.count
+            ? "no rows yet"
+            : tooBig ||
+              (built.errors[0] ? `row ${built.errors[0].row}: ${built.errors[0].text}` : null),
+  };
+  // only an open New batch is the draft (the list keeps a closed one mounted); a closed one clears only its own
+  const mine = useRef(false);
+  useEffect(() => {
+    if (!draftRef) return;
+    if (open) draftRef.current = now;
+    else if (mine.current) draftRef.current = null;
+    mine.current = open;
+  });
+  useEffect(
+    () => () => {
+      if (draftRef && mine.current) draftRef.current = null;
+    },
+    [draftRef],
+  );
 
   const rowWord = mode === "lines" ? "Line" : mode === "table" ? "Row" : "Combination";
   const rowErrors = [...built.errors, ...(serverRow ? [serverRow] : [])];
