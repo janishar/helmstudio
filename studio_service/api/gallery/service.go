@@ -3,6 +3,7 @@
 package gallery
 
 import (
+	"cmp"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -97,31 +98,48 @@ type Filter struct {
 	Kind, Source, SessionID, BatchID string
 	Starred                          *bool
 	Words                            []string // q split on whitespace
+	Order                            string   // API 1.42: newest (default), oldest, starred, name
 	After                            *cursor
 	Limit                            int
 }
 
-// cursor is the last take of a page: the next page starts after it.
+// cursor is the last take of a page: the next page starts after it. Order is the page's order (a newest cursor keeps
+// the format of before 1.42); Starred and Name are the sort keys of starred and name.
 type cursor struct {
-	CreatedAt time.Time
-	ID        string
+	CreatedAt time.Time `json:"at"`
+	ID        string    `json:"id"`
+	Order     string    `json:"order"`
+	Starred   bool      `json:"starred,omitempty"`
+	Name      string    `json:"name,omitempty"`
 }
 
 // encode makes the opaque next_cursor.
 func (c cursor) encode() string {
-	return base64.RawURLEncoding.EncodeToString([]byte(c.CreatedAt.UTC().Format(time.RFC3339Nano) + "|" + c.ID))
+	if c.Order == "newest" {
+		return base64.RawURLEncoding.EncodeToString([]byte(c.CreatedAt.UTC().Format(time.RFC3339Nano) + "|" + c.ID))
+	}
+	data, _ := json.Marshal(c)
+	return base64.RawURLEncoding.EncodeToString(data)
 }
 
 // decodeCursor reads a next_cursor; false when it is malformed.
 func decodeCursor(text string) (*cursor, bool) {
 	raw, err := base64.RawURLEncoding.DecodeString(text)
+	if err == nil && strings.HasPrefix(string(raw), "{") {
+		var c cursor
+		ok := json.Unmarshal(raw, &c) == nil && utility.IsUUID(c.ID) && slices.Contains(takeOrders[1:], c.Order)
+		return &c, ok
+	}
 	stamp, id, found := strings.Cut(string(raw), "|")
 	at, timeErr := time.Parse(time.RFC3339Nano, stamp)
 	if err != nil || !found || timeErr != nil || !utility.IsUUID(id) {
 		return nil, false
 	}
-	return &cursor{CreatedAt: at, ID: id}, true
+	return &cursor{CreatedAt: at, ID: id, Order: "newest"}, true
 }
+
+// takeOrders are GET /takes's `order` values (API 1.42), the default first.
+var takeOrders = []string{"newest", "oldest", "starred", "name"}
 
 // takeSources are TakeSource's values (contracts/openapi.yaml): import from 1.16, export and frame from 1.17.
 var takeSources = []string{"create", "upload", "pipeline", "import", "export", "frame"}
@@ -165,10 +183,18 @@ func ParseFilter(query url.Values, sessionParam bool) (Filter, string) {
 		}
 		filter.Limit = limit
 	}
+	filter.Order = "newest"
+	if sessionParam && query.Has("order") {
+		if filter.Order = query.Get("order"); !slices.Contains(takeOrders, filter.Order) {
+			return filter, "order must be newest, oldest, starred or name"
+		}
+	}
 	if text := query.Get("cursor"); text != "" {
 		var ok bool
 		if filter.After, ok = decodeCursor(text); !ok {
 			return filter, "cursor is not a next_cursor"
+		} else if filter.After.Order != filter.Order {
+			return filter, "cursor belongs to another order"
 		}
 	}
 	return filter, ""
@@ -213,19 +239,41 @@ func (s *Service) List(ctx context.Context, caller common.Caller, filter Filter)
 			OR EXISTS (SELECT 1 FROM jsonb_array_elements(t.made_with->'elements') e WHERE e->>'handle' ILIKE $?))`,
 			pattern, pattern, pattern, pattern, pattern, handle)
 	}
-	if filter.After != nil {
-		where(`(t.created_at, t.id) < ($?, $?::uuid)`, filter.After.CreatedAt, filter.After.ID)
+	order := `t.created_at DESC, t.id DESC`
+	if after := filter.After; after != nil {
+		switch filter.Order {
+		case "oldest":
+			where(`(t.created_at, t.id) > ($?, $?::uuid)`, after.CreatedAt, after.ID)
+		case "starred":
+			where(`(t.starred::int, t.created_at, t.id) < ($?::int, $?, $?::uuid)`, map[bool]int{true: 1}[after.Starred],
+				after.CreatedAt, after.ID)
+		case "name":
+			where(`(lower(t.title) > lower($?) OR (lower(t.title) = lower($?) AND (t.created_at, t.id) < ($?, $?::uuid)))`, after.Name,
+				after.Name, after.CreatedAt, after.ID)
+		default:
+			where(`(t.created_at, t.id) < ($?, $?::uuid)`, after.CreatedAt, after.ID)
+		}
+	}
+	switch filter.Order {
+	case "oldest":
+		order = `t.created_at, t.id`
+	case "starred":
+		order = `t.starred DESC, ` + order
+	case "name":
+		order = `lower(t.title), ` + order
 	}
 	args = append(args, filter.Limit+1)
 	query := `SELECT ` + model.TakeCols + ` FROM takes t WHERE ` + strings.Join(conds, " AND ") +
-		` ORDER BY t.created_at DESC, t.id DESC LIMIT $` + strconv.Itoa(len(args))
+		` ORDER BY ` + order + ` LIMIT $` + strconv.Itoa(len(args))
 
 	out := dto.TakePage{Takes: []dto.Take{}}
 	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
 		rows, err := takes(ctx, tx, query, args...)
 		if len(rows) > filter.Limit {
 			rows = rows[:filter.Limit]
-			next := cursor{CreatedAt: rows[len(rows)-1].CreatedAt, ID: rows[len(rows)-1].ID}.encode()
+			last := rows[len(rows)-1]
+			next := cursor{CreatedAt: last.CreatedAt, ID: last.ID, Order: cmp.Or(filter.Order, "newest"), Starred: last.Starred,
+				Name: last.Title}.encode()
 			out.NextCursor = &next
 		}
 		for _, row := range rows {

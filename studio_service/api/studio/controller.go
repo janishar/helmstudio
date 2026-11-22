@@ -126,6 +126,7 @@ func (c *controller) MountRoutes(group *gin.RouterGroup) {
 	group.PUT("/library/:id/:look_id", c.starterLookHandler)
 	group.DELETE("/library/:id/:look_id", c.starterLookHandler)
 	c.mountTimelines(group)
+	c.mountAssistant(group)
 }
 
 // MountNats registers studio.runs.create (the service's group is "studio"), pipelines_service's request for a batch

@@ -62,6 +62,9 @@ func strictArgs(raw json.RawMessage, out any) error {
 
 // Tool answers one studio.tools request.
 func (s *Service) Tool(ctx context.Context, req *message.ToolsRequest) message.ToolsReply {
+	if req.ThreadID != "" { // API 1.42: the in-app assistant's call
+		return s.assistantTool(ctx, req)
+	}
 	if !utility.IsUUID(req.OwnerID) || !utility.IsUUID(req.BatchID) || req.Row < 0 || req.Row > MaxRows ||
 		!callID.MatchString(req.CallID) || !strings.HasPrefix(req.CallID, fmt.Sprintf("%s:%d:", req.BatchID, req.Row)) ||
 		strings.Split(req.CallID, ":")[3] != req.Node {

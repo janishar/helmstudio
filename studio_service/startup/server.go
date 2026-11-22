@@ -126,6 +126,18 @@ func Run() error {
 			}
 			return reply, err
 		},
+		// the assistant's memory: the same 5 s (API 1.42)
+		assistantMemory: func(ctx context.Context, req message.AssistantMemoryRequest) (message.AssistantMemoryReply, error) {
+			var reply message.AssistantMemoryReply
+			body, _ := json.Marshal(req)
+			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+			answer, err := natsConn.RequestWithContext(ctx, message.SubjectAssistantMemory, body)
+			if err == nil {
+				err = json.Unmarshal(answer.Data, &reply)
+			}
+			return reply, err
+		},
 		remoteModels: env.RemoteModels,
 		// a provider test makes one or two HTTP calls in pipelines: 30 s (API 1.15)
 		providerTest: func(ctx context.Context, req message.ProviderTestRequest) (message.ProviderTestReply, error) {
@@ -199,6 +211,10 @@ func Run() error {
 			log.Printf("host settings: %v", err)
 		}
 	})
+	assistantEvents := &micro.NatsJetStreamGroup{}
+	projector.MountAssistant(assistantEvents)
+	workers.Go(func() { micro.NatsJetStreamConsume(ctx, client, messaging.AssistantConsumer, assistantEvents) })
+	workers.Go(func() { module.settings.RunAssistantSweep(ctx) })
 	workers.Go(func() { messaging.Relay(ctx, pool, messaging.NatsJetStreamPublisher(client)) })
 	workers.Go(func() { dispatcher.Run(ctx) })
 	workers.Go(func() { gallery.NewSweeper(pool, module.store).Run(ctx) })

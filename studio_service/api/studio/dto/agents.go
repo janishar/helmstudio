@@ -23,7 +23,8 @@ var (
 
 // ProviderPut creates or replaces a provider (admin only).
 type ProviderPut struct {
-	Kind         string   `json:"kind"` // server | remote
+	Kind         string   `json:"kind"` // server | remote | search (API 1.42)
+	API          *string  `json:"api"`  // API 1.42: absent = openai; search needs brave
 	Title        *string  `json:"title"`
 	BaseURL      string   `json:"base_url"`
 	Models       []string `json:"models"`
@@ -40,8 +41,14 @@ type ProviderPut struct {
 // key; a remote one needs key_secret and https.
 func (b *ProviderPut) Validate() string {
 	switch {
-	case b.Kind != "server" && b.Kind != "remote":
-		return "kind must be server or remote"
+	case b.Kind != "server" && b.Kind != "remote" && b.Kind != "search":
+		return "kind must be server, remote or search"
+	case b.Kind == "search" && (b.API == nil || *b.API != "brave"):
+		return "a search provider needs api brave"
+	case b.Kind != "search" && b.API != nil && *b.API != "openai":
+		return "api must be openai for a server or remote provider"
+	case b.Kind == "search" && !slices.Equal(b.Models, []string{"web"}):
+		return "a search provider's models must be [web]"
 	case b.Title != nil && !between(*b.Title, 1, 60):
 		return "title must be 1-60 characters"
 	case len(b.BaseURL) < 8 || len(b.BaseURL) > 300 || !baseURL.MatchString(b.BaseURL):
@@ -64,12 +71,12 @@ func (b *ProviderPut) Validate() string {
 		return "a server needs host and memory_gb"
 	case b.Kind == "server" && (b.KeySecret != nil || b.MaxInFlight != nil):
 		return "a server has no key_secret or max_in_flight"
-	case b.Kind == "remote" && b.KeySecret == nil:
-		return "a remote provider needs key_secret (the name of its key's secret file)"
-	case b.Kind == "remote" && !strings.HasPrefix(b.BaseURL, "https://"):
-		return "a remote provider's base_url must be https"
-	case b.Kind == "remote" && (b.Host != nil || b.MemoryGB != nil):
-		return "a remote provider has no host or memory_gb"
+	case b.Kind != "server" && b.KeySecret == nil:
+		return "a " + b.Kind + " provider needs key_secret (the name of its key's secret file)"
+	case b.Kind != "server" && !strings.HasPrefix(b.BaseURL, "https://"):
+		return "a " + b.Kind + " provider's base_url must be https"
+	case b.Kind != "server" && (b.Host != nil || b.MemoryGB != nil):
+		return "a " + b.Kind + " provider has no host or memory_gb"
 	}
 	for _, m := range b.Models {
 		if !providerModel.MatchString(m) {

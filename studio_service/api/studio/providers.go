@@ -78,7 +78,7 @@ func (p providerRow) snapshot() map[string]any {
 	out := map[string]any{"kind": p.Kind, "api": p.API, "base_url": p.BaseURL, "timeout_s": p.TimeoutS, "key_secret": p.KeySecret}
 	if p.Kind == "server" {
 		out["host"], out["memory_gb"] = p.Host, p.MemoryGB
-	} else {
+	} else if p.Kind == "remote" {
 		out["max_in_flight"] = cmp.Or(deref(p.MaxInFlight), 2)
 	}
 	return out
@@ -148,7 +148,7 @@ func (s *Service) hostRule(ctx context.Context, kind, raw string) string {
 	if detail != "" {
 		return detail
 	}
-	if kind == "remote" {
+	if kind != "server" { // remote and (API 1.42) search
 		if !strings.HasPrefix(raw, "https://") {
 			return "a remote provider's base_url must be https"
 		}
@@ -212,7 +212,7 @@ func (s *Service) PutProvider(ctx context.Context, caller common.Caller, name st
 	if !dto.ProviderName.MatchString(name) {
 		return dto.Provider{}, false, errNotFound
 	}
-	if body.Kind == "remote" && !s.remoteOn {
+	if body.Kind != "server" && !s.remoteOn { // remote and (API 1.42) search
 		return dto.Provider{}, false, network.NewConflictError("remote models are off on this deployment", nil)
 	}
 	if detail := s.hostRule(ctx, body.Kind, body.BaseURL); detail != "" {
@@ -239,13 +239,15 @@ func (s *Service) PutProvider(ctx context.Context, caller common.Caller, name st
 		}
 		enabled := body.Enabled == nil || *body.Enabled
 		row, err := one[providerRow](ctx, tx, `INSERT INTO providers (name, kind, title, base_url, models, default_model,
-			enabled, timeout_s, host, memory_gb, key_secret, max_in_flight) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-			ON CONFLICT (name) DO UPDATE SET title = excluded.title, base_url = excluded.base_url, models = excluded.models,
+			enabled, timeout_s, host, memory_gb, key_secret, max_in_flight, api) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+			$11, $12, $13)
+			ON CONFLICT (name) DO UPDATE SET api = excluded.api, title = excluded.title, base_url = excluded.base_url, models = excluded.models,
 			default_model = excluded.default_model, enabled = excluded.enabled, timeout_s = excluded.timeout_s,
 			host = excluded.host, memory_gb = excluded.memory_gb, key_secret = excluded.key_secret,
 			max_in_flight = excluded.max_in_flight, updated_at = clock_timestamp() RETURNING `+providerCols,
 			name, body.Kind, body.Title, body.BaseURL, body.Models, cmp.Or(deref(body.DefaultModel), body.Models[0]), enabled,
-			cmp.Or(deref(body.TimeoutS), 120), body.Host, body.MemoryGB, body.KeySecret, maxInFlight(body))
+			cmp.Or(deref(body.TimeoutS), 120), body.Host, body.MemoryGB, body.KeySecret, maxInFlight(body),
+			cmp.Or(deref(body.API), "openai"))
 		out = row.dto()
 		return err
 	})
@@ -324,7 +326,7 @@ func (s *Service) ModelSources(ctx context.Context, caller common.Caller) (dto.M
 	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
 		rows, err := readProviders(ctx, tx, true)
 		for _, p := range rows {
-			if p.Kind == "remote" && !s.remoteOn {
+			if p.Kind == "search" || p.Kind == "remote" && !s.remoteOn { // never a search provider (1.42)
 				continue
 			}
 			out.Sources = append(out.Sources, dto.ModelSource{Name: p.Name, Kind: p.Kind, Title: cmp.Or(deref(p.Title), p.Name),

@@ -428,19 +428,22 @@ type ProviderTestReply struct {
 	Code    string   `json:"code"`
 }
 
-// ToolsRequest is the studio.tools request (pipelines → studio): one agent tool call, as the batch's owner.
+// ToolsRequest is the studio.tools request (pipelines → studio): one agent tool call, as the batch's owner; from API
+// 1.42 an assistant chat's call, with ThreadID in place of BatchID, Row and Node.
 type ToolsRequest struct {
-	OwnerID string          `json:"owner_id"`
-	BatchID string          `json:"batch_id"`
-	Row     int             `json:"row"`
-	Node    string          `json:"node"`
-	CallID  string          `json:"call_id"`
-	Tool    string          `json:"tool"`
-	Args    json.RawMessage `json:"args"`
+	OwnerID  string          `json:"owner_id"`
+	ThreadID string          `json:"thread_id"`
+	BatchID  string          `json:"batch_id"`
+	Row      int             `json:"row"`
+	Node     string          `json:"node"`
+	CallID   string          `json:"call_id"`
+	Tool     string          `json:"tool"`
+	Args     json.RawMessage `json:"args"`
 }
 
 // ToolsReply is its reply: {result, row?} or {error, code: invalid | conflict | cap | not_found | internal}.
 type ToolsReply struct {
+	Tool   string    `json:"tool,omitempty"` // API 1.42: an assistant call's ok reply names its tool
 	Result any       `json:"result,omitempty"`
 	Row    *ToolsRow `json:"row,omitempty"`
 	Error  string    `json:"error,omitempty"`
@@ -620,4 +623,89 @@ type Named struct {
 	RunID     string `json:"run_id"`
 	Title     string `json:"title"`
 	NamedBy   string `json:"named_by"`
+}
+
+// ------------------------------------------------------------------ the assistant (API 1.42)
+
+// AssistantTurn is cmd.assistant.turn's data: one input to a chat.
+type AssistantTurn struct {
+	ThreadID string            `json:"thread_id"`
+	Turn     int               `json:"turn"`
+	ClientID string            `json:"client_id"`
+	Roles    []string          `json:"roles"`
+	Tools    []string          `json:"tools"`
+	Actions  []string          `json:"actions"`
+	Settings AssistantSettings `json:"settings"`
+	Input    map[string]any    `json:"input"`
+}
+
+// AssistantSettings is the admin's settings at an input: the model's source, the providers it names, search, caps.
+type AssistantSettings struct {
+	Source    map[string]any            `json:"source"`
+	Providers map[string]map[string]any `json:"providers"`
+	Search    *string                   `json:"search"`
+	Limits    json.RawMessage           `json:"limits"`
+}
+
+// Type is cmd.assistant.turn.
+func (AssistantTurn) Type() string { return "cmd.assistant.turn" }
+
+// Subject is the type.
+func (AssistantTurn) Subject() string { return "cmd.assistant.turn" }
+
+// AssistantDelete is cmd.assistant.delete's data: a deleted chat.
+type AssistantDelete struct {
+	ThreadID string `json:"thread_id"`
+}
+
+// Type is cmd.assistant.delete.
+func (AssistantDelete) Type() string { return "cmd.assistant.delete" }
+
+// Subject is the type.
+func (AssistantDelete) Subject() string { return "cmd.assistant.delete" }
+
+// AssistantStep is evt.assistant.step's data: one step of a turn.
+type AssistantStep struct {
+	ThreadID string            `json:"thread_id"`
+	Turn     int               `json:"turn"`
+	Seq      int               `json:"seq"`
+	Text     string            `json:"text"`
+	Lines    []json.RawMessage `json:"lines"`
+	Actions  []json.RawMessage `json:"actions"`
+	Cards    []json.RawMessage `json:"cards"`
+	Done     bool              `json:"done"`
+	Caps     json.RawMessage   `json:"caps"`
+	Error    json.RawMessage   `json:"error"`
+}
+
+// SubjectAssistantMemory is pipelines' request/reply subject for the assistant's memory (the Memory list).
+const SubjectAssistantMemory = "pipelines.assistant.memory"
+
+// AssistantMemoryRequest is a pipelines.assistant.memory request, in owner_id's namespace only.
+type AssistantMemoryRequest struct {
+	OwnerID string `json:"owner_id"`
+	Op      string `json:"op"` // list | edit | delete | clear
+	Kind    string `json:"kind,omitempty"`
+	ItemID  string `json:"item_id,omitempty"`
+	Text    string `json:"text,omitempty"`
+}
+
+// AssistantMemoryItem is assistant.schema.json memoryItem.
+type AssistantMemoryItem struct {
+	ID        string  `json:"id"`
+	Kind      string  `json:"kind"`
+	Text      string  `json:"text"`
+	ThreadID  *string `json:"thread_id"`
+	CreatedAt string  `json:"created_at"`
+	UpdatedAt string  `json:"updated_at"`
+}
+
+// AssistantMemoryReply is its reply: items and counts, item, deleted, or {error, code}.
+type AssistantMemoryReply struct {
+	Items   []AssistantMemoryItem `json:"items"`
+	Counts  map[string]int        `json:"counts"`
+	Item    *AssistantMemoryItem  `json:"item"`
+	Deleted *int                  `json:"deleted"`
+	Error   string                `json:"error"`
+	Code    string                `json:"code"`
 }

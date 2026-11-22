@@ -128,9 +128,14 @@ func setup(t *testing.T) *env {
 	e.service = studio.NewService(pool, signer, e.registry, cancel, e.store)
 	e.gallery = gallery.NewService(pool, signer, e.store, e.registry, e.service.FindWorkflow)
 	e.gallery.SetOffers(e.service.Offerable)
-	router.LoadControllers(studio.NewController(e.service, recheck, shutdown),
-		gallery.NewController(e.gallery),
-		lora.NewController(lora.NewService(pool, signer, e.store, e.registry)))
+	api := []network.Controller{studio.NewController(e.service, recheck, shutdown), gallery.NewController(e.gallery),
+		lora.NewController(lora.NewService(pool, signer, e.store, e.registry))}
+	router.LoadControllers(api...)
+	local, err := common.LocalEngine(api...) // the assistant's read tools (API 1.42)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.service.SetLocal(local)
 	e.srv = httptest.NewServer(router.Engine())
 	t.Cleanup(e.srv.Close)
 	return e

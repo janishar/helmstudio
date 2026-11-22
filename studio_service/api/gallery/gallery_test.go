@@ -139,15 +139,24 @@ func TestParseFilter(t *testing.T) {
 	}
 	for _, bad := range []url.Values{{"kind": {"gif"}}, {"source": {"timeline"}}, {"starred": {"1"}}, {"session_id": {"x"}}, {"batch_id": {"x"}},
 		{"q": {strings.Repeat("a", 201)}}, {"limit": {"0"}}, {"limit": {"201"}}, {"limit": {"x"}}, {"cursor": {"nope"}},
-		{"cursor": {cursor{time.Now(), "x"}.encode()}}} {
+		{"cursor": {cursor{CreatedAt: time.Now(), ID: "x", Order: "newest"}.encode()}}, {"order": {"random"}},
+		{"order": {"name"}, "cursor": {cursor{CreatedAt: time.Now(), ID: userB, Order: "newest"}.encode()}}} {
 		if _, detail := ParseFilter(bad, true); detail == "" {
 			t.Errorf("%v accepted", bad)
 		}
 	}
 	at := time.Date(2026, 11, 14, 10, 0, 0, 123456000, time.UTC)
-	back, ok := decodeCursor(cursor{at, userB}.encode())
-	if !ok || !back.CreatedAt.Equal(at) || back.ID != userB {
+	back, ok := decodeCursor(cursor{CreatedAt: at, ID: userB, Order: "newest"}.encode())
+	if !ok || !back.CreatedAt.Equal(at) || back.ID != userB || back.Order != "newest" {
 		t.Fatal(back, ok)
+	}
+	// API 1.42: a cursor of another order keeps its sort keys
+	named := cursor{CreatedAt: at, ID: userB, Order: "name", Name: "Fox | 2"}.encode()
+	if back, ok := decodeCursor(named); !ok || back.Name != "Fox | 2" || back.Order != "name" {
+		t.Fatal(back, ok)
+	}
+	if filter, detail := ParseFilter(url.Values{"order": {"name"}, "cursor": {named}}, true); detail != "" || filter.Order != "name" {
+		t.Fatal(filter, detail)
 	}
 }
 

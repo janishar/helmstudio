@@ -331,3 +331,18 @@ consumes `evt.run.>` (durable `studio-projector`) and `evt.pipeline.>` (durable 
 | `api/studio/loras.go` | LoRA values of a run: checked as the owner in `runGraphs`, kept as `runs.loras`, resolved into the command at release; the dispatcher's shared-LoRA host rule, baked residency and deleted-LoRA failure |
 | `api/studio/batch*.go` | batches: `batches.go` (Submit, reads, control, events, `studio.runs.create`), `batch_rows.go` (rows from lines/table/grid/seeds), `batch_projector.go` (`evt.pipeline.*`), `batch_record.go` (`run_finished`, the batch log) |
 | `migrations/` | `00001` platform (RLS function, outbox, projector dedupe), `00002` sessions, runs, run_outputs, run_events, … `00007` batches, batch_rows, batch_events, run batch columns, `outbox.msg_id`, … `00012` loras, `runs.loras`, `00013` looks (`library_items.loras`, `from_take_id`, `runs.looks`, `batches.looks`, `batch_rows.looks`), … `00016` providers, batch_chat, tool_calls, stage B columns, `00017` model_jobs, host_settings, takes.import_key / legacy / import_wait, import_edges |
+
+## The assistant (API 1.42)
+
+Plan 18 section 22; contracts/README.md "Assistant". `api/studio/assistant.go`: chats (`assistant_threads`, their
+`assistant_entries` and `assistant_events`, row-level security), the admin's settings (`assistant_settings`, one row)
+and the Memory list (proxied to `pipelines.assistant.memory`, 5 s, in the caller's namespace). One input = one command:
+`POST …/messages` stores the input and writes `cmd.assistant.turn` (owner from the row, roles from the token, the
+offered tools, the screen's actions, the settings snapshot) in one transaction; the projector (durable
+`studio-assistant`, `evt.assistant.>`) stores each step's words, lines and cards and sets the thread's state and
+pending (a step at or below the last applied is skipped; an older turn's end leaves the current turn's state). Only the
+tab `client_id` posts results and answers; a message to a parked chat resumes it with each action `did_not_run`. New
+chat and a sweep (every 10 min, chats idle 24 h) ask for summaries. `api/studio/assistant_tools.go` serves the
+catalog's studio tools on `studio.tools` as the thread's owner, by asking the service's own routes in process
+(`common.LocalEngine`, never served: its guard takes the caller from the context), so their answers are the API's
+shapes; an admin tool is checked against the thread's roles first, and `look_at` makes the ask run itself.

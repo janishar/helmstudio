@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"math"
+	"net/http"
 	"slices"
 	"time"
 
@@ -50,7 +51,13 @@ type Service struct {
 	// host_settings key <host>. nil: not reachable (tests)
 	purge       func(ctx context.Context, subject string) error
 	putSettings func(ctx context.Context, host string, value []byte) error
+	// API 1.42: the assistant's memory in pipelines (nil answers 503) and the in-process engine its read tools ask
+	assistantMemory AssistantMemoryAsk
+	local           http.Handler
 }
+
+// SetLocal sets the in-process engine the assistant's read tools ask (common.LocalEngine).
+func (s *Service) SetLocal(h http.Handler) { s.local = h }
 
 // SetModelOps sets the NATS calls of model jobs and host settings (API 1.16).
 func (s *Service) SetModelOps(purge func(ctx context.Context, subject string) error, putSettings func(ctx context.Context, host string, value []byte) error) {
