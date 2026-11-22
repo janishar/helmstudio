@@ -2,7 +2,7 @@
 
 [← Plan index](../README.md)
 
-Status: **a design for the owner to decide, not built, not in a milestone.** It becomes a milestone in
+Status: **decided by the owner (2026-11-22), queued to build (first slice with today's edits).** It becomes a milestone in
 [08-milestones.md](08-milestones.md) when the owner schedules it. API version: main is at **1.47.0** (the Plan 20
 gaps), while plan 22 (1.45) and plan 23's links and markers (1.46) are still unbuilt, so numbers are not landing in
 plan order. This plan takes **the next free number when it merges** (1.48.0 if it lands first); a plan that lands
@@ -278,6 +278,16 @@ About 28 h with assistant option A (24 h without phase 5); B adds 4 h. Exact fra
 (their `TimelineOp`, catalog and action enum entries).
 
 ### 28.14 Open points for the owner
+
+**Decided by the owner, 2026-11-22 (one by one, all the recommended options):** 1. The assistant keeps plan 18's
+browser action `timeline.edit`. 2. A first slice now with today's ops; plan 23's ops join when built; MCP tools when
+helm mcp lands. 3. The web editor keeps local drafts and saves each op through `/edits` (the server's answer wins).
+4. 100 revisions kept; agents batch ops. 5. `base_revision` required. 6. Studio makes missing clip ids and returns
+them in the diff. 7. `view=agent` on the existing GET. 8. Stored frames now, exact frames later. 9. Keep the three
+implementations, replayed against each other in `make contracts-check`. 10. At most 200 ops per call. 11. No
+idempotency key now. 12. `try_timeline_edit` is its own read-only MCP tool; `edit_timeline` and `restore_timeline`
+are destructive.
+
 
 Each with the recommended option first.
 
