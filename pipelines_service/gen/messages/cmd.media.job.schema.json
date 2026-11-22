@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helmstudio.local/contracts/messages/cmd.media.job.schema.json",
-  "title": "studio → a runner: one media job (a sequence's export, or a video take's frame)",
+  "title": "studio → a runner: one media job (a sequence's export, a video take's frame, or from 1.48 thumbnails)",
   "description": "From API 1.17 (contracts/README.md, Timeline: media jobs). Subject cmd.media.<host>.<env> (stream CMD, work queue; durable media-<host>-<env>, max_ack_pending 1, ack wait 60 s), Nats-Msg-Id <job_id>:1. `owner_id` = the user. Sent at once to the env studio chose (one whose hosts key has `media`). The runner works on it in a worker apart from runs and model jobs (ffmpeg on CPU or the media engine: no model, no GPU memory, no admission; it never counts as holding weights), sends `+WIP` every 10 s, checks KV `cancels` key <job_id> before it starts and at least every 2 s, publishes evt.media.status running, evt.media.progress, then one terminal status, waits for its ack, then acks the command. A redelivery starts over. Never bytes or URLs: inputs are object keys under u/<owner_id>/, outputs go under output_prefix.",
   "allOf": [
     {
@@ -30,7 +30,8 @@
         "kind": {
           "enum": [
             "export",
-            "frame"
+            "frame",
+            "thumbs"
           ]
         },
         "inputs": {
@@ -57,7 +58,7 @@
               }
             }
           },
-          "description": "every distinct object the job reads, once each (the runner downloads each into a 0700 temp dir); args name them by index. An export of empty slots only (black and silence) reads none; a frame job reads exactly one; (1.32) an audio take on an audio track is kind audio: a WAV (from 1.38 also an mp3 or an m4a), mixed as a video's sound is (resampled to target.sample_rate, stereo, gain, mute, at / in / out)"
+          "description": "every distinct object the job reads, once each (the runner downloads each into a 0700 temp dir); args name them by index. An export of empty slots only (black and silence) reads none; a frame job reads exactly one; (1.32) an audio take on an audio track is kind audio: a WAV (from 1.38 also an mp3 or an m4a), mixed as a video's sound is (resampled to target.sample_rate, stereo, gain, mute, at / in / out); (1.48) a thumbs job reads 1-20, each kind image (an image take's file or a video's poster)"
         },
         "output_prefix": {
           "allOf": [
@@ -65,7 +66,7 @@
               "$ref": "defs.schema.json#/$defs/objectPrefix"
             }
           ],
-          "description": "export: u/<owner_id>/exports/<job_id>/ (export.mp4, export.poster.png, export.last.png); frame: u/<owner_id>/frames/<job_id>/ (frame.png)"
+          "description": "export: u/<owner_id>/exports/<job_id>/ (export.mp4, export.poster.png, export.last.png); frame: u/<owner_id>/frames/<job_id>/ (frame.png); (1.48) thumbs: u/<owner_id>/thumbs/<job_id>/ (<i>.webp per input index)"
         },
         "export": {
           "type": "object",
@@ -261,8 +262,17 @@
                 "frame"
               ]
             }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "frame"
+              }
+            }
           },
-          "else": {
+          "then": {
             "required": [
               "frame"
             ],
@@ -275,6 +285,47 @@
             "not": {
               "required": [
                 "export"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "thumbs"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "inputs": {
+                "minItems": 1,
+                "maxItems": 20,
+                "items": {
+                  "properties": {
+                    "kind": {
+                      "const": "image"
+                    }
+                  }
+                }
+              },
+              "output_prefix": {
+                "pattern": "/thumbs/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/$"
+              }
+            },
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "export"
+                  ]
+                },
+                {
+                  "required": [
+                    "frame"
+                  ]
+                }
               ]
             }
           }
