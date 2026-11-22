@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -293,5 +294,76 @@ func TestMCPWrites(t *testing.T) {
 	res, _ := call(t, cs, "pick", map[string]any{"batch_id": id, "row": 5, "reject": true})
 	if !res.IsError || !strings.Contains(text(res), "row 5 is not waiting") {
 		t.Fatalf("pick row 5: %q", text(res))
+	}
+}
+
+// Tool calls run concurrently: parallel run_workflow calls still start at most maxQueued runs.
+func TestMCPQueueCapUnderParallelCalls(t *testing.T) {
+	f, cs, _ := mcpSession(t, "")
+	var mu sync.Mutex
+	n := 0
+	f.extra["POST /v1/studio/sessions/s1/runs"] = func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(50 * time.Millisecond) // every call checks the cap before any run is counted, without the lock
+		mu.Lock()
+		n++
+		id := fmt.Sprintf("q%d", n)
+		mu.Unlock()
+		w.WriteHeader(202)
+		fmt.Fprintf(w, `{"id":%q,"status":"queued","outputs":[]}`, id)
+	}
+	for i := 1; i <= maxQueued+2; i++ {
+		id := fmt.Sprintf("q%d", i)
+		f.extra["GET /v1/studio/runs/"+id] = func(w http.ResponseWriter, _ *http.Request) {
+			fmt.Fprintf(w, `{"id":%q,"status":"queued","outputs":[]}`, id)
+		}
+	}
+	var wg sync.WaitGroup
+	for range maxQueued + 2 {
+		wg.Go(func() {
+			_, _ = cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "run_workflow", Arguments: map[string]any{"workflow_id": "echo"}})
+		})
+	}
+	wg.Wait()
+	if n != maxQueued {
+		t.Fatalf("%d runs started, at most %d", n, maxQueued)
+	}
+}
+
+func TestMCPLocalPaths(t *testing.T) {
+	home, _ := os.UserHomeDir()
+	for in, want := range map[string]string{"": "", "~": home, "~/Desktop/a.mp4": filepath.Join(home, "Desktop/a.mp4"), "/tmp/x/../y": "/tmp/y"} {
+		if got, err := (args{"p": in}).localPath("p"); err != nil || got != want {
+			t.Errorf("%q: %q %v, want %q", in, got, err, want)
+		}
+	}
+	for _, in := range []string{"out", "./out", "~bob/x"} {
+		if _, err := (args{"p": in}).localPath("p"); err == nil {
+			t.Errorf("%q: a relative path was taken", in)
+		}
+	}
+	_, cs, _ := mcpSession(t, "")
+	res, _ := call(t, cs, "wait_run", map[string]any{"run_id": "aaaaaaaa-0000-4000-8000-000000000001", "out_dir": "takes"})
+	if !res.IsError || !strings.Contains(text(res), "absolute") {
+		t.Fatalf("wait_run relative out_dir: %q", text(res))
+	}
+}
+
+func TestMCPPickNeverSendsRejectFalse(t *testing.T) {
+	f, cs, _ := mcpSession(t, "")
+	const id = "aaaaaaaa-0000-4000-8000-000000000001"
+	f.extra["GET /v1/studio/batches/"+id+"/review"] = func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, `{"items":[{"row":2,"gate":"keep","candidates":[]}]}`)
+	}
+	var body map[string]any
+	f.extra["POST /v1/studio/batches/"+id+"/rows/2/pick"] = func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		w.WriteHeader(202)
+		fmt.Fprint(w, `{"row":2}`)
+	}
+	if res, _ := call(t, cs, "pick", map[string]any{"batch_id": id, "row": 2, "take_ids": []string{id}, "reject": false}); res.IsError {
+		t.Fatal(text(res))
+	}
+	if _, ok := body["reject"]; ok {
+		t.Fatalf("sent %v: the API's reject is const true", body)
 	}
 }

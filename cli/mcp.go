@@ -10,6 +10,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -49,9 +51,10 @@ const maxQueued = 4
 var waitMax = 10 * time.Minute
 
 type mcpServer struct {
-	c    *client
-	mu   sync.Mutex
-	runs map[string]bool // runs this process started that may still be queued or running
+	c       *client
+	mu      sync.Mutex
+	runs    map[string]bool // runs this process started that may still be queued or running
+	startMu sync.Mutex      // one run_workflow at a time: calls run concurrently, and the cap is check-then-start
 }
 
 type toolFunc func(ctx context.Context, req *mcp.CallToolRequest, in args) (any, []mcp.Content, error)
@@ -61,6 +64,26 @@ type args map[string]any
 
 func (a args) str(k string) string { s, _ := a[k].(string); return s }
 func (a args) esc(k string) string { return url.PathEscape(a.str(k)) }
+
+// localPath is a path the agent names: ~ is the home folder, and it must be absolute, since helm mcp's working
+// folder is the MCP client's (Claude Desktop starts it in /), not the agent's. Unset is "".
+func (a args) localPath(k string) (string, error) {
+	p := a.str(k)
+	if p == "" {
+		return "", nil
+	}
+	if rest, ok := strings.CutPrefix(p, "~"); ok && (rest == "" || rest[0] == '/') {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		p = home + rest
+	}
+	if !filepath.IsAbs(p) {
+		return "", fmt.Errorf("%s: give an absolute path (or ~/...), not %q", k, a.str(k))
+	}
+	return filepath.Clean(p), nil
+}
 
 // pick copies the given keys that are set.
 func (a args) pick(keys ...string) map[string]any {
@@ -224,7 +247,13 @@ func (s *mcpServer) handlers() map[string]toolFunc {
 		"cancel_run": plain(func(in args) (any, error) {
 			return s.send(http.MethodPost, "/runs/"+in.esc("run_id")+"/cancel", nil, http.StatusAccepted)
 		}),
-		"upload": plain(func(in args) (any, error) { return s.c.upload(in.str("path")) }),
+		"upload": plain(func(in args) (any, error) {
+			p, err := in.localPath("path")
+			if err != nil {
+				return nil, err
+			}
+			return s.c.upload(p)
+		}),
 		"start_batch": plain(func(in args) (any, error) {
 			return s.send(http.MethodPost, "/batches", map[string]any(in), http.StatusAccepted)
 		}),
@@ -335,6 +364,8 @@ func (s *mcpServer) thumb(take json.RawMessage) ([]byte, string) {
 
 // runWorkflow starts a run (in a new session unless one is given), at most maxQueued of this process's at once.
 func (s *mcpServer) runWorkflow(in args) (any, error) {
+	s.startMu.Lock()
+	defer s.startMu.Unlock()
 	if err := s.roomForRun(); err != nil {
 		return nil, err
 	}
@@ -428,6 +459,10 @@ func (p *progress) say(msg string) {
 
 // waitRun follows the run on its session's event stream (sending progress) until it ends or the time is up.
 func (s *mcpServer) waitRun(ctx context.Context, req *mcp.CallToolRequest, in args) (any, []mcp.Content, error) {
+	dir, err := in.localPath("out_dir")
+	if err != nil {
+		return nil, nil, err
+	}
 	limit := waitMax
 	if t, ok := in["timeout_s"].(float64); ok {
 		limit = min(limit, time.Duration(t*float64(time.Second)))
@@ -473,7 +508,7 @@ func (s *mcpServer) waitRun(ctx context.Context, req *mcp.CallToolRequest, in ar
 		}
 	}
 	out := map[string]any{"run": raw, "still_running": !ended(r.Status)}
-	if dir := in.str("out_dir"); dir != "" && r.Status == "succeeded" {
+	if dir != "" && r.Status == "succeeded" {
 		var log bytes.Buffer
 		if err := s.c.download(r.run, dir, &log); err != nil {
 			return nil, nil, err
@@ -514,13 +549,20 @@ func (s *mcpServer) pick(in args) (any, error) {
 	if gate == "" {
 		return nil, fmt.Errorf("row %d is not waiting for a pick (review_batch lists the rows that are)", int(row))
 	}
-	body := in.pick("take_ids", "reject", "note")
+	body := in.pick("take_ids", "note")
 	body["gate"] = gate
+	if reject {
+		body["reject"] = true // the API's reject is const true: never send false next to take_ids
+	}
 	return s.send(http.MethodPost, fmt.Sprintf("/batches/%s/rows/%d/pick", in.esc("batch_id"), int(row)), body, http.StatusAccepted)
 }
 
 // exportTimeline plans, then exports the current revision; with out it waits (bounded) and saves the MP4.
 func (s *mcpServer) exportTimeline(ctx context.Context, req *mcp.CallToolRequest, in args) (any, []mcp.Content, error) {
+	out, err := in.localPath("out")
+	if err != nil {
+		return nil, nil, err
+	}
 	base := "/timelines/" + in.esc("timeline_id")
 	body := in.pick("host")
 	plan, err := s.send(http.MethodPost, base+"/export/plan", body, http.StatusOK)
@@ -539,7 +581,6 @@ func (s *mcpServer) exportTimeline(ctx context.Context, req *mcp.CallToolRequest
 	if err != nil {
 		return nil, nil, err
 	}
-	out := in.str("out")
 	if out == "" {
 		return map[string]any{"plan": plan, "job": raw}, nil, nil
 	}

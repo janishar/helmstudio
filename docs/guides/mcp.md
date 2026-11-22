@@ -62,6 +62,9 @@ Deletes (marked `destructiveHint`: the client asks before each one; they cannot 
 | `delete_run` | A finished run (its takes stay) |
 | `delete_session` | A session with nothing running (its takes stay) |
 
+Local paths (`upload`'s `path`, `out_dir`, `out`) must be absolute or start with `~/`: the server runs in the
+client's folder (Claude Desktop starts it in `/`), not yours.
+
 Resources: `helm://take/{id}` (metadata and thumbnail) and `helm://workflow/{id}`. No prompts. Admin tools are not
 offered. Errors come back as the API's own text (for example `404: take not found`).
 
