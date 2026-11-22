@@ -252,10 +252,12 @@ ruler free for seeking and range marks.
    canvas (7 h).
 6. **Moving and playing**: J/K/L, ↑ / ↓, Home / End, hover scrub (4 h).
 7. **Detail**: filmstrip and waveform extraction, caches, drawing by zoom (6 h).
-8. **Optional, 1.46.0**: linked sound clips and markers: contract, normalize in Go and `check.py`, web (8 h).
-9. **Gates**: `make test lint` (web), `make contracts-check`, `make test` on `helmstudio-test`, the browser pass (3 h).
+8. **Side panel**: the inspector's hide / show button, the 44 px rail, ⌘\\, the per-device memory, the bottom sheet
+   below 900 px (§27.14, 3 h).
+9. **Optional, 1.46.0**: linked sound clips and markers: contract, normalize in Go and `check.py`, web (8 h).
+10. **Gates**: `make test lint` (web), `make contracts-check`, `make test` on `helmstudio-test`, the browser pass (3 h).
 
-About 38 h without phase 8, 46 h with it. Phases 2–5 (about 25 h) ship the tools and the zoom; 6 and 7 add the polish
+About 41 h without phase 9, 49 h with it. Phases 2–5 (about 25 h) ship the tools and the zoom; 6 and 7 add the polish
 and can follow.
 
 ### 27.13 Open points for the owner
@@ -264,6 +266,9 @@ and can follow.
 (roll, slip, slide by where you grab). 3. S stays split at the playhead, next to ⌘B. 4. Audio tracks ripple (later
 clips on the track move left). 5. Linked sound clips, yes (1.46). 6. Markers, yes (1.46). 7. Hover scrub **on by
 default** (toggle in the tool row, ⇧S). 8. Filmstrips and waveforms made in the browser. 9. Max zoom 64 px per frame.
+
+**Owner, 2026-11-22: the side panel collapses** (the Timeline's clip inspector hides to a rail and shows again; §27.14,
+phase 8).
 
 
 Each with the recommended option first.
@@ -284,3 +289,21 @@ Each with the recommended option first.
    sprite sheet and a peaks file per take (exact and shared, but a media job, storage and 1.46 fields) · posters and
    the stripe as today.
 9. **Max zoom**: 64 px per frame (frame numbers fit) · 32 px (less scrolling, numbers every other frame).
+
+### 27.14 Side panel
+
+Owner, 2026-11-22: the Timeline screen's right panel (the clip inspector: In / Out, Transition, Gain, Generate from this
+clip, Clip actions, Add clips) hides and shows. Board: TimelineTools, frame "Side panel collapsed", in option B's layout.
+
+- **Hide**: a chevron button in the panel's header (`aria-label` "Hide panel", `aria-expanded="true"`,
+  `aria-controls` the panel). The panel becomes a **44 px rail** with a chevron button ("Show panel",
+  `aria-expanded="false"`) and the selected clip's chip (its colour and short name, the full name in the title; a click
+  also shows the panel). With no clip selected the rail has only the button.
+- **Width**: hidden, the viewer and the timeline take the full width; the zoom keeps its span (Fit refits).
+- **Key**: **⌘\\** (Ctrl+\\ off Mac) toggles, matched on `e.code` `Backslash`, not while typing or in a dialog; added to
+  the shortcut sheet under Zoom and view. ⌘⌥I was not used: it opens the browser's developer tools.
+- **Memory**: per device in `localStorage` (`hs.timeline.panel` = `open` / `closed`), read and written in try / catch;
+  open when absent.
+- **Focus**: moves to the show button on hide and to the hide button on show.
+- **Narrow** (below 900 px): the panel is a bottom sheet over the lower screen with a grab handle and a chevron-down
+  hide button; hidden, it is a 44 px bar with the clip's chip, name and a chevron-up show button.
