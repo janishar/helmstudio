@@ -10,6 +10,7 @@ import ltxNodes from "../../contracts/fixtures/registry/ltx.nodes.valid.json";
 import ltxWorkflows from "../../contracts/fixtures/registry/ltx.workflows.valid.json";
 import type { S } from "@/lib/api";
 import {
+  blockNotes,
   buildInputs,
   fields,
   optionBlocked,
@@ -79,12 +80,15 @@ describe("media-rows.json (API 1.22: rows of media, per item then in all)", () =
   it("Replace without a soundtrack blocks Generate (frame 6), with one it does not", () => {
     const videos = rowsParams.find((p) => p.name === "videos")!;
     const v = { take_id: "v1" };
-    expect(replaceUnmet(videos, [{ video: v, sound: "keep" }, { video: v, sound: "replace" }])).toBe(
-      "row 2: Replace needs a soundtrack",
-    );
-    expect(replaceUnmet(videos, [{ video: v, sound: "replace", soundtrack: { take_id: "a1" } }])).toBe(
-      null,
-    );
+    expect(
+      replaceUnmet(videos, [
+        { video: v, sound: "keep" },
+        { video: v, sound: "replace" },
+      ]),
+    ).toBe("row 2: Replace needs a soundtrack");
+    expect(
+      replaceUnmet(videos, [{ video: v, sound: "replace", soundtrack: { take_id: "a1" } }]),
+    ).toBe(null);
   });
   // the item and total checks; the drop of an optional node and not_with are studio's (the form sends neither)
   for (const c of mediaRows.cases.filter((x) => x.workflow === "minimax-h3-references"))
@@ -276,7 +280,9 @@ describe("the form of a template with media inputs", () => {
   it("hides Steps, CFG and STG on Distilled (the default) and shows them on Dev", () => {
     const guided = ["retake.steps", "retake.cfg", "retake.stg"];
     const shown = (raws: Record<string, string>) =>
-      visible(retake, raws).map((f) => f.key).filter((k) => guided.includes(k));
+      visible(retake, raws)
+        .map((f) => f.key)
+        .filter((k) => guided.includes(k));
     expect(byKey("model.variant").initial).toBe("distilled");
     expect(shown({})).toEqual([]);
     expect(shown({ "model.variant": "dev" })).toEqual(guided);
@@ -293,6 +299,14 @@ describe("the form of a template with media inputs", () => {
       "Extend before needs Dev",
     );
     expect(optionBlocked(model, "dev", extend, { "extend.direction": "before" })).toBeNull();
+  });
+  it("says why under the Model row by the values_by note (API 1.40, board LtxFeatures frame 8)", () => {
+    const extend = of("ltx-extend");
+    const model = extend.find((x) => x.key === "model.variant")!;
+    expect(
+      blockNotes(model, extend, { "extend.direction": "before", "model.variant": "dev" }),
+    ).toEqual(["Dev: the only model that extends before. About 10× slower."]);
+    expect(blockNotes(model, extend, {})).toEqual([]);
   });
   it("takes an offer's inputs as sent", () => {
     const inputs = {

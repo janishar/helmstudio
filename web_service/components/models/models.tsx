@@ -317,7 +317,7 @@ function AddonCard({
       <div className="flex items-center gap-2">
         <span className="tag">add-on</span>
         <b className="text-[13px]">{a.title}</b>
-        <span className="mono truncate text-[12px] text-t2">{a.component}</span>
+        <span className="mono truncate text-[12px] text-t2">{a.tag ?? a.component}</span>
         <div className="grow" />
         <span className="mono text-[12px]">{bytesText(a.download_bytes)}</span>
       </div>

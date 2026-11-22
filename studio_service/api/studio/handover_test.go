@@ -387,10 +387,12 @@ func TestPlaceFixtures(t *testing.T) {
 				LoraComponent                            string              `json:"lora_component"`
 				LostHost                                 *string             `json:"lost_host"`
 				Host                                     *string             `json:"host"` // API 1.35: the run's pin
+				Refs                                     bool                // API 1.40: its graph holds an Image value
 				Addons                                   []struct {
 					Node, Kind, Component, Title string
 					Bypass                       bool
 					Variants                     []string // API 1.40
+					Refs                         *bool    // API 1.40
 				} `json:"addons"` // API 1.36
 			} `json:"run"`
 			Expect struct {
@@ -465,15 +467,19 @@ func TestPlaceFixtures(t *testing.T) {
 						if slices.Contains(h.Addons[env], m+"/"+a.Component) {
 							presence = "present"
 						}
-						addons = append(addons, registry.Addon{Component: a.Component, Title: a.Title, Dir: a.Component, Presence: presence, Variants: a.Variants})
+						addons = append(addons, registry.Addon{Component: a.Component, Title: a.Title, Dir: a.Component, Presence: presence, Variants: a.Variants, Refs: a.Refs})
 					}
 					models = append(models, registry.Model{ID: m, Family: "qwen-image", Title: m, Variants: vs,
 						Lora: &registry.LoraBlock{Component: run.LoraComponent}, Addons: addons})
 				}
 				raw, _ := json.Marshal(map[string]any{"models": models})
 				_ = reg.SetRegistry(host+"."+env+".models", raw)
-				var schemas []registry.NodeSchema
+				var schemas []registry.NodeSchema // one per kind, its add-ons in order (Qwen's enhance names two)
 				for _, a := range run.Addons {
+					if i := slices.IndexFunc(schemas, func(s registry.NodeSchema) bool { return s.Kind == a.Kind }); i >= 0 {
+						schemas[i].Addons = append(schemas[i].Addons, a.Component)
+						continue
+					}
 					schemas = append(schemas, registry.NodeSchema{Kind: a.Kind, Title: a.Kind, Addons: []string{a.Component}})
 				}
 				raw, _ = json.Marshal(map[string]any{"nodes": schemas})
@@ -486,6 +492,10 @@ func TestPlaceFixtures(t *testing.T) {
 		}
 		for _, a := range run.Addons {
 			graph[a.Node] = registry.Node{Kind: a.Kind, Params: map[string]any{}, Bypass: a.Bypass}
+		}
+		if run.Refs { // an edit: a reference image in the encode node's rows
+			graph["encode"] = registry.Node{Kind: "qwen-image/encode", Params: map[string]any{
+				"refs": []any{map[string]any{"image": map[string]any{"take_id": "t1"}}}}}
 		}
 		nodes, _ := json.Marshal(graph)
 		var used []lora.Used

@@ -3299,7 +3299,8 @@ def place(fx: dict) -> dict:
     fails with. hosts: name -> {keys (as admit fixtures), workflows: {env: [ids]}, variants: {env: {"model/variant":
     [precisions]}} (present ones only), addons?: {env: ["model/component"]} (1.36: present add-ons only), loras: {env:
     [shared LoRA names]}, free, idle_since (null = never ran), reserved_gb? (enabled local servers)};
-    run: {env, workflow, model?, variant?, precision?, addons? ([{node, kind, component, title, bypass?, variants? (1.40)}]: 1.36), loras
+    run: {env, workflow, model?, variant?, precision?, refs? (1.40: an Image value in its graph), addons? ([{node, kind,
+    component, title, bypass?, variants?, refs? (1.40)}]: 1.36), loras
     (shared, graph order), peak_gb, ram_peak_gb?, needs, lora_component?, lost_host?, host? (1.35: the run is set to
     that host only)}."""
     run, hosts = fx["run"], fx["hosts"]
@@ -3327,6 +3328,8 @@ def place(fx: dict) -> dict:
     for a in sorted(run.get("addons", []), key=lambda a: a["node"]):  # 1.36: Optional add-ons, by node id
         if a.get("bypass") or run.get("variant") not in a.get("variants", [run.get("variant")]):
             continue  # 1.40: an add-on scoped to other variants is not needed
+        if a.get("refs", bool(run.get("refs"))) != bool(run.get("refs")):
+            continue  # 1.40: nor one of the other task (Qwen's PE-T2I in an edit)
         cand = [h for h in cand if f"{run['model']}/{a['component']}" in hosts[h].get("addons", {}).get(env, [])]
         if not cand:
             return {"host": None, "eligible": [], "error": gone(

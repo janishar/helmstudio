@@ -684,3 +684,24 @@ def test_compute_is_a_load_option_keyed_only_off_its_default(tmp_path, monkeypat
     assert f16.key("transformer") == plain.key(
         "transformer"
     ) and "compute" not in pack.models_entry(q.pack)
+
+
+def test_qwens_enhancers_are_per_task_add_ons_named_as_the_boards(tmp_path, monkeypatch):
+    """API 1.40: PE-T2I is text to image's (`refs: false`), PE-I2I an edit's (`refs: true`); both read `Enhancer` in
+    the controls (board CreateEnhance) and carry their Models card line (board Models)."""
+    from types import SimpleNamespace
+
+    import yaml
+
+    from core import models
+
+    spec = yaml.safe_load(
+        (Path(pack.__file__).parents[1] / "packs/qwen_image/model.yaml").read_text()
+    )
+    monkeypatch.setattr(pack, "models_root", lambda: tmp_path)
+    p = SimpleNamespace(spec=spec, component=lambda c: spec["components"][c])
+    got = {c: models.addon_entry(p, c) for c in pack.addons(p)}
+    assert {c: (a["title"], a["short"], a["tag"], a["refs"]) for c, a in got.items()} == {
+        "text_enhancer": ("Text enhancer", "Enhancer", "PE-T2I", False),
+        "edit_enhancer": ("Edit enhancer", "Enhancer", "PE-I2I", True),
+    }

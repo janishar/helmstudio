@@ -160,7 +160,7 @@ export function track(t: Record<string, RunTrack>, e: S<"SessionEvent">): Record
 
 /** One piece of the run's progress strip. `key`: the node id, `<node>:<phase id>` for a phase of a node with
  * `phases` (API 1.36), or "saving"; `seconds`: how long a done piece took, when its events say; `steps`: the node's
- * `steps` param as the run set it, shown while it waits; `bar`: a step / of bar while active (a phase or Saving
+ * `steps` param as the run set it when the stage fixes it (`values`), shown while it waits; `bar`: a step / of bar while active (a phase or Saving
  * shows one only when `of` > 1). */
 export type Segment = {
   key: string;
@@ -269,7 +269,11 @@ export function segments(w: S<"Workflow">, run: Run, t?: RunTrack): Segment[] {
     const seconds = last != null && from != null ? (last - from) / 1000 : undefined;
     // a silent node's time is not known: don't add it to the next node's
     prevEnd = last;
-    const asked = phase ? undefined : (run.inputs[`${node}.steps`] ?? w.nodes[node]?.params?.steps);
+    // only a count the stage fixes (its `values`: LTX's Sample 2 · 3 steps); one the form sets is not repeated
+    // (Qwen's Sample, docs/mock/Main.dc.html)
+    const fixed = schema(node)?.params.some((x) => x.name === "steps" && x.values);
+    const asked =
+      phase || !fixed ? undefined : (run.inputs[`${node}.steps`] ?? w.nodes[node]?.params?.steps);
     const steps = typeof asked === "number" ? asked : undefined;
     if (i === cur)
       return {

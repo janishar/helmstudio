@@ -626,9 +626,9 @@ not; Starting up still exempts):
 2b. **Add-ons** (API 1.36, Optional add-ons): for each node of X's graph that is not bypassed, by node id, and each of
    its kind's `addons` in order (as that host's nodes key lists them: a host whose runner names none needs none), the
    host's models entry of the node's family lists that add-on `present` (from 1.40: or does not list it, or lists it
-   with `variants` leaving out the run's model variant): `<node>:
-   <title> not downloaded on any live host for env <env>` (title: the add-on's, from the first host left that lists
-   it, else the component).
+   with `variants` leaving out the run's model variant, or with `refs` other than whether X's graph holds an Image
+   value): `<node>: <title> not downloaded on any live host for env <env>` (title: the add-on's `short`, else its
+   `title`, from the first host left that lists it, else the component).
 3. **Shared LoRAs**: `<H>.<env>.loras` lists every shared LoRA of the resolved graph. With F = the first host left (by
    name) and L = the first LoRA (graph order) F lacks: `no live host for env <env> has LoRA <L>` when no host left has
    L, else `no live host for env <env> has all of its LoRAs (<L> is not on <F>)`.
@@ -715,8 +715,8 @@ counts as that receipt time. `.tools/make-secrets` refuses `mac` and `fake` as G
 **Fixtures** (`place.*.json`): `{description, hosts: {<name>: {keys (as admit fixtures, plus `ram_budget_gb`),
 workflows: {env: [ids]}, variants: {env: {"<model>/<variant>": [precisions]}} (present ones only), addons?: {env: ["<model>/<component>"]} (1.36:
 present add-ons only), loras: {env: [shared LoRA names]}, free, idle_since, reserved_gb?}}, run: {env, workflow, model?,
-variant?, precision?, addons? ([{node, kind, component, title, bypass?, variants?}]: 1.36, nodes of the run's model family
-needing an add-on; `variants` 1.40), loras (shared, graph order), peak_gb, ram_peak_gb?, needs, lora_component?, lost_host?, host?}, expect: {host,
+variant?, precision?, refs? (1.40: the graph holds an Image value), addons? ([{node, kind, component, title, bypass?,
+variants?, refs?}]: 1.36, nodes of the run's model family needing an add-on; `variants`, `refs` 1.40), loras (shared, graph order), peak_gb, ram_peak_gb?, needs, lora_component?, lost_host?, host?}, expect: {host,
 eligible, error}}`; `eligible` is
 after the `lost_host` rule, by name; the run's `host` (1.35) is its pin. Cases: resident-first, fits-first,
 idle-longest, name-order, free-first, variant-missing, no-variant, offline, small-gpu, too-big, host-ram, loras,
@@ -726,7 +726,8 @@ pinned-offline, pinned-unknown, pinned-env, pinned-variant (a NVIDIA-only varian
 pinned-lost (attempt 2 while H is still offline: fails, never the live other host), pinned-lost-back (H is back:
 attempt 2 runs there); from 1.36 addon (Auto: the host with the add-on though the other is resident), addon-none (on no
 live host), pinned-addon (the pinned host lacks it), addon-bypassed (a bypassed node needs nothing); from 1.40
-addon-variant (an add-on scoped to another variant: the host without it runs the run). Admission
+addon-variant (an add-on scoped to another variant: the host without it runs the run), addon-refs (Qwen's enhance:
+an edit needs only its PE-I2I add-on, so the host with only PE-T2I is not eligible). Admission
 on a cuda host: `admit.cuda-cpu-entry.json` (a `device: cpu` entry is not counted), `admit.cuda-host-ram.json`.
 
 ## A remote GPU host: credentials and TLS (API 1.18, M6; deployment, normative for names and permissions)
@@ -949,7 +950,10 @@ audio track) plus a poster image; uploads stay images.
   distilled-fp8: [after], dev-int8: [after, before]}}`. Studio's run check (`extend.direction: must be one of
   after`, 422), the Graph's `param_invalid`, presets and the runner's graph check use it. The UI shows a value outside
   the subset faded with `<Value> needs <V>`, V the first value of the named param's enum (its `only`, else the
-  schema's) that allows it ("Before needs Dev"). **Offers rule**: a take offer whose pre-fill falls outside the
+  schema's) that allows it ("Before needs Dev"); the named param's option it refuses is faded with `<Node> <value>
+  needs <V>` ("Extend before needs Dev"), and from API 1.40 a cross-node `values_by.note` is the line under that
+  param's choice while it refuses one (`Dev: the only model that extends before. About 10× slower.`, board
+  LtxFeatures frame 8; absent: each refusal). **Offers rule**: a take offer whose pre-fill falls outside the
   template's `values_by` also sets the named param to that V (the Timeline's Extend at a clip's start: `model.variant:
   dev`; `offer_values_by`, fixtures/video/uses.json).
 - **Audio relay, compute, negative prompts** (API 1.39; plan 19-ltx-studio-features 23.4 phase 2, board LtxFeatures
@@ -3007,19 +3011,26 @@ studio or the web.
   the distilled variants'; Dev's shares stay 8). From API 1.40 an add-on may carry `variants` too: the variants whose
   runs need it (LTX's `distilled_lora`: `[dev]`, Dev's fast-distill stage; its `ic_lora`: `[distilled]`, the detail
   pass), published as the add-on's `variants`. A runner lists an add-on only when it runs one of those variants (the
-  NVIDIA runner lists neither: no add-ons), and a run on another variant does not need it.
+  NVIDIA runner lists neither: no add-ons), and a run on another variant does not need it. From API 1.40 an add-on
+  may also carry `refs` (model.yaml `addon.refs`, published as the add-on's `refs`): the task whose runs need it, true =
+  only a run whose graph holds an Image value (references: an edit), false = only one without (text to image); Qwen
+  Image's enhance names both its add-ons and a run needs one: PE-T2I (`refs: false`) or PE-I2I (`refs: true`). And
+  `short` (the name the run check and the UI use, both Qwen enhancers `Enhancer`; absent = `title`) and `tag` (the
+  Models card's mono line, `PE-T2I`; absent = the component id).
 - **Presence**: a variant is `present` without its add-ons; their files are never in its `components`, `files` or
-  `bytes`, and a delete of the variant keeps them. The models entry lists `addons [{component, title, help?, dir,
-  presence, bytes?, source?, mismatch?}]`, presence decided as a variant's over the add-on's own files (its globs in
+  `bytes`, and a delete of the variant keeps them. The models entry lists `addons [{component, title, short?, tag?,
+  refs?, help?, dir, presence, bytes?, source?, variants?, mismatch?}]`, presence decided as a variant's over the add-on's own files (its globs in
   its folder, a download marker there, recorded hashes).
 - **The run check** (Several hosts: eligibility, step 2b): a run in which a node with `addons` is not bypassed is
   eligible only on hosts where each is present; from 1.40 a host whose models entry does not list the add-on, or
-  lists it with `variants` that leave out the run's variant of that family, needs none (a Distilled audio to video
+  lists it with `variants` that leave out the run's variant of that family, or with `refs` other than the run's
+  (whether its graph holds an Image value), needs none (a Distilled audio to video
   runs without the distilled LoRA; a Detail run set to gcp gets the runner's `sample1.detail: the detail pass is Mac
   only for now`). Set to a host without it (Run on): 422 at create, `<node>: <title> not
   downloaded on host <H>`; Auto picks a host that has it, and with none the run fails `<node>: <title> not downloaded
   on any live host for env <env>`. POST /v1/studio/runs/plan answers either as `reason`. The UI greys the controls
-  that need a missing add-on (`<title> not downloaded`; per host in Run on, `… not downloaded on <host>`) and leaves
+  that need a missing add-on (`<title> not downloaded`, title its `short` from 1.40; per host in Run on, `… not
+  downloaded on <host>`; from 1.40 only the add-ons the form's references call for: `refs`) and leaves
   such a node bypassed, so a run never reaches the refusal from the form; from 1.40, for a node the workflow runs
   unbypassed (`ltx/distill`), it greys instead the model chip's rows of the add-on's `variants` (`Dev` · `Distilled
   LoRA not downloaded`; board LtxFeatures frame 17).

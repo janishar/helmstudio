@@ -409,8 +409,9 @@ stages:
       seconds: {type: float, label: Add, default: 2, min: 0.1, max: 10, step: 0.1,
                 help: "Seconds to add, rounded up to whole 8-frame steps."}
       # API 1.39 (a cross-node values_by): a distilled extend continues the clip's tail, so only after
+      # API 1.40: `note` is the line under the Model row while Distilled is refused (board LtxFeatures frame 8)
       direction: {type: enum, label: Where, default: after, enum: [after, before],
-                  values_by: {param: model.variant,
+                  values_by: {param: model.variant, note: "Dev: the only model that extends before. About 10× slower.",
                               values: {distilled: [after], dev: [after, before], distilled-fp8: [after], dev-int8: [after, before]}}}
       steps: *steps
       cfg: *cfg

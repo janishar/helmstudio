@@ -61,6 +61,9 @@ type ModelAddon struct {
 	Help          string             `json:"help,omitempty"`
 	Dir           *string            `json:"dir"`
 	Variants      []string           `json:"variants,omitempty"` // API 1.40: the variants whose runs need it
+	Refs          *bool              `json:"refs,omitempty"`     // API 1.40: the task whose runs need it
+	Short         string             `json:"short,omitempty"`    // API 1.40: the controls' name for it
+	Tag           string             `json:"tag,omitempty"`      // API 1.40: the Models card's mono line
 	Licence       *VariantLicence    `json:"licence"`
 	Gated         bool               `json:"gated"`
 	DownloadBytes *int64             `json:"download_bytes"`

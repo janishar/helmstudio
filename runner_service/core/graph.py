@@ -224,7 +224,10 @@ class Ctx:
             raise RunError(f"{self.node}: component {name!r} is not in its stage's uses")
         if (addon := model.pack.component(name).get("addon")) and not model.files(name):
             # studio's run check refuses this first (API 1.36, Optional add-ons)
-            raise RunError(f"{self.node}: {addon['title']} not downloaded on host {config.HOST}")
+            # (API 1.40: by its `short`, the name the controls use)
+            raise RunError(
+                f"{self.node}: {addon.get('short', addon['title'])} not downloaded on host {config.HOST}"
+            )
         gb, transient = model.gb(name)
         key = model.key(name)
         module = self.residency.get(key, gb, transient, lambda: model.load(name, self), model.resident_loras(name))  # fmt: skip

@@ -82,11 +82,13 @@ components:                       # weight components the residency manager load
   vae: {files: "vae/*.safetensors", dtype: bf16, precision: [bf16]}
   text_enhancer:                  # an optional add-on (API 1.36): a folder of its own, no variant needs it
     dir: Qwen-Image-2.1-PE-T2I
-    addon: {title: Text enhancer, help: "Qwen-Image-2.1-PE-T2I (9B). Enhance prompt without references."}
+    addon: {title: Text enhancer, short: Enhancer, tag: PE-T2I, refs: false,   # API 1.40: text to image's
+            help: "Qwen-Image-2.1-PE-T2I. Enhance prompt without references."}
     files: "model-*.safetensors"
   edit_enhancer:
     dir: Qwen-Image-2.1-PE-I2I
-    addon: {title: Edit enhancer, help: "Qwen-Image-2.1-PE-I2I (9B). Enhance prompt with references."}
+    addon: {title: Edit enhancer, short: Enhancer, tag: PE-I2I, refs: true,    # an edit's
+            help: "Qwen-Image-2.1-PE-I2I. Enhance prompt with references."}
     files: "model-*.safetensors"
 lora:                             # LoRAs: the generated qwen-image/lora-stack node and the registry lora block
   component: transformer          # the component LoRAs patch; only stages that use it see the Model's LoRA set
@@ -210,11 +212,14 @@ Keys the core understands; anything else is ignored:
   add-ons"): no variant needs it to be present, it is in no variant's components, files, bytes or delete, and it is
   downloaded (`source`, as a variant's, into its `dir` or else the first variant's folder) and deleted on its own. A
   stage whose `uses` names it publishes `addons: [<name>]`: studio runs such a node (not bypassed) only on a host
-  where the add-on is present, and the stage itself fails `<node>: <title> not downloaded on host <h>` without its
+  where the add-on is present, and the stage itself fails `<node>: <short or title> not downloaded on host <h>` without its
   files (MiniMax H3 Image's enhancer, Qwen Image's two). From API 1.40 a stage's `addons: [<name>]` publishes it too
   without loading it through residency (no memory plan counts it: ltx/distill's bake reads the distilled LoRA), and the
   component's `variants` scopes an add-on to the runs of those variants: published as its `variants`, listed only by a
-  runner that runs one of them (ltx's two add-ons are the Mac's).
+  runner that runs one of them (ltx's two add-ons are the Mac's). Also from 1.40 the `addon` block may carry
+  `refs` (the task whose runs need it: true = a run with references, an edit; false = one without; absent = both:
+  Qwen's PE-I2I and PE-T2I), `short` (the name in `<short> not downloaded`, the controls' and the stage's refusal;
+  absent = `title`) and `tag` (the Models card's mono line; absent = the component id).
 - **`lora`** (optional; contracts/README.md "LoRAs", "LoRA normaliser"): `component` (the component LoRAs patch),
   `renames` (ordered `{from, to[, at: end]}` rewrites of a key's module part: a prefix, or with `at: end` a suffix,
   as ltx's `.to_out.0` → `.to_out`), `runtime` (optional: the one runtime the block holds for; ltx's is `mlx`, so

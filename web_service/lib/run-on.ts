@@ -129,6 +129,8 @@ export type AddonNeed = {
   hosts: string[];
   free: string[];
   variants?: string[];
+  /** API 1.40: the task that needs it (true: a run with references, false: one without); absent = both */
+  refs?: boolean;
   always: boolean;
 };
 
@@ -136,14 +138,18 @@ export type AddonNeed = {
 const lacks = (n: AddonNeed, mc: Machine) =>
   !n.hosts.includes(mc.host) && !n.free.includes(mc.host);
 
-/** Whether a run with the form's chosen variants needs the add-on (API 1.40: its `variants`, absent = every one). */
-export function needed(n: AddonNeed, picks: { m: Model; v: Variant }[]): boolean {
+/** Whether a run with the form's chosen variants, with references or not, needs the add-on (API 1.40: its
+ * `variants`, absent = every one; its `refs`, absent = both: Qwen's PE-T2I is text to image's, PE-I2I an edit's). */
+export function needed(n: AddonNeed, picks: { m: Model; v: Variant }[], refs = false): boolean {
   const pick = picks.find((p) => p.m.family === n.family);
-  return !n.variants || !pick || n.variants.includes(pick.v.id);
+  return (
+    (!n.variants || !pick || n.variants.includes(pick.v.id)) && (n.refs == null || n.refs === refs)
+  );
 }
 
 /** The workflow's add-on needs, graph order then the schema's: from the models of each node's family (a family the
- * list does not hold, or no list yet, needs nothing it can tell). Titles as the list has them, else the component. */
+ * list does not hold, or no list yet, needs nothing it can tell). Titles as the list has them (API 1.40: its `short`,
+ * "Enhancer"), else the component. */
 export function addonNeeds(
   w: Pick<S<"Workflow">, "nodes" | "node_schemas"> | undefined,
   list: S<"ModelList"> | null,
@@ -165,10 +171,11 @@ export function addonNeeds(
         node,
         family: s.family ?? "",
         component,
-        title: as[0]?.title ?? component,
+        title: as[0]?.short ?? as[0]?.title ?? component,
         hosts: [...new Set(hosts)],
         free: as.length ? [...new Set(free)].filter((h) => !listed.has(h)) : [],
         ...(as[0]?.variants && { variants: as[0].variants }),
+        ...(as[0]?.refs != null && { refs: as[0].refs }),
         always: w.nodes[node].bypass !== true,
       };
     });

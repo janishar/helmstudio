@@ -177,6 +177,12 @@
               "type": "string",
               "pattern": "^([a-z][a-z0-9_]{0,63}\\.)?[a-z][a-z0-9_]{0,63}$"
             },
+            "note": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "from API 1.40, a cross-node values_by only: the line the UI shows under the choice of `param` while this refuses one of its options (LTX extend: `Dev: the only model that extends before. About 10\u00d7 slower.`, board LtxFeatures frame 8). Absent = each refusal (`Extend before needs Dev`)"
+            },
             "values": {
               "type": "object",
               "minProperties": 1,
@@ -1966,7 +1972,23 @@
                           "type": "string",
                           "minLength": 1,
                           "maxLength": 60,
-                          "description": "its display name (`Enhancer`): the run check's and the UI's `<title> not downloaded`"
+                          "description": "its display name (`Enhancer`): the Models screen's, a job's and, without `short`, the run check's and the UI's `<title> not downloaded`"
+                        },
+                        "short": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 60,
+                          "description": "from API 1.40: the name the run check and the UI use in `<short> not downloaded` (model.yaml `addon.short`: Qwen Image's two enhancers are both `Enhancer`, as the controls see one). Absent = `title`"
+                        },
+                        "tag": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 40,
+                          "description": "from API 1.40: the Models screen's mono line beside the title (model.yaml `addon.tag`: `PE-T2I`). Absent = the component id"
+                        },
+                        "refs": {
+                          "type": "boolean",
+                          "description": "from API 1.40 (contracts/README.md, Optional add-ons): the task whose runs need it (model.yaml `addon.refs`): true = only a run with references (an Image value in its graph: an edit, Qwen's PE-I2I), false = only one without (text to image, PE-T2I). Absent = both"
                         },
                         "help": {
                           "type": "string",

@@ -756,6 +756,7 @@
           ],
           "values_by": {
             "param": "model.variant",
+            "note": "Dev: the only model that extends before. About 10× slower.",
             "values": {
               "distilled": [
                 "after"

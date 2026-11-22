@@ -23,6 +23,7 @@ import {
 } from "@/lib/source";
 import { newId, timecode, type Clip, type Norm } from "@/lib/timeline";
 import {
+  blockNotes,
   buildInputs,
   display,
   fields as fieldsOf,
@@ -288,13 +289,11 @@ function ActionForm({
               ))}
             </div>
           </div>
-          {Object.values(blocked)
-            .filter(Boolean)
-            .map((why) => (
-              <span key={String(why)} className="text-[12px] text-t2">
-                {why}
-              </span>
-            ))}
+          {blockNotes(variant, fields, raws).map((why) => (
+            <span key={why} className="text-[12px] text-t2">
+              {why}
+            </span>
+          ))}
         </>
       )}
       {prompt && (

@@ -1,0 +1,129 @@
+{
+  "description": "From 1.40: Qwen's enhance names both its add-ons and a run needs one by its task (`refs`): this edit (its graph holds a reference image) needs only PE-I2I, so mac (only PE-T2I) is not eligible and gcp (only PE-I2I) runs it",
+  "hosts": {
+    "mac": {
+      "keys": {
+        "torch": {
+          "state": "fresh",
+          "budget_gb": 52,
+          "resident": []
+        },
+        "mlx": {
+          "state": "fresh",
+          "budget_gb": 52,
+          "resident": []
+        }
+      },
+      "workflows": {
+        "torch": [
+          "qwen-image"
+        ]
+      },
+      "variants": {
+        "torch": {
+          "qwen-image-2.1/base": [
+            "bf16",
+            "int8"
+          ]
+        }
+      },
+      "loras": {
+        "torch": []
+      },
+      "free": true,
+      "idle_since": null,
+      "addons": {
+        "torch": [
+          "qwen-image-2.1/text_enhancer"
+        ]
+      }
+    },
+    "gcp": {
+      "keys": {
+        "torch": {
+          "state": "fresh",
+          "budget_gb": 94,
+          "ram_budget_gb": 176,
+          "resident": []
+        }
+      },
+      "workflows": {
+        "torch": [
+          "qwen-image"
+        ]
+      },
+      "variants": {
+        "torch": {
+          "qwen-image-2.1/base": [
+            "bf16",
+            "int8"
+          ]
+        }
+      },
+      "loras": {
+        "torch": []
+      },
+      "free": true,
+      "idle_since": "2026-11-15T09:00:00Z",
+      "addons": {
+        "torch": [
+          "qwen-image-2.1/edit_enhancer"
+        ]
+      }
+    }
+  },
+  "run": {
+    "env": "torch",
+    "workflow": "qwen-image",
+    "model": "qwen-image-2.1",
+    "variant": "base",
+    "precision": "int8",
+    "refs": true,
+    "loras": [],
+    "peak_gb": 29.25,
+    "needs": [
+      {
+        "component": "text_encoder",
+        "model": "qwen-image-2.1",
+        "variant": "base",
+        "precision": "int8"
+      },
+      {
+        "component": "transformer",
+        "model": "qwen-image-2.1",
+        "variant": "base",
+        "precision": "int8"
+      },
+      {
+        "component": "vae",
+        "model": "qwen-image-2.1",
+        "variant": "base",
+        "precision": "bf16"
+      }
+    ],
+    "lora_component": "transformer",
+    "addons": [
+      {
+        "node": "enhance",
+        "kind": "qwen-image/enhance",
+        "component": "text_enhancer",
+        "title": "Enhancer",
+        "refs": false
+      },
+      {
+        "node": "enhance",
+        "kind": "qwen-image/enhance",
+        "component": "edit_enhancer",
+        "title": "Enhancer",
+        "refs": true
+      }
+    ]
+  },
+  "expect": {
+    "host": "gcp",
+    "eligible": [
+      "gcp"
+    ],
+    "error": null
+  }
+}

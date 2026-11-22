@@ -486,11 +486,25 @@ type Addon struct {
 	Mismatch  []string `json:"mismatch,omitempty"`
 	// API 1.40: the variants whose runs need it; absent = every variant
 	Variants []string `json:"variants,omitempty"`
+	// API 1.40: the task whose runs need it (true: a run with references, false: one without); absent = both
+	Refs *bool `json:"refs,omitempty"`
+	// API 1.40: the name in `<short> not downloaded` (absent = Title) and the Models card's mono line
+	Short string `json:"short,omitempty"`
+	Tag   string `json:"tag,omitempty"`
 }
 
-// Needs reports whether a run on variant needs the add-on (API 1.40: its variants, absent = every one).
-func (a Addon) Needs(variant string) bool {
-	return len(a.Variants) == 0 || slices.Contains(a.Variants, variant)
+// Needs reports whether a run on variant, with references or not, needs the add-on (API 1.40: its variants, absent =
+// every one; its refs, absent = both).
+func (a Addon) Needs(variant string, refs bool) bool {
+	return (len(a.Variants) == 0 || slices.Contains(a.Variants, variant)) && (a.Refs == nil || *a.Refs == refs)
+}
+
+// Name is what the run check and the UI call it: its short name, else its title.
+func (a Addon) Name() string {
+	if a.Short != "" {
+		return a.Short
+	}
+	return a.Title
 }
 
 // Addon returns the model's add-on named component, if the host lists it.

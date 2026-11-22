@@ -504,6 +504,11 @@ describe("the progress strip", () => {
     ]);
   });
 
+  it("names no step count the form sets: Qwen's Sample reads Sample (docs/mock/Main.dc.html)", () => {
+    const sample = segments(qwen, run()).find((x) => x.node === "sample");
+    expect([sample?.title, sample?.state, sample?.steps]).toEqual(["Sample", "pending", undefined]);
+  });
+
   it("marks nodes done (with their time), active and pending from the events", () => {
     let t: Record<string, RunTrack> = {};
     for (const e of [

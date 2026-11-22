@@ -158,6 +158,25 @@ export function optionBlocked(
   return null;
 }
 
+/** API 1.40: the lines under `f`'s choice while one of its options is refused ("Extend before needs Dev"); a
+ * refusal by another field's cross-node `values_by` that carries a `note` reads that note instead ("Dev: the only
+ * model that extends before. About 10× slower.", board LtxFeatures frame 8). Empty when none is refused. */
+export function blockNotes(f: Field, fields: Field[], raws: Record<string, Raw>): string[] {
+  const out = new Set<string>();
+  for (const o of f.param.enum ?? []) {
+    const why = optionBlocked(f, o, fields, raws);
+    if (!why) continue;
+    // a field with a note whose cross-node values_by refuses its value under `o`
+    const by = fields.find((g) => {
+      const vb = g.param.values_by;
+      const v = String(raws[g.key] ?? toRaw(g.initial, g.param));
+      return g !== f && vb?.note && vb.param === f.key && !(vb.values[o] ?? [v]).includes(v);
+    });
+    out.add(by?.param.values_by?.note ?? why);
+  }
+  return [...out];
+}
+
 type ExprValue = string | number | boolean | null | undefined;
 
 /** Evaluates a `when` / `requires` expression (contracts/README.md): `node.param` references, 'string' / "string",

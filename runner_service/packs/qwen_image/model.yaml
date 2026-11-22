@@ -89,7 +89,10 @@ components:
     dir: Qwen-Image-2.1-PE-T2I
     addon:
       title: Text enhancer
-      help: "Qwen-Image-2.1-PE-T2I (9B). Enhance prompt without references."
+      short: Enhancer             # API 1.40: the greyed controls' `Enhancer not downloaded` (board CreateEnhance)
+      tag: PE-T2I                 # API 1.40: the Models card's mono line (board Models)
+      refs: false                 # API 1.40: text to image needs it, an edit does not
+      help: "Qwen-Image-2.1-PE-T2I. Enhance prompt without references."
       source: {repo: Qwen/Qwen-Image-2.1-PE-T2I, revision: f3ed7985c788ad75b3ab7223e0c4c51e2a43545b,
                allow_patterns: ["*.json", chat_template.jinja, system_prompt.txt, "model-*.safetensors"],
                licence: qwen-research, must_accept: true, gated: false, bytes: 18839796212}
@@ -100,7 +103,10 @@ components:
     dir: Qwen-Image-2.1-PE-I2I
     addon:
       title: Edit enhancer
-      help: "Qwen-Image-2.1-PE-I2I (9B). Enhance prompt with references."
+      short: Enhancer
+      tag: PE-I2I
+      refs: true                  # API 1.40: an edit (references) needs it, text to image does not
+      help: "Qwen-Image-2.1-PE-I2I. Enhance prompt with references."
       source: {repo: Qwen/Qwen-Image-2.1-PE-I2I, revision: 72927bc08afc99b7888ceb7d7d51a12db3700bbd,
                allow_patterns: ["*.json", chat_template.jinja, system_prompt.txt, "model-*.safetensors"],
                licence: qwen-research, must_accept: true, gated: false, bytes: 18839804437}
@@ -119,7 +125,7 @@ stages:
     title: Enhance prompt
     component: prompt enhancer
     help: "Rewrites the prompt with Qwen-Image-2.1-PE: PE-T2I without references, PE-I2I with them (9B each), and picks an aspect for an auto canvas; it sees the references of the encode node its text feeds. Bypassed: the prompt and canvas pass through."
-    uses: [text_enhancer, edit_enhancer]   # one of them per run (references or not); a host needs both (node addons)
+    uses: [text_enhancer, edit_enhancer]   # one of them per run: the add-ons' `refs` say which (API 1.40)
     unload_after: [text_enhancer, edit_enhancer]
     alone: true                   # none of the model's other components stay beside it, as MiniMax's enhance
     sees: {refs: text}            # the refs param of the node its text feeds (the encode node)

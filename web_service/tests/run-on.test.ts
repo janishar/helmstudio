@@ -174,6 +174,42 @@ describe("optional add-ons (API 1.36)", () => {
     expect(machineReason(mac, "torch", [], needs)).toBeNull();
     expect(machineReason(gcp, "torch", [], [])).toBeNull(); // the node is bypassed: not asked
   });
+
+  // API 1.40: Qwen's enhancers per task (`refs`), both named "Enhancer" (`short`, board CreateEnhance)
+  it("needs only the add-on of the form's task, by its short name", () => {
+    const perTask = {
+      ...list(),
+      models: [
+        {
+          ...model,
+          addons: [
+            {
+              ...addon("text_enhancer", "Text enhancer", { mac: "present", gcp: "missing" }),
+              short: "Enhancer",
+              refs: false,
+            },
+            {
+              ...addon("edit_enhancer", "Edit enhancer", { mac: "missing", gcp: "present" }),
+              short: "Enhancer",
+              refs: true,
+            },
+          ],
+        },
+      ],
+    } as unknown as S<"ModelList">;
+    const all = addonNeeds(w, perTask);
+    expect(all.map((n) => [n.title, n.refs])).toEqual([
+      ["Enhancer", false],
+      ["Enhancer", true],
+    ]);
+    const text = all.filter((n) => needed(n, [], false));
+    const edit = all.filter((n) => needed(n, [], true));
+    expect(text.map((n) => n.component)).toEqual(["text_enhancer"]);
+    expect(edit.map((n) => n.component)).toEqual(["edit_enhancer"]);
+    expect(addonBlocks(text, gcp)).toEqual({ enhance: "Enhancer not downloaded on gcp" });
+    expect(addonBlocks(edit, gcp)).toEqual({});
+    expect(machineReason(mac, "torch", [], edit)).toBe("enhancer not downloaded on mac");
+  });
 });
 
 describe("versionRow", () => {

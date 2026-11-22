@@ -400,8 +400,8 @@ def addon_entry(pack, c: str) -> dict:
     else:
         presence = "partial" if files else "missing"
     out = {"component": c, "title": spec["addon"]["title"]}
-    if "help" in spec["addon"]:
-        out["help"] = spec["addon"]["help"]
+    # API 1.40: the controls' name, the Models card's mono line and the task (references or not) that needs it
+    out |= {k: spec["addon"][k] for k in ("short", "tag", "refs", "help") if k in spec["addon"]}
     out |= {"dir": root.relative_to(packs.models_root()).as_posix(), "presence": presence}
     if files:
         out["bytes"] = sum(f["bytes"] for f in files)

@@ -504,7 +504,9 @@ export function Create({
   // runs needs greys its variants' rows instead (Dev without the distilled LoRA)
   const allNeeds = useMemo(() => addonNeeds(workflow, modelList), [workflow, modelList]);
   const chosenModels = chosenVariants(all, { ...held, ...pins }, modelList);
-  const needs = allNeeds.filter((n) => needed(n, chosenModels));
+  // (API 1.40) and one for the other task (`refs`): an edit needs Qwen's PE-I2I, text to image its PE-T2I
+  const withRefs = refCount(all, held) > 0;
+  const needs = allNeeds.filter((n) => needed(n, chosenModels, withRefs));
   const blocks = addonBlocks(needs, runOn);
   const forced = Object.fromEntries(Object.keys(blocks).map((n) => [`${n}.bypass`, true]));
   const raws =

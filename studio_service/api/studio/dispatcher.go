@@ -1106,7 +1106,9 @@ func eligibleIn(reg *registry.Registry, values []registry.Host, reserved map[str
 	}
 	// API 1.36 (contracts/README.md "Optional add-ons"): a node that is not bypassed needs each add-on its kind loads
 	// present in the host's models entry of its family; from 1.40 not when that entry does not list it, or lists it
-	// for other variants than the run's (the distilled LoRA is Dev's)
+	// for other variants than the run's (the distilled LoRA is Dev's) or for the other task (`refs`: Qwen's PE-I2I is
+	// an edit's, a run whose graph holds an Image value)
+	refs := len(images(graph)) > 0
 	for _, id := range slices.Sorted(maps.Keys(graph)) {
 		node := graph[id]
 		if node.Bypass {
@@ -1135,11 +1137,11 @@ func eligibleIn(reg *registry.Registry, values []registry.Host, reserved map[str
 				}
 				found, _ := reg.Model(host+"."+env, family)
 				a, listed := found.Addon(c)
-				if !listed || !a.Needs(variant) {
+				if !listed || !a.Needs(variant, refs) {
 					return false
 				}
 				if title == c {
-					title = a.Title
+					title = a.Name()
 				}
 				return a.Presence != "present"
 			})

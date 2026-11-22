@@ -2747,6 +2747,8 @@ export interface components {
                 values: {
                     [key: string]: (number | string)[];
                 };
+                /** @description from 1.40, a cross-node values_by only: the line under the named param's choice while this refuses one of its options (LTX extend: `Dev: the only model that extends before. About 10× slower.`); absent = each refusal (`Extend before needs Dev`) */
+                note?: string;
             };
             /** @description absent = the name */
             label?: string;
@@ -5631,6 +5633,18 @@ export interface components {
             component: string;
             /** @example Enhancer */
             title: string;
+            /**
+             * @description from 1.40: the name in the greyed controls' and Run on's `<short> not downloaded` (registry add-on `short`; Qwen Image's Text enhancer and Edit enhancer are both `Enhancer`). Absent = `title`
+             * @example Enhancer
+             */
+            short?: string;
+            /**
+             * @description from 1.40: the Models screen's mono line beside the title (registry add-on `tag`). Absent = the component id
+             * @example PE-T2I
+             */
+            tag?: string;
+            /** @description from 1.40: the task whose runs need it (registry add-on `refs`, contracts/README.md Optional add-ons): true = only a run with references (an edit), false = only one without (text to image). Absent = both */
+            refs?: boolean;
             help?: string;
             /** @description its folder under each host's models root */
             dir: string | null;
