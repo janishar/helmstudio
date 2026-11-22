@@ -1,6 +1,6 @@
 # helmstudio logo plan
 
-Status: round 2 (organic) concepts for the owner to choose · 2026-11-22 · board: [docs/mock/Logo.dc.html](../mock/Logo.dc.html) (canvas page "Brand")
+Status: round 2 (organic) concepts, design-reviewed, for the owner to choose · 2026-11-22 · board: [docs/mock/Logo.dc.html](../mock/Logo.dc.html) (canvas page "Brand")
 
 ## Brief
 
@@ -33,7 +33,7 @@ one-colour versions. Marks still use `--a1` / `--a2` / `--on1` so they follow th
 joins (reads like 600 with rounded corners and terminals), tracking −0.01em. The final artwork outlines it to paths;
 an optional touch for later is a small leaf as the dot of the i.
 
-1. **Leaf play.** An asymmetric leaf whose heart is cut out as a soft play shape, on a stem that curls like a tiller.
+1. **Leaf play.** An asymmetric leaf whose heart is cut out as a soft play shape (bowed sides), on a tapered stem that curls like a tiller.
    - Why: what you make grows from a seed of an idea, and you hold the stem; play says media.
    - Risks: leaf marks are common in eco and wellness brands; the diagonal leaf fills less of the square, so it is the
      smallest at 16 px (the small cut widens the play cut); play says video more than voice.
@@ -41,28 +41,49 @@ an optional touch for later is a small leaf as the dot of the i.
    - Why: the h owns the name (helm), the leaf is both growth and the vane you steer by; bold at 16 px; in one colour
      the leaf joins the stem and reads as a sprout.
    - Risks: a letter mark needs the wordmark nearby at first; the leaf must stay a clear flag, not a tick or accent.
-3. **Bud pebble.** A river-pebble tile (soft, uneven, one tighter corner like the dock tiles) with a bud opening
-   around a spark of light.
+3. **Bud pebble.** A river-pebble tile (soft, uneven, one tighter corner like the dock tiles) with two uneven
+   petals cupping a seed of light, like a pod about to open.
    - Why: the moment a take is born; the strongest at 16 px; sits in the dock as one of the family.
-   - Risks: cupped petals with a flame can read as a lotus, a spa or a candle; the pebble is part of the mark; says
-     little about steering.
+   - Risks: the pod can read as an eye or a map pin; the petal gaps close at 16 px (it needs its own small cut);
+     the pebble is part of the mark; says little about steering.
 4. **Current eye.** A wave, thin at the tail and full at the crest, that curls into a helm turn around an eye.
    - Why: you ride and steer the current of the models; the eye is the lens and the director's look; the curl is a
      natural spinner.
-   - Risks: spirals and wave curls are common; the thin tail fades at 16 px (the small cut is heavier); it must never
-     read as a 6, a 9 or an @.
+   - Risks: spirals and wave curls are common; it must never read as a 6, a 9 or an @.
 
 | Concept | Legible at 16 px | Organic | Says helm and studio | Unique | Motion and loading | Score |
 |---|---|---|---|---|---|---|
 | 2 Sprout h | 3 | 3 | 2 | 3 | 3: leaf unfurls as progress | 14 |
-| 4 Current eye | 2 | 3 | 3 | 2 | 3: the curl turns as a spinner | 13 |
-| 3 Bud pebble | 3 | 3 | 2 | 1 | 3: bud opens as a take lands | 12 |
+| 4 Current eye | 3 | 3 | 3 | 2 | 3: the curl turns as a spinner | 14 |
+| 3 Bud pebble | 2 | 3 | 2 | 2 | 3: bud opens as a take lands | 12 |
 | 1 Leaf play | 2 | 3 | 2 | 2 | 2: leaf sways, play pulses | 11 |
 
 **Recommendation: concept 2, Sprout h**, with the soft wordmark. It is the most organic and still the clearest: a
 living h for helm with a leaf flag for growth and steering; it holds at 16 px, works in one colour, and the swaying
-leaf gives a gentle loading state (still under reduced motion). Runner-up: **4 Current eye**, if the owner prefers a
-symbol to a letter. Nothing in the four borrows a well-known shape (no robot heads, sound-wave bars, shopping bags).
+leaf gives a gentle loading state (still under reduced motion). Runner-up: **4 Current eye**, which now ties on score; the h wins the tie because it owns the name. Pick 4 if the
+owner prefers a symbol to a letter. Nothing in the four borrows a well-known shape (no robot heads, sound-wave bars, shopping bags).
+
+### Design review (2026-11-22)
+
+Rendered at full size and at 64, 32 and 16 px on forest ink. Asked of each mark: does it truly feel organic, or is it
+geometric with rounded corners; are curves and weights even; does it hold small; does it clash or look like a known
+brand. All four stay distinct (leaf, letter, pod in a pebble, curl).
+
+- **1 Leaf play.** The play cut was a straight-sided triangle with rounded corners and the stem a monoline stroke:
+  the two most geometric parts of the set. Fixed: the cut now has bowed sides, and the stem is one tapered filled
+  shape joined to the leaf, heavier at the leaf and fine at the tip. Still the weakest at 16 px.
+- **2 Sprout h.** The leaf floated above the stem with a gap, so it read as an accent (an h with an acute, like
+  ĥ or ń) rather than a sprout. Fixed: the leaf now grows out of the stem tip, in colour and in one colour, and the
+  loading sway pivots on that joint.
+- **3 Bud pebble.** The flame in a cup read as a candle, a lotus or a spa. A first redraw (two open petals with a
+  round seed above) read as a person with raised arms, a common community and wellness mark, so it was dropped too.
+  Fixed: two uneven petals now curve in around an egg-shaped seed, a pod about to open. Left: the pod can read as an
+  eye or a map pin, and the gaps close at 16 px, so the final art needs a small cut (wider gaps, smaller seed).
+- **4 Current eye.** The curl was traced as about 60 short segments, with small bumps and a hairline tail that
+  vanished at 16 px. Fixed: redrawn as one clean curl in nine smooth segments, heaviest at the crest, tail ending in a
+  soft round end that holds at 16 px; the eye moved to the optical centre of the curl.
+- **Colour.** Lime and orange stay apart in every mark except the h, where the orange leaf meets the lime stem at
+  one small joint; the one-colour versions carry all four. No clashes found on dark, light or the gradient tile.
 
 **Open for the owner (round 2):** pick 1–4 (recommended 2); soft or plain wordmark; leaf in orange or both parts in
 lime. The usage rules below carry over to whichever mark is chosen (for an organic mark the small cut is the 16 px
