@@ -156,6 +156,8 @@ import {
   refIds,
 } from "@/lib/refs";
 import type { GraphProps } from "@/components/graph/graph";
+import { useScreenTools } from "@/components/assistant/tools";
+import { createTools } from "@/components/create/assistant";
 import {
   buildInputs,
   carry,
@@ -471,12 +473,12 @@ export function Create({
     void applyUse(use.take, use.workflow);
   }, [use, workflows, applyUse]);
 
-  async function star(t: Take) {
+  async function star(t: Take, on = !t.starred) {
     try {
       const n = await ok(
         api.PATCH("/v1/studio/takes/{take_id}", {
           params: { path: { take_id: t.id } },
-          body: { starred: !t.starred },
+          body: { starred: on },
         }),
       );
       setTakes((list) => list.map((x) => (x.id === n.id ? n : x)));
@@ -1020,8 +1022,12 @@ export function Create({
       await send(workflow, fields);
   }
   /** Queues runs of `w` (Graph view passes the version it just saved) with the form's settings for it. */
-  async function send(w: S<"Workflow">, fields: Field[]) {
-    if (sending.current) return;
+  async function send(
+    w: S<"Workflow">,
+    fields: Field[],
+  ): Promise<{ ids: string[]; error: string }> {
+    const queuedIds: string[] = [];
+    if (sending.current) return { ids: queuedIds, error: "Generate is already sending" };
     const built = buildInputs(fields, raws);
     // an unplaced seed still steps from the workflow's own value
     const seed = fieldsOf(w).find((f) => f.param.type === "seed");
@@ -1037,7 +1043,12 @@ export function Create({
     if (Object.keys(errs).length) {
       if (view === "graph")
         setError("Some Studio settings are not valid: open Studio to fix them.");
-      return;
+      return {
+        ids: queuedIds,
+        error: Object.entries(errs)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join("; "),
+      };
     }
     sending.current = true;
     setBusy(true);
@@ -1066,8 +1077,10 @@ export function Create({
         if (sid === sessionRef.current) put(mergeRuns(runsRef.current, [run]));
         setSelected(run.id);
         setLastRun(run.id);
+        queuedIds.push(run.id);
       }
       setReuseNote("");
+      return { ids: queuedIds, error: "" };
     } catch (err) {
       // a dialogue's line errors go on its lines (API 1.32), the rest as before
       const sc =
@@ -1087,6 +1100,7 @@ export function Create({
         );
       if (on) setErrors(on);
       else if (!sc || detail) setError(sc ? detail : message(err));
+      return { ids: queuedIds, error: detail || message(err) };
     } finally {
       sending.current = false;
       setBusy(false);
@@ -1340,6 +1354,112 @@ export function Create({
     </div>
   );
 
+  // the assistant's Create actions (plan 18 §22.5): the screen's own entry points; a card's Yes reads the form as
+  // it is at the click
+  const cannot = (): string | null =>
+    !workflow
+      ? "no workflow"
+      : busy
+        ? "Generate is already sending"
+        : blocked
+          ? `${blocked} problem${blocked === 1 ? "" : "s"} in the graph`
+          : fields.some((f) => replaceUnmet(f.param, raws[f.key] ?? f.initial))
+            ? "a Replace sound needs its soundtrack"
+            : noVoice
+              ? "pick a voice first"
+              : badLine
+                ? `fix line ${badLine} first`
+                : notDownloaded
+                  ? "not downloaded · Models"
+                  : runOnOffline
+                    ? `${runOn.label} is offline`
+                    : null;
+  // what Run on's rows are greyed by: the chosen variants and the add-ons of the nodes that run
+  const runOnPicks = chosenVariants(all, raws, modelList);
+  const runOnNeeds = [
+    ...needs.filter((n) => (raws[`${n.node}.bypass`] ?? workflow?.nodes[n.node]?.bypass) !== true),
+    ...heldNeeds,
+  ];
+  const live = useRef({
+    cannot,
+    generate: async (): Promise<{ ids: string[]; error: string }> => ({ ids: [], error: "" }),
+  });
+  useEffect(() => {
+    live.current = {
+      cannot,
+      generate: () =>
+        workflow ? send(workflow, fields) : Promise.resolve({ ids: [], error: "no workflow" }),
+    };
+  });
+  useScreenTools(
+    // eslint-disable-next-line react-hooks/refs -- `live` is read only on a card's Yes, after render
+    createTools({
+      workflow,
+      workflows,
+      all,
+      fields,
+      raws,
+      held,
+      inputs: formInputs,
+      change: (k, raw) => change(k, raw),
+      restore: (k, old) =>
+        setRaws((r) => {
+          const next = { ...r };
+          if (old === undefined) delete next[k];
+          else next[k] = old;
+          return next;
+        }),
+      switchTo,
+      media,
+      family: familyName,
+      count,
+      setCount,
+      seedField,
+      machines: machineList,
+      runOn,
+      setRunOn: (h) => {
+        setRunOnHost(h);
+        setRunNote("");
+      },
+      picks: runOnPicks,
+      needs: runOnNeeds,
+      blocks,
+      modelList,
+      hosts,
+      view,
+      setView,
+      newSession: () => newSession(),
+      session,
+      takes,
+      shownTake,
+      selected,
+      select: setSelected,
+      runs,
+      star,
+      stop: cancel,
+      generate: () => live.current.generate(),
+      cannot: () => live.current.cannot(),
+      plan,
+      took,
+      budgetGb: host?.budget_gb ?? null,
+      looks,
+      chosenLooks: looksChosen,
+      setLooks: setLooksChosen,
+      tiles,
+      loras,
+      loraFamilies,
+      library,
+      onWorkflow,
+      onDeleted: (id) => {
+        setWorkflows((list) => list?.filter((x) => x.id !== id) ?? null);
+        if (chosen === id) setChosen("");
+      },
+      applyOffer,
+      handles,
+      prompt: texts[0] ?? "",
+    }),
+  );
+
   if (view === "graph" && workflow)
     return (
       <>
@@ -1367,9 +1487,9 @@ export function Create({
           track={shown && tracks[shown.id]}
           take={shownTake}
           hosts={hosts}
-          generate={(w) => {
+          generate={async (w) => {
             const fs = fieldsOf(w);
-            return send(w, visible(studioView(w, fs)?.shown ?? fs, raws, fs));
+            await send(w, visible(studioView(w, fs)?.shown ?? fs, raws, fs));
           }}
           busy={busy}
           anyActive={anyActive}
@@ -1842,14 +1962,8 @@ export function Create({
                     list={machineList}
                     chosen={runOn}
                     env={workflow?.env}
-                    picks={chosenVariants(all, raws, modelList)}
-                    needs={[
-                      ...needs.filter(
-                        (n) =>
-                          (raws[`${n.node}.bypass`] ?? workflow?.nodes[n.node]?.bypass) !== true,
-                      ),
-                      ...heldNeeds,
-                    ]}
+                    picks={runOnPicks}
+                    needs={runOnNeeds}
                     onPick={(h) => {
                       setRunOnHost(h);
                       setRunNote("");

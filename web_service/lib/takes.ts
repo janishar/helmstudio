@@ -16,6 +16,8 @@ export type Filter = {
   source?: S<"TakeSource">;
   session_id?: string;
   batch_id?: string;
+  /** API 1.42: the Gallery's sort (absent = newest) */
+  order?: "newest" | "oldest" | "starred" | "name";
 };
 
 const PROJECT = "helm.project";
@@ -46,6 +48,7 @@ export function takeQuery(f: Filter, q: string, cursor?: string | null) {
     ...(f.source && { source: f.source }),
     ...(f.session_id && { session_id: f.session_id }),
     ...(f.batch_id && { batch_id: f.batch_id }),
+    ...(f.order && f.order !== "newest" && { order: f.order }),
     ...(text && { q: text }),
     ...(cursor && { cursor }),
   };

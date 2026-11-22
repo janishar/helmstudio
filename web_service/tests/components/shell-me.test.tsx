@@ -8,7 +8,10 @@ import { WorkflowPicker } from "@/components/create/workflows";
 import { api, type S } from "@/lib/api";
 import { answer } from "./helpers";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/",
+  useRouter: () => ({ push: vi.fn() }),
+}));
 vi.mock("@/app/(auth)/actions", () => ({ signout: () => undefined }));
 
 beforeAll(() => {
@@ -52,7 +55,8 @@ describe("sign-in check retry", () => {
   it("asks nothing when the layout had the user", () => {
     const spy = vi.spyOn(api, "GET");
     render(<AppShell user={admin}>page</AppShell>);
-    expect(spy).not.toHaveBeenCalled();
+    // (the assistant's status is asked once the user is known)
+    expect(spy.mock.calls.filter((c) => c[0] === "/auth/me")).toEqual([]);
     expect(screen.getByRole("link", { name: /admin/i })).toBeTruthy();
   });
 });

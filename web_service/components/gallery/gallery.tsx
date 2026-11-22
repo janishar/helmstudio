@@ -22,6 +22,8 @@ import { safeUrl } from "@/lib/format";
 import { useLoras } from "@/lib/lora-library";
 import { madeWithLine } from "@/lib/loras";
 import { FrameIn } from "@/components/create/frame-in";
+import { useScreenTools } from "@/components/assistant/tools";
+import { ORDERS, galleryTools } from "@/components/gallery/assistant";
 import {
   AUDIO_ACCEPT,
   UPLOAD_START,
@@ -314,6 +316,28 @@ export function Gallery({
       if (!n.delete(id)) n.add(id);
       return n;
     });
+  const router = useRouter();
+  useScreenTools(
+    galleryTools({
+      q,
+      setQ,
+      filter,
+      setFilter,
+      batchTitle: batch?.title,
+      takes,
+      current,
+      setCurrent: setCurrentId,
+      selecting,
+      picked,
+      pick: (ids) => {
+        setSelecting(!!ids);
+        setPicked(new Set(ids ?? []));
+      },
+      replace,
+      remove,
+      push: (url) => router.push(url),
+    }),
+  );
   const filtered = !!(
     filter.kind ||
     filter.starred ||
@@ -439,6 +463,17 @@ export function Gallery({
           >
             This project only
           </Chip>
+          {filter.order && filter.order !== "newest" && (
+            <button
+              type="button"
+              aria-label={`Clear sort ${ORDERS[filter.order]}`}
+              onClick={() => setFilter((f) => ({ ...f, order: undefined }))}
+              className="chip bevel bg-t1 font-semibold text-panel"
+            >
+              Sort · {ORDERS[filter.order]}
+              <X size={12} aria-hidden />
+            </button>
+          )}
           {filter.batch_id && (
             <button
               type="button"

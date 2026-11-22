@@ -14,6 +14,8 @@ import {
   Workflow,
 } from "lucide-react";
 import { ThemeSelect } from "@/components/kit";
+import { AssistantDrawer, shortcut, useAssistant } from "@/components/assistant/assistant";
+import { ToolsContext } from "@/components/assistant/tools";
 import { signout } from "@/app/(auth)/actions";
 import { ApiError, api, ok, type S } from "@/lib/api";
 
@@ -95,33 +97,63 @@ export function AppShell({
   const path = usePathname();
   const me = useMe(user);
   const items = me?.roles.includes("admin") ? [...ITEMS, ADMIN] : ITEMS;
+  const a = useAssistant(me);
+  const { reg } = a;
+  useEffect(() => {
+    reg.setPath(path);
+  }, [reg, path]);
   return (
     <UserContext value={me}>
-      <div className="flex min-h-dvh flex-col md:flex-row lg:h-dvh lg:overflow-hidden">
-        <nav
-          aria-label="Sections"
-          className="panel z-10 m-3.5 mb-0 flex shrink-0 items-center gap-3.5 self-stretch overflow-x-auto rounded-[30px] px-3 py-1 md:mr-0 md:mb-3.5 md:w-[76px] md:flex-col md:self-start md:overflow-visible md:px-1 md:py-3.5"
-        >
-          {items.map(({ href, label, Icon, tile }) => (
-            <Link
-              key={href}
-              href={href}
-              aria-current={isCurrent(href, path) ? "page" : undefined}
-              className="dock-item flex h-16 w-[58px] shrink-0 flex-col items-center justify-center gap-[5px] rounded-2xl text-[10px] font-medium text-t2 aria-[current]:text-t1"
-            >
-              <span className="tile" style={{ "--tile": tile } as React.CSSProperties}>
-                <Icon size={20} strokeWidth={1.75} aria-hidden />
-              </span>
-              {label}
-            </Link>
-          ))}
-          <SettingsMenu user={user} />
-        </nav>
-        {/* lg+: the window never scrolls; the dock and the side panel stay put and only <main> scrolls */}
-        <div className="flex min-h-0 min-w-0 flex-1 flex-wrap content-start lg:flex-nowrap lg:overflow-hidden lg:[&>.aside]:max-h-[calc(100dvh-28px)] lg:[&>.aside]:shrink-0 lg:[&>.aside]:overflow-y-auto lg:[&>main]:min-h-0 lg:[&>main]:overflow-y-auto">
-          {children}
+      <ToolsContext value={reg}>
+        <div className="flex min-h-dvh flex-col md:flex-row lg:h-dvh lg:overflow-hidden">
+          <nav
+            aria-label="Sections"
+            className="panel z-10 m-3.5 mb-0 flex shrink-0 items-center gap-3.5 self-stretch overflow-x-auto rounded-[30px] px-3 py-1 md:mr-0 md:mb-3.5 md:w-[76px] md:flex-col md:self-start md:overflow-visible md:px-1 md:py-3.5"
+          >
+            {items.map(({ href, label, Icon, tile }) => (
+              <Link
+                key={href}
+                href={href}
+                aria-current={isCurrent(href, path) ? "page" : undefined}
+                className="dock-item flex h-16 w-[58px] shrink-0 flex-col items-center justify-center gap-[5px] rounded-2xl text-[10px] font-medium text-t2 aria-[current]:text-t1"
+              >
+                <span className="tile" style={{ "--tile": tile } as React.CSSProperties}>
+                  <Icon size={20} strokeWidth={1.75} aria-hidden />
+                </span>
+                {label}
+              </Link>
+            ))}
+            {a.enabled && (
+              <button
+                type="button"
+                aria-expanded={a.open}
+                title={`Assistant (${shortcut()})`}
+                onClick={() => a.setOpen((o) => !o)}
+                className="dock-item relative flex h-16 w-[58px] shrink-0 flex-col items-center justify-center gap-[5px] rounded-2xl text-[10px] font-medium text-t2 aria-expanded:text-t1"
+              >
+                <span
+                  className="tile"
+                  style={
+                    { "--tile": "linear-gradient(155deg,#d8f58c,#3c9a2e)" } as React.CSSProperties
+                  }
+                >
+                  <Sparkles size={20} strokeWidth={1.75} aria-hidden />
+                </span>
+                Assistant
+                {a.cardWaits && !a.open && (
+                  <span aria-label="1 card waits for you" className="dot" />
+                )}
+              </button>
+            )}
+            <SettingsMenu user={user} />
+          </nav>
+          {/* lg+: the window never scrolls; the dock and the side panel stay put and only <main> scrolls */}
+          <div className="flex min-h-0 min-w-0 flex-1 flex-wrap content-start lg:flex-nowrap lg:overflow-hidden lg:[&>.aside]:max-h-[calc(100dvh-28px)] lg:[&>.aside]:shrink-0 lg:[&>.aside]:overflow-y-auto lg:[&>main]:min-h-0 lg:[&>main]:overflow-y-auto">
+            {children}
+          </div>
         </div>
-      </div>
+        {a.enabled && <AssistantDrawer a={a} />}
+      </ToolsContext>
     </UserContext>
   );
 }
