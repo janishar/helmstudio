@@ -2,7 +2,7 @@
 
 [← Plan index](../README.md)
 
-Status: **a design for the owner to decide** (2026-11-22). A plan, not in a milestone: it becomes one in
+Status: **decided by the owner (2026-11-22), queued to build**. A plan, not in a milestone: it becomes one in
 [08-milestones.md](08-milestones.md) when the owner schedules it. Nothing here is built. API target **1.45.0** (main
 is at 1.43.0; branch `assistant` takes 1.44.0 when it merges).
 
@@ -299,6 +299,12 @@ backfill, uploads and imports follow. The web's poster change ships with the fir
 thumbnail.
 
 ### 26.11 Open points for the owner
+
+**Decided by the owner, 2026-11-22 (one by one, all the recommended options):** 1. short side 512, long side at
+most 1024. 2. One size. 3. WebP q80. 4. Uploads and imports by the runner's thumbs job. 5. Automatic backfill, 20 at
+a time. 6. Audio keeps the CSS sound tile. 7. The viewer shows the thumbnail while the full image loads. 8. Video
+tiles use the poster's thumbnail. 9. Fix the shared frame-key sweep bug in this build.
+
 
 Each with the recommended option first.
 
