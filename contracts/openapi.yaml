@@ -6041,7 +6041,7 @@ components:
             client_id: {$ref: '#/components/schemas/AssistantClientId'}
             turn: {type: integer, minimum: 1}
             results: {type: array, minItems: 1, maxItems: 30, items: {$ref: '#/components/schemas/AssistantActionResult'}}
-            screen: {$ref: '#/components/schemas/AssistantScreen', description: 'after a navigate: the new screen'}
+            screen: {$ref: '#/components/schemas/AssistantScreen', description: 'the screen as the actions left it (after a navigate, the new screen)'}
         - type: object
           required: [kind, client_id, card_id, answer]
           additionalProperties: false

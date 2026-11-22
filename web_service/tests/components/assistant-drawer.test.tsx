@@ -5,7 +5,7 @@
 // cancel it), navigate dropping the rest of the batch, another tab's chat read-only with Continue here, a server
 // card's answer, the daily limit, a Remembered line's Undo, and model text that stays text.
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { api, type S } from "@/lib/api";
 import { done, type Handler } from "@/lib/assistant";
@@ -274,7 +274,8 @@ describe("a turn's actions in this tab", () => {
     fireEvent.click(screen.getByRole("button", { name: "GENERATE" }));
     await waitFor(() => expect(posts).toHaveLength(1));
     expect(yes).toHaveBeenCalledTimes(1);
-    expect(posts[0]).toEqual({
+    expect({ ...posts[0], screen: undefined }).toEqual({
+      screen: undefined,
       kind: "results",
       client_id: ME,
       turn: 1,
@@ -288,7 +289,32 @@ describe("a turn's actions in this tab", () => {
         },
       ],
     });
+    expect(posts[0]).toMatchObject({ screen: { fields: { screen: "create" } } });
     expect(screen.queryByRole("region", { name: "Confirm: Generate 4 images?" })).toBeNull();
+  });
+
+  it("sends the screen as the actions left it: a switch's new workflow, not the one of the message", async () => {
+    const posts = serve({ existing: thread() });
+    function Switching() {
+      const [w, setW] = useState("Echo");
+      useScreenTools({
+        screen: "create",
+        sees: [w],
+        summary: () => ({ workflow: w }),
+        actions: {
+          switchTo: ({ workflow }) => {
+            setW(String(workflow));
+            return done(`Switched to Image · ${String(workflow)}`);
+          },
+        },
+      });
+      return null;
+    }
+    await openDrawer(<Switching />);
+    await waitFor(() => expect(onEvent).not.toBeNull());
+    park([{ id: id(0), name: "switchTo", args: { workflow: "Qwen Image" } }]);
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0]).toMatchObject({ screen: { fields: { workflow: "Qwen Image" } } });
   });
 
   it("Not now cancels the card; leaving the screen cancels it too", async () => {

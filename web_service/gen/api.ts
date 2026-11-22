@@ -6167,7 +6167,7 @@ export interface components {
             client_id: components["schemas"]["AssistantClientId"];
             turn: number;
             results: components["schemas"]["AssistantActionResult"][];
-            /** @description after a navigate: the new screen */
+            /** @description the screen as the actions left it (after a navigate, the new screen) */
             screen?: components["schemas"]["AssistantScreen"];
         } | {
             /** @constant */

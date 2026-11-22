@@ -219,8 +219,8 @@ export function useAssistant(me: S<"User"> | null) {
     [reg],
   );
 
-  /** The parked turn's actions, in order, in this tab; then their results (with the new screen after a navigate,
-   * whose later actions are dropped). */
+  /** The parked turn's actions, in order, in this tab; then their results with the screen now (after a navigate,
+   * whose later actions are dropped, the new screen). */
   const runBatch = useCallback(
     async (t: Thread, p: S<"AssistantPending">) => {
       stop.current = false;
@@ -254,12 +254,15 @@ export function useAssistant(me: S<"User"> | null) {
         if (a.name === "navigate" && o.status === "done") moved = true;
       }
       setRunning(null);
+      // the screen as the actions left it, after their renders (a switchTo's new form): without it the model reads
+      // the summary sent with the message, sees the old workflow and switches again (the switch loop)
+      await new Promise((r) => setTimeout(r, 150));
       await post(t.id, {
         kind: "results",
         client_id: cid,
         turn: p.turn,
         results,
-        ...(moved && { screen: reg.summary() }),
+        screen: reg.summary(),
       });
     },
     [ask, cid, post, reg],

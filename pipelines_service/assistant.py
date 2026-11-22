@@ -241,10 +241,19 @@ def _time(t: datetime) -> str:
     return t.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
-def _entry(c: dict, status: str, result=None, error=None, line=None) -> dict:
+def _entry(c: dict, status: str, result=None, error=None, line=None, undo=False) -> dict:
     return {"role": "call", "id": c["id"], "name": c["name"], "args": c["args"], "kind": c.get("kind", "action"),
             "status": status, "result": agents.cut_result(result), "error": (error or None) and error[:500],
-            "line": line}  # fmt: skip
+            "line": line, "undo": undo}  # fmt: skip
+
+
+def _again(chat: list, c: dict, msg: str) -> dict | None:
+    """This message's last action of the same name, when `c` repeats it: same arguments, done, and a setting the
+    screen holds (it had Undo; a Generate or a new session makes something each time and always runs)."""
+    last = next((e for e in reversed(chat) if e.get("role") == "call" and e["name"] == c["name"]
+                 and e["id"].startswith(msg)), None)  # fmt: skip
+    ok = last and last["status"] == "done" and last.get("undo") and last["args"] == c["args"]
+    return last if ok else None
 
 
 def _end(code: str, text: str, resets_at: str | None = None, **up) -> dict:
@@ -357,12 +366,20 @@ class Assistant:
                 by = {r["id"]: r for r in inp.get("results") or []}
                 for a in pend["actions"]:
                     r = by.get(a["id"]) or {"status": "did_not_run", "error": "no result came back"}
-                    chat.append(_entry(a, r["status"], r.get("result"), r.get("error"),
-                                       (r.get("line") or {}).get("text")))  # fmt: skip
+                    line = r.get("line") or {}
+                    chat.append(_entry(a, r["status"], r.get("result"), r.get("error"), line.get("text"),
+                                       bool(line.get("undo"))))  # fmt: skip
                 if inp.get("screen"):
                     up["screen"] = inp["screen"]
+        msg = f"{s['thread_id']}:{s['msg']}:"
         while q:
             c = q[0]
+            if c["kind"] == "action" and (last := _again(chat, c, msg)):
+                # the switch loop's guard: a repeat of what already took answers at once, no new line in the tab
+                q.pop(0)
+                chat.append(_entry(c, "done", line=f"Already done: {last['line']}. The screen shows it; go on",
+                                   undo=True))  # fmt: skip
+                continue
             if c["kind"] == "action":
                 n = next((i for i, x in enumerate(q) if x["kind"] != "action"), len(q))
                 acts = [{"id": x["id"], "name": x["name"], "args": x["args"]} for x in q[:n]]

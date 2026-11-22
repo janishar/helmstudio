@@ -150,7 +150,9 @@ gating (`addonBlocks`, the Run on rules, `when` / `requires`).
 
 **navigate** targets (from `web_service/app/(app)`); it resolves when the new screen has registered its actions
 (about 10 s, else "screen did not load"); actions after it in the same batch are dropped and the new summary comes
-back instead.
+back instead. Every batch's results carry the screen as its actions left it (a switchTo's new form), so the model
+never works from the summary sent with the message; an action that repeats this message's last one of its name with
+the same arguments, done and with Undo, answers at once "Already done" and never reaches the tab (the switch loop).
 
 | Route | Params |
 |---|---|

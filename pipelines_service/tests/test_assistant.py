@@ -186,6 +186,31 @@ async def test_a_tool_call_turn_parks_on_the_screen_actions_and_resumes_with_the
     )
 
 
+async def test_a_repeated_action_that_already_took_answers_at_once_and_the_new_screen_reaches_the_model(
+    pool, fake
+):
+    """The switch loop: the results carry the screen the switch left, and a switchTo again (same args, done, with
+    Undo) never reaches the tab: the model is told it is already done. Generate always runs."""
+    c = Chat(pool, fake)
+    sw = ("switchTo", {"workflow": "qwen-image"})
+    c.script(calls(sw), calls(sw, ("generate", {})), calls(("generate", {})), {"content": "Two."})
+    step = await c.say("generate 1 image")
+    assert [a["name"] for a in step["actions"]] == ["switchTo"]
+    screen = {"route": "/", "ids": {}, "roles": ["user"], "as_of": now(), "hidden": False, "actions": ACTIONS,
+              "fields": {"workflow": {"id": "qwen-image", "title": "Qwen Image"}}}  # fmt: skip
+    undo = {
+        "id": c.cid(1, 0),
+        "status": "done",
+        "line": {"text": "Switched to Image · Qwen Image", "undo": True},
+    }
+    step = await c.send({"kind": "results", "results": [undo], "screen": screen})
+    assert [(a["id"], a["name"]) for a in step["actions"]] == [(c.cid(1, 2), "generate")]
+    assert '"Qwen Image"' in c.asked()[1]["messages"][1]["content"].split("The screen now")[-1]
+    step = await c.results(done(c.cid(1, 2), "You clicked GENERATE · 1 image"))
+    assert [(a["id"], a["name"]) for a in step["actions"]] == [(c.cid(1, 3), "generate")]
+    assert "Already done: Switched to Image · Qwen Image" in c.asked()[2]["messages"][1]["content"]
+
+
 async def test_admin_tools_are_never_offered_to_a_user(pool, fake):
     c = Chat(pool, fake)
     c.script({"content": "Hi."}, calls(("model_jobs", {})), calls(("model_jobs", {})))

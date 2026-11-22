@@ -67,7 +67,7 @@
               "properties": {
                 "kind": {"const": "results"},
                 "results": {"type": "array", "minItems": 1, "maxItems": 30, "items": {"$ref": "assistant.schema.json#/$defs/result"}},
-                "screen": {"$ref": "assistant.schema.json#/$defs/screen", "description": "after a navigate: the new screen"}
+                "screen": {"$ref": "assistant.schema.json#/$defs/screen", "description": "the screen as the actions left it (after a navigate, the new screen)"}
               }
             },
             {
