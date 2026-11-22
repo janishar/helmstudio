@@ -40,9 +40,9 @@
     },
     "CreateAudio.dc.html": {
       "expand": "fill",
-      "h": 960,
+      "h": 1660,
       "is_interactive": true,
-      "title": "Create · voices on Qwen3-TTS: voice-over and dialogue",
+      "title": "Create · voices on Qwen3-TTS: voice-over and dialogue, the prompt expanded",
       "w": 1440,
       "x": 16720,
       "y": 0

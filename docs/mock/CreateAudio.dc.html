@@ -225,7 +225,14 @@ summary{list-style:none}summary::-webkit-details-marker{display:none}
 <button class="tile"><small>Seed</small><b>12</b></button>
 </div>
 <label for="say" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%)">Text to speak</label>
-<textarea id="say" rows="2" style="width: 100%; box-sizing: border-box; resize: none; border: 0; outline: 0; background: transparent; color: var(--t1); font: inherit; font-size: 15px; line-height: 22px; padding: 2px 6px">The last train left at midnight. By morning the station was empty, and snow had covered every track.</textarea>
+<div style="position: relative">
+<textarea id="say" rows="2" maxlength="4000" placeholder="Type the words to speak" style="width: 100%; box-sizing: border-box; resize: none; border: 0; outline: 0; background: transparent; color: var(--t1); font: inherit; font-size: 15px; line-height: 22px; padding: 2px 40px 2px 6px">Alright, let's get started. Today we're building a small API from scratch, and by the end you'll understand every line of it. No magic, no blind copy-pasting. Just open your editor and follow along.
+
+First, run npm init, then install Express. Why Express? It's tiny, fast, and gets out of your way. You define a route, tell it what to send back, and that's it. Let's write our first endpoint and see it respond in the browser.
+
+And there it is, our server is live and returning real data. Next time, we'll connect a database and add proper error handling. If this helped, hit subscribe, and tell me in the comments what we should build next.</textarea>
+<button aria-label="Expand" title="Expand" aria-haspopup="dialog" style="position: absolute; top: 0; right: 0; width: 28px; height: 28px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 8px; background: var(--s3); color: var(--t2)"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"></path></svg></button>
+</div>
 </sc-if>
 
 <sc-if value="{{dialogue}}" hint-placeholder-val="{{ false }}">
@@ -325,6 +332,26 @@ summary{list-style:none}summary::-webkit-details-marker{display:none}
 </div>
 </sc-if>
 </aside>
+
+<section aria-label="The prompt, expanded" style="flex: 1 1 100%; position: relative; min-height: 700px; border-top: 1px solid var(--s3)">
+<span style="position: absolute; left: 40px; top: 28px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--t2)">Expand (top-right of the prompt, shown when the text overflows or on focus) opens the same text in a dialog; edits go straight back to the prompt</span>
+<div aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; bottom: 0; background: color-mix(in srgb, var(--g) 70%, transparent)"></div>
+<section role="dialog" aria-label="Words to speak" style="position: absolute; left: 50%; top: 72px; transform: translateX(-50%); width: 880px; box-sizing: border-box; padding: 18px 20px; border-radius: 16px; background: var(--s2); border: 1px solid var(--s5); display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 8px"><h2 style="margin: 0; font-size: 15px; font-weight: 600">Words to speak</h2><button aria-label="Close" style="width: 28px; height: 28px; flex: 0 0 auto; display: grid; place-items: center; padding: 0; border: 0; border-radius: 8px; background: transparent; box-shadow: none"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button></div>
+<label for="say-x" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%)">Words to speak</label>
+<textarea id="say-x" maxlength="4000" placeholder="Type the words to speak" style="width: 100%; height: 420px; box-sizing: border-box; resize: none; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--a1); outline: 0; background: var(--s1); color: var(--t1); font: inherit; font-size: 15px; line-height: 24px">Alright, let's get started. Today we're building a small API from scratch, and by the end you'll understand every line of it. No magic, no blind copy-pasting. Just open your editor and follow along.
+
+First, run npm init, then install Express. Why Express? It's tiny, fast, and gets out of your way. You define a route, tell it what to send back, and that's it. Let's write our first endpoint and see it respond in the browser.
+
+And there it is, our server is live and returning real data. Next time, we'll connect a database and add proper error handling. If this helped, hit subscribe, and tell me in the comments what we should build next.</textarea>
+<div style="display: flex; align-items: center; gap: 8px">
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--t2)">641 / 4000</span>
+<span style="font-size: 12px; color: var(--t2)">· @ adds an element · Esc closes</span>
+<span style="flex-grow: 1"></span>
+<button style="height: 36px; padding: 0 16px; border-radius: 10px; border: 0; background: var(--a1); color: var(--on1); font-size: 13px; font-weight: 600">Done</button>
+</div>
+</section>
+</section>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"mode":{"editor":"enum","default":"voice","options":["voice","dialogue"]},"$preview":{"width":1440,"height":960}}'>
