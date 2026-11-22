@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/evt.pipeline.named.schema.json",
+  "title": "pipelines → studio's projector: a title for an untitled session",
+  "description": "From API 1.43 (contracts/README.md, Sessions: titles and naming). Subject `evt.pipeline.<session_id>.named` (stream EVT, studio's durable studio-pipelines), Nats-Msg-Id `name:<session_id>`, job_id = the session id, owner_id = cmd.pipeline.name's. The title is model text, checked by pipelines (2-5 words, at most 60 characters, one line, no quotes or markup) and again by studio, which applies it only to that owner's session while its title_source is default or prompt (a user's rename always wins), then appends a `session` event to the session's log.",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "evt.pipeline.named"
+    },
+    "version": {
+      "const": 1
+    },
+    "job_id": {
+      "$ref": "defs.schema.json#/$defs/uuid",
+      "description": "the session id"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "session_id",
+        "run_id",
+        "title",
+        "named_by"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "session_id": {
+          "$ref": "defs.schema.json#/$defs/uuid"
+        },
+        "run_id": {
+          "$ref": "defs.schema.json#/$defs/uuid",
+          "description": "cmd.pipeline.name's run_id"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60,
+          "pattern": "^[^\\n\\r\"`<>*_#\\[\\]]+$"
+        },
+        "named_by": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        }
+      }
+    }
+  }
+}

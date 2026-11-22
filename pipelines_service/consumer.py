@@ -1,9 +1,10 @@
-"""cmd.pipeline.{submit,resume,pause,stop,retry,pick,chat} from CMD (durable `pipelines`, one at a time, in order).
+"""cmd.pipeline.{submit,resume,pause,stop,retry,pick,chat,name} from CMD (durable `pipelines`, one at a time, in order).
 
 One `handle(msg)` per delivery: off-contract → copied to dlq.<subject> and termed; already handled (inbox, by
 Nats-Msg-Id) → acked; else the engine's handler, the inbox row, ack. Every handler is idempotent too, so a
 redelivery after the handler but before the inbox row is harmless. Any error naks with a delay (redelivered, with
-no limit: a command is never dropped, however long Postgres or JetStream is down)."""
+no limit: a command is never dropped, however long Postgres or JetStream is down). cmd.pipeline.name (API 1.43) only
+starts a names.py job: the consumer never waits on a model."""
 
 import json
 import logging
@@ -13,15 +14,16 @@ from messaging import schemas
 log = logging.getLogger(__name__)
 
 TYPES = {
-    f"cmd.pipeline.{k}" for k in ("submit", "resume", "pause", "stop", "retry", "pick", "chat")
+    f"cmd.pipeline.{k}"
+    for k in ("submit", "resume", "pause", "stop", "retry", "pick", "chat", "name")
 }
 ACK_WAIT = 60  # seconds
 RETRY_DELAY = 5  # seconds before a failed delivery comes back
 
 
 class Commands:
-    def __init__(self, engine, pool, js) -> None:
-        self.engine, self.pool, self.js = engine, pool, js
+    def __init__(self, engine, pool, js, names=None) -> None:
+        self.engine, self.pool, self.js, self.names = engine, pool, js, names
 
     async def handle(self, msg) -> None:
         try:
@@ -51,6 +53,10 @@ class Commands:
 
     async def dispatch(self, cmd: dict) -> None:
         d, kind = cmd["data"], cmd["type"].rsplit(".", 1)[1]
+        if kind == "name":
+            log.info("%s %s", cmd["type"], d["session_id"])
+            self.names.take(cmd)
+            return
         log.info("%s %s", cmd["type"], d["batch_id"])
         if kind == "submit":
             await self.engine.submit(cmd)

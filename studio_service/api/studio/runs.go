@@ -193,7 +193,7 @@ func (s *Service) GetRun(ctx context.Context, caller common.Caller, runID string
 	}
 	var out dto.Run
 	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
-		run, err := one[model.Run](ctx, tx, `SELECT `+model.RunCols+` FROM runs WHERE id = $1`, runID)
+		run, err := one[model.Run](ctx, tx, `SELECT `+model.RunCols+` FROM runs WHERE id = $1 AND deleted_at IS NULL`, runID)
 		if err != nil {
 			return err
 		}
@@ -206,7 +206,7 @@ func (s *Service) GetRun(ctx context.Context, caller common.Caller, runID string
 	return out, err
 }
 
-// ListRuns returns the session's newest 100 runs.
+// ListRuns returns the session's newest 100 runs: never a deleted one or its hidden naming run (API 1.43).
 func (s *Service) ListRuns(ctx context.Context, caller common.Caller, sessionID string) (dto.RunList, error) {
 	if !utility.IsUUID(sessionID) {
 		return dto.RunList{}, errNotFound
@@ -217,7 +217,7 @@ func (s *Service) ListRuns(ctx context.Context, caller common.Caller, sessionID 
 			return err
 		}
 		runs, err := collect[model.Run](ctx, tx, `SELECT `+model.RunCols+` FROM runs WHERE session_id = $1
-			ORDER BY created_at DESC, id LIMIT 100`, sessionID)
+			AND deleted_at IS NULL AND purpose IS NULL ORDER BY created_at DESC, id LIMIT 100`, sessionID)
 		if err != nil {
 			return err
 		}
@@ -257,7 +257,7 @@ func (s *Service) CancelRun(ctx context.Context, caller common.Caller, runID str
 	}
 	var out dto.Run
 	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
-		run, err := one[model.Run](ctx, tx, `SELECT `+model.RunCols+` FROM runs WHERE id = $1 FOR UPDATE`, runID)
+		run, err := one[model.Run](ctx, tx, `SELECT `+model.RunCols+` FROM runs WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, runID)
 		if err != nil {
 			return err
 		}
@@ -274,6 +274,28 @@ func (s *Service) CancelRun(ctx context.Context, caller common.Caller, runID str
 		err = s.placeQueued(ctx, &out)
 	}
 	return out, err
+}
+
+// DeleteRun is DELETE /runs/{id} (API 1.43): a finished run leaves its session (soft; its takes stay). 409 while it is
+// queued or running, or for a batch's run; 404 for an unknown, another user's, a deleted or a hidden naming run.
+func (s *Service) DeleteRun(ctx context.Context, caller common.Caller, runID string) error {
+	if !utility.IsUUID(runID) {
+		return errNotFound
+	}
+	return s.tx(ctx, caller, func(tx pgx.Tx) error {
+		run, err := one[model.Run](ctx, tx, `SELECT `+model.RunCols+` FROM runs WHERE id = $1 AND deleted_at IS NULL
+			AND purpose IS NULL FOR UPDATE`, runID)
+		switch {
+		case err != nil:
+			return err
+		case !terminal[run.Status]:
+			return network.NewConflictError("stop the run first", nil)
+		case run.BatchID != nil:
+			return network.NewConflictError("a batch's run goes with its batch", nil)
+		}
+		_, err = tx.Exec(ctx, `UPDATE runs SET deleted_at = clock_timestamp() WHERE id = $1`, runID)
+		return err
+	})
 }
 
 // cancelRun stops an open run locked in tx: never sent (not released, or its command still in the outbox) is
@@ -323,8 +345,12 @@ func statusData(status string, failure, host *string, attempt int) map[string]an
 	return map[string]any{"status": status, "error": failure, "host": host, "attempt": attempt}
 }
 
-// appendEvent adds one event of run to its session's log under the session's next seq.
+// appendEvent adds one event of run to its session's log under the session's next seq; a hidden naming run's events
+// are never in it (API 1.43).
 func appendEvent(ctx context.Context, tx pgx.Tx, run model.Run, typ string, ts time.Time, data any) error {
+	if run.Purpose != nil {
+		return nil
+	}
 	_, err := tx.Exec(ctx, `WITH next AS (UPDATE sessions SET event_seq = event_seq + 1 WHERE id = $1 RETURNING event_seq)
 		INSERT INTO run_events (session_id, seq, owner_id, run_id, type, ts, data)
 		SELECT $1, event_seq, $2, $3, $4, $5, $6 FROM next`, run.SessionID, run.OwnerID, run.ID, typ, ts.UTC(), data)
@@ -342,7 +368,7 @@ func (s *Service) runDTO(run model.Run, outputs []model.Output) dto.Run {
 	out := dto.Run{ID: run.ID, SessionID: run.SessionID, WorkflowID: run.WorkflowID, Inputs: map[string]any{},
 		Status: run.Status, Error: run.Error, Outputs: []dto.RunOutput{}, Host: run.Host, LostHost: run.LostHost, Lane: run.Lane,
 		Attempt: run.Attempt, CreatedAt: run.CreatedAt, StartedAt: run.StartedAt, FinishedAt: run.FinishedAt,
-		BatchID: run.BatchID, BatchRow: run.BatchRow, WorkflowVersion: run.WorkflowVersion}
+		BatchID: run.BatchID, BatchRow: run.BatchRow, WorkflowVersion: run.WorkflowVersion, Purpose: run.Purpose}
 	_ = json.Unmarshal(run.Inputs, &out.Inputs)
 	_ = json.Unmarshal(run.Resolved, &out.Resolved) // null or absent leaves it nil (omitted)
 	_ = json.Unmarshal(run.Looks, &out.Looks)

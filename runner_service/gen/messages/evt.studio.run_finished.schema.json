@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helmstudio.local/contracts/messages/evt.studio.run_finished.schema.json",
-  "title": "studio → pipelines: a batch run reached a terminal status",
-  "description": "Subject evt.studio.<session_id>.run_finished (stream EVT), Nats-Msg-Id <run_id>:finished, written to studio's outbox in the transaction that makes a run with a batch_id terminal: the projector applying the runner's status, and every status studio decides itself (cancelled, created failed for no live host, created cancelled for a stopped batch, lease lost twice). pipelines_service consumes it (durable `pipelines-runs` on EVT, filter `evt.studio.>`) and resumes the waiting thread with it whatever the outcome; one that finds no thread waiting on this run (already resumed from a studio.runs.create reply) is acked and dropped.",
+  "title": "studio → pipelines: a batch run (or a session's naming run) reached a terminal status",
+  "description": "Subject evt.studio.<session_id>.run_finished (stream EVT), Nats-Msg-Id <run_id>:finished, written to studio's outbox in the transaction that makes a run with a batch_id terminal: the projector applying the runner's status, and every status studio decides itself (cancelled, created failed for no live host, created cancelled for a stopped batch, lease lost twice). pipelines_service consumes it (durable `pipelines-runs` on EVT, filter `evt.studio.>`) and resumes the waiting thread with it whatever the outcome; one that finds no thread waiting on this run (already resumed from a studio.runs.create reply) is acked and dropped. From API 1.43 also for a session's hidden naming run (purpose name): batch_id and row null, idempotency_key `name:<session_id>` (pipelines' names.py takes it).",
   "allOf": [
     {
       "$ref": "envelope.schema.json"
@@ -35,7 +35,15 @@
           "description": "= envelope job_id"
         },
         "batch_id": {
-          "$ref": "defs.schema.json#/$defs/uuid"
+          "oneOf": [
+            {
+              "$ref": "defs.schema.json#/$defs/uuid"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "null only for a naming run (API 1.43)"
         },
         "row": {
           "oneOf": [
@@ -44,13 +52,24 @@
             },
             {
               "const": 0
+            },
+            {
+              "type": "null"
             }
           ],
-          "description": "the row; from API 1.15 0 = the director's chat thread (its turns' ask runs)"
+          "description": "the row; from API 1.15 0 = the director's chat thread (its turns' ask runs); null only for a naming run (API 1.43)"
         },
         "idempotency_key": {
-          "$ref": "defs.schema.json#/$defs/idempotencyKey",
-          "description": "the key the run was created under: names the thread (batch:row), row attempt, node, loop and branch"
+          "oneOf": [
+            {
+              "$ref": "defs.schema.json#/$defs/idempotencyKey"
+            },
+            {
+              "type": "string",
+              "pattern": "^name:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            }
+          ],
+          "description": "the key the run was created under: names the thread (batch:row), row attempt, node, loop and branch; `name:<session_id>` for a naming run"
         },
         "status": {
           "$ref": "defs.schema.json#/$defs/terminalRunStatus"
@@ -71,24 +90,62 @@
           "description": "from API 1.14: the run's answer (a text workflow), as evt.run.status carried it; absent otherwise"
         }
       },
-      "if": {
-        "properties": {
-          "status": {
-            "const": "failed"
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "failed"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "error"
+            ],
+            "properties": {
+              "error": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "batch_id": {
+                "type": "null"
+              }
+            },
+            "required": [
+              "batch_id"
+            ]
+          },
+          "then": {
+            "properties": {
+              "row": {
+                "type": "null"
+              },
+              "idempotency_key": {
+                "pattern": "^name:"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "row": {
+                "type": "integer"
+              },
+              "idempotency_key": {
+                "not": {
+                  "pattern": "^name:"
+                }
+              }
+            }
           }
         }
-      },
-      "then": {
-        "required": [
-          "error"
-        ],
-        "properties": {
-          "error": {
-            "type": "string",
-            "minLength": 1
-          }
-        }
-      }
+      ]
     }
   }
 }

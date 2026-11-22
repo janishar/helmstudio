@@ -165,6 +165,7 @@ func Run() error {
 	events := &micro.NatsJetStreamGroup{}
 	projector := studio.NewProjector(pool)
 	projector.Workflows = runners // names a take's workflow and model
+	projector.RemoteOn = env.RemoteModels
 	projector.MountNatsJetStream(events)
 	workers.Go(func() { micro.NatsJetStreamConsume(ctx, client, messaging.ProjectorConsumer, events) })
 	pipelineEvents := &micro.NatsJetStreamGroup{}

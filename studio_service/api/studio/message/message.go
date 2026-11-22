@@ -236,11 +236,12 @@ func (Pick) Type() string { return "cmd.pipeline.pick" }
 // Subject is the type.
 func (Pick) Subject() string { return "cmd.pipeline.pick" }
 
-// RunFinished is evt.studio.run_finished's data: a batch run reached a terminal status.
+// RunFinished is evt.studio.run_finished's data: a batch run (API 1.43: or a session's naming run, BatchID and Row
+// nil) reached a terminal status.
 type RunFinished struct {
 	RunID          string          `json:"run_id"`
-	BatchID        string          `json:"batch_id"`
-	Row            int             `json:"row"`
+	BatchID        *string         `json:"batch_id"`
+	Row            *int            `json:"row"`
 	IdempotencyKey string          `json:"idempotency_key"`
 	Status         string          `json:"status"`
 	TakeIDs        []string        `json:"take_ids"`
@@ -345,6 +346,7 @@ type RunsCreate struct {
 	BatchID        string         `json:"batch_id"`
 	Row            int            `json:"row"`
 	IdempotencyKey string         `json:"idempotency_key"`
+	Purpose        string         `json:"purpose"` // API 1.43: name = a session's hidden naming run (no batch)
 }
 
 // RunsCreated is studio.runs.create's reply for a run, new or already made under the key.
@@ -587,4 +589,35 @@ type JudgeTestReply struct {
 	Takes       []JudgeTestTake `json:"takes"`
 	Error       string          `json:"error"`
 	Code        string          `json:"code"`
+}
+
+// Name is cmd.pipeline.name's data (API 1.43): name an untitled session from its first succeeded run's prompt.
+type Name struct {
+	SessionID string        `json:"session_id"`
+	RunID     string        `json:"run_id"`
+	Prompt    string        `json:"prompt"`
+	Mode      string        `json:"mode"` // local | remote
+	NamedBy   string        `json:"named_by"`
+	Provider  *NameProvider `json:"provider,omitempty"` // remote only
+}
+
+// NameProvider is the provider a remote name is asked of, as it is now.
+type NameProvider struct {
+	Name     string         `json:"name"`
+	Model    string         `json:"model"`
+	Snapshot map[string]any `json:"snapshot"`
+}
+
+// Type is the envelope type.
+func (Name) Type() string { return "cmd.pipeline.name" }
+
+// Subject is the type.
+func (Name) Subject() string { return "cmd.pipeline.name" }
+
+// Named is evt.pipeline.named's data: a title for the session (API 1.43).
+type Named struct {
+	SessionID string `json:"session_id"`
+	RunID     string `json:"run_id"`
+	Title     string `json:"title"`
+	NamedBy   string `json:"named_by"`
 }

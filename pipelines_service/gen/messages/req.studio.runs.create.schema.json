@@ -2,9 +2,19 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helmstudio.local/contracts/messages/req.studio.runs.create.schema.json",
   "title": "NATS request/reply studio.runs.create (pipelines → studio)",
-  "description": "Core NATS request/reply on subject `studio.runs.create` (queue group `studio`), bare JSON like auth.validate.*. Creates a batch-lane run for one step of one row, idempotent on idempotency_key: asking again returns the same run (`created: false`) with its current status, so a caller that lost the reply, or restarted, just asks again. Studio takes the owner, session, lane and graph from the batch record (its snapshot), never from the request: owner_id, session_id and workflow_id must match the batch or the reply is `not_found`. The inputs are resolved and checked like RunRequest.inputs against the snapshot graph. No live host: the run is created `failed` (as in Create); a stopped batch: created `cancelled`; a paused batch: created `queued` and held. A timeout (5 s) or `internal` is retried by the caller with backoff under the same key. From API 1.14 the same request makes the ask run of a judge, write or decide node: workflow_id = the node's resolved ask workflow (one of snapshot.pipeline.workflows), inputs = `ask.*` values only (the template filled by pipelines, `ask.media` as `{take: {take_id}}` rows of image or video takes the owner has; a family ask also `model.precision` = the judged step's), idempotency key node = the judge/write/decide node id, loop = visit from 0, branch 0 (1 for the re-ask). From API 1.15: an Agent turn is one such ask run (key branch `t<turn>`, `t<turn>r` for its re-ask), the director's chat turns use row 0; a node whose model is a local server asks for workflow `server-ask` (a built-in text workflow: inputs `ask.*` incl. `ask.provider`, `ask.model`, `ask.tools`), which the dispatcher releases on the provider's host to pipelines_service's server executor (contracts/README.md, Model sources).",
+  "description": "Core NATS request/reply on subject `studio.runs.create` (queue group `studio`), bare JSON like auth.validate.*. Creates a batch-lane run for one step of one row, idempotent on idempotency_key: asking again returns the same run (`created: false`) with its current status, so a caller that lost the reply, or restarted, just asks again. Studio takes the owner, session, lane and graph from the batch record (its snapshot), never from the request: owner_id, session_id and workflow_id must match the batch or the reply is `not_found`. The inputs are resolved and checked like RunRequest.inputs against the snapshot graph. No live host: the run is created `failed` (as in Create); a stopped batch: created `cancelled`; a paused batch: created `queued` and held. A timeout (5 s) or `internal` is retried by the caller with backoff under the same key. From API 1.14 the same request makes the ask run of a judge, write or decide node: workflow_id = the node's resolved ask workflow (one of snapshot.pipeline.workflows), inputs = `ask.*` values only (the template filled by pipelines, `ask.media` as `{take: {take_id}}` rows of image or video takes the owner has; a family ask also `model.precision` = the judged step's), idempotency key node = the judge/write/decide node id, loop = visit from 0, branch 0 (1 for the re-ask). From API 1.15: an Agent turn is one such ask run (key branch `t<turn>`, `t<turn>r` for its re-ask), the director's chat turns use row 0; a node whose model is a local server asks for workflow `server-ask` (a built-in text workflow: inputs `ask.*` incl. `ask.provider`, `ask.model`, `ask.tools`), which the dispatcher releases on the provider's host to pipelines_service's server executor (contracts/README.md, Model sources). From API 1.43: `purpose: name` (no batch_id or row) makes a session's hidden naming run (contracts/README.md, Sessions: titles and naming): workflow `llm-ask`, inputs `ask.system`, `ask.prompt`, `ask.schema`, `ask.max_tokens` only, idempotency key `name:<session_id>`; owner and session must match the session row (else `not_found`). It runs in the batch lane, is left out of the session's runs, events and the gallery, and finishes with evt.studio.run_finished (batch_id null).",
   "$defs": {
     "request": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/batchRequest"
+        },
+        {
+          "$ref": "#/$defs/nameRequest"
+        }
+      ]
+    },
+    "batchRequest": {
       "type": "object",
       "required": [
         "owner_id",
@@ -50,6 +60,57 @@
         },
         "idempotency_key": {
           "$ref": "defs.schema.json#/$defs/idempotencyKey"
+        }
+      },
+      "not": {
+        "required": [
+          "purpose"
+        ]
+      }
+    },
+    "nameRequest": {
+      "type": "object",
+      "required": [
+        "owner_id",
+        "session_id",
+        "workflow_id",
+        "inputs",
+        "lane",
+        "purpose",
+        "idempotency_key"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "owner_id": {
+          "$ref": "defs.schema.json#/$defs/uuid"
+        },
+        "session_id": {
+          "$ref": "defs.schema.json#/$defs/uuid"
+        },
+        "workflow_id": {
+          "const": "llm-ask"
+        },
+        "inputs": {
+          "type": "object",
+          "propertyNames": {
+            "enum": [
+              "ask.system",
+              "ask.prompt",
+              "ask.schema",
+              "ask.max_tokens"
+            ]
+          }
+        },
+        "lane": {
+          "const": "batch"
+        },
+        "purpose": {
+          "const": "name"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "pattern": "^name:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "description": "name:<session_id>"
         }
       }
     },

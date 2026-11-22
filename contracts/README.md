@@ -3516,6 +3516,59 @@ studio_service (Go: normalizes every write and restore, runs `add`, `insert`, `f
   (incoming = its opacity, outgoing = 1 − that). The old preview's bug (V1's track gain left out) is fixed here and the
   export applies the same gains. Gain above 0 dB needs Web Audio (a GainNode); `<video>.volume` stops at 1.
 
+## Deleting runs (API 1.43; plan 21 25.3; normative)
+
+- `DELETE /v1/studio/runs/{run_id}` removes a **finished** run (`failed`, `cancelled` or `succeeded`) from its
+  session: 409 `stop the run first` while `queued` or `running`, 409 `a batch's run goes with its batch` for a run
+  with a `batch_id`; 404 for an unknown, another user's, an already deleted or a hidden naming run.
+- Soft: `runs.deleted_at` is set. The run leaves `GET …/sessions/{id}/runs`, `GET /runs/{id}` is 404 and its events
+  are left out of the session's replay (seqs skip; `last_seq` still moves past them). Its takes stay (they are the
+  gallery's; `made_with` is a snapshot). The rows stay until their session is deleted; there is no sweep.
+- Create's Clear ("N failed · Clear": failed plus stopped runs) is the client calling this once per run, at most 100
+  per session; there is no bulk endpoint. No card for a run's ✕ or Clear (nothing is lost); a take and a session keep
+  theirs.
+
+## Sessions: titles and naming (API 1.43; plan 21 25.4-25.6; normative)
+
+- **Who wrote the title** (`StudioSession.title_source`): `default` ("Untitled"), `prompt` (Generate's 60-character
+  slice of the prompt, `SessionCreate.from_prompt`), `user` (a title typed at create, or any rename: `PATCH`) or
+  `model` (the namer; `named_by` holds the model's short name, null otherwise). Sessions made before 1.43: "Untitled"
+  is `default`, any other title `user`.
+- **The setting** (Admin › AI agents, `GET/PUT /v1/studio/admin/session-names`, admins only): `off` (the default),
+  `local` (the llm pack's `llm-ask`, Qwen3.8 27B on the local GPU queue: nothing leaves the machine; PUT 422 `Qwen3.8
+  27B is not downloaded` while no live host can run it) or `remote` (a provider of Admin › Model providers and one of
+  its models: kind `remote` sends the prompt out and needs the deployment's switch, 409 `remote models are off on this
+  deployment`; kind `server` is a server "on this network" and needs none). `GET /v1/studio/sessions` carries it
+  redacted as `naming` {mode, named_by, remote}, so Create can say "New sessions are named by DeepSeek from their
+  first prompt" before a prompt leaves.
+- **When.** In the transaction that makes a session's **first succeeded** Create run terminal (lane interactive, no
+  batch, not a naming run) studio writes `cmd.pipeline.name` when the setting is not off, the session's title is
+  `default` or `prompt` and the session was never asked; it marks the session asked (`name_asked`) and never asks
+  again, whatever the answer. A run without a prompt (an upload, a clone with no text) asks nothing; the next one with
+  one does. A remote provider is skipped while the switch is off, and a disabled or deleted provider skips too.
+- **What is sent**: the run's prompt only, the workflow's first unwired text param (node id, then schema order) as
+  typed, `<imageN>` tags removed, trimmed, cut to 2000 characters. Never images, references, other runs or the user's
+  name.
+- **pipelines** (`names.py`, template `name.v1`): system "a 2-5 word title", schema `{title}`, at most 24 tokens.
+  The command consumer only records the job and acks. Remote (and a server on this network) is one
+  `providers.chat_retried` call run as a task (host rule, key file, network retries only); local asks
+  `studio.runs.create` with `purpose: name` (idempotency key `name:<session_id>`) and takes the answer from
+  `evt.studio.run_finished` (batch_id and row null). The answer is cleaned: the `title` of a JSON object, else the
+  text; one line, quotes, backticks and markup characters (`*_#[]<>`) dropped, spaces collapsed, then kept only when
+  it is 2-5 words and at most 60 characters. It publishes `evt.pipeline.<session_id>.named` (Nats-Msg-Id
+  `name:<session_id>`). Any failure (no host, a refused or failed call, an answer that fails the checks) leaves the
+  title and logs a line; nothing is shown. A restart may lose one name: naming is best-effort.
+- **The hidden naming run**: studio takes owner and session from the session row (the request must match them),
+  workflow `llm-ask`, inputs `ask.system`, `ask.prompt`, `ask.schema`, `ask.max_tokens` only. It runs in the batch
+  lane (behind every interactive run, outside the 100 open-run cap), `purpose` name; it is left out of the session's
+  runs, events and the gallery, is listed only by `GET /v1/studio/queue` ("Session name"), and does not block deleting
+  its session (the delete cancels it).
+- **Applying** (studio's projector, durable studio-pipelines): only to the envelope owner's session, only while its
+  `title_source` is `default` or `prompt` (a rename made while a name is on its way wins); the title is checked again
+  (1-60 characters, one line) and stored with `title_source` model and `named_by`, and a `session` event
+  (`TitleEvent` {title, title_source, named_by}, run_id = the run it was named from) goes to the session's log, kept
+  in the replay even after that run is deleted.
+
 ## Rules
 
 - **Claim check:** messages carry object keys under `u/<owner_id>/…`, never bytes or signed URLs. Producers only

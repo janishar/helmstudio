@@ -29,8 +29,10 @@ import (
 // the session's log, as System.
 type Projector struct {
 	pool *pgxpool.Pool
-	// Workflows names a take's workflow and model (made_with); nil leaves them as the run's ids.
+	// Workflows names a take's workflow and model (made_with); nil leaves them as the run's ids (and names no session).
 	Workflows *registry.Registry
+	// RemoteOn is the deployment's remote switch: a remote session namer is skipped while it is off (API 1.43).
+	RemoteOn bool
 }
 
 // NewProjector returns the projector writing through pool.
@@ -40,7 +42,7 @@ func NewProjector(pool *pgxpool.Pool) *Projector {
 
 // MountNatsJetStream registers one handler per evt.run.* kind.
 func (p *Projector) MountNatsJetStream(group *micro.NatsJetStreamGroup) {
-	group.AddHandler("evt.run.*.*.status", handler(p, "status", applyStatus))
+	group.AddHandler("evt.run.*.*.status", handler(p, "status", p.applyStatusNamed))
 	group.AddHandler("evt.run.*.*.progress", handler(p, "progress", applyProgress))
 	group.AddHandler("evt.run.*.*.output", handler(p, "output", p.applyOutput))
 }

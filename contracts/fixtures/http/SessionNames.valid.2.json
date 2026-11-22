@@ -1,0 +1,8 @@
+{
+  "mode": "remote",
+  "provider": "deepseek",
+  "model": "deepseek-chat",
+  "local_available": true,
+  "remote_enabled": true,
+  "updated_at": "2026-11-22T10:00:00Z"
+}

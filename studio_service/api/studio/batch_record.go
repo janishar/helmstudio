@@ -19,7 +19,7 @@ func runEnded(ctx context.Context, tx pgx.Tx, run model.Run) error {
 	if err := shotEnded(ctx, tx, run); err != nil { // API 1.17: a cancelled New shot leaves its slot
 		return err
 	}
-	if run.BatchID == nil || run.BatchRow == nil || run.Key == nil {
+	if run.Key == nil || (run.Purpose == nil && (run.BatchID == nil || run.BatchRow == nil)) {
 		return nil
 	}
 	rows, _ := tx.Query(ctx, `SELECT take_id::text FROM run_outputs WHERE run_id = $1 AND take_id IS NOT NULL ORDER BY idx`, run.ID)
@@ -35,7 +35,7 @@ func runEnded(ctx context.Context, tx pgx.Tx, run model.Run) error {
 		failure = nil
 	}
 	err = messaging.Enqueue(ctx, tx, messaging.Command{JobID: run.ID, OwnerID: run.OwnerID, MsgID: run.ID + ":finished",
-		Data: message.RunFinished{RunID: run.ID, BatchID: *run.BatchID, Row: *run.BatchRow, IdempotencyKey: *run.Key,
+		Data: message.RunFinished{RunID: run.ID, BatchID: run.BatchID, Row: run.BatchRow, IdempotencyKey: *run.Key,
 			Status: run.Status, TakeIDs: takeIDs, Error: failure, Answer: answerOf(run), SessionID: run.SessionID}})
 	if err != nil {
 		return err

@@ -9,7 +9,7 @@ continue from their checkpoints on the next start (after the user's Resume).
 Stage B: publishes the custom nodes (registry `pipelines.engine.custom`), answers pipelines.providers.test, sends
 queued remote calls (remote.py; only with PIPELINES_REMOTE_MODELS on and a pipeline that enables them) and is the
 `server` env runner of each host in PIPELINES_SERVER_HOSTS (server.py). Agent tools reach studio by studio.tools.
-API 1.28: answers pipelines.judge.test (judge_test.py)."""
+API 1.28: answers pipelines.judge.test (judge_test.py). API 1.43: names untitled sessions (names.py)."""
 
 import asyncio
 import contextlib
@@ -43,6 +43,7 @@ import events
 import health
 import judge_test
 import memory
+import names
 import providers
 import server as server_env
 import states
@@ -159,6 +160,7 @@ async def main() -> None:
             max_deliver=-1,  # redelivered until handled (every handler is idempotent)
         )
         runs = await durable(js, "EVT", "pipelines-runs", "evt.studio.>", events.ACK_WAIT, 64)
+        namer = names.Names(js, studio.create_run)  # API 1.43: session names
         server = await health.serve(nc, pool)
         state_sub = await states.serve(nc, engine)
         memory_sub = await memory.serve(nc, store)
@@ -173,8 +175,8 @@ async def main() -> None:
             loop.add_signal_handler(sig, stop.set)
         log.info("pipelines_service ready")
         await asyncio.gather(
-            pull(cmds, consumer.Commands(engine, pool, js).handle, stop, 1),
-            pull(runs, events.RunEvents(engine).handle, stop, 16),
+            pull(cmds, consumer.Commands(engine, pool, js, namer).handle, stop, 1),
+            pull(runs, events.RunEvents(engine, namer).handle, stop, 16),
             engine.remote.run(stop),
             *[pull(sub, x.handle, stop, 1) for x, sub in zip(executors, server_subs)],
             *[x.beat(stop) for x in executors],

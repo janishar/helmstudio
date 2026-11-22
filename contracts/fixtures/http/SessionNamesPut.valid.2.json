@@ -1,0 +1,5 @@
+{
+  "mode": "remote",
+  "provider": "deepseek",
+  "model": "deepseek-chat"
+}

@@ -12,10 +12,13 @@ type Session struct {
 	Title     string
 	CreatedAt time.Time
 	UpdatedAt time.Time
+	// API 1.43: who wrote the title (default | prompt | user | model) and the model that named it
+	TitleSource string
+	NamedBy     *string
 }
 
 // SessionCols are the columns Session scans, in order.
-const SessionCols = `id::text, title, created_at, updated_at`
+const SessionCols = `id::text, title, created_at, updated_at, title_source, named_by`
 
 // Run is a runs row.
 type Run struct {
@@ -52,13 +55,14 @@ type Run struct {
 	PinHost         *string         // a server-ask run: the only host it may go to (its provider's; API 1.15)
 	LostHost        *string         // attempt 1's host after it stopped responding (API 1.18); nil otherwise
 	MediaAt         json.RawMessage // API 1.19: the largest media facts {mp, frames} its memory plan counts; null: none
+	Purpose         *string         // API 1.43: name = a session's hidden naming run; nil otherwise
 }
 
 // RunCols are the columns Run scans, in order.
 const RunCols = `id::text, owner_id::text, session_id::text, workflow_id, env, inputs, status, progress, error, host,
 	cancel_requested_at IS NOT NULL, created_at, started_at, finished_at, resolved, lane, attempt, nodes, released_at,
 	batch_id::text, batch_row, idempotency_key, workflow_version, workflow_title, mentions, loras, looks, answer, thumbs, pin_host,
-	lost_host, media_at`
+	lost_host, media_at, purpose`
 
 // Output is a run_outputs row.
 type Output struct {

@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/cmd.pipeline.name.schema.json",
+  "title": "studio → pipelines: name an untitled session from its first prompt",
+  "description": "From API 1.43 (contracts/README.md, Sessions: titles and naming). Written by studio's outbox in the transaction that makes a session's first succeeded run terminal, once per session, while the session's title is nobody's (title_source default or prompt) and the admin's session-names setting is not off; subject `cmd.pipeline.name` (stream CMD), Nats-Msg-Id `name:<session_id>`, job_id = the session id. pipelines only records the job and acks (the in-order consumer never waits on a model): remote calls the provider snapshot through providers.chat_retried as a task; local asks studio.runs.create for the hidden `llm-ask` run (purpose name) and takes its answer from evt.studio.run_finished. Either way it publishes evt.pipeline.named, or nothing (best-effort: any failure leaves the title, a log line only).",
+  "allOf": [
+    {
+      "$ref": "envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "cmd.pipeline.name"
+    },
+    "version": {
+      "const": 1
+    },
+    "job_id": {
+      "$ref": "defs.schema.json#/$defs/uuid",
+      "description": "the session id"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "session_id",
+        "run_id",
+        "prompt",
+        "mode",
+        "named_by"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "session_id": {
+          "$ref": "defs.schema.json#/$defs/uuid"
+        },
+        "run_id": {
+          "$ref": "defs.schema.json#/$defs/uuid",
+          "description": "the succeeded run whose prompt is named"
+        },
+        "prompt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "description": "the run's prompt only (its workflow's first text param as typed), <imageN> tags removed, cut to 2000 characters; never images, references or the user's name"
+        },
+        "mode": {
+          "enum": [
+            "local",
+            "remote"
+          ]
+        },
+        "named_by": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60,
+          "description": "the model's short name shown as `named by <named_by>` (`Qwen3.8`, a provider's title)"
+        },
+        "provider": {
+          "type": "object",
+          "required": [
+            "name",
+            "model",
+            "snapshot"
+          ],
+          "additionalProperties": false,
+          "description": "remote only: the provider as it was when the command was written (kind remote, or server: on this network)",
+          "properties": {
+            "name": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]{0,31}$"
+            },
+            "model": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$"
+            },
+            "snapshot": {
+              "$ref": "defs.schema.json#/$defs/providerSnapshot"
+            }
+          }
+        }
+      },
+      "if": {
+        "properties": {
+          "mode": {
+            "const": "remote"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "provider"
+        ]
+      },
+      "else": {
+        "not": {
+          "required": [
+            "provider"
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.41.0
+  version: 1.43.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -39,6 +39,7 @@ paths:
       tags: [studio]
       operationId: studioListSessions
       summary: The caller's sessions, newest first (at most 100, not paginated)
+      description: 'From 1.43 `naming` says how new sessions get their title (contracts/README.md, Sessions: titles and naming), so Create can say so before a prompt leaves the machine.'
       responses:
         '200': {description: sessions, content: {application/json: {schema: {$ref: '#/components/schemas/SessionList'}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -69,6 +70,7 @@ paths:
     patch:
       tags: [studio]
       operationId: studioRenameSession
+      description: 'From 1.43 a rename makes the title the user''s (`title_source` user, `named_by` null): the namer never replaces it.'
       parameters: [{$ref: '#/components/parameters/SessionId'}]
       requestBody:
         required: true
@@ -85,7 +87,7 @@ paths:
       summary: Delete a session with its runs and events
       description: |
         409 while one of its runs is queued or running (cancel it first), or while a batch in it is queued, running or
-        paused (stop it first). Its takes stay in the gallery with `session_id` and `run_id` set to null (`made_with`
+        paused (stop it first). From 1.43 its hidden naming run (`purpose` name) does not count: the delete cancels it. Its takes stay in the gallery with `session_id` and `run_id` set to null (`made_with`
         is a snapshot); its finished batches stay with `session_id` and their rows' `run_id` set to null.
       parameters: [{$ref: '#/components/parameters/SessionId'}]
       responses:
@@ -878,6 +880,23 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
         '503': {$ref: '#/components/responses/Unavailable'}
+    delete:
+      tags: [studio]
+      operationId: studioDeleteRun
+      summary: Delete a finished run from its session
+      description: |
+        From 1.43 (contracts/README.md, Deleting runs). Soft: the run leaves `GET …/sessions/{id}/runs`, `GET` on it is
+        404 and its events leave the session's replay; its takes stay in the gallery. Allowed when `failed`,
+        `cancelled` or `succeeded`; 409 `stop the run first` while `queued` or `running`, 409 `a batch's run goes with
+        its batch` for a run with a `batch_id`. 404 for an unknown, another user's, an already deleted or a hidden
+        (`purpose` name) run.
+      parameters: [{$ref: '#/components/parameters/RunId'}]
+      responses:
+        '204': {description: deleted}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/Unavailable'}
 
   /v1/studio/runs/{run_id}/cancel:
     post:
@@ -906,7 +925,8 @@ paths:
       summary: The caller's queued and running runs across sessions, and per host how many runs of others wait
       description: |
         `runs`: the caller's own runs that are `queued` or `running`, every session: running first, then queued by
-        host and `position`. `hosts`: one entry per host name in the KV `hosts` (its envs merged), with the number of
+        host and `position`; from 1.43 a session's hidden naming run too (`purpose` name, the only place one is listed).
+        `hosts`: one entry per host name in the KV `hosts` (its envs merged), with the number of
         other users' queued runs lined up for it, never whose or which (plan 17.3).
       responses:
         '200': {description: the queue, content: {application/json: {schema: {$ref: '#/components/schemas/Queue'}}}}
@@ -1759,6 +1779,38 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/AdminRequired'}
         '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/admin/session-names:
+    get:
+      tags: [studio]
+      operationId: studioAdminGetSessionNames
+      summary: How untitled sessions are named (Admin › AI agents)
+      description: 'From 1.43. Admin only (403). contracts/README.md, Sessions: titles and naming.'
+      responses:
+        '200': {description: the setting, content: {application/json: {schema: {$ref: '#/components/schemas/SessionNames'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/AdminRequired'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    put:
+      tags: [studio]
+      operationId: studioAdminPutSessionNames
+      summary: Set how untitled sessions are named
+      description: |
+        From 1.43. Admin only (403). Applies to sessions named from then on. 422 `<provider> is not an enabled provider`,
+        `<model> is not a model of <provider>`, `provider and model are only for remote`, `remote needs a provider`,
+        `Qwen3.8 27B is not downloaded` (local with no live host that can run `llm-ask`); 409 `remote models are off on
+        this deployment` for a provider of kind remote while the deployment's switch is off (a server, "on this
+        network", needs no switch).
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/SessionNamesPut'}}}
+      responses:
+        '200': {description: the setting, content: {application/json: {schema: {$ref: '#/components/schemas/SessionNames'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/AdminRequired'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
         '503': {$ref: '#/components/responses/Unavailable'}
 
   # ------------------------------------------------------------------ studio: models and model jobs (API 1.16, contracts/README.md, Models and model jobs)
@@ -2794,17 +2846,34 @@ components:
       properties:
         id: {type: string, format: uuid}
         title: {type: string, minLength: 1, maxLength: 200}
+        title_source: {$ref: '#/components/schemas/TitleSource'}
+        named_by: {type: [string, 'null'], maxLength: 60, description: 'from 1.43: the model that wrote the title (`Qwen3.8`, `DeepSeek`) while `title_source` is model; null otherwise'}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time, description: 'last rename or run'}
+    TitleSource:
+      type: string
+      enum: [default, prompt, user, model]
+      description: 'from 1.43, who wrote the title: default ("Untitled"), prompt (Generate''s slice of the prompt, `from_prompt`), user (typed or renamed), model (the namer). The namer replaces only default and prompt, once per session'
     SessionList:
       type: object
       required: [sessions]
-      properties: {sessions: {type: array, items: {$ref: '#/components/schemas/StudioSession'}}}
+      properties:
+        sessions: {type: array, items: {$ref: '#/components/schemas/StudioSession'}}
+        naming:
+          type: object
+          required: [mode, named_by, remote]
+          additionalProperties: false
+          description: 'from 1.43: how an untitled session is named after its first run succeeds (the admin''s setting, redacted)'
+          properties:
+            mode: {type: string, enum: ['off', local, remote]}
+            named_by: {type: [string, 'null'], maxLength: 60, description: 'local: Qwen3.8; remote: the provider''s title; null when off'}
+            remote: {type: boolean, description: 'the prompt leaves this machine (a provider of kind remote)'}
     SessionCreate:
       type: object
       additionalProperties: false
       properties:
         title: {type: string, maxLength: 200, description: 'trimmed; empty or missing = "Untitled"'}
+        from_prompt: {type: boolean, description: 'from 1.43: the title is a slice of the prompt Generate is about to send (`title_source` prompt, so the namer may replace it); default false (user)'}
     SessionPatch:
       type: object
       required: [title]
@@ -3795,6 +3864,7 @@ components:
         workflow_version: {type: [integer, 'null'], minimum: 1, description: 'a user workflow: the version it ran (its graph is the run''s snapshot); absent or null for a template'}
         looks: {$ref: '#/components/schemas/LookIds', description: 'the looks it was asked with (RunRequest.looks; a batch run: its row''s or step''s), as requested; absent or empty = none'}
         answer: {$ref: '#/components/schemas/RunAnswer'}
+        purpose: {type: [string, 'null'], enum: [name, null], description: 'from 1.43: name = the hidden run that names its session (local namer, lane batch); only `GET /v1/studio/queue` lists one. Absent or null otherwise'}
         unloads_pinned:
           type: array
           minItems: 1
@@ -3865,12 +3935,14 @@ components:
         - {$ref: '#/components/schemas/StatusEvent'}
         - {$ref: '#/components/schemas/ProgressEvent'}
         - {$ref: '#/components/schemas/OutputEvent'}
+        - {$ref: '#/components/schemas/TitleEvent'}
       discriminator:
         propertyName: type
         mapping:
           status: '#/components/schemas/StatusEvent'
           progress: '#/components/schemas/ProgressEvent'
           output: '#/components/schemas/OutputEvent'
+          session: '#/components/schemas/TitleEvent'
     StatusEvent:
       type: object
       required: [seq, type, run_id, ts, data]
@@ -3906,6 +3978,22 @@ components:
         run_id: {type: string, format: uuid}
         ts: {type: string, format: date-time}
         data: {$ref: '#/components/schemas/RunOutput'}
+    TitleEvent:
+      type: object
+      required: [seq, type, run_id, ts, data]
+      description: 'from 1.43: the namer gave the session its title; `run_id` is the run whose prompt it was named from'
+      properties:
+        seq: {type: integer, minimum: 1}
+        type: {type: string, const: session}
+        run_id: {type: string, format: uuid}
+        ts: {type: string, format: date-time}
+        data:
+          type: object
+          required: [title, title_source, named_by]
+          properties:
+            title: {type: string, minLength: 1, maxLength: 200}
+            title_source: {$ref: '#/components/schemas/TitleSource'}
+            named_by: {type: [string, 'null'], maxLength: 60}
     EventPage:
       type: object
       required: [events, last_seq]
@@ -5372,6 +5460,25 @@ components:
         error: {type: [string, 'null']}
         failure: {type: [string, 'null'], enum: [network, answer, refused, 'off', null], description: 'network: unreachable, TLS, timeout, 5xx, 429; answer: a 4xx (401: the key) or not OpenAI-shaped; refused: the host rule; off: remote models are off'}
         seconds: {type: number, minimum: 0}
+    SessionNames:
+      type: object
+      required: [mode, provider, model, local_available, remote_enabled, updated_at]
+      description: 'from 1.43: how an untitled session is named (contracts/README.md, Sessions: titles and naming). Default off'
+      properties:
+        mode: {type: string, enum: ['off', local, remote], description: 'off; local: the llm pack (Qwen3.8 27B) on the local GPU queue, nothing leaves the machine; remote: a provider of Admin › Model providers, kind remote (sends the prompt out) or server (on this network)'}
+        provider: {type: [string, 'null'], description: 'remote: the provider''s name; null otherwise'}
+        model: {type: [string, 'null'], description: 'remote: one of its models; null otherwise'}
+        local_available: {type: boolean, description: 'a live host can run llm-ask now (else Local is greyed: "Qwen3.8 27B not downloaded")'}
+        remote_enabled: {type: boolean, description: 'the deployment''s remote switch'}
+        updated_at: {type: [string, 'null'], format: date-time, description: 'null until first set'}
+    SessionNamesPut:
+      type: object
+      required: [mode]
+      additionalProperties: false
+      properties:
+        mode: {type: string, enum: ['off', local, remote]}
+        provider: {type: string, pattern: '^[a-z][a-z0-9-]{0,31}$', description: 'remote only, required there'}
+        model: {type: string, maxLength: 128, description: 'remote only; absent = the provider''s default_model'}
     ModelSourceList:
       type: object
       required: [remote_enabled, sources]

@@ -37,8 +37,10 @@ func (s *Service) Events(ctx context.Context, caller common.Caller, sessionID st
 		} else if err != nil || last <= since {
 			return err
 		}
-		events, err := collect[model.Event](ctx, tx, `SELECT seq, type, run_id::text, ts, data FROM run_events
-			WHERE session_id = $1 AND seq > $2 ORDER BY seq LIMIT 500`, sessionID, since)
+		// API 1.43: a deleted run's events are left out (a session event stays: it is the session's)
+		events, err := collect[model.Event](ctx, tx, `SELECT seq, type, run_id::text, ts, data FROM run_events e
+			WHERE session_id = $1 AND seq > $2 AND (type = 'session' OR NOT EXISTS (SELECT 1 FROM runs r
+			WHERE r.id = e.run_id AND r.deleted_at IS NOT NULL)) ORDER BY seq LIMIT 500`, sessionID, since)
 		if err != nil {
 			return err
 		}
@@ -48,6 +50,9 @@ func (s *Service) Events(ctx context.Context, caller common.Caller, sessionID st
 			if mapped, ok := s.eventDTO(event, live); ok {
 				out.Events = append(out.Events, mapped)
 			}
+		}
+		if len(events) < 500 { // a short page read every event up to last: the cursor moves past the ones left out
+			out.LastSeq = max(out.LastSeq, last)
 		}
 		return err
 	})

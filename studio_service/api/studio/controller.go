@@ -65,6 +65,7 @@ func (c *controller) MountRoutes(group *gin.RouterGroup) {
 	group.POST("/runs/plan", c.planRunHandler)
 	group.GET("/runs/:id", c.getRunHandler)
 	group.POST("/runs/:id/cancel", c.cancelRunHandler)
+	group.DELETE("/runs/:id", c.deleteRunHandler)
 	group.GET("/hosts", c.listHostsHandler)
 	group.GET("/queue", c.queueHandler)
 	group.GET("/batches", c.listBatchesHandler)
@@ -101,6 +102,8 @@ func (c *controller) MountRoutes(group *gin.RouterGroup) {
 	group.GET("/model-sources", c.modelSourcesHandler)
 	group.GET("/custom-nodes", c.customNodesHandler)
 	group.GET("/admin/providers", c.listProvidersHandler)
+	group.GET("/admin/session-names", c.getSessionNamesHandler)
+	group.PUT("/admin/session-names", c.putSessionNamesHandler)
 	group.PUT("/admin/providers/:name", c.putProviderHandler)
 	group.DELETE("/admin/providers/:name", c.deleteProviderHandler)
 	group.POST("/admin/providers/:name/test", c.testProviderHandler)
@@ -402,6 +405,15 @@ func (c *controller) planRunHandler(ctx *gin.Context) {
 func (c *controller) getRunHandler(ctx *gin.Context) {
 	out, err := c.service.GetRun(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"))
 	reply(ctx, http.StatusOK, out, err)
+}
+
+// deleteRunHandler: DELETE /runs/{id} — 204 (API 1.43).
+func (c *controller) deleteRunHandler(ctx *gin.Context) {
+	if err := c.service.DeleteRun(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id")); err != nil {
+		network.SendMixedError(ctx, err)
+		return
+	}
+	network.SendNoContent(ctx)
 }
 
 // cancelRunHandler: POST /runs/{id}/cancel — 202 with the run as it is now.
@@ -882,6 +894,32 @@ func (c *controller) modelSourcesHandler(ctx *gin.Context) {
 // customNodesHandler: GET /custom-nodes.
 func (c *controller) customNodesHandler(ctx *gin.Context) {
 	out, err := c.service.CustomNodes()
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// getSessionNamesHandler: GET /admin/session-names (API 1.43).
+func (c *controller) getSessionNamesHandler(ctx *gin.Context) {
+	out, err := c.service.GetSessionNames(ctx.Request.Context(), common.MustCaller(ctx))
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// putSessionNamesHandler: PUT /admin/session-names — 403 before the body is read.
+func (c *controller) putSessionNamesHandler(ctx *gin.Context) {
+	caller := common.MustCaller(ctx)
+	if !caller.IsAdmin() {
+		network.SendMixedError(ctx, errAdmin)
+		return
+	}
+	body, err := strictBody[dto.SessionNamesPut](ctx, false)
+	if err == nil {
+		if detail := body.Validate(); detail != "" {
+			err = network.NewUnprocessableError(detail, nil)
+		}
+	}
+	var out dto.SessionNames
+	if err == nil {
+		out, err = c.service.PutSessionNames(ctx.Request.Context(), caller, body)
+	}
 	reply(ctx, http.StatusOK, out, err)
 }
 

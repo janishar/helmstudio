@@ -1,0 +1,17 @@
+{
+  "sessions": [
+    {
+      "id": "0b5c1f8e-7a2d-4c1e-9a4f-3d6f2b1c9e10",
+      "title": "Red fox at dusk",
+      "title_source": "model",
+      "named_by": "DeepSeek",
+      "created_at": "2026-11-22T10:00:00Z",
+      "updated_at": "2026-11-22T10:01:00Z"
+    }
+  ],
+  "naming": {
+    "mode": "remote",
+    "named_by": "DeepSeek",
+    "remote": true
+  }
+}

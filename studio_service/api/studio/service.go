@@ -92,15 +92,15 @@ func one[T any](ctx context.Context, tx pgx.Tx, query string, args ...any) (T, e
 func (s *Service) CreateSession(ctx context.Context, caller common.Caller, body *dto.SessionCreate) (dto.Session, error) {
 	var out dto.Session
 	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
-		row, err := one[model.Session](ctx, tx, `INSERT INTO sessions (id, owner_id, title) VALUES ($1, $2, $3)
-			RETURNING `+model.SessionCols, utility.NewID(), caller.ID, body.TitleOrDefault())
+		row, err := one[model.Session](ctx, tx, `INSERT INTO sessions (id, owner_id, title, title_source) VALUES ($1, $2, $3, $4)
+			RETURNING `+model.SessionCols, utility.NewID(), caller.ID, body.TitleOrDefault(), body.TitleSource())
 		out = sessionDTO(row)
 		return err
 	})
 	return out, err
 }
 
-// ListSessions returns the caller's newest 100 sessions.
+// ListSessions returns the caller's newest 100 sessions and how new ones are named (API 1.43).
 func (s *Service) ListSessions(ctx context.Context, caller common.Caller) (dto.SessionList, error) {
 	out := dto.SessionList{Sessions: []dto.Session{}}
 	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
@@ -108,6 +108,9 @@ func (s *Service) ListSessions(ctx context.Context, caller common.Caller) (dto.S
 			ORDER BY created_at DESC LIMIT 100`)
 		for _, row := range rows {
 			out.Sessions = append(out.Sessions, sessionDTO(row))
+		}
+		if err == nil {
+			out.Naming, err = naming(ctx, tx)
 		}
 		return err
 	})
@@ -128,15 +131,15 @@ func (s *Service) GetSession(ctx context.Context, caller common.Caller, id strin
 	return out, err
 }
 
-// RenameSession sets the title.
+// RenameSession sets the title; it is the user's from then on (the namer never replaces it).
 func (s *Service) RenameSession(ctx context.Context, caller common.Caller, id string, body *dto.SessionPatch) (dto.Session, error) {
 	if !utility.IsUUID(id) {
 		return dto.Session{}, errNotFound
 	}
 	var out dto.Session
 	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
-		row, err := one[model.Session](ctx, tx, `UPDATE sessions SET title = $2, updated_at = clock_timestamp()
-			WHERE id = $1 RETURNING `+model.SessionCols, id, (&dto.SessionCreate{Title: body.Title}).TitleOrDefault())
+		row, err := one[model.Session](ctx, tx, `UPDATE sessions SET title = $2, title_source = 'user', named_by = NULL,
+			updated_at = clock_timestamp() WHERE id = $1 RETURNING `+model.SessionCols, id, (&dto.SessionCreate{Title: body.Title}).TitleOrDefault())
 		out = sessionDTO(row)
 		return err
 	})
@@ -144,7 +147,8 @@ func (s *Service) RenameSession(ctx context.Context, caller common.Caller, id st
 }
 
 // DeleteSession deletes the session with its runs and events; 409 while one of its runs is queued or running, or one
-// of its batches is unfinished. Its finished batches stay (session_id null).
+// of its batches is unfinished. Its finished batches stay (session_id null). Its hidden naming run does not count: it
+// is cancelled first (API 1.43).
 func (s *Service) DeleteSession(ctx context.Context, caller common.Caller, id string) error {
 	if !utility.IsUUID(id) {
 		return errNotFound
@@ -155,8 +159,8 @@ func (s *Service) DeleteSession(ctx context.Context, caller common.Caller, id st
 		var busy bool
 		err := tx.QueryRow(ctx, `SELECT 1 FROM sessions WHERE id = $1 FOR UPDATE`, id).Scan(new(int))
 		if err == nil {
-			err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM runs WHERE session_id = $1 AND status IN ('queued', 'running'))`,
-				id).Scan(&busy)
+			err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM runs WHERE session_id = $1 AND status IN ('queued', 'running')
+				AND purpose IS NULL)`, id).Scan(&busy)
 		}
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
@@ -172,14 +176,24 @@ func (s *Service) DeleteSession(ctx context.Context, caller common.Caller, id st
 		} else if busy {
 			return network.NewConflictError("a batch of this session is still queued, running or paused; stop it first", nil)
 		}
-		_, err = tx.Exec(ctx, `DELETE FROM sessions WHERE id = $1`, id)
+		hidden, err := collect[model.Run](ctx, tx, `SELECT `+model.RunCols+` FROM runs WHERE session_id = $1
+			AND purpose IS NOT NULL AND status IN ('queued', 'running') FOR UPDATE`, id)
+		for _, run := range hidden {
+			if err == nil {
+				_, err = s.cancelRun(ctx, tx, run)
+			}
+		}
+		if err == nil {
+			_, err = tx.Exec(ctx, `DELETE FROM sessions WHERE id = $1`, id)
+		}
 		return err
 	})
 }
 
 // sessionDTO maps a row.
 func sessionDTO(row model.Session) dto.Session {
-	return dto.Session{ID: row.ID, Title: row.Title, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt}
+	return dto.Session{ID: row.ID, Title: row.Title, TitleSource: row.TitleSource, NamedBy: row.NamedBy,
+		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt}
 }
 
 // ------------------------------------------------------------------ hosts

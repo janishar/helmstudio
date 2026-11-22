@@ -77,6 +77,7 @@ HTTP_SCHEMAS = [
     "HostUnloadAccepted", "ImportTakeCreate", "ImportTake",
     "Timeline", "TimelineList", "TimelineCreate", "TimelineUpdate", "TimelineAddClips", "TimelineShotCreate",
     "TimelineRerender", "ExportPlan", "MediaJob", "TakeFrame", "TakeUses", "ClipActions", "TimelineLineCreate",
+    "SessionList", "SessionNames", "SessionNamesPut",
 ]
 OPENAPI = "https://helmstudio.local/contracts/openapi.yaml"
 OPERATION_PREFIX = {"/v1/studio/": "studio", "/files/": "files", "/auth/": "auth"}

@@ -28,6 +28,7 @@ func (p *Projector) MountPipeline(group *micro.NatsJetStreamGroup) {
 	group.AddHandler("evt.pipeline.*.row", pipelineHandler(p, applyPipelineRow))
 	group.AddHandler("evt.pipeline.*.step", pipelineHandler(p, applyPipelineStep))
 	group.AddHandler("evt.pipeline.*.chat", pipelineHandler(p, applyPipelineChat))
+	group.AddHandler("evt.pipeline.*.named", p.namedHandler) // API 1.43: a session's title
 }
 
 // pipelineApply applies one event to its batch, locked and checked; it returns the row it changed (0: none) and

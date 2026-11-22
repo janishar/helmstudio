@@ -668,6 +668,9 @@ func (s *Service) CreateBatchRun(ctx context.Context, req *message.RunsCreate) (
 	invalid := func(detail string) *message.RunsCreateError {
 		return &message.RunsCreateError{Error: detail, Code: "invalid"}
 	}
+	if req.Purpose == "name" { // API 1.43: a session's hidden naming run
+		return s.createNameRun(ctx, req)
+	}
 	notFound := &message.RunsCreateError{Error: "no such batch, session or workflow for this owner", Code: "not_found"}
 	if !runsCreateKey.MatchString(req.IdempotencyKey) || !strings.HasPrefix(req.IdempotencyKey, fmt.Sprintf("%s:%d:", req.BatchID, req.Row)) {
 		return message.RunsCreated{}, invalid("idempotency_key must be <batch_id>:<row>:<attempt>:<node>:<loop>:<branch> of this batch and row")

@@ -269,7 +269,7 @@ func TestRunsCreate(t *testing.T) {
 	subjects, envelopes := e.sent()
 	done := finished(t, envelopes)
 	if !slices.Equal(subjects, []string{"evt.studio." + sessionID + ".run_finished " + runID + ":finished"}) || len(done) != 1 ||
-		done[0].Status != "succeeded" || done[0].Row != 1 || len(done[0].TakeIDs) != 1 ||
+		done[0].Status != "succeeded" || *done[0].Row != 1 || len(done[0].TakeIDs) != 1 ||
 		done[0].IdempotencyKey != batch["id"].(string)+":1:1:step:0:0" {
 		t.Fatal(subjects, done)
 	}
@@ -304,7 +304,7 @@ func TestRunFinishedEveryPath(t *testing.T) {
 	statusOf := func(envelopes []gen.Envelope) map[int]string {
 		out := map[int]string{}
 		for _, data := range finished(t, envelopes) {
-			out[data.Row] = data.Status
+			out[*data.Row] = data.Status
 		}
 		return out
 	}

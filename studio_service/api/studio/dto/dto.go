@@ -19,20 +19,72 @@ import (
 
 // Session is StudioSession.
 type Session struct {
-	ID        string    `json:"id"`
-	Title     string    `json:"title"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID          string    `json:"id"`
+	Title       string    `json:"title"`
+	TitleSource string    `json:"title_source"` // API 1.43: default | prompt | user | model
+	NamedBy     *string   `json:"named_by"`     // the model that wrote it, while title_source is model
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
-// SessionList is the caller's sessions, newest first.
+// SessionList is the caller's sessions, newest first, and how new ones are named (API 1.43).
 type SessionList struct {
-	Sessions []Session `json:"sessions"`
+	Sessions []Session     `json:"sessions"`
+	Naming   SessionNaming `json:"naming"`
+}
+
+// SessionNaming is SessionList.naming: the session-names setting, redacted.
+type SessionNaming struct {
+	Mode    string  `json:"mode"`
+	NamedBy *string `json:"named_by"`
+	Remote  bool    `json:"remote"`
+}
+
+// SessionNames is GET/PUT /admin/session-names (API 1.43).
+type SessionNames struct {
+	Mode           string     `json:"mode"`
+	Provider       *string    `json:"provider"`
+	Model          *string    `json:"model"`
+	LocalAvailable bool       `json:"local_available"`
+	RemoteEnabled  bool       `json:"remote_enabled"`
+	UpdatedAt      *time.Time `json:"updated_at"`
+}
+
+// SessionNamesPut sets the session-names setting.
+type SessionNamesPut struct {
+	Mode     string  `json:"mode"`
+	Provider *string `json:"provider"`
+	Model    *string `json:"model"`
+}
+
+// Validate wants a known mode, and a provider only with remote.
+func (b *SessionNamesPut) Validate() string {
+	switch {
+	case b.Mode != "off" && b.Mode != "local" && b.Mode != "remote":
+		return "mode must be off, local or remote"
+	case b.Mode != "remote" && (b.Provider != nil || b.Model != nil):
+		return "provider and model are only for remote"
+	case b.Mode == "remote" && b.Provider == nil:
+		return "remote needs a provider"
+	}
+	return ""
 }
 
 // SessionCreate is POST /sessions; a missing or blank title is "Untitled".
 type SessionCreate struct {
-	Title *string `json:"title"`
+	Title      *string `json:"title"`
+	FromPrompt *bool   `json:"from_prompt"` // API 1.43: the title is Generate's slice of the prompt
+}
+
+// TitleSource is who wrote the created session's title: default for "Untitled", prompt with from_prompt, else user.
+func (b *SessionCreate) TitleSource() string {
+	switch {
+	case b.Title == nil || strings.TrimSpace(*b.Title) == "":
+		return "default"
+	case b.FromPrompt != nil && *b.FromPrompt:
+		return "prompt"
+	}
+	return "user"
 }
 
 // Validate checks the title's length.
@@ -183,6 +235,8 @@ type Run struct {
 	Looks []string `json:"looks,omitempty"`
 	// a text (ask) workflow's run: its answer, never a take (API 1.14)
 	Answer *RunAnswer `json:"answer,omitempty"`
+	// API 1.43: name = a session's hidden naming run (only the queue lists one)
+	Purpose *string `json:"purpose,omitempty"`
 }
 
 // RunAnswer is an ask run's answer: the last try's text, the tokens and the time.
