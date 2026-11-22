@@ -101,6 +101,8 @@ type Output struct {
 	SourceMap *dto.SourceMap `json:"source_map"`
 	// API 1.30, kind audio only (required then): the WAV's length and sample rate
 	Audio *dto.AudioInfo `json:"audio"`
+	// API 1.48, an image or a video: its thumbnail <output_prefix><index>.thumb.webp
+	Thumb *dto.Poster `json:"thumb"`
 }
 
 // Resolved is an output's resolved: "<node>.<param>" → the value the runner chose for "auto" (a predicted length).

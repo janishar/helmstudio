@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -14,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/helmstudio/helmgo/micro"
+	"github.com/helmstudio/helmgo/storage"
 	"github.com/helmstudio/helmgo/utility"
 
 	"github.com/helmstudio/studio_service/api/gallery"
@@ -33,6 +35,8 @@ type Projector struct {
 	Workflows *registry.Registry
 	// RemoteOn is the deployment's remote switch: a remote session namer is skipped while it is off (API 1.43).
 	RemoteOn bool
+	// Store holds the objects media jobs write: a last frame's copy, unused thumbnails deleted (API 1.48)
+	Store storage.Store
 }
 
 // NewProjector returns the projector writing through pool.
@@ -206,10 +210,14 @@ func (p *Projector) applyOutput(ctx context.Context, tx pgx.Tx, run model.Run, e
 	if sm := data.SourceMap; sm != nil && (data.Kind != "video" || !slices.Contains(lineage, sm.TakeID)) {
 		data.SourceMap = nil // only a video, and only from one of the run's own media takes
 	}
+	if th := data.Thumb; th != nil && (data.Kind == "audio" || th.Key != prefix+strconv.Itoa(data.Index)+".thumb.webp" ||
+		th.Width < 1 || th.Height < 1 || th.Bytes < 1) {
+		data.Thumb = nil // API 1.48: only <prefix><index>.thumb.webp of an image or a video (README, Thumbnails)
+	}
 	takeID, err := gallery.Record(ctx, tx, gallery.Output{OwnerID: run.OwnerID, SessionID: run.SessionID, RunID: run.ID,
 		Index: data.Index, Key: data.Key, Kind: data.Kind, Width: data.Width, Height: data.Height, Bytes: data.Bytes,
 		Etag: data.Etag, MadeWith: made, BatchID: run.BatchID, Parents: lineage, Video: data.Video, SourceMap: data.SourceMap,
-		Audio: data.Audio})
+		Audio: data.Audio, Thumb: data.Thumb})
 	if err == nil && data.Index == 0 {
 		err = fillShot(ctx, tx, run, takeID) // API 1.17: the run's first take fills its slot
 	}

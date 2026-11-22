@@ -13,6 +13,7 @@ import (
 	"github.com/helmstudio/helmgo/utility"
 
 	gallerydto "github.com/helmstudio/studio_service/api/gallery/dto"
+	gallerymodel "github.com/helmstudio/studio_service/api/gallery/model"
 	"github.com/helmstudio/studio_service/api/studio/dto"
 	"github.com/helmstudio/studio_service/api/studio/message"
 	"github.com/helmstudio/studio_service/common"
@@ -66,7 +67,7 @@ func (s *Service) memoryDTOs(ctx context.Context, caller common.Caller, items []
 	if len(ids) > 0 {
 		err := s.tx(ctx, caller, func(tx pgx.Tx) error {
 			type found struct{ ID, Kind, Title, Key string }
-			rows, err := collect[found](ctx, tx, `SELECT t.id::text, t.kind, t.title, coalesce(t.video->'poster'->>'key', t.key)
+			rows, err := collect[found](ctx, tx, `SELECT t.id::text, t.kind, t.title, `+gallerymodel.ThumbKey+`
 				FROM takes t WHERE t.id = ANY($1::uuid[]) AND t.deleted_at IS NULL AND t.ready`, uuids(ids))
 			for _, row := range rows {
 				refs[row.ID] = gallerydto.TakeRef{ID: row.ID, Kind: row.Kind, Title: row.Title, ThumbURL: s.signer.Sign(row.Key)}

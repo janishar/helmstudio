@@ -21,6 +21,7 @@ import (
 	"github.com/helmstudio/helmgo/storage"
 	"github.com/helmstudio/helmgo/utility"
 
+	gallerymodel "github.com/helmstudio/studio_service/api/gallery/model"
 	"github.com/helmstudio/studio_service/common"
 	"github.com/helmstudio/studio_service/registry"
 )
@@ -195,7 +196,7 @@ func (s *Service) thumbs(ctx context.Context, tx pgx.Tx, out []Lora) error {
 	for i, l := range out {
 		ids[i] = l.ID
 	}
-	rows, _ := tx.Query(ctx, `SELECT DISTINCT ON (l->>'id') l->>'id', t.key FROM takes t,
+	rows, _ := tx.Query(ctx, `SELECT DISTINCT ON (l->>'id') l->>'id', `+gallerymodel.ThumbKey+` FROM takes t,
 		jsonb_array_elements(CASE WHEN jsonb_typeof(t.made_with->'loras') = 'array' THEN t.made_with->'loras' ELSE '[]' END) l
 		WHERE t.deleted_at IS NULL AND t.ready AND t.kind = 'image' AND l->>'id' = ANY($1)
 		ORDER BY l->>'id', t.created_at, t.id`, ids)

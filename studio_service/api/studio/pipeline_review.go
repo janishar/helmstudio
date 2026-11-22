@@ -14,6 +14,7 @@ import (
 	"github.com/helmstudio/helmgo/network"
 
 	gallerydto "github.com/helmstudio/studio_service/api/gallery/dto"
+	gallerymodel "github.com/helmstudio/studio_service/api/gallery/model"
 	"github.com/helmstudio/studio_service/api/studio/dto"
 	"github.com/helmstudio/studio_service/api/studio/message"
 	"github.com/helmstudio/studio_service/api/studio/model"
@@ -108,7 +109,7 @@ func (s *Service) BatchReview(ctx context.Context, caller common.Caller, batchID
 			Height *int
 			Seed   *int64
 		}
-		found, err := collect[candidate](ctx, tx, `SELECT t.id::text, t.kind, t.key, coalesce(t.video->'poster'->>'key', t.key), t.video, t.width, t.height,
+		found, err := collect[candidate](ctx, tx, `SELECT t.id::text, t.kind, t.key, `+gallerymodel.ThumbKey+`, t.video, t.width, t.height,
 			(SELECT o.seed FROM run_outputs o WHERE o.take_id = t.id LIMIT 1)
 			FROM takes t WHERE t.id = ANY($1::uuid[]) AND t.deleted_at IS NULL AND t.ready`, uuids(ids))
 		if err != nil {

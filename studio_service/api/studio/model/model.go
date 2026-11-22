@@ -4,6 +4,8 @@ package model
 import (
 	"encoding/json"
 	"time"
+
+	gallerymodel "github.com/helmstudio/studio_service/api/gallery/model"
 )
 
 // Session is a sessions row.
@@ -76,10 +78,12 @@ type Output struct {
 	TakeID *string         // the take it became; nil only for outputs stored before the gallery
 	Video  json.RawMessage // a video's metadata and poster (gallery dto.Video); null for an image
 	Audio  json.RawMessage // API 1.30: an audio output's {duration_s, sample_rate}; null otherwise
+	Thumb  *string         // API 1.48: its take's thumbnail key (gallery ThumbKey) while the take is not deleted
 }
 
 // OutputCols are the columns Output scans, in order.
-const OutputCols = `run_id::text, idx, key, kind, width, height, seed, take_id::text, video, audio`
+const OutputCols = `run_id::text, idx, key, kind, width, height, seed, take_id::text, video, audio,
+	(SELECT ` + gallerymodel.ThumbKey + ` FROM takes t WHERE t.id = take_id AND t.deleted_at IS NULL)`
 
 // Event is a run_events row.
 type Event struct {
@@ -168,7 +172,7 @@ const BatchRowFrom = `SELECT br.n, br.attempt, br.inputs, ` + RowShown + `, br.r
 	coalesce(tk.keys, '{}'), br.error, r.started_at, br.finished_at,
 	br.cells IS NOT NULL, br.node, br.parked, br.cells, br.looks
 	FROM batch_rows br LEFT JOIN runs r ON r.id = br.run_id
-	LEFT JOIN LATERAL (SELECT array_agg(t.id::text ORDER BY u.ord) ids, array_agg(coalesce(t.video->'poster'->>'key', t.key) ORDER BY u.ord) keys
+	LEFT JOIN LATERAL (SELECT array_agg(t.id::text ORDER BY u.ord) ids, array_agg(` + gallerymodel.ThumbKey + ` ORDER BY u.ord) keys
 		FROM unnest(br.take_ids) WITH ORDINALITY u(id, ord) JOIN takes t ON t.id = u.id AND t.deleted_at IS NULL) tk ON true `
 
 // UserWorkflow is a user_workflows row.

@@ -178,6 +178,7 @@ func Run() error {
 	projector := studio.NewProjector(pool)
 	projector.Workflows = runners // names a take's workflow and model
 	projector.RemoteOn = env.RemoteModels
+	projector.Store = module.store
 	projector.MountNatsJetStream(events)
 	workers.Go(func() { micro.NatsJetStreamConsume(ctx, client, messaging.ProjectorConsumer, events) })
 	pipelineEvents := &micro.NatsJetStreamGroup{}
@@ -204,7 +205,8 @@ func Run() error {
 	mediaEvents := &micro.NatsJetStreamGroup{}
 	projector.MountMedia(mediaEvents)
 	workers.Go(func() { micro.NatsJetStreamConsume(ctx, client, messaging.MediaConsumer, mediaEvents) })
-	workers.Go(func() { studio.RunMediaJobs(ctx, pool, runners, module.purge, module.cancel) })
+	workers.Go(func() { studio.RunMediaJobs(ctx, pool, runners, module.purge, module.cancel, module.store) })
+	workers.Go(func() { studio.RunThumbs(ctx, pool, runners) }) // API 1.48: thumbnails of takes without one
 	workers.Go(func() {
 		// KV host_settings is a copy of studio's table: written at every start (API 1.16)
 		if err := module.settings.PublishSettings(ctx); err != nil && ctx.Err() == nil {

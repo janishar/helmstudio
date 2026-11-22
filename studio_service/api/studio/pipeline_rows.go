@@ -9,6 +9,7 @@ import (
 
 	"github.com/helmstudio/helmgo/utility"
 
+	gallerymodel "github.com/helmstudio/studio_service/api/gallery/model"
 	"github.com/helmstudio/studio_service/api/studio/dto"
 	"github.com/helmstudio/studio_service/api/studio/model"
 )
@@ -132,7 +133,7 @@ func takeKeys(ctx context.Context, tx pgx.Tx, ids []string) (map[string]string, 
 		return out, nil
 	}
 	type found struct{ ID, Key string }
-	rows, err := collect[found](ctx, tx, `SELECT t.id::text, coalesce(t.video->'poster'->>'key', t.key) FROM takes t
+	rows, err := collect[found](ctx, tx, `SELECT t.id::text, `+gallerymodel.ThumbKey+` FROM takes t
 		WHERE t.id = ANY($1::uuid[]) AND t.deleted_at IS NULL AND t.ready`, uuids(ids))
 	for _, row := range rows {
 		out[row.ID] = row.Key

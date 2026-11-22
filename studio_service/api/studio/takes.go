@@ -177,7 +177,7 @@ func (p *Projector) Backfill(ctx context.Context) (int, error) {
 				model.Output
 				Bytes int64
 			}
-			err := row.Scan(&o.RunID, &o.Index, &o.Key, &o.Kind, &o.Width, &o.Height, &o.Seed, &o.TakeID, &o.Video, &o.Audio, &o.Bytes)
+			err := row.Scan(&o.RunID, &o.Index, &o.Key, &o.Kind, &o.Width, &o.Height, &o.Seed, &o.TakeID, &o.Video, &o.Audio, &o.Thumb, &o.Bytes)
 			return o, err
 		})
 		if err != nil {

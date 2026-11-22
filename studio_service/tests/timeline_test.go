@@ -301,13 +301,13 @@ func TestTimelineExport(t *testing.T) {
 	purge := func(_ context.Context, subject string) error { purged = append(purged, subject); return nil }
 	var stopped []string
 	stop := func(_ context.Context, id string) error { stopped = append(stopped, id); return nil }
-	if err := studio.SweepMediaJobs(context.Background(), e.pool, e.registry, purge, stop, time.Now()); err != nil {
+	if err := studio.SweepMediaJobs(context.Background(), e.pool, e.registry, purge, stop, e.store, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	if got = e.call(userA, "GET", "/v1/studio/media-jobs/"+job["id"].(string), nil, 200); got["status"] == "failed" {
 		t.Fatal(got) // heard within 60 s: a clean restart of its runner is no host loss
 	}
-	if err := studio.SweepMediaJobs(context.Background(), e.pool, e.registry, purge, stop,
+	if err := studio.SweepMediaJobs(context.Background(), e.pool, e.registry, purge, stop, e.store,
 		time.Now().Add(studio.StaleJobKey+time.Second)); err != nil {
 		t.Fatal(err)
 	}
@@ -331,7 +331,9 @@ func TestTimelineExport(t *testing.T) {
 func TestTakeFrame(t *testing.T) {
 	e := setup(t)
 	group := &micro.NatsJetStreamGroup{}
-	studio.NewProjector(e.pool).MountMedia(group)
+	p := studio.NewProjector(e.pool)
+	p.Store = e.store // a frame at last: the frame take's own copy (API 1.48)
+	p.MountMedia(group)
 	made := map[string]any{"workflow_id": "echo-video", "inputs": map[string]any{}}
 	video, old, upload := e.clipTake(userA, 2, true, made), e.clipTake(userA, 2, false, nil), e.clipTake(userA, 2, true, nil)
 	first := e.call(userA, "POST", "/v1/studio/takes/"+video+"/frame", map[string]any{"at": "first"}, 200)["take"].(map[string]any)
@@ -357,6 +359,9 @@ func TestTakeFrame(t *testing.T) {
 	}
 	jobID := job["id"].(string)
 	e.media(group, userA, jobID, "status", 1, map[string]any{"status": "running"})
+	if err := e.store.Put(context.Background(), "u/"+userA+"/frames/"+jobID+"/frame.png", strings.NewReader("frame"), 5, "image/png"); err != nil {
+		t.Fatal(err)
+	}
 	e.media(group, userA, jobID, "status", 2, map[string]any{"status": "succeeded", "result": map[string]any{
 		"key": "u/" + userA + "/frames/" + jobID + "/frame.png", "width": 256, "height": 128, "bytes": 5}})
 	done := e.call(userA, "GET", "/v1/studio/media-jobs/"+jobID, nil, 200)

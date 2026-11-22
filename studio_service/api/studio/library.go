@@ -17,6 +17,7 @@ import (
 	"github.com/helmstudio/helmgo/utility"
 
 	gallerydto "github.com/helmstudio/studio_service/api/gallery/dto"
+	gallerymodel "github.com/helmstudio/studio_service/api/gallery/model"
 	"github.com/helmstudio/studio_service/api/lora"
 	"github.com/helmstudio/studio_service/api/studio/dto"
 	"github.com/helmstudio/studio_service/common"
@@ -52,11 +53,11 @@ type libraryRow struct {
 
 // libraryCols are the columns libraryRow scans from library_items l, in order.
 const libraryCols = `l.id::text, l.kind, l.item_group, l.name, l.handle, l.text, l.version, l.created_at, l.updated_at,
-	coalesce((SELECT jsonb_agg(jsonb_build_object('take_id', t.id, 'key', t.key, 'width', t.width, 'height', t.height)
+	coalesce((SELECT jsonb_agg(jsonb_build_object('take_id', t.id, 'key', t.key, 'thumb', ` + gallerymodel.ThumbKey + `, 'width', t.width, 'height', t.height)
 		ORDER BY u.o) FROM unnest(l.images) WITH ORDINALITY AS u(i, o) JOIN takes t ON t.id = u.i AND t.owner_id = l.owner_id
 		AND t.deleted_at IS NULL AND t.ready AND t.width IS NOT NULL AND t.height IS NOT NULL), '[]'), l.loras,
 	(SELECT t.id::text FROM takes t WHERE t.id = l.from_take_id AND t.owner_id = l.owner_id AND t.deleted_at IS NULL AND t.ready),
-	(SELECT coalesce(t.video->'poster'->>'key', t.key) FROM takes t WHERE t.id = l.from_take_id AND t.owner_id = l.owner_id AND t.deleted_at IS NULL AND t.ready), l.voice,
+	(SELECT ` + gallerymodel.ThumbKey + ` FROM takes t WHERE t.id = l.from_take_id AND t.owner_id = l.owner_id AND t.deleted_at IS NULL AND t.ready), l.voice,
 	(SELECT t.key FROM takes t WHERE t.id = (l.voice->'clip'->>'take_id')::uuid AND t.owner_id = l.owner_id), ` + elementVoiceCol
 
 // elementVoiceCol is an element's voice_id as read (API 1.32): a starter voice's id as stored (the caller checks it
@@ -64,7 +65,7 @@ const libraryCols = `l.id::text, l.kind, l.item_group, l.name, l.handle, l.text,
 const elementVoiceCol = `(CASE WHEN l.voice_id LIKE '%/%' THEN l.voice_id ELSE (SELECT v.id::text FROM library_items v
 	WHERE v.owner_id = l.owner_id AND v.kind = 'voice' AND v.id::text = l.voice_id) END)`
 
-// itemDTO maps a row, signing its images' keys (the original is its own thumbnail, as in the gallery); names are the
+// itemDTO maps a row, signing its images' keys (each image's thumbnail is its take's, as in the gallery); names are the
 // LoRA names now (a LoRA gone keeps the name it was saved with).
 func (s *Service) itemDTO(row libraryRow, names map[string]string) dto.LibraryItem {
 	out := dto.LibraryItem{ID: row.ID, Kind: row.Kind, Group: row.Group, Name: row.Name, Handle: row.Handle, Text: row.Text,
@@ -73,13 +74,13 @@ func (s *Service) itemDTO(row libraryRow, names map[string]string) dto.LibraryIt
 	var images []struct {
 		TakeID        string `json:"take_id"`
 		Key           string `json:"key"`
+		Thumb         string `json:"thumb"`
 		Width, Height int
 	}
 	_ = json.Unmarshal(row.Images, &images)
 	for _, image := range images {
-		link := s.signer.Sign(image.Key)
-		out.Images = append(out.Images, dto.LibraryImage{TakeID: image.TakeID, URL: link, ThumbURL: link, Width: image.Width,
-			Height: image.Height})
+		out.Images = append(out.Images, dto.LibraryImage{TakeID: image.TakeID, URL: s.signer.Sign(image.Key),
+			ThumbURL: s.signer.Sign(cmp.Or(image.Thumb, image.Key)), Width: image.Width, Height: image.Height})
 	}
 	for _, l := range rowLoras(row) {
 		out.Loras = append(out.Loras, dto.LookLora{Lora: &dto.LoraRef{LoraID: *l.LoraID}, Name: cmp.Or(names[*l.LoraID], l.Name),

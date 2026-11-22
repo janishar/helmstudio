@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -34,14 +35,21 @@ import (
 // Media jobs (contracts/README.md "Timeline: export", "Media jobs", API 1.17): a sequence's export and a video take's
 // frame, each a row of media_jobs sent at once as cmd.media.job to an env whose hosts key has `media`. They hold no
 // model and take no GPU admission: the dispatcher never sees them. The projector applies evt.media.* and stores the
-// take; a job whose env went silent is ended by RunMediaJobs.
+// take; a job whose env went silent is ended by RunMediaJobs. From API 1.48 a thumbs job makes takes' thumbnails
+// (contracts/README.md, Thumbnails): RunThumbs queues them, the projector stores them; it has no endpoint.
 
 // noHost is the refusal when no live env can run a media job.
 const noHost = "no live host can export (ffmpeg)"
 
 // MaxOpenMediaJobs is how many unfinished media jobs (exports and frames) one user may have: every user's jobs share
-// each env's one media worker.
+// each env's one media worker. Thumbs jobs (API 1.48) do not count.
 const MaxOpenMediaJobs = 4
+
+// ThumbsPerJob is the most takes one thumbs job holds; ThumbTries how often a take is tried (README, Thumbnails).
+const (
+	ThumbsPerJob = 20
+	ThumbTries   = 3
+)
 
 type mediaRow struct {
 	ID, OwnerID, Kind, Status, Host, Env string
@@ -55,11 +63,12 @@ type mediaRow struct {
 	Failure                              json.RawMessage
 	CreatedAt, HeardAt                   time.Time
 	StartedAt, FinishedAt                *time.Time
+	TakeIDs                              []string // thumbs: its takes, in input order
 }
 
 const mediaCols = `id::text, owner_id::text, kind, status, host, env, timeline_id::text, timeline_name, revision, parents,
 	source_take_id::text, at, mode, reason, frames, progress, take_id::text, failure, created_at, heard_at, started_at,
-	finished_at`
+	finished_at, take_ids::text[]`
 
 func (r mediaRow) dto() dto.MediaJob {
 	return dto.MediaJob{ID: r.ID, Kind: r.Kind, Status: r.Status, Host: r.Host, Env: r.Env, TimelineID: r.TimelineID,
@@ -101,10 +110,12 @@ func (c mediaCommand) Subject() string { return "cmd.media." + c.host + "." + c.
 
 // mediaEnv is the env that would run a media job now: the named host's media envs, else every live one;
 // VideoToolbox first, then NVENC (API 1.18), then host, env by name; never a server env.
-func (s *Service) mediaEnv(host *string) (registry.Host, bool) {
+func (s *Service) mediaEnv(host *string) (registry.Host, bool) { return mediaEnvOf(s.registry, host) }
+
+func mediaEnvOf(reg *registry.Registry, host *string) (registry.Host, bool) {
 	now := time.Now()
 	var envs []registry.Host
-	for _, h := range s.registry.Hosts() {
+	for _, h := range reg.Hosts() {
 		if h.Media != nil && len(h.Media.Encoders) > 0 && h.Live(now) && h.Env != "server" && (host == nil || h.Host == *host) {
 			envs = append(envs, h)
 		}
@@ -131,17 +142,17 @@ func insertMediaJob(ctx context.Context, tx pgx.Tx, j mediaRow, command mediaCom
 		return mediaRow{}, err
 	}
 	var open int
-	if err := tx.QueryRow(ctx, `SELECT count(*) FROM media_jobs WHERE owner_id = $1 AND status IN ('queued', 'running')`,
-		j.OwnerID).Scan(&open); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM media_jobs WHERE owner_id = $1 AND status IN ('queued', 'running')
+		AND kind <> 'thumbs'`, j.OwnerID).Scan(&open); err != nil {
 		return mediaRow{}, err
-	} else if open >= MaxOpenMediaJobs {
+	} else if open >= MaxOpenMediaJobs && j.Kind != "thumbs" {
 		return mediaRow{}, network.NewConflictError(fmt.Sprintf("You have %d unfinished exports or frames; wait for one to finish.",
 			MaxOpenMediaJobs), nil)
 	}
 	row, err := one[mediaRow](ctx, tx, `INSERT INTO media_jobs (id, owner_id, kind, host, env, timeline_id, timeline_name,
-		revision, parents, source_take_id, at, mode, reason, frames) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
-		$12, $13, $14) RETURNING `+mediaCols, j.ID, j.OwnerID, j.Kind, j.Host, j.Env, j.TimelineID, j.TimelineName,
-		j.Revision, j.Parents, j.SourceTakeID, j.At, j.Mode, j.Reason, j.Frames)
+		revision, parents, source_take_id, at, mode, reason, frames, take_ids) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+		$11, $12, $13, $14, $15) RETURNING `+mediaCols, j.ID, j.OwnerID, j.Kind, j.Host, j.Env, j.TimelineID, j.TimelineName,
+		j.Revision, j.Parents, j.SourceTakeID, j.At, j.Mode, j.Reason, j.Frames, j.TakeIDs)
 	if err != nil {
 		return row, err
 	}
@@ -372,7 +383,7 @@ func (s *Service) GetMediaJob(ctx context.Context, caller common.Caller, id stri
 	}
 	var out mediaRow
 	err := s.tx(ctx, caller, func(tx pgx.Tx) (err error) {
-		out, err = one[mediaRow](ctx, tx, `SELECT `+mediaCols+` FROM media_jobs WHERE id = $1`, id)
+		out, err = one[mediaRow](ctx, tx, `SELECT `+mediaCols+` FROM media_jobs WHERE id = $1 AND kind <> 'thumbs'`, id)
 		return err
 	})
 	return out.dto(), err
@@ -387,7 +398,8 @@ func (s *Service) CancelMediaJob(ctx context.Context, caller common.Caller, id s
 	var out mediaRow
 	ask := false
 	err := s.tx(ctx, caller, func(tx pgx.Tx) (err error) {
-		if out, err = one[mediaRow](ctx, tx, `SELECT `+mediaCols+` FROM media_jobs WHERE id = $1 FOR UPDATE`, id); err != nil {
+		if out, err = one[mediaRow](ctx, tx, `SELECT `+mediaCols+` FROM media_jobs WHERE id = $1 AND kind <> 'thumbs'
+			FOR UPDATE`, id); err != nil {
 			return err
 		}
 		if jobEnded[out.Status] {
@@ -424,13 +436,43 @@ func mediaKeyLive(reg *registry.Registry, job mediaRow, now time.Time) bool {
 	return false
 }
 
-// endMedia moves an open job to a terminal status.
+// endMedia moves an open job to a terminal status; a thumbs job that did not succeed adds a try to each of its takes
+// (README, Thumbnails: an input that crashes the runner is tried at most ThumbTries times).
 func endMedia(ctx context.Context, tx pgx.Tx, job *mediaRow, status string, failure any) error {
 	f, _ := json.Marshal(failure)
 	row, err := one[mediaRow](ctx, tx, `UPDATE media_jobs SET status = $2, failure = $3::jsonb, finished_at = clock_timestamp()
 		WHERE id = $1 RETURNING `+mediaCols, job.ID, status, string(f))
 	*job = row
+	if err == nil && row.Kind == "thumbs" && status != "succeeded" {
+		_, err = tx.Exec(ctx, `UPDATE takes SET thumb_tries = thumb_tries + 1 WHERE id = ANY($1::uuid[]) AND thumb IS NULL`,
+			row.TakeIDs)
+	}
 	return err
+}
+
+// thumbsPrefix is a thumbs job's output_prefix.
+func thumbsPrefix(job mediaRow) string {
+	return common.OwnerPrefix(job.OwnerID) + "thumbs/" + job.ID + "/"
+}
+
+// unusedThumbs are the keys a thumbs job could have written (<prefix><i>.webp per take) that no take points at.
+func unusedThumbs(ctx context.Context, tx pgx.Tx, job mediaRow) ([]string, error) {
+	keys := make([]string, len(job.TakeIDs))
+	for i := range job.TakeIDs {
+		keys[i] = thumbsPrefix(job) + strconv.Itoa(i) + ".webp"
+	}
+	used, err := collect[string](ctx, tx, `SELECT thumb->>'key' FROM takes WHERE thumb->>'key' = ANY($1)`, keys)
+	return slices.DeleteFunc(keys, func(k string) bool { return slices.Contains(used, k) }), err
+}
+
+// deleteKeys removes objects nothing points at any more; a failure only leaks them (logged).
+func deleteKeys(ctx context.Context, store storage.Store, keys []string) {
+	if store == nil || len(keys) == 0 {
+		return
+	}
+	if err := store.Delete(ctx, keys...); err != nil {
+		log.Printf("media jobs: delete %d unused thumbnails: %v", len(keys), err)
+	}
 }
 
 // purgeMedia drops the commands queued for job's env (cmd.media.<host>.<env>), for a job whose env's key is stale: no
@@ -444,13 +486,14 @@ func purgeMedia(ctx context.Context, purge func(ctx context.Context, subject str
 
 // SweepMediaJobs ends the open jobs studio can no longer hear: a job whose env's key is gone or older than
 // StaleJobKey fails host_lost (API 1.18), its command purged and its id written to KV cancels; a job unheard for JobSilence fails (internal) and its runner is asked to stop
-// it (KV cancels), so a hung ffmpeg never holds the env's media worker.
+// it (KV cancels), so a hung ffmpeg never holds the env's media worker. An ended thumbs job's unused keys are deleted
+// from store after the commit (nil: kept).
 func SweepMediaJobs(ctx context.Context, pool *pgxpool.Pool, reg *registry.Registry, purge func(ctx context.Context, subject string) error,
-	cancel Cancel, now time.Time) error {
+	cancel Cancel, store storage.Store, now time.Time) error {
 	if !reg.Ready() {
 		return nil
 	}
-	var silent []string
+	var silent, unused []string
 	err := common.System(ctx, pool, func(tx pgx.Tx) error {
 		open, err := collect[mediaRow](ctx, tx, `SELECT `+mediaCols+` FROM media_jobs WHERE status IN ('queued', 'running')
 			FOR UPDATE SKIP LOCKED`)
@@ -470,12 +513,20 @@ func SweepMediaJobs(ctx context.Context, pool *pgxpool.Pool, reg *registry.Regis
 				silent = append(silent, job.ID)
 				err = endMedia(ctx, tx, &job, "failed", map[string]string{"class": "internal", "detail": "the runner stopped reporting this job"})
 			}
+			if err == nil && job.Kind == "thumbs" && jobEnded[job.Status] {
+				var keys []string
+				keys, err = unusedThumbs(ctx, tx, job)
+				unused = append(unused, keys...)
+			}
 			if err != nil {
 				return err
 			}
 		}
 		return nil
 	})
+	if err == nil {
+		deleteKeys(ctx, store, unused)
+	}
 	for _, id := range silent {
 		if cancel == nil {
 			break
@@ -488,11 +539,12 @@ func SweepMediaJobs(ctx context.Context, pool *pgxpool.Pool, reg *registry.Regis
 }
 
 // RunMediaJobs sweeps media jobs every Tick until ctx ends.
-func RunMediaJobs(ctx context.Context, pool *pgxpool.Pool, reg *registry.Registry, purge func(ctx context.Context, subject string) error, cancel Cancel) {
+func RunMediaJobs(ctx context.Context, pool *pgxpool.Pool, reg *registry.Registry, purge func(ctx context.Context, subject string) error,
+	cancel Cancel, store storage.Store) {
 	tick := time.NewTicker(Tick)
 	defer tick.Stop()
 	for {
-		if err := SweepMediaJobs(ctx, pool, reg, purge, cancel, time.Now()); err != nil && ctx.Err() == nil {
+		if err := SweepMediaJobs(ctx, pool, reg, purge, cancel, store, time.Now()); err != nil && ctx.Err() == nil {
 			log.Printf("media jobs: %v", err)
 		}
 		select {
@@ -570,7 +622,15 @@ func (s *Service) frameOf(ctx context.Context, tx pgx.Tx, ownerID string, video 
 		key := common.OwnerPrefix(ownerID) + "frames/" + frameID + ".png"
 		err := s.store.Copy(ctx, src.Key, key)
 		if err == nil {
-			take, err := insertFrameTake(ctx, tx, ownerID, frameID, video, at, key, *src)
+			var thumb *gallerydto.Poster
+			var made gallerydto.Poster // API 1.48: a run's poster is frame 0, so its thumbnail is the frame's
+			if src == &v.Poster && json.Unmarshal(video.Thumb, &made) == nil && common.Owns(ownerID, made.Key) {
+				tkey := common.OwnerPrefix(ownerID) + "frames/" + frameID + ".thumb.webp"
+				if s.store.Copy(ctx, made.Key, tkey) == nil {
+					made.Key, thumb = tkey, &made
+				} // else the thumbs job makes it
+			}
+			take, err := insertFrameTake(ctx, tx, ownerID, frameID, video, at, key, *src, thumb)
 			return &take, nil, err
 		} else if !errors.Is(err, storage.ErrNotFound) {
 			return nil, nil, network.NewServiceUnavailableError("could not copy the frame; try again", err)
@@ -599,13 +659,14 @@ func (s *Service) frameOf(ctx context.Context, tx pgx.Tx, ownerID string, video 
 	return nil, &job, err
 }
 
-// insertFrameTake stores the image take of video's frame at at.
-func insertFrameTake(ctx context.Context, tx pgx.Tx, ownerID, id string, video gallerymodel.Take, at, key string, frame gallerydto.Poster) (gallerymodel.Take, error) {
+// insertFrameTake stores the image take of video's frame at at, with its thumbnail when made (API 1.48).
+func insertFrameTake(ctx context.Context, tx pgx.Tx, ownerID, id string, video gallerymodel.Take, at, key string, frame gallerydto.Poster,
+	thumb *gallerydto.Poster) (gallerymodel.Take, error) {
 	title := video.Title + " · " + at + " frame"
 	frameOf, _ := json.Marshal(timeline.FrameOf{TakeID: video.ID, At: at})
 	if _, err := tx.Exec(ctx, `INSERT INTO takes (id, owner_id, kind, source, title, key, content_type, width, height, bytes,
-		ready, frame_of) VALUES ($1, $2, 'image', 'frame', $3, $4, 'image/png', $5, $6, $7, true, $8)`,
-		id, ownerID, title, key, frame.Width, frame.Height, frame.Bytes, frameOf); err != nil {
+		ready, frame_of, thumb) VALUES ($1, $2, 'image', 'frame', $3, $4, 'image/png', $5, $6, $7, true, $8, $9)`,
+		id, ownerID, title, key, frame.Width, frame.Height, frame.Bytes, frameOf, thumb); err != nil {
 		return gallerymodel.Take{}, err
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO take_parents (take_id, parent_id, owner_id, idx) VALUES ($1, $2, $3, 0)`,
@@ -634,6 +695,16 @@ type mediaResult struct {
 	Mode   *string           `json:"mode"`
 	Reason *string           `json:"reason"`
 	Video  *gallerydto.Video `json:"video"`
+	// API 1.48: an export's or a frame's thumbnail; a thumbs job's results by input index
+	Thumb  *gallerydto.Poster `json:"thumb"`
+	Thumbs []thumbResult      `json:"thumbs"`
+}
+
+type thumbResult struct {
+	gallerydto.Poster
+	Index int     `json:"index"`
+	Skip  bool    `json:"skip"`
+	Error *string `json:"error"`
 }
 
 type mediaProgress struct {
@@ -644,7 +715,7 @@ type mediaProgress struct {
 
 // MountMedia registers the handlers of evt.media.<host>.status and .progress (durable studio-media).
 func (p *Projector) MountMedia(group *micro.NatsJetStreamGroup) {
-	group.AddHandler("evt.media.*.status", mediaHandler(p.pool, applyMediaStatus))
+	group.AddHandler("evt.media.*.status", mediaHandler(p.pool, p.applyMediaStatus))
 	group.AddHandler("evt.media.*.progress", mediaHandler(p.pool, applyMediaProgress))
 }
 
@@ -706,8 +777,12 @@ func applyMediaProgress(ctx context.Context, tx pgx.Tx, job mediaRow, data media
 	return err
 }
 
-// applyMediaStatus: running starts the job; succeeded stores its take in the same transaction; failed, cancelled end it.
-func applyMediaStatus(ctx context.Context, tx pgx.Tx, job mediaRow, data mediaStatus) error {
+// applyMediaStatus: running starts the job; succeeded stores its take (a thumbs job: its thumbnails) in the same
+// transaction; failed, cancelled end it (a thumbs job's unused keys deleted).
+func (p *Projector) applyMediaStatus(ctx context.Context, tx pgx.Tx, job mediaRow, data mediaStatus) error {
+	if job.Kind == "thumbs" && data.Status != "running" {
+		return p.endThumbs(ctx, tx, job, data)
+	}
 	switch data.Status {
 	case "running":
 		_, err := tx.Exec(ctx, `UPDATE media_jobs SET status = 'running', started_at = coalesce(started_at, clock_timestamp())
@@ -725,7 +800,7 @@ func applyMediaStatus(ctx context.Context, tx pgx.Tx, job mediaRow, data mediaSt
 	case "cancelled":
 		return endMedia(ctx, tx, &job, "cancelled", nil)
 	case "succeeded":
-		takeID, bad, err := storeMediaTake(ctx, tx, job, data.Result)
+		takeID, bad, err := storeMediaTake(ctx, tx, p.Store, job, data.Result)
 		if err != nil {
 			return err
 		}
@@ -749,8 +824,9 @@ func applyMediaStatus(ctx context.Context, tx pgx.Tx, job mediaRow, data mediaSt
 }
 
 // storeMediaTake makes a succeeded job's take: an export's video take (source export) or a frame's image take; a
-// result outside the job's prefix is the second result.
-func storeMediaTake(ctx context.Context, tx pgx.Tx, job mediaRow, r *mediaResult) (string, string, error) {
+// result outside the job's prefix is the second result. A frame at last is the video's last frame from now on, and
+// the frame take gets its own copy (frames/<take>.png), so the take sweep of either never deletes the other's file.
+func storeMediaTake(ctx context.Context, tx pgx.Tx, store storage.Store, job mediaRow, r *mediaResult) (string, string, error) {
 	inside := func(key, prefix, suffix string) bool {
 		return common.Owns(job.OwnerID, key) && strings.HasPrefix(key, prefix) && strings.HasSuffix(key, suffix)
 	}
@@ -768,7 +844,20 @@ func storeMediaTake(ctx context.Context, tx pgx.Tx, job mediaRow, r *mediaResult
 			return "", "", err
 		}
 		frame := gallerydto.Poster{Key: r.Key, Width: r.Width, Height: r.Height, Bytes: r.Bytes}
-		if _, err := insertFrameTake(ctx, tx, job.OwnerID, id, video, *job.At, r.Key, frame); err != nil {
+		thumb := r.Thumb
+		if thumb != nil && (thumb.Key != prefix+"frame.thumb.webp" || thumb.Width < 1 || thumb.Height < 1) {
+			thumb = nil
+		}
+		key := r.Key
+		if *job.At == "last" {
+			key = common.OwnerPrefix(job.OwnerID) + "frames/" + id + ".png"
+			if err := store.Copy(ctx, r.Key, key); errors.Is(err, storage.ErrNotFound) {
+				return "", "the frame is missing", nil
+			} else if err != nil {
+				return "", "", err
+			}
+		}
+		if _, err := insertFrameTake(ctx, tx, job.OwnerID, id, video, *job.At, key, frame, thumb); err != nil {
 			return "", "", err
 		}
 		if *job.At == "last" { // that video's last frame from now on
@@ -783,6 +872,10 @@ func storeMediaTake(ctx context.Context, tx pgx.Tx, job mediaRow, r *mediaResult
 		v.Last == nil || !inside(v.Last.Key, prefix, ".last.png") {
 		return "", "the result is outside the job's prefix", nil
 	}
+	thumb := r.Thumb
+	if thumb != nil && (thumb.Key != prefix+"export.thumb.webp" || thumb.Width < 1 || thumb.Height < 1) {
+		thumb = nil
+	}
 	mode := deref(job.Mode)
 	if r.Mode != nil {
 		mode = *r.Mode
@@ -790,8 +883,8 @@ func storeMediaTake(ctx context.Context, tx pgx.Tx, job mediaRow, r *mediaResult
 	export, _ := json.Marshal(map[string]any{"timeline_id": job.TimelineID, "timeline_name": job.TimelineName,
 		"revision": job.Revision, "job_id": job.ID, "mode": mode})
 	if _, err := tx.Exec(ctx, `INSERT INTO takes (id, owner_id, kind, source, title, key, content_type, width, height, bytes,
-		etag, video, ready, export) VALUES ($1, $2, 'video', 'export', $3, $4, 'video/mp4', $5, $6, $7, $8, $9, true, $10)`,
-		id, job.OwnerID, deref(job.TimelineName), r.Key, r.Width, r.Height, r.Bytes, r.Etag, v, export); err != nil {
+		etag, video, ready, export, thumb) VALUES ($1, $2, 'video', 'export', $3, $4, 'video/mp4', $5, $6, $7, $8, $9, true, $10,
+		$11)`, id, job.OwnerID, deref(job.TimelineName), r.Key, r.Width, r.Height, r.Bytes, r.Etag, v, export, thumb); err != nil {
 		return "", "", err
 	}
 	_, err := tx.Exec(ctx, `INSERT INTO take_parents (take_id, parent_id, owner_id, idx)

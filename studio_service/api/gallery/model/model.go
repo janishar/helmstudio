@@ -31,6 +31,7 @@ type Take struct {
 	Export      json.RawMessage // source export: {timeline_id, timeline_name, revision, job_id, mode} (API 1.17)
 	Audio       json.RawMessage // kind audio: {duration_s} (API 1.19)
 	SourceMap   json.RawMessage // a video made from a media take: evt.run.output's source_map (API 1.19)
+	Thumb       json.RawMessage // API 1.48: its thumbnail {key, width, height, bytes}; null until made
 }
 
 // TakeCols are the columns Take scans, in order, from takes aliased t.
@@ -38,7 +39,8 @@ const TakeCols = `t.id::text, t.kind, t.source, t.title, t.key, t.content_type, 
 	t.session_id::text, t.run_id::text, t.made_with, t.ready, t.created_at,
 	coalesce((SELECT array_agg(p.parent_id::text ORDER BY p.idx) FROM take_parents p
 		JOIN takes pt ON pt.id = p.parent_id AND pt.deleted_at IS NULL WHERE p.take_id = t.id), '{}'),
-	t.batch_id::text, t.video, t.legacy, t.frame_of, t.export, t.audio, t.source_map`
+	t.batch_id::text, t.video, t.legacy, t.frame_of, t.export, t.audio, t.source_map, t.thumb`
 
-// ThumbKey is the key of a take's thumbnail, from takes aliased t: a video's poster, else the image itself.
-const ThumbKey = `coalesce(t.video->'poster'->>'key', t.key)`
+// ThumbKey is the key of a take's thumbnail, from takes aliased t: its thumbnail (API 1.48), else a video's poster,
+// else the image itself (contracts/README.md, Thumbnails).
+const ThumbKey = `coalesce(t.thumb->>'key', t.video->'poster'->>'key', t.key)`

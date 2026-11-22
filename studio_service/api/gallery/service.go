@@ -761,7 +761,8 @@ func imageInput(workflow registry.Workflow, want *string) (string, registry.Para
 // takeDTO maps a row, signing its keys.
 func (s *Service) takeDTO(row model.Take) dto.Take { return TakeDTO(s.signer, row) }
 
-// TakeDTO maps a row, signing its keys: an image is its own thumbnail (API 1.2), a video's is its poster.
+// TakeDTO maps a row, signing its keys: its thumbnail (API 1.48), else an image is its own thumbnail (API 1.2), a
+// video's is its poster.
 func TakeDTO(signer *common.Signer, row model.Take) dto.Take {
 	if row.ID == "" {
 		return dto.Take{}
@@ -769,7 +770,10 @@ func TakeDTO(signer *common.Signer, row model.Take) dto.Take {
 	link := signer.Sign(row.Key)
 	video := dto.Info(row.Video, signer.Sign)
 	thumb := link
-	if video != nil {
+	var made dto.Poster
+	if json.Unmarshal(row.Thumb, &made) == nil && made.Key != "" {
+		thumb = signer.Sign(made.Key)
+	} else if video != nil {
 		thumb = video.PosterURL
 	}
 	out := dto.Take{ID: row.ID, Kind: row.Kind, Source: row.Source, Title: row.Title, URL: link, ThumbURL: thumb, Video: video,
