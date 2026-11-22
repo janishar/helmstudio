@@ -101,11 +101,12 @@ export function AppShell({
   }, [reg, path]);
   const nav = useRef<HTMLElement>(null);
   useEffect(() => {
-    // a phone's dock is a bar that scrolls sideways: keep the current item (Settings is the last) in view
+    // a phone's dock is a bar that scrolls sideways: keep the current item (Settings is the last) in view, again once
+    // the Assistant item arrives and pushes it along
     nav.current
       ?.querySelector("[aria-current=page]")
       ?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
-  }, [path]);
+  }, [path, a.enabled]);
   return (
     <UserContext value={me}>
       <ToolsContext value={reg}>
