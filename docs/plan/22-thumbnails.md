@@ -2,9 +2,8 @@
 
 [← Plan index](../README.md)
 
-Status: **decided by the owner (2026-11-22), queued to build**. A plan, not in a milestone: it becomes one in
-[08-milestones.md](08-milestones.md) when the owner schedules it. Nothing here is built. API target **1.45.0** (main
-is at 1.43.0; branch `assistant` takes 1.44.0 when it merges).
+Status: **decided by the owner (2026-11-22), being built**. API **1.48.0** (the next free number when built:
+main was at 1.47.0; plan 23 reserved 1.46 and is unbuilt; numbers below that say 1.45 mean 1.48).
 
 The owner's ask, 2026-11-22: "thumbnail support so the loading image in gallery view or elsewhere is memory and
 network efficient, full size on view area".
@@ -183,7 +182,7 @@ store). With one size there is no size in the key.
   of takes with `thumb IS NULL`; after it, the same count and a look at a few tiles. Undo is
   `UPDATE takes SET thumb = NULL, thumb_tries = 0` (the objects can stay or be listed and removed under `thumbs/`).
 
-### 26.5 Storage and the contract (1.45.0)
+### 26.5 Storage and the contract (1.48.0)
 
 - **studio migration** (next free number when built): `takes.thumb jsonb` (`{key, width, height, bytes}`, null until
   made), `takes.thumb_tries smallint NOT NULL DEFAULT 0`, `media_jobs.take_ids uuid[]` (thumbs only);

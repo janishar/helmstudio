@@ -16,7 +16,13 @@
       "key": "u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/frames/9e4d2c1b-3a5f-4e6d-8c7b-0a1b2c3d4e5f/frame.png",
       "width": 256,
       "height": 128,
-      "bytes": 52000
+      "bytes": 52000,
+      "thumb": {
+        "key": "u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/frames/9e4d2c1b-3a5f-4e6d-8c7b-0a1b2c3d4e5f/frame.thumb.webp",
+        "width": 910,
+        "height": 512,
+        "bytes": 40213
+      }
     }
   }
 }

@@ -1,0 +1,35 @@
+{
+  "type": "evt.media.status",
+  "version": 1,
+  "id": "6f1c2d3e-4b5a-4c7d-8e9f-000000004802",
+  "job_id": "5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d",
+  "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+  "occurred_at": "2026-11-16T10:00:00Z",
+  "trace": {
+    "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+  },
+  "data": {
+    "seq": 2,
+    "delivery": 1,
+    "status": "succeeded",
+    "result": {
+      "thumbs": [
+        {
+          "index": 0,
+          "key": "u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/thumbs/5a6b7c8d-9e0f-4a1b-8c2d-3e4f5a6b7c8d/0.png",
+          "width": 910,
+          "height": 512,
+          "bytes": 61234
+        },
+        {
+          "index": 1,
+          "skip": true
+        },
+        {
+          "index": 2,
+          "error": "input 2 is not a readable image"
+        }
+      ]
+    }
+  }
+}

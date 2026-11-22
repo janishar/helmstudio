@@ -814,7 +814,7 @@ runner reads them through `X_FILE` as every service does.
 (SeaweedFS `-s3.config` `policies` and `policyNames`, `.tools/make-secrets`; the stack's own key stays the admin one):
 `s3:GetObject` on `<bucket>/u/*`, `<bucket>/packs/*/looks/*` and (API 1.33) `<bucket>/packs/*/voices/*` (a command's
 inputs, LoRAs, the HEAD after its own upload, the looks' thumbnails, the voice previews), `s3:PutObject` (with the
-multipart parts) only on `<bucket>/u/*/runs/*`, `u/*/exports/*`, `u/*/frames/*`, `u/*/llm/thumbs/*`, `packs/*/looks/*`
+multipart parts) only on `<bucket>/u/*/runs/*`, `u/*/exports/*`, `u/*/frames/*`, `u/*/llm/thumbs/*`, (API 1.48) `u/*/thumbs/*`, `packs/*/looks/*`
 and `packs/*/voices/*`. No delete, list (ListBuckets answers an empty list),
 tagging, admin or other bucket; revocable on its own (a SeaweedFS restart). **Enforced by the store**: the bucket,
 the verbs, the prefixes, per-host revocation. **Not enforced by the store**: the owner and the run (keys are per owner
@@ -874,7 +874,7 @@ or presigned URLs, which the claim-check rule (never signed URLs in messages) ru
   with exactly the signed `Content-Type` and `Content-Length`; files_service streams them to the object store and never
   overwrites an object. `POST /v1/studio/uploads/{take_id}/complete` checks size and image header (HEAD + a 64 KB
   range read of the object), records width and height and shows the take. The original is its own thumbnail in API
-  1.2. Images (png, jpeg, webp) and, from 1.19, audio (wav, mp3: Media inputs, audio uploads; from 1.38 m4a), at
+  1.2; from 1.48 the thumbs media job makes a real one within seconds (Thumbnails). Images (png, jpeg, webp) and, from 1.19, audio (wav, mp3: Media inputs, audio uploads; from 1.38 m4a), at
   most 50 MB; Kong must let a 50 MB `PUT /files/*` through.
 - **Optimised uploads** (API 1.38; plan 20-h3-options-and-uploads 24.5, board UploadOptimise; images and audio,
   video uploads are not in this version). The web optimises every media upload before `POST /v1/studio/uploads`, in
@@ -897,6 +897,46 @@ or presigned URLs, which the claim-check rule (never signed URLs in messages) ru
   - `PUT /files/<key>?exp=&bytes=&ct=&sig=`: `sig = HMAC("PUT\n" + key + "\n" + exp + "\n" + bytes + "\n" + ct)`
     (`ct` URL-encoded in the query, raw in the HMAC). A GET signature never verifies as a PUT. Answers: 204 stored,
     403 bad / expired / path, 409 exists, 411 `Content-Length` not the signed bytes, 415 `Content-Type` not `ct`.
+
+## Thumbnails (API 1.48; plan 22-thumbnails section 26; normative)
+
+Lists draw `thumb_url`; viewers, compare, export and every model input use `url` (the full file). A video player's
+`poster` is `video.poster_url` (full size).
+
+- **The thumbnail**: one WebP (quality 80, PIL `method=4`, alpha kept) of an image take, or of a video's poster, with
+  its short side 512 px and its long side at most 1024 (the short side shrinks to fit), never upscaled; an image is
+  read upright (EXIF applied) and refused past 50 MP before decoding. **None is made** when the original's short side
+  is at most 512 px or the WebP is not smaller than the original: the original stays the thumbnail. Audio takes have
+  none (the web draws a sound tile).
+- **`takes.thumb`** `{key, width, height, bytes}` (null until made). `thumb_url` signs `coalesce(thumb.key, the
+  video's poster, the take's key)` everywhere a take is listed (the gallery, parents, refs, the library's images and
+  looks, LoRAs, batch rows, review, rows and decisions, memory, timelines); `RunOutput.thumb_url` is its take's. A
+  thumbnail key never reaches a client.
+- **Who makes it**:
+  - a run output (image or video): the runner's `output` node, from the image or poster it holds, writes
+    `<output_prefix><index>.thumb.webp` before the main object and reports it as `evt.run.output` `thumb`; the
+    projector stores it on the take (only that exact key under the run's prefix).
+  - an export: `<output_prefix>export.thumb.webp` (of the poster); a frame job: `<output_prefix>frame.thumb.webp`;
+    both reported as `evt.media.status` `result.thumb`.
+  - a frame copy (`frameOf`, first frame of a run's video): a server copy of the video's thumbnail to
+    `u/<owner>/frames/<take>.thumb.webp`.
+  - every other image or video take (uploads, imports, last-frame copies, takes from before 1.48): the **thumbs
+    media job**.
+- **The thumbs job** (`cmd.media.job` kind `thumbs`): studio's loop (every 10 s, as System) picks ready, live image
+  and video takes with `thumb` null and `thumb_tries` < 3, oldest first, one owner per job, at most 20, only when no
+  thumbs job is open on the stack and a media env is live; a take whose key (or poster) is outside `u/<owner_id>/`
+  and a video without a poster are never picked. `inputs`: each take's key (a video: its poster) as kind `image`;
+  `output_prefix` `u/<owner_id>/thumbs/<job_id>/`; studio keeps the take ids in order (`media_jobs.take_ids`). The
+  runner writes `<prefix><i>.webp` per input index and answers `result.thumbs[]`: `{index, key, width, height,
+  bytes}`, `{index, skip: true}` (none needed) or `{index, error}` (unreadable; the job goes on). The projector
+  stores each key only when it is exactly `<prefix><i>.webp` and the take is still live with `thumb` null (else the
+  object is deleted at once); a skip sets `thumb_tries = 3`, an error adds 1. A thumbs job that fails, is cancelled
+  or is lost adds 1 to every take it held and deletes its keys no take points at. It does not count toward a user's
+  open media jobs and has no endpoint: `GET` / cancel of its id are 404. Running it again changes nothing already
+  done (the state is `takes.thumb`); it never writes, moves or deletes an original or a poster.
+- **Deletes**: the take sweep removes `thumb.key` with the take's other objects (same `u/<owner_id>/` check); a
+  thumbnail is never shared between takes. A frame job at `last` stores its frame once for the video (`video.last`)
+  and a copy `u/<owner>/frames/<take>.png` for the frame take, so sweeping one never deletes the other's file.
 
 ## Video (API 1.11, M4 stage A; 1.12, M4 stage B)
 
@@ -3284,7 +3324,7 @@ it as `evt.run.output` `video.last`; exports write `export.last.png`). Why studi
 both frames as pixels when it writes the MP4, so a keyframe is exact (never re-decoded) and instant, with no queue
 and no ffmpeg in studio. A video take from before 1.17 has no stored last frame: a **media job** `frame` (`index` =
 frames − 1) makes it on a runner (202 `{job}`); the projector stores the take and records it as that video's last
-frame. Pipelines bind frames through `<step>.last_frame` / `.first_frame` sources (re-render).
+frame (from 1.48 the frame take keeps a copy, `u/<owner>/frames/<take>.png`: Thumbnails, Deletes). Pipelines bind frames through `<step>.last_frame` / `.first_frame` sources (re-render).
 
 ### Re-render (plan 15.3)
 
@@ -3477,6 +3517,8 @@ New shot machinery (references `make_shot`, `t_edit` `place`, `rerender_steps`; 
   and its id is written to KV cancels, so the runner stops it.
 - Failure classes: `input`, `invalid`, `ffmpeg` (its last error line), `verify`, `internal`, (1.18) `host_lost` (its
   host stopped responding: Several hosts, host loss).
+- (1.48) Kind `thumbs`: the takes' thumbnails (Thumbnails); exports and frames also write the thumbnail of their
+  poster or frame (`result.thumb`).
 
 ## Timeline rules (normative)
 
