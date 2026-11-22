@@ -474,7 +474,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 </section>
 
 <!-- ============ Turbo ============ -->
-<h2 class="sec">Create · Turbo: the 8-step Turbo LoRA (an optional add-on)</h2>
+<h2 class="sec">Create · Turbo: the 8-step Turbo LoRAs (optional add-ons: Turbo LoRA, and Turbo Ref LoRA for References)</h2>
 
 <!-- 10 -->
 <section class="frame" aria-label="Turbo picked on Base">
@@ -511,7 +511,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 </div>
 <div style="display: flex; flex-direction: column; gap: 14px">
 <div role="menu" aria-label="LoRA" class="menu">
-<span class="hd">LoRA<button class="i" aria-label="More information" title="turbo: lightx2v's 8-step Turbo LoRA (an add-on); use 8 steps. Merged at load on a Mac, applied by SGLang on NVIDIA.">i</button></span>
+<span class="hd">LoRA<button class="i" aria-label="More information" title="turbo: lightx2v's 8-step Turbo LoRA (an add-on; References use their own, Turbo Ref LoRA); use 8 steps. Merged at load on a Mac, applied by SGLang on NVIDIA.">i</button></span>
 <button role="menuitemradio" aria-checked="false" class="mi"><span>none<small>the model as it is</small></span></button>
 <button role="menuitemradio" aria-checked="true" class="mi"><span>turbo<small>8 steps, near the 50-step look</small></span><em>Turbo</em></button>
 </div>
@@ -537,7 +537,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 
 <!-- 11 -->
 <section class="frame" aria-label="Turbo LoRA not downloaded">
-<p class="note">11 · No live host has the Turbo LoRA: the Turbo pill and the turbo option stay visible, greyed, with the reason. The other presets work as before. <span class="ph">C3</span></p>
+<p class="note">11 · No reference, and no live host has the Turbo LoRA: the Turbo pill and the turbo option stay visible, greyed, with the reason. The other presets work as before. <span class="ph">C3</span></p>
 <div class="insp">
 <div>
 <h2 class="h">Preset<button class="i" aria-label="More information" title="Draft 4 steps; Turbo 8 steps with the Turbo LoRA (an add-on); Fast 20 steps, 45 layers, reuse 2, token reduction; Default the same without token reduction; Reference 50 steps, every layer.">i</button></h2>
@@ -612,11 +612,53 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 </div>
 </section>
 
+<!-- 13 -->
+<section class="frame" aria-label="References need the Turbo Ref LoRA" style="grid-column: 1 / -1">
+<p class="note">13 · References. A reference is wired, so the run uses Ref2VA and Turbo needs the other add-on, Turbo Ref LoRA. The Mac has only the Turbo LoRA: the Turbo pill and the turbo option grey with "Turbo Ref LoRA not downloaded", Run on says it per machine. Remove the reference and Turbo works again on the Mac (frame 10). <span class="ph">C3</span></p>
+<div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+<div style="flex: 1 1 380px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+<div class="comp">
+<div role="list" aria-label="References" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+<span role="listitem" style="display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 6px 0 4px; border-radius: 8px; background: var(--s5); font-size: 12px; font-family: 'JetBrains Mono', monospace"><i aria-hidden="true" class="thumb" style="width: 24px; height: 24px; border-radius: 5px"></i>&lt;Picture 1&gt;</span>
+</div>
+<textarea rows="2" aria-label="Prompt">The woman from &lt;Picture 1&gt; walks through the rain and laughs</textarea>
+</div>
+<div class="insp">
+<div>
+<h2 class="h">Preset</h2>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<button style="height: 36px; padding: 0 14px; border-radius: 999px; border: 0; background: var(--s3); font-size: 13px">Draft</button>
+<button aria-disabled="true" title="Turbo Ref LoRA not downloaded. An admin downloads it in Models, under MiniMax H3's optional add-ons." style="height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--ln); background: transparent; font-size: 13px; color: var(--t2); cursor: not-allowed"><span style="opacity: 0.55">Turbo</span></button>
+<button style="height: 36px; padding: 0 14px; border-radius: 999px; border: 0; background: var(--s3); font-size: 13px">Fast</button>
+<button style="height: 36px; padding: 0 14px; border-radius: 999px; border: 0; background: var(--s3); font-size: 13px">Default</button>
+<button aria-pressed="true" style="height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--a2); background: var(--s1); font-size: 13px">Reference</button>
+</div>
+<span style="font-size: 12px; color: var(--t2)">Turbo Ref LoRA not downloaded</span>
+</div>
+</div>
+</div>
+<div style="flex: 1 1 380px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+<div role="menu" aria-label="LoRA" class="menu">
+<span class="hd">LoRA</span>
+<button role="menuitemradio" aria-checked="true" class="mi"><span>none<small>the model as it is</small></span></button>
+<button role="menuitemradio" aria-checked="false" aria-disabled="true" class="mi" title="An admin downloads it in Models, under MiniMax H3's optional add-ons."><span>turbo<small>8 steps, near the 50-step look</small></span><em>Turbo Ref LoRA not downloaded</em></button>
+</div>
+<div role="menu" aria-label="Run on" class="menu">
+<span class="hd">Run on</span>
+<button role="menuitemradio" aria-checked="true" class="mi"><span>Auto<small>picks a free machine</small></span></button>
+<button role="menuitemradio" aria-checked="false" class="mi"><span>Mac<small>mac · Apple M5 Pro</small></span></button>
+<button role="menuitemradio" aria-checked="false" class="mi"><span>NVIDIA<small>gcp · RTX PRO 6000</small></span></button>
+</div>
+<p class="note">With Turbo held (a Remix of a Turbo References take), the Mac and gcp rows say "Turbo Ref LoRA not downloaded on mac" / "… on gcp" and Generate is blocked, as in frame 12.</p>
+</div>
+</div>
+</section>
+
 </div>
 </main>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":4600}}'>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":5100}}'>
 class Component extends DCLogic {
 state = { theme: null };
 renderVals() {

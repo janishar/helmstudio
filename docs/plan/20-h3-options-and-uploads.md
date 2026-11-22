@@ -11,7 +11,8 @@ schedules it. Design only: nothing here is built. Three parts that ship apart (C
   history.
 - **B. Optimised uploads**: the browser shrinks and re-encodes every media upload before it goes to storage.
 - **C. Turbo** (added 2026-11-22, after the spike in `docs/reference-notes/h3-turbo-spike`): lightx2v's 8-step
-  Turbo LoRA as an optional add-on of MiniMax H3 and a **Turbo** preset beside A1's four (24.11).
+  Turbo LoRAs as two optional add-ons of MiniMax H3 (one for text, image and first-last to video, one for
+  References) and a **Turbo** preset beside A1's four (24.11).
 
 Facts come from a read-only scout on 2026-11-22 of:
 - h3c-studio (`static/app.js`, `static/canvas.js`, `static/index.html`, `server/params.go`, `h3c/README.md`);
@@ -350,10 +351,12 @@ audio references, LTX audio to video sources) becomes AAC. The board's video-upl
 
 ### 24.11 C. MiniMax H3 Turbo (8-step LoRA)
 
-Design only, owner to approve (2026-11-22). Built against the shared optional add-on rule (API 1.36, contracts/README
+Design approved by the owner (2026-11-22, decisions in 24.12), with one change folded in here: References use
+lightx2v's separate ref2v 8-step v1.1 file as their own add-on (+1.4 GB), not the FL2V file. Built against the shared optional add-on rule (API 1.36, contracts/README
 "Optional add-ons"; plan 19 23.11 "Changed"), which a concurrent build is implementing now; C adds one small
-extension to it (C3). Board: [H3Options](../mock/H3Options.dc.html) frames 10-12, [Models](../mock/Models.dc.html)
-under MiniMax H3. The 4-step v1.3 stays in the [backlog](../backlog.md).
+extension to it (C3: an add-on picked by a param value, and swapped when references are wired). Board:
+[H3Options](../mock/H3Options.dc.html) frames 10-13, [Models](../mock/Models.dc.html)
+under MiniMax H3 (two add-on cards). The 4-step v1.3 stays in the [backlog](../backlog.md).
 
 **C1. What the spike found** (`docs/reference-notes/h3-turbo-spike`, `docs/mock/checks/h3-turbo/grid8.png`):
 
@@ -369,21 +372,30 @@ copied load, not today's mapped one. The recipe is h3's own defaults: Euler,
 no CFG, shift 12 / audio shift 3, so on the Mac only the merge is new. Not yet checked: other prompts, image to
 video, sound, 1344 × 768, references (C7), NVIDIA.
 
-**The file** (HF API, 2026-11-22): `lightx2v/Minimax-h3-Turbo` @ `c2bf13b837e33bd851b370285fc7db99482d2ab2`,
-`minimax_h3_fl2v_turbo_8step_v1.2_768p_bf16.safetensors`, 1,543,291,302 B, sha256
-`4c94278f9207209c193efd489e89c992d225e3fb3986c3658cf992c1e51f7b39`; not gated; licence the MiniMax H3 Community
-License (the model's own, `minimax-h3-community`). Diffusers / PEFT layout, 1089 tensors, a per-layer `.alpha` each;
-363 modules merge (spike log). The authors say it covers FL2VA and Ref2VA.
+**The files** (HF API, 2026-11-22, rechecked: the repo's `main` is still that revision, last modified 2026-11-16;
+not gated; licence the MiniMax H3 Community License, the model's own, `minimax-h3-community`; the API's
+`license_name` is `minimax-h3-community-license-agreement`), both in `lightx2v/Minimax-h3-Turbo` @
+`c2bf13b837e33bd851b370285fc7db99482d2ab2`:
 
-**C2. The add-on** (model.yaml, the 1.36 shape; no model names in studio or the web):
+| Add-on | File | Bytes | sha256 (LFS oid) | For |
+|---|---|---|---|---|
+| `turbo` | `minimax_h3_fl2v_turbo_8step_v1.2_768p_bf16.safetensors` | 1,543,291,302 | `4c94278f9207209c193efd489e89c992d225e3fb3986c3658cf992c1e51f7b39` | FL2VA: text, image and first-last to video |
+| `turbo_ref` | `minimax_h3_ref2v_turbo_8step_v1.1_768p_bf16.safetensors` | 1,383,677,808 | `46c64fc94509489f18dd1f545172e30c8df7d4cc50a30e96744409b4288c937d` | Ref2VA: References |
+
+The FL2V file: Diffusers / PEFT layout, 1089 tensors, a per-layer `.alpha` each; 363 modules merge (spike log). The
+authors say it covers Ref2VA too, but the owner picked the ref2v file for References (24.12 point 1). The ref2v file
+is not yet opened: its key layout and module count are checked in C0 (its size, the same as the FL2V 8-step v1.1,
+suggests the same layout). Not used: the `_comfyui_` copies (ComfyUI keys) and the 4-step files (backlog).
+
+**C2. The add-ons** (model.yaml, the 1.36 shape; no model names in studio or the web):
 
 ```yaml
 components:
-  turbo:                          # lightx2v's MiniMax-H3 Turbo v1.2 (8 steps): one file for both partitions
+  turbo:                          # lightx2v's MiniMax-H3 Turbo FL2V v1.2 (8 steps): FL2VA runs
     dir: MiniMax-H3-Turbo         # its own folder: the same on a Mac (base) and NVIDIA (base-fp8) host
     addon:
       title: Turbo LoRA
-      help: "lightx2v's 8-step Turbo LoRA (1.5 GB). The Turbo preset needs it; every variant works without it."
+      help: "lightx2v's 8-step Turbo LoRA for text, image and first-last to video (1.5 GB). The Turbo preset needs it; every variant works without it."
       source: {repo: lightx2v/Minimax-h3-Turbo, revision: c2bf13b837e33bd851b370285fc7db99482d2ab2,
                allow_patterns: [minimax_h3_fl2v_turbo_8step_v1.2_768p_bf16.safetensors],
                licence: minimax-h3-community, must_accept: true, gated: false, bytes: 1543291302}
@@ -391,27 +403,61 @@ components:
     dtype: stored
     precision: [int8]             # as the other components: a component without one counts as [bf16]
                                   # (pack.component_precisions) and would add bf16 to Base's Precision enum
+  turbo_ref:                      # lightx2v's MiniMax-H3 Turbo ref2v v1.1 (8 steps): Ref2VA runs (References)
+    dir: MiniMax-H3-Turbo         # the same folder; each add-on's presence and delete go by its own file
+    addon:
+      title: Turbo Ref LoRA
+      help: "lightx2v's 8-step Turbo LoRA for References (1.4 GB). The Turbo preset needs it when references are wired."
+      source: {repo: lightx2v/Minimax-h3-Turbo, revision: c2bf13b837e33bd851b370285fc7db99482d2ab2,
+               allow_patterns: [minimax_h3_ref2v_turbo_8step_v1.1_768p_bf16.safetensors],
+               licence: minimax-h3-community, must_accept: true, gated: false, bytes: 1383677808}
+    files: minimax_h3_ref2v_turbo_8step_v1.1_768p_bf16.safetensors
+    dtype: stored
+    precision: [int8]
 ```
 
-- An add-on of **both** variants: Base and Base fp8 are present without it; Models lists **Turbo LoRA · 1.5 GB ·
-  add-on** under MiniMax H3 with its hosts, **Download…** and **Delete** (the 1.36 model jobs, `addon: turbo`).
-- Its own folder, not `MiniMax-H3/loras/` (the spike's place): the first variant's folder does not exist on an
-  NVIDIA host. The owner's Mac already has the file from the spike: the build moves it into `MiniMax-H3-Turbo/`
-  (no download; presence checks the hash).
+- Two add-ons of **both** variants: Base and Base fp8 are present without them; Models lists two cards under MiniMax
+  H3's Optional add-ons, each with its hosts, its own **Download…** and **Delete** (the 1.36 model jobs, `addon:
+  turbo` / `addon: turbo_ref`): **Turbo LoRA · v1.2 · 8 steps · 1.5 GB** ("For text, image and first-last to video")
+  and **Turbo Ref LoRA · v1.1 · 8 steps · 1.4 GB** ("For References"). Either works alone: a host with only Turbo
+  LoRA runs Turbo without references; one with only Turbo Ref LoRA runs Turbo with them.
+- One folder for both, `MiniMax-H3-Turbo/`, not `MiniMax-H3/loras/` (the spike's place): the first variant's folder
+  does not exist on an NVIDIA host. A delete removes only that add-on's file (`DELETE …?addon=` removes only its
+  files). The build checks the 1.36 download marker is per add-on, not per folder; if it is per folder,
+  `turbo_ref` takes its own `MiniMax-H3-Turbo-Ref/` instead (data only). The owner's Mac already has the FL2V file
+  from the spike: the build moves it into `MiniMax-H3-Turbo/` (no download; presence checks the hash). The ref2v file is on no host yet: the owner downloads it in Models (Download…,
+  accepting the licence there) before C0; nothing in this pass downloads it.
 
 **C3. How a run carries Turbo** (data, contracts first):
 - A new `generate` param on both variants, in the Quality section:
-  `lora: {type: enum, label: LoRA, default: none, enum: [none, turbo], addons: {turbo: [turbo]}, help: "turbo:
-  lightx2v's 8-step Turbo LoRA (an add-on); use 8 steps. Merged at load on a Mac, applied by SGLang on NVIDIA."}`.
+  `lora: {type: enum, label: LoRA, default: none, enum: [none, turbo], addons: {turbo: [turbo]},
+  addons_with: {references: {turbo: [turbo_ref]}}, help: "turbo: lightx2v's 8-step Turbo LoRA (an add-on; References
+  use their own); use 8 steps. Merged at load on a Mac, applied by SGLang on NVIDIA."}`.
   An enum leaves room for the 4-step (`turbo4`) without a new param.
 - **The contract extension**: today an add-on is needed by a whole node (`nodeSchema.addons`, while the node is not
   bypassed). Turbo is needed by one **value** of a param of a node that is never bypassed, so an enum param gains
-  `addons: {<value>: [<component>]}` (each an add-on of the node's family; `contracts/check.py` refuses others). The
-  run check (Several hosts: eligibility, step 2b) adds, for each such param, the add-ons its resolved value lists:
-  the same texts (`generate: Turbo LoRA not downloaded on host gcp`; `… on any live host for env native`), the same
-  `POST /v1/studio/runs/plan` reason, the same Run on rule. The UI greys the option and every **preset whose values
-  pick it** (`Turbo LoRA not downloaded`; per host in Run on, `Turbo LoRA not downloaded on gcp`). One API version
-  (it can ride with A's).
+  `addons: {<value>: [<component>]}` (each an add-on of the node's family; `contracts/check.py` refuses others).
+  Which file a run needs depends on its partition, and `generate` picks Ref2VA when any reference is wired (in any
+  workflow, not only References), so the param may also carry `addons_with: {<input>: {<value>: [<component>]}}`:
+  when that input of the node is wired, its list **replaces** the value's `addons` list (`check.py` refuses an
+  `<input>` the node does not have, and the same values and components as `addons`). The run check (Several hosts:
+  eligibility, step 2b) adds, for each such param, the add-ons its resolved value lists on the resolved graph: the
+  same texts (`generate: Turbo LoRA not downloaded on host gcp`; with references `generate: Turbo Ref LoRA not
+  downloaded on host gcp`; `… on any live host for env native`), the same `POST /v1/studio/runs/plan` reason, the
+  same Run on rule. The UI greys the option and every **preset whose values pick it**, by the add-on the form needs
+  now (no reference: `Turbo LoRA not downloaded`; with a reference: `Turbo Ref LoRA not downloaded`; per host in Run
+  on, `… not downloaded on gcp`), and re-checks when a reference is added or removed. One API version (it can ride
+  with A's).
+- **Per add-on and host**, the greyed texts (board frames 11-13):
+
+| Form | Host has | Turbo pill / turbo option | Run on, per host |
+|---|---|---|---|
+| no reference | Turbo LoRA | works | works |
+| no reference | only Turbo Ref LoRA, or none | `Turbo LoRA not downloaded` | `Turbo LoRA not downloaded on <host>` |
+| a reference wired (References) | Turbo Ref LoRA | works | works |
+| a reference wired (References) | only Turbo LoRA, or none | `Turbo Ref LoRA not downloaded` | `Turbo Ref LoRA not downloaded on <host>` |
+
+  The pill is greyed only when no live host has the add-on the form needs; per host it is the Run on menu's job.
 - **A form that already holds `lora: turbo`** (a saved workflow, a take's Remix) where no host has it: the option
   shows picked and greyed and Generate is blocked with the reason (it never drops to `none` silently: 8 steps
   without the LoRA is a bad run; open point 2).
@@ -442,7 +488,8 @@ components:
   `child.run` does not keep (its prefix is `h3: `), so the run would say only "exited with status 2": the build makes
   them return 0 to the hook, which fails with h3's own line. The spike's debug knobs go (`H3_LORA_DUMP`,
   `H3_LORA_VERBOSE`, `H3_LORA_ROUND`, `H3_LORA_INT8`, `H3_LORA_ALPHA`); `H3_LORA_STRENGTH` stays (open point 5).
-- **native.py**: with `lora: turbo` the child gets `H3_LORA=<the add-on's file>` and `H3_ZERO_COPY_WEIGHTS=0`; argv
+- **native.py**: with `lora: turbo` the child gets `H3_LORA=<the add-on's file>` (`turbo`'s on FL2VA, `turbo_ref`'s
+  on Ref2VA: the add-on the run check resolved, so the runner never picks by name) and `H3_ZERO_COPY_WEIGHTS=0`; argv
   is unchanged (steps from the param). With `none` it gets `H3_LORA=` (empty): `child_env` passes every `H3_*` of the
   runner's own environment, so a stray one never merges. `core.child.run` gains an `env` argument (merged over
   `child_env`, through `_Child`), the one core change.
@@ -456,15 +503,17 @@ components:
   27.2 GB, base 6 steps 28.3, base 50 steps 28.9). So `peak_gb` gains `+ (4.5 if lora == 'turbo' else 0)` (a stage's
   own params are formula variables; `pack.compile_formula` allows `a if c else b` and `==`): about 31 GB at
   864 × 480 × 124 on the Generate key. The stage is shared, so Base fp8 also gets the +4.5 on its host-RAM budget
-  (unmeasured there anyway; harmless). Measured with the runner's
-  own measure in the build, recorded in GOTCHAS.
-- **Load time**: the CPU merge adds about 17 s per run (h3 is a fresh process each run; nothing is cached). Shown in
-  the Encode chip. ponytail: CPU sgemm per tensor; a Metal merge if it ever matters (merged files on disk are a
+  (unmeasured there anyway; harmless). Ref2VA takes the same +4.5: its file is 0.16 GB smaller and the copied load is
+  the same transformer; Ref2VA's own Turbo peak is unmeasured (references add their own encode). Both measured with
+  the runner's own measure in the build (one FL2VA, one Ref2VA), recorded in GOTCHAS.
+- **Load time**: the CPU merge adds about 17 s per run (h3 is a fresh process each run; nothing is cached); about the
+  same with the ref2v file (a slightly smaller file, unmeasured). Shown in the Encode chip. ponytail: CPU sgemm per tensor; a Metal merge if it ever matters (merged files on disk are a
   no-go: the spike's route B).
 
 **C5. NVIDIA (sgl.py)**:
 - SGLang 0.5.23's `MiniMaxH3Pipeline` is a `LoRAPipeline`: with `lora: turbo`, `argv` adds `--lora-path <the add-on's
-  file>` to the run's server for its partition (fl2va or ref2va: one server per run, so no `/set_lora`). Checked in
+  file>` to the run's server for its partition (fl2va gets `turbo`'s file, ref2va `turbo_ref`'s: one server per run,
+  so no `/set_lora`). Checked in
   the v0.5.23 source (2026-11-22): `--lora-path` is a server arg; the default `--lora-merge-mode auto` keeps an
   adapter unmerged when a merge would round away over half of it (its comment names MiniMax-H3 Turbo: 75 %), so it
   runs dynamically on the FP8 weights with no extra flag, at some cost per step (SGLang's note: up to +50 % on small
@@ -472,39 +521,44 @@ components:
   checkpoint's AdaLN LoRA onto the pruned coordinates; `guidance_scale` is fixed at 1 (no CFG, as the recipe). It
   refuses an AdaLN LoRA only with an AdaLN cache (`--minimax-h3-adaln-cache-path`), which sgl.py never sets.
 - The request carries `num_inference_steps` 8; `flow_shift` / `audio_flow_shift` only when not 12 / 3 (A5's rule),
-  so a Turbo run sends none. Unverified on the VM, like every SGLang path: one render when the VM is next on.
+  so a Turbo run sends none. Unverified on the VM, like every SGLang path: one render when the VM is next on (FL2VA;
+  a Ref2VA render too if time allows).
 
 **C6. Tests** (lean):
 - **Pack unit** (no GPU): the Turbo preset's argv and child env (`H3_LORA`, `H3_ZERO_COPY_WEIGHTS=0`, `--steps 8`),
-  none without it; `sgl.argv` has `--lora-path` only with `turbo`; the peak formula with and without.
-- **Contract**: `check.py` refuses a param `addons` value not in `enum` or a component that is not an add-on; a
-  dispatch fixture (`place.addon-param.json`): `lora: turbo` on a host without the add-on → the reason, `none` →
-  eligible; the contract suite creates a Turbo run set to that host → 422 with the text.
-- **Web**: one vitest over the greyed option and preset from the hosts' `addons` (beside `run-on.test.ts`).
+  none without it; with an image reference `H3_LORA` is the ref2v file; `sgl.argv` has `--lora-path` only with
+  `turbo`, the ref2v file on ref2va; the peak formula with and without.
+- **Contract**: `check.py` refuses a param `addons` value not in `enum`, a component that is not an add-on, and an
+  `addons_with` input the node lacks; a dispatch fixture (`place.addon-param.json`): `lora: turbo` on a host without
+  Turbo LoRA → the reason, `none` → eligible; with `references` wired on a host with only Turbo LoRA → the Turbo Ref
+  LoRA reason, on one with only Turbo Ref LoRA → eligible; the contract suite creates a Turbo run set to that host →
+  422 with the text.
+- **Web**: one vitest over the greyed option and preset from the hosts' `addons`, without and with a reference
+  (beside `run-on.test.ts`).
 - **Golden** (Mac): one T2VA at the Turbo preset, 512 × 512 × 22, 8 steps (T2VA and the merge repeat bit for bit,
   so it compares hashes as the other T2VA golden); skipped where the add-on is missing.
 - **VM** (manual): one Turbo T2VA at 864 × 480 × 124 when the VM is next on: s/step, VRAM, a look beside the Mac's.
-- Board parity for frames 10-12 and the Models row.
+- Board parity for frames 10-13 and the Models row's two cards.
 
-**C7. Ref2VA check** (before the build commits to it): one Mac render of H3 References (an image reference, 864 ×
-480 × 124, seed 42) at Turbo vs Base 50 steps, graded like grid8. If it holds, Turbo goes in all three workflows'
-presets. If not: Turbo is left out of workflow 3's presets (data only), or the add-on gains lightx2v's
-`minimax_h3_ref2v_turbo_8step_v1.1_768p_bf16.safetensors` (1,383,677,808 B, sha256 `46c64fc9…937d`), picked by
-partition (open point 1).
+**C7. Ref2VA check** (first in the build, once the owner has downloaded Turbo Ref LoRA in Models): open the ref2v file
+(its key layout must map with the FL2V key map; a new map is a C5 change), then one Mac render of H3 References (an
+image reference, 864 × 480 × 124, seed 42) at Turbo with the ref2v file vs Base 50 steps, graded like grid8. If it
+holds, Turbo goes in all three workflows' presets. If not, Turbo is left out of workflow 3's presets (data only) and
+the owner decides on the add-on; the FL2V file is not tried for References (owner, 24.12 point 1).
 
 **C8. Phases and effort**
 
 | # | Phase | Hours |
 |---|---|---|
-| 0 | Boards (frames 10-12, the Models row), approved by the owner | done in this pass |
-| C0 | The Ref2VA render (C7) | 1 |
-| C1 | Contract: param `addons`, run check 2b, plan reason, check.py, fixtures, README | 3-4 |
-| C2 | Studio: the run check and plan reason for param add-ons | 2-3 |
-| C3 | Web: greyed option and preset, Run on reason, Generate blocked | 3-4 |
-| C4 | Runner: the add-on, `lora` param, Turbo in the three workflows, child `env`, native env, `sgl.argv`, peak | 2-3 |
+| 0 | Boards (frames 10-13, the Models row's two cards), approved by the owner | done (v70 adds the ref2v card) |
+| C0 | The ref2v file's keys and the Ref2VA render (C7) | 1-2 |
+| C1 | Contract: param `addons` and `addons_with`, run check 2b, plan reason, check.py, fixtures, README | 4-5 |
+| C2 | Studio: the run check and plan reason for param add-ons, swapped by a wired input | 2-3 |
+| C3 | Web: greyed option and preset by the add-on the form needs, Run on reason, Generate blocked | 3-4 |
+| C4 | Runner: the two add-ons, `lora` param, Turbo in the three workflows, child `env`, native env, `sgl.argv`, peak | 3-4 |
 | C5 | h3.c patch (quiet log), VERSION / THIRD_PARTY / the diff, `make h3`, the golden, one memory measure, GOTCHAS | 3-4 |
 | C6 | The VM render | 1-2 |
-| | **C total** | **about 15-21** |
+| | **C total** | **about 17-24** |
 
 Order: after the 1.36 add-ons land and after A1 (Turbo sits among A1's presets). C0 first; C1 before C2-C4.
 
