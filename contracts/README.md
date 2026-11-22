@@ -924,7 +924,8 @@ Lists draw `thumb_url`; viewers, compare, export and every model input use `url`
     media job**.
 - **The thumbs job** (`cmd.media.job` kind `thumbs`): studio's loop (every 10 s, as System) picks ready, live image
   and video takes with `thumb` null and `thumb_tries` < 3, oldest first, one owner per job, at most 20, only when no
-  thumbs job is open on the stack and a media env is live; a take whose key (or poster) is outside `u/<owner_id>/`
+  thumbs job is open on the stack and a media env whose hosts key has `media.thumbs: true` is live
+  (an older runner advertises none and is sent none); a take whose key (or poster) is outside `u/<owner_id>/`
   and a video without a poster are never picked. `inputs`: each take's key (a video: its poster) as kind `image`;
   `output_prefix` `u/<owner_id>/thumbs/<job_id>/`; studio keeps the take ids in order (`media_jobs.take_ids`). The
   runner writes `<prefix><i>.webp` per input index and answers `result.thumbs[]`: `{index, key, width, height,
