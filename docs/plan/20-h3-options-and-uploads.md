@@ -510,6 +510,15 @@ Order: after the 1.36 add-ons land and after A1 (Turbo sits among A1's presets).
 
 ### 24.12 Open points for the owner (C)
 
+**Decided by the owner, 2026-11-22 (one by one); design approved for build:**
+1. References: **add the ref2v 8-step file** (its own add-on, +1.4 GB), not the FL2V file. The plan and boards
+   gain it before the build.
+2. Turbo picked without the add-on: **block Generate** with the reason.
+3. Preset order **by time**: Draft · Turbo · Fast · Default · Reference (swap Turbo and Fast if Fast measures quicker).
+4. **Copy every weight** (`H3_ZERO_COPY_WEIGHTS=0`, +4.4 GB), no second h3 patch.
+5. Strength **fixed at 1**.
+6. **Keep both** Draft and Fast.
+
 1. **References**: use the FL2V file for Ref2VA if C7's render holds (recommended, the authors' word, one file), else
    add the ref2v 8-step v1.1 file (+1.4 GB) or leave Turbo off References.
 2. **A form holding `lora: turbo` without the add-on**: block Generate with the reason (recommended) or drop to `none`
