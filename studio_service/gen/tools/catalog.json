@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helmstudio.local/contracts/tools/catalog.json",
   "title": "The tools the in-app assistant and helm mcp share (API 1.44)",
-  "description": "Not a message: one entry per tool (plan 18, 22.7). `input` is model-facing and self-contained (no $ref); `output` is what the tool answers, in the API's own shapes. `surfaces`: assistant (the in-app assistant) and mcp (helm mcp, plan 16). `served_by`: studio answers it on studio.tools as the thread's owner (`routes` are the API calls it stands for), pipelines answers it itself (memory, web search). `roles`: empty = every user; an admin tool is never offered to anyone else and studio checks the role again. `card`: the card kind (actions.json) the user's Yes must answer first. Write tools for mcp only (runs, batches, timeline edits) come with helm mcp.",
+  "description": "Not a message: one entry per tool (plan 18, 22.7). `input` is model-facing and self-contained (no $ref); `output` is what the tool answers, in the API's own shapes. `surfaces`: assistant (the in-app assistant) and mcp (helm mcp, plan 16). `served_by`: studio answers it on studio.tools as the thread's owner (`routes` are the API calls it stands for), pipelines answers it itself (memory, web search). `roles`: empty = every user; an admin tool is never offered to anyone else and studio checks the role again. `card`: the card kind (actions.json) the user's Yes must answer first. A tool for mcp only is called by helm mcp over Kong as the signed-in user (`routes` are the calls it makes; served_by stays studio). `destructive` (plan 16, the deletes): helm mcp marks it destructiveHint so the client asks before each call.",
   "tools": {
     "sessions": {
       "description": "Your Create sessions, newest first; with session_id, that session's runs and takes.",
@@ -934,6 +934,583 @@
         ]
       },
       "card": "delete"
+    },
+    "run_workflow": {
+      "description": "Start a run of a workflow; returns the run at once (queued). Use wait_run to wait for its takes. At most 4 of your runs wait at once.",
+      "surfaces": [
+        "mcp"
+      ],
+      "served_by": "studio",
+      "read_only": false,
+      "roles": [],
+      "routes": [
+        "POST /v1/studio/sessions",
+        "POST /v1/studio/sessions/{session_id}/runs"
+      ],
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "workflow_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "inputs": {
+            "type": "object",
+            "description": "<node>.<param>: value, as Generate sends them (an image: {\"take_id\": ...})"
+          },
+          "looks": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "type": "string"
+            },
+            "description": "look ids (list_library kind look), in order"
+          },
+          "host": {
+            "type": "string",
+            "pattern": "^[a-z0-9]{1,32}$",
+            "description": "one machine (Run on); absent = Auto"
+          },
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "an existing session; absent = a new one"
+          }
+        },
+        "required": [
+          "workflow_id"
+        ]
+      },
+      "output": {
+        "$ref": "../openapi.yaml#/components/schemas/Run"
+      }
+    },
+    "wait_run": {
+      "description": "Wait for a run to end (sends progress); returns the run with its outputs' take ids, or still_running after timeout_s. out_dir also saves the files there.",
+      "surfaces": [
+        "mcp"
+      ],
+      "served_by": "studio",
+      "read_only": true,
+      "roles": [],
+      "routes": [
+        "GET /v1/studio/runs/{run_id}",
+        "GET /v1/studio/sessions/{session_id}/events"
+      ],
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "the run"
+          },
+          "timeout_s": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 600,
+            "description": "at most 600; default 600"
+          },
+          "out_dir": {
+            "type": "string",
+            "minLength": 1,
+            "description": "a local folder to save the outputs in"
+          }
+        },
+        "required": [
+          "run_id"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "run": {
+            "$ref": "../openapi.yaml#/components/schemas/Run"
+          },
+          "still_running": {
+            "type": "boolean"
+          },
+          "saved": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "run",
+          "still_running"
+        ]
+      }
+    },
+    "cancel_run": {
+      "description": "Cancel a queued or running run.",
+      "surfaces": [
+        "mcp"
+      ],
+      "served_by": "studio",
+      "read_only": false,
+      "roles": [],
+      "routes": [
+        "POST /v1/studio/runs/{run_id}/cancel"
+      ],
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "the run"
+          }
+        },
+        "required": [
+          "run_id"
+        ]
+      },
+      "output": {
+        "$ref": "../openapi.yaml#/components/schemas/Run"
+      }
+    },
+    "upload": {
+      "description": "Upload a local png, jpeg or webp image as a take, to use as an input by its take id.",
+      "surfaces": [
+        "mcp"
+      ],
+      "served_by": "studio",
+      "read_only": false,
+      "roles": [],
+      "routes": [
+        "POST /v1/studio/uploads",
+        "POST /v1/studio/uploads/{take_id}/complete"
+      ],
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "the local file"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "output": {
+        "$ref": "../openapi.yaml#/components/schemas/Take"
+      }
+    },
+    "start_batch": {
+      "description": "Start a batch: one workflow or one of your pipelines over rows (lines, table or grid). Returns the batch at once; batch_status follows it.",
+      "surfaces": [
+        "mcp"
+      ],
+      "served_by": "studio",
+      "read_only": false,
+      "roles": [],
+      "routes": [
+        "POST /v1/studio/batches"
+      ],
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "workflow_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "description": "this or pipeline_id"
+          },
+          "pipeline_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "this or workflow_id"
+          },
+          "rows": {
+            "type": "object",
+            "description": "exactly one of {\"lines\": {\"param\": \"prompt.text\", \"values\": [...]}}, {\"table\": {\"columns\": [...], \"rows\": [[...]]}}, {\"grid\": {\"axes\": [{\"param\", \"values\"}]}} (at most 2 axes); 1 to 500 rows"
+          },
+          "inputs": {
+            "type": "object",
+            "description": "<node>.<param>: value, as Generate sends them (an image: {\"take_id\": ...})"
+          },
+          "seeds": {
+            "type": "object",
+            "description": "{\"count\": 1-8, \"start\"?}: repeat each row with consecutive seeds"
+          },
+          "looks": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "type": "string"
+            },
+            "description": "look ids (list_library kind look), in order"
+          },
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "absent = a new session"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "rows"
+        ]
+      },
+      "output": {
+        "$ref": "../openapi.yaml#/components/schemas/Batch"
+      }
+    },
+    "review_batch": {
+      "description": "The rows of a batch waiting at a gate or a Suggest judge, with their candidate takes (and the judge's suggestion).",
+      "surfaces": [
+        "mcp"
+      ],
+      "served_by": "studio",
+      "read_only": true,
+      "roles": [],
+      "routes": [
+        "GET /v1/studio/batches/{batch_id}/review"
+      ],
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "batch_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "the batch"
+          }
+        },
+        "required": [
+          "batch_id"
+        ]
+      },
+      "output": {
+        "$ref": "../openapi.yaml#/components/schemas/BatchReview"
+      }
+    },
+    "pick": {
+      "description": "Answer the gate (or Suggest judge) a batch row waits at: keep take_ids, or reject them all. A note on a judge becomes an example in its memory.",
+      "surfaces": [
+        "mcp"
+      ],
+      "served_by": "studio",
+      "read_only": false,
+      "roles": [],
+      "routes": [
+        "GET /v1/studio/batches/{batch_id}/review",
+        "POST /v1/studio/batches/{batch_id}/rows/{row}/pick"
+      ],
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "batch_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "the batch"
+          },
+          "row": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          },
+          "take_ids": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 8,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "the candidates to keep"
+          },
+          "reject": {
+            "type": "boolean",
+            "description": "true: reject every candidate (instead of take_ids)"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "batch_id",
+          "row"
+        ]
+      },
+      "output": {
+        "$ref": "../openapi.yaml#/components/schemas/BatchRow"
+      }
+    },
+    "batch_chat": {
+      "description": "Say something to a pipeline batch's director agent; it answers in the chat (batch_status reads it).",
+      "surfaces": [
+        "mcp"
+      ],
+      "served_by": "studio",
+      "read_only": false,
+      "roles": [],
+      "routes": [
+        "POST /v1/studio/batches/{batch_id}/chat"
+      ],
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "batch_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "the batch"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "batch_id",
+          "text"
+        ]
+      },
+      "output": {
+        "$ref": "../openapi.yaml#/components/schemas/ChatMessage"
+      }
+    },
+    "add_to_timeline": {
+      "description": "Append takes to a sequence in order (V1, or A2-A9 for sound); without timeline_id, a new sequence of them.",
+      "surfaces": [
+        "mcp"
+      ],
+      "served_by": "studio",
+      "read_only": false,
+      "roles": [],
+      "routes": [
+        "POST /v1/studio/timelines/{timeline_id}/clips",
+        "POST /v1/studio/timelines"
+      ],
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "timeline_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "absent = a new sequence"
+          },
+          "take_ids": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "track": {
+            "type": "string",
+            "pattern": "^(V1|A[2-9])$",
+            "description": "default V1"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 80,
+            "description": "a new sequence's name"
+          }
+        },
+        "required": [
+          "take_ids"
+        ]
+      },
+      "output": {
+        "$ref": "../openapi.yaml#/components/schemas/Timeline"
+      }
+    },
+    "export_timeline": {
+      "description": "Export a sequence's current revision as an MP4 take. plan_only: only the plan. out: wait (up to 10 min, with progress) and save the MP4 there; else returns the job at once (show_timeline lists exports).",
+      "surfaces": [
+        "mcp"
+      ],
+      "served_by": "studio",
+      "read_only": false,
+      "roles": [],
+      "routes": [
+        "POST /v1/studio/timelines/{timeline_id}/export/plan",
+        "POST /v1/studio/timelines/{timeline_id}/export",
+        "GET /v1/studio/media-jobs/{job_id}",
+        "GET /v1/studio/takes/{take_id}"
+      ],
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "timeline_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "the sequence"
+          },
+          "host": {
+            "type": "string",
+            "pattern": "^[a-z0-9]{1,32}$",
+            "description": "one machine (Run on); absent = Auto"
+          },
+          "plan_only": {
+            "type": "boolean"
+          },
+          "out": {
+            "type": "string",
+            "minLength": 1,
+            "description": "a local .mp4 path"
+          }
+        },
+        "required": [
+          "timeline_id"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "plan": {
+            "$ref": "../openapi.yaml#/components/schemas/ExportPlan"
+          },
+          "job": {
+            "$ref": "../openapi.yaml#/components/schemas/MediaJob"
+          },
+          "saved": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "delete_take": {
+      "description": "Delete a take from your gallery. Cannot be undone.",
+      "surfaces": [
+        "mcp"
+      ],
+      "served_by": "studio",
+      "read_only": false,
+      "roles": [],
+      "routes": [
+        "DELETE /v1/studio/takes/{take_id}"
+      ],
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "take_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "the take"
+          }
+        },
+        "required": [
+          "take_id"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "deleted": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "deleted"
+        ]
+      },
+      "destructive": true
+    },
+    "delete_run": {
+      "description": "Delete a finished run (its takes stay in the gallery). Cannot be undone.",
+      "surfaces": [
+        "mcp"
+      ],
+      "served_by": "studio",
+      "read_only": false,
+      "roles": [],
+      "routes": [
+        "DELETE /v1/studio/runs/{run_id}"
+      ],
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "the run"
+          }
+        },
+        "required": [
+          "run_id"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "deleted": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "deleted"
+        ]
+      },
+      "destructive": true
+    },
+    "delete_session": {
+      "description": "Delete a session with no run or batch going (its takes stay in the gallery). Cannot be undone.",
+      "surfaces": [
+        "mcp"
+      ],
+      "served_by": "studio",
+      "read_only": false,
+      "roles": [],
+      "routes": [
+        "DELETE /v1/studio/sessions/{session_id}"
+      ],
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "the session"
+          }
+        },
+        "required": [
+          "session_id"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "deleted": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "deleted"
+        ]
+      },
+      "destructive": true
     }
   }
 }

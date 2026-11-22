@@ -3984,6 +3984,8 @@ def check_tools(schemas: dict[str, dict], registry: Registry) -> None:
             fail(f"{w}: an admin route needs roles [admin], and roles [admin] an admin route")
         if not t["read_only"] and "mcp" in t["surfaces"] and "assistant" in t["surfaces"]:
             fail(f"{w}: a write tool is mcp only, or the assistant's behind a card")
+        if t.get("destructive") and (t["read_only"] or t["surfaces"] != ["mcp"]):
+            fail(f"{w}: destructive is an mcp-only write (plan 16)")
         if not t["read_only"] and "assistant" in t["surfaces"] and "card" not in t and t["served_by"] != "pipelines":
             fail(f"{w}: an assistant write needs a card (only memory writes go without)")
         if "card" in t:
@@ -3999,8 +4001,8 @@ def check_tools(schemas: dict[str, dict], registry: Registry) -> None:
         for an, a in sc["actions"].items():
             w = f"tools/actions.json {sn}.{an}"
             schema_ok(f"{w} input", a["input"], True)
-            if an in catalog["tools"]:
-                fail(f"{w}: named like a catalog tool")
+            if an in catalog["tools"] and "assistant" in catalog["tools"][an]["surfaces"]:
+                fail(f"{w}: named like an assistant tool")  # an mcp-only tool (plan 16's pick) is another namespace
             if sn != "shell" and an in shell:
                 fail(f"{w}: named like a shell action")
             if "card" in a:

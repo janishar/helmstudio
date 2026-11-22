@@ -24,7 +24,7 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `messages/cmd.assistant.{turn,delete}.schema.json`, `evt.assistant.step.schema.json` | (API 1.44) studio → pipelines: one input to an assistant chat (a message, the actions' results, a card's answer, summarize), a deleted chat; pipelines → studio's projector: one step of a turn (Assistant, below) |
 | `messages/req.pipelines.assistant.memory.schema.json` | (API 1.44) NATS request/reply studio → pipelines (not enveloped): the Memory list's list, edit, delete, clear, in the owner's namespace only |
 | `messages/assistant.schema.json` | (API 1.44) not a message: the assistant's shared shapes (screen summary, action, result, line, card, caps, limits, error, memory item); openapi.yaml's `Assistant*` twins copy them |
-| `tools/catalog.json` | (API 1.44) not a message: every tool the in-app assistant and `helm mcp` share (name, input, output, routes, roles, surfaces, card); studio_service embeds a copy (`gen/tools/`), pipelines_service copies it with the rest of `tools/` |
+| `tools/catalog.json` | (API 1.44) not a message: every tool the in-app assistant and `helm mcp` share (name, input, output, routes, roles, surfaces, card); studio_service embeds a copy (`gen/tools/`), pipelines_service copies it with the rest of `tools/`, cli embeds a copy for `helm mcp` (`gen/`, plan 16) |
 | `tools/actions.json` | (API 1.44) not a message: the assistant's screen actions per screen and its card kinds; web_service and pipelines_service copy it |
 | `tools/catalog.schema.json` | (API 1.44) the shape of `tools/catalog.json` and `tools/actions.json` |
 | `messages/tools.schema.json` | (API 1.15) not a message: every Agent tool's arguments and result, one turn, one executed tool call (Agents: tools) |
@@ -3697,12 +3697,17 @@ chats (threads), their rows, roles, caps and SSE in studio_service.
 - A route under `/v1/studio/admin/` ⇔ `roles` [admin]; an admin tool is never offered to anyone else and studio
   checks the role again (`forbidden`).
 - A write is mcp only, or the assistant's behind a `card`; only memory writes (`remember`) go without one.
+- (plan 16) A tool for `mcp` only is called by `helm mcp` over Kong as the signed-in user; its `routes` are the calls
+  it makes and `served_by` stays studio, but studio never serves it on `studio.tools`. `destructive` (the deletes) is
+  an mcp-only write; `helm mcp` sends it as `destructiveHint` (and every other write as `destructiveHint` false), so
+  the client asks before each call.
 - `offered_tools(roles, web_search, look_at)`: surface assistant, every role held, `web_search` only when on,
   `look_at` only when an ask workflow can run now.
 
 `tools/actions.json` (`$defs/actionsFile`) holds each screen's actions (`effect` line, undo, card, dialog; `card`
 names a card kind), the card kinds (each asked by some action or tool; tags from `tags`) and the shell's actions on
-every screen. An action is never named like a tool or a shell action; every screen route is a `navigate` target; a
+every screen. An action is never named like an assistant tool (an mcp-only tool such as `pick` is helm mcp's own
+namespace) or a shell action; every screen route is a `navigate` target; a
 screen with `roles` registers only for them (`screen_actions`). The server's card kinds in assistant.schema.json are
 the tools' cards plus `delete` (Clear all).
 

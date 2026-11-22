@@ -542,7 +542,9 @@ def test_assistant_tool_replies_are_checked_for_their_envelope():
 def test_tools_and_actions_never_share_a_name_and_actions_follow_the_route():
     cat, screens = assistant._files()
     acts = {n for s in screens.values() for n in s["actions"]}
-    assert not acts & set(cat)
+    assert not acts & {
+        n for n, t in cat.items() if "assistant" in t["surfaces"]
+    }  # mcp-only tools: helm mcp's own
     assert (
         assistant.action_spec("addNode", "/pipelines/abc", set())
         == screens["pipeline_editor"]["actions"]["addNode"]

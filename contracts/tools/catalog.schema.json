@@ -103,6 +103,10 @@
         "read_only": {
           "type": "boolean"
         },
+        "destructive": {
+          "type": "boolean",
+          "description": "plan 16: a write that cannot be undone (a delete); helm mcp marks it destructiveHint so the client asks first. Absent = false"
+        },
         "roles": {
           "type": "array",
           "uniqueItems": true,
