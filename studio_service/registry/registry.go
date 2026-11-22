@@ -72,6 +72,8 @@ type Auto struct {
 type ValuesBy struct {
 	Param  string           `json:"param"`
 	Values map[string][]any `json:"values"`
+	// Note (1.40, cross-node only) is the line under the named param's choice while this refuses one of its options
+	Note string `json:"note,omitempty"`
 }
 
 // Pool is what values_by narrows: an int's values, else an enum's.

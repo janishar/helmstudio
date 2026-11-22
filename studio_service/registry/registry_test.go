@@ -352,6 +352,12 @@ func TestRemoteHostsNeverShadowOwnHosts(t *testing.T) {
 	if w, ok := r.Workflow("ltx-text-to-video"); !ok || w.Env != "mlx" || w.Title == "Forged" {
 		t.Fatalf("mac.mlx's, never refused for gcp's: %+v", w)
 	}
+	// API 1.40: a cross-node values_by keeps its note (the Timeline's Extend before line)
+	if ps := r.Schemas()["ltx/extend"].Params; !slices.ContainsFunc(ps, func(p Param) bool {
+		return p.ValuesBy != nil && strings.HasPrefix(p.ValuesBy.Note, "Dev: the only model")
+	}) {
+		t.Fatal("ltx/extend direction: values_by note dropped")
+	}
 	if help := r.Schemas()["prompt"].Help; help == "Forged" {
 		t.Fatal("gcp's schema dated 2099 must not replace mac's")
 	}
