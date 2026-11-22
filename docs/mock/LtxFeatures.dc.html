@@ -246,7 +246,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 </div>
 </div>
 </div>
-<p class="note">Fast sets float16; Quality and Low memory set float32 (a preset sets only the keys it names). The Variant tile offers Distilled only: Dev is refused here today.</p>
+<p class="note">Fast sets float16; Quality and Low memory set float32 (a preset sets only the keys it names). The model menu offers Distilled only: Dev is refused here today.</p>
 </section>
 
 <!-- 3 -->
@@ -257,7 +257,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <h2 class="h">Negative prompt<button class="i" aria-label="More information" title="What the clip should not show. Applied with NAG, about 10 % slower. Empty: off.">i</button></h2>
 <label for="neg" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%)">Negative prompt</label>
 <textarea id="neg" class="ta" rows="2">text, watermark, people, a second fox</textarea>
-<span class="mono" style="font-size: 11px">38 / 500</span>
+<span class="mono" style="font-size: 11px">37 / 500</span>
 </div>
 <div>
 <h2 class="h">Prompt beats<button class="i" aria-label="More information" title="Each beat steers the picture and the sound for its stretch. The main prompt covers the rest.">i</button></h2>
@@ -268,7 +268,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <div>
 <h2 class="h">LoRA<button class="i" aria-label="More information" title="The word after the rank is the mode; click it to switch. Adapter: applied at run time, a strength change needs no reload. Bake: merged at load.">i</button></h2>
 <div style="display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 10px; background: var(--s1); border: 1px solid var(--s3)">
-<div style="display: flex; justify-content: space-between; gap: 8px"><span>[YOUR LORA NAME]</span><span class="mono" style="font-size: 12px">0.80</span></div>
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 8px"><span>[YOUR LORA NAME]</span><span style="display: flex; align-items: center; gap: 6px"><span class="mono" style="font-size: 12px; color: var(--t2)">0.80</span><button aria-label="Remove [YOUR LORA NAME]" style="width: 22px; height: 22px; padding: 0; border: 0; border-radius: 8px; background: var(--s3); font-size: 12px; color: var(--t2); box-shadow: none">×</button></span></div>
 <label for="lr1" style="font-size: 12px; color: var(--t2)">Strength · rank 8 · <button title="Mode: adapter. Click for bake." style="padding: 0; border: 0; background: transparent; color: var(--t1); font-size: 12px; text-decoration: underline dotted; box-shadow: none">adapter</button></label>
 <input id="lr1" type="range" min="0" max="2" step="0.05" value="0.8" style="width: 100%; accent-color: var(--a1)">
 </div>
