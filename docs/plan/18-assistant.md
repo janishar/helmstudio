@@ -2,7 +2,8 @@
 
 [← Plan index](../README.md)
 
-Status: a plan, not in a milestone yet: it becomes one in [08-milestones.md](08-milestones.md) when the owner says to
+Status: board v72 approved by the owner on 2026-11-22 ("Approve"); building on branch `assistant`; `look_at` gets a
+card (decision 2). Before that: a plan, not in a milestone yet: it becomes one in [08-milestones.md](08-milestones.md) when the owner says to
 build it (owner, 2026-11-21: "plan with me how we can power the whole web features with ai agents in the browser
 ui"). Decided with the owner the same day: it **acts, and confirms what costs or lasts**; phase 1 covers
 **navigation, Create, Graph and Pipelines, the Timeline and the Gallery**; the **admin picks the model** (DeepSeek
