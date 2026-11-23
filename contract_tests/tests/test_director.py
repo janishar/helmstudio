@@ -1055,7 +1055,9 @@ def test_remote_caps_and_network_failure(api, remote, fake_ctl):
     finally:
         finish(api, b["id"])
     assert r["status"] == "failed"
-    assert r["error"] == f"check: {remote['name']}: the provider is busy or down (HTTP 503)", r["error"]
+    assert r["error"] == f"check: {remote['name']}: the provider is busy or down (HTTP 503)", r[
+        "error"
+    ]
     assert done["remote"]["network_failures"] == 4  # the first try and 3 retries, none a verdict
     for x in (p, tokens):
         assert api.delete(f"{PIPES}/{x['id']}").status_code == 204

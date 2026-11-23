@@ -102,7 +102,7 @@ func TestProviders(t *testing.T) {
 		(*reqs)[len(*reqs)-1] != "POST /v1/studio/admin/providers/ollama/test?model=qwen2.5%3A7b" {
 		t.Fatalf("test %q %v", got, *reqs)
 	}
-	helmFails(t, "fakeai failed (network, 2.1 s): fakeai: network error: connection refused", "providers", "test", "fakeai")
+	helmFails(t, "fakeai failed (network, 2.1 s): fakeai: could not connect", "providers", "test", "fakeai")
 	if got := helmOK(t, "providers", "rm", "ollama"); got != "deleted ollama\n" {
 		t.Fatalf("rm %q", got)
 	}
