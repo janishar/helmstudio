@@ -3,11 +3,13 @@
 # stack (it must never reach a real provider) but leaves a real provider (DeepSeek, Claude, ...) unreachable here.
 # At start this joins the public CA bundle with the fake's certificate in the container's /tmp. The admin's key files
 # (deploy/secrets/providers, named by key_secret) are read live from the mount, then the fake's placeholder (API 1.51:
-# two folders), so a key added later is seen without a restart (Recheck in Admin › Model providers).
+# two folders), so a key added later is seen without a restart (Recheck in Admin › Model providers). API 1.52: the
+# mount is writable again (fake.yml makes it read-only), so a key pasted in Admin › Model providers is saved to it.
 services:
   pipelines:
     environment:
       PIPELINES_PROVIDER_KEYS_DIR: /run/secrets/providers:/fake-keys
       SSL_CERT_FILE: /tmp/ca-bundle.pem
+    volumes: [./secrets/providers:/run/secrets/providers]
     entrypoint: [sh, -c, 'cat "$$(python -c "import certifi; print(certifi.where())")" /certs/fake-openai.pem > /tmp/ca-bundle.pem && exec "$$@"', --]
     command: [python, main.py]

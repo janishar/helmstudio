@@ -17,14 +17,16 @@ services:
     volumes: [fakeai-certs:/certs]
 
   # pipelines is the server executor of host fake, trusts only the fake's certificate (SSL_CERT_FILE replaces the CA
-  # bundle) and finds a placeholder (not a key) under key_secret fake-openai
+  # bundle) and finds a placeholder (not a key) under key_secret fake-openai. API 1.52: a saved key goes into the
+  # container's own /tmp/provider-keys (made at start, gone with the container); the real folder is mounted read-only
+  # and is not in the list, so a test never writes or removes a real key
   pipelines:
     environment:
       PIPELINES_SERVER_HOSTS: ${SERVER_HOSTS:-fake}
-      PIPELINES_PROVIDER_KEYS_DIR: /fake-keys
+      PIPELINES_PROVIDER_KEYS_DIR: /tmp/provider-keys:/fake-keys
       PIPELINES_REMOTE_ALLOW_PRIVATE: "on"  # the fake's remote (https://fake-openai:8443) is a compose address
       SSL_CERT_FILE: /certs/fake-openai.pem
-    volumes: [fakeai-certs:/certs:ro]
+    volumes: [fakeai-certs:/certs:ro, ./secrets/providers:/run/secrets/providers:ro]
     configs: [{source: fake_provider_key, target: /fake-keys/fake-openai}]
     depends_on:
       fake-openai: {condition: service_healthy}
