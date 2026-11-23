@@ -121,9 +121,9 @@ services:
   postgres:
     # Alpine (musl): collations come from Postgres's builtin provider (C.UTF-8), not libc, so they never shift with the
     # image's libc. A cluster made under the old glibc image must not be reused here: hence the new volume pgdata18a.
-    # The old volumes (helmstudio_pgdata, helmstudio-test_pgdata) are kept as a fallback; delete them by hand when
-    # no longer needed: docker volume rm helmstudio_pgdata helmstudio-test_pgdata
-    image: postgres:18.7-alpine
+    # The old dev volume (helmstudio_pgdata) is kept as a fallback; the owner deletes it by hand when
+    # no longer needed: docker volume rm helmstudio_pgdata
+    image: postgres:18.7-alpine3.24
     environment:
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password   # init.sh reads <svc>_db_password the same way
       POSTGRES_INITDB_ARGS: --locale-provider=builtin --locale=C.UTF-8
