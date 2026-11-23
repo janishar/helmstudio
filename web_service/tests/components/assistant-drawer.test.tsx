@@ -625,8 +625,13 @@ describe("thinking (plan 29)", () => {
     await openDrawer(<Screen actions={{ change }} />);
     await waitFor(() => expect(onEvent).not.toBeNull());
     vi.useFakeTimers();
+    const title = () =>
+      screen.getByRole("heading", { level: 2, name: /Assistant/ }).querySelector("span")!;
+    expect(title().className).toContain("truncate");
     to("working", 20);
     expect(screen.getByText("Thinking… 0 s")).toBeTruthy();
+    // the word hides while the chip shows (still read out), so the buttons keep their room
+    expect(title().className).toContain("sr-only");
     act(() => vi.advanceTimersByTime(3000));
     expect(screen.getByText("Thinking… 3 s")).toBeTruthy();
     // parked on this tab's actions: today's chip

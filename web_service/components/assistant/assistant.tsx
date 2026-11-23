@@ -1017,7 +1017,8 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
           <div className="dh">
             <h2>
               <Sparkles aria-hidden strokeWidth={2} />
-              <span className="truncate">Assistant</span>
+              {/* while Thinking… N s shows, the word hides (the icon stays) so the buttons keep their room (owner) */}
+              <span className={since ? "sr-only" : "truncate"}>Assistant</span>
             </h2>
             {chip}
             <button
