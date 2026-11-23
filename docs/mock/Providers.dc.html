@@ -131,11 +131,12 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 </table>
 </div>
 
-<section aria-label="Other states" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start">
+<section aria-label="Other states" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; align-items: start">
 <div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 12px; background: var(--p0); border: 1px solid var(--s3)">
-<span style="font-size: 12px; color: var(--t2)">Key file missing</span>
+<span style="font-size: 12px; color: var(--t2)">Key missing</span>
 <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px"><span style="width: 8px; height: 8px; border-radius: 50%; background: #f2c14e"></span><span style="color: #f2c14e; font-weight: 600">Missing</span><span style="font-family: 'JetBrains Mono', monospace; color: var(--t2)">deploy/secrets/providers/openai</span><div style="flex-grow: 1"></div><button class="chip" style="height: 26px; font-size: 12px">Recheck</button></div>
-<span style="font-size: 12px; color: var(--t2)">Put the key in this file, then Recheck. The key is never shown here.</span>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="k-new" style="font-size: 12px; color: var(--t2)">API key</label><div style="display: flex; gap: 8px"><input id="k-new" class="in" type="password" autocomplete="off" placeholder="Paste the key" style="flex: 1 1 auto"><button class="chip" style="height: 38px; font-size: 12px; flex: 0 0 auto">Save key</button></div></div>
+<span style="font-size: 12px; color: var(--t2)">Checked with the provider, then saved to this file. Never shown again.</span>
 </div>
 <div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 12px; background: var(--p0); border: 1px solid var(--s3)">
 <span style="font-size: 12px; color: var(--t2)">Fetch failed</span>
@@ -159,11 +160,34 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <div style="display: flex; align-items: center; gap: 8px"><span style="font-size: 12px; color: var(--t2); flex: 1 1 auto">Fetch asks only the preset's or the saved URL. Save first.</span><button class="chip" disabled style="height: 26px; font-size: 12px; opacity: 0.5">Fetch</button></div>
 <span style="font-size: 12px; color: var(--t2)">Ollama preset: Base URL host.docker.internal:11434; GPU host and memory are yours to fill.</span>
 </div>
+<div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 12px; background: var(--p0); border: 1px solid var(--s3)">
+<span style="font-size: 12px; color: var(--t2)">Checking the key</span>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="k-chk" style="font-size: 12px; color: var(--t2)">API key</label><div style="display: flex; gap: 8px"><input id="k-chk" class="in" type="password" autocomplete="off" placeholder="Paste the key" value="xxxxxxxxxxxxxxxx" disabled style="flex: 1 1 auto; opacity: 0.6"><button class="chip" disabled style="height: 38px; font-size: 12px; flex: 0 0 auto; opacity: 0.6">Checking…</button></div></div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 12px; background: var(--p0); border: 1px solid var(--s3)">
+<span style="font-size: 12px; color: var(--t2)">Key refused</span>
+<div role="alert" style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, #ff6b6b 14%, transparent); color: #ff8a8a; font-size: 12px"><span style="flex: 1 1 auto">the provider refused this key; not saved</span></div>
+<span style="font-size: 12px; color: var(--t2)">The field empties; the line stays Missing.</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 12px; background: var(--p0); border: 1px solid var(--s3)">
+<span style="font-size: 12px; color: var(--t2)">Could not check</span>
+<div role="alert" style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, #f2c14e 14%, transparent); color: #f2c14e; font-size: 12px"><span style="flex: 1 1 auto">could not check: timeout</span><button class="chip" style="height: 26px; font-size: 12px">Save anyway</button></div>
+<span style="font-size: 12px; color: var(--t2)">Saved anyway, Found reads: Saved without a check; tried on first use.</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 12px; background: var(--p0); border: 1px solid var(--s3)">
+<span style="font-size: 12px; color: var(--t2)">Replace open</span>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="k-rep" style="font-size: 12px; color: var(--t2)">New API key</label><div style="display: flex; gap: 8px"><input id="k-rep" class="in" type="password" autocomplete="off" placeholder="Paste the key" style="flex: 1 1 auto"><button class="chip" style="height: 38px; font-size: 12px; flex: 0 0 auto">Save key</button><button class="chip" style="height: 38px; font-size: 12px; flex: 0 0 auto">Cancel</button></div></div>
+<span style="font-size: 12px; color: var(--t2)">The old key stays until the new one is saved.</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 12px; background: var(--p0); border: 1px solid var(--s3)">
+<span style="font-size: 12px; color: var(--t2)">Remove confirm</span>
+<div role="alertdialog" aria-label="Remove key" style="display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 12px; background: var(--s2); font-size: 12px"><span>Remove <span style="font-family: 'JetBrains Mono', monospace; color: var(--t2)">deploy/secrets/providers/deepseek</span>? Calls to DeepSeek fail until a key is saved.</span><div style="display: flex; gap: 8px; justify-content: flex-end"><button class="chip" style="height: 28px; font-size: 12px">Cancel</button><button class="chip" style="height: 28px; font-size: 12px; background: #ff6b6b; color: #2b0505; font-weight: 600">Remove</button></div></div>
+</div>
 </section>
 </main>
 
 <aside aria-label="Add a model provider" style="flex: 1 1 340px; box-sizing: border-box; padding: 16px 18px 24px; border-left: 1px solid var(--s3); background: var(--p0); display: flex; flex-direction: column; gap: 12px">
-<h2 style="margin: 0; display: flex; align-items: center; gap: 8px; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 16px; font-weight: 700">Add a model provider<button class="i" aria-label="More information" title="Pick a preset to fill the form; every field stays editable. A local server is any OpenAI-compatible endpoint you run (Ollama, LM Studio, llama-server) on a loopback or private address; the host keeps its memory reserved. A remote provider is https and needs the deployment's remote switch. Keys are never entered here: put the key in the key file the server reads.">i</button></h2>
+<h2 style="margin: 0; display: flex; align-items: center; gap: 8px; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 16px; font-weight: 700">Add a model provider<button class="i" aria-label="More information" title="Pick a preset to fill the form; every field stays editable. A local server is any OpenAI-compatible endpoint you run (Ollama, LM Studio, llama-server) on a loopback or private address; the host keeps its memory reserved. A remote provider is https and needs the deployment's remote switch. Paste its key under Key file: it is checked with the provider, saved to that file on the server and never shown again.">i</button></h2>
 <div style="display: flex; flex-direction: column; gap: 6px"><label for="p-preset" style="font-size: 12px; color: var(--t2)">Preset</label><select id="p-preset" class="in"><option>None</option><optgroup label="Local"><option>Ollama</option><option>LM Studio</option><option>llama-server</option></optgroup><optgroup label="Remote"><option selected>DeepSeek</option><option>OpenAI</option><option>Anthropic</option><option>Google Gemini</option><option>OpenRouter</option><option>Groq</option><option>Mistral</option></optgroup></select></div>
 <div role="group" aria-label="Kind" style="display: flex; padding: 3px; border-radius: 10px; background: var(--s1); border: 1px solid var(--s3)">
 <button aria-pressed="false" style="flex: 1 1 0; height: 34px; border-radius: 8px; border: 0; background: transparent; color: var(--t2); font-weight: 500">Local server</button>
@@ -188,6 +212,7 @@ deepseek-v4-pro</textarea></div>
 <div style="display: flex; flex-direction: column; gap: 6px"><label for="p-to" style="font-size: 12px; color: var(--t2)">Timeout, s</label><input id="p-to" class="in" placeholder="120"></div>
 </div>
 <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px"><span style="width: 8px; height: 8px; border-radius: 50%; background: var(--a1)"></span><span style="color: var(--a1); font-weight: 600">Found</span><span style="font-family: 'JetBrains Mono', monospace; color: var(--t2)">deploy/secrets/providers/deepseek</span><div style="flex-grow: 1"></div><button class="chip" style="height: 26px; font-size: 12px">Recheck</button></div>
+<div style="display: flex; gap: 8px"><button class="chip" style="height: 30px; font-size: 12px">Replace key</button><button class="chip" style="height: 30px; font-size: 12px">Remove key</button></div>
 <label style="display: flex; align-items: center; gap: 10px; min-height: 32px; font-size: 13px"><input type="checkbox" checked style="accent-color: var(--a1)">Enabled</label>
 <button style="height: 48px; border-radius: 14px; border: 0; background: var(--a1); color: var(--on1); background-image: linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 55%); font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.04em">Save provider</button>
 </aside>
