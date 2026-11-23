@@ -2450,8 +2450,10 @@ a local model (`model_media`): server and remote calls carry **text only** in 1.
   URL: the check uses the preset's or the saved provider's) asks `pipelines.providers.key.write` (core request/reply,
   never in a stream; 30 s): pipelines lists `GET <base_url>/models` with the key in memory under the host rule (15 s);
   401 or 403 is `refused`, anything else that is not an answer `unreachable` (nothing written; the form offers Save
-  anyway, `force: true`, written without a call: `skipped`). The key (trimmed, 1-1024 printable characters, no spaces)
-  goes into the first key folder only, temp file then rename, mode 0600; the answer is `ProviderKeySaved {key_secret,
+  anyway, `force: true`, written without a call: `skipped`). The key (trimmed, 1-1024 printable ASCII characters
+  only, 0x21-0x7E, no spaces; any other character, such as a `…` from a cut copy, a curly quote, a non-breaking or
+  zero-width space, is 422 `the key has a character keys never have (like … or a curly quote): copy it again from the
+  provider`, never the key or the character; pipelines refuses it the same way before any request) goes into the first key folder only, temp file then rename, mode 0600; the answer is `ProviderKeySaved {key_secret,
   path, found, saved, check, detail?}`, never the key. **Remove**: `DELETE` on the same path deletes the first folder's
   file (5 s) and answers `ProviderKey`. Studio logs `provider key <name> saved|refused|removed … by <admin id>`, pipelines
   `key file <name> written|removed`, never the key.

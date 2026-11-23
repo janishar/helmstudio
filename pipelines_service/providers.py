@@ -52,6 +52,10 @@ SUBJECT = "pipelines.providers.test"
 KEY_SUBJECT = "pipelines.providers.key"  # API 1.51: is a key file there (stat only)
 WRITE_SUBJECT = "pipelines.providers.key.write"  # API 1.52: save or remove a key (core request/reply, never a stream)
 KEY_NAME = re.compile(r"[a-z0-9][a-z0-9_.-]{0,63}")  # defs key_secret: no "/", no leading "."
+KEY_CHARS = re.compile(r"[!-~]+")  # a key is printable ASCII without spaces (0x21-0x7E)
+# our own fixed text for a key with any other character (a "…" from a cut copy, a curly quote, a non-breaking or
+# zero-width space): the HTTP client cannot send it, so it is never "could not connect"; never the key or the character
+KEY_CHARS_TEXT = "the key has a character keys never have (like … or a curly quote): copy it again from the provider"
 CHECK_TIMEOUT = 15.0
 MODELS_MAX = 1000  # GET /models ids kept (API 1.51; 64 before)
 DELAYS = [1.0, 4.0, 16.0]  # seconds before each network retry (tests set them short)
@@ -233,6 +237,9 @@ def _classify(name: str, e: Exception) -> CallError:
         if isinstance(cause, CallError):
             return cause
         cause = cause.__cause__ or cause.__context__
+    # a header (the key) the client cannot encode: local, before any request, never "could not connect"
+    if isinstance(e, UnicodeError):
+        return CallError("answer", f"{name}: {KEY_CHARS_TEXT}")
     if isinstance(e, (asyncio.TimeoutError, TimeoutError, openai.APITimeoutError)):
         return CallError("network", f"{name}: timed out")
     if isinstance(e, openai.APIConnectionError):
@@ -559,11 +566,14 @@ def remove_key(name: str) -> None:
 
 async def check_key(name: str, p: dict, key: str) -> tuple[str, str]:
     """GET <base_url>/models with the key in memory, under the host rule (pinned, no redirects, no proxy), 15 s:
-    ("ok", ""), ("refused", text) for 401 or 403, else ("unreachable", our own short reason)."""
+    ("ok", ""), ("refused", text) for 401 or 403 or a key with a character outside 0x21-0x7E (no request), else
+    ("unreachable", our own short reason)."""
     p = p | {
         "key_secret": name,
         "timeout_s": CHECK_TIMEOUT,
     }  # a key: the Authorization header is sent
+    if not KEY_CHARS.fullmatch(key):
+        return "refused", KEY_CHARS_TEXT
     try:
         # the whole check, the host rule's lookup too, within 15 s: studio waits 30 s for the answer
         async with asyncio.timeout(CHECK_TIMEOUT):

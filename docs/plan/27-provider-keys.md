@@ -115,8 +115,11 @@ browser ──PUT key──▶ web BFF ─▶ Kong ─▶ studio ──NATS requ
   missing is fine (nothing to do); never another folder. The answer reports `found` after it (a same-name file in a
   later folder, such as the fake's placeholder on the dev stack, still counts and the line shows Found).
 - **The key value**: trimmed of surrounding whitespace; 1 to 1024 characters; printable ASCII without spaces (0x21 to
-  0x7E), so no newline or control character reaches the file or a header. Checked in studio (422) and again in
-  pipelines (by the message schema).
+  0x7E), so no newline, control or non-ASCII character reaches the file or a header. Checked in studio (422) and again in
+  pipelines (by the message schema). A non-ASCII character (a `…` from a cut copy, a curly quote, a non-breaking or
+  zero-width space) gets one fixed text everywhere, never the key or the character: "the key has a character keys never have (like … or a curly quote): copy it again from the provider". The web field shows it
+  as it is typed (Save key greyed); pipelines' check refuses it before any request, and a call whose key file holds one
+  says the same, never "could not connect".
 
 ### 31.4 The check before saving
 

@@ -583,6 +583,12 @@ function ProviderPanel({
   );
 }
 
+/** A key is printable ASCII without spaces (0x21-0x7E): anything else (a "…" from a cut copy, a curly quote, a
+ * non-breaking or zero-width space) gets this note at once and no Save key; studio's 422 says the same. */
+export const KEY_CHARS_TEXT =
+  "the key has a character keys never have (like … or a curly quote): copy it again from the provider";
+const badKey = (v: string) => /[^!-~]/.test(v.trim());
+
 /** The key area (plan 27, the Providers board): the key file's line (a dot, Found or Missing, the path, Recheck); while
  * Missing an API key field with Save key; once Found, Replace key and Remove key (asked first). The check's answers:
  * Checking…, Refused (red), Could not check (amber, Save anyway). Not writable: plan 25's note, no field. */
@@ -603,9 +609,11 @@ function KeyArea({
   // putting the key in the page's markup), cleared after every answer but Could not check
   const input = useRef<HTMLInputElement>(null);
   const [typed, setTyped] = useState(false);
+  const [bad, setBad] = useState(false); // a character keys never have: the note, never the key or the character
   const clear = () => {
     if (input.current) input.current.value = "";
     setTyped(false);
+    setBad(false);
   };
   const [mode, setMode] = useState<"" | "replace" | "remove">("");
   const [busy, setBusy] = useState(false);
@@ -746,17 +754,20 @@ function KeyArea({
               placeholder="Paste the key"
               ref={input}
               disabled={busy}
-              onChange={(e) => setTyped(e.target.value.trim() !== "")}
+              onChange={(e) => {
+                setTyped(e.target.value.trim() !== "");
+                setBad(badKey(e.target.value));
+              }}
               onKeyDown={(e) => {
                 if (e.key !== "Enter") return;
                 e.preventDefault(); // Enter saves the key, never the provider form
-                if (typed && source) void save(false);
+                if (typed && !bad && source) void save(false);
               }}
             />
             <button
               type="button"
               className="chip h-[38px] flex-none text-[12px]"
-              disabled={busy || !typed || !source}
+              disabled={busy || !typed || bad || !source}
               onClick={() => void save(false)}
             >
               {busy ? "Checking…" : "Save key"}
@@ -790,7 +801,7 @@ function KeyArea({
           <button
             type="button"
             className="chip h-[26px] text-[12px] text-t1"
-            disabled={busy || !typed || !source}
+            disabled={busy || !typed || bad || !source}
             onClick={() => void save(true)}
           >
             Save anyway
@@ -798,7 +809,8 @@ function KeyArea({
         </div>
       )}
       {note?.kind === "error" && <ErrorNote>{note.text}</ErrorNote>}
-      {field && !note && (
+      {field && bad && <ErrorNote>{KEY_CHARS_TEXT}</ErrorNote>}
+      {field && !note && !bad && (
         <span className="text-[12px] text-t2">
           {status.found
             ? "The old key stays until the new one is saved."

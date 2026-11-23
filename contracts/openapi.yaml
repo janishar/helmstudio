@@ -1848,9 +1848,10 @@ paths:
         `GET <base_url>/models` with the key in memory (the host rule and the remote switch as for any call, 15 s), and
         `check` is `ok` (written), `refused` (401 or 403: nothing written), `unreachable` (anything else: nothing
         written; `detail` is our own short reason) or `skipped` (`force: true`: written without a call). The key is
-        trimmed, 1-1024 printable characters without spaces, written into the first key folder only (temp file and
-        rename, owner-only) and never returned or logged. 404 malformed name, unknown preset or provider; 422 a bad key
-        (the detail names the rule, never the value), both or neither source, an unknown field; 409 `keys are set in
+        trimmed, then 1-1024 printable ASCII characters only (0x21-0x7E: no spaces, no `…`, curly quote, non-breaking or
+        zero-width space), written into the first key folder only (temp file and rename, owner-only) and never returned
+        or logged. 404 malformed name, unknown preset or provider; 422 a bad key (the detail names the rule, never the
+        value; a character outside 0x21-0x7E is always `the key has a character keys never have (like … or a curly quote): copy it again from the provider`), both or neither source, an unknown field; 409 `keys are set in
         files on this deployment` (not writable) or a folder of that name.
       parameters:
         - {name: key_secret, in: path, required: true, schema: {type: string}}
@@ -6001,7 +6002,7 @@ components:
       additionalProperties: false
       description: 'from 1.52 (plan 27): a key to check and save. Exactly one source: `preset` or `provider` (never a URL)'
       properties:
-        key: {type: string, minLength: 1, maxLength: 1024, pattern: '^\s*[!-~]+\s*$', writeOnly: true, description: 'the key; trimmed, then 1-1024 printable ASCII characters without spaces. Never returned, logged or stored outside the key file'}
+        key: {type: string, minLength: 1, maxLength: 1024, pattern: '^\s*[!-~]+\s*$', writeOnly: true, description: 'the key; trimmed, then 1-1024 printable ASCII characters only (0x21-0x7E, no spaces; anything else is 422 with a fixed text, never the key or the character). Never returned, logged or stored outside the key file'}
         preset: {type: string, pattern: '^[a-z][a-z0-9-]{0,31}$', description: 'check with this preset''s URL'}
         provider: {type: string, pattern: '^[a-z][a-z0-9-]{0,31}$', description: 'check with this saved provider''s URL'}
         force: {type: boolean, default: false, description: 'Save anyway: write without a check (check skipped)'}

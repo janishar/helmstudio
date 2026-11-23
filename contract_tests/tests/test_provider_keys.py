@@ -44,6 +44,13 @@ def test_save_replace_and_remove_a_key(api, admin):
             == 422
         )
         assert put(name, "has space").status_code == 422
+        # a key with a character keys never have (a cut copy's "…", a curly quote, a non-breaking or zero-width
+        # space): our fixed text, never the key or the character, and never "could not connect"
+        for bad in (f"sk-{t}\u2026", f"\u201csk-{t}\u201d", f"sk-{t}\u00a0x", f"sk-{t}\u200bx"):
+            r = put(name, bad)
+            assert r.status_code == 422, r.text
+            assert r.json() == {"detail": "the key has a character keys never have (like … or a curly quote): "
+                                          "copy it again from the provider"}, r.text  # fmt: skip
         assert put(name, "x", preset="ollama").status_code == 422  # both sources
         assert put(name, "x", provider="nope").status_code == 404
         assert put("Bad..Name", "x").status_code == 404

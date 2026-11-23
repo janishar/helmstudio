@@ -202,6 +202,10 @@ type ProviderKeySave struct {
 	Force    bool    `json:"force"`
 }
 
+// KeyCharsText is the 422 for a key with a character outside 0x21-0x7E (a "…" from a cut copy, a curly quote, a
+// non-breaking or zero-width space): our own fixed text, never the key or the character.
+const KeyCharsText = "the key has a character keys never have (like … or a curly quote): copy it again from the provider"
+
 // Validate trims the key and checks it (1-1024 printable ASCII characters without spaces) and the source.
 func (b *ProviderKeySave) Validate() string {
 	b.Key = strings.TrimSpace(b.Key)
@@ -210,7 +214,7 @@ func (b *ProviderKeySave) Validate() string {
 	}
 	for i := 0; i < len(b.Key); i++ {
 		if b.Key[i] < 0x21 || b.Key[i] > 0x7e {
-			return "key must be printable characters without spaces"
+			return KeyCharsText
 		}
 	}
 	if (b.Preset == nil) == (b.Provider == nil) {

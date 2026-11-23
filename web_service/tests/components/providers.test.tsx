@@ -4,7 +4,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api } from "@/lib/api";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { ProvidersAdmin } from "@/components/admin/providers";
+import { KEY_CHARS_TEXT, ProvidersAdmin } from "@/components/admin/providers";
 import remote from "../../../contracts/fixtures/http/Provider.valid.2.json";
 import presetFile from "../../../contracts/providers/presets.json";
 import { answer } from "./helpers";
@@ -459,6 +459,25 @@ describe("ProvidersAdmin", () => {
     expect(button("Replace key")).toBeTruthy();
     expect(button("Remove key")).toBeTruthy();
     expect(document.body.innerHTML).not.toContain(KEY);
+  });
+
+  it("a key with a character keys never have: the note at once, Save key greyed, nothing sent", async () => {
+    serve(true, false, true);
+    const put = answer("PUT", { "/v1/studio/admin/provider-keys/{key_secret}": saved("ok", true) });
+    render(<ProvidersAdmin />);
+    await pick("OpenAI");
+    await screen.findByText("Missing", {}, { timeout: 2000 });
+    for (const bad of [`${KEY}\u2026`, `\u201c${KEY}\u201d`, `${KEY}\u00a0x`, `${KEY}\u200bx`]) {
+      fireEvent.change(keyField(), { target: { value: bad } });
+      expect(screen.getByText(KEY_CHARS_TEXT)).toBeTruthy();
+      expect(button("Save key").disabled).toBe(true);
+      fireEvent.keyDown(keyField(), { key: "Enter" });
+    }
+    expect(put).not.toHaveBeenCalled();
+    expect(document.body.innerHTML).not.toContain(KEY);
+    fireEvent.change(keyField(), { target: { value: KEY } });
+    expect(screen.queryByText(KEY_CHARS_TEXT)).toBeNull();
+    expect(button("Save key").disabled).toBe(false);
   });
 
   it("Checking: the field and the button are greyed, the button reads Checking…", async () => {

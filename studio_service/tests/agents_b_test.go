@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/helmstudio/studio_service/api/studio"
+	"github.com/helmstudio/studio_service/api/studio/dto"
 	"github.com/helmstudio/studio_service/api/studio/message"
 )
 
@@ -603,6 +604,12 @@ func TestProviderKeySave(t *testing.T) {
 		got := e.call(admin, "PUT", keys+"deepseek", save(bad), 422)
 		if strings.Contains(fmt.Sprint(got), "sk") && bad["key"] != nil {
 			t.Fatal("a 422 echoes the key", got)
+		}
+	}
+	for _, bad := range []string{"sk-ant-api03-abc\u2026", "sk-\u201cabc\u201d", "sk-a\u00a0b", "sk-a\u200bb"} {
+		got := e.call(admin, "PUT", keys+"deepseek", save(map[string]any{"key": bad}), 422)
+		if got["detail"] != dto.KeyCharsText || strings.Contains(fmt.Sprint(got), "sk-") {
+			t.Fatal("a key with a non-ASCII character: not our fixed text", got)
 		}
 	}
 	e.call(admin, "PUT", keys+"Bad..Name", save(nil), 404)

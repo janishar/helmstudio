@@ -178,3 +178,21 @@ async def test_a_slow_name_lookup_counts_in_the_15_s(keys, monkeypatch):
     got = await asyncio.wait_for(ask(**save("slow", "http://slow.invalid/v1")), 2)
     assert (got["check"], got["detail"]) == ("unreachable", "timeout")
     assert os.listdir(keys[0]) == []
+
+
+async def test_a_non_ascii_key_is_refused_with_our_text_and_no_request(fake, keys):
+    # a cut copy ("…"), a curly quote, a non-breaking or zero-width space: never "could not connect", never a call
+    for bad in ("sk-ant-api03-abc\u2026", "sk-\u201cabc\u201d", "sk-a\u00a0b", "sk-a\u200bb"):
+        before = len(fake.requests)
+        got = await providers.check_key("anthropic", snap(fake.url), bad)
+        assert got == ("refused", providers.KEY_CHARS_TEXT), got
+        assert len(fake.requests) == before
+    assert os.listdir(keys[0]) == []
+
+
+def test_a_local_encoding_error_is_never_could_not_connect():
+    try:
+        "sk-\u2026".encode("ascii")
+    except UnicodeEncodeError as e:
+        got = str(providers._classify("anthropic", e))
+    assert got == f"anthropic: {providers.KEY_CHARS_TEXT}"
