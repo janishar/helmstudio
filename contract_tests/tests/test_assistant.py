@@ -51,6 +51,7 @@ def test_a_turn_reads_through_studio(api, api_b, assistant):
     ]})  # fmt: skip
     status = ok(api.get(THREADS))["status"]
     assert status["enabled"] and status["provider"]["remote"] is False
+    assert status["thinks"] is False  # API 1.54: the fake model has no preset, so no thinking rule
     chat = ok(api.post(THREADS, json={"client_id": TAB}), 201)
     tid = chat["id"]
     url = f"{THREADS}/{tid}"
