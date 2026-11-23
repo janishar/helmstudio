@@ -996,13 +996,13 @@ function ModelRow({
           checked={chosen}
           onChange={(e) => onTick(e.target.checked)}
         />
-        <span className="mono min-w-0 truncate" title={id}>
+        <span className="mono min-w-0 break-all" title={id}>
           {id}
         </span>
-        {custom && <span className="tag">custom</span>}
+        {custom && <span className="tag shrink-0">custom</span>}
         <div className="grow" />
         {chosen && (
-          <label className={`flex items-center gap-1.5 ${isDefault ? "" : "text-t2"}`}>
+          <label className={`flex shrink-0 items-center gap-1.5 ${isDefault ? "" : "text-t2"}`}>
             <input
               type="radio"
               name="p-default"
@@ -1017,7 +1017,7 @@ function ModelRow({
           <button
             type="button"
             aria-label={`Remove ${id}`}
-            className="size-[22px] rounded-full border-0 bg-s4 p-0 text-[12px]"
+            className="size-[22px] shrink-0 rounded-full border-0 bg-s4 p-0 text-[12px]"
             onClick={() => onTick(false)}
           >
             ×
@@ -1049,7 +1049,9 @@ function ModelRow({
                   </button>
                 ))}
               </div>
-              {level && level === info.default && <span className="text-t2">provider default</span>}
+              {level && level === info.default && (
+                <span className="whitespace-nowrap text-t2">provider default</span>
+              )}
             </>
           ) : (
             <span className="text-t2">No thinking setting</span>

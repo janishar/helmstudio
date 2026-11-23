@@ -2,7 +2,7 @@
 
 [← Plan index](../README.md)
 
-Status: **decided by the owner (2026-11-24): layout A · Rows ("A - rows"), after seeing both drawn; queued to build.** API version:
+Status: **decided by the owner (2026-11-24): layout A · Rows ("A - rows"), after seeing both drawn; built 2026-11-24 (32.12).** API version:
 **1.53.0** (main is at 1.52.0, plan 27; if another plan takes 1.53.0 first, this takes the next free one at build
 time). Not in a milestone, like plans 25 and 27.
 
@@ -251,3 +251,51 @@ Small calls made in this design (say if any should change): the API keeps `model
 `thinking` map (the CLI reads strings); our High is the provider's `high`, never `max`; Claude 5 shows "Always
 thinks" (the layer documents no off); LM Studio and llama-server get no control; the Mistral aliases are assumed to
 be the 4 models until a Test says otherwise.
+
+### 32.12 As built (layout A, all phases; 2026-11-24)
+
+- **Phase 0 (finding).** The dev stack has no provider and no session-names setting saved, so nothing could be seen
+  there; from the code and DeepSeek's docs: nothing about thinking was sent, so DeepSeek thought at high on every
+  call, and its reasoning counts inside `max_tokens`. Session names ask with 24 tokens (and Test with 8): the
+  thinking spends them, the answer comes back empty or cut, `names.clean` refuses it and the session stays untitled
+  (log `the answer is not a 2-5 word title`). Fixed two ways: a level set per model is sent (Off for names is the
+  cheapest), and every call to a model a rule covers gets that level's `thinking_tokens` added to `max_tokens`. A
+  model with **nothing saved** whose rule has a `default` (DeepSeek high, OpenAI medium, Mistral Large high) or that
+  always thinks (Claude 5) gets `body {}` and that level's tokens: nothing new is sent, but the call has room. So a
+  DeepSeek provider saved before 1.53 names sessions again without being opened.
+- **Contracts** (API 1.53.0): `presets.json` `thinking_tokens` and per-preset `thinking` (rules or `"models"`); the
+  schema limits a fragment to `reasoning_effort`, `thinking`, `reasoning`, `reasoning_format`; check.py checks the
+  rules (compiles, no lookaround or backreference, default among levels, on only with off, a `budget_tokens` below its
+  level's tokens) and runs eight bad rules through the same check to prove each is refused. openapi: `Provider.thinking`
+  and `thinking_levels`, `ProviderPut.thinking`, `ProviderTest.thinking`, `ProviderPreset.thinking`, a model source's
+  `thinking`; messages: `defs providerThinking` in the snapshot, `reasoning` in the test reply. README: Model sources,
+  Thinking.
+- **Rules shipped**: DeepSeek flash / v4-pro / v4-flash Off, Low, High (default High); OpenAI `gpt-6*` Low, Medium,
+  High (default Medium); Anthropic Claude 5 always thinks; Gemini 3 and 4 Low, Medium, High (no default); OpenRouter
+  `"models"`; Groq GPT-OSS Low, Medium, High (default Medium), Qwen 3 Off to High with `reasoning_format: hidden`;
+  Mistral Large (`-latest` or 4) Low, Medium, High (default High), Small (`-latest` or 2603) Off / On; Ollama `qwen3`,
+  `deepseek-r1`, `magistral` Off / On (on = effort medium), `gpt-oss` Low, Medium, High. LM Studio and llama-server none.
+- **Studio**: migration 00034 `providers.thinking jsonb NOT NULL DEFAULT '{}'`; PUT 422 texts `thinking: <m> is not
+  one of models`, `has no thinking setting`, `takes <levels>`; the snapshot (`providerRow.snapshot`, so Submit, Run
+  again, assistant, names and Test alike) carries `thinking`; Test and a preset's Fetch answer `thinking`
+  (OpenRouter's from the reply's `reasoning`: its efforts among low, medium, high, plus off unless mandatory; fewer
+  than two levels: none).
+- **Pipelines**: `chat` merges the fragment into the body (`extra_body`, for remote and server) and adds the tokens; a
+  400 tries the json_object fallback first (DeepSeek refuses json_schema, so the fragment is not blamed for it), then
+  once without the fragment, remembered per (provider, model) in `_NO_THINKING`, log `thinking setting refused, sent
+  without it`. Test reads a `/models` entry's `reasoning` (only `supported_efforts` and `mandatory`).
+- **Web** (layout A): rows chosen first (tick, mono id, custom tag and ×, Default radio), under a chosen model the
+  Thinking segment of its own levels with "provider default", "Always thinks" or "No thinking setting"; a filter past
+  12 rows with "N found · M match · chosen first"; Model id + Add (Enter adds, never saves); Refresh; auto Fetch once
+  per provider and key when it can be asked (key Found, a local preset on pick, a saved one on Edit); Loading models…
+  with Refresh greyed and two skeleton bars; Fetch failed with Retry and "The list keeps what it had."; No key: "Add the
+  key to load the full list." with the preset's models ticked. Save sends `models`, `default_model` and the level
+  each chosen model shows (picked, else the rule's default, else Off). Enable/Disable keeps the saved thinking as is.
+  The AI agents Model selects read `deepseek-flash · Thinking Off (default)` with "Set per model in Model providers.";
+  the editor's Runs on options carry the level too.
+- **Deviations**: (1) the default's room above (the plan said absent = nothing sent; still true for the body, the
+  tokens are new). (2) OpenRouter's levels are not stored, so a saved OpenRouter provider's `thinking_levels` offer
+  all four until Fetch answers, and PUT accepts any of off, low, medium, high for it. (3) A row is "custom" when it is
+  not in the fetched list (or, before a fetch, the preset's list): a saved model the provider no longer lists shows as
+  custom. (4) Gemini (no default, no Off) starts with nothing picked and sends nothing.
+
