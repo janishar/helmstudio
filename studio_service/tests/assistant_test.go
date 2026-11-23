@@ -107,7 +107,7 @@ func TestAssistantSettings(t *testing.T) {
 		t.Fatal(set)
 	}
 	status := e.call(userA, "GET", "/v1/studio/assistant/threads", nil, 200)["status"].(map[string]any)
-	if status["enabled"] != true || status["web_search"] != "brave" ||
+	if status["enabled"] != true || status["web_search"] != "brave" || status["thinks"] != false ||
 		status["provider"].(map[string]any)["remote"] != false || status["provider"].(map[string]any)["title"] != "ollama" {
 		t.Fatal(status)
 	}

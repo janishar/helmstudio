@@ -209,3 +209,10 @@ func testThinking(preset *string, reply message.ProviderTestReply) map[string]dt
 	}
 	return out
 }
+
+// modelThinks is AssistantStatus.thinks (API 1.54, plan 29): the model's level resolved as the snapshot's is (a saved
+// level, else its rule's default, or always thinks) and is not off. No rule or nothing resolved: false.
+func modelThinks(preset *string, model string, saved map[string]string) bool {
+	t, ok := thinkingSnapshot(preset, []string{model}, saved)[model].(map[string]any)
+	return ok && t["level"] != "off"
+}

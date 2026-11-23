@@ -210,12 +210,13 @@ func (s *Service) PutAssistantSettings(ctx context.Context, caller common.Caller
 	return out, err
 }
 
-// AssistantStatus is what every user may know: on or off, where the model runs, web search, the caps.
+// AssistantStatus is what every user may know: on or off, where the model runs, web search, the caps, whether it thinks.
 type AssistantStatus struct {
 	Enabled   bool               `json:"enabled"`
 	Provider  *AssistantProvider `json:"provider"`
 	WebSearch *string            `json:"web_search"`
 	Limits    AssistantLimits    `json:"limits"`
+	Thinks    bool               `json:"thinks"` // API 1.54 (plan 29): the model thinks (modelThinks)
 }
 
 // AssistantProvider names where the model runs.
@@ -246,6 +247,7 @@ func (s *Service) assistantConfig(ctx context.Context, tx pgx.Tx) (AssistantStat
 		}
 		status.Enabled = true
 		status.Provider = &AssistantProvider{Title: cmp.Or(deref(p.Title), p.Name), Remote: p.Kind == "remote"}
+		status.Thinks = modelThinks(p.Preset, model, p.Thinking)
 		snap.Source = map[string]any{"kind": p.Kind, "provider": p.Name, "model": model}
 		if p.Kind == "server" {
 			snap.Source["host"] = deref(p.Host)
