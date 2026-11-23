@@ -31,11 +31,11 @@ This section owns version numbers; other sections name libraries without them.
 
 | Item | Version |
 |---|---|
-| Kong (open source) | 3.9.4 — the newest open-source line; do not plan on later features |
+| Kong (open source) | 3.9.4 — the newest open-source line; do not plan on later features. `KONG_NGINX_WORKER_PROCESSES=2` (kong/Dockerfile): the default starts one worker per core the VM shows, 1.2 GB on the Mac |
 | Kong go-pdk | v0.11.2 (maintenance mode) |
-| PostgreSQL | 18.7 |
+| PostgreSQL | 18.7, image `postgres:18.7-alpine` (2026-11-23; 426 MB against 698 MB for the Debian one). Clusters use the builtin collation provider (`C.UTF-8`), so a libc change never reorders indexes; the volume is `pgdata18a` (the old glibc `pgdata` volumes are kept, never reused) |
 | NATS server | 2.15.3 |
-| SeaweedFS | 4.53 |
+| SeaweedFS | 4.53, image `chrislusf/seaweedfs:4.53` (already its smallest tag: `_large_disk` is the same size, `_full` bigger) |
 | nats-box (stream and KV setup) | 0.20.2 |
 | Alpine (Go and web runtime images) | 3.24.3 |
 | Docker Compose | 2.20 or later (current v5.7.1); no `version:` key |

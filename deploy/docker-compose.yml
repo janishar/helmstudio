@@ -119,12 +119,17 @@ services:
       nats: {condition: service_healthy}
 
   postgres:
-    image: postgres:18.7
+    # Alpine (musl): collations come from Postgres's builtin provider (C.UTF-8), not libc, so they never shift with the
+    # image's libc. A cluster made under the old glibc image must not be reused here: hence the new volume pgdata18a.
+    # The old volumes (helmstudio_pgdata, helmstudio-test_pgdata) are kept as a fallback; delete them by hand when
+    # no longer needed: docker volume rm helmstudio_pgdata helmstudio-test_pgdata
+    image: postgres:18.7-alpine
     environment:
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password   # init.sh reads <svc>_db_password the same way
+      POSTGRES_INITDB_ARGS: --locale-provider=builtin --locale=C.UTF-8
     secrets: [postgres_password, auth_db_password, studio_db_password, pipelines_db_password]
     ports: ["127.0.0.1:${POSTGRES_HOST_PORT:-5463}:5432"]
-    volumes: [pgdata:/var/lib/postgresql, ./postgres/init.sh:/docker-entrypoint-initdb.d/init.sh:ro]
+    volumes: [pgdata18a:/var/lib/postgresql, ./postgres/init.sh:/docker-entrypoint-initdb.d/init.sh:ro]
     healthcheck: {test: [CMD-SHELL, "pg_isready -U postgres -d auth"], interval: 2s, timeout: 3s, retries: 30}
 
   seaweedfs:
@@ -152,6 +157,6 @@ services:
       seaweedfs: {condition: service_healthy}
 
 volumes:
-  pgdata:
+  pgdata18a:
   natsdata:
   seaweeddata:

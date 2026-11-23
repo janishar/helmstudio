@@ -8,7 +8,9 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/apikey-auth-plugin
 FROM kong:3.9.4
 COPY --from=build /out/apikey-auth-plugin /usr/local/bin/apikey-auth-plugin
 COPY kong.yml /kong/kong.yml
+# 2 nginx workers: the default (auto) starts one per core Docker's VM shows (20 on the Mac, 1.2 GB); 2 serve this load.
 ENV KONG_DATABASE=off \
+    KONG_NGINX_WORKER_PROCESSES=2 \
     KONG_DECLARATIVE_CONFIG=/kong/kong.yml \
     KONG_PLUGINS=bundled,apikey-auth-plugin \
     KONG_PLUGINSERVER_NAMES=apikey-auth-plugin \

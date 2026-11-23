@@ -32,7 +32,7 @@ cli/bin/helm run echo -p echo.steps=5 -p prompt.text="hello" --out .
 | Command | What |
 |---|---|
 | `make up` (= `make dev`) | build and start the stack, wait until healthy |
-| `make down` | stop it; the data volumes (`pgdata`, `natsdata`, `seaweeddata`) stay |
+| `make down` | stop it; the data volumes (`pgdata18a`, `natsdata`, `seaweeddata`) stay |
 | `make logs s=studio` | follow one service's logs (no `s`: all) |
 | `make ps` | what is running |
 | `make contracts-check` | validate `contracts/` (no stack needed) |
@@ -43,7 +43,7 @@ cli/bin/helm run echo -p echo.steps=5 -p prompt.text="hello" --out .
 
 Each service has its own `Makefile` (at least `test` and `lint`; `dev` and `gen` where they apply).
 
-A stack whose `pgdata` volume predates a service's database (pipelines, added in M1) gets it once from
+A stack whose `pgdata18a` volume predates a service's database (pipelines, added in M1) gets it once from
 `deploy/postgres/init.sh` (idempotent; the first command recreates Postgres with the new secret, the volume stays):
 
 ```sh
