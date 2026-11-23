@@ -61,6 +61,21 @@ describe("sign-in check retry", () => {
   });
 });
 
+describe("rail logo", () => {
+  it("links home from its own panel above the menu, not in the phone bar", () => {
+    render(<AppShell user={admin}>page</AppShell>);
+    const logo = screen.getByRole("link", { name: "helmstudio, home (Create)" });
+    expect(logo.getAttribute("href")).toBe("/");
+    const nav = screen.getByRole("navigation", { name: "Sections" });
+    expect(nav.contains(logo)).toBe(false);
+    // two panels in one rail: the logo panel (desktop only) first, then the menu
+    const panel = logo.parentElement!;
+    expect(panel.className).toMatch(/\bhidden\b.*\bmd:flex\b/);
+    expect(panel.parentElement).toBe(nav.parentElement);
+    expect(panel.nextElementSibling).toBe(nav);
+  });
+});
+
 describe("workflow picker", () => {
   it("greys a workflow whose model is not downloaded, with a link to Models, and still opens it", () => {
     const w = (id: string, family: string) =>

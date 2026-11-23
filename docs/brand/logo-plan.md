@@ -42,7 +42,7 @@ Source files: `docs/brand/logo/a-as-drawn/`. In the app use the tokens, not the 
   (Next's own dependency): `app/favicon.ico`, `app/apple-icon.png`, `app/icon.svg`; the 16 / 32 / 192 / 512 PNGs in
   `public/` for a future manifest.
 - [x] **Web app manifest** (not added): none exists today; add one only if the build wants installable-app icons (192, 512).
-- [ ] **Rail logo** (`web_service/components/shell.tsx`, `AppShell`, above the `nav aria-label="Sections"`): a link
+- [x] **Rail logo** (`web_service/components/shell.tsx`, `AppShell`, above the `nav aria-label="Sections"`): a link
   above the dock, in its own panel, that goes to Create (home), label "helmstudio, home (Create)", no text under it.
   Tile 36 px (same as a dock icon tile), radius 12/12/12/5 px (organic), 155° `--a1 → --a2` gradient with the dock
   tiles' inset light and shadow, mark in `--on1` at 24 px (the full mark's minimum; same art as the Sign in tile).
