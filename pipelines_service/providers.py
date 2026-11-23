@@ -16,6 +16,10 @@ opens a connection):
   writes it into the first key folder only (temp file and rename, 0600); `remove_key` deletes it there.
 - **compat** (API 1.51, from a preset): `temperature: false` sends no temperature; `strict_schema: true` sends a schema
   with `strict: true` and never retries it as `json_object`.
+- **thinking** (API 1.53, plan 28): the snapshot's `thinking[model]` {level, body, tokens}, resolved by studio from
+  the preset's rules: `body` is merged into the call's body, `tokens` added to max_tokens (thinking spends output
+  tokens: a 24-token title still has room). A 400 on a call that carried a body is asked once more without it, and
+  that (provider, model) is remembered in this process (`_NO_THINKING`); the tokens stay.
 - **Failures** are classed: `network` (connect, DNS, TLS, timeout, 5xx, 429; retried 1 s, 4 s, 16 s or
   Retry-After ≤ 60 s, counted apart from verdicts) or `answer` (another 4xx, a body that is not a chat completion:
   stage A's one re-ask). `refused` and `off` are final.
@@ -199,13 +203,18 @@ def _http(name: str, p: dict):
     )
 
 
-def _client(name: str, p: dict, model: str, max_tokens: int, http) -> ChatOpenAI:
+def _client(
+    name: str, p: dict, model: str, max_tokens: int, http, body: dict | None = None
+) -> ChatOpenAI:
+    """body: the thinking fragment (API 1.53), merged into the request body as is."""
     # langchain-openai sends max_completion_tokens; local servers (Ollama, llama-server) read max_tokens
     limit = (
         {"max_tokens": max_tokens}
         if p["kind"] == "remote"
         else {"extra_body": {"max_tokens": max_tokens}}
     )
+    if body:
+        limit["extra_body"] = limit.get("extra_body", {}) | body
     return ChatOpenAI(
         base_url=p["base_url"],
         api_key=api_key(name, p),
@@ -236,7 +245,9 @@ def _classify(name: str, e: Exception) -> CallError:
                 after = min(float(e.response.headers.get("retry-after")), RETRY_AFTER_MAX)
             except TypeError, ValueError:
                 pass
-            return CallError("network", f"{name}: the provider is busy or down (HTTP {code})", after)
+            return CallError(
+                "network", f"{name}: the provider is busy or down (HTTP {code})", after
+            )
         if code == 401:
             return CallError("answer", f"{name}: the key was refused")
         return CallError("answer", f"{name}: HTTP {code}")
@@ -263,20 +274,33 @@ async def chat(name: str, p: dict, req: dict) -> dict:
     msgs = [SystemMessage(req["system"]), HumanMessage(req["prompt"])]
     if "response_format" in kw and not strict and name in _NO_JSON_SCHEMA:
         kw, msgs = _json_object(req, msgs)
+    think = (p.get("thinking") or {}).get(req["model"]) or {}
+    limit = req["max_tokens"] + think.get("tokens", 0)
+    body = {} if (name, req["model"]) in _NO_THINKING else think.get("body") or {}
     t = time.monotonic()
     try:
         async with _http(name, p) as http:
-            llm = _client(name, p, req["model"], req["max_tokens"], http)
-            try:
-                msg = await llm.bind(**kw).ainvoke(msgs)
-            except openai.BadRequestError:
-                # some OpenAI-compatible providers (DeepSeek) refuse response_format json_schema but take json_object:
-                # ask again once with the schema in the system prompt; the caller still validates the answer
-                if strict or kw.get("response_format", {}).get("type") != "json_schema":
-                    raise
-                _NO_JSON_SCHEMA.add(name)
-                kw, msgs = _json_object(req, msgs)
-                msg = await llm.bind(**kw).ainvoke(msgs)
+            while True:
+                llm = _client(name, p, req["model"], limit, http, body)
+                try:
+                    msg = await llm.bind(**kw).ainvoke(msgs)
+                    break
+                except openai.BadRequestError:
+                    # some OpenAI-compatible providers (DeepSeek) refuse response_format json_schema but take
+                    # json_object: ask again once with the schema in the system prompt; the caller still validates
+                    if not strict and kw.get("response_format", {}).get("type") == "json_schema":
+                        _NO_JSON_SCHEMA.add(name)
+                        kw, msgs = _json_object(req, msgs)
+                    elif (
+                        body
+                    ):  # API 1.53: the thinking setting refused: once more without it, remembered
+                        _NO_THINKING.add((name, req["model"]))
+                        log.warning(
+                            "%s %s: thinking setting refused, sent without it", name, req["model"]
+                        )
+                        body = {}
+                    else:
+                        raise
     except Exception as e:  # noqa: BLE001 - every failure is classed (network or answer)
         raise _classify(name, e) from None
     # the calls as the model wrote them: parsed ones re-serialised, unparsable ones as sent (an invalid turn)
@@ -290,7 +314,7 @@ async def chat(name: str, p: dict, req: dict) -> dict:
         # no usage reported: counted as the prompt's estimate and the whole output allowance, so caps still hold
         usage = {
             "input_tokens": estimate(req["system"] + req["prompt"]),
-            "output_tokens": req["max_tokens"],
+            "output_tokens": limit,
         }
     out = {"text": text[:32768], "tool_calls": calls, "tokens_in": usage.get("input_tokens", 0),
            "tokens_out": usage.get("output_tokens", 0), "seconds": round(time.monotonic() - t, 3)}  # fmt: skip
@@ -302,6 +326,9 @@ async def chat(name: str, p: dict, req: dict) -> dict:
 _NO_JSON_SCHEMA: set[str] = (
     set()
 )  # providers that refused response_format json_schema (this process)
+_NO_THINKING: set[tuple[str, str]] = (
+    set()
+)  # (provider, model) that refused its thinking fragment (this process)
 
 
 def _json_object(req: dict, msgs: list) -> tuple[dict, list]:
@@ -363,7 +390,9 @@ async def search(name: str, p: dict, query: str) -> list[dict]:
             r = await http.get(f"{p['base_url'].rstrip('/')}/web/search", headers=headers,
                                params={"q": query, "count": SEARCH_RESULTS}, timeout=p["timeout_s"])  # fmt: skip
             if r.status_code == 429 or r.status_code >= 500:
-                raise CallError("network", f"{name}: the provider is busy or down (HTTP {r.status_code})")
+                raise CallError(
+                    "network", f"{name}: the provider is busy or down (HTTP {r.status_code})"
+                )
             if r.status_code >= 400:
                 raise CallError("answer", f"{name}: HTTP {r.status_code}")
             found = ((r.json().get("web") or {}).get("results")) or []
@@ -399,17 +428,19 @@ async def test(req: dict) -> dict:
         client = openai.AsyncOpenAI(base_url=p["base_url"], api_key=api_key(name, p), timeout=p["timeout_s"],
                                     max_retries=0, http_client=_http(name, p))  # fmt: skip
         try:
-            models = []
+            models, reasoning = [], {}
             async for (
                 m
             ) in client.models.list():  # ponytail: pages past MODELS_MAX are still read; cut here
                 if len(models) < MODELS_MAX:
                     models.append(m.id[:128])
+                    if r := reasoning_of(m.model_extra or {}):
+                        reasoning[m.id[:128]] = r
         except Exception as e:  # noqa: BLE001 - classed as a call's
             raise _classify(name, e) from None
         finally:
             await client.close()
-        out = {"models": models, "seconds": 0}
+        out = {"models": models, "seconds": 0} | ({"reasoning": reasoning} if reasoning else {})
         if req.get("model"):
             got = await chat(name, p, {"model": req["model"], "system": "Answer with OK.",
                                        "prompt": "Answer with OK.", "max_tokens": 8})  # fmt: skip
@@ -420,6 +451,19 @@ async def test(req: dict) -> dict:
     except Exception:
         log.exception("%s %s failed", SUBJECT, name)
         return {"error": f"{name}: the test failed", "code": "internal", "seconds": secs()}
+
+
+_EFFORT = re.compile(r"[a-z]{1,16}")
+
+
+def reasoning_of(extra: dict) -> dict | None:
+    """API 1.53: a /models entry's `reasoning` object (OpenRouter's) as {efforts, mandatory}; only supported_efforts
+    and mandatory are read, anything else (and any other shape) is ignored."""
+    r = extra.get("reasoning")
+    if not isinstance(r, dict) or not isinstance(r.get("supported_efforts"), list):
+        return None
+    efforts = [e for e in r["supported_efforts"] if isinstance(e, str) and _EFFORT.fullmatch(e)][:8]
+    return {"efforts": efforts, "mandatory": r.get("mandatory") is True}
 
 
 async def answer_test(body: bytes) -> dict:
