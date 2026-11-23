@@ -1,0 +1,12 @@
+{
+  "name": "anthropic",
+  "provider": {
+    "kind": "remote",
+    "api": "openai",
+    "base_url": "https://api.anthropic.com/v1/",
+    "timeout_s": 15,
+    "key_secret": "anthropic",
+    "max_in_flight": 2,
+    "compat": {"temperature": false, "strict_schema": true}
+  }
+}

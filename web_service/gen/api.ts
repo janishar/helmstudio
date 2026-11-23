@@ -1684,6 +1684,71 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/studio/admin/provider-presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The model provider presets the form is filled from (contracts/providers/presets.json)
+         * @description From 1.51. Admin only (403). The embedded file's presets in its order, with the deployment's remote switch (the form greys remote presets while it is off). A preset only fills the form: a saved provider never changes on its own.
+         */
+        get: operations["studioAdminListProviderPresets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/admin/provider-presets/{id}/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * A preset's Fetch — the models its provider lists (made by pipelines_service)
+         * @description From 1.51. Admin only (403). Studio builds the provider from the preset file (its `kind`, `base_url` and
+         *     `compat`; never a URL from the browser: a body with `base_url` is 422), `key_secret` from the body or the
+         *     preset, `timeout_s` 15, and asks `pipelines.providers.test` without a model (30 s, else 503). The host rule and
+         *     the remote switch apply as for Test: a remote preset while the switch is off is 200 with ok false and failure
+         *     `off`. 404 for an unknown preset. A saved provider fetches through `POST /v1/studio/admin/providers/{name}/test`
+         *     without `model`.
+         */
+        post: operations["studioAdminFetchPresetModels"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/admin/provider-keys/{key_secret}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Is a provider's key file there? (never the key)
+         * @description From 1.51. Admin only (403). Studio asks `pipelines.providers.key` (5 s, else 503); pipelines stats the file in its key folders and never opens it. `path` is the deploy-side text (`deploy/secrets/providers/<key_secret>`), never a container path. 404 for a malformed name.
+         */
+        get: operations["studioAdminGetProviderKey"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/studio/admin/session-names": {
         parameters: {
             query?: never;
@@ -5902,10 +5967,13 @@ export interface components {
             host?: string;
             /** @description server: declared; the host reserves it while enabled */
             memory_gb?: number;
-            /** @description remote: the secret file's name */
+            /** @description remote: the secret file's name; from 1.51 a server may have one too */
             key_secret?: string;
             /** @description remote: calls in flight at once (default 2) */
             max_in_flight?: number;
+            compat?: components["schemas"]["ProviderCompat"];
+            /** @description from 1.51: the preset it was filled from (display only) */
+            preset?: string;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -5930,10 +5998,16 @@ export interface components {
             timeout_s?: number;
             host?: string;
             memory_gb?: number;
-            /** @example provider-openai */
+            /**
+             * @description remote and search: required; from 1.51 a server may name one too (optional: llama-server --api-key)
+             * @example provider-openai
+             */
             key_secret?: string;
             /** @default 2 */
             max_in_flight?: number;
+            compat?: components["schemas"]["ProviderCompat"];
+            /** @description from 1.51: the preset the form was filled from (display only; studio does not check it) */
+            preset?: string;
         };
         ProviderList: {
             /** @description the deployment's remote switch (REMOTE_MODELS, off by default) */
@@ -5942,7 +6016,7 @@ export interface components {
         };
         ProviderTest: {
             ok: boolean;
-            /** @description what its /models listed */
+            /** @description what its /models listed (from 1.51 the first 1000) */
             models: string[];
             /** @description with ?model=: its answer to a tiny prompt */
             answer?: string | null;
@@ -5953,6 +6027,46 @@ export interface components {
              */
             failure: "network" | "answer" | "refused" | "off" | null;
             seconds: number;
+        };
+        /** @description from 1.51: what a provider's OpenAI layer refuses of what pipelines sends (messages defs providerCompat; from a preset, Anthropic's). temperature false: none sent; strict_schema true: json_schema with strict true, never retried as json_object. Absent = the usual calls */
+        ProviderCompat: {
+            temperature?: boolean;
+            strict_schema?: boolean;
+        };
+        /** @description from 1.51: one item of contracts/providers/presets.json (its schema: providers/presets.schema.json). A remote preset names `key_secret` (its id), a server preset none and no models (Fetch fills them) */
+        ProviderPreset: {
+            /** @description the provider name it fills */
+            id: string;
+            title: string;
+            /** @enum {string} */
+            kind: "server" | "remote";
+            base_url: string;
+            models: string[];
+            key_secret?: string;
+            compat?: components["schemas"]["ProviderCompat"];
+            docs: string;
+            note: string;
+        };
+        ProviderPresetList: {
+            /** @description the deployment's remote switch (remote presets are greyed while off) */
+            remote_enabled: boolean;
+            presets: components["schemas"]["ProviderPreset"][];
+        };
+        /** @description from 1.51: a preset's Fetch. Only the key file's name: the URL always comes from the preset (a `base_url` here is 422) */
+        ProviderFetch: {
+            /** @description absent = the preset's */
+            key_secret?: string;
+        };
+        /** @description from 1.51: a key file's status (never the key) */
+        ProviderKey: {
+            key_secret: string;
+            /**
+             * @description where the admin puts it, as the deployment sees it
+             * @example deploy/secrets/providers/deepseek
+             */
+            path: string;
+            /** @description a regular file that is not empty */
+            found: boolean;
         };
         /** @description from 1.43: how an untitled session is named (contracts/README.md, Sessions: titles and naming). Default off */
         SessionNames: {
@@ -10159,6 +10273,85 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProviderTest"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["AdminRequired"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioAdminListProviderPresets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the presets */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderPresetList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["AdminRequired"];
+        };
+    };
+    studioAdminFetchPresetModels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ProviderFetch"];
+            };
+        };
+        responses: {
+            /** @description the result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderTest"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["AdminRequired"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioAdminGetProviderKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key_secret: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderKey"];
                 };
             };
             401: components["responses"]["Unauthorized"];

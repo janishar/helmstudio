@@ -2588,6 +2588,19 @@
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$",
       "description": "a model name as the provider's OpenAI-compatible API takes it (`qwen2.5vl:7b`, `gpt-4.1-mini`)"
     },
+    "providerCompat": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "from API 1.51 (contracts/README.md, Model sources: presets): what a provider's OpenAI layer refuses of what pipelines sends, from a preset (contracts/providers/presets.json). temperature false: no temperature is sent; strict_schema true: a schema goes as json_schema with strict true and is never retried as json_object. Absent = the usual calls",
+      "properties": {
+        "temperature": {
+          "type": "boolean"
+        },
+        "strict_schema": {
+          "type": "boolean"
+        }
+      }
+    },
     "providerSnapshot": {
       "type": "object",
       "required": [
@@ -2640,13 +2653,16 @@
             "null"
           ],
           "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
-          "description": "remote: the secret file's name; server: null (no key)"
+          "description": "remote: the secret file's name; server: null (no key), from API 1.51 optionally a file's name too (llama-server --api-key: sent as a remote provider's key is)"
         },
         "max_in_flight": {
           "type": "integer",
           "minimum": 1,
           "maximum": 8,
           "description": "remote: calls in flight at once over every batch (default 2)"
+        },
+        "compat": {
+          "$ref": "#/$defs/providerCompat"
         }
       },
       "allOf": [

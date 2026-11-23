@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helmstudio.local/contracts/messages/req.pipelines.providers.test.schema.json",
   "title": "NATS request/reply pipelines.providers.test (studio → pipelines)",
-  "description": "From API 1.15. Core NATS request/reply on subject `pipelines.providers.test` (queue group `pipelines`), bare JSON, for POST /v1/studio/admin/providers/{name}/test. Only pipelines_service ever calls a model provider, so the test is made there: `GET <base_url>/models`, then, with `model`, one chat completion of at most 8 tokens (`Answer with OK.`). The host rule is applied first (a server's base_url must resolve only to loopback or private addresses; a remote one must be https, and remote models must be on in pipelines' own setting). Studio waits 30 s (no answer: 503).",
+  "description": "From API 1.15. Core NATS request/reply on subject `pipelines.providers.test` (queue group `pipelines`), bare JSON, for POST /v1/studio/admin/providers/{name}/test. Only pipelines_service ever calls a model provider, so the test is made there: `GET <base_url>/models`, then, with `model`, one chat completion of at most 8 tokens (`Answer with OK.`). The host rule is applied first (a server's base_url must resolve only to loopback or private addresses; a remote one must be https, and remote models must be on in pipelines' own setting). Studio waits 30 s (no answer: 503). From API 1.51 also a preset's Fetch (POST /v1/studio/admin/provider-presets/{id}/models): the snapshot is built by studio from the preset file, never from the browser, and comes without `model`.",
   "$defs": {
     "request": {
       "type": "object",
@@ -48,12 +48,12 @@
       "properties": {
         "models": {
           "type": "array",
-          "maxItems": 64,
+          "maxItems": 1000,
           "items": {
             "type": "string",
             "maxLength": 128
           },
-          "description": "what GET /models listed (first 64)"
+          "description": "what GET /models listed (the first 1000; 64 before API 1.51)"
         },
         "answer": {
           "type": "string",

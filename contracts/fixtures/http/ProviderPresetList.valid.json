@@ -1,0 +1,32 @@
+{
+  "remote_enabled": false,
+  "presets": [
+    {
+      "id": "ollama",
+      "title": "Ollama",
+      "kind": "server",
+      "base_url": "http://host.docker.internal:11434/v1",
+      "models": [],
+      "docs": "https://docs.ollama.com/api/openai-compatibility",
+      "note": "Listens on port 11434 and ignores the key. Fetch lists the models you pulled."
+    },
+    {
+      "id": "anthropic",
+      "title": "Anthropic",
+      "kind": "remote",
+      "base_url": "https://api.anthropic.com/v1/",
+      "models": [
+        "claude-sonnet-5-5",
+        "claude-haiku-5-5",
+        "claude-opus-5-5"
+      ],
+      "key_secret": "anthropic",
+      "compat": {
+        "temperature": false,
+        "strict_schema": true
+      },
+      "docs": "https://platform.claude.com/docs/en/api/openai-sdk",
+      "note": "Partial: Claude's OpenAI layer is for testing."
+    }
+  ]
+}

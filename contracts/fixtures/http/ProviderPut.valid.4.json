@@ -1,0 +1,11 @@
+{
+  "kind": "server",
+  "base_url": "http://host.docker.internal:9931/v1",
+  "models": [
+    "qwen3"
+  ],
+  "host": "mac",
+  "memory_gb": 8,
+  "key_secret": "llama-server",
+  "preset": "llama-server"
+}

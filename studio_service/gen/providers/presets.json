@@ -1,0 +1,102 @@
+{
+  "presets": [
+    {
+      "id": "ollama",
+      "title": "Ollama",
+      "kind": "server",
+      "base_url": "http://host.docker.internal:11434/v1",
+      "models": [],
+      "docs": "https://docs.ollama.com/api/openai-compatibility",
+      "note": "Listens on port 11434 and ignores the key. Fetch lists the models you pulled."
+    },
+    {
+      "id": "lmstudio",
+      "title": "LM Studio",
+      "kind": "server",
+      "base_url": "http://host.docker.internal:1234/v1",
+      "models": [],
+      "docs": "https://lmstudio.ai/docs/developer/openai-compat",
+      "note": "Start its server (port 1234). Fetch lists the models it has."
+    },
+    {
+      "id": "llama-server",
+      "title": "llama-server",
+      "kind": "server",
+      "base_url": "http://host.docker.internal:9931/v1",
+      "models": [],
+      "docs": "https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md",
+      "note": "Default port 9931: change the port if you started it with --port. A key file is optional (--api-key)."
+    },
+    {
+      "id": "deepseek",
+      "title": "DeepSeek",
+      "kind": "remote",
+      "base_url": "https://api.deepseek.com",
+      "models": ["deepseek-flash", "deepseek-v4-pro"],
+      "key_secret": "deepseek",
+      "docs": "https://api-docs.deepseek.com/",
+      "note": "Refuses json_schema; answers in JSON mode."
+    },
+    {
+      "id": "openai",
+      "title": "OpenAI",
+      "kind": "remote",
+      "base_url": "https://api.openai.com/v1",
+      "models": ["gpt-6.2-sol", "gpt-6-luna", "gpt-6.2-astra"],
+      "key_secret": "openai",
+      "docs": "https://developers.openai.com/api/docs/models",
+      "note": "The OpenAI API itself."
+    },
+    {
+      "id": "anthropic",
+      "title": "Anthropic",
+      "kind": "remote",
+      "base_url": "https://api.anthropic.com/v1/",
+      "models": ["claude-sonnet-5-5", "claude-haiku-5-5", "claude-opus-5-5"],
+      "key_secret": "anthropic",
+      "compat": {"temperature": false, "strict_schema": true},
+      "docs": "https://platform.claude.com/docs/en/api/openai-sdk",
+      "note": "Partial: Claude's OpenAI layer is for testing."
+    },
+    {
+      "id": "gemini",
+      "title": "Google Gemini",
+      "kind": "remote",
+      "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+      "models": ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-4-neon"],
+      "key_secret": "gemini",
+      "docs": "https://ai.google.dev/gemini-api/docs/openai",
+      "note": "Partial: the OpenAI layer is in beta; thinking stays on for Gemini 3 and 4."
+    },
+    {
+      "id": "openrouter",
+      "title": "OpenRouter",
+      "kind": "remote",
+      "base_url": "https://openrouter.ai/api/v1",
+      "models": ["openai/gpt-6.2-sol", "anthropic/claude-sonnet-5.5", "google/gemini-4-neon", "deepseek/deepseek-v4.1-flash"],
+      "key_secret": "openrouter",
+      "docs": "https://openrouter.ai/docs/quickstart",
+      "note": "About 480 models: filter the Fetch list. Ids carry the maker's prefix."
+    },
+    {
+      "id": "groq",
+      "title": "Groq",
+      "kind": "remote",
+      "base_url": "https://api.groq.com/openai/v1",
+      "models": ["llama-3.3-70b-versatile", "openai/gpt-oss-120b", "openai/gpt-oss-20b"],
+      "key_secret": "groq",
+      "docs": "https://console.groq.com/docs/openai",
+      "note": "Temperature 0 is sent as 1e-8."
+    },
+    {
+      "id": "mistral",
+      "title": "Mistral",
+      "kind": "remote",
+      "base_url": "https://api.mistral.ai/v1",
+      "models": ["mistral-large-latest", "mistral-small-latest"],
+      "key_secret": "mistral",
+      "docs": "https://docs.mistral.ai/api",
+      "note": "The -latest aliases of its examples."
+    }
+  ]
+}

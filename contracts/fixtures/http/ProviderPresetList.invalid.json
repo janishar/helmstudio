@@ -1,0 +1,13 @@
+{
+  "presets": [
+    {
+      "id": "ollama",
+      "title": "Ollama",
+      "kind": "server",
+      "base_url": "http://host.docker.internal:11434/v1",
+      "models": [],
+      "docs": "https://docs.ollama.com/api/openai-compatibility",
+      "note": "Listens on port 11434 and ignores the key. Fetch lists the models you pulled."
+    }
+  ]
+}

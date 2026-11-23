@@ -20,6 +20,9 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `messages/cmd.pipeline.chat.schema.json`, `evt.pipeline.chat.schema.json` | (API 1.15) studio → pipelines: a user's message to the batch's director; pipelines → studio's projector: the director's reply or a notice (Agents: the director) |
 | `messages/req.studio.tools.schema.json` | (API 1.15) NATS request/reply pipelines → studio (not enveloped): one Agent tool call that needs studio's data (gallery.search, library.read, rows.add, rows.edit), as the batch's owner |
 | `messages/req.pipelines.providers.test.schema.json` | (API 1.15) NATS request/reply studio → pipelines (not enveloped): test a model provider (only pipelines ever calls one) |
+| `messages/req.pipelines.providers.key.schema.json` | (API 1.51) NATS request/reply studio → pipelines (not enveloped): is a provider's key file there (stat only; never the key) |
+| `providers/presets.json` | (API 1.51) not a message: the model provider presets Admin › Model providers fills its form from (Model sources: presets); studio_service embeds a copy (`gen/providers/`) and serves it; the web reads it only from the API |
+| `providers/presets.schema.json` | (API 1.51) the shape of `providers/presets.json` (check.py adds the host and ProviderPut rules) |
 | `messages/req.pipelines.judge.test.schema.json` | (API 1.28) NATS request/reply studio → pipelines (not enveloped): a judge test's filled template, and its verdict from the answer |
 | `messages/cmd.assistant.{turn,delete}.schema.json`, `evt.assistant.step.schema.json` | (API 1.44) studio → pipelines: one input to an assistant chat (a message, the actions' results, a card's answer, summarize), a deleted chat; pipelines → studio's projector: one step of a turn (Assistant, below) |
 | `messages/req.pipelines.assistant.memory.schema.json` | (API 1.44) NATS request/reply studio → pipelines (not enveloped): the Memory list's list, edit, delete, clear, in the owner's namespace only |
@@ -82,6 +85,7 @@ make -C contract_tests check-contracts   # exit 1 on any failure
 | `evt.pipeline.<batch_id>.chat` | stream `EVT` | `evt.pipeline.chat`, `Nats-Msg-Id <batch_id>:<seq>` | pipelines → studio projector (durable `studio-pipelines`; API 1.15) |
 | `studio.tools` | core request/reply, queue group `studio` | bare JSON (`req.studio.tools`) | pipelines → studio (5 s; API 1.15) |
 | `pipelines.providers.test` | core request/reply, queue group `pipelines` | bare JSON (`req.pipelines.providers.test`) | studio → pipelines (30 s; API 1.15) |
+| `pipelines.providers.key` | core request/reply, queue group `pipelines` | bare JSON (`req.pipelines.providers.key`) | studio → pipelines (5 s; API 1.51) |
 | `pipelines.judge.test` | core request/reply, queue group `pipelines` | bare JSON (`req.pipelines.judge.test`) | studio → pipelines (5 s; API 1.28) |
 | `cmd.assistant.turn`, `cmd.assistant.delete` | stream `CMD` (work queue) | `cmd.assistant.<same>`, `Nats-Msg-Id <thread_id>:<turn>` (delete: `<thread_id>:delete`) | studio outbox relay → pipelines (durable `pipelines-assistant`, filter `cmd.assistant.>`: chats handled concurrently, each in order; API 1.44) |
 | `evt.assistant.<thread_id>.step` | stream `EVT` | `evt.assistant.step`, `Nats-Msg-Id <thread_id>:<seq>` | pipelines → studio projector (durable `studio-assistant`; API 1.44) |
@@ -2388,9 +2392,32 @@ a local model (`model_media`): server and remote calls carry **text only** in 1.
   query or fragment (the schema). Run again calls the providers as they are at Run again, with Submit's checks (422
   when one is gone, disabled, changed kind or host, or is remote while the switch is off).
 - **Keys** are service secrets set by the admin: a remote provider names `key_secret`, a file in pipelines_service's
-  secrets directory (`PIPELINES_PROVIDER_KEYS_DIR`, default `/run/secrets`, mounted from `deploy/secrets/`). No API
-  takes or returns a key; pipelines reads the file at call time and never logs it; errors never echo it. A server has
-  no key.
+  secrets directory (`PIPELINES_PROVIDER_KEYS_DIR`, default `/run/secrets`, mounted from `deploy/secrets/`; from API
+  1.51 several folders joined by `:`, searched in order, so the dev stack reads `deploy/secrets/providers` live beside
+  the fake's placeholder). No API takes or returns a key; pipelines reads the file at call time and never logs it;
+  errors never echo it. A server has no key; from API 1.51 it may name one (optional: llama-server `--api-key`), sent
+  as a remote provider's is.
+- **Presets** (API 1.51; plan 25): `providers/presets.json` (shape `providers/presets.schema.json`; check.py also
+  checks unique ids, a remote preset https to a public host, a server preset on `host.docker.internal`, a loopback or
+  a private literal, and each preset as a `ProviderPut` body) holds the common providers: local Ollama, LM Studio,
+  llama-server (no models: Fetch fills them) and remote DeepSeek, OpenAI, Anthropic, Google Gemini, OpenRouter, Groq,
+  Mistral (`key_secret` = the id). Studio embeds it; `GET /v1/studio/admin/provider-presets` (`ProviderPresetList`,
+  admin only) serves it with `remote_enabled`. A preset only **fills** the admin's form (kind, name, title, base URL,
+  models, key file, `compat`); saving is the usual PUT, which keeps `preset` (display only) and `compat`; a saved
+  provider never changes on its own. **Fetch**: `POST /v1/studio/admin/provider-presets/{id}/models` (`ProviderFetch
+  {key_secret?}`, `additionalProperties: false`: a `base_url` is 422) builds the snapshot from the preset (never a URL
+  from the browser), `timeout_s` 15, and asks `pipelines.providers.test` without a model (30 s); a saved provider
+  fetches through its Test without `model`. The host rule and the switch apply as for any call (`failure: off` while
+  remote models are off). `ProviderTest.models` holds at most 1000 ids.
+- **`compat`** (`defs providerCompat`, `Provider.compat`, `ProviderPut.compat`, the snapshot): `temperature: false`
+  sends no `temperature`; `strict_schema: true` sends a schema as `json_schema` with `strict: true` and never retries
+  it as `json_object`. Absent = the usual calls. Anthropic's preset carries both (its OpenAI layer refuses
+  `temperature` below 1 and non-strict schemas).
+- **Key file status**: `GET /v1/studio/admin/provider-keys/{key_secret}` (`ProviderKey {key_secret, path, found}`,
+  admin only; 404 for a malformed name, 503 when pipelines does not answer in 5 s). Studio asks
+  `pipelines.providers.key`; pipelines answers `found` = a regular file of that name in one of its key folders with a
+  size above 0, by `stat` only (it never opens the file). `path` is `deploy/secrets/providers/<key_secret>`, composed by
+  studio (it never reads the folder).
 - **A local server** declares `host` (a GPU host) and `memory_gb`. While it is enabled, the dispatcher subtracts its
   `memory_gb` from that host's shared budget B in every admission (its memory is outside the app's control, so it is
   always reserved); Submit lists it (`reserved`). Its calls are **batch-lane queue items**: `studio.runs.create` with
@@ -2488,7 +2515,7 @@ a local model (`model_media`): server and remote calls carry **text only** in 1.
 
 `fixtures/pipelines/valid.{director-shots,server-remote,custom}.json`, `invalid.{agent-rules,fanout,remote,
 remote-off}.json`; `fixtures/decisions/agent-{turn,schema}.json`; messages `cmd.pipeline.chat.*`,
-`evt.pipeline.chat.*`, `req.studio.tools.*`, `req.pipelines.providers.test.*`, `evt.pipeline.step.valid.{5,6}`
+`evt.pipeline.chat.*`, `req.studio.tools.*`, `req.pipelines.providers.{test,key}.*`, `evt.pipeline.step.valid.{5,6}`
 (an agent's tools part, a fanned branch), `evt.pipeline.batch.valid.4` (director, remote), `cmd.pipeline.submit.valid.4`
 (agent, custom, fan-out, providers), `req.studio.runs.create.request.valid.4` (a server-ask chat turn, row 0),
 `evt.run.status.valid.10` (native tool calls); http `Chat*`, `Provider*`, `ModelSourceList`, `CustomNodeList`,

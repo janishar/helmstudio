@@ -17,11 +17,13 @@ among several hosts (`place`) (README, Several hosts);
 fixtures/timelines/ through the reference timeline rules (`t_normalize`, `t_edit`, `snap_point`, `frame_at`,
 `export_plan`, `shot_keyframes`, `rerender_steps`; from 1.49 `t_diff`, `t_agent_view`, `frame_at_time`) (README, Timeline rules), and
 edits.json replayed through studio's edit.go and the web's lib/timeline.ts (needs go and node on PATH); fixtures/voices/ through the reference voice rules (README, Voices; from
-API 1.32 Dialogue and Timeline audio: `expand_script`, `echo_dialogue`, `script_check`, `make_shot`).
+API 1.32 Dialogue and Timeline audio: `expand_script`, `echo_dialogue`, `script_check`, `make_shot`); providers/presets.json
+against its schema and the preset rules (README, Model sources: presets; API 1.51).
 Exit code 1 on any failure."""
 
 import copy
 import hashlib
+import ipaddress
 import json
 import math
 import os
@@ -33,6 +35,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import yaml
 from jsonschema import Draft202012Validator, FormatChecker
@@ -44,6 +47,7 @@ from referencing.jsonschema import DRAFT202012
 HERE = Path(__file__).parent
 SCHEMA_FILES = sorted((HERE / "messages").glob("*.schema.json"))
 TOOL_FILES = sorted((HERE / "tools").glob("*.json"))  # the assistant's tools/catalog.json, actions.json and their schema
+PRESETS_SCHEMA = HERE / "providers" / "presets.schema.json"  # API 1.51: the model provider presets' shape
 # Every cmd.*/evt.* schema is an enveloped message; every req.* holds $defs/request and $defs/reply.
 MESSAGE_TYPES = [
     n
@@ -83,6 +87,7 @@ HTTP_SCHEMAS = [
     "HostList",
     "Decision", "DecisionList", "MemoryItem", "MemoryList", "MemoryCreate", "BatchAgain",
     "ChatMessage", "ChatPage", "ChatPost", "Provider", "ProviderPut", "ProviderList", "ProviderTest", "ModelSourceList",
+    "ProviderPreset", "ProviderPresetList", "ProviderFetch", "ProviderKey",  # 1.51
     "CustomNodeList",
     "ModelList", "ModelDownload", "ModelJob", "ModelJobList", "HostSettings", "HostSettingsPut", "HostPins", "HostUnload",
     "HostUnloadAccepted", "ImportTakeCreate", "ImportTake",
@@ -111,6 +116,7 @@ def load_schemas() -> tuple[dict[str, dict], Registry]:
     schemas = {p.name.removesuffix(".schema.json"): json.loads(p.read_text()) for p in SCHEMA_FILES}
     schemas["registry"] = json.loads((HERE / "registry.schema.json").read_text())
     schemas |= {f"tools/{p.name}": json.loads(p.read_text()) for p in TOOL_FILES}
+    schemas["providers/presets.schema.json"] = json.loads(PRESETS_SCHEMA.read_text())
     for name, s in schemas.items():
         try:
             Draft202012Validator.check_schema(s)
@@ -4532,6 +4538,41 @@ def check_tools(schemas: dict[str, dict], registry: Registry) -> None:
     print("ok   tools/catalog.json, tools/actions.json, fixtures/tools/offered.json")
 
 
+def check_presets(schemas: dict[str, dict], registry: Registry) -> None:
+    """providers/presets.json (README, Model sources: presets): its schema, then what a schema cannot say."""
+    doc = json.loads((HERE / "providers" / "presets.json").read_text())
+    shape = schemas["providers/presets.schema.json"]["$id"]
+    if bad := list(Draft202012Validator({"$ref": shape}, registry=registry).iter_errors(doc)):
+        fail(f"providers/presets.json: {bad[0].json_path}: {bad[0].message}")
+        return
+    put, item = (Draft202012Validator({"$ref": f"{OPENAPI}#/components/schemas/{n}"}, registry=registry)
+                 for n in ("ProviderPut", "ProviderPreset"))  # fmt: skip
+    seen: set[str] = set()
+    for p in doc["presets"]:
+        w = f"providers/presets.json {p['id']}"
+        if p["id"] in seen:
+            fail(f"{w}: the id is used twice")
+        seen.add(p["id"])
+        host = urlsplit(p["base_url"]).hostname or ""
+        try:
+            ip = ipaddress.ip_address(host)
+        except ValueError:
+            ip = None
+        if p["kind"] == "remote":
+            if not p["base_url"].startswith("https://") or host == "localhost" or (
+                ip and (ip.is_private or ip.is_loopback or ip.is_link_local)
+            ):
+                fail(f"{w}: a remote preset is https to a public host")
+        elif not (host == "host.docker.internal" or (ip and (ip.is_loopback or ip.is_private) and not ip.is_link_local)):
+            fail(f"{w}: a server preset's host is host.docker.internal, a loopback or a private address")
+        body = {"kind": p["kind"], "base_url": p["base_url"], "models": p["models"] or ["placeholder"],
+                "preset": p["id"]} | {k: p[k] for k in ("key_secret", "compat") if k in p}  # fmt: skip
+        for v, what in ((put, "as a ProviderPut body"), (item, "as openapi ProviderPreset")):
+            if bad := list(v.iter_errors(body if v is put else p)):
+                fail(f"{w}: {what}: {bad[0].json_path}: {bad[0].message}")
+    print(f"ok   providers/presets.json ({len(seen)} presets)")
+
+
 def main() -> int:
     schemas, registry = load_schemas()
     check_fixtures(schemas, registry)
@@ -4548,6 +4589,7 @@ def main() -> int:
     check_edit_replay()
     check_dispatch(registry)
     check_tools(schemas, registry)
+    check_presets(schemas, registry)
     check_openapi()
     check_names()
     print(f"\n{len(errors)} failure(s)" if errors else "\nall contract checks passed")

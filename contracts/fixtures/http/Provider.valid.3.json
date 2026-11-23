@@ -1,0 +1,22 @@
+{
+  "name": "anthropic",
+  "kind": "remote",
+  "api": "openai",
+  "base_url": "https://api.anthropic.com/v1/",
+  "models": [
+    "claude-sonnet-5-5"
+  ],
+  "default_model": "claude-sonnet-5-5",
+  "enabled": true,
+  "timeout_s": 60,
+  "key_secret": "anthropic",
+  "max_in_flight": 2,
+  "created_at": "2026-11-16T09:00:00Z",
+  "updated_at": "2026-11-16T09:05:00Z",
+  "title": "Anthropic",
+  "compat": {
+    "temperature": false,
+    "strict_schema": true
+  },
+  "preset": "anthropic"
+}

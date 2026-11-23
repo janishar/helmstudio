@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.50.0
+  version: 1.51.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -27,7 +27,7 @@ servers:
 security:
   - {ApiKey: [], BearerJWT: []}
 tags:
-  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media); from 1.23 LoRA strengths 0..2 (looks saved before are clamped when read; contracts/README.md, Looks); from 1.24 the model component a node loads (NodeSchema.component); from 1.25 an inspector section''s help, the presets'' order (StudioLayout.preset_order) and a run''s planned peak before it is sent (POST /v1/studio/runs/plan); from 1.26 an inspector section''s choice tiles (LTX''s Recipe: two-stage or one-stage); from 1.28 a judge''s branch without `then` (Ask me) and a judge test on picked takes (POST /v1/studio/pipelines/{pipeline_id}/judge-tests); from 1.29 a V1 clip''s shot number (TimelineClip.number: "Shot 4"); from 1.30 voices: audio takes made by runs (the `Audio` port, `Workflow.media` audio), the `voice` param, saved voices in the library (designed voices and the packs'' starter voices; contracts/README.md, Voices); from 1.31 cloned voices (a 3–30 s clip of an audio take or a video''s sound, with consent), designed voices that keep a clip, Save as voice (`from_take` with `kind: voice`) and the zonos3 family (contracts/README.md, Voices: cloned voices); from 1.32 dialogue and Timeline audio: dialogue scripts (`script` text params expanded into `lines` rows whose items carry a voice), an element''s `voice_id`, cues on a dialogue''s take, audio takes on the audio tracks, New line (POST /v1/studio/timelines/{timeline_id}/lines), Make shot (a slot `exact` at an audio clip''s time), an export plan''s `sounds`, offers and pipeline binds into rows of one media field, `library.read` voices and the write node''s `form: script` (contracts/README.md, Dialogue and Timeline audio); from 1.44 the in-app assistant: chats, their events and memory, the admin''s assistant settings, search providers (kind `search`) and the Gallery''s `order` (contracts/README.md, Assistant); from 1.47 rules (refusals as data, ParamSchema.rules), option help (ParamSchema.option_help), a native node''s peak formula and sound limits (NodeSchema.peak_gb, sounds: the planned peak per run) and the Preset heading''s help (StudioLayout.preset_help); from 1.48 thumbnails: every list''s `thumb_url` is a small WebP of the image or the poster once made, `RunOutput.thumb_url` (contracts/README.md, Thumbnails); from 1.49 timeline edits by named ops (POST …/timelines/{timeline_id}/edits: a dry run, a diff, studio-made clip ids), the revision history and restore to any kept revision, the agent view (`view=agent`) and a stored frame at a sequence time (contracts/README.md, Timeline: edits by ops); from 1.50 the Timeline tools'' ops (roll, slip, slide, overwrite, split_all, remove_range, lift_range, an audio track''s ripple remove), linked sound clips (`TimelineClip.link`) and markers (`TimelineDoc.markers`, the marker ops; contracts/README.md, Timeline rules: tools, linked clips, markers)'}
+  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media); from 1.23 LoRA strengths 0..2 (looks saved before are clamped when read; contracts/README.md, Looks); from 1.24 the model component a node loads (NodeSchema.component); from 1.25 an inspector section''s help, the presets'' order (StudioLayout.preset_order) and a run''s planned peak before it is sent (POST /v1/studio/runs/plan); from 1.26 an inspector section''s choice tiles (LTX''s Recipe: two-stage or one-stage); from 1.28 a judge''s branch without `then` (Ask me) and a judge test on picked takes (POST /v1/studio/pipelines/{pipeline_id}/judge-tests); from 1.29 a V1 clip''s shot number (TimelineClip.number: "Shot 4"); from 1.30 voices: audio takes made by runs (the `Audio` port, `Workflow.media` audio), the `voice` param, saved voices in the library (designed voices and the packs'' starter voices; contracts/README.md, Voices); from 1.31 cloned voices (a 3–30 s clip of an audio take or a video''s sound, with consent), designed voices that keep a clip, Save as voice (`from_take` with `kind: voice`) and the zonos3 family (contracts/README.md, Voices: cloned voices); from 1.32 dialogue and Timeline audio: dialogue scripts (`script` text params expanded into `lines` rows whose items carry a voice), an element''s `voice_id`, cues on a dialogue''s take, audio takes on the audio tracks, New line (POST /v1/studio/timelines/{timeline_id}/lines), Make shot (a slot `exact` at an audio clip''s time), an export plan''s `sounds`, offers and pipeline binds into rows of one media field, `library.read` voices and the write node''s `form: script` (contracts/README.md, Dialogue and Timeline audio); from 1.44 the in-app assistant: chats, their events and memory, the admin''s assistant settings, search providers (kind `search`) and the Gallery''s `order` (contracts/README.md, Assistant); from 1.47 rules (refusals as data, ParamSchema.rules), option help (ParamSchema.option_help), a native node''s peak formula and sound limits (NodeSchema.peak_gb, sounds: the planned peak per run) and the Preset heading''s help (StudioLayout.preset_help); from 1.48 thumbnails: every list''s `thumb_url` is a small WebP of the image or the poster once made, `RunOutput.thumb_url` (contracts/README.md, Thumbnails); from 1.49 timeline edits by named ops (POST …/timelines/{timeline_id}/edits: a dry run, a diff, studio-made clip ids), the revision history and restore to any kept revision, the agent view (`view=agent`) and a stored frame at a sequence time (contracts/README.md, Timeline: edits by ops); from 1.50 the Timeline tools'' ops (roll, slip, slide, overwrite, split_all, remove_range, lift_range, an audio track''s ripple remove), linked sound clips (`TimelineClip.link`) and markers (`TimelineDoc.markers`, the marker ops; contracts/README.md, Timeline rules: tools, linked clips, markers); from 1.51 provider presets (GET /v1/studio/admin/provider-presets, a preset''s Fetch, a key file''s status, `Provider.compat` and `preset`; contracts/README.md, Model sources: presets)'}
   - {name: files, description: signed file downloads and uploads}
   - name: auth
     description: 'auth_service: users, sessions (JWT access + rotating refresh tokens), roles, client API keys'
@@ -1780,6 +1780,57 @@ paths:
         - {name: model, in: query, required: false, schema: {type: string}}
       responses:
         '200': {description: the result, content: {application/json: {schema: {$ref: '#/components/schemas/ProviderTest'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/AdminRequired'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/admin/provider-presets:
+    get:
+      tags: [studio]
+      operationId: studioAdminListProviderPresets
+      summary: The model provider presets the form is filled from (contracts/providers/presets.json)
+      description: 'From 1.51. Admin only (403). The embedded file''s presets in its order, with the deployment''s remote switch (the form greys remote presets while it is off). A preset only fills the form: a saved provider never changes on its own.'
+      responses:
+        '200': {description: the presets, content: {application/json: {schema: {$ref: '#/components/schemas/ProviderPresetList'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/AdminRequired'}
+
+  /v1/studio/admin/provider-presets/{id}/models:
+    post:
+      tags: [studio]
+      operationId: studioAdminFetchPresetModels
+      summary: A preset's Fetch — the models its provider lists (made by pipelines_service)
+      description: |
+        From 1.51. Admin only (403). Studio builds the provider from the preset file (its `kind`, `base_url` and
+        `compat`; never a URL from the browser: a body with `base_url` is 422), `key_secret` from the body or the
+        preset, `timeout_s` 15, and asks `pipelines.providers.test` without a model (30 s, else 503). The host rule and
+        the remote switch apply as for Test: a remote preset while the switch is off is 200 with ok false and failure
+        `off`. 404 for an unknown preset. A saved provider fetches through `POST /v1/studio/admin/providers/{name}/test`
+        without `model`.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[a-z][a-z0-9-]{0,31}$'}}
+      requestBody:
+        required: false
+        content: {application/json: {schema: {$ref: '#/components/schemas/ProviderFetch'}}}
+      responses:
+        '200': {description: the result, content: {application/json: {schema: {$ref: '#/components/schemas/ProviderTest'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/AdminRequired'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/admin/provider-keys/{key_secret}:
+    get:
+      tags: [studio]
+      operationId: studioAdminGetProviderKey
+      summary: Is a provider's key file there? (never the key)
+      description: 'From 1.51. Admin only (403). Studio asks `pipelines.providers.key` (5 s, else 503); pipelines stats the file in its key folders and never opens it. `path` is the deploy-side text (`deploy/secrets/providers/<key_secret>`), never a container path. 404 for a malformed name.'
+      parameters:
+        - {name: key_secret, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: the status, content: {application/json: {schema: {$ref: '#/components/schemas/ProviderKey'}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/AdminRequired'}
         '404': {$ref: '#/components/responses/NotFound'}
@@ -5761,8 +5812,10 @@ components:
         timeout_s: {type: integer, minimum: 5, maximum: 600}
         host: {type: string, description: 'server: the GPU host whose memory it shares'}
         memory_gb: {type: number, minimum: 0.5, maximum: 1024, description: 'server: declared; the host reserves it while enabled'}
-        key_secret: {type: string, description: 'remote: the secret file''s name'}
+        key_secret: {type: string, description: 'remote: the secret file''s name; from 1.51 a server may have one too'}
         max_in_flight: {type: integer, minimum: 1, maximum: 8, description: 'remote: calls in flight at once (default 2)'}
+        compat: {$ref: '#/components/schemas/ProviderCompat'}
+        preset: {type: string, pattern: '^[a-z][a-z0-9-]{0,31}$', description: 'from 1.51: the preset it was filled from (display only)'}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
     ProviderPut:
@@ -5781,8 +5834,10 @@ components:
         timeout_s: {type: integer, minimum: 5, maximum: 600, default: 120}
         host: {type: string, pattern: '^[a-z0-9]{1,32}$'}
         memory_gb: {type: number, minimum: 0.5, maximum: 1024}
-        key_secret: {type: string, pattern: '^[a-z0-9][a-z0-9_.-]{0,63}$', examples: [provider-openai]}
+        key_secret: {type: string, pattern: '^[a-z0-9][a-z0-9_.-]{0,63}$', examples: [provider-openai], description: 'remote and search: required; from 1.51 a server may name one too (optional: llama-server --api-key)'}
         max_in_flight: {type: integer, minimum: 1, maximum: 8, default: 2}
+        compat: {$ref: '#/components/schemas/ProviderCompat'}
+        preset: {type: string, pattern: '^[a-z][a-z0-9-]{0,31}$', description: 'from 1.51: the preset the form was filled from (display only; studio does not check it)'}
     ProviderList:
       type: object
       required: [remote_enabled, providers]
@@ -5794,11 +5849,55 @@ components:
       required: [ok, models, error, failure, seconds]
       properties:
         ok: {type: boolean}
-        models: {type: array, items: {type: string}, description: 'what its /models listed'}
+        models: {type: array, maxItems: 1000, items: {type: string, maxLength: 128}, description: 'what its /models listed (from 1.51 the first 1000)'}
         answer: {type: [string, 'null'], description: 'with ?model=: its answer to a tiny prompt'}
         error: {type: [string, 'null']}
         failure: {type: [string, 'null'], enum: [network, answer, refused, 'off', null], description: 'network: unreachable, TLS, timeout, 5xx, 429; answer: a 4xx (401: the key) or not OpenAI-shaped; refused: the host rule; off: remote models are off'}
         seconds: {type: number, minimum: 0}
+    ProviderCompat:
+      type: object
+      additionalProperties: false
+      description: 'from 1.51: what a provider''s OpenAI layer refuses of what pipelines sends (messages defs providerCompat; from a preset, Anthropic''s). temperature false: none sent; strict_schema true: json_schema with strict true, never retried as json_object. Absent = the usual calls'
+      properties:
+        temperature: {type: boolean}
+        strict_schema: {type: boolean}
+    ProviderPreset:
+      type: object
+      required: [id, title, kind, base_url, models, docs, note]
+      additionalProperties: false
+      description: 'from 1.51: one item of contracts/providers/presets.json (its schema: providers/presets.schema.json). A remote preset names `key_secret` (its id), a server preset none and no models (Fetch fills them)'
+      properties:
+        id: {type: string, pattern: '^[a-z][a-z0-9-]{0,31}$', description: 'the provider name it fills'}
+        title: {type: string, minLength: 1, maxLength: 60}
+        kind: {type: string, enum: [server, remote]}
+        base_url: {type: string, minLength: 8, maxLength: 300, pattern: '^https?://[^\s/?#@]+(/[^\s?#]*)?$'}
+        models: {type: array, maxItems: 16, uniqueItems: true, items: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$'}}
+        key_secret: {type: string, pattern: '^[a-z0-9][a-z0-9_.-]{0,63}$'}
+        compat: {$ref: '#/components/schemas/ProviderCompat'}
+        docs: {type: string, pattern: '^https://', maxLength: 300}
+        note: {type: string, minLength: 1, maxLength: 120}
+    ProviderPresetList:
+      type: object
+      required: [remote_enabled, presets]
+      additionalProperties: false
+      properties:
+        remote_enabled: {type: boolean, description: 'the deployment''s remote switch (remote presets are greyed while off)'}
+        presets: {type: array, maxItems: 32, items: {$ref: '#/components/schemas/ProviderPreset'}}
+    ProviderFetch:
+      type: object
+      additionalProperties: false
+      description: 'from 1.51: a preset''s Fetch. Only the key file''s name: the URL always comes from the preset (a `base_url` here is 422)'
+      properties:
+        key_secret: {type: string, pattern: '^[a-z0-9][a-z0-9_.-]{0,63}$', description: 'absent = the preset''s'}
+    ProviderKey:
+      type: object
+      required: [key_secret, path, found]
+      additionalProperties: false
+      description: 'from 1.51: a key file''s status (never the key)'
+      properties:
+        key_secret: {type: string}
+        path: {type: string, examples: [deploy/secrets/providers/deepseek], description: 'where the admin puts it, as the deployment sees it'}
+        found: {type: boolean, description: 'a regular file that is not empty'}
     SessionNames:
       type: object
       required: [mode, provider, model, local_available, remote_enabled, updated_at]

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/providers/presets.schema.json",
+  "title": "Model provider presets (contracts/providers/presets.json)",
+  "description": "From API 1.51 (contracts/README.md, Model sources: presets). Not a message: the presets Admin › Model providers fills its form from. Studio embeds the file (gen/providers/) and serves it (GET /v1/studio/admin/provider-presets, openapi ProviderPreset is this item); the web never reads the file. Order in the file is the order in the picker (grouped Local, then Remote). check.py also checks: ids unique, a remote base_url https and not a literal loopback or private address, a server base_url's host host.docker.internal, a loopback or a private literal, and each preset as a body passes ProviderPut.",
+  "type": "object",
+  "required": ["presets"],
+  "additionalProperties": false,
+  "properties": {
+    "presets": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": {"$ref": "#/$defs/preset"}
+    }
+  },
+  "$defs": {
+    "preset": {
+      "type": "object",
+      "required": ["id", "title", "kind", "base_url", "models", "docs", "note"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"$ref": "../messages/defs.schema.json#/$defs/providerName", "description": "the provider name it fills; a remote preset's key file is named the same"},
+        "title": {"type": "string", "minLength": 1, "maxLength": 60},
+        "kind": {"enum": ["server", "remote"]},
+        "base_url": {"type": "string", "minLength": 8, "maxLength": 300, "pattern": "^https?://[^\\s/?#@]+(/[^\\s?#]*)?$"},
+        "models": {"type": "array", "maxItems": 16, "uniqueItems": true, "items": {"$ref": "../messages/defs.schema.json#/$defs/providerModel"}, "description": "the default list, the first is the default; a local server ships none (Fetch fills them)"},
+        "key_secret": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$", "description": "remote: the key file's name (required); a server preset has none"},
+        "compat": {"$ref": "../messages/defs.schema.json#/$defs/providerCompat"},
+        "docs": {"type": "string", "pattern": "^https://[^\\s]+$", "maxLength": 300},
+        "note": {"type": "string", "minLength": 1, "maxLength": 120, "description": "one grey line under the picker"}
+      },
+      "if": {"properties": {"kind": {"const": "remote"}}},
+      "then": {"required": ["key_secret"]},
+      "else": {"not": {"required": ["key_secret"]}}
+    }
+  }
+}
