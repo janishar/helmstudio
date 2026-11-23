@@ -501,6 +501,16 @@
       "x": 3040,
       "y": 2400,
       "page": "models-admin"
+    },
+    "ProvidersModels.dc.html": {
+      "expand": "fill",
+      "h": 1080,
+      "is_interactive": true,
+      "title": "Admin · provider models: A rows or B chips, thinking per model",
+      "w": 1440,
+      "x": 1520,
+      "y": 3480,
+      "page": "models-admin"
     }
   },
   "createdOnFiles": {
@@ -632,6 +642,7 @@
     "ApiKeys.dc.html",
     "Users.dc.html",
     "AdminAgents.dc.html",
+    "ProvidersModels.dc.html",
     "Settings.dc.html",
     "Assistant.dc.html",
     "Landing.dc.html",
