@@ -121,37 +121,73 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <button role="tab" aria-selected="false" class="chip">API keys</button>
 <button role="tab" aria-selected="true" class="chip" style="background: var(--t1); color: var(--p0); font-weight: 600">Model providers</button>
 </div>
-<span style="font-size: 13px; color: var(--t2)">Remote models are off on this deployment (REMOTE_MODELS in deploy/.env). Local servers still work.</span>
 <div style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 6px 8px; overflow-x: auto">
 <table style="border-collapse: collapse; width: 100%; min-width: 760px">
 <thead><tr><th>Name</th><th>Kind</th><th>Address</th><th>Models</th><th>Limits</th><th>Status</th><th>Actions</th></tr></thead>
 <tbody>
 <tr><td style="font-weight: 600">Ollama on the Mac<br><span class="m" style="font-weight: 400">ollama</span></td><td><span class="tag">local server</span></td><td class="m">http://host.docker.internal:11434/v1</td><td class="m">qwen2.5:7b (default)<br>llama3.2:3b</td><td class="m">mac · 6.5 GB reserved<br>timeout 120 s</td><td>Enabled<br><span style="font-size: 12px; color: var(--a1)">answered · 0.4 s</span></td><td><button class="chip" style="height: 30px">Test</button> <button class="chip" style="height: 30px">Edit</button> <button class="chip" style="height: 30px">Disable</button> <button class="chip" style="height: 30px">Delete</button></td></tr>
-<tr><td style="font-weight: 600">Fake AI<br><span class="m" style="font-weight: 400">fakeai</span></td><td><span class="tag adm">remote</span></td><td class="m">https://fake.test/v1</td><td class="m">fake-large (default)</td><td class="m">key file provider-fakeai<br>2 in flight · timeout 120 s</td><td style="color: var(--t2)">Disabled<br><span style="font-size: 12px; color: #f2c14e">off · remote models are off</span></td><td><button class="chip" style="height: 30px">Test</button> <button class="chip" style="height: 30px">Edit</button> <button class="chip" style="height: 30px">Enable</button> <button class="chip" style="height: 30px">Delete</button></td></tr>
+<tr><td style="font-weight: 600">Fake AI<br><span class="m" style="font-weight: 400">fakeai</span></td><td><span class="tag adm">remote</span></td><td class="m">https://fake.test/v1</td><td class="m">fake-large (default)</td><td class="m">key file provider-fakeai<br>2 in flight · timeout 120 s</td><td>Enabled</td><td><button class="chip" style="height: 30px">Test</button> <button class="chip" style="height: 30px">Edit</button> <button class="chip" style="height: 30px">Disable</button> <button class="chip" style="height: 30px">Delete</button></td></tr>
 </tbody>
 </table>
 </div>
+
+<section aria-label="Other states" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start">
+<div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 12px; background: var(--p0); border: 1px solid var(--s3)">
+<span style="font-size: 12px; color: var(--t2)">Key file missing</span>
+<div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px"><span style="width: 8px; height: 8px; border-radius: 50%; background: #f2c14e"></span><span style="color: #f2c14e; font-weight: 600">Missing</span><span style="font-family: 'JetBrains Mono', monospace; color: var(--t2)">deploy/secrets/providers/openai</span><div style="flex-grow: 1"></div><button class="chip" style="height: 26px; font-size: 12px">Recheck</button></div>
+<span style="font-size: 12px; color: var(--t2)">Put the key in this file, then Recheck. The key is never shown here.</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 12px; background: var(--p0); border: 1px solid var(--s3)">
+<span style="font-size: 12px; color: var(--t2)">Fetch failed</span>
+<div role="alert" style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, #ff6b6b 14%, transparent); color: #ff8a8a; font-size: 12px"><span style="flex: 1 1 auto">openai: the key was refused</span><button class="chip" style="height: 26px; font-size: 12px">Retry</button></div>
+<span style="font-size: 12px; color: var(--t2)">The preset's models stay in the list.</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 12px; background: var(--p0); border: 1px solid var(--s3)">
+<span style="font-size: 12px; color: var(--t2)">Preset picker · remote models off</span>
+<div role="listbox" aria-label="Preset" style="display: flex; flex-direction: column; gap: 2px; padding: 6px; border-radius: 12px; background: var(--s2); font-size: 13px">
+<div role="option" style="padding: 5px 8px; border-radius: 8px">None</div>
+<span style="padding: 4px 8px 0; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; color: var(--t2)">Local</span>
+<div role="option" aria-selected="true" style="padding: 5px 8px; border-radius: 8px; background: var(--s4)">Ollama</div>
+<div role="option" style="padding: 5px 8px; border-radius: 8px">LM Studio</div>
+<div role="option" style="padding: 5px 8px; border-radius: 8px">llama-server</div>
+<span style="padding: 4px 8px 0; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; color: var(--t2)">Remote · remote models are off</span>
+<div role="option" aria-disabled="true" style="padding: 5px 8px; color: var(--t2); opacity: 0.6">DeepSeek · OpenAI · Anthropic · Gemini · OpenRouter · Groq · Mistral</div>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 12px; background: var(--p0); border: 1px solid var(--s3)">
+<span style="font-size: 12px; color: var(--t2)">Base URL changed from the preset's</span>
+<div style="display: flex; align-items: center; gap: 8px"><span style="font-size: 12px; color: var(--t2); flex: 1 1 auto">Fetch asks only the preset's or the saved URL. Save first.</span><button class="chip" disabled style="height: 26px; font-size: 12px; opacity: 0.5">Fetch</button></div>
+<span style="font-size: 12px; color: var(--t2)">Ollama preset: Base URL host.docker.internal:11434; GPU host and memory are yours to fill.</span>
+</div>
+</section>
 </main>
 
 <aside aria-label="Add a model provider" style="flex: 1 1 340px; box-sizing: border-box; padding: 16px 18px 24px; border-left: 1px solid var(--s3); background: var(--p0); display: flex; flex-direction: column; gap: 12px">
-<h2 style="margin: 0; display: flex; align-items: center; gap: 8px; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 16px; font-weight: 700">Add a model provider<button class="i" aria-label="More information" title="A local server is any OpenAI-compatible endpoint you run (Ollama, LM Studio, llama-server) on a loopback or private address; the host keeps its memory reserved. A remote provider is https and needs the deployment's remote switch. Keys are never entered here: name the secret file the server reads.">i</button></h2>
+<h2 style="margin: 0; display: flex; align-items: center; gap: 8px; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 16px; font-weight: 700">Add a model provider<button class="i" aria-label="More information" title="Pick a preset to fill the form; every field stays editable. A local server is any OpenAI-compatible endpoint you run (Ollama, LM Studio, llama-server) on a loopback or private address; the host keeps its memory reserved. A remote provider is https and needs the deployment's remote switch. Keys are never entered here: put the key in the key file the server reads.">i</button></h2>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="p-preset" style="font-size: 12px; color: var(--t2)">Preset</label><select id="p-preset" class="in"><option>None</option><optgroup label="Local"><option>Ollama</option><option>LM Studio</option><option>llama-server</option></optgroup><optgroup label="Remote"><option selected>DeepSeek</option><option>OpenAI</option><option>Anthropic</option><option>Google Gemini</option><option>OpenRouter</option><option>Groq</option><option>Mistral</option></optgroup></select></div>
 <div role="group" aria-label="Kind" style="display: flex; padding: 3px; border-radius: 10px; background: var(--s1); border: 1px solid var(--s3)">
-<button aria-pressed="true" style="flex: 1 1 0; height: 34px; border-radius: 8px; border: 0; background: var(--s5); font-weight: 500">Local server</button>
-<button aria-pressed="false" style="flex: 1 1 0; height: 34px; border-radius: 8px; border: 0; background: transparent; color: var(--t2); font-weight: 500">Remote</button>
+<button aria-pressed="false" style="flex: 1 1 0; height: 34px; border-radius: 8px; border: 0; background: transparent; color: var(--t2); font-weight: 500">Local server</button>
+<button aria-pressed="true" style="flex: 1 1 0; height: 34px; border-radius: 8px; border: 0; background: var(--s5); font-weight: 500">Remote</button>
 </div>
 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px">
-<div style="display: flex; flex-direction: column; gap: 6px"><label for="p-name" style="font-size: 12px; color: var(--t2)">Name</label><input id="p-name" class="in" placeholder="ollama"></div>
-<div style="display: flex; flex-direction: column; gap: 6px"><label for="p-title" style="font-size: 12px; color: var(--t2)">Title users see</label><input id="p-title" class="in" placeholder="Ollama on the Mac"></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="p-name" style="font-size: 12px; color: var(--t2)">Name</label><input id="p-name" class="in" value="deepseek"></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="p-title" style="font-size: 12px; color: var(--t2)">Title users see</label><input id="p-title" class="in" value="DeepSeek"></div>
 </div>
-<div style="display: flex; flex-direction: column; gap: 6px"><label for="p-url" style="font-size: 12px; color: var(--t2)">Base URL</label><input id="p-url" class="in" placeholder="http://host.docker.internal:11434/v1"></div>
-<div style="display: flex; flex-direction: column; gap: 6px"><label for="p-models" style="font-size: 12px; color: var(--t2)">Models, one per line (the first is the default)</label><textarea id="p-models" class="in" rows="2">qwen2.5:7b
-llama3.2:3b</textarea></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="p-url" style="font-size: 12px; color: var(--t2)">Base URL</label><input id="p-url" class="in" value="https://api.deepseek.com"></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><div style="display: flex; align-items: center; gap: 8px"><label for="p-models" style="font-size: 12px; color: var(--t2); flex: 1 1 auto">Models (the first is the default)</label><button class="chip" style="height: 26px; font-size: 12px">Fetch</button></div><textarea id="p-models" class="in" rows="2">deepseek-flash
+deepseek-v4-pro</textarea></div>
+<div role="group" aria-label="Fetched models" style="display: flex; flex-direction: column; gap: 2px; padding: 6px; border-radius: 12px; background: var(--s1); border: 1px solid var(--s3)">
+<span style="padding: 2px 8px 4px; font-size: 12px; color: var(--t2)">3 found · tick to add</span>
+<label style="display: flex; align-items: center; gap: 10px; padding: 4px 8px; border-radius: 8px; font-size: 12px"><input type="checkbox" checked style="accent-color: var(--a1)"><span style="font-family: 'JetBrains Mono', monospace">deepseek-flash</span></label>
+<label style="display: flex; align-items: center; gap: 10px; padding: 4px 8px; border-radius: 8px; font-size: 12px"><input type="checkbox" checked style="accent-color: var(--a1)"><span style="font-family: 'JetBrains Mono', monospace">deepseek-v4-pro</span></label>
+<label style="display: flex; align-items: center; gap: 10px; padding: 4px 8px; border-radius: 8px; font-size: 12px"><input type="checkbox" style="accent-color: var(--a1)"><span style="font-family: 'JetBrains Mono', monospace">deepseek-v4-flash</span></label>
+</div>
 <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px">
-<div style="display: flex; flex-direction: column; gap: 6px"><label for="p-host" style="font-size: 12px; color: var(--t2)">GPU host</label><input id="p-host" class="in" placeholder="mac"></div>
-<div style="display: flex; flex-direction: column; gap: 6px"><label for="p-mem" style="font-size: 12px; color: var(--t2)">Memory, GB</label><input id="p-mem" class="in" placeholder="6.5"></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="p-key" style="font-size: 12px; color: var(--t2)">Key file</label><input id="p-key" class="in" value="deepseek"></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="p-fl" style="font-size: 12px; color: var(--t2)">In flight</label><input id="p-fl" class="in" placeholder="2"></div>
 <div style="display: flex; flex-direction: column; gap: 6px"><label for="p-to" style="font-size: 12px; color: var(--t2)">Timeout, s</label><input id="p-to" class="in" placeholder="120"></div>
 </div>
-<span style="font-size: 12px; color: var(--t2)">Remote: the key's secret file name (in deploy/secrets) and calls in flight at once, instead of host and memory.</span>
+<div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px"><span style="width: 8px; height: 8px; border-radius: 50%; background: var(--a1)"></span><span style="color: var(--a1); font-weight: 600">Found</span><span style="font-family: 'JetBrains Mono', monospace; color: var(--t2)">deploy/secrets/providers/deepseek</span><div style="flex-grow: 1"></div><button class="chip" style="height: 26px; font-size: 12px">Recheck</button></div>
 <label style="display: flex; align-items: center; gap: 10px; min-height: 32px; font-size: 13px"><input type="checkbox" checked style="accent-color: var(--a1)">Enabled</label>
 <button style="height: 48px; border-radius: 14px; border: 0; background: var(--a1); color: var(--on1); background-image: linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 55%); font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.04em">Save provider</button>
 </aside>
