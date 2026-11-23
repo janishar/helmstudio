@@ -151,6 +151,18 @@ func Run() error {
 			}
 			return reply, err
 		},
+		// a key file's status: pipelines stats it (API 1.51): 5 s
+		providerKey: func(ctx context.Context, req message.ProviderKeyRequest) (message.ProviderKeyReply, error) {
+			var reply message.ProviderKeyReply
+			body, _ := json.Marshal(req)
+			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+			answer, err := natsConn.RequestWithContext(ctx, message.SubjectProviderKey, body)
+			if err == nil {
+				err = json.Unmarshal(answer.Data, &reply)
+			}
+			return reply, err
+		},
 	}
 	module.purge, module.putSettings = messaging.NatsPurge(client), messaging.NatsKVPut(client, "host_settings")
 	if module.store, err = objectStore(ctx, env); err != nil {

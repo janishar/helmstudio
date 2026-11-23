@@ -35,10 +35,20 @@ type ProviderPut struct {
 	MemoryGB     *float64 `json:"memory_gb"`
 	KeySecret    *string  `json:"key_secret"`
 	MaxInFlight  *int     `json:"max_in_flight"`
+	// API 1.51: from a preset (plan 25): what its OpenAI layer refuses, and the preset's id (display only)
+	Compat *ProviderCompat `json:"compat"`
+	Preset *string         `json:"preset"`
 }
 
-// Validate checks the shape (the host rule is checked by the service): a server needs host and memory_gb and has no
-// key; a remote one needs key_secret and https.
+// ProviderCompat is defs providerCompat (API 1.51): false temperature sends none; strict_schema sends strict json_schema
+// without the json_object retry. Unknown fields are refused by the strict body.
+type ProviderCompat struct {
+	Temperature  *bool `json:"temperature,omitempty"`
+	StrictSchema *bool `json:"strict_schema,omitempty"`
+}
+
+// Validate checks the shape (the host rule is checked by the service): a server needs host and memory_gb and may name
+// a key (API 1.51); a remote one needs key_secret and https.
 func (b *ProviderPut) Validate() string {
 	switch {
 	case b.Kind != "server" && b.Kind != "remote" && b.Kind != "search":
@@ -69,8 +79,10 @@ func (b *ProviderPut) Validate() string {
 		return "key_secret must be a secret file's name"
 	case b.Kind == "server" && (b.Host == nil || b.MemoryGB == nil):
 		return "a server needs host and memory_gb"
-	case b.Kind == "server" && (b.KeySecret != nil || b.MaxInFlight != nil):
-		return "a server has no key_secret or max_in_flight"
+	case b.Kind == "server" && b.MaxInFlight != nil:
+		return "a server has no max_in_flight"
+	case b.Preset != nil && !ProviderName.MatchString(*b.Preset):
+		return "preset must be a preset's id"
 	case b.Kind != "server" && b.KeySecret == nil:
 		return "a " + b.Kind + " provider needs key_secret (the name of its key's secret file)"
 	case b.Kind != "server" && !strings.HasPrefix(b.BaseURL, "https://"):
@@ -88,27 +100,71 @@ func (b *ProviderPut) Validate() string {
 
 // Provider is one model provider as the admin sees it; the key itself is never here.
 type Provider struct {
-	Name         string    `json:"name"`
-	Kind         string    `json:"kind"`
-	API          string    `json:"api"`
-	Title        *string   `json:"title,omitempty"`
-	BaseURL      string    `json:"base_url"`
-	Models       []string  `json:"models"`
-	DefaultModel string    `json:"default_model"`
-	Enabled      bool      `json:"enabled"`
-	TimeoutS     int       `json:"timeout_s"`
-	Host         *string   `json:"host,omitempty"`
-	MemoryGB     *float64  `json:"memory_gb,omitempty"`
-	KeySecret    *string   `json:"key_secret,omitempty"`
-	MaxInFlight  *int      `json:"max_in_flight,omitempty"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	Name         string          `json:"name"`
+	Kind         string          `json:"kind"`
+	API          string          `json:"api"`
+	Title        *string         `json:"title,omitempty"`
+	BaseURL      string          `json:"base_url"`
+	Models       []string        `json:"models"`
+	DefaultModel string          `json:"default_model"`
+	Enabled      bool            `json:"enabled"`
+	TimeoutS     int             `json:"timeout_s"`
+	Host         *string         `json:"host,omitempty"`
+	MemoryGB     *float64        `json:"memory_gb,omitempty"`
+	KeySecret    *string         `json:"key_secret,omitempty"`
+	MaxInFlight  *int            `json:"max_in_flight,omitempty"`
+	Compat       *ProviderCompat `json:"compat,omitempty"`
+	Preset       *string         `json:"preset,omitempty"`
+	CreatedAt    time.Time       `json:"created_at"`
+	UpdatedAt    time.Time       `json:"updated_at"`
 }
 
 // ProviderList is GET /admin/providers.
 type ProviderList struct {
 	RemoteEnabled bool       `json:"remote_enabled"`
 	Providers     []Provider `json:"providers"`
+}
+
+// ProviderPreset is one item of contracts/providers/presets.json (API 1.51).
+type ProviderPreset struct {
+	ID        string          `json:"id"`
+	Title     string          `json:"title"`
+	Kind      string          `json:"kind"`
+	BaseURL   string          `json:"base_url"`
+	Models    []string        `json:"models"`
+	KeySecret *string         `json:"key_secret,omitempty"`
+	Compat    *ProviderCompat `json:"compat,omitempty"`
+	Docs      string          `json:"docs"`
+	Note      string          `json:"note"`
+}
+
+// ProviderPresetList is GET /admin/provider-presets.
+type ProviderPresetList struct {
+	RemoteEnabled bool             `json:"remote_enabled"`
+	Presets       []ProviderPreset `json:"presets"`
+}
+
+// ProviderFetch is a preset's Fetch body: only the key file's name (a base_url is an unknown field: 422).
+type ProviderFetch struct {
+	KeySecret *string `json:"key_secret"`
+}
+
+// Validate checks the key file's name.
+func (b *ProviderFetch) Validate() string {
+	if b.KeySecret != nil && !keySecret.MatchString(*b.KeySecret) {
+		return "key_secret must be a secret file's name"
+	}
+	return ""
+}
+
+// KeySecretName reports whether s is a key file's name (no "/": never a path outside the keys folder).
+func KeySecretName(s string) bool { return keySecret.MatchString(s) }
+
+// ProviderKey is GET /admin/provider-keys/{key_secret}: whether the key file is there, never the key.
+type ProviderKey struct {
+	KeySecret string `json:"key_secret"`
+	Path      string `json:"path"`
+	Found     bool   `json:"found"`
 }
 
 // ProviderTest is POST /admin/providers/{name}/test.

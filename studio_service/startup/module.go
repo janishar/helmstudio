@@ -34,6 +34,7 @@ type Module struct {
 	dispatcher      *studio.Dispatcher                                         // positions use its skip counts; nil in tests
 	remoteModels    bool                                                       // the deployment's remote switch (API 1.15)
 	providerTest    studio.ProviderTestAsk                                     // pipelines.providers.test
+	providerKey     studio.ProviderKeyAsk                                      // pipelines.providers.key (API 1.51)
 	judgeTest       studio.JudgeTestAsk                                        // pipelines.judge.test (API 1.28)
 	assistantMemory studio.AssistantMemoryAsk                                  // pipelines.assistant.memory (API 1.44)
 	lookup          studio.Lookup                                              // a server provider's host name (nil: the system resolver)
@@ -62,6 +63,7 @@ func (m *Module) Controllers() []micro.Controller {
 	service.SetDispatcher(m.dispatcher)
 	service.SetRemote(m.remoteModels)
 	service.SetProviderTest(m.providerTest)
+	service.SetProviderKey(m.providerKey)
 	service.SetJudgeTest(m.judgeTest)
 	service.SetLookup(m.lookup)
 	service.SetModelOps(m.purge, m.putSettings)

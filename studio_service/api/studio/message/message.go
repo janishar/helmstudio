@@ -430,6 +430,21 @@ type ProviderTestReply struct {
 	Code    string   `json:"code"`
 }
 
+// SubjectProviderKey is pipelines' request/reply subject for a key file's status (API 1.51).
+const SubjectProviderKey = "pipelines.providers.key"
+
+// ProviderKeyRequest is the pipelines.providers.key request.
+type ProviderKeyRequest struct {
+	KeySecret string `json:"key_secret"`
+}
+
+// ProviderKeyReply is its reply: {found} or {error, code: internal}.
+type ProviderKeyReply struct {
+	Found bool   `json:"found"`
+	Error string `json:"error"`
+	Code  string `json:"code"`
+}
+
 // ToolsRequest is the studio.tools request (pipelines → studio): one agent tool call, as the batch's owner; from API
 // 1.44 an assistant chat's call, with ThreadID in place of BatchID, Row and Node.
 type ToolsRequest struct {

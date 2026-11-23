@@ -10,7 +10,9 @@ import (
 	"net/netip"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -20,6 +22,7 @@ import (
 	"github.com/helmstudio/studio_service/api/studio/dto"
 	"github.com/helmstudio/studio_service/api/studio/message"
 	"github.com/helmstudio/studio_service/common"
+	"github.com/helmstudio/studio_service/gen"
 	"github.com/helmstudio/studio_service/registry"
 )
 
@@ -42,6 +45,12 @@ func (s *Service) SetLookup(fn Lookup) { s.lookup = fn }
 // SetProviderTest sets how the service reaches pipelines' provider test; without one the test answers 503.
 func (s *Service) SetProviderTest(fn ProviderTestAsk) { s.providerTest = fn }
 
+// ProviderKeyAsk asks pipelines_service whether a key file is there (API 1.51); an error is no answer.
+type ProviderKeyAsk func(ctx context.Context, req message.ProviderKeyRequest) (message.ProviderKeyReply, error)
+
+// SetProviderKey sets how the service reaches pipelines' key check; without one the route answers 503.
+func (s *Service) SetProviderKey(fn ProviderKeyAsk) { s.providerKey = fn }
+
 // errAdmin is the 403 of every admin route for anyone else.
 var errAdmin = network.NewForbiddenError("admin role required", nil)
 
@@ -62,15 +71,18 @@ type providerRow struct {
 	MaxInFlight  *int
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
+	Compat       *dto.ProviderCompat // API 1.51
+	Preset       *string
 }
 
 const providerCols = `name, kind, api, title, base_url, models, default_model, enabled, timeout_s, host, memory_gb,
-	key_secret, max_in_flight, created_at, updated_at`
+	key_secret, max_in_flight, created_at, updated_at, compat, preset`
 
 func (p providerRow) dto() dto.Provider {
 	return dto.Provider{Name: p.Name, Kind: p.Kind, API: p.API, Title: p.Title, BaseURL: p.BaseURL, Models: p.Models,
 		DefaultModel: p.DefaultModel, Enabled: p.Enabled, TimeoutS: p.TimeoutS, Host: p.Host, MemoryGB: p.MemoryGB,
-		KeySecret: p.KeySecret, MaxInFlight: p.MaxInFlight, CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt}
+		KeySecret: p.KeySecret, MaxInFlight: p.MaxInFlight, Compat: p.Compat, Preset: p.Preset, CreatedAt: p.CreatedAt,
+		UpdatedAt: p.UpdatedAt}
 }
 
 // snapshot is defs providerSnapshot: the provider as a batch calls it.
@@ -80,6 +92,9 @@ func (p providerRow) snapshot() map[string]any {
 		out["host"], out["memory_gb"] = p.Host, p.MemoryGB
 	} else if p.Kind == "remote" {
 		out["max_in_flight"] = cmp.Or(deref(p.MaxInFlight), 2)
+	}
+	if p.Compat != nil {
+		out["compat"] = p.Compat
 	}
 	return out
 }
@@ -239,15 +254,16 @@ func (s *Service) PutProvider(ctx context.Context, caller common.Caller, name st
 		}
 		enabled := body.Enabled == nil || *body.Enabled
 		row, err := one[providerRow](ctx, tx, `INSERT INTO providers (name, kind, title, base_url, models, default_model,
-			enabled, timeout_s, host, memory_gb, key_secret, max_in_flight, api) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-			$11, $12, $13)
+			enabled, timeout_s, host, memory_gb, key_secret, max_in_flight, api, compat, preset) VALUES ($1, $2, $3, $4, $5, $6,
+			$7, $8, $9, $10, $11, $12, $13, $14, $15)
 			ON CONFLICT (name) DO UPDATE SET api = excluded.api, title = excluded.title, base_url = excluded.base_url, models = excluded.models,
 			default_model = excluded.default_model, enabled = excluded.enabled, timeout_s = excluded.timeout_s,
 			host = excluded.host, memory_gb = excluded.memory_gb, key_secret = excluded.key_secret,
-			max_in_flight = excluded.max_in_flight, updated_at = clock_timestamp() RETURNING `+providerCols,
+			max_in_flight = excluded.max_in_flight, compat = excluded.compat, preset = excluded.preset,
+			updated_at = clock_timestamp() RETURNING `+providerCols,
 			name, body.Kind, body.Title, body.BaseURL, body.Models, cmp.Or(deref(body.DefaultModel), body.Models[0]), enabled,
 			cmp.Or(deref(body.TimeoutS), 120), body.Host, body.MemoryGB, body.KeySecret, maxInFlight(body),
-			cmp.Or(deref(body.API), "openai"))
+			cmp.Or(deref(body.API), "openai"), body.Compat, body.Preset)
 		out = row.dto()
 		return err
 	})
@@ -297,13 +313,18 @@ func (s *Service) TestProvider(ctx context.Context, caller common.Caller, name, 
 	if err != nil {
 		return dto.ProviderTest{}, err
 	}
-	unavailable := network.NewServiceUnavailableError("the pipeline service did not answer; try again", nil)
-	if s.providerTest == nil {
-		return dto.ProviderTest{}, unavailable
-	}
 	req := message.ProviderTestRequest{Name: name, Provider: row.snapshot()}
 	if model != "" {
 		req.Model = &model
+	}
+	return s.askTest(ctx, req)
+}
+
+// askTest asks pipelines.providers.test (30 s, else 503); a failed test is 200 with ok false.
+func (s *Service) askTest(ctx context.Context, req message.ProviderTestRequest) (dto.ProviderTest, error) {
+	unavailable := network.NewServiceUnavailableError("the pipeline service did not answer; try again", nil)
+	if s.providerTest == nil {
+		return dto.ProviderTest{}, unavailable
 	}
 	reply, err := s.providerTest(ctx, req)
 	if err != nil || reply.Code == "internal" {
@@ -317,6 +338,74 @@ func (s *Service) TestProvider(ctx context.Context, caller common.Caller, name, 
 		out.Error, out.Failure = &reply.Error, &reply.Code
 	}
 	return out, nil
+}
+
+// ------------------------------------------------------------------ presets and key files (API 1.51, plan 25)
+
+// presets is the embedded contracts/providers/presets.json (gen.ProviderPresets), parsed once.
+var presets = sync.OnceValue(func() []dto.ProviderPreset {
+	var file struct {
+		Presets []dto.ProviderPreset `json:"presets"`
+	}
+	if err := json.Unmarshal(gen.ProviderPresets, &file); err != nil {
+		panic(err) // the file is checked by make contracts-check and its copy by gen's test
+	}
+	return file.Presets
+})
+
+// ProviderPresets answers GET /admin/provider-presets: the file's presets in its order, with the remote switch.
+func (s *Service) ProviderPresets(caller common.Caller) (dto.ProviderPresetList, error) {
+	if !caller.IsAdmin() {
+		return dto.ProviderPresetList{}, errAdmin
+	}
+	return dto.ProviderPresetList{RemoteEnabled: s.remoteOn, Presets: presets()}, nil
+}
+
+// FetchPresetModels answers POST /admin/provider-presets/{id}/models: the preset's provider lists its models, asked by
+// pipelines from the preset's own kind, base_url and compat (never a URL from the browser), timeout 15 s. A remote
+// preset while the switch is off is ok false, failure off, without asking.
+func (s *Service) FetchPresetModels(ctx context.Context, caller common.Caller, id string, body *dto.ProviderFetch) (dto.ProviderTest, error) {
+	if !caller.IsAdmin() {
+		return dto.ProviderTest{}, errAdmin
+	}
+	i := slices.IndexFunc(presets(), func(p dto.ProviderPreset) bool { return p.ID == id })
+	if i < 0 {
+		return dto.ProviderTest{}, errNotFound
+	}
+	p := presets()[i]
+	if p.Kind == "remote" && !s.remoteOn {
+		off, detail := "off", "remote models are off on this deployment"
+		return dto.ProviderTest{Models: []string{}, Error: &detail, Failure: &off}, nil
+	}
+	key := p.KeySecret
+	if body != nil && body.KeySecret != nil {
+		key = body.KeySecret
+	}
+	snapshot := map[string]any{"kind": p.Kind, "api": "openai", "base_url": p.BaseURL, "timeout_s": 15, "key_secret": key}
+	if p.Compat != nil {
+		snapshot["compat"] = p.Compat
+	}
+	return s.askTest(ctx, message.ProviderTestRequest{Name: p.ID, Provider: snapshot})
+}
+
+// ProviderKey answers GET /admin/provider-keys/{key_secret}: pipelines stats the file (5 s, else 503); 404 for a
+// malformed name. The path is the deployment's, composed here: studio never reads the folder.
+func (s *Service) ProviderKey(ctx context.Context, caller common.Caller, secret string) (dto.ProviderKey, error) {
+	if !caller.IsAdmin() {
+		return dto.ProviderKey{}, errAdmin
+	}
+	if !dto.KeySecretName(secret) {
+		return dto.ProviderKey{}, errNotFound
+	}
+	unavailable := network.NewServiceUnavailableError("the pipeline service did not answer; try again", nil)
+	if s.providerKey == nil {
+		return dto.ProviderKey{}, unavailable
+	}
+	reply, err := s.providerKey(ctx, message.ProviderKeyRequest{KeySecret: secret})
+	if err != nil || reply.Code != "" {
+		return dto.ProviderKey{}, unavailable
+	}
+	return dto.ProviderKey{KeySecret: secret, Path: "deploy/secrets/providers/" + secret, Found: reply.Found}, nil
 }
 
 // ModelSources answers GET /model-sources: the enabled providers, names and models only; remote ones only while the

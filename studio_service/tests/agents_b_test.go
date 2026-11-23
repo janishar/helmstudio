@@ -470,3 +470,92 @@ func TestServerMemoryReserved(t *testing.T) {
 		t.Fatal("disabled: nothing reserved", got, budgets[second])
 	}
 }
+
+// TestProviderPresets: API 1.51 (plan 25): the presets list is the embedded file, admin only; a preset's Fetch asks
+// pipelines with the preset's own URL (never the body's: 422), 404 unknown, off without asking while remote is off;
+// a key file's status, 404 malformed, 503 silent; compat and preset round-trip through PUT and GET and the snapshot.
+func TestProviderPresets(t *testing.T) {
+	e := setup(t)
+	file, err := os.ReadFile(filepath.Join("..", "..", "contracts", "providers", "presets.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var want map[string]any
+	_ = json.Unmarshal(file, &want)
+	e.call(userA, "GET", "/v1/studio/admin/provider-presets", nil, 403)
+	list := e.call(admin, "GET", "/v1/studio/admin/provider-presets", nil, 200)
+	if list["remote_enabled"] != false || fmt.Sprint(list["presets"]) != fmt.Sprint(want["presets"]) {
+		t.Fatal(list)
+	}
+
+	fetch := "/v1/studio/admin/provider-presets/"
+	e.call(userA, "POST", fetch+"ollama/models", nil, 403)
+	e.call(admin, "POST", fetch+"ollama/models", nil, 503) // pipelines silent
+	var asked []message.ProviderTestRequest
+	e.service.SetProviderTest(func(_ context.Context, req message.ProviderTestRequest) (message.ProviderTestReply, error) {
+		asked = append(asked, req)
+		return message.ProviderTestReply{Models: []string{"qwen3:8b", "llama3.2:3b"}, Seconds: 0.2}, nil
+	})
+	got := e.call(admin, "POST", fetch+"ollama/models", nil, 200)
+	if got["ok"] != true || fmt.Sprint(got["models"]) != "[qwen3:8b llama3.2:3b]" || len(asked) != 1 || asked[0].Model != nil ||
+		fmt.Sprint(asked[0].Provider) != "map[api:openai base_url:http://host.docker.internal:11434/v1 key_secret:<nil> kind:server timeout_s:15]" {
+		t.Fatal(got, asked)
+	}
+	e.call(admin, "POST", fetch+"ollama/models", map[string]any{"base_url": "http://169.254.169.254/latest"}, 422)
+	e.call(admin, "POST", fetch+"nope/models", map[string]any{}, 404)
+	off := e.call(admin, "POST", fetch+"anthropic/models", nil, 200)
+	if off["ok"] != false || off["failure"] != "off" || len(asked) != 1 {
+		t.Fatal("a remote preset with the switch off", off, asked)
+	}
+	e.service.SetRemote(true)
+	e.call(admin, "POST", fetch+"anthropic/models", map[string]any{"key_secret": "claude-2"}, 200)
+	if p := asked[1].Provider; p["base_url"] != "https://api.anthropic.com/v1/" || *p["key_secret"].(*string) != "claude-2" ||
+		p["kind"] != "remote" {
+		t.Fatal(p)
+	}
+	raw, _ := json.Marshal(asked[1].Provider)
+	if !strings.Contains(string(raw), `"compat":{"temperature":false,"strict_schema":true}`) {
+		t.Fatalf("%s", raw)
+	}
+
+	keys := "/v1/studio/admin/provider-keys/"
+	e.call(userA, "GET", keys+"deepseek", nil, 403)
+	e.call(admin, "GET", keys+"Bad..Name", nil, 404)
+	e.call(admin, "GET", keys+"deepseek", nil, 503)
+	e.service.SetProviderKey(func(_ context.Context, req message.ProviderKeyRequest) (message.ProviderKeyReply, error) {
+		return message.ProviderKeyReply{Found: req.KeySecret == "deepseek"}, nil
+	})
+	if k := e.call(admin, "GET", keys+"deepseek", nil, 200); fmt.Sprint(k) != "map[found:true key_secret:deepseek path:deploy/secrets/providers/deepseek]" {
+		t.Fatal(k)
+	}
+	if k := e.call(admin, "GET", keys+"openai", nil, 200); k["found"] != false {
+		t.Fatal(k)
+	}
+
+	// compat and preset round-trip; a server may name a key; the snapshot carries both
+	body := map[string]any{"kind": "remote", "base_url": "https://api.anthropic.com/v1/", "models": []string{"claude-sonnet-5-5"},
+		"key_secret": "anthropic", "compat": map[string]any{"temperature": false, "strict_schema": true}, "preset": "anthropic"}
+	unknown := maps(body)
+	unknown["compat"] = map[string]any{"retry": true}
+	e.call(admin, "PUT", "/v1/studio/admin/providers/anthropic", unknown, 422)
+	put := e.call(admin, "PUT", "/v1/studio/admin/providers/anthropic", body, 201)
+	if fmt.Sprint(put["compat"]) != "map[strict_schema:true temperature:false]" || put["preset"] != "anthropic" {
+		t.Fatal(put)
+	}
+	server := map[string]any{"kind": "server", "base_url": "http://192.168.1.20:9931/v1", "models": []string{"qwen3"}, "host": "mac",
+		"memory_gb": 4, "key_secret": "llama-server"}
+	if s := e.call(admin, "PUT", "/v1/studio/admin/providers/llama", server, 201); s["key_secret"] != "llama-server" || s["compat"] != nil {
+		t.Fatal(s)
+	}
+	listed := e.call(admin, "GET", "/v1/studio/admin/providers", nil, 200)
+	raw, _ = json.Marshal(listed)
+	if !strings.Contains(string(raw), `"compat":{"strict_schema":true,"temperature":false}`) || !strings.Contains(string(raw), `"preset":"anthropic"`) {
+		t.Fatalf("%s", raw)
+	}
+	e.call(admin, "POST", "/v1/studio/admin/providers/llama/test", nil, 200)
+	e.call(admin, "POST", "/v1/studio/admin/providers/anthropic/test", nil, 200)
+	raw, _ = json.Marshal(asked[2:])
+	if !strings.Contains(string(raw), `"key_secret":"llama-server"`) || !strings.Contains(string(raw), `"compat":{"temperature":false,"strict_schema":true}`) {
+		t.Fatalf("%s", raw)
+	}
+}

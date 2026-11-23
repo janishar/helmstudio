@@ -230,6 +230,9 @@ consumes `evt.run.>` (durable `studio-projector`) and `evt.pipeline.>` (durable 
   deployment switch `STUDIO_REMOTE_MODELS` (off by default) and `pipelines.engine.custom` (registry `Custom`).
 - Providers (`providers.go`, migration 00016, admin only, 403 otherwise): `/admin/providers` (PUT 201/200, kind never
   changes in place, DELETE 409 while an unfinished batch names it, `test` asks `pipelines.providers.test`, 30 s).
+  API 1.51 (plan 25, migration 00033: `compat`, `preset`): `/admin/provider-presets` serves the embedded
+  `gen/providers/presets.json`; a preset's `models` (Fetch) builds the snapshot from the file, never the body, and asks
+  the test subject (15 s call, 30 s wait); `/admin/provider-keys/{key_secret}` asks `pipelines.providers.key` (5 s).
 - Judge tests (API 1.28, `api/studio/judge_tests.go`, table `judge_tests`): `POST /pipelines/{id}/judge-tests` asks
   `pipelines.judge.test` for the template and makes an interactive ask run on the picked takes; `GET /judge-tests/{id}`
   asks it for the verdict once the run succeeded and keeps it.

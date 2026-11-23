@@ -121,16 +121,18 @@ func TestHostRule(t *testing.T) {
 	}
 }
 
-// A provider body: a server has host and memory and no key; a remote one a key file and https.
+// A provider body: a server has host and memory (from 1.51 maybe a key); a remote one a key file and https.
 func TestProviderPutShape(t *testing.T) {
-	host, mem, key := "mac", 6.5, "provider-x"
+	host, mem, key, one, bad := "mac", 6.5, "provider-x", 1, "Not a preset"
 	for _, c := range []struct {
 		body dto.ProviderPut
 		ok   bool
 	}{
 		{dto.ProviderPut{Kind: "server", BaseURL: "http://127.0.0.1:11434/v1", Models: []string{"qwen2.5:7b"}, Host: &host, MemoryGB: &mem}, true},
 		{dto.ProviderPut{Kind: "server", BaseURL: "http://127.0.0.1:11434/v1", Models: []string{"qwen2.5:7b"}, Host: &host}, false},
-		{dto.ProviderPut{Kind: "server", BaseURL: "http://127.0.0.1/v1", Models: []string{"m"}, Host: &host, MemoryGB: &mem, KeySecret: &key}, false},
+		{dto.ProviderPut{Kind: "server", BaseURL: "http://127.0.0.1/v1", Models: []string{"m"}, Host: &host, MemoryGB: &mem, KeySecret: &key}, true}, // 1.51
+		{dto.ProviderPut{Kind: "server", BaseURL: "http://127.0.0.1/v1", Models: []string{"m"}, Host: &host, MemoryGB: &mem, MaxInFlight: &one}, false},
+		{dto.ProviderPut{Kind: "remote", BaseURL: "https://api.example.com/v1", Models: []string{"m"}, KeySecret: &key, Preset: &bad}, false},
 		{dto.ProviderPut{Kind: "remote", BaseURL: "https://api.example.com/v1", Models: []string{"m"}, KeySecret: &key}, true},
 		{dto.ProviderPut{Kind: "remote", BaseURL: "https://api.example.com/v1", Models: []string{"m"}}, false},
 		{dto.ProviderPut{Kind: "remote", BaseURL: "http://api.example.com/v1", Models: []string{"m"}, KeySecret: &key}, false},

@@ -43,6 +43,7 @@ type Service struct {
 	memory       MemoryAsk       // pipelines.memory; nil answers 503
 	lookup       Lookup          // resolves a server provider's host (nil: the system resolver)
 	providerTest ProviderTestAsk // pipelines.providers.test; nil answers 503
+	providerKey  ProviderKeyAsk  // pipelines.providers.key (API 1.51); nil answers 503
 	judgeTest    JudgeTestAsk    // pipelines.judge.test (API 1.28); nil answers 503
 	remoteOn     bool            // the deployment's remote switch (STUDIO_REMOTE_MODELS, off by default; API 1.15)
 	// the dispatcher whose skip counts positions use; nil: none

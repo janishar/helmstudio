@@ -6,3 +6,8 @@ import _ "embed"
 //
 //go:embed tools/catalog.json
 var ToolCatalog []byte
+
+// ProviderPresets is contracts/providers/presets.json (API 1.51): the model provider presets, copied by `make gen`.
+//
+//go:embed providers/presets.json
+var ProviderPresets []byte

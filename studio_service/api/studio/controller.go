@@ -107,6 +107,9 @@ func (c *controller) MountRoutes(group *gin.RouterGroup) {
 	group.PUT("/admin/providers/:name", c.putProviderHandler)
 	group.DELETE("/admin/providers/:name", c.deleteProviderHandler)
 	group.POST("/admin/providers/:name/test", c.testProviderHandler)
+	group.GET("/admin/provider-presets", c.listPresetsHandler)             // API 1.51
+	group.POST("/admin/provider-presets/:id/models", c.fetchPresetHandler) // API 1.51
+	group.GET("/admin/provider-keys/:key_secret", c.providerKeyHandler)    // API 1.51
 	group.GET("/models", c.listModelsHandler)
 	group.POST("/admin/models/:model/download", c.downloadModelHandler)
 	group.DELETE("/admin/models/:model", c.deleteModelHandler)
@@ -958,6 +961,35 @@ func (c *controller) deleteProviderHandler(ctx *gin.Context) {
 // testProviderHandler: POST /admin/providers/{name}/test[?model=].
 func (c *controller) testProviderHandler(ctx *gin.Context) {
 	out, err := c.service.TestProvider(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("name"), ctx.Query("model"))
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// listPresetsHandler: GET /admin/provider-presets (API 1.51).
+func (c *controller) listPresetsHandler(ctx *gin.Context) {
+	out, err := c.service.ProviderPresets(common.MustCaller(ctx))
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// fetchPresetHandler: POST /admin/provider-presets/{id}/models — the body is optional (ProviderFetch); 403 before it
+// is read; a base_url in it is an unknown field (422).
+func (c *controller) fetchPresetHandler(ctx *gin.Context) {
+	caller := common.MustCaller(ctx)
+	body, err := &dto.ProviderFetch{}, error(nil)
+	if !caller.IsAdmin() {
+		err = errAdmin
+	} else if ctx.Request.ContentLength != 0 {
+		body, err = strictBody[dto.ProviderFetch](ctx, false)
+	}
+	var out dto.ProviderTest
+	if err == nil {
+		out, err = c.service.FetchPresetModels(ctx.Request.Context(), caller, ctx.Param("id"), body)
+	}
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// providerKeyHandler: GET /admin/provider-keys/{key_secret} (API 1.51).
+func (c *controller) providerKeyHandler(ctx *gin.Context) {
+	out, err := c.service.ProviderKey(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("key_secret"))
 	reply(ctx, http.StatusOK, out, err)
 }
 
