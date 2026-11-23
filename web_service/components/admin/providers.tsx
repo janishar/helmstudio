@@ -1025,7 +1025,7 @@ function ModelRow({
         )}
       </div>
       {chosen && (
-        <div className="flex items-center gap-2 pl-[26px] text-[12px]">
+        <div className="flex flex-wrap items-center gap-2 pl-[26px] text-[12px]">
           {info?.always ? (
             <span className="text-t2">Always thinks</span>
           ) : info && info.levels.length > 0 ? (
