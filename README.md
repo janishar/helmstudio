@@ -23,8 +23,17 @@ and create users on Admin › Users. There is no public sign-up. The CLI's API k
 
 ```sh
 make -C cli build
-cli/bin/helm login --url http://localhost:8300 --email you@example.com --api-key-file deploy/secrets/helm_api_key
+cli/bin/helm login --url http://localhost:8300 --email admin@helm.test --api-key-file deploy/secrets/helm_api_key
 cli/bin/helm run echo -p echo.steps=5 -p prompt.text="hello" --out .
+```
+
+Run `helm login` in a real terminal: it asks for the password. To use helmstudio from Claude Code or Claude Desktop
+(MCP), add `helm mcp` once and check it connects; the steps and the tools are in
+[docs/guides/mcp.md](docs/guides/mcp.md):
+
+```sh
+claude mcp add -s user helmstudio -- "$PWD/cli/bin/helm" mcp
+claude mcp list        # helmstudio: … ✔ Connected
 ```
 
 ## Daily commands
@@ -36,7 +45,7 @@ cli/bin/helm run echo -p echo.steps=5 -p prompt.text="hello" --out .
 | `make logs s=studio` | follow one service's logs (no `s`: all) |
 | `make ps` | what is running |
 | `make contracts-check` | validate `contracts/` (no stack needed) |
-| `make test` | the contract suite on its own stack, `helmstudio-test` (Kong on 8390); `make test-down` stops it |
+| `make test` | the contract suite on its own stack, `helmstudio-test` (Kong on 8390); `make test T="tests/test_x.py"` runs only those; `make test-down` stops it |
 | `make resilience` | restart each service of `helmstudio-test` mid-run and check the stack recovers (`contract_tests/resilience.sh`) |
 | `.tools/test-db` | Postgres for the services' DB tests (`helmstudio-test`, port 5464) |
 | `make runners` | the native runners of this Mac (torch, mlx, native) in the background (`make runners-stop` stops them) |

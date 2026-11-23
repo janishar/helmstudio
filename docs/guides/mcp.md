@@ -12,7 +12,7 @@ wait, look at the takes, batch, pick, put takes on a Timeline and export. It cal
 
    ```sh
    make -C cli build                      # cli/bin/helm
-   cli/bin/helm login --url http://127.0.0.1:8300 --email you@example.com --api-key-file /path/to/helm.key
+   cli/bin/helm login --url http://127.0.0.1:8300 --email admin@helm.test --api-key-file deploy/secrets/helm_api_key
    ```
 
 2. **Claude Code** (for every project: `-s user`):
@@ -29,6 +29,16 @@ wait, look at the takes, batch, pick, put takes on a Timeline and export. It cal
    ```
 
 If the session expires, run `helm login` again; the server picks up the new tokens on its next start.
+
+## Check it works
+
+1. `cli/bin/helm whoami` prints your account (on the dev stack the admin is `admin@helm.test`, the `ADMIN_EMAIL`).
+   `helm login` asks for the password, so run it in a real terminal, not through a chat's `!` command.
+2. `claude mcp list` shows `helmstudio: … ✔ Connected`. If not, run `helm mcp` by hand: an error on start is the
+   reason (most often an expired login).
+3. Open a **new** Claude Code session (one already open does not see a server added later), type `/mcp`:
+   helmstudio is listed with its tools. Ask "using helmstudio, list my workflows".
+4. Claude Desktop: after the restart, Settings › Developer shows helmstudio as running.
 
 ## Tools
 
