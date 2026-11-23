@@ -5937,7 +5937,7 @@ export interface components {
             state: Record<string, never>;
         };
         /**
-         * @description server: a local server you run (loopback or private address); remote: outside the machine (https; only when the deployment has remote models on); from 1.44 search: a web search provider for the assistant (https, `api` brave, `key_secret`; only with remote models on; never a model source)
+         * @description server: a local server you run (loopback or private address, or the Docker host: what host.docker.internal resolves to); remote: outside the machine (https; only when the deployment has remote models on); from 1.44 search: a web search provider for the assistant (https, `api` brave, `key_secret`; only with remote models on; never a model source)
          * @enum {string}
          */
         ProviderKind: "server" | "remote" | "search";
@@ -5979,7 +5979,7 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
-        /** @description create or replace a provider. server: http(s) base_url whose host is a loopback or private address or a name that resolves only to such (checked again at every call); `host` and `memory_gb` required. remote: https base_url, `key_secret` required, refused (409) unless the deployment has remote models on. From 1.44 search: like remote, with `api` brave and `models` [web] */
+        /** @description create or replace a provider. server: http(s) base_url whose host is a loopback or private address, or what host.docker.internal resolves to there, or a name that resolves only to such (checked again at every call); `host` and `memory_gb` required. remote: https base_url, `key_secret` required, refused (409) unless the deployment has remote models on. From 1.44 search: like remote, with `api` brave and `models` [web] */
         ProviderPut: {
             kind: components["schemas"]["ProviderKind"];
             /**

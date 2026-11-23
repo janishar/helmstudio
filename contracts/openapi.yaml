@@ -5795,7 +5795,7 @@ components:
         state: {type: object, description: 'the thread''s state after the step, read-only plain JSON (row inputs, run and take ids, picks, loop counters; never media)'}
 
     # ---------------------------------------------------------- studio: model providers, custom nodes (1.15)
-    ProviderKind: {type: string, enum: [server, remote, search], description: 'server: a local server you run (loopback or private address); remote: outside the machine (https; only when the deployment has remote models on); from 1.44 search: a web search provider for the assistant (https, `api` brave, `key_secret`; only with remote models on; never a model source)'}
+    ProviderKind: {type: string, enum: [server, remote, search], description: 'server: a local server you run (loopback or private address, or the Docker host: what host.docker.internal resolves to); remote: outside the machine (https; only when the deployment has remote models on); from 1.44 search: a web search provider for the assistant (https, `api` brave, `key_secret`; only with remote models on; never a model source)'}
     Provider:
       type: object
       required: [name, kind, api, base_url, models, default_model, enabled, timeout_s, created_at, updated_at]
@@ -5822,7 +5822,7 @@ components:
       type: object
       required: [kind, base_url, models]
       additionalProperties: false
-      description: 'create or replace a provider. server: http(s) base_url whose host is a loopback or private address or a name that resolves only to such (checked again at every call); `host` and `memory_gb` required. remote: https base_url, `key_secret` required, refused (409) unless the deployment has remote models on. From 1.44 search: like remote, with `api` brave and `models` [web]'
+      description: 'create or replace a provider. server: http(s) base_url whose host is a loopback or private address, or what host.docker.internal resolves to there, or a name that resolves only to such (checked again at every call); `host` and `memory_gb` required. remote: https base_url, `key_secret` required, refused (409) unless the deployment has remote models on. From 1.44 search: like remote, with `api` brave and `models` [web]'
       properties:
         kind: {$ref: '#/components/schemas/ProviderKind'}
         api: {type: string, enum: [openai, brave], description: 'from 1.44: absent = openai; kind search needs brave, the others openai (422)'}
