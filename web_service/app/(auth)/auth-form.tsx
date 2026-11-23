@@ -21,7 +21,7 @@ export function SigninForm({ next }: { next?: string }) {
     >
       <div className="mb-2 flex items-center gap-3">
         <Logo />
-        <h1 className="m-0 font-display text-[26px] font-bold tracking-[0.01em]">helmstudio</h1>
+        <h1 className="m-0 font-display text-[26px] font-bold tracking-[-0.02em]">helmstudio</h1>
       </div>
       {err && (
         <p role="alert" id="form-error" className="rounded-xl bg-s2 px-3 py-2 text-[13px] text-bad">

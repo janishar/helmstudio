@@ -6,7 +6,31 @@ import { ChevronLeft, X } from "lucide-react";
 import { THEMES } from "@/lib/themes";
 import { progressText, type UploadProgress } from "@/lib/takes";
 
-/** The helmstudio mark on its accent gradient. */
+/** Logo A's mark (docs/brand/logo/a-as-drawn), 24 grid: `arch`, then `stem` for the stem and the playhead flag. */
+export function MarkPaths({
+  arch = "currentColor",
+  stem = "currentColor",
+}: {
+  arch?: string;
+  stem?: string;
+}) {
+  const line = { fill: "none", strokeWidth: 3.2, strokeLinecap: "round" } as const;
+  return (
+    <>
+      <path
+        d="M8 16C8 12.4 10.4 10.6 13.3 10.6S18.4 12.6 18.4 16V21"
+        style={{ ...line, stroke: arch }}
+      />
+      <path d="M8 7V21" style={{ ...line, stroke: stem }} />
+      <path
+        d="M5.3 1.6H10.7A.9.9 0 0 1 11.6 2.5V5L8 8.4L4.4 5V2.5A.9.9 0 0 1 5.3 1.6Z"
+        style={{ fill: stem }}
+      />
+    </>
+  );
+}
+
+/** The helmstudio mark in --on1 on its accent gradient tile (docs/mock/SignIn.dc.html: 28 px in 44 px). */
 export function Logo({ size = 44 }: { size?: number }) {
   return (
     <span
@@ -21,18 +45,8 @@ export function Logo({ size = 44 }: { size?: number }) {
           "inset 0 1px 0 rgba(255,255,255,.5), inset 0 -4px 6px color-mix(in srgb, var(--shd) 35%, transparent), 0 10px 18px -6px color-mix(in srgb, var(--shd) 80%, transparent)",
       }}
     >
-      <svg
-        width={size / 2}
-        height={size / 2}
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      >
-        <circle cx="12" cy="12" r="7" />
-        <circle cx="12" cy="12" r="2" />
-        <path d="M12 2v5M12 17v5M2 12h5M17 12h5" />
+      <svg width={(size * 7) / 11} height={(size * 7) / 11} viewBox="0 0 24 24">
+        <MarkPaths />
       </svg>
     </span>
   );

@@ -4,6 +4,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import Landing from "@/app/welcome/page";
+import { Logo } from "@/components/kit";
 
 vi.mock("@/app/welcome/landing.css", () => ({}));
 
@@ -41,4 +42,29 @@ it("shows the board's sections and sends every Sign in to /signin", () => {
   expect(container.querySelector("#models pre")?.textContent).toContain(
     "  turbo: {dir: Qwen-Image-2.1-Turbo, shares: [text_encoder, vae]}\ncomponents:",
   );
+});
+
+it("shows logo A's lockup in the header and footer, and the mark in the sign-in tile", () => {
+  render(<Landing />);
+  const top = screen.getByRole("link", { name: "helmstudio, top of page" });
+  expect(top.getAttribute("href")).toBe("#top");
+  const lockups = screen.getAllByRole("img", { name: "helmstudio" });
+  expect(lockups).toHaveLength(2);
+  expect(top.contains(lockups[0])).toBe(true);
+  for (const svg of lockups) {
+    expect(svg.getAttribute("height")).toBe("24");
+    // the mark follows the theme (landing.css .bm), the word is --t1: no fixed colours
+    expect(svg.innerHTML).not.toMatch(/#[0-9a-f]{3,6}/i);
+    expect(svg.innerHTML).toContain("var(--bA)");
+  }
+  cleanup();
+
+  const { container } = render(<Logo />);
+  const tile = container.firstElementChild!;
+  expect(tile.getAttribute("aria-hidden")).toBe("true");
+  expect(tile.className).toContain("text-on1");
+  const mark = tile.querySelector("svg")!;
+  expect(mark.getAttribute("width")).toBe("28");
+  expect(mark.querySelectorAll("path")).toHaveLength(3);
+  expect(mark.innerHTML).toContain("currentcolor");
 });

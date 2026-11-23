@@ -29,17 +29,19 @@ No other board shows the brand (the app shell has no brand spot). B's folder sta
 
 Source files: `docs/brand/logo/a-as-drawn/`. In the app use the tokens, not the fixed hex.
 
-- [ ] **Landing header** (`web_service/app/welcome/page.tsx`, the `logo` icon at the top): the horizontal lockup
+- [x] **Landing header** (`web_service/app/welcome/page.tsx`, the `logo` icon at the top): the horizontal lockup
   (mark + outlined wordmark, 24 px tall, about 132 px wide) in place of the wheel tile and the text word.
-- [ ] **Landing footer** (same file): the same lockup.
-- [ ] **Sign in tile** (`components/kit.tsx` `Logo`, used by `app/(auth)/auth-form.tsx`): the mark in `--on1`
+- [x] **Landing footer** (same file): the same lockup.
+- [x] **Sign in tile** (`components/kit.tsx` `Logo`, used by `app/(auth)/auth-form.tsx`): the mark in `--on1`
   (28 px in the 44 px tile); the h1 tracking from +0.01em to −0.02em.
-- [ ] **Browser tab favicon** (`web_service/app/icon.svg`): replace with `favicon.svg` (the 16 px cut).
-- [ ] **Icon set** from `favicon.svg` (16, 32) and `app-icon.svg` (180, 192, 512): `favicon.ico` (16 + 32),
-  `icon-16.png`, `icon-32.png`, `apple-icon.png` (180), `icon-192.png`, `icon-512.png`.
-- [ ] **Web app manifest**: none exists today; add one only if the build wants installable-app icons (192, 512).
-- [ ] **App shell brand spot**: none today (the rail has no logo); nothing to change.
-- [ ] Theme check: the mark follows every theme (tokens); parchment uses the light rule above.
+- [x] **Browser tab favicon** (`web_service/app/icon.svg`): replace with `favicon.svg` (the 16 px cut).
+- [x] **Icon set** from `favicon.svg` (16, 32) and `app-icon.svg` (180, 192, 512): `favicon.ico` (16 + 32),
+  `icon-16.png`, `icon-32.png`, `apple-icon.png` (180), `icon-192.png`, `icon-512.png`. Built 2026-11-24 with sharp
+  (Next's own dependency): `app/favicon.ico`, `app/apple-icon.png`, `app/icon.svg`; the 16 / 32 / 192 / 512 PNGs in
+  `public/` for a future manifest.
+- [x] **Web app manifest** (not added): none exists today; add one only if the build wants installable-app icons (192, 512).
+- [x] **App shell brand spot**: none today (the rail has no logo); nothing to change.
+- [x] Theme check: the mark follows every theme (tokens); parchment uses the light rule above.
 
 ## Final candidates (current)
 

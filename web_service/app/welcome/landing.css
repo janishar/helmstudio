@@ -330,3 +330,14 @@
     display: none;
   }
 }
+/* logo A's lockup: arch --a1, stem and playhead --a2; on parchment (light) arch ink, stem and playhead --a1 */
+.lp .bm {
+  display: block;
+  flex: 0 0 auto;
+  --bA: var(--a1);
+  --bB: var(--a2);
+}
+[data-theme="parchment"] .lp .bm {
+  --bA: var(--t1);
+  --bB: var(--a1);
+}
