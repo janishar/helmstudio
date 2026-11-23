@@ -133,13 +133,15 @@ services:
     healthcheck: {test: [CMD-SHELL, "pg_isready -U postgres -d auth"], interval: 2s, timeout: 3s, retries: 30}
 
   seaweedfs:
-    image: chrislusf/seaweedfs:4.53
+    build: ./seaweedfs                                # only `weed` from chrislusf/seaweedfs:4.53, on Alpine
+    image: helmstudio/seaweedfs:${IMAGE_TAG:-dev}
     profiles: [s3local]
     restart: unless-stopped   # it gets OOM-killed when Docker's VM is short of memory; every upload fails until it is back
     # identities from -s3.config (secret s3_config, .tools/make-secrets): the admin key of the s3_* secrets (also
     # exported, as before) and runner-<h> per remote GPU host, Read and Write on the bucket only; a new host's identity
     # needs a seaweedfs restart (make gpu-host-reload). S3_TLS_ARGS (compose/tls.yml) adds https on 8334; 8333 stays http.
-    entrypoint: [sh, -c, 'export AWS_ACCESS_KEY_ID="$$(cat /run/secrets/s3_access_key_id)" AWS_SECRET_ACCESS_KEY="$$(cat /run/secrets/s3_secret_access_key)"; exec /entrypoint.sh server -dir=/data -s3 -s3.port=8333 -s3.config=/run/secrets/s3_config $${S3_TLS_ARGS:-} -ip=seaweedfs -ip.bind=0.0.0.0']
+    # -volume.max=0 and -master.volumeSizeLimitMB=1024 are upstream's entrypoint defaults: without them it idles at ~210 MB.
+    entrypoint: [sh, -c, 'export AWS_ACCESS_KEY_ID="$$(cat /run/secrets/s3_access_key_id)" AWS_SECRET_ACCESS_KEY="$$(cat /run/secrets/s3_secret_access_key)"; exec weed -logtostderr=true server -dir=/data -volume.max=0 -master.volumeSizeLimitMB=1024 -s3 -s3.port=8333 -s3.config=/run/secrets/s3_config $${S3_TLS_ARGS:-} -ip=seaweedfs -ip.bind=0.0.0.0']
     secrets: [s3_access_key_id, s3_secret_access_key, s3_config]
     ports:
       - "127.0.0.1:${S3_HOST_PORT:-8433}:8333"        # the S3 API, for native runners (make runners)
@@ -148,7 +150,8 @@ services:
     healthcheck: {test: [CMD, wget, -qO-, http://localhost:8333/healthz], interval: 3s, timeout: 3s, retries: 30}
 
   storage-setup:                                      # one-shot: creates the bucket, idempotent
-    image: chrislusf/seaweedfs:4.53
+    build: ./seaweedfs
+    image: helmstudio/seaweedfs:${IMAGE_TAG:-dev}
     profiles: [s3local]
     entrypoint: [sh, /tools/storage-setup]
     environment: {S3_BUCKET: "${S3_BUCKET:-helmstudio}", WEED_MASTER: "seaweedfs:9333"}

@@ -9,10 +9,13 @@ FROM kong:3.9.4
 COPY --from=build /out/apikey-auth-plugin /usr/local/bin/apikey-auth-plugin
 COPY kong.yml /kong/kong.yml
 # 2 nginx workers: the default (auto) starts one per core Docker's VM shows (20 on the Mac, 1.2 GB); 2 serve this load.
+# KONG_PLUGINS: only the plugins kong.yml uses (grep '- name:' under plugins:) plus ours; a new one in kong.yml must be
+# added here or Kong refuses the config. A 16 MB shared cache is plenty for a static DB-less config.
 ENV KONG_DATABASE=off \
     KONG_NGINX_WORKER_PROCESSES=2 \
     KONG_DECLARATIVE_CONFIG=/kong/kong.yml \
-    KONG_PLUGINS=bundled,apikey-auth-plugin \
+    KONG_PLUGINS=correlation-id,request-size-limiting,rate-limiting,apikey-auth-plugin \
+    KONG_MEM_CACHE_SIZE=16m \
     KONG_PLUGINSERVER_NAMES=apikey-auth-plugin \
     KONG_PLUGINSERVER_APIKEY_AUTH_PLUGIN_START_CMD=/usr/local/bin/apikey-auth-plugin \
     KONG_PLUGINSERVER_APIKEY_AUTH_PLUGIN_QUERY_CMD="/usr/local/bin/apikey-auth-plugin -dump" \

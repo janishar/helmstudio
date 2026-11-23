@@ -31,13 +31,13 @@ This section owns version numbers; other sections name libraries without them.
 
 | Item | Version |
 |---|---|
-| Kong (open source) | 3.9.4 — the newest open-source line; do not plan on later features. `KONG_NGINX_WORKER_PROCESSES=2` (kong/Dockerfile): the default starts one worker per core the VM shows, 1.2 GB on the Mac |
+| Kong (open source) | 3.9.4 — the newest open-source line; do not plan on later features. `KONG_NGINX_WORKER_PROCESSES=2` (kong/Dockerfile): the default starts one worker per core the VM shows, 1.2 GB on the Mac. `KONG_PLUGINS` lists only the plugins kong.yml uses (correlation-id, request-size-limiting, rate-limiting) plus apikey-auth-plugin, and `KONG_MEM_CACHE_SIZE=16m` (2026-11-23: idle 177 → 132 MB) |
 | Kong go-pdk | v0.11.2 (maintenance mode) |
 | PostgreSQL | 18.7, image `postgres:18.7-alpine3.24` (2026-11-23; 426 MB against 698 MB for the Debian one). Clusters use the builtin collation provider (`C.UTF-8`), so a libc change never reorders indexes; the volume is `pgdata18a` (the old glibc dev volume `helmstudio_pgdata` is kept, never reused) |
 | NATS server | 2.15.3 |
-| SeaweedFS | 4.53, image `chrislusf/seaweedfs:4.53` (already its smallest tag: `_large_disk` is the same size, `_full` bigger) |
+| SeaweedFS | 4.53: our image `helmstudio/seaweedfs` (deploy/seaweedfs/Dockerfile) copies only the static `weed` binary and `filer.toml` from `chrislusf/seaweedfs:4.53` onto Alpine 3.24.3, user `seaweed` (uid 1000, as upstream), 1.03 GB → 317 MB (2026-11-23). Upstream's other binaries (weed-volume, weed-worker, weed-vector) are never run by `weed server`. Compose passes upstream's entrypoint flags (`-volume.max=0 -master.volumeSizeLimitMB=1024`); without them it idles at ~210 MB |
 | nats-box (stream and KV setup) | 0.20.2 |
-| Alpine (Go and web runtime images) | 3.24.3 |
+| Alpine (Go, web and SeaweedFS runtime images) | 3.24.3 |
 | Docker Compose | 2.20 or later (current v5.7.1); no `version:` key |
 
 **Python** (`pyproject` floors plus a committed `uv.lock`)
