@@ -3,7 +3,8 @@ key, nothing real is ever called. It serves http on PORT (a local server's base_
 provider's: remote base_urls must be https) with a self-signed certificate made at start, written to CERT_DIR for
 pipelines_service to trust (SSL_CERT_FILE).
 
-  GET  /v1/models            the scripted models and FAKE_MODELS
+  GET  /v1/models            the scripted models and FAKE_MODELS; API 1.52 (plan 27, a key's check): a bearer key
+                             starting `refused-` is 401, `forbidden-` 403, `down-` 503; any other key is accepted
   POST /v1/chat/completions  OpenAI's shape; the next scripted response for body.model, else the prompt's script:
                              the JSON after the `ECHO-TURN <n>:` of its last `This is turn <n> of` line, else after
                              the last `ECHO-ANSWER:` (echo-ask's rules), else "ok". With `tools`, a {say, calls} turn
@@ -127,6 +128,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path.rstrip("/").endswith("/v1/models"):
+            key = (self.headers.get("Authorization") or "").removeprefix("Bearer ")
+            for prefix, status in (("refused-", 401), ("forbidden-", 403), ("down-", 503)):
+                if key.startswith(prefix):
+                    return self.reply(status, {"error": {"message": "scripted"}})
             with lock:
                 names = sorted(set(MODELS) | set(scripts))
             return self.reply(

@@ -51,6 +51,7 @@ def test_key_file_status(api, admin):
         "key_secret": KEY_SECRET,
         "path": f"deploy/secrets/providers/{KEY_SECRET}",
         "found": True,
+        "writable": True,  # API 1.52: the test stack writes /tmp/provider-keys
     }
     assert ok(admin.get(f"{KEYS}/nope"))["found"] is False
     assert admin.get(f"{KEYS}/Bad%20Name").status_code == 404
