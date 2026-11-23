@@ -511,6 +511,16 @@
       "x": 1520,
       "y": 3480,
       "page": "models-admin"
+    },
+    "CatsEasterEgg.dc.html": {
+      "expand": "fill",
+      "h": 3166,
+      "is_interactive": true,
+      "title": "Brand · the cats: double-click the logo",
+      "w": 1440,
+      "x": 1520,
+      "y": 0,
+      "page": "brand"
     }
   },
   "createdOnFiles": {
@@ -647,7 +657,8 @@
     "Assistant.dc.html",
     "Landing.dc.html",
     "SignIn.dc.html",
-    "Logo.dc.html"
+    "Logo.dc.html",
+    "CatsEasterEgg.dc.html"
   ],
   "pages": [
     {
