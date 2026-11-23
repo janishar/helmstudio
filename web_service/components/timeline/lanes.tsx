@@ -312,11 +312,14 @@ export function Lanes({
     seen.current = pps;
     if (!el || was === pps) return;
     const phWas = HEAD + now * was - scrolled.current;
-    const x = anchor.current ?? (phWas >= HEAD && phWas <= el.clientWidth ? phWas : el.clientWidth / 2);
+    const x =
+      anchor.current ?? (phWas >= HEAD && phWas <= el.clientWidth ? phWas : el.clientWidth / 2);
     anchor.current = null;
     // Fit shows the whole sequence from 0
     el.scrollLeft =
-      view && pps * Math.max(end, 5) <= view + 1 ? 0 : zoomAbout(scrolled.current, x, was, pps, HEAD);
+      view && pps * Math.max(end, 5) <= view + 1
+        ? 0
+        : zoomAbout(scrolled.current, x, was, pps, HEAD);
     scrolled.current = el.scrollLeft;
     if (view) setWin(virtualWindow(el.scrollLeft, view));
   }, [pps, now, view, end]);
@@ -381,6 +384,19 @@ export function Lanes({
     ...cuts(base, facts, exclude).map((t) => ({ t, kind: "cut" as const })),
     ...extra,
   ];
+  /** A marker flag dragged along the ruler: the marker at the pointer (snapped; its own place is no target). */
+  const markDrag = useRef<{ x0: number; moved: boolean } | null>(null);
+  const markerAt = (m: (typeof markers)[number], e: React.PointerEvent): Op => {
+    const pts = points(doc).filter((p) => !(p.kind === "marker" && p.t === m.at));
+    const t = Math.min(snapTo(timeAt(e.clientX), pts, pps, g, snapOn(e)).t, end);
+    return {
+      op: "marker",
+      id: m.id,
+      at: t,
+      ...(m.name && { name: m.name }),
+      ...(m.color && { color: m.color }),
+    };
+  };
   /** Sequence seconds under a client x. */
   const timeAt = (clientX: number) => {
     const r = content.current?.getBoundingClientRect();
@@ -693,7 +709,8 @@ export function Lanes({
                 style={{
                   background:
                     "repeating-linear-gradient(90deg, transparent 0 2px, color-mix(in srgb, #86cdea 70%, transparent) 2px 3px)",
-                  maskImage: "linear-gradient(180deg, transparent 20%, #000 20% 80%, transparent 80%)",
+                  maskImage:
+                    "linear-gradient(180deg, transparent 20%, #000 20% 80%, transparent 80%)",
                 }}
               />
             }
@@ -850,11 +867,7 @@ export function Lanes({
   return (
     <div className="panel flex shrink-0 flex-col gap-2 rounded-[28px_28px_28px_12px] px-3.5 pt-3 pb-3.5">
       {toolbar}
-      <div
-        ref={scroller}
-        className="overflow-x-auto"
-        onScroll={onScroll}
-      >
+      <div ref={scroller} className="overflow-x-auto" onScroll={onScroll}>
         <div
           ref={content}
           className="relative flex flex-col gap-1.5"
@@ -869,48 +882,74 @@ export function Lanes({
             onHover?.(null);
           }}
         >
-          <div
-            role="slider"
-            tabIndex={-1}
-            aria-label="Time ruler: click to move the playhead"
-            aria-valuemin={0}
-            aria-valuemax={doc.frames}
-            aria-valuenow={frame}
-            aria-valuetext={shortTime(g.s(frame))}
-            className="mono relative h-[22px] cursor-pointer text-[10px] text-t2"
-            style={{ marginLeft: HEAD }}
-            onPointerDown={(e) => {
-              if (tool === "range") return;
-              seekAt(e);
-              e.currentTarget.setPointerCapture(e.pointerId);
-            }}
-            onPointerMove={(e) => tool !== "range" && e.buttons === 1 && seekAt(e)}
-          >
-            <RulerCanvas pps={pps} fps={doc.target.fps} win={win} width={width} />
-            {markers.map((m) => (
-              <button
-                key={m.id}
-                type="button"
-                aria-pressed={marker === m.id}
-                aria-label={`Marker${m.name ? ` ${m.name}` : ""} at ${timecode(m.at)}`}
-                title={`${m.name ?? "Marker"} · ${timecode(m.at)}`}
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={() => {
-                  onSeek(g.f(m.at));
-                  onMarker?.(m.id);
-                }}
-                className="absolute top-0 z-10 h-[14px] w-[10px] -translate-x-1/2 p-0 aria-pressed:outline-2 aria-pressed:outline-t1"
-                style={{
-                  left: m.at * pps,
-                  background: m.color ? MARKER_COLORS[m.color] : "var(--a1)",
-                  clipPath: "polygon(0 0, 100% 0, 100% 65%, 50% 100%, 0 65%)",
-                }}
-              />
-            ))}
+          <div className="flex">
+            {/* the lane names stay put when the lanes scroll (board: Zoomed in to frames); this covers the ruler */}
+            <span aria-hidden className="sticky left-0 z-30 w-[72px] shrink-0 bg-s1" />
+            <div
+              role="slider"
+              tabIndex={-1}
+              aria-label="Time ruler: click to move the playhead"
+              aria-valuemin={0}
+              aria-valuemax={doc.frames}
+              aria-valuenow={frame}
+              aria-valuetext={shortTime(g.s(frame))}
+              className="mono relative h-[22px] flex-1 cursor-pointer text-[10px] text-t2"
+              onPointerDown={(e) => {
+                if (tool === "range") return;
+                seekAt(e);
+                e.currentTarget.setPointerCapture(e.pointerId);
+              }}
+              onPointerMove={(e) => tool !== "range" && e.buttons === 1 && seekAt(e)}
+            >
+              <RulerCanvas pps={pps} fps={doc.target.fps} win={win} width={width} />
+              {markers.map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  aria-pressed={marker === m.id}
+                  aria-label={`Marker${m.name ? ` ${m.name}` : ""} at ${timecode(m.at)}`}
+                  title={`${m.name ?? "Marker"} · ${timecode(m.at)}`}
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                    e.currentTarget.setPointerCapture?.(e.pointerId);
+                    markDrag.current = { x0: e.clientX, moved: false };
+                  }}
+                  onPointerMove={(e) => {
+                    // a flag dragged along the ruler moves the marker (snapping as clips do)
+                    e.stopPropagation();
+                    const d = markDrag.current;
+                    if (!d || e.buttons !== 1 || (!d.moved && Math.abs(e.clientX - d.x0) < DRAG_PX))
+                      return;
+                    d.moved = true;
+                    onPreview(markerAt(m, e));
+                  }}
+                  onPointerUp={(e) => {
+                    const d = markDrag.current;
+                    if (!d?.moved) return void (markDrag.current = null);
+                    onPreview(null);
+                    onCommit(markerAt(m, e));
+                  }}
+                  onClick={() => {
+                    if (markDrag.current?.moved) return void (markDrag.current = null);
+                    markDrag.current = null;
+                    onSeek(g.f(m.at));
+                    onMarker?.(m.id);
+                  }}
+                  className="absolute top-0 z-10 h-[14px] w-[10px] -translate-x-1/2 p-0 aria-pressed:outline-2 aria-pressed:outline-t1"
+                  style={{
+                    left: m.at * pps,
+                    background: m.color ? MARKER_COLORS[m.color] : "var(--a1)",
+                    clipPath: "polygon(0 0, 100% 0, 100% 65%, 50% 100%, 0 65%)",
+                  }}
+                />
+              ))}
+            </div>
           </div>
 
           <div className="flex h-14 items-stretch" data-lane={0}>
-            <span className="mono flex w-[72px] shrink-0 items-center text-[11px] text-t2">V1</span>
+            <span className="sticky left-0 z-30 bg-s1 mono flex w-[72px] shrink-0 items-center text-[11px] text-t2">
+              V1
+            </span>
             <div className="relative flex-1" role="group" aria-label="V1: the picture">
               {v1.clips.map((c) => clipButton(c, 0, 56))}
               {!v1.clips.length && (
@@ -922,7 +961,9 @@ export function Lanes({
           </div>
 
           <div className="flex h-9 items-stretch">
-            <span className="mono flex w-[72px] shrink-0 items-center text-[11px] text-t2">A1</span>
+            <span className="sticky left-0 z-30 bg-s1 mono flex w-[72px] shrink-0 items-center text-[11px] text-t2">
+              A1
+            </span>
             <div className="relative flex-1" aria-label="A1: the clips' own sound" role="group">
               {v1.clips.map((c) => {
                 const t = c.take_id ? takes[c.take_id] : undefined;
@@ -967,7 +1008,7 @@ export function Lanes({
 
           {doc.tracks.slice(1).map((t, i) => (
             <div key={t.name} className="flex h-14 items-stretch" data-lane={i + 1}>
-              <span className="flex w-[72px] shrink-0 items-center gap-1.5">
+              <span className="sticky left-0 z-30 bg-s1 flex w-[72px] shrink-0 items-center gap-1.5">
                 <button
                   type="button"
                   aria-pressed={track === t.name}
@@ -997,7 +1038,7 @@ export function Lanes({
           {onAddTrack && doc.tracks.length < 9 && (
             <button
               type="button"
-              className="chip bevel h-8 w-fit rounded-[10px] text-[12px]"
+              className="chip bevel sticky left-0 z-30 h-8 w-fit rounded-[10px] text-[12px]"
               onClick={onAddTrack}
             >
               + Audio track
@@ -1049,7 +1090,11 @@ export function Lanes({
                 className="tl-bl"
                 style={{ left: xOf(hover.t) - 1, top: TOP, bottom: 0 }}
               />
-              <span aria-hidden className="tl-cur" style={{ left: xOf(hover.t) + 5, top: TOP + 18 }}>
+              <span
+                aria-hidden
+                className="tl-cur"
+                style={{ left: xOf(hover.t) + 5, top: TOP + 18 }}
+              >
                 <ToolIcon tool="blade" size={14} />
               </span>
               <span className="tl-tag" style={{ left: xOf(hover.t) - 4, top: 2 }}>

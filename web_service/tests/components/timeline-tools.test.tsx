@@ -109,10 +109,42 @@ it("draws a marker on the ruler and a linked sound clip's link", () => {
   expect(screen.getByRole("button", { name: /^Empty, .*, linked$/ })).toBeTruthy();
 });
 
+it("drags a marker's flag along the ruler to move it; a click only selects it", () => {
+  const onCommit = lanes("select");
+  const flag = screen.getByRole("button", { name: "Marker Beat at 0:03.00" });
+  fireEvent.pointerDown(flag, { clientX: 72 + 120, buttons: 1 });
+  fireEvent.pointerMove(flag, { clientX: 72 + 50, buttons: 1 });
+  fireEvent.pointerUp(flag, { clientX: 72 + 50 });
+  fireEvent.click(flag);
+  expect(onCommit).toHaveBeenCalledTimes(1);
+  expect(onCommit).toHaveBeenLastCalledWith({
+    op: "marker",
+    id: "m1",
+    at: 1.25,
+    name: "Beat",
+    color: "red",
+  });
+  fireEvent.pointerDown(flag, { clientX: 72 + 120, buttons: 1 });
+  fireEvent.pointerUp(flag, { clientX: 72 + 120 });
+  fireEvent.click(flag);
+  expect(onCommit).toHaveBeenCalledTimes(1);
+});
+
+it("keeps the lane names in view when the lanes scroll (board: Zoomed in to frames)", () => {
+  lanes("select");
+  expect(screen.getByText("V1").className).toContain("sticky");
+  expect(screen.getByRole("button", { name: /^Track A2/ }).parentElement!.className).toContain(
+    "sticky",
+  );
+});
+
 it("virtualises the lanes and zooms about the pointer (plan 23 §27.4, §27.8)", () => {
   // laid out: an 800 px track; jsdom has no layout, so the width and the observer are stubbed
   const width = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
-  Object.defineProperty(HTMLElement.prototype, "clientWidth", { configurable: true, get: () => 872 });
+  Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+    configurable: true,
+    get: () => 872,
+  });
   const RO = globalThis.ResizeObserver;
   globalThis.ResizeObserver = class {
     constructor(private f: () => void) {}
@@ -129,7 +161,12 @@ it("virtualises the lanes and zooms about the pointer (plan 23 §27.4, §27.8)",
         {
           name: "V1",
           kind: "video",
-          clips: Array.from({ length: 200 }, (_, i) => ({ id: `c${i}`, take_id: null, hold: 2, at: 2 * i })),
+          clips: Array.from({ length: 200 }, (_, i) => ({
+            id: `c${i}`,
+            take_id: null,
+            hold: 2,
+            at: 2 * i,
+          })),
         },
       ],
       markers: [],

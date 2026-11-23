@@ -158,6 +158,7 @@ export const KEYMAP: Bind[] = [
 /** The key map's action for a key event, or null. */
 export function keyOf(e: {
   code: string;
+  key?: string;
   shiftKey: boolean;
   altKey: boolean;
   metaKey: boolean;
@@ -168,7 +169,9 @@ export function keyOf(e: {
     KEYMAP.find(
       (k) =>
         k.code === e.code && !!k.shift === e.shiftKey && !!k.alt === e.altKey && !!k.mod === mod,
-    )?.id ?? null
+    )?.id ??
+    // "?" sits elsewhere on other layouts (German: ⇧ß): the sheet by the character too
+    (e.key === "?" ? "sheet" : null)
   );
 }
 
@@ -410,7 +413,11 @@ export function rulerTicks(a: number, b: number, pps: number, g: Grid): Tick[] {
       for (let f = f0; f < g.f(sec + 1); f += st.frames) {
         const t = g.s(f);
         if (t < a || t > b) continue;
-        out.push(f === f0 ? { t, label: clock(sec), major: true } : { t, label: String(f - f0), major: false });
+        out.push(
+          f === f0
+            ? { t, label: clock(sec), major: true }
+            : { t, label: String(f - f0), major: false },
+        );
       }
     }
     return out;

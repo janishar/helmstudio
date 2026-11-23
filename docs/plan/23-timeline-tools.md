@@ -4,7 +4,7 @@
 
 Status: **built (2026-11-23)**: the contract and server part of phases 2 and 8, the web's edits (phase 3), the tools
 (phase 4, with links and markers in the UI), and the zoom, moving and playing and the detail (phases 5-7); as-built
-notes in 27.14, 27.15 and 27.16. The browser pass on the `helmstudio-test` stack (27.11's last item) is still open. A
+notes in 27.14, 27.15 and 27.16; the browser pass on the `helmstudio-test` stack (27.11's last item) in 27.17. A
 plan, not in a milestone: it becomes one in [08-milestones.md](08-milestones.md) when the owner schedules it. Since plan
 24 (1.49) made `TimelineOp` part of openapi, every new op is an openapi change, so the tools, linked sound clips and
 markers took API **1.50.0** together (the next free version when they were built; the plan first said 1.46.0).
@@ -124,7 +124,7 @@ the op itself returns an error code when called past them, like `trim`.
 - **I / O** mark in / out (today), **Alt+X** clears the range, **X** marks the clip under the playhead.
 - **Hover scrub** (Shift+S toggles; S stays split, open point 3): a thin line follows the pointer over the tracks
   and the ruler with its timecode; with it on, the viewer shows `frame_at` at that frame (throttled to one seek per
-  animation frame; sound off). The playhead does not move until a click. Off by default (open point 7).
+  animation frame; sound off). The playhead does not move until a click. On by default (open point 7).
 - **Shortcut sheet** (`?`, and a button): a dialog listing every key by group (tools, edit, play, zoom, marks).
 
 ### 27.4 Zoom
@@ -375,3 +375,18 @@ Each with the recommended option first.
   tests/components/timeline-tools.test.tsx: the lanes virtualised (21 of 200 clips) and a zoom keeping the centre
   still. Checked in Chromium on a harness of the lanes with a real video and sound (not the stack): the filmstrip,
   waveforms, the frame ruler, Fit and a pinch-style ⌃-wheel at the pointer.
+
+### 27.17 The browser pass (2026-11-23)
+
+On `helmstudio-test` (fake mode, a user made as the contract suite does), a three-clip sequence with a dissolve, music
+on A2 and a line on A3 linked to clip 2, and a 10-minute sequence of 60 held stills. Matched: the tool row is option
+B's (the same five radios, keys, toggles, zoom group and `?`); blade (pointer, ⌘B, ⇧⌘B, a linked line cut with its
+clip), ripple trim, roll, slip, slide, range remove and lift, overwrite and a V1 move, each with ⌘Z; the linked line
+moves with slip, slide and a move and stays on a roll; a ripple delete that would leave music past the end is
+refused; markers add (M) and delete; a 409 from a second writer during a slide re-reads and re-applies with the
+notice; on the long sequence Fit, −/+, ⌃-wheel zoom about the pointer (within half a pixel), the frame ruler at
+64 px a frame with a constant 17-node DOM, J/K/L, hover scrub on by default with ⇧S, the sheet by keyboard (focus in,
+Esc closes). Fixed: a marker could not be moved (its flag now drags along the ruler, snapping, one `marker` op);
+the lane names, the ruler's corner and + Audio track scrolled away when zoomed in (now they stay, as the board's
+"Zoomed in to frames"); `?` opened the sheet only on a US layout (the character now works too). Not checked by eye:
+the ×2 … ×8 speeds (the pane was hidden, so timers were throttled).

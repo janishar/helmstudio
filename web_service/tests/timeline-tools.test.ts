@@ -59,6 +59,7 @@ describe("the key map", () => {
     expect(keyOf(ev("Comma", "a"))).toBe("roll_back");
     expect(keyOf(ev("Period"))).toBe("slip_fwd");
     expect(keyOf(ev("Slash", "s"))).toBe("sheet");
+    expect(keyOf({ ...ev("Minus", "s"), key: "?" })).toBe("sheet"); // "?" on a German layout (⇧ß)
     expect(keyOf(ev("Delete"))).toBe("delete");
     expect(keyOf(ev("Backspace", "s"))).toBe("lift");
     expect(keyOf(ev("KeyZ", "m"))).toBe("undo");
@@ -211,8 +212,14 @@ it("picks the ruler's step: frames with room for a number, then 1 s … 10 min (
   // seconds: a labelled major per step and 4 minors between
   const s = rulerTicks(0, 4, 41.9, g);
   expect(s.filter((k) => k.label).map((k) => k.label)).toEqual(["0:00", "0:02", "0:04"]);
-  expect(s.filter((k) => !k.label).map((k) => k.t)).toEqual([0.4, 0.8, 1.2, 1.6, 2.4, 2.8, 3.2, 3.6]);
-  expect(rulerTicks(0, 225, 2.42, g).filter((k) => k.label).at(-1)?.label).toBe("3:30");
+  expect(s.filter((k) => !k.label).map((k) => k.t)).toEqual([
+    0.4, 0.8, 1.2, 1.6, 2.4, 2.8, 3.2, 3.6,
+  ]);
+  expect(
+    rulerTicks(0, 225, 2.42, g)
+      .filter((k) => k.label)
+      .at(-1)?.label,
+  ).toBe("3:30");
   // the blade's tag names the frame in its second at frame zoom
   expect(cutText(10 + 7 / 24, 56 * 24, g, false)).toBe("0:10 · 7");
   expect(cutText(10.5, 40, g, false)).toBe("0:10.50 · frame 252");
