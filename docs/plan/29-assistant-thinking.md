@@ -2,7 +2,7 @@
 
 [← Plan index](../README.md)
 
-Status: **decided by the owner (2026-11-24); board drawn; build after plan 28.** API version: **1.54.0** (main is
+Status: **decided by the owner (2026-11-24); board approved by the owner (2026-11-24, "Approve"); build after plan 28.** API version: **1.54.0** (main is
 at 1.53.0, plan 28; if another plan takes 1.54.0 first, this takes the next free one at build time). Not in a
 milestone, like plans 25, 27 and 28.
 
