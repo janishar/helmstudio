@@ -15,6 +15,10 @@ import {
   testLine,
   tickModel,
   toggled,
+  addModel,
+  levelOf,
+  ruleInfo,
+  withThinking,
   type Preset,
 } from "@/lib/providers";
 
@@ -45,7 +49,12 @@ describe("provider form", () => {
     expect("body" in r && "host" in r.body).toBe(false);
   });
   it("refuses what the API would", () => {
-    const f = { ...blankForm(), name: "ollama", base_url: "http://10.0.0.5:11434/v1", models: "a" };
+    const f = {
+      ...blankForm(),
+      name: "ollama",
+      base_url: "http://10.0.0.5:11434/v1",
+      models: ["a"],
+    };
     expect(putOf({ ...f, name: "Ollama" })).toEqual({ error: expect.stringMatching(/^Name/) });
     expect(putOf({ ...f, base_url: "http://u:p@10.0.0.5/v1" })).toEqual({
       error: expect.stringMatching(/^Base URL/),
@@ -80,7 +89,8 @@ describe("provider presets (plan 25)", () => {
       name: "deepseek",
       title: "DeepSeek",
       base_url: "https://api.deepseek.com",
-      models: "deepseek-flash\ndeepseek-v4-pro",
+      models: ["deepseek-flash", "deepseek-v4-pro"],
+      default_model: "deepseek-flash",
       key_secret: "deepseek",
       preset: "deepseek",
       host: "mac",
@@ -103,7 +113,7 @@ describe("provider presets (plan 25)", () => {
       ...presetForm(preset("llama-server"), blankForm()),
       host: "mac",
       memory_gb: "4",
-      models: "q",
+      models: ["q"],
     };
     expect(putOf(f)).toMatchObject({ body: { kind: "server" } });
     expect("key_secret" in (putOf(f) as { body: object }).body).toBe(false);
@@ -125,16 +135,99 @@ describe("provider presets (plan 25)", () => {
     ).toBeNull();
   });
   it("ticks add at the end and unticks remove; the 17th is refused", () => {
-    const f = { ...blankForm(), models: "a\nb" };
+    const f = { ...blankForm(), models: ["a", "b"], default_model: "a" };
     const r = tickModel(f, "c", true);
-    expect("form" in r && r.form.models).toBe("a\nb\nc");
-    const u = tickModel(f, "a", false);
-    expect("form" in u && u.form.models).toBe("b");
-    const full = {
-      ...blankForm(),
-      models: Array.from({ length: 16 }, (_, i) => `m${i}`).join("\n"),
-    };
-    expect(tickModel(full, "x", true)).toEqual({ error: "16 models at most" });
+    expect("form" in r && r.form.models).toEqual(["a", "b", "c"]);
+    const u = tickModel(f, "b", false);
+    expect("form" in u && u.form).toMatchObject({ models: ["a"], default_model: "a" });
+    const full = { ...blankForm(), models: Array.from({ length: 16 }, (_, i) => `m${i}`) };
+    expect(tickModel(full, "x", true)).toEqual({ error: "16 at most" });
     expect(tickModel(full, "m3", true)).toMatchObject({ form: { models: full.models } });
+  });
+});
+
+describe("provider models (plan 28)", () => {
+  const ds = () => presetForm(preset("deepseek"), blankForm());
+  it("Default: the first chosen at start; removing the default moves it to the next chosen", () => {
+    const f = { ...ds(), models: ["deepseek-flash", "deepseek-v4-pro", "x"] };
+    expect(f.default_model).toBe("deepseek-flash");
+    const r = tickModel(f, "deepseek-flash", false);
+    expect("form" in r && r.form.default_model).toBe("deepseek-v4-pro");
+    const last = tickModel({ ...f, default_model: "x" }, "x", false);
+    expect("form" in last && last.form.default_model).toBe("deepseek-v4-pro");
+    const first = tickModel(blankForm(), "a", true);
+    expect("form" in first && first.form.default_model).toBe("a");
+  });
+  it("the preset's rules give levels: DeepSeek Off / Low / High (default High), Claude always thinks", () => {
+    expect(ds().levels["deepseek-flash"]).toEqual({
+      levels: ["off", "low", "high"],
+      default: "high",
+    });
+    expect(ruleInfo(preset("anthropic"), "claude-opus-5-5")).toEqual({ levels: [], always: true });
+    expect(ruleInfo(preset("mistral"), "mistral-small-latest")).toEqual({ levels: ["off", "on"] });
+    expect(ruleInfo(preset("openai"), "gpt-6.2-sol")).toEqual({
+      levels: ["low", "medium", "high"],
+      default: "medium",
+    });
+    expect(ruleInfo(preset("openrouter"), "anthropic/claude-sonnet-5.5")).toBeUndefined();
+    expect(ruleInfo(preset("lmstudio"), "qwen3")).toBeUndefined();
+  });
+  it("a custom name: the pattern, then ticked; it gets its id's rule when one fits", () => {
+    const f = ds();
+    expect(addModel(f, "bad name", preset("deepseek"))).toEqual({
+      error: '"bad name" is not a model name.',
+    });
+    const r = addModel(f, " deepseek-v4-flash ", preset("deepseek"));
+    expect("form" in r && r.form.models).toEqual([
+      "deepseek-flash",
+      "deepseek-v4-pro",
+      "deepseek-v4-flash",
+    ]);
+    expect("form" in r && r.form.levels["deepseek-v4-flash"]?.levels).toEqual([
+      "off",
+      "low",
+      "high",
+    ]);
+    const chat = addModel(f, "deepseek-chat", preset("deepseek"));
+    expect("form" in chat && chat.form.levels["deepseek-chat"]).toBeUndefined();
+  });
+  it("Save sends models, default_model and each level shown (picked, else the default, else off)", () => {
+    const f = {
+      ...ds(),
+      thinking: { "deepseek-flash": "off" as const },
+      default_model: "deepseek-v4-pro",
+    };
+    expect(putOf(f)).toMatchObject({
+      body: {
+        models: ["deepseek-flash", "deepseek-v4-pro"],
+        default_model: "deepseek-v4-pro",
+        thinking: { "deepseek-flash": "off", "deepseek-v4-pro": "high" },
+      },
+    });
+    expect(levelOf({ ...f, levels: { a: { levels: ["off", "on"] } } }, "a")).toBe("off");
+    const claude = { ...presetForm(preset("anthropic"), blankForm()) };
+    expect("thinking" in (putOf(claude) as { body: object }).body).toBe(false);
+  });
+  it("a saved provider reads back with its levels; toggling keeps its thinking exactly", () => {
+    const p = P({
+      ...remote,
+      models: ["deepseek-flash", "deepseek-chat"],
+      default_model: "deepseek-chat",
+      preset: "deepseek",
+      thinking: { "deepseek-flash": "low" },
+      thinking_levels: { "deepseek-flash": { levels: ["off", "low", "high"], default: "high" } },
+    });
+    const f = formOf(p);
+    expect(f).toMatchObject({
+      default_model: "deepseek-chat",
+      thinking: { "deepseek-flash": "low" },
+    });
+    expect(levelOf(f, "deepseek-flash")).toBe("low");
+    expect(toggled(p)).toMatchObject({ enabled: false, thinking: { "deepseek-flash": "low" } });
+    expect("thinking" in toggled(P(remote))).toBe(false); // a provider from before 1.53
+  });
+  it("where a model is picked: the level after the id", () => {
+    expect(withThinking("deepseek-flash", "off")).toBe("deepseek-flash · Thinking Off");
+    expect(withThinking("deepseek-chat")).toBe("deepseek-chat");
   });
 });

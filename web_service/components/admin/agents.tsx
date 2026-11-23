@@ -12,6 +12,7 @@ import { ErrorNote, Info } from "@/components/kit";
 import { AdminTabs } from "@/components/admin/users";
 import { useUser } from "@/components/shell";
 import { api, message, ok, type S } from "@/lib/api";
+import { withThinking } from "@/lib/providers";
 
 type Names = S<"SessionNames">;
 type Settings = S<"AssistantSettings">;
@@ -426,11 +427,17 @@ function NamesPanel({
                   onChange={(e) => setModel(e.target.value)}
                 >
                   {p.models.map((m) => (
-                    <option key={m}>{m}</option>
+                    <option key={m} value={m}>
+                      {withThinking(m, p.thinking?.[m])}
+                      {m === p.default_model ? " (default)" : ""}
+                    </option>
                   ))}
                 </select>
               </div>
             </div>
+            {p.thinking_levels && (
+              <span className="text-[12px] text-t2">Set per model in Model providers.</span>
+            )}
             <span className="text-[12px] text-t2">
               Sends {sendsTo(p)}. Never images or references.
             </span>
@@ -594,11 +601,14 @@ function AssistantPanel({
             >
               {p?.models.map((m) => (
                 <option key={m} value={m === p.default_model ? "" : m}>
-                  {m}
+                  {withThinking(m, p.thinking?.[m])}
                   {m === p.default_model ? " (default)" : ""}
                 </option>
               ))}
             </select>
+            {p?.thinking_levels && (
+              <span className="text-[12px] text-t2">Set per model in Model providers.</span>
+            )}
           </div>
         </div>
       ) : (

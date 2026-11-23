@@ -1,20 +1,28 @@
 // Admin > Model providers (contracts/README.md "Model sources: providers"): the form a provider is edited in, the
 // PUT body built from it (with the checks the API makes that the browser can make first), and a test result in words.
 // A remote provider's key is never typed here: `key_secret` names the secret file pipelines_service reads.
+// API 1.53 (plan 28): the models are a list of rows (chosen, a default, a thinking level per model that has levels).
 import type { S } from "@/lib/api";
 
 type Provider = S<"Provider">;
 type Put = S<"ProviderPut">;
 export type Preset = S<"ProviderPreset">;
 type Compat = S<"ProviderCompat">;
+export type Level = S<"ThinkingLevel">;
+export type ThinkingInfo = S<"ThinkingInfo">;
 
 export type ProviderForm = {
   kind: Provider["kind"];
   name: string;
   title: string;
   base_url: string;
-  /** one per line; the first is the default */
-  models: string;
+  /** the chosen models, in order */
+  models: string[];
+  default_model: string;
+  /** API 1.53: the level picked per model; one not picked shows its rule's default, else off */
+  thinking: Record<string, Level>;
+  /** what each known model offers (saved thinking_levels, the preset's rules, Fetch's answer) */
+  levels: Record<string, ThinkingInfo>;
   enabled: boolean;
   timeout_s: string;
   host: string;
@@ -38,7 +46,10 @@ export const blankForm = (kind: ProviderForm["kind"] = "server"): ProviderForm =
   name: "",
   title: "",
   base_url: "",
-  models: "",
+  models: [],
+  default_model: "",
+  thinking: {},
+  levels: {},
   enabled: true,
   timeout_s: "120",
   host: "",
@@ -48,15 +59,17 @@ export const blankForm = (kind: ProviderForm["kind"] = "server"): ProviderForm =
   preset: "",
 });
 
-/** A provider as the form edits it (its default model first). */
+/** A provider as the form edits it. */
 export function formOf(p: Provider): ProviderForm {
-  const models = [p.default_model, ...p.models.filter((m) => m !== p.default_model)];
   return {
     kind: p.kind,
     name: p.name,
     title: p.title ?? "",
     base_url: p.base_url,
-    models: models.join("\n"),
+    models: [...p.models],
+    default_model: p.default_model,
+    thinking: { ...p.thinking },
+    levels: { ...p.thinking_levels },
     enabled: p.enabled,
     timeout_s: String(p.timeout_s),
     host: p.host ?? "",
@@ -76,34 +89,80 @@ export const presetForm = (p: Preset, f: ProviderForm): ProviderForm => ({
   name: p.id,
   title: p.title,
   base_url: p.base_url,
-  models: p.models.join("\n"),
+  models: [...p.models],
+  default_model: p.models[0] ?? "",
+  thinking: {},
+  levels: Object.fromEntries(
+    p.models.flatMap((m) => {
+      const i = ruleInfo(p, m);
+      return i ? [[m, i]] : [];
+    }),
+  ),
   key_secret: p.key_secret ?? "",
   preset: p.id,
   compat: p.compat,
 });
 
-/** The form's models, one per line, in order, each once. */
-export const modelsOf = (f: ProviderForm) => [
-  ...new Set(
-    f.models
-      .split(/\r?\n|,/)
-      .map((m) => m.trim())
-      .filter(Boolean),
-  ),
-];
+/** What a preset's rules give a model id (the first rule whose match fits), else undefined. "models" (OpenRouter):
+ * only Fetch knows. */
+export function ruleInfo(p: Preset | undefined, id: string): ThinkingInfo | undefined {
+  if (!Array.isArray(p?.thinking)) return undefined;
+  const r = p.thinking.find((x) => new RegExp(x.match).test(id));
+  if (!r) return undefined;
+  if (r.always) return { levels: [], always: true };
+  const order: Level[] = ["off", "on", "low", "medium", "high"];
+  return {
+    levels: order.filter((l) => r.levels && l in r.levels),
+    ...(r.default && { default: r.default }),
+  };
+}
 
-/** Tick (add at the end) or untick (remove) a fetched model; the 17th is refused. */
+/** The level a chosen model runs at: the one picked, else its rule's default, else off; none for a model without
+ * levels or one that always thinks. */
+export function levelOf(f: ProviderForm, id: string): Level | undefined {
+  const i = f.levels[id];
+  if (!i || i.always || !i.levels.length) return undefined;
+  const l = f.thinking[id] ?? i.default ?? (i.levels.includes("off") ? "off" : undefined);
+  return l && i.levels.includes(l) ? l : undefined;
+}
+
+/** Tick (add at the end) or untick (remove) a model; the 17th is refused. The first chosen is the default; removing
+ * the default moves it to the next chosen. */
 export function tickModel(
   f: ProviderForm,
   id: string,
   on: boolean,
 ): { form: ProviderForm } | { error: string } {
-  const ms = modelsOf(f);
-  if (on && !ms.includes(id) && ms.length >= MAX_MODELS)
-    return { error: `${MAX_MODELS} models at most` };
-  const next = on ? (ms.includes(id) ? ms : [...ms, id]) : ms.filter((m) => m !== id);
-  return { form: { ...f, models: next.join("\n") } };
+  const ms = f.models;
+  if (on && !ms.includes(id) && ms.length >= MAX_MODELS) return { error: `${MAX_MODELS} at most` };
+  if (on) {
+    const models = ms.includes(id) ? ms : [...ms, id];
+    return { form: { ...f, models, default_model: f.default_model || id } };
+  }
+  const at = ms.indexOf(id);
+  const models = ms.filter((m) => m !== id);
+  const default_model =
+    f.default_model === id ? (models[Math.min(at, models.length - 1)] ?? "") : f.default_model;
+  return { form: { ...f, models, default_model } };
 }
+
+/** A custom model id (Model id + Add): the pattern, then ticked; the preset's rules give it levels when one fits. */
+export function addModel(
+  f: ProviderForm,
+  raw: string,
+  p: Preset | undefined,
+): { form: ProviderForm } | { error: string } {
+  const id = raw.trim();
+  if (!MODEL.test(id)) return { error: `"${id}" is not a model name.` };
+  const r = tickModel(f, id, true);
+  if ("error" in r) return r;
+  const info = f.levels[id] ?? ruleInfo(p, id);
+  return { form: info ? { ...r.form, levels: { ...r.form.levels, [id]: info } } : r.form };
+}
+
+/** "deepseek-flash · Thinking Off" where a model is picked (nothing when no level is set). */
+export const withThinking = (model: string, level?: string) =>
+  level ? `${model} · Thinking ${level[0].toUpperCase()}${level.slice(1)}` : model;
 
 /** What Fetch asks: the preset's route while the URL is still the preset's, the saved provider's Test while it is the
  * saved one's, else nothing (no URL from the browser is ever fetched). */
@@ -128,7 +187,7 @@ export const compatLine = (c?: Compat) =>
 
 /** The PUT body for the form, or the first thing wrong with it (the server checks again, and the host rule after DNS). */
 export function putOf(f: ProviderForm): { body: Put } | { error: string } {
-  const models = modelsOf(f);
+  const models = f.models;
   const url = f.base_url.trim();
   const num = (v: string) => (v.trim() === "" ? NaN : Number(v));
   if (!NAME.test(f.name))
@@ -140,6 +199,12 @@ export function putOf(f: ProviderForm): { body: Put } | { error: string } {
   if (!models.length || models.length > MAX_MODELS) return { error: "Models: 1 to 16." };
   const bad = models.find((m) => !MODEL.test(m));
   if (bad) return { error: `Models: "${bad}" is not a model name.` };
+  const thinking = Object.fromEntries(
+    models.flatMap((m) => {
+      const l = levelOf(f, m);
+      return l ? [[m, l]] : [];
+    }),
+  );
   const timeout = num(f.timeout_s);
   if (!Number.isInteger(timeout) || timeout < 5 || timeout > 600)
     return { error: "Timeout: 5 to 600 seconds." };
@@ -147,12 +212,13 @@ export function putOf(f: ProviderForm): { body: Put } | { error: string } {
     kind: f.kind,
     base_url: url,
     models,
-    default_model: models[0],
+    default_model: models.includes(f.default_model) ? f.default_model : models[0],
     enabled: f.enabled,
     timeout_s: timeout,
     ...(f.title.trim() && { title: f.title.trim().slice(0, 60) }),
     ...(f.compat && { compat: f.compat }),
     ...(f.preset && { preset: f.preset }),
+    ...(Object.keys(thinking).length > 0 && { thinking }),
   };
   if (f.kind === "server") {
     const mem = num(f.memory_gb);
@@ -174,11 +240,12 @@ export function putOf(f: ProviderForm): { body: Put } | { error: string } {
   return { body: { ...body, key_secret: f.key_secret, max_in_flight: inFlight } };
 }
 
-/** The same provider with `enabled` changed, as a PUT body. */
+/** The same provider with `enabled` changed, as a PUT body (its thinking exactly as saved). */
 export const toggled = (p: Provider): Put => {
-  const r = putOf({ ...formOf(p), enabled: !p.enabled });
+  const r = putOf({ ...formOf(p), enabled: !p.enabled, levels: {} }); // no levels: no thinking resolved
   if ("error" in r) throw new Error(r.error);
-  return r.body;
+  const saved = p.thinking ?? {};
+  return { ...r.body, ...(Object.keys(saved).length > 0 && { thinking: saved }) };
 };
 
 /** A test result in words: "answered · 0.4 s", "network · connection refused". */

@@ -193,6 +193,26 @@ describe("AgentsAdmin", () => {
     expect(row("Assistant").getAttribute("aria-selected")).toBe("false");
   });
 
+  it("the model select shows each model's thinking level (plan 28)", async () => {
+    const thinking = {
+      ...deepseek,
+      models: ["deepseek-flash", "deepseek-v4-pro"],
+      default_model: "deepseek-flash",
+      thinking: { "deepseek-flash": "off", "deepseek-v4-pro": "high" },
+      thinking_levels: { "deepseek-flash": { levels: ["off", "low", "high"], default: "high" } },
+    };
+    serve(names({ remote_enabled: true }), [thinking, brave], assistantOn);
+    await screen.findByText("your messages to DeepSeek");
+    edit("Assistant");
+    const form = screen.getByRole("form", { name: "Assistant settings" });
+    const options = within(within(form).getByLabelText("Model")).getAllByRole("option");
+    expect(options.map((o) => o.textContent)).toEqual([
+      "deepseek-flash · Thinking Off (default)",
+      "deepseek-v4-pro · Thinking High",
+    ]);
+    expect(within(form).getByText("Set per model in Model providers.")).toBeTruthy();
+  });
+
   it("Assistant: Cancel closes the box and puts the saved settings back; web search greyed while remote is off", async () => {
     serve(names(), [server, brave]);
     await screen.findAllByText("Assistant");

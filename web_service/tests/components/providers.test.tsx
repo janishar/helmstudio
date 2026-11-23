@@ -23,15 +23,45 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const serve = (remote_enabled: boolean, found = true, writable = false) =>
-  answer("GET", {
-    "/v1/studio/admin/providers": () => ({ data: { providers: [remote], remote_enabled } }),
+const fetchOk = (models: string[], thinking?: object) => ({
+  data: {
+    ok: true,
+    models,
+    answer: null,
+    error: null,
+    failure: null,
+    seconds: 0.3,
+    ...(thinking && { thinking }),
+  },
+});
+const deepseekLevels = { levels: ["off", "low", "high"], default: "high" };
+
+const serve = (
+  remote_enabled: boolean,
+  found = true,
+  writable = false,
+  providers: object[] = [remote],
+) => {
+  // Fetch by itself (plan 28): an answer unless a test scripts its own
+  answer("POST", {
+    "/v1/studio/admin/provider-presets/{id}/models": () => fetchOk([]),
+    "/v1/studio/admin/providers/{name}/test": () => fetchOk([]),
+  });
+  return answer("GET", {
+    "/v1/studio/admin/providers": () => ({ data: { providers, remote_enabled } }),
     "/v1/studio/admin/provider-presets": () => ({ data: { ...presetFile, remote_enabled } }),
     "/v1/studio/admin/provider-keys/{key_secret}": (init) => {
       const k = (init.params as { path: { key_secret: string } }).path.key_secret;
       return { data: { key_secret: k, path: `deploy/secrets/providers/${k}`, found, writable } };
     },
   });
+};
+const models = () => screen.getByRole("group", { name: "Models" });
+const ticked = () =>
+  within(models())
+    .getAllByRole("checkbox")
+    .filter((c) => (c as HTMLInputElement).checked)
+    .map((c) => c.getAttribute("aria-label")!.replace(/^Use /, ""));
 
 const pick = async (title: string) => {
   const select = (await screen.findByLabelText("Preset")) as HTMLSelectElement;
@@ -80,9 +110,7 @@ describe("ProvidersAdmin", () => {
     expect(value("Name")).toBe("deepseek");
     expect(value("Base URL")).toBe("https://api.deepseek.com");
     expect(value("Key file")).toBe("deepseek");
-    expect((screen.getByLabelText(/^Models/) as HTMLTextAreaElement).value).toBe(
-      "deepseek-flash\ndeepseek-v4-pro",
-    );
+    expect(ticked()).toEqual(["deepseek-flash", "deepseek-v4-pro"]);
     expect(screen.getByText(/Refuses json_schema/)).toBeTruthy();
     expect(screen.getByRole("link", { name: "Docs" }).getAttribute("href")).toBe(
       "https://api-docs.deepseek.com/",
@@ -105,42 +133,139 @@ describe("ProvidersAdmin", () => {
     ).toBeTruthy();
   });
 
-  it("Fetch: the preset's route with the key file, a tick list with a filter, ticks add lines", async () => {
+  // ---- plan 28: the Models area, layout A · Rows (docs/mock/ProvidersModels.dc.html)
+
+  it("key Found: Fetch by itself on the preset's route; rows with tick, Default and the model's thinking", async () => {
     serve(true);
-    const many = Array.from({ length: 14 }, (_, i) => `deepseek-x${i}`);
     const post = answer("POST", {
-      "/v1/studio/admin/provider-presets/{id}/models": () => ({
-        data: {
-          ok: true,
-          models: ["deepseek-flash", ...many],
-          answer: null,
-          error: null,
-          failure: null,
-          seconds: 0.3,
-        },
-      }),
+      "/v1/studio/admin/provider-presets/{id}/models": () =>
+        fetchOk(["deepseek-flash", "deepseek-v4-pro"], {
+          "deepseek-flash": deepseekLevels,
+          "deepseek-v4-pro": deepseekLevels,
+        }),
     });
     render(<ProvidersAdmin />);
     await pick("DeepSeek");
-    fireEvent.click(screen.getByRole("button", { name: "Fetch" }));
-    const list = await screen.findByRole("group", { name: "Fetched models" });
+    expect(await screen.findByText("2 found", {}, { timeout: 2000 })).toBeTruthy();
     expect(post.mock.calls[0][1]).toEqual({
       params: { path: { id: "deepseek" } },
       body: { key_secret: "deepseek" },
     });
-    expect(within(list).getByText("15 found · tick to add")).toBeTruthy();
+    const flash = screen.getByRole("radiogroup", { name: "Thinking for deepseek-flash" });
     expect(
-      (within(list).getByRole("checkbox", { name: "deepseek-flash" }) as HTMLInputElement).checked,
-    ).toBe(true);
-    fireEvent.change(within(list).getByLabelText("Filter models"), { target: { value: "x13" } });
-    expect(within(list).getAllByRole("checkbox")).toHaveLength(1);
-    fireEvent.click(within(list).getByRole("checkbox", { name: "deepseek-x13" }));
-    expect((screen.getByLabelText(/^Models/) as HTMLTextAreaElement).value).toBe(
-      "deepseek-flash\ndeepseek-v4-pro\ndeepseek-x13",
+      within(flash)
+        .getAllByRole("radio")
+        .map((r) => r.textContent),
+    ).toEqual(["Off", "Low", "High"]);
+    // nothing picked: the rule's default, marked as the provider's
+    expect(within(flash).getByRole("radio", { name: "High" }).getAttribute("aria-checked")).toBe(
+      "true",
     );
+    expect(within(models()).getAllByText("provider default")).toHaveLength(2);
+    fireEvent.click(within(flash).getByRole("radio", { name: "Off" }));
+    expect(within(flash).getByRole("radio", { name: "Off" }).getAttribute("aria-checked")).toBe(
+      "true",
+    );
+    const defaults = within(models()).getAllByRole("radio", {
+      name: "Default",
+    }) as HTMLInputElement[];
+    expect(defaults.map((d) => d.checked)).toEqual([true, false]);
+
+    // a custom name: tagged, ×, no thinking setting; Default moves to it, then back when it is removed
+    fireEvent.change(screen.getByLabelText("Model id"), { target: { value: "deepseek-chat" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    expect(ticked()).toEqual(["deepseek-flash", "deepseek-v4-pro", "deepseek-chat"]);
+    expect(within(models()).getByText("custom")).toBeTruthy();
+    expect(within(models()).getByText("No thinking setting")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Model id"), { target: { value: "bad name" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    expect(screen.getByText('"bad name" is not a model name.')).toBeTruthy();
+
+    const put = answer("PUT", {
+      "/v1/studio/admin/providers/{name}": (init) => ({
+        data: { ...remote, ...(init.body as object) },
+      }),
+    });
+    fireEvent.click(within(models()).getAllByRole("radio", { name: "Default" })[2]);
+    fireEvent.click(screen.getByRole("button", { name: "Save provider" }));
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
+    expect(put.mock.calls[0][1]).toMatchObject({
+      body: {
+        models: ["deepseek-flash", "deepseek-v4-pro", "deepseek-chat"],
+        default_model: "deepseek-chat",
+        thinking: { "deepseek-flash": "off", "deepseek-v4-pro": "high" },
+      },
+    });
   });
 
-  it("Fetch is greyed once the URL is not the preset's; a failed fetch keeps the models and offers Retry", async () => {
+  it("removing the default moves it to the next chosen; the 17th model is refused", async () => {
+    serve(true);
+    const many = Array.from({ length: 15 }, (_, i) => `deepseek-x${i}`);
+    answer("POST", {
+      "/v1/studio/admin/provider-presets/{id}/models": () =>
+        fetchOk(["deepseek-flash", "deepseek-v4-pro", ...many]),
+    });
+    render(<ProvidersAdmin />);
+    await pick("DeepSeek");
+    await screen.findByText("17 found", {}, { timeout: 2000 });
+    fireEvent.click(within(models()).getByRole("checkbox", { name: "Use deepseek-flash" }));
+    const defaults = within(models()).getAllByRole("radio", {
+      name: "Default",
+    }) as HTMLInputElement[];
+    expect(defaults).toHaveLength(1);
+    expect(defaults[0].checked).toBe(true); // deepseek-v4-pro
+    for (const m of many)
+      fireEvent.click(within(models()).getByRole("checkbox", { name: `Use ${m}` }));
+    fireEvent.click(within(models()).getByRole("checkbox", { name: "Use deepseek-flash" }));
+    expect(screen.getByText("16 at most")).toBeTruthy();
+    expect(ticked()).toHaveLength(16);
+  });
+
+  it("a long list: a filter, the count that matches, chosen first", async () => {
+    serve(true);
+    const many = Array.from({ length: 14 }, (_, i) => `deepseek-x${i}`);
+    answer("POST", {
+      "/v1/studio/admin/provider-presets/{id}/models": () => fetchOk([...many, "deepseek-flash"]),
+    });
+    render(<ProvidersAdmin />);
+    await pick("DeepSeek");
+    await screen.findByText("15 found", {}, { timeout: 2000 });
+    const rows = within(models())
+      .getAllByRole("checkbox")
+      .map((c) => c.getAttribute("aria-label"));
+    expect(rows.slice(0, 3)).toEqual([
+      "Use deepseek-flash",
+      "Use deepseek-v4-pro",
+      "Use deepseek-x0",
+    ]);
+    fireEvent.change(screen.getByLabelText("Filter models"), { target: { value: "x1" } });
+    expect(screen.getByText("15 found · 5 match · chosen first")).toBeTruthy();
+    expect(within(models()).getAllByRole("checkbox")).toHaveLength(5);
+  });
+
+  it("Loading: the list shows with Loading models… and Refresh greyed; Refresh asks again", async () => {
+    serve(true);
+    let done: (v: unknown) => void = () => {};
+    const post = vi.spyOn(api, "POST").mockImplementation(
+      (() =>
+        new Promise((r) => {
+          done = r;
+        })) as never,
+    );
+    render(<ProvidersAdmin />);
+    await pick("DeepSeek");
+    expect(await screen.findByText("Loading models…", {}, { timeout: 2000 })).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Refresh" }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    expect(ticked()).toEqual(["deepseek-flash", "deepseek-v4-pro"]);
+    done({ data: fetchOk(["deepseek-flash"]).data, response: new Response(null, { status: 200 }) });
+    expect(await screen.findByText("1 found")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    expect(post).toHaveBeenCalledTimes(2);
+  });
+
+  it("Fetch failed: the error with Retry; the list keeps what it had; Refresh greyed off the preset's URL", async () => {
     serve(true);
     const post = answer("POST", {
       "/v1/studio/admin/provider-presets/{id}/models": () => ({
@@ -148,31 +273,102 @@ describe("ProvidersAdmin", () => {
           ok: false,
           models: [],
           answer: null,
-          error: "openai: the key was refused",
-          failure: "answer",
-          seconds: 0.2,
+          error: "openai: timed out",
+          failure: "network",
+          seconds: 15,
         },
       }),
     });
     render(<ProvidersAdmin />);
     await pick("OpenAI");
-    fireEvent.click(screen.getByRole("button", { name: "Fetch" }));
-    expect(await screen.findByText("openai: the key was refused")).toBeTruthy();
-    expect(screen.getByText("The preset's models stay in the list.")).toBeTruthy();
-    expect((screen.getByLabelText(/^Models/) as HTMLTextAreaElement).value).toContain(
-      "gpt-6.2-sol",
-    );
+    expect(await screen.findByText("openai: timed out", {}, { timeout: 2000 })).toBeTruthy();
+    expect(screen.getByText("The list keeps what it had.")).toBeTruthy();
+    expect(ticked()).toEqual(["gpt-6.2-sol", "gpt-6-luna", "gpt-6.2-astra"]);
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
     fireEvent.change(screen.getByLabelText("Base URL"), {
       target: { value: "https://proxy.example.com/v1" },
     });
-    expect((screen.getByRole("button", { name: "Fetch" }) as HTMLButtonElement).disabled).toBe(
+    expect((screen.getByRole("button", { name: "Refresh" }) as HTMLButtonElement).disabled).toBe(
       true,
     );
     expect(
-      screen.getByText("Fetch asks only the preset's or the saved URL. Save first."),
+      screen.getByText("Refresh asks only the preset's or the saved URL. Save first."),
     ).toBeTruthy();
+  });
+
+  it("No key yet: the preset's models, ticked, and no fetch; OpenAI shows Low / Medium / High, no Off", async () => {
+    const post = vi.fn();
+    serve(true, false);
+    vi.spyOn(api, "POST").mockImplementation(post as never);
+    render(<ProvidersAdmin />);
+    await pick("OpenAI");
+    expect(
+      await screen.findByText("Add the key to load the full list.", {}, { timeout: 2000 }),
+    ).toBeTruthy();
+    expect(ticked()).toEqual(["gpt-6.2-sol", "gpt-6-luna", "gpt-6.2-astra"]);
+    expect(post).not.toHaveBeenCalled();
+    const sol = screen.getByRole("radiogroup", { name: "Thinking for gpt-6.2-sol" });
+    expect(
+      within(sol)
+        .getAllByRole("radio")
+        .map((r) => r.textContent),
+    ).toEqual(["Low", "Medium", "High"]);
+    expect(within(sol).getByRole("radio", { name: "Medium" }).getAttribute("aria-checked")).toBe(
+      "true",
+    );
+  });
+
+  it("Mistral Small shows Off / On; Claude 5.5 says Always thinks", async () => {
+    serve(true, false);
+    render(<ProvidersAdmin />);
+    await pick("Mistral");
+    const small = await screen.findByRole("radiogroup", {
+      name: "Thinking for mistral-small-latest",
+    });
+    expect(
+      within(small)
+        .getAllByRole("radio")
+        .map((r) => r.textContent),
+    ).toEqual(["Off", "On"]);
+    expect(within(small).getByRole("radio", { name: "Off" }).getAttribute("aria-checked")).toBe(
+      "true",
+    );
+    await pick("Anthropic");
+    await waitFor(() => expect(within(models()).getAllByText("Always thinks")).toHaveLength(3));
+  });
+
+  it("opening a saved provider fetches through its Test; its levels and custom names read back", async () => {
+    const saved = {
+      ...remote,
+      name: "deepseek",
+      base_url: "https://api.deepseek.com/v1", // not the preset's URL: Fetch asks the saved one
+      key_secret: "deepseek",
+      preset: "deepseek",
+      models: ["deepseek-flash", "deepseek-chat"],
+      default_model: "deepseek-chat",
+      thinking: { "deepseek-flash": "low" },
+      thinking_levels: { "deepseek-flash": deepseekLevels },
+    };
+    serve(true, true, false, [saved]);
+    const post = answer("POST", {
+      "/v1/studio/admin/providers/{name}/test": () =>
+        fetchOk(["deepseek-flash", "deepseek-v4-pro"], { "deepseek-flash": deepseekLevels }),
+    });
+    render(<ProvidersAdmin />);
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    expect(await screen.findByText("2 found", {}, { timeout: 2000 })).toBeTruthy();
+    expect(post.mock.calls[0][0]).toBe("/v1/studio/admin/providers/{name}/test");
+    expect(ticked()).toEqual(["deepseek-flash", "deepseek-chat"]);
+    const flash = screen.getByRole("radiogroup", { name: "Thinking for deepseek-flash" });
+    expect(within(flash).getByRole("radio", { name: "Low" }).getAttribute("aria-checked")).toBe(
+      "true",
+    );
+    expect(within(models()).getByText("custom")).toBeTruthy();
+    fireEvent.click(within(models()).getByRole("button", { name: "Remove deepseek-chat" }));
+    expect(ticked()).toEqual(["deepseek-flash"]);
+    const def = within(models()).getAllByRole("radio", { name: "Default" }) as HTMLInputElement[];
+    expect(def.map((d) => d.checked)).toEqual([true]);
   });
 
   // ---- plan 27: the key area (docs/mock/Providers.dc.html, Other states)

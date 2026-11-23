@@ -11,20 +11,21 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { AdminTabs } from "@/components/admin/users";
 import { useUser } from "@/components/shell";
-import { TextArea } from "@/components/expand-text";
 import { api, message, ok, type S } from "@/lib/api";
 import {
   blankForm,
   compatLine,
   fetchFrom,
   formOf,
+  addModel,
   KEY,
-  modelsOf,
+  levelOf,
   presetForm,
   putOf,
   testLine,
   tickModel,
   toggled,
+  type Level,
   type Preset,
   type ProviderForm,
 } from "@/lib/providers";
@@ -282,7 +283,7 @@ function ProviderPanel({
   onSaved,
 }: {
   form: ProviderForm;
-  setForm: (f: ProviderForm) => void;
+  setForm: React.Dispatch<React.SetStateAction<ProviderForm>>;
   remoteOn: boolean;
   exists: boolean;
   presets: Preset[];
@@ -336,6 +337,10 @@ function ProviderPanel({
               }),
             )
           : await ok(api.POST("/v1/studio/admin/providers/{name}/test", path(from.saved.name)));
+      if (r.ok && r.thinking) {
+        const known = r.thinking;
+        setForm((g) => ({ ...g, levels: { ...g.levels, ...known } }));
+      }
       setFx(
         r.ok
           ? { ...cur, models: r.models, error: "" }
@@ -353,12 +358,22 @@ function ProviderPanel({
       setFetching(false);
     }
   }
-  function tick(id: string, on: boolean) {
-    const r = tickModel(f, id, on);
-    if ("error" in r) return setFx({ ...cur, tickError: r.error });
-    setFx({ ...cur, tickError: "" });
-    setForm(r.form);
-  }
+  // plan 28: Fetch by itself once the provider can be asked: a preset or saved provider whose key is Found (after Save
+  // key or Recheck too), a local one on pick, a saved one on opening; Refresh asks again
+  const ask = from
+    ? "preset" in from
+      ? `preset:${from.preset.id}`
+      : `saved:${from.saved.name}`
+    : "";
+  const keyReady = f.kind !== "remote" || (key?.key_secret === keyName && key.found);
+  const autoKey = ask && keyReady ? `${ask}|${keyName}` : "";
+  const asked = useRef("");
+  useEffect(() => {
+    if (!autoKey || asked.current === autoKey) return;
+    asked.current = autoKey;
+    void fetchModels();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per provider and key
+  }, [autoKey]);
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const r = putOf(f);
@@ -392,8 +407,6 @@ function ProviderPanel({
       />
     </div>
   );
-  const models = modelsOf(f);
-  const shown = fetched?.filter((m) => m.toLowerCase().includes(filter.trim().toLowerCase()));
   const group = (kind: Preset["kind"]) => presets.filter((p) => p.kind === kind);
   return (
     <aside
@@ -404,11 +417,12 @@ function ProviderPanel({
         <h2 className="flex items-center font-display text-base leading-5 font-bold">
           {exists ? `Edit ${f.name}` : "Add a model provider"}
           <Info>
-            Pick a preset to fill the form; every field stays editable. A local server is any
-            OpenAI-compatible endpoint you run (Ollama, LM Studio, llama-server) on a loopback or
-            private address; the host keeps its memory reserved. A remote provider is https and
-            needs the deployment&apos;s remote switch. Paste its key under Key file: it is checked
-            with the provider, saved to that file on the server and never shown again.
+            Pick a preset to fill the form; every field stays editable. Models load from the
+            provider: tick the ones to use, pick the default and each one&apos;s thinking. A local
+            server is any OpenAI-compatible endpoint you run (Ollama, LM Studio, llama-server) on a
+            loopback or private address; the host keeps its memory reserved. A remote provider is
+            https and needs the deployment&apos;s remote switch. Paste its key under Key file: it is
+            checked with the provider, saved to that file on the server and never shown again.
           </Info>
         </h2>
         <div className="flex min-w-0 flex-col gap-1.5">
@@ -489,86 +503,28 @@ function ProviderPanel({
             : "https://api.example.com/v1",
           { maxLength: 300 },
         )}
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-center gap-2">
-            <label htmlFor="p-models" className="label flex-auto">
-              Models (the first is the default)
-            </label>
-            <button
-              type="button"
-              className="chip h-[26px] text-[12px]"
-              disabled={!from || fetching}
-              onClick={() => void fetchModels()}
-            >
-              {fetching ? "Fetching…" : "Fetch"}
-            </button>
-          </div>
-          <TextArea
-            id="p-models"
-            expand="Models"
-            className="in h-auto py-2"
-            rows={2}
-            value={f.models}
-            onChange={(e) => set("models")(e.target.value)}
-          />
-          {!from && f.base_url.trim() && (
-            <span className="text-[12px] text-t2">
-              Fetch asks only the preset&apos;s or the saved URL. Save first.
-            </span>
-          )}
-          {compatLine(f.compat) && (
-            <span className="text-[12px] text-t2">{compatLine(f.compat)}</span>
-          )}
-        </div>
-        {fetchError && (
-          <div
-            role="alert"
-            className="flex items-center gap-2 rounded-[10px] bg-[color-mix(in_srgb,#ff6b6b_14%,transparent)] px-2.5 py-2 text-[12px] text-[#ff8a8a]"
-          >
-            <span className="flex-auto">{fetchError}</span>
-            <button
-              type="button"
-              className="chip h-[26px] text-[12px] text-t1"
-              onClick={() => void fetchModels()}
-            >
-              Retry
-            </button>
-          </div>
+        <ModelsArea
+          form={f}
+          setForm={setForm}
+          preset={preset}
+          fetched={fetched}
+          fetchError={fetchError}
+          note={tickError}
+          setNote={(n) => setFx({ ...cur, tickError: n })}
+          filter={filter}
+          setFilter={(v) => setFx({ ...cur, filter: v })}
+          fetching={fetching}
+          canFetch={!!from}
+          noKey={f.kind === "remote" && key?.key_secret === keyName && !key.found}
+          onFetch={() => void fetchModels()}
+        />
+        {!from && f.base_url.trim() && (
+          <span className="text-[12px] text-t2">
+            Refresh asks only the preset&apos;s or the saved URL. Save first.
+          </span>
         )}
-        {fetchError && preset && (
-          <span className="text-[12px] text-t2">The preset&apos;s models stay in the list.</span>
-        )}
-        {fetched && shown && (
-          <div
-            role="group"
-            aria-label="Fetched models"
-            className="flex max-h-[260px] flex-col gap-0.5 overflow-auto rounded-xl border border-s3 bg-s1 p-1.5"
-          >
-            {fetched.length > 12 && (
-              <input
-                className="in mb-1 h-8 text-[12px]"
-                aria-label="Filter models"
-                placeholder="Filter"
-                value={filter}
-                onChange={(e) => setFx({ ...cur, filter: e.target.value })}
-              />
-            )}
-            <span className="px-2 pt-0.5 pb-1 text-[12px] text-t2">
-              {fetched.length} found · tick to add
-            </span>
-            {tickError && <span className="px-2 text-[12px] text-bad">{tickError}</span>}
-            {shown.map((m) => (
-              <label key={m} className="flex items-center gap-2.5 rounded-lg px-2 py-1 text-[12px]">
-                <input
-                  type="checkbox"
-                  className="accent-[var(--a1)]"
-                  checked={models.includes(m)}
-                  onChange={(e) => tick(m, e.target.checked)}
-                />
-                <span className="mono">{m}</span>
-              </label>
-            ))}
-          </div>
+        {compatLine(f.compat) && (
+          <span className="text-[12px] text-t2">{compatLine(f.compat)}</span>
         )}
         {f.kind === "server" ? (
           <>
@@ -848,6 +804,257 @@ function KeyArea({
             ? "The old key stays until the new one is saved."
             : "Checked with the provider, then saved to this file. Never shown again."}
         </span>
+      )}
+    </div>
+  );
+}
+
+/** The Models area, layout A · Rows (docs/mock/ProvidersModels.dc.html; plan 28): one row per model, chosen first: a
+ * tick to use it, the id, a Default radio; under a chosen model its thinking (that model's levels only), Always thinks,
+ * or No thinking setting; a custom one carries a tag and ×. A filter past 12 rows, Model id + Add for a custom name,
+ * Refresh; Loading models…, Fetch failed (Retry, the list keeps what it had) and No key yet. */
+function ModelsArea({
+  form: f,
+  setForm,
+  preset,
+  fetched,
+  fetchError,
+  note,
+  setNote,
+  filter,
+  setFilter,
+  fetching,
+  canFetch,
+  noKey,
+  onFetch,
+}: {
+  form: ProviderForm;
+  setForm: (f: ProviderForm) => void;
+  preset: Preset | undefined;
+  fetched: string[] | undefined;
+  fetchError: string | undefined;
+  note: string | undefined;
+  setNote: (n: string) => void;
+  filter: string;
+  setFilter: (v: string) => void;
+  fetching: boolean;
+  canFetch: boolean;
+  noKey: boolean;
+  onFetch: () => void;
+}) {
+  const [typed, setTyped] = useState("");
+  const offered = fetched ?? preset?.models ?? [];
+  const rows = [...f.models, ...offered.filter((m) => !f.models.includes(m))];
+  const q = filter.trim().toLowerCase();
+  const shown = rows.filter((m) => m.toLowerCase().includes(q));
+  const apply = (r: { form: ProviderForm } | { error: string }) => {
+    if ("error" in r) return setNote(r.error);
+    setNote("");
+    setForm(r.form);
+  };
+  const add = () => {
+    const r = addModel(f, typed, preset);
+    apply(r);
+    if ("form" in r) setTyped("");
+  };
+  const status = fetching
+    ? "Loading models…"
+    : fetched
+      ? `${fetched.length} found${q ? ` · ${shown.length} match · chosen first` : ""}`
+      : "";
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <span id="p-models" className="label flex-auto">
+          Models
+        </span>
+        {status && <span className="text-[12px] text-t2">{status}</span>}
+        <button
+          type="button"
+          className="chip h-[26px] text-[12px] disabled:opacity-50"
+          disabled={!canFetch || fetching}
+          onClick={onFetch}
+        >
+          Refresh
+        </button>
+      </div>
+      {fetchError && (
+        <>
+          <div
+            role="alert"
+            className="flex items-center gap-2 rounded-[10px] bg-[color-mix(in_srgb,#ff6b6b_14%,transparent)] px-2.5 py-2 text-[12px] text-[#ff8a8a]"
+          >
+            <span className="flex-auto">{fetchError}</span>
+            <button type="button" className="chip h-[26px] text-[12px] text-t1" onClick={onFetch}>
+              Retry
+            </button>
+          </div>
+          <span className="text-[12px] text-t2">The list keeps what it had.</span>
+        </>
+      )}
+      {noKey && !fetched && (
+        <span className="text-[12px] text-[#f2c14e]">Add the key to load the full list.</span>
+      )}
+      {rows.length > 12 && (
+        <input
+          className="in h-[30px] text-[12px]"
+          aria-label="Filter models"
+          placeholder="Filter"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+        />
+      )}
+      {note && <span className="text-[12px] text-bad">{note}</span>}
+      {(shown.length > 0 || fetching) && (
+        <div
+          role="group"
+          aria-labelledby="p-models"
+          aria-busy={fetching}
+          className="flex max-h-[260px] flex-col gap-0.5 overflow-auto rounded-xl border border-s3 bg-s1 p-1.5"
+        >
+          {shown.map((m) => (
+            <ModelRow
+              key={m}
+              form={f}
+              id={m}
+              custom={!offered.includes(m)}
+              onTick={(on) => apply(tickModel(f, m, on))}
+              onDefault={() => setForm({ ...f, default_model: m })}
+              onLevel={(l) => setForm({ ...f, thinking: { ...f.thinking, [m]: l } })}
+            />
+          ))}
+          {fetching && (
+            <div aria-hidden className="flex flex-col gap-1.5 px-2 py-1.5">
+              <div className="h-2.5 w-[70%] rounded-md bg-s3" />
+              <div className="h-2.5 w-1/2 rounded-md bg-s3" />
+            </div>
+          )}
+        </div>
+      )}
+      <div className="flex gap-2">
+        <input
+          className="in h-8 min-w-0 flex-auto text-[12px]"
+          aria-label="Model id"
+          placeholder="Model id"
+          maxLength={128}
+          value={typed}
+          onChange={(e) => setTyped(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter") return;
+            e.preventDefault(); // Enter adds the model, never saves the provider
+            if (typed.trim()) add();
+          }}
+        />
+        <button
+          type="button"
+          className="chip h-8 text-[12px]"
+          disabled={!typed.trim()}
+          onClick={add}
+        >
+          Add
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const LEVEL_WORD: Record<Level, string> = {
+  off: "Off",
+  on: "On",
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+};
+
+/** One model's row: tick, id, custom tag, Default radio, × (custom); its thinking under it when chosen. */
+function ModelRow({
+  form: f,
+  id,
+  custom,
+  onTick,
+  onDefault,
+  onLevel,
+}: {
+  form: ProviderForm;
+  id: string;
+  custom: boolean;
+  onTick: (on: boolean) => void;
+  onDefault: () => void;
+  onLevel: (l: Level) => void;
+}) {
+  const chosen = f.models.includes(id);
+  const isDefault = chosen && f.default_model === id;
+  const info = f.levels[id];
+  const level = levelOf(f, id);
+  return (
+    <div className={`flex flex-col gap-1.5 rounded-lg px-2 py-1.5 ${isDefault ? "bg-s2" : ""}`}>
+      <div className="flex items-center gap-2.5 text-[12px]">
+        <input
+          type="checkbox"
+          className="accent-[var(--a1)]"
+          aria-label={`Use ${id}`}
+          checked={chosen}
+          onChange={(e) => onTick(e.target.checked)}
+        />
+        <span className="mono min-w-0 truncate" title={id}>
+          {id}
+        </span>
+        {custom && <span className="tag">custom</span>}
+        <div className="grow" />
+        {chosen && (
+          <label className={`flex items-center gap-1.5 ${isDefault ? "" : "text-t2"}`}>
+            <input
+              type="radio"
+              name="p-default"
+              className="accent-[var(--a1)]"
+              checked={isDefault}
+              onChange={onDefault}
+            />
+            Default
+          </label>
+        )}
+        {custom && (
+          <button
+            type="button"
+            aria-label={`Remove ${id}`}
+            className="size-[22px] rounded-full border-0 bg-s4 p-0 text-[12px]"
+            onClick={() => onTick(false)}
+          >
+            ×
+          </button>
+        )}
+      </div>
+      {chosen && (
+        <div className="flex items-center gap-2 pl-[26px] text-[12px]">
+          {info?.always ? (
+            <span className="text-t2">Always thinks</span>
+          ) : info && info.levels.length > 0 ? (
+            <>
+              <span className="text-t2">Thinking</span>
+              <div
+                role="radiogroup"
+                aria-label={`Thinking for ${id}`}
+                className="flex rounded-lg bg-s1 p-0.5"
+              >
+                {info.levels.map((l) => (
+                  <button
+                    key={l}
+                    type="button"
+                    role="radio"
+                    aria-checked={level === l}
+                    className="h-6 rounded-md border-0 px-2.5 text-[12px] text-t2 aria-checked:bg-s5 aria-checked:text-t1"
+                    onClick={() => onLevel(l)}
+                  >
+                    {LEVEL_WORD[l]}
+                  </button>
+                ))}
+              </div>
+              {level && level === info.default && <span className="text-t2">provider default</span>}
+            </>
+          ) : (
+            <span className="text-t2">No thinking setting</span>
+          )}
+        </div>
       )}
     </div>
   );

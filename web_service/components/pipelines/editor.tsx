@@ -37,6 +37,7 @@ import { history, historyOf } from "@/lib/graph-edit";
 import { until, useAssistantChanges, useScreenTools } from "@/components/assistant/tools";
 import { editorTools } from "@/components/pipelines/assistant";
 import { presetNames } from "@/lib/studio";
+import { withThinking } from "@/lib/providers";
 import {
   addRewrite,
   blankPipeline,
@@ -1293,7 +1294,13 @@ function ModelChoice({
     others
       .filter((p) => p.kind === kind)
       .flatMap((p) =>
-        p.models.map((x) => [`${kind}:${p.name}/${x}`, `${p.title || p.name} · ${x}`] as const),
+        p.models.map(
+          (x) =>
+            [
+              `${kind}:${p.name}/${x}`,
+              `${p.title || p.name} · ${withThinking(x, p.thinking?.[x])}`,
+            ] as const,
+        ),
       );
   const servers = group("server");
   const remotes = group("remote");
