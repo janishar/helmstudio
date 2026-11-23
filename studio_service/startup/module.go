@@ -19,28 +19,29 @@ import (
 
 // Module is what the router is built from: Run fills it for production, tests pass their own parts.
 type Module struct {
-	db              *pgxpool.Pool
-	signer          *common.Signer
-	registry        *registry.Registry
-	cancel          studio.Cancel
-	authentication  network.AuthenticationProvider
-	recheck         studio.Recheck  // the token check an open event stream repeats
-	shutdown        <-chan struct{} // closes when the service stops, which ends open SSE streams
-	health          micro.Controller
-	maxBody         int64                                                      // bytes
-	store           storage.Store                                              // read to check uploads and reference images
-	stateGet        studio.StateGet                                            // pipelines.state.get (a row's checkpoint state)
-	memory          studio.MemoryAsk                                           // pipelines.memory (a pipeline's memory)
-	dispatcher      *studio.Dispatcher                                         // positions use its skip counts; nil in tests
-	remoteModels    bool                                                       // the deployment's remote switch (API 1.15)
-	providerTest    studio.ProviderTestAsk                                     // pipelines.providers.test
-	providerKey     studio.ProviderKeyAsk                                      // pipelines.providers.key (API 1.51)
-	judgeTest       studio.JudgeTestAsk                                        // pipelines.judge.test (API 1.28)
-	assistantMemory studio.AssistantMemoryAsk                                  // pipelines.assistant.memory (API 1.44)
-	lookup          studio.Lookup                                              // a server provider's host name (nil: the system resolver)
-	purge           func(ctx context.Context, subject string) error            // a CMD subject's messages (API 1.16)
-	putSettings     func(ctx context.Context, host string, value []byte) error // KV host_settings (API 1.16)
-	settings        *studio.Service                                            // the service Controllers built (it publishes the host settings at start)
+	db               *pgxpool.Pool
+	signer           *common.Signer
+	registry         *registry.Registry
+	cancel           studio.Cancel
+	authentication   network.AuthenticationProvider
+	recheck          studio.Recheck  // the token check an open event stream repeats
+	shutdown         <-chan struct{} // closes when the service stops, which ends open SSE streams
+	health           micro.Controller
+	maxBody          int64                                                      // bytes
+	store            storage.Store                                              // read to check uploads and reference images
+	stateGet         studio.StateGet                                            // pipelines.state.get (a row's checkpoint state)
+	memory           studio.MemoryAsk                                           // pipelines.memory (a pipeline's memory)
+	dispatcher       *studio.Dispatcher                                         // positions use its skip counts; nil in tests
+	remoteModels     bool                                                       // the deployment's remote switch (API 1.15)
+	providerTest     studio.ProviderTestAsk                                     // pipelines.providers.test
+	providerKey      studio.ProviderKeyAsk                                      // pipelines.providers.key (API 1.51)
+	providerKeyWrite studio.ProviderKeyWriteAsk                                 // pipelines.providers.key.write (API 1.52)
+	judgeTest        studio.JudgeTestAsk                                        // pipelines.judge.test (API 1.28)
+	assistantMemory  studio.AssistantMemoryAsk                                  // pipelines.assistant.memory (API 1.44)
+	lookup           studio.Lookup                                              // a server provider's host name (nil: the system resolver)
+	purge            func(ctx context.Context, subject string) error            // a CMD subject's messages (API 1.16)
+	putSettings      func(ctx context.Context, host string, value []byte) error // KV host_settings (API 1.16)
+	settings         *studio.Service                                            // the service Controllers built (it publishes the host settings at start)
 }
 
 // RootMiddlewares returns the middlewares in load order. The body limit comes before the guard, so 411 and 413 come
@@ -64,6 +65,7 @@ func (m *Module) Controllers() []micro.Controller {
 	service.SetRemote(m.remoteModels)
 	service.SetProviderTest(m.providerTest)
 	service.SetProviderKey(m.providerKey)
+	service.SetProviderKeyWrite(m.providerKeyWrite)
 	service.SetJudgeTest(m.judgeTest)
 	service.SetLookup(m.lookup)
 	service.SetModelOps(m.purge, m.putSettings)

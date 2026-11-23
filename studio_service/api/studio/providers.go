@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"net/netip"
 	"net/url"
@@ -50,6 +51,12 @@ type ProviderKeyAsk func(ctx context.Context, req message.ProviderKeyRequest) (m
 
 // SetProviderKey sets how the service reaches pipelines' key check; without one the route answers 503.
 func (s *Service) SetProviderKey(fn ProviderKeyAsk) { s.providerKey = fn }
+
+// ProviderKeyWriteAsk asks pipelines_service to save or remove a key file (API 1.52); an error is no answer.
+type ProviderKeyWriteAsk func(ctx context.Context, req message.ProviderKeyWriteRequest) (message.ProviderKeyWriteReply, error)
+
+// SetProviderKeyWrite sets how the service reaches pipelines' key writer; without one the routes answer 503.
+func (s *Service) SetProviderKeyWrite(fn ProviderKeyWriteAsk) { s.providerKeyWrite = fn }
 
 // errAdmin is the 403 of every admin route for anyone else.
 var errAdmin = network.NewForbiddenError("admin role required", nil)
@@ -435,7 +442,100 @@ func (s *Service) ProviderKey(ctx context.Context, caller common.Caller, secret 
 	if err != nil || reply.Code != "" {
 		return dto.ProviderKey{}, unavailable
 	}
-	return dto.ProviderKey{KeySecret: secret, Path: "deploy/secrets/providers/" + secret, Found: reply.Found}, nil
+	return dto.ProviderKey{KeySecret: secret, Path: keyPath(secret), Found: reply.Found, Writable: reply.Writable}, nil
+}
+
+// keyPath is a key file's deploy-side path (studio never reads the folder).
+func keyPath(secret string) string { return "deploy/secrets/providers/" + secret }
+
+// SaveProviderKey answers PUT /admin/provider-keys/{key_secret} (API 1.52, plan 27): pipelines checks the key on the
+// /models of the preset's or the saved provider's URL (never one from the browser), then writes it. 404 malformed name,
+// unknown preset or provider; 409 not writable; 503 no answer. The log line names the file and the admin, never the key.
+func (s *Service) SaveProviderKey(ctx context.Context, caller common.Caller, secret string, body *dto.ProviderKeySave) (dto.ProviderKeySaved, error) {
+	if !caller.IsAdmin() {
+		return dto.ProviderKeySaved{}, errAdmin
+	}
+	if !dto.KeySecretName(secret) {
+		return dto.ProviderKeySaved{}, errNotFound
+	}
+	var snapshot map[string]any
+	if body.Preset != nil {
+		i := slices.IndexFunc(presets(), func(p dto.ProviderPreset) bool { return p.ID == *body.Preset })
+		if i < 0 {
+			return dto.ProviderKeySaved{}, errNotFound
+		}
+		p := presets()[i]
+		snapshot = map[string]any{"kind": p.Kind, "api": "openai", "base_url": p.BaseURL}
+		if p.Compat != nil {
+			snapshot["compat"] = p.Compat
+		}
+	} else {
+		var row providerRow
+		err := s.tx(ctx, caller, func(tx pgx.Tx) (err error) {
+			row, err = one[providerRow](ctx, tx, `SELECT `+providerCols+` FROM providers WHERE name = $1`, *body.Provider)
+			return err
+		})
+		if err != nil {
+			return dto.ProviderKeySaved{}, err
+		}
+		snapshot = row.snapshot()
+		delete(snapshot, "key_secret") // the write message carries the key itself, never a file name in the snapshot
+	}
+	snapshot["timeout_s"] = 15
+	reply, err := s.askKeyWrite(ctx, message.ProviderKeyWriteRequest{Op: "save", KeySecret: secret, Key: body.Key,
+		Provider: snapshot, Force: body.Force})
+	if err != nil {
+		return dto.ProviderKeySaved{}, err
+	}
+	switch {
+	case reply.Saved:
+		log.Printf("provider key %s saved (check %s) by %s", secret, reply.Check, caller.ID)
+	case reply.Check == "refused":
+		log.Printf("provider key %s refused by the provider, not saved, by %s", secret, caller.ID)
+	default:
+		log.Printf("provider key %s not saved (could not check) by %s", secret, caller.ID)
+	}
+	out := dto.ProviderKeySaved{KeySecret: secret, Path: keyPath(secret), Found: reply.Found, Saved: reply.Saved,
+		Check: reply.Check}
+	if reply.Detail != "" {
+		out.Detail = &reply.Detail
+	}
+	return out, nil
+}
+
+// RemoveProviderKey answers DELETE /admin/provider-keys/{key_secret} (API 1.52): pipelines deletes the first key
+// folder's file; the answer is the status after it.
+func (s *Service) RemoveProviderKey(ctx context.Context, caller common.Caller, secret string) (dto.ProviderKey, error) {
+	if !caller.IsAdmin() {
+		return dto.ProviderKey{}, errAdmin
+	}
+	if !dto.KeySecretName(secret) {
+		return dto.ProviderKey{}, errNotFound
+	}
+	reply, err := s.askKeyWrite(ctx, message.ProviderKeyWriteRequest{Op: "remove", KeySecret: secret})
+	if err != nil {
+		return dto.ProviderKey{}, err
+	}
+	log.Printf("provider key %s removed by %s", secret, caller.ID)
+	return dto.ProviderKey{KeySecret: secret, Path: keyPath(secret), Found: reply.Found, Writable: reply.Writable}, nil
+}
+
+// askKeyWrite asks pipelines.providers.key.write: no answer or internal is 503, readonly or a folder of that name 409.
+func (s *Service) askKeyWrite(ctx context.Context, req message.ProviderKeyWriteRequest) (message.ProviderKeyWriteReply, error) {
+	unavailable := network.NewServiceUnavailableError("the pipeline service did not answer; try again", nil)
+	if s.providerKeyWrite == nil {
+		return message.ProviderKeyWriteReply{}, unavailable
+	}
+	reply, err := s.providerKeyWrite(ctx, req)
+	switch {
+	case err != nil || reply.Code == "internal":
+		return reply, unavailable
+	case reply.Code == "readonly":
+		return reply, network.NewConflictError("keys are set in files on this deployment", nil)
+	case reply.Code != "":
+		return reply, network.NewConflictError(keyPath(req.KeySecret)+" is a folder, not a file", nil)
+	}
+	return reply, nil
 }
 
 // ModelSources answers GET /model-sources: the enabled providers, names and models only; remote ones only while the

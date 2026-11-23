@@ -233,6 +233,9 @@ consumes `evt.run.>` (durable `studio-projector`) and `evt.pipeline.>` (durable 
   API 1.51 (plan 25, migration 00033: `compat`, `preset`): `/admin/provider-presets` serves the embedded
   `gen/providers/presets.json`; a preset's `models` (Fetch) builds the snapshot from the file, never the body, and asks
   the test subject (15 s call, 30 s wait); `/admin/provider-keys/{key_secret}` asks `pipelines.providers.key` (5 s).
+  API 1.52 (plan 27): `PUT /admin/provider-keys/{key_secret}` builds the check's snapshot from the preset or the stored
+  provider (never the body; no key_secret in it) and asks `pipelines.providers.key.write` (30 s), `DELETE` the same
+  (5 s); readonly is 409, no answer 503; one log line per save or remove with the name and the admin id, never the key.
 - Judge tests (API 1.28, `api/studio/judge_tests.go`, table `judge_tests`): `POST /pipelines/{id}/judge-tests` asks
   `pipelines.judge.test` for the template and makes an interactive ask run on the picked takes; `GET /judge-tests/{id}`
   asks it for the verdict once the run succeeded and keeps it.

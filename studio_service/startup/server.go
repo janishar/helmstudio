@@ -163,6 +163,23 @@ func Run() error {
 			}
 			return reply, err
 		},
+		// a key to save or remove (API 1.52): save checks the key with the provider (15 s in pipelines): 30 s; remove 5 s.
+		// The request holds the key: it is never logged here
+		providerKeyWrite: func(ctx context.Context, req message.ProviderKeyWriteRequest) (message.ProviderKeyWriteReply, error) {
+			var reply message.ProviderKeyWriteReply
+			body, _ := json.Marshal(req)
+			wait := 5 * time.Second
+			if req.Op == "save" {
+				wait = 30 * time.Second
+			}
+			ctx, cancel := context.WithTimeout(ctx, wait)
+			defer cancel()
+			answer, err := natsConn.RequestWithContext(ctx, message.SubjectProviderKeyWrite, body)
+			if err == nil {
+				err = json.Unmarshal(answer.Data, &reply)
+			}
+			return reply, err
+		},
 	}
 	module.purge, module.putSettings = messaging.NatsPurge(client), messaging.NatsKVPut(client, "host_settings")
 	if module.store, err = objectStore(ctx, env); err != nil {

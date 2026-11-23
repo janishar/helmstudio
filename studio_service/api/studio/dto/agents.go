@@ -160,11 +160,50 @@ func (b *ProviderFetch) Validate() string {
 // KeySecretName reports whether s is a key file's name (no "/": never a path outside the keys folder).
 func KeySecretName(s string) bool { return keySecret.MatchString(s) }
 
-// ProviderKey is GET /admin/provider-keys/{key_secret}: whether the key file is there, never the key.
+// ProviderKey is GET /admin/provider-keys/{key_secret}: whether the key file is there, never the key; API 1.52:
+// whether the deployment lets the admin save keys here.
 type ProviderKey struct {
 	KeySecret string `json:"key_secret"`
 	Path      string `json:"path"`
 	Found     bool   `json:"found"`
+	Writable  bool   `json:"writable"`
+}
+
+// ProviderKeySave is PUT /admin/provider-keys/{key_secret} (API 1.52, plan 27): a key to check and save, with one
+// source for the check's URL (a base_url is an unknown field: 422). Key is never printed, logged or returned: no
+// String method, no %v use; Validate's texts name the rule only.
+type ProviderKeySave struct {
+	Key      string  `json:"key"`
+	Preset   *string `json:"preset"`
+	Provider *string `json:"provider"`
+	Force    bool    `json:"force"`
+}
+
+// Validate trims the key and checks it (1-1024 printable ASCII characters without spaces) and the source.
+func (b *ProviderKeySave) Validate() string {
+	b.Key = strings.TrimSpace(b.Key)
+	if b.Key == "" || len(b.Key) > 1024 {
+		return "key must be 1-1024 characters"
+	}
+	for i := 0; i < len(b.Key); i++ {
+		if b.Key[i] < 0x21 || b.Key[i] > 0x7e {
+			return "key must be printable characters without spaces"
+		}
+	}
+	if (b.Preset == nil) == (b.Provider == nil) {
+		return "name either preset or provider"
+	}
+	return ""
+}
+
+// ProviderKeySaved is its answer: the check's verdict and the key file's status after it, never the key.
+type ProviderKeySaved struct {
+	KeySecret string  `json:"key_secret"`
+	Path      string  `json:"path"`
+	Found     bool    `json:"found"`
+	Saved     bool    `json:"saved"`
+	Check     string  `json:"check"` // ok | refused | unreachable | skipped
+	Detail    *string `json:"detail,omitempty"`
 }
 
 // ProviderTest is POST /admin/providers/{name}/test.

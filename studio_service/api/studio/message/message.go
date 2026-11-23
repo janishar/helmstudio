@@ -438,11 +438,38 @@ type ProviderKeyRequest struct {
 	KeySecret string `json:"key_secret"`
 }
 
-// ProviderKeyReply is its reply: {found} or {error, code: internal}.
+// ProviderKeyReply is its reply: {found, writable (API 1.52)} or {error, code: internal}.
 type ProviderKeyReply struct {
-	Found bool   `json:"found"`
-	Error string `json:"error"`
-	Code  string `json:"code"`
+	Found    bool   `json:"found"`
+	Writable bool   `json:"writable"`
+	Error    string `json:"error"`
+	Code     string `json:"code"`
+}
+
+// SubjectProviderKeyWrite is pipelines' request/reply subject for saving or removing a key file (API 1.52): the only
+// message that carries a key (core request/reply only, never in a stream).
+const SubjectProviderKeyWrite = "pipelines.providers.key.write"
+
+// ProviderKeyWriteRequest is its request: op save (Key, Provider: a snapshot without key_secret, Force) or remove.
+// Never printed or logged.
+type ProviderKeyWriteRequest struct {
+	Op        string         `json:"op"`
+	KeySecret string         `json:"key_secret"`
+	Key       string         `json:"key,omitempty"`
+	Provider  map[string]any `json:"provider,omitempty"`
+	Force     bool           `json:"force,omitempty"`
+}
+
+// ProviderKeyWriteReply is its reply: {found, writable, saved?, check?, detail?} or {error, code: readonly | not_file |
+// internal}.
+type ProviderKeyWriteReply struct {
+	Found    bool   `json:"found"`
+	Writable bool   `json:"writable"`
+	Saved    bool   `json:"saved"`
+	Check    string `json:"check"`
+	Detail   string `json:"detail"`
+	Error    string `json:"error"`
+	Code     string `json:"code"`
 }
 
 // ToolsRequest is the studio.tools request (pipelines → studio): one agent tool call, as the batch's owner; from API

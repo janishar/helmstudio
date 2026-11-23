@@ -107,9 +107,11 @@ func (c *controller) MountRoutes(group *gin.RouterGroup) {
 	group.PUT("/admin/providers/:name", c.putProviderHandler)
 	group.DELETE("/admin/providers/:name", c.deleteProviderHandler)
 	group.POST("/admin/providers/:name/test", c.testProviderHandler)
-	group.GET("/admin/provider-presets", c.listPresetsHandler)             // API 1.51
-	group.POST("/admin/provider-presets/:id/models", c.fetchPresetHandler) // API 1.51
-	group.GET("/admin/provider-keys/:key_secret", c.providerKeyHandler)    // API 1.51
+	group.GET("/admin/provider-presets", c.listPresetsHandler)                   // API 1.51
+	group.POST("/admin/provider-presets/:id/models", c.fetchPresetHandler)       // API 1.51
+	group.GET("/admin/provider-keys/:key_secret", c.providerKeyHandler)          // API 1.51
+	group.PUT("/admin/provider-keys/:key_secret", c.saveProviderKeyHandler)      // API 1.52
+	group.DELETE("/admin/provider-keys/:key_secret", c.removeProviderKeyHandler) // API 1.52
 	group.GET("/models", c.listModelsHandler)
 	group.POST("/admin/models/:model/download", c.downloadModelHandler)
 	group.DELETE("/admin/models/:model", c.deleteModelHandler)
@@ -990,6 +992,22 @@ func (c *controller) fetchPresetHandler(ctx *gin.Context) {
 // providerKeyHandler: GET /admin/provider-keys/{key_secret} (API 1.51).
 func (c *controller) providerKeyHandler(ctx *gin.Context) {
 	out, err := c.service.ProviderKey(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("key_secret"))
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// saveProviderKeyHandler: PUT /admin/provider-keys/{key_secret} (API 1.52) — 403 before the body is read.
+func (c *controller) saveProviderKeyHandler(ctx *gin.Context) {
+	caller, body, err := adminBody[dto.ProviderKeySave](ctx)
+	var out dto.ProviderKeySaved
+	if err == nil {
+		out, err = c.service.SaveProviderKey(ctx.Request.Context(), caller, ctx.Param("key_secret"), body)
+	}
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// removeProviderKeyHandler: DELETE /admin/provider-keys/{key_secret} (API 1.52).
+func (c *controller) removeProviderKeyHandler(ctx *gin.Context) {
+	out, err := c.service.RemoveProviderKey(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("key_secret"))
 	reply(ctx, http.StatusOK, out, err)
 }
 

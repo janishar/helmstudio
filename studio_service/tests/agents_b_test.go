@@ -6,9 +6,11 @@
 package tests
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -525,7 +527,7 @@ func TestProviderPresets(t *testing.T) {
 	e.service.SetProviderKey(func(_ context.Context, req message.ProviderKeyRequest) (message.ProviderKeyReply, error) {
 		return message.ProviderKeyReply{Found: req.KeySecret == "deepseek"}, nil
 	})
-	if k := e.call(admin, "GET", keys+"deepseek", nil, 200); fmt.Sprint(k) != "map[found:true key_secret:deepseek path:deploy/secrets/providers/deepseek]" {
+	if k := e.call(admin, "GET", keys+"deepseek", nil, 200); fmt.Sprint(k) != "map[found:true key_secret:deepseek path:deploy/secrets/providers/deepseek writable:false]" {
 		t.Fatal(k)
 	}
 	if k := e.call(admin, "GET", keys+"openai", nil, 200); k["found"] != false {
@@ -557,5 +559,120 @@ func TestProviderPresets(t *testing.T) {
 	raw, _ = json.Marshal(asked[2:])
 	if !strings.Contains(string(raw), `"key_secret":"llama-server"`) || !strings.Contains(string(raw), `"compat":{"temperature":false,"strict_schema":true}`) {
 		t.Fatalf("%s", raw)
+	}
+}
+
+// TestProviderKeySave: API 1.52 (plan 27): saving a key is admin only; the check's snapshot comes from the preset file
+// or the stored provider (never the body: a base_url is 422), without key_secret, timeout 15; the key is trimmed and its
+// 422 texts name the rule, never the value; 409 when pipelines says not writable or a folder; 503 on silence; the log
+// line names the file and the admin, never the key. Remove answers the status after it.
+func TestProviderKeySave(t *testing.T) {
+	e := setup(t)
+	var logged bytes.Buffer
+	previous := log.Writer()
+	log.SetOutput(&logged)
+	t.Cleanup(func() { log.SetOutput(previous) })
+	const key = "sk-test-secret-0123456789"
+	keys := "/v1/studio/admin/provider-keys/"
+	save := func(over map[string]any) map[string]any {
+		body := map[string]any{"key": "  " + key + "\n", "preset": "deepseek"}
+		for k, v := range over {
+			if v == nil {
+				delete(body, k)
+			} else {
+				body[k] = v
+			}
+		}
+		return body
+	}
+	e.call(userA, "PUT", keys+"deepseek", save(nil), 403)
+	e.call(userA, "DELETE", keys+"deepseek", nil, 403)
+	e.call(admin, "PUT", keys+"deepseek", save(nil), 503) // pipelines silent
+	e.call(admin, "DELETE", keys+"deepseek", nil, 503)
+
+	var asked []message.ProviderKeyWriteRequest
+	answer := message.ProviderKeyWriteReply{Found: true, Writable: true, Saved: true, Check: "ok"}
+	e.service.SetProviderKeyWrite(func(_ context.Context, req message.ProviderKeyWriteRequest) (message.ProviderKeyWriteReply, error) {
+		asked = append(asked, req)
+		return answer, nil
+	})
+	for _, bad := range []map[string]any{
+		{"base_url": "https://evil.example.com/v1"}, {"provider": "fakeai"}, {"preset": nil}, {"key": "sk with space"},
+		{"key": "   "}, {"key": strings.Repeat("k", 1025)}, {"key": "sk-\u00e9"},
+	} {
+		got := e.call(admin, "PUT", keys+"deepseek", save(bad), 422)
+		if strings.Contains(fmt.Sprint(got), "sk") && bad["key"] != nil {
+			t.Fatal("a 422 echoes the key", got)
+		}
+	}
+	e.call(admin, "PUT", keys+"Bad..Name", save(nil), 404)
+	e.call(admin, "PUT", keys+"deepseek", save(map[string]any{"preset": "nope"}), 404)
+	e.call(admin, "PUT", keys+"deepseek", save(map[string]any{"preset": nil, "provider": "nope"}), 404)
+	if len(asked) != 0 {
+		t.Fatal("asked pipelines for a refused body", len(asked))
+	}
+
+	got := e.call(admin, "PUT", keys+"deepseek", save(nil), 200)
+	if fmt.Sprint(got) != "map[check:ok found:true key_secret:deepseek path:deploy/secrets/providers/deepseek saved:true]" {
+		t.Fatal(got)
+	}
+	if r := asked[0]; r.Op != "save" || r.Key != key || r.KeySecret != "deepseek" || r.Force ||
+		fmt.Sprint(r.Provider) != "map[api:openai base_url:https://api.deepseek.com kind:remote timeout_s:15]" {
+		t.Fatal(r.Op, r.KeySecret, r.Force, r.Provider)
+	}
+	if _, ok := asked[0].Provider["key_secret"]; ok {
+		t.Fatal("the snapshot names a key file")
+	}
+
+	// a saved provider's stored URL; force passes through; refused and unreachable carry our detail
+	e.service.SetRemote(true)
+	e.call(admin, "PUT", "/v1/studio/admin/providers/fakeai", map[string]any{"kind": "remote", "base_url": "https://fake.test/v1",
+		"models": []string{"m"}, "key_secret": "provider-fakeai"}, 201)
+	answer = message.ProviderKeyWriteReply{Found: true, Writable: true, Saved: true, Check: "skipped"}
+	got = e.call(admin, "PUT", keys+"provider-fakeai", save(map[string]any{"preset": nil, "provider": "fakeai", "force": true}), 200)
+	if r := asked[1]; got["check"] != "skipped" || !r.Force || r.Provider["base_url"] != "https://fake.test/v1" || r.Provider["timeout_s"] != 15 ||
+		r.Provider["key_secret"] != nil {
+		t.Fatal(got, r.Provider)
+	}
+	answer = message.ProviderKeyWriteReply{Writable: true, Check: "refused", Detail: "the provider refused this key; not saved"}
+	got = e.call(admin, "PUT", keys+"deepseek", save(nil), 200)
+	if got["saved"] != false || got["check"] != "refused" || got["detail"] != "the provider refused this key; not saved" {
+		t.Fatal(got)
+	}
+	answer = message.ProviderKeyWriteReply{Writable: true, Check: "unreachable", Detail: "timeout"}
+	if got = e.call(admin, "PUT", keys+"deepseek", save(nil), 200); got["check"] != "unreachable" || got["detail"] != "timeout" {
+		t.Fatal(got)
+	}
+
+	// not writable, a folder of that name, pipelines' internal error
+	answer = message.ProviderKeyWriteReply{Error: "keys are set in files on this deployment", Code: "readonly"}
+	if got = e.call(admin, "PUT", keys+"deepseek", save(nil), 409); got["detail"] != "keys are set in files on this deployment" {
+		t.Fatal(got)
+	}
+	e.call(admin, "DELETE", keys+"deepseek", nil, 409)
+	answer = message.ProviderKeyWriteReply{Error: "x", Code: "not_file"}
+	e.call(admin, "PUT", keys+"deepseek", save(nil), 409)
+	answer = message.ProviderKeyWriteReply{Error: "x", Code: "internal"}
+	e.call(admin, "PUT", keys+"deepseek", save(nil), 503)
+
+	// remove: the status after it (a later folder may still have one)
+	answer = message.ProviderKeyWriteReply{Found: false, Writable: true}
+	e.call(admin, "DELETE", keys+"Bad..Name", nil, 404)
+	if got = e.call(admin, "DELETE", keys+"deepseek", nil, 200); fmt.Sprint(got) != "map[found:false key_secret:deepseek path:deploy/secrets/providers/deepseek writable:true]" {
+		t.Fatal(got)
+	}
+	if r := asked[len(asked)-1]; r.Op != "remove" || r.Key != "" || r.Provider != nil {
+		t.Fatal(r)
+	}
+	text := logged.String()
+	for _, want := range []string{"provider key deepseek saved (check ok) by " + admin, "provider key provider-fakeai saved (check skipped) by " + admin,
+		"provider key deepseek refused by the provider, not saved, by " + admin, "provider key deepseek not saved (could not check) by " + admin,
+		"provider key deepseek removed by " + admin} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("log misses %q:\n%s", want, text)
+		}
+	}
+	if strings.Contains(text, key) || strings.Contains(text, "sk with space") {
+		t.Fatal("the key is in the log")
 	}
 }
