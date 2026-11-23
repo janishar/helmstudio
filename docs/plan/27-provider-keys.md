@@ -2,7 +2,7 @@
 
 [← Plan index](../README.md)
 
-Status: **decided by the owner (2026-11-23); a design, not built.** API version: **1.52.0** (main is at 1.51.0, plan
+Status: **decided by the owner (2026-11-23); board approved by the owner (2026-11-24, "Approve"); queued to build.** API version: **1.52.0** (main is at 1.51.0, plan
 25; if another plan takes 1.52.0 first, this takes the next free one at build time).
 
 The owner's ask, 2026-11-23, on Admin › Model providers: "add support to provide api key in the ui itself. ask any
