@@ -134,6 +134,25 @@ func allowedServer(addr netip.Addr) bool {
 	return !addr.IsLinkLocalUnicast() && !addr.IsLinkLocalMulticast() && (addr.IsLoopback() || addr.IsPrivate())
 }
 
+// dockerHost is the name every Docker engine gives the host machine inside a container. OrbStack answers 0.250.250.254
+// (neither loopback nor private), Docker Desktop and Linux host-gateway a private address; whatever it resolves to at
+// check time is the host, so a server may live there (by that name, another name or the literal).
+const dockerHost = "host.docker.internal"
+
+// dockerAddr reports whether addr is one of docker (host.docker.internal's addresses), never a link-local one.
+func dockerAddr(addr netip.Addr, docker []netip.Addr) bool {
+	addr = addr.Unmap()
+	if !addr.IsValid() || addr.IsLinkLocalUnicast() || addr.IsLinkLocalMulticast() || addr.IsUnspecified() || addr.IsMulticast() {
+		return false
+	}
+	for _, d := range docker {
+		if d.Unmap() == addr {
+			return true
+		}
+	}
+	return false
+}
+
 // urlHost parses a base_url's host, refusing ambiguous forms: userinfo, a query or fragment, numeric hosts other than
 // canonical IPv4 dotted decimal, an IPv6 zone.
 func urlHost(raw string) (string, *netip.Addr, string) {
@@ -156,8 +175,9 @@ func urlHost(raw string) (string, *netip.Addr, string) {
 }
 
 // hostRule checks a provider's base_url (contracts/README.md, Model sources: the host rule): a server's host is, or
-// resolves only to, loopback or private addresses (pipelines checks again at every call, after DNS); a remote one is
-// https to a public host (a literal address must be public; pipelines resolves a name at every call). The detail is the 422's.
+// resolves only to, loopback or private addresses or what host.docker.internal resolves to here (pipelines checks
+// again at every call, after DNS); a remote one is https to a public host (a literal address must be public; pipelines
+// resolves a name at every call). The detail is the 422's.
 func (s *Service) hostRule(ctx context.Context, kind, raw string) string {
 	host, addr, detail := urlHost(raw)
 	if detail != "" {
@@ -174,27 +194,37 @@ func (s *Service) hostRule(ctx context.Context, kind, raw string) string {
 		}
 		return ""
 	}
+	lookup := s.lookup
+	if lookup == nil {
+		lookup = func(ctx context.Context, host string) ([]netip.Addr, error) {
+			return net.DefaultResolver.LookupNetIP(ctx, "ip", host)
+		}
+	}
+	lctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
 	addrs := []netip.Addr{}
 	if addr != nil {
 		addrs = append(addrs, *addr)
 	} else {
-		lookup := s.lookup
-		if lookup == nil {
-			lookup = func(ctx context.Context, host string) ([]netip.Addr, error) {
-				return net.DefaultResolver.LookupNetIP(ctx, "ip", host)
-			}
-		}
-		lctx, cancel := context.WithTimeout(ctx, 3*time.Second)
-		defer cancel()
 		found, err := lookup(lctx, host)
 		if err != nil || len(found) == 0 {
 			return fmt.Sprintf("base_url: %s does not resolve here", host)
 		}
 		addrs = found
 	}
+	var docker []netip.Addr // what host.docker.internal resolves to here, looked up only when needed
+	looked := false
 	for _, a := range addrs {
-		if !allowedServer(a) {
-			return fmt.Sprintf("base_url: a local server must be on a loopback or private address; %s is %s", host, a.Unmap())
+		if allowedServer(a) {
+			continue
+		}
+		if !looked {
+			docker, _ = lookup(lctx, dockerHost)
+			looked = true
+		}
+		if !dockerAddr(a, docker) {
+			return fmt.Sprintf("base_url: a local server must be on a loopback, private or Docker host address; %s is %s",
+				host, a.Unmap())
 		}
 	}
 	return ""

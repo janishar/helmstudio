@@ -48,6 +48,9 @@ OUTSIDE = (
     "remote",
     "search",
 )  # kinds that leave the machine (API 1.44: search, the assistant's web search)
+DOCKER_HOST = (
+    "host.docker.internal"  # its addresses here are the Docker host's: a server may live there
+)
 ALLOWED = [ipaddress.ip_network(n) for n in
            ("127.0.0.0/8", "::1/128", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7")]  # fmt: skip
 
@@ -63,26 +66,44 @@ def _addr(ip: str):
     return getattr(a, "ipv4_mapped", None) or a
 
 
-def allowed_ip(ip: str, kind: str = "server") -> bool:
-    """A server: loopback or private, never link-local. A remote: public only (REMOTE_ALLOW_PRIVATE: private and
-    loopback too), never link-local, unspecified or multicast."""
+def allowed_ip(ip: str, kind: str = "server", docker_host: frozenset = frozenset()) -> bool:
+    """A server: loopback or private, or one of docker_host (what host.docker.internal resolves to here), never
+    link-local. A remote: public only (REMOTE_ALLOW_PRIVATE: private and loopback too), never link-local, unspecified
+    or multicast."""
     a = _addr(ip)
     if a.is_link_local or a.is_unspecified or a.is_multicast:
         return False
     if kind not in OUTSIDE:
-        return any(a in n for n in ALLOWED)
+        return any(a in n for n in ALLOWED) or a in docker_host
     return a.is_global or (config.REMOTE_ALLOW_PRIVATE and (a.is_private or a.is_loopback))
+
+
+async def _lookup(host: str, port: int | None) -> list[str]:
+    infos = await asyncio.get_running_loop().getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    return list(dict.fromkeys(i[4][0] for i in infos))
+
+
+async def docker_host() -> frozenset:
+    """The addresses host.docker.internal resolves to in this container now (empty when it does not): the Docker host
+    on any engine. OrbStack answers 0.250.250.254, neither loopback nor private; Docker Desktop and Linux host-gateway
+    answer a private address."""
+    try:
+        return frozenset(_addr(ip) for ip in await _lookup(DOCKER_HOST, None))
+    except OSError:
+        return frozenset()
 
 
 async def resolve(name: str, kind: str, host: str, port: int) -> list[str]:
     """The host's addresses when every one passes the host rule (CallError network | refused)."""
     try:
-        infos = await asyncio.get_running_loop().getaddrinfo(host, port, type=socket.SOCK_STREAM)
+        ips = await _lookup(host, port)
     except OSError as e:
         raise CallError("network", f"{name}: cannot resolve {host}: {e}") from None
-    ips = list(dict.fromkeys(i[4][0] for i in infos))
-    if not ips or not all(allowed_ip(ip, kind) for ip in ips):
-        what = "a public" if kind in OUTSIDE else "a loopback or private"
+    docker = frozenset()
+    if kind not in OUTSIDE and not all(allowed_ip(ip, kind) for ip in ips):
+        docker = await docker_host()  # looked up only when needed
+    if not ips or not all(allowed_ip(ip, kind, docker) for ip in ips):
+        what = "a public" if kind in OUTSIDE else "a loopback, private or Docker host"
         raise CallError("refused", f"{name}: {host} is not {what} address")
     return ips
 

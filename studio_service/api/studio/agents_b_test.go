@@ -121,6 +121,40 @@ func TestHostRule(t *testing.T) {
 	}
 }
 
+// OrbStack: host.docker.internal is 0.250.250.254 in the container, neither loopback nor private. A server may live at
+// whatever that name resolves to here, by that name, another name or the literal; nothing else outside the ranges.
+func TestHostRuleDockerHost(t *testing.T) {
+	names := map[string][]string{"host.docker.internal": {"0.250.250.254"}, "other.example": {"0.250.250.254"}}
+	s := &Service{lookup: func(_ context.Context, host string) ([]netip.Addr, error) {
+		var out []netip.Addr
+		for _, a := range names[host] {
+			out = append(out, netip.MustParseAddr(a))
+		}
+		if out == nil {
+			return nil, errors.New("no such host")
+		}
+		return out, nil
+	}}
+	check := func(kind string, cases map[string]bool) {
+		t.Helper()
+		for raw, ok := range cases {
+			if detail := s.hostRule(context.Background(), kind, raw); (detail == "") != ok {
+				t.Errorf("%s %s (host.docker.internal %v): %q", kind, raw, names["host.docker.internal"], detail)
+			}
+		}
+	}
+	check("server", map[string]bool{"http://host.docker.internal:11434/v1": true, "http://other.example/v1": true,
+		"http://0.250.250.254/v1": true, "http://[::ffff:0.250.250.254]/v1": true, "http://0.250.250.253/v1": false,
+		"http://8.8.8.8/v1": false, "http://169.254.169.254/v1": false})
+	check("remote", map[string]bool{"http://host.docker.internal/v1": false, "http://0.250.250.254/v1": false})
+	// Docker Desktop: OrbStack's address is refused again
+	names["host.docker.internal"] = []string{"192.168.65.254"}
+	check("server", map[string]bool{"http://host.docker.internal/v1": true, "http://other.example/v1": false,
+		"http://0.250.250.254/v1": false})
+	delete(names, "host.docker.internal") // the name does not resolve: nothing extra
+	check("server", map[string]bool{"http://host.docker.internal/v1": false, "http://0.250.250.254/v1": false})
+}
+
 // A provider body: a server has host and memory (from 1.51 maybe a key); a remote one a key file and https.
 func TestProviderPutShape(t *testing.T) {
 	host, mem, key, one, bad := "mac", 6.5, "provider-x", 1, "Not a preset"

@@ -236,8 +236,9 @@ consumes `evt.run.>` (durable `studio-projector`) and `evt.pipeline.>` (durable 
 - Judge tests (API 1.28, `api/studio/judge_tests.go`, table `judge_tests`): `POST /pipelines/{id}/judge-tests` asks
   `pipelines.judge.test` for the template and makes an interactive ask run on the picked takes; `GET /judge-tests/{id}`
   asks it for the verdict once the run succeeded and keeps it.
-  The host rule at PUT: a server's base_url is a loopback or private address or a name resolving only to such
-  (link-local, IPv4-mapped public, any non-canonical numeric host such as `2130706433`, `0x7f000001`, `127.1` refused);
+  The host rule at PUT: a server's base_url is a loopback or private address or a name resolving only to such, or
+  an address `host.docker.internal` resolves to here (OrbStack: 0.250.250.254; compose maps the name with
+  `host-gateway` on Linux) (link-local, IPv4-mapped public, any non-canonical numeric host such as `2130706433`, `0x7f000001`, `127.1` refused);
   a remote one is https and not a loopback or link-local literal, and only while the switch is on. Keys are only a
   `key_secret` file name. `GET /model-sources` is names and models only (remote ones while the switch is on);
   `GET /custom-nodes` is the registry's list.

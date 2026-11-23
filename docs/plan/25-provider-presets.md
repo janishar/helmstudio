@@ -53,7 +53,8 @@ Facts come from a read on 2026-11-23 of `web_service/components/admin/providers.
   /tmp/provider-keys/` and `PIPELINES_PROVIDER_KEYS_DIR=/tmp/provider-keys`). On the dev stack a key file added
   after pipelines started is not seen until pipelines restarts. The real stack reads the mount live.
 - **The host rule** (`providers.check_host`, `resolve`, `_Pinned`, at every call and every connection): a server
-  must resolve only to loopback or private addresses, never link-local; a remote must be https, needs
+  must resolve only to loopback or private addresses (or, since the OrbStack fix, to what `host.docker.internal`
+  resolves to in the container), never link-local; a remote must be https, needs
   `PIPELINES_REMOTE_MODELS` and must resolve only to public addresses; no userinfo, query or fragment; no redirects;
   no proxy from the environment. Studio checks literals at PUT.
 - **Local servers from Docker**: pipelines runs in a container, so `127.0.0.1` there is the container itself. The
@@ -232,8 +233,8 @@ As the Providers board:
   the embedded file. The saved route uses the stored provider. So Fetch cannot be pointed at an arbitrary address,
   inside or outside.
 - **The host rule and the switch still apply** in pipelines on every fetch: a remote preset needs
-  `PIPELINES_REMOTE_MODELS`, https and public addresses; a local one loopback or private, never link-local (so no cloud
-  metadata). No redirects, no environment proxy, pinned connections, as Test.
+  `PIPELINES_REMOTE_MODELS`, https and public addresses; a local one loopback or private (or what `host.docker.internal`
+  resolves to there), never link-local (so no cloud metadata). No redirects, no environment proxy, pinned connections, as Test.
 - **Timeouts**: 15 s for the `/models` call (`timeout_s` of the snapshot), studio waits 30 s, the key check 5 s.
 - **The key**: read by pipelines only, only to call the provider (`api_key`), never returned (`ProviderTest` has no
   field for it), never logged (errors name the file, never its content). The key check stats the file; it never
@@ -344,7 +345,13 @@ local server on a Linux host is reachable. 4. A local-server provider may name a
 - **Contract suite.** `contract_tests/tests/test_provider_presets.py`. The "remote off greys remote presets" case is a
   web test only (the test stack has remote on).
 - **Found on the owner's Mac (OrbStack):** `host.docker.internal` resolves to `0.250.250.254` inside containers, with
-  or without `host-gateway`; that is not a loopback or private address, so the host rule refuses the local presets'
-  base URL (422 at Save, `refused` at Fetch). Until the owner decides, use the Mac's LAN address
-  (`http://192.168.x.y:11434/v1`). Open: allow OrbStack's host address in both host rules, or not.
+  or without `host-gateway`; that is not a loopback or private address, so the host rule refused the local presets'
+  base URL (422 at Save, `refused` at Fetch). **Fixed (owner's OK):** both host rules (studio `hostRule`, pipelines
+  `resolve`) also allow, for a server, any address `host.docker.internal` resolves to in that container at check time
+  (looked up only when an address fails the ranges), whatever name or literal reached it; never link-local. So
+  OrbStack, Docker Desktop and Linux `host-gateway` all work, no range is widened, and a literal `0.250.250.254` is
+  allowed only where that name resolves to it. studio.yml now maps `host.docker.internal:host-gateway` too, so studio
+  resolves the name at Save on Linux. check.py's preset check is static (no DNS): a preset names
+  `host.docker.internal`, which it already allows. Remotes are unchanged. Tests: studio `TestHostRuleDockerHost`,
+  pipelines `test_a_server_may_live_at_what_host_docker_internal_resolves_to`.
 

@@ -80,7 +80,8 @@ database; no GPU, no torch, numpy or model code. Compose service `pipelines`, he
 - **Director**: thread `<batch>:director`, one wake per message or row end (`director_inbox`), row 0's queue items;
   its reply and notices go out as `evt.pipeline.chat`; the batch does not end mid-wake (unless stopped).
 - **Egress**: remote calls need `PIPELINES_REMOTE_MODELS` and the pipeline's `remote`; servers must resolve to
-  loopback or private addresses. `tests/test_stage_b.py` runs every node kind with the switch off under a socket
+  loopback or private addresses, or to what `host.docker.internal` resolves to in the container (OrbStack:
+  0.250.250.254). `tests/test_stage_b.py` runs every node kind with the switch off under a socket
   guard and asserts no connection left loopback and private ranges.
 
 ## Commands

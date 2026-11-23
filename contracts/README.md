@@ -2381,8 +2381,11 @@ a local model (`model_media`): server and remote calls carry **text only** in 1.
   A batch calls a provider as it was at Submit (`snapshot.pipeline.providers`, `defs providerSnapshot`).
 - **The host rule** (studio at PUT, pipelines again at every connection, after DNS resolution, so a name cannot be
   re-pointed): a **server** base_url is http or https whose host is, or resolves only to, loopback (127.0.0.0/8, ::1)
-  or private addresses (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, fc00::/7); link-local (169.254.0.0/16, fe80::/10,
-  so cloud metadata) and everything else are refused (422 at PUT; `refused` at a call: an item failure). A **remote**
+  or private addresses (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, fc00::/7), or to an address that
+  `host.docker.internal` resolves to in that service's container at check time (the Docker host on any engine:
+  OrbStack answers 0.250.250.254, neither loopback nor private; by that name, another name or the literal; when the
+  name does not resolve, nothing extra); link-local (169.254.0.0/16, fe80::/10, so cloud metadata) and everything else
+  are refused (422 at PUT; `refused` at a call: an item failure). A **remote**
   base_url is https to a public host (studio refuses a literal loopback, private or link-local address and
   `localhost`; pipelines resolves the name at every connection and refuses any non-public answer; test tooling's
   `PIPELINES_REMOTE_ALLOW_PRIVATE`, set only by the fake overlay, admits private and loopback, never link-local), and

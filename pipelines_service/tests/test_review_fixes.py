@@ -273,3 +273,45 @@ async def test_a_provider_without_json_schema_gets_json_object_with_the_schema_i
         and len(fake.requests) == 3
     )
     providers._NO_JSON_SCHEMA.discard("nojs")
+
+
+async def test_a_server_may_live_at_what_host_docker_internal_resolves_to(monkeypatch):
+    """OrbStack: host.docker.internal is 0.250.250.254 in the container, neither loopback nor private."""
+    names = {
+        "host.docker.internal": ["0.250.250.254"],
+        "other.example": ["0.250.250.254"],
+        "lan": ["192.168.1.9"],
+    }
+
+    async def lookup(host, port):
+        if host in names:
+            return names[host]
+        if host[0].isdigit():
+            return [host]
+        raise OSError("no such host")
+
+    monkeypatch.setattr(providers, "_lookup", lookup)
+    for url in ("http://host.docker.internal:11434/v1", "http://other.example/v1", "http://0.250.250.254/v1",
+                "http://lan/v1"):  # fmt: skip
+        await providers.check_host("x", {"kind": "server", "base_url": url})
+    for url in ("http://0.250.250.253/v1", "http://8.8.8.8/v1", "http://169.254.169.254/v1"):
+        with pytest.raises(providers.CallError) as err:
+            await providers.check_host("x", {"kind": "server", "base_url": url})
+        assert err.value.kind == "refused"
+    monkeypatch.setattr(
+        config, "REMOTE_MODELS", True
+    )  # a remote is unchanged: https and public only
+    with pytest.raises(providers.CallError) as err:
+        await providers.check_host(
+            "x", {"kind": "remote", "base_url": "https://host.docker.internal/v1"}
+        )
+    assert err.value.kind == "refused"
+    names["host.docker.internal"] = [
+        "192.168.65.254"
+    ]  # Docker Desktop: OrbStack's address is refused again
+    for url in ("http://other.example/v1", "http://0.250.250.254/v1"):
+        with pytest.raises(providers.CallError):
+            await providers.check_host("x", {"kind": "server", "base_url": url})
+    del names["host.docker.internal"]  # the name does not resolve: nothing extra is allowed
+    with pytest.raises(providers.CallError):
+        await providers.check_host("x", {"kind": "server", "base_url": "http://0.250.250.254/v1"})
