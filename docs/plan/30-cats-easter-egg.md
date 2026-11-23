@@ -2,7 +2,7 @@
 
 [← Plan index](../README.md)
 
-Status: **decided by the owner (2026-11-24); board drawn, cats redrawn organic (2026-11-24), board approved by the owner (2026-11-24, "Approve"); building.** Web only: no contract, API or
+Status: **decided by the owner (2026-11-24); board drawn, cats redrawn organic (2026-11-24), board approved by the owner (2026-11-24, "Approve"); built (2026-11-24, as-built notes in 34.6).** Web only: no contract, API or
 service change. Not in a milestone, like plans 25, 27, 28 and 29.
 
 The owner's ask, 2026-11-24: "on clicking the helm can you think of a cool white female and black male cat coming on
@@ -127,3 +127,21 @@ x is the cat's place in the overlay strip; W is its width.
 | 3 | The trigger on the rail logo, the overlay layer, reduced motion, clean-up, lazy chunk | 0.5 |
 | 4 | Tests, gates and a look in every theme on the dev stack | 1 |
 | | Total | 4.5 |
+
+### 34.6 As built (2026-11-24)
+
+- **Files**: `web_service/components/cats.ts` (the chunk: the board's rig, poses, walk, four scenes, crossfades, blink
+  and still pair, CSS scoped under `.cats` with `c-` keyframes, injected once as a `<style>`; the player);
+  `web_service/components/shell.tsx` (the logo's `onClick` is a no-op on Create, `onDoubleClick` loads the chunk with
+  `import()` and plays; leaving Create stops it); `web_service/tests/components/cats.test.tsx`.
+- **Size**: the built chunk is 18.7 KB raw, 5.9 KB gzip (budget 24 KB and 8 KB). Measured on a side build
+  (`NEXT_DIST_DIR`); no size check was added to the build (a one-off measure instead).
+- **Layer**: a `popover="manual"` element shown with `showPopover()`, so it sits in the top layer above modal dialogs
+  and popovers (z-index alone cannot); `left: 90px` (the rail), 130 px tall, `pointer-events: none`,
+  `aria-hidden`, removed at the end. Phone needs nothing: the logo is hidden there.
+- **One at a time** is the 10 s rule itself (every scene is shorter), counted with `Date.now()` in module memory.
+- **Reduced motion**: the still pair fades with a CSS keyframe (opacity only), so no `animate` call.
+- **Tests** (Vitest, 6): double-click plays a scene, layer aria-hidden, pointer-events none, gone at the end; a single
+  click on Create is prevented (and not on another page); ignored while playing, the 10 s rule, no repeat; reduced
+  motion; leaving Create; `visibilitychange`. Not done: the Playwright run on `helmstudio-test` (34.4); the scenes
+  were checked headless in forest and parchment from a file:// harness instead.
