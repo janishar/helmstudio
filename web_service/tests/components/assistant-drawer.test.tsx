@@ -57,8 +57,9 @@ const ME = "tabA00000001";
 const T = "11111111-2222-4333-8444-555555555555";
 const id = (n: number, turn = 1) => `${T}:${turn}:${n}`;
 const user = { id: "u1", email: "u@x.test", name: "U", roles: ["user"] } as unknown as S<"User">;
-const status = (remote = false): S<"AssistantStatus"> => ({
+const status = (remote = false, thinks = false): S<"AssistantStatus"> => ({
   enabled: true,
+  thinks,
   provider: { title: "DeepSeek", remote },
   web_search: null,
   limits: {
@@ -90,13 +91,19 @@ const entry = (n: number, over: Partial<S<"AssistantEntry">>): S<"AssistantEntry
 /** Serves the assistant routes; returns the bodies POSTed to …/messages. */
 function serve({
   remote = false,
+  thinks = false,
   existing,
   entries = [],
-}: { remote?: boolean; existing?: S<"AssistantThread">; entries?: S<"AssistantEntry">[] } = {}) {
+}: {
+  remote?: boolean;
+  thinks?: boolean;
+  existing?: S<"AssistantThread">;
+  entries?: S<"AssistantEntry">[];
+} = {}) {
   const posts: S<"AssistantPost">[] = [];
   answer("GET", {
     "/v1/studio/assistant/threads": () => ({
-      data: { status: status(remote), threads: existing ? [existing] : [] },
+      data: { status: status(remote, thinks), threads: existing ? [existing] : [] },
     }),
     "/v1/studio/assistant/threads/{thread_id}": () => ({ data: { ...existing, entries } }),
   });
@@ -602,5 +609,53 @@ describe("other tabs, server cards, limits, memory", () => {
     );
     expect(r.out).toMatchObject({ text: "Opened Studio view" });
     expect(view).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("thinking (plan 29)", () => {
+  const to = (state: S<"AssistantThread">["state"], seq: number, over = {}) =>
+    act(() => onEvent!({ seq, type: "thread", thread: thread({ state, client_id: ME, ...over }) }));
+  afterEach(() => vi.useRealTimers());
+
+  it("counts up while the model call runs, Working while actions run, gone when the step lands", async () => {
+    serve({ thinks: true, existing: thread({ client_id: ME }) });
+    let finish = () => undefined as void;
+    const change = () =>
+      new Promise<ReturnType<typeof done>>((r) => (finish = () => r(done("Set"))));
+    await openDrawer(<Screen actions={{ change }} />);
+    await waitFor(() => expect(onEvent).not.toBeNull());
+    vi.useFakeTimers();
+    to("working", 20);
+    expect(screen.getByText("Thinking… 0 s")).toBeTruthy();
+    act(() => vi.advanceTimersByTime(3000));
+    expect(screen.getByText("Thinking… 3 s")).toBeTruthy();
+    // parked on this tab's actions: today's chip
+    park([{ id: id(0), name: "change", args: {} }]);
+    expect(screen.queryByText(/^Thinking/)).toBeNull();
+    expect(screen.getByText("Working")).toBeTruthy();
+    // the actions done, the turn resumes: a new count from 0
+    await act(async () => finish());
+    to("working", 30);
+    expect(screen.getByText("Thinking… 0 s")).toBeTruthy();
+    act(() => vi.advanceTimersByTime(1000));
+    expect(screen.getByText("Thinking… 1 s")).toBeTruthy();
+    to("idle", 31);
+    expect(screen.queryByText(/^Thinking/)).toBeNull();
+  });
+
+  it("Working when the model does not think", async () => {
+    serve({ existing: thread({ client_id: ME }) });
+    await openDrawer();
+    await waitFor(() => expect(onEvent).not.toBeNull());
+    to("working", 20);
+    expect(screen.getByText("Working")).toBeTruthy();
+    expect(screen.queryByText(/^Thinking/)).toBeNull();
+  });
+
+  it("another tab's working chat stays Read-only", async () => {
+    serve({ thinks: true, existing: thread({ state: "working", client_id: "tabB00000001" }) });
+    await openDrawer();
+    expect(await screen.findByText("Read-only")).toBeTruthy();
+    expect(screen.queryByText(/^Thinking/)).toBeNull();
   });
 });

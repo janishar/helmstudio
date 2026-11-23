@@ -912,6 +912,11 @@
     box-shadow: inset 0 0 0 1px var(--a2);
     color: var(--a2);
   }
+  .ast .st-think {
+    gap: 5px;
+    font-family: var(--font-mono);
+    font-weight: 500;
+  }
   .ast .ro-chip {
     background: var(--s3);
     color: var(--t2);

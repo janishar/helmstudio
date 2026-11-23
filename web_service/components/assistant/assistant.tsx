@@ -394,6 +394,21 @@ export function useAssistant(me: S<"User"> | null) {
 }
 export type AssistantApi = ReturnType<typeof useAssistant>;
 
+/** "Thinking… N s" (plan 29): whole seconds since this tab saw the model call start; it goes when the step lands. */
+function Thinking() {
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setN((x) => x + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <span className="st st-go st-think" role="status" aria-live="off">
+      <LoaderCircle size={11} strokeWidth={3} aria-hidden className="run" />
+      Thinking… {n} s
+    </span>
+  );
+}
+
 const TONE: Record<Line["status"], string> = {
   running: "run",
   waiting: "wait",
@@ -896,6 +911,8 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
     <span className="st ro-chip">Read-only</span>
   ) : a.cardWaits ? (
     <span className="st st-ask">Waiting for you</span>
+  ) : st?.thinks && t?.state === "working" && !a.running ? (
+    <Thinking />
   ) : a.running || t?.state === "working" || t?.state === "waiting" ? (
     <span className="st st-go">Working</span>
   ) : null;

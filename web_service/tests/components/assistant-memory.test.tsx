@@ -46,8 +46,9 @@ const ME = "tabA00000001";
 const T = "11111111-2222-4333-8444-555555555555";
 const id = (n: number, turn = 1) => `${T}:${turn}:${n}`;
 const user = { id: "u1", email: "u@x.test", name: "U", roles: ["user"] } as unknown as S<"User">;
-const status = (remote = false): S<"AssistantStatus"> => ({
+const status = (remote = false, thinks = false): S<"AssistantStatus"> => ({
   enabled: true,
+  thinks,
   provider: { title: "DeepSeek", remote },
   web_search: null,
   limits: {
