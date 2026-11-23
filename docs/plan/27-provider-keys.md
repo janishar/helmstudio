@@ -2,7 +2,7 @@
 
 [← Plan index](../README.md)
 
-Status: **decided by the owner (2026-11-23); board approved by the owner (2026-11-24, "Approve"); queued to build.** API version: **1.52.0** (main is at 1.51.0, plan
+Status: **decided by the owner (2026-11-23); board approved by the owner (2026-11-24, "Approve"); built 2026-11-24 (31.13).** API version: **1.52.0** (main is at 1.51.0, plan
 25; if another plan takes 1.52.0 first, this takes the next free one at build time).
 
 The owner's ask, 2026-11-23, on Admin › Model providers: "add support to provide api key in the ui itself. ask any
@@ -294,3 +294,36 @@ None for the owner: the four doubts are decided above. Small calls made in this 
 Save key is its own button (the key is not sent with Save provider, so a key can be saved for a preset before the
 provider exists, and a failed check never blocks saving the provider); Save anyway writes without a second check;
 anything other than 401 / 403 (including remote models off) counts as "could not check".
+
+### 31.13 As built (all phases; 2026-11-24)
+
+- **Contracts 1.52.0** as 31.6: `PUT` and `DELETE …/provider-keys/{key_secret}`, `ProviderKeySave` (key `writeOnly`,
+  pattern `^\s*[!-~]+\s*$`, max 1024, exactly one of `preset`/`provider` by `oneOf`), `ProviderKeySaved`,
+  `ProviderKey.writable` (required); `req.pipelines.providers.key.write` (save: the key `^[!-~]{1,1024}$`, already
+  trimmed; `provider` a snapshot with `not required key_secret`; remove; reply codes readonly, not_file, internal);
+  fixtures for each; nats.conf grants the subject; README Keys and Key file status.
+- **pipelines** (`providers.py`): `writable()` (first folder a writable directory), `write_key` / `remove_key` (name
+  re-checked, first folder only, mkstemp `.tmp-` 0600, fsync, `os.replace`, folder fsync, temp removed on failure),
+  `make_first_folder` at `serve`, `check_key` and the `pipelines.providers.key.write` responder. Log lines `key file
+  <name> written (check …)` / `removed`; a failure logs only the exception's class.
+- **studio**: `SaveProviderKey`, `RemoveProviderKey`, `askKeyWrite` (internal or no answer 503; readonly 409 "keys are
+  set in files on this deployment"; a folder 409); the snapshot from the preset or the stored row, key_secret dropped,
+  `timeout_s` 15; log lines `provider key <name> saved (check ok|skipped) by <id>`, `… refused by the provider, not
+  saved, by <id>`, `… not saved (could not check) by <id>`, `… removed by <id>`.
+- **compose**: as 31.5 (pipelines.yml writable, fake.yml `:ro` plus `/tmp/provider-keys:/fake-keys`, dev-remote.yml
+  writable again). make-secrets: on Linux, chown 10001 as root, else prints the line.
+- **web**: `KeyArea` in `components/admin/providers.tsx`, the board's states; Enter in the key field saves the key, not
+  the provider form.
+- **The fakes**: contract_tests' fake OpenAI server answers `/models` 401 for a key starting `refused-`, 403
+  `forbidden-`, 503 `down-`; pipelines' test fake has a `__models` script.
+
+Deviations:
+- The check is its own function, `check_key`, not `test(req, key=…)`: the verdict needs the HTTP status, which
+  `test`'s classed errors drop. It uses the same `check_host`, `_http` (pinned, no redirects, no proxy) and 15 s.
+- "Could not check" reasons: `timeout`, `HTTP <code>`, `remote models are off on this deployment`, or the host rule's
+  text (as the board's "could not check: timeout").
+- The contract case scripts the fake by key prefix (above) instead of `/__script`, and uses `down-` (503) for "could
+  not check" instead of a 15 s hang.
+- Save key greys without repeating Fetch's note in the key area (the note already shows under Models).
+- The dev-stack browser check of 31.10 was not done in this build (the build was told never to save a key on dev).
+

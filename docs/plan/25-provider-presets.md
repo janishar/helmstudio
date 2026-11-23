@@ -71,7 +71,7 @@ status); one pipelines request (key file status); the Preset picker, the key sta
 in the form; a per-provider `compat` for providers whose OpenAI layer refuses what we send (Anthropic; 29.4); the
 Assistant row's Edit fix (29.9).
 
-Not in: typing a key in the browser (never); presets for search providers (Brave stays typed; one provider); a
+Not in: typing a key in the browser (never; superseded by [plan 27](27-provider-keys.md), API 1.52); presets for search providers (Brave stays typed; one provider); a
 preset that updates saved providers (a preset only fills the form; a saved provider never changes on its own);
 fetching from a URL the browser sends; Linux `host-gateway` (open point 3); model prices or context sizes.
 
