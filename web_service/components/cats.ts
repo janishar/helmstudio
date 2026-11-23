@@ -52,22 +52,22 @@ const CSS = `.cats{position:fixed;inset:auto 0 0 90px;width:auto;height:130px;ma
 .cats .walk .p-tail{animation-duration:1.68s;animation-delay:var(--ph,0s)}
 .cats .walk :is(.t2,.t3){animation-duration:1.68s}
 .cats .run .p-tail{animation:none;transform:rotate(-40deg)}.cats .run :is(.t2,.t3){animation-duration:.5s}
-.cats .sit .b-stand,.cats .wave .b-stand{transform:rotate(-22deg);opacity:0;--od:.18s}
-.cats .sit .b-sit,.cats .wave .b-sit{transform:none;opacity:1;--od:0s}
-.cats .sit .lb,.cats .wave .lb{opacity:0;--od:.18s;transform:translateY(6px) rotate(-30deg)}
-.cats .sit :is(.p-tail,.t2,.t3),.cats .wave :is(.p-tail,.t2,.t3){animation:none}
-.cats .sit .p-tail,.cats .wave .p-tail{opacity:0;--od:.18s;transform:rotate(-50deg)}
-.cats .sit .tl-curl,.cats .wave .tl-curl{opacity:1;--od:0s;transform:none}
-.cats .sit .p-head,.cats .wave .p-head{transform:translate(-4px,-6px)}
-.cats .sit .lf,.cats .wave .lf{transform:translateX(1px)}
-.cats .wave .p-lfn{transform:translate(1px,-2px) rotate(-100deg)}.cats .wave .p-lfn .kn{transform:rotate(-40deg)}
-.cats .wave .p-head{transform:translate(-4px,-6px) rotate(-5deg)}
+.cats .sit .b-stand,.cats .paw .b-stand{transform:rotate(-22deg);opacity:0;--od:.18s}
+.cats .sit .b-sit,.cats .paw .b-sit{transform:none;opacity:1;--od:0s}
+.cats .sit .lb,.cats .paw .lb{opacity:0;--od:.18s;transform:translateY(6px) rotate(-30deg)}
+.cats .sit :is(.p-tail,.t2,.t3),.cats .paw :is(.p-tail,.t2,.t3){animation:none}
+.cats .sit .p-tail,.cats .paw .p-tail{opacity:0;--od:.18s;transform:rotate(-50deg)}
+.cats .sit .tl-curl,.cats .paw .tl-curl{opacity:1;--od:0s;transform:none}
+.cats .sit .p-head,.cats .paw .p-head{transform:translate(-4px,-6px)}
+.cats .sit .lf,.cats .paw .lf{transform:translateX(1px)}
+.cats .paw .p-lfn{transform:translate(1px,-2px) rotate(-100deg)}.cats .paw .p-lfn .kn{transform:rotate(-40deg)}
+.cats .paw .p-head{transform:translate(-4px,-6px) rotate(-5deg)}
 .cats .stretch .p-body{transform:rotate(13deg)}
 .cats .stretch .p-head{transform:translate(3px,17px) rotate(10deg)}
 .cats .stretch .lf{transform:translate(-1px,12px) rotate(-66deg)}.cats .stretch .lf .kn{transform:rotate(-14deg)}
 .cats .stretch .p-tail{animation:none;transform:rotate(10deg)}
-.cats .stretch .eyes-o,.cats .boop .eyes-o,.cats .curl .eyes-o,.cats .wave .eyes-o{opacity:0;--od:.18s;animation:none}
-.cats .stretch .eyes-c,.cats .boop .eyes-c,.cats .curl .eyes-c,.cats .wave .eyes-c{opacity:1;--od:0s}
+.cats .stretch .eyes-o,.cats .boop .eyes-o,.cats .curl .eyes-o,.cats .paw .eyes-o{opacity:0;--od:.18s;animation:none}
+.cats .stretch .eyes-c,.cats .boop .eyes-c,.cats .curl .eyes-c,.cats .paw .eyes-c{opacity:1;--od:0s}
 @keyframes c-breathe{from{transform:none}to{transform:scale(1.015,1.05)}}
 .cats .curl .b-stand{transform:translateY(10px) scale(.95,.7);opacity:0;--od:.18s}
 .cats .curl .b-loaf{transform:none;opacity:1;--od:0s;animation:c-breathe 1.4s ease-in-out infinite alternate}
@@ -181,7 +181,7 @@ export function play() {
   const n = still ? 0 : (last = pick[Math.floor(Math.random() * pick.length)]);
   el.dataset.scene = still ? "still" : String(n);
   el.innerHTML = still
-    ? `<div class="rm">${kit("b", "wave still", "r", "0")}${kit("w", "sit still", "l", "74px")}</div>`
+    ? `<div class="rm">${kit("b", "paw still", "r", "0")}${kit("w", "sit still", "l", "74px")}</div>`
     : Object.keys(scene(n, 0).tracks)
         .map((id) => (XTRA[id] ? `<div class="xtra" data-a="${id}">${XTRA[id]}</div>` : kit(id, "", "r")))
         .join("");

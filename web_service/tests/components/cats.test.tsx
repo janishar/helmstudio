@@ -2,6 +2,7 @@
 // The cats (plan 30): a double-click on the rail logo plays a scene in an overlay that takes no input and leaves when
 // the scene ends; a single click on Create does not navigate; never the same scene twice in a row; at most one per
 // 10 s; reduced motion shows the still pair and animates nothing; leaving Create or hiding the page ends it.
+import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { AppShell } from "@/components/shell";
@@ -101,7 +102,7 @@ describe("the cats", () => {
     render(<AppShell user={user}>page</AppShell>);
     await dbl();
     expect(layer()!.dataset.scene).toBe("still");
-    expect(layer()!.querySelectorAll(".kit.wave, .kit.sit")).toHaveLength(2);
+    expect(layer()!.querySelectorAll(".kit.paw, .kit.sit")).toHaveLength(2);
     expect(animate).not.toHaveBeenCalled();
     // the app's global reduced-motion rule cuts every animation to 0.01ms !important: the fade must win over it
     expect(document.getElementById("cats-css")!.textContent).toMatch(/\.cats \.rm\{[^}]*animation-duration:2s!important/);
@@ -125,6 +126,17 @@ describe("the cats", () => {
     vi.spyOn(document, "hidden", "get").mockReturnValue(true);
     document.dispatchEvent(new Event("visibilitychange"));
     expect(layer()).toBeNull();
+  });
+
+  it("the cats' classes are not the app's global classes (the app's .wave drew a striped box)", async () => {
+    const css = readFileSync("app/globals.css", "utf8");
+    const { scene } = await import("@/components/cats");
+    const poses = [1, 2, 3, 4].flatMap((n) => Object.values(scene(n, 900).tracks).flat().map((k) => k.p ?? ""));
+    reduced = true;
+    render(<AppShell user={user}>page</AppShell>);
+    await dbl();
+    const used = new Set([...poses, ...[...layer()!.querySelectorAll("[class]")].flatMap((e) => [...e.classList])]);
+    for (const c of used) if (c) expect(css, c).not.toMatch(new RegExp(`^\\s*\\.${c}\\b`, "m")); // a rule of its own, not nested under another class
   });
 
   it("a page already hidden when the chunk arrives plays nothing", async () => {
