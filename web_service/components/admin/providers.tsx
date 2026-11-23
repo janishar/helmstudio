@@ -533,6 +533,9 @@ function ProviderPanel({
             </button>
           </div>
         )}
+        {fetchError && preset && (
+          <span className="text-[12px] text-t2">The preset&apos;s models stay in the list.</span>
+        )}
         {fetched && shown && (
           <div
             role="group"

@@ -218,9 +218,11 @@ export function AgentsAdmin() {
                         setEditing("names");
                         const panel = namesPanel.current;
                         panel?.scrollIntoView?.({ block: "nearest" });
-                        panel
-                          ?.querySelector<HTMLElement>("input[type=radio]:checked, input, select")
-                          ?.focus();
+                        // a selector list matches in page order, so the checked option is asked first
+                        (
+                          panel?.querySelector<HTMLElement>("input[type=radio]:checked") ??
+                          panel?.querySelector<HTMLElement>("input, select")
+                        )?.focus();
                       }}
                     >
                       Edit

@@ -234,4 +234,14 @@ describe("AgentsAdmin", () => {
     expect(row("Session names").getAttribute("aria-selected")).toBe("true");
     expect(document.activeElement).toBe(radio(/^Off/));
   });
+
+  it("Session names: Edit focuses the checked option when it is not the first", async () => {
+    serve(
+      names({ mode: "remote", provider: "ollama", model: "qwen2.5:7b", local_available: true }),
+      [server],
+    );
+    await screen.findAllByText("Session names");
+    edit("Session names");
+    expect(document.activeElement).toBe(radio(/^Remote/));
+  });
 });

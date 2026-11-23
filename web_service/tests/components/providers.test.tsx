@@ -157,6 +157,7 @@ describe("ProvidersAdmin", () => {
     await pick("OpenAI");
     fireEvent.click(screen.getByRole("button", { name: "Fetch" }));
     expect(await screen.findByText("openai: the key was refused")).toBeTruthy();
+    expect(screen.getByText("The preset's models stay in the list.")).toBeTruthy();
     expect((screen.getByLabelText(/^Models/) as HTMLTextAreaElement).value).toContain(
       "gpt-6.2-sol",
     );
