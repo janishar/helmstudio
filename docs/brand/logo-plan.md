@@ -25,7 +25,7 @@ mark in `--a1` / `--a2`, word in `--t1`; on parchment arch and word ink `--t1`, 
 [Sign in](../mock/SignIn.dc.html) (the 44 px tile keeps its 155° `--a1 → --a2` gradient and organic radius, now with
 the mark in `--on1` at 28 px; "helmstudio" tracking −0.02em). Both boards carry the 16 px favicon as the tab icon.
 On 2026-11-24 the owner also asked for the logo inside the app ("Top of the left rail"): every board that draws the
-desktop rail (47 boards) now has the mark in a gradient tile above Create. Phone layouts (the dock as a bar) show no
+desktop rail (47 boards) now has the mark in a gradient tile, in its own panel above the dock. Phone layouts (the dock as a bar) show no
 mark. B's folder stays as a reference, as decided on
 2026-11-22; it is not used anywhere.
 
@@ -42,12 +42,16 @@ Source files: `docs/brand/logo/a-as-drawn/`. In the app use the tokens, not the 
   (Next's own dependency): `app/favicon.ico`, `app/apple-icon.png`, `app/icon.svg`; the 16 / 32 / 192 / 512 PNGs in
   `public/` for a future manifest.
 - [x] **Web app manifest** (not added): none exists today; add one only if the build wants installable-app icons (192, 512).
-- [ ] **Rail logo** (`web_service/components/shell.tsx`, `AppShell`, the `nav aria-label="Sections"`): a link above
-  Create, before the first dock item, that goes to Create (home), label "helmstudio, home (Create)", no text under it.
+- [ ] **Rail logo** (`web_service/components/shell.tsx`, `AppShell`, above the `nav aria-label="Sections"`): a link
+  above the dock, in its own panel, that goes to Create (home), label "helmstudio, home (Create)", no text under it.
   Tile 36 px (same as a dock icon tile), radius 12/12/12/5 px (organic), 155° `--a1 → --a2` gradient with the dock
   tiles' inset light and shadow, mark in `--on1` at 24 px (the full mark's minimum; same art as the Sign in tile).
-  Spacing: 4 px above, 8 px below plus the rail's 14 px gap; a 1 px `--s3` hairline (inset 6 px each side) sits 11 px
-  under the tile, between it and Create. The dock items move down by the tile plus its spacing. Phone (dock as a
+  Since 2026-11-24 (owner: "separate the logo with menu same form but two rows") the tile sits in its own panel,
+  not in the menu: a `.rail` column (68 px wide, 14 px margin from the page edge, `align-self: flex-start`) holds two
+  stacked panels 14 px apart (the same 14 px as the page-edge gap and the dock's item gap). Top panel `.rail-logo`:
+  only the tile, padding 14 px 4 px (64 px tall). Bottom panel: the menu `nav`, exactly as before the logo (padding
+  14 px 4 px, items 14 px apart, no hairline). Both panels share the rail's form: `--s1` background, 30 px radius, the
+  rail's inset light and drop shadow. In `AppShell` that is a wrapper around a logo panel plus the `nav`. Phone (dock as a
   bar): no mark. Boards done 2026-11-24: all 47 boards with the desktop rail (Main, Gallery, Timeline, Pipelines,
   Models, Settings, Users, AdminAgents, Providers, Hosts and the rest).
 - [x] Theme check: the mark follows every theme (tokens); parchment uses the light rule above.
