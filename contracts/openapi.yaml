@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.53.0
+  version: 1.54.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -6172,9 +6172,9 @@ components:
         messages_per_minute: {type: integer, minimum: 1, maximum: 60, default: 6}
     AssistantStatus:
       type: object
-      required: [enabled, provider, web_search, limits]
+      required: [enabled, provider, web_search, limits, thinks]
       additionalProperties: false
-      description: 'what every user may know: on or off (the dock item is hidden when off), where the model runs, web search, the caps'
+      description: 'what every user may know: on or off (the dock item is hidden when off), where the model runs, web search, the caps, whether the model thinks'
       properties:
         enabled: {type: boolean}
         provider:
@@ -6188,6 +6188,7 @@ components:
             - {type: 'null'}
         web_search: {type: [string, 'null'], description: 'the search provider''s title when web search is on'}
         limits: {$ref: '#/components/schemas/AssistantLimits'}
+        thinks: {type: boolean, description: 'API 1.54 (plan 29): the model thinks (its resolved thinking level is not off, or it always thinks); the drawer shows `Thinking… N s` while a model call runs. False when off or no provider'}
     AssistantPending:
       type: object
       required: [turn, actions, cards]

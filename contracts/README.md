@@ -3867,6 +3867,11 @@ chats (threads), their rows, roles, caps and SSE in studio_service.
   all), `memory/{id}` (edit, delete). `/v1/studio/admin/assistant` holds the admin's settings: on or off, provider and
   model (a server or remote provider), web search's own switch and its provider (kind `search`), and the caps per
   user (model calls and tokens a day, `look_at` an hour, messages a minute). Another user's chat or memory item is 404.
+- **Thinks** (API 1.54; plan 29, [docs/plan/29-assistant-thinking.md](../docs/plan/29-assistant-thinking.md)):
+  `AssistantStatus.thinks` is true when the assistant's model thinks: its level resolved as the snapshot's `thinking`
+  (Thinking, Model sources) is not `off` (a saved level, or with none saved the rule's `default`), or it always
+  thinks. No rule, no saved level of a `"models"` preset, no provider: false. The drawer shows `Thinking… N s` (a
+  browser timer) while the thread is `working`; no thinking text is stored or sent.
 - **One input = one command.** Studio stores the input and writes `cmd.assistant.turn` (owner from its thread row,
   roles from the token, `tools` = `offered_tools`, `actions` = the screen's registered ones, the settings) in one
   transaction; pipelines answers with `evt.assistant.step`s; studio stores their text, lines and cards as entries and

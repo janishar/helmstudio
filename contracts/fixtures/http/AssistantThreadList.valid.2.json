@@ -8,7 +8,8 @@
       "tokens_per_day": 2000000,
       "look_at_per_hour": 20,
       "messages_per_minute": 6
-    }
+    },
+    "thinks": false
   },
   "threads": []
 }

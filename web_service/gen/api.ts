@@ -6302,7 +6302,7 @@ export interface components {
             /** @default 6 */
             messages_per_minute: number;
         };
-        /** @description what every user may know: on or off (the dock item is hidden when off), where the model runs, web search, the caps */
+        /** @description what every user may know: on or off (the dock item is hidden when off), where the model runs, web search, the caps, whether the model thinks */
         AssistantStatus: {
             enabled: boolean;
             provider: {
@@ -6314,6 +6314,8 @@ export interface components {
             /** @description the search provider's title when web search is on */
             web_search: string | null;
             limits: components["schemas"]["AssistantLimits"];
+            /** @description API 1.54 (plan 29): the model thinks (its resolved thinking level is not off, or it always thinks); the drawer shows `Thinking… N s` while a model call runs. False when off or no provider */
+            thinks: boolean;
         };
         /** @description what the parked turn waits on: actions for the tab `client_id` to run, cards (ids of card entries) to answer */
         AssistantPending: {
