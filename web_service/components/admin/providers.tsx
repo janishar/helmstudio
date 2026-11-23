@@ -7,7 +7,7 @@
 // status line says Found or Missing with Recheck. API 1.52 (plan 27): the key area takes a key (a password field, its
 // value in its own state, never in the form, a URL or storage), checked with the provider, then saved to the file and
 // never shown again; Replace key and Remove key once Found.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { AdminTabs } from "@/components/admin/users";
 import { useUser } from "@/components/shell";
@@ -643,7 +643,14 @@ function KeyArea({
   onStatus: (k: S<"ProviderKey">) => void;
   onRecheck: () => void;
 }) {
-  const [value, setValue] = useState(""); // the key: only here, cleared after every answer but Could not check
+  // the key: only in the field itself (uncontrolled: React would mirror a controlled value into the value attribute,
+  // putting the key in the page's markup), cleared after every answer but Could not check
+  const input = useRef<HTMLInputElement>(null);
+  const [typed, setTyped] = useState(false);
+  const clear = () => {
+    if (input.current) input.current.value = "";
+    setTyped(false);
+  };
   const [mode, setMode] = useState<"" | "replace" | "remove">("");
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{
@@ -663,12 +670,12 @@ function KeyArea({
       const r = await ok(
         api.PUT("/v1/studio/admin/provider-keys/{key_secret}", {
           ...keyPath,
-          body: { key: value, ...from, ...(force ? { force } : {}) },
+          body: { key: input.current?.value ?? "", ...from, ...(force ? { force } : {}) },
         }),
       );
       onStatus({ key_secret: r.key_secret, path: r.path, found: r.found, writable: true });
       if (r.check === "unreachable") return setNote({ kind: "unreachable", text: r.detail ?? "" });
-      setValue("");
+      clear();
       if (r.check === "refused")
         return setNote({
           kind: "refused",
@@ -677,7 +684,7 @@ function KeyArea({
       setMode("");
       setSkipped(r.check === "skipped");
     } catch (err) {
-      setValue("");
+      clear();
       setNote({ kind: "error", text: message(err) });
     } finally {
       setBusy(false);
@@ -698,7 +705,7 @@ function KeyArea({
   }
   const cancel = () => {
     setMode("");
-    setValue("");
+    clear();
     setNote(null);
   };
   const field = status.writable && (!status.found || mode === "replace");
@@ -778,22 +785,22 @@ function KeyArea({
               id="p-api-key"
               className="in min-w-0 flex-auto disabled:opacity-60"
               type="password"
-              autoComplete="off"
+              autoComplete="new-password"
               spellCheck={false}
               placeholder="Paste the key"
-              value={value}
+              ref={input}
               disabled={busy}
-              onChange={(e) => setValue(e.target.value)}
+              onChange={(e) => setTyped(e.target.value.trim() !== "")}
               onKeyDown={(e) => {
                 if (e.key !== "Enter") return;
                 e.preventDefault(); // Enter saves the key, never the provider form
-                if (value.trim() && source) void save(false);
+                if (typed && source) void save(false);
               }}
             />
             <button
               type="button"
               className="chip h-[38px] flex-none text-[12px]"
-              disabled={busy || !value.trim() || !source}
+              disabled={busy || !typed || !source}
               onClick={() => void save(false)}
             >
               {busy ? "Checking…" : "Save key"}
@@ -827,7 +834,7 @@ function KeyArea({
           <button
             type="button"
             className="chip h-[26px] text-[12px] text-t1"
-            disabled={busy || !value.trim() || !source}
+            disabled={busy || !typed || !source}
             onClick={() => void save(true)}
           >
             Save anyway

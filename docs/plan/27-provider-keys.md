@@ -201,8 +201,9 @@ browser ──PUT key──▶ web BFF ─▶ Kong ─▶ studio ──NATS requ
   pipelines logs the class name of an exception in the write path, never `str(e)` of an SDK error and never the
   request; the BFF logs only the path on a failed fetch; Kong has no body logging. The contract suite proves it by
   grepping every service's logs for the test key (31.10).
-- **The browser**: a password field (`type="password"`, `autoComplete="off"`, `spellCheck={false}`), its value in its
-  own state, not in the provider form object, cleared after every answer except Could not check (kept for Save
+- **The browser**: a password field (`type="password"`, `autoComplete="new-password"` (review: "off" does not stop a
+  browser filling a saved sign-in password), `spellCheck={false}`), its value only in the field itself (review: an
+  uncontrolled input; React mirrors a controlled value into the `value` attribute, the page's markup), not in the provider form object, cleared after every answer except Could not check (kept for Save
   anyway, cleared on Cancel), never in a URL or browser storage. The assistant never reads it (it reads only the tab
   on Admin; plan 18).
 - **Audit**: no audit store exists, so a log line in studio, without the key: `provider key <key_secret> saved
@@ -326,4 +327,6 @@ Deviations:
   not check" instead of a 15 s hang.
 - Save key greys without repeating Fetch's note in the key area (the note already shows under Models).
 - The dev-stack browser check of 31.10 was not done in this build (the build was told never to save a key on dev).
-
+- Review fixes (2026-11-24): the key field is `autoComplete="new-password"` and uncontrolled, so a browser never fills
+  a saved password into it and the key never sits in the page's markup; pipelines' check (the host rule's name lookup
+  too) is bounded by the 15 s as a whole, so studio's 30 s wait always gets the verdict.

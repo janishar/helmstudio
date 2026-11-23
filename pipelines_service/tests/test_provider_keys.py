@@ -163,3 +163,18 @@ async def test_a_bad_key_never_reaches_a_reply_or_the_log(keys, caplog, fake):
         assert got["code"] == "internal" and bad not in json.dumps(got)
         assert bad not in caplog.text
     assert os.listdir(keys[0]) == []
+
+
+async def test_a_slow_name_lookup_counts_in_the_15_s(keys, monkeypatch):
+    # the whole check (the host rule's lookup too) fits in CHECK_TIMEOUT, so studio's 30 s wait always gets the answer
+    # (else studio says "did not answer" while pipelines still checks and may write the key afterwards)
+    import asyncio
+
+    async def slow(*_a):
+        await asyncio.sleep(5)
+
+    monkeypatch.setattr(providers, "_lookup", slow)
+    monkeypatch.setattr(providers, "CHECK_TIMEOUT", 0.3)
+    got = await asyncio.wait_for(ask(**save("slow", "http://slow.invalid/v1")), 2)
+    assert (got["check"], got["detail"]) == ("unreachable", "timeout")
+    assert os.listdir(keys[0]) == []

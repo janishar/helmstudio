@@ -204,7 +204,7 @@ describe("ProvidersAdmin", () => {
     const field = keyField();
     expect(screen.getByText("API key")).toBeTruthy();
     expect(field.type).toBe("password");
-    expect(field.getAttribute("autocomplete")).toBe("off");
+    expect(field.getAttribute("autocomplete")).toBe("new-password");
     expect(field.getAttribute("placeholder")).toBe("Paste the key");
     expect(
       screen.getByText("Checked with the provider, then saved to this file. Never shown again."),
@@ -234,6 +234,20 @@ describe("ProvidersAdmin", () => {
     fireEvent.click(button("Save key"));
     expect(button("Checking…").disabled).toBe(true);
     expect(keyField().disabled).toBe(true);
+  });
+
+  it("the typed key stays out of the page's markup and the browser's saved passwords", async () => {
+    serve(true, false, true);
+    render(<ProvidersAdmin />);
+    await pick("OpenAI");
+    await screen.findByText("Missing", {}, { timeout: 2000 });
+    // new-password: a browser never fills the admin's saved sign-in password into the key field
+    expect(keyField().getAttribute("autocomplete")).toBe("new-password");
+    fireEvent.change(keyField(), { target: { value: KEY } });
+    expect(keyField().value).toBe(KEY);
+    expect(button("Save key").disabled).toBe(false);
+    // React mirrors a controlled input's value into its value attribute: the key would sit in the DOM's markup
+    expect(document.body.innerHTML).not.toContain(KEY);
   });
 
   it("Refused: a red note, the field empties, the line stays Missing", async () => {

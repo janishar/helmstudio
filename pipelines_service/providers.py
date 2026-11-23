@@ -517,13 +517,15 @@ async def check_key(name: str, p: dict, key: str) -> tuple[str, str]:
         "timeout_s": CHECK_TIMEOUT,
     }  # a key: the Authorization header is sent
     try:
-        await check_host(name, p)
-        client = openai.AsyncOpenAI(base_url=p["base_url"], api_key=key, timeout=CHECK_TIMEOUT, max_retries=0,
-                                    http_client=_http(name, p))  # fmt: skip
-        try:
-            await client.models.list()
-        finally:
-            await client.close()
+        # the whole check, the host rule's lookup too, within 15 s: studio waits 30 s for the answer
+        async with asyncio.timeout(CHECK_TIMEOUT):
+            await check_host(name, p)
+            client = openai.AsyncOpenAI(base_url=p["base_url"], api_key=key, timeout=CHECK_TIMEOUT, max_retries=0,
+                                        http_client=_http(name, p))  # fmt: skip
+            try:
+                await client.models.list()
+            finally:
+                await client.close()
     except openai.APIStatusError as e:
         if e.status_code in (401, 403):
             return "refused", "the provider refused this key; not saved"
