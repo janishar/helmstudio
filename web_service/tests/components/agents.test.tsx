@@ -204,6 +204,10 @@ describe("AgentsAdmin", () => {
     fireEvent.change(within(form).getByLabelText("Model calls a day"), { target: { value: "5" } });
     fireEvent.click(within(form).getByRole("button", { name: "Cancel" }));
     expect(screen.queryByRole("form", { name: "Assistant settings" })).toBeNull();
+    // focus goes back to the row's Edit, not lost to the page
+    expect(document.activeElement).toBe(
+      within(row("Assistant")).getByRole("button", { name: "Edit" }),
+    );
     edit("Assistant");
     form = screen.getByRole("form", { name: "Assistant settings" });
     expect((within(form).getByLabelText("Model calls a day") as HTMLInputElement).value).toBe(

@@ -44,6 +44,12 @@ export function AgentsAdmin() {
   const [editing, setEditing] = useState<"assistant" | "names" | null>(null);
   const assistantBox = useRef<HTMLFormElement>(null);
   const namesPanel = useRef<HTMLElement>(null);
+  const assistantEdit = useRef<HTMLButtonElement>(null);
+  // Cancel or Save closes the box; focus goes back to the row's Edit, not lost to the page
+  const closeAssistant = () => {
+    setEditing(null);
+    assistantEdit.current?.focus();
+  };
   // after Edit opens the Assistant box: scroll to it, focus its first field
   useEffect(() => {
     if (editing !== "assistant") return;
@@ -157,6 +163,7 @@ export function AgentsAdmin() {
                   </td>
                   <td className={cell}>
                     <button
+                      ref={assistantEdit}
                       type="button"
                       className="chip bevel h-[30px]"
                       aria-expanded={editing === "assistant"}
@@ -242,9 +249,9 @@ export function AgentsAdmin() {
             search={searchable(providers, assistant.remote_enabled)}
             onSaved={(a) => {
               setAssistant(a);
-              setEditing(null);
+              closeAssistant();
             }}
-            onClose={() => setEditing(null)}
+            onClose={closeAssistant}
           />
         )}
       </main>
