@@ -2,7 +2,7 @@
 
 [← Plan index](../README.md)
 
-Status: **decided by the owner (2026-11-24); board drawn, cats redrawn organic (2026-11-24), for the owner to approve.** Web only: no contract, API or
+Status: **decided by the owner (2026-11-24); board drawn, cats redrawn organic (2026-11-24), board approved by the owner (2026-11-24, "Approve"); building.** Web only: no contract, API or
 service change. Not in a milestone, like plans 25, 27, 28 and 29.
 
 The owner's ask, 2026-11-24: "on clicking the helm can you think of a cool white female and black male cat coming on
