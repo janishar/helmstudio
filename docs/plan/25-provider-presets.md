@@ -302,6 +302,12 @@ checked option. A test for each.
 
 ### 29.12 Open points
 
+**Decided by the owner, 2026-11-23 (board approved; open points one by one):** 1. Build Anthropic's `compat`.
+2. Dev key files are read live (two folders in `PIPELINES_PROVIDER_KEYS_DIR`), so Recheck works without a restart.
+3. Add `extra_hosts: ["host.docker.internal:host-gateway"]` to pipelines now (not the recommended "later"), so a
+local server on a Linux host is reachable. 4. A local-server provider may name a key file too (not the recommended
+"leave it"), sent as a remote provider's is; still optional, never required.
+
 1. **Anthropic's `compat`**: build it (recommended; without it the Anthropic preset cannot make a call) · ship the
    Anthropic preset with only its "partial" note and fix later.
 2. **Dev key files**: let `PIPELINES_PROVIDER_KEYS_DIR` take two folders (`/run/secrets/providers:/fake-keys`) so the
