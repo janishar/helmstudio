@@ -886,12 +886,17 @@
   .ast .dh h2 {
     margin: 0;
     flex: 1 1 auto;
+    min-width: 0; /* a wide chip (Thinking… N s) shortens the title, never pushes Close out of the drawer */
     display: flex;
     align-items: center;
     gap: 8px;
     font-family: var(--font-display);
     font-size: 16px;
     font-weight: 700;
+  }
+  .ast .dh > *,
+  .ast .dh h2 svg {
+    flex-shrink: 0;
   }
   .ast .dh h2 svg {
     width: 26px;

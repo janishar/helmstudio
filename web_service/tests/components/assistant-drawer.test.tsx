@@ -643,6 +643,19 @@ describe("thinking (plan 29)", () => {
     expect(screen.queryByText(/^Thinking/)).toBeNull();
   });
 
+  it("closing and reopening the drawer keeps the count", async () => {
+    serve({ thinks: true, existing: thread({ client_id: ME }) });
+    await openDrawer();
+    await waitFor(() => expect(onEvent).not.toBeNull());
+    vi.useFakeTimers();
+    to("working", 20);
+    act(() => vi.advanceTimersByTime(4000));
+    fireEvent.click(screen.getByRole("button", { name: /^Close \(/ }));
+    act(() => vi.advanceTimersByTime(3000));
+    fireEvent.click(screen.getByRole("button", { name: /^Assistant/ }));
+    expect(screen.getByText("Thinking… 7 s")).toBeTruthy();
+  });
+
   it("Working when the model does not think", async () => {
     serve({ existing: thread({ client_id: ME }) });
     await openDrawer();

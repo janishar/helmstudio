@@ -395,16 +395,16 @@ export function useAssistant(me: S<"User"> | null) {
 export type AssistantApi = ReturnType<typeof useAssistant>;
 
 /** "Thinking… N s" (plan 29): whole seconds since this tab saw the model call start; it goes when the step lands. */
-function Thinking() {
-  const [n, setN] = useState(0);
+function Thinking({ since }: { since: number }) {
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    const id = setInterval(() => setN((x) => x + 1), 1000);
+    const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
   return (
     <span className="st st-go st-think" role="status" aria-live="off">
       <LoaderCircle size={11} strokeWidth={3} aria-hidden className="run" />
-      Thinking… {n} s
+      Thinking… {Math.max(0, Math.floor((now - since) / 1000))} s
     </span>
   );
 }
@@ -897,6 +897,13 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
   const screen = a.reg.current()?.spec;
   const entries = a.view?.entries ?? [];
   const count = entries.length + Object.keys(a.local).length + (a.asking ? 1 : 0);
+  // the Thinking start, kept here (above the closed-drawer return) so closing and reopening keeps the count; a new
+  // thread, actions running or the state leaving working start it again
+  const thinkId =
+    a.status?.thinks && a.view?.thread.state === "working" && !a.running ? a.view.thread.id : null;
+  const [since, setSince] = useState<{ id: string; at: number } | null>(null);
+  if ((since?.id ?? null) !== thinkId)
+    setSince(() => (thinkId ? { id: thinkId, at: Date.now() } : null));
   useEffect(() => {
     end.current?.scrollIntoView({ block: "nearest" });
   }, [count]);
@@ -911,8 +918,8 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
     <span className="st ro-chip">Read-only</span>
   ) : a.cardWaits ? (
     <span className="st st-ask">Waiting for you</span>
-  ) : st?.thinks && t?.state === "working" && !a.running ? (
-    <Thinking />
+  ) : since ? (
+    <Thinking since={since.at} />
   ) : a.running || t?.state === "working" || t?.state === "waiting" ? (
     <span className="st st-go">Working</span>
   ) : null;
@@ -1010,7 +1017,7 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
           <div className="dh">
             <h2>
               <Sparkles aria-hidden strokeWidth={2} />
-              Assistant
+              <span className="truncate">Assistant</span>
             </h2>
             {chip}
             <button
