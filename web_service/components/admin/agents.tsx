@@ -3,9 +3,11 @@
 // with the editor beside it, as Model providers. Assistant (plan 18, /v1/studio/admin/assistant): on or off, provider
 // and model, web search and the caps, edited in its section under the table. Session names: Off · Local LLM (the llm
 // pack, greyed while no host has it) · Remote (an enabled provider of Model providers: a remote one sends the prompt
-// out and needs the deployment's switch, a local server is "on this network").
+// out and needs the deployment's switch, a local server is "on this network"). Plan 25 (29.9): the Assistant box is
+// closed until its row's Edit, which opens it, marks the row and focuses its first field (Cancel or Save closes it);
+// Session names' Edit marks its row and moves focus to the panel beside.
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ErrorNote, Info } from "@/components/kit";
 import { AdminTabs } from "@/components/admin/users";
 import { useUser } from "@/components/shell";
@@ -39,6 +41,16 @@ export function AgentsAdmin() {
   const [assistant, setAssistant] = useState<Settings | null>(null);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [error, setError] = useState("");
+  const [editing, setEditing] = useState<"assistant" | "names" | null>(null);
+  const assistantBox = useRef<HTMLFormElement>(null);
+  const namesPanel = useRef<HTMLElement>(null);
+  // after Edit opens the Assistant box: scroll to it, focus its first field
+  useEffect(() => {
+    if (editing !== "assistant") return;
+    const box = assistantBox.current;
+    box?.scrollIntoView?.({ block: "nearest" });
+    box?.querySelector<HTMLElement>("[role=switch], select, input")?.focus();
+  }, [editing]);
   const load = useCallback(() => {
     Promise.all([
       ok(api.GET("/v1/studio/admin/session-names")),
@@ -99,7 +111,10 @@ export function AgentsAdmin() {
             </thead>
             <tbody>
               {assistant && (
-                <tr>
+                <tr
+                  aria-selected={editing === "assistant"}
+                  className={editing === "assistant" ? "bg-s3" : undefined}
+                >
                   <td className={cell}>
                     Assistant
                     <br />
@@ -141,17 +156,23 @@ export function AgentsAdmin() {
                     </span>
                   </td>
                   <td className={cell}>
-                    <a
-                      href="#assistant-settings"
-                      className="chip bevel inline-flex h-[30px] items-center"
+                    <button
+                      type="button"
+                      className="chip bevel h-[30px]"
+                      aria-expanded={editing === "assistant"}
+                      aria-controls="assistant-settings"
+                      onClick={() => setEditing("assistant")}
                     >
                       Edit
-                    </a>
+                    </button>
                   </td>
                 </tr>
               )}
               {names && (
-                <tr>
+                <tr
+                  aria-selected={editing === "names"}
+                  className={editing === "names" ? "bg-s3" : undefined}
+                >
                   <td className={cell}>
                     Session names
                     <br />
@@ -189,34 +210,52 @@ export function AgentsAdmin() {
                     </span>
                   </td>
                   <td className={cell}>
-                    <a
-                      href="#session-names"
-                      className="chip bevel inline-flex h-[30px] items-center"
+                    <button
+                      type="button"
+                      className="chip bevel h-[30px]"
+                      aria-controls="session-names"
+                      onClick={() => {
+                        setEditing("names");
+                        const panel = namesPanel.current;
+                        panel?.scrollIntoView?.({ block: "nearest" });
+                        panel
+                          ?.querySelector<HTMLElement>("input[type=radio]:checked, input, select")
+                          ?.focus();
+                      }}
                     >
                       Edit
-                    </a>
+                    </button>
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
-        {assistant && (
+        {assistant && editing === "assistant" && (
           <AssistantPanel
+            ref={assistantBox}
             key={assistant.updated_at ?? "unset"}
             settings={assistant}
             providers={pickable(providers, assistant.remote_enabled)}
             search={searchable(providers, assistant.remote_enabled)}
-            onSaved={setAssistant}
+            onSaved={(a) => {
+              setAssistant(a);
+              setEditing(null);
+            }}
+            onClose={() => setEditing(null)}
           />
         )}
       </main>
       {names && (
         <NamesPanel
+          ref={namesPanel}
           key={names.updated_at ?? "unset"}
           names={names}
           providers={pickable(providers, names.remote_enabled)}
-          onSaved={setNames}
+          onSaved={(n) => {
+            setNames(n);
+            setEditing((e) => (e === "names" ? null : e));
+          }}
         />
       )}
     </>
@@ -225,10 +264,12 @@ export function AgentsAdmin() {
 
 /** The Session names editor: Off · Local LLM · Remote, then Save. */
 function NamesPanel({
+  ref,
   names,
   providers,
   onSaved,
 }: {
+  ref: React.Ref<HTMLElement>;
   names: Names;
   /** the ones Remote may pick */
   providers: Provider[];
@@ -295,6 +336,7 @@ function NamesPanel({
   );
   return (
     <aside
+      ref={ref}
       id="session-names"
       aria-label="Session names"
       className="aside m-3.5 flex flex-[1_1_340px] flex-col px-[18px] pt-4 pb-6 md:ml-0"
@@ -418,17 +460,22 @@ const CAPS: [keyof Limits, string][] = [
 
 /** The Assistant's settings under the table: on or off, provider and model, web search, caps, then Cancel and Save. */
 function AssistantPanel({
+  ref,
   settings,
   providers,
   search,
   onSaved,
+  onClose,
 }: {
+  ref: React.Ref<HTMLFormElement>;
   settings: Settings;
   /** enabled servers, and remote ones while the switch is on */
   providers: Provider[];
   /** enabled search providers while the switch is on */
   search: Provider[];
   onSaved: (s: Settings) => void;
+  /** Cancel: the box closes (it opens fresh from the saved settings) */
+  onClose: () => void;
 }) {
   const [enabled, setEnabled] = useState(settings.enabled);
   const [name, setName] = useState(settings.provider ?? providers[0]?.name ?? "");
@@ -469,18 +516,10 @@ function AssistantPanel({
       setBusy(false);
     }
   }
-  function cancel() {
-    setEnabled(settings.enabled);
-    setName(settings.provider ?? providers[0]?.name ?? "");
-    setModel(settings.model ?? "");
-    setWeb(settings.web_search && search.length > 0);
-    setSName(settings.search_provider ?? search[0]?.name ?? "");
-    setCaps(capsText(settings.limits));
-    setError("");
-  }
   const field = "flex min-w-0 flex-col gap-1.5";
   return (
     <form
+      ref={ref}
       id="assistant-settings"
       aria-label="Assistant settings"
       onSubmit={save}
@@ -623,15 +662,13 @@ function AssistantPanel({
       {error && <ErrorNote>{error}</ErrorNote>}
       <div className="flex flex-wrap items-center gap-2">
         {p && (
-          <span
-            className={`text-[12px] ${p.kind === "remote" ? "text-[#f2c14e]" : "text-t2"}`}
-          >
+          <span className={`text-[12px] ${p.kind === "remote" ? "text-[#f2c14e]" : "text-t2"}`}>
             Sends your messages, the screen summary and tool results to {titleOf(p)}
             {p.kind === "server" ? ", on this network" : ""}; never images.
           </span>
         )}
         <div className="grow" />
-        <button type="button" className="chip bevel" onClick={cancel}>
+        <button type="button" className="chip bevel" onClick={onClose}>
           Cancel
         </button>
         <button type="submit" className="key h-[38px] px-[18px] text-[13px]" disabled={busy}>

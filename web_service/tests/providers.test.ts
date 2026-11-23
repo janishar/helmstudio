@@ -3,8 +3,23 @@ import server from "../../contracts/fixtures/http/Provider.valid.1.json";
 import remote from "../../contracts/fixtures/http/Provider.valid.2.json";
 import testOk from "../../contracts/fixtures/http/ProviderTest.valid.1.json";
 import testBad from "../../contracts/fixtures/http/ProviderTest.valid.2.json";
+import presetFile from "../../contracts/providers/presets.json";
 import type { S } from "@/lib/api";
-import { blankForm, formOf, putOf, testLine, toggled } from "@/lib/providers";
+import {
+  blankForm,
+  compatLine,
+  fetchFrom,
+  formOf,
+  presetForm,
+  putOf,
+  testLine,
+  tickModel,
+  toggled,
+  type Preset,
+} from "@/lib/providers";
+
+const presets = presetFile.presets as Preset[];
+const preset = (id: string) => presets.find((p) => p.id === id)!;
 
 const P = (x: unknown) => x as S<"Provider">;
 
@@ -55,5 +70,73 @@ describe("provider form", () => {
     expect(testLine(testBad as S<"ProviderTest">)).toBe(
       "network · fakeai: network error: connection refused",
     );
+  });
+});
+
+describe("provider presets (plan 25)", () => {
+  it("picking DeepSeek fills the form and keeps host, memory, in flight, timeout and enabled", () => {
+    const mine = { ...blankForm(), host: "mac", memory_gb: "6.5", timeout_s: "90", enabled: false };
+    const f = presetForm(preset("deepseek"), mine);
+    expect(f).toMatchObject({
+      kind: "remote",
+      name: "deepseek",
+      title: "DeepSeek",
+      base_url: "https://api.deepseek.com",
+      models: "deepseek-flash\ndeepseek-v4-pro",
+      key_secret: "deepseek",
+      preset: "deepseek",
+      host: "mac",
+      memory_gb: "6.5",
+      timeout_s: "90",
+      enabled: false,
+    });
+    expect(putOf(f)).toMatchObject({ body: { preset: "deepseek", key_secret: "deepseek" } });
+  });
+  it("Anthropic's compat goes into the body and reads as one line", () => {
+    const f = presetForm(preset("anthropic"), blankForm());
+    expect(putOf(f)).toMatchObject({
+      body: { compat: { temperature: false, strict_schema: true } },
+    });
+    expect(compatLine(f.compat)).toBe("Sends no temperature; strict JSON schema");
+    expect(compatLine(undefined)).toBe("");
+  });
+  it("a server may name a key file, optional", () => {
+    const f = {
+      ...presetForm(preset("llama-server"), blankForm()),
+      host: "mac",
+      memory_gb: "4",
+      models: "q",
+    };
+    expect(putOf(f)).toMatchObject({ body: { kind: "server" } });
+    expect("key_secret" in (putOf(f) as { body: object }).body).toBe(false);
+    expect(putOf({ ...f, key_secret: "llama-server" })).toMatchObject({
+      body: { key_secret: "llama-server" },
+    });
+    expect(putOf({ ...f, key_secret: "sk THE KEY" })).toEqual({
+      error: expect.stringMatching(/^Key file/),
+    });
+  });
+  it("Fetch asks the preset's URL or the saved one's, never a changed one", () => {
+    const f = presetForm(preset("ollama"), blankForm());
+    expect(fetchFrom(f, presets, [])).toEqual({ preset: preset("ollama") });
+    const moved = { ...f, base_url: "http://host.docker.internal:11435/v1" };
+    expect(fetchFrom(moved, presets, [])).toBeNull();
+    expect(fetchFrom(formOf(P(server)), presets, [P(server)])).toEqual({ saved: server });
+    expect(
+      fetchFrom({ ...formOf(P(server)), base_url: "http://10.0.0.9/v1" }, presets, [P(server)]),
+    ).toBeNull();
+  });
+  it("ticks add at the end and unticks remove; the 17th is refused", () => {
+    const f = { ...blankForm(), models: "a\nb" };
+    const r = tickModel(f, "c", true);
+    expect("form" in r && r.form.models).toBe("a\nb\nc");
+    const u = tickModel(f, "a", false);
+    expect("form" in u && u.form.models).toBe("b");
+    const full = {
+      ...blankForm(),
+      models: Array.from({ length: 16 }, (_, i) => `m${i}`).join("\n"),
+    };
+    expect(tickModel(full, "x", true)).toEqual({ error: "16 models at most" });
+    expect(tickModel(full, "m3", true)).toMatchObject({ form: { models: full.models } });
   });
 });

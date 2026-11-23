@@ -46,10 +46,28 @@ const assistantOff: S<"AssistantSettings"> = {
   updated_at: null,
 };
 
-const deepseek = { ...remote, name: "deepseek", title: "DeepSeek", models: ["deepseek-chat"], default_model: "deepseek-chat" };
-const brave = { ...remote, name: "brave", title: "Brave", kind: "search", api: "brave", models: [], default_model: "" };
+const deepseek = {
+  ...remote,
+  name: "deepseek",
+  title: "DeepSeek",
+  models: ["deepseek-chat"],
+  default_model: "deepseek-chat",
+};
+const brave = {
+  ...remote,
+  name: "brave",
+  title: "Brave",
+  kind: "search",
+  api: "brave",
+  models: [],
+  default_model: "",
+};
 
-function serve(n: S<"SessionNames">, providers: unknown[], a: S<"AssistantSettings"> = assistantOff) {
+function serve(
+  n: S<"SessionNames">,
+  providers: unknown[],
+  a: S<"AssistantSettings"> = assistantOff,
+) {
   answer("GET", {
     "/v1/studio/admin/assistant": () => ({ data: a }),
     "/v1/studio/admin/session-names": () => ({ data: n }),
@@ -59,6 +77,14 @@ function serve(n: S<"SessionNames">, providers: unknown[], a: S<"AssistantSettin
   });
   render(<AgentsAdmin />);
 }
+
+const row = (job: string) =>
+  screen
+    .getAllByText(job)
+    .map((e) => e.closest("tr"))
+    .find(Boolean) as HTMLElement;
+const edit = (job: string) =>
+  fireEvent.click(within(row(job)).getByRole("button", { name: "Edit" }));
 
 const radio = (name: RegExp) =>
   within(screen.getByRole("radiogroup", { name: "Session names" })).getByRole("radio", { name });
@@ -136,6 +162,7 @@ describe("AgentsAdmin", () => {
     expect(await screen.findByText("your messages to DeepSeek")).toBeTruthy();
     expect(screen.getByText("200 calls · 2 M tokens a day")).toBeTruthy();
     expect(screen.getByText(/web search: Brave/)).toBeTruthy();
+    edit("Assistant");
     const form = screen.getByRole("form", { name: "Assistant settings" });
     expect(
       within(form).getByText(
@@ -162,16 +189,49 @@ describe("AgentsAdmin", () => {
       },
     });
     expect(await screen.findByText("no Assistant in the dock")).toBeTruthy();
+    expect(screen.queryByRole("form", { name: "Assistant settings" })).toBeNull(); // Save closes it
+    expect(row("Assistant").getAttribute("aria-selected")).toBe("false");
   });
 
-  it("Assistant: Cancel puts the saved settings back; web search greyed while remote is off", async () => {
+  it("Assistant: Cancel closes the box and puts the saved settings back; web search greyed while remote is off", async () => {
     serve(names(), [server, brave]);
-    const form = await screen.findByRole("form", { name: "Assistant settings" });
-    expect((within(form).getByRole("checkbox", { name: "Web search" }) as HTMLInputElement).disabled).toBe(true);
-    const calls = within(form).getByLabelText("Model calls a day") as HTMLInputElement;
-    fireEvent.change(calls, { target: { value: "5" } });
+    await screen.findAllByText("Assistant");
+    edit("Assistant");
+    let form = screen.getByRole("form", { name: "Assistant settings" });
+    expect(
+      (within(form).getByRole("checkbox", { name: "Web search" }) as HTMLInputElement).disabled,
+    ).toBe(true);
+    fireEvent.change(within(form).getByLabelText("Model calls a day"), { target: { value: "5" } });
     fireEvent.click(within(form).getByRole("button", { name: "Cancel" }));
-    expect(calls.value).toBe("200");
-    expect(within(form).getByText(/to Ollama on the Mac, on this network; never images/)).toBeTruthy();
+    expect(screen.queryByRole("form", { name: "Assistant settings" })).toBeNull();
+    edit("Assistant");
+    form = screen.getByRole("form", { name: "Assistant settings" });
+    expect((within(form).getByLabelText("Model calls a day") as HTMLInputElement).value).toBe(
+      "200",
+    );
+    expect(
+      within(form).getByText(/to Ollama on the Mac, on this network; never images/),
+    ).toBeTruthy();
+  });
+
+  it("Assistant: closed until Edit, which opens it, marks the row and focuses its first field", async () => {
+    serve(names(), [server], assistantOn);
+    await screen.findAllByText("Assistant");
+    expect(screen.queryByRole("form", { name: "Assistant settings" })).toBeNull();
+    expect(row("Assistant").getAttribute("aria-selected")).toBe("false");
+    edit("Assistant");
+    const form = screen.getByRole("form", { name: "Assistant settings" });
+    expect(row("Assistant").getAttribute("aria-selected")).toBe("true");
+    expect(form.contains(document.activeElement)).toBe(true);
+    expect(document.activeElement).toBe(within(form).getByRole("switch", { name: "Assistant on" }));
+  });
+
+  it("Session names: Edit marks its row and moves focus to the panel's checked option", async () => {
+    serve(names(), [server]);
+    await screen.findAllByText("Session names");
+    expect(row("Session names").getAttribute("aria-selected")).toBe("false");
+    edit("Session names");
+    expect(row("Session names").getAttribute("aria-selected")).toBe("true");
+    expect(document.activeElement).toBe(radio(/^Off/));
   });
 });
