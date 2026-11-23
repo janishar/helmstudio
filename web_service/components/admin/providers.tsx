@@ -435,7 +435,7 @@ function ProviderPanel({
             value={f.preset}
             onChange={(e) => {
               const p = presets.find((x) => x.id === e.target.value);
-              setForm(p ? presetForm(p, f) : { ...f, preset: "" });
+              setForm(p ? presetForm(p, f) : { ...f, preset: "", thinking: {}, levels: {} }); // no preset: no rules
             }}
           >
             <option value="">None</option>
@@ -918,7 +918,7 @@ function ModelsArea({
               form={f}
               id={m}
               custom={!offered.includes(m)}
-              onTick={(on) => apply(tickModel(f, m, on))}
+              onTick={(on) => apply(on ? addModel(f, m, preset) : tickModel(f, m, false))}
               onDefault={() => setForm({ ...f, default_model: m })}
               onLevel={(l) => setForm({ ...f, thinking: { ...f.thinking, [m]: l } })}
             />

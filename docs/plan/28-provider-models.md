@@ -299,3 +299,7 @@ be the 4 models until a Test says otherwise.
   not in the fetched list (or, before a fetch, the preset's list): a saved model the provider no longer lists shows as
   custom. (4) Gemini (no default, no Off) starts with nothing picked and sends nothing.
 
+- **Review fixes (2026-11-24)**: the 400 retry without the fragment remembers the (provider, model) only when that
+  retry answers (a 400 for another reason, a prompt too long, no longer turns DeepSeek's Off back to thinking for the
+  process); Preset None drops the preset's levels (else Save sent a level for a provider with no rules: 422); ticking
+  a preset model on a saved provider shows its rule's levels before Fetch answers.

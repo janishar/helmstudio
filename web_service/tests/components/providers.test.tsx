@@ -371,6 +371,45 @@ describe("ProvidersAdmin", () => {
     expect(def.map((d) => d.checked)).toEqual([true]);
   });
 
+  it("review: Preset None drops the preset's thinking, so Save is not refused for it", async () => {
+    serve(true, false);
+    render(<ProvidersAdmin />);
+    await pick("DeepSeek");
+    await screen.findByRole("radiogroup", { name: "Thinking for deepseek-flash" });
+    fireEvent.change(screen.getByLabelText("Preset"), { target: { value: "" } });
+    expect(within(models()).getAllByText("No thinking setting")).toHaveLength(2);
+    const put = answer("PUT", {
+      "/v1/studio/admin/providers/{name}": (init) => ({
+        data: { ...remote, ...(init.body as object) },
+      }),
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save provider" }));
+    await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
+    const body = (put.mock.calls[0][1] as { body: object }).body;
+    expect("thinking" in body || "preset" in body).toBe(false);
+  });
+
+  it("review: ticking a preset model on a saved provider shows its rule's levels before any Fetch", async () => {
+    const saved = {
+      ...remote,
+      name: "deepseek",
+      base_url: "https://api.deepseek.com/v1",
+      key_secret: "deepseek",
+      preset: "deepseek",
+      models: ["deepseek-flash"],
+      default_model: "deepseek-flash",
+      thinking_levels: { "deepseek-flash": deepseekLevels },
+    };
+    serve(true, false, false, [saved]);
+    render(<ProvidersAdmin />);
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Use deepseek-v4-pro" }));
+    const pro = screen.getByRole("radiogroup", { name: "Thinking for deepseek-v4-pro" });
+    expect(within(pro).getByRole("radio", { name: "High" }).getAttribute("aria-checked")).toBe(
+      "true",
+    );
+  });
+
   // ---- plan 27: the key area (docs/mock/Providers.dc.html, Other states)
 
   const saved = (check: string, found: boolean, detail?: string) => (init: { body?: unknown }) => {

@@ -18,8 +18,8 @@ opens a connection):
   with `strict: true` and never retries it as `json_object`.
 - **thinking** (API 1.53, plan 28): the snapshot's `thinking[model]` {level, body, tokens}, resolved by studio from
   the preset's rules: `body` is merged into the call's body, `tokens` added to max_tokens (thinking spends output
-  tokens: a 24-token title still has room). A 400 on a call that carried a body is asked once more without it, and
-  that (provider, model) is remembered in this process (`_NO_THINKING`); the tokens stay.
+  tokens: a 24-token title still has room). A 400 on a call that carried a body is asked once more without it; when that answers,
+  the (provider, model) is remembered in this process (`_NO_THINKING`); the tokens stay.
 - **Failures** are classed: `network` (connect, DNS, TLS, timeout, 5xx, 429; retried 1 s, 4 s, 16 s or
   Retry-After ≤ 60 s, counted apart from verdicts) or `answer` (another 4xx, a body that is not a chat completion:
   stage A's one re-ask). `refused` and `off` are final.
@@ -280,10 +280,16 @@ async def chat(name: str, p: dict, req: dict) -> dict:
     t = time.monotonic()
     try:
         async with _http(name, p) as http:
+            dropped = False
             while True:
                 llm = _client(name, p, req["model"], limit, http, body)
                 try:
                     msg = await llm.bind(**kw).ainvoke(msgs)
+                    if dropped:  # remembered only once the call without it answered (another 400 is not its fault)
+                        _NO_THINKING.add((name, req["model"]))
+                        log.warning(
+                            "%s %s: thinking setting refused, sent without it", name, req["model"]
+                        )
                     break
                 except openai.BadRequestError:
                     # some OpenAI-compatible providers (DeepSeek) refuse response_format json_schema but take
@@ -291,14 +297,8 @@ async def chat(name: str, p: dict, req: dict) -> dict:
                     if not strict and kw.get("response_format", {}).get("type") == "json_schema":
                         _NO_JSON_SCHEMA.add(name)
                         kw, msgs = _json_object(req, msgs)
-                    elif (
-                        body
-                    ):  # API 1.53: the thinking setting refused: once more without it, remembered
-                        _NO_THINKING.add((name, req["model"]))
-                        log.warning(
-                            "%s %s: thinking setting refused, sent without it", name, req["model"]
-                        )
-                        body = {}
+                    elif body:  # API 1.53: the thinking setting refused? once more without it
+                        body, dropped = {}, True
                     else:
                         raise
     except Exception as e:  # noqa: BLE001 - every failure is classed (network or answer)

@@ -128,3 +128,14 @@ async def test_test_reads_an_openrouter_reasoning_object(fake):
     assert not schemas.providers_test_errors("reply", got)
     plain = await providers.test({"name": "local", "provider": server(fake.url)})
     assert "reasoning" not in plain
+
+
+async def test_a_400_that_is_not_the_fragment_is_not_remembered(fake):
+    # review: a 400 for another reason (a prompt too long) fails both ways; the setting (Off) must not be dropped for good
+    p = server(fake.url, thinking={"m": OFF | {"body": {"thinking": {"type": "disabled"}}}})
+    fake.script["m"] = [{"status": 400}, {"status": 400}]
+    with pytest.raises(providers.CallError):
+        await providers.chat("ds", p, REQ)
+    assert ("ds", "m") not in providers._NO_THINKING
+    await providers.chat("ds", p, REQ)
+    assert fake.requests[-1]["body"]["thinking"] == {"type": "disabled"}
