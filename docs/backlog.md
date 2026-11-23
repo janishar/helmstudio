@@ -48,11 +48,6 @@ Notes from the owner while using the app. Not scheduled; each is picked up when 
   check that no fake service or echo workflow is offered), fresh production secrets from `.tools/make-secrets`, a
   domain and HTTPS in front of Kong (NATS and S3 private or tunnelled), the admin account, releases by tag with
   migrate, health checks and rollback, logs. The owner's `oralab-deploy` skill covers a one-VM compose beta.
-- **Nightly backup of the dev data** (owner, 2026-11-23, after Docker Desktop's storage was wiped and recreated at
-  18:28 that day, losing the dev database and media store: users, sessions, takes, Timelines, pipelines, assistant
-  chats, memory and settings). A nightly `pg_dump` of every database and a copy of the SeaweedFS bucket, kept off
-  Docker (the T9 drive when connected, else a folder outside Docker), with a few days kept and a restore command
-  that is tested. Needed before production too.
 
 ## Checks and hardening
 
