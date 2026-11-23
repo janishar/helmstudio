@@ -2,7 +2,7 @@
 
 [← Plan index](../README.md)
 
-Status: **decided by the owner (2026-11-24); board approved by the owner (2026-11-24, "Approve"); build after plan 28.** API version: **1.54.0** (main is
+Status: **decided by the owner (2026-11-24); board approved by the owner (2026-11-24, "Approve"); built 2026-11-24 (33.6).** API version: **1.54.0** (main is
 at 1.53.0, plan 28; if another plan takes 1.54.0 first, this takes the next free one at build time). Not in a
 milestone, like plans 25, 27 and 28.
 
@@ -71,3 +71,32 @@ per model, the snapshot's `thinking`), `contracts/openapi.yaml` (`AssistantStatu
 | 3 | web: the chip and the timer; tests | 1 |
 | 4 | Gates and a dev-stack look with a thinking model | 0.5 |
 | | Total | 3 |
+
+### 33.6 As built (all phases; 2026-11-24)
+
+- **Contracts** (API 1.54.0): `AssistantStatus.thinks`, required; `AssistantThreadList` fixtures with true and
+  false; README Assistant › Thinks; web `gen/api.ts` regenerated.
+- **studio**: `modelThinks(preset, model, saved)` (thinking.go) reads plan 28's own snapshot rule for that one model
+  (`thinkingSnapshot`) and is true when the resolved level is not `off`. So a saved level counts; with nothing saved,
+  the rule's `default` counts (DeepSeek flash's high, OpenAI's medium, Mistral Large's high: those models think on
+  every call without being told, so the chip should say so); always thinks counts (`on`). No rule, a rule without a
+  default and nothing saved (Ollama qwen3, Gemini), a `"models"` preset (OpenRouter) with nothing saved, no preset or
+  no provider: false. Why the snapshot rule: it is exactly what the call sends and reserves room for, so the chip and
+  the call never disagree. Set in `assistantConfig` beside `provider`, so it is false whenever the assistant is off.
+- **web**: a `Thinking` chip (assistant.tsx) replaces `Working` when `status.thinks`, the thread is `working` and the
+  tab is not running actions; it mounts at 0 and counts whole seconds with `setInterval`, so it starts when this tab
+  sees `working` and goes when the state leaves it (the step lands, or the turn parks on actions or a card). A server
+  step that keeps the state `working` keeps the same count. Styled as the board: `.st-go` outline, mono 500, an
+  11 px spinning `LoaderCircle`. It has `role="status"` (as the board) with `aria-live="off"`, so a screen reader is
+  not told every second. Read-only and `Waiting for you` win, as before.
+- **Tests**: studio `TestModelThinks` (11 cases: high, off, a default, always thinks, no rule, a rule without a
+  default, `"models"` with and without a level, no preset) and the settings test checks `thinks` false; web
+  `assistant-drawer` "thinking (plan 29)": `Thinking… 0 s` → `3 s` with fake timers, `Working` while the parked
+  actions run, a new `0 s` after they finish, gone on idle; `Working` when `thinks` is false; another tab's chat
+  stays `Read-only`; contract `test_assistant.py` checks `thinks` is false for the fake model.
+- **Gates**: contracts-check passed; studio `make test lint` (243 tests, DB tests on the test Postgres); web `make
+  test lint` (1144 tests, 80 files; one older warning in run-on.test.tsx); contract suite `test_assistant.py` 2
+  passed, then the full suite 752 passed, 117 skipped.
+- **Deviations**: none from the plan. The dev-stack look with a real thinking model was not done (the dev stack's
+  data is not changed by builds); the chip was checked by the tests only.
+
