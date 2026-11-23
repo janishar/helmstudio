@@ -2,6 +2,7 @@
 // Admin > Model providers (components/admin/providers.tsx; docs/mock/Providers.dc.html): a remote provider says it is
 // off while the deployment's remote switch is, and the form explains what Remote asks for.
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { api } from "@/lib/api";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ProvidersAdmin } from "@/components/admin/providers";
 import remote from "../../../contracts/fixtures/http/Provider.valid.2.json";
@@ -22,13 +23,13 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const serve = (remote_enabled: boolean, found = true) =>
+const serve = (remote_enabled: boolean, found = true, writable = false) =>
   answer("GET", {
     "/v1/studio/admin/providers": () => ({ data: { providers: [remote], remote_enabled } }),
     "/v1/studio/admin/provider-presets": () => ({ data: { ...presetFile, remote_enabled } }),
     "/v1/studio/admin/provider-keys/{key_secret}": (init) => {
       const k = (init.params as { path: { key_secret: string } }).path.key_secret;
-      return { data: { key_secret: k, path: `deploy/secrets/providers/${k}`, found } };
+      return { data: { key_secret: k, path: `deploy/secrets/providers/${k}`, found, writable } };
     },
   });
 
@@ -172,5 +173,186 @@ describe("ProvidersAdmin", () => {
     expect(
       screen.getByText("Fetch asks only the preset's or the saved URL. Save first."),
     ).toBeTruthy();
+  });
+
+  // ---- plan 27: the key area (docs/mock/Providers.dc.html, Other states)
+
+  const saved = (check: string, found: boolean, detail?: string) => (init: { body?: unknown }) => {
+    const body = init.body as { key: string };
+    expect(body.key).toBe(KEY);
+    return {
+      data: {
+        key_secret: "openai",
+        path: "deploy/secrets/providers/openai",
+        found,
+        saved: check === "ok" || check === "skipped",
+        check,
+        ...(detail ? { detail } : {}),
+      },
+    };
+  };
+  const KEY = "sk-test-0123456789";
+  const keyField = () => screen.getByLabelText(/API key$/) as HTMLInputElement;
+  const button = (name: string) => screen.getByRole("button", { name }) as HTMLButtonElement;
+
+  it("Missing: a password field and Save key; a checked key is saved, then Found with Replace and Remove", async () => {
+    serve(true, false, true);
+    const put = answer("PUT", { "/v1/studio/admin/provider-keys/{key_secret}": saved("ok", true) });
+    render(<ProvidersAdmin />);
+    await pick("OpenAI");
+    expect(await screen.findByText("Missing", {}, { timeout: 2000 })).toBeTruthy();
+    const field = keyField();
+    expect(screen.getByText("API key")).toBeTruthy();
+    expect(field.type).toBe("password");
+    expect(field.getAttribute("autocomplete")).toBe("off");
+    expect(field.getAttribute("placeholder")).toBe("Paste the key");
+    expect(
+      screen.getByText("Checked with the provider, then saved to this file. Never shown again."),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Put the key in this file/)).toBeNull();
+    expect(button("Save key").disabled).toBe(true);
+    fireEvent.change(field, { target: { value: KEY } });
+    fireEvent.click(button("Save key"));
+    expect(await screen.findByText("Found")).toBeTruthy();
+    expect(put.mock.calls[0][1]).toEqual({
+      params: { path: { key_secret: "openai" } },
+      body: { key: KEY, preset: "openai" },
+    });
+    expect(screen.queryByLabelText(/API key$/)).toBeNull();
+    expect(button("Replace key")).toBeTruthy();
+    expect(button("Remove key")).toBeTruthy();
+    expect(document.body.innerHTML).not.toContain(KEY);
+  });
+
+  it("Checking: the field and the button are greyed, the button reads Checking…", async () => {
+    serve(true, false, true);
+    vi.spyOn(api, "PUT").mockImplementation((() => new Promise(() => {})) as never);
+    render(<ProvidersAdmin />);
+    await pick("OpenAI");
+    await screen.findByText("Missing", {}, { timeout: 2000 });
+    fireEvent.change(keyField(), { target: { value: KEY } });
+    fireEvent.click(button("Save key"));
+    expect(button("Checking…").disabled).toBe(true);
+    expect(keyField().disabled).toBe(true);
+  });
+
+  it("Refused: a red note, the field empties, the line stays Missing", async () => {
+    serve(true, false, true);
+    answer("PUT", {
+      "/v1/studio/admin/provider-keys/{key_secret}": saved(
+        "refused",
+        false,
+        "the provider refused this key; not saved",
+      ),
+    });
+    render(<ProvidersAdmin />);
+    await pick("OpenAI");
+    await screen.findByText("Missing", {}, { timeout: 2000 });
+    fireEvent.change(keyField(), { target: { value: KEY } });
+    fireEvent.click(button("Save key"));
+    expect(await screen.findByText("the provider refused this key; not saved")).toBeTruthy();
+    expect(keyField().value).toBe("");
+    expect(screen.getByText("Missing")).toBeTruthy();
+  });
+
+  it("Could not check: an amber note with Save anyway (force); the key is kept until then", async () => {
+    serve(true, false, true);
+    const put = answer("PUT", {
+      "/v1/studio/admin/provider-keys/{key_secret}": (init) =>
+        (init.body as { force?: boolean }).force
+          ? saved("skipped", true)(init)
+          : saved("unreachable", false, "timeout")(init),
+    });
+    render(<ProvidersAdmin />);
+    await pick("OpenAI");
+    await screen.findByText("Missing", {}, { timeout: 2000 });
+    fireEvent.change(keyField(), { target: { value: KEY } });
+    fireEvent.click(button("Save key"));
+    expect(await screen.findByText("could not check: timeout")).toBeTruthy();
+    expect(keyField().value).toBe(KEY);
+    fireEvent.click(button("Save anyway"));
+    expect(await screen.findByText("Saved without a check; tried on first use.")).toBeTruthy();
+    expect(put.mock.calls[1][1]).toEqual({
+      params: { path: { key_secret: "openai" } },
+      body: { key: KEY, preset: "openai", force: true },
+    });
+    expect(screen.getByText("Found")).toBeTruthy();
+  });
+
+  it("Replace open: an empty New API key field, Save key and Cancel; the old key stays", async () => {
+    serve(true, true, true);
+    render(<ProvidersAdmin />);
+    await pick("DeepSeek");
+    await screen.findByText("Found", {}, { timeout: 2000 });
+    expect(screen.queryByLabelText(/API key$/)).toBeNull();
+    fireEvent.click(button("Replace key"));
+    expect(screen.getByText("New API key")).toBeTruthy();
+    expect(keyField().value).toBe("");
+    expect(screen.getByText("The old key stays until the new one is saved.")).toBeTruthy();
+    fireEvent.change(keyField(), { target: { value: KEY } });
+    fireEvent.click(button("Cancel"));
+    expect(screen.queryByLabelText(/API key$/)).toBeNull();
+    fireEvent.click(button("Replace key"));
+    expect(keyField().value).toBe("");
+  });
+
+  it("Remove asks first, then removes: Missing with the field", async () => {
+    serve(true, true, true);
+    const del = answer("DELETE", {
+      "/v1/studio/admin/provider-keys/{key_secret}": () => ({
+        data: {
+          key_secret: "deepseek",
+          path: "deploy/secrets/providers/deepseek",
+          found: false,
+          writable: true,
+        },
+      }),
+    });
+    render(<ProvidersAdmin />);
+    await pick("DeepSeek");
+    await screen.findByText("Found", {}, { timeout: 2000 });
+    fireEvent.click(button("Remove key"));
+    const dialog = screen.getByRole("alertdialog", { name: "Remove key" });
+    expect(dialog.textContent).toBe(
+      "Remove deploy/secrets/providers/deepseek? Calls to DeepSeek fail until a key is saved.CancelRemove",
+    );
+    expect(del).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    fireEvent.click(button("Remove key"));
+    fireEvent.click(
+      within(screen.getByRole("alertdialog")).getByRole("button", { name: "Remove" }),
+    );
+    expect(await screen.findByText("Missing")).toBeTruthy();
+    expect(del.mock.calls[0][1]).toEqual({ params: { path: { key_secret: "deepseek" } } });
+    expect(screen.getByText("API key")).toBeTruthy();
+  });
+
+  it("not writable: plan 25's note, no field, no Replace or Remove", async () => {
+    serve(true, false, false);
+    render(<ProvidersAdmin />);
+    await pick("OpenAI");
+    await screen.findByText("Missing", {}, { timeout: 2000 });
+    expect(screen.queryByLabelText(/API key$/)).toBeNull();
+    cleanup();
+    serve(true, true, false);
+    render(<ProvidersAdmin />);
+    await pick("DeepSeek");
+    await screen.findByText("Found", {}, { timeout: 2000 });
+    expect(screen.queryByRole("button", { name: "Replace key" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Remove key" })).toBeNull();
+  });
+
+  it("Save key is greyed once the Base URL is neither the preset's nor the saved one", async () => {
+    serve(true, false, true);
+    render(<ProvidersAdmin />);
+    await pick("OpenAI");
+    await screen.findByText("Missing", {}, { timeout: 2000 });
+    fireEvent.change(keyField(), { target: { value: KEY } });
+    expect(button("Save key").disabled).toBe(false);
+    fireEvent.change(screen.getByLabelText("Base URL"), {
+      target: { value: "https://proxy.example.com/v1" },
+    });
+    expect(button("Save key").disabled).toBe(true);
   });
 });

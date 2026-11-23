@@ -1,10 +1,12 @@
 "use client";
 // Admin > Model providers (docs/mock/Providers.dc.html): local servers (any OpenAI-compatible endpoint on a loopback or
 // private address, with the memory their GPU host keeps reserved) and remote providers (https, only while the
-// deployment's remote switch is on). Test, Edit, Enable/Disable, Delete per row; the form adds or replaces one. Keys
-// are never shown or typed: a remote provider names the secret file pipelines_service reads. API 1.51 (plan 25): a
-// Preset fills the form, Fetch lists the provider's models (asked by pipelines, from the preset's or the saved URL only)
-// as a tick list, and the key file's status line says Found or Missing with Recheck.
+// deployment's remote switch is on). Test, Edit, Enable/Disable, Delete per row; the form adds or replaces one. A
+// provider names the key file pipelines_service reads. API 1.51 (plan 25): a Preset fills the form, Fetch lists the
+// provider's models (asked by pipelines, from the preset's or the saved URL only) as a tick list, and the key file's
+// status line says Found or Missing with Recheck. API 1.52 (plan 27): the key area takes a key (a password field, its
+// value in its own state, never in the form, a URL or storage), checked with the provider, then saved to the file and
+// never shown again; Replace key and Remove key once Found.
 import { useCallback, useEffect, useState } from "react";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { AdminTabs } from "@/components/admin/users";
@@ -405,8 +407,8 @@ function ProviderPanel({
             Pick a preset to fill the form; every field stays editable. A local server is any
             OpenAI-compatible endpoint you run (Ollama, LM Studio, llama-server) on a loopback or
             private address; the host keeps its memory reserved. A remote provider is https and
-            needs the deployment&apos;s remote switch. Keys are never entered here: put the key in
-            the key file the server reads.
+            needs the deployment&apos;s remote switch. Paste its key under Key file: it is checked
+            with the provider, saved to that file on the server and never shown again.
           </Info>
         </h2>
         <div className="flex min-w-0 flex-col gap-1.5">
@@ -585,7 +587,14 @@ function ProviderPanel({
           </div>
         )}
         {showKey && key?.key_secret === keyName && (
-          <KeyLine status={key} onRecheck={() => setRecheck((n) => n + 1)} />
+          <KeyArea
+            key={keyName}
+            status={key}
+            source={from}
+            title={f.title.trim() || f.name.trim() || keyName}
+            onStatus={setKey}
+            onRecheck={() => setRecheck((n) => n + 1)}
+          />
         )}
         {f.kind === "server" && (
           <span className="text-[12px] text-t2">
@@ -618,11 +627,83 @@ function ProviderPanel({
   );
 }
 
-/** The key file's status: a dot, Found or Missing, the deploy-side path, Recheck (the key is never shown). */
-function KeyLine({ status, onRecheck }: { status: S<"ProviderKey">; onRecheck: () => void }) {
+/** The key area (plan 27, the Providers board): the key file's line (a dot, Found or Missing, the path, Recheck); while
+ * Missing an API key field with Save key; once Found, Replace key and Remove key (asked first). The check's answers:
+ * Checking…, Refused (red), Could not check (amber, Save anyway). Not writable: plan 25's note, no field. */
+function KeyArea({
+  status,
+  source,
+  title,
+  onStatus,
+  onRecheck,
+}: {
+  status: S<"ProviderKey">;
+  source: ReturnType<typeof fetchFrom>;
+  title: string;
+  onStatus: (k: S<"ProviderKey">) => void;
+  onRecheck: () => void;
+}) {
+  const [value, setValue] = useState(""); // the key: only here, cleared after every answer but Could not check
+  const [mode, setMode] = useState<"" | "replace" | "remove">("");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<{
+    kind: "refused" | "unreachable" | "error";
+    text: string;
+  } | null>(null);
+  const [skipped, setSkipped] = useState(false);
+  const keyPath = { params: { path: { key_secret: status.key_secret } } };
   const colour = status.found ? "var(--a1)" : "#f2c14e";
+  async function save(force: boolean) {
+    if (!source) return;
+    setBusy(true);
+    setNote(null);
+    const from =
+      "preset" in source ? { preset: source.preset.id } : { provider: source.saved.name };
+    try {
+      const r = await ok(
+        api.PUT("/v1/studio/admin/provider-keys/{key_secret}", {
+          ...keyPath,
+          body: { key: value, ...from, ...(force ? { force } : {}) },
+        }),
+      );
+      onStatus({ key_secret: r.key_secret, path: r.path, found: r.found, writable: true });
+      if (r.check === "unreachable") return setNote({ kind: "unreachable", text: r.detail ?? "" });
+      setValue("");
+      if (r.check === "refused")
+        return setNote({
+          kind: "refused",
+          text: r.detail ?? "the provider refused this key; not saved",
+        });
+      setMode("");
+      setSkipped(r.check === "skipped");
+    } catch (err) {
+      setValue("");
+      setNote({ kind: "error", text: message(err) });
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function remove() {
+    setBusy(true);
+    setNote(null);
+    try {
+      onStatus(await ok(api.DELETE("/v1/studio/admin/provider-keys/{key_secret}", keyPath)));
+      setMode("");
+      setSkipped(false);
+    } catch (err) {
+      setNote({ kind: "error", text: message(err) });
+    } finally {
+      setBusy(false);
+    }
+  }
+  const cancel = () => {
+    setMode("");
+    setValue("");
+    setNote(null);
+  };
+  const field = status.writable && (!status.found || mode === "replace");
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2 text-[12px]">
         <span className="size-2 rounded-full" style={{ background: colour }} />
         <span className="font-semibold" style={{ color: colour }}>
@@ -634,9 +715,131 @@ function KeyLine({ status, onRecheck }: { status: S<"ProviderKey">; onRecheck: (
           Recheck
         </button>
       </div>
-      {!status.found && (
+      {!status.writable && !status.found && (
         <span className="text-[12px] text-t2">
           Put the key in this file, then Recheck. The key is never shown here.
+        </span>
+      )}
+      {status.writable && status.found && mode === "" && (
+        <>
+          {skipped && (
+            <span className="text-[12px] text-t2">Saved without a check; tried on first use.</span>
+          )}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="chip h-[30px] text-[12px]"
+              onClick={() => setMode("replace")}
+            >
+              Replace key
+            </button>
+            <button
+              type="button"
+              className="chip h-[30px] text-[12px]"
+              onClick={() => setMode("remove")}
+            >
+              Remove key
+            </button>
+          </div>
+        </>
+      )}
+      {status.writable && status.found && mode === "remove" && (
+        <div
+          role="alertdialog"
+          aria-label="Remove key"
+          className="flex flex-col gap-2 rounded-xl bg-s2 px-3 py-2.5 text-[12px]"
+        >
+          <span>
+            Remove <span className="mono text-t2">{status.path}</span>? Calls to {title} fail until
+            a key is saved.
+          </span>
+          <div className="flex justify-end gap-2">
+            <button type="button" className="chip h-7 text-[12px]" onClick={cancel}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="chip h-7 bg-[#ff6b6b] text-[12px] font-semibold text-[#2b0505]"
+              disabled={busy}
+              onClick={() => void remove()}
+            >
+              Remove
+            </button>
+          </div>
+        </div>
+      )}
+      {field && (
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="p-api-key" className="label">
+            {status.found ? "New API key" : "API key"}
+          </label>
+          <div className="flex gap-2">
+            <input
+              id="p-api-key"
+              className="in min-w-0 flex-auto disabled:opacity-60"
+              type="password"
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="Paste the key"
+              value={value}
+              disabled={busy}
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter") return;
+                e.preventDefault(); // Enter saves the key, never the provider form
+                if (value.trim() && source) void save(false);
+              }}
+            />
+            <button
+              type="button"
+              className="chip h-[38px] flex-none text-[12px]"
+              disabled={busy || !value.trim() || !source}
+              onClick={() => void save(false)}
+            >
+              {busy ? "Checking…" : "Save key"}
+            </button>
+            {status.found && (
+              <button
+                type="button"
+                className="chip h-[38px] flex-none text-[12px]"
+                onClick={cancel}
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+      {note?.kind === "refused" && (
+        <div
+          role="alert"
+          className="flex items-center gap-2 rounded-[10px] bg-[color-mix(in_srgb,#ff6b6b_14%,transparent)] px-2.5 py-2 text-[12px] text-[#ff8a8a]"
+        >
+          <span className="flex-auto">{note.text}</span>
+        </div>
+      )}
+      {note?.kind === "unreachable" && (
+        <div
+          role="alert"
+          className="flex items-center gap-2 rounded-[10px] bg-[color-mix(in_srgb,#f2c14e_14%,transparent)] px-2.5 py-2 text-[12px] text-[#f2c14e]"
+        >
+          <span className="flex-auto">could not check: {note.text}</span>
+          <button
+            type="button"
+            className="chip h-[26px] text-[12px] text-t1"
+            disabled={busy || !value.trim() || !source}
+            onClick={() => void save(true)}
+          >
+            Save anyway
+          </button>
+        </div>
+      )}
+      {note?.kind === "error" && <ErrorNote>{note.text}</ErrorNote>}
+      {field && !note && (
+        <span className="text-[12px] text-t2">
+          {status.found
+            ? "The old key stays until the new one is saved."
+            : "Checked with the provider, then saved to this file. Never shown again."}
         </span>
       )}
     </div>
