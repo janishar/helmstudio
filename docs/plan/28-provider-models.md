@@ -2,7 +2,7 @@
 
 [← Plan index](../README.md)
 
-Status: **design (2026-11-24); one open point for the owner: the layout, A · Rows or B · Chips (32.7).** API version:
+Status: **decided by the owner (2026-11-24): layout A · Rows ("A - rows"), after seeing both drawn; queued to build.** API version:
 **1.53.0** (main is at 1.52.0, plan 27; if another plan takes 1.53.0 first, this takes the next free one at build
 time). Not in a milestone, like plans 25 and 27.
 
@@ -242,6 +242,8 @@ call because nothing is sent (32.1); setting Off on `deepseek-flash` is the chea
 | | Total (A) | 10.25 |
 
 ### 32.11 Open points
+
+**Decided by the owner, 2026-11-24:** layout **A · Rows**. B · Chips stays on the board for the record only; it is not built.
 
 1. **Layout: A · Rows or B · Chips** (32.7; recommended A). The owner's pick.
 
