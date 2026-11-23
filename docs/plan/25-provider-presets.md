@@ -2,8 +2,8 @@
 
 [← Plan index](../README.md)
 
-Status: **decided by the owner (2026-11-23), not built**. A design for the owner to approve, not in a milestone. API
-version: **1.51.0** (the next free number: main is at 1.50.0).
+Status: **decided by the owner (2026-11-23); built (2026-11-23)**, as-built notes in 29.13. API version: **1.51.0**
+(main was at 1.50.0).
 
 The owner's ask, 2026-11-23, after a Docker wipe made them type DeepSeek again in Admin › Model providers: "we should
 also support predefined providers config like deepseek so i dont have to fill this manually for them".
@@ -318,3 +318,33 @@ local server on a Linux host is reachable. 4. A local-server provider may name a
    bridge, not only loopback) · leave it until a local server runs on Linux (recommended: nothing runs there today).
 4. **llama-server `--api-key`**: a server provider never sends a key today. Leave it (recommended) · let a server
    name a key file too.
+
+### 29.13 As built (all phases; 2026-11-23)
+
+- **Contracts (1.51.0).** `contracts/providers/presets.json` (10 presets, Local first, then Remote, as 29.3) and
+  `presets.schema.json` (it `$ref`s `defs providerName`, `providerModel`, `providerCompat`); check.py `check_presets`:
+  the schema, unique ids, the remote and server host rules, each preset as a `ProviderPut` body and as openapi
+  `ProviderPreset`. openapi: the three routes, `ProviderPreset`, `ProviderPresetList`, `ProviderFetch`, `ProviderKey`,
+  `ProviderCompat`; `Provider`/`ProviderPut` `compat` and `preset`; `ProviderTest.models` `maxItems: 1000`. Messages:
+  `req.pipelines.providers.key` (new), the test reply cap 1000, `defs providerCompat` in the snapshot. Fixtures for all
+  of these. `make gen` copies in studio (`gen/providers/`), pipelines, runner and web.
+- **pipelines.** `PIPELINES_PROVIDER_KEYS_DIR` takes folders joined by `:` (`config.PROVIDER_KEYS_DIRS`, first that has
+  the file); `key_found` stats only; the `pipelines.providers.key` responder; `compat` (no temperature; strict schema,
+  no `json_object` retry); a server sends a key when it names one; `/models` kept to 1000. Tests: `tests/test_presets.py`.
+- **studio.** Embedded presets; `ProviderPresets`, `FetchPresetModels` (snapshot from the file, `timeout_s` 15; remote
+  with the switch off answers `off` without asking pipelines), `ProviderKey` (5 s); migration 00033 (`compat`,
+  `preset`); a server may name `key_secret`. Tests: `TestProviderPresets`, `TestProviderPutShape`.
+- **compose.** `extra_hosts: host.docker.internal:host-gateway` on pipelines; dev-remote.yml reads
+  `/run/secrets/providers:/fake-keys` live (the copy at start is gone, so no "restart pipelines" hint); nats.conf grants
+  `pipelines.providers.key`.
+- **web.** As the board, with: the preset's note and a Docs link under the picker; "<name> exists: Save replaces it"
+  when a preset names a saved provider; a server's optional "Key file (optional)" field under host, memory and timeout
+  (open point 4; the board has none), with the key line when it is filled. AI agents: the Edits are buttons; the
+  Assistant box mounts on Edit (so Cancel simply closes it), focus goes to its on switch.
+- **Contract suite.** `contract_tests/tests/test_provider_presets.py`. The "remote off greys remote presets" case is a
+  web test only (the test stack has remote on).
+- **Found on the owner's Mac (OrbStack):** `host.docker.internal` resolves to `0.250.250.254` inside containers, with
+  or without `host-gateway`; that is not a loopback or private address, so the host rule refuses the local presets'
+  base URL (422 at Save, `refused` at Fetch). Until the owner decides, use the Mac's LAN address
+  (`http://192.168.x.y:11434/v1`). Open: allow OrbStack's host address in both host rules, or not.
+
