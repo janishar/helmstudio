@@ -2601,6 +2601,96 @@
         }
       }
     },
+    "thinkingLevel": {
+      "enum": [
+        "off",
+        "on",
+        "low",
+        "medium",
+        "high"
+      ],
+      "description": "from API 1.53 (plan 28, contracts/README.md Model sources: thinking): a model's thinking level. A rule (providers/presets.json) has off + on, or some of off, low, medium, high; our high is the provider's high, never its max or xhigh"
+    },
+    "thinkingFragment": {
+      "type": "object",
+      "additionalProperties": false,
+      "maxProperties": 4,
+      "description": "from API 1.53: what pipelines merges into a chat call's body for a thinking level (only these keys: no other body field can be set from the presets file)",
+      "properties": {
+        "reasoning_effort": {
+          "type": "string",
+          "pattern": "^[a-z]{1,16}$"
+        },
+        "thinking": {
+          "type": "object",
+          "maxProperties": 4,
+          "properties": {
+            "type": {
+              "type": "string",
+              "pattern": "^[a-z]{1,16}$"
+            },
+            "budget_tokens": {
+              "type": "integer",
+              "minimum": 1024,
+              "maximum": 32768
+            }
+          },
+          "additionalProperties": false
+        },
+        "reasoning": {
+          "type": "object",
+          "maxProperties": 4,
+          "properties": {
+            "effort": {
+              "type": "string",
+              "pattern": "^[a-z]{1,16}$"
+            },
+            "max_tokens": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 32768
+            }
+          },
+          "additionalProperties": false
+        },
+        "reasoning_format": {
+          "enum": [
+            "parsed",
+            "hidden"
+          ]
+        }
+      }
+    },
+    "providerThinking": {
+      "type": "object",
+      "maxProperties": 16,
+      "propertyNames": {
+        "$ref": "#/$defs/providerModel"
+      },
+      "description": "from API 1.53 (plan 28): each model's thinking as a call sends it, resolved by studio at Submit from the saved level and the preset's rules: `body` the fragment merged into the call's body, `tokens` added to its max_tokens (thinking spends output tokens). A model that is absent gets nothing extra",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "level",
+          "body",
+          "tokens"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "level": {
+            "$ref": "#/$defs/thinkingLevel"
+          },
+          "body": {
+            "$ref": "#/$defs/thinkingFragment"
+          },
+          "tokens": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 32768
+          }
+        }
+      }
+    },
     "providerSnapshot": {
       "type": "object",
       "required": [
@@ -2663,6 +2753,9 @@
         },
         "compat": {
           "$ref": "#/$defs/providerCompat"
+        },
+        "thinking": {
+          "$ref": "#/$defs/providerThinking"
         }
       },
       "allOf": [

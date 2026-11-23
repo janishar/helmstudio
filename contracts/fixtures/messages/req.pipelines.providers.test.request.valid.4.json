@@ -1,0 +1,16 @@
+{
+  "name": "deepseek",
+  "provider": {
+    "kind": "remote",
+    "api": "openai",
+    "base_url": "https://api.deepseek.com",
+    "timeout_s": 120,
+    "key_secret": "deepseek",
+    "max_in_flight": 2,
+    "thinking": {
+      "deepseek-flash": {"level": "off", "body": {"thinking": {"type": "disabled"}}, "tokens": 0},
+      "deepseek-v4-pro": {"level": "high", "body": {"thinking": {"type": "enabled"}, "reasoning_effort": "high"}, "tokens": 8192}
+    }
+  },
+  "model": "deepseek-flash"
+}

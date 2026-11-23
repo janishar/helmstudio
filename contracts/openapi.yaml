@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.52.0
+  version: 1.53.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -27,7 +27,7 @@ servers:
 security:
   - {ApiKey: [], BearerJWT: []}
 tags:
-  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media); from 1.23 LoRA strengths 0..2 (looks saved before are clamped when read; contracts/README.md, Looks); from 1.24 the model component a node loads (NodeSchema.component); from 1.25 an inspector section''s help, the presets'' order (StudioLayout.preset_order) and a run''s planned peak before it is sent (POST /v1/studio/runs/plan); from 1.26 an inspector section''s choice tiles (LTX''s Recipe: two-stage or one-stage); from 1.28 a judge''s branch without `then` (Ask me) and a judge test on picked takes (POST /v1/studio/pipelines/{pipeline_id}/judge-tests); from 1.29 a V1 clip''s shot number (TimelineClip.number: "Shot 4"); from 1.30 voices: audio takes made by runs (the `Audio` port, `Workflow.media` audio), the `voice` param, saved voices in the library (designed voices and the packs'' starter voices; contracts/README.md, Voices); from 1.31 cloned voices (a 3–30 s clip of an audio take or a video''s sound, with consent), designed voices that keep a clip, Save as voice (`from_take` with `kind: voice`) and the zonos3 family (contracts/README.md, Voices: cloned voices); from 1.32 dialogue and Timeline audio: dialogue scripts (`script` text params expanded into `lines` rows whose items carry a voice), an element''s `voice_id`, cues on a dialogue''s take, audio takes on the audio tracks, New line (POST /v1/studio/timelines/{timeline_id}/lines), Make shot (a slot `exact` at an audio clip''s time), an export plan''s `sounds`, offers and pipeline binds into rows of one media field, `library.read` voices and the write node''s `form: script` (contracts/README.md, Dialogue and Timeline audio); from 1.44 the in-app assistant: chats, their events and memory, the admin''s assistant settings, search providers (kind `search`) and the Gallery''s `order` (contracts/README.md, Assistant); from 1.47 rules (refusals as data, ParamSchema.rules), option help (ParamSchema.option_help), a native node''s peak formula and sound limits (NodeSchema.peak_gb, sounds: the planned peak per run) and the Preset heading''s help (StudioLayout.preset_help); from 1.48 thumbnails: every list''s `thumb_url` is a small WebP of the image or the poster once made, `RunOutput.thumb_url` (contracts/README.md, Thumbnails); from 1.49 timeline edits by named ops (POST …/timelines/{timeline_id}/edits: a dry run, a diff, studio-made clip ids), the revision history and restore to any kept revision, the agent view (`view=agent`) and a stored frame at a sequence time (contracts/README.md, Timeline: edits by ops); from 1.50 the Timeline tools'' ops (roll, slip, slide, overwrite, split_all, remove_range, lift_range, an audio track''s ripple remove), linked sound clips (`TimelineClip.link`) and markers (`TimelineDoc.markers`, the marker ops; contracts/README.md, Timeline rules: tools, linked clips, markers); from 1.51 provider presets (GET /v1/studio/admin/provider-presets, a preset''s Fetch, a key file''s status, `Provider.compat` and `preset`; contracts/README.md, Model sources: presets); from 1.52 saving a provider key (PUT and DELETE /v1/studio/admin/provider-keys/{key_secret}, `ProviderKey.writable`; contracts/README.md, Model sources: Keys)'}
+  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media); from 1.23 LoRA strengths 0..2 (looks saved before are clamped when read; contracts/README.md, Looks); from 1.24 the model component a node loads (NodeSchema.component); from 1.25 an inspector section''s help, the presets'' order (StudioLayout.preset_order) and a run''s planned peak before it is sent (POST /v1/studio/runs/plan); from 1.26 an inspector section''s choice tiles (LTX''s Recipe: two-stage or one-stage); from 1.28 a judge''s branch without `then` (Ask me) and a judge test on picked takes (POST /v1/studio/pipelines/{pipeline_id}/judge-tests); from 1.29 a V1 clip''s shot number (TimelineClip.number: "Shot 4"); from 1.30 voices: audio takes made by runs (the `Audio` port, `Workflow.media` audio), the `voice` param, saved voices in the library (designed voices and the packs'' starter voices; contracts/README.md, Voices); from 1.31 cloned voices (a 3–30 s clip of an audio take or a video''s sound, with consent), designed voices that keep a clip, Save as voice (`from_take` with `kind: voice`) and the zonos3 family (contracts/README.md, Voices: cloned voices); from 1.32 dialogue and Timeline audio: dialogue scripts (`script` text params expanded into `lines` rows whose items carry a voice), an element''s `voice_id`, cues on a dialogue''s take, audio takes on the audio tracks, New line (POST /v1/studio/timelines/{timeline_id}/lines), Make shot (a slot `exact` at an audio clip''s time), an export plan''s `sounds`, offers and pipeline binds into rows of one media field, `library.read` voices and the write node''s `form: script` (contracts/README.md, Dialogue and Timeline audio); from 1.44 the in-app assistant: chats, their events and memory, the admin''s assistant settings, search providers (kind `search`) and the Gallery''s `order` (contracts/README.md, Assistant); from 1.47 rules (refusals as data, ParamSchema.rules), option help (ParamSchema.option_help), a native node''s peak formula and sound limits (NodeSchema.peak_gb, sounds: the planned peak per run) and the Preset heading''s help (StudioLayout.preset_help); from 1.48 thumbnails: every list''s `thumb_url` is a small WebP of the image or the poster once made, `RunOutput.thumb_url` (contracts/README.md, Thumbnails); from 1.49 timeline edits by named ops (POST …/timelines/{timeline_id}/edits: a dry run, a diff, studio-made clip ids), the revision history and restore to any kept revision, the agent view (`view=agent`) and a stored frame at a sequence time (contracts/README.md, Timeline: edits by ops); from 1.50 the Timeline tools'' ops (roll, slip, slide, overwrite, split_all, remove_range, lift_range, an audio track''s ripple remove), linked sound clips (`TimelineClip.link`) and markers (`TimelineDoc.markers`, the marker ops; contracts/README.md, Timeline rules: tools, linked clips, markers); from 1.51 provider presets (GET /v1/studio/admin/provider-presets, a preset''s Fetch, a key file''s status, `Provider.compat` and `preset`; contracts/README.md, Model sources: presets); from 1.52 saving a provider key (PUT and DELETE /v1/studio/admin/provider-keys/{key_secret}, `ProviderKey.writable`; contracts/README.md, Model sources: Keys); from 1.53 thinking per model (`Provider.thinking`, `thinking_levels`, `ProviderPut.thinking`, `ProviderTest.thinking`, `ProviderPreset.thinking`, a model source''s `thinking`; contracts/README.md, Model sources: thinking)'}
   - {name: files, description: signed file downloads and uploads}
   - name: auth
     description: 'auth_service: users, sessions (JWT access + rotating refresh tokens), roles, client API keys'
@@ -1742,7 +1742,9 @@ paths:
         it (a batch calls the provider as it was at Submit). 422 for a base_url that breaks the host rule
         (contracts/README.md, Model sources: hosts), a default_model not in models, a server without host or
         memory_gb, a remote without key_secret. 409 `remote models are off on this deployment` for kind remote while
-        the deployment's switch is off, and `<name> is a <kind>; delete it first` to change a provider's kind.
+        the deployment's switch is off, and `<name> is a <kind>; delete it first` to change a provider's kind. From
+        1.53 `thinking` (plan 28): 422 `thinking: <model> is not one of models`, `thinking: <model> has no thinking
+        setting` (no rule of its preset covers it, or it always thinks) and `thinking: <model> takes <levels>`.
       parameters: [{$ref: '#/components/parameters/ProviderName'}]
       requestBody:
         required: true
@@ -5857,7 +5859,13 @@ components:
         key_secret: {type: string, description: 'remote: the secret file''s name; from 1.51 a server may have one too'}
         max_in_flight: {type: integer, minimum: 1, maximum: 8, description: 'remote: calls in flight at once (default 2)'}
         compat: {$ref: '#/components/schemas/ProviderCompat'}
-        preset: {type: string, pattern: '^[a-z][a-z0-9-]{0,31}$', description: 'from 1.51: the preset it was filled from (display only)'}
+        preset: {type: string, pattern: '^[a-z][a-z0-9-]{0,31}$', description: 'from 1.51: the preset it was filled from; from 1.53 it also names the thinking rules (contracts/providers/presets.json)'}
+        thinking: {$ref: '#/components/schemas/ProviderThinking'}
+        thinking_levels:
+          type: object
+          maxProperties: 16
+          additionalProperties: {$ref: '#/components/schemas/ThinkingInfo'}
+          description: 'from 1.53 (read only): what each saved model offers, for the models its preset''s rules cover (absent: no control). The form and the AI agents tab need no copy of the rules'
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
     ProviderPut:
@@ -5879,7 +5887,43 @@ components:
         key_secret: {type: string, pattern: '^[a-z0-9][a-z0-9_.-]{0,63}$', examples: [provider-openai], description: 'remote and search: required; from 1.51 a server may name one too (optional: llama-server --api-key)'}
         max_in_flight: {type: integer, minimum: 1, maximum: 8, default: 2}
         compat: {$ref: '#/components/schemas/ProviderCompat'}
-        preset: {type: string, pattern: '^[a-z][a-z0-9-]{0,31}$', description: 'from 1.51: the preset the form was filled from (display only; studio does not check it)'}
+        preset: {type: string, pattern: '^[a-z][a-z0-9-]{0,31}$', description: 'from 1.51: the preset the form was filled from; from 1.53 its thinking rules check `thinking` (an unknown preset has none)'}
+        thinking: {$ref: '#/components/schemas/ProviderThinking'}
+    ProviderThinking:
+      type: object
+      maxProperties: 16
+      propertyNames: {pattern: '^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$'}
+      additionalProperties: {$ref: '#/components/schemas/ThinkingLevel'}
+      description: 'from 1.53 (plan 28): a thinking level per model. Each key is one of `models`, each level one its rule allows (else 422 naming the model; a model no rule covers is 422 too). Absent or {} = nothing sent: the provider''s own default. Studio resolves it into the batch snapshot (messages defs providerThinking)'
+    ThinkingLevel: {type: string, enum: ['off', 'on', low, medium, high], description: 'from 1.53: off + on, or some of off, low, medium, high (our high is the provider''s high, never max)'}
+    ThinkingInfo:
+      type: object
+      required: [levels]
+      additionalProperties: false
+      description: 'from 1.53: what one model offers: its levels (empty when it always thinks), `always` (thinks and cannot be set), `default` (what the provider uses when nothing is sent)'
+      properties:
+        levels: {type: array, maxItems: 4, uniqueItems: true, items: {$ref: '#/components/schemas/ThinkingLevel'}}
+        always: {type: boolean}
+        default: {$ref: '#/components/schemas/ThinkingLevel'}
+    ThinkingRule:
+      type: object
+      required: [match]
+      additionalProperties: false
+      description: 'from 1.53: one rule of a preset (providers/presets.schema.json thinkingRule): `match` a regular expression on the model id; `levels` each level''s body fragment (messages defs thinkingFragment); or `always`'
+      properties:
+        match: {type: string, minLength: 1, maxLength: 120}
+        levels:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties: false
+            properties:
+              reasoning_effort: {type: string}
+              thinking: {type: object}
+              reasoning: {type: object}
+              reasoning_format: {type: string, enum: [parsed, hidden]}
+        default: {$ref: '#/components/schemas/ThinkingLevel'}
+        always: {type: boolean, const: true}
     ProviderList:
       type: object
       required: [remote_enabled, providers]
@@ -5896,6 +5940,11 @@ components:
         error: {type: [string, 'null']}
         failure: {type: [string, 'null'], enum: [network, answer, refused, 'off', null], description: 'network: unreachable, TLS, timeout, 5xx, 429; answer: a 4xx (401: the key) or not OpenAI-shaped; refused: the host rule; off: remote models are off'}
         seconds: {type: number, minimum: 0}
+        thinking:
+          type: object
+          maxProperties: 1000
+          additionalProperties: {$ref: '#/components/schemas/ThinkingInfo'}
+          description: 'from 1.53: what each listed model offers (only the models a rule covers): from the preset''s rules, or for a preset whose thinking is "models" (OpenRouter) from the provider''s /models answer (its reasoning supported_efforts and mandatory)'
     ProviderCompat:
       type: object
       additionalProperties: false
@@ -5916,6 +5965,11 @@ components:
         models: {type: array, maxItems: 16, uniqueItems: true, items: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$'}}
         key_secret: {type: string, pattern: '^[a-z0-9][a-z0-9_.-]{0,63}$'}
         compat: {$ref: '#/components/schemas/ProviderCompat'}
+        thinking:
+          description: 'from 1.53: the thinking rules (the first whose match fits a model id gives its levels), or "models": the levels come from the provider''s /models (OpenRouter)'
+          oneOf:
+            - {type: string, const: models}
+            - {type: array, minItems: 1, maxItems: 8, items: {$ref: '#/components/schemas/ThinkingRule'}}
         docs: {type: string, pattern: '^https://', maxLength: 300}
         note: {type: string, minLength: 1, maxLength: 120}
     ProviderPresetList:
@@ -6003,6 +6057,7 @@ components:
               title: {type: string}
               models: {type: array, items: {type: string}}
               default_model: {type: string}
+              thinking: {type: object, additionalProperties: {$ref: '#/components/schemas/ThinkingLevel'}, description: 'from 1.53: the level set per model (absent: none set), shown where a model is picked'}
     # ---------------------------------------------------------- studio: the assistant (from 1.44; plan 18 22; the twins
     # of messages/assistant.schema.json are marked, check.py runs their fixtures against both)
     AssistantCallId: {type: string, pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[1-9][0-9]{0,5}:([0-9]|[12][0-9])$', description: '<thread_id>:<turn>:<n>'}

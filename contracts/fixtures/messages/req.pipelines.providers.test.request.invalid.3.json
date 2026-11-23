@@ -1,0 +1,11 @@
+{
+  "name": "deepseek",
+  "provider": {
+    "kind": "remote",
+    "api": "openai",
+    "base_url": "https://api.deepseek.com",
+    "timeout_s": 120,
+    "key_secret": "deepseek",
+    "thinking": {"deepseek-flash": {"level": "off", "body": {"temperature": 1}, "tokens": 0}}
+  }
+}

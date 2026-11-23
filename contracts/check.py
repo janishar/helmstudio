@@ -4539,13 +4539,61 @@ def check_tools(schemas: dict[str, dict], registry: Registry) -> None:
     print("ok   tools/catalog.json, tools/actions.json, fixtures/tools/offered.json")
 
 
+THINKING_LEVELS = ("off", "low", "medium", "high")
+
+
+def thinking_problems(doc: dict, shape: str, registry: Registry) -> list[str]:
+    """API 1.53 (plan 28): a presets file's thinking rules, schema then what a schema cannot say: each match compiles
+    (and stays RE2 and JavaScript alike: no lookaround or backreferences), default is one of the levels, levels are
+    off + on or some of off, low, medium, high, a thinking.budget_tokens stays below thinking_tokens of its level."""
+    if bad := list(Draft202012Validator({"$ref": shape}, registry=registry).iter_errors(doc)):
+        return [f"{bad[0].json_path}: {bad[0].message}"]
+    out, tokens = [], doc["thinking_tokens"]
+    for p in doc["presets"]:
+        rules = p.get("thinking")
+        for i, r in enumerate(rules if isinstance(rules, list) else []):
+            w = f"{p['id']} thinking[{i}]"
+            try:
+                re.compile(r["match"])
+            except re.error as e:
+                out.append(f"{w}: match does not compile ({e})")
+            if re.search(r"\(\?[=!<]|\\[1-9]", r["match"]):
+                out.append(f"{w}: match uses lookaround or a backreference")
+            levels = set(r.get("levels", {}))
+            if "on" in levels and levels != {"off", "on"}:
+                out.append(f"{w}: levels are off and on, or some of off, low, medium, high")
+            if r.get("default") and r["default"] not in levels:
+                out.append(f"{w}: default {r['default']} is not one of its levels")
+            for lv, frag in r.get("levels", {}).items():
+                budget = (frag.get("thinking") or {}).get("budget_tokens")
+                if budget is not None and (lv == "off" or budget >= tokens[lv]):
+                    out.append(f"{w}: {lv}'s budget_tokens {budget} is not below thinking_tokens {lv}")
+    return out
+
+
 def check_presets(schemas: dict[str, dict], registry: Registry) -> None:
     """providers/presets.json (README, Model sources: presets): its schema, then what a schema cannot say."""
     doc = json.loads((HERE / "providers" / "presets.json").read_text())
     shape = schemas["providers/presets.schema.json"]["$id"]
-    if bad := list(Draft202012Validator({"$ref": shape}, registry=registry).iter_errors(doc)):
-        fail(f"providers/presets.json: {bad[0].json_path}: {bad[0].message}")
+    if bad := thinking_problems(doc, shape, registry):
+        fail(f"providers/presets.json: {bad[0]}")
         return
+    # each thinking check catches its case (a bad file is refused, never only the real file's lucky shape)
+    rule = lambda r: {"thinking_tokens": doc["thinking_tokens"], "presets": [doc["presets"][0] | {"thinking": [r]}]}
+    lv = {"off": {"reasoning_effort": "none"}, "high": {"reasoning_effort": "high"}}
+    for why, bad_doc in (
+        ("a fragment key outside the four", rule({"match": "^a", "levels": lv | {"low": {"temperature": 1}}})),
+        ("a bad level", rule({"match": "^a", "levels": lv | {"max": {"reasoning_effort": "max"}}})),
+        ("on with low", rule({"match": "^a", "levels": lv | {"on": {"reasoning_effort": "low"}}})),
+        ("a match that does not compile", rule({"match": "^(a", "levels": lv})),
+        ("a lookahead", rule({"match": "^a(?!b)", "levels": lv})),
+        ("a default not in levels", rule({"match": "^a", "default": "low", "levels": lv})),
+        ("always with levels", rule({"match": "^a", "always": True, "levels": lv})),
+        ("a budget above thinking_tokens",
+         rule({"match": "^a", "levels": lv | {"high": {"thinking": {"type": "enabled", "budget_tokens": 9000}}}})),
+    ):  # fmt: skip
+        if not thinking_problems(bad_doc, shape, registry):
+            fail(f"check.py: thinking rules: {why} passes")
     put, item = (Draft202012Validator({"$ref": f"{OPENAPI}#/components/schemas/{n}"}, registry=registry)
                  for n in ("ProviderPut", "ProviderPreset"))  # fmt: skip
     seen: set[str] = set()
@@ -4571,7 +4619,7 @@ def check_presets(schemas: dict[str, dict], registry: Registry) -> None:
         for v, what in ((put, "as a ProviderPut body"), (item, "as openapi ProviderPreset")):
             if bad := list(v.iter_errors(body if v is put else p)):
                 fail(f"{w}: {what}: {bad[0].json_path}: {bad[0].message}")
-    print(f"ok   providers/presets.json ({len(seen)} presets)")
+    print(f"ok   providers/presets.json ({len(seen)} presets, thinking rules)")
 
 
 def main() -> int:

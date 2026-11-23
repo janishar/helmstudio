@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "models": ["anthropic/claude-sonnet-5.5", "anthropic/claude-haiku-5.5", "meta/llama-4"],
+  "answer": null,
+  "error": null,
+  "failure": null,
+  "seconds": 0.6,
+  "thinking": {
+    "anthropic/claude-sonnet-5.5": {"levels": ["low", "medium", "high"]},
+    "anthropic/claude-haiku-5.5": {"levels": ["off", "low", "medium", "high"]}
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "ok": true,
+  "models": ["gpt-6.2-sol"],
+  "answer": null,
+  "error": null,
+  "failure": null,
+  "seconds": 0.6,
+  "thinking": {"gpt-6.2-sol": {"levels": ["xhigh"]}}
+}

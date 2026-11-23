@@ -1,4 +1,5 @@
 {
+  "thinking_tokens": {"on": 4096, "low": 1024, "medium": 4096, "high": 8192},
   "presets": [
     {
       "id": "ollama",
@@ -6,6 +7,20 @@
       "kind": "server",
       "base_url": "http://host.docker.internal:11434/v1",
       "models": [],
+      "thinking": [
+        {
+          "match": "^(qwen3|deepseek-r1|magistral)([:.-]|$)",
+          "levels": {"off": {"reasoning_effort": "none"}, "on": {"reasoning_effort": "medium"}}
+        },
+        {
+          "match": "^gpt-oss([:.-]|$)",
+          "levels": {
+            "low": {"reasoning_effort": "low"},
+            "medium": {"reasoning_effort": "medium"},
+            "high": {"reasoning_effort": "high"}
+          }
+        }
+      ],
       "docs": "https://docs.ollama.com/api/openai-compatibility",
       "note": "Listens on port 11434 and ignores the key. Fetch lists the models you pulled."
     },
@@ -34,6 +49,17 @@
       "base_url": "https://api.deepseek.com",
       "models": ["deepseek-flash", "deepseek-v4-pro"],
       "key_secret": "deepseek",
+      "thinking": [
+        {
+          "match": "^deepseek-(flash|v4-pro|v4-flash)$",
+          "default": "high",
+          "levels": {
+            "off": {"thinking": {"type": "disabled"}},
+            "low": {"thinking": {"type": "enabled"}, "reasoning_effort": "low"},
+            "high": {"thinking": {"type": "enabled"}, "reasoning_effort": "high"}
+          }
+        }
+      ],
       "docs": "https://api-docs.deepseek.com/",
       "note": "Refuses json_schema; answers in JSON mode."
     },
@@ -44,6 +70,17 @@
       "base_url": "https://api.openai.com/v1",
       "models": ["gpt-6.2-sol", "gpt-6-luna", "gpt-6.2-astra"],
       "key_secret": "openai",
+      "thinking": [
+        {
+          "match": "^gpt-6",
+          "default": "medium",
+          "levels": {
+            "low": {"reasoning_effort": "low"},
+            "medium": {"reasoning_effort": "medium"},
+            "high": {"reasoning_effort": "high"}
+          }
+        }
+      ],
       "docs": "https://developers.openai.com/api/docs/models",
       "note": "The OpenAI API itself."
     },
@@ -55,6 +92,7 @@
       "models": ["claude-sonnet-5-5", "claude-haiku-5-5", "claude-opus-5-5"],
       "key_secret": "anthropic",
       "compat": {"temperature": false, "strict_schema": true},
+      "thinking": [{"match": "^claude-[a-z]+-5", "always": true}],
       "docs": "https://platform.claude.com/docs/en/api/openai-sdk",
       "note": "Partial: Claude's OpenAI layer is for testing."
     },
@@ -65,6 +103,16 @@
       "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
       "models": ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-4-neon"],
       "key_secret": "gemini",
+      "thinking": [
+        {
+          "match": "^gemini-(3|4)",
+          "levels": {
+            "low": {"reasoning_effort": "low"},
+            "medium": {"reasoning_effort": "medium"},
+            "high": {"reasoning_effort": "high"}
+          }
+        }
+      ],
       "docs": "https://ai.google.dev/gemini-api/docs/openai",
       "note": "Partial: the OpenAI layer is in beta; thinking stays on for Gemini 3 and 4."
     },
@@ -73,8 +121,14 @@
       "title": "OpenRouter",
       "kind": "remote",
       "base_url": "https://openrouter.ai/api/v1",
-      "models": ["openai/gpt-6.2-sol", "anthropic/claude-sonnet-5.5", "google/gemini-4-neon", "deepseek/deepseek-v4.1-flash"],
+      "models": [
+        "openai/gpt-6.2-sol",
+        "anthropic/claude-sonnet-5.5",
+        "google/gemini-4-neon",
+        "deepseek/deepseek-v4.1-flash"
+      ],
       "key_secret": "openrouter",
+      "thinking": "models",
       "docs": "https://openrouter.ai/docs/quickstart",
       "note": "About 480 models: filter the Fetch list. Ids carry the maker's prefix."
     },
@@ -85,6 +139,26 @@
       "base_url": "https://api.groq.com/openai/v1",
       "models": ["llama-3.3-70b-versatile", "openai/gpt-oss-120b", "openai/gpt-oss-20b"],
       "key_secret": "groq",
+      "thinking": [
+        {
+          "match": "^openai/gpt-oss-",
+          "default": "medium",
+          "levels": {
+            "low": {"reasoning_effort": "low"},
+            "medium": {"reasoning_effort": "medium"},
+            "high": {"reasoning_effort": "high"}
+          }
+        },
+        {
+          "match": "^qwen/qwen3",
+          "levels": {
+            "off": {"reasoning_effort": "none", "reasoning_format": "hidden"},
+            "low": {"reasoning_effort": "low", "reasoning_format": "hidden"},
+            "medium": {"reasoning_effort": "medium", "reasoning_format": "hidden"},
+            "high": {"reasoning_effort": "high", "reasoning_format": "hidden"}
+          }
+        }
+      ],
       "docs": "https://console.groq.com/docs/openai",
       "note": "Temperature 0 is sent as 1e-8."
     },
@@ -95,6 +169,21 @@
       "base_url": "https://api.mistral.ai/v1",
       "models": ["mistral-large-latest", "mistral-small-latest"],
       "key_secret": "mistral",
+      "thinking": [
+        {
+          "match": "^mistral-large-(latest|4)",
+          "default": "high",
+          "levels": {
+            "low": {"reasoning_effort": "low"},
+            "medium": {"reasoning_effort": "medium"},
+            "high": {"reasoning_effort": "high"}
+          }
+        },
+        {
+          "match": "^mistral-small-(latest|2603)$",
+          "levels": {"off": {"reasoning_effort": "none"}, "on": {"reasoning_effort": "high"}}
+        }
+      ],
       "docs": "https://docs.mistral.ai/api",
       "note": "The -latest aliases of its examples."
     }

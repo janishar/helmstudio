@@ -1,0 +1,13 @@
+{
+  "remote_enabled": true,
+  "sources": [
+    {
+      "name": "deepseek",
+      "kind": "remote",
+      "title": "DeepSeek",
+      "models": ["deepseek-flash", "deepseek-v4-pro"],
+      "default_model": "deepseek-flash",
+      "thinking": {"deepseek-flash": "off", "deepseek-v4-pro": "high"}
+    }
+  ]
+}

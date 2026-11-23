@@ -1,0 +1,5 @@
+{
+  "models": ["anthropic/claude-sonnet-5.5", "meta/llama-4"],
+  "reasoning": {"anthropic/claude-sonnet-5.5": {"efforts": ["low", "medium", "high", "xhigh"], "mandatory": true}},
+  "seconds": 0.6
+}

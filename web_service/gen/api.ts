@@ -1650,7 +1650,9 @@ export interface paths {
          *     it (a batch calls the provider as it was at Submit). 422 for a base_url that breaks the host rule
          *     (contracts/README.md, Model sources: hosts), a default_model not in models, a server without host or
          *     memory_gb, a remote without key_secret. 409 `remote models are off on this deployment` for kind remote while
-         *     the deployment's switch is off, and `<name> is a <kind>; delete it first` to change a provider's kind.
+         *     the deployment's switch is off, and `<name> is a <kind>; delete it first` to change a provider's kind. From
+         *     1.53 `thinking` (plan 28): 422 `thinking: <model> is not one of models`, `thinking: <model> has no thinking
+         *     setting` (no rule of its preset covers it, or it always thinks) and `thinking: <model> takes <levels>`.
          */
         put: operations["studioAdminPutProvider"];
         post?: never;
@@ -5989,8 +5991,13 @@ export interface components {
             /** @description remote: calls in flight at once (default 2) */
             max_in_flight?: number;
             compat?: components["schemas"]["ProviderCompat"];
-            /** @description from 1.51: the preset it was filled from (display only) */
+            /** @description from 1.51: the preset it was filled from; from 1.53 it also names the thinking rules (contracts/providers/presets.json) */
             preset?: string;
+            thinking?: components["schemas"]["ProviderThinking"];
+            /** @description from 1.53 (read only): what each saved model offers, for the models its preset's rules cover (absent: no control). The form and the AI agents tab need no copy of the rules */
+            thinking_levels?: {
+                [key: string]: components["schemas"]["ThinkingInfo"];
+            };
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -6023,8 +6030,40 @@ export interface components {
             /** @default 2 */
             max_in_flight?: number;
             compat?: components["schemas"]["ProviderCompat"];
-            /** @description from 1.51: the preset the form was filled from (display only; studio does not check it) */
+            /** @description from 1.51: the preset the form was filled from; from 1.53 its thinking rules check `thinking` (an unknown preset has none) */
             preset?: string;
+            thinking?: components["schemas"]["ProviderThinking"];
+        };
+        /** @description from 1.53 (plan 28): a thinking level per model. Each key is one of `models`, each level one its rule allows (else 422 naming the model; a model no rule covers is 422 too). Absent or {} = nothing sent: the provider's own default. Studio resolves it into the batch snapshot (messages defs providerThinking) */
+        ProviderThinking: {
+            [key: string]: components["schemas"]["ThinkingLevel"];
+        };
+        /**
+         * @description from 1.53: off + on, or some of off, low, medium, high (our high is the provider's high, never max)
+         * @enum {string}
+         */
+        ThinkingLevel: "off" | "on" | "low" | "medium" | "high";
+        /** @description from 1.53: what one model offers: its levels (empty when it always thinks), `always` (thinks and cannot be set), `default` (what the provider uses when nothing is sent) */
+        ThinkingInfo: {
+            levels: components["schemas"]["ThinkingLevel"][];
+            always?: boolean;
+            default?: components["schemas"]["ThinkingLevel"];
+        };
+        /** @description from 1.53: one rule of a preset (providers/presets.schema.json thinkingRule): `match` a regular expression on the model id; `levels` each level's body fragment (messages defs thinkingFragment); or `always` */
+        ThinkingRule: {
+            match: string;
+            levels?: {
+                [key: string]: {
+                    reasoning_effort?: string;
+                    thinking?: Record<string, never>;
+                    reasoning?: Record<string, never>;
+                    /** @enum {string} */
+                    reasoning_format?: "parsed" | "hidden";
+                };
+            };
+            default?: components["schemas"]["ThinkingLevel"];
+            /** @constant */
+            always?: true;
         };
         ProviderList: {
             /** @description the deployment's remote switch (REMOTE_MODELS, off by default) */
@@ -6044,6 +6083,10 @@ export interface components {
              */
             failure: "network" | "answer" | "refused" | "off" | null;
             seconds: number;
+            /** @description from 1.53: what each listed model offers (only the models a rule covers): from the preset's rules, or for a preset whose thinking is "models" (OpenRouter) from the provider's /models answer (its reasoning supported_efforts and mandatory) */
+            thinking?: {
+                [key: string]: components["schemas"]["ThinkingInfo"];
+            };
         };
         /** @description from 1.51: what a provider's OpenAI layer refuses of what pipelines sends (messages defs providerCompat; from a preset, Anthropic's). temperature false: none sent; strict_schema true: json_schema with strict true, never retried as json_object. Absent = the usual calls */
         ProviderCompat: {
@@ -6061,6 +6104,8 @@ export interface components {
             models: string[];
             key_secret?: string;
             compat?: components["schemas"]["ProviderCompat"];
+            /** @description from 1.53: the thinking rules (the first whose match fits a model id gives its levels), or "models": the levels come from the provider's /models (OpenRouter) */
+            thinking?: "models" | components["schemas"]["ThinkingRule"][];
             docs: string;
             note: string;
         };
@@ -6159,6 +6204,10 @@ export interface components {
                 title: string;
                 models: string[];
                 default_model: string;
+                /** @description from 1.53: the level set per model (absent: none set), shown where a model is picked */
+                thinking?: {
+                    [key: string]: components["schemas"]["ThinkingLevel"];
+                };
             }[];
         };
         /** @description <thread_id>:<turn>:<n> */

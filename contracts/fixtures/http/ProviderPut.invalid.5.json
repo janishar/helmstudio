@@ -1,0 +1,8 @@
+{
+  "kind": "remote",
+  "base_url": "https://api.deepseek.com",
+  "models": ["deepseek-flash"],
+  "key_secret": "deepseek",
+  "preset": "deepseek",
+  "thinking": {"deepseek-flash": "max"}
+}

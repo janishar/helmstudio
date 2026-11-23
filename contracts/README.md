@@ -2417,6 +2417,29 @@ a local model (`model_media`): server and remote calls carry **text only** in 1.
   sends no `temperature`; `strict_schema: true` sends a schema as `json_schema` with `strict: true` and never retries
   it as `json_object`. Absent = the usual calls. Anthropic's preset carries both (its OpenAI layer refuses
   `temperature` below 1 and non-strict schemas).
+- **Thinking** (API 1.53; plan 28, [docs/plan/28-provider-models.md](../docs/plan/28-provider-models.md)): a preset may
+  carry `thinking`, a list of rules (`presets.schema.json thinkingRule`): the first whose `match` (a regular expression
+  on the model id, RE2 and JavaScript alike) fits gives that model's `levels`, each a body fragment (`defs
+  thinkingFragment`: only `reasoning_effort`, `thinking`, `reasoning`, `reasoning_format`), its `default` (what the
+  provider does when nothing is sent) or `always: true` (thinks, no control: Claude 5). `"models"` (OpenRouter): the
+  levels come from its `/models` (`reasoning.supported_efforts` among low, medium, high, plus off unless `mandatory`),
+  sent as `reasoning {effort}`, off as effort `none`. Levels are `off` + `on`, or some of `off`, `low`, `medium`,
+  `high`; our high is the provider's high, never `max`. Top-level `thinking_tokens` is the extra output allowance per
+  level. check.py checks the rules (compiles, no lookaround, default among levels, a `budget_tokens` below its level's
+  tokens) and that a bad rule is refused. `models` stays a list of strings; `ProviderPut.thinking` and
+  `Provider.thinking` are `{model: level}` (422 for a model not in `models`, a model no rule of its `preset` covers
+  or one that always thinks, a level its rule does not allow; absent or `{}` = nothing sent). `Provider.thinking_levels`
+  (read only) gives each covered saved model's `{levels, always?, default?}` (for `"models"` every level, since the
+  answer of `/models` is not stored); `ProviderTest.thinking` the same for the listed models (from the rules, or from
+  the reply's `reasoning` of `pipelines.providers.test`); `ProviderPreset.thinking` the rules; a model source's
+  `thinking` the levels set. Studio stores `thinking` in `providers.thinking` (jsonb, `{}` by default) and resolves
+  the snapshot's `thinking` (`defs providerThinking`: `{model: {level, body, tokens}}`) wherever it builds one
+  (Submit, Run again, the assistant, session names, Test): a saved level gives its fragment and tokens; a model with
+  no saved level whose rule has a `default` gets `body {}` and that level's tokens (nothing sent; room for the
+  provider's own thinking), an always-thinks model `body {}` and the `on` tokens. Pipelines merges `body` into the
+  call's body and adds `tokens` to `max_tokens`; a 400 on a call that carried a fragment is asked once more without
+  it and that (provider, model) is remembered in the process (log `thinking setting refused, sent without it`).
+  A provider saved before 1.53 reads as before: no `thinking`, nothing sent but the default's room.
 - **Key file status**: `GET /v1/studio/admin/provider-keys/{key_secret}` (`ProviderKey {key_secret, path, found, writable}`,
   admin only; 404 for a malformed name, 503 when pipelines does not answer in 5 s). Studio asks
   `pipelines.providers.key`; pipelines answers `found` = a regular file of that name in one of its key folders with a

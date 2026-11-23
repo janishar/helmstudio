@@ -2,17 +2,24 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helmstudio.local/contracts/providers/presets.schema.json",
   "title": "Model provider presets (contracts/providers/presets.json)",
-  "description": "From API 1.51 (contracts/README.md, Model sources: presets). Not a message: the presets Admin › Model providers fills its form from. Studio embeds the file (gen/providers/) and serves it (GET /v1/studio/admin/provider-presets, openapi ProviderPreset is this item); the web never reads the file. Order in the file is the order in the picker (grouped Local, then Remote). check.py also checks: ids unique, a remote base_url https and not a literal loopback or private address, a server base_url's host host.docker.internal, a loopback or a private literal, and each preset as a body passes ProviderPut.",
+  "description": "From API 1.51 (contracts/README.md, Model sources: presets). Not a message: the presets Admin › Model providers fills its form from. Studio embeds the file (gen/providers/) and serves it (GET /v1/studio/admin/provider-presets, openapi ProviderPreset is this item); the web never reads the file. Order in the file is the order in the picker (grouped Local, then Remote). check.py also checks: ids unique, a remote base_url https and not a literal loopback or private address, a server base_url's host host.docker.internal, a loopback or a private literal, and each preset as a body passes ProviderPut; from API 1.53 (plan 28) each thinking rule's match compiles, its default is one of its levels, its levels are off + on or some of off, low, medium, high, and a budget_tokens stays below thinking_tokens of its level.",
   "type": "object",
-  "required": ["presets"],
+  "required": ["thinking_tokens", "presets"],
   "additionalProperties": false,
   "properties": {
-    "presets": {
-      "type": "array",
-      "minItems": 1,
-      "maxItems": 32,
-      "items": {"$ref": "#/$defs/preset"}
-    }
+    "thinking_tokens": {
+      "type": "object",
+      "required": ["on", "low", "medium", "high"],
+      "additionalProperties": false,
+      "description": "from API 1.53: the extra output allowance per thinking level, added to a call's max_tokens (a ceiling, not a charge); off adds none",
+      "properties": {
+        "on": {"type": "integer", "minimum": 256, "maximum": 32768},
+        "low": {"type": "integer", "minimum": 256, "maximum": 32768},
+        "medium": {"type": "integer", "minimum": 256, "maximum": 32768},
+        "high": {"type": "integer", "minimum": 256, "maximum": 32768}
+      }
+    },
+    "presets": {"type": "array", "minItems": 1, "maxItems": 32, "items": {"$ref": "#/$defs/preset"}}
   },
   "$defs": {
     "preset": {
@@ -20,19 +27,61 @@
       "required": ["id", "title", "kind", "base_url", "models", "docs", "note"],
       "additionalProperties": false,
       "properties": {
-        "id": {"$ref": "../messages/defs.schema.json#/$defs/providerName", "description": "the provider name it fills; a remote preset's key file is named the same"},
+        "id": {
+          "$ref": "../messages/defs.schema.json#/$defs/providerName",
+          "description": "the provider name it fills; a remote preset's key file is named the same"
+        },
         "title": {"type": "string", "minLength": 1, "maxLength": 60},
         "kind": {"enum": ["server", "remote"]},
         "base_url": {"type": "string", "minLength": 8, "maxLength": 300, "pattern": "^https?://[^\\s/?#@]+(/[^\\s?#]*)?$"},
-        "models": {"type": "array", "maxItems": 16, "uniqueItems": true, "items": {"$ref": "../messages/defs.schema.json#/$defs/providerModel"}, "description": "the default list, the first is the default; a local server ships none (Fetch fills them)"},
-        "key_secret": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$", "description": "remote: the key file's name (required); a server preset has none"},
+        "models": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {"$ref": "../messages/defs.schema.json#/$defs/providerModel"},
+          "description": "the default list, the first is the default; a local server ships none (Fetch fills them)"
+        },
+        "key_secret": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}$",
+          "description": "remote: the key file's name (required); a server preset has none"
+        },
         "compat": {"$ref": "../messages/defs.schema.json#/$defs/providerCompat"},
+        "thinking": {
+          "description": "from API 1.53 (plan 28): how a model's thinking is set. A list of rules, the first whose match fits a model id gives its levels; \"models\" (OpenRouter): the levels come from its /models answer (reasoning.supported_efforts, mandatory), each sent as reasoning {effort}, off as effort none. Absent: no thinking control",
+          "oneOf": [
+            {"const": "models"},
+            {"type": "array", "minItems": 1, "maxItems": 8, "items": {"$ref": "#/$defs/thinkingRule"}}
+          ]
+        },
         "docs": {"type": "string", "pattern": "^https://[^\\s]+$", "maxLength": 300},
         "note": {"type": "string", "minLength": 1, "maxLength": 120, "description": "one grey line under the picker"}
       },
       "if": {"properties": {"kind": {"const": "remote"}}},
       "then": {"required": ["key_secret"]},
       "else": {"not": {"required": ["key_secret"]}}
+    },
+    "thinkingRule": {
+      "type": "object",
+      "required": ["match"],
+      "additionalProperties": false,
+      "description": "match: a regular expression on the model id (RE2 and JavaScript alike: no lookaround or backreferences); levels: each level's body fragment; always: the model always thinks and offers no control (no levels); default: the level the provider uses when nothing is sent",
+      "properties": {
+        "match": {"type": "string", "minLength": 1, "maxLength": 120},
+        "levels": {
+          "type": "object",
+          "minProperties": 2,
+          "maxProperties": 4,
+          "propertyNames": {"$ref": "../messages/defs.schema.json#/$defs/thinkingLevel"},
+          "additionalProperties": {"$ref": "../messages/defs.schema.json#/$defs/thinkingFragment"}
+        },
+        "default": {"$ref": "../messages/defs.schema.json#/$defs/thinkingLevel"},
+        "always": {"const": true}
+      },
+      "oneOf": [
+        {"required": ["levels"], "not": {"required": ["always"]}},
+        {"required": ["always"], "not": {"anyOf": [{"required": ["levels"]}, {"required": ["default"]}]}}
+      ]
     }
   }
 }
