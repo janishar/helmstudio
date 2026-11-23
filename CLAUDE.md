@@ -10,8 +10,12 @@
 - **Services are isolated.** Each `*_service/`, `kong/`, `cli/` and `contract_tests/` has its own dependencies,
   lockfile, `.env` / `.env.example`, Dockerfile and Makefile. Services never import each other's code or read each
   other's `.env`; `deploy/.env` holds only compose-level values. No root virtualenv, `node_modules` or Go workspace.
-- **Gates** before calling work done: the service's `make test lint`, `make contracts-check`, and `make test` (the
-  contract suite on the `helmstudio-test` stack). Go DB tests need `.tools/test-db`.
+- **Gates** before calling work done, tiered (owner, 2026-11-24; the full suite takes ~16 min):
+  - **Every change:** the touched service's `make test lint`, `make contracts-check`, and only the contract tests
+    the change touches: `make test T="tests/test_x.py tests/test_y.py"` (find them by grepping `contract_tests/tests`
+    for the routes, messages and texts changed). Go DB tests need `.tools/test-db`.
+  - **A feature or plan built:** the full `make test` once, at the end of the build (not after every fix).
+  - **Before pushing a day's run of small changes** that never had a full run: the full `make test` once.
 - **Safety.** Tests never run against the dev stack (`helmstudio`, Kong 8300, Postgres 5463) or its volumes; they use
   `helmstudio-test` (8390 / 5464), scratch databases and fake mode. Never `down -v` a stack you did not create.
 - **Never commit secrets.** Secrets are files in `deploy/secrets/` (`.tools/make-secrets`), read through `X_FILE`;

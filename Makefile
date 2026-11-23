@@ -57,12 +57,12 @@ contract_tests/.venv:
 contracts-check: contract_tests/.venv   ## schemas, fixtures, openapi.yaml (no stack needed)
 	$(MAKE) -C contract_tests check-contracts
 
-test: secrets envs contract_tests/.venv  ## the contract suite on the helmstudio-test stack
+test: secrets envs contract_tests/.venv  ## the contract suite on the helmstudio-test stack; T="tests/test_x.py" runs only those
 	$(call nats_reload,$(TEST))
 	$(TEST) up -d --build --wait
 	$(TEST) --profile hosts create runner-b   # the second fake host: test_hosts.py starts and stops it
 	key=$$($(TEST) run --rm -T auth apikey contract) && \
-	  $(MAKE) -C contract_tests test BASE_URL=http://localhost:8390 API_KEY="$$key" CONTRACT_SCHEMAS=1 $(TEST_ADMIN)
+	  $(MAKE) -C contract_tests test ARGS="$(T)" BASE_URL=http://localhost:8390 API_KEY="$$key" CONTRACT_SCHEMAS=1 $(TEST_ADMIN)
 
 resilience: secrets envs  ## contract_tests/resilience.sh on the helmstudio-test stack (restarts its services); SCENARIOS="a b" runs only those
 	$(call nats_reload,$(TEST))
