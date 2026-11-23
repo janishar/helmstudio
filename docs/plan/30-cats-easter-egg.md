@@ -54,7 +54,7 @@ kept subtle. Every shape is a smooth bezier path, no rects:
 - **One rig per cat**: a side view 120 × 96 (facing right; facing left is `scaleX(-1)`): the tail (three parts), four
   legs (two parts each), the body (three shapes: standing, sitting, napping), the wrapped tail, the head (eyes open
   and shut). A pose is a class: stand, walk, run, sit, stretch (a play bow), curl (a loaf with the tail round the
-  front, breathing), boop (head forward, eyes shut), bat (a paw swat), crouch (tail tip flicks), wave (the
+  front, breathing), boop (head forward, eyes shut), bat (a paw swat), crouch (tail tip flicks), paw (the
   reduced-motion still). A front view (sitting) is on the sheet only.
 - **How it moves: layered parts that turn at joints, not path morphs.** Each part turns at its own joint (hip, knee,
   shoulder, elbow, neck, tail base and two tail joints) with CSS transforms, so it stays transform-only and small.
