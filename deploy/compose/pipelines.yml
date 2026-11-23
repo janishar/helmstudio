@@ -18,6 +18,9 @@ services:
       PIPELINES_SERVER_HOSTS: ${SERVER_HOSTS:-}
     secrets: [pipelines_database_url, nats_pipelines_url]
     volumes: [./secrets/providers:/run/secrets/providers:ro]
+    # API 1.51 (plan 25): a local server preset's base URL is http://host.docker.internal:<port>; on a Linux host that
+    # name resolves only with this (the Docker bridge: private, so the host rule passes; the server must listen there)
+    extra_hosts: ["host.docker.internal:host-gateway"]
     healthcheck:                                      # GET /health on 8082 (the slim image has no curl)
       test: [CMD, python, -c, "import urllib.request as u; u.urlopen('http://127.0.0.1:8082/health', timeout=3)"]
       interval: 5s

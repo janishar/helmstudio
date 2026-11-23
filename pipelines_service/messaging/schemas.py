@@ -75,6 +75,11 @@ def providers_test_errors(part: str, value) -> list[str]:
     return errors(f"{BASE}req.pipelines.providers.test.schema.json#/$defs/{part}", value)
 
 
+def providers_key_errors(part: str, value) -> list[str]:
+    """Errors of a pipelines.providers.key `request` or `reply` (API 1.51)."""
+    return errors(f"{BASE}req.pipelines.providers.key.schema.json#/$defs/{part}", value)
+
+
 def judge_test_errors(part: str, value) -> list[str]:
     """Errors of a pipelines.judge.test `request` or `reply` (API 1.28)."""
     return errors(f"{BASE}req.pipelines.judge.test.schema.json#/$defs/{part}", value)

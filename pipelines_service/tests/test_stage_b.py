@@ -459,7 +459,7 @@ def remote_on(monkeypatch, tmp_path, fake):
     monkeypatch.setattr(
         config, "REMOTE_ALLOW_PRIVATE", True
     )  # the fake is on loopback (as the fake overlay's)
-    monkeypatch.setattr(config, "PROVIDER_KEYS_DIR", tmp_path)
+    monkeypatch.setattr(config, "PROVIDER_KEYS_DIRS", [tmp_path])
     monkeypatch.setattr(providers, "DELAYS", [0.01, 0.01, 0.01])
     (tmp_path / "fakeai.key").write_text("test-key\n")
     real = providers.check_host

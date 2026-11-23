@@ -550,7 +550,7 @@ async def test_web_search_waits_for_its_card_and_is_behind_the_switch(
     monkeypatch.setattr(
         config, "REMOTE_ALLOW_PRIVATE", True
     )  # the fake is on loopback (as the fake overlay's)
-    monkeypatch.setattr(config, "PROVIDER_KEYS_DIR", tmp_path)
+    monkeypatch.setattr(config, "PROVIDER_KEYS_DIRS", [tmp_path])
     (tmp_path / "brave.key").write_text("test-key\n")
     real = providers.check_host
 

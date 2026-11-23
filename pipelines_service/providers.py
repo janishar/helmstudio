@@ -9,8 +9,11 @@ opens a connection):
   and everything else refused); a remote one must be https, needs the deployment's switch (config.REMOTE_MODELS)
   and must resolve only to public addresses (config.REMOTE_ALLOW_PRIVATE, the fake overlay's, lets it be private
   or loopback; never link-local).
-- **Keys**: a remote provider's `key_secret` names a file in config.PROVIDER_KEYS_DIR, read at call time, never
-  logged or echoed; a server has none.
+- **Keys**: a provider's `key_secret` names a file in config.PROVIDER_KEYS_DIRS (the first folder that has it), read
+  at call time, never logged or echoed; a server usually has none (API 1.51: it may name one, sent the same way).
+  `key_found` (the pipelines.providers.key responder) only stats the file.
+- **compat** (API 1.51, from a preset): `temperature: false` sends no temperature; `strict_schema: true` sends a schema
+  with `strict: true` and never retries it as `json_object`.
 - **Failures** are classed: `network` (connect, DNS, TLS, timeout, 5xx, 429; retried 1 s, 4 s, 16 s or
   Retry-After ≤ 60 s, counted apart from verdicts) or `answer` (another 4xx, a body that is not a chat completion:
   stage A's one re-ask). `refused` and `off` are final.
@@ -37,6 +40,8 @@ from messaging import schemas
 log = logging.getLogger(__name__)
 
 SUBJECT = "pipelines.providers.test"
+KEY_SUBJECT = "pipelines.providers.key"  # API 1.51: is a key file there (stat only)
+MODELS_MAX = 1000  # GET /models ids kept (API 1.51; 64 before)
 DELAYS = [1.0, 4.0, 16.0]  # seconds before each network retry (tests set them short)
 RETRY_AFTER_MAX = 60.0
 OUTSIDE = (
@@ -116,14 +121,26 @@ class _Pinned(httpcore2.AsyncNetworkBackend):
         await self.inner.sleep(seconds)
 
 
+def key_path(secret: str):
+    """The key file of that name in the first key folder that has a regular file of it, else None (stat only)."""
+    return next((d / secret for d in config.PROVIDER_KEYS_DIRS if (d / secret).is_file()), None)
+
+
+def key_found(secret: str) -> bool:
+    """A regular file of that name, not empty, in a key folder: stat only, the file is never opened."""
+    f = key_path(secret)
+    return f is not None and f.stat().st_size > 0
+
+
 def api_key(name: str, p: dict) -> str:
-    """The provider's key (a server has none). Never logged; an error names the file, never its content."""
-    if p["kind"] not in OUTSIDE or not p.get("key_secret"):
+    """The provider's key ("none" without key_secret: a server usually). Never logged; an error names the file, never
+    its content."""
+    if not p.get("key_secret"):
         return "none"
-    f = config.PROVIDER_KEYS_DIR / p["key_secret"]
+    f = key_path(p["key_secret"])
     try:
         return f.read_text().strip()
-    except OSError:
+    except OSError, AttributeError:
         raise CallError("answer", f"{name}: the key file {p['key_secret']} is missing") from None
 
 
@@ -135,7 +152,7 @@ def _http(name: str, p: dict):
     """The HTTP client of one call: no redirects followed, no proxy from the environment, connections only to
     addresses that pass the host rule (_Pinned). A provider without a key (a server) sends no Authorization at
     all: the SDK insists on some api_key, so the header it builds from the "none" placeholder is dropped here."""
-    keyless = p["kind"] not in OUTSIDE or not p.get("key_secret")
+    keyless = not p.get("key_secret")
     transport = httpx2.AsyncHTTPTransport()
     transport._pool._network_backend = _Pinned(
         name, p["kind"]
@@ -164,7 +181,7 @@ def _client(name: str, p: dict, model: str, max_tokens: int, http) -> ChatOpenAI
         base_url=p["base_url"],
         api_key=api_key(name, p),
         model=model,
-        temperature=0,
+        temperature=None if (p.get("compat") or {}).get("temperature") is False else 0,
         timeout=p["timeout_s"],
         max_retries=0,  # retries are ours: counted, classed and held by Pause and Stop
         http_async_client=http,
@@ -199,6 +216,9 @@ async def chat(name: str, p: dict, req: dict) -> dict:
     """One chat completion: req {model, system, prompt, max_tokens, schema? (JSON text), tools? (OpenAI tool
     definitions)} → {text, tool_calls [{id, name, arguments}], tokens_in, tokens_out, seconds}; CallError else."""
     await check_host(name, p)
+    strict = (p.get("compat") or {}).get(
+        "strict_schema"
+    ) is True  # API 1.51: never retried as json_object
     kw = {}
     if req.get(
         "tools"
@@ -208,9 +228,9 @@ async def chat(name: str, p: dict, req: dict) -> dict:
     elif req.get("schema"):
         schema = json.loads(req["schema"])
         kw = {"response_format": {"type": "json_schema",
-                                  "json_schema": {"name": "answer", "schema": schema, "strict": False}}}  # fmt: skip
+                                  "json_schema": {"name": "answer", "schema": schema, "strict": strict}}}  # fmt: skip
     msgs = [SystemMessage(req["system"]), HumanMessage(req["prompt"])]
-    if "response_format" in kw and name in _NO_JSON_SCHEMA:
+    if "response_format" in kw and not strict and name in _NO_JSON_SCHEMA:
         kw, msgs = _json_object(req, msgs)
     t = time.monotonic()
     try:
@@ -221,7 +241,7 @@ async def chat(name: str, p: dict, req: dict) -> dict:
             except openai.BadRequestError:
                 # some OpenAI-compatible providers (DeepSeek) refuse response_format json_schema but take json_object:
                 # ask again once with the schema in the system prompt; the caller still validates the answer
-                if kw.get("response_format", {}).get("type") != "json_schema":
+                if strict or kw.get("response_format", {}).get("type") != "json_schema":
                     raise
                 _NO_JSON_SCHEMA.add(name)
                 kw, msgs = _json_object(req, msgs)
@@ -346,7 +366,12 @@ async def test(req: dict) -> dict:
         client = openai.AsyncOpenAI(base_url=p["base_url"], api_key=api_key(name, p), timeout=p["timeout_s"],
                                     max_retries=0, http_client=_http(name, p))  # fmt: skip
         try:
-            models = [m.id[:128] async for m in client.models.list()][:64]
+            models = []
+            async for (
+                m
+            ) in client.models.list():  # ponytail: pages past MODELS_MAX are still read; cut here
+                if len(models) < MODELS_MAX:
+                    models.append(m.id[:128])
         except Exception as e:  # noqa: BLE001 - classed as a call's
             raise _classify(name, e) from None
         finally:
@@ -374,10 +399,31 @@ async def answer_test(body: bytes) -> dict:
     return await test(req)
 
 
+# --- pipelines.providers.key (API 1.51)
+
+
+def answer_key(body: bytes) -> dict:
+    """{found} for a key_secret: stat only, never the file's content."""
+    try:
+        req = json.loads(body)
+    except ValueError:
+        req = None
+    if not isinstance(req, dict) or schemas.providers_key_errors("request", req):
+        return {"error": "not a pipelines.providers.key request", "code": "internal"}
+    try:
+        return {"found": key_found(req["key_secret"])}
+    except OSError:
+        return {"found": False}
+
+
 async def serve(nc):
-    """Subscribe the test responder; returns the subscription."""
+    """Subscribe the test and key responders; returns the subscriptions."""
 
     async def on(msg) -> None:
         await msg.respond(json.dumps(await answer_test(msg.data)).encode())
 
-    return await nc.subscribe(SUBJECT, queue="pipelines", cb=on)
+    async def on_key(msg) -> None:
+        await msg.respond(json.dumps(answer_key(msg.data)).encode())
+
+    return [await nc.subscribe(SUBJECT, queue="pipelines", cb=on),
+            await nc.subscribe(KEY_SUBJECT, queue="pipelines", cb=on_key)]  # fmt: skip

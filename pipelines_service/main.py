@@ -6,7 +6,7 @@ order) and evt.studio.> from EVT (durable `pipelines-runs`), and answers pipelin
 (LangGraph's Postgres store). LangSmith tracing is forced off (plan 16.4: no network call). SIGINT/SIGTERM stop pulling and exit; threads
 continue from their checkpoints on the next start (after the user's Resume).
 
-Stage B: publishes the custom nodes (registry `pipelines.engine.custom`), answers pipelines.providers.test, sends
+Stage B: publishes the custom nodes (registry `pipelines.engine.custom`), answers pipelines.providers.test and (API 1.51) pipelines.providers.key, sends
 queued remote calls (remote.py; only with PIPELINES_REMOTE_MODELS on and a pipeline that enables them) and is the
 `server` env runner of each host in PIPELINES_SERVER_HOSTS (server.py). Agent tools reach studio by studio.tools.
 API 1.28: answers pipelines.judge.test (judge_test.py). API 1.43: names untitled sessions (names.py). API 1.44: the
@@ -171,7 +171,7 @@ async def main() -> None:
         server = await health.serve(nc, pool)
         state_sub = await states.serve(nc, engine)
         memory_sub = await memory.serve(nc, store)
-        test_sub = await providers.serve(nc)
+        test_subs = await providers.serve(nc)
         judge_sub = await judge_test.serve(nc, store)
         assistant_sub = await assistant_memory.serve(nc, store)
         executors = [server_env.Executor(js, pool, h.strip()) for h in config.SERVER_HOSTS]
@@ -194,7 +194,8 @@ async def main() -> None:
         server.close()
         await state_sub.unsubscribe()
         await memory_sub.unsubscribe()
-        await test_sub.unsubscribe()
+        for sub in test_subs:
+            await sub.unsubscribe()
         await judge_sub.unsubscribe()
         await assistant_sub.unsubscribe()
         await engine.close()
