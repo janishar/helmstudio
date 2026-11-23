@@ -494,7 +494,7 @@ nav button[aria-label="Assistant"][aria-expanded="true"] svg{filter:none;outline
 
 <!-- ============ 4 · Small states ============ -->
 <section class="board" aria-label="Small states" style="padding: 64px 40px 56px 96px; display: grid; grid-template-columns: repeat(3, 340px); gap: 32px 48px; align-items: start">
-<span class="lbl" style="top: auto; bottom: -1px; border-radius: 10px 10px 0 0">4 · Small states · empty, another tab, limit reached, line states, the dock item, batch and delete cards</span>
+<span class="lbl" style="top: auto; bottom: -1px; border-radius: 10px 10px 0 0">4 · Small states · empty, another tab, limit reached, line states, the dock item, batch and delete cards, waiting for the model (Working or Thinking… 8 s)</span>
 
 <div style="display: flex; flex-direction: column; gap: 10px">
 <p class="note">Empty, on Create</p>
@@ -602,6 +602,24 @@ nav button[aria-label="Assistant"][aria-expanded="true"] svg{filter:none;outline
 <div class="cfb"><button class="go" style="background: #ff8a80; color: #1a0d0c">DELETE 3</button><button class="no">Not now</button></div>
 <p class="fine">This can't be undone. Same as Delete on the take menu.</p>
 </section>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<p class="note">Waiting for the model · it does not think</p>
+<div class="mini" aria-label="Assistant, waiting, no thinking">
+<div class="dh"><h2><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path></svg>Assistant</h2><span class="st" style="padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; box-shadow: inset 0 0 0 1px var(--a2); color: var(--a2)">Working</span><button class="x" aria-label="Close"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg></button></div>
+<div class="msg me">Make it blue hour and add <span class="mn">@mara</span></div>
+<p class="fine">Today's line, unchanged: the model is Off or has no thinking.</p>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<p class="note">Waiting for the model · it thinks</p>
+<div class="mini" aria-label="Assistant, waiting, thinking">
+<div class="dh"><h2><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path></svg>Assistant</h2><span class="st" role="status" style="padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; box-shadow: inset 0 0 0 1px var(--a2); color: var(--a2); font-family: 'JetBrains Mono', Inter, monospace; font-weight: 500"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -1px; margin-right: 5px"><path d="M21 12a9 9 0 1 1-6.22-8.56"></path></svg>Thinking… 8 s</span><button class="x" aria-label="Close"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg></button></div>
+<div class="msg me">Make it blue hour and add <span class="mn">@mara</span></div>
+<p class="fine">Replaces Working while the model call runs; the seconds count up. Gone when the reply comes. The thinking text is never shown.</p>
 </div>
 </div>
 </section>
