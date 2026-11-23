@@ -86,7 +86,7 @@ export async function proxy(req: NextRequest) {
   return res;
 }
 
-/** Everything except static assets and /files, whose links carry their own signature. */
+/** Everything except static assets (the tab and app icons too) and /files, whose links carry their own signature. */
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|icon.svg|robots.txt|files/).*)"],
+  matcher: ["/((?!_next/static|_next/image|icon.svg|favicon.ico|apple-icon.png|icon-|robots.txt|files/).*)"],
 };

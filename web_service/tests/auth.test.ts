@@ -13,7 +13,7 @@ import {
 } from "@/lib/session";
 import { errorText, okOr } from "@/lib/api";
 import { safeUrl } from "@/lib/format";
-import { proxy } from "@/proxy";
+import { config, proxy } from "@/proxy";
 import { GET as expiredGET } from "@/app/(auth)/signin/expired/route";
 
 const b64 = (o: object) =>
@@ -351,6 +351,13 @@ describe("a signed-out visitor", () => {
     expect(admin.headers.get("location")).toBe("http://web/signin?next=%2Fadmin");
     const welcome = await proxy(new NextRequest("http://web/welcome"));
     expect(welcome.headers.get("x-middleware-next")).toBe("1");
+  });
+
+  it("gets the tab and app icons without a session (the proxy never sees them)", () => {
+    const matched = new RegExp(`^${config.matcher[0]}$`);
+    for (const p of ["/favicon.ico", "/icon.svg", "/apple-icon.png", "/icon-32.png", "/icon-512.png"])
+      expect(matched.test(p), p).toBe(false);
+    for (const p of ["/", "/admin", "/welcome", "/signin"]) expect(matched.test(p), p).toBe(true);
   });
 });
 
