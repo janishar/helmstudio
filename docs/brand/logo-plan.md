@@ -1,6 +1,6 @@
 # helmstudio logo plan
 
-Status: two final candidates (Playhead h, A as drawn and B softer) for the owner to choose · 2026-11-22 · board: [docs/mock/Logo.dc.html](../mock/Logo.dc.html) (canvas page "Brand")
+Status: A chosen; boards updated 2026-11-24; app build next · board: [docs/mock/Logo.dc.html](../mock/Logo.dc.html) (canvas page "Brand")
 
 ## Brief
 
@@ -17,6 +17,29 @@ Status: two final candidates (Playhead h, A as drawn and B softer) for the owner
   helm-wheel glyph in a lime-to-orange tile.
 - **Must.** Read at 16 px; work in one colour; work on dark and light; 3:1 contrast or better for the mark
   (lime and orange on `--g` are both above 7:1; on parchment the mark uses ink `#1f1a14` and `#c8553d`).
+
+## Logo A in the app (checklist for the build)
+
+Boards updated 2026-11-24: [Landing](../mock/Landing.dc.html) (header and footer: horizontal lockup, 24 px tall,
+mark in `--a1` / `--a2`, word in `--t1`; on parchment arch and word ink `--t1`, stem and playhead `--a1`) and
+[Sign in](../mock/SignIn.dc.html) (the 44 px tile keeps its 155° `--a1 → --a2` gradient and organic radius, now with
+the mark in `--on1` at 28 px; "helmstudio" tracking −0.02em). Both boards carry the 16 px favicon as the tab icon.
+No other board shows the brand (the app shell has no brand spot). B's folder stays as a reference, as decided on
+2026-11-22; it is not used anywhere.
+
+Source files: `docs/brand/logo/a-as-drawn/`. In the app use the tokens, not the fixed hex.
+
+- [ ] **Landing header** (`web_service/app/welcome/page.tsx`, the `logo` icon at the top): the horizontal lockup
+  (mark + outlined wordmark, 24 px tall, about 132 px wide) in place of the wheel tile and the text word.
+- [ ] **Landing footer** (same file): the same lockup.
+- [ ] **Sign in tile** (`components/kit.tsx` `Logo`, used by `app/(auth)/auth-form.tsx`): the mark in `--on1`
+  (28 px in the 44 px tile); the h1 tracking from +0.01em to −0.02em.
+- [ ] **Browser tab favicon** (`web_service/app/icon.svg`): replace with `favicon.svg` (the 16 px cut).
+- [ ] **Icon set** from `favicon.svg` (16, 32) and `app-icon.svg` (180, 192, 512): `favicon.ico` (16 + 32),
+  `icon-16.png`, `icon-32.png`, `apple-icon.png` (180), `icon-192.png`, `icon-512.png`.
+- [ ] **Web app manifest**: none exists today; add one only if the build wants installable-app icons (192, 512).
+- [ ] **App shell brand spot**: none today (the rail has no logo); nothing to change.
+- [ ] Theme check: the mark follows every theme (tokens); parchment uses the light rule above.
 
 ## Final candidates (current)
 
@@ -65,7 +88,7 @@ missing to be seen. B's flag is kept close to A's pentagon so it never reads as 
 - **Don't.** Stretch, rotate, outline, add shadows to the flat mark, recolour outside the theme tokens, or mix A's
   mark with B's wordmark (or the reverse).
 
-**Open for the owner:** A or B. After the choice: export the favicon .ico/.png set and the app icon sizes from the
+**Decided: A** (2026-11-22). After the choice: export the favicon .ico/.png set and the app icon sizes from the
 chosen folder, delete the other folder, and swap the helm-wheel glyph on Landing, Sign in and the browser tab.
 
 ## Round 2 · organic (for reference)
