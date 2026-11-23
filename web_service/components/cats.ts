@@ -3,9 +3,10 @@
 // with import() on the first double-click. The rig, poses, walk and scenes are the board's, scoped under .cats.
 // Positions run on the Web Animations API (transform and opacity only); poses are classes set at the scene's times.
 
+// .rm (the reduced-motion pair) keeps its 2 s fade with !important: globals.css cuts every animation to 0.01ms there
 const CSS = `.cats{position:fixed;inset:auto 0 0 90px;width:auto;height:130px;margin:0;border:0;padding:0;background:none;overflow:hidden;pointer-events:none;z-index:2147483647}
 .cats .kit{left:0;bottom:10px}.cats .xtra{position:absolute;bottom:0;left:0;will-change:transform,opacity}
-.cats .rm{position:absolute;right:24px;bottom:8px;width:194px;height:100px;animation:c-fade 2s both}
+.cats .rm{position:absolute;right:24px;bottom:8px;width:194px;height:100px;animation:c-fade 2s both;animation-duration:2s!important}
 .cats .rm .kit{bottom:0;transform:scale(.8);transform-origin:50% 100%}
 @keyframes c-fade{0%,100%{opacity:0}15%,85%{opacity:1}}
 .cats .kw{--fur:#faf7f1;--fur2:#e2dbce;--crease:#e8e0d2;--muz:#fffdf9;--inear:#f2b5b0;--eye:#5b9bd0;--pup:#22303e;--nose:#ec8f98;--ink:#3a3228;--wh:#c9c0b0;--edge:transparent}

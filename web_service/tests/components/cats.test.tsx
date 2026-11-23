@@ -103,6 +103,8 @@ describe("the cats", () => {
     expect(layer()!.dataset.scene).toBe("still");
     expect(layer()!.querySelectorAll(".kit.wave, .kit.sit")).toHaveLength(2);
     expect(animate).not.toHaveBeenCalled();
+    // the app's global reduced-motion rule cuts every animation to 0.01ms !important: the fade must win over it
+    expect(document.getElementById("cats-css")!.textContent).toMatch(/\.cats \.rm\{[^}]*animation-duration:2s!important/);
     await tick(2000);
     expect(layer()).toBeNull();
   });
