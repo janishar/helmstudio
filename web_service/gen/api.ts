@@ -1738,12 +1738,29 @@ export interface paths {
         };
         /**
          * Is a provider's key file there? (never the key)
-         * @description From 1.51. Admin only (403). Studio asks `pipelines.providers.key` (5 s, else 503); pipelines stats the file in its key folders and never opens it. `path` is the deploy-side text (`deploy/secrets/providers/<key_secret>`), never a container path. 404 for a malformed name.
+         * @description From 1.51. Admin only (403). Studio asks `pipelines.providers.key` (5 s, else 503); pipelines stats the file in its key folders and never opens it. `path` is the deploy-side text (`deploy/secrets/providers/<key_secret>`), never a container path. 404 for a malformed name. From 1.52 `writable`: whether this deployment lets the admin save keys here.
          */
         get: operations["studioAdminGetProviderKey"];
-        put?: never;
+        /**
+         * Save a provider's key — checked with the provider, then written to the key file (never read back)
+         * @description From 1.52 (plan 27). Admin only (403). The body names one source, as Fetch does: `preset` (studio takes its
+         *     `kind`, `base_url` and `compat` from the presets file) or `provider` (a saved provider's row); never a URL from
+         *     the browser (a `base_url` is 422). Studio asks `pipelines.providers.key.write` (30 s, else 503): pipelines lists
+         *     `GET <base_url>/models` with the key in memory (the host rule and the remote switch as for any call, 15 s), and
+         *     `check` is `ok` (written), `refused` (401 or 403: nothing written), `unreachable` (anything else: nothing
+         *     written; `detail` is our own short reason) or `skipped` (`force: true`: written without a call). The key is
+         *     trimmed, 1-1024 printable characters without spaces, written into the first key folder only (temp file and
+         *     rename, owner-only) and never returned or logged. 404 malformed name, unknown preset or provider; 422 a bad key
+         *     (the detail names the rule, never the value), both or neither source, an unknown field; 409 `keys are set in
+         *     files on this deployment` (not writable) or a folder of that name.
+         */
+        put: operations["studioAdminSaveProviderKey"];
         post?: never;
-        delete?: never;
+        /**
+         * Remove a provider's key file (the provider then shows Missing)
+         * @description From 1.52 (plan 27). Admin only (403). Studio asks `pipelines.providers.key.write` with `op: remove` (5 s, else 503); pipelines deletes the file of that name in its first key folder only (missing is fine). The answer is the status after it: `found` stays true when a later key folder still has a file of that name. 404 malformed name; 409 not writable.
+         */
+        delete: operations["studioAdminRemoveProviderKey"];
         options?: never;
         head?: never;
         patch?: never;
@@ -6067,6 +6084,38 @@ export interface components {
             path: string;
             /** @description a regular file that is not empty */
             found: boolean;
+            /** @description from 1.52: the deployment lets the admin save keys here (pipelines' first key folder is a writable directory); false: keys are set in files only */
+            writable: boolean;
+        };
+        /** @description from 1.52 (plan 27): a key to check and save. Exactly one source: `preset` or `provider` (never a URL) */
+        ProviderKeySave: {
+            /** @description the key; trimmed, then 1-1024 printable ASCII characters without spaces. Never returned, logged or stored outside the key file */
+            key: string;
+            /** @description check with this preset's URL */
+            preset?: string;
+            /** @description check with this saved provider's URL */
+            provider?: string;
+            /**
+             * @description Save anyway: write without a check (check skipped)
+             * @default false
+             */
+            force?: boolean;
+        } & (unknown | unknown);
+        /** @description from 1.52: the check's verdict and the key file's status after it (never the key) */
+        ProviderKeySaved: {
+            key_secret: string;
+            /** @example deploy/secrets/providers/deepseek */
+            path: string;
+            found: boolean;
+            /** @description written: true for check ok and skipped */
+            saved: boolean;
+            /**
+             * @description ok: /models answered; refused: 401 or 403; unreachable: anything else (network, timeout, 429, 5xx, another 4xx, the host rule, remote models off); skipped: force
+             * @enum {unknown}
+             */
+            check: "ok" | "refused" | "unreachable" | "skipped";
+            /** @description refused or unreachable: our own short text, never the provider's */
+            detail?: string;
         };
         /** @description from 1.43: how an untitled session is named (contracts/README.md, Sessions: titles and naming). Default off */
         SessionNames: {
@@ -10357,6 +10406,65 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["AdminRequired"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioAdminSaveProviderKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key_secret: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderKeySave"];
+            };
+        };
+        responses: {
+            /** @description the check and the status after it */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderKeySaved"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["AdminRequired"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioAdminRemoveProviderKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key_secret: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the status after removal */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderKey"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["AdminRequired"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             503: components["responses"]["Unavailable"];
         };
     };

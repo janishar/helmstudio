@@ -1,0 +1,8 @@
+{
+  "key_secret": "openai",
+  "path": "deploy/secrets/providers/openai",
+  "found": false,
+  "saved": false,
+  "check": "refused",
+  "detail": "the provider refused this key; not saved"
+}

@@ -1,5 +1,6 @@
 {
   "key_secret": "deepseek",
   "path": "deploy/secrets/providers/deepseek",
-  "found": true
+  "found": true,
+  "writable": true
 }

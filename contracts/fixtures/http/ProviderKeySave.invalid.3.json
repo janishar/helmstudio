@@ -1,0 +1,5 @@
+{
+  "key": "sk-x",
+  "preset": "deepseek",
+  "base_url": "https://evil.example.com/v1"
+}

@@ -2610,7 +2610,7 @@
         "timeout_s"
       ],
       "additionalProperties": false,
-      "description": "from API 1.15: a provider as it was at Submit (pipelines calls it from this, never from the live settings). base_url is configuration, not a media link (the claim-check rule is about object keys). key_secret names a file in pipelines_service's secrets directory; the key itself never travels",
+      "description": "from API 1.15: a provider as it was at Submit (pipelines calls it from this, never from the live settings). base_url is configuration, not a media link (the claim-check rule is about object keys). key_secret names a file in pipelines_service's secrets directory; the snapshot never carries a key; only `pipelines.providers.key.write` does (API 1.52)",
       "properties": {
         "kind": {
           "enum": [

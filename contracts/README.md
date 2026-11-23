@@ -2397,8 +2397,9 @@ a local model (`model_media`): server and remote calls carry **text only** in 1.
 - **Keys** are service secrets set by the admin: a remote provider names `key_secret`, a file in pipelines_service's
   secrets directory (`PIPELINES_PROVIDER_KEYS_DIR`, default `/run/secrets`, mounted from `deploy/secrets/`; from API
   1.51 several folders joined by `:`, searched in order, so the dev stack reads `deploy/secrets/providers` live beside
-  the fake's placeholder). No API takes or returns a key; pipelines reads the file at call time and never logs it;
-  errors never echo it. A server has no key; from API 1.51 it may name one (optional: llama-server `--api-key`), sent
+  the fake's placeholder). One admin route takes a key (`PUT …/provider-keys/{key_secret}`, API 1.52: checked, then
+  written by pipelines into the first key folder); no API returns one; pipelines reads the file at call time and never
+  logs it; errors never echo it. A server has no key; from API 1.51 it may name one (optional: llama-server `--api-key`), sent
   as a remote provider's is.
 - **Presets** (API 1.51; plan 25): `providers/presets.json` (shape `providers/presets.schema.json`; check.py also
   checks unique ids, a remote preset https to a public host, a server preset on `host.docker.internal`, a loopback or
@@ -2416,11 +2417,21 @@ a local model (`model_media`): server and remote calls carry **text only** in 1.
   sends no `temperature`; `strict_schema: true` sends a schema as `json_schema` with `strict: true` and never retries
   it as `json_object`. Absent = the usual calls. Anthropic's preset carries both (its OpenAI layer refuses
   `temperature` below 1 and non-strict schemas).
-- **Key file status**: `GET /v1/studio/admin/provider-keys/{key_secret}` (`ProviderKey {key_secret, path, found}`,
+- **Key file status**: `GET /v1/studio/admin/provider-keys/{key_secret}` (`ProviderKey {key_secret, path, found, writable}`,
   admin only; 404 for a malformed name, 503 when pipelines does not answer in 5 s). Studio asks
   `pipelines.providers.key`; pipelines answers `found` = a regular file of that name in one of its key folders with a
   size above 0, by `stat` only (it never opens the file). `path` is `deploy/secrets/providers/<key_secret>`, composed by
-  studio (it never reads the folder).
+  studio (it never reads the folder). From API 1.52 (plan 27) `writable`: pipelines' first key folder is a writable directory
+  (false: a deployment that mounts it read-only; keys are then set in files only, and the routes below answer 409).
+  **Save**: `PUT /v1/studio/admin/provider-keys/{key_secret}` (`ProviderKeySave {key, preset | provider, force?}`, no
+  URL: the check uses the preset's or the saved provider's) asks `pipelines.providers.key.write` (core request/reply,
+  never in a stream; 30 s): pipelines lists `GET <base_url>/models` with the key in memory under the host rule (15 s);
+  401 or 403 is `refused`, anything else that is not an answer `unreachable` (nothing written; the form offers Save
+  anyway, `force: true`, written without a call: `skipped`). The key (trimmed, 1-1024 printable characters, no spaces)
+  goes into the first key folder only, temp file then rename, mode 0600; the answer is `ProviderKeySaved {key_secret,
+  path, found, saved, check, detail?}`, never the key. **Remove**: `DELETE` on the same path deletes the first folder's
+  file (5 s) and answers `ProviderKey`. Studio logs `provider key <name> saved|refused|removed … by <admin id>`, pipelines
+  `key file <name> written|removed`, never the key.
 - **A local server** declares `host` (a GPU host) and `memory_gb`. While it is enabled, the dispatcher subtracts its
   `memory_gb` from that host's shared budget B in every admission (its memory is outside the app's control, so it is
   always reserved); Submit lists it (`reserved`). Its calls are **batch-lane queue items**: `studio.runs.create` with

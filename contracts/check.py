@@ -88,6 +88,7 @@ HTTP_SCHEMAS = [
     "Decision", "DecisionList", "MemoryItem", "MemoryList", "MemoryCreate", "BatchAgain",
     "ChatMessage", "ChatPage", "ChatPost", "Provider", "ProviderPut", "ProviderList", "ProviderTest", "ModelSourceList",
     "ProviderPreset", "ProviderPresetList", "ProviderFetch", "ProviderKey",  # 1.51
+    "ProviderKeySave", "ProviderKeySaved",  # 1.52
     "CustomNodeList",
     "ModelList", "ModelDownload", "ModelJob", "ModelJobList", "HostSettings", "HostSettingsPut", "HostPins", "HostUnload",
     "HostUnloadAccepted", "ImportTakeCreate", "ImportTake",

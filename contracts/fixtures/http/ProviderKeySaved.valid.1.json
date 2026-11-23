@@ -1,0 +1,7 @@
+{
+  "key_secret": "deepseek",
+  "path": "deploy/secrets/providers/deepseek",
+  "found": true,
+  "saved": true,
+  "check": "ok"
+}
