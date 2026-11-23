@@ -39,6 +39,21 @@ Notes from the owner while using the app. Not scheduled; each is picked up when 
   has a Gemma 4 enhancer for 2.5 (`enhance_t2v` / `enhance_i2v`, gemma4 system prompts), no new download; check the
   DmitryDB int8 text encoder can generate. On the Mac the ltx-2-mlx port enhances only 2.3 (Gemma 3).
 
+## Deployment
+
+- **Production deployment (plan 26)** (owner, 2026-11-23: "add in tasks"). No production setup exists yet: only the dev
+  stack (`make up`, always with `deploy/compose/fake.yml`, so the fake runner and Echo) and the test stack. Plan it
+  with the owner's answers first (who uses it: just the owner, a team or the internet; where it runs: this Mac, a home
+  server or a cloud VM, with the Mac runners and GCP as GPU hosts). Shape: the base compose without `fake.yml` (a
+  check that no fake service or echo workflow is offered), fresh production secrets from `.tools/make-secrets`, a
+  domain and HTTPS in front of Kong (NATS and S3 private or tunnelled), the admin account, releases by tag with
+  migrate, health checks and rollback, logs. The owner's `oralab-deploy` skill covers a one-VM compose beta.
+- **Nightly backup of the dev data** (owner, 2026-11-23, after Docker Desktop's storage was wiped and recreated at
+  18:28 that day, losing the dev database and media store: users, sessions, takes, Timelines, pipelines, assistant
+  chats, memory and settings). A nightly `pg_dump` of every database and a copy of the SeaweedFS bucket, kept off
+  Docker (the T9 drive when connected, else a folder outside Docker), with a few days kept and a restore command
+  that is tested. Needed before production too.
+
 ## Checks and hardening
 
 - **Robust check pass: done 2026-11-19** (after M7). Security review across M7, 79 take-isolation contract tests,
