@@ -101,6 +101,11 @@ export function AppShell({
     reg.setPath(path);
   }, [reg, path]);
   const nav = useRef<HTMLElement>(null);
+  // the cats (plan 30): a double-click on the logo; their chunk loads on the first one; they leave with Create
+  const cats = useRef<typeof import("@/components/cats")>(null);
+  useEffect(() => {
+    if (path !== "/") cats.current?.stop();
+  }, [path]);
   useEffect(() => {
     // a phone's dock is a bar that scrolls sideways: keep the current item (Settings is the last) in view, again once
     // the Assistant item arrives and pushes it along
@@ -122,6 +127,11 @@ export function AppShell({
                 href="/"
                 aria-label="helmstudio, home (Create)"
                 title="helmstudio"
+                // on Create a click is a no-op, so a double-click never navigates twice
+                onClick={(e) => path === "/" && e.preventDefault()}
+                onDoubleClick={() =>
+                  void import("@/components/cats").then((m) => (cats.current = m).play())
+                }
                 className="tile text-on1"
                 style={
                   {
