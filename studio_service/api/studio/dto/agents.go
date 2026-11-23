@@ -38,6 +38,18 @@ type ProviderPut struct {
 	// API 1.51: from a preset (plan 25): what its OpenAI layer refuses, and the preset's id (display only)
 	Compat *ProviderCompat `json:"compat"`
 	Preset *string         `json:"preset"`
+	// API 1.53 (plan 28): a thinking level per model, checked against the preset's rules by the service
+	Thinking map[string]string `json:"thinking"`
+}
+
+// ThinkingLevels is every thinking level in its order (openapi ThinkingLevel).
+var ThinkingLevels = []string{"off", "on", "low", "medium", "high"}
+
+// ThinkingInfo is what one model offers (API 1.53): its levels, always thinks, the provider's default.
+type ThinkingInfo struct {
+	Levels  []string `json:"levels"`
+	Always  bool     `json:"always,omitempty"`
+	Default string   `json:"default,omitempty"`
 }
 
 // ProviderCompat is defs providerCompat (API 1.51): false temperature sends none; strict_schema sends strict json_schema
@@ -89,6 +101,13 @@ func (b *ProviderPut) Validate() string {
 		return "a " + b.Kind + " provider's base_url must be https"
 	case b.Kind != "server" && (b.Host != nil || b.MemoryGB != nil):
 		return "a " + b.Kind + " provider has no host or memory_gb"
+	case len(b.Thinking) > 16:
+		return "thinking has at most 16 models"
+	}
+	for m, level := range b.Thinking {
+		if !slices.Contains(ThinkingLevels, level) {
+			return "thinking: " + m + ": a level is off, on, low, medium or high"
+		}
 	}
 	for _, m := range b.Models {
 		if !providerModel.MatchString(m) {
@@ -115,8 +134,11 @@ type Provider struct {
 	MaxInFlight  *int            `json:"max_in_flight,omitempty"`
 	Compat       *ProviderCompat `json:"compat,omitempty"`
 	Preset       *string         `json:"preset,omitempty"`
-	CreatedAt    time.Time       `json:"created_at"`
-	UpdatedAt    time.Time       `json:"updated_at"`
+	// API 1.53: the levels set, and what each saved model a rule covers offers (read only)
+	Thinking       map[string]string       `json:"thinking,omitempty"`
+	ThinkingLevels map[string]ThinkingInfo `json:"thinking_levels,omitempty"`
+	CreatedAt      time.Time               `json:"created_at"`
+	UpdatedAt      time.Time               `json:"updated_at"`
 }
 
 // ProviderList is GET /admin/providers.
@@ -134,6 +156,7 @@ type ProviderPreset struct {
 	Models    []string        `json:"models"`
 	KeySecret *string         `json:"key_secret,omitempty"`
 	Compat    *ProviderCompat `json:"compat,omitempty"`
+	Thinking  json.RawMessage `json:"thinking,omitempty"` // API 1.53: the rules as in the file, or "models"
 	Docs      string          `json:"docs"`
 	Note      string          `json:"note"`
 }
@@ -214,6 +237,8 @@ type ProviderTest struct {
 	Error   *string  `json:"error"`
 	Failure *string  `json:"failure"` // network | answer | refused | off
 	Seconds float64  `json:"seconds"`
+	// API 1.53: what each listed model a rule covers offers
+	Thinking map[string]ThinkingInfo `json:"thinking,omitempty"`
 }
 
 // ModelSource is one provider as every user sees it: names and models only.
@@ -223,6 +248,8 @@ type ModelSource struct {
 	Title        string   `json:"title"`
 	Models       []string `json:"models"`
 	DefaultModel string   `json:"default_model"`
+	// API 1.53: the thinking level set per model (absent: none set)
+	Thinking map[string]string `json:"thinking,omitempty"`
 }
 
 // ModelSourceList is GET /model-sources.

@@ -80,16 +80,17 @@ type providerRow struct {
 	UpdatedAt    time.Time
 	Compat       *dto.ProviderCompat // API 1.51
 	Preset       *string
+	Thinking     map[string]string // API 1.53: {model: level}
 }
 
 const providerCols = `name, kind, api, title, base_url, models, default_model, enabled, timeout_s, host, memory_gb,
-	key_secret, max_in_flight, created_at, updated_at, compat, preset`
+	key_secret, max_in_flight, created_at, updated_at, compat, preset, thinking`
 
 func (p providerRow) dto() dto.Provider {
 	return dto.Provider{Name: p.Name, Kind: p.Kind, API: p.API, Title: p.Title, BaseURL: p.BaseURL, Models: p.Models,
 		DefaultModel: p.DefaultModel, Enabled: p.Enabled, TimeoutS: p.TimeoutS, Host: p.Host, MemoryGB: p.MemoryGB,
 		KeySecret: p.KeySecret, MaxInFlight: p.MaxInFlight, Compat: p.Compat, Preset: p.Preset, CreatedAt: p.CreatedAt,
-		UpdatedAt: p.UpdatedAt}
+		UpdatedAt: p.UpdatedAt, Thinking: p.Thinking, ThinkingLevels: thinkingLevels(p.Preset, p.Models)}
 }
 
 // snapshot is defs providerSnapshot: the provider as a batch calls it.
@@ -102,6 +103,9 @@ func (p providerRow) snapshot() map[string]any {
 	}
 	if p.Compat != nil {
 		out["compat"] = p.Compat
+	}
+	if t := thinkingSnapshot(p.Preset, p.Models, p.Thinking); t != nil { // API 1.53
+		out["thinking"] = t
 	}
 	return out
 }
@@ -270,6 +274,13 @@ func (s *Service) PutProvider(ctx context.Context, caller common.Caller, name st
 	if detail := s.hostRule(ctx, body.Kind, body.BaseURL); detail != "" {
 		return dto.Provider{}, false, network.NewUnprocessableError(detail, nil)
 	}
+	if detail := thinkingProblem(body); detail != "" {
+		return dto.Provider{}, false, network.NewUnprocessableError(detail, nil)
+	}
+	thinkingSet := body.Thinking
+	if thinkingSet == nil {
+		thinkingSet = map[string]string{}
+	}
 	var out dto.Provider
 	created := false
 	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
@@ -291,16 +302,16 @@ func (s *Service) PutProvider(ctx context.Context, caller common.Caller, name st
 		}
 		enabled := body.Enabled == nil || *body.Enabled
 		row, err := one[providerRow](ctx, tx, `INSERT INTO providers (name, kind, title, base_url, models, default_model,
-			enabled, timeout_s, host, memory_gb, key_secret, max_in_flight, api, compat, preset) VALUES ($1, $2, $3, $4, $5, $6,
-			$7, $8, $9, $10, $11, $12, $13, $14, $15)
+			enabled, timeout_s, host, memory_gb, key_secret, max_in_flight, api, compat, preset, thinking) VALUES ($1, $2, $3, $4,
+			$5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 			ON CONFLICT (name) DO UPDATE SET api = excluded.api, title = excluded.title, base_url = excluded.base_url, models = excluded.models,
 			default_model = excluded.default_model, enabled = excluded.enabled, timeout_s = excluded.timeout_s,
 			host = excluded.host, memory_gb = excluded.memory_gb, key_secret = excluded.key_secret,
 			max_in_flight = excluded.max_in_flight, compat = excluded.compat, preset = excluded.preset,
-			updated_at = clock_timestamp() RETURNING `+providerCols,
+			thinking = excluded.thinking, updated_at = clock_timestamp() RETURNING `+providerCols,
 			name, body.Kind, body.Title, body.BaseURL, body.Models, cmp.Or(deref(body.DefaultModel), body.Models[0]), enabled,
 			cmp.Or(deref(body.TimeoutS), 120), body.Host, body.MemoryGB, body.KeySecret, maxInFlight(body),
-			cmp.Or(deref(body.API), "openai"), body.Compat, body.Preset)
+			cmp.Or(deref(body.API), "openai"), body.Compat, body.Preset, thinkingSet)
 		out = row.dto()
 		return err
 	})
@@ -354,11 +365,12 @@ func (s *Service) TestProvider(ctx context.Context, caller common.Caller, name, 
 	if model != "" {
 		req.Model = &model
 	}
-	return s.askTest(ctx, req)
+	return s.askTest(ctx, req, row.Preset)
 }
 
-// askTest asks pipelines.providers.test (30 s, else 503); a failed test is 200 with ok false.
-func (s *Service) askTest(ctx context.Context, req message.ProviderTestRequest) (dto.ProviderTest, error) {
+// askTest asks pipelines.providers.test (30 s, else 503); a failed test is 200 with ok false. From API 1.53 the listed
+// models' thinking under preset.
+func (s *Service) askTest(ctx context.Context, req message.ProviderTestRequest, preset *string) (dto.ProviderTest, error) {
 	unavailable := network.NewServiceUnavailableError("the pipeline service did not answer; try again", nil)
 	if s.providerTest == nil {
 		return dto.ProviderTest{}, unavailable
@@ -373,6 +385,8 @@ func (s *Service) askTest(ctx context.Context, req message.ProviderTestRequest) 
 	}
 	if !out.OK {
 		out.Error, out.Failure = &reply.Error, &reply.Code
+	} else {
+		out.Thinking = testThinking(preset, reply)
 	}
 	return out, nil
 }
@@ -422,7 +436,7 @@ func (s *Service) FetchPresetModels(ctx context.Context, caller common.Caller, i
 	if p.Compat != nil {
 		snapshot["compat"] = p.Compat
 	}
-	return s.askTest(ctx, message.ProviderTestRequest{Name: p.ID, Provider: snapshot})
+	return s.askTest(ctx, message.ProviderTestRequest{Name: p.ID, Provider: snapshot}, &p.ID)
 }
 
 // ProviderKey answers GET /admin/provider-keys/{key_secret}: pipelines stats the file (5 s, else 503); 404 for a
@@ -549,7 +563,7 @@ func (s *Service) ModelSources(ctx context.Context, caller common.Caller) (dto.M
 				continue
 			}
 			out.Sources = append(out.Sources, dto.ModelSource{Name: p.Name, Kind: p.Kind, Title: cmp.Or(deref(p.Title), p.Name),
-				Models: p.Models, DefaultModel: p.DefaultModel})
+				Models: p.Models, DefaultModel: p.DefaultModel, Thinking: p.Thinking})
 		}
 		return err
 	})

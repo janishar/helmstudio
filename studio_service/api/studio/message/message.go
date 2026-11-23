@@ -428,6 +428,14 @@ type ProviderTestReply struct {
 	Seconds float64  `json:"seconds"`
 	Error   string   `json:"error"`
 	Code    string   `json:"code"`
+	// API 1.53: per listed model, what its /models entry said of reasoning (OpenRouter's)
+	Reasoning map[string]ModelReasoning `json:"reasoning"`
+}
+
+// ModelReasoning is one model's reasoning in a test reply: the efforts it lists, and whether it cannot be off.
+type ModelReasoning struct {
+	Efforts   []string `json:"efforts"`
+	Mandatory bool     `json:"mandatory"`
 }
 
 // SubjectProviderKey is pipelines' request/reply subject for a key file's status (API 1.51).
