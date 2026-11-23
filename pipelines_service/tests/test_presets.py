@@ -67,8 +67,8 @@ def test_key_status_is_stat_only_over_every_folder(keys, monkeypatch):
         "nope": False,
     }
     for body, want in (
-        (b'{"key_secret": "deepseek"}', {"found": True}),
-        (b'{"key_secret": "nope"}', {"found": False}),
+        (b'{"key_secret": "deepseek"}', {"found": True, "writable": True}),
+        (b'{"key_secret": "nope"}', {"found": False, "writable": True}),
     ):
         got = providers.answer_key(body)
         assert got == want and not schemas.providers_key_errors("reply", got)

@@ -3,7 +3,8 @@ called in tests. Stdlib only, so it also runs on its own in the fake compose ove
 
     python fake_openai.py --port 8399 [--host 0.0.0.0]
 
-- GET  /v1/models            the scripted models (and `fake-large`, `fake-small`)
+- GET  /v1/models            the scripted models (and `fake-large`, `fake-small`); the `__models` script's next
+                             {status, body} answers instead, {delay_s} answers late
 - POST /v1/chat/completions  OpenAI's shape: answers choices[0].message {content, tool_calls} and usage
 - POST /__script             {model: [response, ...]} queues responses per model; each is {content?, tool_calls?,
                              usage?} (tool_calls: [{name, arguments}], arguments a JSON value or its text),
@@ -94,7 +95,16 @@ def handler(fake: Fake):
                         "body": None,
                     }
                 )
-                ids = sorted(set(MODELS) | set(fake.script))
+                with (
+                    fake.lock
+                ):  # API 1.52: the `__models` script's next {status, body} or {delay_s}
+                    r = fake.script["__models"].pop(0) if fake.script.get("__models") else {}
+                time.sleep(r.get("delay_s", 0))
+                if "status" in r:
+                    return self._send(
+                        r["status"], r.get("body", {"error": {"message": "scripted"}})
+                    )
+                ids = sorted(m for m in set(MODELS) | set(fake.script) if not m.startswith("__"))
                 return self._send(
                     200, {"object": "list", "data": [{"id": m, "object": "model"} for m in ids]}
                 )

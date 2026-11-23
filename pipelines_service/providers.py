@@ -11,7 +11,9 @@ opens a connection):
   or loopback; never link-local).
 - **Keys**: a provider's `key_secret` names a file in config.PROVIDER_KEYS_DIRS (the first folder that has it), read
   at call time, never logged or echoed; a server usually has none (API 1.51: it may name one, sent the same way).
-  `key_found` (the pipelines.providers.key responder) only stats the file.
+  `key_found` (the pipelines.providers.key responder) only stats the file. API 1.52 (plan 27): the admin pastes a key
+  in Admin › Model providers; the pipelines.providers.key.write responder checks it on /models, then `write_key`
+  writes it into the first key folder only (temp file and rename, 0600); `remove_key` deletes it there.
 - **compat** (API 1.51, from a preset): `temperature: false` sends no temperature; `strict_schema: true` sends a schema
   with `strict: true` and never retries it as `json_object`.
 - **Failures** are classed: `network` (connect, DNS, TLS, timeout, 5xx, 429; retried 1 s, 4 s, 16 s or
@@ -24,7 +26,10 @@ import asyncio
 import ipaddress
 import json
 import logging
+import os
+import re
 import socket
+import tempfile
 import time
 from urllib.parse import urlsplit
 
@@ -41,6 +46,9 @@ log = logging.getLogger(__name__)
 
 SUBJECT = "pipelines.providers.test"
 KEY_SUBJECT = "pipelines.providers.key"  # API 1.51: is a key file there (stat only)
+WRITE_SUBJECT = "pipelines.providers.key.write"  # API 1.52: save or remove a key (core request/reply, never a stream)
+KEY_NAME = re.compile(r"[a-z0-9][a-z0-9_.-]{0,63}")  # defs key_secret: no "/", no leading "."
+CHECK_TIMEOUT = 15.0
 MODELS_MAX = 1000  # GET /models ids kept (API 1.51; 64 before)
 DELAYS = [1.0, 4.0, 16.0]  # seconds before each network retry (tests set them short)
 RETRY_AFTER_MAX = 60.0
@@ -424,7 +432,7 @@ async def answer_test(body: bytes) -> dict:
 
 
 def answer_key(body: bytes) -> dict:
-    """{found} for a key_secret: stat only, never the file's content."""
+    """{found, writable} for a key_secret: stat only, never the file's content."""
     try:
         req = json.loads(body)
     except ValueError:
@@ -432,13 +440,150 @@ def answer_key(body: bytes) -> dict:
     if not isinstance(req, dict) or schemas.providers_key_errors("request", req):
         return {"error": "not a pipelines.providers.key request", "code": "internal"}
     try:
-        return {"found": key_found(req["key_secret"])}
+        return {"found": key_found(req["key_secret"]), "writable": writable()}
     except OSError:
-        return {"found": False}
+        return {"found": False, "writable": writable()}
+
+
+# --- pipelines.providers.key.write (API 1.52, plan 27)
+
+
+class KeyFileError(Exception):
+    """A write that cannot happen: code readonly | not_file (our own text, never a key)."""
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+def writable() -> bool:
+    """The first key folder is a writable directory: the only place a key is ever written."""
+    d = config.PROVIDER_KEYS_DIRS[0] if config.PROVIDER_KEYS_DIRS else None
+    return d is not None and d.is_dir() and os.access(d, os.W_OK | os.X_OK)
+
+
+def _target(name: str):
+    if not KEY_NAME.fullmatch(name):
+        raise ValueError(
+            "not a key file name"
+        )  # the schema refuses it first; never a path out of the folder
+    if not writable():
+        raise KeyFileError("readonly", "keys are set in files on this deployment")
+    f = config.PROVIDER_KEYS_DIRS[0] / name
+    if f.is_dir() and not f.is_symlink():
+        raise KeyFileError("not_file", f"deploy/secrets/providers/{name} is a folder, not a file")
+    return f
+
+
+def write_key(name: str, key: str) -> None:
+    """Write the key into the first key folder: a temp file (mkstemp: 0600, a leading "." no key name has), fsync,
+    rename over the name (a symlink of that name is replaced itself, never its target), fsync the folder. The temp
+    file never stays behind."""
+    f = _target(name)
+    fd, tmp = tempfile.mkstemp(dir=f.parent, prefix=".tmp-")
+    try:
+        with os.fdopen(fd, "w") as out:
+            out.write(key)
+            out.flush()
+            os.fsync(out.fileno())
+        os.replace(tmp, f)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+    d = os.open(f.parent, os.O_RDONLY)
+    try:
+        os.fsync(d)
+    finally:
+        os.close(d)
+
+
+def remove_key(name: str) -> None:
+    """Delete the first key folder's file of that name (a regular file or a symlink; missing is fine)."""
+    f = _target(name)
+    try:
+        os.unlink(f)
+    except FileNotFoundError:
+        pass
+
+
+async def check_key(name: str, p: dict, key: str) -> tuple[str, str]:
+    """GET <base_url>/models with the key in memory, under the host rule (pinned, no redirects, no proxy), 15 s:
+    ("ok", ""), ("refused", text) for 401 or 403, else ("unreachable", our own short reason)."""
+    p = p | {
+        "key_secret": name,
+        "timeout_s": CHECK_TIMEOUT,
+    }  # a key: the Authorization header is sent
+    try:
+        await check_host(name, p)
+        client = openai.AsyncOpenAI(base_url=p["base_url"], api_key=key, timeout=CHECK_TIMEOUT, max_retries=0,
+                                    http_client=_http(name, p))  # fmt: skip
+        try:
+            await client.models.list()
+        finally:
+            await client.close()
+    except openai.APIStatusError as e:
+        if e.status_code in (401, 403):
+            return "refused", "the provider refused this key; not saved"
+        return "unreachable", f"HTTP {e.status_code}"
+    except openai.APITimeoutError, TimeoutError:
+        return "unreachable", "timeout"
+    except Exception as e:  # noqa: BLE001 - classed; never str() of an SDK error (it may hold the provider's body)
+        c = e if isinstance(e, CallError) else _classify(name, e)
+        return "unreachable", str(c).removeprefix(f"{name}: ")[:300]
+    return "ok", ""
+
+
+async def answer_write(body: bytes) -> dict:
+    """save: check (unless force), then write; remove: delete. Never the key in a reply or a log line."""
+    try:
+        req = json.loads(body)
+    except ValueError:
+        req = None
+    if not isinstance(req, dict) or schemas.providers_key_write_errors("request", req):
+        return {"error": "not a pipelines.providers.key.write request", "code": "internal"}
+    name = req["key_secret"]
+    try:
+        if req["op"] == "remove":
+            remove_key(name)
+            log.info("key file %s removed", name)
+            return {"found": key_found(name), "writable": writable()}
+        key = req["key"].strip()
+        _target(name)  # readonly or not_file before a call
+        check, detail = (
+            ("skipped", "") if req.get("force") else await check_key(name, req["provider"], key)
+        )
+        if check in ("ok", "skipped"):
+            write_key(name, key)
+            log.info("key file %s written (check %s)", name, check)
+        out = {
+            "found": key_found(name),
+            "writable": writable(),
+            "saved": check in ("ok", "skipped"),
+            "check": check,
+        }
+        return out | ({"detail": detail} if detail else {})
+    except KeyFileError as e:
+        return {"error": str(e), "code": e.code}
+    except Exception as e:  # noqa: BLE001 - the class name only: an error's text may hold anything
+        log.error("key file %s: %s failed (%s)", name, req["op"], type(e).__name__)
+        return {"error": f"{name}: the key file could not be changed", "code": "internal"}
+
+
+def make_first_folder() -> None:
+    """The first key folder is made at start when missing (0700); a read-only file system leaves it so."""
+    if config.PROVIDER_KEYS_DIRS:
+        try:
+            config.PROVIDER_KEYS_DIRS[0].mkdir(mode=0o700, exist_ok=True)
+        except OSError:
+            pass
 
 
 async def serve(nc):
-    """Subscribe the test and key responders; returns the subscriptions."""
+    """Subscribe the test, key and (API 1.52) key write responders; returns the subscriptions."""
+    make_first_folder()
 
     async def on(msg) -> None:
         await msg.respond(json.dumps(await answer_test(msg.data)).encode())
@@ -446,5 +591,9 @@ async def serve(nc):
     async def on_key(msg) -> None:
         await msg.respond(json.dumps(answer_key(msg.data)).encode())
 
+    async def on_write(msg) -> None:
+        await msg.respond(json.dumps(await answer_write(msg.data)).encode())
+
     return [await nc.subscribe(SUBJECT, queue="pipelines", cb=on),
-            await nc.subscribe(KEY_SUBJECT, queue="pipelines", cb=on_key)]  # fmt: skip
+            await nc.subscribe(KEY_SUBJECT, queue="pipelines", cb=on_key),
+            await nc.subscribe(WRITE_SUBJECT, queue="pipelines", cb=on_write)]  # fmt: skip

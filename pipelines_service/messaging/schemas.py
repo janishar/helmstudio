@@ -80,6 +80,12 @@ def providers_key_errors(part: str, value) -> list[str]:
     return errors(f"{BASE}req.pipelines.providers.key.schema.json#/$defs/{part}", value)
 
 
+def providers_key_write_errors(part: str, value) -> list[str]:
+    """Errors of a pipelines.providers.key.write `request` or `reply` (API 1.52). The text may quote the value: never
+    log it (a request holds a key)."""
+    return errors(f"{BASE}req.pipelines.providers.key.write.schema.json#/$defs/{part}", value)
+
+
 def judge_test_errors(part: str, value) -> list[str]:
     """Errors of a pipelines.judge.test `request` or `reply` (API 1.28)."""
     return errors(f"{BASE}req.pipelines.judge.test.schema.json#/$defs/{part}", value)
