@@ -167,7 +167,7 @@ describe("ProvidersAdmin", () => {
       "true",
     );
     const defaults = within(models()).getAllByRole("radio", {
-      name: "Default",
+      name: /^Default for /,
     }) as HTMLInputElement[];
     expect(defaults.map((d) => d.checked)).toEqual([true, false]);
 
@@ -186,7 +186,7 @@ describe("ProvidersAdmin", () => {
         data: { ...remote, ...(init.body as object) },
       }),
     });
-    fireEvent.click(within(models()).getAllByRole("radio", { name: "Default" })[2]);
+    fireEvent.click(within(models()).getByRole("radio", { name: "Default for deepseek-chat" }));
     fireEvent.click(screen.getByRole("button", { name: "Save provider" }));
     await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
     expect(put.mock.calls[0][1]).toMatchObject({
@@ -210,7 +210,7 @@ describe("ProvidersAdmin", () => {
     await screen.findByText("17 found", {}, { timeout: 2000 });
     fireEvent.click(within(models()).getByRole("checkbox", { name: "Use deepseek-flash" }));
     const defaults = within(models()).getAllByRole("radio", {
-      name: "Default",
+      name: /^Default for /,
     }) as HTMLInputElement[];
     expect(defaults).toHaveLength(1);
     expect(defaults[0].checked).toBe(true); // deepseek-v4-pro
@@ -367,7 +367,9 @@ describe("ProvidersAdmin", () => {
     expect(within(models()).getByText("custom")).toBeTruthy();
     fireEvent.click(within(models()).getByRole("button", { name: "Remove deepseek-chat" }));
     expect(ticked()).toEqual(["deepseek-flash"]);
-    const def = within(models()).getAllByRole("radio", { name: "Default" }) as HTMLInputElement[];
+    const def = within(models()).getAllByRole("radio", {
+      name: /^Default for /,
+    }) as HTMLInputElement[];
     expect(def.map((d) => d.checked)).toEqual([true]);
   });
 

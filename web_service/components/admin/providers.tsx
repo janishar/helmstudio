@@ -996,7 +996,7 @@ function ModelRow({
           checked={chosen}
           onChange={(e) => onTick(e.target.checked)}
         />
-        <span className="mono min-w-0 break-all" title={id}>
+        <span className="mono min-w-0 [overflow-wrap:anywhere]" title={id}>
           {id}
         </span>
         {custom && <span className="tag shrink-0">custom</span>}
@@ -1006,6 +1006,7 @@ function ModelRow({
             <input
               type="radio"
               name="p-default"
+              aria-label={`Default for ${id}`}
               className="accent-[var(--a1)]"
               checked={isDefault}
               onChange={onDefault}
