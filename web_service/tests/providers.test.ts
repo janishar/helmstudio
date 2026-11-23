@@ -67,9 +67,7 @@ describe("provider form", () => {
   });
   it("says a test result in words", () => {
     expect(testLine(testOk as S<"ProviderTest">)).toBe("answered · 0.8 s");
-    expect(testLine(testBad as S<"ProviderTest">)).toBe(
-      "network · fakeai: network error: connection refused",
-    );
+    expect(testLine(testBad as S<"ProviderTest">)).toBe("network · fakeai: could not connect");
   });
 });
 

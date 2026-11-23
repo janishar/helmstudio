@@ -1,7 +1,7 @@
 {
   "ok": false,
   "models": [],
-  "error": "fakeai: network error: connection refused",
+  "error": "fakeai: could not connect",
   "failure": "network",
   "seconds": 2.1
 }

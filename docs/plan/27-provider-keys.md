@@ -54,7 +54,7 @@ Facts come from a read on 2026-11-24 of plan 25 (as built, 29.13), plans 13 and 
   needs `REMOTE_MODELS`; loopback, private or what `host.docker.internal` resolves to for a server; no redirects, no
   proxy, pinned connections).
 - **Failure texts are ours**: `_classify` makes `"<name>: the key was refused"` for 401, `"<name>: HTTP <code>"` for
-  other 4xx, `"network error: <type or HTTP code>"`; it never copies the provider's body (where some providers echo a
+  other 4xx, `"could not connect"`, `"timed out"` or `"the provider is busy or down (HTTP <code>)"` (plainer wording, owner 2026-11-24); it never copies the provider's body (where some providers echo a
   masked key).
 - **Key name pattern** (`defs` `key_secret`): `^[a-z0-9][a-z0-9_.-]{0,63}$`: no `/`, no leading `.`, at most 64.
 - **What sees a request body**: the web BFF (`lib/proxy.ts` streams it to Kong; it logs only `proxy <method>

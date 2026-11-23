@@ -224,8 +224,10 @@ def _classify(name: str, e: Exception) -> CallError:
         if isinstance(cause, CallError):
             return cause
         cause = cause.__cause__ or cause.__context__
-    if isinstance(e, (openai.APIConnectionError, asyncio.TimeoutError, TimeoutError)):
-        return CallError("network", f"{name}: network error: {type(e).__name__}")
+    if isinstance(e, (asyncio.TimeoutError, TimeoutError, openai.APITimeoutError)):
+        return CallError("network", f"{name}: timed out")
+    if isinstance(e, openai.APIConnectionError):
+        return CallError("network", f"{name}: could not connect")
     if isinstance(e, openai.APIStatusError):
         code = e.status_code
         if code == 429 or code >= 500:
@@ -234,7 +236,7 @@ def _classify(name: str, e: Exception) -> CallError:
                 after = min(float(e.response.headers.get("retry-after")), RETRY_AFTER_MAX)
             except TypeError, ValueError:
                 pass
-            return CallError("network", f"{name}: network error: HTTP {code}", after)
+            return CallError("network", f"{name}: the provider is busy or down (HTTP {code})", after)
         if code == 401:
             return CallError("answer", f"{name}: the key was refused")
         return CallError("answer", f"{name}: HTTP {code}")
@@ -361,7 +363,7 @@ async def search(name: str, p: dict, query: str) -> list[dict]:
             r = await http.get(f"{p['base_url'].rstrip('/')}/web/search", headers=headers,
                                params={"q": query, "count": SEARCH_RESULTS}, timeout=p["timeout_s"])  # fmt: skip
             if r.status_code == 429 or r.status_code >= 500:
-                raise CallError("network", f"{name}: network error: HTTP {r.status_code}")
+                raise CallError("network", f"{name}: the provider is busy or down (HTTP {r.status_code})")
             if r.status_code >= 400:
                 raise CallError("answer", f"{name}: HTTP {r.status_code}")
             found = ((r.json().get("web") or {}).get("results")) or []
@@ -373,8 +375,10 @@ async def search(name: str, p: dict, query: str) -> list[dict]:
             if isinstance(cause, CallError):
                 raise cause from None
             cause = cause.__cause__ or cause.__context__
-        if isinstance(e, (httpx2.TransportError, TimeoutError)):
-            raise CallError("network", f"{name}: network error: {type(e).__name__}") from None
+        if isinstance(e, (httpx2.TimeoutException, TimeoutError)):
+            raise CallError("network", f"{name}: timed out") from None
+        if isinstance(e, httpx2.TransportError):
+            raise CallError("network", f"{name}: could not connect") from None
         raise CallError(
             "answer", f"{name}: the answer is not a search result ({type(e).__name__})"
         ) from None

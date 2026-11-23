@@ -2458,7 +2458,7 @@ a local model (`model_media`): server and remote calls carry **text only** in 1.
   sent) and **Stop** cancels them and aborts the ones in flight. Each request carries `timeout_s`.
 - **Failures**: a **network** failure (connect, DNS, TLS, timeout, 5xx, 429) is retried 3 times (1 s, 4 s, 16 s, or
   `Retry-After` ≤ 60 s) and counted in `network_failures` (`Batch.remote`, the decision), never as a verdict or a failed
-  check; after the retries the row fails `<node>: <provider>: network error: <what>` (it counts for "3 rows in a row" as
+  check; after the retries the row fails `<node>: <provider>: <what>` (`could not connect`, `timed out`, or `the provider is busy or down (HTTP <code>)`) (it counts for "3 rows in a row" as
   any item failure). An **answer** failure (any other 4xx, a body that is not a chat completion, a schema or turn check)
   takes stage A's path (one re-ask, then an item failure). A 401 says `<provider>: the key was refused`.
 - **Never replayed**: a remote decision has `replayable: false`; "Run again: same decisions" asks it again, Resume
