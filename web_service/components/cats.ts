@@ -166,7 +166,7 @@ const hidden = () => document.hidden && stop();
 
 /** Plays a random scene (never the last one), or with reduced motion the still pair for 2 s. */
 export function play() {
-  if (Date.now() - started < 10000) return;
+  if (document.hidden || Date.now() - started < 10000) return; // hidden: the tab went away while the chunk loaded
   started = Date.now();
   if (!document.getElementById("cats-css"))
     document.head.insertAdjacentHTML("beforeend", `<style id="cats-css">${CSS}</style>`);

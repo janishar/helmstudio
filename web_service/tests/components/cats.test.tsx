@@ -124,4 +124,12 @@ describe("the cats", () => {
     document.dispatchEvent(new Event("visibilitychange"));
     expect(layer()).toBeNull();
   });
+
+  it("a page already hidden when the chunk arrives plays nothing", async () => {
+    render(<AppShell user={user}>page</AppShell>);
+    vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+    await dbl();
+    expect(layer()).toBeNull();
+    expect(animate).not.toHaveBeenCalled();
+  });
 });
