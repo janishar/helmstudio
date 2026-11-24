@@ -11,9 +11,9 @@
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/licence-Apache--2.0-b9e37a?style=flat-square" alt="Licence: Apache-2.0"></a>
-  <a href="https://helmstudio.in"><img src="https://img.shields.io/badge/docs-helmstudio.in-ff8552?style=flat-square" alt="Docs: helmstudio.in"></a>
-  <img src="https://img.shields.io/badge/runs%20on-Apple%20Silicon%20%7C%20NVIDIA-26342d?style=flat-square" alt="Runs on Apple Silicon and NVIDIA">
+  <a href="LICENSE"><img src="docs/images/readme/badge-licence.svg" alt="Licence: Apache-2.0"></a>
+  <a href="https://helmstudio.in"><img src="docs/images/readme/badge-docs.svg" alt="Docs: helmstudio.in"></a>
+  <img src="docs/images/readme/badge-runs-on.svg" alt="Runs on Apple Silicon and NVIDIA">
 </p>
 
 <p align="center">
