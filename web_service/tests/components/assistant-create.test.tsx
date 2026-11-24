@@ -102,7 +102,7 @@ function start({
     "/v1/studio/sessions/{session_id}/takes": () => ({ data: { takes } }),
     "/v1/studio/library": () => ({ data: { items: [] } }),
     "/v1/studio/loras": () => ({ data: { loras: [] } }),
-    "/v1/studio/models": () => ({ data: list }),
+    "/v1/studio/models": () => ({ data: typeof list === "function" ? list() : list }),
     "/v1/studio/queue": () => ({
       data: { runs: [], hosts: [{ host: "mac", state: "idle", others_queued: 1 }] },
     }),
@@ -299,6 +299,18 @@ describe("Create's actions", () => {
       }),
     );
     expect(queued).toHaveLength(0);
+  });
+
+  it("reads /models again when a host comes up, so a Mac back after a restart is not 'not downloaded'", async () => {
+    // the owner's run (2026-11-24): Create opened while the Mac was not live; studio had it live a minute later
+    let calls = 0;
+    const list = () =>
+      ++calls === 1
+        ? { ...models, hosts: models.hosts.map((h) => ({ ...h, live: false })) }
+        : models;
+    const { call, reg } = start({ list });
+    await waitFor(() => expect(reg.current()?.spec.sees).toContain("Run on: Auto → Mac"));
+    await waitFor(async () => expect(asked(await call("generate"))).toBe(true));
   });
 
   it("seeds, select, star and stop; view and a new session; a template refuses rename and delete", async () => {

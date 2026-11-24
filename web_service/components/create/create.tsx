@@ -270,9 +270,6 @@ export function Create({
   const [held, setRaws] = useState<Record<string, Raw>>({});
   // which variants are on a host and what each loads at: the precision pins and "Not downloaded" (GET models)
   const [modelList, setModelList] = useState<S<"ModelList"> | null>(null);
-  useEffect(() => {
-    ok(api.GET("/v1/studio/models")).then(setModelList, () => undefined);
-  }, []);
   const [sentErrors, setErrors] = useState<Record<string, string>>({});
   const [runs, setRuns] = useState<Run[] | null>(initial?.runs ?? null);
   const [takes, setTakes] = useState<Take[]>(initial?.takes ?? []);
@@ -311,6 +308,14 @@ export function Create({
   // the graph's problems for the document it holds (its own check merged with studio's)
   const [lifted, setLifted] = useState<{ id: string; problems: Problem[] } | null>(null);
   const hosts = useHosts();
+  // read again whenever a host comes up or goes (the hosts poll, 10 s): a list read while a runner was down would
+  // say "not downloaded" until Create was opened again
+  const liveHosts = [...new Set(hosts?.filter((h) => h.state !== "offline").map((h) => h.host))]
+    .sort()
+    .join();
+  useEffect(() => {
+    ok(api.GET("/v1/studio/models")).then(setModelList, () => undefined);
+  }, [liveHosts]);
   // Run on (docs/mock/RunOn.dc.html): the host every run is set to, "" = Auto; kept across workflows like the form
   const [runOnHost, setRunOnHost] = useState("");
   // why a version pick set Run on back to Auto ("Run on set to Auto: Base fp8 is NVIDIA only")
