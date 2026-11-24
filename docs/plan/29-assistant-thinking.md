@@ -2,7 +2,7 @@
 
 [← Plan index](../README.md)
 
-Status: **decided by the owner (2026-11-24); board approved by the owner (2026-11-24, "Approve"); built 2026-11-24 (33.6); moved into the chat by the owner (2026-11-24, 33.7), board redrawn, not built yet.** API version: **1.54.0** (main is
+Status: **decided by the owner (2026-11-24); board approved by the owner (2026-11-24, "Approve"); built 2026-11-24 (33.6); moved into the chat by the owner (2026-11-24, 33.7), board redrawn and approved by the owner (2026-11-24, "Approve"); building.** API version: **1.54.0** (main is
 at 1.53.0, plan 28; if another plan takes 1.54.0 first, this takes the next free one at build time). Not in a
 milestone, like plans 25, 27 and 28.
 
