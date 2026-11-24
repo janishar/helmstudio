@@ -292,9 +292,12 @@ describe("a turn's actions in this tab", () => {
     expect(screen.getByText("Waiting for you")).toBeTruthy();
     expect(yes).not.toHaveBeenCalled();
     expect(posts).toHaveLength(0);
-    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    // Undo names its line, on hover and to screen readers (alpha.2 item 23, board frame 14c)
+    const un = screen.getByRole("button", { name: "Undo: Set Lighting: Blue hour" });
+    expect(un.title).toBe("Undo: Set Lighting: Blue hour");
+    fireEvent.click(un);
     await waitFor(() => expect(undo).toHaveBeenCalledTimes(1));
-    fireEvent.click(await screen.findByRole("button", { name: "Redo" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Redo: Set Lighting: Blue hour" }));
     await waitFor(() => expect(redo).toHaveBeenCalledTimes(1));
     fireEvent.click(screen.getByRole("button", { name: "GENERATE" }));
     await waitFor(() => expect(posts).toHaveLength(1));
@@ -618,14 +621,14 @@ describe("other tabs, server cards, limits, memory", () => {
       response: new Response(null, { status: 204 }),
     } as never);
     await openDrawer();
-    fireEvent.click(await screen.findByRole("button", { name: "Undo" }));
+    fireEvent.click(await screen.findByRole("button", { name: /^Undo: Remembered/ }));
     await waitFor(() =>
       expect(del).toHaveBeenCalledWith("/v1/studio/assistant/memory/{item_id}", {
         params: { path: { item_id: mem } },
       }),
     );
     expect(await screen.findByText("Remembered: you like 16:9")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Undo/ })).toBeNull();
   });
 
   it("model and tool text is shown as text: injected text runs nothing", async () => {
@@ -696,7 +699,7 @@ describe("other tabs, server cards, limits, memory", () => {
     });
     await openDrawer(<Screen actions={{}} />);
     expect((await screen.findByText("references")).tagName).toBe("B");
-    expect(screen.getByText(/on the fake host/)).toBeTruthy();
+    expect(screen.getByText("fake").tagName).toBe("CODE");
   });
 
   it("the side panel sits beside the open drawer (board frame 5) and moves back when it closes", async () => {
@@ -874,8 +877,8 @@ describe("older chats and a broken answer (board frame 7)", () => {
     expect(await screen.findByText("Hi. What should we make?")).toBeTruthy();
   });
 
-  it("a broken answer twice: the plain line, with the checker's words behind Details", async () => {
-    serve({
+  it("a broken answer twice: the plain line, Retry, and the checker's words behind Details", async () => {
+    const posts = serve({
       existing: thread(),
       entries: [
         entry(1, { kind: "user", text: "Launch the rockets" }),
@@ -891,9 +894,14 @@ describe("older chats and a broken answer (board frame 7)", () => {
     });
     await openDrawer();
     const note = await screen.findByRole("note");
-    expect(
-      within(note).getByText("The model gave a broken answer twice. Try again or rephrase."),
-    ).toBeTruthy();
+    expect(within(note).getByText("The model gave a broken answer twice.")).toBeTruthy();
+    // Retry on the last broken answer sends your last message again (alpha.2 item 24)
+    fireEvent.click(within(note).getByRole("button", { name: "Retry" }));
+    await waitFor(() =>
+      expect(posts).toContainEqual(
+        expect.objectContaining({ kind: "message", text: "Launch the rockets" }),
+      ),
+    );
     const details = within(note).getByRole("button", { name: "Details" });
     expect(details.getAttribute("aria-expanded")).toBe("false");
     expect(within(note).queryByText(/launch_rockets/)).toBeNull();
@@ -919,7 +927,8 @@ describe("thinking (plan 29)", () => {
     act(() => onEvent!({ seq, type: "thread", thread: thread({ state, client_id: ME, ...over }) }));
   afterEach(() => vi.useRealTimers());
 
-  // the bubble is in the thread (under the last message), never in the header; the title stays in full (33.7)
+  // the bubble is in the thread (under the last message), never in the header; while the chip shows it takes the
+  // title's place (alpha.2, board frame 9)
   const bubble = () => {
     const b = screen.queryByText(/^Thinking…/);
     if (b) {
@@ -930,7 +939,7 @@ describe("thinking (plan 29)", () => {
     return b;
   };
   const title = () =>
-    screen.getByRole("heading", { level: 2, name: "Assistant" }).querySelector("span")!;
+    screen.getByRole("heading", { level: 2, name: "Assistant" }).querySelector("span");
 
   it("counts up while the model call runs, Working while actions run, gone when the step lands", async () => {
     serve({
@@ -950,9 +959,9 @@ describe("thinking (plan 29)", () => {
     // under the user's last message, where the reply lands
     const mine = screen.getByText("Make it blue hour").closest(".msg")!;
     expect(mine.compareDocumentPosition(bubble()!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    // the chip stays Working and the title shows in full
+    // the chip stays Working, in the title's place
     expect(screen.getByText("Working")).toBeTruthy();
-    expect(title().className).toContain("truncate");
+    expect(title()).toBeNull();
     act(() => vi.advanceTimersByTime(3000));
     expect(bubble()?.textContent).toBe("Thinking… 3 s");
     // parked on this tab's actions: no bubble, today's chip
@@ -975,7 +984,13 @@ describe("thinking (plan 29)", () => {
     );
     to("idle", 32);
     expect(bubble()).toBeNull();
-    expect(screen.getByText("Done: blue hour")).toBeTruthy();
+    const drawer = screen.getByRole("complementary", { name: "Assistant" });
+    expect(within(drawer).getByText("Done: blue hour")).toBeTruthy();
+    // screen readers hear the new words alone, from a region outside the thread (alpha.2 item 23)
+    const live = document.querySelector("[aria-live=polite]")!;
+    expect(live.textContent).toBe("Done: blue hour");
+    expect(drawer.contains(live)).toBe(false);
+    expect(drawer.querySelector("[aria-live=polite]")).toBeNull();
   });
 
   it("closing and reopening the drawer keeps the count", async () => {
@@ -998,7 +1013,7 @@ describe("thinking (plan 29)", () => {
     to("working", 20);
     expect(screen.getByText("Working")).toBeTruthy();
     expect(screen.queryByText(/^Thinking/)).toBeNull();
-    expect(title().className).toContain("truncate");
+    expect(title()).toBeNull();
   });
 
   it("another tab's working chat stays Read-only", async () => {
@@ -1188,5 +1203,280 @@ describe("steer while it answers (board frame 8)", () => {
     expect(r.results).toMatchObject([
       { status: "did_not_run", line: { text: "Did not run · you stopped it" } },
     ]);
+  });
+});
+
+describe("alpha.2: size, answers that read well, polish (board frames 9, 10, 14)", () => {
+  const drawer = () => screen.queryByRole("complementary", { name: "Assistant" });
+  const bar = (name: string | RegExp) => screen.getByRole("button", { name });
+
+  it("full screen, back with Esc or ⇧⌘J; Minimize to the bar, which opens it as left; Close ends both", async () => {
+    serve();
+    await openDrawer();
+    fireEvent.click(screen.getByRole("button", { name: "Full screen (Ctrl Shift J)" }));
+    expect(drawer()!.className).toContain("full");
+    expect(screen.getByRole("button", { name: "Back to the drawer (Ctrl Shift J)" })).toBeTruthy();
+    fireEvent.keyDown(drawer()!, { key: "Escape" });
+    expect(drawer()!.className).not.toContain("full");
+    fireEvent.keyDown(window, { key: "J", ctrlKey: true, shiftKey: true });
+    expect(drawer()!.className).toContain("full");
+    fireEvent.keyDown(window, { key: "J", ctrlKey: true, shiftKey: true });
+    expect(drawer()!.className).not.toContain("full");
+    fireEvent.click(screen.getByRole("button", { name: "Minimize" }));
+    expect(drawer()).toBeNull();
+    fireEvent.click(bar("Open the Assistant"));
+    expect(drawer()).toBeTruthy();
+    // opened from the bar, Esc and ⌘J go back to it
+    fireEvent.keyDown(drawer()!, { key: "Escape" });
+    expect(bar("Open the Assistant")).toBeTruthy();
+    fireEvent.keyDown(window, { key: "j", ctrlKey: true });
+    expect(drawer()).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^Close \(/ }));
+    expect(drawer()).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Open the Assistant/ })).toBeNull();
+  });
+
+  it("the bar's states: Working with Stop, Waiting for you and what, a new answer", async () => {
+    const posts = serve({ existing: thread({ state: "working", client_id: ME }) });
+    await openDrawer();
+    // while it works, the chip takes the title's place
+    expect(screen.getByText("Working")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Minimize" }));
+    expect(bar("Open the Assistant · Working").textContent).toContain("Thinking…");
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+    await waitFor(() => expect(posts).toContainEqual(expect.objectContaining({ kind: "stop" })));
+    const card = (state: S<"AssistantCard">["state"]): S<"AssistantCard"> => ({
+      id: id(1),
+      kind: "delete",
+      title: "Delete the take",
+      rows: [],
+      tags: [],
+      state,
+    });
+    act(() =>
+      onEvent!({
+        seq: 40,
+        type: "entry",
+        entry: entry(2, { kind: "card", card: card("waiting") }),
+      }),
+    );
+    act(() =>
+      onEvent!({
+        seq: 41,
+        type: "thread",
+        thread: thread({ state: "waiting", client_id: ME, updated_at: "2026-11-22T00:01:00Z" }),
+      }),
+    );
+    expect(bar("Open the Assistant · Waiting for you").textContent).toContain("Delete the take?");
+    act(() =>
+      onEvent!({
+        seq: 42,
+        type: "thread",
+        thread: thread({ state: "idle", updated_at: "2026-11-22T00:02:00Z" }),
+      }),
+    );
+    act(() =>
+      onEvent!({
+        seq: 43,
+        type: "entry",
+        entry: entry(3, { kind: "assistant", turn: 2, text: "**Done**: 4 takes. Take 2 is best." }),
+      }),
+    );
+    // a card that waits still wins; once answered, the new answer shows
+    act(() =>
+      onEvent!({ seq: 44, type: "entry", entry: entry(2, { kind: "card", card: card("yes") }) }),
+    );
+    expect(bar("Open the Assistant · new answer").textContent).toContain("Done: 4 takes.");
+    fireEvent.click(bar("Open the Assistant · new answer"));
+    fireEvent.click(screen.getByRole("button", { name: "Minimize" }));
+    expect(bar("Open the Assistant").textContent).toBe("Assistant");
+  });
+
+  it("formats answers as plain elements: bold, italic, lists, code with Copy; links and headings as text", async () => {
+    const copied = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: copied },
+      configurable: true,
+    });
+    serve({
+      existing: thread(),
+      entries: [
+        entry(1, {
+          kind: "assistant",
+          text: [
+            "## Name the move first",
+            "**Slow** beats *very slow*, see [the guide](https://evil.test/x).",
+            "- One subject",
+            "- 5 s or less",
+            "1. Open Video",
+            "2. Set Camera to `Dolly in`",
+            "| a | b |",
+            "```prompt",
+            "Slow dolly in. <img src=x onerror=alert(1)>",
+            "```",
+          ].join("\n"),
+        }),
+      ],
+    });
+    await openDrawer();
+    const d = drawer()!;
+    expect((await within(d).findByText("Slow")).tagName).toBe("B");
+    expect(within(d).getByText("very slow").tagName).toBe("I");
+    expect(within(d).getByText("Dolly in").tagName).toBe("CODE");
+    expect(within(d).getByText("One subject").closest("ul")!.className).toBe("md");
+    expect(
+      within(d)
+        .getByText(/Open Video/)
+        .closest("ol"),
+    ).toBeTruthy();
+    expect(d.querySelectorAll("h1, h2, h3, table, a[href*='evil']")).toHaveLength(1); // the header's h2
+    expect(within(d).getByText("Name the move first").tagName).toBe("P");
+    expect(d.textContent).toContain("see the guide.");
+    expect(d.textContent).not.toContain("evil.test");
+    expect(within(d).getByText("| a | b |")).toBeTruthy();
+    expect(d.querySelector("img")).toBeNull();
+    expect(d.querySelector("pre")!.textContent).toBe("Slow dolly in. <img src=x onerror=alert(1)>");
+    fireEvent.click(within(d).getByRole("button", { name: "Copy the prompt" }));
+    await waitFor(() =>
+      expect(copied).toHaveBeenCalledWith("Slow dolly in. <img src=x onerror=alert(1)>"),
+    );
+    fireEvent.click(within(d).getByRole("button", { name: "Copy the answer" }));
+    await waitFor(() => expect(copied).toHaveBeenCalledTimes(2));
+    const all = (copied.mock.calls.at(-1) as unknown as [string])[0];
+    expect(all).toContain("Slow beats *very slow*, see the guide.");
+    expect(all).not.toContain("**");
+    expect((await within(d).findAllByText("Copied")).length).toBeGreaterThan(0);
+  });
+
+  it("a plain checklist is a plan; timecodes jump the playhead on the Timeline, text elsewhere", async () => {
+    const text = "Plan:\n- [x] Keyframe for each shot\n- [ ] Place it at 0:26";
+    serve({ existing: thread(), entries: [entry(1, { kind: "assistant", text })] });
+    const r = await openDrawer(<Screen actions={{}} />);
+    const plan = await screen.findByRole("list", { name: "Plan" });
+    const items = within(plan).getAllByRole("listitem");
+    expect(items.map((x) => x.textContent)).toEqual([
+      "Done: Keyframe for each shot",
+      "To do: Place it at 0:26",
+    ]);
+    expect(items[1].className).toBe("todo");
+    expect(screen.queryByRole("button", { name: /^Jump the Timeline/ })).toBeNull();
+    r.unmount();
+    sessionStorage.clear(); // it would come back open
+    path = "/timeline";
+    const setPlayhead = vi.fn(() => done("Moved"));
+    function Timeline() {
+      useScreenTools({
+        screen: "timeline",
+        sees: ["Timeline"],
+        summary: () => ({}),
+        actions: { setPlayhead },
+      });
+      return null;
+    }
+    await openDrawer(<Timeline />);
+    fireEvent.click(await screen.findByRole("button", { name: "Jump the Timeline to 0:26" }));
+    expect(setPlayhead).toHaveBeenCalledWith({ at_s: 26 }, expect.anything());
+  });
+
+  it("a long answer stops at 3 lines with More", async () => {
+    const tall = vi
+      .spyOn(HTMLElement.prototype, "scrollHeight", "get")
+      .mockImplementation(function (this: HTMLElement) {
+        return this.className === "clamp" ? 200 : 0;
+      });
+    serve({ existing: thread(), entries: [entry(1, { kind: "assistant", text: "Five shots…" })] });
+    await openDrawer();
+    const more = await screen.findByRole("button", { name: "More" });
+    expect(more.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(more);
+    expect(screen.getByRole("button", { name: "Less" }).getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText("Five shots…").closest(".unclamp")).toBeTruthy();
+    tall.mockRestore();
+  });
+
+  it("an earlier turn's steps fold into one line once a new turn starts; the newest stays open", async () => {
+    const ln = (n: number, turn: number, text: string, over = {}) =>
+      entry(n, {
+        kind: "line",
+        turn,
+        line: { id: id(n, turn), status: "done", text, undo: false, ...over },
+      });
+    serve({
+      existing: thread(),
+      entries: [
+        entry(1, { kind: "user", turn: 1, text: "Make shot 1" }),
+        ln(2, 1, "Opened Create · Image"),
+        ln(3, 1, "Run done · 2 takes"),
+        ln(4, 1, "Remembered: Elias's voice is warm", { memory_id: T }),
+        ln(5, 1, "Set Duration: 5 s"),
+        ln(6, 1, "Set Lighting: Window"),
+        entry(7, { kind: "user", turn: 2, text: "Now shot 2" }),
+        ln(8, 2, "Opened Create · Video"),
+      ],
+    });
+    await openDrawer();
+    const sum = await screen.findByRole("button", { name: "5 steps · 2 takes · 1 memory" });
+    expect(sum.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByText("Opened Create · Image")).toBeNull();
+    expect(screen.getByText("Opened Create · Video")).toBeTruthy();
+    fireEvent.click(sum);
+    expect(sum.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.queryByText("Opened Create · Image")).toBeNull(); // the last 4, then "+ 1 more step"
+    fireEvent.click(screen.getByRole("button", { name: "+ 1 more step" }));
+    expect(screen.getByText("Opened Create · Image")).toBeTruthy();
+  });
+
+  it("a long line is one line that opens on tap, its full text on hover", async () => {
+    const long = "Generated Elias at the window, morning light through lace curtains · 4 takes";
+    serve({
+      existing: thread(),
+      entries: [
+        entry(1, { kind: "line", line: { id: id(1), status: "done", text: long, undo: false } }),
+      ],
+    });
+    await openDrawer();
+    const one = (await screen.findByText(long)).closest("[role=button]")!;
+    expect(one.className).toBe("one");
+    expect(one.getAttribute("title")).toBe(long);
+    fireEvent.click(one);
+    expect(one.getAttribute("aria-expanded")).toBe("true");
+    expect(one.className).toBe("wide");
+  });
+
+  it("a look card shows the takes it is about", async () => {
+    const t1 = "00000000-0000-4000-8000-0000000000a1";
+    answer("GET", {
+      "/v1/studio/assistant/threads": () => ({
+        data: { status: status(), threads: [thread()] },
+      }),
+      "/v1/studio/assistant/threads/{thread_id}": () => ({
+        data: {
+          ...thread(),
+          entries: [
+            entry(1, {
+              kind: "card",
+              card: {
+                id: id(1),
+                kind: "look",
+                title: "Look at 1 take?",
+                rows: [],
+                tags: [],
+                take_ids: [t1],
+                state: "waiting",
+              },
+            }),
+          ],
+        },
+      }),
+      "/v1/studio/takes/{take_id}": () => ({
+        data: { id: t1, title: "Fox at dusk", thumb_url: "/files/u/x/fox.png" },
+      }),
+    });
+    await openDrawer();
+    const thumbs = await screen.findByLabelText("The takes it is about");
+    await waitFor(() =>
+      expect(thumbs.querySelector("img")?.getAttribute("src")).toBe("/files/u/x/fox.png"),
+    );
+    expect(thumbs.querySelector("img")!.getAttribute("alt")).toBe("Fox at dusk");
   });
 });

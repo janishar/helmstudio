@@ -4,7 +4,14 @@
 // It shows the chat (your messages, its words, the action lines with Undo, the cards), runs a turn's actions in the
 // tab that sent the message (others show it read-only with Continue here) and posts their results. Every text is
 // rendered as text: React escapes it, nothing is parsed as HTML.
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -18,35 +25,51 @@ import {
   CircleAlert,
   CircleMinus,
   Clock3,
+  Copy,
   Cpu,
+  Ellipsis,
   Eye,
   Globe,
   LoaderCircle,
+  Maximize2,
   MessagesSquare,
+  Minimize2,
+  Minus,
   Monitor,
+  Pencil,
   Plus,
   Redo2,
+  RotateCcw,
   Sparkles,
+  Trash2,
   Undo2,
   X,
 } from "lucide-react";
 import { api, message, ok, type S } from "@/lib/api";
+import { safeUrl } from "@/lib/format";
+import { useTakes } from "@/lib/take-cache";
 import {
   ASSISTANT_CHANGED,
   MEMORY_TABS,
   ago,
+  answerBlocks,
   applyEvent,
   asked,
   elsewhere,
   capNoticeId,
   chatTime,
+  inlineParts,
   limitOf,
   mentionParts,
+  plainAnswer,
+  stepSummary,
   tabClientId,
   tabOpen,
+  timecode,
   rememberOpen,
   sourceText,
   toResult,
+  undoName,
   waitingText,
   type Action,
   type Asked,
@@ -132,6 +155,18 @@ export function useAssistant(me: S<"User"> | null) {
     setShrunk(false);
   }, []);
   const setLocal = (id: string, l: Local) => setLocalState((m) => ({ ...m, [id]: l }));
+  // size (alpha.2 item 4, board frame 9): full screen, and minimized to the small bar; Close ends both, ⌘J and Esc
+  // go back to the bar when it was minimized
+  const [full, setFull] = useState(false);
+  const [min, setMin] = useState(false);
+  const close = useCallback(() => {
+    setOpen(false);
+    setMin(false);
+  }, [setOpen]);
+  const minimize = useCallback(() => {
+    setOpen(false);
+    setMin(true);
+  }, [setOpen]);
 
   // the status and the newest chat, once the user is known, and again when Admin › AI agents saves (no reload)
   const [rev, setRev] = useState(0);
@@ -437,18 +472,33 @@ export function useAssistant(me: S<"User"> | null) {
   };
 
   const enabled = !!status?.enabled;
-  // ⌘J (Ctrl J) opens and closes it on any screen
+  // ⌘J (Ctrl J) opens and closes it on any screen; ⇧⌘J toggles full screen (opening it full when closed)
   useEffect(() => {
     if (!enabled) return;
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "j") {
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === "j") {
         e.preventDefault();
-        setOpen((o) => !o);
+        if (e.shiftKey) {
+          setFull(!(open && full));
+          setOpen(true);
+        } else setOpen((o) => !o);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [enabled, setOpen]);
+  }, [enabled, setOpen, open, full]);
+
+  // a new answer is one that came while the drawer was not open (the minimized bar's green dot)
+  const lastAnswer = view?.entries.findLast((e) => e.kind === "assistant");
+  const lastId = lastAnswer?.id ?? null;
+  const [seen, setSeen] = useState<string | null | undefined>(undefined);
+  if (view && (seen === undefined || (open && seen !== lastId))) setSeen(lastId);
+
+  /** Retry on a broken answer (item 24): your last message again. */
+  const retry = useCallback(() => {
+    const u = view?.entries.findLast((e) => e.kind === "user");
+    if (u?.text) void send(u.text);
+  }, [view, send]);
 
   const readOnly = elsewhere(view?.thread, cid);
   const serverCardWaits =
@@ -462,6 +512,13 @@ export function useAssistant(me: S<"User"> | null) {
     view,
     open,
     setOpen,
+    close,
+    full,
+    setFull,
+    min,
+    minimize,
+    newAnswer: !open && !!lastId && lastId !== seen ? (lastAnswer?.text ?? "") : null,
+    retry,
     shrunk,
     setShrunk,
     local,
@@ -564,46 +621,283 @@ function Mentions({ text }: { text: string }) {
   );
 }
 
-function Lines({ lines, a }: { lines: Line[]; a: AssistantApi }) {
+/** An answer's line (item 22): bold, italic, inline code, @handles; a timecode is a chip that jumps the Timeline's
+ * playhead when `seek` is given (on the Timeline), else text. */
+function Inlines({ text, seek }: { text: string; seek?: (s: number) => void }) {
+  return (
+    <>
+      {inlineParts(text).map((p, i) =>
+        p.k === "b" ? (
+          <b key={i}>{p.t}</b>
+        ) : p.k === "i" ? (
+          <i key={i}>{p.t}</i>
+        ) : p.k === "code" ? (
+          <code key={i}>{p.t}</code>
+        ) : p.k === "at" ? (
+          <span key={i} className="mn">
+            {p.t}
+          </span>
+        ) : p.k === "tc" && seek ? (
+          <button
+            key={i}
+            type="button"
+            className="tc"
+            aria-label={`Jump the Timeline to ${p.t}`}
+            title={`Jump the Timeline to ${p.t}`}
+            onClick={() => seek(timecode(p.t))}
+          >
+            {p.t}
+          </button>
+        ) : (
+          p.t
+        ),
+      )}
+    </>
+  );
+}
+
+function CopyButton({ text, label, children }: { text: string; label?: string; children: string }) {
+  const [did, setDid] = useState(false);
+  return (
+    <button
+      type="button"
+      className="un"
+      aria-label={label}
+      onClick={() =>
+        void navigator.clipboard?.writeText(text).then(
+          () => {
+            setDid(true);
+            setTimeout(() => setDid(false), 1500);
+          },
+          () => undefined,
+        )
+      }
+    >
+      <Copy size={12} aria-hidden />
+      {did ? "Copied" : children}
+    </button>
+  );
+}
+
+/** Text clamped to 3 lines with More when it is longer (items 5, 24): measured, so short text has no More. */
+function Clamp({ children, k }: { children: React.ReactNode; k: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [over, setOver] = useState(false);
+  const [more, setMore] = useState(false);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (el && !more) setOver(el.scrollHeight > el.clientHeight + 1);
+  }, [k, more]);
+  return (
+    <>
+      <div ref={ref} className={more ? "unclamp" : "clamp"}>
+        {children}
+      </div>
+      {(over || more) && (
+        <button type="button" className="mmore" aria-expanded={more} onClick={() => setMore(!more)}>
+          {more ? "Less" : "More"}
+        </button>
+      )}
+    </>
+  );
+}
+
+/** One answer (item 22, board frame 10a): its blocks as plain elements, never HTML; no headings or tables. */
+function Answer({ text, seek }: { text: string; seek?: (s: number) => void }) {
+  return (
+    <Clamp k={text}>
+      {answerBlocks(text).map((b, i) =>
+        b.k === "p" ? (
+          <p key={i}>
+            <Inlines text={b.text} seek={seek} />
+          </p>
+        ) : b.k === "code" ? (
+          <div key={i} className="cb">
+            <div>
+              {b.lang || "code"}
+              <CopyButton text={b.text} label={`Copy the ${b.lang || "code"}`}>
+                Copy
+              </CopyButton>
+            </div>
+            <pre>{b.text}</pre>
+          </div>
+        ) : b.k === "plan" ? (
+          <ul key={i} className="plan" aria-label="Plan">
+            {b.items.map((x, j) => (
+              <li key={j} className={x.done ? undefined : "todo"}>
+                {x.done ? (
+                  <Check size={14} strokeWidth={2.5} aria-hidden className="ok" />
+                ) : (
+                  <Clock3 size={14} strokeWidth={2} aria-hidden />
+                )}
+                <span>
+                  <span className="sr-only">{x.done ? "Done: " : "To do: "}</span>
+                  <Inlines text={x.text} seek={seek} />
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : b.k === "ol" ? (
+          <ol key={i}>
+            {b.items.map((x, j) => (
+              <li key={j}>
+                <Inlines text={x} seek={seek} />
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <ul key={i} className="md">
+            {b.items.map((x, j) => (
+              <li key={j}>
+                <Inlines text={x} seek={seek} />
+              </li>
+            ))}
+          </ul>
+        ),
+      )}
+    </Clamp>
+  );
+}
+
+function LineRow({ l, a }: { l: Line; a: AssistantApi }) {
+  const [wide, setWide] = useState(false);
+  const off = !!a.undone[l.id];
+  const status = off ? "undone" : l.status;
+  const text = / in Models\.$/.test(l.text) ? (
+    <>
+      <Text text={l.text.slice(0, -"Models.".length)} />
+      <Link href="/models" className="underline">
+        Models
+      </Link>
+      .
+    </>
+  ) : (
+    <Text text={l.text} />
+  );
+  // one line with "…", tap opens it in full, hover shows it (item 21, board frame 10c); a memory line wraps in full
+  const long = l.text.length > 36 && !/^Remembered\b/.test(l.text);
+  const verb = off ? "Redo" : "Undo";
+  return (
+    <li>
+      <LineIcon status={status} text={l.text} />
+      <span
+        className={
+          off
+            ? "text-t2 line-through"
+            : status === "did_not_run" || status === "cancelled"
+              ? "text-t2"
+              : ""
+        }
+      >
+        {long ? (
+          <span
+            className={wide ? "wide" : "one"}
+            role="button"
+            tabIndex={0}
+            aria-expanded={wide}
+            title={l.text}
+            onClick={() => setWide(!wide)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setWide(!wide);
+              }
+            }}
+          >
+            {text}
+          </span>
+        ) : (
+          text
+        )}
+      </span>
+      {l.undo && (l.status === "done" || off) && a.canUndo(l) && !(off && l.memory_id) && (
+        <button
+          type="button"
+          className="un"
+          aria-label={`${verb}: ${undoName(l.text)}`}
+          title={`${verb}: ${undoName(l.text)}`}
+          onClick={() => void a.toggleUndo(l)}
+        >
+          {off ? <Redo2 size={12} aria-hidden /> : <Undo2 size={12} aria-hidden />}
+          {verb}
+        </button>
+      )}
+    </li>
+  );
+}
+
+function Lines({
+  lines,
+  a,
+  more = 0,
+  onMore,
+}: {
+  lines: Line[];
+  a: AssistantApi;
+  more?: number;
+  onMore?: () => void;
+}) {
   return (
     <ul className="al" aria-label="What it did">
-      {lines.map((l) => {
-        const off = !!a.undone[l.id];
-        const status = off ? "undone" : l.status;
-        return (
-          <li key={l.id}>
-            <LineIcon status={status} text={l.text} />
-            <span
-              className={
-                off
-                  ? "text-t2 line-through"
-                  : status === "did_not_run" || status === "cancelled"
-                    ? "text-t2"
-                    : ""
-              }
-            >
-              {/ in Models\.$/.test(l.text) ? (
-                <>
-                  <Text text={l.text.slice(0, -"Models.".length)} />
-                  <Link href="/models" className="underline">
-                    Models
-                  </Link>
-                  .
-                </>
-              ) : (
-                <Text text={l.text} />
-              )}
-            </span>
-            {l.undo && (l.status === "done" || off) && a.canUndo(l) && !(off && l.memory_id) && (
-              <button type="button" className="un" onClick={() => void a.toggleUndo(l)}>
-                {off ? <Redo2 size={12} aria-hidden /> : <Undo2 size={12} aria-hidden />}
-                {off ? "Redo" : "Undo"}
-              </button>
-            )}
-          </li>
+      {lines.map((l) => (
+        <LineRow key={l.id} l={l} a={a} />
+      ))}
+      {more > 0 && (
+        <li>
+          <button type="button" className="un" onClick={onMore}>
+            + {more} more step{more === 1 ? "" : "s"}
+          </button>
+        </li>
+      )}
+    </ul>
+  );
+}
+
+const FOLD_SHOWN = 4; // a folded turn opened shows its last steps, then "+ N more steps"
+
+/** An earlier turn's steps folded into one line (item 25, board frame 10h–i); tap opens them again. */
+function Folded({ lines, a }: { lines: Line[]; a: AssistantApi }) {
+  const [open, setOpen] = useState(false);
+  const [all, setAll] = useState(false);
+  const more = all ? 0 : Math.max(0, lines.length - FOLD_SHOWN);
+  return (
+    <>
+      <button type="button" className="sum" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <Check size={14} strokeWidth={2.5} aria-hidden className="ok" />
+        <span>{stepSummary(lines)}</span>
+        {open ? (
+          <ChevronDown size={14} strokeWidth={2} aria-hidden />
+        ) : (
+          <ChevronRight size={14} strokeWidth={2} aria-hidden />
+        )}
+      </button>
+      {open && (
+        <Lines
+          lines={more ? lines.slice(-FOLD_SHOWN) : lines}
+          a={a}
+          more={more}
+          onMore={() => setAll(true)}
+        />
+      )}
+    </>
+  );
+}
+
+/** The takes a look-at card is about (item 23), from the tab's take cache. */
+function TakeThumbs({ ids }: { ids: string[] }) {
+  const take = useTakes(ids);
+  return (
+    <div className="thumbs" aria-label="The takes it is about">
+      {ids.map((id) => {
+        const t = take(id);
+        const src = safeUrl(t?.thumb_url);
+        return src ? (
+          <img loading="lazy" decoding="async" key={id} src={src} alt={t?.title ?? ""} />
+        ) : (
+          <span key={id} aria-hidden />
         );
       })}
-    </ul>
+    </div>
   );
 }
 
@@ -627,6 +921,7 @@ function Card({
   onYes,
   onNo,
   after,
+  takeIds,
 }: {
   card: ScreenCard;
   waiting: boolean;
@@ -634,6 +929,7 @@ function Card({
   onYes: () => void;
   onNo: () => void;
   after?: string;
+  takeIds?: string[];
 }) {
   return (
     <section className={`cf ${card.danger ? "danger" : ""}`} aria-label={`Confirm: ${card.title}`}>
@@ -663,6 +959,7 @@ function Card({
           ))}
         </div>
       )}
+      {!!takeIds?.length && <TakeThumbs ids={takeIds} />}
       {card.est && (
         <div className="est">
           <Clock3 size={13} strokeWidth={1.75} aria-hidden />
@@ -715,7 +1012,7 @@ const serverCard = (c: S<"AssistantCard">): ScreenCard => ({
 
 /** The model answered wrongly twice (board frame 7): the plain line, and the checker's own words behind Details,
  * closed by default and after a reload. */
-function Broken({ raw }: { raw: string }) {
+function Broken({ raw, retry }: { raw: string; retry?: () => void }) {
   const [open, setOpen] = useState(false);
   const rawRef = useRef<HTMLParagraphElement>(null);
   // opened on the last message, its words come into view, not under the composer
@@ -724,11 +1021,25 @@ function Broken({ raw }: { raw: string }) {
   }, [open]);
   return (
     <div role="note" className="msg note">
-      <p>The model gave a broken answer twice. Try again or rephrase.</p>
-      <button type="button" className="un det" aria-expanded={open} onClick={() => setOpen(!open)}>
-        Details
-        {open ? <ChevronUp size={12} aria-hidden /> : <ChevronDown size={12} aria-hidden />}
-      </button>
+      <p>The model gave a broken answer twice.</p>
+      <div className="ma">
+        {/* Retry (item 24, board frame 10d): your last message again; nothing ran the first time */}
+        {retry && (
+          <button type="button" className="un det" onClick={retry}>
+            <RotateCcw size={12} aria-hidden />
+            Retry
+          </button>
+        )}
+        <button
+          type="button"
+          className="un det"
+          aria-expanded={open}
+          onClick={() => setOpen(!open)}
+        >
+          Details
+          {open ? <ChevronUp size={12} aria-hidden /> : <ChevronDown size={12} aria-hidden />}
+        </button>
+      </div>
       {open && (
         <p className="raw mono" ref={rawRef}>
           {raw}
@@ -831,16 +1142,33 @@ function Thread({ a, entries }: { a: AssistantApi; entries: Entry[] }) {
   const out: React.ReactNode[] = [];
   let words: Entry[] = [];
   let lines: Line[] = [];
+  let fold: number | null = null;
   const steers: React.ReactNode[] = []; // sent while it works: at the bottom, dimmed, until the turn reads them
+  // an earlier turn's steps fold into one line once a newer turn starts (item 25); the newest turn stays open
+  const last = Math.max(
+    0,
+    ...entries.filter((e) => !(e.kind === "user" && e.steer === "waiting")).map((e) => e.turn),
+  );
+  const older = new Map<number, Line[]>();
+  for (const e of entries)
+    if (e.kind === "line" && e.line && e.turn < last)
+      older.set(e.turn, [...(older.get(e.turn) ?? []), e.line]);
+  const folded = new Set<number>();
+  // timecodes jump the playhead on the Timeline (item 24), plain text elsewhere
+  const tl = a.reg.current()?.spec;
+  const setPlayhead = tl?.screen === "timeline" ? tl.actions.setPlayhead : undefined;
+  const seek = setPlayhead
+    ? (s: number) => void setPlayhead({ at_s: s }, { progress: () => undefined })
+    : undefined;
   const flush = (key: string) => {
-    if (!words.length && !lines.length) return;
+    if (!words.length && !lines.length && fold === null) return;
+    const copy = words.map((w) => plainAnswer(w.text ?? "")).join("\n\n");
     out.push(
       <div key={`b${key}`} className="msg">
         {words.map((w) => (
-          <p key={w.id}>
-            <Text text={w.text ?? ""} />
-          </p>
+          <Answer key={w.id} text={w.text ?? ""} seek={seek} />
         ))}
+        {fold !== null && <Folded key={`f${fold}`} lines={older.get(fold) ?? []} a={a} />}
         {lines.length > 0 && <Lines lines={lines} a={a} />}
         {lines
           .filter((l) => l.sources?.length)
@@ -851,14 +1179,28 @@ function Thread({ a, entries }: { a: AssistantApi; entries: Entry[] }) {
               ))}
             </ol>
           ))}
+        {copy && (
+          <div className="ma">
+            <CopyButton text={copy} label="Copy the answer">
+              Copy
+            </CopyButton>
+          </div>
+        )}
       </div>,
     );
     words = [];
     lines = [];
+    fold = null;
   };
+  const lastEntry = entries.at(-1)?.id;
   for (const e of entries) {
     if (e.kind === "assistant") words.push(e);
-    else if (e.kind === "line" && e.line) lines.push(e.line);
+    else if (e.kind === "line" && e.line && e.turn < last) {
+      if (!folded.has(e.turn) && fold === null) {
+        folded.add(e.turn);
+        fold = e.turn;
+      }
+    } else if (e.kind === "line" && e.line) lines.push(e.line);
     else {
       flush(e.id);
       if (e.kind === "user" && e.steer === "waiting")
@@ -891,12 +1233,19 @@ function Thread({ a, entries }: { a: AssistantApi; entries: Entry[] }) {
             card={serverCard(c)}
             waiting={c.state === "waiting" && !a.readOnly}
             after={CARD_STATE[c.state]}
+            takeIds={c.take_ids}
             onYes={() => a.answerCard(c.id, true)}
             onNo={() => a.answerCard(c.id, false)}
           />,
         );
       } else if (e.kind === "notice" && e.error?.code === "answer")
-        out.push(<Broken key={e.id} raw={e.text ?? e.error.text} />);
+        out.push(
+          <Broken
+            key={e.id}
+            raw={e.text ?? e.error.text}
+            retry={e.id === lastEntry && !a.readOnly && !a.steering ? a.retry : undefined}
+          />,
+        );
       else if (e.kind === "notice" && !["cap_day", "cap_tokens"].includes(e.error?.code ?? ""))
         out.push(
           <div key={e.id} role="note" className="msg note">
@@ -927,6 +1276,66 @@ function Thread({ a, entries }: { a: AssistantApi; entries: Entry[] }) {
       {out}
       {steers}
     </>
+  );
+}
+
+/** A memory item's ⋯ menu: Edit and Delete (Delete is two taps: ⋯, then Delete). Esc or a click outside closes it. */
+function RowMenu({ busy, edit, remove }: { busy: boolean; edit: () => void; remove: () => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    ref.current?.querySelector<HTMLElement>("[role=menuitem]")?.focus();
+    const out = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
+    document.addEventListener("pointerdown", out);
+    return () => document.removeEventListener("pointerdown", out);
+  }, [open]);
+  const pick = (f: () => void) => () => {
+    setOpen(false);
+    f();
+  };
+  return (
+    <div ref={ref} className="relative shrink-0">
+      <button
+        type="button"
+        className="ib"
+        aria-label="More for this item"
+        title="More for this item"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
+        <Ellipsis size={15} strokeWidth={2} aria-hidden />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          aria-label="More for this item"
+          className="pop"
+          onKeyDown={(e) => {
+            if (e.key !== "Escape") return;
+            e.preventDefault();
+            setOpen(false);
+            ref.current?.querySelector<HTMLElement>("button")?.focus();
+          }}
+        >
+          <button type="button" role="menuitem" className="pr" onClick={pick(edit)}>
+            <Pencil size={14} strokeWidth={1.75} aria-hidden />
+            Edit
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="pr"
+            disabled={busy}
+            onClick={pick(remove)}
+          >
+            <Trash2 size={14} strokeWidth={1.75} aria-hidden />
+            Delete
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1006,10 +1415,10 @@ function MemoryList() {
       ) : shown.length === 0 ? (
         <p className="note">Nothing here yet.</p>
       ) : (
-        <ul className="al m-0 bg-s2" aria-label={MEMORY_TABS.find(([k]) => k === kind)![1]}>
+        <ul className="mem" aria-label={MEMORY_TABS.find(([k]) => k === kind)![1]}>
           {shown.map((x) =>
             editing?.id === x.id ? (
-              <li key={x.id} className="min-h-10">
+              <li key={x.id} className="mrow items-center">
                 <label htmlFor={`mem-${x.id}`} className="sr-only">
                   Edit
                 </label>
@@ -1038,28 +1447,19 @@ function MemoryList() {
                 </button>
               </li>
             ) : (
-              <li key={x.id} className="min-h-10">
-                <span>
-                  {x.text}
-                  <small className="block text-[10px] text-t2">
+              // the text takes the full width, 3 lines then More; Edit and Delete in ⋯ (item 5, board frame 14a)
+              <li key={x.id} className="mrow">
+                <div>
+                  <Clamp k={x.text}>{x.text}</Clamp>
+                  <small>
                     chat · {x.thread?.title || "deleted"} · {ago(x.updated_at)}
                   </small>
-                </span>
-                <button
-                  type="button"
-                  className="un"
-                  onClick={() => setEditing({ id: x.id, text: x.text })}
-                >
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  className="un"
-                  disabled={busy}
-                  onClick={() => void remove(x.id)}
-                >
-                  Delete
-                </button>
+                </div>
+                <RowMenu
+                  busy={busy}
+                  edit={() => setEditing({ id: x.id, text: x.text })}
+                  remove={() => void remove(x.id)}
+                />
               </li>
             ),
           )}
@@ -1117,9 +1517,113 @@ function MemoryList() {
 const mac = () =>
   typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform ?? "");
 export const shortcut = () => (mac() ? "⌘J" : "Ctrl J");
+const fullKey = () => (mac() ? "⇧⌘J" : "Ctrl Shift J");
 
-/** The drawer (or, on a phone, the bottom sheet). */
+/** The minimized bar (item 4, board frame 9): bottom right, 44 px; Working with Stop, Waiting for you and what, a
+ * new answer, else idle. A click opens the drawer as it was left. It moves up rather than cover a Generate button
+ * (the screens' primary `.key` buttons). */
+function MinBar({ a }: { a: AssistantApi }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [lift, setLift] = useState(0);
+  const liftRef = useRef(0);
+  useEffect(() => {
+    // ponytail: checked every 400 ms and on scroll/resize; a ResizeObserver on the keys if that ever costs
+    const check = () => {
+      const el = ref.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const top = r.top + liftRef.current;
+      const bottom = r.bottom + liftRef.current;
+      let up = 0;
+      for (const k of document.querySelectorAll<HTMLElement>("button.key")) {
+        const b = k.getBoundingClientRect();
+        if (b.width && b.right > r.left && b.left < r.right && b.bottom > top && b.top < bottom)
+          up = Math.max(up, bottom - b.top + 8);
+      }
+      if (up !== liftRef.current) setLift((liftRef.current = up));
+    };
+    const id = setInterval(check, 400);
+    const first = setTimeout(check);
+    addEventListener("resize", check);
+    addEventListener("scroll", check, true);
+    return () => {
+      clearInterval(id);
+      clearTimeout(first);
+      removeEventListener("resize", check);
+      removeEventListener("scroll", check, true);
+    };
+  }, []);
+  const t = a.view?.thread;
+  const card =
+    a.asking?.card.title ??
+    a.view?.entries.findLast((e) => e.kind === "card" && e.card?.state === "waiting")?.card?.title;
+  const working = !a.readOnly && (!!a.running || t?.state === "working" || t?.state === "waiting");
+  const [state, text, sub, dot] = a.cardWaits
+    ? ["Waiting for you", "Waiting for you", card && `${card.replace(/\?$/, "")}?`, "ask"]
+    : working
+      ? [
+          "Working",
+          a.running?.text ?? "Thinking…",
+          a.running ? `Working · ${a.running.n} of ${a.running.of}` : "Working",
+          "",
+        ]
+      : a.newAnswer !== null
+        ? ["new answer", "New answer", plainAnswer(a.newAnswer).split("\n")[0], "new"]
+        : ["", "Assistant", "", ""];
+  return (
+    <div ref={ref} className="ast-min" style={lift ? { marginBottom: lift } : undefined}>
+      <button
+        type="button"
+        aria-label={`Open the Assistant${state ? ` · ${state}` : ""}`}
+        onClick={() => a.setOpen(true)}
+      >
+        <span className="lg">
+          <Sparkles size={18} strokeWidth={2} aria-hidden />
+          {dot && <span className={`dot ${dot}`} />}
+        </span>
+        <span className="tx">
+          <span className="truncate">{text}</span>
+          {sub && <small>{sub}</small>}
+        </span>
+      </button>
+      {working && a.steering && (
+        <button type="button" className="no" onClick={a.stopAll}>
+          Stop
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Screen readers hear only what is new (item 23): the newest words or card since the chat was first shown, in a
+ * region of their own outside the drawer (open, minimized or closed), never the whole thread. */
+function Announce({ a }: { a: AssistantApi }) {
+  const said = a.view?.entries.findLast((e) => e.kind === "assistant" || e.kind === "card");
+  const [heard, setHeard] = useState<{ t: string; id: string | null } | null>(null);
+  const tid = a.view?.thread.id;
+  if (tid && heard?.t !== tid) setHeard({ t: tid, id: said?.id ?? null });
+  return (
+    <div className="sr-only" aria-live="polite">
+      {said && heard && heard.t === tid && said.id !== heard.id
+        ? said.kind === "card"
+          ? `Asks: ${said.card?.title ?? ""}`
+          : plainAnswer(said.text ?? "")
+        : ""}
+    </div>
+  );
+}
+
+/** The drawer (or, on a phone, the bottom sheet), and what screen readers hear. */
 export function AssistantDrawer({ a }: { a: AssistantApi }) {
+  return (
+    <>
+      <Announce a={a} />
+      <Drawer a={a} />
+    </>
+  );
+}
+
+function Drawer({ a }: { a: AssistantApi }) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [top, setTop] = useState<number | null>(null);
@@ -1160,8 +1664,9 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
   }, [a.open]);
   if (!a.open) {
     if (chats) setChats(false); // the list never comes back open with the drawer
-    return null;
+    return a.min ? <MinBar a={a} /> : null;
   }
+  const full = a.full && !phone;
   const limit = limitOf(entries, a.capLimits);
   const st = a.status;
   const t = a.view?.thread;
@@ -1236,11 +1741,12 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
 
   return (
     <div
-      className={`ast ${phone ? "sheet" : "drw"}`}
+      className={`ast ${phone ? "sheet" : "drw"} ${full ? "full" : ""}`}
       role="complementary"
       aria-label="Assistant"
       style={phone && top !== null ? { top } : undefined}
-      // Escape closes it (owner, 2026-11-25) unless a dialog, menu or card is open; the work keeps going
+      // Escape closes it (owner, 2026-11-25) unless a dialog, menu or card is open; the work keeps going. Full screen
+      // goes back to the drawer; opened from the minimized bar, it goes back to the bar
       onKeyDown={(e) => {
         if (
           e.key === "Escape" &&
@@ -1248,8 +1754,10 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
           !memory &&
           !a.cardWaits &&
           !document.querySelector('dialog[open], [role="dialog"], [role="menu"]')
-        )
-          a.setOpen(false);
+        ) {
+          if (full) a.setFull(false);
+          else a.setOpen(false);
+        }
       }}
     >
       {phone && <span className="grab" aria-hidden onPointerDown={drag} />}
@@ -1275,11 +1783,13 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
       ) : (
         <>
           <div className="dh">
-            <h2>
+            {/* while a chip shows (Working, Waiting) it takes the title's place, so every button fits */}
+            <h2 aria-label="Assistant" className={chip ? "grow-0" : ""}>
               <Sparkles aria-hidden strokeWidth={2} />
-              <span className="truncate">Assistant</span>
+              {!chip && <span className="truncate">Assistant</span>}
             </h2>
             {chip}
+            {chip && <span className="flex-1" />}
             <button
               type="button"
               className="ib"
@@ -1301,7 +1811,7 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
             >
               <MessagesSquare size={15} strokeWidth={1.75} aria-hidden />
             </button>
-            {phone && (
+            {phone ? (
               <button
                 type="button"
                 className="ib"
@@ -1310,13 +1820,36 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
               >
                 <ChevronDown size={15} strokeWidth={2} aria-hidden />
               </button>
+            ) : (
+              <button
+                type="button"
+                className="ib"
+                aria-label={`${full ? "Back to the drawer" : "Full screen"} (${fullKey()})`}
+                title={`${full ? "Back to the drawer" : "Full screen"} (${fullKey()})`}
+                onClick={() => a.setFull(!full)}
+              >
+                {full ? (
+                  <Minimize2 size={15} strokeWidth={1.75} aria-hidden />
+                ) : (
+                  <Maximize2 size={15} strokeWidth={1.75} aria-hidden />
+                )}
+              </button>
             )}
+            <button
+              type="button"
+              className="ib"
+              aria-label="Minimize"
+              title="Minimize"
+              onClick={a.minimize}
+            >
+              <Minus size={15} strokeWidth={2} aria-hidden />
+            </button>
             <button
               type="button"
               className="x"
               aria-label={`Close (${shortcut()})`}
               title={`Close (${shortcut()})`}
-              onClick={() => a.setOpen(false)}
+              onClick={a.close}
             >
               <X size={16} strokeWidth={1.75} aria-hidden />
             </button>
@@ -1348,7 +1881,7 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
             </div>
           )}
 
-          <div className={`thr ${a.readOnly ? "ro" : ""}`} aria-live="polite">
+          <div className={`thr ${a.readOnly ? "ro" : ""}`}>
             {entries.length === 0 && !a.asking ? (
               <div className="flex flex-col gap-2.5">
                 <p className="m-0 font-display text-lg font-bold">Hi. What should we make?</p>

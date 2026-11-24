@@ -171,7 +171,10 @@ describe("the Memory list", () => {
     const likes = await screen.findByRole("list", { name: "Likes" });
     expect(likes.textContent).toContain("You like 16:9");
     expect(likes.textContent).toContain("chat · Rain still · today");
-    fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
+    // Edit and Delete live in each item's ⋯ menu (alpha.2 item 5, board frame 14a)
+    const more = () => screen.getAllByRole("button", { name: "More for this item" });
+    fireEvent.click(more()[0]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Edit" }));
     fireEvent.change(screen.getByLabelText("Edit"), { target: { value: "You like 21:9 " } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(patches).toHaveLength(1));
@@ -180,7 +183,9 @@ describe("the Memory list", () => {
       body: { text: "You like 21:9" },
     });
     expect(await screen.findByText("You like 21:9")).toBeTruthy();
-    fireEvent.click(screen.getAllByRole("button", { name: "Delete" })[1]);
+    fireEvent.click(more()[1]);
+    expect(deletes).toHaveLength(0); // the menu first: Delete is two taps
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
     await waitFor(() => expect(deletes).toEqual([items[1].id]));
     expect(screen.queryByText("No text in images")).toBeNull();
     fireEvent.click(screen.getByRole("tab", { name: "Projects" }));
