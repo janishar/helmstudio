@@ -106,8 +106,13 @@ LTX-2.5 (video with sound; MLX on a Mac, torch on NVIDIA)
   Compute float16: 10-20% faster on a Mac, picture changes slightly.
 - Presets: Fast (int8, float16), Quality (bf16, float32), Low memory (int4); retake / extend / audio: Fast, Low memory.
 - Size: 128-1920 px on a 64 px grid, about 0.1-2.1 MP, default 704 x 448.
-- Length: frames on an 8k+1 grid, 9-321 (default 49, about 2 s at 24 fps); Auto predicts 1-20 s from the prompt.
+- Length (the Duration section): frames on an 8k+1 grid, 9-321 (default 49, about 2 s at 24 fps); Auto predicts 1-20 s
+  from the prompt.
   Frame rate 24 (trained there; far values drift).
+- Recipe (Quality section; text, image and audio to video): Two-stage (default: half size, then x2 and 3 refine
+  steps), One-stage (one pass, faster, softer, the clip is half the canvas), Detail (Two-stage, then stage 2 is
+  refined with Lightricks' detailing LoRA: sharper hair, edges and texture, about a third slower; Mac only; needs
+  the Detailer add-on). Pick Detail for a final close-up, One-stage for a quick look.
 - Prompt beats: up to 8 timed lines that steer picture and sound in order (0 s shares the rest equally).
 - Negative prompt: NAG, Mac only, about 10% slower. On Dev's guided workflows it feeds CFG instead.
 - Audio on / off: off writes an MP4 without sound (the picture is the same).
@@ -125,13 +130,13 @@ MiniMax H3 (video with sound; native h3 on a Mac, SGLang on NVIDIA)
   videos and sounds together). Slower than LTX.
 - Variants: Base (Macs only) and Base fp8 (NVIDIA only).
 - Size: sides 256-1344, step 32, at most 768 x 1344 pixels in all; default 864 x 480 (16:9).
-- Length: 5 + 17k frames at 24 fps only: 124 about 5 s (default), 362 about 15 s.
+- Length (the Duration section): 5 + 17k frames at 24 fps only: 124 about 5 s (default), 362 about 15 s.
 - Presets: Draft (4 steps), Fast (20 steps, 45 layers, reuse 2, token reduction), Turbo (8 steps with the Turbo LoRA
   add-on), Default (20 steps, 45 layers, reuse 2), Reference (50 steps, every layer). On NVIDIA a preset sets only
   steps and the LoRA.
 - Steps 2-50 (20 default; 50 reference quality, 4 a draft). LoRA none / turbo (use 8 steps; References need the
   Turbo Ref LoRA add-on).
-- Mac speed settings (Base): Layers 35-50 (50 exact, 45 fast, 40 aggressive), Reuse 1-3, Core reuse 1-6 (only with
+- Mac speed settings (Base; the Advanced section): Layers 35-50 (50 exact, 45 fast, 40 aggressive), Reuse 1-3, Core reuse 1-6 (only with
   Reuse 1), Render Full / 75% / 62.5% (faster, softer; needs a canvas with a smaller same-shape size), Token
   reduction (about 25% faster, can shift the composition; not with 40 layers or fewer and Reuse 3).
 - NVIDIA settings (Base fp8): Mode lossless / exact, Flow shift 1-20 (12), Audio flow shift 1-10 (3).
@@ -145,7 +150,7 @@ Qwen3-TTS (voice; torch, Mac or NVIDIA)
 - Variants: Custom voice (9 preset speakers, with Style in words: calm, angry, whispering) and Voice design (a
   designed voice). Language auto, en, zh, ja, ko, de, fr, ru, pt, es, it.
 - Variation 0.1-1.2 (0.3 Steady, 0.9 Lively; high drifts). At most 900 characters (about 60 s) a take.
-- Dialogue: a script, one line each "@name: text" or "@name (style): text"; an empty line is a longer pause; up
+- Dialogue: the Cast field lists the speakers (each @name with a voice); a script, one line each "@name: text" or "@name (style): text"; an empty line is a longer pause; up
   to 40 lines; presets only (a designed voice drifts between lines). Pause between lines 0-2 s (0.35).
 
 ZONOS3 (voice; native, Mac or NVIDIA; fast, about 2 GB)
