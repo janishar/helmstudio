@@ -293,6 +293,12 @@ func (s *Service) readManifests(ctx context.Context) (map[string]foundPlugin, []
 			switch mine, seen := out[found.M.Name]; {
 			case !seen:
 				out[found.M.Name] = found
+			case mine.Origin == "yours" && (found.M.Run != nil || mine.M.Run != nil):
+				// API 1.67: a plugin that starts itself runs the built-in's command (the runner takes the built-in
+				// folder first): your copy is never used, so a dropped folder can't swap the command under one that is on
+				why := "Can't replace a built-in that starts itself; using built in"
+				found.Problem = &why
+				out[found.M.Name] = found
 			case mine.Origin == "yours" && mine.Blocked != "":
 				// your copy can't be used: the built-in stays in use, and the row says why yours is not
 				why := "Your copy is broken: " + *mine.Problem + "; using built in"
@@ -316,6 +322,7 @@ func (s *Service) readManifests(ctx context.Context) (map[string]foundPlugin, []
 func (s *Service) ScanPlugins(ctx context.Context) ([]string, error) {
 	s.scanMu.Lock() // Rescan and the watch never unpack or write at once
 	defer s.scanMu.Unlock()
+	defer s.publishRuns(ctx) // API 1.67: what should run follows what was found
 	found, busy := s.readManifests(ctx)
 	added := []string{}
 	err := common.System(ctx, s.db, func(tx pgx.Tx) error {
@@ -499,4 +506,62 @@ func assistantSkills(ctx context.Context, tx pgx.Tx) ([]message.TurnSkill, error
 		}
 	}
 	return out, err
+}
+
+// publishRuns writes KV host_settings <host>.plugins (API 1.67, registry.schema.json plugin_runs): per host, the plugins
+// that are on, usable and start themselves there, by name. Every host written before is written again (an empty list
+// stops them). Errors are logged: the next change or start writes it again.
+func (s *Service) publishRuns(ctx context.Context) {
+	if s.putSettings == nil {
+		return
+	}
+	s.runsMu.Lock()
+	defer s.runsMu.Unlock()
+	var rows []pluginRow
+	var retry []struct {
+		Name  string
+		Retry int
+	}
+	if err := common.System(ctx, s.db, func(tx pgx.Tx) (err error) {
+		rows, err = readPlugins(ctx, tx, `WHERE enabled AND blocked = '' AND manifest ? 'run'`)
+		if err == nil {
+			retry, err = collect[struct {
+				Name  string
+				Retry int
+			}](ctx, tx, `SELECT name, (settings->>'retry')::int FROM plugins WHERE enabled AND settings ? 'retry'`)
+		}
+		return err
+	}); err != nil {
+		log.Printf("plugins: the plugins to run not written: %v", err)
+		return
+	}
+	byHost := map[string][]string{}
+	for _, r := range rows {
+		if r.Manifest.Run != nil {
+			byHost[r.Manifest.Run.host()] = append(byHost[r.Manifest.Run.host()], r.Name)
+		}
+	}
+	if s.runHosts == nil {
+		s.runHosts = map[string]bool{"mac": true} // a runner may hold an older list: always write mac
+	}
+	for host := range byHost {
+		s.runHosts[host] = true
+	}
+	for _, host := range slices.Sorted(maps.Keys(s.runHosts)) {
+		names := byHost[host]
+		if names == nil {
+			names = []string{}
+		}
+		nonces := map[string]int{} // Try again: the runner starts a plugin again at once when its nonce changes
+		for _, r := range retry {
+			if slices.Contains(names, r.Name) {
+				nonces[r.Name] = r.Retry
+			}
+		}
+		value := toJSON(map[string]any{"schema_version": 1, "host": host, "plugins": names, "retry": nonces,
+			"updated_at": time.Now().UTC().Format(time.RFC3339Nano)})
+		if err := s.putSettings(ctx, host+".plugins", value); err != nil {
+			log.Printf("plugins: %s.plugins not written: %v", host, err)
+		}
+	}
 }

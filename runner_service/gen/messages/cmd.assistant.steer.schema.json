@@ -16,7 +16,7 @@
         "thread_id": {"$ref": "defs.schema.json#/$defs/uuid"},
         "turn": {"type": "integer", "minimum": 1, "maximum": 999999, "description": "the thread's input counter when it was sent: the running turn's (a steer is never read by a turn after it)"},
         "steer_id": {"$ref": "defs.schema.json#/$defs/uuid", "description": "the stored message's id (its entry key message:<steer_id>)"},
-        "text": {"type": "string", "minLength": 1, "maxLength": 4000},
+        "text": {"type": "string", "minLength": 1, "maxLength": 4400, "description": "from API 1.65 with its attached images as a last line, as cmd.assistant.turn's"},
         "stop": {"const": true, "description": "Stop: end the turn at its next step"},
         "at": {"type": "string", "format": "date-time"}
       },

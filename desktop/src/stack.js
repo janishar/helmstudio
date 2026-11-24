@@ -433,6 +433,35 @@ class Runners {
       for (let i = 0; i < 100 && alive(pid); i++) await new Promise((r) => setTimeout(r, 100));
       if (alive(pid)) process.kill(pid, 'SIGKILL');
     }
+    await this.reapPlugins();
+  }
+
+  // API 1.67: the plugin groups a killed native runner left ($HELM_HOME/run/<name>.pid, pid = group), only while the
+  // native runner isn't ours and alive, and only a process whose cwd is that plugin's folder (a pid can be reused)
+  async reapPlugins() {
+    if (this.procs.native) return;
+    const run = path.join(process.env.HELM_HOME || path.join(os.homedir(), '.helm'), 'run');
+    let files = [];
+    try {
+      files = fs.readdirSync(run).filter((f) => f.endsWith('.pid'));
+    } catch {}
+    for (const f of files) {
+      const pid = parseInt(fs.readFileSync(path.join(run, f), 'utf8'), 10);
+      const cwd = pid > 0 ? await exec('/usr/sbin/lsof', ['-a', '-d', 'cwd', '-p', `${pid}`, '-Fn']).catch(() => '') : '';
+      const cmd = pid > 0 ? await exec('/bin/ps', ['-p', `${pid}`, '-o', 'command=']).catch(() => '') : '';
+      const theirs = cwd.split('\n').some((l) => l.startsWith('n') && l.endsWith(`/plugins/${f.slice(0, -4)}`));
+      if (theirs && cmd.trim() && !cmd.includes(this.p.venvs)) {
+        try {
+          process.kill(-pid, 'SIGTERM');
+          for (let i = 0; i < 50; i++) {
+            process.kill(-pid, 0);
+            await new Promise((r) => setTimeout(r, 100));
+          }
+          process.kill(-pid, 'SIGKILL');
+        } catch {}
+      }
+      fs.rmSync(path.join(run, f), { force: true });
+    }
   }
 
   env(r) {
@@ -449,6 +478,11 @@ class Runners {
       S3_SECRET_ACCESS_KEY_FILE: path.join(s, 's3_secret_access_key'),
       HELMSTUDIO_MODELS: this.settings.modelsDir || tilde(this.cfg.defaultModelsDir),
       CONTRACTS_DIR: path.join(this.p.runner, 'contracts'),
+      // API 1.67: the native runner starts the plugins that start themselves (the app's plugins, then ~/.helm/plugins)
+      ...(r.env === 'native' && {
+        RUNNER_PLUGINS: 'on',
+        RUNNER_PLUGINS_DIRS: `${path.join(this.p.stack, 'plugins')}:${path.join(process.env.HELM_HOME || path.join(os.homedir(), '.helm'), 'plugins')}`,
+      }),
     };
   }
 
@@ -499,6 +533,7 @@ class Runners {
     );
     this.procs = {};
     this.savePids();
+    await this.reapPlugins(); // a runner that needed SIGKILL left its plugins
   }
 
   async restart() {

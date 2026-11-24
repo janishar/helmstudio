@@ -38,10 +38,16 @@ func TestReadManifests(t *testing.T) {
 	}
 	s.SetPluginDirs([]string{"../../../plugins", "../../../contract_tests/fake_plugins", bad})
 	got, _ := s.readManifests(context.Background())
-	names := slices.Sorted(maps.Keys(got))
-	want := []string{"animator", "claude-code-bridge", "fake-provider", "fake-tools", "good", "web-search"}
-	if !slices.Equal(names, want) {
-		t.Fatalf("got %v, want %v", names, want)
+	names := slices.Sorted(maps.Keys(got)) // every repo plugin and fake one is read; none of the bad ones
+	for _, want := range []string{"animator", "claude-code-bridge", "fake-crash", "fake-provider", "fake-run", "fake-tools", "good", "web-search"} {
+		if !slices.Contains(names, want) {
+			t.Fatalf("%s missing: %v", want, names)
+		}
+	}
+	for _, bad := range []string{"wrong-name", "public", "unknown", "no-tools", "empty-risk"} {
+		if slices.Contains(names, bad) {
+			t.Fatalf("%s read: %v", bad, names)
+		}
 	}
 	if r := got["web-search"].M.Tools[0].Risk; r == nil || r.SendsOffMachine == nil || !*r.SendsOffMachine {
 		t.Fatal("web-search's search sends off the machine")

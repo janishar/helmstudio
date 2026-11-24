@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "host": "mac",
+  "plugins": [
+    "web-search"
+  ],
+  "updated_at": "2026-11-25T10:00:00Z",
+  "retry": {
+    "web-search": 2
+  }
+}

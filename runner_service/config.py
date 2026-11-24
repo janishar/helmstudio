@@ -79,3 +79,14 @@ HF_TOKEN_FILE = Path(
     os.environ.get("RUNNER_HF_TOKEN_FILE")
     or Path(__file__).resolve().parent.parent / "deploy/secrets/hf_token"
 )
+
+# plugins that start themselves (contracts/README.md, Plugins: starts itself; API 1.67): one runner per host has
+# RUNNER_PLUGINS on (`make runners`' native env, the Mac app's native runner); RUNNER_PLUGINS_DIRS is `:`-separated,
+# the first folder wins a name (empty: off). Logs go to $HELM_HOME/logs/<plugin>.log.
+PLUGINS_DIRS = [
+    Path(d).expanduser() for d in os.environ.get("RUNNER_PLUGINS_DIRS", "").split(":") if d
+]
+PLUGINS = os.environ.get("RUNNER_PLUGINS", "off").lower() in ("on", "1", "true", "yes") and bool(
+    PLUGINS_DIRS
+)
+HELM_HOME = Path(os.environ.get("HELM_HOME") or "~/.helm").expanduser()

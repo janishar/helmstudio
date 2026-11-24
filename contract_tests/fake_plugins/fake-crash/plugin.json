@@ -1,0 +1,20 @@
+{
+  "name": "fake-crash",
+  "title": "Fake crash",
+  "version": "0.1.0",
+  "kind": "assistant-tools",
+  "description": "Test stack only: a service that stops at once, so the runner reports Couldn't start (API 1.67).",
+  "author": "contract_tests",
+  "may_do": ["Fail to start in the fake runner"],
+  "url": "http://runner:8472",
+  "health": "/health",
+  "run": {"cmd": ["python3", "-c", "import sys; print('boom: fake-crash cannot start'); sys.exit(3)"], "host": "fake"},
+  "tools": [
+    {
+      "name": "never",
+      "description": "Never answers.",
+      "input": {"type": "object", "additionalProperties": false, "properties": {}},
+      "risk": {"uses_gpu": false, "deletes": false, "sends_off_machine": false}
+    }
+  ]
+}

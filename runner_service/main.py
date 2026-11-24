@@ -11,7 +11,8 @@ admin): idle, it unloads the components studio names (everything when it names n
 cmd.model.<host>.<env> (durable models-<host>-<env>: downloads and deletes, messaging.models), follows KV
 host_settings key <host> (messaging.settings) and rescans its models root and LoRAs every RESCAN seconds. With ffmpeg
 (core.media.detect: the hosts key's `media`) it also pulls cmd.media.<host>.<env> (durable media-<host>-<env>:
-exports and frames, messaging.media), never in the GPU loop.
+exports and frames, messaging.media), never in the GPU loop. With RUNNER_PLUGINS on (one runner per host) it keeps
+this host's plugins that start themselves running (messaging.plugin_runs) and stops them when it stops.
 
 The hosts key also carries the `device` (API 1.18) and, on CUDA, `host_ram`; the budget is cut from the device's
 memory (VRAM on CUDA). A remote GPU host connects over TLS (NATS_CA_FILE, S3_CA_FILE: contracts/README.md "A remote
@@ -40,7 +41,7 @@ from core.graph import GPU
 from core.residency import POLICIES, Residency, host_device, ram_gb
 from messaging import media as media_jobs
 from messaging import models as model_jobs
-from messaging import schemas
+from messaging import plugin_runs, schemas
 from messaging.hosts import Host
 from messaging.settings import Settings
 from storage import Store
@@ -319,6 +320,15 @@ async def main() -> None:
     beat = asyncio.create_task(host.beat(stop))
     idle = asyncio.create_task(idle_unload(consumer, host, stop)) if residency else None
     side = [asyncio.create_task(t) for t in (*side_jobs, settings.watch(js, stop), rescans(stop))]
+    plugins = None
+    if config.PLUGINS:  # this host's plugins that start themselves (API 1.67)
+        plugins_kv = await js.key_value("registry")
+
+        async def put_plugins(value: dict) -> None:
+            await plugins_kv.put(plugin_runs.KEY, json.dumps(value).encode())
+
+        plugins = plugin_runs.Supervisor(config.PLUGINS_DIRS, config.HELM_HOME, put_plugins)
+        side.append(asyncio.create_task(plugins.watch(js, stop)))
     server = await health.serve(nc)
     log.info("runner %s.%s ready on %s (device %s)", HOST, ENV, SUBJECT, device)
     try:
@@ -346,6 +356,8 @@ async def main() -> None:
                 await t
         if idle:
             await idle
+        if plugins:  # the plugins stop with the runner (TERM, then KILL)
+            await plugins.close()
         if residency:
             await loop.run_in_executor(GPU, residency.unload)
         await host.offline()

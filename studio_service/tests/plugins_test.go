@@ -4,6 +4,8 @@ package tests
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -97,4 +99,113 @@ func TestBrokenScanKeepsASkillOn(t *testing.T) {
 	if got := status(); got != "on" {
 		t.Fatal("still on once it reads well:", got)
 	}
+}
+
+// API 1.67: turning a plugin that starts itself on writes host_settings <host>.plugins with its name; off empties it;
+// the runner's registry plugins key shows as starting, running or Couldn't start.
+func TestPluginsToRun(t *testing.T) {
+	e := setup(t)
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "svc"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "svc", "plugin.json"), []byte(`{"name":"svc","title":"Svc","version":"0.1.0",
+		"kind":"assistant-tools","description":"d","author":"a","may_do":["m"],"url":"http://127.0.0.1:1","health":"/h",
+		"run":{"cmd":["./run.sh"],"host":"box"},"tools":[{"name":"t","description":"d","input":{"type":"object"},
+		"risk":{"uses_gpu":false,"deletes":false,"sends_off_machine":false}}]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	written, retry := map[string][]string{}, map[string]map[string]int{}
+	e.service.SetModelOps(nil, func(_ context.Context, key string, value []byte) error {
+		var v struct {
+			Plugins []string
+			Retry   map[string]int
+		}
+		_ = json.Unmarshal(value, &v)
+		written[key], retry[key] = v.Plugins, v.Retry
+		return nil
+	})
+	e.service.SetPluginDirs([]string{dir})
+	e.service.SetUserPluginDir("")
+	if _, err := e.service.ScanPlugins(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := written["box.plugins"]; ok && len(got) != 0 {
+		t.Fatalf("off: %v", got)
+	}
+	e.call(admin, "PUT", "/v1/studio/admin/plugins/svc", map[string]any{"enabled": true}, 200)
+	if got := written["box.plugins"]; len(got) != 1 || got[0] != "svc" {
+		t.Fatalf("on: %v", written)
+	}
+	status := func() map[string]any {
+		for _, p := range e.call(admin, "GET", "/v1/studio/admin/plugins", nil, 200)["plugins"].([]any) {
+			if p := p.(map[string]any); p["name"] == "svc" {
+				return p
+			}
+		}
+		return nil
+	}
+	if p := status(); p["status"] != "not_running" || p["starts"].(map[string]any)["host"] != "box" {
+		t.Fatal("no runner of box is up:", p)
+	}
+	host, _ := json.Marshal(map[string]any{"schema_version": 1, "host": "box", "env": "native", "state": "idle",
+		"run_id": nil, "updated_at": time.Now().UTC(), "published_by": "test"})
+	if err := e.registry.SetHost("box.native", host); err != nil {
+		t.Fatal(err)
+	}
+	if p := status(); p["status"] != "starting" {
+		t.Fatal("a runner of box is up, the plugin not answering yet:", p)
+	}
+	// Try again: on while on raises the nonce
+	e.call(admin, "PUT", "/v1/studio/admin/plugins/svc", map[string]any{"enabled": true}, 200)
+	if got := retry["box.plugins"]["svc"]; got != 1 {
+		t.Fatalf("retry: %v", retry)
+	}
+	value, _ := json.Marshal(map[string]any{"schema_version": 1, "plugins": map[string]any{"svc": map[string]any{
+		"state": "failed", "detail": "it stopped 3 times: exit 3: boom", "restarts": 3, "since": time.Now().UTC(),
+		"log": "~/.helm/logs/svc.log"}}, "published_by": "runner box.native", "published_at": time.Now().UTC()})
+	if err := e.registry.SetRegistry("box.native.plugins", value); err != nil {
+		t.Fatal(err)
+	}
+	if p := status(); p["status"] != "failed" || p["problem"] != "it stopped 3 times: exit 3: boom" ||
+		p["starts"].(map[string]any)["log"] != "~/.helm/logs/svc.log" {
+		t.Fatal(p)
+	}
+	e.call(admin, "PUT", "/v1/studio/admin/plugins/svc", map[string]any{"enabled": false}, 200)
+	if got := written["box.plugins"]; len(got) != 0 {
+		t.Fatalf("off again: %v", got)
+	}
+}
+
+// API 1.67: for a plugin that starts itself the built-in wins; your copy is never used and the row says so.
+func TestBuiltInWinsForAPluginThatStartsItself(t *testing.T) {
+	e := setup(t)
+	builtIn, user := t.TempDir(), t.TempDir()
+	manifest := `{"name":"svc","title":"Svc","version":"%s","kind":"assistant-tools","description":"d","author":"a",
+		"may_do":["m"],"url":"http://127.0.0.1:1","health":"/h","run":{"cmd":["%s"],"host":"box"},
+		"tools":[{"name":"t","description":"d","input":{"type":"object"},"risk":{"uses_gpu":false,"deletes":false,"sends_off_machine":false}}]}`
+	for dir, args := range map[string][2]string{builtIn: {"0.1.0", "./run.sh"}, user: {"9.0.0", "./evil.sh"}} {
+		_ = os.MkdirAll(filepath.Join(dir, "svc"), 0o755)
+		body := strings.Replace(strings.Replace(manifest, "%s", args[0], 1), "%s", args[1], 1)
+		if err := os.WriteFile(filepath.Join(dir, "svc", "plugin.json"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old := time.Now().Add(-time.Minute)
+	_ = filepath.WalkDir(user, func(p string, _ os.DirEntry, err error) error { return os.Chtimes(p, old, old) })
+	e.service.SetPluginDirs([]string{builtIn})
+	e.service.SetUserPluginDir(user)
+	if _, err := e.service.ScanPlugins(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range e.call(admin, "GET", "/v1/studio/admin/plugins", nil, 200)["plugins"].([]any) {
+		if p := p.(map[string]any); p["name"] == "svc" {
+			if p["origin"] != "built_in" || p["version"] != "0.1.0" || !strings.Contains(fmt.Sprint(p["problem"]),
+				"Can't replace a built-in that starts itself") {
+				t.Fatal(p)
+			}
+			return
+		}
+	}
+	t.Fatal("svc not listed")
 }

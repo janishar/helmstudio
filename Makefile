@@ -121,6 +121,8 @@ UV_RUN_native := run
 HEALTH_PORT_torch := 8091   # each runner's GET /health on 0.0.0.0 (envs on one Mac need their own ports)
 HEALTH_PORT_mlx := 8092
 HEALTH_PORT_native := 8093
+# API 1.67: the native runner starts the plugins that start themselves (the repo's plugins/, then ~/.helm/plugins)
+PLUGINS_native := RUNNER_PLUGINS=on RUNNER_PLUGINS_DIRS=$(CURDIR)/plugins:$${HELM_HOME:-$$HOME/.helm}/plugins
 
 runners: runner-torch runner-mlx runner-native  ## the native runners in the background (needs make up, or make prod with STACK=prod); make runners-stop stops them
 
@@ -142,7 +144,7 @@ runner-torch runner-mlx runner-native: runner-%: $(if $(filter prod,$(STACK)),pr
 	  RUNNER_HOST=mac RUNNER_ENV=$* HEALTH_PORT=$(HEALTH_PORT_$*) NATS_URL_FILE=$(SECRETS)/nats_runner_mac_$*_url \
 	  S3_ENDPOINT=http://127.0.0.1:$(RUNNER_S3) S3_BUCKET=$${S3_BUCKET:-helmstudio} \
 	  S3_ACCESS_KEY_ID_FILE=$(SECRETS)/s3_access_key_id S3_SECRET_ACCESS_KEY_FILE=$(SECRETS)/s3_secret_access_key \
-	  HELMSTUDIO_MODELS=$${HELMSTUDIO_MODELS:-$$HOME/GenAI/models} CONTRACTS_DIR=$(CURDIR)/contracts \
+	  HELMSTUDIO_MODELS=$${HELMSTUDIO_MODELS:-$$HOME/GenAI/models} CONTRACTS_DIR=$(CURDIR)/contracts $(PLUGINS_$*) \
 	  $(UV) $(UV_RUN_$*) python main.py & c=$$!; wait $$c; s=$$?; [ $$s -eq 70 ] || [ $$s -eq 137 ] || exit $$s; \
 	  echo "runner exited $$s: restarting"; sleep 2; done' > .run/runner-mac-$*.log 2>&1 & \
 	sleep 1; echo "runner $* started ($$(cat $(RUN_DIR)/runner-mac-$*.pid)); log runner_service/.run/runner-mac-$*.log"
@@ -151,6 +153,10 @@ runners-stop:     ## stops the native runners (each by its pid file; only a proc
 	@for env in torch mlx native; do f=$(RUN_DIR)/runner-mac-$$env.pid; pid=$$(cat $$f 2>/dev/null) || continue; \
 	if ps -p $$pid -o command= | grep -q 'uv run'; then kill $$pid && echo "stopped runner $$env ($$pid)"; \
 	else echo "runner $$env ($$pid) is not running"; fi; rm -f $$f; done
+	@# API 1.67: plugin groups a killed runner left (pid = group), only while the process's cwd is that plugin's folder
+	@for f in $${HELM_HOME:-$$HOME/.helm}/run/*.pid; do [ -f "$$f" ] || continue; pid=$$(cat $$f); n=$$(basename $$f .pid); \
+	if [ -n "$$(ps -o command= -p $$pid)" ] && lsof -a -d cwd -p $$pid -Fn | grep -q "/plugins/$$n$$"; then \
+	kill -TERM -- -$$pid && echo "stopped plugin $$n ($$pid)"; fi; rm -f $$f; done
 
 # Remote GPU hosts (deploy/gpu-host/README.md; contracts/README.md, A remote GPU host). Each has its own NATS user
 # runner_<h>_torch and S3 identity runner-<h>, made by .tools/make-secrets; a running dev stack takes a new host

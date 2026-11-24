@@ -388,6 +388,15 @@ type Plugin struct {
 	Files       []string          `json:"files,omitempty"`
 	Recipes     *PluginRecipes    `json:"recipes,omitempty"`
 	Problem     *string           `json:"problem,omitempty"`
+	Starts      *PluginStarts     `json:"starts,omitempty"` // API 1.67: it starts itself
+}
+
+// PluginStarts is a plugin that starts itself: the host whose runner runs it, its log there, how often it restarted.
+type PluginStarts struct {
+	Host     string     `json:"host"`
+	Log      *string    `json:"log,omitempty"`
+	Restarts *int       `json:"restarts,omitempty"`
+	Since    *time.Time `json:"since,omitempty"`
 }
 
 // PluginRecipes is a skill's recipes checked against this install (API 1.64).

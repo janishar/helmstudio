@@ -70,6 +70,8 @@ REGISTRY_KEYS = [
     "host",
     "custom",
     "settings",
+    "plugin_runs",  # API 1.67: host_settings <host>.plugins
+    "plugins",  # API 1.67: registry <host>.<env>.plugins
 ]  # registry.schema.json $defs; fixtures/registry/<key>.*
 # API 1.44: openapi.yaml schemas that copy a messages/assistant.schema.json $def; their fixtures must agree on both
 TWINS = {
@@ -4672,6 +4674,9 @@ def check_plugins(schemas: dict[str, dict], registry: Registry) -> None:
                        or (p.parent / f).stat().st_size > 65536]:
                 fail(f"{w}: skill files are .md, .txt or .json under 64 KB with plain names: {bad}")
             continue
+        cmd0 = (doc.get("run") or {}).get("cmd", ["x"])[0]  # API 1.67: inside the folder or a program on PATH
+        if cmd0.startswith("/") or ".." in cmd0.split("/"):
+            fail(f"{w}: run.cmd starts inside the plugin's folder (./x) or names a program, never / or ..")
         host = urlsplit(doc["url"]).hostname or ""
         try:
             ip = ipaddress.ip_address(host)

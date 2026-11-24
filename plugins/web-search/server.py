@@ -63,6 +63,9 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(out)
 
+    def log_message(self, *_):  # no access log: studio's health checks would grow ~/.helm/logs/web-search.log
+        pass
+
     def do_GET(self):
         self.reply(*((200, {"ok": True}) if self.path == "/health" else (404, {"detail": "not found"})))
 

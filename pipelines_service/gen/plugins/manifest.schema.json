@@ -31,6 +31,16 @@
     "url": {"type": "string", "pattern": "^https?://[^\\s/?#@]+$", "maxLength": 200, "examples": ["http://host.docker.internal:8420"], "description": "the service's address as the stack's containers reach it, without a path; a local server's host rule (loopback, private, or host.docker.internal)"},
     "health": {"type": "string", "pattern": "^/[A-Za-z0-9/_.-]{0,99}$", "description": "a path under url answered 2xx without a key while it runs (the Status)"},
     "start": {"type": "string", "maxLength": 200, "description": "how to start it, shown while it is Not running (`plugins/claude-code-bridge/run.sh`)"},
+    "run": {
+      "type": "object",
+      "required": ["cmd"],
+      "additionalProperties": false,
+      "description": "from API 1.67 (contracts/README.md, Plugins: starts itself): how the host's runner starts its service while it is on (and again whenever the runners start); absent: you start it yourself (`start`). The runner reads this from its own plugin folders, never from studio",
+      "properties": {
+        "cmd": {"type": "array", "minItems": 1, "maxItems": 8, "items": {"type": "string", "minLength": 1, "maxLength": 200}, "description": "argv, run in the plugin's folder: the first a path inside the folder (`./run.sh`) or a program on PATH (`python3`); never an absolute path or `..`"},
+        "host": {"type": "string", "pattern": "^[a-z0-9]{1,32}$", "default": "mac", "description": "the host whose runner runs it"}
+      }
+    },
     "provider": {"$ref": "#/$defs/provider"},
     "tools": {"type": "array", "minItems": 1, "maxItems": 8, "items": {"$ref": "#/$defs/tool"}}
   },
@@ -38,7 +48,7 @@
     {"if": {"properties": {"kind": {"const": "model-provider"}}}, "then": {"required": ["provider"], "not": {"required": ["tools"]}}},
     {"if": {"properties": {"kind": {"const": "assistant-tools"}}}, "then": {"required": ["tools"], "not": {"required": ["provider"]}}},
     {"if": {"properties": {"kind": {"enum": ["model-provider", "assistant-tools"]}}}, "then": {"required": ["url", "health"], "not": {"anyOf": [{"required": ["format"]}, {"required": ["when"]}, {"required": ["recipes"]}]}}},
-    {"if": {"properties": {"kind": {"const": "skill"}}}, "then": {"required": ["format", "when"], "properties": {"format": {"const": 1}}, "not": {"anyOf": [{"required": ["url"]}, {"required": ["health"]}, {"required": ["provider"]}, {"required": ["tools"]}, {"required": ["start"]}]}}}
+    {"if": {"properties": {"kind": {"const": "skill"}}}, "then": {"required": ["format", "when"], "properties": {"format": {"const": 1}}, "not": {"anyOf": [{"required": ["url"]}, {"required": ["health"]}, {"required": ["provider"]}, {"required": ["tools"]}, {"required": ["start"]}, {"required": ["run"]}]}}}
   ],
   "$defs": {
     "recipe": {

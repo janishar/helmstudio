@@ -683,19 +683,51 @@ func (h Host) Live(now time.Time) bool { return now.Sub(h.UpdatedAt) <= Stale }
 // Registry holds the latest value of every registry and hosts key. The zero value is empty and ready to use.
 type Registry struct {
 	mu        sync.RWMutex
-	nodes     map[string][]NodeSchema   // "<host>.<env>" → its node schemas
-	nodesAt   map[string]time.Time      // "<host>.<env>" → when its nodes were published
-	workflows map[string][]Workflow     // "<host>.<env>" → its workflows (without node schemas)
-	models    map[string][]Model        // "<host>.<env>" → the models present there
-	licences  map[string][]Licence      // "<host>.<env>" → the licences its models key publishes (API 1.16)
-	loras     map[string][]SharedLora   // "<host>.<env>" → the shared LoRAs on that host
-	looks     map[string][]StarterLook  // "<host>.<env>" → the starter looks of its packs
-	looksAt   map[string]time.Time      // "<host>.<env>" → when its looks were published
-	voices    map[string][]StarterVoice // "<host>.<env>" → the starter voices of its packs (API 1.30)
-	voicesAt  map[string]time.Time      // "<host>.<env>" → when its voices were published
-	hosts     map[string]Host           // "<host>.<env>" → its state
-	awaiting  map[string]bool           // watched buckets whose current values have not all arrived yet
-	custom    []CustomNode              // pipelines.engine.custom: the custom nodes pipelines' packs register (API 1.15)
+	nodes     map[string][]NodeSchema         // "<host>.<env>" → its node schemas
+	nodesAt   map[string]time.Time            // "<host>.<env>" → when its nodes were published
+	workflows map[string][]Workflow           // "<host>.<env>" → its workflows (without node schemas)
+	models    map[string][]Model              // "<host>.<env>" → the models present there
+	licences  map[string][]Licence            // "<host>.<env>" → the licences its models key publishes (API 1.16)
+	loras     map[string][]SharedLora         // "<host>.<env>" → the shared LoRAs on that host
+	looks     map[string][]StarterLook        // "<host>.<env>" → the starter looks of its packs
+	looksAt   map[string]time.Time            // "<host>.<env>" → when its looks were published
+	voices    map[string][]StarterVoice       // "<host>.<env>" → the starter voices of its packs (API 1.30)
+	voicesAt  map[string]time.Time            // "<host>.<env>" → when its voices were published
+	hosts     map[string]Host                 // "<host>.<env>" → its state
+	awaiting  map[string]bool                 // watched buckets whose current values have not all arrived yet
+	custom    []CustomNode                    // pipelines.engine.custom: the custom nodes pipelines' packs register (API 1.15)
+	plugins   map[string]map[string]PluginRun // "<host>.<env>" → the plugins its runner runs, by name (API 1.67)
+}
+
+// PluginRun is one plugin a host's runner runs (registry.schema.json plugins, API 1.67).
+type PluginRun struct {
+	State    string    `json:"state"` // starting | running | failed | stopped
+	Detail   *string   `json:"detail,omitempty"`
+	Restarts int       `json:"restarts"`
+	Since    time.Time `json:"since"`
+	Log      string    `json:"log"`
+}
+
+// PluginRuns is what the runners of host say of their plugins, by plugin name (the newest since wins a name two
+// runners report); live: a runner of host is up (a fresh hosts key).
+func (r *Registry) PluginRuns(host string, now time.Time) (out map[string]PluginRun, live bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out = map[string]PluginRun{}
+	for source, h := range r.hosts {
+		live = live || strings.HasPrefix(source, host+".") && h.Live(now)
+	}
+	for source, runs := range r.plugins {
+		if !strings.HasPrefix(source, host+".") {
+			continue
+		}
+		for name, run := range runs {
+			if old, ok := out[name]; !ok || run.Since.After(old.Since) {
+				out[name] = run
+			}
+		}
+	}
+	return out, live
 }
 
 // CustomNode is one custom node pipelines_service's packs register (registry.schema.json custom, API 1.15).
@@ -879,6 +911,18 @@ func (r *Registry) SetRegistry(key string, value []byte) error {
 			return err
 		}
 		r.custom = parsed.Nodes
+	case "plugins": // API 1.67
+		if value == nil {
+			delete(r.plugins, source)
+			return nil
+		}
+		var parsed struct {
+			Plugins map[string]PluginRun `json:"plugins"`
+		}
+		if err := json.Unmarshal(value, &parsed); err != nil {
+			return err
+		}
+		set(&r.plugins, source, parsed.Plugins)
 	case "loras":
 		if value == nil {
 			delete(r.loras, source)

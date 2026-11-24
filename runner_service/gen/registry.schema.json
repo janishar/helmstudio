@@ -3631,6 +3631,120 @@
         }
       },
       "description": "where a download fetches files: huggingface_hub.snapshot_download(repo_id=repo, revision=revision, allow_patterns=allow_patterns, local_dir=<models root>/<dir>)"
+    },
+    "plugin_runs": {
+      "description": "from API 1.67: bucket host_settings, key <host>.plugins: the plugins that are on and declare `run` with that host (contracts/README.md, Plugins: starts itself). studio_service writes it on every change and at start; the host's supervising runner (RUNNER_PLUGINS on) reads it every 5 s and starts or stops each plugin's service to match. Names only: the runner reads each plugin's `run.cmd` from its own plugin folders. No key: none",
+      "type": "object",
+      "required": [
+        "schema_version",
+        "host",
+        "plugins",
+        "updated_at"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "host": {
+          "$ref": "messages/defs.schema.json#/$defs/hostName",
+          "description": "= the key's first part"
+        },
+        "plugins": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,22}$"
+          }
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "retry": {
+          "type": "object",
+          "maxProperties": 64,
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,22}$"
+          },
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "description": "from API 1.67: Try again: a nonce per plugin, raised by turning an on plugin on again; when it changes the runner starts that plugin again at once, its backoff reset"
+        }
+      }
+    },
+    "plugins": {
+      "description": "from API 1.67: bucket registry, key <host>.<env>.plugins, written by the host's supervising runner whenever a plugin's state changes: each plugin it was asked to run, by name. starting: launched, not up 3 s yet; running: up; failed: it exited (detail: why, the log's last line) and is started again after the backoff (1 s, doubling to 60 s; reset after 60 s up); stopped: turned off. studio shows Starting…, Running (its health path) and Couldn't start · detail",
+      "type": "object",
+      "required": [
+        "schema_version",
+        "plugins",
+        "published_by",
+        "published_at"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "plugins": {
+          "type": "object",
+          "maxProperties": 64,
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,22}$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "state",
+              "restarts",
+              "since",
+              "log"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "state": {
+                "enum": [
+                  "starting",
+                  "running",
+                  "failed",
+                  "stopped"
+                ]
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 300
+              },
+              "restarts": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "since": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "log": {
+                "type": "string",
+                "maxLength": 300,
+                "description": "the log file, as the host sees it (~/.helm/logs/<plugin>.log)"
+              }
+            }
+          }
+        },
+        "published_by": {
+          "type": "string"
+        },
+        "published_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
     }
   }
 }

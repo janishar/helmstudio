@@ -75,6 +75,7 @@
         "text": {"type": "string", "minLength": 1, "maxLength": 300},
         "undo": {"type": "boolean"},
         "memory_id": {"$ref": "defs.schema.json#/$defs/uuid", "description": "a Remembered line: the item its Undo deletes"},
+        "skill": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,22}$", "description": "from API 1.64: a Using skill line: the skill read"},
         "sources": {
           "type": "array",
           "maxItems": 5,
@@ -95,7 +96,7 @@
       "description": "a card the server asks (look_at, web_search, forget, Clear all); a screen action's card is drawn by its screen",
       "properties": {
         "id": {"$ref": "#/$defs/callId"},
-        "kind": {"enum": ["look", "web_search", "delete"]},
+        "kind": {"enum": ["look", "web_search", "delete", "plugin"], "description": "from API 1.61 plugin: a plugin tool with a risk flag asks first"},
         "title": {"type": "string", "minLength": 1, "maxLength": 120},
         "rows": {
           "type": "array",

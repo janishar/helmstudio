@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "plugins": {
+    "web-search": {
+      "state": "running",
+      "restarts": 0,
+      "since": "2026-11-25T10:42:00Z",
+      "log": "~/.helm/logs/web-search.log"
+    },
+    "fake-crash": {
+      "state": "failed",
+      "detail": "it stopped 3 times: exit 3: boom",
+      "restarts": 3,
+      "since": "2026-11-25T10:43:00Z",
+      "log": "~/.helm/logs/fake-crash.log"
+    }
+  },
+  "published_by": "runner mac.native",
+  "published_at": "2026-11-25T10:43:00Z"
+}
