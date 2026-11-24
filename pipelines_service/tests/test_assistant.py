@@ -6,6 +6,7 @@ import asyncio
 import base64
 import copy
 import http.server
+import itertools
 import json
 import threading
 import time
@@ -965,3 +966,118 @@ async def test_a_risky_plugin_tool_waits_for_its_card_and_off_means_off(pool, fa
     line = step["lines"][0]
     assert line["status"] == "failed" and line["text"].endswith("the plugin is off")
     assert len(plugin.requests) == 1 and SEARCH not in offered(c.asked()[-1])
+
+
+# --- context and cache (API 1.66, alpha.2 item 30)
+
+
+def _talk(req: dict) -> str:
+    """A request's transcript: its user part up to the screen."""
+    return req["messages"][1]["content"].split("\n\nThe screen now:")[0]
+
+
+async def test_the_prompt_start_is_byte_identical_across_turns_of_one_chat(pool, fake):
+    """The system part and the tools never change within a chat, the memories are frozen (the assistant's own
+    remember leaves them; the user's change in Memory reads them again), the transcript only grows at its end."""
+    c = Chat(pool, fake)
+    await mem.put(c.store, OWNER, "preference", str(uuid.uuid4()), "likes 16:9", None)
+    c.script(calls(("remember", {"kind": "preference", "text": "likes rain"})), {"content": "Noted."},
+             calls(("change", {"key": "prompt", "value": "rain"})), {"content": "Set."})  # fmt: skip
+    await c.say("Remember I like rain")
+    await c.say("Write rain")
+    await c.steer("and dusk")
+    await c.results(done(c.cid(2, 0), "Wrote prompt"))
+    reqs = c.asked()
+    assert len(reqs) == 4
+    assert all(r["messages"][0] == reqs[0]["messages"][0] for r in reqs)
+    assert "likes 16:9" in reqs[0]["messages"][0]["content"]
+    assert "likes rain" not in reqs[-1]["messages"][0]["content"]
+    assert all(r["tools"] == reqs[0]["tools"] for r in reqs)
+    assert offered(reqs[0]) == sorted(offered(reqs[0]))
+    for a, b in itertools.pairwise(reqs):
+        assert _talk(b).startswith(_talk(a))
+    item = (await mem.items(c.store, OWNER, "preference"))[-1]
+    await mem.answer(c.store, json.dumps({"owner_id": OWNER, "op": "edit", "item_id": item["id"],
+                                          "text": "likes 4:3"}).encode())  # fmt: skip
+    c.script({"content": "OK."})
+    await c.say("again")
+    system = c.asked()[-1]["messages"][0]["content"]
+    assert (
+        "likes 4:3" in system
+        and "likes rain" in system
+        and _talk(c.asked()[-1]).startswith(_talk(reqs[-1]))
+    )
+
+
+async def test_the_oldest_half_folds_once_at_the_threshold(pool, fake, monkeypatch):
+    """Past 70% of the window the oldest half of the chat folds into a running summary, once: the next message
+    does not fold again, the start stays the same, and the folded part's @handles stay usable."""
+    c = Chat(pool, fake)
+    c.script({"content": "Hi."})
+    await c.say("Hello @rex")
+    first = c.asked()[0]
+    fixed = len(first["messages"][0]["content"]) + len(
+        json.dumps(first["tools"], separators=(",", ":"))
+    )
+    monkeypatch.setattr(assistant, "WINDOW", int((fixed + 3000) / assistant.FOLD_AT / 4))
+    for i in range(6):
+        c.script({"content": "Plan: shot 1 rain, shot 2 dusk."})
+        await c.say(f"Shot {i}: " + "rain " * 120)
+    folds = [
+        i for i, r in enumerate(c.asked()) if r["messages"][0]["content"] == assistant.FOLD_SYSTEM
+    ]
+    assert len(folds) == 1
+    fold = c.asked()[folds[0]]
+    assert (
+        "Hello @rex" in fold["messages"][1]["content"]
+        and "Shot 5" not in fold["messages"][1]["content"]
+    )
+    after = c.asked()[folds[0] + 1]
+    assert after["messages"][0] == first["messages"][0]
+    assert _talk(after).startswith(
+        "\n\nEarlier in this chat (your summary):\n<<<\nPlan: shot 1 rain"
+    )
+    assert "Hello @rex" not in _talk(after) and _talk(c.asked()[-1]).startswith(_talk(after))
+    v = (await c.a.graph.aget_state(c.a.cfg(c.tid))).values
+    assert v["digest"].startswith("Plan:") and "rex" in v["handles"]
+    assert "rex" in assistant.allowed_handles(v)
+
+
+def test_cache_hits_are_read_from_each_providers_usage():
+    assert providers.cache_hits({"prompt_tokens": 100, "prompt_cache_hit_tokens": 80,
+                                 "prompt_cache_miss_tokens": 20}) == (100, 80)  # fmt: skip
+    assert providers.cache_hits(
+        {"prompt_tokens": 50, "prompt_tokens_details": {"cached_tokens": 10}}
+    ) == (50, 10)
+    assert providers.cache_hits({"input_tokens": 5, "cache_read_input_tokens": 90,
+                                 "cache_creation_input_tokens": 5}) == (100, 90)  # fmt: skip
+    assert (
+        providers.cache_hits({"prompt_tokens": 50}) is None and providers.cache_hits(None) is None
+    )
+
+
+async def test_cache_hits_are_stored_with_the_spend_rows_and_summed_per_model(pool, fake):
+    c = Chat(pool, fake)
+    c.script({"content": "One.", "usage": {"prompt_tokens": 100, "prompt_cache_hit_tokens": 80,
+                                           "prompt_cache_miss_tokens": 20}},
+             {"content": "Two.", "usage": {"prompt_tokens": 50, "prompt_tokens_details": {"cached_tokens": 10}}},
+             {"content": "Three."})  # fmt: skip
+    for text in ("one", "two", "three"):
+        await c.say(text)
+    async with pool.connection() as conn:
+        cur = await conn.execute(
+            "SELECT provider, model, prompt_tokens, hit_tokens FROM assistant_spend ORDER BY at"
+        )
+        rows = await cur.fetchall()
+    assert [(r["provider"], r["model"], r["prompt_tokens"], r["hit_tokens"]) for r in rows] == [
+        ("local", "fake-large", 100, 80),
+        ("local", "fake-large", 50, 10),
+        ("local", "fake-large", None, None),
+    ]
+    got = await assistant.cache_stats(pool, b'{"days": 30}')
+    assert not schemas.errors(
+        f"{schemas.BASE}req.pipelines.assistant.cache.schema.json#/$defs/reply", got
+    )
+    assert got == {"models": [{"provider": "local", "model": "fake-large", "calls": 2, "prompt_tokens": 150,
+                               "hit_tokens": 90}]}  # fmt: skip
+    assert (await assistant.cache_stats(pool, b'{"days": 0}'))["code"] == "invalid"
