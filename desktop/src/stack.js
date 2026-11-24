@@ -249,7 +249,7 @@ function stackSteps({ p, cfg, settings, runners }) {
     { id: 'runners', title: 'Runners', hint: 'The runners did not start.', run: startRunners },
   ];
 
-  // Quit entirely: the runners, the stack (data stays) and the VM
+  // Quit: the runners, the stack (data stays) and the VM
   const stopAll = async (run) => {
     await runners.stop();
     await run('docker', compose(['down']), { env: e.compose, cwd: p.stack }).catch(() => {});

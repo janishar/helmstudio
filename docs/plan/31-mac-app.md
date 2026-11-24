@@ -54,10 +54,10 @@ Every later open: start the VM if it is stopped, `compose up -d --wait`, start t
 same step screen while it waits.
 
 A menu-bar item shows one status dot (ready / starting / something down) and a menu: **Open**, **Restart runners**,
-**Open logs**, **Keep running after quit** (a tick, on), **Open at login** (a tick, off), **Quit entirely**.
+**Open logs**, **Keep running** (a tick, on), **Open at login** (a tick, off), **Quit**.
 
 Quitting the app (Cmd+Q, the Dock's Quit, or closing the window) keeps the background running: the stack and the
-runners stay up, the window and Dock icon go, the menu-bar item stays, so opening again is instant. **Quit entirely**
+runners stay up, the window and Dock icon go, the menu-bar item stays, so opening again is instant. **Quit**
 stops the runners, the stack (`compose down`, data stays) and the VM, then the app.
 
 ### 35.3 The window
@@ -76,7 +76,7 @@ stops the runners, the stack (`compose down`, data stays) and the VM, then the a
 - Electron, its packager and Colima are pinned in [14-dependencies](14-dependencies.md) at build time.
 - **Essential checks (prototype):** `make -C desktop lint`, a few unit tests of the step runner (commands faked), and
   one manual end-to-end install on this Mac (first open to the studio showing, a take generated, quit and reopen,
-  Quit entirely). Nothing else; the repo's other gates run only if a change touches another service (the shipped
+  Quit). Nothing else; the repo's other gates run only if a change touches another service (the shipped
   compose file and the image push script should not).
 - **Later, robust testing:** a clean-Mac install in a fresh macOS VM, update and uninstall paths, an Electron smoke
   test in CI, failure injection per step.
@@ -132,9 +132,9 @@ limits are kept as they are.
 and a relaunch after the app was killed mid-step, both resumed at the failed step); sign-in as the test admin;
 Admin › Hosts showing `mac` with envs torch, mlx and native; one Qwen Image Turbo take (512×512, 8 steps, 26 s
 including the model load) shown in the gallery; closing the window and Cmd+Q keep the stack and runners up and
-reopening is instant (the window shows in under 5 ms); Quit entirely stops the runners, `compose down` and the VM
+reopening is instant (the window shows in under 5 ms); Quit stops the runners, `compose down` and the VM
 (about 25 s); the next open shows the Starting… screen and keeps the data (the take was still there); the menu-bar
-items Open, Restart runners, Open logs, Keep running after quit and Open at login (both toggled and back).
+items Open, Restart runners, Open logs, Keep running and Open at login (both toggled and back).
 
 **Times (first open, warm caches):** check under 0.1 s; VM 20 s (the very first start adds about 2.7 min to download
 Colima's 317 MB disk image, cached after in `~/Library/Caches/colima`); images 20 s (2.2 GB); secrets and admin 2 s
@@ -153,7 +153,7 @@ folder (no uninstall tool, 35.7).
 ### Decided by the owner, 2026-11-25 (asked one by one)
 
 1. **Shell: Electron** (Chromium, the engine the e2e suite uses).
-2. **On quit: keep running in the background**; **Quit entirely** in the menu-bar menu stops everything (owner,
+2. **On quit: keep running in the background**; **Quit** in the menu-bar menu (named Quit entirely until the owner shortened it, 2026-11-24) stops everything (owner,
    2026-11-25: "have option to keep running the background process when we quit the app. it can be quit entirely
    with menu bar"; this replaces the first answer, stop everything).
 3. **Open at login: off**, with an Open at login tick in the menu-bar menu.

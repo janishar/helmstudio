@@ -1,5 +1,5 @@
 // helmstudio for Mac (docs/plan/31-mac-app.md): first open sets everything up, every open starts it, then one window
-// on the app's Kong. Dock icon plus a menu-bar item; quitting keeps the background running (decision 2), Quit entirely
+// on the app's Kong. Dock icon plus a menu-bar item; quitting keeps the background running (decision 2), Quit
 // stops the runners, the stack and the VM.
 // HELMSTUDIO_HOME moves the app's folder (a scratch run); HELMSTUDIO_FAKE=1 fakes every command (no VM, no Docker),
 // HELMSTUDIO_FAKE_FAIL=<word> then fails one of them (the failed-step screen).
@@ -90,7 +90,7 @@ function setStatus(dot, text, sub = '') {
       { label: 'Open logs', click: () => (fs.mkdirSync(p.logs, { recursive: true }), shell.openPath(p.logs)) },
       { type: 'separator' },
       {
-        label: 'Keep running after quit',
+        label: 'Keep running',
         type: 'checkbox',
         checked: settings.keepRunning,
         click: (i) => ((settings.keepRunning = i.checked), settings.save()),
@@ -102,7 +102,7 @@ function setStatus(dot, text, sub = '') {
         click: (i) => (app.setLoginItemSettings({ openAtLogin: i.checked }), setStatus(...Object.values(status))),
       },
       { type: 'separator' },
-      { label: 'Quit entirely', click: quitEntirely },
+      { label: 'Quit', click: quitEntirely },
     ])),
   );
 }
@@ -237,7 +237,7 @@ async function restartRunners() {
   setStatus('wait', 'Starting…', 'Runners');
   await runners.restart();
   await runners.waitReady().catch(() => {});
-  if (phase !== 'restarting') return; // Quit entirely meanwhile
+  if (phase !== 'restarting') return; // Quit meanwhile
   phase = 'ready';
   setStatus('ok', 'Ready');
   check();

@@ -43,17 +43,17 @@ The helmstudio icon in the menu bar is tinted by macOS like every other icon the
 - **Open**: the studio window.
 - **Restart runners**: after a runner stalls or a new model is added.
 - **Open logs**: the app's log and one log per runner.
-- **Keep running after quit** (on): closing the window or Cmd+Q only hides the app; the studio keeps running and
+- **Keep running** (on): closing the window or Cmd+Q only hides the app; the studio keeps running and
   reopens at once.
 - **Open at login** (off).
-- **Quit entirely**: stops the runners, the services and the VM (about 25 s). Your takes and data stay; the next open
+- **Quit**: stops the runners, the services and the VM (about 25 s). Your takes and data stay; the next open
   starts it all again.
 
 ## Where things are
 
 - `~/Library/Application Support/helmstudio`: settings, logs, secrets, the runners' Python.
 - `~/.helmstudio-vm`: the VM (its disks hold the images and the data).
-- Deleting the app leaves both folders; delete them by hand (after Quit entirely) to remove everything.
+- Deleting the app leaves both folders; delete them by hand (after Quit) to remove everything.
 
 ## Use it from Claude (MCP)
 
