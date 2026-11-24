@@ -293,6 +293,12 @@ func (s *Service) readManifests(ctx context.Context) (map[string]foundPlugin, []
 			switch mine, seen := out[found.M.Name]; {
 			case !seen:
 				out[found.M.Name] = found
+			case mine.Origin == "yours" && (found.M.Run != nil || mine.M.Run != nil):
+				// API 1.65: a plugin that starts itself runs the built-in's command (the runner takes the built-in
+				// folder first): your copy is never used, so a dropped folder can't swap the command under one that is on
+				why := "Can't replace a built-in that starts itself; using built in"
+				found.Problem = &why
+				out[found.M.Name] = found
 			case mine.Origin == "yours" && mine.Blocked != "":
 				// your copy can't be used: the built-in stays in use, and the row says why yours is not
 				why := "Your copy is broken: " + *mine.Problem + "; using built in"
@@ -512,8 +518,18 @@ func (s *Service) publishRuns(ctx context.Context) {
 	s.runsMu.Lock()
 	defer s.runsMu.Unlock()
 	var rows []pluginRow
+	var retry []struct {
+		Name  string
+		Retry int
+	}
 	if err := common.System(ctx, s.db, func(tx pgx.Tx) (err error) {
 		rows, err = readPlugins(ctx, tx, `WHERE enabled AND blocked = '' AND manifest ? 'run'`)
+		if err == nil {
+			retry, err = collect[struct {
+				Name  string
+				Retry int
+			}](ctx, tx, `SELECT name, (settings->>'retry')::int FROM plugins WHERE enabled AND settings ? 'retry'`)
+		}
 		return err
 	}); err != nil {
 		log.Printf("plugins: the plugins to run not written: %v", err)
@@ -536,7 +552,13 @@ func (s *Service) publishRuns(ctx context.Context) {
 		if names == nil {
 			names = []string{}
 		}
-		value := toJSON(map[string]any{"schema_version": 1, "host": host, "plugins": names,
+		nonces := map[string]int{} // Try again: the runner starts a plugin again at once when its nonce changes
+		for _, r := range retry {
+			if slices.Contains(names, r.Name) {
+				nonces[r.Name] = r.Retry
+			}
+		}
+		value := toJSON(map[string]any{"schema_version": 1, "host": host, "plugins": names, "retry": nonces,
 			"updated_at": time.Now().UTC().Format(time.RFC3339Nano)})
 		if err := s.putSettings(ctx, host+".plugins", value); err != nil {
 			log.Printf("plugins: %s.plugins not written: %v", host, err)

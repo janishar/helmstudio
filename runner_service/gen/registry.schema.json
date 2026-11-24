@@ -3662,6 +3662,19 @@
         "updated_at": {
           "type": "string",
           "format": "date-time"
+        },
+        "retry": {
+          "type": "object",
+          "maxProperties": 64,
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,22}$"
+          },
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "description": "from API 1.65: Try again: a nonce per plugin, raised by turning an on plugin on again; when it changes the runner starts that plugin again at once, its backoff reset"
         }
       }
     },

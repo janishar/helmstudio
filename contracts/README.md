@@ -4060,11 +4060,22 @@ launches next time".
   (`HELM_HOME` overrides `~/.helm`). A plugin that leaves the list is stopped (SIGTERM, then SIGKILL after 5 s). One
   that exits is started again after a backoff (1 s, doubling to 60 s; reset after 60 s up). When the runner starts,
   it starts every plugin on the list, so a plugin that is on stays on across app launches. When it stops, it stops
-  them.
+  them. Each child's process group id is kept in `~/.helm/run/<plugin>.pid`: a group left by a runner that died
+  (its command still the plugin's) is stopped before the plugin starts again, at the runner's start, by the Mac app's
+  start and by `make runners-stop`. Run one supervising runner per host (dev's `make runners` or the Mac app, not
+  both). `run.cmd[0]` with a `/` must be a file inside the folder (`./run.sh`, `bin/start.sh`); without one, a
+  program on PATH; never absolute or `..`.
+- **Try again**: turning on a plugin that is on raises its nonce in `<host>.plugins` `retry`; the runner starts it
+  again at once, its backoff reset.
+- **Built in wins** for a plugin that starts itself (either copy declares `run`): your copy in `~/.helm/plugins` is
+  never used, and the row says `Can't replace a built-in that starts itself; using built in` (the runner reads the
+  built-in folder first; a dropped folder can't swap the command under a plugin that is on).
 - **What is running** (registry.schema.json `plugins`): the runner writes KV `registry` key `<host>.<env>.plugins`
   with each plugin's state (starting, running, failed with `detail`, stopped), restarts and log. The Plugins page:
-  a plugin that is on and starts itself is `running` while its health path answers, else `starting` or `failed`
-  (Couldn't start · `problem`), else `not_running` (no runner of its host is up).
+  a plugin that is on and starts itself is `running` while its health path answers; else, while a runner of its host
+  is up (a fresh hosts key), `failed` when that runner says so (Couldn't start · `problem`) and `starting` otherwise
+  (launched, up but not answering yet, or not seen yet); `not_running` only when no runner of its host is up. Only
+  the registry keys of its own host count.
 
 ### Skills (API 1.64; boards docs/mock/Plugins.dc.html SKILLS and Assistant.dc.html 16, release 0.1.0-alpha.2 item 36; normative)
 

@@ -475,7 +475,19 @@ function PluginPanel({
           </div>
           {p.starts?.log && <CopyCode text={p.starts.log} />}
           <div className="flex gap-1.5">
-            <button type="button" className={CHIP} onClick={onRetry}>
+            <button
+              type="button"
+              className={CHIP}
+              onClick={() =>
+                // on while on: the runner starts it again at once, its backoff reset (API 1.65 retry)
+                void api
+                  .PUT("/v1/studio/admin/plugins/{plugin}", {
+                    ...path(p.name),
+                    body: { enabled: true },
+                  })
+                  .finally(onRetry)
+              }
+            >
               Try again
             </button>
           </div>

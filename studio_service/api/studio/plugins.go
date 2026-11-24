@@ -244,7 +244,6 @@ func running(ctx context.Context, m manifest) bool {
 // pluginDTOs is rows as the caller sees them: the on ones' health checked at once, the caller's own provider of each.
 func (s *Service) pluginDTOs(ctx context.Context, caller common.Caller, rows []pluginRow) ([]dto.Plugin, error) {
 	out := make([]dto.Plugin, len(rows))
-	runs := s.registry.PluginRuns()
 	var wg sync.WaitGroup
 	for i, r := range rows {
 		m := r.Manifest
@@ -272,8 +271,11 @@ func (s *Service) pluginDTOs(ctx context.Context, caller common.Caller, rows []p
 			p.Status = r.Blocked
 		}
 		var run *registry.PluginRun // API 1.65: what its runner says
+		live := false               // a runner of its host is up
 		if m.Run != nil {
 			p.Starts = &dto.PluginStarts{Host: m.Run.host()}
+			var runs map[string]registry.PluginRun
+			runs, live = s.registry.PluginRuns(m.Run.host(), time.Now())
 			if got, ok := runs[r.Name]; ok {
 				run = &got
 				p.Starts.Log, p.Starts.Restarts, p.Starts.Since = &got.Log, &got.Restarts, &got.Since
@@ -285,11 +287,11 @@ func (s *Service) pluginDTOs(ctx context.Context, caller common.Caller, rows []p
 				switch up := running(ctx, m); {
 				case up:
 					out[i].Status = "running"
-				case run != nil && run.State == "starting":
-					out[i].Status = "starting"
-				case run != nil && run.State == "failed":
+				case m.Run != nil && live && run != nil && run.State == "failed":
 					out[i].Status, out[i].Problem = "failed", run.Detail
-				default:
+				case m.Run != nil && live: // starting, up but not answering yet, or not seen by its runner yet
+					out[i].Status = "starting"
+				default: // you start it yourself, or no runner of its host is up
 					out[i].Status = "not_running"
 				}
 			})
@@ -358,8 +360,10 @@ func (s *Service) PutPlugin(ctx context.Context, caller common.Caller, name stri
 				return network.NewConflictError(name+" can't be read", nil)
 			}
 		}
-		if _, err := tx.Exec(ctx, `UPDATE plugins SET enabled = $2, updated_at = clock_timestamp() WHERE name = $1`,
-			name, *body.Enabled); err != nil {
+		// API 1.65: on while on is Try again: the runner starts it again at once (settings.retry, the nonce it reads)
+		if _, err := tx.Exec(ctx, `UPDATE plugins SET settings = CASE WHEN enabled AND $2 THEN jsonb_set(settings, '{retry}',
+			to_jsonb(COALESCE((settings->>'retry')::int, 0) + 1)) ELSE settings END, enabled = $2,
+			updated_at = clock_timestamp() WHERE name = $1`, name, *body.Enabled); err != nil {
 			return err
 		}
 		var err error

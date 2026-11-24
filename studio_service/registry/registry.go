@@ -708,19 +708,26 @@ type PluginRun struct {
 	Log      string    `json:"log"`
 }
 
-// PluginRuns is every runner's plugins, by plugin name (the newest since wins a name two runners report).
-func (r *Registry) PluginRuns() map[string]PluginRun {
+// PluginRuns is what the runners of host say of their plugins, by plugin name (the newest since wins a name two
+// runners report); live: a runner of host is up (a fresh hosts key).
+func (r *Registry) PluginRuns(host string, now time.Time) (out map[string]PluginRun, live bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	out := map[string]PluginRun{}
-	for _, runs := range r.plugins {
+	out = map[string]PluginRun{}
+	for source, h := range r.hosts {
+		live = live || strings.HasPrefix(source, host+".") && h.Live(now)
+	}
+	for source, runs := range r.plugins {
+		if !strings.HasPrefix(source, host+".") {
+			continue
+		}
 		for name, run := range runs {
 			if old, ok := out[name]; !ok || run.Since.After(old.Since) {
 				out[name] = run
 			}
 		}
 	}
-	return out
+	return out, live
 }
 
 // CustomNode is one custom node pipelines_service's packs register (registry.schema.json custom, API 1.15).
