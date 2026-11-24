@@ -55,6 +55,7 @@
 - **Host it for a team.** Self-hosted and multi-user. An admin adds accounts; each person sees only their own work.
   Nothing you make leaves your machines.
 - **Try the Mac app.** A prototype `helmstudio.app` runs the whole studio on one Mac, with a menu-bar item.
+  [Download the Mac app (alpha)](https://github.com/janishar/helmstudio/releases): Apple Silicon, no Docker needed.
 
 ## A look inside
 
@@ -119,6 +120,9 @@ The full docs are at **[helmstudio.in](https://helmstudio.in)**.
 The design plan and decisions live in [docs/](docs/README.md).
 
 ## Quick start
+
+Just want to use it on one Mac? [Download the Mac app (alpha)](https://github.com/janishar/helmstudio/releases)
+instead (right-click › Open the first time). The steps below run it from the source.
 
 Needs a Mac with Apple Silicon, Docker with Compose 2.20 or later (OrbStack or Docker Desktop), `make` and `openssl`.
 The native runners also need [uv](https://docs.astral.sh/uv/), the Xcode Command Line Tools, CMake and Rust.

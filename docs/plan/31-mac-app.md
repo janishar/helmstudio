@@ -150,6 +150,11 @@ about 30 characters would again overflow Lima's socket path; Open logs opens Fin
 through the test hook, not with a real mouse; deleting the app leaves `~/.helmstudio-vm` and its Application Support
 folder (no uninstall tool, 35.7).
 
+**Release 0.1.0-alpha.1 (owner, 2026-11-24):** the app pulls its images into the VM (`docker pull`, per image and
+layer) as `ghcr.io/janishar/helmstudio-<svc>:<app version>` (compose's `IMAGE_PREFIX`/`IMAGE_TAG`), pushed by
+`.tools/push-images`; it ships the docker CLI and compose plugin, so the Mac needs no Docker; `HELMSTUDIO_LOCAL_IMAGES=1`
+keeps the `docker save` | `docker load` path for unreleased builds.
+
 **Helm names in Activity Monitor (owner, 2026-11-24):** `make app` renames the executable `helmstudio` and the
 helpers `helmstudio Helper (…)`, ships limactl as `helmstudio-vm` (signed with the entitlement; a `limactl` shim
 execs it for Colima, so the VM row reads "Virtual Machine Service for helmstudio-vm"), and the runners run a hard

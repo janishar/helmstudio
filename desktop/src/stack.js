@@ -1,5 +1,5 @@
-// The concrete steps (docs/plan/31-mac-app.md §35.2, decision 11): the VM (bundled Colima), the images (from this
-// Mac's Docker into the VM's), the secrets (a bundled .tools/make-secrets), the admin account, the runners (bundled uv,
+// The concrete steps (docs/plan/31-mac-app.md §35.2): the VM (bundled Colima), the images (pulled into the VM's Docker
+// from GitHub's registry and Docker Hub, with the bundled docker CLI), the secrets (a bundled .tools/make-secrets), the admin account, the runners (bundled uv,
 // one venv per env) and the stack (compose in the VM). Everything the app writes lives under its home folder
 // (~/Library/Application Support/helmstudio); the bundled files (Resources) are only read.
 const fs = require('node:fs');
@@ -48,7 +48,7 @@ function loadSettings(p) {
   return settings;
 }
 
-// An app opened from Finder gets a bare PATH: the bundled tools first, then where Docker's CLI usually is
+// An app opened from Finder gets a bare PATH: the bundled tools first (colima, docker, uv, helm), then the usual folders
 function envs(p, cfg) {
   const PATH = [
     path.join(p.res, 'vm', 'bin'),
@@ -67,12 +67,21 @@ function envs(p, cfg) {
   return { base, host: base, vm, docker, compose: { ...docker, ...cfg.composeEnv } };
 }
 
-// the VM's Docker uses its own config folder; docker compose is found through the user's CLI plugins
+// the VM's Docker uses its own config folder; docker compose is the bundled plugin (Resources/docker/cli-plugins)
 function dockerConfig(p) {
   fs.mkdirSync(p.dockerConfig, { recursive: true });
-  const plugins = path.join(os.homedir(), '.docker', 'cli-plugins');
   const link = path.join(p.dockerConfig, 'cli-plugins');
-  if (fs.existsSync(plugins) && !fs.existsSync(link)) fs.symlinkSync(plugins, link);
+  fs.rmSync(link, { force: true }); // an older app linked the user's ~/.docker/cli-plugins
+  fs.symlinkSync(path.join(p.res, 'docker', 'cli-plugins'), link);
+}
+
+// HELMSTUDIO_LOCAL_IMAGES=1 (developers, unreleased builds): make prod's images (helmstudio/<svc>:prod) copied from
+// this Mac's Docker into the VM, instead of the released ones pulled from GitHub's registry
+function imagesCfg(cfg, local = process.env.HELMSTUDIO_LOCAL_IMAGES === '1') {
+  if (!local) return cfg;
+  const pre = cfg.composeEnv.IMAGE_PREFIX;
+  const images = cfg.images.map((i) => (i.startsWith(pre) ? `helmstudio/${i.slice(pre.length).split(':')[0]}:prod` : i));
+  return { ...cfg, images, local, composeEnv: { ...cfg.composeEnv, IMAGE_PREFIX: 'helmstudio/', IMAGE_TAG: 'prod' } };
 }
 
 function validateAdmin(a) {
@@ -85,7 +94,8 @@ function validateAdmin(a) {
 
 const gb = (n) => (n / 1e9).toFixed(1);
 
-function stackSteps({ p, cfg, settings, runners }) {
+function stackSteps({ p, cfg: shipped, settings, runners }) {
+  const cfg = imagesCfg(shipped);
   const e = envs(p, cfg);
   const compose = (args) => [
     'compose',
@@ -139,6 +149,29 @@ function stackSteps({ p, cfg, settings, runners }) {
     await runners.waitReady(c.signal);
   };
 
+  // the developer path (HELMSTUDIO_LOCAL_IMAGES=1): docker save on this Mac | docker load in the VM
+  const copyImages = async (c, inspect) => {
+    const todo = [];
+    for (const img of cfg.images) {
+      const [id, size] = await inspect(img, e.host).catch(() => {
+        throw new Error(`${img} is not in Docker on this Mac. Build the images first (make prod).`);
+      });
+      const [vmId] = await inspect(img, e.docker).catch(() => []);
+      if (vmId !== id) todo.push({ img, size: Number(size) });
+    }
+    const total = todo.reduce((n, t) => n + t.size, 0);
+    let done = 0;
+    for (const t of todo) {
+      c.log(`load ${t.img}`);
+      await c.pipe(
+        { cmd: 'docker', args: ['save', t.img], env: e.host },
+        { cmd: 'docker', args: ['load'], env: e.docker },
+        { onBytes: (n) => c.progress(Math.min((done += n) / total, 1), `${gb(Math.min(done, total))} of ${gb(total)} GB`) },
+      );
+    }
+    c.detail(total ? `${gb(total)} GB` : 'up to date');
+  };
+
   const first = [
     {
       id: 'check',
@@ -151,9 +184,6 @@ function stackSteps({ p, cfg, settings, runners }) {
         const st = fs.statfsSync(p.home);
         const free = (st.bavail * st.bsize) / 1e9;
         if (free < cfg.minFreeGB) throw new Error(`About ${cfg.minFreeGB} GB of free disk is needed; ${free.toFixed(0)} GB is free.`);
-        await c.run('docker', ['--version'], { env: e.host }).catch(() => {
-          throw new Error('Docker is not on this Mac: install OrbStack or Docker, then try again.');
-        });
         c.detail(`Apple Silicon · macOS ${ver} · ${free.toFixed(0)} GB free`);
       },
     },
@@ -161,28 +191,30 @@ function stackSteps({ p, cfg, settings, runners }) {
     {
       id: 'images',
       title: 'Load the images',
+      hint: cfg.local ? undefined : 'The images could not be downloaded. The internet is needed for this step.',
       run: async (c) => {
         const inspect = (img, env) =>
           c.run('docker', ['image', 'inspect', '-f', '{{.Id}} {{.Size}}', img], { env, quiet: true }).then((o) => o.trim().split(' '));
+        if (cfg.local) return copyImages(c, inspect);
         const todo = [];
-        for (const img of cfg.images) {
-          const [id, size] = await inspect(img, e.host).catch(() => {
-            throw new Error(`${img} is not in Docker on this Mac. Build the images first (make prod).`);
+        for (const img of cfg.images) if (!(await inspect(img, e.docker).catch(() => null))) todo.push(img);
+        let bytes = 0;
+        for (const [i, img] of todo.entries()) {
+          const at = `${i + 1} of ${todo.length} images`;
+          const layers = new Map(); // layer id -> done; docker pull prints a line per layer status
+          c.progress(i / todo.length, bytes ? `${at} · ${gb(bytes)} GB` : at);
+          await c.run('docker', ['pull', img], {
+            env: e.docker,
+            onLine: (l) => {
+              const m = /^(\w{12}): (.*)/.exec(l);
+              if (!m) return;
+              layers.set(m[1], /Pull complete|Already exists/.test(m[2]));
+              c.progress((i + [...layers.values()].filter(Boolean).length / layers.size) / todo.length);
+            },
           });
-          const [vmId] = await inspect(img, e.docker).catch(() => []);
-          if (vmId !== id) todo.push({ img, size: Number(size) });
+          bytes += Number((await inspect(img, e.docker))[1]);
         }
-        const total = todo.reduce((n, t) => n + t.size, 0);
-        let done = 0;
-        for (const t of todo) {
-          c.log(`load ${t.img}`);
-          await c.pipe(
-            { cmd: 'docker', args: ['save', t.img], env: e.host },
-            { cmd: 'docker', args: ['load'], env: e.docker },
-            { onBytes: (n) => c.progress(Math.min((done += n) / total, 1), `${gb(Math.min(done, total))} of ${gb(total)} GB`) },
-          );
-        }
-        c.detail(total ? `${gb(total)} GB` : 'up to date');
+        c.detail(todo.length ? `${gb(bytes)} GB` : 'up to date');
       },
     },
     {
@@ -405,4 +437,4 @@ class Runners {
   }
 }
 
-module.exports = { layout, loadSettings, stackSteps, Runners, validateAdmin, envs };
+module.exports = { layout, loadSettings, stackSteps, Runners, validateAdmin, envs, imagesCfg };

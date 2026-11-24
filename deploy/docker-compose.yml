@@ -55,7 +55,7 @@ networks:
 services:
   kong:
     build: ../kong
-    image: helmstudio/kong:${IMAGE_TAG:-dev}
+    image: ${IMAGE_PREFIX:-helmstudio/}kong:${IMAGE_TAG:-dev}
     environment:
       KONG_PORT_MAPS: "${KONG_HTTP_PORT:-8300}:8000"   # X-Forwarded-Port = the host port (web's redirects)
       KONG_TRUSTED_IPS: ${HELM_NET:-172.30.97}.11      # only the web BFF may name the client (X-Forwarded-For)
@@ -76,7 +76,7 @@ services:
 
   auth:
     build: {context: ../auth_service, additional_contexts: {helmgo: ../helmgo}}
-    image: helmstudio/auth:${IMAGE_TAG:-dev}
+    image: ${IMAGE_PREFIX:-helmstudio/}auth:${IMAGE_TAG:-dev}
     env_file: [{path: ../auth_service/.env, required: false}]
     environment:
       DATABASE_URL_FILE: /run/secrets/auth_database_url
@@ -134,7 +134,7 @@ services:
 
   seaweedfs:
     build: ./seaweedfs                                # only `weed` from chrislusf/seaweedfs:4.53, on Alpine
-    image: helmstudio/seaweedfs:${IMAGE_TAG:-dev}
+    image: ${IMAGE_PREFIX:-helmstudio/}seaweedfs:${IMAGE_TAG:-dev}
     profiles: [s3local]
     restart: unless-stopped   # it gets OOM-killed when Docker's VM is short of memory; every upload fails until it is back
     # identities from -s3.config (secret s3_config, .tools/make-secrets): the admin key of the s3_* secrets (also
@@ -151,7 +151,7 @@ services:
 
   storage-setup:                                      # one-shot: creates the bucket, idempotent
     build: ./seaweedfs
-    image: helmstudio/seaweedfs:${IMAGE_TAG:-dev}
+    image: ${IMAGE_PREFIX:-helmstudio/}seaweedfs:${IMAGE_TAG:-dev}
     profiles: [s3local]
     entrypoint: [sh, /tools/storage-setup]
     environment: {S3_BUCKET: "${S3_BUCKET:-helmstudio}", WEED_MASTER: "seaweedfs:9333"}

@@ -96,6 +96,8 @@ This section owns version numbers; other sections name libraries without them.
 | Colima | v0.10.3 (`colima-Darwin-arm64`), profile helmstudio, vz, Docker runtime |
 | Lima | 2.3.0 (`lima-2.3.0-Darwin-arm64.tar.gz`); limactl re-signed ad hoc with its upstream entitlements (virtualization, network client and server) |
 | uv (shipped in the app) | 0.13.8, as the runner lockfiles require |
+| Docker CLI (shipped in the app) | 29.10.0 (`docker-29.10.0.tgz`, download.docker.com static aarch64, with its `.sha256`) |
+| Docker Compose (shipped in the app) | v5.7.1 (`docker-compose-darwin-aarch64`), the CLI plugin |
 
 ### 18.2 Things that must move together
 

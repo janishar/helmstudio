@@ -1,13 +1,16 @@
 # helmstudio for Mac (docs/plan/31-mac-app.md): an Electron shell plus what it ships under Contents/Resources.
 # Versions are owned by docs/plan/14-dependencies.md; the downloads are checked against their releases' sha256 files.
 #   make test lint    the step runner's unit tests (commands faked) and the syntax checks
-#   make app          dist.noindex/helmstudio.app (ad-hoc signed; limactl, as helmstudio-vm, with the virtualization entitlement)
+#   make app          dist.noindex/helmstudio.app (ad-hoc signed; limactl, as helmstudio-vm, with the virtualization entitlement;
+#                     the docker CLI and compose bundled; the images are pulled on first open, tagged with the version)
 #   make dmg          dist.noindex/helmstudio.dmg
 #   make run          the app from source on build/Resources (HELMSTUDIO_FAKE=1 HELMSTUDIO_HOME=/tmp/x to look around)
 
 COLIMA_VERSION := v0.10.3
 LIMA_VERSION   := 2.3.0
 UV_VERSION     := 0.13.8
+DOCKER_VERSION := 29.10.0
+COMPOSE_VERSION := v5.7.1
 
 ROOT := $(abspath ..)
 DL   := downloads
@@ -53,13 +56,29 @@ $(DL)/uv/uv-aarch64-apple-darwin.tar.gz:
 	  && curl -fsSLO $(GH)/astral-sh/uv/releases/download/$(UV_VERSION)/uv-aarch64-apple-darwin.tar.gz.sha256 \
 	  && shasum -a 256 -c uv-aarch64-apple-darwin.tar.gz.sha256 || { rm -f uv-*.tar.gz; exit 1; }
 
+# the docker CLI and its compose plugin: the app talks to the VM's Docker with them (no Docker or OrbStack on the Mac)
+$(DL)/docker/docker-$(DOCKER_VERSION).tgz:
+	mkdir -p $(@D)
+	cd $(@D) && curl -fsSLO https://download.docker.com/mac/static/stable/aarch64/docker-$(DOCKER_VERSION).tgz \
+	  && curl -fsSLO https://download.docker.com/mac/static/stable/aarch64/docker-$(DOCKER_VERSION).tgz.sha256 \
+	  && shasum -a 256 -c docker-$(DOCKER_VERSION).tgz.sha256 || { rm -f docker-*.tgz; exit 1; }
+
+$(DL)/compose/docker-compose-darwin-aarch64:
+	mkdir -p $(@D)
+	cd $(@D) && curl -fsSLO $(GH)/docker/compose/releases/download/$(COMPOSE_VERSION)/docker-compose-darwin-aarch64 \
+	  && curl -fsSLO $(GH)/docker/compose/releases/download/$(COMPOSE_VERSION)/docker-compose-darwin-aarch64.sha256 \
+	  && shasum -a 256 -c docker-compose-darwin-aarch64.sha256 || { rm -f docker-compose-darwin-aarch64; exit 1; }
+
 # ---------- what the app ships (build/Resources): the VM tools, uv, helm, the runner code, the stack files
 
-resources: $(DL)/colima/colima-Darwin-arm64 $(DL)/lima/lima-$(LIMA_VERSION)-Darwin-arm64.tar.gz $(DL)/uv/uv-aarch64-apple-darwin.tar.gz
-	rm -rf $(RES) && mkdir -p $(RES)/vm $(RES)/bin $(RES)/runner $(RES)/stack
+resources: $(DL)/colima/colima-Darwin-arm64 $(DL)/lima/lima-$(LIMA_VERSION)-Darwin-arm64.tar.gz $(DL)/uv/uv-aarch64-apple-darwin.tar.gz \
+           $(DL)/docker/docker-$(DOCKER_VERSION).tgz $(DL)/compose/docker-compose-darwin-aarch64
+	rm -rf $(RES) && mkdir -p $(RES)/vm $(RES)/bin $(RES)/runner $(RES)/stack $(RES)/docker/cli-plugins
 	tar -xzf $(DL)/lima/lima-$(LIMA_VERSION)-Darwin-arm64.tar.gz -C $(RES)/vm
 	install -m 755 $(DL)/colima/colima-Darwin-arm64 $(RES)/vm/bin/colima
 	tar -xzf $(DL)/uv/uv-aarch64-apple-darwin.tar.gz -C $(DL)/uv && install -m 755 $(DL)/uv/uv-aarch64-apple-darwin/uv $(RES)/bin/uv
+	tar -xzf $(DL)/docker/docker-$(DOCKER_VERSION).tgz -C $(DL)/docker && install -m 755 $(DL)/docker/docker/docker $(RES)/bin/docker
+	install -m 755 $(DL)/compose/docker-compose-darwin-aarch64 $(RES)/docker/cli-plugins/docker-compose
 	cd $(ROOT)/cli && CGO_ENABLED=0 go build -o $(abspath $(RES))/bin/helm .   # decision 10: helm for the MCP
 	# the runner code and the contracts it reads (tracked files only: no venvs, .env, tests), plus the built binaries
 	cd $(ROOT) && git ls-files -z runner_service contracts | grep -zv '^runner_service/tests/' \

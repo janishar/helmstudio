@@ -5,7 +5,7 @@
 services:
   web:
     build: ../web_service
-    image: helmstudio/web:${IMAGE_TAG:-dev}
+    image: ${IMAGE_PREFIX:-helmstudio/}web:${IMAGE_TAG:-dev}
     env_file: [{path: ../web_service/.env, required: false}]
     environment:
       KONG_URL: http://kong:8000

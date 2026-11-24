@@ -4,7 +4,7 @@
 services:
   pipelines:
     build: ../pipelines_service
-    image: helmstudio/pipelines:${IMAGE_TAG:-dev}
+    image: ${IMAGE_PREFIX:-helmstudio/}pipelines:${IMAGE_TAG:-dev}
     env_file: [{path: ../pipelines_service/.env, required: false}]
     environment:                                      # credentials come from the secrets (<VAR>_FILE)
       DATABASE_URL_FILE: /run/secrets/pipelines_database_url

@@ -6,19 +6,23 @@ The app runs the whole studio on this Mac: the services in a small VM of their o
 the studio in one window. It runs beside the dev and prod stacks (its own ports: the studio is on
 `http://127.0.0.1:8310`).
 
-## Before the first open
+## Install
 
-- A Mac with Apple Silicon, macOS 13 or later, about 6 GB of free disk.
-- The prod images in this Mac's Docker (OrbStack): run `make prod` once. The app copies them into its VM; nothing is
-  downloaded from a registry.
-- The internet, for the first open only (the VM's system disk, about 320 MB, and the runners' Python packages, about
-  2 GB).
+1. Download `helmstudio.dmg` from the [GitHub releases](https://github.com/janishar/helmstudio/releases) (check it
+   against the release's `SHA256SUMS` if you like: `shasum -a 256 helmstudio.dmg`).
+2. Open it and drag helmstudio to Applications.
+3. The app is ad-hoc signed (no Developer ID): the first time, right-click it › **Open**, then **Open** again.
+
+Needs a Mac with Apple Silicon, macOS 13 or later and about 6 GB of free disk. **No Docker or OrbStack:** the app
+ships its own VM and docker tools. The internet is needed on the first open only: the VM's system disk (about
+320 MB), the images (pulled from GitHub's registry and Docker Hub, about 2.2 GB once unpacked) and the runners'
+Python packages (about 2 GB).
 
 ## First open
 
-1. Open `/Applications/helmstudio.app`. It is ad-hoc signed: a copy from another Mac needs right-click › **Open** the first time.
+1. Open helmstudio from Applications.
 2. A step list runs: Check this Mac, Start the VM, Load the images, Make the secrets, Set up the runners, Start.
-   It takes about **2 minutes** here (about 5 on a Mac that has never downloaded the VM disk or the runner packages).
+   It takes about **5 minutes** on a Mac that has never downloaded the VM disk, the images or the runner packages.
 3. **Admin account:** the step list asks for an email and a password (12 characters or more, no quote). That is
    the studio's sign-in. It is kept only in the app's folder.
 4. **Models folder:** it asks where the models live (default `~/helmstudio-models`; Choose… may pick an existing
@@ -26,6 +30,15 @@ the studio in one window. It runs beside the dev and prod stacks (its own ports:
 5. The studio window opens. Sign in with the admin account.
 
 If a step fails, the screen says which; **Show log** opens the log, **Try again** goes on from that step.
+
+## Build it yourself (developers)
+
+`make -C desktop app` builds `desktop/dist.noindex/helmstudio.app` (`make -C desktop dmg` the `.dmg`). That build
+pulls the released images named in `desktop/stack.json` (tagged with the app version). To try unreleased images, run
+`make prod` once and start the app from a terminal with the switch, on every open
+(`HELMSTUDIO_LOCAL_IMAGES=1 desktop/dist.noindex/helmstudio.app/Contents/MacOS/helmstudio`): it then copies
+`helmstudio/<svc>:prod` from this Mac's Docker into its VM (`docker save` | `docker load`) and runs those. Releases
+push the images with `.tools/push-images <version>`.
 
 ## Every later open
 

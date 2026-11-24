@@ -1,12 +1,13 @@
 // The step runner with faked commands: success, a failure then Try again resuming at that step, cancel, an ask;
-// plus the admin form's checks
+// plus the images step (pull, or the developer switch's copy) and the admin form's checks
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { StepRunner, exec } = require('../src/steps');
-const { validateAdmin } = require('../src/stack');
+const { validateAdmin, stackSteps, layout, imagesCfg } = require('../src/stack');
+const cfg = require('../stack.json');
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'helm-steps-'));
 
@@ -90,4 +91,67 @@ test('admin account checks', () => {
   assert.match(validateAdmin({ ...ok, password: 'short', repeat: 'short' }), /12/);
   assert.match(validateAdmin({ ...ok, repeat: 'other' }), /differ/);
   assert.match(validateAdmin({ ...ok, password: "it's twelve+", repeat: "it's twelve+" }), /quote/);
+});
+
+// the images step alone, on a StepRunner whose commands are faked: inVM(img) says whether the VM's Docker has it
+function imagesRun({ inVM, onHost = () => true, local = false }) {
+  const dir = tmp();
+  process.env.HELMSTUDIO_HOME = dir;
+  if (local) process.env.HELMSTUDIO_LOCAL_IMAGES = '1';
+  else delete process.env.HELMSTUDIO_LOCAL_IMAGES;
+  const steps = stackSteps({ p: layout(dir, dir), cfg, settings: {}, runners: {} }).first.filter((s) => s.id === 'images');
+  delete process.env.HELMSTUDIO_LOCAL_IMAGES;
+  const calls = [];
+  const fake = async (cmd, args, { env, onLine }) => {
+    calls.push({ args, vm: Boolean(env.DOCKER_HOST) });
+    const img = args.at(-1);
+    if (args[0] === 'image') {
+      if (env.DOCKER_HOST ? !inVM.has(img) : !onHost(img)) throw new Error(`No such image: ${img}`);
+      return 'sha256:1 500000000\n';
+    }
+    if (args[0] === 'pull') {
+      ['aaaaaaaaaaaa: Pulling fs layer', 'bbbbbbbbbbbb: Already exists', 'aaaaaaaaaaaa: Pull complete', `Status: Downloaded ${img}`].forEach(onLine);
+      inVM.add(img);
+    }
+    return '';
+  };
+  const pipes = [];
+  const pipe = async (a, b) => pipes.push([a.args, b.args, Boolean(a.env.DOCKER_HOST), Boolean(b.env.DOCKER_HOST)]);
+  const runner = new StepRunner({ steps, logFile: path.join(dir, 'log'), exec: fake, pipe });
+  return { runner, calls, pipes };
+}
+
+test('images: the released ones, pulled into the VM when missing', async () => {
+  const [kong, auth] = cfg.images;
+  const { runner, calls, pipes } = imagesRun({ inVM: new Set(cfg.images.filter((i) => i !== kong && i !== auth)) });
+  const seen = [];
+  runner.on('update', (s) => s.steps[0].progress != null && seen.push(s.steps[0].progress));
+  assert.equal(await runner.run(), 'done');
+  const pulls = calls.filter((c) => c.args[0] === 'pull');
+  assert.deepEqual(pulls.map((c) => c.args), [['pull', kong], ['pull', auth]]);
+  assert.ok(pulls.every((c) => c.vm)); // the VM's Docker; nothing asks this Mac's
+  assert.ok(calls.every((c) => c.vm));
+  assert.equal(pipes.length, 0);
+  assert.deepEqual(seen.slice(0, 5), [0, 0, 0.25, 0.5, 0.5]); // per image, then per layer done
+  assert.equal(runner.snapshot().steps[0].detail, '1.0 GB');
+  assert.match(fs.readFileSync(runner.logFile, 'utf8'), /Pull complete/);
+});
+
+test('images: the released names carry the app version', () => {
+  const { version } = require('../package.json');
+  assert.equal(cfg.composeEnv.IMAGE_TAG, version);
+  const ours = cfg.images.filter((i) => i.startsWith(cfg.composeEnv.IMAGE_PREFIX));
+  assert.equal(ours.length, 7);
+  assert.ok(ours.every((i) => i.endsWith(`:${version}`)));
+});
+
+test('images: HELMSTUDIO_LOCAL_IMAGES=1 copies make prod\'s images from this Mac instead', async () => {
+  const local = imagesCfg(cfg, true);
+  assert.equal(local.composeEnv.IMAGE_PREFIX, 'helmstudio/');
+  assert.equal(local.composeEnv.IMAGE_TAG, 'prod');
+  assert.ok(local.images.includes('helmstudio/kong:prod') && local.images.includes('postgres:18.7-alpine3.24'));
+  const { runner, calls, pipes } = imagesRun({ inVM: new Set(local.images.filter((i) => i !== 'helmstudio/web:prod')), local: true });
+  assert.equal(await runner.run(), 'done');
+  assert.equal(calls.filter((c) => c.args[0] === 'pull').length, 0);
+  assert.deepEqual(pipes, [[['save', 'helmstudio/web:prod'], ['load'], false, true]]);
 });

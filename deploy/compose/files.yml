@@ -4,7 +4,7 @@
 services:
   files:
     build: {context: ../files_service, additional_contexts: {helmgo: ../helmgo}}
-    image: helmstudio/files:${IMAGE_TAG:-dev}
+    image: ${IMAGE_PREFIX:-helmstudio/}files:${IMAGE_TAG:-dev}
     env_file: [{path: ../files_service/.env, required: false}]
     environment:                                      # credentials come from the secrets (<VAR>_FILE)
       FILE_URL_SECRET_FILE: /run/secrets/file_url_secret   # the key studio_service signs with

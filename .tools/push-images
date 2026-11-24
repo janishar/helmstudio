@@ -1,0 +1,19 @@
+#!/bin/sh
+# Pushes our images to GitHub's registry for a release (docs/plan/31-mac-app.md §35.1 item 2): the Mac app's stack,
+# built as `make prod` builds them (the base compose file + compose/prod.yml), for linux/arm64, named
+# ghcr.io/janishar/helmstudio-<svc>:<version> and labelled with the repo, so each package links to it. Third-party
+# images (postgres, nats, nats-box) stay on Docker Hub. New packages start private: set each public once on GitHub.
+#   gh auth token | docker login ghcr.io -u <user> --password-stdin   (once; the token needs write:packages)
+#   .tools/push-images 0.1.0-alpha.1                                  (the app version, desktop/package.json)
+set -eu
+[ $# -eq 1 ] && [ -n "$1" ] || { echo "usage: .tools/push-images <version>   (e.g. 0.1.0-alpha.1)" >&2; exit 2; }
+grep -q '"ghcr.io"' "${DOCKER_CONFIG:-$HOME/.docker}/config.json" 2>/dev/null || {
+  echo "not logged in to ghcr.io: run  gh auth token | docker login ghcr.io -u <user> --password-stdin" >&2; exit 1; }
+cd "$(dirname "$0")/.."
+export IMAGE_PREFIX=ghcr.io/janishar/helmstudio- IMAGE_TAG="${1#v}" COMPOSE_PROFILES=s3local DOCKER_DEFAULT_PLATFORM=linux/arm64
+c="docker compose -p helmstudio-release -f deploy/docker-compose.yml -f deploy/compose/prod.yml"
+$c build
+for img in $($c config --images | grep "^$IMAGE_PREFIX" | sort -u); do
+  echo "FROM $img" | docker build -q --label org.opencontainers.image.source=https://github.com/janishar/helmstudio -t "$img" - >/dev/null
+  docker push "$img"
+done

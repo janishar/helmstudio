@@ -159,7 +159,8 @@ class StepRunner extends EventEmitter {
         if (detail !== undefined) step.detail = detail;
         this.emitUpdate();
       },
-      run: (cmd, args, opts = {}) => this.exec(cmd, args, { ...opts, signal, onLine: opts.quiet ? () => {} : onLine }),
+      run: (cmd, args, opts = {}) =>
+        this.exec(cmd, args, { ...opts, signal, onLine: (l) => (opts.quiet || onLine(l), opts.onLine?.(l)) }),
       pipe: (a, b, opts = {}) => this.pipe(a, b, { ...opts, signal, onLine }),
       // waits for the UI (an admin account, a folder); data goes to the UI (e.g. an error from the last answer)
       ask: (kind, data = {}) =>

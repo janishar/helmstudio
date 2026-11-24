@@ -3,7 +3,7 @@
 services:
   studio:
     build: {context: ../studio_service, additional_contexts: {helmgo: ../helmgo}}
-    image: helmstudio/studio:${IMAGE_TAG:-dev}
+    image: ${IMAGE_PREFIX:-helmstudio/}studio:${IMAGE_TAG:-dev}
     env_file: [{path: ../studio_service/.env, required: false}]
     environment:                                      # credentials come from the secrets (<VAR>_FILE)
       DATABASE_URL_FILE: /run/secrets/studio_database_url
