@@ -26,7 +26,8 @@ import (
 
 // Errors the service returns, each with the status and detail a client sees.
 var (
-	ErrInvalidLogin  = network.NewUnauthorizedError("invalid email or password", nil)
+	ErrInvalidLogin  = network.NewUnauthorizedError("Wrong email or password.", nil)
+	ErrAccountOff    = network.NewUnauthorizedError("This account is off. Ask your admin.", nil) // right password only
 	ErrWrongPassword = network.NewUnauthorizedError("current password is incorrect", nil)
 	ErrTooMany       = network.NewTooManyRequestsError("too many attempts, try again later", nil)
 	ErrConflict      = network.NewConflictError("email already registered", nil)
@@ -133,8 +134,9 @@ func (s *Service) CreateUser(ctx context.Context, email, name, password string, 
 	return s.GetUser(ctx, id)
 }
 
-// Signin checks the password and starts a new session. An unknown email, a disabled user and a wrong password give
-// the same ErrInvalidLogin and count against both limits. The email's count is per IP, so failures from elsewhere
+// Signin checks the password and starts a new session. An unknown email and a wrong password give the same
+// ErrInvalidLogin; a disabled user gets ErrAccountOff only with the right password (API 1.58), so it tells nothing of
+// which emails exist. Every refusal counts against both limits. The email's count is per IP, so failures from elsewhere
 // can't lock the owner out. Success clears only the email's count.
 func (s *Service) Signin(ctx context.Context, body *dto.SigninRequest, ip string) (dto.Session, error) {
 	email := dto.NormalizeEmail(body.Email)
@@ -152,9 +154,12 @@ func (s *Service) Signin(ctx context.Context, body *dto.SigninRequest, ip string
 		return dto.Session{}, err
 	}
 	// The password check runs for a disabled account too, so it takes as long to refuse as a wrong password.
-	if err != nil || !utils.VerifyPassword(body.Password, hash) || disabled {
+	if right := err == nil && utils.VerifyPassword(body.Password, hash); !right || disabled {
 		s.EmailLimit.Fail(emailKey)
 		s.IPLimit.Fail(ip)
+		if right {
+			return dto.Session{}, ErrAccountOff
+		}
 		return dto.Session{}, ErrInvalidLogin
 	}
 	s.EmailLimit.Reset(emailKey)

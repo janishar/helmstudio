@@ -195,7 +195,7 @@ func TestSessionFlow(t *testing.T) {
 	var d1, d2 map[string]string
 	e.do("POST", "/auth/signin", "", map[string]string{"email": "ann@example.com", "password": "wrong password!"}, &d1)
 	e.do("POST", "/auth/signin", "", map[string]string{"email": "who@example.com", "password": "wrong password!"}, &d2)
-	if d1["detail"] != "invalid email or password" || d1["detail"] != d2["detail"] {
+	if d1["detail"] != "Wrong email or password." || d1["detail"] != d2["detail"] {
 		t.Fatalf("generic error %v %v", d1, d2)
 	}
 	var s1 session
@@ -363,8 +363,13 @@ func TestAdminAndAPIKeys(t *testing.T) {
 	if c := e.do("GET", "/auth/me", cy.AccessToken, nil, nil); c != 401 {
 		t.Fatalf("disabled user's token %d", c)
 	}
-	if c := e.do("POST", "/auth/signin", "", map[string]string{"email": "cy@example.com", "password": "a long passphrase"}, nil); c != 401 {
-		t.Fatalf("disabled signin %d", c)
+	// API 1.58: the right password on a disabled account says so; a wrong one stays generic (no email probe)
+	var off, offWrong map[string]string
+	if c := e.do("POST", "/auth/signin", "", map[string]string{"email": "cy@example.com", "password": "a long passphrase"}, &off); c != 401 || off["detail"] != "This account is off. Ask your admin." {
+		t.Fatalf("disabled signin %d %v", c, off)
+	}
+	if e.do("POST", "/auth/signin", "", map[string]string{"email": "cy@example.com", "password": "wrong password!"}, &offWrong); offWrong["detail"] != "Wrong email or password." {
+		t.Fatalf("disabled, wrong password %v", offWrong)
 	}
 	e.do("PUT", "/auth/admin/users/"+u.User.ID+"/disabled", adm.AccessToken, map[string]any{"disabled": false}, nil)
 	if c := e.do("PUT", "/auth/admin/users/"+u.User.ID+"/password", adm.AccessToken, map[string]any{"password": "admin set this one"}, nil); c != 204 {

@@ -2610,7 +2610,8 @@ export interface paths {
         /**
          * Re-render the sequence or a selection with a preset: one pipeline batch, a step per clip
          * @description contracts/README.md, Timeline: re-render. 409 stale `revision`, a selected clip with a shot running, or the
-         *     batch limit (`You have 5 unfinished batches; …`). 422 `clip <id> is an empty slot`, `clip <id> is offline`,
+         *     batch limit (`You have 5 unfinished batches; …`). 422 `clip <id> is an empty slot`,
+         *     `Shot <n> is offline` (1.58, a V1 clip; before, and an audio clip: `clip <id> is offline`),
          *     `clip <id>: its take was not made by a workflow`, `clip <id>: workflow <wid> has no preset <p>`, `clip <id>:
          *     workflow <wid> no longer exists`, `at most 22 clips per re-render`, `clips <a> and <b> start from each other`,
          *     `unknown clip <id>`. From 1.32 `clips` may name audio-track clips made by a workflow (a line): each is a step,
@@ -2657,8 +2658,8 @@ export interface paths {
          * Export the sequence to an MP4 take (a queued media job)
          * @description Plans the stated revision (it must be the current one: 409 stale), builds the ffmpeg arguments and sends
          *     `cmd.media.job` (kind `export`) to the chosen runner env (contracts/README.md, Timeline: export). 409 when the
-         *     plan is `blocked` (the first reason's text: `clip <id> is offline`, `the sequence is empty`, `no live host
-         *     can export (ffmpeg)`), `an export of this sequence is already running`, or `revision`. 422 `host <h> cannot
+         *     plan is `blocked` (the first reason's text: `Shot <n> is offline` (1.58; before: `clip <id> is offline`), `the
+         *     sequence is empty`, `no live host can export (ffmpeg)`), `an export of this sequence is already running`, or `revision`. 422 `host <h> cannot
          *     export` for a named host with no media env.
          */
         post: operations["studioExportTimeline"];
@@ -7827,7 +7828,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description unknown email, wrong password or disabled user — one generic answer: "invalid email or password" */
+        /** @description unknown email or wrong password: "Wrong email or password." (1.58; before: "invalid email or password"). A disabled user with the right password: "This account is off. Ask your admin." (1.58); with a wrong one the generic line, so it tells nothing of which emails exist. Every refusal counts against the sign-in limit. */
         InvalidLogin: {
             headers: {
                 [name: string]: unknown;

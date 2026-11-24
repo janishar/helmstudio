@@ -3605,8 +3605,9 @@ New shot machinery (references `make_shot`, `t_edit` `place`, `rerender_steps`; 
   or an upload: null, ffmpeg reads it). Every sound chain resamples to `target.sample_rate` and up-mixes to stereo
   before the mix (`aresample=<rate>,aformat=channel_layouts=stereo`), so a 24 kHz Qwen line, a 44.1 kHz ZONOS3 line and
   a 48 kHz video mix on one grid; a line placeholder reads nothing. `blocked`:
-  `offline` (per clip), `empty`, `no_host`. `video_bitrate` (conform) = clamp(rnd(w × h × num / den × 0.15), 1 Mb/s, 40
-  Mb/s); `estimated_bytes` = copy: Σ clip take bytes + rnd(192000 × duration / 8), else rnd((bitrate + 192000) ×
+  `offline` (per clip; API 1.58: its message and the refusals of export and re-render read `Shot <n> is offline`, the
+  clip's own shot number, not its id), `empty`, `no_host`. `video_bitrate` (conform) = clamp(rnd(w × h × num / den ×
+  0.15), 1 Mb/s, 40 Mb/s); `estimated_bytes` = copy: Σ clip take bytes + rnd(192000 × duration / 8), else rnd((bitrate + 192000) ×
   duration / 8). `too_large`: longer than 2 hours, `estimated_bytes` over 16 GiB, or the distinct takes it reads (every
   track) over 32 GiB in all. `empty`: no V1 clip (sound alone has no picture). `host` / `env` / `hardware`: the env
   that would run it now.

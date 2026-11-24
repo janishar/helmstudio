@@ -333,7 +333,7 @@ test("a07 reset a user's password, then disable and enable the account", async (
   await p.getByRole("button", { name: "Sign in" }).click();
   const err = p.getByRole("alert").filter({ hasText: /\w/ });
   await expect(err).toBeVisible();
-  await expect(err).not.toContainText(/[{}]|Sign-in failed\.$/);
+  await expect(p.locator("#form-error")).toHaveText("This account is off. Ask your admin.");
   await shot(p, "a07-disabled-signin");
 
   await r.getByRole("button", { name: "Enable" }).click();
@@ -458,7 +458,7 @@ test("a11 a user changes their password, signs out and back in", async () => {
   await p.getByRole("button", { name: "Sign in" }).click();
   const err = p.getByRole("alert").filter({ hasText: /\w/ });
   await expect(err).toBeVisible();
-  await expect(err).not.toContainText(/[{}]/);
+  await expect(p.locator("#form-error")).toHaveText("Wrong email or password.");
   await shot(p, "a11-old-password");
   person.password = next;
   await signIn(p, person);
@@ -483,7 +483,7 @@ test("a12 a visitor lands, goes to sign in, and gets plain errors", async ({ bro
   await p.getByRole("button", { name: "Sign in" }).click();
   const err = p.getByRole("alert").filter({ hasText: /\w/ });
   await expect(err).toBeVisible();
-  await expect(err).not.toContainText(/[{}]/);
+  await expect(p.locator("#form-error")).toHaveText("Wrong email or password.");
   await expect(p.getByLabel("Email")).toHaveValue(ADMIN.email);
   await shot(p, "a12-wrong-password");
   await p.context().close();

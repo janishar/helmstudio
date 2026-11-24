@@ -74,7 +74,10 @@ def test_disable_revokes_sessions_and_enable(admin, new_user, no_token):
     assert (
         limited(no_token, "/auth/refresh", {"refresh_token": u["refresh_token"]}).status_code == 401
     )
-    assert signin(no_token, u["email"], u["password"]).status_code == 401
+    r = signin(no_token, u["email"], u["password"])  # API 1.58: the right password hears why
+    assert (r.status_code, r.json()["detail"]) == (401, "This account is off. Ask your admin.")
+    r = signin(no_token, u["email"], "wrong password 1")  # a wrong one stays generic
+    assert (r.status_code, r.json()["detail"]) == (401, "Wrong email or password.")
     assert (
         ok(admin.put(f"/auth/admin/users/{uid}/disabled", json={"disabled": False}))["disabled"]
         is False

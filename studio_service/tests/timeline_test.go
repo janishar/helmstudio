@@ -183,10 +183,15 @@ func TestTimelineEditing(t *testing.T) {
 	}
 	e.mediaHost(0)
 	plan := e.call(userA, "POST", base+"/export/plan", nil, 200)
-	if blocked := plan["blocked"].([]any); len(blocked) != 1 || blocked[0].(map[string]any)["code"] != "offline" {
+	// API 1.58: an offline clip is named by its shot number, as the lanes show it, not its id
+	offline := fmt.Sprintf("Shot %v is offline", v1(tl)[0].(map[string]any)["number"])
+	if blocked := plan["blocked"].([]any); len(blocked) != 1 || blocked[0].(map[string]any)["code"] != "offline" ||
+		blocked[0].(map[string]any)["message"] != offline {
 		t.Fatal(plan)
 	}
-	e.call(userA, "POST", base+"/export", map[string]any{"revision": 7}, 409)
+	if out := e.call(userA, "POST", base+"/export", map[string]any{"revision": 7}, 409); out["detail"] != offline {
+		t.Fatal(out)
+	}
 
 	// the last 100 revisions are kept
 	tl = e.call(userA, "GET", base, nil, 200)

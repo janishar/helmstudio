@@ -580,11 +580,11 @@ def test_offline_clip(api, live, sid):
     )
     assert gone not in cur["takes"] and cur["frames"] == 98
     p = plan(api, cur)
-    assert {"code": "offline", "clip": cg["id"], "message": p["blocked"][0]["message"]} in p[
+    assert {"code": "offline", "clip": cg["id"], "message": f"Shot {cg['number']} is offline"} in p[
         "blocked"
     ]
     r = api.post(f"{TL}/{tl['id']}/export", json={"revision": cur["revision"]})
-    assert (r.status_code, r.json()["detail"]) == (409, f"clip {cg['id']} is offline")
+    assert (r.status_code, r.json()["detail"]) == (409, f"Shot {cg['number']} is offline")
     again = put(
         api, cur, doc(cur)
     )  # writing it back keeps it offline (the stored revision named it)
@@ -592,7 +592,7 @@ def test_offline_clip(api, live, sid):
     r = api.post(
         f"{TL}/{tl['id']}/rerender", json={"revision": again["revision"], "clips": [cg["id"]]}
     )
-    assert (r.status_code, r.json()["detail"]) == (422, f"clip {cg['id']} is offline")
+    assert (r.status_code, r.json()["detail"]) == (422, f"Shot {cg['number']} is offline")
 
 
 # ---------------------------------------------------------------- directing

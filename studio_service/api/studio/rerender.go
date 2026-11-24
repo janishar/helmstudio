@@ -186,7 +186,11 @@ func rerenderError(e timeline.RerenderError, doc timeline.Doc, takes map[string]
 	case "empty":
 		return network.NewUnprocessableError("clip "+e.Clip+" is an empty slot", nil)
 	case "offline":
-		return network.NewUnprocessableError("clip "+e.Clip+" is offline", nil)
+		name := "clip " + e.Clip // an audio-track clip has no shot number
+		if ti, k := findClip(doc, e.Clip); ti == 0 {
+			name = fmt.Sprintf("Shot %d", cmp.Or(doc.Tracks[0].Clips[k].Number, k+1)) // API 1.58, as the lanes
+		}
+		return network.NewUnprocessableError(name+" is offline", nil)
 	case "not_made":
 		return network.NewUnprocessableError("clip "+e.Clip+": its take was not made by a workflow", nil)
 	case "rerender_cycle":

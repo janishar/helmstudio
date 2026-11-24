@@ -240,7 +240,7 @@ func exportReason(r timeline.Reason, doc timeline.Doc, takes map[string]timeline
 	t := doc.Target
 	switch r.Code {
 	case "offline":
-		out.Message = "clip " + r.Clip + " is offline" // the 409 detail openapi.yaml names (studioExportTimeline)
+		out.Message = shot + " is offline" // the 409 detail openapi.yaml names (studioExportTimeline; API 1.58)
 	case "empty":
 		out.Message = "the sequence has no clip on V1"
 	case "too_large":

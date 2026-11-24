@@ -27,7 +27,7 @@ def test_signin_failures_are_generic(no_token, user_a):
         ("nobody-" + user_a["email"], "x" * 12),
     ):
         r = signin(no_token, email, password)
-        assert r.status_code == 401 and r.json()["detail"] == "invalid email or password"
+        assert r.status_code == 401 and r.json()["detail"] == "Wrong email or password."
 
 
 def test_signup_is_closed():
