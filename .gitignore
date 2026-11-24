@@ -16,3 +16,6 @@ deploy/secrets-*/
 tsconfig.tsbuildinfo
 *.pem
 *.key
+
+# internal research notes: kept on the owner's machine, not published
+docs/reference-notes/

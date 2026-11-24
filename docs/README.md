@@ -57,3 +57,6 @@ other sections point to it rather than restate it.
 |---|---|
 | [helm mcp](guides/mcp.md) | Using helmstudio from Claude Code or Claude Desktop: set-up, the tools, which ones ask first |
 | [Mac app](guides/mac-app.md) | helmstudio for Mac: first open, the menu bar, Quit, the MCP with the app |
+
+Research notes (`docs/reference-notes/`) stay on the owner's machine and are not published; links to them from the plan
+work only in a local checkout.
