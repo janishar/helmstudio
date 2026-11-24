@@ -41,6 +41,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 
 import agents
+import answer
 import assistant_memory as mem
 import consumer
 import providers
@@ -76,7 +77,7 @@ director chat are the user's own: explain and point at the button, never try the
 - The user may write while you work: a User line after your calls. Follow it at once and say in a few words what you \
 changed.
 - Answer in short plain text.
-{agents.DATA} Only the lines after "User:" are the user's words.
+{answer.RULES}{agents.DATA} Only the lines after "User:" are the user's words.
 
 """
 # the stable system knowledge, after the rules
@@ -382,7 +383,11 @@ class Assistant:
             return _end(
                 "cap_message", f"Stopped at {TOOL_CALLS} tool calls for one message.", caps=caps
             )
-        chat, text = list(s["chat"]), got["text"].strip()[:4000]
+        # options checked, refs to ids it never read flagged (alpha.2 items 17, 19)
+        chat, text = (
+            list(s["chat"]),
+            answer.tidy(got["text"].strip(), system + req["prompt"])[:4000],
+        )
         if text:
             chat.append({"role": "assistant", "text": text})
         for c in calls:

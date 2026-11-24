@@ -4,7 +4,7 @@
 // It shows the chat (your messages, its words, the action lines with Undo, the cards), runs a turn's actions in the
 // tab that sent the message (others show it read-only with Continue here) and posts their results. Every text is
 // rendered as text: React escapes it, nothing is parsed as HTML.
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -58,6 +58,8 @@ import {
 } from "@/lib/assistant";
 import { followEvents } from "@/lib/runs";
 import { Registry, awaitIt, navigateTo } from "@/components/assistant/tools";
+import { Options, Refs } from "@/components/assistant/answer";
+import { liveOptions, splitOptions } from "@/lib/answer-refs";
 import { TextArea } from "@/components/expand-text";
 
 type Line = S<"AssistantLine">;
@@ -832,15 +834,39 @@ function Thread({ a, entries }: { a: AssistantApi; entries: Entry[] }) {
   let words: Entry[] = [];
   let lines: Line[] = [];
   const steers: React.ReactNode[] = []; // sent while it works: at the bottom, dimmed, until the turn reads them
+  // a workflow chip switches to it where the screen can (Create)
+  const switchTo = a.reg.current()?.spec.actions.switchTo;
+  const pickWorkflow = switchTo
+    ? (id: string) => void switchTo({ workflow: id }, { progress: () => undefined })
+    : undefined;
   const flush = (key: string) => {
     if (!words.length && !lines.length) return;
     out.push(
       <div key={`b${key}`} className="msg">
-        {words.map((w) => (
-          <p key={w.id}>
-            <Text text={w.text ?? ""} />
-          </p>
-        ))}
+        {words.map((w) => {
+          // alpha.2 items 17, 19: the options block as cards, refs as chips
+          const { text, options } = splitOptions(w.text ?? "");
+          return (
+            <Fragment key={w.id}>
+              <p>
+                <Refs
+                  text={text}
+                  onWorkflow={pickWorkflow}
+                  plain={(t, k) => <Text key={k} text={t} />}
+                />
+              </p>
+              {options && (
+                <Options
+                  entry={w}
+                  entries={entries}
+                  options={options}
+                  readOnly={a.readOnly}
+                  send={a.send}
+                />
+              )}
+            </Fragment>
+          );
+        })}
         {lines.length > 0 && <Lines lines={lines} a={a} />}
         {lines
           .filter((l) => l.sources?.length)
@@ -1185,6 +1211,7 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
     setSending(false);
   };
   const onMachine = st?.provider && !st.provider.remote;
+  const picks = a.readOnly ? null : liveOptions(entries); // keys 1–4 send one (board frame 11)
 
   if (phone && a.shrunk)
     return (
@@ -1430,7 +1457,19 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                  const n = Number(e.key);
+                  if (
+                    picks &&
+                    !text &&
+                    n >= 1 &&
+                    n <= picks.length &&
+                    !e.metaKey &&
+                    !e.ctrlKey &&
+                    !e.altKey
+                  ) {
+                    e.preventDefault();
+                    void sendExample(picks[n - 1].title);
+                  } else if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                     e.preventDefault();
                     void submit();
                   }
@@ -1442,6 +1481,13 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
                     <>
                       <span className="kbd">Enter</span> steers this answer
                     </>
+                  ) : picks ? (
+                    !phone && (
+                      <>
+                        <span className="kbd">1</span>–<span className="kbd">{picks.length}</span>{" "}
+                        picks
+                      </>
+                    )
                   ) : (
                     !phone && (
                       <>

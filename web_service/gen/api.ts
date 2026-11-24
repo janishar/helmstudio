@@ -6375,7 +6375,7 @@ export interface components {
             kind: "user" | "assistant" | "line" | "card" | "notice";
             /** Format: date-time */
             at: string;
-            /** @description user, assistant, notice: shown as text, never HTML */
+            /** @description user, assistant, notice: shown as text, never HTML; from 1.63 an assistant text may hold an ```options block and [[take|element|voice|workflow:<id>]] refs, shown as cards and chips (contracts/README.md, Assistant: pick one and refs) */
             text?: string;
             line?: components["schemas"]["AssistantLine"];
             card?: components["schemas"]["AssistantCard"];
