@@ -113,7 +113,7 @@ Notes from the owner while using the app. Not scheduled; each is picked up when 
   Magnific fits as an Upscale take action and a pipeline step; fal as a short curated list of models. Rough size if
   built: 2–4 days for the runner and the first vendor, about a day per further vendor or model family.
 
-## Skills (decided 2026-11-25, on the list after item 35 when the owner says)
+## Skills (decided 2026-11-25; now alpha.2 item 36)
 
 A plugin kind `skill`: text that teaches the Assistant a craft (an animator, a cinematographer, a voice director)
 and how to do it in helmstudio. `plugins/<name>/plugin.json` (kind skill, `"format": 1`, title, when to use) plus
