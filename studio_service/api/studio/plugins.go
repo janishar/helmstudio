@@ -232,7 +232,7 @@ func (s *Service) pluginDTOs(ctx context.Context, caller common.Caller, rows []p
 		if m.Kind == "skill" { // API 1.64
 			p.Format, p.When = m.Format, &m.When
 			if r.Blocked == "" {
-				p.Files = skillFiles(r.Dir)
+				p.Files = append([]string{"SKILL.md"}, skillFiles(r.Dir)...)
 				ok, skipped := s.recipes(m)
 				p.Recipes = &dto.PluginRecipes{OK: len(ok), Skipped: skipped}
 				p.Status = map[bool]string{true: "on", false: "off"}[r.Enabled]

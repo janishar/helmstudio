@@ -1908,7 +1908,7 @@ paths:
       tags: [studio]
       operationId: studioAdminPutPlugin
       summary: 'From 1.61: turn a plugin on or off'
-      description: 'Admin only (403). Off at once: its assistant tools leave the next input''s tools, its providers leave every list and pipeline rule (they come back when it is on again). 404 unknown.'
+      description: 'Admin only (403). Off at once: its assistant tools leave the next input''s tools, its providers leave every list and pipeline rule (they come back when it is on again). 404 unknown. From 1.64 409 `<title> needs a newer helmstudio` (needs_newer) and `<name> can''t be read` (broken) for on.'
       parameters: [{$ref: '#/components/parameters/PluginName'}]
       requestBody:
         required: true
@@ -1918,6 +1918,7 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/AdminRequired'}
         '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
         '422': {$ref: '#/components/responses/Unprocessable'}
     delete:
       tags: [studio]

@@ -1819,7 +1819,7 @@ export interface paths {
         get?: never;
         /**
          * From 1.61: turn a plugin on or off
-         * @description Admin only (403). Off at once: its assistant tools leave the next input's tools, its providers leave every list and pipeline rule (they come back when it is on again). 404 unknown.
+         * @description Admin only (403). Off at once: its assistant tools leave the next input's tools, its providers leave every list and pipeline rule (they come back when it is on again). 404 unknown. From 1.64 409 `<title> needs a newer helmstudio` (needs_newer) and `<name> can't be read` (broken) for on.
          */
         put: operations["studioAdminPutPlugin"];
         post?: never;
@@ -10930,6 +10930,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["AdminRequired"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
         };
     };

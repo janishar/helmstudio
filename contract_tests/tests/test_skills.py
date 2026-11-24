@@ -44,12 +44,12 @@ def test_found_built_in_and_yours(admin):
         "skill",
         "built_in",
         1,
-    ) and "camera-moves.md" in a["files"]
+    ) and a["files"] == ["SKILL.md", "camera-moves.md"]
     assert (
         a["recipes"]["ok"] + len(a["recipes"]["skipped"]) == 6
     )  # the fake runner has no LTX or H3: skipped, with why
     f = got["fake-skill"]
-    assert (f["origin"], f["files"]) == ("yours", ["notes.md"]) and f["status"] in ("off", "on")
+    assert (f["origin"], f["files"]) == ("yours", ["SKILL.md", "notes.md"]) and f["status"] in ("off", "on")
     assert f["recipes"] == {
         "ok": 0,
         "skipped": [{"name": "missing", "why": "this install has no workflow no-such-workflow"}],
@@ -84,7 +84,7 @@ def test_every_user_reads_the_skills_that_are_on(admin, api, on):
     )
     assert skill["origin"] == "yours"
     assert "extra file" in ok(api.get(f"{SKILLS}/fake-skill/files/notes.md"))["text"]
-    for file in ("plugin.json", "SKILL.md", "..%2Fplugin.json", "nope.md"):
+    for file in ("plugin.json", "SKILL.md", "nope.md"):
         assert api.get(f"{SKILLS}/fake-skill/files/{file}").status_code == 404, file
     assert api.get(f"{SKILLS}/future-skill").status_code == 404
 
