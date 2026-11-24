@@ -14,6 +14,7 @@ import {
   limitOf,
   mentionParts,
   plainAnswer,
+  plainError,
   stepSummary,
   timecode,
   undoName,
@@ -384,5 +385,44 @@ describe("answers that read well (alpha.2 items 21, 22, 24, 25)", () => {
     expect(undoName("Generated Elias at the window · 4 takes")).toBe(
       "Generated Elias at the window",
     );
+  });
+});
+
+describe("failed lines and provider errors in plain words (item 23)", () => {
+  it("says what happened, the raw text kept for Details", () => {
+    expect(plainError("switchTo · name resolution failed")).toEqual({
+      plain: "Lost the connection to the studio for a moment; try again",
+      raw: "switchTo · name resolution failed",
+    });
+    expect(plainError("seeds · extra is not an argument")).toEqual({
+      plain: "Failed · extra is not an argument",
+      raw: "seeds · extra is not an argument",
+    });
+    expect(plainError("deepseek: the provider is busy or down (HTTP 429)").plain).toBe(
+      "deepseek is busy. Try again in a minute.",
+    );
+    expect(plainError("deepseek: HTTP 400").plain).toBe(
+      "deepseek turned the request down. Try again or rephrase.",
+    );
+    expect(plainError("deepseek: cannot resolve api.x: [Errno 8] nodename").plain).toBe(
+      "Could not reach deepseek. Try again in a minute.",
+    );
+    expect(plainError("Thumbnails · thumbs failed · Thumbs: timed out").plain).toBe(
+      "Thumbnails · thumbs failed · Thumbs took too long to answer. Try again.",
+    );
+    expect(plainError("Thumbnails · thumbs failed · timed out").plain).toBe(
+      "Thumbnails · thumbs failed · It took too long to answer. Try again.",
+    );
+    expect(plainError("Thumbnails did not answer").plain).toBe(
+      "Thumbnails took too long to answer. Try again.",
+    );
+    expect(plainError("timelineSave · The server had a problem (502). Try again.").plain).toBe(
+      "The studio had a problem. Try again.",
+    );
+    // already plain: no Details
+    expect(plainError("Search failed · Brave")).toEqual({ plain: "Search failed · Brave" });
+    expect(plainError("Length: the longest is 13.4 s")).toEqual({
+      plain: "Length: the longest is 13.4 s",
+    });
   });
 });

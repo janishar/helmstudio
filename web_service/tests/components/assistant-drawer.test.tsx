@@ -599,6 +599,39 @@ describe("other tabs, server cards, limits, memory", () => {
     await waitFor(() => expect(box.disabled).toBe(false));
   });
 
+  it("a failed line and a provider's error say it in plain words, the raw text under Details", async () => {
+    serve({
+      existing: thread(),
+      entries: [
+        entry(1, {
+          kind: "line",
+          line: {
+            id: id(0),
+            status: "failed",
+            text: "switchTo · name resolution failed",
+            undo: false,
+          },
+        }),
+        entry(2, {
+          kind: "notice",
+          text: "deepseek: the provider is busy or down (HTTP 429)",
+          error: { code: "provider", text: "deepseek: the provider is busy or down (HTTP 429)" },
+        }),
+      ],
+    });
+    await openDrawer();
+    expect(
+      await screen.findByText("Lost the connection to the studio for a moment; try again"),
+    ).toBeTruthy();
+    expect(screen.getByText("deepseek is busy. Try again in a minute.")).toBeTruthy();
+    expect(screen.queryByText(/switchTo|HTTP 429/)).toBeNull();
+    const [line, note] = screen.getAllByRole("button", { name: "Details" });
+    fireEvent.click(line);
+    expect(screen.getByText("switchTo · name resolution failed")).toBeTruthy();
+    fireEvent.click(note);
+    expect(screen.getByText("deepseek: the provider is busy or down (HTTP 429)")).toBeTruthy();
+  });
+
   it("a Remembered line's Undo deletes the memory item", async () => {
     const mem = "99999999-2222-4333-8444-555555555555";
     serve({

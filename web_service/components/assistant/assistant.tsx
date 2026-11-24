@@ -65,6 +65,7 @@ import {
   limitOf,
   mentionParts,
   plainAnswer,
+  plainError,
   stepSummary,
   tabClientId,
   tabOpen,
@@ -854,19 +855,21 @@ function LineRow({ l, a }: { l: Line; a: AssistantApi }) {
   const [wide, setWide] = useState(false);
   const off = !!a.undone[l.id];
   const status = off ? "undone" : l.status;
-  const text = / in Models\.$/.test(l.text) ? (
+  // a failed line in plain words, its raw text under Details (item 23, board frame 6)
+  const { plain, raw } = l.status === "failed" ? plainError(l.text) : { plain: l.text, raw: "" };
+  const text = / in Models\.$/.test(plain) ? (
     <>
-      <Text text={l.text.slice(0, -"Models.".length)} />
+      <Text text={plain.slice(0, -"Models.".length)} />
       <Link href="/models" className="underline">
         Models
       </Link>
       .
     </>
   ) : (
-    <Text text={l.text} />
+    <Text text={plain} />
   );
   // one line with "…", tap opens it in full, hover shows it (item 21, board frame 10c); a memory line wraps in full
-  const long = l.text.length > 36 && !/^Remembered\b/.test(l.text);
+  const long = plain.length > 36 && !/^Remembered\b/.test(plain) && !raw;
   const verb = off ? "Redo" : "Undo";
   return (
     <li>
@@ -900,6 +903,7 @@ function LineRow({ l, a }: { l: Line; a: AssistantApi }) {
         ) : (
           text
         )}
+        {raw && <RawDetails raw={raw} />}
       </span>
       {l.undo && (l.status === "done" || off) && a.canUndo(l) && !(off && l.memory_id) && (
         <button
@@ -1103,6 +1107,20 @@ const serverCard = (c: S<"AssistantCard">): ScreenCard => ({
           : "Runs on your machines.",
   danger: c.kind === "delete",
 });
+
+/** Details under a failed line or a provider's error: the raw text, closed by default. */
+function RawDetails({ raw }: { raw: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button type="button" className="un det" aria-expanded={open} onClick={() => setOpen(!open)}>
+        Details
+        {open ? <ChevronUp size={12} aria-hidden /> : <ChevronDown size={12} aria-hidden />}
+      </button>
+      {open && <span className="raw mono block">{raw}</span>}
+    </>
+  );
+}
 
 /** The model answered wrongly twice (board frame 7): the plain line, and the checker's own words behind Details,
  * closed by default and after a reload. */
@@ -1420,12 +1438,16 @@ function Thread({ a, entries }: { a: AssistantApi; entries: Entry[] }) {
             retry={e.id === lastEntry && !a.readOnly && !a.steering ? a.retry : undefined}
           />,
         );
-      else if (e.kind === "notice" && !["cap_day", "cap_tokens"].includes(e.error?.code ?? ""))
+      else if (e.kind === "notice" && !["cap_day", "cap_tokens"].includes(e.error?.code ?? "")) {
+        // a provider's error in plain words, its raw text under Details (item 23, board frame 6)
+        const { plain, raw } = plainError(e.text ?? "");
         out.push(
           <div key={e.id} role="note" className="msg note">
-            <Text text={e.text ?? ""} />
+            <Text text={plain} />
+            {raw && <RawDetails raw={raw} />}
           </div>,
         );
+      }
     }
   }
   // what this tab runs now, until the server's lines come

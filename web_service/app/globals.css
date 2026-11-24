@@ -1229,6 +1229,22 @@
   .ast .al li svg {
     flex: 0 0 auto;
   }
+  /* a failed line in plain words (board frame 6): Details under it, the raw text small, grey, mono */
+  .ast .al li:has(.det) {
+    align-items: flex-start;
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+  .ast .al li .det {
+    display: flex;
+    height: 22px;
+    margin: 2px 0 0 -8px;
+  }
+  .ast .al li .raw {
+    font-size: 11px;
+    line-height: 16px;
+    color: var(--t2);
+  }
   .ast .ok {
     color: var(--a1);
   }
