@@ -431,7 +431,7 @@ PLUGIN_TIMEOUT = 30.0
 
 
 async def plugin_tool(title: str, url: str, tool: str, args: dict, headers: dict) -> dict:
-    """An assistant-tools plugin's call (API 1.60, contracts/README.md Plugins): POST <url>/tools/<tool> {input}
+    """An assistant-tools plugin's call (API 1.61, contracts/README.md Plugins): POST <url>/tools/<tool> {input}
     through a local server's host rule and the pinned client, no redirects. The 200 answer when valid against the
     manifest's toolReply; else CallError with a short plain reason (no name prefix): refused by the host rule, no
     answer, a non-2xx (its detail), a reply off the schema."""

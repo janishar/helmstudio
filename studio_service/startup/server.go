@@ -195,7 +195,7 @@ func Run() error {
 	if err := router.LoadControllers(module.Controllers()...); err != nil {
 		return err
 	}
-	if added, err := module.settings.ScanPlugins(ctx); err != nil { // API 1.60: plugins/ on start (new ones stay off)
+	if added, err := module.settings.ScanPlugins(ctx); err != nil { // API 1.61: plugins/ on start (new ones stay off)
 		log.Printf("plugins: scan failed: %v", err)
 	} else if len(added) > 0 {
 		log.Printf("plugins: found %v (off)", added)

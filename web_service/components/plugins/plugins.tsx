@@ -1,5 +1,5 @@
 "use client";
-// Plugins (docs/mock/Plugins.dc.html; API 1.60): the admin-only rail page. The table lists what studio found in
+// Plugins (docs/mock/Plugins.dc.html; API 1.61): the admin-only rail page. The table lists what studio found in
 // plugins/ (Rescan reads it again); a row opens its aside: the switch, its rows, MAY DO, the disclaimer and, for a
 // model-provider plugin that is on, Add as provider (a personal plugin's provider is its admin's own).
 import Link from "next/link";

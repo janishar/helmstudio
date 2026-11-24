@@ -117,6 +117,8 @@ test("j01 put my three takes on a timeline from the Gallery, in the order I pick
   for (const [i, t] of CLIPS.entries())
     await expect(clip(i)).toHaveAccessibleName(named(t, "Echo · 2.0 s"));
   await expect(header()).toHaveText(/^256 × 128 · 24 fps · /);
+  // the sequence's render time, its shots' in all (API 1.60; docs/mock/Timeline.dc.html)
+  await expect(header()).toHaveText(/ · ⏱ \d+:\d\d$/);
   await expect(exportKey()).toHaveAccessibleName(/^Export stream copy$/);
   await shot("j01-three-takes");
 });
@@ -155,6 +157,8 @@ test("j03 trim five frames off the end of the first clip", async () => {
   await expect(
     inspector().getByRole("heading", { name: new RegExp(`${CLIPS[0]}$`) }),
   ).toBeVisible();
+  // the clip's take's render time, low text (API 1.60)
+  await expect(inspector()).toContainText(/ · ⏱ \d+:\d\d/);
   const out = await inspector().textContent();
   for (let i = 0; i < 5; i++) await page.keyboard.press("]");
   // 49 frames → 44 at 24 fps

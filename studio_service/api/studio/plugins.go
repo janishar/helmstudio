@@ -28,7 +28,7 @@ import (
 	"github.com/helmstudio/studio_service/common"
 )
 
-// Plugins (API 1.60; contracts/README.md "Plugins"): small separate HTTP services in plugins/<name>/ with a manifest
+// Plugins (API 1.61; contracts/README.md "Plugins"): small separate HTTP services in plugins/<name>/ with a manifest
 // (contracts/plugins/manifest.schema.json). Studio reads only */plugin.json from its read-only mounts, on start and at
 // Rescan, keeps them in the plugins table (off until an admin turns one on), checks a running one's health path, makes
 // a provider from a model-provider plugin (Add as provider) and sends the assistant-tools plugins that are on with

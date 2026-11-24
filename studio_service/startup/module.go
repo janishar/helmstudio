@@ -33,7 +33,7 @@ type Module struct {
 	memory           studio.MemoryAsk                                           // pipelines.memory (a pipeline's memory)
 	dispatcher       *studio.Dispatcher                                         // positions use its skip counts; nil in tests
 	remoteModels     bool                                                       // the deployment's remote switch (API 1.15)
-	pluginDirs       []string                                                   // where plugins are read (API 1.60)
+	pluginDirs       []string                                                   // where plugins are read (API 1.61)
 	providerTest     studio.ProviderTestAsk                                     // pipelines.providers.test
 	providerKey      studio.ProviderKeyAsk                                      // pipelines.providers.key (API 1.51)
 	providerKeyWrite studio.ProviderKeyWriteAsk                                 // pipelines.providers.key.write (API 1.52)

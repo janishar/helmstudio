@@ -48,7 +48,7 @@ HERE = Path(__file__).parent
 SCHEMA_FILES = sorted((HERE / "messages").glob("*.schema.json"))
 TOOL_FILES = sorted((HERE / "tools").glob("*.json"))  # the assistant's tools/catalog.json, actions.json and their schema
 PRESETS_SCHEMA = HERE / "providers" / "presets.schema.json"  # API 1.51: the model provider presets' shape
-MANIFEST_SCHEMA = HERE / "plugins" / "manifest.schema.json"  # API 1.60: a plugin's plugin.json
+MANIFEST_SCHEMA = HERE / "plugins" / "manifest.schema.json"  # API 1.61: a plugin's plugin.json
 # Every cmd.*/evt.* schema is an enveloped message; every req.* holds $defs/request and $defs/reply.
 MESSAGE_TYPES = [
     n
@@ -99,7 +99,7 @@ HTTP_SCHEMAS = [
     "SessionList", "SessionNames", "SessionNamesPut",
     "AssistantPost", "AssistantThreadList", "AssistantThreadDetail", "AssistantEvent", "AssistantMemoryList",
     "AssistantSettings", "AssistantSettingsPut", *TWINS,
-    "PluginList", "PluginRescan", "PluginPut", "PluginProviderCreate",  # 1.60
+    "PluginList", "PluginRescan", "PluginPut", "PluginProviderCreate",  # 1.61
 ]
 OPENAPI = "https://helmstudio.local/contracts/openapi.yaml"
 OPERATION_PREFIX = {"/v1/studio/": "studio", "/files/": "files", "/auth/": "auth"}
@@ -4408,7 +4408,7 @@ def check_openapi() -> None:
                     fail(f"{where} {code}: use a components/responses error")
 
 
-ASSISTANT_CARD_KINDS = {"delete", "plugin"}  # cards the server asks without a catalog tool: Clear all (a delete card); API 1.60 a plugin tool with a risk flag
+ASSISTANT_CARD_KINDS = {"delete", "plugin"}  # cards the server asks without a catalog tool: Clear all (a delete card); API 1.61 a plugin tool with a risk flag
 
 
 def refs(node, out=None) -> list[str]:
@@ -4636,7 +4636,7 @@ def check_presets(schemas: dict[str, dict], registry: Registry) -> None:
 
 
 def check_plugins(schemas: dict[str, dict], registry: Registry) -> None:
-    """API 1.60 (README, Plugins): every plugins/*/plugin.json in the repo (and the test stack's fake plugins) passes
+    """API 1.61 (README, Plugins): every plugins/*/plugin.json in the repo (and the test stack's fake plugins) passes
     the manifest schema, names its folder, keeps url on a local server's host, and each tool's input is a
     self-contained JSON Schema of an object."""
     v = Draft202012Validator({"$ref": schemas["plugins/manifest.schema.json"]["$id"]}, registry=registry)

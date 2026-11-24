@@ -21,7 +21,7 @@
         "plugins": {
           "type": "array",
           "maxItems": 16,
-          "description": "from API 1.60 (contracts/README.md, Plugins): the plugins of kind assistant-tools that are on, as studio read them at this input; pipelines offers each tool as `<name>__<tool>` and calls `<url>/tools/<tool>` (plugins/manifest.schema.json toolCall). Absent or [] = none",
+          "description": "from API 1.61 (contracts/README.md, Plugins): the plugins of kind assistant-tools that are on, as studio read them at this input; pipelines offers each tool as `<name>__<tool>` and calls `<url>/tools/<tool>` (plugins/manifest.schema.json toolCall). Absent or [] = none",
           "items": {
             "type": "object",
             "required": ["name", "title", "url", "tools"],

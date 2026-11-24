@@ -689,10 +689,10 @@ type AssistantTurn struct {
 	Actions  []string          `json:"actions"`
 	Settings AssistantSettings `json:"settings"`
 	Input    map[string]any    `json:"input"`
-	Plugins  []TurnPlugin      `json:"plugins,omitempty"` // API 1.60: the assistant-tools plugins that are on
+	Plugins  []TurnPlugin      `json:"plugins,omitempty"` // API 1.61: the assistant-tools plugins that are on
 }
 
-// TurnPlugin is one assistant-tools plugin as a turn offers it (API 1.60): its tools as in its manifest.
+// TurnPlugin is one assistant-tools plugin as a turn offers it (API 1.61): its tools as in its manifest.
 type TurnPlugin struct {
 	Name  string          `json:"name"`
 	Title string          `json:"title"`

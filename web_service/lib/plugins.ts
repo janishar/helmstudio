@@ -1,4 +1,4 @@
-// Plugins page texts (docs/mock/Plugins.dc.html; contracts/README.md "Plugins", API 1.60).
+// Plugins page texts (docs/mock/Plugins.dc.html; contracts/README.md "Plugins", API 1.61).
 import type { S } from "@/lib/api";
 
 type Plugin = S<"Plugin">;

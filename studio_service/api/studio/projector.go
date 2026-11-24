@@ -206,6 +206,12 @@ func (p *Projector) applyOutput(ctx context.Context, tx pgx.Tx, run model.Run, e
 	if err != nil {
 		return nil, err
 	}
+	// API 1.60: render time, the run's start to this file, both on the database's clock (started_at is its
+	// clock_timestamp()); none without a start
+	if err := tx.QueryRow(ctx, `SELECT greatest(round(extract(epoch FROM clock_timestamp() - started_at)::numeric, 1), 0)::float8
+		FROM runs WHERE id = $1 AND started_at IS NOT NULL`, run.ID).Scan(&made.RenderS); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return nil, err
+	}
 	lineage := runParents(run.Nodes, run.Mentions, p.Workflows.Schemas())
 	if sm := data.SourceMap; sm != nil && (data.Kind != "video" || !slices.Contains(lineage, sm.TakeID)) {
 		data.SourceMap = nil // only a video, and only from one of the run's own media takes

@@ -1585,7 +1585,7 @@ export interface paths {
         };
         /**
          * The local servers and remote providers a pipeline may name (names and models only)
-         * @description From 1.15. Enabled providers, redacted for every user: no base_url, key_secret, host or limits. Remote ones only when the deployment has remote models on. Never a search provider (1.44). From 1.60 another account's Only-you provider is never listed, and a disabled plugin's providers are not either.
+         * @description From 1.15. Enabled providers, redacted for every user: no base_url, key_secret, host or limits. Remote ones only when the deployment has remote models on. Never a search provider (1.44). From 1.61 another account's Only-you provider is never listed, and a disabled plugin's providers are not either.
          */
         get: operations["studioListModelSources"];
         put?: never;
@@ -1777,7 +1777,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * From 1.60: the plugins found in plugins/ (Plugins page)
+         * From 1.61: the plugins found in plugins/ (Plugins page)
          * @description Admin only (403). Every plugin studio found (contracts/README.md, Plugins), by name, with its manifest, whether it is on and, for one that is on, whether its health path answers now (2 s). `provider` is the caller's own provider made from it.
          */
         get: operations["studioAdminListPlugins"];
@@ -1799,7 +1799,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * From 1.60: read plugins/ again (Rescan)
+         * From 1.61: read plugins/ again (Rescan)
          * @description Admin only (403). Reads every plugins/*\/plugin.json again: a new one is added Off, a known one's manifest is replaced (on stays on), one whose folder or manifest is gone is dropped with its tools. `new` names the ones added.
          */
         post: operations["studioAdminRescanPlugins"];
@@ -1818,13 +1818,13 @@ export interface paths {
         };
         get?: never;
         /**
-         * From 1.60: turn a plugin on or off
+         * From 1.61: turn a plugin on or off
          * @description Admin only (403). Off at once: its assistant tools leave the next input's tools, its providers leave every list and pipeline rule (they come back when it is on again). 404 unknown.
          */
         put: operations["studioAdminPutPlugin"];
         post?: never;
         /**
-         * From 1.60: remove a plugin (its providers go too; the folder stays)
+         * From 1.61: remove a plugin (its providers go too; the folder stays)
          * @description Admin only (403). Drops the plugin and every provider made from it; the folder stays in plugins/, so a Rescan finds it again, Off. 404 unknown; 409 `<provider> is in use by an unfinished batch`.
          */
         delete: operations["studioAdminRemovePlugin"];
@@ -1843,7 +1843,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * From 1.60: Add as provider — a model-provider plugin becomes the caller's own local server provider
+         * From 1.61: Add as provider — a model-provider plugin becomes the caller's own local server provider
          * @description Admin only (403). The plugin must be a model-provider and on (409 `turn <title> on first`; 409 `<title> is not
          *     a model provider`). Studio asks `pipelines.providers.key.write` to check `key` on the plugin's
          *     `<url><provider.path>/models` and write it to the key file `plugin-<plugin>-<8 hex of the caller's id>`
@@ -1876,7 +1876,7 @@ export interface paths {
         /**
          * Set how untitled sessions are named
          * @description From 1.43. Admin only (403). Applies to sessions named from then on. 422 `<provider> is not an enabled provider`
-         *     (from 1.60 also an Only-you provider: `<provider> is only yours; pick a shared provider`),
+         *     (from 1.61 also an Only-you provider: `<provider> is only yours; pick a shared provider`),
          *     `<model> is not a model of <provider>`, `provider and model are only for remote`, `remote needs a provider`,
          *     `Qwen3.8 27B is not downloaded` (local with no live host that can run `llm-ask`); 409 `remote models are off on
          *     this deployment` for a provider of kind remote while the deployment's switch is off (a server, "on this
@@ -4729,6 +4729,8 @@ export interface components {
             pipeline?: components["schemas"]["MadeWithPipeline"] | null;
             /** @description from 1.18: the host that ran it (the run's host at the attempt that stored it); absent or null for takes made before 1.18 */
             host?: string | null;
+            /** @description from 1.60: its render time in seconds (0.1 s steps), from the run's start (its attempt's first running status) to this output's file stored; a run's takes each keep their own. Absent for takes made before 1.60 or by a run with no start recorded (the UI shows none: "⏱ 1:14" when present; a sequence's total is the sum over its clips' takes that have one) */
+            render_s?: number;
             /** @description from the workflow's `<family>/model` node; null without one (echo) */
             model: {
                 /** @description the model id of the registry models key for the family; null when unknown */
@@ -6101,10 +6103,10 @@ export interface components {
             };
             /**
              * Format: uuid
-             * @description from 1.60 (read only): an Only-you provider's owner, the admin who added it from a personal plugin. Only that account sees or uses it (every list, the AI agents picker, pipeline rules, the assistant); absent = everyone's
+             * @description from 1.61 (read only): an Only-you provider's owner, the admin who added it from a personal plugin. Only that account sees or uses it (every list, the AI agents picker, pipeline rules, the assistant); absent = everyone's
              */
             owner_id?: string;
-            /** @description from 1.60 (read only): the plugin it was made from (Add as provider) */
+            /** @description from 1.61 (read only): the plugin it was made from (Add as provider) */
             plugin?: string;
             /** Format: date-time */
             created_at: string;
@@ -6218,7 +6220,7 @@ export interface components {
             compat?: components["schemas"]["ProviderCompat"];
             /** @description from 1.53: the thinking rules (the first whose match fits a model id gives its levels), or "models": the levels come from the provider's /models (OpenRouter) */
             thinking?: "models" | components["schemas"]["ThinkingRule"][];
-            /** @description from 1.60: a plugin's preset (its providers' thinking rules); never in this list (the file only) */
+            /** @description from 1.61: a plugin's preset (its providers' thinking rules); never in this list (the file only) */
             plugin?: string;
             docs: string;
             note: string;
@@ -6276,7 +6278,7 @@ export interface components {
             /** @description refused or unreachable: our own short text, never the provider's */
             detail?: string;
         };
-        /** @description from 1.60: a tool's risk flags (plugins/manifest.schema.json risk): any true asks the user first */
+        /** @description from 1.61: a tool's risk flags (plugins/manifest.schema.json risk): any true asks the user first */
         PluginRisk: {
             uses_gpu: boolean;
             deletes: boolean;
@@ -6288,7 +6290,7 @@ export interface components {
             description: string;
             risk: components["schemas"]["PluginRisk"];
         };
-        /** @description from 1.60: one plugin as the admin sees it: its manifest (plugins/manifest.schema.json) and its state */
+        /** @description from 1.61: one plugin as the admin sees it: its manifest (plugins/manifest.schema.json) and its state */
         Plugin: {
             /** @description its folder under plugins/ */
             name: string;
@@ -6339,7 +6341,7 @@ export interface components {
         PluginPut: {
             enabled: boolean;
         };
-        /** @description from 1.60: Add as provider */
+        /** @description from 1.61: Add as provider */
         PluginProviderCreate: {
             /** @description the plugin's key (its key_hint); checked, then written as ProviderKeySave's; never returned, logged or stored outside the key file */
             key: string;
@@ -6453,7 +6455,7 @@ export interface components {
         AssistantCard: {
             id: components["schemas"]["AssistantCallId"];
             /**
-             * @description from 1.60 plugin: a plugin tool with a risk flag (contracts/README.md, Plugins)
+             * @description from 1.61 plugin: a plugin tool with a risk flag (contracts/README.md, Plugins)
              * @enum {string}
              */
             kind: "look" | "web_search" | "delete" | "plugin";
@@ -6657,11 +6659,11 @@ export interface components {
         /** @description the admin's assistant settings (Admin › AI agents) */
         AssistantSettings: {
             enabled: boolean;
-            /** @description a server or remote provider's name; from 1.60 the caller's own choice when they made one (`personal`) */
+            /** @description a server or remote provider's name; from 1.61 the caller's own choice when they made one (`personal`) */
             provider: string | null;
             /** @description one of its models; null = its default_model */
             model: string | null;
-            /** @description from 1.60: `provider` is the caller's own Only-you provider: only the caller's chats use it; everyone else's use the deployment's provider. A PUT naming an Only-you provider sets the caller's own choice (the deployment's stays); naming another clears it and sets the deployment's */
+            /** @description from 1.61: `provider` is the caller's own Only-you provider: only the caller's chats use it; everyone else's use the deployment's provider. A PUT naming an Only-you provider sets the caller's own choice (the deployment's stays); naming another clears it and sets the deployment's */
             personal?: boolean;
             /** @description web search's own egress switch (off by default) */
             web_search: boolean;
@@ -7245,6 +7247,8 @@ export interface components {
             /** @description `made_with.workflow_id`; null for an upload, import, frame or export (no "from this clip", no re-render) */
             workflow_id: string | null;
             workflow_title: string | null;
+            /** @description from 1.60: `made_with.render_s` (the clip inspector's "⏱ 3:12"; the sequence's total sums its clips' takes that have one); absent without one */
+            render_s?: number;
         };
         TimelineProblem: {
             /**
@@ -8208,7 +8212,7 @@ export interface components {
         Cursor: string;
         /** @description a provider's name (unknown = 404 on DELETE and test; malformed = 404) */
         ProviderName: string;
-        /** @description from 1.60: a plugin's name (its folder; unknown or malformed = 404) */
+        /** @description from 1.61: a plugin's name (its folder; unknown or malformed = 404) */
         PluginName: string;
         Limit: number;
         /** @description sequence UUID (malformed = 404) */
@@ -10778,7 +10782,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description from 1.60: a plugin's name (its folder; unknown or malformed = 404) */
+                /** @description from 1.61: a plugin's name (its folder; unknown or malformed = 404) */
                 plugin: components["parameters"]["PluginName"];
             };
             cookie?: never;
@@ -10809,7 +10813,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description from 1.60: a plugin's name (its folder; unknown or malformed = 404) */
+                /** @description from 1.61: a plugin's name (its folder; unknown or malformed = 404) */
                 plugin: components["parameters"]["PluginName"];
             };
             cookie?: never;
@@ -10834,7 +10838,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description from 1.60: a plugin's name (its folder; unknown or malformed = 404) */
+                /** @description from 1.61: a plugin's name (its folder; unknown or malformed = 404) */
                 plugin: components["parameters"]["PluginName"];
             };
             cookie?: never;

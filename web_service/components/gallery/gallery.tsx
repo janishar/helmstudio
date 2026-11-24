@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { Check, FileText, Maximize, Star, X } from "lucide-react";
 import { FullScreen, Media, Thumb, useFullScreenKey } from "@/components/media";
 import { videoLine } from "@/lib/media";
+import { renderTime } from "@/lib/runs";
 import { ErrorNote, Info, Modal, UploadStatus } from "@/components/kit";
 import { RefThumbs } from "@/components/create/refs";
 import { ElementEditor } from "@/components/create/elements";
@@ -25,6 +26,7 @@ import { FrameIn } from "@/components/create/frame-in";
 import { useScreenTools } from "@/components/assistant/tools";
 import { useLibraryDialog } from "@/components/assistant/library";
 import { ORDERS, galleryTools } from "@/components/gallery/assistant";
+import { sliceFrom, useGridWindow } from "@/components/gallery/window";
 import {
   AUDIO_ACCEPT,
   UPLOAD_START,
@@ -165,6 +167,7 @@ export function TakeCard({
   selecting,
   disabled,
   onClick,
+  onDoubleClick,
   sub,
 }: {
   take: Take;
@@ -172,6 +175,8 @@ export function TakeCard({
   selecting: boolean;
   disabled?: boolean;
   onClick: () => void;
+  /** a double-click (the Gallery: its full preview) */
+  onDoubleClick?: () => void;
   /** the mono line, else subLine */
   sub?: string;
 }) {
@@ -181,6 +186,7 @@ export function TakeCard({
       aria-pressed={on}
       disabled={disabled}
       onClick={onClick}
+      onDoubleClick={onDoubleClick}
       className="bevel flex w-full flex-col gap-1.5 rounded-[10px] bg-transparent text-left disabled:opacity-50"
     >
       <span className="relative block w-full">
@@ -257,6 +263,9 @@ export function Gallery({
   const [full, setFull] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const uploadSeq = useRef(0);
+  // only the rows near the screen are drawn (item 32): uploads first, then the takes, as the grid holds them
+  const grid = useRef<HTMLDivElement>(null);
+  const win = useGridWindow(grid, uploads.length + (takes?.length ?? 0));
 
   // a take picked from another one's lineage may not be in the list loaded
   const outside = currentId && !takes?.some((t) => t.id === currentId) ? currentId : null;
@@ -542,9 +551,11 @@ export function Gallery({
           role="list"
           aria-label="Takes"
           aria-busy={loading}
+          ref={grid}
+          style={{ paddingTop: win.padTop, paddingBottom: win.padBottom }}
           className="grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-3.5"
         >
-          {uploads.map((u) => (
+          {uploads.slice(win.start, win.end).map((u) => (
             <div key={u.id} role="listitem" className="flex flex-col gap-1.5">
               <i
                 className={`relative flex aspect-[16/10] flex-col items-center justify-center gap-1 rounded-[10px] border border-dashed border-dash bg-s1 p-2 text-center text-[11px] not-italic ${u.error ? "text-bad" : "text-t2"}`}
@@ -572,7 +583,7 @@ export function Gallery({
               <small className="mono text-[10px] text-t2">Upload</small>
             </div>
           ))}
-          {takes?.map((t) => {
+          {takes?.slice(...sliceFrom(win, uploads.length)).map((t) => {
             const on = selecting ? picked.has(t.id) : t.id === current?.id;
             return (
               <div key={t.id} role="listitem" className="min-w-0">
@@ -581,6 +592,15 @@ export function Gallery({
                   on={on}
                   selecting={selecting}
                   onClick={() => (selecting ? toggle(t.id) : setCurrentId(t.id))}
+                  // a double-click opens the full preview, as the expand button (item 31)
+                  onDoubleClick={
+                    selecting
+                      ? undefined
+                      : () => {
+                          setCurrentId(t.id);
+                          setFull(true);
+                        }
+                  }
                 />
               </div>
             );
@@ -804,6 +824,7 @@ function TakePanel({
         )}
         {!m && <Row label="File" value={`${t.content_type} · ${mb(t.bytes)} MB`} />}
         {size && <Row label={m?.seed != null ? "Size · seed" : "Size"} value={size} />}
+        {m?.render_s != null && <Row label="Render time" value={renderTime(m.render_s)} />}
         {t.video && <Row label="Length" value={videoLine(t.video)} />}
         {t.audio && (
           <Row

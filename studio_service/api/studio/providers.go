@@ -81,8 +81,8 @@ type providerRow struct {
 	Compat       *dto.ProviderCompat // API 1.51
 	Preset       *string
 	Thinking     map[string]string // API 1.53: {model: level}
-	OwnerID      *string           // API 1.60: Only you (the providers policy shows it to its owner only)
-	Plugin       *string           // API 1.60: the plugin it was made from
+	OwnerID      *string           // API 1.61: Only you (the providers policy shows it to its owner only)
+	Plugin       *string           // API 1.61: the plugin it was made from
 }
 
 const providerCols = `name, kind, api, title, base_url, models, default_model, enabled, timeout_s, host, memory_gb,
@@ -113,7 +113,7 @@ func (p providerRow) snapshot() map[string]any {
 	return out
 }
 
-// readProviders reads every provider tx may see (API 1.60: never another account's Only-you one; enabledOnly: those
+// readProviders reads every provider tx may see (API 1.61: never another account's Only-you one; enabledOnly: those
 // enabled whose plugin, if any, is on).
 func readProviders(ctx context.Context, tx pgx.Tx, enabledOnly bool) ([]providerRow, error) {
 	query := `SELECT ` + providerCols + ` FROM providers`
@@ -340,7 +340,7 @@ func (s *Service) DeleteProvider(ctx context.Context, caller common.Caller, name
 		return errAdmin
 	}
 	return common.System(ctx, s.db, func(tx pgx.Tx) error { // every user's batches count
-		// API 1.60: another admin's Only-you provider is a 404 here too (System sees every row)
+		// API 1.61: another admin's Only-you provider is a 404 here too (System sees every row)
 		if _, err := one[struct{ Name string }](ctx, tx, `SELECT name FROM providers WHERE name = $1
 			AND (owner_id IS NULL OR owner_id::text = $2) FOR UPDATE`, name, caller.ID); err != nil {
 			return err
@@ -421,7 +421,7 @@ func (s *Service) ProviderPresets(caller common.Caller) (dto.ProviderPresetList,
 	}
 	out := dto.ProviderPresetList{RemoteEnabled: s.remoteOn, Presets: []dto.ProviderPreset{}}
 	for _, p := range presets() {
-		if p.Plugin == nil { // API 1.60: a plugin's preset is never offered in the form
+		if p.Plugin == nil { // API 1.61: a plugin's preset is never offered in the form
 			out.Presets = append(out.Presets, p)
 		}
 	}
@@ -475,7 +475,7 @@ func (s *Service) ProviderKey(ctx context.Context, caller common.Caller, secret 
 	return dto.ProviderKey{KeySecret: secret, Path: keyPath(secret), Found: reply.Found, Writable: reply.Writable}, nil
 }
 
-// othersKey reports whether secret is a plugin provider's key file of another admin (API 1.60: Add as provider names
+// othersKey reports whether secret is a plugin provider's key file of another admin (API 1.61: Add as provider names
 // it plugin-<plugin>-<8 hex of its admin's id>): its PUT and DELETE are 404 to anyone else.
 func othersKey(caller common.Caller, secret string) bool {
 	return strings.HasPrefix(secret, "plugin-") && !strings.HasSuffix(secret, "-"+strings.ReplaceAll(caller.ID, "-", "")[:8])

@@ -1,4 +1,4 @@
-"""Plugins (API 1.60; contracts/README.md "Plugins") on the test stack: the repo's plugins/ and the fake plugins
+"""Plugins (API 1.61; contracts/README.md "Plugins") on the test stack: the repo's plugins/ and the fake plugins
 (contract_tests/fake_plugins: the fake OpenAI server as a personal model provider and as assistant tools). Admin only;
 found off; on and off; Add as provider is Only you (no other account sees or uses it); Remove and Rescan; a plugin's
 tools in the assistant (run at once, a risk flag asks on a plugin card, a failure is a plain line, off removes them)."""

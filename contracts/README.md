@@ -3966,7 +3966,7 @@ namespace) or a shell action; every screen route is a `navigate` target; a
 screen with `roles` registers only for them (`screen_actions`). The server's card kinds in assistant.schema.json are
 the tools' cards plus `delete` (Clear all).
 
-## Plugins (API 1.60; board docs/mock/Plugins.dc.html, release 0.1.0-alpha.2 items 33-34; normative)
+## Plugins (API 1.61; board docs/mock/Plugins.dc.html, release 0.1.0-alpha.2 items 33-34; normative)
 
 Owner, 2026-11-25: plugins are "a design of publishing additional features that plug into the system later". v1
 kinds: model providers and Assistant tools only.

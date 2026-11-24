@@ -1,4 +1,4 @@
-// Integration tests of plugins (API 1.60, contracts/README.md "Plugins"): another admin's Only-you provider and its
+// Integration tests of plugins (API 1.61, contracts/README.md "Plugins"): another admin's Only-you provider and its
 // key file are 404 to everyone else (list, delete, key save and remove); its owner sees and deletes it.
 package tests
 

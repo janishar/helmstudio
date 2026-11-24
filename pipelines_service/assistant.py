@@ -18,7 +18,7 @@ differs is dropped). Plain nodes, like agent_loop.py, no prebuilt agent:
 - `tools`: runs the calls in order, each result kept under its call id `<thread>:<turn>:<n>`. Studio reads
   (studio.tools, idempotent on the call id) and memory return at once; screen actions (a run of them) and the server
   cards (look_at, web_search, forget) stop it as `pending`, and the next calls wait for their results.
-- Plugin tools (API 1.60, contracts/README.md "Plugins"): the input's `plugins` offered as `<plugin>__<tool>`; one
+- Plugin tools (API 1.61, contracts/README.md "Plugins"): the input's `plugins` offered as `<plugin>__<tool>`; one
   with a risk flag asks first on a `plugin` card, one without runs at once: POST <url>/tools/<tool> with a
   short-lived pass for that owner and call (providers.plugin_tool), the reply a line and a result fenced as data.
 - `wait` only calls interrupt() (a resumed node runs again from its start, so nothing with an effect sits before

@@ -142,7 +142,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply(200, list(requests))
         if (
             self.path == "/health"
-        ):  # API 1.60: the fake plugins' health (contract_tests/fake_plugins)
+        ):  # API 1.61: the fake plugins' health (contract_tests/fake_plugins)
             return self.reply(200, {"ok": True})
         self.reply(404, {"error": {"message": "not found"}})
 
@@ -163,7 +163,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(200, {"ok": True})
         if self.path.startswith(
             "/tools/"
-        ):  # API 1.60: the fake-tools plugin's tools (manifest toolCall/toolReply)
+        ):  # API 1.61: the fake-tools plugin's tools (manifest toolCall/toolReply)
             name = self.path.removeprefix("/tools/")
             with lock:
                 requests.append({"model": f"tool:{name}", "body": body, "authorization": self.headers.get("Authorization"),

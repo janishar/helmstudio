@@ -144,7 +144,7 @@ func (s *Service) PutSessionNames(ctx context.Context, caller common.Caller, bod
 				return network.NewUnprocessableError(*body.Provider+" is not an enabled provider", nil)
 			} else if err != nil {
 				return err
-			} else if p.OwnerID != nil { // API 1.60: naming runs for every account
+			} else if p.OwnerID != nil { // API 1.61: naming runs for every account
 				return network.NewUnprocessableError(p.Name+" is only yours; pick a shared provider", nil)
 			}
 			if body.Model == nil {

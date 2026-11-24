@@ -60,7 +60,12 @@ def test_run_output_is_a_take(api, anon, echo_done):
     }
     assert (take["starred"], take["parents"]) == (False, [])
     assert "key" not in take  # only signed links
-    assert take["made_with"] == {
+    # API 1.60: its render time, the run's start to this file, in 0.1 s steps (echo takes 3 steps of 50 ms)
+    made = dict(take["made_with"])
+    render_s = made.pop("render_s")
+    assert isinstance(render_s, (int, float)) and 0 <= render_s < 60
+    assert abs(render_s * 10 - round(render_s * 10)) < 1e-6
+    assert made == {
         "workflow_id": "echo",
         "workflow_title": title,
         "inputs": {

@@ -95,7 +95,7 @@
       "description": "a card the server asks (look_at, web_search, forget, Clear all); a screen action's card is drawn by its screen",
       "properties": {
         "id": {"$ref": "#/$defs/callId"},
-        "kind": {"enum": ["look", "web_search", "delete", "plugin"], "description": "from API 1.60 plugin: a plugin tool with a risk flag asks first"},
+        "kind": {"enum": ["look", "web_search", "delete", "plugin"], "description": "from API 1.61 plugin: a plugin tool with a risk flag asks first"},
         "title": {"type": "string", "minLength": 1, "maxLength": 120},
         "rows": {
           "type": "array",

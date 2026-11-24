@@ -1,5 +1,5 @@
 -- +goose Up
--- Plugins (API 1.60; contracts/README.md "Plugins"): what studio found in plugins/ (the manifest as read, off until an
+-- Plugins (API 1.61; contracts/README.md "Plugins"): what studio found in plugins/ (the manifest as read, off until an
 -- admin turns it on); a provider made from a plugin names it, and one made from a personal plugin has an owner: the
 -- providers table's policy shows it only to that owner and to the service itself (never to other admins); an admin's
 -- own assistant provider (an Only-you one) beside the deployment's.

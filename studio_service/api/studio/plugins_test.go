@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-// API 1.60: the repo's and the test stack's manifests are read; a bad one, one naming another folder or one off the
+// API 1.61: the repo's and the test stack's manifests are read; a bad one, one naming another folder or one off the
 // local host rule is skipped.
 func TestReadManifests(t *testing.T) {
 	s := &Service{}

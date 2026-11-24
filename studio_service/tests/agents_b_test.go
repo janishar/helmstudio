@@ -485,7 +485,7 @@ func TestProviderPresets(t *testing.T) {
 	}
 	var want map[string]any
 	_ = json.Unmarshal(file, &want)
-	offered := []any{} // API 1.60: a plugin's preset is never in the list
+	offered := []any{} // API 1.61: a plugin's preset is never in the list
 	for _, p := range want["presets"].([]any) {
 		if _, plugin := p.(map[string]any)["plugin"]; !plugin {
 			offered = append(offered, p)

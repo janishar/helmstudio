@@ -36,7 +36,7 @@ type Env struct {
 	// RemoteModels is the deployment's switch for remote model providers (API 1.15): off unless 1, true, on or yes (SwitchOn)
 	RemoteModels bool
 
-	// PluginDirs are the read-only folders plugins/*/plugin.json are read from (API 1.60; STUDIO_PLUGINS_DIRS, `:`-separated)
+	// PluginDirs are the read-only folders plugins/*/plugin.json are read from (API 1.61; STUDIO_PLUGINS_DIRS, `:`-separated)
 	PluginDirs []string
 }
 

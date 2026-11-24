@@ -45,7 +45,7 @@ const (
 	userA  = "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13"
 	userB  = "11111111-2222-4333-8444-555555555555"
 	admin  = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee" // fakeAuthentication gives this one the admin role (API 1.15)
-	admin2 = "bbbbbbbb-bbbb-4ccc-8ddd-ffffffffffff" // a second admin (API 1.60: Only-you providers)
+	admin2 = "bbbbbbbb-bbbb-4ccc-8ddd-ffffffffffff" // a second admin (API 1.61: Only-you providers)
 )
 
 // env is one test's API: a migrated scratch database, the runners' registry, the projector's handlers, a test server

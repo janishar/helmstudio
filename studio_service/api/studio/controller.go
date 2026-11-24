@@ -112,11 +112,11 @@ func (c *controller) MountRoutes(group *gin.RouterGroup) {
 	group.GET("/admin/provider-keys/:key_secret", c.providerKeyHandler)          // API 1.51
 	group.PUT("/admin/provider-keys/:key_secret", c.saveProviderKeyHandler)      // API 1.52
 	group.DELETE("/admin/provider-keys/:key_secret", c.removeProviderKeyHandler) // API 1.52
-	group.GET("/admin/plugins", c.listPluginsHandler)                            // API 1.60
-	group.POST("/admin/plugins/rescan", c.rescanPluginsHandler)                  // API 1.60
-	group.PUT("/admin/plugins/:plugin", c.putPluginHandler)                      // API 1.60
-	group.DELETE("/admin/plugins/:plugin", c.removePluginHandler)                // API 1.60
-	group.POST("/admin/plugins/:plugin/provider", c.addPluginProviderHandler)    // API 1.60
+	group.GET("/admin/plugins", c.listPluginsHandler)                            // API 1.61
+	group.POST("/admin/plugins/rescan", c.rescanPluginsHandler)                  // API 1.61
+	group.PUT("/admin/plugins/:plugin", c.putPluginHandler)                      // API 1.61
+	group.DELETE("/admin/plugins/:plugin", c.removePluginHandler)                // API 1.61
+	group.POST("/admin/plugins/:plugin/provider", c.addPluginProviderHandler)    // API 1.61
 	group.GET("/models", c.listModelsHandler)
 	group.POST("/admin/models/:model/download", c.downloadModelHandler)
 	group.DELETE("/admin/models/:model", c.deleteModelHandler)
@@ -1016,19 +1016,19 @@ func (c *controller) removeProviderKeyHandler(ctx *gin.Context) {
 	reply(ctx, http.StatusOK, out, err)
 }
 
-// listPluginsHandler: GET /admin/plugins (API 1.60).
+// listPluginsHandler: GET /admin/plugins (API 1.61).
 func (c *controller) listPluginsHandler(ctx *gin.Context) {
 	out, err := c.service.ListPlugins(ctx.Request.Context(), common.MustCaller(ctx))
 	reply(ctx, http.StatusOK, out, err)
 }
 
-// rescanPluginsHandler: POST /admin/plugins/rescan (API 1.60).
+// rescanPluginsHandler: POST /admin/plugins/rescan (API 1.61).
 func (c *controller) rescanPluginsHandler(ctx *gin.Context) {
 	out, err := c.service.RescanPlugins(ctx.Request.Context(), common.MustCaller(ctx))
 	reply(ctx, http.StatusOK, out, err)
 }
 
-// putPluginHandler: PUT /admin/plugins/{plugin} (API 1.60) — 403 before the body is read.
+// putPluginHandler: PUT /admin/plugins/{plugin} (API 1.61) — 403 before the body is read.
 func (c *controller) putPluginHandler(ctx *gin.Context) {
 	caller, body, err := adminBody[dto.PluginPut](ctx)
 	var out dto.Plugin
@@ -1038,7 +1038,7 @@ func (c *controller) putPluginHandler(ctx *gin.Context) {
 	reply(ctx, http.StatusOK, out, err)
 }
 
-// removePluginHandler: DELETE /admin/plugins/{plugin} (API 1.60) — 204.
+// removePluginHandler: DELETE /admin/plugins/{plugin} (API 1.61) — 204.
 func (c *controller) removePluginHandler(ctx *gin.Context) {
 	if err := c.service.RemovePlugin(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("plugin")); err != nil {
 		network.SendMixedError(ctx, err)
@@ -1047,7 +1047,7 @@ func (c *controller) removePluginHandler(ctx *gin.Context) {
 	network.SendNoContent(ctx)
 }
 
-// addPluginProviderHandler: POST /admin/plugins/{plugin}/provider (API 1.60) — 201; 403 before the body is read.
+// addPluginProviderHandler: POST /admin/plugins/{plugin}/provider (API 1.61) — 201; 403 before the body is read.
 func (c *controller) addPluginProviderHandler(ctx *gin.Context) {
 	caller, body, err := adminBody[dto.PluginProviderCreate](ctx)
 	var out dto.Provider

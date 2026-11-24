@@ -9,6 +9,13 @@ export type MediaKind = NonNullable<Workflow["media"]>; // text: an ask workflow
 /** A workflow's media; absent (an API before 1.11) is image. */
 export const mediaOf = (w: Pick<Workflow, "media">): MediaKind => w.media ?? "image";
 
+/** The two sides whose texts never cross (alpha.2 item 14): picture (image, video) and sound (audio). */
+export const SIDES = ["picture", "sound"] as const;
+export type Side = (typeof SIDES)[number];
+/** A workflow's side; none (no workflow yet) is picture. */
+export const sideOf = (w?: Pick<Workflow, "media">): Side =>
+  w && mediaOf(w) === "audio" ? "sound" : "picture";
+
 /** A workflow whose voice params take designed voices only (`only {voice: [design]}`: Qwen3-TTS Voice design). */
 const designsOnly = (w: Workflow) =>
   Object.values(w.nodes ?? {}).some((n) =>

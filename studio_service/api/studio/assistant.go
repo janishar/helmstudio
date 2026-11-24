@@ -86,7 +86,7 @@ type AssistantSettings struct {
 	Enabled        bool            `json:"enabled"`
 	Provider       *string         `json:"provider"`
 	Model          *string         `json:"model"`
-	Personal       bool            `json:"personal"` // API 1.60: provider is the caller's own Only-you one
+	Personal       bool            `json:"personal"` // API 1.61: provider is the caller's own Only-you one
 	WebSearch      bool            `json:"web_search"`
 	SearchProvider *string         `json:"search_provider"`
 	Limits         AssistantLimits `json:"limits"`
@@ -136,7 +136,7 @@ func readAssistantSettings(ctx context.Context, tx pgx.Tx) (AssistantSettings, e
 	return out, err
 }
 
-// ownChoice puts the tx user's own assistant provider (API 1.60: an Only-you one) in place of the deployment's.
+// ownChoice puts the tx user's own assistant provider (API 1.61: an Only-you one) in place of the deployment's.
 func ownChoice(ctx context.Context, tx pgx.Tx, set *AssistantSettings) error {
 	var provider string
 	var model *string
@@ -216,7 +216,7 @@ func (s *Service) PutAssistantSettings(ctx context.Context, caller common.Caller
 		if body.Limits != nil {
 			limits = *body.Limits
 		}
-		// API 1.60: an Only-you provider is the caller's own choice; the deployment's stays for everyone else
+		// API 1.61: an Only-you provider is the caller's own choice; the deployment's stays for everyone else
 		provider, model := body.Provider, body.Model
 		if p, ok := find(body.Provider); ok && p.OwnerID != nil {
 			if _, err := tx.Exec(ctx, `INSERT INTO assistant_personal (owner_id, provider, model) VALUES ($1, $2, $3)
@@ -835,7 +835,7 @@ func (s *Service) PostAssistant(ctx context.Context, caller common.Caller, id st
 		} else if !status.Enabled {
 			return errAssistantOff
 		}
-		plugins, err := assistantPlugins(ctx, tx) // API 1.60: the on assistant-tools plugins' tools, at every input
+		plugins, err := assistantPlugins(ctx, tx) // API 1.61: the on assistant-tools plugins' tools, at every input
 		if err != nil {
 			return err
 		}

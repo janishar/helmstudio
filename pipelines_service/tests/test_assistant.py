@@ -71,7 +71,7 @@ class Chat:
         self.store = AsyncPostgresStore(pool)
         self.a = self.restart()
         self.roles, self.tool_names, self.search, self.limits = ["user"], TOOLS, None, dict(LIMITS)
-        self.plugins: list[dict] = []  # cmd.assistant.turn data.plugins (API 1.60)
+        self.plugins: list[dict] = []  # cmd.assistant.turn data.plugins (API 1.61)
 
     def restart(self) -> assistant.Assistant:
         """A new process: a fresh graph and saver on the same database."""
@@ -722,7 +722,7 @@ def test_the_system_prompt_keeps_the_rules_first_then_the_helmstudio_knowledge()
     assert "Qwen Image 2.1 (image" in assistant.SYSTEM and "MiniMax H3 (video" in assistant.SYSTEM
 
 
-# --- plugin tools (API 1.60)
+# --- plugin tools (API 1.61)
 
 
 class Plugin:

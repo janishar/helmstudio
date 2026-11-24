@@ -153,8 +153,8 @@ type Provider struct {
 	// API 1.53: the levels set, and what each saved model a rule covers offers (read only)
 	Thinking       map[string]string       `json:"thinking,omitempty"`
 	ThinkingLevels map[string]ThinkingInfo `json:"thinking_levels,omitempty"`
-	OwnerID        *string                 `json:"owner_id,omitempty"` // API 1.60: Only you
-	Plugin         *string                 `json:"plugin,omitempty"`   // API 1.60
+	OwnerID        *string                 `json:"owner_id,omitempty"` // API 1.61: Only you
+	Plugin         *string                 `json:"plugin,omitempty"`   // API 1.61
 	CreatedAt      time.Time               `json:"created_at"`
 	UpdatedAt      time.Time               `json:"updated_at"`
 }
@@ -175,7 +175,7 @@ type ProviderPreset struct {
 	KeySecret *string         `json:"key_secret,omitempty"`
 	Compat    *ProviderCompat `json:"compat,omitempty"`
 	Thinking  json.RawMessage `json:"thinking,omitempty"` // API 1.53: the rules as in the file, or "models"
-	Plugin    *string         `json:"plugin,omitempty"`   // API 1.60: a plugin's preset (never offered in the form)
+	Plugin    *string         `json:"plugin,omitempty"`   // API 1.61: a plugin's preset (never offered in the form)
 	Docs      string          `json:"docs"`
 	Note      string          `json:"note"`
 }
@@ -337,7 +337,7 @@ func (b *ChatPost) Validate() string {
 	return ""
 }
 
-// ------------------------------------------------------------------ plugins (API 1.60)
+// ------------------------------------------------------------------ plugins (API 1.61)
 
 // PluginRisk is a tool's risk flags.
 type PluginRisk struct {
