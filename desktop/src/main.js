@@ -42,13 +42,14 @@ const runners = fake
   : new Runners({ p, cfg, settings, onChange: () => phase === 'ready' && check() });
 const stack = stackSteps({ p, cfg, settings, runners });
 
-let phase = 'starting'; // starting | failed | ready | stopping
+let phase = 'starting'; // starting | failed | ready | restarting | stopping
 let status = { dot: 'wait', text: 'Starting…', sub: '' };
 let mode = null;
 let runner = null;
 let setupWin = null;
 let studioWin = null;
 let tray = null;
+let trayMenu = null;
 let quitting = false;
 
 if (!app.requestSingleInstanceLock()) app.exit(0);
@@ -91,7 +92,7 @@ function setStatus(dot, text, sub = '') {
   tray.setImage(trayImage(dot));
   const login = app.getLoginItemSettings().openAtLogin;
   tray.setContextMenu(
-    Menu.buildFromTemplate([
+    (trayMenu = Menu.buildFromTemplate([
       { label: text, icon: dotImage(dot), enabled: false },
       ...(sub ? [{ label: sub, enabled: false }] : []),
       { type: 'separator' },
@@ -113,7 +114,7 @@ function setStatus(dot, text, sub = '') {
       },
       { type: 'separator' },
       { label: 'Quit entirely', click: quitEntirely },
-    ]),
+    ])),
   );
 }
 
@@ -195,7 +196,7 @@ function hideAll() {
 
 function showApp() {
   app.dock?.show();
-  const w = phase === 'ready' ? studioWindow() : setupWindow();
+  const w = phase === 'ready' || phase === 'restarting' ? studioWindow() : setupWindow();
   w.show();
   w.focus();
 }
@@ -243,9 +244,12 @@ async function startUp() {
 }
 
 async function restartRunners() {
+  phase = 'restarting'; // check() waits: the runners' exits and spawns would flip the dot to down, then to Ready early
   setStatus('wait', 'Starting…', 'Runners');
   await runners.restart();
   await runners.waitReady().catch(() => {});
+  if (phase !== 'restarting') return; // Quit entirely meanwhile
+  phase = 'ready';
   setStatus('ok', 'Ready');
   check();
 }
@@ -286,6 +290,9 @@ app.on('before-quit', (e) => {
   if (settings.keepRunning) hideAll();
   else quitEntirely();
 });
+
+// the end-to-end run's hook (Playwright's _electron evaluates in this process): the menu-bar menu and the state
+if (process.env.HELMSTUDIO_TEST === '1') global.helmTest = { menu: () => trayMenu, state: () => ({ phase, mode, status }) };
 
 app.whenReady().then(() => {
   Menu.setApplicationMenu(

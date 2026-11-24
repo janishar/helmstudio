@@ -67,8 +67,8 @@ resources: $(DL)/colima/colima-Darwin-arm64 $(DL)/lima/lima-$(LIMA_VERSION)-Darw
 	  if [ -x $(ROOT)/runner_service/$$b ]; then mkdir -p $(RES)/runner/runner_service/$$(dirname $$b) && \
 	    cp $(ROOT)/runner_service/$$b $(RES)/runner/runner_service/$$b; \
 	  else echo "note: runner_service/$$b is not built (make h3 / make zonos3 at the root): the native packs will not run"; fi; done
-	# make-secrets and the deploy files (compose, nats.conf it rewrites); never deploy/secrets*
-	cd $(ROOT) && git ls-files -z deploy .tools/make-secrets | tar --null -T - -cf - | tar -xf - -C $(abspath $(RES))/stack
+	# make-secrets, the one-shots' scripts (nats-setup, storage-setup) and the deploy files (compose, nats.conf it rewrites); never deploy/secrets*
+	cd $(ROOT) && git ls-files -z deploy .tools/make-secrets .tools/nats-setup .tools/storage-setup | tar --null -T - -cf - | tar -xf - -C $(abspath $(RES))/stack
 
 # ---------- the app: Electron's own bundle, renamed, our code in Resources/app
 

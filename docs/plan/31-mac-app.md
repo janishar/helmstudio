@@ -21,7 +21,8 @@ install.
 ### 35.1 The parts (all existing, wrapped)
 
 1. **VM: Colima inside the app** (MIT; Lima underneath, Apple's virtualization). Its binaries ship in the app;
-   `COLIMA_HOME` (and `LIMA_HOME`) point at `~/Library/Application Support/helmstudio/`, so the VM, its Docker socket
+   `COLIMA_HOME` (and `LIMA_HOME`) point at `~/.helmstudio-vm` (as built, 35.8: Lima's socket paths are too long
+   under Application Support; the rest is in `~/Library/Application Support/helmstudio/`), so the VM, its Docker socket
    and its disks belong to the app only: nothing in `/usr/local/bin`, the user's Docker or OrbStack untouched.
    `colima start` fetches its own Linux image and Docker; we build no VM image. Memory about 2 GB.
 2. **Images: pulled, not built.** Postgres and NATS from Docker Hub; ours (web, studio, pipelines, auth, files, kong,
@@ -97,6 +98,57 @@ a day for the manual install run and fixes. Download about 150 MB; after setup a
 
 Auto-update (a new version is a new download; the data stays in the app's Colima disk), backup and export, an
 uninstall tool, a Homebrew tap or install command, notarization (Developer ID), Intel Macs, Windows and Linux.
+
+### 35.8 As built: the install run on this Mac (2026-11-25)
+
+Stage 1 (commit 19c1cd5) built `desktop/`; stage 2 wired it and ran a real install of `/Applications/helmstudio.app`
+on the owner's Mac, driven headless by Playwright's `_electron` (the app's test hook `HELMSTUDIO_TEST=1` exposes the
+menu-bar menu and the state), with a test admin and the models folder `~/GenAI/models`.
+
+**Wiring.** No app overlay file was needed: everything goes through `stack.json`'s `composeEnv` on base +
+`compose/prod.yml`: ports Kong 8310, Postgres 5466, NATS 4325, S3 8436/8446 (all 127.0.0.1, as the base file
+publishes them), `HELM_NET=172.30.100` (dev 97, test 98, prod 99), `HELM_SECRETS=secrets` inside the app's own copy
+of `deploy/`, `PUBLIC_BASE_URL=http://127.0.0.1:8310`, `COMPOSE_PROFILES=s3local`. The image list equals
+`docker compose … config --images` of base + prod.yml. Memory measured in the VM with the stack up and one take made:
+containers about 750 MiB, the VM 870 MiB used of 2 GB with 1.1 GB available, so the VM stays at 2 GB and prod.yml's
+limits are kept as they are.
+
+**What broke, and the fix:**
+
+1. *VM step:* Lima refused the instance: its socket path under `~/Library/Application Support/helmstudio/vm` was 110
+   characters (limit 104). The VM now lives in `~/.helmstudio-vm` (`COLIMA_HOME`; not `~/.helmstudio`, which the
+   reference app already uses). The rest of the app's data stays in Application Support.
+2. *Start step:* SeaweedFS did not start (profile `s3local` comes from the git-ignored `deploy/.env`), so the
+   runners could not reach S3 and never answered on their health ports. `COMPOSE_PROFILES=s3local` in `composeEnv`;
+   Try again then resumed at Start and finished.
+3. *Shipped files:* the one-shots' scripts `.tools/nats-setup` and `.tools/storage-setup` were not copied into the
+   app; `make resources` copies them now.
+4. *Runner envs:* `uv sync` picked Homebrew's Python 3.14, which a `brew upgrade` would break; `--managed-python`
+   puts uv's own Python in the app's folder.
+5. *Restart runners:* the status dot went to "Something is down" and back to Ready before the runners answered; the
+   periodic check now waits while the runners restart.
+
+**Proven:** first open from nothing to the studio window on 127.0.0.1:8310; resume (Try again on a failed step,
+and a relaunch after the app was killed mid-step, both resumed at the failed step); sign-in as the test admin;
+Admin › Hosts showing `mac` with envs torch, mlx and native; one Qwen Image Turbo take (512×512, 8 steps, 26 s
+including the model load) shown in the gallery; closing the window and Cmd+Q keep the stack and runners up and
+reopening is instant (the window shows in under 5 ms); Quit entirely stops the runners, `compose down` and the VM
+(about 25 s); the next open shows the Starting… screen and keeps the data (the take was still there); the menu-bar
+items Open, Restart runners, Open logs, Keep running after quit and Open at login (both toggled and back).
+
+**Times (first open, warm caches):** check under 0.1 s; VM 20 s (the very first start adds about 2.7 min to download
+Colima's 317 MB disk image, cached after in `~/Library/Caches/colima`); images 20 s (2.2 GB); secrets and admin 2 s
+plus typing; runners 15 s (uv's cache on this Mac was warm: a Mac without it downloads about 2 GB); Start 42 s
+(compose up 23 s, runners ready about 18 s). About 1 min 40 s in all. Every later open: VM 30 s, services 24 s,
+runners 6 s, about 1 min.
+
+**Sizes:** the app 484 MB; the VM folder 3.3 GB (data disk with the images 2.2 GB, system disk 1.1 GB, disk
+limit 60 GB); Application Support 1.8 GB (runner venv 838 MB, mlx venv 833 MB, Python 71 MB, runner code 67 MB).
+
+**Known limits (prototype):** images come only from this Mac's Docker (`make prod` first); a user name longer than
+about 30 characters would again overflow Lima's socket path; Open logs opens Finder; the menu-bar items were clicked
+through the test hook, not with a real mouse; deleting the app leaves `~/.helmstudio-vm` and its Application Support
+folder (no uninstall tool, 35.7).
 
 ### Decided by the owner, 2026-11-25 (asked one by one)
 

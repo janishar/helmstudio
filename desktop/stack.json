@@ -4,6 +4,7 @@
   "project": "helmstudio-app",
   "composeFiles": ["deploy/docker-compose.yml", "deploy/compose/prod.yml"],
   "composeEnv": {
+    "COMPOSE_PROFILES": "s3local",
     "HELM_SECRETS": "secrets",
     "KONG_HTTP_PORT": "8310",
     "POSTGRES_HOST_PORT": "5466",
@@ -11,6 +12,8 @@
     "S3_HOST_PORT": "8436",
     "S3_TLS_HOST_PORT": "8446",
     "IMAGE_TAG": "prod",
+    "HELM_NET": "172.30.100",
+    "PUBLIC_BASE_URL": "http://127.0.0.1:8310",
     "SERVER_HOSTS": ""
   },
   "studioUrl": "http://127.0.0.1:8310",

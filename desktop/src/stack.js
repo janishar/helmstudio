@@ -8,14 +8,17 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 
 function layout(home, res) {
-  const vm = path.join(home, 'vm');
+  // Lima's sockets (…/_lima/colima-<profile>/ssh.sock.<16 digits>) must stay under 104 characters: under
+  // "Application Support" they are 110 for an 11-letter user name, so the VM lives in a short folder in the home
+  // (not ~/.helmstudio: the reference app keeps its data there)
+  const vm = process.env.HELMSTUDIO_HOME ? path.join(home, 'vm') : path.join(os.homedir(), '.helmstudio-vm');
   return {
     home,
     res,
     logs: path.join(home, 'logs'),
     state: path.join(home, 'first-open.json'),
     settings: path.join(home, 'settings.json'),
-    vm, // COLIMA_HOME (sockets under it: keep the path short)
+    vm, // COLIMA_HOME: ~/.helmstudio-vm (sockets under it: keep the path short)
     lima: path.join(vm, '_lima'), // LIMA_HOME, where Colima puts it
     dockerConfig: path.join(home, 'docker'), // DOCKER_CONFIG for the VM's Docker: the user's ~/.docker stays as it is
     stack: path.join(home, 'stack'), // .tools/make-secrets, deploy/ (compose files, secrets), auth_service/.env
@@ -215,12 +218,13 @@ function stackSteps({ p, cfg, settings, runners }) {
         }
         fs.rmSync(p.runner, { recursive: true, force: true });
         fs.cpSync(path.join(p.res, 'runner'), p.runner, { recursive: true });
+        // --managed-python: uv's own Python in the app's folder, never a Homebrew one an upgrade would break
         const n = cfg.venvs.length;
         for (const [i, v] of cfg.venvs.entries()) {
           c.progress(i / n, `${i + 1} of ${n}`);
           await c.run(
             p.uv,
-            ['sync', '--frozen', '--no-dev', '--project', path.join(p.runner, v.project), ...v.extras.flatMap((x) => ['--extra', x])],
+            ['sync', '--frozen', '--no-dev', '--managed-python', '--project', path.join(p.runner, v.project), ...v.extras.flatMap((x) => ['--extra', x])],
             { env: { ...e.base, UV_PROJECT_ENVIRONMENT: path.join(p.venvs, v.name), UV_PYTHON_INSTALL_DIR: p.python } },
           );
         }
