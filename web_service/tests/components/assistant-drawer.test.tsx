@@ -882,6 +882,8 @@ describe("older chats and a broken answer (board frame 7)", () => {
       existing: thread(),
       entries: [
         entry(1, { kind: "user", text: "Launch the rockets" }),
+        // a steer the turn read is not the message Retry sends
+        entry(3, { kind: "user", text: "and fast", steer: "read" }),
         entry(2, {
           kind: "notice",
           text: "The answer was invalid twice: launch_rockets is not one of your tools now",
@@ -896,12 +898,16 @@ describe("older chats and a broken answer (board frame 7)", () => {
     const note = await screen.findByRole("note");
     expect(within(note).getByText("The model gave a broken answer twice.")).toBeTruthy();
     // Retry on the last broken answer sends your last message again (alpha.2 item 24)
-    fireEvent.click(within(note).getByRole("button", { name: "Retry" }));
+    const retry = within(note).getByRole("button", { name: "Retry" });
+    fireEvent.click(retry);
+    fireEvent.click(retry); // a double click sends it once
     await waitFor(() =>
       expect(posts).toContainEqual(
         expect.objectContaining({ kind: "message", text: "Launch the rockets" }),
       ),
     );
+    expect(posts.filter((p) => p.kind === "message")).toHaveLength(1);
+    expect(within(note).queryByRole("button", { name: "Retry" })).toBeNull();
     const details = within(note).getByRole("button", { name: "Details" });
     expect(details.getAttribute("aria-expanded")).toBe("false");
     expect(within(note).queryByText(/launch_rockets/)).toBeNull();
@@ -991,6 +997,25 @@ describe("thinking (plan 29)", () => {
     expect(live.textContent).toBe("Done: blue hour");
     expect(drawer.contains(live)).toBe(false);
     expect(drawer.querySelector("[aria-live=polite]")).toBeNull();
+  });
+
+  it("Retry after steers sent as the next message sends them together", async () => {
+    const posts = serve({
+      existing: thread(),
+      entries: [
+        entry(1, { kind: "user", text: "Make it rain" }),
+        entry(2, { kind: "user", text: "add a bus", steer: "next" }),
+        entry(3, { kind: "user", text: "and night", steer: "next" }),
+        entry(4, { kind: "notice", text: "x", error: { code: "answer", text: "x" } }),
+      ],
+    });
+    await openDrawer();
+    fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
+    await waitFor(() =>
+      expect(posts).toContainEqual(
+        expect.objectContaining({ kind: "message", text: "add a bus\n\nand night" }),
+      ),
+    );
   });
 
   it("closing and reopening the drawer keeps the count", async () => {
@@ -1230,6 +1255,8 @@ describe("alpha.2: size, answers that read well, polish (board frames 9, 10, 14)
     expect(drawer()!.className).not.toContain("full");
     fireEvent.click(screen.getByRole("button", { name: "Minimize" }));
     expect(drawer()).toBeNull();
+    // the focus moves to the bar, not lost on the page
+    expect(document.activeElement).toBe(bar("Open the Assistant"));
     fireEvent.click(bar("Open the Assistant"));
     expect(drawer()).toBeTruthy();
     // opened from the bar, Esc and ⌘J go back to it
@@ -1374,13 +1401,23 @@ describe("alpha.2: size, answers that read well, polish (board frames 9, 10, 14)
       useScreenTools({
         screen: "timeline",
         sees: ["Timeline"],
-        summary: () => ({}),
+        summary: () => ({ length_s: 30 }),
         actions: { setPlayhead },
       });
       return null;
     }
     await openDrawer(<Timeline />);
     fireEvent.click(await screen.findByRole("button", { name: "Jump the Timeline to 0:26" }));
+    // a time past the sequence's end stays text
+    act(() =>
+      onEvent!({
+        seq: 50,
+        type: "entry",
+        entry: entry(5, { kind: "assistant", text: "The credits roll at 0:45." }),
+      }),
+    );
+    expect(await within(drawer()!).findByText(/The credits roll at 0:45/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Jump the Timeline to 0:45" })).toBeNull();
     expect(setPlayhead).toHaveBeenCalledWith({ at_s: 26 }, expect.anything());
   });
 

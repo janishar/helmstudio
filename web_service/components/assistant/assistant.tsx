@@ -494,10 +494,19 @@ export function useAssistant(me: S<"User"> | null) {
   const [seen, setSeen] = useState<string | null | undefined>(undefined);
   if (view && (seen === undefined || (open && seen !== lastId))) setSeen(lastId);
 
-  /** Retry on a broken answer (item 24): your last message again. */
+  /** Retry on a broken answer (item 24): your last message again, the one that started the turn (a steer read
+   * while it worked is not it); steers sent as the next message are that message together. */
   const retry = useCallback(() => {
-    const u = view?.entries.findLast((e) => e.kind === "user");
-    if (u?.text) void send(u.text);
+    const mine = (view?.entries ?? []).filter(
+      (e) => e.kind === "user" && (!e.steer || e.steer === "next"),
+    );
+    let i = mine.length - 1;
+    if (mine[i]?.steer === "next") while (i > 0 && mine[i - 1].steer === "next") i--;
+    const text = mine
+      .slice(Math.max(0, i))
+      .map((e) => e.text ?? "")
+      .join("\n\n");
+    if (text.trim()) void send(text);
   }, [view, send]);
 
   const readOnly = elsewhere(view?.thread, cid);
@@ -621,9 +630,12 @@ function Mentions({ text }: { text: string }) {
   );
 }
 
+/** Moves the Timeline's playhead; `max` is the open sequence's length (s). */
+type Seek = ((s: number) => void) & { max: number };
+
 /** An answer's line (item 22): bold, italic, inline code, @handles; a timecode is a chip that jumps the Timeline's
- * playhead when `seek` is given (on the Timeline), else text. */
-function Inlines({ text, seek }: { text: string; seek?: (s: number) => void }) {
+ * playhead when `seek` is given (on the Timeline) and the time is within the sequence, else text. */
+function Inlines({ text, seek }: { text: string; seek?: Seek }) {
   return (
     <>
       {inlineParts(text).map((p, i) =>
@@ -637,7 +649,7 @@ function Inlines({ text, seek }: { text: string; seek?: (s: number) => void }) {
           <span key={i} className="mn">
             {p.t}
           </span>
-        ) : p.k === "tc" && seek ? (
+        ) : p.k === "tc" && seek && timecode(p.t) <= seek.max ? (
           <button
             key={i}
             type="button"
@@ -719,7 +731,7 @@ function Clamp({
 }
 
 /** One answer (item 22, board frame 10a): its blocks as plain elements, never HTML; no headings or tables. */
-function Answer({ text, seek }: { text: string; seek?: (s: number) => void }) {
+function Answer({ text, seek }: { text: string; seek?: Seek }) {
   const blocks = answerBlocks(text);
   return (
     <Clamp k={text} whole={blocks.some((b) => b.k === "code" || b.k === "plan")}>
@@ -1031,6 +1043,7 @@ const serverCard = (c: S<"AssistantCard">): ScreenCard => ({
  * closed by default and after a reload. */
 function Broken({ raw, retry }: { raw: string; retry?: () => void }) {
   const [open, setOpen] = useState(false);
+  const [retried, setRetried] = useState(false);
   const rawRef = useRef<HTMLParagraphElement>(null);
   // opened on the last message, its words come into view, not under the composer
   useEffect(() => {
@@ -1041,8 +1054,15 @@ function Broken({ raw, retry }: { raw: string; retry?: () => void }) {
       <p>The model gave a broken answer twice.</p>
       <div className="ma">
         {/* Retry (item 24, board frame 10d): your last message again; nothing ran the first time */}
-        {retry && (
-          <button type="button" className="un det" onClick={retry}>
+        {retry && !retried && (
+          <button
+            type="button"
+            className="un det"
+            onClick={() => {
+              setRetried(true); // once: a second click would send it again
+              retry();
+            }}
+          >
             <RotateCcw size={12} aria-hidden />
             Retry
           </button>
@@ -1178,9 +1198,19 @@ function Thread({ a, entries }: { a: AssistantApi; entries: Entry[] }) {
   // timecodes jump the playhead on the Timeline (item 24), plain text elsewhere
   const tl = a.reg.current()?.spec;
   const setPlayhead = tl?.screen === "timeline" ? tl.actions.setPlayhead : undefined;
-  const seek = setPlayhead
-    ? (s: number) => void setPlayhead({ at_s: s }, { progress: () => undefined })
-    : undefined;
+  // a time past the open sequence's end stays text (setPlayhead would refuse it)
+  let max = NaN;
+  try {
+    max = Number(tl?.summary().length_s);
+  } catch {
+    /* no sequence open */
+  }
+  const seek: Seek | undefined =
+    setPlayhead && max >= 0
+      ? Object.assign((s: number) => void setPlayhead({ at_s: s }, { progress: () => undefined }), {
+          max,
+        })
+      : undefined;
   const flush = (key: string) => {
     if (!words.length && !lines.length && fold === null) return;
     const copy = words.map((w) => plainAnswer(w.text ?? "")).join("\n\n");
@@ -1559,6 +1589,10 @@ function MinBar({ a }: { a: AssistantApi }) {
   const ref = useRef<HTMLDivElement>(null);
   const [lift, setLift] = useState(0);
   const liftRef = useRef(0);
+  // it shows only after Minimize (or Esc, ⌘J back to it) in the drawer: the focus moves to it, not to the page
+  useEffect(() => {
+    ref.current?.querySelector("button")?.focus();
+  }, []);
   useEffect(() => {
     // ponytail: checked every 400 ms and on scroll/resize; a ResizeObserver on the keys if that ever costs
     const check = () => {
