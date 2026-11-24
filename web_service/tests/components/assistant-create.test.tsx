@@ -219,6 +219,10 @@ describe("Create's actions", () => {
     expect((f().fields as unknown as { key: string }[]).some((x) => x.key === "prompt.text")).toBe(
       true,
     );
+    // the workflows switchTo takes, by title, so the model never guesses a name such as "Text to image"
+    expect(f().workflows).toEqual([
+      { id: "ltx-text-to-video", title: workflow.title, media: workflow.media ?? "image", downloaded: true },
+    ]);
   });
 
   it("change writes the prompt with Undo, and refuses a setting it does not have or a value not offered", async () => {

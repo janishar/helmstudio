@@ -318,6 +318,14 @@ export function createTools(c: CreateCtx): ScreenSpec {
         source: w.source,
         version: c.picks[0]?.v.title ?? null,
       },
+      // the workflows switchTo takes, by title: without them the model guessed a name ("Text to image") and was told
+      // it was not installed while Qwen Image sat downloaded
+      workflows: (c.workflows ?? []).map((x) => ({
+        id: x.id,
+        title: x.title,
+        media: x.media ?? "image",
+        downloaded: downloaded(c.modelList, x.family),
+      })),
       fields: c.fields.map((f) => ({
         key: f.key,
         label: label(f),
