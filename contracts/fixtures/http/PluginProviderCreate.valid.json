@@ -1,5 +1,5 @@
 {
   "key": "abc123-token",
-  "title": "Claude Code (personal)",
+  "title": "Claude Code bridge",
   "default_model": "claude-sonnet"
 }

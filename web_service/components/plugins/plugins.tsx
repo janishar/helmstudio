@@ -28,8 +28,8 @@ import {
 type Plugin = S<"Plugin">;
 const path = (plugin: string) => ({ params: { path: { plugin } } });
 const ME_TAG = "tag bg-[color-mix(in_srgb,#f2c14e_22%,transparent)] text-[#f2c14e]";
-const KIND_TAG = "tag bg-[color-mix(in_srgb,var(--a2)_22%,transparent)] text-t1";
-const CHIP = "chip bevel h-[30px] text-[12px]";
+const KIND_TAG = "tag whitespace-nowrap bg-[color-mix(in_srgb,var(--a2)_22%,transparent)] text-t1";
+const CHIP = "chip bevel h-[30px] whitespace-nowrap text-[12px]";
 
 export function PluginsScreen() {
   const [list, setList] = useState<Plugin[] | null>(null);
@@ -218,7 +218,7 @@ export function PluginsScreen() {
                         )}
                       </td>
                       <td className={cell} onClick={(e) => e.stopPropagation()}>
-                        <div className="flex flex-wrap items-center gap-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5 xl:flex-nowrap">
                           {p.provider ? (
                             <>
                               <Dot ok />
@@ -481,6 +481,8 @@ function PluginPanel({
           <div className="h-px bg-s3" />
           {added ? (
             <Added title={added} onDone={onDone} />
+          ) : p.provider ? (
+            <AlreadyAdded title={p.title} />
           ) : p.status === "not_running" ? (
             <NotRunning p={p} onRetry={onRetry} />
           ) : (
@@ -542,6 +544,27 @@ function Added({ title, onDone }: { title: string; onDone: () => void }) {
         <button type="button" className={CHIP} onClick={onDone}>
           Done
         </button>
+      </div>
+    </div>
+  );
+}
+
+/** The aside of a plugin this admin already added: no second form (owner, 2026-11-25), the board's "Added · the
+ * aside" with where to use it. The provider's default title is the plugin's. */
+function AlreadyAdded({ title }: { title: string }) {
+  return (
+    <div role="status" className="flex flex-col gap-2 text-[13px]">
+      <div className="flex items-center gap-2 font-semibold">
+        <span className="text-[#7fd88f]">✓</span>
+        {title} added
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        <Link href="/admin?tab=providers" className={CHIP}>
+          Open in Model providers
+        </Link>
+        <Link href="/admin?tab=agents" className={CHIP}>
+          Open AI agents
+        </Link>
       </div>
     </div>
   );

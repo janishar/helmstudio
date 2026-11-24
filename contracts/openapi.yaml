@@ -6296,7 +6296,7 @@ components:
       description: 'from 1.61: Add as provider'
       properties:
         key: {type: string, minLength: 1, maxLength: 1024, pattern: '^\s*[!-~]+\s*$', writeOnly: true, description: 'the plugin''s key (its key_hint); checked, then written as ProviderKeySave''s; never returned, logged or stored outside the key file'}
-        title: {type: string, minLength: 1, maxLength: 60, description: 'absent: `<title> (personal)` for a personal plugin, else its title'}
+        title: {type: string, minLength: 1, maxLength: 60, description: 'absent: the plugin''s title (from 1.64 never `<title> (personal)`; owner, 2026-11-25)'}
         default_model: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$', description: 'absent: the first of its models'}
         host: {type: string, pattern: '^[a-z0-9]{1,32}$', description: 'the host whose memory it shares; absent: the first host by name'}
     SessionNames:

@@ -6468,7 +6468,7 @@ export interface components {
         PluginProviderCreate: {
             /** @description the plugin's key (its key_hint); checked, then written as ProviderKeySave's; never returned, logged or stored outside the key file */
             key: string;
-            /** @description absent: `<title> (personal)` for a personal plugin, else its title */
+            /** @description absent: the plugin's title (from 1.64 never `<title> (personal)`; owner, 2026-11-25) */
             title?: string;
             /** @description absent: the first of its models */
             default_model?: string;

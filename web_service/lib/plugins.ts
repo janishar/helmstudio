@@ -81,8 +81,8 @@ export function problemAlert(p: Plugin): { text: string; red: boolean } | null {
   return null;
 }
 
-/** The provider's default title: "<title> (personal)" for a personal plugin, else its title (the API's own default). */
-export const providerTitle = (p: Plugin) => (p.personal ? `${p.title} (personal)` : p.title);
+/** The provider's default title: the plugin's (the API's own default; owner, 2026-11-25: no "(personal)"). */
+export const providerTitle = (p: Plugin) => p.title;
 
 /** After Rescan: "1 new plugin: Web search. It stays Off." / "2 new plugins: A, B. They stay Off." / "No new plugins.";
  * skills on their own line: "New skill in ~/.helm/plugins: Cinematographer. It stays Off." (in plugins/ when built

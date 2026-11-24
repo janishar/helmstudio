@@ -438,10 +438,7 @@ func (s *Service) AddPluginProvider(ctx context.Context, caller common.Caller, n
 		return dto.Provider{}, network.NewUnprocessableError(m.Title+" did not answer: start it, then Try again", nil)
 	}
 	log.Printf("plugin %s: key %s saved by %s", name, secret, caller.ID)
-	title := cmp.Or(deref(body.Title), m.Title)
-	if body.Title == nil && m.Personal {
-		title = m.Title + " (personal)"
-	}
+	title := cmp.Or(deref(body.Title), m.Title) // owner, 2026-11-25: no "(personal)"
 	var owner, preset *string
 	if m.Personal {
 		owner = &caller.ID
