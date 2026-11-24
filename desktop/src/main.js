@@ -65,7 +65,7 @@ const trayIcon = () => {
   i.setTemplateImage(true);
   return i;
 };
-const DOT_TITLE = { ok: '\x1b[32m●\x1b[0m', wait: '\x1b[33m●\x1b[0m', bad: '\x1b[31m●\x1b[0m' };
+const DOT_TITLE = { ok: '\x1b[32m•\x1b[0m', wait: '\x1b[33m•\x1b[0m', bad: '\x1b[31m•\x1b[0m' }; // • : the smallest dot that reads
 
 function dotImage(dot) {
   const s = 16;
