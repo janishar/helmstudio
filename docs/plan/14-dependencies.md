@@ -88,6 +88,15 @@ This section owns version numbers; other sections name libraries without them.
 | prettier | 3.10.1 (exact) |
 | next-themes, server-only | ^0.4.6, ^0.0.1 |
 
+**Mac app** (`desktop/`, plan 31; exact; downloads checked against each release's sha256 file)
+
+| Item | Version |
+|---|---|
+| Electron | 45.2.3 (2026-11-04; its own bundle is the app, renamed: no packager) |
+| Colima | v0.10.3 (`colima-Darwin-arm64`), profile helmstudio, vz, Docker runtime |
+| Lima | 2.3.0 (`lima-2.3.0-Darwin-arm64.tar.gz`); limactl re-signed ad hoc with its upstream entitlements (virtualization, network client and server) |
+| uv (shipped in the app) | 0.13.8, as the runner lockfiles require |
+
 ### 18.2 Things that must move together
 
 - `langchain-core`, `langchain-openai` and `langgraph`: each release line

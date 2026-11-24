@@ -1,0 +1,44 @@
+{
+  "profile": "helmstudio",
+  "vm": { "cpus": 4, "memoryGB": 2, "diskGB": 60 },
+  "project": "helmstudio-app",
+  "composeFiles": ["deploy/docker-compose.yml", "deploy/compose/prod.yml"],
+  "composeEnv": {
+    "HELM_SECRETS": "secrets",
+    "KONG_HTTP_PORT": "8310",
+    "POSTGRES_HOST_PORT": "5466",
+    "NATS_HOST_PORT": "4325",
+    "S3_HOST_PORT": "8436",
+    "S3_TLS_HOST_PORT": "8446",
+    "IMAGE_TAG": "prod",
+    "SERVER_HOSTS": ""
+  },
+  "studioUrl": "http://127.0.0.1:8310",
+  "natsPort": 4325,
+  "s3Port": 8436,
+  "s3Bucket": "helmstudio",
+  "images": [
+    "helmstudio/kong:prod",
+    "helmstudio/auth:prod",
+    "helmstudio/studio:prod",
+    "helmstudio/pipelines:prod",
+    "helmstudio/files:prod",
+    "helmstudio/web:prod",
+    "helmstudio/seaweedfs:prod",
+    "nats:2.15.3-alpine3.22",
+    "natsio/nats-box:0.20.2",
+    "postgres:18.7-alpine3.24"
+  ],
+  "venvs": [
+    { "name": "runner", "project": "runner_service", "extras": ["torch"] },
+    { "name": "mlx", "project": "runner_service/envs/mlx", "extras": ["llm"] }
+  ],
+  "runners": [
+    { "env": "torch", "venv": "runner", "healthPort": 8191 },
+    { "env": "mlx", "venv": "mlx", "healthPort": 8192 },
+    { "env": "native", "venv": "runner", "healthPort": 8193 }
+  ],
+  "minMacOS": 13,
+  "minFreeGB": 6,
+  "defaultModelsDir": "~/helmstudio-models"
+}
