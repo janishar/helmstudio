@@ -90,8 +90,8 @@ make -C contract_tests check-contracts   # exit 1 on any failure
 | `pipelines.judge.test` | core request/reply, queue group `pipelines` | bare JSON (`req.pipelines.judge.test`) | studio → pipelines (5 s; API 1.28) |
 | `cmd.assistant.turn`, `cmd.assistant.delete` | stream `CMD` (work queue) | `cmd.assistant.<same>`, `Nats-Msg-Id <thread_id>:<turn>` (delete: `<thread_id>:delete`) | studio outbox relay → pipelines (durable `pipelines-assistant`, filter `cmd.assistant.>`: chats handled concurrently, each in order; API 1.44) |
 | `evt.assistant.<thread_id>.step` | stream `EVT` | `evt.assistant.step`, `Nats-Msg-Id <thread_id>:<seq>` | pipelines → studio projector (durable `studio-assistant`; API 1.44) |
-| `cmd.assistant.steer` | stream `CMD` (work queue) | `cmd.assistant.steer`, `Nats-Msg-Id <thread_id>:steer:<steer_id>` (stop: `<thread_id>:stop:<turn>`) | studio outbox relay → pipelines (durable `pipelines-assistant`, handled at once outside the chat's lock; API 1.59) |
-| `evt.assistant.<thread_id>.steered` | stream `EVT` | `evt.assistant.steered`, `Nats-Msg-Id <thread_id>:steered:<first steer id>` | pipelines → studio projector (durable `studio-assistant`, in order with the steps; API 1.59) |
+| `cmd.assistant.steer` | stream `CMD` (work queue) | `cmd.assistant.steer`, `Nats-Msg-Id <thread_id>:steer:<steer_id>` (stop, from 1.59.1: `<thread_id>:stop:<new id>`, one per Stop) | studio outbox relay → pipelines (durable `pipelines-assistant`, handled at once outside the chat's lock; API 1.59) |
+| `evt.assistant.<thread_id>.steered` | stream `EVT` | `evt.assistant.steered`, `Nats-Msg-Id <thread_id>:steered:<steer ids, comma-joined>` (from 1.59.1) | pipelines → studio projector (durable `studio-assistant`, in order with the steps; API 1.59) |
 | `pipelines.assistant.memory` | core request/reply, queue group `pipelines` | bare JSON (`req.pipelines.assistant.memory`) | studio → pipelines (5 s; API 1.44) |
 | `cmd.run.<host>.server` | stream `CMD` (work queue) | `cmd.run.execute` of a `server-ask` run | studio outbox relay → pipelines' server executor (durable `runner-<host>-server`; API 1.15) |
 | `evt.auth.revoked` | core | `evt.auth.revoked` | auth → every Go service's token cache |
@@ -3921,12 +3921,24 @@ Write while it works, like Claude Code: the message joins the running answer and
 - **Unread at the end.** When studio applies the turn's done step and steers of it are still `waiting`, in the same
   transaction they become `next` (`at` now) and one new turn starts from them: `cmd.assistant.turn` kind `message`,
   text = their texts in order joined by a blank line (at most 4000 characters), the screen of the last one; caps reset,
-  state `working`. No new user entry is made: the steers are the message.
+  state `working`. No new user entry is made: the steers are the message. (1.59.1) A turn that was stopped takes them
+  as `read` instead, and no turn starts.
+- **A new message first** (1.59.1). A `message` that starts a new turn (not a steer) while steers are still `waiting`
+  (the turn parked on a server card, or pipelines restarted) takes them in the same transaction: they become `next`
+  (`at` now) and the turn's text is their texts in order, then the new message's, joined by a blank line (the last
+  4000 characters). An old steer is never answered later as an out-of-order turn.
 - **Stop.** `kind: stop` from the running tab writes `cmd.assistant.steer` {stop: true}: at its next boundary the turn
   ends (`done`; its queued calls `did_not_run`, unread steers taken as read). The tab stops its own running actions
-  as before (`Did not run · you stopped it`). On an idle chat it does nothing (202).
+  as before (`Did not run · you stopped it`), and a batch the turn parks on after Stop does not run. Studio keeps the
+  stopped turn on the thread (1.59.1): at its done step its steers still `waiting` become `read`. Only a running
+  turn stops (the same states as a steer); on an idle chat, or one waiting only on a server card, it does nothing
+  (202). Each Stop has its own message id (1.59.1): pipelines' inbox keeps ids for good, so a Stop after its
+  restart is never dropped as a duplicate.
 - **Restart.** pipelines keeps steers in memory: after a restart a steer it had is never read by that turn, so it
   becomes the next message at the turn's end. Nothing is lost.
+- **Known gap.** A read steer can show above the lines of server-tool calls that ran before it was read:
+  `evt.assistant.steered` (at the boundary) reaches studio before the step that carries those lines, so the steer's
+  `at` is earlier than theirs. Display order only; the transcript the model reads has the right order.
 
 ### Assistant: tools
 
