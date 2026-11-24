@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Plugins</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Bricolage+Grotesque:wght@600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* themes */
+[data-theme="forest"]{--g:#0e1512;--in:#090e0c;--p0:#131c17;--s1:#16201b;--s2:#1e2a24;--s3:#26342d;--s4:#2c3b33;--s5:#32433a;--ln:#3d5146;--dash:#5a7265;--t2:#a9b8ab;--t1:#f0f2e8;--t1b:#dfe5d8;--ib:#354a3f;--it:#cfdacb;--a1:#b9e37a;--on1:#17200a;--a2:#ff8552;--on2:#2b0c02;--shd:#000000}
+[data-theme="ocean"]{--g:#0c1320;--in:#080d17;--p0:#101a2a;--s1:#131d2e;--s2:#1c2940;--s3:#24344f;--s4:#2b3d5c;--s5:#33486b;--ln:#40587f;--dash:#5e779e;--t2:#9fb0c6;--t1:#eaf0f7;--t1b:#d6dfeb;--ib:#33486b;--it:#cdd8e6;--a1:#ff8a6b;--on1:#2b0d05;--a2:#7cc7f2;--on2:#06202e;--shd:#000000}
+[data-theme="aubergine"]{--g:#15101a;--in:#0f0b13;--p0:#1a1421;--s1:#1f1826;--s2:#2b2135;--s3:#352a41;--s4:#3f324d;--s5:#4a3b5a;--ln:#5c4a6e;--dash:#7a678c;--t2:#b3a6b8;--t1:#f3ecf2;--t1b:#e2d8e3;--ib:#4a3b5a;--it:#d9cedc;--a1:#ffb36b;--on1:#2b1500;--a2:#d59bf6;--on2:#230a33;--shd:#000000}
+[data-theme="espresso"]{--g:#17110d;--in:#0f0b08;--p0:#1c1510;--s1:#211914;--s2:#2e231c;--s3:#3a2d24;--s4:#45362b;--s5:#514033;--ln:#655141;--dash:#84705e;--t2:#b8a896;--t1:#f5ece0;--t1b:#e5d9c9;--ib:#514033;--it:#dccfbd;--a1:#f2b84b;--on1:#2a1c00;--a2:#ff8552;--on2:#2b0c02;--shd:#000000}
+[data-theme="oxblood"]{--g:#170e10;--in:#0f0809;--p0:#1c1113;--s1:#221517;--s2:#301d20;--s3:#3c2529;--s4:#472d31;--s5:#54363a;--ln:#694549;--dash:#896266;--t2:#bfa8a6;--t1:#f6ecea;--t1b:#e6d8d6;--ib:#54363a;--it:#dccccb;--a1:#f6c177;--on1:#2b1a00;--a2:#ff7d96;--on2:#33060f;--shd:#000000}
+[data-theme="indigo"]{--g:#0e0f22;--in:#090a18;--p0:#12142b;--s1:#161832;--s2:#20234a;--s3:#292d5c;--s4:#32376c;--s5:#3c417d;--ln:#4b5194;--dash:#6a70b0;--t2:#a5a9cf;--t1:#eceefc;--t1b:#d9dcf3;--ib:#3c417d;--it:#d0d3ee;--a1:#ffc145;--on1:#2b1d00;--a2:#ff7fa8;--on2:#33061a;--shd:#000000}
+[data-theme="parchment"]{--g:#f3ede2;--in:#e9e1d3;--p0:#f8f3ea;--s1:#fbf7ef;--s2:#ffffff;--s3:#efe7d9;--s4:#e6ddcd;--s5:#dcd1be;--ln:#cdbfa8;--dash:#a8987f;--t2:#6e6455;--t1:#1f1a14;--t1b:#3a3228;--ib:#dcd1be;--it:#3a3228;--a1:#c8553d;--on1:#ffffff;--a2:#2f5d8a;--on2:#ffffff;--shd:#b8a688}
+body{margin:0}
+nav button{flex-direction:column!important;width:58px!important;height:54px!important;gap:3px;font-size:10px;font-weight:500}
+nav button::after{content:attr(aria-label)}
+*{text-transform:none!important}
+nav button{height:64px!important;gap:5px!important;background:transparent!important}
+nav button svg{width:36px;height:36px;padding:8px;box-sizing:border-box;border-radius:12px;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.5),inset 0 -4px 6px color-mix(in srgb, var(--shd) 35%, transparent),0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)}
+nav button[aria-label="Create"] svg{background:linear-gradient(155deg,#a393ff,#4a2fe0)}
+nav button[aria-label="Pipelines"] svg{background:linear-gradient(155deg,#6cc4ff,#1f5fe0)}
+nav button[aria-label="Gallery"] svg{background:linear-gradient(155deg,#ffb07a,#e0457a)}
+nav button[aria-label="Timeline"] svg{background:linear-gradient(155deg,#ffe07a,#f08a1c)}
+nav button[aria-label="Models"] svg{background:linear-gradient(155deg,#7af5d6,#12967f)}
+nav button:not([aria-current]) svg{filter:saturate(.55) brightness(.8)}
+nav button[aria-current]{color:var(--t1)!important}
+nav button[aria-current] svg{outline:2px solid rgba(255,255,255,.85);outline-offset:2px}
+main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.09),inset 0 -2px 0 color-mix(in srgb, var(--shd) 30%, transparent),0 2px 5px color-mix(in srgb, var(--shd) 45%, transparent)}
+[style*="border-radius: 16px"],[style*="border-radius: 18px"],[style*="border-radius: 14px"]{box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 28px 48px -18px color-mix(in srgb, var(--shd) 85%, transparent),0 10px 18px -10px color-mix(in srgb, var(--shd) 60%, transparent)}
+aside{box-shadow:-28px 0 48px -28px color-mix(in srgb, var(--shd) 80%, transparent)}
+.n{background:linear-gradient(180deg,var(--s3),var(--s1))!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 20px 34px -12px color-mix(in srgb, var(--shd) 85%, transparent)!important}
+.pi,.po{box-shadow:0 0 8px currentColor}
+input[type=range]{filter:drop-shadow(0 2px 3px color-mix(in srgb, var(--shd) 60%, transparent))}
+button{font:inherit;color:inherit;cursor:pointer}
+a{color:var(--t2)}a:hover{color:var(--t1)}
+nav{gap:14px!important}
+.i{width:18px;height:18px;margin-left:6px;border-radius:50%;border:0;background:var(--ib);color:var(--it);font:600 11px/18px Inter,sans-serif;padding:0;vertical-align:middle;flex:0 0 auto}
+[style*="border-radius: 16px"],[style*="border-radius: 18px"],.set,.crit,.tile{background-image:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,0) 46%)}
+.chip{height:36px;padding:0 12px;border-radius:999px;border:0;background:var(--s3);font-size:13px;font-weight:500}
+.take{text-align:left;padding:0;border:0;background:transparent;display:flex;flex-direction:column;gap:6px}
+.take i{display:flex;align-items:center;justify-content:center;aspect-ratio:16/10;border-radius:10px;border:1px dashed var(--dash);background:var(--s1);font-style:normal;font-size:11px;color:var(--t2)}
+.take b{font-size:12px;font-weight:600}
+.take small{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t2)}
+.act{height:40px;border-radius:10px;border:0;background:var(--s3);font-size:13px;font-weight:500;text-align:left;padding:0 12px}
+.h{margin:0;font-size:12px;font-weight:600;letter-spacing:.04em;color:var(--t2)}
+.row{display:flex;justify-content:space-between;gap:10px;font-size:13px}
+.row span:last-child{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t2);text-align:right}
+/* organic layer */
+td,th{padding:10px;text-align:left;font-size:13px;border-bottom:1px solid var(--s3);white-space:nowrap}
+th{font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--t2)}
+tbody tr:last-child td{border-bottom:0}
+td.m{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t2)}
+nav button[aria-label="Plugins"] svg{background:linear-gradient(155deg,#f59af0,#a72fc4)}
+nav button[aria-label="Admin"] svg{background:linear-gradient(155deg,#c9ced9,#5b6478)}
+.in{width:100%;height:38px;box-sizing:border-box;border-radius:10px;border:0;background:var(--s4);color:var(--t1);font:inherit;font-size:13px;padding:0 12px}
+.tag{padding:2px 8px;border-radius:999px;background:var(--s4);font-size:11px;font-weight:500}
+.tag.adm{background:var(--a1);color:var(--on1)}
+
+[style*="min-height: 960px"]{background-image:radial-gradient(1100px 620px at 14% -12%,rgba(255,196,120,.11),transparent 62%),radial-gradient(900px 640px at 108% 112%,color-mix(in srgb, var(--a1) 7%, transparent),transparent 60%),repeating-linear-gradient(118deg,rgba(255,255,255,.014) 0 1px,transparent 1px 4px)}
+nav{margin:14px 0 14px 14px;border:0!important;border-radius:30px;background:var(--s1);align-self:flex-start;padding:14px 4px!important;flex:0 0 68px!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 24px 40px -18px color-mix(in srgb, var(--shd) 80%, transparent)}
+aside{margin:14px 14px 14px 0;border:0!important;border-radius:34px 34px 34px 14px;background:var(--p0)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 28px 48px -20px color-mix(in srgb, var(--shd) 85%, transparent)!important}
+main [style*="border-radius: 16px"]{border-radius:28px 28px 28px 12px!important;border-color:transparent!important}
+main [style*="border-radius: 18px"]{border-radius:32px!important;border-color:transparent!important}
+aside [style*="border-radius: 14px"],aside [style*="border-radius: 12px"],.set,.crit{border-radius:18px 18px 18px 8px!important;border-color:transparent!important}
+.n{border-radius:20px 20px 20px 8px!important;border-color:rgba(255,255,255,.08)}
+button[style*="border-radius: 14px"]{border-radius:20px 20px 20px 8px!important}
+main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -2px 0 color-mix(in srgb, var(--shd) 28%, transparent),0 3px 6px color-mix(in srgb, var(--shd) 35%, transparent)}
+/* stage B: chat, tool calls, checklists */
+.msg{align-self:flex-start;max-width:92%;padding:8px 12px;border-radius:18px 18px 18px 6px;background:var(--s2);font-size:13px;line-height:19px;white-space:pre-wrap}
+.msg.me{align-self:flex-end;border-radius:18px 18px 6px 18px;background:var(--s4)}
+.msg.note{background:transparent;box-shadow:inset 0 0 0 1px #f2c14e;color:#f2c14e;font-size:12px}
+.tc{margin-top:6px;font-size:12px;color:var(--t2)}
+.tc summary{cursor:pointer}
+.tc div{font-family:'JetBrains Mono',monospace;font-size:11px;padding:2px 0 0 12px}
+.ck2{display:flex;align-items:center;gap:10px;min-height:30px;font-size:13px}
+.ck2 input{accent-color:var(--a2)}
+</style>
+<style>
+/* Logo A in its own panel above the rail: same form as the rail (width, background, radius, shadow), 14 px apart */
+.rail{flex:0 0 68px;align-self:flex-start;display:flex;flex-direction:column;gap:14px;margin:14px 0 14px 14px}
+.rail>nav,.rail-logo{margin:0!important;flex:none!important;box-sizing:border-box;width:68px;border-radius:30px;background:var(--s1);box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 24px 40px -18px color-mix(in srgb, var(--shd) 80%, transparent)}
+.rail-logo{display:flex;justify-content:center;padding:14px 4px}
+.brand{width:36px;height:36px;border-radius:12px 12px 12px 5px;display:flex;align-items:center;justify-content:center;color:var(--on1);background:linear-gradient(155deg,var(--a1),var(--a2));box-shadow:inset 0 1px 0 rgba(255,255,255,.5),inset 0 -4px 6px color-mix(in srgb, var(--shd) 35%, transparent),0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)}
+</style>
+</helmet>
+<div data-theme="{{theme}}" style="display: flex; flex-wrap: wrap; min-height: 960px; background: var(--g); color: var(--t1); font-family: Inter, system-ui, sans-serif; font-size: 14px; line-height: 20px">
+
+<div class="rail">
+<div class="rail-logo"><a class="brand" href="#" aria-label="helmstudio, home (Create)" title="helmstudio"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24"><path d="M8 16C8 12.4 10.4 10.6 13.3 10.6S18.4 12.6 18.4 16V21" style="fill:none;stroke:currentColor;stroke-width:3.2;stroke-linecap:round"/><path d="M8 7V21" style="stroke:currentColor;stroke-width:3.2;stroke-linecap:round"/><path d="M5.3 1.6H10.7A.9.9 0 0 1 11.6 2.5V5L8 8.4L4.4 5V2.5A.9.9 0 0 1 5.3 1.6Z" style="fill:currentColor"/></svg></a></div>
+<nav aria-label="Sections" style="flex: 0 0 64px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 0; border-right: 1px solid var(--s3)">
+<button aria-label="Create" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"></path><circle cx="12" cy="12" r="3"></circle></svg></button>
+<button aria-label="Pipelines" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="6" height="6" rx="1.5"></rect><rect x="15" y="14" width="6" height="6" rx="1.5"></rect><path d="M9 7h4a2 2 0 0 1 2 2v5"></path></svg></button>
+<button aria-label="Gallery" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="9" cy="10" r="2"></circle><path d="m21 16-5-5L5 20"></path></svg></button>
+<button aria-label="Timeline" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 17h18"></path><rect x="5" y="4" width="6" height="6" rx="1.5"></rect><rect x="12" y="14" width="7" height="6" rx="1.5"></rect></svg></button>
+<button aria-label="Models" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"></path><path d="m3 8 9 5 9-5M12 13v8"></path></svg></button>
+<button aria-label="Plugins" aria-current="page" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: var(--s2); color: var(--a1); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v5M15 2v5"></path><path d="M6 7h12v4a6 6 0 0 1-12 0V7Z"></path><path d="M12 17v5"></path></svg></button>
+<button aria-label="Admin" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.5 3.2 7.6 8 9 4.8-1.4 8-4.5 8-9V6l-8-3Z"></path><path d="m9 12 2 2 4-4"></path></svg></button>
+<details style="position: relative; margin-top: 6px">
+<summary aria-label="Settings" style="list-style: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10px; font-weight: 500; color: var(--t2)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 36px; height: 36px; padding: 8px; box-sizing: border-box; border-radius: 12px; color: #fff; background: linear-gradient(155deg, #a7b0c2, #4b5468); box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg>Settings</summary>
+<div style="position: absolute; left: 70px; bottom: 0; z-index: 5; width: 220px; box-sizing: border-box; padding: 14px; border-radius: 18px 18px 18px 8px; background: var(--s2); box-shadow: 0 24px 40px -12px color-mix(in srgb, var(--shd) 80%, transparent); display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 12px; font-weight: 600; color: var(--t2)">Settings</span>
+<label for="theme" style="font-size: 13px; color: var(--t1)">Theme</label>
+<select id="theme" value="{{theme}}" onChange="{{setTheme}}" style="width: 100%; height: 36px; padding: 0 10px; border-radius: 10px; border: 0; background: var(--s4); color: var(--t1); font: inherit; font-size: 13px">
+<option value="forest">Forest ink</option>
+<option value="ocean">Deep ocean</option>
+<option value="aubergine">Aubergine dusk</option>
+<option value="espresso">Espresso</option>
+<option value="oxblood">Oxblood</option>
+<option value="indigo">Indigo night</option>
+<option value="parchment">Parchment (light)</option>
+</select>
+</div>
+</details>
+</nav>
+</div>
+
+<style>
+.amb{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border-radius:10px;box-shadow:inset 0 0 0 1px #f2c14e;color:#f2c14e;font-size:12px;line-height:17px}
+.amb a{color:#f2c14e}
+.dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto;display:inline-block}
+.ok{color:#7fd88f}.okb{background:#7fd88f}
+.off{color:var(--t2)}.offb{background:var(--t2)}
+.tag.kind{background:color-mix(in srgb,var(--a2) 22%,transparent);color:var(--t1)}
+.tag.me{background:color-mix(in srgb,#f2c14e 22%,transparent);color:#f2c14e}
+.ex{opacity:.62}
+.code{display:flex;align-items:center;gap:8px;padding:6px 6px 6px 10px;border-radius:10px;background:var(--in);font-family:'JetBrains Mono',monospace;font-size:12px}
+.code span{flex:1 1 auto;word-break:break-all}
+.tag,.chip{white-space:nowrap}
+.st{display:flex;flex-direction:column;gap:8px;padding:12px 14px;border-radius:12px;background:var(--p0);border:1px solid var(--s3)}
+.st>.cap{font-size:12px;color:var(--t2)}
+.alert{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;font-size:12px}
+.alert.red{background:color-mix(in srgb,#ff6b6b 14%,transparent);color:#ff8a8a}
+.alert.amb2{background:color-mix(in srgb,#f2c14e 14%,transparent);color:#f2c14e}
+.perm{margin:0;padding-left:16px;font-size:12px;line-height:18px;color:var(--t1b)}
+.sw{flex:0 0 auto;width:40px;height:24px;border-radius:999px;border:0;padding:2px;display:flex}
+.sw span{width:20px;height:20px;border-radius:50%;display:block}
+.sw[aria-checked=true]{background:var(--a1);justify-content:flex-end}.sw[aria-checked=true] span{background:var(--on1)}
+.sw[aria-checked=false]{background:var(--s4);justify-content:flex-start}.sw[aria-checked=false] span{background:var(--t2)}
+td{vertical-align:top}
+</style>
+<main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 16px; padding: 16px 20px 24px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+<h1 style="margin: 0; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 22px; font-weight: 700; letter-spacing: 0.01em">Plugins</h1>
+<div style="flex-grow: 1"></div>
+<button class="chip">Rescan</button>
+<button class="chip" style="background: var(--a1); color: var(--on1); font-weight: 600">Add plugin</button>
+</div>
+<div style="display: flex; flex-direction: column; gap: 2px; margin-top: -6px">
+<span style="font-size: 13px; color: var(--t2)">Add-ons that plug new features in. Found in plugins/ on start; off until you turn them on.<button class="i" aria-label="More information" title="A plugin is a folder in plugins/ with a manifest: name, kind, version, source, what it may do. The studio lists it on start and never runs it until an admin turns it on. Kinds: Model provider, Assistant tools, Assistant tools, Media tools, Workflows.">i</button></span>
+<span style="font-size: 11px; color: var(--t2); opacity: .8">Admins only: other users don't see this page.</span>
+</div>
+
+<div style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 6px 8px; overflow-x: auto">
+<table style="border-collapse: collapse; width: 100%; min-width: 760px">
+<thead><tr><th>Plugin</th><th>Kind</th><th>May do</th><th>Status</th><th>Actions</th></tr></thead>
+<tbody>
+<tr aria-selected="true" style="background: var(--s3)">
+<td style="font-weight: 600; white-space: normal">Claude Code bridge<br><span class="m" style="font-weight: 400">0.1.0 · plugins/claude-code-bridge</span><br><span class="tag me" style="display: inline-block; margin-top: 4px">Personal use only</span></td>
+<td><span class="tag kind">Model provider</span></td>
+<td style="white-space: normal; font-size: 12px; color: var(--t1b); max-width: 260px">Adds a model provider · reaches host.docker.internal:8420</td>
+<td><span class="dot okb"></span> <span class="ok" style="font-weight: 600">Running</span><br><span class="m" style="font-size: 11px">host.docker.internal:8420</span></td>
+<td><button class="chip" style="height: 30px">Add as provider</button> <button class="chip" style="height: 30px">Disable</button> <button class="chip" style="height: 30px">Remove</button></td>
+</tr>
+<tr>
+<td style="font-weight: 600; white-space: normal">Media tools<br><span class="m" style="font-weight: 400">0.1.0 · helmstudio · plugins/media-tools</span></td>
+<td><span class="tag kind">Assistant tools</span></td>
+<td style="white-space: normal; font-size: 12px; color: var(--t1b); max-width: 260px">Adds crop, resize, trim and frames · reads your takes, saves new ones</td>
+<td><span class="dot offb"></span> <span class="off" style="font-weight: 600">Not running</span><br><span class="m" style="font-size: 11px">enabled · start it</span></td>
+<td><button class="chip" style="height: 30px">Disable</button> <button class="chip" style="height: 30px">Remove</button></td>
+</tr>
+<tr>
+<td style="font-weight: 600; white-space: normal">Web search<br><span class="m" style="font-weight: 400">0.1.0 · helmstudio · plugins/web-search</span></td>
+<td><span class="tag kind">Assistant tools</span></td>
+<td style="white-space: normal; font-size: 12px; color: var(--t1b); max-width: 260px">Adds web search for the Assistant · sends searches off the machine (Brave), asks first</td>
+<td><span class="dot offb"></span> <span class="off" style="font-weight: 600">Off</span></td>
+<td><button class="chip" style="height: 30px">Enable</button> <button class="chip" style="height: 30px">Remove</button></td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<section aria-label="Add plugin" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; align-items: start">
+<div class="st">
+<span class="cap">Add plugin</span>
+<div style="display: flex; flex-direction: column; gap: 2px; padding: 6px; border-radius: 12px; background: var(--s2); font-size: 13px">
+<div style="padding: 6px 8px; border-radius: 8px; background: var(--s4)">From the plugins/ folder<br><span style="font-size: 12px; color: var(--t2)">Copy its folder there, then Rescan.</span></div>
+<div aria-disabled="true" style="padding: 6px 8px; color: var(--t2); opacity: 0.6">From a URL · later</div>
+</div>
+</div>
+<div class="st">
+<span class="cap">Rescan found one</span>
+<div style="display: flex; align-items: center; gap: 8px; font-size: 13px"><span style="flex: 1 1 auto">1 new plugin: Web search. It stays Off.</span><button class="chip" style="height: 26px; font-size: 12px">Show</button></div>
+</div>
+<div class="st">
+<span class="cap">Remove</span>
+<span style="font-size: 13px">Remove Claude Code bridge? Its provider goes too. The folder stays in plugins/.</span>
+<div style="display: flex; gap: 8px"><button class="chip" style="height: 30px; font-size: 12px; background: #ff6b6b; color: #2b0505; font-weight: 600">Remove</button><button class="chip" style="height: 30px; font-size: 12px">Cancel</button></div>
+</div>
+</section>
+
+<h2 class="h" style="margin-top: 4px">CLAUDE CODE BRIDGE · STATES</h2>
+<section aria-label="Bridge states" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; align-items: start">
+<div class="st">
+<span class="cap">Not running</span>
+<div style="display: flex; align-items: center; gap: 8px; font-size: 12px"><span class="dot offb"></span><span class="off" style="font-weight: 600">Not running</span><span style="color: var(--t2)">start it in a terminal</span></div>
+<div class="code"><span>plugins/claude-code-bridge/run.sh</span><button class="chip" style="height: 26px; font-size: 12px">Copy</button></div>
+<div style="display: flex; gap: 8px"><button class="chip" style="height: 30px; font-size: 12px">Try again</button><button class="chip" disabled style="height: 30px; font-size: 12px; opacity: 0.5">Add as provider</button></div>
+</div>
+<div class="st">
+<span class="cap">Wrong key · 401</span>
+<div role="alert" class="alert red"><span style="flex: 1 1 auto">The key doesn't match: copy it again from the plugin's .env</span></div>
+<span style="font-size: 12px; color: var(--t2)">The key field empties; nothing is saved.</span>
+</div>
+<div class="st">
+<span class="cap">Bridge error · not signed in</span>
+<div role="alert" class="alert amb2"><span style="flex: 1 1 auto">Claude isn't signed in. Sign in with claude in a terminal, then Try again.</span><button class="chip" style="height: 26px; font-size: 12px">Try again</button></div>
+<span style="font-size: 12px; color: var(--t2)">Any other bridge message shows as is.</span>
+</div>
+<div class="st">
+<span class="cap">Added · the list row</span>
+<div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px"><span class="dot okb"></span><span class="ok" style="font-weight: 600">Added</span><span class="tag me">Only you</span><div style="flex-grow: 1"></div><button class="chip" style="height: 26px; font-size: 12px">Open in Model providers</button></div>
+</div>
+<div class="st">
+<span class="cap">Added · the aside</span>
+<div style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600"><span class="ok">✓</span>Claude Code (personal) added</div>
+<span style="font-size: 12px; color: var(--t2)">Next: use it for the Assistant in AI agents.</span>
+<div style="display: flex; gap: 8px"><button class="chip" style="height: 30px; font-size: 12px; background: var(--a1); color: var(--on1); font-weight: 600">Open AI agents</button><button class="chip" style="height: 30px; font-size: 12px">Done</button></div>
+</div>
+<div class="st">
+<span class="cap">Adding</span>
+<div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--t2)"><span class="dot offb"></span>Checking the key with the bridge…</div>
+<button class="chip" disabled style="height: 30px; font-size: 12px; opacity: 0.6; align-self: flex-start">Adding…</button>
+</div>
+</section>
+
+<h2 class="h" style="margin-top: 4px">ELSEWHERE · ONLY ITS OWNER SEES IT</h2>
+<section aria-label="Elsewhere" style="display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; align-items: start">
+<div class="st" style="grid-column: 1 / -1">
+<span class="cap">Admin › Model providers · the new row</span>
+<div style="overflow-x: auto"><table style="border-collapse: collapse; width: 100%">
+<thead><tr><th>Name</th><th>Kind</th><th>Address</th><th>Models</th><th>Status</th></tr></thead>
+<tbody><tr><td style="font-weight: 600">Claude Code (personal) <span class="tag me">Only you</span><br><span class="m" style="font-weight: 400">plugin · claude-code-bridge</span></td><td><span class="tag">local server</span></td><td class="m">http://host.docker.internal:8420/v1</td><td class="m">claude-sonnet (default)<br>claude-opus · claude-haiku</td><td>Enabled<br><span style="font-size: 12px; color: var(--a1)">answered · 4.1 s</span></td></tr></tbody>
+</table></div>
+<span style="font-size: 12px; color: var(--t2)">Other admins don't see this row.</span>
+</div>
+<div class="st">
+<span class="cap">Admin › AI agents · Assistant provider</span>
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px">
+<div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 11px; font-weight: 600; color: var(--t2)">You</span>
+<div role="listbox" aria-label="Provider, you" style="display: flex; flex-direction: column; gap: 2px; padding: 6px; border-radius: 12px; background: var(--s2); font-size: 12px">
+<div role="option" style="padding: 4px 6px">DeepSeek</div>
+<div role="option" style="padding: 4px 6px">Ollama on the Mac</div>
+<div role="option" aria-selected="true" style="padding: 4px 6px; border-radius: 8px; background: var(--s4)">Claude Code (personal) <span class="tag me" style="font-size: 10px">Only you</span></div>
+</div></div>
+<div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 11px; font-weight: 600; color: var(--t2)">Another admin</span>
+<div role="listbox" aria-label="Provider, another admin" style="display: flex; flex-direction: column; gap: 2px; padding: 6px; border-radius: 12px; background: var(--s2); font-size: 12px">
+<div role="option" aria-selected="true" style="padding: 4px 6px; border-radius: 8px; background: var(--s4)">DeepSeek</div>
+<div role="option" style="padding: 4px 6px">Ollama on the Mac</div>
+</div></div>
+</div>
+<span style="font-size: 12px; color: var(--t2)">Only your own Assistant chats use it.</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px"><span class="cap" style="font-size: 12px; color: var(--t2)">Empty</span>
+<div class="st" style="padding: 28px 18px; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center">
+<span style="font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 16px; font-weight: 700">No plugins found</span>
+<span style="font-size: 13px; color: var(--t2); max-width: 460px">Plugins are add-ons you copy into plugins/. They stay off until you turn them on.</span>
+<button class="chip" style="height: 30px; font-size: 12px">Rescan</button>
+</div>
+</div>
+</section>
+<div style="height: 40px"></div>
+</main>
+
+<aside aria-label="Plugin: Claude Code bridge" style="flex: 1 1 340px; box-sizing: border-box; padding: 16px 18px 24px; border-left: 1px solid var(--s3); background: var(--p0); display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; align-items: center; gap: 8px">
+<h2 style="margin: 0; flex: 1 1 auto; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 16px; font-weight: 700">Claude Code bridge</h2>
+<button role="switch" aria-checked="true" aria-label="Enabled" class="sw"><span></span></button>
+</div>
+<span style="font-size: 13px; color: var(--t1b)">Answers with your own logged-in claude CLI, as an OpenAI-compatible endpoint.</span>
+<div style="display: flex; flex-direction: column; gap: 4px">
+<div class="row"><span>Kind</span><span>Model provider</span></div>
+<div class="row"><span>Version</span><span>0.1.0</span></div>
+<div class="row"><span>Source</span><span>plugins/claude-code-bridge</span></div>
+<div class="row"><span>Author</span><span>this repo</span></div>
+<div class="row"><span>Status</span><span style="color: #7fd88f">Running · host.docker.internal:8420</span></div>
+<div class="row"><span>Models</span><span>claude-sonnet · claude-opus · claude-haiku</span></div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px">
+<span class="h">MAY DO</span>
+<ul class="perm"><li>Add a model provider</li><li>Reach host.docker.internal:8420</li><li>Read your prompts (sent to your Claude plan)</li></ul>
+</div>
+<div class="amb"><span><b>Personal use only.</b> Runs your own Claude login and plan, for you only. Never shared with other accounts. <a href="https://code.claude.com/docs/en/legal-and-compliance.md">Anthropic's terms</a></span></div>
+
+<div style="height: 1px; background: var(--s3)"></div>
+<h3 style="margin: 0; display: flex; align-items: center; font-size: 14px; font-weight: 700">Add as provider</h3>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="pl-name" style="font-size: 12px; color: var(--t2)">Name</label><input id="pl-name" class="in" value="Claude Code (personal)"></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="pl-key" style="font-size: 12px; color: var(--t2)">Key</label><input id="pl-key" class="in" type="password" autocomplete="off" placeholder="Paste the key from run.sh"><span style="font-size: 12px; color: var(--t2)">BRIDGE_TOKEN in <span style="font-family: 'JetBrains Mono', monospace">plugins/claude-code-bridge/.env</span></span></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="pl-model" style="font-size: 12px; color: var(--t2)">Default model</label><select id="pl-model" class="in"><option>claude-sonnet</option><option>claude-opus</option><option>claude-haiku</option></select></div>
+<div style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; background: var(--s2); font-size: 13px"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg><span style="flex: 1 1 auto">Only you can use it</span><button class="i" aria-label="Why only you" title="It runs your own Claude login and plan. Anthropic's terms allow that for you only, so other accounts never see or use this provider.">i</button></div>
+<button style="height: 48px; border-radius: 14px; border: 0; background: var(--a1); color: var(--on1); background-image: linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 55%); font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.04em">Add</button>
+</aside>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":1544}}'>
+class Component extends DCLogic {
+state = { theme: null };
+renderVals() {
+return {
+theme: this.state.theme ?? this.props.theme ?? 'forest',
+setTheme: (e) => this.setState({ theme: e.target.value })
+};
+}
+}
+</script>
+</body>
+</html>

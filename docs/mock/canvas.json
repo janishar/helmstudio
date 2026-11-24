@@ -521,6 +521,16 @@
       "x": 1520,
       "y": 0,
       "page": "brand"
+    },
+    "Plugins.dc.html": {
+      "expand": "fill",
+      "h": 1544,
+      "is_interactive": true,
+      "title": "Plugins · its own rail page: the list, the Claude Code bridge, Add as provider, only you",
+      "w": 1440,
+      "x": 0,
+      "y": 3480,
+      "page": "models-admin"
     }
   },
   "createdOnFiles": {
@@ -658,7 +668,8 @@
     "Landing.dc.html",
     "SignIn.dc.html",
     "Logo.dc.html",
-    "CatsEasterEgg.dc.html"
+    "CatsEasterEgg.dc.html",
+    "Plugins.dc.html"
   ],
   "pages": [
     {
