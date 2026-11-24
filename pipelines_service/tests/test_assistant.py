@@ -498,10 +498,11 @@ async def test_stop_cancels_the_model_call_in_flight_at_once(pool, fake):
 
 def test_memory_must_be_plain_words():
     for bad in ('Elias speaks with {"voice_id": "x"}', "Elias's voice is 9a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d",
-                "Elias uses voice_id v2", "Set settings.source.model to fake"):  # fmt: skip
+                "Elias uses voice_id v2", "Elias uses Voice_ID v2", "Set settings.source.model to fake"):  # fmt: skip
         assert assistant.not_plain(bad), bad
     for ok in ("@elias speaks with the Warm Narrator voice", "@old_man likes 16:9, e.g. wide shots",
-               "The best take is rain.png at 8 steps"):  # fmt: skip
+               "The best take is rain.png at 8 steps", "Search references on www.artstation.com first",
+               "Keep renders in the final.cut.mp4 style", 'Call it "Warm": the narrator voice'):  # fmt: skip
         assert assistant.not_plain(ok) is None, ok
 
 
@@ -533,6 +534,13 @@ async def test_generate_after_a_switch_to_a_voice_workflow_needs_the_spoken_line
     c.script(calls(("switchTo", {"workflow": "w1"}), ("generate", {})))
     step = await c.say("back to the image", more=wfs)
     assert [a["name"] for a in step["actions"]] == ["switchTo", "generate"] and len(c.asked()) == 3
+    # setting the voice is not writing the line; the dialogue script is
+    c.script(calls(("switchTo", {"workflow": "w2"}), ("change", {"key": "tts.voice", "value": "Warm"}), ("generate", {})),
+             calls(("switchTo", {"workflow": "w2"}), ("change", {"key": "tts.script", "value": "@mara: Hi."}),
+                   ("generate", {})))  # fmt: skip
+    step = await c.say("make her say hi", more=wfs)
+    assert "write what is spoken with change" in c.asked()[4]["messages"][1]["content"]
+    assert [a["args"]["key"] for a in step["actions"] if a["name"] == "change"] == ["tts.script"]
 
 
 async def test_a_hidden_tab_stays_parked_and_stale_results_are_dropped(pool, fake):

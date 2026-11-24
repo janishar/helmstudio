@@ -226,9 +226,15 @@ def check(got: dict, off: dict, s: State) -> tuple[list | None, str | None]:
 
 
 _UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.IGNORECASE)
-_JSON = re.compile(r'[{\[]\s*"|"\w+"\s*:')
-# voice_id, settings.source.model; never an @handle (old_man) or a file name (take.png)
-_FIELD = re.compile(r"(?<![@\w-])[a-z]\w*_\w+\b|(?<![@\w-])[a-z]\w*(?:\.[a-z]\w*){2,}\b")
+_JSON = re.compile(r'[{\[]\s*"\w+"\s*[:,\]]')  # {"key": or ["a", ; not 'Call it "Warm": …'
+# voice_id, settings.source.model; never an @handle (old_man), a file name (final.cut.mp4) or a domain/URL
+_FIELD = re.compile(
+    r"(?<![@\w-])[a-z]\w*_\w+\b|(?<![@\w-])[a-z]\w*(?:\.[a-z]\w*){2,}\b", re.IGNORECASE
+)
+_WEB = re.compile(
+    r"\S*(?:://|www\.)\S*|\S+\.(?:com|org|net|io|ai|dev|in|mp4|mov|webm|png|jpe?g|webp|gif|wav|mp3|flac)\b",
+    re.IGNORECASE,
+)
 
 
 def not_plain(text: str) -> str | None:
@@ -237,9 +243,13 @@ def not_plain(text: str) -> str | None:
         return "it has JSON"
     if _UUID.search(text):
         return "it has an id (UUID); name the thing by its @handle or title"
-    if m := _FIELD.search(text):
+    if m := _FIELD.search(_WEB.sub(" ", text)):
         return f"it has a field name ({m.group()})"
     return None
+
+
+# the spoken-line field of a voice workflow (`node.param`): the text or dialogue script; not voice, seed, speed, style
+_SPOKEN = re.compile(r"(?:^|\.)(?:prompt|text|script)$")
 
 
 def _voice_unwritten(s: State, calls: list) -> bool:
@@ -261,7 +271,7 @@ def _voice_unwritten(s: State, calls: list) -> bool:
         if c["name"] == "switchTo":
             w = c["args"]["workflow"]
             voice = (media.get(w) or media.get(w.lower())) == "audio"
-        elif c["name"] == "change":
+        elif c["name"] == "change" and _SPOKEN.search(c["args"]["key"]):
             voice = False
         elif c["name"] == "generate" and voice and i >= len(done):
             return True
