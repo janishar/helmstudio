@@ -218,13 +218,17 @@ export function PluginsScreen() {
                         )}
                       </td>
                       <td className={cell} onClick={(e) => e.stopPropagation()}>
-                        <div className="flex flex-wrap items-center gap-1.5 xl:flex-nowrap">
+                        <div className="flex flex-wrap items-center gap-1.5 min-[1400px]:flex-nowrap">
                           {p.provider ? (
                             <>
-                              <Dot ok />
-                              <span className="text-[#7fd88f]">Added</span>
-                              <Link href="/admin?tab=providers" className={CHIP}>
-                                Open in Model providers
+                              {/* one line at 1440 px: the aside has Open in Model providers and AI agents */}
+                              <Link
+                                href="/admin?tab=providers"
+                                title="Open in Model providers"
+                                className="flex items-center gap-1.5 whitespace-nowrap text-[13px] text-[#7fd88f]"
+                              >
+                                <Dot ok />
+                                Added
                               </Link>
                             </>
                           ) : (

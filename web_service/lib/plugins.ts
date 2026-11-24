@@ -48,10 +48,12 @@ export const subline = (p: Plugin) =>
 /** A skill's aside Source row: "Built in · plugins/animator" / "Yours · ~/.helm/plugins/x.zip". */
 export const sourceRow = (p: Plugin) => `${yours(p) ? "Yours" : "Built in"} · ${sourceOf(p)}`;
 
-/** A skill's aside Recipes row: "2" / "2 · 1 skipped: <why>; <why>". */
+/** A skill's aside Recipes row: "2" / "2 · 1 skipped: <why>" / "0 · 6 skipped: <first why>, and 5 more" (one short
+ * line, as the board's). */
 export function recipesRow(r: NonNullable<Plugin["recipes"]>) {
   if (!r.skipped.length) return String(r.ok);
-  return `${r.ok} · ${r.skipped.length} skipped: ${r.skipped.map((s) => s.why).join("; ")}`;
+  const more = r.skipped.length > 1 ? `, and ${r.skipped.length - 1} more` : "";
+  return `${r.ok} · ${r.skipped.length} skipped: ${r.skipped[0].why}${more}`;
 }
 
 /** A skill's aside line from its `when`: "Use when planning …". */

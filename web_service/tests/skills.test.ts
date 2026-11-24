@@ -46,6 +46,16 @@ describe("skills on the Plugins page", () => {
       "1 · 1 skipped: this install has no workflow wan-2.5-image-to-video",
     );
     expect(recipesRow({ ok: 6, skipped: [] })).toBe("6");
+    expect(
+      recipesRow({
+        ok: 0,
+        skipped: [
+          { name: "a", why: "no a" },
+          { name: "b", why: "no b" },
+          { name: "c", why: "no c" },
+        ],
+      }),
+    ).toBe("0 · 3 skipped: no a, and 2 more");
     expect(whenLine("Planning a shot.")).toBe("Use when planning a shot.");
     expect(problemAlert(animator)).toBeNull();
     // API 1.64: a built-in in use whose copy of yours is broken says so
