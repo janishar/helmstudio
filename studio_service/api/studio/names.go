@@ -70,7 +70,7 @@ func namer(ctx context.Context, tx pgx.Tx, set namesRow) (string, *providerRow, 
 	case "local":
 		return LocalNamer, nil, true, nil
 	case "remote":
-		p, err := one[providerRow](ctx, tx, `SELECT `+providerCols+` FROM providers WHERE name = $1 AND enabled`, deref(set.Provider))
+		p, err := one[providerRow](ctx, tx, `SELECT `+providerCols+` FROM providers WHERE name = $1 AND enabled AND owner_id IS NULL`, deref(set.Provider))
 		if errors.Is(err, errNotFound) || (err == nil && !slices.Contains(p.Models, deref(set.Model))) {
 			return "", nil, false, nil
 		}
@@ -144,6 +144,8 @@ func (s *Service) PutSessionNames(ctx context.Context, caller common.Caller, bod
 				return network.NewUnprocessableError(*body.Provider+" is not an enabled provider", nil)
 			} else if err != nil {
 				return err
+			} else if p.OwnerID != nil { // API 1.60: naming runs for every account
+				return network.NewUnprocessableError(p.Name+" is only yours; pick a shared provider", nil)
 			}
 			if body.Model == nil {
 				body.Model = &p.DefaultModel

@@ -139,6 +139,7 @@ func Run() error {
 			return reply, err
 		},
 		remoteModels: env.RemoteModels,
+		pluginDirs:   env.PluginDirs,
 		// a provider test makes one or two HTTP calls in pipelines: 30 s (API 1.15)
 		providerTest: func(ctx context.Context, req message.ProviderTestRequest) (message.ProviderTestReply, error) {
 			var reply message.ProviderTestReply
@@ -193,6 +194,11 @@ func Run() error {
 	router.LoadRootMiddlewares(module.RootMiddlewares()...)
 	if err := router.LoadControllers(module.Controllers()...); err != nil {
 		return err
+	}
+	if added, err := module.settings.ScanPlugins(ctx); err != nil { // API 1.60: plugins/ on start (new ones stay off)
+		log.Printf("plugins: scan failed: %v", err)
+	} else if len(added) > 0 {
+		log.Printf("plugins: found %v (off)", added)
 	}
 
 	var workers sync.WaitGroup

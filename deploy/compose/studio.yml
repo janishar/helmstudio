@@ -18,6 +18,8 @@ services:
       S3_SECRET_ACCESS_KEY_FILE: /run/secrets/s3_secret_access_key
       STUDIO_REMOTE_MODELS: ${REMOTE_MODELS:-off}       # API 1.15: kind remote providers only while on
     secrets: [studio_database_url, nats_studio_url, file_url_secret, s3_access_key_id, s3_secret_access_key]
+    # API 1.60: plugins/*/plugin.json are read from here (read-only; studio never runs a plugin)
+    volumes: [../plugins:/plugins:ro]
     # the host rule resolves a server's host.docker.internal at Save, as pipelines does at every call (pipelines.yml)
     extra_hosts: ["host.docker.internal:host-gateway"]
     healthcheck: {test: [CMD, /app/studio, health], interval: 5s, timeout: 3s, retries: 20}

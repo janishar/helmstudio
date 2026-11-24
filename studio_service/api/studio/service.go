@@ -40,6 +40,7 @@ type Service struct {
 	cancel           Cancel
 	store            storage.Store
 	stateGet         StateGet            // pipelines.state.get; nil answers 503
+	pluginDirs       []string            // API 1.60: where plugins/*/plugin.json are read (read-only mounts)
 	memory           MemoryAsk           // pipelines.memory; nil answers 503
 	lookup           Lookup              // resolves a server provider's host (nil: the system resolver)
 	providerTest     ProviderTestAsk     // pipelines.providers.test; nil answers 503

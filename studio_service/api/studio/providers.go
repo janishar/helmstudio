@@ -81,16 +81,19 @@ type providerRow struct {
 	Compat       *dto.ProviderCompat // API 1.51
 	Preset       *string
 	Thinking     map[string]string // API 1.53: {model: level}
+	OwnerID      *string           // API 1.60: Only you (the providers policy shows it to its owner only)
+	Plugin       *string           // API 1.60: the plugin it was made from
 }
 
 const providerCols = `name, kind, api, title, base_url, models, default_model, enabled, timeout_s, host, memory_gb,
-	key_secret, max_in_flight, created_at, updated_at, compat, preset, thinking`
+	key_secret, max_in_flight, created_at, updated_at, compat, preset, thinking, owner_id::text, plugin`
 
 func (p providerRow) dto() dto.Provider {
 	return dto.Provider{Name: p.Name, Kind: p.Kind, API: p.API, Title: p.Title, BaseURL: p.BaseURL, Models: p.Models,
 		DefaultModel: p.DefaultModel, Enabled: p.Enabled, TimeoutS: p.TimeoutS, Host: p.Host, MemoryGB: p.MemoryGB,
 		KeySecret: p.KeySecret, MaxInFlight: p.MaxInFlight, Compat: p.Compat, Preset: p.Preset, CreatedAt: p.CreatedAt,
-		UpdatedAt: p.UpdatedAt, Thinking: p.Thinking, ThinkingLevels: thinkingLevels(p.Preset, p.Models)}
+		UpdatedAt: p.UpdatedAt, Thinking: p.Thinking, ThinkingLevels: thinkingLevels(p.Preset, p.Models), OwnerID: p.OwnerID,
+		Plugin: p.Plugin}
 }
 
 // snapshot is defs providerSnapshot: the provider as a batch calls it.
@@ -110,11 +113,12 @@ func (p providerRow) snapshot() map[string]any {
 	return out
 }
 
-// readProviders reads every provider in tx (enabledOnly: those enabled).
+// readProviders reads every provider tx may see (API 1.60: never another account's Only-you one; enabledOnly: those
+// enabled whose plugin, if any, is on).
 func readProviders(ctx context.Context, tx pgx.Tx, enabledOnly bool) ([]providerRow, error) {
 	query := `SELECT ` + providerCols + ` FROM providers`
 	if enabledOnly {
-		query += ` WHERE enabled`
+		query += ` WHERE enabled AND ` + pluginOn
 	}
 	return collect[providerRow](ctx, tx, query+` ORDER BY name`)
 }
@@ -280,6 +284,9 @@ func (s *Service) PutProvider(ctx context.Context, caller common.Caller, name st
 	thinkingSet := body.Thinking
 	if thinkingSet == nil {
 		thinkingSet = map[string]string{}
+	}
+	if err := s.nameFree(ctx, caller, name, ""); err != nil {
+		return dto.Provider{}, false, err
 	}
 	var out dto.Provider
 	created := false
