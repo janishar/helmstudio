@@ -18,6 +18,21 @@
         "client_id": {"$ref": "assistant.schema.json#/$defs/clientId", "description": "the tab whose actions this turn runs"},
         "roles": {"type": "array", "maxItems": 8, "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{0,31}$"}},
         "tools": {"type": "array", "maxItems": 64, "uniqueItems": true, "items": {"$ref": "assistant.schema.json#/$defs/toolName"}, "description": "the tools of tools/catalog.json offered: surface assistant, the owner's roles; web_search only when it is on; look_at only when an ask workflow can run now"},
+        "skills": {
+          "type": "array",
+          "maxItems": 32,
+          "description": "from API 1.64 (contracts/README.md, Skills): the skills that are on, one line each in the prompt; use_skill reads one. Absent or [] = none (use_skill and read_skill_file are not offered)",
+          "items": {
+            "type": "object",
+            "required": ["name", "title", "when"],
+            "additionalProperties": false,
+            "properties": {
+              "name": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,22}$"},
+              "title": {"type": "string", "minLength": 1, "maxLength": 60},
+              "when": {"type": "string", "minLength": 1, "maxLength": 200}
+            }
+          }
+        },
         "plugins": {
           "type": "array",
           "maxItems": 16,

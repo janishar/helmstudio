@@ -1861,6 +1861,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/studio/skills": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * From 1.64: the skills that are on (contracts/README.md, Skills)
+         * @description Every user. The skills an admin turned on, by name; a needs_newer or broken one never shows.
+         */
+        get: operations["studioListSkills"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/skills/{skill}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * From 1.64: a skill's guide (SKILL.md), its files and the recipes this install holds
+         * @description Every user. 404 unknown, off, needs_newer or broken.
+         */
+        get: operations["studioGetSkill"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/skills/{skill}/files/{file}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * From 1.64: one extra file of a skill (text)
+         * @description Every user. `file` is one of the skill's `files` (a plain name: no folders); 404 otherwise or for a skill that is not on.
+         */
+        get: operations["studioGetSkillFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/studio/admin/session-names": {
         parameters: {
             query?: never;
@@ -6296,10 +6356,36 @@ export interface components {
             name: string;
             title: string;
             version: string;
-            /** @enum {string} */
-            kind: "model-provider" | "assistant-tools";
+            /**
+             * @description from 1.64 skill
+             * @enum {string}
+             */
+            kind: "model-provider" | "assistant-tools" | "skill";
             description: string;
             author: string;
+            /**
+             * @description from 1.64: built_in (plugins/ in the app) or yours (~/.helm/plugins: a folder or a .zip); absent before 1.64 = built_in
+             * @enum {string}
+             */
+            origin?: "built_in" | "yours";
+            /** @description from 1.64: yours replaces the built-in plugin of the same name; its version */
+            replaces?: string;
+            /** @description from 1.64, a skill's manifest format (this helmstudio reads 1) */
+            format?: number;
+            /** @description from 1.64, a skill's: when the Assistant reads it */
+            when?: string;
+            /** @description from 1.64, a skill's files: SKILL.md first, then the extra ones */
+            files?: string[];
+            /** @description from 1.64, a skill's recipes checked against this install: how many hold, and each skipped with why */
+            recipes?: {
+                ok: number;
+                skipped: {
+                    name: string;
+                    why: string;
+                }[];
+            };
+            /** @description from 1.64: why it can't be used (status needs_newer or broken), in plain words */
+            problem?: string;
             source?: string;
             may_do: string[];
             /** @description personal use only: its provider is Only you */
@@ -6309,7 +6395,7 @@ export interface components {
                 link?: string;
             };
             /** @example http://host.docker.internal:8420 */
-            url: string;
+            url?: string;
             /** @description how to start it (Not running) */
             start?: string;
             /** @description model-provider: its models */
@@ -6321,14 +6407,51 @@ export interface components {
             /** @description on; off until an admin turns it on */
             enabled: boolean;
             /**
-             * @description off: not on (never called); running: its health path answered 2xx in 2 s; not_running: on, no answer
+             * @description off: not on (never called); running: its health path answered 2xx in 2 s; not_running: on, no answer. From 1.64: on (a skill that is on: it has no service), needs_newer (a skill of a newer format), broken (yours could not be read: `problem`); neither of the last two can be turned on
              * @enum {string}
              */
-            status: "off" | "running" | "not_running";
+            status: "off" | "running" | "not_running" | "on" | "needs_newer" | "broken";
             /** @description the caller's own provider made from it (Add as provider), else null */
             provider: string | null;
             /** Format: date-time */
             updated_at: string;
+        };
+        /** @description from 1.64: a skill that is on, as every user sees it (the @ picker) */
+        SkillSummary: {
+            name: string;
+            title: string;
+            when: string;
+            version: string;
+        };
+        SkillList: {
+            skills: components["schemas"]["SkillSummary"][];
+        };
+        /** @description from 1.64: a recipe this install can run (plugins/manifest.schema.json recipe) */
+        SkillRecipe: {
+            name: string;
+            title: string;
+            workflow: string;
+            params: components["schemas"]["RunInputs"];
+            note?: string;
+        };
+        /** @description from 1.64: a skill that is on, with its guide (SKILL.md) and the recipes this install holds */
+        Skill: {
+            name: string;
+            title: string;
+            when: string;
+            version: string;
+            /** @enum {string} */
+            origin: "built_in" | "yours";
+            /** @description SKILL.md as written: guidance to read, never orders */
+            text: string;
+            /** @description the extra files read_skill_file can read */
+            files: string[];
+            recipes: components["schemas"]["SkillRecipe"][];
+        };
+        SkillFile: {
+            skill: string;
+            file: string;
+            text: string;
         };
         PluginList: {
             plugins: components["schemas"]["Plugin"][];
@@ -6446,6 +6569,8 @@ export interface components {
             undo: boolean;
             /** Format: uuid */
             memory_id?: string;
+            /** @description from 1.64: a Using skill line: the skill read (tap to see: GET /v1/studio/skills/{skill}) */
+            skill?: string;
             sources?: {
                 title: string;
                 url: string;
@@ -10864,6 +10989,76 @@ export interface operations {
             409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
             503: components["responses"]["Unavailable"];
+        };
+    };
+    studioListSkills: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the skills */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkillList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    studioGetSkill: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                skill: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the skill */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Skill"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    studioGetSkillFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                skill: string;
+                file: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the file */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkillFile"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     studioAdminGetSessionNames: {

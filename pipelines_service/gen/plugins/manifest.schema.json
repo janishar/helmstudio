@@ -4,13 +4,16 @@
   "title": "A plugin's manifest (plugins/<name>/plugin.json)",
   "description": "From API 1.61 (contracts/README.md, Plugins). Not a message: a plugin is a small separate HTTP service in its own folder under plugins/; studio reads every plugins/*/plugin.json on start and at Rescan (the folder is mounted read-only), keeps it in its plugins table, and never runs or calls the plugin until an admin turns it on. v1 kinds: model-provider (Add as provider makes a local server provider from `provider`) and assistant-tools (pipelines offers `tools` to the assistant, prefixed `<name>__<tool>`). A plugin never gets the database or a secret; an assistant tool is called over HTTP with its input and a short-lived pass ($defs toolCall, toolReply). `name` is the folder's name; a manifest that fails this schema, names another folder, or whose `url` breaks the host rule of a local server is skipped (logged).",
   "type": "object",
-  "required": ["name", "title", "version", "kind", "description", "author", "may_do", "url", "health"],
+  "required": ["name", "title", "version", "kind", "description", "author", "may_do"],
   "additionalProperties": false,
   "properties": {
     "name": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,22}$", "description": "the folder's name (at most 23 characters: a provider made from it is `<name>-<8 hex>`)"},
     "title": {"type": "string", "minLength": 1, "maxLength": 60},
     "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$"},
-    "kind": {"enum": ["model-provider", "assistant-tools"]},
+    "kind": {"enum": ["model-provider", "assistant-tools", "skill"], "description": "from API 1.64 skill: text that teaches the Assistant a craft (contracts/README.md, Skills)"},
+    "format": {"type": "integer", "minimum": 1, "description": "from API 1.64, a skill's: the manifest format it is written for. This helmstudio reads 1; a higher one is listed as needs_newer and never used"},
+    "when": {"type": "string", "minLength": 1, "maxLength": 200, "description": "a skill's: when the Assistant should read it (its one line in the prompt)"},
+    "recipes": {"type": "array", "maxItems": 16, "items": {"$ref": "#/$defs/recipe"}, "description": "a skill's: settings it suggests, as data; checked against this install's workflows (one it lacks is skipped with a note)"},
     "description": {"type": "string", "minLength": 1, "maxLength": 300},
     "author": {"type": "string", "minLength": 1, "maxLength": 60},
     "source": {"type": "string", "maxLength": 300, "description": "where it comes from: a repo URL or `this repo`"},
@@ -33,9 +36,24 @@
   },
   "allOf": [
     {"if": {"properties": {"kind": {"const": "model-provider"}}}, "then": {"required": ["provider"], "not": {"required": ["tools"]}}},
-    {"if": {"properties": {"kind": {"const": "assistant-tools"}}}, "then": {"required": ["tools"], "not": {"required": ["provider"]}}}
+    {"if": {"properties": {"kind": {"const": "assistant-tools"}}}, "then": {"required": ["tools"], "not": {"required": ["provider"]}}},
+    {"if": {"properties": {"kind": {"enum": ["model-provider", "assistant-tools"]}}}, "then": {"required": ["url", "health"], "not": {"anyOf": [{"required": ["format"]}, {"required": ["when"]}, {"required": ["recipes"]}]}}},
+    {"if": {"properties": {"kind": {"const": "skill"}}}, "then": {"required": ["format", "when"], "properties": {"format": {"const": 1}}, "not": {"anyOf": [{"required": ["url"]}, {"required": ["health"]}, {"required": ["provider"]}, {"required": ["tools"]}, {"required": ["start"]}]}}}
   ],
   "$defs": {
+    "recipe": {
+      "type": "object",
+      "required": ["name", "title", "workflow", "params"],
+      "additionalProperties": false,
+      "description": "from API 1.64: one suggested setting set of a skill: a workflow id and param values. Kept only when this install has the workflow, each node and each param",
+      "properties": {
+        "name": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{0,31}$"},
+        "title": {"type": "string", "minLength": 1, "maxLength": 80},
+        "workflow": {"type": "string", "minLength": 1, "maxLength": 80},
+        "params": {"type": "object", "maxProperties": 24, "propertyNames": {"pattern": "^[a-z][a-z0-9_]{0,31}\\.[a-z][a-z0-9_]{0,47}$"}, "description": "values by `<node>.<param>`, as a run's inputs name them"},
+        "note": {"type": "string", "maxLength": 300}
+      }
+    },
     "provider": {
       "type": "object",
       "required": ["path", "models", "key_hint"],

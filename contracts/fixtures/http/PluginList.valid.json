@@ -56,6 +56,57 @@
       "status": "off",
       "provider": null,
       "updated_at": "2026-11-25T10:00:00Z"
+    },
+    {
+      "name": "animator",
+      "title": "Animator",
+      "version": "0.1.0",
+      "kind": "skill",
+      "description": "Shot planning.",
+      "author": "helmstudio",
+      "origin": "built_in",
+      "may_do": [
+        "Teach the Assistant a craft (text it reads)"
+      ],
+      "personal": false,
+      "format": 1,
+      "when": "Planning an animated shot or film: shots, timing, motion, camera moves.",
+      "files": [
+        "SKILL.md",
+        "camera-moves.md"
+      ],
+      "recipes": {
+        "ok": 1,
+        "skipped": [
+          {
+            "name": "wan-loop",
+            "why": "this install has no workflow wan-2.5-image-to-video"
+          }
+        ]
+      },
+      "enabled": true,
+      "status": "on",
+      "provider": null,
+      "updated_at": "2026-11-25T10:00:00Z"
+    },
+    {
+      "name": "storyboard",
+      "title": "Storyboard artist",
+      "version": "1.0.0",
+      "kind": "skill",
+      "description": "x",
+      "author": "someone",
+      "origin": "yours",
+      "may_do": [
+        "x"
+      ],
+      "personal": false,
+      "format": 2,
+      "problem": "made for a newer helmstudio (format 2; this one reads 1)",
+      "enabled": false,
+      "status": "needs_newer",
+      "provider": null,
+      "updated_at": "2026-11-25T10:00:00Z"
     }
   ]
 }

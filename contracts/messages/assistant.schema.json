@@ -75,6 +75,7 @@
         "text": {"type": "string", "minLength": 1, "maxLength": 300},
         "undo": {"type": "boolean"},
         "memory_id": {"$ref": "defs.schema.json#/$defs/uuid", "description": "a Remembered line: the item its Undo deletes"},
+        "skill": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,22}$", "description": "from API 1.64: a Using skill line: the skill read"},
         "sources": {
           "type": "array",
           "maxItems": 5,
