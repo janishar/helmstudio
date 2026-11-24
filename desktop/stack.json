@@ -14,7 +14,8 @@
     "IMAGE_TAG": "prod",
     "HELM_NET": "172.30.100",
     "PUBLIC_BASE_URL": "http://127.0.0.1:8310",
-    "SERVER_HOSTS": ""
+    "SERVER_HOSTS": "",
+    "REMOTE_MODELS": "on"
   },
   "studioUrl": "http://127.0.0.1:8310",
   "natsPort": 4325,

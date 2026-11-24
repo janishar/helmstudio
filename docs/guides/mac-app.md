@@ -31,9 +31,14 @@ If a step fails, the screen says which; **Show log** opens the log, **Try again*
 
 The start screen shows for about **1 minute** (VM, services, runners), then the studio window.
 
+## Remote models
+
+Remote models are on in the app: Admin › Model providers offers DeepSeek, OpenAI, Anthropic and the rest. Paste the
+key in the provider form (or put the key file in `~/Library/Application Support/helmstudio/stack/deploy/secrets/providers/`).
+
 ## The menu bar
 
-The helmstudio icon in the menu bar has a dot: green Ready, yellow Starting…, red Something is down. Its menu:
+The helmstudio icon in the menu bar (white in dark mode, black in light mode; it follows a switch at once) has a dot: green Ready, yellow Starting…, red Something is down. Its menu:
 
 - **Open**: the studio window.
 - **Restart runners**: after a runner stalls or a new model is added.
