@@ -289,7 +289,7 @@ describe("a turn's actions in this tab", () => {
     expect(card.textContent).toContain("uses the GPU");
     expect(screen.getByText("Set Lighting: Blue hour")).toBeTruthy();
     expect(screen.getByText("Waiting for your OK · Generate")).toBeTruthy();
-    expect(screen.getByText("Waiting for you")).toBeTruthy();
+    expect(screen.getByText("Waiting")).toBeTruthy();
     expect(yes).not.toHaveBeenCalled();
     expect(posts).toHaveLength(0);
     // Undo names its line, on hover and to screen readers (alpha.2 item 23, board frame 14c)

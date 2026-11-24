@@ -1860,7 +1860,7 @@ function Drawer({ a }: { a: AssistantApi }) {
   ) : a.stopping ? (
     <span className="st st-go">Stopping…</span>
   ) : a.cardWaits ? (
-    <span className="st st-ask">Waiting for you</span>
+    <span className="st st-ask">Waiting</span>
   ) : a.running || t?.state === "working" || t?.state === "waiting" ? (
     <span className="st st-go">Working</span>
   ) : null;
