@@ -79,6 +79,29 @@ def sign_in(email: str, password: str) -> dict:
     return session
 
 
+def pytest_sessionfinish(session, exitstatus):
+    """Revokes the run's own API key (root make test issues a "contract" key each run), pass or fail. Only a key whose
+    prefix matches API_KEY is revoked, so a key another run is using stays."""
+    if not API_KEY:
+        return
+    try:
+        with make_client(headers(sign_in(ADMIN_EMAIL, ADMIN_PASSWORD)["access_token"])) as c:
+            for k in c.get("/auth/admin/apikeys").json()["api_keys"]:
+                if (
+                    k["client"] == "contract"
+                    and not k["revoked_at"]
+                    and API_KEY.startswith(k["prefix"])
+                ):
+                    c.delete(f"/auth/admin/apikeys/{k['id']}")
+    except (
+        httpx.HTTPError,
+        AssertionError,
+        KeyError,
+        ValueError,
+    ) as e:  # never turn a run's result into a cleanup failure
+        print(f"\ncould not revoke the contract API key: {e}")
+
+
 @pytest.fixture(scope="session")
 def admin_session() -> dict:
     return sign_in(ADMIN_EMAIL, ADMIN_PASSWORD)
