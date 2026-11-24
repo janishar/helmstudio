@@ -1,0 +1,16 @@
+{
+  "name": "future-skill",
+  "title": "Future skill",
+  "version": "0.1.0",
+  "kind": "skill",
+  "format": 2,
+  "description": "Test stack only: Future skill.",
+  "author": "contract_tests",
+  "may_do": [
+    "Teach the Assistant a test craft (text it reads)"
+  ],
+  "when": "Only in contract tests: when the user asks for future skill.",
+  "sounds": [
+    "x"
+  ]
+}

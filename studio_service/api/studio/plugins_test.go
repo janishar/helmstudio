@@ -39,11 +39,11 @@ func TestReadManifests(t *testing.T) {
 	s.SetPluginDirs([]string{"../../../plugins", "../../../contract_tests/fake_plugins", bad})
 	got := s.readManifests(context.Background())
 	names := slices.Sorted(maps.Keys(got))
-	want := []string{"claude-code-bridge", "fake-provider", "fake-tools", "good", "web-search"}
+	want := []string{"animator", "claude-code-bridge", "fake-provider", "fake-tools", "good", "web-search"}
 	if !slices.Equal(names, want) {
 		t.Fatalf("got %v, want %v", names, want)
 	}
-	if r := got["web-search"].Tools[0].Risk; r == nil || r.SendsOffMachine == nil || !*r.SendsOffMachine {
+	if r := got["web-search"].M.Tools[0].Risk; r == nil || r.SendsOffMachine == nil || !*r.SendsOffMachine {
 		t.Fatal("web-search's search sends off the machine")
 	}
 }

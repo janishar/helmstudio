@@ -53,11 +53,13 @@ var toolCatalog = sync.OnceValue(func() map[string]catalogTool {
 
 // offeredTools are the tools a turn offers (contracts check.py offered_tools): surface assistant, every role it needs
 // held, web_search only when on, look_at only when an ask workflow can run now; sorted.
-func offeredTools(roles []string, webSearch, lookAt bool) []string {
+func offeredTools(roles []string, webSearch, lookAt bool, skills ...bool) []string {
+	skillOn := len(skills) > 0 && skills[0] // API 1.64: use_skill and read_skill_file only while a skill is on
 	out := []string{}
 	for name, t := range toolCatalog() {
 		if slices.Contains(t.Surfaces, "assistant") && !slices.ContainsFunc(t.Roles, func(r string) bool { return !slices.Contains(roles, r) }) &&
-			(name != "web_search" || webSearch) && (name != "look_at" || lookAt) {
+			(name != "web_search" || webSearch) && (name != "look_at" || lookAt) &&
+			(name != "use_skill" && name != "read_skill_file" || skillOn) {
 			out = append(out, name)
 		}
 	}
@@ -66,8 +68,8 @@ func offeredTools(roles []string, webSearch, lookAt bool) []string {
 }
 
 // OfferedTools is offeredTools, for the contract's offer fixtures.
-func OfferedTools(roles []string, webSearch, lookAt bool) []string {
-	return offeredTools(roles, webSearch, lookAt)
+func OfferedTools(roles []string, webSearch, lookAt, skills bool) []string {
+	return offeredTools(roles, webSearch, lookAt, skills)
 }
 
 // askWorkflow is the ask workflow look_at runs now: a template answering text whose ask node takes media (Qwen Image's
@@ -214,6 +216,8 @@ type toolArgs struct {
 	TimelineID *string `json:"timeline_id"`
 	Revision   *int    `json:"revision"` // timeline_revisions (API 1.49)
 	Before     *int    `json:"before"`
+	Skill      *string `json:"skill"` // use_skill, read_skill_file (API 1.64)
+	File       *string `json:"file"`
 }
 
 // toolInputs are the args each read tool takes, and which it needs.
@@ -236,6 +240,8 @@ var toolInputs = map[string][2][]string{
 	"custom_nodes":       {},
 	"model_sources":      {},
 	"model_jobs":         {},
+	"use_skill":          {{"skill"}, {"skill"}},                 // API 1.64
+	"read_skill_file":    {{"skill", "file"}, {"skill", "file"}}, // API 1.64
 }
 
 // readTool runs one read tool through its routes.
@@ -417,6 +423,10 @@ func (s *Service) readTool(ctx context.Context, caller common.Caller, name strin
 		default:
 			get("revisions", fmt.Sprintf("%s?limit=%d", base, limit))
 		}
+	case "use_skill": // API 1.64
+		return single(get("", "/skills/"+esc(args.Skill)), refused)
+	case "read_skill_file":
+		return single(get("", "/skills/"+esc(args.Skill)+"/files/"+esc(args.File)), refused)
 	case "custom_nodes":
 		return single(get("", "/custom-nodes"), refused)
 	case "model_sources":

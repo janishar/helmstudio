@@ -10,4 +10,5 @@ services:
   studio:
     environment:
       STUDIO_PLUGINS_DIRS: /plugins:/fake-plugins
-    volumes: [../contract_tests/fake_plugins:/fake-plugins:ro]
+    # API 1.64: a test ~/.helm/plugins, never the real one
+    volumes: [../contract_tests/fake_plugins:/fake-plugins:ro, ../contract_tests/fake_helm/plugins:/helm-plugins:ro]

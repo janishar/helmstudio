@@ -839,6 +839,10 @@ func (s *Service) PostAssistant(ctx context.Context, caller common.Caller, id st
 		if err != nil {
 			return err
 		}
+		skills, err := assistantSkills(ctx, tx) // API 1.64: the skills that are on, one line each
+		if err != nil {
+			return err
+		}
 		turn, actions := t.Turn+1, t.Actions
 		if body.screen != nil {
 			actions = body.screen.Actions
@@ -869,9 +873,9 @@ func (s *Service) PostAssistant(ctx context.Context, caller common.Caller, id st
 				return network.NewConflictError("this chat is working in another tab", nil)
 			}
 			if mine && running {
-				next := message.AssistantTurn{ClientID: body.ClientID, Roles: roles, Tools: offeredTools(roles, snap.Search != nil, lookAt),
+				next := message.AssistantTurn{ClientID: body.ClientID, Roles: roles, Tools: offeredTools(roles, snap.Search != nil, lookAt, len(skills) > 0),
 					Actions: append([]string{}, actions...), Settings: snap, Input: map[string]any{"kind": "message", "screen": body.Screen},
-					Plugins: plugins}
+					Plugins: plugins, Skills: skills}
 				entry, err := one[AssistantEntry](ctx, tx, `INSERT INTO assistant_entries (id, thread_id, owner_id, key, turn, kind, text,
 					steer, next) VALUES ($1, $2, $3, $4, $5, 'user', $6, 'waiting', $7) RETURNING `+entryCols,
 					utility.NewID(), t.ID, t.OwnerID, "message:"+messageID, t.Turn, *body.Text, toJSON(next))
@@ -953,8 +957,8 @@ func (s *Service) PostAssistant(ctx context.Context, caller common.Caller, id st
 		}
 		if err := messaging.Enqueue(ctx, tx, messaging.Command{JobID: t.ID, OwnerID: t.OwnerID, MsgID: fmt.Sprintf("%s:%d", t.ID, turn),
 			Data: message.AssistantTurn{ThreadID: t.ID, Turn: turn, ClientID: body.ClientID, Roles: roles,
-				Tools: offeredTools(roles, snap.Search != nil, lookAt), Actions: append([]string{}, actions...), Settings: snap,
-				Input: input, Plugins: plugins}}); err != nil {
+				Tools: offeredTools(roles, snap.Search != nil, lookAt, len(skills) > 0), Actions: append([]string{}, actions...), Settings: snap,
+				Input: input, Plugins: plugins, Skills: skills}}); err != nil {
 			return err
 		}
 		t, err = threadEvent(ctx, tx, t.ID)

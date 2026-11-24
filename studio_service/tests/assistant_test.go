@@ -482,6 +482,7 @@ func TestAssistantOffered(t *testing.T) {
 			Roles       []string `json:"roles"`
 			WebSearch   bool     `json:"web_search"`
 			LookAt      bool     `json:"look_at"`
+			Skills      bool     `json:"skills"`
 			Expect      []string `json:"expect"`
 		} `json:"cases"`
 	}
@@ -494,7 +495,7 @@ func TestAssistantOffered(t *testing.T) {
 			continue // screen_actions: web_service's
 		}
 		ran++
-		if got := studio.OfferedTools(c.Roles, c.WebSearch, c.LookAt); !slices.Equal(got, c.Expect) {
+		if got := studio.OfferedTools(c.Roles, c.WebSearch, c.LookAt, c.Skills); !slices.Equal(got, c.Expect) {
 			t.Errorf("%s: %v, want %v", c.Description, got, c.Expect)
 		}
 	}

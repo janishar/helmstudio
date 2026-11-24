@@ -690,6 +690,14 @@ type AssistantTurn struct {
 	Settings AssistantSettings `json:"settings"`
 	Input    map[string]any    `json:"input"`
 	Plugins  []TurnPlugin      `json:"plugins,omitempty"` // API 1.61: the assistant-tools plugins that are on
+	Skills   []TurnSkill       `json:"skills,omitempty"`  // API 1.64: the skills that are on
+}
+
+// TurnSkill is one skill that is on, as a turn's prompt lists it (API 1.64).
+type TurnSkill struct {
+	Name  string `json:"name"`
+	Title string `json:"title"`
+	When  string `json:"when"`
 }
 
 // TurnPlugin is one assistant-tools plugin as a turn offers it (API 1.61): its tools as in its manifest.

@@ -4650,6 +4650,8 @@ def check_plugins(schemas: dict[str, dict], registry: Registry) -> None:
                     *root.glob("contract_tests/fake_helm/plugins/*/plugin.json")])
     for p in found:
         w, doc = str(p.relative_to(root)), json.loads(p.read_text())
+        if doc.get("kind") == "skill" and doc.get("format", 1) > 1:
+            continue  # API 1.64: a newer format (the test stack's future-skill) is listed needs_newer, never read
         if bad := list(v.iter_errors(doc)):
             fail(f"{w}: {bad[0].json_path}: {bad[0].message}")
             continue

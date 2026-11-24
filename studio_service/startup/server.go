@@ -138,8 +138,9 @@ func Run() error {
 			}
 			return reply, err
 		},
-		remoteModels: env.RemoteModels,
-		pluginDirs:   env.PluginDirs,
+		remoteModels:  env.RemoteModels,
+		pluginDirs:    env.PluginDirs,
+		userPluginDir: env.UserPluginDir,
 		// a provider test makes one or two HTTP calls in pipelines: 30 s (API 1.15)
 		providerTest: func(ctx context.Context, req message.ProviderTestRequest) (message.ProviderTestReply, error) {
 			var reply message.ProviderTestReply
@@ -200,6 +201,7 @@ func Run() error {
 	} else if len(added) > 0 {
 		log.Printf("plugins: found %v (off)", added)
 	}
+	go module.settings.WatchPlugins(ctx, 10*time.Second) // API 1.64: ~/.helm/plugins changed
 
 	var workers sync.WaitGroup
 	runners.Await("registry", "hosts") // the dispatcher fails no run on a view not loaded yet

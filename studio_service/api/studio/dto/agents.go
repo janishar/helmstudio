@@ -371,15 +371,72 @@ type Plugin struct {
 	MayDo       []string          `json:"may_do"`
 	Personal    bool              `json:"personal"`
 	Disclaimer  *PluginDisclaimer `json:"disclaimer,omitempty"`
-	URL         string            `json:"url"`
+	URL         string            `json:"url,omitempty"`
 	Start       *string           `json:"start,omitempty"`
 	Models      []string          `json:"models,omitempty"`
 	KeyHint     *string           `json:"key_hint,omitempty"`
 	Tools       []PluginTool      `json:"tools,omitempty"`
 	Enabled     bool              `json:"enabled"`
-	Status      string            `json:"status"` // off | running | not_running
+	Status      string            `json:"status"` // off | running | not_running; API 1.64 on | needs_newer | broken
 	Provider    *string           `json:"provider"`
 	UpdatedAt   time.Time         `json:"updated_at"`
+	Origin      *string           `json:"origin,omitempty"` // API 1.64: built_in | yours
+	Replaces    *string           `json:"replaces,omitempty"`
+	Format      *int              `json:"format,omitempty"`
+	When        *string           `json:"when,omitempty"`
+	Files       []string          `json:"files,omitempty"`
+	Recipes     *PluginRecipes    `json:"recipes,omitempty"`
+	Problem     *string           `json:"problem,omitempty"`
+}
+
+// PluginRecipes is a skill's recipes checked against this install (API 1.64).
+type PluginRecipes struct {
+	OK      int             `json:"ok"`
+	Skipped []RecipeSkipped `json:"skipped"`
+}
+
+// RecipeSkipped is a recipe this install can't run, and why.
+type RecipeSkipped struct {
+	Name string `json:"name"`
+	Why  string `json:"why"`
+}
+
+// SkillSummary is a skill that is on, as every user sees it (API 1.64).
+type SkillSummary struct {
+	Name    string `json:"name"`
+	Title   string `json:"title"`
+	When    string `json:"when"`
+	Version string `json:"version"`
+}
+
+// SkillList is GET /skills.
+type SkillList struct {
+	Skills []SkillSummary `json:"skills"`
+}
+
+// SkillRecipe is a recipe this install can run.
+type SkillRecipe struct {
+	Name     string         `json:"name"`
+	Title    string         `json:"title"`
+	Workflow string         `json:"workflow"`
+	Params   map[string]any `json:"params"`
+	Note     *string        `json:"note,omitempty"`
+}
+
+// Skill is GET /skills/{skill}: the guide, its files and the recipes that hold.
+type Skill struct {
+	SkillSummary
+	Origin  string        `json:"origin"`
+	Text    string        `json:"text"`
+	Files   []string      `json:"files"`
+	Recipes []SkillRecipe `json:"recipes"`
+}
+
+// SkillFile is GET /skills/{skill}/files/{file}.
+type SkillFile struct {
+	Skill string `json:"skill"`
+	File  string `json:"file"`
+	Text  string `json:"text"`
 }
 
 // PluginList is GET /admin/plugins.

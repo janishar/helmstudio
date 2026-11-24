@@ -1,7 +1,6 @@
 package studio
 
 import (
-	"bytes"
 	"cmp"
 	"context"
 	"encoding/json"
@@ -12,7 +11,6 @@ import (
 	"maps"
 	"net/http"
 	"os"
-	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -52,11 +50,23 @@ type manifest struct {
 	MayDo       []string              `json:"may_do"`
 	Personal    bool                  `json:"personal,omitempty"`
 	Disclaimer  *dto.PluginDisclaimer `json:"disclaimer,omitempty"`
-	URL         string                `json:"url"`
-	Health      string                `json:"health"`
+	URL         string                `json:"url,omitempty"`
+	Health      string                `json:"health,omitempty"`
 	Start       *string               `json:"start,omitempty"`
 	Provider    *manifestProvider     `json:"provider,omitempty"`
 	Tools       []manifestTool        `json:"tools,omitempty"`
+	Format      *int                  `json:"format,omitempty"`  // API 1.64, a skill's
+	When        string                `json:"when,omitempty"`    // API 1.64, a skill's
+	Recipes     []recipe              `json:"recipes,omitempty"` // API 1.64, a skill's
+}
+
+// recipe is plugins/manifest.schema.json $defs/recipe (API 1.64).
+type recipe struct {
+	Name     string         `json:"name"`
+	Title    string         `json:"title"`
+	Workflow string         `json:"workflow"`
+	Params   map[string]any `json:"params"`
+	Note     *string        `json:"note,omitempty"`
 }
 
 type manifestProvider struct {
@@ -88,6 +98,8 @@ var (
 	pluginPathRe = regexp.MustCompile(`^/[A-Za-z0-9/_.-]{0,99}$`)
 	toolNameRe   = regexp.MustCompile(`^[a-z][a-z0-9_]{0,23}$`)
 	modelNameRe  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$`)
+	recipeNameRe = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
+	recipeKeyRe  = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}\.[a-z][a-z0-9_]{0,47}$`)
 )
 
 // problem is why a manifest is skipped (the schema's rules a scan can trip on), or "".
@@ -100,10 +112,31 @@ func (s *Service) problem(ctx context.Context, m *manifest, folder string) strin
 		return "title, version, description and author are required"
 	case len(m.MayDo) < 1 || len(m.MayDo) > 8 || slices.ContainsFunc(m.MayDo, func(v string) bool { return !text(v, 120) }):
 		return "may_do needs 1-8 lines"
-	case !pluginURLRe.MatchString(m.URL) || !pluginPathRe.MatchString(m.Health):
-		return "url (no path) and health (a path) are required"
 	case m.Disclaimer != nil && !text(m.Disclaimer.Text, 400):
 		return "disclaimer.text is required"
+	}
+	if m.Kind == "skill" { // API 1.64: text only, no service
+		switch {
+		case m.Format == nil || *m.Format != 1 || !text(m.When, 200):
+			return "a skill needs format 1 and when"
+		case m.URL != "" || m.Health != "" || m.Start != nil || m.Provider != nil || m.Tools != nil:
+			return "a skill has no url, health, start, provider or tools"
+		case len(m.Recipes) > 16:
+			return "at most 16 recipes"
+		}
+		for _, r := range m.Recipes {
+			if !recipeNameRe.MatchString(r.Name) || !text(r.Title, 80) || !text(r.Workflow, 80) || len(r.Params) > 24 ||
+				slices.ContainsFunc(slices.Collect(maps.Keys(r.Params)), func(k string) bool { return !recipeKeyRe.MatchString(k) }) {
+				return "each recipe needs name, title, workflow and params by <node>.<param>"
+			}
+		}
+		return ""
+	}
+	if m.Format != nil || m.When != "" || m.Recipes != nil {
+		return "format, when and recipes are a skill's"
+	}
+	if !pluginURLRe.MatchString(m.URL) || !pluginPathRe.MatchString(m.Health) {
+		return "url (no path) and health (a path) are required"
 	}
 	switch m.Kind {
 	case "model-provider":
@@ -128,40 +161,9 @@ func (s *Service) problem(ctx context.Context, m *manifest, folder string) strin
 			}
 		}
 	default:
-		return "kind must be model-provider or assistant-tools"
+		return "kind must be model-provider, assistant-tools or skill"
 	}
 	return s.hostRule(ctx, "server", m.URL)
-}
-
-// readManifests reads */plugin.json in every plugin folder (the first of a name wins); a bad one is logged and skipped.
-func (s *Service) readManifests(ctx context.Context) map[string]manifest {
-	out := map[string]manifest{}
-	for _, dir := range s.pluginDirs {
-		files, _ := filepath.Glob(filepath.Join(dir, "*", "plugin.json"))
-		for _, f := range files {
-			folder := filepath.Base(filepath.Dir(f))
-			raw, err := readLimited(f, 64<<10)
-			if err != nil || len(raw) > 64<<10 {
-				log.Printf("plugin %s skipped: unreadable or over 64 KB", folder)
-				continue
-			}
-			var m manifest
-			dec := json.NewDecoder(bytes.NewReader(raw))
-			dec.DisallowUnknownFields()
-			if err := dec.Decode(&m); err != nil {
-				log.Printf("plugin %s skipped: %v", folder, err)
-				continue
-			}
-			if why := s.problem(ctx, &m, folder); why != "" {
-				log.Printf("plugin %s skipped: %s", folder, why)
-				continue
-			}
-			if _, seen := out[m.Name]; !seen {
-				out[m.Name] = m
-			}
-		}
-	}
-	return out
 }
 
 // readLimited reads at most max+1 bytes of a file (a longer one is refused by its caller, never read whole).
@@ -174,42 +176,22 @@ func readLimited(path string, max int64) ([]byte, error) {
 	return io.ReadAll(io.LimitReader(f, max+1))
 }
 
-// ScanPlugins reads the plugin folders into the table: a new one is added off, a known one's manifest replaced, one
-// gone is dropped. It returns the names added.
-func (s *Service) ScanPlugins(ctx context.Context) ([]string, error) {
-	found := s.readManifests(ctx)
-	added := []string{}
-	err := common.System(ctx, s.db, func(tx pgx.Tx) error {
-		names := []string{}
-		for _, name := range slices.Sorted(maps.Keys(found)) {
-			names = append(names, name)
-			var inserted bool
-			if err := tx.QueryRow(ctx, `INSERT INTO plugins (name, manifest) VALUES ($1, $2)
-				ON CONFLICT (name) DO UPDATE SET manifest = excluded.manifest,
-				updated_at = CASE WHEN plugins.manifest = excluded.manifest THEN plugins.updated_at ELSE clock_timestamp() END
-				RETURNING xmax = 0`, name, toJSON(found[name])).Scan(&inserted); err != nil {
-				return err
-			}
-			if inserted {
-				added = append(added, name)
-			}
-		}
-		_, err := tx.Exec(ctx, `DELETE FROM plugins WHERE NOT (name = ANY($1))`, names)
-		return err
-	})
-	return added, err
-}
-
 // pluginRow is a plugins row.
 type pluginRow struct {
 	Name      string
 	Manifest  manifest
 	Enabled   bool
 	UpdatedAt time.Time
+	Origin    string  // API 1.64: built_in | yours
+	Dir       string  // where its files are read
+	Replaces  *string // yours: the built-in version
+	Blocked   string  // '' | needs_newer | broken
+	Problem   *string
 }
 
 func readPlugins(ctx context.Context, tx pgx.Tx, where string, args ...any) ([]pluginRow, error) {
-	return collect[pluginRow](ctx, tx, `SELECT name, manifest, enabled, updated_at FROM plugins `+where+` ORDER BY name`, args...)
+	return collect[pluginRow](ctx, tx, `SELECT name, manifest, enabled, updated_at, origin, dir, replaces, blocked, problem
+		FROM plugins `+where+` ORDER BY name`, args...)
 }
 
 // healthClient checks a plugin's health path: 2 s, never a redirect.
@@ -246,8 +228,21 @@ func (s *Service) pluginDTOs(ctx context.Context, caller common.Caller, rows []p
 			p.Tools = append(p.Tools, dto.PluginTool{Name: t.Name, Description: t.Description, Risk: dto.PluginRisk{
 				UsesGPU: *t.Risk.UsesGPU, Deletes: *t.Risk.Deletes, SendsOffMachine: *t.Risk.SendsOffMachine}})
 		}
+		p.Origin, p.Replaces, p.Problem = &r.Origin, r.Replaces, r.Problem
+		if m.Kind == "skill" { // API 1.64
+			p.Format, p.When = m.Format, &m.When
+			if r.Blocked == "" {
+				p.Files = skillFiles(r.Dir)
+				ok, skipped := s.recipes(m)
+				p.Recipes = &dto.PluginRecipes{OK: len(ok), Skipped: skipped}
+				p.Status = map[bool]string{true: "on", false: "off"}[r.Enabled]
+			}
+		}
+		if r.Blocked != "" {
+			p.Status = r.Blocked
+		}
 		out[i] = p
-		if r.Enabled {
+		if r.Enabled && m.Kind != "skill" && r.Blocked == "" {
 			wg.Go(func() {
 				out[i].Status = map[bool]string{true: "running", false: "not_running"}[running(ctx, m)]
 			})
@@ -306,6 +301,16 @@ func (s *Service) PutPlugin(ctx context.Context, caller common.Caller, name stri
 	}
 	var rows []pluginRow
 	err := common.System(ctx, s.db, func(tx pgx.Tx) error {
+		if *body.Enabled { // API 1.64: a skill of a newer format, or one of yours that can't be read, never turns on
+			var title, blocked string
+			err := tx.QueryRow(ctx, `SELECT manifest->>'title', blocked FROM plugins WHERE name = $1`, name).Scan(&title, &blocked)
+			switch {
+			case err == nil && blocked == "needs_newer":
+				return network.NewConflictError(title+" needs a newer helmstudio", nil)
+			case err == nil && blocked != "":
+				return network.NewConflictError(name+" can't be read", nil)
+			}
+		}
 		if _, err := tx.Exec(ctx, `UPDATE plugins SET enabled = $2, updated_at = clock_timestamp() WHERE name = $1`,
 			name, *body.Enabled); err != nil {
 			return err
@@ -457,7 +462,7 @@ func (s *Service) AddPluginProvider(ctx context.Context, caller common.Caller, n
 
 // assistantPlugins is a turn's `plugins`: the assistant-tools plugins that are on, as studio read them.
 func assistantPlugins(ctx context.Context, tx pgx.Tx) ([]message.TurnPlugin, error) {
-	rows, err := readPlugins(ctx, tx, `WHERE enabled AND manifest->>'kind' = 'assistant-tools'`)
+	rows, err := readPlugins(ctx, tx, `WHERE enabled AND blocked = '' AND manifest->>'kind' = 'assistant-tools'`)
 	out := []message.TurnPlugin{}
 	for _, r := range rows {
 		if len(out) < 16 {
