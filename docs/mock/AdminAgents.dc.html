@@ -186,6 +186,32 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 </div>
 </div>
 </section>
+
+<h2 class="h" style="margin-top: 4px">CONTEXT AND CACHE · ALPHA.2 ITEM 30 · AWAITS APPROVAL</h2>
+<section aria-label="Context and cache" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 12px; color: var(--t2)">In the Assistant box, under Provider and Model</span>
+<div style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 16px 18px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: end">
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="a-win" style="font-size: 12px; color: var(--t2)">Chat window, tokens<button class="i" aria-label="More information" title="The model's real limit. Past 70% the oldest half of a chat folds once into a short summary, so plans and decisions stay. A smaller window costs less per answer.">i</button></label><input id="a-win" class="in" value="60000"></div>
+<span style="font-size: 12px; color: var(--t2); padding-bottom: 9px">for deepseek-chat · 60000 until set</span>
+</div>
+<span style="font-size: 12px; color: var(--t2)">Each model keeps its own. Past 70% the oldest half folds into a summary.</span>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 12px; color: var(--t2)">Below the Assistant box: prompt cache, last 30 days</span>
+<div style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 6px 8px">
+<table style="border-collapse: collapse; width: 100%">
+<thead><tr><th>Model</th><th>Calls</th><th>Cache hits<button class="i" aria-label="More information" title="The share of prompt tokens the provider read from its cache, as each reply reported. Hits cost less. A model whose replies report none is not listed.">i</button></th></tr></thead>
+<tbody>
+<tr><td class="m">DeepSeek · deepseek-chat</td><td class="m">1,284</td><td><span style="display: flex; align-items: center; gap: 8px"><span style="flex: 0 0 96px; height: 6px; border-radius: 999px; background: var(--s4); overflow: hidden"><span style="display: block; width: 85%; height: 100%; background: var(--a1)"></span></span><b style="font-weight: 600">85%</b></span></td></tr>
+<tr><td class="m">OpenAI · gpt-5-mini</td><td class="m">12</td><td><span style="display: flex; align-items: center; gap: 8px"><span style="flex: 0 0 96px; height: 6px; border-radius: 999px; background: var(--s4); overflow: hidden"><span style="display: block; width: 41%; height: 100%; background: var(--a1)"></span></span><b style="font-weight: 600">41%</b></span></td></tr>
+</tbody>
+</table>
+</div>
+</div>
+</section>
 </main>
 
 <aside aria-label="Session names" style="flex: 1 1 340px; box-sizing: border-box; padding: 16px 18px 24px; border-left: 1px solid var(--s3); background: var(--p0); display: flex; flex-direction: column; gap: 12px">
