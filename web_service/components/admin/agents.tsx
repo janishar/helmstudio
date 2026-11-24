@@ -630,17 +630,21 @@ function AssistantPanel({
       )}
       {tools.length > 0 && (
         <span className="flex flex-wrap items-center gap-x-2 text-[13px]">
-          <span className="ok" aria-hidden>
+          <span className="text-a1" aria-hidden>
             ✓
           </span>
           {tools.map((t) => t.title).join(" · ")}
-          <span className="text-t2">· on in Plugins; the Assistant asks before it sends anything off the machine</span>
+          <span className="text-t2">
+            · on in Plugins; the Assistant asks before it sends anything off the machine
+          </span>
           <Link href="/plugins" className="underline underline-offset-2">
             Plugins
           </Link>
         </span>
       )}
-      <div className={`grid grid-cols-2 items-end gap-2 ${!search.length && tools.length ? "hidden" : ""}`}>
+      <div
+        className={`grid grid-cols-2 items-end gap-2 ${!search.length && tools.length ? "hidden" : ""}`}
+      >
         <label
           aria-disabled={!search.length || undefined}
           title={
