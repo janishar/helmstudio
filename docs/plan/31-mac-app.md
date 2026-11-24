@@ -25,11 +25,15 @@ and SwiftUI because it renders with Chromium, the engine the e2e suite tests in.
    with **Show log** and **Try again**.
 
 A menu-bar item shows one status dot (ready / starting / something down) and a menu: **Open**, **Restart runners**,
-**Rebuild and restart** (`make up` then `make runners`), **Stop everything**, **Open logs**, **Open at login** (a
-tick, off by default), **Quit**.
+**Rebuild and restart** (`make up` then `make runners`), **Open logs**, **Keep running after quit** (a tick, on),
+**Open at login** (a tick, off), **Quit entirely**.
 
-Quitting stops everything: the runners (`make runners-stop`), then the dev stack (`make down`; data volumes stay).
-The next open starts both again (about 30 s more than a warm start).
+Quitting the app (Cmd+Q, the Dock's Quit, or closing the window) keeps the background running: the dev stack and the
+runners stay up, the window and Dock icon go, and the menu-bar item stays, so opening the app again is instant. A
+**Keep running after quit** tick in the menu-bar menu (on by default) turns this off.
+
+**Quit entirely** in the menu-bar menu stops everything: the runners (`make runners-stop`), then the dev stack
+(`make down`; data volumes stay), then the app and its menu-bar item. The next open starts both again.
 
 ### 35.2 What it is not (the quick path)
 
@@ -74,6 +78,8 @@ About a day: half for the board and the start screen, half for the app, tests an
 ### Decided by the owner, 2026-11-25 (asked one by one)
 
 1. **Shell: Electron** (Chromium, the engine the e2e suite uses).
-2. **On quit: stop everything** (the runners, then the dev stack; volumes stay).
+2. **On quit: keep running in the background**; **Quit entirely** in the menu-bar menu stops everything (owner,
+   2026-11-25: "have option to keep running the background process when we quit the app. it can be quit entirely
+   with menu bar"; this replaces the first answer, stop everything).
 3. **Open at login: off**, with an Open at login tick in the menu-bar menu.
 4. **Dock icon plus menu-bar item.**
