@@ -1454,7 +1454,7 @@ describe("alpha.2: size, answers that read well, polish (board frames 9, 10, 14)
     expect(setPlayhead).toHaveBeenCalledWith({ at_s: 26 }, expect.anything());
   });
 
-  it("a long reply stops at 3 lines with one chevron for the whole bubble (board frame 17)", async () => {
+  it("an older long reply stops at 3 lines with one chevron for the whole bubble; the latest shows in full (board frame 17)", async () => {
     const tall = vi
       .spyOn(HTMLElement.prototype, "scrollHeight", "get")
       .mockImplementation(function (this: HTMLElement) {
@@ -1465,12 +1465,15 @@ describe("alpha.2: size, answers that read well, polish (board frames 9, 10, 14)
       entries: [
         entry(1, { kind: "assistant", text: "Opening Create…" }),
         entry(2, { kind: "assistant", text: "Five shots…" }),
+        entry(3, { kind: "user", text: "Now shot 2" }),
+        entry(4, { kind: "assistant", text: "Shot 2 is set." }),
       ],
     });
     await openDrawer();
     const show = await screen.findByRole("button", { name: "Show all" });
-    // one control for the reply, not one per answer
+    // one control for the older reply, not one per answer; the latest reply always shows in full
     expect(screen.getAllByRole("button", { name: "Show all" })).toHaveLength(1);
+    expect(screen.getByText("Shot 2 is set.").closest(".unclamp")).toBeTruthy();
     expect(screen.getByText("Opening Create…").closest(".clamp")).toBe(
       screen.getByText("Five shots…").closest(".clamp"),
     );

@@ -1270,6 +1270,7 @@ function Thread({ a, entries }: { a: AssistantApi; entries: Entry[] }) {
           max,
         })
       : undefined;
+  const latestReply = entries.findLast((e) => e.kind === "assistant")?.id;
   const flush = (key: string) => {
     if (!words.length && !lines.length && fold === null) return;
     const said = words;
@@ -1287,9 +1288,11 @@ function Thread({ a, entries }: { a: AssistantApi; entries: Entry[] }) {
           // one clamp for the whole reply (board frame 17): every note of the turn and the answer, never per paragraph
           <Clamp
             k={parts.map((x) => x.text).join("\n\n")}
-            whole={parts.some((x) =>
-              answerBlocks(x.text).some((b) => b.k === "code" || b.k === "plan"),
-            )}
+            whole={
+              // the latest reply always shows in full; older ones collapse (owner, 2026-11-25)
+              parts.some((x) => x.w.id === latestReply) ||
+              parts.some((x) => answerBlocks(x.text).some((b) => b.k === "code" || b.k === "plan"))
+            }
           >
             {parts.map(
               (x) => x.text && <Answer key={x.w.id} text={x.text} seek={seek} refs={refs} />,
