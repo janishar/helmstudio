@@ -1,0 +1,1 @@
+{"days": 30, "models": [{"provider": "deepseek", "model": "deepseek-chat", "calls": 1, "prompt_tokens": 10, "hit_tokens": 5, "hit_rate": 1.5}]}

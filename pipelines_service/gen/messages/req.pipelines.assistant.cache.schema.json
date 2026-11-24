@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/req.pipelines.assistant.cache.schema.json",
+  "title": "NATS request/reply pipelines.assistant.cache (studio → pipelines)",
+  "description": "From API 1.66 (alpha.2 item 30). Core NATS request/reply on subject `pipelines.assistant.cache` (queue group `pipelines`), bare JSON, for GET /v1/studio/admin/assistant/cache (admin only: studio checks the role). pipelines sums assistant_spend's model calls of the last `days` days that reported their cache hits, per provider and model (at most 100, most calls first). Studio waits 5 s (no answer: 503).",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "required": ["days"],
+      "additionalProperties": false,
+      "properties": {"days": {"type": "integer", "minimum": 1, "maximum": 365}}
+    },
+    "reply": {"oneOf": [{"$ref": "#/$defs/ok"}, {"$ref": "#/$defs/error"}]},
+    "ok": {
+      "type": "object",
+      "required": ["models"],
+      "additionalProperties": false,
+      "properties": {
+        "models": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "required": ["provider", "model", "calls", "prompt_tokens", "hit_tokens"],
+            "additionalProperties": false,
+            "properties": {
+              "provider": {"type": "string", "minLength": 1, "maxLength": 64},
+              "model": {"type": "string", "minLength": 1, "maxLength": 128},
+              "calls": {"type": "integer", "minimum": 0},
+              "prompt_tokens": {"type": "integer", "minimum": 0},
+              "hit_tokens": {"type": "integer", "minimum": 0}
+            }
+          }
+        }
+      }
+    },
+    "error": {
+      "type": "object",
+      "required": ["error", "code"],
+      "additionalProperties": false,
+      "properties": {
+        "error": {"type": "string", "minLength": 1, "maxLength": 500},
+        "code": {"enum": ["invalid", "internal"]}
+      }
+    }
+  }
+}

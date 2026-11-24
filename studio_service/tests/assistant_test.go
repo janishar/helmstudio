@@ -611,6 +611,58 @@ func TestAssistantTools(t *testing.T) {
 	}
 }
 
+// TestAssistantWindowAndCache: each model keeps its own chat window, the turn carries it, and the admin reads the
+// prompt cache hit rate per model from pipelines (API 1.66, alpha.2 item 30).
+func TestAssistantWindowAndCache(t *testing.T) {
+	e := setup(t)
+	path := "/v1/studio/admin/assistant"
+	if got := e.call(admin, "GET", path, nil, 200); got["window_tokens"] != float64(60000) {
+		t.Fatal(got)
+	}
+	e.assistantOn()
+	e.call(admin, "PUT", path, map[string]any{"enabled": true, "provider": "ollama", "window_tokens": 7999}, 422)
+	if got := e.call(admin, "PUT", path, map[string]any{"enabled": true, "provider": "ollama", "window_tokens": 128000}, 200); got["window_tokens"] != float64(128000) {
+		t.Fatal(got)
+	}
+	if got := e.call(admin, "PUT", path, map[string]any{"enabled": true, "provider": "ollama", "model": "llama3.2:3b"}, 200); got["window_tokens"] != float64(60000) {
+		t.Fatal("another model keeps its own window", got)
+	}
+	if got := e.call(admin, "PUT", path, map[string]any{"enabled": true, "provider": "ollama"}, 200); got["window_tokens"] != float64(128000) {
+		t.Fatal("absent: unchanged", got)
+	}
+	// the default model is the same model as named: one window, kept by name
+	if got := e.call(admin, "PUT", path, map[string]any{"enabled": true, "provider": "ollama", "model": "qwen2.5:7b"}, 200); got["window_tokens"] != float64(128000) {
+		t.Fatal("the default model named keeps its window", got)
+	}
+	chat := e.call(userA, "POST", "/v1/studio/assistant/threads", map[string]any{"client_id": tabA}, 201)
+	e.call(userA, "POST", "/v1/studio/assistant/threads/"+chat["id"].(string)+"/messages", map[string]any{"kind": "message",
+		"client_id": tabA, "text": "hi", "screen": screen("/")}, 202)
+	if turns := e.turns(); len(turns) != 1 || turns[0].Data.Settings.WindowTokens != 128000 {
+		t.Fatal(turns)
+	}
+
+	e.call(userA, "GET", path+"/cache", nil, 403)
+	e.call(admin, "GET", path+"/cache", nil, 503) // pipelines not reachable
+	e.service.SetAssistantCache(func(_ context.Context, req message.AssistantCacheRequest) (message.AssistantCacheReply, error) {
+		if req.Days != 30 {
+			t.Fatal(req)
+		}
+		return message.AssistantCacheReply{Models: []message.AssistantCacheModel{
+			{Provider: "deepseek", Model: "deepseek-chat", Calls: 4, PromptTokens: 1000, HitTokens: 800},
+			{Provider: "ollama", Model: "qwen2.5:7b", Calls: 1}}}, nil
+	})
+	got := e.call(admin, "GET", path+"/cache", nil, 200)
+	models := got["models"].([]any)
+	if got["days"] != float64(30) || len(models) != 2 || models[0].(map[string]any)["hit_rate"] != 0.8 ||
+		models[0].(map[string]any)["calls"] != float64(4) || models[1].(map[string]any)["hit_rate"] != nil {
+		t.Fatal(got)
+	}
+	e.service.SetAssistantCache(func(context.Context, message.AssistantCacheRequest) (message.AssistantCacheReply, error) {
+		return message.AssistantCacheReply{Error: "could not read the spend rows", Code: "internal"}, nil
+	})
+	e.call(admin, "GET", path+"/cache", nil, 503)
+}
+
 func TestAssistantMemory(t *testing.T) {
 	e := setup(t)
 	path := "/v1/studio/assistant/memory"

@@ -45,6 +45,9 @@ class Studio:
     async def tool(self, request: dict) -> dict:
         return await tool(self.nc, request)
 
+    async def see(self, request: dict) -> dict | None:
+        return await see(self.nc, request)
+
 
 TOOLS = "studio.tools"
 
@@ -78,3 +81,23 @@ def _reply_errors(request: dict, reply) -> list[str]:
         ok = set(reply) == {"tool", "result"} and reply["tool"] == request["tool"]
         return [] if ok and isinstance(reply["result"], dict) else ["not an assistant tool reply"]
     return schemas.tools_errors("reply", reply)
+
+
+SEE = "studio.see"
+
+
+async def see(nc, request: dict) -> dict | None:
+    """studio.see (API 1.65): one take's pictures for the assistant's model ({take_id, kind, title, images} or {error,
+    code}). Read-only, so asked at most twice; None when no good reply came (the model goes on without them)."""
+    if errs := schemas.see_errors("request", request):
+        raise ValueError(f"{SEE} request is off-contract: {'; '.join(errs[:3])}")
+    for _ in range(2):
+        try:
+            msg = await nc.request(SEE, json.dumps(request).encode(), timeout=TIMEOUT)
+            reply = json.loads(msg.data)
+            if not (errs := schemas.see_errors("reply", reply)) and reply.get("code") != "internal":
+                return reply
+            log.warning("%s %s: %s", SEE, request["take_id"], errs or reply)
+        except (nats.errors.Error, OSError, ValueError) as e:
+            log.warning("%s %s: %r", SEE, request["take_id"], e)
+    return None

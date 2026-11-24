@@ -1,6 +1,7 @@
 // An answer's options block and refs (lib/answer-refs.ts; alpha.2 items 17, 19).
 import { describe, expect, it } from "vitest";
-import { liveOptions, pickOf, refParts, splitOptions } from "@/lib/answer-refs";
+import { atQuery, liveOptions, pickOf, refParts, splitOptions, withPicks } from "@/lib/answer-refs";
+import { answerBlocks } from "@/lib/assistant";
 import type { Entry } from "@/lib/assistant";
 
 const OPTS = [
@@ -46,6 +47,32 @@ describe("refs", () => {
       { kind: "voice", id: "qwen3-tts/ryan" },
       { t: " [[film:x]] [[take:a b]] " },
       { kind: "element", id: "?" },
+    ]);
+  });
+});
+
+// alpha.2 items 7 and 10 (board frame 12)
+describe("@ picks and media lines", () => {
+  it("finds the @word at the caret, never mid-word or an email", () => {
+    expect(atQuery("Animate @fo", 11)).toEqual({ start: 8, q: "fo" });
+    expect(atQuery("@", 1)).toEqual({ start: 0, q: "" });
+    expect(atQuery("mail a@b.c", 10)).toBeNull();
+    expect(atQuery("@fox and more", 13)).toBeNull();
+  });
+  it("sends a picked take's [title] as its ref; an edited one stays text", () => {
+    const picks = [
+      { label: "Fox · take 2", id: "t1" },
+      { label: "Gone", id: "t2" },
+    ];
+    expect(withPicks("Animate [Fox · take 2] now [Gon]", picks)).toBe(
+      "Animate [[take:t1]] now [Gon]",
+    );
+  });
+  it("a take ref alone on its line is a media block; inside a sentence it stays text", () => {
+    expect(answerBlocks("Take 2:\n[[take:t1]]\nor [[take:t1]] here\n[[take:?]]")).toEqual([
+      { k: "p", text: "Take 2:" },
+      { k: "take", id: "t1" },
+      { k: "p", text: "or [[take:t1]] here\n[[take:?]]" },
     ]);
   });
 });

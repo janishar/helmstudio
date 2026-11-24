@@ -11,7 +11,7 @@ queued remote calls (remote.py; only with PIPELINES_REMOTE_MODELS on and a pipel
 `server` env runner of each host in PIPELINES_SERVER_HOSTS (server.py). Agent tools reach studio by studio.tools.
 API 1.28: answers pipelines.judge.test (judge_test.py). API 1.43: names untitled sessions (names.py). API 1.44: the
 in-app assistant (assistant.py): pulls cmd.assistant.> from CMD (durable `pipelines-assistant`, chats handled
-concurrently, each in order) and answers pipelines.assistant.memory (assistant_memory.py)."""
+concurrently, each in order) and answers pipelines.assistant.memory (assistant_memory.py) and pipelines.assistant.cache (assistant.py)."""
 
 import asyncio
 import contextlib
@@ -165,7 +165,7 @@ async def main() -> None:
         )
         runs = await durable(js, "EVT", "pipelines-runs", "evt.studio.>", events.ACK_WAIT, 64)
         namer = names.Names(js, studio.create_run)  # API 1.43: session names
-        helper = assistant.Assistant(pool, saver, store, js, studio.tool)
+        helper = assistant.Assistant(pool, saver, store, js, studio.tool, see=studio.see)
         asks = await durable(js, "CMD", "pipelines-assistant", "cmd.assistant.>", assistant.ACK_WAIT, 16,
                              max_deliver=-1)  # fmt: skip
         server = await health.serve(nc, pool)
@@ -174,6 +174,7 @@ async def main() -> None:
         test_subs = await providers.serve(nc)
         judge_sub = await judge_test.serve(nc, store)
         assistant_sub = await assistant_memory.serve(nc, store)
+        cache_sub = await assistant.serve_cache(nc, pool)  # API 1.66
         executors = [server_env.Executor(js, pool, h.strip()) for h in config.SERVER_HOSTS]
         server_subs = [await x.start() for x in executors]
 
@@ -198,6 +199,7 @@ async def main() -> None:
             await sub.unsubscribe()
         await judge_sub.unsubscribe()
         await assistant_sub.unsubscribe()
+        await cache_sub.unsubscribe()
         await engine.close()
     finally:
         # close, not drain: every publish was awaited; draining pull subscriptions is slow

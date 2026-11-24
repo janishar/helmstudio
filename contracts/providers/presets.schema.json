@@ -55,6 +55,7 @@
           ]
         },
         "plugin": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,22}$", "description": "from API 1.61: a plugin's preset: only the providers Add as provider makes from that plugin use it (for its thinking rules); never offered in the form (GET /admin/provider-presets leaves it out, its Fetch and key save are 404)"},
+        "vision": {"type": "string", "minLength": 1, "maxLength": 200, "description": "from API 1.65 (contracts/README.md, Assistant: media and vision): a regular expression on the model id (RE2 and JavaScript alike) for the models that see images (an image in the chat goes to them directly); absent: none does"},
         "docs": {"type": "string", "pattern": "^https://[^\\s]+$", "maxLength": 300},
         "note": {"type": "string", "minLength": 1, "maxLength": 120, "description": "one grey line under the picker"}
       },

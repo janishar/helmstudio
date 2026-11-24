@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/req.studio.see.schema.json",
+  "title": "NATS request/reply studio.see (pipelines → studio)",
+  "description": "From API 1.65 (contracts/README.md, Assistant: media and vision). Core NATS request/reply on subject `studio.see` (queue group `studio`), bare JSON: the pictures of one take for the assistant's own model when it sees images (cmd.assistant.turn settings.sees). Asked as the thread's owner: owner_id must own thread_id and the take (else not_found). Studio reads the take's thumbnail (an image's, a video's poster; else the image itself) and answers it as JPEG, its long side at most 1024 px; an audio take has no pictures. Never stored, never on a stream: the bytes go only into the model call. Studio answers within 5 s.",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "required": ["owner_id", "thread_id", "take_id"],
+      "additionalProperties": false,
+      "properties": {
+        "owner_id": {"$ref": "defs.schema.json#/$defs/uuid"},
+        "thread_id": {"$ref": "defs.schema.json#/$defs/uuid"},
+        "take_id": {"$ref": "defs.schema.json#/$defs/uuid"}
+      }
+    },
+    "reply": {"oneOf": [{"$ref": "#/$defs/ok"}, {"$ref": "#/$defs/error"}]},
+    "ok": {
+      "type": "object",
+      "required": ["take_id", "kind", "title", "images"],
+      "additionalProperties": false,
+      "properties": {
+        "take_id": {"$ref": "defs.schema.json#/$defs/uuid"},
+        "kind": {"enum": ["image", "video", "audio"]},
+        "title": {"type": "string", "maxLength": 200},
+        "images": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {"type": "string", "contentEncoding": "base64", "contentMediaType": "image/jpeg", "minLength": 4, "maxLength": 700000},
+          "description": "JPEG pictures, base64: an image's one, a video's poster (keyframes come with alpha.2 item 13), none for audio"
+        }
+      }
+    },
+    "error": {
+      "type": "object",
+      "required": ["error", "code"],
+      "additionalProperties": false,
+      "properties": {
+        "error": {"type": "string", "minLength": 1, "maxLength": 500},
+        "code": {"enum": ["not_found", "invalid", "internal"]}
+      }
+    }
+  }
+}

@@ -1,0 +1,1 @@
+{"days": 30, "models": [{"provider": "deepseek", "model": "deepseek-chat", "calls": 42, "prompt_tokens": 840000, "hit_tokens": 712000, "hit_rate": 0.8476}, {"provider": "local-llm", "model": "qwen3-8b", "calls": 0, "prompt_tokens": 0, "hit_tokens": 0, "hit_rate": null}]}

@@ -1835,11 +1835,6 @@
     background: var(--s5);
   }
   /* skills (board frame 16): the @ picker above the composer, the Using skill line and its box */
-  .ast .pop.atp {
-    top: auto;
-    bottom: calc(100% + 6px);
-    left: 0;
-  }
   .ast .atq {
     display: flex;
     align-items: center;
@@ -2098,4 +2093,228 @@
 .ast .idc.gone i {
   background: transparent;
   color: var(--t2);
+}
+
+/* media in the chat (alpha.2 items 7, 8, 10; docs/mock/Assistant.dc.html frame 12) */
+.ast .pic {
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+.ast .att {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--t2);
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  box-shadow: none;
+}
+.ast .att:hover {
+  background: var(--s4);
+  color: var(--t1);
+}
+.ast .att-chip {
+  position: relative;
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  margin-bottom: 4px;
+  padding: 3px 4px 3px 3px;
+  border-radius: 9px;
+  background: var(--s4);
+  font-size: 11px;
+  color: var(--t1b);
+  white-space: nowrap;
+}
+.ast .cmp .att-chip {
+  margin-bottom: 0;
+}
+.ast .att-chip i {
+  width: 36px;
+  height: 24px;
+  border-radius: 6px;
+  display: block;
+  flex: 0 0 auto;
+  background-color: var(--ln);
+}
+.ast .att-chip .x {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  min-height: 20px;
+}
+.ast .med {
+  margin-top: 8px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--in);
+}
+.ast .med .pv {
+  position: relative;
+  display: block;
+  aspect-ratio: 16 / 9;
+  background-color: var(--ln);
+}
+.ast .med .mt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 4px 4px 10px;
+  font-size: 11px;
+  color: var(--t2);
+  white-space: nowrap;
+}
+.ast .med .mt > span {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--t1b);
+  font-size: 12px;
+}
+.ast .mb {
+  height: 28px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--s4);
+  color: var(--t1);
+  font-size: 11px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  box-shadow: none;
+}
+.ast .med .pop {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+.ast .ply {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--t1);
+  color: var(--g);
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  box-shadow: none;
+}
+.ast .vbar {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+.ast .vbar i {
+  flex: 1 1 auto;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.3);
+  display: block;
+  overflow: hidden;
+}
+.ast .vbar i b {
+  display: block;
+  height: 100%;
+  background: var(--a2);
+}
+.ast .wf {
+  flex: 1 1 auto;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.ast .wf span {
+  flex: 1 1 0;
+  border-radius: 2px;
+  background: var(--ln);
+}
+.ast .wf span.p {
+  background: var(--a2);
+}
+.ast .pop h4 {
+  margin: 4px 0 2px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--t2);
+}
+.ast .pr i {
+  width: 40px;
+  height: 26px;
+  border-radius: 6px;
+  flex: 0 0 auto;
+  background-color: var(--ln);
+  display: grid;
+  place-items: center;
+  font-style: normal;
+}
+.ast .pr span {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ast .pr small {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  color: var(--t2);
+}
+.ast .pr.on {
+  background: var(--s5);
+}
+/* the @ picker opens above the box, its width */
+.ast .pop.at {
+  top: auto;
+  bottom: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  max-height: min(340px, 50vh);
+  overflow-y: auto;
+}
+.ast .atq {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 10px;
+  background: var(--s2);
+  font-size: 12px;
+  color: var(--t2);
+}
+.ast .atq span {
+  color: var(--t1);
+}
+.ast .drop {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  height: 56px;
+  border-radius: 16px;
+  border: 2px dashed var(--a2);
+  color: var(--a2);
+  font-size: 12px;
+  font-weight: 600;
+  gap: 2px;
 }
