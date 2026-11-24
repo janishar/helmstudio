@@ -4,6 +4,7 @@ package tests
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -96,5 +97,65 @@ func TestBrokenScanKeepsASkillOn(t *testing.T) {
 	scan()
 	if got := status(); got != "on" {
 		t.Fatal("still on once it reads well:", got)
+	}
+}
+
+// API 1.65: turning a plugin that starts itself on writes host_settings <host>.plugins with its name; off empties it;
+// the runner's registry plugins key shows as starting, running or Couldn't start.
+func TestPluginsToRun(t *testing.T) {
+	e := setup(t)
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "svc"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "svc", "plugin.json"), []byte(`{"name":"svc","title":"Svc","version":"0.1.0",
+		"kind":"assistant-tools","description":"d","author":"a","may_do":["m"],"url":"http://127.0.0.1:1","health":"/h",
+		"run":{"cmd":["./run.sh"],"host":"box"},"tools":[{"name":"t","description":"d","input":{"type":"object"},
+		"risk":{"uses_gpu":false,"deletes":false,"sends_off_machine":false}}]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	written := map[string][]string{}
+	e.service.SetModelOps(nil, func(_ context.Context, key string, value []byte) error {
+		var v struct{ Plugins []string }
+		_ = json.Unmarshal(value, &v)
+		written[key] = v.Plugins
+		return nil
+	})
+	e.service.SetPluginDirs([]string{dir})
+	e.service.SetUserPluginDir("")
+	if _, err := e.service.ScanPlugins(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := written["box.plugins"]; ok && len(got) != 0 {
+		t.Fatalf("off: %v", got)
+	}
+	e.call(admin, "PUT", "/v1/studio/admin/plugins/svc", map[string]any{"enabled": true}, 200)
+	if got := written["box.plugins"]; len(got) != 1 || got[0] != "svc" {
+		t.Fatalf("on: %v", written)
+	}
+	status := func() map[string]any {
+		for _, p := range e.call(admin, "GET", "/v1/studio/admin/plugins", nil, 200)["plugins"].([]any) {
+			if p := p.(map[string]any); p["name"] == "svc" {
+				return p
+			}
+		}
+		return nil
+	}
+	if p := status(); p["status"] != "not_running" || p["starts"].(map[string]any)["host"] != "box" {
+		t.Fatal(p)
+	}
+	value, _ := json.Marshal(map[string]any{"schema_version": 1, "plugins": map[string]any{"svc": map[string]any{
+		"state": "failed", "detail": "it stopped 3 times: exit 3: boom", "restarts": 3, "since": time.Now().UTC(),
+		"log": "~/.helm/logs/svc.log"}}, "published_by": "runner box.native", "published_at": time.Now().UTC()})
+	if err := e.registry.SetRegistry("box.native.plugins", value); err != nil {
+		t.Fatal(err)
+	}
+	if p := status(); p["status"] != "failed" || p["problem"] != "it stopped 3 times: exit 3: boom" ||
+		p["starts"].(map[string]any)["log"] != "~/.helm/logs/svc.log" {
+		t.Fatal(p)
+	}
+	e.call(admin, "PUT", "/v1/studio/admin/plugins/svc", map[string]any{"enabled": false}, 200)
+	if got := written["box.plugins"]; len(got) != 0 {
+		t.Fatalf("off again: %v", got)
 	}
 }

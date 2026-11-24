@@ -26,6 +26,7 @@ import (
 	"github.com/helmstudio/studio_service/api/studio/dto"
 	"github.com/helmstudio/studio_service/api/studio/message"
 	"github.com/helmstudio/studio_service/common"
+	"github.com/helmstudio/studio_service/registry"
 )
 
 // Plugins (API 1.61; contracts/README.md "Plugins"): small separate HTTP services in plugins/<name>/ with a manifest
@@ -60,6 +61,22 @@ type manifest struct {
 	Format      *int                  `json:"format,omitempty"`  // API 1.64, a skill's
 	When        string                `json:"when,omitempty"`    // API 1.64, a skill's
 	Recipes     []recipe              `json:"recipes,omitempty"` // API 1.64, a skill's
+	Run         *manifestRun          `json:"run,omitempty"`     // API 1.65: it starts itself
+}
+
+// manifestRun is plugins/manifest.schema.json run (API 1.65): the runner reads cmd from its own copy; studio only
+// checks it and the host.
+type manifestRun struct {
+	Cmd  []string `json:"cmd"`
+	Host *string  `json:"host,omitempty"`
+}
+
+// host is the runner's host (default mac).
+func (r *manifestRun) host() string {
+	if r.Host == nil {
+		return "mac"
+	}
+	return *r.Host
 }
 
 // recipe is plugins/manifest.schema.json $defs/recipe (API 1.64).
@@ -100,6 +117,7 @@ var (
 	pluginPathRe = regexp.MustCompile(`^/[A-Za-z0-9/_.-]{0,99}$`)
 	toolNameRe   = regexp.MustCompile(`^[a-z][a-z0-9_]{0,23}$`)
 	modelNameRe  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$`)
+	runHostRe    = regexp.MustCompile(`^[a-z0-9]{1,32}$`)
 	recipeNameRe = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
 	recipeKeyRe  = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}\.[a-z][a-z0-9_]{0,47}$`)
 )
@@ -139,6 +157,11 @@ func (s *Service) problem(ctx context.Context, m *manifest, folder string) strin
 	}
 	if !pluginURLRe.MatchString(m.URL) || !pluginPathRe.MatchString(m.Health) {
 		return "url (no path) and health (a path) are required"
+	}
+	if r := m.Run; r != nil && (len(r.Cmd) < 1 || len(r.Cmd) > 8 || slices.ContainsFunc(r.Cmd, func(v string) bool { return !text(v, 200) }) ||
+		strings.HasPrefix(r.Cmd[0], "/") || slices.Contains(strings.Split(r.Cmd[0], "/"), "..") ||
+		r.Host != nil && !runHostRe.MatchString(*r.Host)) {
+		return "run needs cmd (1-8 parts; the first inside its folder or a program) and a host's name"
 	}
 	switch m.Kind {
 	case "model-provider":
@@ -221,6 +244,7 @@ func running(ctx context.Context, m manifest) bool {
 // pluginDTOs is rows as the caller sees them: the on ones' health checked at once, the caller's own provider of each.
 func (s *Service) pluginDTOs(ctx context.Context, caller common.Caller, rows []pluginRow) ([]dto.Plugin, error) {
 	out := make([]dto.Plugin, len(rows))
+	runs := s.registry.PluginRuns()
 	var wg sync.WaitGroup
 	for i, r := range rows {
 		m := r.Manifest
@@ -247,10 +271,27 @@ func (s *Service) pluginDTOs(ctx context.Context, caller common.Caller, rows []p
 		if r.Blocked != "" {
 			p.Status = r.Blocked
 		}
+		var run *registry.PluginRun // API 1.65: what its runner says
+		if m.Run != nil {
+			p.Starts = &dto.PluginStarts{Host: m.Run.host()}
+			if got, ok := runs[r.Name]; ok {
+				run = &got
+				p.Starts.Log, p.Starts.Restarts, p.Starts.Since = &got.Log, &got.Restarts, &got.Since
+			}
+		}
 		out[i] = p
 		if r.Enabled && m.Kind != "skill" && r.Blocked == "" {
 			wg.Go(func() {
-				out[i].Status = map[bool]string{true: "running", false: "not_running"}[running(ctx, m)]
+				switch up := running(ctx, m); {
+				case up:
+					out[i].Status = "running"
+				case run != nil && run.State == "starting":
+					out[i].Status = "starting"
+				case run != nil && run.State == "failed":
+					out[i].Status, out[i].Problem = "failed", run.Detail
+				default:
+					out[i].Status = "not_running"
+				}
 			})
 		}
 	}
@@ -331,6 +372,7 @@ func (s *Service) PutPlugin(ctx context.Context, caller common.Caller, name stri
 		return dto.Plugin{}, errNotFound
 	}
 	log.Printf("plugin %s turned %s by %s", name, map[bool]string{true: "on", false: "off"}[*body.Enabled], caller.ID)
+	s.publishRuns(ctx) // API 1.65: on starts it, off stops it
 	list, err := s.pluginDTOs(ctx, caller, rows)
 	return list[0], err
 }
@@ -341,6 +383,7 @@ func (s *Service) RemovePlugin(ctx context.Context, caller common.Caller, name s
 	if !caller.IsAdmin() {
 		return errAdmin
 	}
+	defer s.publishRuns(ctx) // API 1.65: a removed plugin stops
 	return common.System(ctx, s.db, func(tx pgx.Tx) error {
 		if _, err := one[struct{ Name string }](ctx, tx, `SELECT name FROM plugins WHERE name = $1 FOR UPDATE`, name); err != nil {
 			return err

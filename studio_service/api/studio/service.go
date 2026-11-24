@@ -44,6 +44,8 @@ type Service struct {
 	pluginDirs       []string            // API 1.61: where plugins/*/plugin.json are read (read-only mounts)
 	userPluginDir    string              // API 1.64: ~/.helm/plugins as mounted (read-only); "" = none
 	scanMu           sync.Mutex          // API 1.64: one plugins scan at a time (Rescan, start, the watch)
+	runsMu           sync.Mutex          // API 1.65: one write of the plugins to run at a time
+	runHosts         map[string]bool     // API 1.65: hosts whose <host>.plugins key studio wrote (to empty it)
 	memory           MemoryAsk           // pipelines.memory; nil answers 503
 	lookup           Lookup              // resolves a server provider's host (nil: the system resolver)
 	providerTest     ProviderTestAsk     // pipelines.providers.test; nil answers 503

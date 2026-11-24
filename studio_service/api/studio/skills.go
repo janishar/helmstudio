@@ -316,6 +316,7 @@ func (s *Service) readManifests(ctx context.Context) (map[string]foundPlugin, []
 func (s *Service) ScanPlugins(ctx context.Context) ([]string, error) {
 	s.scanMu.Lock() // Rescan and the watch never unpack or write at once
 	defer s.scanMu.Unlock()
+	defer s.publishRuns(ctx) // API 1.65: what should run follows what was found
 	found, busy := s.readManifests(ctx)
 	added := []string{}
 	err := common.System(ctx, s.db, func(tx pgx.Tx) error {
@@ -499,4 +500,46 @@ func assistantSkills(ctx context.Context, tx pgx.Tx) ([]message.TurnSkill, error
 		}
 	}
 	return out, err
+}
+
+// publishRuns writes KV host_settings <host>.plugins (API 1.65, registry.schema.json plugin_runs): per host, the plugins
+// that are on, usable and start themselves there, by name. Every host written before is written again (an empty list
+// stops them). Errors are logged: the next change or start writes it again.
+func (s *Service) publishRuns(ctx context.Context) {
+	if s.putSettings == nil {
+		return
+	}
+	s.runsMu.Lock()
+	defer s.runsMu.Unlock()
+	var rows []pluginRow
+	if err := common.System(ctx, s.db, func(tx pgx.Tx) (err error) {
+		rows, err = readPlugins(ctx, tx, `WHERE enabled AND blocked = '' AND manifest ? 'run'`)
+		return err
+	}); err != nil {
+		log.Printf("plugins: the plugins to run not written: %v", err)
+		return
+	}
+	byHost := map[string][]string{}
+	for _, r := range rows {
+		if r.Manifest.Run != nil {
+			byHost[r.Manifest.Run.host()] = append(byHost[r.Manifest.Run.host()], r.Name)
+		}
+	}
+	if s.runHosts == nil {
+		s.runHosts = map[string]bool{"mac": true} // a runner may hold an older list: always write mac
+	}
+	for host := range byHost {
+		s.runHosts[host] = true
+	}
+	for _, host := range slices.Sorted(maps.Keys(s.runHosts)) {
+		names := byHost[host]
+		if names == nil {
+			names = []string{}
+		}
+		value := toJSON(map[string]any{"schema_version": 1, "host": host, "plugins": names,
+			"updated_at": time.Now().UTC().Format(time.RFC3339Nano)})
+		if err := s.putSettings(ctx, host+".plugins", value); err != nil {
+			log.Printf("plugins: %s.plugins not written: %v", host, err)
+		}
+	}
 }

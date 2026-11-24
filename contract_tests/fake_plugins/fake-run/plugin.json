@@ -1,0 +1,20 @@
+{
+  "name": "fake-run",
+  "title": "Fake run",
+  "version": "0.1.0",
+  "kind": "assistant-tools",
+  "description": "Test stack only: a tiny service the fake runner starts while it is on (API 1.65).",
+  "author": "contract_tests",
+  "may_do": ["Start a test service in the fake runner"],
+  "url": "http://runner:8471",
+  "health": "/health",
+  "run": {"cmd": ["python3", "service.py"], "host": "fake"},
+  "tools": [
+    {
+      "name": "ping",
+      "description": "Answer pong.",
+      "input": {"type": "object", "additionalProperties": false, "properties": {}},
+      "risk": {"uses_gpu": false, "deletes": false, "sends_off_machine": false}
+    }
+  ]
+}
