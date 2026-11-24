@@ -309,7 +309,7 @@ function stackSteps({ p, cfg: shipped, settings, runners }) {
       },
     },
     { id: 'vm', title: 'Start the VM', hint: 'The VM did not start.', run: vm },
-    { id: 'images', title: 'Load the images', hint: imagesHint, run: (c) => images(c, true) },
+    { id: 'images', title: 'Download the images', hint: imagesHint, run: (c) => images(c, true) },
     {
       id: 'secrets',
       title: 'Make the secrets',
