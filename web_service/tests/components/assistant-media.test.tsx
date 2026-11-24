@@ -156,6 +156,8 @@ describe("media in answers (frame 12a)", () => {
     expect(within(d).getByRole("button", { name: "take: Fox at dusk · take 2" })).toBeTruthy();
     fireEvent.click(within(d).getByRole("button", { name: "Use in…" }));
     expect(await within(d).findByRole("menuitem", { name: "Video · First frame" })).toBeTruthy();
+    expect(within(d).getByRole("menuitem", { name: "Timeline · at the playhead" })).toBeTruthy();
+    expect(within(d).getByRole("menuitem", { name: "Save as element" })).toBeTruthy();
     fireEvent.click(within(d).getByRole("button", { name: "Open" }));
     expect(await screen.findByRole("dialog", { name: "Fox at dusk · take 2" })).toBeTruthy();
     expect(d.textContent).not.toMatch(/9a1b|\[\[/);
@@ -183,7 +185,9 @@ describe("the box (frames 12c, 12e, 12f)", () => {
     const list = await within(d).findByRole("listbox", { name: "Pick a take or element" });
     expect(await within(list).findByRole("option", { name: /@fox/ })).toBeTruthy();
     expect(await within(list).findByRole("option", { name: /Fox at dusk/ })).toBeTruthy();
+    expect(box.getAttribute("aria-controls")).toBe(list.id);
     fireEvent.keyDown(box, { key: "ArrowDown" });
+    await waitFor(() => expect(box.getAttribute("aria-activedescendant")).toBe("at-1"));
     fireEvent.keyDown(box, { key: "Enter" });
     await waitFor(() =>
       expect((box as HTMLTextAreaElement).value).toBe("Animate [Fox at dusk · take 2] "),
@@ -194,6 +198,22 @@ describe("the box (frames 12c, 12e, 12f)", () => {
     fireEvent.keyDown(box, { key: "Enter" });
     await waitFor(() => expect(posts).toHaveLength(1));
     expect(posts[0].text).toBe(`Animate [[take:${TAKE}]] slowly`);
+  });
+
+  it("a message within 4000 characters that its picks' refs push past them is not sent", async () => {
+    const posts = serve([]);
+    const d = await openDrawer();
+    const box = within(d).getByRole("textbox", { name: "Message the assistant" });
+    fireEvent.change(box, { target: { value: "@fo", selectionStart: 3 } });
+    await within(d).findByRole("option", { name: /Fox at dusk/ });
+    fireEvent.keyDown(box, { key: "ArrowDown" });
+    fireEvent.keyDown(box, { key: "Enter" });
+    await waitFor(() => expect((box as HTMLTextAreaElement).value).toMatch(/^\[Fox at dusk/));
+    const long = (box as HTMLTextAreaElement).value + "x".repeat(3970); // 3993 in the box, 4017 sent
+    fireEvent.change(box, { target: { value: long, selectionStart: long.length } });
+    fireEvent.keyDown(box, { key: "Enter" });
+    expect(await within(d).findByText(/Too long with its picked takes/)).toBeTruthy();
+    expect(posts).toHaveLength(0);
   });
 
   it("a pasted image uploads, shows in the box, says the model uses Look at, and goes as takes", async () => {

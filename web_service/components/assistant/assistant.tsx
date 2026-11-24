@@ -1799,6 +1799,7 @@ function Drawer({ a }: { a: AssistantApi }) {
   const [caret, setCaret] = useState(0);
   const [atOff, setAtOff] = useState<number | null>(null); // Escape closed the picker of the @ at this place
   const atKeys = useRef<((k: AtKey) => void) | null>(null);
+  const [atCur, setAtCur] = useState(""); // the @ picker's highlighted option, for aria-activedescendant
   const [dropping, setDropping] = useState(false);
   const [told, setTold] = useState(false); // "This model can't see images" shows once
   const file = useRef<HTMLInputElement>(null);
@@ -1862,10 +1863,15 @@ function Drawer({ a }: { a: AssistantApi }) {
   async function submit(e?: React.FormEvent) {
     e?.preventDefault();
     if (!text.trim() || sending || uploading) return;
+    const said = withPicks(text, chosen); // each picked title becomes a 45-character ref
+    if (said.length > 4000) {
+      a.setError("Too long with its picked takes: shorten the message.");
+      return;
+    }
     setSending(true);
     if (
       await a.send(
-        withPicks(text, chosen),
+        said,
         atts.map((x) => x.id!),
       )
     ) {
@@ -2215,7 +2221,7 @@ function Drawer({ a }: { a: AssistantApi }) {
                 attach([...e.dataTransfer.files]);
               }}
             >
-              {atOpen && <AtPicker q={at.q} keysRef={atKeys} onPick={pick} />}
+              {atOpen && <AtPicker q={at.q} keysRef={atKeys} onPick={pick} onActive={setAtCur} />}
               {atts.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
                   {atts.map((x) => (
@@ -2246,8 +2252,11 @@ function Drawer({ a }: { a: AssistantApi }) {
                   limit ? limit.until : a.steering ? "Steer the answer…" : "Ask, or say what to do"
                 }
                 value={text}
+                aria-autocomplete="list"
                 aria-expanded={atOpen}
                 aria-haspopup="listbox"
+                aria-controls={atOpen ? "at-list" : undefined}
+                aria-activedescendant={atOpen && atCur ? atCur : undefined}
                 onChange={(e) => {
                   setText(e.target.value);
                   setCaret(e.target.selectionStart);

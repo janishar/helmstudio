@@ -5,11 +5,14 @@
 // attachment chip. Plain elements, never HTML; never a raw id.
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Maximize2, Play, Search, Square, Volume2, VolumeX, X } from "lucide-react";
+import { ArrowUpRight, ChevronDown, Play, Search, Square, Volume2, VolumeX, X } from "lucide-react";
 import { usePlayer } from "@/components/create/audio";
+import { ElementEditor } from "@/components/create/elements";
 import { useTakePages } from "@/components/gallery/gallery";
 import { useGridWindow } from "@/components/gallery/window";
 import { FullScreen } from "@/components/media";
+import { addToTimeline } from "@/components/timeline/add";
+import { message } from "@/lib/api";
 import { safeUrl } from "@/lib/format";
 import { useLibrary } from "@/lib/library";
 import { offerLabel } from "@/lib/source";
@@ -61,7 +64,7 @@ export function TakeMedia({ id }: { id: string }) {
         <span title={title}>{title}</span>
         {take.kind !== "audio" && (
           <button type="button" className="mb" onClick={() => setOpen(true)}>
-            <Maximize2 size={11} strokeWidth={2} aria-hidden />
+            <ArrowUpRight size={12} strokeWidth={2} aria-hidden />
             Open
           </button>
         )}
@@ -184,9 +187,13 @@ function Sound({ take }: { take: Take }) {
   );
 }
 
-/** Use in…: the take's offers (the Gallery's Use in…: the workflows it fits, opened on Create with it in place). */
+/** Use in… (frame 12a): the take's offers (the Gallery's Use in…: the workflows it fits, opened on Create in the
+ * take's session with it in place), the timeline, and Save as element for an image. */
 function UseIn({ take }: { take: Take }) {
   const [open, setOpen] = useState(false);
+  const [making, setMaking] = useState(false);
+  const [error, setError] = useState("");
+  const session = take.session_id ? `s=${encodeURIComponent(take.session_id)}&` : "";
   const uses = useUses(open ? take.id : undefined);
   const router = useRouter();
   const box = useRef<HTMLDivElement>(null);
@@ -206,14 +213,12 @@ function UseIn({ take }: { take: Take }) {
         onClick={() => setOpen((o) => !o)}
       >
         Use in…
-        <ChevronDown size={11} strokeWidth={2} aria-hidden />
+        <ChevronDown size={12} strokeWidth={2} aria-hidden />
       </button>
       {open && (
         <div className="pop" role="menu" aria-label="Use in" style={{ width: 190 }}>
           {uses === null ? (
             <span className="pr">…</span>
-          ) : uses.length === 0 ? (
-            <span className="pr">Nothing takes it here</span>
           ) : (
             uses.map((o) => (
               <button
@@ -224,7 +229,7 @@ function UseIn({ take }: { take: Take }) {
                 onClick={() => {
                   setOpen(false);
                   router.push(
-                    `/?use=${encodeURIComponent(take.id)}&w=${encodeURIComponent(o.workflow_id)}`,
+                    `/?${session}use=${encodeURIComponent(take.id)}&w=${encodeURIComponent(o.workflow_id)}`,
                   );
                 }}
               >
@@ -232,8 +237,40 @@ function UseIn({ take }: { take: Take }) {
               </button>
             ))
           )}
+          <button
+            type="button"
+            role="menuitem"
+            className="pr"
+            onClick={() => {
+              setError("");
+              addToTimeline([take.id], take.kind === "audio")
+                .then((tl) => router.push(`/timeline?t=${encodeURIComponent(tl.id)}`))
+                .catch((e) => setError(message(e)));
+            }}
+          >
+            <span>Timeline · at the playhead</span>
+          </button>
+          {take.kind === "image" && (
+            <button
+              type="button"
+              role="menuitem"
+              className="pr"
+              onClick={() => {
+                setOpen(false);
+                setMaking(true);
+              }}
+            >
+              <span>Save as element</span>
+            </button>
+          )}
+          {error && (
+            <span role="alert" className="pr text-bad">
+              {error}
+            </span>
+          )}
         </div>
       )}
+      <ElementEditor open={making} onClose={() => setMaking(false)} takes={[take]} />
     </div>
   );
 }
@@ -265,10 +302,13 @@ export function AtPicker({
   q,
   keysRef,
   onPick,
+  onActive,
 }: {
   q: string;
   keysRef: React.RefObject<((k: AtKey) => void) | null>;
   onPick: (p: Pick) => void;
+  /** the highlighted option's id ("" when none), for the box's aria-activedescendant */
+  onActive?: (id: string) => void;
 }) {
   const lib = useLibrary();
   const needle = q.toLowerCase();
@@ -298,9 +338,11 @@ export function AtPicker({
       setAt(Math.max(0, Math.min(all.length - 1, cur + (k === "down" ? 1 : -1))));
     };
   });
+  const has = all.length > 0;
   useEffect(() => {
     document.getElementById(`at-${cur}`)?.scrollIntoView({ block: "nearest" });
-  }, [cur]);
+    onActive?.(has ? `at-${cur}` : "");
+  }, [cur, has, onActive]);
   const row = (p: Pick, i: number) => {
     const t = p.kind === "take" ? p.take : null;
     const el = p.kind === "element" ? elements.find((x) => x.handle === p.handle) : null;
@@ -331,7 +373,7 @@ export function AtPicker({
   };
   const n = elements.length;
   return (
-    <div className="pop at" role="listbox" aria-label="Pick a take or element">
+    <div id="at-list" className="pop at" role="listbox" aria-label="Pick a take or element">
       <div className="atq">
         <Search size={13} strokeWidth={2} aria-hidden />
         <span>{q || "Type to search"}</span>
