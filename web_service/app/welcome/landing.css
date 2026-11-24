@@ -224,6 +224,12 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.18),
     0 10px 16px -8px color-mix(in srgb, var(--shd) 80%, transparent);
 }
+.lp img.tk {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  object-fit: cover;
+}
 .lp .t1 {
   background:
     radial-gradient(60% 80% at 30% 75%, #ffb07a, transparent 70%),

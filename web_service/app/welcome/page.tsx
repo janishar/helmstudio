@@ -103,9 +103,19 @@ function Ic({ name, c, small }: { name: keyof typeof ICONS; c: string; small?: b
 const col = (gap: number): CSSProperties => ({ display: "flex", flexDirection: "column", gap });
 const wrapRow = (gap: number): CSSProperties => ({ display: "flex", flexWrap: "wrap", gap });
 const grow = <div style={{ flexGrow: 1 }} />;
-const strip = (t: string, flex: number) => (
-  <div className={`tk ${t}`} style={{ flex, aspectRatio: "auto", height: 46 }} />
+/** A take tile with its picture (public/showcase); the tN gradient shows until it loads. Below the fold it waits. */
+const pic = (src: string, t: string, style?: CSSProperties, eager = false) => (
+  <img
+    className={`tk ${t}`}
+    src={`/showcase/${src}.jpg`}
+    alt=""
+    loading={eager ? "eager" : "lazy"}
+    decoding="async"
+    style={style}
+  />
 );
+const strip = (src: string, t: string, flex: number) =>
+  pic(src, t, { flex, aspectRatio: "auto", height: 46 });
 
 /** Route /welcome, shown at / to a signed-out visitor (proxy.ts): the landing page (docs/mock/Landing.dc.html). */
 export default function Landing() {
@@ -262,17 +272,19 @@ export default function Landing() {
                   color: "var(--t1b)",
                 }}
               >
-                A fox crossing a snowfield at dusk, <span style={{ color: "var(--a1)" }}>@fox</span>
-                , long lens
+                <span style={{ color: "var(--a1)" }}>@mara</span> in the rain, neon city at night,
+                long lens
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
-                <div className="tk t1" />
-                <div
-                  className="tk t2"
-                  style={{ outline: "2px solid var(--a1)", outlineOffset: 2 }}
-                />
-                <div className="tk t3" />
-                <div className="tk t4" />
+                {pic("mara-street", "t1", undefined, true)}
+                {pic(
+                  "mara-looks-back",
+                  "t2",
+                  { outline: "2px solid var(--a1)", outlineOffset: 2 },
+                  true,
+                )}
+                {pic("mara-umbrella", "t3", undefined, true)}
+                {pic("mara-train", "t4", undefined, true)}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <span className="pill" style={{ height: 30, fontSize: 12 }}>
@@ -331,10 +343,10 @@ export default function Landing() {
                   paddingTop: 6,
                 }}
               >
-                <div className="tk t3" />
-                <div className="tk t1" />
-                <div className="tk t4" />
-                <div className="tk t2" />
+                {pic("outpost-monolith", "t3")}
+                {pic("sneaker-dunes", "t1")}
+                {pic("mara-motorbike", "t4")}
+                {pic("fox-dusk-43", "t2")}
               </div>
             </article>
             <article
@@ -371,10 +383,10 @@ export default function Landing() {
                 Direct shot by shot with a shared cast and look, cut the takes together, and export.
               </p>
               <div aria-hidden style={{ display: "flex", gap: 8, paddingTop: 6 }}>
-                {strip("t1", 3)}
-                {strip("t4", 2)}
-                {strip("t3", 4)}
-                {strip("t2", 2)}
+                {strip("mara-bus", "t1", 3)}
+                {strip("mara-street", "t4", 2)}
+                {strip("mara-motorbike", "t3", 4)}
+                {strip("mara-puddle", "t2", 2)}
               </div>
             </article>
           </div>
@@ -471,9 +483,9 @@ export default function Landing() {
                 background: "var(--in)",
               }}
             >
-              <div className="tk t2" style={{ flex: "0 0 96px" }} />
+              {pic("sneaker-splash", "t2", { flex: "0 0 96px", minWidth: 0 })}
               <p style={{ fontSize: 13, lineHeight: "20px", color: "var(--t1b)" }}>
-                Kept take 2. Fox is in frame, no extra limbs, horizon level.
+                Kept take 2. Shoe is sharp, no logo, horizon level.
               </p>
             </div>
           </div>

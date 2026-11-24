@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 // The landing page (docs/mock/Landing.dc.html): the board's words, every Sign in going to /signin, and the nav's
-// anchors landing on the page's own sections.
+// anchors landing on the page's own sections; the board pictures on the landing and sign-in tiles.
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import Landing from "@/app/welcome/page";
+import AuthLayout from "@/app/(auth)/layout";
 import { Logo } from "@/components/kit";
 
 vi.mock("@/app/welcome/landing.css", () => ({}));
@@ -67,4 +68,42 @@ it("shows logo A's lockup in the header and footer, and the mark in the sign-in 
   expect(mark.getAttribute("width")).toBe("28");
   expect(mark.querySelectorAll("path")).toHaveLength(3);
   expect(mark.innerHTML).toContain("currentcolor");
+});
+
+it("puts the board's pictures in the hero takes and the sign-in tiles, decorative only", () => {
+  const { container } = render(<Landing />);
+  const imgs = [...container.querySelectorAll<HTMLImageElement>("img.tk")];
+  expect(imgs).toHaveLength(13);
+  expect(imgs.slice(0, 4).map((i) => i.getAttribute("src"))).toEqual(
+    ["mara-street", "mara-looks-back", "mara-umbrella", "mara-train"].map(
+      (n) => `/showcase/${n}.jpg`,
+    ),
+  );
+  for (const i of imgs) expect(i.getAttribute("alt")).toBe("");
+  expect(imgs[0].getAttribute("loading")).toBe("eager");
+  expect(imgs[12].getAttribute("loading")).toBe("lazy");
+  expect(container.textContent).toContain("@mara in the rain, neon city at night, long lens");
+  expect(container.textContent).toContain("Kept take 2. Shoe is sharp, no logo, horizon level.");
+  cleanup();
+
+  const auth = render(<AuthLayout>card</AuthLayout>).container;
+  const tiles = [...auth.querySelectorAll<HTMLElement>("[aria-hidden] > div")];
+  expect(tiles.map((t) => t.style.backgroundImage)).toEqual(
+    [
+      "outpost-monolith",
+      "mara-rooftop",
+      "sneaker-studio",
+      "outpost-saltflat",
+      "mara-motorbike",
+      "mara-portrait",
+    ].map((n) => `url("/showcase/${n}.jpg")`),
+  );
+  expect(tiles.map((t) => t.textContent)).toEqual([
+    "Qwen Image 2.1",
+    "▶ LTX-2.5",
+    "take",
+    "Qwen Image 2.1",
+    "▶ LTX-2.5",
+    "take",
+  ]);
 });

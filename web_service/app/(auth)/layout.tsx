@@ -1,61 +1,13 @@
 import { ThemeSelect } from "@/components/kit";
 
-/** Decorative take cards behind the sign-in card: [left, top, width, height, rotation, background, label]. */
+/** Decorative take cards behind the sign-in card: [left, top, width, height, rotation, picture in public/showcase, label]. */
 const TAKES: [number, number, number, number, number, string, string][] = [
-  [
-    6,
-    15,
-    230,
-    150,
-    -8,
-    "radial-gradient(120px 90px at 30% 30%, color-mix(in srgb, var(--a1) 85%, transparent), transparent 70%), linear-gradient(150deg, var(--a2), var(--s4))",
-    "Qwen Image 2.1",
-  ],
-  [
-    17,
-    43,
-    170,
-    220,
-    6,
-    "radial-gradient(110px 140px at 70% 25%, color-mix(in srgb, var(--a2) 80%, transparent), transparent 70%), linear-gradient(200deg, var(--s5), var(--a1))",
-    "▶ LTX-2.5",
-  ],
-  [
-    5,
-    75,
-    150,
-    110,
-    -4,
-    "linear-gradient(120deg, color-mix(in srgb, var(--a1) 70%, var(--s3)), var(--s2))",
-    "take",
-  ],
-  [
-    76,
-    13,
-    180,
-    230,
-    7,
-    "radial-gradient(120px 120px at 30% 70%, color-mix(in srgb, var(--a1) 75%, transparent), transparent 70%), linear-gradient(160deg, var(--s4), var(--a2))",
-    "Qwen Image 2.1",
-  ],
-  [
-    71,
-    54,
-    240,
-    150,
-    -6,
-    "radial-gradient(140px 90px at 75% 35%, color-mix(in srgb, var(--a2) 75%, transparent), transparent 70%), linear-gradient(140deg, var(--a1), var(--s5))",
-    "▶ LTX-2.5",
-  ],
-  [
-    85,
-    79,
-    130,
-    130,
-    10,
-    "linear-gradient(210deg, color-mix(in srgb, var(--a2) 65%, var(--s3)), var(--s2))",
-    "take",
-  ],
+  [6, 15, 230, 150, -8, "outpost-monolith", "Qwen Image 2.1"],
+  [17, 43, 170, 220, 6, "mara-rooftop", "▶ LTX-2.5"],
+  [5, 75, 150, 110, -4, "sneaker-studio", "take"],
+  [76, 13, 180, 230, 7, "outpost-saltflat", "Qwen Image 2.1"],
+  [71, 54, 240, 150, -6, "mara-motorbike", "▶ LTX-2.5"],
+  [85, 79, 130, 130, 10, "mara-portrait", "take"],
 ];
 
 /** The page before an account is known: floating takes, the theme select and the card. */
@@ -72,7 +24,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         />
       </div>
       <div aria-hidden className="hidden md:block">
-        {TAKES.map(([l, t, w, h, r, bg, tag], i) => (
+        {TAKES.map(([l, t, w, h, r, src, tag], i) => (
           <div
             key={i}
             className="absolute flex items-end p-3"
@@ -83,7 +35,11 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
               height: h,
               boxSizing: "content-box", // the mock's sizes exclude the 12px padding
               transform: `rotate(${r}deg)`,
-              background: bg,
+              // the board's .pic: the picture covers the tile, under the inset shadows
+              backgroundColor: "var(--s3)",
+              backgroundImage: `url(/showcase/${src}.jpg)`,
+              backgroundSize: "cover",
+              backgroundPosition: "center",
               borderRadius: "28px 28px 28px 12px",
               boxShadow:
                 "inset 0 1px 0 rgba(255,255,255,.25), inset 0 -6px 12px color-mix(in srgb, var(--shd) 30%, transparent), 0 34px 56px -20px color-mix(in srgb, var(--shd) 90%, transparent)",
@@ -91,7 +47,10 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           >
             <span
               className="mono rounded-full px-2 py-0.5 text-[10px] font-medium text-white"
-              style={{ background: "color-mix(in srgb, var(--shd) 45%, transparent)" }}
+              style={{
+                background: "color-mix(in srgb, var(--shd) 45%, transparent)",
+                textShadow: "0 1px 3px rgba(0,0,0,.9)",
+              }}
             >
               {tag}
             </span>

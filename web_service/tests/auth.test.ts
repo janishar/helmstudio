@@ -353,9 +353,16 @@ describe("a signed-out visitor", () => {
     expect(welcome.headers.get("x-middleware-next")).toBe("1");
   });
 
-  it("gets the tab and app icons without a session (the proxy never sees them)", () => {
+  it("gets the tab and app icons and the showcase pictures without a session (the proxy never sees them)", () => {
     const matched = new RegExp(`^${config.matcher[0]}$`);
-    for (const p of ["/favicon.ico", "/icon.svg", "/apple-icon.png", "/icon-32.png", "/icon-512.png"])
+    for (const p of [
+      "/favicon.ico",
+      "/icon.svg",
+      "/apple-icon.png",
+      "/icon-32.png",
+      "/icon-512.png",
+      "/showcase/mara-street.jpg",
+    ])
       expect(matched.test(p), p).toBe(false);
     for (const p of ["/", "/admin", "/welcome", "/signin"]) expect(matched.test(p), p).toBe(true);
   });
