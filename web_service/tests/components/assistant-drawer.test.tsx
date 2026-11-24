@@ -1008,3 +1008,149 @@ describe("thinking (plan 29)", () => {
     expect(screen.queryByText(/^Thinking/)).toBeNull();
   });
 });
+
+describe("steer while it answers (board frame 8)", () => {
+  const working = thread({ state: "working", client_id: ME });
+  /** Serves a working chat; a message posted is stored as a steer waiting for the next step. */
+  function serveSteer(entries: S<"AssistantEntry">[] = []) {
+    const posts: S<"AssistantPost">[] = [];
+    serve({ existing: working, entries });
+    answer("POST", {
+      "/v1/studio/assistant/threads/{thread_id}/messages": ({ body }) => {
+        const b = body as S<"AssistantPost">;
+        posts.push(b);
+        const text = "text" in b ? b.text : "";
+        return {
+          status: 202,
+          data: {
+            thread: working,
+            steer: b.kind === "message",
+            entry:
+              b.kind === "message"
+                ? entry(posts.length + 4, {
+                    kind: "user",
+                    text,
+                    steer: "waiting",
+                    at: "2026-11-22T00:00:05Z",
+                  })
+                : null,
+          },
+        };
+      },
+    });
+    return posts;
+  }
+  const box = () => screen.getByRole("textbox", { name: "Message the assistant" });
+  const send = async (text: string) => {
+    fireEvent.change(box(), { target: { value: text } });
+    fireEvent.keyDown(box(), { key: "Enter" });
+    await screen.findByText(text);
+  };
+
+  it("a · while it works the box stays open: Steer the answer…, Enter steers this answer, and Stop", async () => {
+    serveSteer([entry(1, { kind: "user", text: "Make a rainy London still" })]);
+    await openDrawer();
+    await waitFor(() => expect(box().getAttribute("placeholder")).toBe("Steer the answer…"));
+    expect((box() as HTMLTextAreaElement).disabled).toBe(false);
+    expect(screen.getByText("steers this answer").textContent).toBe("Enter steers this answer");
+    expect(screen.getByRole("button", { name: "Stop" })).toBeTruthy();
+    // idle: as before
+    act(() =>
+      onEvent!({
+        seq: 40,
+        type: "thread",
+        thread: thread({ client_id: ME, updated_at: "2026-11-22T00:01:00Z" }),
+      }),
+    );
+    expect(box().getAttribute("placeholder")).toBe("Ask, or say what to do");
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
+    expect(screen.queryByText(/steers this answer/)).toBeNull();
+  });
+
+  it("b · sent: shown at once at the bottom, dimmed, at the next step; several wait in order", async () => {
+    const posts = serveSteer([entry(1, { kind: "user", text: "Make a rainy London still" })]);
+    const change = vi.fn(() => new Promise<ReturnType<typeof done>>(() => undefined)); // still running
+    await openDrawer(<Screen actions={{ change }} />);
+    await waitFor(() => expect(onEvent).not.toBeNull());
+    park([{ id: id(0), name: "change", args: { key: "prompt", value: "rain" } }]);
+    await screen.findByText("Change…");
+    await send("Use Turbo instead");
+    await send("And make it 16:9");
+    expect(posts.map((p) => p.kind === "message" && p.text)).toEqual([
+      "Use Turbo instead",
+      "And make it 16:9",
+    ]);
+    const waiting = screen.getAllByLabelText("Waiting for the next step");
+    expect(waiting.map((w) => w.firstChild?.textContent)).toEqual([
+      "Use Turbo instead",
+      "And make it 16:9",
+    ]);
+    expect(waiting[0].className).toContain("steer");
+    expect(waiting[0].textContent).toContain("at the next step");
+    // under the running line
+    const running = screen.getByText("Change…");
+    expect(
+      running.compareDocumentPosition(waiting[0]) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("c · read: the sub-line goes and it moves to where it was read", async () => {
+    serveSteer([
+      entry(1, { kind: "user", text: "Make a rainy London still" }),
+      entry(2, {
+        kind: "user",
+        text: "Use Turbo instead",
+        steer: "waiting",
+        at: "2026-11-22T00:00:01Z",
+      }),
+      entry(3, {
+        kind: "line",
+        line: { id: id(0), status: "done", text: "Set model: Qwen Image", undo: true },
+        at: "2026-11-22T00:00:02Z",
+      }),
+    ]);
+    await openDrawer();
+    await screen.findByLabelText("Waiting for the next step");
+    act(() =>
+      onEvent!({
+        seq: 50,
+        type: "entry",
+        entry: entry(2, {
+          kind: "user",
+          text: "Use Turbo instead",
+          steer: "read",
+          at: "2026-11-22T00:00:03Z",
+        }),
+      }),
+    );
+    expect(screen.queryByLabelText("Waiting for the next step")).toBeNull();
+    expect(screen.queryByText("at the next step")).toBeNull();
+    const line = screen.getByText("Set model: Qwen Image");
+    const read = screen.getByText("Use Turbo instead");
+    expect(line.compareDocumentPosition(read) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("d · it finished first: sent as the next message", async () => {
+    serveSteer([
+      entry(1, { kind: "user", text: "Make a rainy London still" }),
+      entry(2, { kind: "assistant", text: "Done. Check the prompt on the left." }),
+      entry(3, {
+        kind: "user",
+        text: "Add a red bus behind her",
+        steer: "next",
+        at: "2026-11-22T00:00:04Z",
+      }),
+    ]);
+    await openDrawer();
+    const next = (await screen.findByText("Add a red bus behind her")).closest(".msg")!;
+    expect(next.textContent).toContain("sent as the next message");
+    expect(next.className).not.toContain("steer");
+  });
+
+  it("Stop on the desktop composer stops the running turn", async () => {
+    const posts = serveSteer();
+    await openDrawer();
+    fireEvent.click(await screen.findByRole("button", { name: "Stop" }));
+    await waitFor(() => expect(posts).toEqual([{ kind: "stop", client_id: ME }]));
+  });
+});

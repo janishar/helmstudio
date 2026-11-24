@@ -122,6 +122,9 @@ export function applyEvent(v: ThreadView, e: S<"AssistantEvent">): ThreadView {
   const en = e.entry;
   const i = v.entries.findIndex((x) => x.id === en.id);
   const entries = i < 0 ? [...v.entries, en] : v.entries.map((x, j) => (j === i ? en : x));
+  // a steer read or sent as the next message moves to where that happened (its `at`, API 1.59)
+  if (i >= 0 && v.entries[i].at !== en.at)
+    entries.sort((x, y) => Date.parse(x.at) - Date.parse(y.at));
   return { ...v, entries };
 }
 

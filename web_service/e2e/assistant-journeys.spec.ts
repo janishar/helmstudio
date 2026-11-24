@@ -920,3 +920,86 @@ test("J15 on a phone: a bottom sheet that shrinks to one line while it acts", as
     await p.close();
   }
 });
+
+test("J16 I write while it works: it reads me at the next step, or takes it as the next message, and Stop ends it", async () => {
+  test.setTimeout(150_000);
+  await page.goto("/");
+  await open();
+  // c · read at the next step: the next model call has my words, its answer follows them
+  let n = sent(MODEL).length;
+  script(
+    MODEL,
+    {
+      delay_s: 6,
+      content: "Writing it.",
+      tool_calls: [
+        { tool: "change", args: { key: "prompt.text", value: "a rainy London street" } },
+      ],
+    },
+    {
+      content: "Added a red bus.",
+      tool_calls: [
+        {
+          tool: "change",
+          args: { key: "prompt.text", value: "a rainy London street, a red bus behind her" },
+        },
+      ],
+    },
+    { content: "Done: a red bus behind her." },
+  );
+  await say("make a rainy London still");
+  // a · the box stays open while it works
+  await expect(box()).toHaveAttribute("placeholder", "Steer the answer…");
+  await expect(drawer().getByText("steers this answer")).toBeVisible();
+  await expect(drawer().getByRole("button", { name: "Stop" })).toBeVisible();
+  await shot("j16-steer-working");
+  // b · sent: at the bottom, dimmed, at the next step (the first model call runs by now)
+  await page.waitForTimeout(1500);
+  await say("add a red bus behind her");
+  const waiting = drawer().getByLabel("Waiting for the next step");
+  await expect(waiting).toHaveCount(1);
+  await expect(waiting).toContainText("at the next step");
+  await shot("j16-steer-waiting");
+  await replied("Done: a red bus behind her.");
+  await expect(drawer().getByText("at the next step")).toHaveCount(0);
+  // read after the first step's line, before the answer that follows it
+  const read = drawer().locator(".msg.me").filter({ hasText: "add a red bus behind her" });
+  const after = await read.evaluate((el) => {
+    const all = [...el.parentElement!.querySelectorAll(".msg")];
+    const i = all.indexOf(el);
+    return [all[i - 1]?.textContent ?? "", all[i + 1]?.textContent ?? ""];
+  });
+  expect(after[0]).toContain("Writing it.");
+  expect(after[1]).toContain("Added a red bus.");
+  await shot("j16-steer-read");
+  await expect(prompt()).toHaveValue("a rainy London street, a red bus behind her");
+  expect(told(n)[1]).toContain("User: add a red bus behind her");
+  await expect(box()).toHaveAttribute("placeholder", "Ask, or say what to do");
+  await expect(drawer().getByRole("button", { name: "Stop" })).toHaveCount(0);
+
+  // d · it finished first: my message starts the next answer
+  n = sent(MODEL).length;
+  script(MODEL, { delay_s: 5, content: "Here is the plan." }, { content: "Made it night." });
+  await say("plan a still");
+  await page.waitForTimeout(1500);
+  await say("make it night");
+  await expect(drawer().getByText("sent as the next message")).toBeVisible({ timeout: 30_000 });
+  await shot("j16-steer-next");
+  await replied("Made it night.");
+  expect(told(n)).toHaveLength(2);
+  expect(told(n)[1]).toContain("User: make it night");
+
+  // Stop ends it at the next step: no model call after
+  n = sent(MODEL).length;
+  script(MODEL, {
+    delay_s: 4,
+    content: "Starting.",
+    tool_calls: [{ tool: "change", args: { key: "prompt.text", value: "never" } }],
+  });
+  await say("write a long prompt");
+  await page.waitForTimeout(1500); // the model call runs: it finishes, its change does not
+  await drawer().getByRole("button", { name: "Stop" }).click();
+  await replied("Starting.");
+  await expect(prompt()).not.toHaveValue("never");
+  expect(sent(MODEL).length - n).toBe(1);
+});

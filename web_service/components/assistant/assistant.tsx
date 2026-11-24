@@ -13,6 +13,7 @@ import {
   Brain,
   Check,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   CircleAlert,
   CircleMinus,
@@ -202,7 +203,7 @@ export function useAssistant(me: S<"User"> | null) {
       setView((v) =>
         v && v.thread.id === id
           ? {
-              thread: r.thread,
+              thread: r.steer ? v.thread : r.thread, // a steer leaves the running turn as the events have it
               entries:
                 r.entry && !v.entries.some((x) => x.id === r.entry!.id)
                   ? [...v.entries, r.entry]
@@ -391,9 +392,17 @@ export function useAssistant(me: S<"User"> | null) {
       answer: yes ? "yes" : "not_now",
     });
   const continueHere = () => threadId && void post(threadId, { kind: "continue", client_id: cid });
+  // the running turn takes a message as a steer (board frame 8): while it works, or runs this tab's actions
+  const t = view?.thread;
+  const steering =
+    !!t &&
+    !elsewhere(t, cid) &&
+    (t.state === "working" || (t.state === "waiting" && !!t.pending?.actions.length));
+  /** Stop: this tab's actions stop, a screen card is cancelled, and the turn ends at its next step. */
   const stopAll = () => {
     stop.current = true;
     answerRef.current?.("no");
+    if (threadId && steering) void post(threadId, { kind: "stop", client_id: cid });
   };
   const toggleUndo = async (l: Line) => {
     const was = !!undone[l.id];
@@ -458,6 +467,7 @@ export function useAssistant(me: S<"User"> | null) {
     answerCard,
     continueHere,
     stopAll,
+    steering,
     toggleUndo,
     readOnly,
     cardWaits: !!asking || serverCardWaits,
@@ -809,6 +819,7 @@ function Thread({ a, entries }: { a: AssistantApi; entries: Entry[] }) {
   const out: React.ReactNode[] = [];
   let words: Entry[] = [];
   let lines: Line[] = [];
+  const steers: React.ReactNode[] = []; // sent while it works: at the bottom, dimmed, until the turn reads them
   const flush = (key: string) => {
     if (!words.length && !lines.length) return;
     out.push(
@@ -838,10 +849,26 @@ function Thread({ a, entries }: { a: AssistantApi; entries: Entry[] }) {
     else if (e.kind === "line" && e.line) lines.push(e.line);
     else {
       flush(e.id);
-      if (e.kind === "user")
+      if (e.kind === "user" && e.steer === "waiting")
+        steers.push(
+          <div key={e.id} className="msg me steer" aria-label="Waiting for the next step">
+            <Text text={e.text ?? ""} />
+            <small>
+              <Clock3 size={11} strokeWidth={2} aria-hidden />
+              at the next step
+            </small>
+          </div>,
+        );
+      else if (e.kind === "user")
         out.push(
           <div key={e.id} className="msg me">
             <Text text={e.text ?? ""} />
+            {e.steer === "next" && (
+              <small>
+                <ChevronRight size={11} strokeWidth={2} aria-hidden />
+                sent as the next message
+              </small>
+            )}
           </div>,
         );
       else if (e.kind === "card" && e.card) {
@@ -883,7 +910,12 @@ function Thread({ a, entries }: { a: AssistantApi; entries: Entry[] }) {
         onNo={() => a.answerAsk(false)}
       />,
     );
-  return <>{out}</>;
+  return (
+    <>
+      {out}
+      {steers}
+    </>
+  );
 }
 
 type MemoryItem = S<"AssistantMemoryItem">;
@@ -1380,7 +1412,9 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
                 rows={phone ? 1 : 2}
                 maxLength={4000}
                 disabled={!!limit}
-                placeholder={limit ? limit.until : "Ask, or say what to do"}
+                placeholder={
+                  limit ? limit.until : a.steering ? "Steer the answer…" : "Ask, or say what to do"
+                }
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 onKeyDown={(e) => {
@@ -1392,18 +1426,29 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
               />
               <div className="cmpb">
                 <small>
-                  {!phone && (
+                  {a.steering ? (
                     <>
-                      <span className="kbd">{shortcut()}</span> open or close
-                      {screen?.screen === "create" && (
-                        <>
-                          {" · "}
-                          <span className="kbd">@</span> elements
-                        </>
-                      )}
+                      <span className="kbd">Enter</span> steers this answer
                     </>
+                  ) : (
+                    !phone && (
+                      <>
+                        <span className="kbd">{shortcut()}</span> open or close
+                        {screen?.screen === "create" && (
+                          <>
+                            {" · "}
+                            <span className="kbd">@</span> elements
+                          </>
+                        )}
+                      </>
+                    )
                   )}
                 </small>
+                {a.steering && (
+                  <button type="button" className="no h-[34px] px-3 text-xs" onClick={a.stopAll}>
+                    Stop
+                  </button>
+                )}
                 <button
                   type="submit"
                   className="snd"
