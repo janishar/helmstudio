@@ -69,6 +69,8 @@ test("j01 my first picture: type a prompt, Generate, the take shows with its pic
   await expect(pic).toBeVisible();
   // the picture really loaded, not a broken image
   await expect.poll(() => pic.evaluate((i: HTMLImageElement) => i.naturalWidth)).toBeGreaterThan(0);
+  // the stage's badge has its render time (API 1.60; docs/mock/Main.dc.html "A finished take")
+  await expect(page.getByTitle("Render time (start to file)")).toHaveText(/· ⏱ \d+:\d\d/);
   // the session is named from the first prompt
   await expect(sessionButton()).toHaveAccessibleName(/^Session: a red fox in snow\./);
   await shot("j01-first-picture");
@@ -110,7 +112,21 @@ test("j04 find yesterday's picture in the Gallery and see how it was made", asyn
   await expect(panel()).toContainText("Template");
   await expect(panel()).toContainText("Echo");
   await expect(panel()).toContainText("512 × 512");
+  // its render time, low text (API 1.60; docs/mock/Gallery.dc.html)
+  await expect(panel()).toContainText(/Render time\s*⏱ \d+:\d\d/);
   await shot("j04-gallery-made-with");
+});
+
+test("j04b double-click a take: its full preview opens, as the expand button does", async () => {
+  await card("a red fox in snow").dblclick();
+  const full = page.getByRole("dialog", { name: "a red fox in snow" });
+  await expect(full).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(full).toHaveCount(0);
+  // a single click still only selects
+  await card("a red fox in snow").click();
+  await expect(card("a red fox in snow")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
 });
 
 test("j05 reuse its settings: Create opens with the same workflow and prompt", async () => {

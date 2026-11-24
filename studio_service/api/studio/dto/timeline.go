@@ -435,6 +435,7 @@ type TimelineTake struct {
 	Seed          *int64                `json:"seed"`
 	WorkflowID    *string               `json:"workflow_id"`
 	WorkflowTitle *string               `json:"workflow_title"`
+	RenderS       *float64              `json:"render_s,omitempty"` // API 1.60: made_with.render_s
 }
 
 // TimelineProblem is one broken rule.

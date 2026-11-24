@@ -4636,6 +4636,8 @@ export interface components {
             pipeline?: components["schemas"]["MadeWithPipeline"] | null;
             /** @description from 1.18: the host that ran it (the run's host at the attempt that stored it); absent or null for takes made before 1.18 */
             host?: string | null;
+            /** @description from 1.60: its render time in seconds (0.1 s steps), from the run's start (its attempt's first running status) to this output's file stored; a run's takes each keep their own. Absent for takes made before 1.60 or by a run with no start recorded (the UI shows none: "⏱ 1:14" when present; a sequence's total is the sum over its clips' takes that have one) */
+            render_s?: number;
             /** @description from the workflow's `<family>/model` node; null without one (echo) */
             model: {
                 /** @description the model id of the registry models key for the family; null when unknown */
@@ -7064,6 +7066,8 @@ export interface components {
             /** @description `made_with.workflow_id`; null for an upload, import, frame or export (no "from this clip", no re-render) */
             workflow_id: string | null;
             workflow_title: string | null;
+            /** @description from 1.60: `made_with.render_s` (the clip inspector's "⏱ 3:12"; the sequence's total sums its clips' takes that have one); absent without one */
+            render_s?: number;
         };
         TimelineProblem: {
             /**

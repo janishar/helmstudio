@@ -88,6 +88,13 @@ export const clock = (s: number) => {
   return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
 };
 
+/** A render time as low text, "⏱ 1:14" ("⏱ 1:02:05" from an hour); "" without one (API 1.60, MadeWith.render_s). */
+export const renderTime = (s?: number | null) => {
+  if (s == null) return "";
+  const t = Math.max(0, Math.round(s));
+  return `⏱ ${t >= 3600 ? `${Math.floor(t / 3600)}:${clock(t % 3600).padStart(5, "0")}` : clock(t)}`;
+};
+
 /** "1:52 left" from the last progress event's ETA; "" without one. */
 export const etaText = (r: Run) =>
   r.progress?.eta_s != null && isActive(r.status) ? `${clock(r.progress.eta_s)} left` : "";

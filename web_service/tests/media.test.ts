@@ -22,6 +22,7 @@ import {
   aspectOf,
   buildInputs,
   carry,
+  carryKind,
   fields,
   megapixelChoices,
   readValue,
@@ -102,6 +103,42 @@ describe("media of workflows and the Image / Video switch", () => {
     }
     const ltxRows = { "lora.rows": [{ lora: { lora_id: id }, strength: 1, mode: "bake" }] };
     expect(carry(ltxRows, fields(ltx), fields(ltx))).toEqual(ltxRows);
+  });
+});
+
+describe("prompts and scripts per kind (alpha.2 item 14)", () => {
+  it("never carries a picture prompt into an audio workflow, and brings each side's last text back", () => {
+    const kept = {};
+    const toSound = { from: "picture", to: "sound" };
+    const toPicture = { from: "sound", to: "picture" };
+    // the audio workflow is drawn with the same prompt path (Qwen3-TTS Voice design's prompt.text)
+    const sound = fields(qwen);
+    const pic = { "prompt.text": "@elias @biscuit at the door", "seed.seed": "7" };
+    const heard = carryKind(pic, sound, fields(qwen), undefined, toSound, kept);
+    expect(heard["prompt.text"]).toBeUndefined();
+    expect(heard["seed.seed"]).toBe("7");
+    const back = carryKind(
+      { ...heard, "prompt.text": "Hello there." },
+      fields(qwen),
+      sound,
+      undefined,
+      toPicture,
+      kept,
+    );
+    expect(back["prompt.text"]).toBe("@elias @biscuit at the door");
+    const again = carryKind(back, sound, fields(qwen), undefined, toSound, kept);
+    expect(again["prompt.text"]).toBe("Hello there.");
+    // the same side: as carry
+    expect(
+      carryKind(
+        pic,
+        fields(ltx),
+        fields(qwen),
+        undefined,
+        { from: "picture", to: "picture" },
+        kept,
+      ),
+    ).toEqual(carry(pic, fields(ltx), fields(qwen)));
   });
 });
 

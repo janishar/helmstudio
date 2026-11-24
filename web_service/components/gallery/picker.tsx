@@ -7,6 +7,7 @@ import { useRef, useState } from "react";
 import { X } from "lucide-react";
 import { ErrorNote, Modal, UploadStatus } from "@/components/kit";
 import { Chip, TakeCard, useTakePages } from "@/components/gallery/gallery";
+import { useGridWindow } from "@/components/gallery/window";
 import { message, type S } from "@/lib/api";
 import {
   AUDIO_ACCEPT,
@@ -178,6 +179,9 @@ function Picker({
   const { next, loading, error, fetchPage, sentinel } = pages;
   // ponytail: an audio input filters a page of every kind here; a kind list in the API if galleries grow
   const takes = only ? (pages.takes?.filter(only) ?? null) : pages.takes;
+  // only the rows near the screen are drawn (item 32)
+  const grid = useRef<HTMLDivElement>(null);
+  const win = useGridWindow(grid, takes?.length ?? 0);
   const [picked, setPicked] = useState<Take[]>([]);
   const toggle = (t: Take) =>
     setPicked((p) =>
@@ -245,9 +249,11 @@ function Picker({
           role="list"
           aria-label={kind === "image" ? "Images" : "Takes"}
           aria-busy={loading}
+          ref={grid}
+          style={{ paddingTop: win.padTop, paddingBottom: win.padBottom }}
           className="grid grid-cols-[repeat(auto-fill,minmax(130px,1fr))] gap-2.5"
         >
-          {takes?.map((t) => {
+          {takes?.slice(win.start, win.end).map((t) => {
             const on = picked.some((x) => x.id === t.id);
             return (
               <div key={t.id} role="listitem" className="min-w-0">
