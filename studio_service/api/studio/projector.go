@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -205,6 +206,10 @@ func (p *Projector) applyOutput(ctx context.Context, tx pgx.Tx, run model.Run, e
 	made, err := withPipeline(ctx, tx, run, madeWith(p.Workflows, run, data.Seed, outputParams(data)))
 	if err != nil {
 		return nil, err
+	}
+	if run.StartedAt != nil { // API 1.60: render time, the run's start to this file
+		s := math.Round(max(time.Since(*run.StartedAt).Seconds(), 0)*10) / 10
+		made.RenderS = &s
 	}
 	lineage := runParents(run.Nodes, run.Mentions, p.Workflows.Schemas())
 	if sm := data.SourceMap; sm != nil && (data.Kind != "video" || !slices.Contains(lineage, sm.TakeID)) {
