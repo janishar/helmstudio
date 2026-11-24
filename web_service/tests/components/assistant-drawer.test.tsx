@@ -60,6 +60,7 @@ const user = { id: "u1", email: "u@x.test", name: "U", roles: ["user"] } as unkn
 const status = (remote = false, thinks = false): S<"AssistantStatus"> => ({
   enabled: true,
   thinks,
+  sees: false,
   provider: { title: "DeepSeek", remote },
   web_search: null,
   limits: {
