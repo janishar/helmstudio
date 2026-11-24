@@ -120,13 +120,35 @@ class Chat:
         return self.steps()[-1] if self.steps() else {}
 
     def steps(self) -> list[dict]:
-        out = [json.loads(d) for s, d, _ in self.js.sent if s.startswith("evt.assistant.")]
+        out = [
+            json.loads(d)
+            for s, d, _ in self.js.sent
+            if s.startswith("evt.assistant.") and s.endswith(".step")
+        ]
         for m in out:
             assert not schemas.message_errors(m), schemas.message_errors(m)
         return [m["data"] for m in out]
 
     def asked(self) -> list[dict]:
         return [r["body"] for r in self.fake.requests if r["body"]]
+
+    async def steer(self, text: str | None = None, turn: int | None = None) -> str:
+        """A cmd.assistant.steer as studio writes it while the turn works (a Stop without text); the steer's id."""
+        c = copy.deepcopy(fixture("cmd.assistant.steer.valid.1"))
+        sid = str(uuid.uuid4())
+        c["id"], c["job_id"], c["owner_id"] = str(uuid.uuid4()), self.tid, self.owner
+        c["data"] = {"thread_id": self.tid, "turn": turn or self.n, "at": now()} | (
+            {"steer_id": sid, "text": text} if text else {"stop": True}
+        )
+        assert not schemas.message_errors(c), schemas.message_errors(c)
+        await assistant.Commands(self.a, self.pool, self.js).dispatch(c)
+        return sid
+
+    def steered(self) -> list[dict]:
+        out = [json.loads(d) for s, d, _ in self.js.sent if s.endswith(".steered")]
+        for m in out:
+            assert not schemas.message_errors(m), schemas.message_errors(m)
+        return [m["data"] for m in out]
 
     def script(self, *answers: dict) -> None:
         self.fake.script.setdefault("fake-large", []).extend(answers)
@@ -385,6 +407,47 @@ async def test_a_closed_tab_the_next_message_says_did_not_run(pool, fake):
     old, new = c.steps()[-2:]
     assert (old["turn"], old["done"], new["turn"], new["done"]) == (1, True, 2, True)
     assert "the tab was closed" in c.asked()[-1]["messages"][1]["content"]
+
+
+async def test_steers_are_read_at_the_next_boundary_in_order(pool, fake):
+    """API 1.59: messages sent while the tab runs the actions join the transcript when the results resume the turn,
+    in order, after those results and before the next model call; studio hears which were read."""
+    c = Chat(pool, fake)
+    c.script(calls(("change", {"key": "model", "value": "qwen"})),
+             {"content": "Switching to Turbo, 16:9."})  # fmt: skip
+    await c.say("Make a rainy London still")
+    one, two = await c.steer("Use Turbo instead"), await c.steer("And make it 16:9")
+    assert c.steered() == []  # never during a step
+    step = await c.results(done(c.cid(1, 0), "Set model: Qwen Image"))
+    assert step["done"] and step["text"] == "Switching to Turbo, 16:9."
+    assert c.steered() == [{"thread_id": c.tid, "turn": 1, "steer_ids": [one, two]}]
+    p = c.asked()[1]["messages"][1]["content"]
+    assert (
+        p.index("Set model: Qwen Image")
+        < p.index("User: Use Turbo instead")
+        < p.index("User: And make it 16:9")
+    )
+    # the steer of an ended turn is stale: studio sends it as the next message, never read twice
+    await c.steer("too late", turn=2)
+    c.script({"content": "OK."})
+    await c.say("Add a red bus behind her\n\ntoo late")
+    assert len(c.steered()) == 1 and c.asked()[-1]["messages"][1]["content"].count("too late") == 1
+
+
+async def test_stop_ends_the_turn_at_its_next_boundary(pool, fake):
+    c = Chat(pool, fake)
+    c.script(calls(("change", {"key": "prompt", "value": "rain"}), ("generate", {})))
+    await c.say("rain")
+    await c.steer()  # Stop while the tab runs the actions
+    stopped = {"id": c.cid(1, 1), "status": "did_not_run", "line": {"text": "Did not run · you stopped it",
+                                                                      "undo": False}}  # fmt: skip
+    step = await c.results(done(c.cid(1, 0), "Wrote prompt"), stopped)
+    assert (
+        step["done"] and step["error"] is None and len(c.asked()) == 1
+    )  # no model call after Stop
+    # the next message is a new turn: the old Stop does not touch it
+    c.script({"content": "Here."})
+    assert (await c.say("again"))["text"] == "Here."
 
 
 async def test_a_hidden_tab_stays_parked_and_stale_results_are_dropped(pool, fake):

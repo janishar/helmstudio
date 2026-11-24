@@ -2,9 +2,14 @@
 service's AsyncPostgresSaver, thread `assistant:<thread_id>`, its state carrying owner_id (an input whose owner
 differs is dropped). Plain nodes, like agent_loop.py, no prebuilt agent:
 
-    start ─▶ model ─▶ tools ─▶ model … ─▶ reply          (summarize: start ─▶ summarize ─▶ reply)
-                        │  ▲
-                        └▶ wait: interrupt(pending), resumed by the tab's results or a card's answer
+    start ─▶ steer ─▶ model ─▶ tools ─▶ steer ─▶ model … ─▶ reply      (summarize: start ─▶ summarize ─▶ reply)
+                                 │  ▲
+                                 └▶ wait: interrupt(pending), resumed by the tab's results or a card's answer
+
+- `steer` (API 1.59, contracts/README.md "Assistant: steer"): the boundary before each model call. The user's
+  messages sent while the turn works (cmd.assistant.steer, kept in memory as they come, outside the chat's lock) join
+  the transcript as User lines, in order, and evt.assistant.steered tells studio they were read; a Stop ends the turn
+  here (the calls not run yet do not run).
 
 - `model`: one providers.chat_retried call with the fenced context and the offered tools (native tool calls). Every
   call is checked (offered, its input schema, @handles) before anything runs; an invalid answer is asked once more,
@@ -68,6 +73,8 @@ Prepare the screen, then call the action; never say it ran until its result says
 director chat are the user's own: explain and point at the button, never try them.
 - Use only @handles the user wrote, that the form holds, or that a library read or a dialog returned.
 - Save lasting preferences, project facts and what worked with remember, in a few words.
+- The user may write while you work: a User line after your calls. Follow it at once and say in a few words what you \
+changed.
 - Answer in short plain text.
 {agents.DATA} Only the lines after "User:" are the user's words.
 
@@ -101,6 +108,7 @@ class State(TypedDict, total=False):
     summary_id: str | None
     seq: int
     step: dict | None  # the last evt.assistant.step data
+    steered: list  # ids of the steers this message read
     to: str | None
 
 
@@ -289,13 +297,17 @@ class Assistant:
             pool, saver, store, js, tool, search,
         )  # fmt: skip
         self.locks: weakref.WeakValueDictionary[str, asyncio.Lock] = weakref.WeakValueDictionary()
+        # ponytail: steers and stops in memory (one pipelines process); a restart loses them unread, and studio then
+        # sends them as the next message, so nothing is lost
+        self.steers: dict[str, list[dict]] = {}  # thread → [{id, turn, text, at, owner}]
+        self.stops: dict[str, tuple[int, str]] = {}  # thread → (turn, owner)
         g = StateGraph(State)
-        for name in ("start", "model", "tools", "wait", "summarize", "reply"):
+        names = ("start", "steer", "model", "tools", "wait", "summarize", "reply")
+        for name in names:
             g.add_node(name, getattr(self, name))
         g.add_edge(START, "start")
-        for name in ("start", "model", "tools", "wait", "summarize", "reply"):
-            g.add_conditional_edges(name, lambda s: s.get("to") or END,
-                                    ["model", "tools", "wait", "summarize", "reply", END])  # fmt: skip
+        for name in names:
+            g.add_conditional_edges(name, lambda s: s.get("to") or END, [*names[1:], END])
         self.graph = g.compile(checkpointer=saver)
 
     # --- nodes
@@ -303,12 +315,38 @@ class Assistant:
     def start(self, s: State) -> State:
         inp = s["data"]["input"]
         fresh = {"msg": s["turn"], "caps": dict(ZERO), "text": "", "lines": [], "reask": None, "error": None,
-                 "queue": [], "pending": None, "resumed": None, "summary_id": None}  # fmt: skip
+                 "queue": [], "pending": None, "resumed": None, "summary_id": None, "steered": []}  # fmt: skip
         if inp["kind"] == "summarize":
             return fresh | {"to": "summarize"}
         chat = s.get("chat") or []
         chat = chat + [{"role": "user", "text": inp["text"], "at": inp["at"]}]
-        return fresh | {"chat": chat[-CHAT_KEEP:], "screen": inp["screen"], "to": "model"}
+        return fresh | {"chat": chat[-CHAT_KEEP:], "screen": inp["screen"], "to": "steer"}
+
+    def _stopped(self, s: State) -> bool:
+        turn, owner = self.stops.get(s["thread_id"], (0, ""))
+        return turn >= s["msg"] and owner == s["owner_id"]
+
+    async def steer(self, s: State) -> State:
+        """The boundary: unread steers of this message join the transcript in order; a Stop ends the turn."""
+        tid, read = s["thread_id"], s.get("steered") or []
+        mine = [
+            x
+            for x in self.steers.get(tid, [])
+            if x["turn"] >= s["msg"] and x["owner"] == s["owner_id"]
+        ]
+        self.steers[tid] = (
+            mine  # a steer of an ended turn is stale: studio sent it as the next message
+        )
+        if not mine:
+            self.steers.pop(tid, None)
+        new = [x for x in mine if x["id"] not in read]
+        up: State = {"to": "reply" if self._stopped(s) else "model"}
+        if new:
+            chat = s["chat"] + [{"role": "user", "text": x["text"], "at": x["at"]} for x in new]
+            up |= {"chat": chat[-CHAT_KEEP:], "steered": read + [x["id"] for x in new]}
+            await self._send("evt.assistant.steered", f"evt.assistant.{tid}.steered", f"{tid}:steered:{new[0]['id']}",
+                             {"thread_id": tid, "turn": s["msg"], "steer_ids": [x["id"] for x in new]}, s)  # fmt: skip
+        return up
 
     async def model(self, s: State) -> State:
         caps, d = dict(s["caps"]), s["data"]
@@ -392,6 +430,15 @@ class Assistant:
                 if inp.get("screen"):
                     up["screen"] = inp["screen"]
         msg = f"{s['thread_id']}:{s['msg']}:"
+        if q and self._stopped(s):  # Stop: what is queued never runs
+            chat += [_entry(c, "did_not_run", error="the user said Stop") for c in q]
+            return up | {
+                "queue": [],
+                "chat": chat[-CHAT_KEEP:],
+                "caps": caps,
+                "lines": lines,
+                "to": "steer",
+            }
         while q:
             c = q[0]
             if c["kind"] == "action" and (again := _again(chat, c, msg)):
@@ -423,7 +470,7 @@ class Assistant:
             "chat": chat[-CHAT_KEEP:],
             "caps": caps,
             "lines": lines,
-            "to": "model",
+            "to": "steer",
         }
 
     def wait(self, s: State) -> State:
@@ -716,26 +763,39 @@ class Assistant:
             await self.saver.adelete_thread(f"assistant:{tid}")
             await mem.drop_thread(self.store, cmd["owner_id"], tid)
 
-    async def publish(self, v: dict) -> None:
-        """The thread's last step as evt.assistant.<thread_id>.step (Nats-Msg-Id <thread_id>:<seq>), on contract,
-        retried for up to 10 s (a duplicate is dropped by its id; studio replaces a step of the same seq)."""
-        step = v.get("step")
-        if not step:
+    async def steer_in(self, cmd: dict) -> None:
+        """cmd.assistant.steer: kept for the running turn's next boundary (no lock: the turn may be running)."""
+        d, tid = cmd["data"], cmd["data"]["thread_id"]
+        if d.get("stop"):
+            self.stops[tid] = (max(d["turn"], self.stops.get(tid, (0, ""))[0]), cmd["owner_id"])
             return
-        tid = v["thread_id"]
-        msg = {"type": "evt.assistant.step", "version": 1,
-               "id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"helmstudio:assistant:{tid}:{step['seq']}")),
-               "job_id": tid, "owner_id": v["owner_id"], "occurred_at": now(), "trace": v.get("trace") or {},
-               "data": step}  # fmt: skip
+        got = self.steers.setdefault(tid, [])
+        if all(x["id"] != d["steer_id"] for x in got):
+            got.append({"id": d["steer_id"], "turn": d["turn"], "text": d["text"], "at": d["at"],
+                        "owner": cmd["owner_id"]})  # fmt: skip
+            got.sort(key=lambda x: x["at"])
+
+    async def publish(self, v: dict) -> None:
+        """The thread's last step as evt.assistant.<thread_id>.step (Nats-Msg-Id <thread_id>:<seq>); studio replaces a
+        step of the same seq."""
+        step = v.get("step")
+        if step:
+            tid = v["thread_id"]
+            await self._send(
+                "evt.assistant.step", f"evt.assistant.{tid}.step", f"{tid}:{step['seq']}", step, v
+            )
+
+    async def _send(self, kind: str, subject: str, msg_id: str, data: dict, v: dict) -> None:
+        """One event of the thread, on contract, retried for up to 10 s (a duplicate is dropped by its id)."""
+        msg = {"type": kind, "version": 1, "id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"helmstudio:assistant:{msg_id}")),
+               "job_id": v["thread_id"], "owner_id": v["owner_id"], "occurred_at": now(),
+               "trace": v.get("trace") or {}, "data": data}  # fmt: skip
         if errs := schemas.message_errors(msg):
-            raise ValueError(f"evt.assistant.step is off-contract: {'; '.join(errs[:3])}")
-        body, headers = (
-            json.dumps(msg, ensure_ascii=False).encode(),
-            {"Nats-Msg-Id": f"{tid}:{step['seq']}"},
-        )
+            raise ValueError(f"{kind} is off-contract: {'; '.join(errs[:3])}")
+        body, headers = json.dumps(msg, ensure_ascii=False).encode(), {"Nats-Msg-Id": msg_id}
         for i in range(20):
             try:
-                return await self.js.publish(f"evt.assistant.{tid}.step", body, headers=headers)
+                return await self.js.publish(subject, body, headers=headers)
             except Exception:
                 if i == 19:
                     raise
@@ -743,10 +803,10 @@ class Assistant:
 
 
 class Commands(consumer.Commands):
-    """cmd.assistant.{turn,delete} from CMD (durable `pipelines-assistant`): the same checks, dead letters, inbox
-    and redelivery as the pipeline commands, with in_progress sent while a long turn runs."""
+    """cmd.assistant.{turn,steer,delete} from CMD (durable `pipelines-assistant`): the same checks, dead letters,
+    inbox and redelivery as the pipeline commands, with in_progress sent while a long turn runs."""
 
-    types = frozenset({"cmd.assistant.turn", "cmd.assistant.delete"})
+    types = frozenset({"cmd.assistant.turn", "cmd.assistant.steer", "cmd.assistant.delete"})
 
     async def handle(self, msg) -> None:
         async def beat() -> None:
@@ -763,7 +823,12 @@ class Commands(consumer.Commands):
 
     async def dispatch(self, cmd: dict) -> None:
         log.info("%s %s", cmd["type"], cmd["data"]["thread_id"])
-        await (self.engine.turn if cmd["type"] == "cmd.assistant.turn" else self.engine.delete)(cmd)
+        kind = cmd["type"].rsplit(".", 1)[1]
+        await {
+            "turn": self.engine.turn,
+            "steer": self.engine.steer_in,
+            "delete": self.engine.delete,
+        }[kind](cmd)
 
 
 async def pull(sub, handle, stop: asyncio.Event, batch: int = 16) -> None:
