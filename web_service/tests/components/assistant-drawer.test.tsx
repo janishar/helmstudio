@@ -1153,4 +1153,40 @@ describe("steer while it answers (board frame 8)", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Stop" }));
     await waitFor(() => expect(posts).toEqual([{ kind: "stop", client_id: ME }]));
   });
+
+  it("Stop's reply never takes back a newer state (the turn ended first)", async () => {
+    serve({ existing: working });
+    answer("POST", {
+      "/v1/studio/assistant/threads/{thread_id}/messages": () => {
+        // the turn's end arrives before the reply, whose snapshot is the working one
+        onEvent!({
+          seq: 60,
+          type: "thread",
+          thread: thread({ client_id: ME, updated_at: "2026-11-22T00:02:00Z" }),
+        });
+        return { status: 202, data: { thread: working, entry: null } };
+      },
+    });
+    await openDrawer();
+    fireEvent.click(await screen.findByRole("button", { name: "Stop" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Stop" })).toBeNull());
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
+    expect(box().getAttribute("placeholder")).toBe("Ask, or say what to do");
+  });
+
+  it("Stop just before a park: that batch does not run", async () => {
+    const posts = serveSteer();
+    const change = vi.fn(() => done("Set prompt"));
+    await openDrawer(<Screen actions={{ change }} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Stop" }));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    park([{ id: id(0), name: "change", args: { key: "prompt", value: "rain" } }]);
+    await waitFor(() => expect(posts).toHaveLength(2));
+    expect(change).not.toHaveBeenCalled();
+    const r = posts[1] as Extract<S<"AssistantPost">, { kind: "results" }>;
+    expect(r.results).toMatchObject([
+      { status: "did_not_run", line: { text: "Did not run · you stopped it" } },
+    ]);
+  });
 });

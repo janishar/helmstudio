@@ -111,6 +111,8 @@ export function useAssistant(me: S<"User"> | null) {
   const answerRef = useRef<((a: "yes" | "no" | "gone") => void) | null>(null);
   const handled = useRef(new Set<string>());
   const stop = useRef(false);
+  // Stop pressed while the turn works: its next park, if it parks before ending, runs nothing
+  const stopNext = useRef(false);
   const threadId = view?.thread.id;
 
   useEffect(() => {
@@ -203,7 +205,8 @@ export function useAssistant(me: S<"User"> | null) {
       setView((v) =>
         v && v.thread.id === id
           ? {
-              thread: r.steer ? v.thread : r.thread, // a steer leaves the running turn as the events have it
+              // a steer or Stop leaves the running turn as the events have it (the reply's snapshot may be older)
+              thread: r.steer || body.kind === "stop" ? v.thread : r.thread,
               entries:
                 r.entry && !v.entries.some((x) => x.id === r.entry!.id)
                   ? [...v.entries, r.entry]
@@ -258,7 +261,8 @@ export function useAssistant(me: S<"User"> | null) {
    * whose later actions are dropped, the new screen). */
   const runBatch = useCallback(
     async (t: Thread, p: S<"AssistantPending">) => {
-      stop.current = false;
+      stop.current = stopNext.current;
+      stopNext.current = false;
       const results = [];
       let moved = false;
       if (typeof matchMedia === "function" && matchMedia(PHONE).matches) setShrunk(true);
@@ -316,6 +320,10 @@ export function useAssistant(me: S<"User"> | null) {
     handled.current.add(k);
     void runBatch(thread, p);
   }, [thread, cid, runBatch]);
+  // the stopped turn ended without parking: a later turn's batch runs as usual
+  useEffect(() => {
+    if (thread?.state === "idle") stopNext.current = false;
+  }, [thread?.state]);
 
   const send = useCallback(
     async (text: string) => {
@@ -343,6 +351,7 @@ export function useAssistant(me: S<"User"> | null) {
   const leave = useCallback(() => {
     answerRef.current?.("gone");
     stop.current = true;
+    stopNext.current = false;
     setLocalState({});
     setError("");
   }, []);
@@ -402,7 +411,10 @@ export function useAssistant(me: S<"User"> | null) {
   const stopAll = () => {
     stop.current = true;
     answerRef.current?.("no");
-    if (threadId && steering) void post(threadId, { kind: "stop", client_id: cid });
+    if (threadId && steering) {
+      stopNext.current = true;
+      void post(threadId, { kind: "stop", client_id: cid });
+    }
   };
   const toggleUndo = async (l: Line) => {
     const was = !!undone[l.id];
