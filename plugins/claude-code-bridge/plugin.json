@@ -1,0 +1,25 @@
+{
+  "name": "claude-code-bridge",
+  "title": "Claude Code bridge",
+  "version": "0.1.0",
+  "kind": "model-provider",
+  "description": "Answers with your own logged-in claude CLI, as an OpenAI-compatible endpoint.",
+  "author": "this repo",
+  "source": "plugins/claude-code-bridge",
+  "may_do": ["Add a model provider", "Reach host.docker.internal:8420", "Read your prompts (sent to your Claude plan)"],
+  "personal": true,
+  "disclaimer": {
+    "text": "Personal use only. Runs your own Claude login and plan, for you only. Never shared with other accounts.",
+    "link": "https://code.claude.com/docs/en/legal-and-compliance.md"
+  },
+  "url": "http://host.docker.internal:8420",
+  "health": "/health",
+  "start": "plugins/claude-code-bridge/run.sh",
+  "provider": {
+    "path": "/v1",
+    "models": ["claude-sonnet", "claude-opus", "claude-haiku"],
+    "key_hint": "BRIDGE_TOKEN in plugins/claude-code-bridge/.env",
+    "memory_gb": 0.5,
+    "timeout_s": 180
+  }
+}

@@ -146,6 +146,8 @@ class Handler(BaseHTTPRequestHandler):
         return False
 
     def do_GET(self):
+        if self.path.rstrip("/") == "/health":  # the studio's Plugins status: no key, nothing about the plan
+            return self.send(200, {"ok": True})
         if not self.authed():
             return
         if self.path.rstrip("/") == "/v1/models":

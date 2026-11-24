@@ -1,0 +1,20 @@
+{
+  "id": "3b7c9d1e-2f4a-4b6c-8d0e-1a2b3c4d5e6f:1:5",
+  "kind": "plugin",
+  "title": "Use Web search?",
+  "rows": [
+    {
+      "label": "Tool",
+      "value": "web-search.search"
+    },
+    {
+      "label": "Input",
+      "value": "{\"query\": \"ltx 2.3 prompt tips\"}"
+    }
+  ],
+  "note": "Sends what you see above off this machine.",
+  "tags": [
+    "sends off the machine"
+  ],
+  "state": "waiting"
+}

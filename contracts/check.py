@@ -48,6 +48,7 @@ HERE = Path(__file__).parent
 SCHEMA_FILES = sorted((HERE / "messages").glob("*.schema.json"))
 TOOL_FILES = sorted((HERE / "tools").glob("*.json"))  # the assistant's tools/catalog.json, actions.json and their schema
 PRESETS_SCHEMA = HERE / "providers" / "presets.schema.json"  # API 1.51: the model provider presets' shape
+MANIFEST_SCHEMA = HERE / "plugins" / "manifest.schema.json"  # API 1.60: a plugin's plugin.json
 # Every cmd.*/evt.* schema is an enveloped message; every req.* holds $defs/request and $defs/reply.
 MESSAGE_TYPES = [
     n
@@ -98,6 +99,7 @@ HTTP_SCHEMAS = [
     "SessionList", "SessionNames", "SessionNamesPut",
     "AssistantPost", "AssistantThreadList", "AssistantThreadDetail", "AssistantEvent", "AssistantMemoryList",
     "AssistantSettings", "AssistantSettingsPut", *TWINS,
+    "PluginList", "PluginRescan", "PluginPut", "PluginProviderCreate",  # 1.60
 ]
 OPENAPI = "https://helmstudio.local/contracts/openapi.yaml"
 OPERATION_PREFIX = {"/v1/studio/": "studio", "/files/": "files", "/auth/": "auth"}
@@ -118,6 +120,7 @@ def load_schemas() -> tuple[dict[str, dict], Registry]:
     schemas["registry"] = json.loads((HERE / "registry.schema.json").read_text())
     schemas |= {f"tools/{p.name}": json.loads(p.read_text()) for p in TOOL_FILES}
     schemas["providers/presets.schema.json"] = json.loads(PRESETS_SCHEMA.read_text())
+    schemas["plugins/manifest.schema.json"] = json.loads(MANIFEST_SCHEMA.read_text())
     for name, s in schemas.items():
         try:
             Draft202012Validator.check_schema(s)
@@ -4405,7 +4408,7 @@ def check_openapi() -> None:
                     fail(f"{where} {code}: use a components/responses error")
 
 
-ASSISTANT_CARD_KINDS = {"delete"}  # cards the server asks without a tool of its own: Clear all (a delete card)
+ASSISTANT_CARD_KINDS = {"delete", "plugin"}  # cards the server asks without a catalog tool: Clear all (a delete card); API 1.60 a plugin tool with a risk flag
 
 
 def refs(node, out=None) -> list[str]:
@@ -4632,6 +4635,39 @@ def check_presets(schemas: dict[str, dict], registry: Registry) -> None:
     print(f"ok   providers/presets.json ({len(seen)} presets, thinking rules)")
 
 
+def check_plugins(schemas: dict[str, dict], registry: Registry) -> None:
+    """API 1.60 (README, Plugins): every plugins/*/plugin.json in the repo (and the test stack's fake plugins) passes
+    the manifest schema, names its folder, keeps url on a local server's host, and each tool's input is a
+    self-contained JSON Schema of an object."""
+    v = Draft202012Validator({"$ref": schemas["plugins/manifest.schema.json"]["$id"]}, registry=registry)
+    root = HERE.parent
+    found = sorted([*root.glob("plugins/*/plugin.json"), *root.glob("contract_tests/fake_plugins/*/plugin.json")])
+    for p in found:
+        w, doc = str(p.relative_to(root)), json.loads(p.read_text())
+        if bad := list(v.iter_errors(doc)):
+            fail(f"{w}: {bad[0].json_path}: {bad[0].message}")
+            continue
+        if doc["name"] != p.parent.name:
+            fail(f"{w}: name {doc['name']!r} is not its folder's")
+        host = urlsplit(doc["url"]).hostname or ""
+        try:
+            ip = ipaddress.ip_address(host)
+        except ValueError:
+            ip = None
+        if ip and (ip.is_link_local or not (ip.is_loopback or ip.is_private)):
+            fail(f"{w}: url is a local server's: host.docker.internal, a name, a loopback or a private address")
+        for t in doc.get("tools", []):
+            try:
+                Draft202012Validator.check_schema(t["input"])
+            except SchemaError as e:
+                fail(f"{w} {t['name']}: input is not a JSON Schema: {e.message}")
+            if refs(t["input"]):
+                fail(f"{w} {t['name']}: input is model-facing, so self-contained: no $ref")
+    if not found:
+        fail("plugins/: no plugin.json found")
+    print(f"ok   plugins ({len(found)} manifests)")
+
+
 def main() -> int:
     schemas, registry = load_schemas()
     check_fixtures(schemas, registry)
@@ -4649,6 +4685,7 @@ def main() -> int:
     check_dispatch(registry)
     check_tools(schemas, registry)
     check_presets(schemas, registry)
+    check_plugins(schemas, registry)
     check_openapi()
     check_names()
     print(f"\n{len(errors)} failure(s)" if errors else "\nall contract checks passed")

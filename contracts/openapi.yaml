@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.59.1
+  version: 1.60.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -27,7 +27,7 @@ servers:
 security:
   - {ApiKey: [], BearerJWT: []}
 tags:
-  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media); from 1.23 LoRA strengths 0..2 (looks saved before are clamped when read; contracts/README.md, Looks); from 1.24 the model component a node loads (NodeSchema.component); from 1.25 an inspector section''s help, the presets'' order (StudioLayout.preset_order) and a run''s planned peak before it is sent (POST /v1/studio/runs/plan); from 1.26 an inspector section''s choice tiles (LTX''s Recipe: two-stage or one-stage); from 1.28 a judge''s branch without `then` (Ask me) and a judge test on picked takes (POST /v1/studio/pipelines/{pipeline_id}/judge-tests); from 1.29 a V1 clip''s shot number (TimelineClip.number: "Shot 4"); from 1.30 voices: audio takes made by runs (the `Audio` port, `Workflow.media` audio), the `voice` param, saved voices in the library (designed voices and the packs'' starter voices; contracts/README.md, Voices); from 1.31 cloned voices (a 3–30 s clip of an audio take or a video''s sound, with consent), designed voices that keep a clip, Save as voice (`from_take` with `kind: voice`) and the zonos3 family (contracts/README.md, Voices: cloned voices); from 1.32 dialogue and Timeline audio: dialogue scripts (`script` text params expanded into `lines` rows whose items carry a voice), an element''s `voice_id`, cues on a dialogue''s take, audio takes on the audio tracks, New line (POST /v1/studio/timelines/{timeline_id}/lines), Make shot (a slot `exact` at an audio clip''s time), an export plan''s `sounds`, offers and pipeline binds into rows of one media field, `library.read` voices and the write node''s `form: script` (contracts/README.md, Dialogue and Timeline audio); from 1.44 the in-app assistant: chats, their events and memory, the admin''s assistant settings, search providers (kind `search`) and the Gallery''s `order` (contracts/README.md, Assistant); from 1.47 rules (refusals as data, ParamSchema.rules), option help (ParamSchema.option_help), a native node''s peak formula and sound limits (NodeSchema.peak_gb, sounds: the planned peak per run) and the Preset heading''s help (StudioLayout.preset_help); from 1.48 thumbnails: every list''s `thumb_url` is a small WebP of the image or the poster once made, `RunOutput.thumb_url` (contracts/README.md, Thumbnails); from 1.49 timeline edits by named ops (POST …/timelines/{timeline_id}/edits: a dry run, a diff, studio-made clip ids), the revision history and restore to any kept revision, the agent view (`view=agent`) and a stored frame at a sequence time (contracts/README.md, Timeline: edits by ops); from 1.50 the Timeline tools'' ops (roll, slip, slide, overwrite, split_all, remove_range, lift_range, an audio track''s ripple remove), linked sound clips (`TimelineClip.link`) and markers (`TimelineDoc.markers`, the marker ops; contracts/README.md, Timeline rules: tools, linked clips, markers); from 1.51 provider presets (GET /v1/studio/admin/provider-presets, a preset''s Fetch, a key file''s status, `Provider.compat` and `preset`; contracts/README.md, Model sources: presets); from 1.52 saving a provider key (PUT and DELETE /v1/studio/admin/provider-keys/{key_secret}, `ProviderKey.writable`; contracts/README.md, Model sources: Keys); from 1.53 thinking per model (`Provider.thinking`, `thinking_levels`, `ProviderPut.thinking`, `ProviderTest.thinking`, `ProviderPreset.thinking`, a model source''s `thinking`; contracts/README.md, Model sources: thinking); from 1.55 a provider''s fixed extra headers (`ProviderCompat.headers`: Anthropic''s anthropic-version; contracts/README.md, Model sources: compat); from 1.56 generous assistant defaults (AssistantLimits defaults 2000 model calls and 20000000 tokens a day, 200 look_at an hour, 30 messages a minute; AssistantCaps per message up to 40 model calls, 100 tool calls, 8 memory writes; a call''s n up to 99; contracts/README.md, Assistant); from 1.59 steering an answer (a message while a turn works joins it: `AssistantAccepted.steer`, `AssistantEntry.steer`; Stop: kind `stop`; contracts/README.md, Assistant: steer); from 1.59.1 steer fixes: waiting steers go first in a new turn, a stopped turn takes them as read, one message id per Stop (contracts/README.md, Assistant: steer)'}
+  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media); from 1.23 LoRA strengths 0..2 (looks saved before are clamped when read; contracts/README.md, Looks); from 1.24 the model component a node loads (NodeSchema.component); from 1.25 an inspector section''s help, the presets'' order (StudioLayout.preset_order) and a run''s planned peak before it is sent (POST /v1/studio/runs/plan); from 1.26 an inspector section''s choice tiles (LTX''s Recipe: two-stage or one-stage); from 1.28 a judge''s branch without `then` (Ask me) and a judge test on picked takes (POST /v1/studio/pipelines/{pipeline_id}/judge-tests); from 1.29 a V1 clip''s shot number (TimelineClip.number: "Shot 4"); from 1.30 voices: audio takes made by runs (the `Audio` port, `Workflow.media` audio), the `voice` param, saved voices in the library (designed voices and the packs'' starter voices; contracts/README.md, Voices); from 1.31 cloned voices (a 3–30 s clip of an audio take or a video''s sound, with consent), designed voices that keep a clip, Save as voice (`from_take` with `kind: voice`) and the zonos3 family (contracts/README.md, Voices: cloned voices); from 1.32 dialogue and Timeline audio: dialogue scripts (`script` text params expanded into `lines` rows whose items carry a voice), an element''s `voice_id`, cues on a dialogue''s take, audio takes on the audio tracks, New line (POST /v1/studio/timelines/{timeline_id}/lines), Make shot (a slot `exact` at an audio clip''s time), an export plan''s `sounds`, offers and pipeline binds into rows of one media field, `library.read` voices and the write node''s `form: script` (contracts/README.md, Dialogue and Timeline audio); from 1.44 the in-app assistant: chats, their events and memory, the admin''s assistant settings, search providers (kind `search`) and the Gallery''s `order` (contracts/README.md, Assistant); from 1.47 rules (refusals as data, ParamSchema.rules), option help (ParamSchema.option_help), a native node''s peak formula and sound limits (NodeSchema.peak_gb, sounds: the planned peak per run) and the Preset heading''s help (StudioLayout.preset_help); from 1.48 thumbnails: every list''s `thumb_url` is a small WebP of the image or the poster once made, `RunOutput.thumb_url` (contracts/README.md, Thumbnails); from 1.49 timeline edits by named ops (POST …/timelines/{timeline_id}/edits: a dry run, a diff, studio-made clip ids), the revision history and restore to any kept revision, the agent view (`view=agent`) and a stored frame at a sequence time (contracts/README.md, Timeline: edits by ops); from 1.50 the Timeline tools'' ops (roll, slip, slide, overwrite, split_all, remove_range, lift_range, an audio track''s ripple remove), linked sound clips (`TimelineClip.link`) and markers (`TimelineDoc.markers`, the marker ops; contracts/README.md, Timeline rules: tools, linked clips, markers); from 1.51 provider presets (GET /v1/studio/admin/provider-presets, a preset''s Fetch, a key file''s status, `Provider.compat` and `preset`; contracts/README.md, Model sources: presets); from 1.52 saving a provider key (PUT and DELETE /v1/studio/admin/provider-keys/{key_secret}, `ProviderKey.writable`; contracts/README.md, Model sources: Keys); from 1.53 thinking per model (`Provider.thinking`, `thinking_levels`, `ProviderPut.thinking`, `ProviderTest.thinking`, `ProviderPreset.thinking`, a model source''s `thinking`; contracts/README.md, Model sources: thinking); from 1.55 a provider''s fixed extra headers (`ProviderCompat.headers`: Anthropic''s anthropic-version; contracts/README.md, Model sources: compat); from 1.56 generous assistant defaults (AssistantLimits defaults 2000 model calls and 20000000 tokens a day, 200 look_at an hour, 30 messages a minute; AssistantCaps per message up to 40 model calls, 100 tool calls, 8 memory writes; a call''s n up to 99; contracts/README.md, Assistant); from 1.59 steering an answer (a message while a turn works joins it: `AssistantAccepted.steer`, `AssistantEntry.steer`; Stop: kind `stop`; contracts/README.md, Assistant: steer); from 1.59.1 steer fixes: waiting steers go first in a new turn, a stopped turn takes them as read, one message id per Stop (contracts/README.md, Assistant: steer); from 1.60 plugins: the admin''s Plugins page (GET /v1/studio/admin/plugins, Rescan, on and off, Remove, Add as provider), Only-you providers (`Provider.owner_id`, `plugin`; `AssistantSettings.personal`) and plugin tools in the assistant (a `plugin` card; contracts/README.md, Plugins)'}
   - {name: files, description: signed file downloads and uploads}
   - name: auth
     description: 'auth_service: users, sessions (JWT access + rotating refresh tokens), roles, client API keys'
@@ -1703,7 +1703,7 @@ paths:
       tags: [studio]
       operationId: studioListModelSources
       summary: The local servers and remote providers a pipeline may name (names and models only)
-      description: 'From 1.15. Enabled providers, redacted for every user: no base_url, key_secret, host or limits. Remote ones only when the deployment has remote models on. Never a search provider (1.44).'
+      description: 'From 1.15. Enabled providers, redacted for every user: no base_url, key_secret, host or limits. Remote ones only when the deployment has remote models on. Never a search provider (1.44). From 1.60 another account''s Only-you provider is never listed, and a disabled plugin''s providers are not either.'
       responses:
         '200': {description: the sources, content: {application/json: {schema: {$ref: '#/components/schemas/ModelSourceList'}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -1881,6 +1881,85 @@ paths:
         '409': {$ref: '#/components/responses/Conflict'}
         '503': {$ref: '#/components/responses/Unavailable'}
 
+  /v1/studio/admin/plugins:
+    get:
+      tags: [studio]
+      operationId: studioAdminListPlugins
+      summary: 'From 1.60: the plugins found in plugins/ (Plugins page)'
+      description: 'Admin only (403). Every plugin studio found (contracts/README.md, Plugins), by name, with its manifest, whether it is on and, for one that is on, whether its health path answers now (2 s). `provider` is the caller''s own provider made from it.'
+      responses:
+        '200': {description: the plugins, content: {application/json: {schema: {$ref: '#/components/schemas/PluginList'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/AdminRequired'}
+
+  /v1/studio/admin/plugins/rescan:
+    post:
+      tags: [studio]
+      operationId: studioAdminRescanPlugins
+      summary: 'From 1.60: read plugins/ again (Rescan)'
+      description: 'Admin only (403). Reads every plugins/*/plugin.json again: a new one is added Off, a known one''s manifest is replaced (on stays on), one whose folder or manifest is gone is dropped with its tools. `new` names the ones added.'
+      responses:
+        '200': {description: the plugins after it, content: {application/json: {schema: {$ref: '#/components/schemas/PluginRescan'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/AdminRequired'}
+
+  /v1/studio/admin/plugins/{plugin}:
+    put:
+      tags: [studio]
+      operationId: studioAdminPutPlugin
+      summary: 'From 1.60: turn a plugin on or off'
+      description: 'Admin only (403). Off at once: its assistant tools leave the next input''s tools, its providers leave every list and pipeline rule (they come back when it is on again). 404 unknown.'
+      parameters: [{$ref: '#/components/parameters/PluginName'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/PluginPut'}}}
+      responses:
+        '200': {description: the plugin, content: {application/json: {schema: {$ref: '#/components/schemas/Plugin'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/AdminRequired'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+    delete:
+      tags: [studio]
+      operationId: studioAdminRemovePlugin
+      summary: 'From 1.60: remove a plugin (its providers go too; the folder stays)'
+      description: 'Admin only (403). Drops the plugin and every provider made from it; the folder stays in plugins/, so a Rescan finds it again, Off. 404 unknown; 409 `<provider> is in use by an unfinished batch`.'
+      parameters: [{$ref: '#/components/parameters/PluginName'}]
+      responses:
+        '204': {description: removed}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/AdminRequired'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+
+  /v1/studio/admin/plugins/{plugin}/provider:
+    post:
+      tags: [studio]
+      operationId: studioAdminAddPluginProvider
+      summary: 'From 1.60: Add as provider — a model-provider plugin becomes the caller''s own local server provider'
+      description: |
+        Admin only (403). The plugin must be a model-provider and on (409 `turn <title> on first`; 409 `<title> is not
+        a model provider`). Studio asks `pipelines.providers.key.write` to check `key` on the plugin's
+        `<url><provider.path>/models` and write it to the key file `plugin-<plugin>-<8 hex of the caller's id>`
+        (as PUT /admin/provider-keys does), then creates or replaces the provider `<plugin>-<8 hex>`: kind server,
+        base_url `<url><provider.path>`, the manifest's models, timeout and memory, host `host` (absent: the first host
+        by name). A personal plugin's provider is Only you (`owner_id` the caller): no other account sees or uses it.
+        422 `The key doesn't match: copy it again from the plugin's .env` (the check was refused: nothing saved),
+        `<title> did not answer: start it, then Try again` (unreachable: nothing saved), a default_model not in its
+        models, an unknown host; 409 `keys are set in files on this deployment`; 503 no answer from pipelines.
+      parameters: [{$ref: '#/components/parameters/PluginName'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/PluginProviderCreate'}}}
+      responses:
+        '201': {description: the provider, content: {application/json: {schema: {$ref: '#/components/schemas/Provider'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/AdminRequired'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
   /v1/studio/admin/session-names:
     get:
       tags: [studio]
@@ -1897,7 +1976,8 @@ paths:
       operationId: studioAdminPutSessionNames
       summary: Set how untitled sessions are named
       description: |
-        From 1.43. Admin only (403). Applies to sessions named from then on. 422 `<provider> is not an enabled provider`,
+        From 1.43. Admin only (403). Applies to sessions named from then on. 422 `<provider> is not an enabled provider`
+        (from 1.60 also an Only-you provider: `<provider> is only yours; pick a shared provider`),
         `<model> is not a model of <provider>`, `provider and model are only for remote`, `remote needs a provider`,
         `Qwen3.8 27B is not downloaded` (local with no live host that can run `llm-ask`); 409 `remote models are off on
         this deployment` for a provider of kind remote while the deployment's switch is off (a server, "on this
@@ -3195,6 +3275,7 @@ components:
     BatchRowN: {name: row, in: path, required: true, schema: {type: string}, description: 'row number, from 1 (unknown or malformed = 404)'}
     Cursor: {name: cursor, in: query, required: false, schema: {type: string}, description: '`next_cursor` of the previous page; opaque (malformed = 422)'}
     ProviderName: {name: name, in: path, required: true, schema: {type: string}, description: 'a provider''s name (unknown = 404 on DELETE and test; malformed = 404)'}
+    PluginName: {name: plugin, in: path, required: true, schema: {type: string}, description: 'from 1.60: a plugin''s name (its folder; unknown or malformed = 404)'}
     Limit: {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200, default: 60}}
     TimelineId: {name: timeline_id, in: path, required: true, schema: {type: string}, description: sequence UUID (malformed = 404)}
     MediaJobId: {name: job_id, in: path, required: true, schema: {type: string}, description: media job UUID (malformed = 404)}
@@ -5874,6 +5955,8 @@ components:
           maxProperties: 16
           additionalProperties: {$ref: '#/components/schemas/ThinkingInfo'}
           description: 'from 1.53 (read only): what each saved model offers, for the models its preset''s rules cover (absent: no control). The form and the AI agents tab need no copy of the rules'
+        owner_id: {type: string, format: uuid, description: 'from 1.60 (read only): an Only-you provider''s owner, the admin who added it from a personal plugin. Only that account sees or uses it (every list, the AI agents picker, pipeline rules, the assistant); absent = everyone''s'}
+        plugin: {type: string, pattern: '^[a-z][a-z0-9-]{0,22}$', description: 'from 1.60 (read only): the plugin it was made from (Add as provider)'}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
     ProviderPut:
@@ -6035,6 +6118,85 @@ components:
         saved: {type: boolean, description: 'written: true for check ok and skipped'}
         check: {enum: [ok, refused, unreachable, skipped], description: 'ok: /models answered; refused: 401 or 403; unreachable: anything else (network, timeout, 429, 5xx, another 4xx, the host rule, remote models off); skipped: force'}
         detail: {type: string, maxLength: 300, description: 'refused or unreachable: our own short text, never the provider''s'}
+
+    # ---------------------------------------------------------- studio: plugins (1.60)
+    PluginRisk:
+      type: object
+      required: [uses_gpu, deletes, sends_off_machine]
+      additionalProperties: false
+      description: 'from 1.60: a tool''s risk flags (plugins/manifest.schema.json risk): any true asks the user first'
+      properties:
+        uses_gpu: {type: boolean}
+        deletes: {type: boolean}
+        sends_off_machine: {type: boolean}
+    PluginTool:
+      type: object
+      required: [name, description, risk]
+      additionalProperties: false
+      properties:
+        name: {type: string, pattern: '^[a-z][a-z0-9_]{0,23}$', description: 'the model sees `<plugin>__<name>`'}
+        description: {type: string, maxLength: 500}
+        risk: {$ref: '#/components/schemas/PluginRisk'}
+    Plugin:
+      type: object
+      required: [name, title, version, kind, description, author, may_do, personal, url, enabled, status, provider, updated_at]
+      additionalProperties: false
+      description: 'from 1.60: one plugin as the admin sees it: its manifest (plugins/manifest.schema.json) and its state'
+      properties:
+        name: {type: string, pattern: '^[a-z][a-z0-9-]{0,22}$', description: 'its folder under plugins/'}
+        title: {type: string, maxLength: 60}
+        version: {type: string, maxLength: 40}
+        kind: {type: string, enum: [model-provider, assistant-tools]}
+        description: {type: string, maxLength: 300}
+        author: {type: string, maxLength: 60}
+        source: {type: string, maxLength: 300}
+        may_do: {type: array, maxItems: 8, items: {type: string, maxLength: 120}}
+        personal: {type: boolean, description: 'personal use only: its provider is Only you'}
+        disclaimer:
+          type: object
+          required: [text]
+          additionalProperties: false
+          properties:
+            text: {type: string, maxLength: 400}
+            link: {type: string, maxLength: 300}
+        url: {type: string, maxLength: 200, examples: ['http://host.docker.internal:8420']}
+        start: {type: string, maxLength: 200, description: 'how to start it (Not running)'}
+        models: {type: array, maxItems: 16, items: {type: string}, description: 'model-provider: its models'}
+        key_hint: {type: string, maxLength: 120, description: 'model-provider: where the key is'}
+        tools: {type: array, maxItems: 8, items: {$ref: '#/components/schemas/PluginTool'}, description: 'assistant-tools: its tools'}
+        enabled: {type: boolean, description: 'on; off until an admin turns it on'}
+        status: {type: string, enum: ['off', running, not_running], description: 'off: not on (never called); running: its health path answered 2xx in 2 s; not_running: on, no answer'}
+        provider: {type: [string, 'null'], description: 'the caller''s own provider made from it (Add as provider), else null'}
+        updated_at: {type: string, format: date-time}
+    PluginList:
+      type: object
+      required: [plugins]
+      additionalProperties: false
+      properties:
+        plugins: {type: array, maxItems: 64, items: {$ref: '#/components/schemas/Plugin'}}
+    PluginRescan:
+      type: object
+      required: [plugins, new]
+      additionalProperties: false
+      properties:
+        plugins: {type: array, maxItems: 64, items: {$ref: '#/components/schemas/Plugin'}}
+        new: {type: array, maxItems: 64, items: {type: string}, description: 'the plugins this Rescan added (Off)'}
+    PluginPut:
+      type: object
+      required: [enabled]
+      additionalProperties: false
+      properties:
+        enabled: {type: boolean}
+    PluginProviderCreate:
+      type: object
+      required: [key]
+      additionalProperties: false
+      description: 'from 1.60: Add as provider'
+      properties:
+        key: {type: string, minLength: 1, maxLength: 1024, pattern: '^\s*[!-~]+\s*$', writeOnly: true, description: 'the plugin''s key (its key_hint); checked, then written as ProviderKeySave''s; never returned, logged or stored outside the key file'}
+        title: {type: string, minLength: 1, maxLength: 60, description: 'absent: `<title> (personal)` for a personal plugin, else its title'}
+        default_model: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$', description: 'absent: the first of its models'}
+        host: {type: string, pattern: '^[a-z0-9]{1,32}$', description: 'the host whose memory it shares; absent: the first host by name'}
     SessionNames:
       type: object
       required: [mode, provider, model, local_available, remote_enabled, updated_at]
@@ -6143,7 +6305,7 @@ components:
       description: 'twin of assistant.schema.json card: a card the server asks (look_at, web_search, forget); Yes or Not now is a message of kind answer'
       properties:
         id: {$ref: '#/components/schemas/AssistantCallId'}
-        kind: {type: string, enum: [look, web_search, delete]}
+        kind: {type: string, enum: [look, web_search, delete, plugin], description: 'from 1.60 plugin: a plugin tool with a risk flag (contracts/README.md, Plugins)'}
         title: {type: string, minLength: 1, maxLength: 120}
         rows:
           type: array
@@ -6362,8 +6524,9 @@ components:
       description: 'the admin''s assistant settings (Admin › AI agents)'
       properties:
         enabled: {type: boolean}
-        provider: {type: [string, 'null'], description: 'a server or remote provider''s name'}
+        provider: {type: [string, 'null'], description: 'a server or remote provider''s name; from 1.60 the caller''s own choice when they made one (`personal`)'}
         model: {type: [string, 'null'], description: 'one of its models; null = its default_model'}
+        personal: {type: boolean, description: 'from 1.60: `provider` is the caller''s own Only-you provider: only the caller''s chats use it; everyone else''s use the deployment''s provider. A PUT naming an Only-you provider sets the caller''s own choice (the deployment''s stays); naming another clears it and sets the deployment''s'}
         web_search: {type: boolean, description: 'web search''s own egress switch (off by default)'}
         search_provider: {type: [string, 'null'], description: 'a provider of kind search'}
         limits: {$ref: '#/components/schemas/AssistantLimits'}

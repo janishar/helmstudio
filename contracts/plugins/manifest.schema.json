@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/plugins/manifest.schema.json",
+  "title": "A plugin's manifest (plugins/<name>/plugin.json)",
+  "description": "From API 1.60 (contracts/README.md, Plugins). Not a message: a plugin is a small separate HTTP service in its own folder under plugins/; studio reads every plugins/*/plugin.json on start and at Rescan (the folder is mounted read-only), keeps it in its plugins table, and never runs or calls the plugin until an admin turns it on. v1 kinds: model-provider (Add as provider makes a local server provider from `provider`) and assistant-tools (pipelines offers `tools` to the assistant, prefixed `<name>__<tool>`). A plugin never gets the database or a secret; an assistant tool is called over HTTP with its input and a short-lived pass ($defs toolCall, toolReply). `name` is the folder's name; a manifest that fails this schema, names another folder, or whose `url` breaks the host rule of a local server is skipped (logged).",
+  "type": "object",
+  "required": ["name", "title", "version", "kind", "description", "author", "may_do", "url", "health"],
+  "additionalProperties": false,
+  "properties": {
+    "name": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,22}$", "description": "the folder's name (at most 23 characters: a provider made from it is `<name>-<8 hex>`)"},
+    "title": {"type": "string", "minLength": 1, "maxLength": 60},
+    "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$"},
+    "kind": {"enum": ["model-provider", "assistant-tools"]},
+    "description": {"type": "string", "minLength": 1, "maxLength": 300},
+    "author": {"type": "string", "minLength": 1, "maxLength": 60},
+    "source": {"type": "string", "maxLength": 300, "description": "where it comes from: a repo URL or `this repo`"},
+    "may_do": {"type": "array", "minItems": 1, "maxItems": 8, "items": {"type": "string", "minLength": 1, "maxLength": 120}, "description": "what it may do, in the admin's words (the list's May do)"},
+    "personal": {"type": "boolean", "default": false, "description": "personal use only: a provider made from it is usable only by the admin who added it (Only you)"},
+    "disclaimer": {
+      "type": "object",
+      "required": ["text"],
+      "additionalProperties": false,
+      "properties": {
+        "text": {"type": "string", "minLength": 1, "maxLength": 400},
+        "link": {"type": "string", "pattern": "^https://", "maxLength": 300}
+      }
+    },
+    "url": {"type": "string", "pattern": "^https?://[^\\s/?#@]+$", "maxLength": 200, "examples": ["http://host.docker.internal:8420"], "description": "the service's address as the stack's containers reach it, without a path; a local server's host rule (loopback, private, or host.docker.internal)"},
+    "health": {"type": "string", "pattern": "^/[A-Za-z0-9/_.-]{0,99}$", "description": "a path under url answered 2xx without a key while it runs (the Status)"},
+    "start": {"type": "string", "maxLength": 200, "description": "how to start it, shown while it is Not running (`plugins/claude-code-bridge/run.sh`)"},
+    "provider": {"$ref": "#/$defs/provider"},
+    "tools": {"type": "array", "minItems": 1, "maxItems": 8, "items": {"$ref": "#/$defs/tool"}}
+  },
+  "allOf": [
+    {"if": {"properties": {"kind": {"const": "model-provider"}}}, "then": {"required": ["provider"], "not": {"required": ["tools"]}}},
+    {"if": {"properties": {"kind": {"const": "assistant-tools"}}}, "then": {"required": ["tools"], "not": {"required": ["provider"]}}}
+  ],
+  "$defs": {
+    "provider": {
+      "type": "object",
+      "required": ["path", "models", "key_hint"],
+      "additionalProperties": false,
+      "description": "model-provider: an OpenAI-compatible endpoint at url + path; Add as provider makes a local server provider of these models",
+      "properties": {
+        "path": {"type": "string", "pattern": "^/[A-Za-z0-9/_.-]{0,99}$", "examples": ["/v1"]},
+        "models": {"type": "array", "minItems": 1, "maxItems": 16, "uniqueItems": true, "items": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$"}},
+        "key_hint": {"type": "string", "minLength": 1, "maxLength": 120, "description": "where the admin finds the key (`BRIDGE_TOKEN in plugins/claude-code-bridge/.env`)"},
+        "memory_gb": {"type": "number", "minimum": 0.5, "maximum": 1024, "default": 0.5, "description": "the memory reserved on the host while its provider is enabled"},
+        "timeout_s": {"type": "integer", "minimum": 5, "maximum": 600, "default": 180}
+      }
+    },
+    "risk": {
+      "type": "object",
+      "required": ["uses_gpu", "deletes", "sends_off_machine"],
+      "additionalProperties": false,
+      "description": "any true flag asks the user first (a plugin card); all false runs at once",
+      "properties": {
+        "uses_gpu": {"type": "boolean"},
+        "deletes": {"type": "boolean"},
+        "sends_off_machine": {"type": "boolean"}
+      }
+    },
+    "tool": {
+      "type": "object",
+      "required": ["name", "description", "input", "risk"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,23}$", "description": "the model sees `<plugin>__<name>`"},
+        "description": {"type": "string", "minLength": 1, "maxLength": 500},
+        "input": {"type": "object", "description": "model-facing JSON Schema of the input: an object, self-contained (no $ref)", "required": ["type"], "properties": {"type": {"const": "object"}}},
+        "risk": {"$ref": "#/$defs/risk"}
+      }
+    },
+    "toolCall": {
+      "type": "object",
+      "required": ["input"],
+      "additionalProperties": false,
+      "description": "POST <url>/tools/<tool>: the body pipelines sends, with headers `Authorization: Bearer <pass>` (short-lived, scoped to the user and the call), `X-Helm-Owner` and `X-Helm-Call` (the call id). 30 s",
+      "properties": {"input": {"type": "object"}}
+    },
+    "toolReply": {
+      "type": "object",
+      "required": ["result"],
+      "additionalProperties": false,
+      "description": "the 200 answer: `result` goes to the model as data (never orders), `line` is the chat line (else `<title> · <tool>`), `sources` a web line's sources. Any other status is a failed call; its `{\"detail\": string}` is the line",
+      "properties": {
+        "result": {"type": "object"},
+        "line": {"type": "string", "minLength": 1, "maxLength": 300},
+        "sources": {"type": "array", "maxItems": 5, "items": {"type": "object", "required": ["title", "url"], "additionalProperties": false,
+          "properties": {"title": {"type": "string", "maxLength": 200}, "url": {"type": "string", "maxLength": 500}}}}
+      }
+    }
+  }
+}

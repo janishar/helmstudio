@@ -1,0 +1,22 @@
+{
+  "name": "fake-provider",
+  "title": "Fake provider",
+  "version": "0.1.0",
+  "kind": "model-provider",
+  "description": "Test stack only: the fake OpenAI server as a personal model-provider plugin.",
+  "author": "contract_tests",
+  "source": "contract_tests/fake_plugins/fake-provider",
+  "may_do": ["Add a model provider", "Reach fake-openai:8000"],
+  "personal": true,
+  "disclaimer": {"text": "Personal use only (a test)."},
+  "url": "http://fake-openai:8000",
+  "health": "/health",
+  "start": "make test",
+  "provider": {
+    "path": "/v1",
+    "models": ["fake-small", "fake-large"],
+    "key_hint": "any key; refused-… is 401",
+    "memory_gb": 0.5,
+    "timeout_s": 30
+  }
+}
