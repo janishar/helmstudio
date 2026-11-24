@@ -157,6 +157,7 @@ def test_the_contract_copy_is_current():
     for p in [
         *(CONTRACTS / "messages").glob("*.schema.json"),
         *(CONTRACTS / "tools").glob("*.json"),
+        *(CONTRACTS / "plugins").glob("*.json"),
     ]:
         assert (schemas.GEN / p.parent.name / p.name).read_text() == p.read_text(), (
             f"make gen: {p.name}"

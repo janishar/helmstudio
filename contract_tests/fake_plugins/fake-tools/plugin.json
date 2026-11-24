@@ -1,0 +1,25 @@
+{
+  "name": "fake-tools",
+  "title": "Fake tools",
+  "version": "0.1.0",
+  "kind": "assistant-tools",
+  "description": "Test stack only: the fake OpenAI server's /tools as assistant tools.",
+  "author": "contract_tests",
+  "may_do": ["Add echo tools for the Assistant"],
+  "url": "http://fake-openai:8000",
+  "health": "/health",
+  "tools": [
+    {
+      "name": "echo",
+      "description": "Echo the text back (text starting fail answers 500).",
+      "input": {"type": "object", "additionalProperties": false, "properties": {"text": {"type": "string", "maxLength": 100}}, "required": ["text"]},
+      "risk": {"uses_gpu": false, "deletes": false, "sends_off_machine": false}
+    },
+    {
+      "name": "wipe",
+      "description": "Pretend to delete something: asks first.",
+      "input": {"type": "object", "additionalProperties": false, "properties": {"text": {"type": "string", "maxLength": 100}}, "required": ["text"]},
+      "risk": {"uses_gpu": false, "deletes": true, "sends_off_machine": false}
+    }
+  ]
+}

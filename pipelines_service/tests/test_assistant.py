@@ -2,8 +2,12 @@
 OpenAI-compatible server, parks and resumes, cards, caps, memory, web search on a fake provider, owner scoping and
 injected text. Needs TEST_DATABASE_URL (scratch databases); nothing real is ever called."""
 
+import base64
 import copy
+import http.server
 import json
+import threading
+import time
 import uuid
 
 import fake_openai
@@ -67,6 +71,7 @@ class Chat:
         self.store = AsyncPostgresStore(pool)
         self.a = self.restart()
         self.roles, self.tool_names, self.search, self.limits = ["user"], TOOLS, None, dict(LIMITS)
+        self.plugins: list[dict] = []  # cmd.assistant.turn data.plugins (API 1.61)
 
     def restart(self) -> assistant.Assistant:
         """A new process: a fresh graph and saver on the same database."""
@@ -89,7 +94,7 @@ class Chat:
                      "tools": self.tool_names, "actions": ACTIONS,
                      "settings": {"source": {"kind": "server", "provider": "local", "model": "fake-large", "host": "mac"},
                                   "providers": provs, "search": self.search, "limits": self.limits},
-                     "input": inp}  # fmt: skip
+                     "input": inp} | ({"plugins": self.plugins} if self.plugins else {})  # fmt: skip
         assert not schemas.message_errors(c), schemas.message_errors(c)
         return c
 
@@ -715,3 +720,168 @@ def test_the_system_prompt_keeps_the_rules_first_then_the_helmstudio_knowledge()
     assert s.index("Answer in short plain text.") < s.index("How helmstudio works")
     assert "switchTo takes a workflow id or title exactly as" in assistant.SYSTEM
     assert "Qwen Image 2.1 (image" in assistant.SYSTEM and "MiniMax H3 (video" in assistant.SYSTEM
+
+
+# --- plugin tools (API 1.61)
+
+
+class Plugin:
+    """A fake assistant-tools plugin on loopback: answers each POST with the next scripted (status, body, delay);
+    every request recorded."""
+
+    def __init__(self) -> None:
+        self.script: list[tuple[int, dict, float]] = []
+        self.requests: list[dict] = []
+        me = self
+
+        class H(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):
+                n = int(self.headers.get("Content-Length") or 0)
+                me.requests.append({"path": self.path, "headers": dict(self.headers),
+                                    "body": json.loads(self.rfile.read(n))})  # fmt: skip
+                code, body, delay = me.script.pop(0) if me.script else (200, {"result": {}}, 0)
+                time.sleep(delay)
+                out = json.dumps(body).encode()
+                self.send_response(code)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(out)))
+                self.end_headers()
+                self.wfile.write(out)
+
+            def log_message(self, *a):
+                pass
+
+        self.srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+        self.url = f"http://127.0.0.1:{self.srv.server_address[1]}"
+
+    def manifest(self, **risk) -> dict:
+        r = {"uses_gpu": False, "deletes": False, "sends_off_machine": False} | risk
+        t = copy.deepcopy(fixture("cmd.assistant.turn.valid.5")["data"]["plugins"][0]["tools"][0])
+        return {
+            "name": "web-search",
+            "title": "Web search",
+            "url": self.url,
+            "tools": [t | {"risk": r}],
+        }
+
+
+@pytest.fixture
+def plugin():
+    p = Plugin()
+    yield p
+    p.srv.shutdown()
+
+
+SEARCH = "web-search__search"
+REPLY = {"result": {"results": [{"title": "LTX", "url": "https://example.org/ltx", "snippet": "x"}]},
+         "line": 'Searched the web · DuckDuckGo · "ltx"',
+         "sources": [{"title": "LTX", "url": "https://example.org/ltx"}]}  # fmt: skip
+
+
+def test_a_broken_plugin_input_schema_is_skipped_never_raised():
+    d = copy.deepcopy(fixture("cmd.assistant.turn.valid.5")["data"])
+    good = d["plugins"][0]["tools"][0]
+    for name, schema in (("pattern", {"type": "object", "properties": {"q": {"type": "string", "pattern": "("}}}),
+                         ("ref", {"type": "object", "$ref": "#/nowhere"}), ("type", {"type": 7})):  # fmt: skip
+        d["plugins"][0]["tools"].append(good | {"name": name, "input": schema})
+    off = assistant.offered(d, "/")
+    assert SEARCH in off and not {f"web-search__{n}" for n in ("pattern", "ref", "type")} & set(off)
+    # a schema that breaks only on use (the spec handed to check() directly) is an invalid answer, never an error
+    broken = {
+        "x__y": {
+            "kind": "plugin",
+            "spec": {"input": {"type": "object", "properties": {"q": {"pattern": "("}}}},
+        }
+    }
+    got = {"tool_calls": [{"name": "x__y", "arguments": '{"q": "a"}'}]}
+    assert assistant.check(got, broken, {"chat": [], "screen": None}) == (
+        None, "x__y: the plugin's input schema is broken")  # fmt: skip
+
+
+def test_plugin_tools_are_offered_under_their_plugin_name_and_checked():
+    d = fixture("cmd.assistant.turn.valid.5")["data"]
+    off = assistant.offered(d, "/")
+    assert off[SEARCH]["kind"] == "plugin"
+    assert off[SEARCH]["spec"]["url"] == "http://host.docker.internal:8421"
+    assert SEARCH in [t["function"]["name"] for t in assistant.native(off)]
+    s = {"chat": [], "screen": None}
+    ok = {"tool_calls": [{"name": SEARCH, "arguments": '{"query": "ltx"}'}]}
+    assert assistant.check(ok, off, s) == (
+        [{"name": SEARCH, "args": {"query": "ltx"}, "kind": "plugin"}],
+        None,
+    )
+    bad = {"tool_calls": [{"name": SEARCH, "arguments": '{"q": "ltx"}'}]}
+    assert assistant.check(bad, off, s)[0] is None
+    assert SEARCH not in assistant.offered(d | {"plugins": []}, "/")
+    body, sig = assistant.plugin_pass(OWNER, f"{OWNER}:1:0").split(".")
+    claims = json.loads(base64.urlsafe_b64decode(body + "=="))
+    assert claims["owner"] == OWNER and claims["call"] == f"{OWNER}:1:0" and sig
+
+
+async def test_plugin_call_failures_are_short_plain_reasons(plugin, monkeypatch):
+    async def call(url=plugin.url):
+        try:
+            return await providers.plugin_tool("Web search", url, "search", {"query": "x"}, {})
+        except providers.CallError as e:
+            return str(e)
+
+    long = "DuckDuckGo broke " + "x" * 300
+    plugin.script = [(200, REPLY, 0), (500, {"detail": long}, 0), (503, {}, 0),
+                     (200, {"results": []}, 0), (200, {"result": {}}, 1)]  # fmt: skip
+    assert await call() == REPLY
+    assert await call() == long[:200]
+    assert await call() == "HTTP 503"
+    assert await call() == "Web search answered off the plugin contract"
+    monkeypatch.setattr(providers, "PLUGIN_TIMEOUT", 0.2)
+    assert await call() == "Web search did not answer"
+    assert "is not a loopback, private or Docker host address" in await call("http://8.8.8.8:9")
+    assert len(plugin.requests) == 5  # the refused host was never called
+
+
+async def test_a_plugin_tool_without_risk_runs_at_once(pool, fake, plugin):
+    c = Chat(pool, fake)
+    c.plugins = [plugin.manifest()]
+    plugin.script = [(200, REPLY, 0), (500, {"detail": "rate limited"}, 0)]
+    c.script(calls((SEARCH, {"query": "ltx"})), calls((SEARCH, {"query": "again"})),
+             {"content": "Found it."})  # fmt: skip
+    step = await c.say("search ltx")
+    assert step["done"] and not step["cards"]
+    ok, failed = step["lines"]
+    assert ok == {"id": c.cid(1, 0), "status": "done", "undo": False, "text": REPLY["line"],
+                  "sources": REPLY["sources"]}  # fmt: skip
+    assert failed == {"id": c.cid(1, 1), "status": "failed", "undo": False,
+                      "text": "Web search · search failed · rate limited"}  # fmt: skip
+    req = plugin.requests[0]
+    assert req["path"] == "/tools/search" and req["body"] == {"input": {"query": "ltx"}}
+    assert req["headers"]["X-Helm-Owner"] == OWNER and req["headers"]["X-Helm-Call"] == c.cid(1, 0)
+    assert req["headers"]["Authorization"].startswith("Bearer ")
+    third = c.asked()[2]["messages"][1]["content"]
+    assert "https://example.org/ltx" in third and "rate limited" in third
+    assert SEARCH in offered(c.asked()[0])
+
+
+async def test_a_risky_plugin_tool_waits_for_its_card_and_off_means_off(pool, fake, plugin):
+    c = Chat(pool, fake)
+    c.plugins = [plugin.manifest(sends_off_machine=True)]
+    q = calls((SEARCH, {"query": "ltx"}))
+    c.script(q, {"content": "Found it."})
+    card = (await c.say("search ltx"))["cards"][0]
+    assert card == {"id": c.cid(1, 0), "state": "waiting", "kind": "plugin", "title": "Use Web search?",
+                    "rows": [{"label": "Tool", "value": "web-search.search"},
+                             {"label": "Input", "value": '{"query":"ltx"}'}],
+                    "tags": ["sends off the machine"], "note": "Sends this input off the machine."}  # fmt: skip
+    assert not plugin.requests
+    plugin.script = [(200, REPLY, 0)]
+    step = await c.answer(card["id"])
+    assert step["done"] and step["lines"][0]["text"] == REPLY["line"] and len(plugin.requests) == 1
+    c.script(q, {"content": "Skipped."})
+    card = (await c.say("again"))["cards"][0]
+    assert (await c.answer(card["id"], "not_now"))["done"] and len(plugin.requests) == 1
+    c.script(q, {"content": "Off."})
+    card = (await c.say("once more"))["cards"][0]
+    c.plugins = []  # the admin turned it off while the card waited
+    step = await c.answer(card["id"])
+    line = step["lines"][0]
+    assert line["status"] == "failed" and line["text"].endswith("the plugin is off")
+    assert len(plugin.requests) == 1 and SEARCH not in offered(c.asked()[-1])

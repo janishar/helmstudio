@@ -86,6 +86,7 @@ type AssistantSettings struct {
 	Enabled        bool            `json:"enabled"`
 	Provider       *string         `json:"provider"`
 	Model          *string         `json:"model"`
+	Personal       bool            `json:"personal"` // API 1.61: provider is the caller's own Only-you one
 	WebSearch      bool            `json:"web_search"`
 	SearchProvider *string         `json:"search_provider"`
 	Limits         AssistantLimits `json:"limits"`
@@ -129,7 +130,24 @@ func readAssistantSettings(ctx context.Context, tx pgx.Tx) (AssistantSettings, e
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = nil
 	}
+	if err == nil {
+		err = ownChoice(ctx, tx, &out)
+	}
 	return out, err
+}
+
+// ownChoice puts the tx user's own assistant provider (API 1.61: an Only-you one) in place of the deployment's.
+func ownChoice(ctx context.Context, tx pgx.Tx, set *AssistantSettings) error {
+	var provider string
+	var model *string
+	err := tx.QueryRow(ctx, `SELECT provider, model FROM assistant_personal
+		WHERE owner_id::text = current_setting('app.user_id', true)`).Scan(&provider, &model)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	} else if err == nil {
+		set.Provider, set.Model, set.Personal = &provider, model, true
+	}
+	return err
 }
 
 // GetAssistantSettings is GET /admin/assistant.
@@ -198,13 +216,33 @@ func (s *Service) PutAssistantSettings(ctx context.Context, caller common.Caller
 		if body.Limits != nil {
 			limits = *body.Limits
 		}
-		return tx.QueryRow(ctx, `INSERT INTO assistant_settings (id, enabled, provider, model, web_search, search_provider, limits)
+		// API 1.61: an Only-you provider is the caller's own choice; the deployment's stays for everyone else
+		provider, model := body.Provider, body.Model
+		if p, ok := find(body.Provider); ok && p.OwnerID != nil {
+			if _, err := tx.Exec(ctx, `INSERT INTO assistant_personal (owner_id, provider, model) VALUES ($1, $2, $3)
+				ON CONFLICT (owner_id) DO UPDATE SET provider = excluded.provider, model = excluded.model,
+				updated_at = clock_timestamp()`, caller.ID, p.Name, body.Model); err != nil {
+				return err
+			}
+			provider, model = nil, nil
+			err := tx.QueryRow(ctx, `SELECT provider, model FROM assistant_settings`).Scan(&provider, &model)
+			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+				return err
+			}
+		} else if _, err := tx.Exec(ctx, `DELETE FROM assistant_personal WHERE owner_id = $1`, caller.ID); err != nil {
+			return err
+		}
+		err = tx.QueryRow(ctx, `INSERT INTO assistant_settings (id, enabled, provider, model, web_search, search_provider, limits)
 			VALUES (true, $1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO UPDATE SET enabled = excluded.enabled,
 			provider = excluded.provider, model = excluded.model, web_search = excluded.web_search,
 			search_provider = excluded.search_provider, limits = excluded.limits, updated_at = clock_timestamp()
 			RETURNING enabled, provider, model, web_search, search_provider, limits, updated_at`,
-			*body.Enabled, body.Provider, body.Model, webSearch, body.SearchProvider, limits).Scan(&out.Enabled, &out.Provider,
+			*body.Enabled, provider, model, webSearch, body.SearchProvider, limits).Scan(&out.Enabled, &out.Provider,
 			&out.Model, &out.WebSearch, &out.SearchProvider, &out.Limits, &out.UpdatedAt)
+		if err != nil {
+			return err
+		}
+		return ownChoice(ctx, tx, &out)
 	})
 	out.RemoteEnabled = s.remoteOn
 	return out, err
@@ -797,6 +835,10 @@ func (s *Service) PostAssistant(ctx context.Context, caller common.Caller, id st
 		} else if !status.Enabled {
 			return errAssistantOff
 		}
+		plugins, err := assistantPlugins(ctx, tx) // API 1.61: the on assistant-tools plugins' tools, at every input
+		if err != nil {
+			return err
+		}
 		turn, actions := t.Turn+1, t.Actions
 		if body.screen != nil {
 			actions = body.screen.Actions
@@ -828,7 +870,8 @@ func (s *Service) PostAssistant(ctx context.Context, caller common.Caller, id st
 			}
 			if mine && running {
 				next := message.AssistantTurn{ClientID: body.ClientID, Roles: roles, Tools: offeredTools(roles, snap.Search != nil, lookAt),
-					Actions: append([]string{}, actions...), Settings: snap, Input: map[string]any{"kind": "message", "screen": body.Screen}}
+					Actions: append([]string{}, actions...), Settings: snap, Input: map[string]any{"kind": "message", "screen": body.Screen},
+					Plugins: plugins}
 				entry, err := one[AssistantEntry](ctx, tx, `INSERT INTO assistant_entries (id, thread_id, owner_id, key, turn, kind, text,
 					steer, next) VALUES ($1, $2, $3, $4, $5, 'user', $6, 'waiting', $7) RETURNING `+entryCols,
 					utility.NewID(), t.ID, t.OwnerID, "message:"+messageID, t.Turn, *body.Text, toJSON(next))
@@ -911,7 +954,7 @@ func (s *Service) PostAssistant(ctx context.Context, caller common.Caller, id st
 		if err := messaging.Enqueue(ctx, tx, messaging.Command{JobID: t.ID, OwnerID: t.OwnerID, MsgID: fmt.Sprintf("%s:%d", t.ID, turn),
 			Data: message.AssistantTurn{ThreadID: t.ID, Turn: turn, ClientID: body.ClientID, Roles: roles,
 				Tools: offeredTools(roles, snap.Search != nil, lookAt), Actions: append([]string{}, actions...), Settings: snap,
-				Input: input}}); err != nil {
+				Input: input, Plugins: plugins}}); err != nil {
 			return err
 		}
 		t, err = threadEvent(ctx, tx, t.ID)
@@ -973,7 +1016,16 @@ func (p *Projector) ApplyAssistantStep(ctx context.Context, ownerID string, step
 			if json.Unmarshal(raw, &line) != nil || line.ID == "" {
 				continue
 			}
-			if _, err := putEntry(ctx, tx, t, line.ID, step.Turn, "line", nil, raw, nil, nil); err != nil {
+			// a server card's call ends in a line of the same id: its own entry, never over the card's
+			lineKey := line.ID
+			var carded bool
+			if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM assistant_entries WHERE thread_id = $1 AND key = $2
+				AND kind = 'card')`, t.ID, line.ID).Scan(&carded); err != nil {
+				return err
+			} else if carded {
+				lineKey += ":line"
+			}
+			if _, err := putEntry(ctx, tx, t, lineKey, step.Turn, "line", nil, raw, nil, nil); err != nil {
 				return err
 			}
 		}

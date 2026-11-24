@@ -225,7 +225,7 @@ td{vertical-align:top}
 </div>
 <div class="st">
 <span class="cap">Added · the list row</span>
-<div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px"><span class="dot okb"></span><span class="ok" style="font-weight: 600">Added</span><span class="tag me">Only you</span><div style="flex-grow: 1"></div><button class="chip" style="height: 26px; font-size: 12px">Open in Model providers</button></div>
+<div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px"><span class="dot okb"></span><span class="ok" style="font-weight: 600">Added</span><div style="flex-grow: 1"></div><button class="chip" style="height: 26px; font-size: 12px">Open in Model providers</button></div>
 </div>
 <div class="st">
 <span class="cap">Added · the aside</span>
@@ -241,12 +241,13 @@ td{vertical-align:top}
 </section>
 
 <h2 class="h" style="margin-top: 4px">ELSEWHERE · ONLY ITS OWNER SEES IT</h2>
+<span style="font-size: 12px; color: var(--t2)">No "Only you" label anywhere (owner, 2026-11-25: "remove things like (Only you) its understood", "remove it from the UI too"); only its owner sees the provider, as before.</span>
 <section aria-label="Elsewhere" style="display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; align-items: start">
 <div class="st" style="grid-column: 1 / -1">
 <span class="cap">Admin › Model providers · the new row</span>
 <div style="overflow-x: auto"><table style="border-collapse: collapse; width: 100%">
 <thead><tr><th>Name</th><th>Kind</th><th>Address</th><th>Models</th><th>Status</th></tr></thead>
-<tbody><tr><td style="font-weight: 600">Claude Code (personal) <span class="tag me">Only you</span><br><span class="m" style="font-weight: 400">plugin · claude-code-bridge</span></td><td><span class="tag">local server</span></td><td class="m">http://host.docker.internal:8420/v1</td><td class="m">claude-sonnet (default)<br>claude-opus · claude-haiku</td><td>Enabled<br><span style="font-size: 12px; color: var(--a1)">answered · 4.1 s</span></td></tr></tbody>
+<tbody><tr><td style="font-weight: 600">Claude Code (personal)<br><span class="m" style="font-weight: 400">plugin · claude-code-bridge</span></td><td><span class="tag">local server</span></td><td class="m">http://host.docker.internal:8420/v1</td><td class="m">claude-sonnet (default)<br>claude-opus · claude-haiku</td><td>Enabled<br><span style="font-size: 12px; color: var(--a1)">answered · 4.1 s</span></td></tr></tbody>
 </table></div>
 <span style="font-size: 12px; color: var(--t2)">Other admins don't see this row.</span>
 </div>
@@ -257,7 +258,7 @@ td{vertical-align:top}
 <div role="listbox" aria-label="Provider, you" style="display: flex; flex-direction: column; gap: 2px; padding: 6px; border-radius: 12px; background: var(--s2); font-size: 12px">
 <div role="option" style="padding: 4px 6px">DeepSeek</div>
 <div role="option" style="padding: 4px 6px">Ollama on the Mac</div>
-<div role="option" aria-selected="true" style="padding: 4px 6px; border-radius: 8px; background: var(--s4)">Claude Code (personal) <span class="tag me" style="font-size: 10px">Only you</span></div>
+<div role="option" aria-selected="true" style="padding: 4px 6px; border-radius: 8px; background: var(--s4)">Claude Code (personal)</div>
 </div></div>
 <div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 11px; font-weight: 600; color: var(--t2)">Another admin</span>
 <div role="listbox" aria-label="Provider, another admin" style="display: flex; flex-direction: column; gap: 2px; padding: 6px; border-radius: 12px; background: var(--s2); font-size: 12px">
@@ -301,9 +302,8 @@ td{vertical-align:top}
 <div style="height: 1px; background: var(--s3)"></div>
 <h3 style="margin: 0; display: flex; align-items: center; font-size: 14px; font-weight: 700">Add as provider</h3>
 <div style="display: flex; flex-direction: column; gap: 6px"><label for="pl-name" style="font-size: 12px; color: var(--t2)">Name</label><input id="pl-name" class="in" value="Claude Code (personal)"></div>
-<div style="display: flex; flex-direction: column; gap: 6px"><label for="pl-key" style="font-size: 12px; color: var(--t2)">Key</label><input id="pl-key" class="in" type="password" autocomplete="off" placeholder="Paste the key from run.sh"><span style="font-size: 12px; color: var(--t2)">BRIDGE_TOKEN in <span style="font-family: 'JetBrains Mono', monospace">plugins/claude-code-bridge/.env</span></span></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="pl-key" style="font-size: 12px; color: var(--t2)">Key</label><input id="pl-key" class="in" type="password" autocomplete="off" placeholder="Paste the key from run.sh"><span style="font-size: 12px; color: var(--t2)">BRIDGE_TOKEN in <span style="font-family: 'JetBrains Mono', monospace">~/.helm/claude-code-bridge.env</span></span></div>
 <div style="display: flex; flex-direction: column; gap: 6px"><label for="pl-model" style="font-size: 12px; color: var(--t2)">Default model</label><select id="pl-model" class="in"><option>claude-sonnet</option><option>claude-opus</option><option>claude-haiku</option></select></div>
-<div style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; background: var(--s2); font-size: 13px"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg><span style="flex: 1 1 auto">Only you can use it</span><button class="i" aria-label="Why only you" title="It runs your own Claude login and plan. Anthropic's terms allow that for you only, so other accounts never see or use this provider.">i</button></div>
 <button style="height: 48px; border-radius: 14px; border: 0; background: var(--a1); color: var(--on1); background-image: linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 55%); font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.04em">Add</button>
 </aside>
 

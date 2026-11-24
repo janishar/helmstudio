@@ -1,0 +1,18 @@
+{
+  "name": "claude-code-bridge-7d1e5c2a",
+  "kind": "server",
+  "api": "openai",
+  "title": "Claude Code (personal)",
+  "base_url": "http://host.docker.internal:8420/v1",
+  "models": ["claude-sonnet", "claude-opus", "claude-haiku"],
+  "default_model": "claude-sonnet",
+  "enabled": true,
+  "timeout_s": 180,
+  "host": "mac",
+  "memory_gb": 0.5,
+  "key_secret": "plugin-claude-code-bridge-7d1e5c2a",
+  "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+  "plugin": "claude-code-bridge",
+  "created_at": "2026-11-25T09:00:00Z",
+  "updated_at": "2026-11-25T09:00:00Z"
+}
