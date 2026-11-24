@@ -69,6 +69,14 @@ Notes from the owner while using the app. Not scheduled; each is picked up when 
   rerun): a queued run's `position` can go back up by one (…5, 4, 5) while runs are released, so the count races with
   release or retry. Unrelated to the work it failed under; fix the position count, then drop this line.
 
+## Plugins (later kinds)
+
+- **Library packs** (owner, 2026-11-25: "i like Library packs only for now add in future features"): installable
+  content plugins: starter voices, looks (film, camera, colour, lighting presets), element presets, e.g. a
+  "Film noir looks" pack. A new plugin kind after v1 (model providers and Assistant tools, alpha.2 item 33). Other
+  kinds discussed and not taken for now: model packs, a dev and test pack (Echo and the fakes), pipeline nodes,
+  provider presets, UI plugins.
+
 ## Product
 
 - **Live preview clip while a video runs** (owner, 2026-11-20: backlog): 8 frames from the middle, refreshed each
