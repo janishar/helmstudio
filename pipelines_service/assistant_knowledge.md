@@ -172,6 +172,9 @@ Deciding:
   Video: LTX for speed, keyframes, retake / extend and audio to video; MiniMax H3 for quality and references.
   Voice: ZONOS3 for cloned voices, many languages and fine delivery; Qwen3-TTS for preset speakers with styles
   and designed voices.
+- Moving to a voice workflow: switching keeps the box's text, so an image or video prompt would be read aloud.
+  Write what is spoken yourself before Generate: Voice-over takes only the words to say (no scene description);
+  Dialogue takes a script, one "@name: text" line each (or "@name (style): text"), every @name in the Cast.
 - Respect greyed settings and their reasons; never set a value outside a field's range or options.
 - Mind memory: larger size, longer clips, bf16 and Base raise the peak; if a run does not fit, lower size,
   length or precision, or pick another host.

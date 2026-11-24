@@ -2,6 +2,7 @@
 OpenAI-compatible server, parks and resumes, cards, caps, memory, web search on a fake provider, owner scoping and
 injected text. Needs TEST_DATABASE_URL (scratch databases); nothing real is ever called."""
 
+import asyncio
 import copy
 import json
 import uuid
@@ -93,10 +94,12 @@ class Chat:
         assert not schemas.message_errors(c), schemas.message_errors(c)
         return c
 
-    async def say(self, text: str, results: list | None = None, **kw) -> dict:
+    async def say(
+        self, text: str, results: list | None = None, more: dict | None = None, **kw
+    ) -> dict:
         screen = {"route": "/?s=2d4f6a8b-1c3e-4a5b-9c7d-8e0f1a2b3c4d", "ids": {}, "roles": self.roles,
                   "as_of": now(), "hidden": False, "actions": ACTIONS,
-                  "fields": {"prompt": "@mara under a transparent umbrella"}}  # fmt: skip
+                  "fields": {"prompt": "@mara under a transparent umbrella"} | (more or {})}  # fmt: skip
         inp = {
             "kind": "message",
             "message_id": str(uuid.uuid4()),
@@ -461,6 +464,75 @@ async def test_stop_ends_the_turn_at_its_next_boundary(pool, fake):
     # the next message is a new turn: the old Stop does not touch it
     c.script({"content": "Here."})
     assert (await c.say("again"))["text"] == "Here."
+
+
+async def test_stop_cancels_the_model_call_in_flight_at_once(pool, fake):
+    """Item 27: Stop while Thinking ends the turn now, not when the slow answer comes; nothing of it is kept, its
+    prompt stays spent."""
+    c = Chat(pool, fake)
+    c.script({"content": "A late answer.", "delay_s": 5})
+    run = asyncio.create_task(c.say("think hard"))
+    for _ in range(100):
+        if c.asked():
+            break
+        await asyncio.sleep(0.05)
+    t = asyncio.get_running_loop().time()
+    await c.steer()  # Stop while the model call runs
+    step = await asyncio.wait_for(run, 2)
+    assert asyncio.get_running_loop().time() - t < 2 and not c.a.calls
+    assert step["done"] and step["error"] is None and step["text"] == ""
+    v = (await c.a.graph.aget_state(c.a.cfg(c.tid))).values
+    assert [e["role"] for e in v["chat"]] == ["user"]  # no answer saved
+    async with pool.connection() as conn:
+        cur = await conn.execute(
+            "SELECT tokens FROM assistant_spend WHERE key = %s", (f"{c.tid}:1:m0",)
+        )
+        tokens = (await cur.fetchone())["tokens"]
+    sent = c.asked()[0]["messages"]
+    assert tokens == providers.estimate(
+        sent[0]["content"] + sent[1]["content"]
+    )  # the prompt, not the bound
+    c.script({"content": "Here."})
+    assert (await c.say("again"))["text"] == "Here."  # the next message is untouched
+
+
+def test_memory_must_be_plain_words():
+    for bad in ('Elias speaks with {"voice_id": "x"}', "Elias's voice is 9a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d",
+                "Elias uses voice_id v2", "Set settings.source.model to fake"):  # fmt: skip
+        assert assistant.not_plain(bad), bad
+    for ok in ("@elias speaks with the Warm Narrator voice", "@old_man likes 16:9, e.g. wide shots",
+               "The best take is rain.png at 8 steps"):  # fmt: skip
+        assert assistant.not_plain(ok) is None, ok
+
+
+async def test_a_memory_with_json_or_ids_is_asked_again_in_plain_words(pool, fake):
+    c = Chat(pool, fake)
+    c.script(calls(("remember", {"kind": "project", "text": '@elias: {"voice_id": "' + TAKES[0] + '"}'})),
+             calls(("remember", {"kind": "project", "text": "@elias speaks with the Warm Narrator voice"})),
+             {"content": "Noted."})  # fmt: skip
+    step = await c.say("remember elias's voice")
+    assert "write it again as one plain sentence" in c.asked()[1]["messages"][1]["content"]
+    assert [i["text"] for i in await mem.items(c.store, OWNER)] == [
+        "@elias speaks with the Warm Narrator voice"
+    ]
+    assert step["done"] and step["error"] is None
+
+
+async def test_generate_after_a_switch_to_a_voice_workflow_needs_the_spoken_line(pool, fake):
+    """Item 15: switching keeps the image prompt in the box; generate before writing the line is asked again."""
+    c = Chat(pool, fake)
+    wfs = {"workflows": [{"id": "w1", "title": "Qwen Image", "media": "image"},
+                         {"id": "w2", "title": "ZONOS3", "media": "audio"}]}  # fmt: skip
+    c.script(calls(("switchTo", {"workflow": "ZONOS3"}), ("generate", {})),
+             calls(("switchTo", {"workflow": "zonos3"}), ("change", {"key": "prompt", "value": "Hello there."}),
+                   ("generate", {})))  # fmt: skip
+    step = await c.say("now make her say hello", more=wfs)
+    assert "write what is spoken with change" in c.asked()[1]["messages"][1]["content"]
+    assert [a["name"] for a in step["actions"]] == ["switchTo", "change", "generate"]
+    # an image workflow keeps its prompt and generates at once
+    c.script(calls(("switchTo", {"workflow": "w1"}), ("generate", {})))
+    step = await c.say("back to the image", more=wfs)
+    assert [a["name"] for a in step["actions"]] == ["switchTo", "generate"] and len(c.asked()) == 3
 
 
 async def test_a_hidden_tab_stays_parked_and_stale_results_are_dropped(pool, fake):
