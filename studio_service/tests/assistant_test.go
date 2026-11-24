@@ -421,19 +421,52 @@ func TestAssistantSteer(t *testing.T) {
 	if many := say(tabA, "one more", 429); many["detail"] != "at most 4 messages a minute" {
 		t.Fatal(many)
 	}
-	// Stop: only from the running tab; it reaches the turn as a steer with stop
+	e.exec(`UPDATE assistant_settings SET limits = jsonb_set(limits, '{messages_per_minute}', '30')`)
+	// Stop: only from the running tab; it reaches the turn as a steer with stop, each Stop with its own id (pipelines'
+	// inbox keeps ids for good)
 	e.call(userA, "POST", msgs, map[string]any{"kind": "stop", "client_id": tabB}, 409)
 	e.call(userA, "POST", msgs, map[string]any{"kind": "stop", "client_id": tabA, "text": "x"}, 422)
 	e.call(userA, "POST", msgs, map[string]any{"kind": "stop", "client_id": tabA}, 202)
-	if turns, steers := e.steers(); len(turns) != 0 || len(steers) != 1 || !steers[0].Stop || steers[0].Turn != 2 {
+	e.call(userA, "POST", msgs, map[string]any{"kind": "stop", "client_id": tabA}, 202)
+	if n := e.count(`SELECT count(DISTINCT msg_id) FROM outbox WHERE type = 'cmd.assistant.steer' AND msg_id LIKE $1`, id+":stop:%"); n != 2 {
+		t.Fatal("stop ids", n)
+	}
+	if turns, steers := e.steers(); len(turns) != 0 || len(steers) != 2 || !steers[0].Stop || steers[0].Turn != 2 {
 		t.Fatal(turns, steers)
 	}
+	// a steer the stopped turn never read is taken as read at its end: no next turn
+	late := say(tabA, "too late", 202)["entry"].(map[string]any)["id"].(string)
 	e.step(userA, message.AssistantStep{ThreadID: id, Turn: 2, Seq: 3, Done: true})
 	if got := e.call(userA, "GET", threads+"/"+id, nil, 200); got["state"] != "idle" {
 		t.Fatal(got["state"])
 	}
 	if turns, _ := e.steers(); len(turns) != 0 {
 		t.Fatal(turns)
+	}
+	if got := entryOf(late); got["steer"] != "read" {
+		t.Fatal(got)
+	}
+	// parked on a server card alone: nothing runs, so Stop does nothing; a message then is a new turn that takes the
+	// steers still waiting first, in order
+	say(tabA, "Search the web for foxes", 202)
+	steer := say(tabA, "only red ones", 202)["entry"].(map[string]any)["id"].(string)
+	card := json.RawMessage(fmt.Sprintf(`{"id": "%s:3:0", "kind": "web_search", "title": "Search the web?", "rows": [],
+		"tags": ["sends to Brave"], "state": "waiting"}`, id))
+	e.step(userA, message.AssistantStep{ThreadID: id, Turn: 3, Seq: 4, Cards: []json.RawMessage{card}})
+	_, _ = e.steers()
+	e.call(userA, "POST", msgs, map[string]any{"kind": "stop", "client_id": tabA}, 202)
+	if turns, steers := e.steers(); len(turns) != 0 || len(steers) != 0 {
+		t.Fatal(turns, steers)
+	}
+	if got := say(tabA, "skip the web", 202); got["steer"] != nil {
+		t.Fatal(got)
+	}
+	turns, _ = e.steers()
+	if len(turns) != 1 || turns[0].Turn != 4 || turns[0].Input["text"] != "only red ones\n\nskip the web" {
+		t.Fatalf("%+v", turns)
+	}
+	if got := entryOf(steer); got["steer"] != "next" {
+		t.Fatal(got)
 	}
 }
 

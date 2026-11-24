@@ -768,14 +768,27 @@ func (s *Service) PostAssistant(ctx context.Context, caller common.Caller, id st
 			return err
 		}
 		out.Thread = t.dto()
-		// Stop (API 1.59): the running turn ends at its next step; an idle chat has nothing to stop
+		var wait *pending
+		if len(t.Pending) > 0 && string(t.Pending) != "null" {
+			wait = new(pending)
+			if err := json.Unmarshal(t.Pending, wait); err != nil {
+				return err
+			}
+		}
+		// the turn runs: it works, or waits on its tab's actions (a wait only on a server card runs nothing)
+		running := t.State == "working" || t.State == "waiting" && wait != nil && len(wait.Actions) > 0
+		// Stop (API 1.59): the running turn ends at its next step; a chat not running has nothing to stop. Each Stop
+		// has its own id (pipelines' inbox keeps ids for good: a second Stop after its restart must still arrive)
 		if body.Kind == "stop" {
-			if t.State == "idle" {
+			if !running {
 				return nil
 			} else if deref(t.ClientID) != body.ClientID {
 				return network.NewConflictError("this chat is working in another tab", nil)
 			}
-			return messaging.Enqueue(ctx, tx, messaging.Command{JobID: t.ID, OwnerID: t.OwnerID, MsgID: fmt.Sprintf("%s:stop:%d", t.ID, t.Turn),
+			if _, err := tx.Exec(ctx, `UPDATE assistant_threads SET stopped_turn = $2 WHERE id = $1`, t.ID, t.Turn); err != nil {
+				return err
+			}
+			return messaging.Enqueue(ctx, tx, messaging.Command{JobID: t.ID, OwnerID: t.OwnerID, MsgID: fmt.Sprintf("%s:stop:%s", t.ID, utility.NewID()),
 				Data: message.AssistantSteer{ThreadID: t.ID, Turn: t.Turn, Stop: true, At: time.Now().UTC().Format(time.RFC3339Nano)}})
 		}
 		status, snap, err := s.assistantConfig(ctx, tx)
@@ -783,13 +796,6 @@ func (s *Service) PostAssistant(ctx context.Context, caller common.Caller, id st
 			return err
 		} else if !status.Enabled {
 			return errAssistantOff
-		}
-		var wait *pending
-		if len(t.Pending) > 0 && string(t.Pending) != "null" {
-			wait = new(pending)
-			if err := json.Unmarshal(t.Pending, wait); err != nil {
-				return err
-			}
 		}
 		turn, actions := t.Turn+1, t.Actions
 		if body.screen != nil {
@@ -820,7 +826,7 @@ func (s *Service) PostAssistant(ctx context.Context, caller common.Caller, id st
 			if t.State == "working" && !mine {
 				return network.NewConflictError("this chat is working in another tab", nil)
 			}
-			if mine && (t.State == "working" || t.State == "waiting" && wait != nil && len(wait.Actions) > 0) {
+			if mine && running {
 				next := message.AssistantTurn{ClientID: body.ClientID, Roles: roles, Tools: offeredTools(roles, snap.Search != nil, lookAt),
 					Actions: append([]string{}, actions...), Settings: snap, Input: map[string]any{"kind": "message", "screen": body.Screen}}
 				entry, err := one[AssistantEntry](ctx, tx, `INSERT INTO assistant_entries (id, thread_id, owner_id, key, turn, kind, text,
@@ -848,6 +854,15 @@ func (s *Service) PostAssistant(ctx context.Context, caller common.Caller, id st
 				if err := cancelCards(ctx, tx, t, wait.Cards); err != nil {
 					return err
 				}
+			}
+			// steers still waiting (the turn ended or parked on a card before reading them) go first, in order: never
+			// answered later as an out-of-order turn
+			steers, _, err := takeSteers(ctx, tx, t, "next")
+			if err != nil {
+				return err
+			} else if len(steers) > 0 {
+				text := []rune(strings.Join(append(steers, *body.Text), "\n\n"))
+				input["text"] = string(text[max(0, len(text)-4000):]) // the newest words win
 			}
 			entry, err := putEntry(ctx, tx, t, "message:"+messageID, turn, "user", body.Text, nil, nil, nil)
 			if err != nil {
@@ -1003,7 +1018,18 @@ func (p *Projector) ApplyAssistantStep(ctx context.Context, ownerID string, step
 			return err
 		}
 		if step.Done && step.Turn >= t.Turn {
-			if err := nextFromSteers(ctx, tx, t); err != nil {
+			// a stopped turn takes its unread steers as read; else they start the next turn
+			var stopped bool
+			if err := tx.QueryRow(ctx, `SELECT coalesce(stopped_turn = $2, false) FROM assistant_threads WHERE id = $1`,
+				t.ID, step.Turn).Scan(&stopped); err != nil {
+				return err
+			}
+			if stopped {
+				_, _, err = takeSteers(ctx, tx, t, "read")
+			} else {
+				err = nextFromSteers(ctx, tx, t)
+			}
+			if err != nil {
 				return err
 			}
 		}
@@ -1015,30 +1041,12 @@ func (p *Projector) ApplyAssistantStep(ctx context.Context, ownerID string, step
 // nextFromSteers (API 1.59): the turn ended with steers unread; they become the next message, in order, as one new
 // turn (the command kept with the last one, its screen; text their texts joined), and show "sent as the next message".
 func nextFromSteers(ctx context.Context, tx pgx.Tx, t threadRow) error {
-	type steerRow struct {
-		Key  string
-		Text string
-		Next json.RawMessage
-	}
-	rows, err := collect[steerRow](ctx, tx, `SELECT key, text, next FROM assistant_entries WHERE thread_id = $1
-		AND steer = 'waiting' ORDER BY at, id`, t.ID)
-	if err != nil || len(rows) == 0 {
+	texts, last, err := takeSteers(ctx, tx, t, "next")
+	if err != nil || len(texts) == 0 {
 		return err
 	}
-	texts := []string{}
-	for _, r := range rows {
-		texts = append(texts, r.Text)
-		entry, err := one[AssistantEntry](ctx, tx, `UPDATE assistant_entries SET steer = 'next', at = clock_timestamp()
-			WHERE thread_id = $1 AND key = $2 RETURNING `+entryCols, t.ID, r.Key)
-		if err == nil {
-			err = putAssistantEvent(ctx, tx, t.ID, t.OwnerID, map[string]any{"type": "entry", "entry": entry})
-		}
-		if err != nil {
-			return err
-		}
-	}
 	var data message.AssistantTurn
-	if err := json.Unmarshal(rows[len(rows)-1].Next, &data); err != nil {
+	if err := json.Unmarshal(last, &data); err != nil {
 		return err
 	}
 	data.ThreadID, data.Turn = t.ID, t.Turn+1
@@ -1051,6 +1059,34 @@ func nextFromSteers(ctx context.Context, tx pgx.Tx, t threadRow) error {
 	}
 	return messaging.Enqueue(ctx, tx, messaging.Command{JobID: t.ID, OwnerID: t.OwnerID, MsgID: fmt.Sprintf("%s:%d", t.ID, data.Turn),
 		Data: data})
+}
+
+// takeSteers sets the thread's waiting steers to steer (next or read), at now, and sends them; their texts in order
+// and the last one's kept command.
+func takeSteers(ctx context.Context, tx pgx.Tx, t threadRow, steer string) ([]string, json.RawMessage, error) {
+	type steerRow struct {
+		Key  string
+		Text string
+		Next json.RawMessage
+	}
+	rows, err := collect[steerRow](ctx, tx, `SELECT key, text, next FROM assistant_entries WHERE thread_id = $1
+		AND steer = 'waiting' ORDER BY at, id`, t.ID)
+	if err != nil || len(rows) == 0 {
+		return nil, nil, err
+	}
+	texts := []string{}
+	for _, r := range rows {
+		texts = append(texts, r.Text)
+		entry, err := one[AssistantEntry](ctx, tx, `UPDATE assistant_entries SET steer = $3, at = clock_timestamp()
+			WHERE thread_id = $1 AND key = $2 RETURNING `+entryCols, t.ID, r.Key, steer)
+		if err == nil {
+			err = putAssistantEvent(ctx, tx, t.ID, t.OwnerID, map[string]any{"type": "entry", "entry": entry})
+		}
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	return texts, rows[len(rows)-1].Next, nil
 }
 
 // ApplyAssistantSteered marks the steers a turn read (evt.assistant.steered, API 1.59): read, at now (they show where
