@@ -1,12 +1,29 @@
 "use client";
 // Plugins (docs/mock/Plugins.dc.html; API 1.61): the admin-only rail page. The table lists what studio found in
 // plugins/ (Rescan reads it again); a row opens its aside: the switch, its rows, MAY DO, the disclaimer and, for a
-// model-provider plugin that is on, Add as provider (a personal plugin's provider is its admin's own).
+// model-provider plugin that is on, Add as provider (a personal plugin's provider is its admin's own). From API 1.64
+// skills (board SKILLS): built in or yours (~/.helm/plugins), a faded row with only Remove when it can't be used.
 import Link from "next/link";
 import { useCallback, useEffect, useId, useState } from "react";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { ApiError, api, message, ok, type S } from "@/lib/api";
-import { KEY_REFUSED, KIND, hostOf, providerTitle, rescanLine, statusOf } from "@/lib/plugins";
+import {
+  KEY_REFUSED,
+  KIND,
+  hostOf,
+  newSkill,
+  problemAlert,
+  problemCell,
+  providerTitle,
+  recipesRow,
+  rescanLine,
+  sourceOf,
+  sourceRow,
+  statusOf,
+  subline,
+  unusable,
+  whenLine,
+} from "@/lib/plugins";
 
 type Plugin = S<"Plugin">;
 const path = (plugin: string) => ({ params: { path: { plugin } } });
@@ -17,7 +34,7 @@ const CHIP = "chip bevel h-[30px] text-[12px]";
 export function PluginsScreen() {
   const [list, setList] = useState<Plugin[] | null>(null);
   const [error, setError] = useState("");
-  const [note, setNote] = useState("");
+  const [note, setNote] = useState({ text: "", show: "" }); // show: a new skill the note's Show selects
   const [sel, setSel] = useState("");
   const [added, setAdded] = useState<{ plugin: string; title: string } | null>(null); // its aside says so
   const [removing, setRemoving] = useState<Plugin | null>(null);
@@ -38,7 +55,7 @@ export function PluginsScreen() {
     try {
       const r = await ok(api.POST("/v1/studio/admin/plugins/rescan"));
       setList(r.plugins);
-      setNote(rescanLine(r));
+      setNote({ text: rescanLine(r), show: newSkill(r) });
       setError("");
       return r.new;
     } catch (e) {
@@ -98,11 +115,18 @@ export function PluginsScreen() {
           </span>
         </div>
         {error && <ErrorNote onRetry={load}>{error}</ErrorNote>}
-        {note && (
+        {note.text && (
           <p role="status" className="flex flex-wrap items-center gap-2.5 text-[13px]">
-            {note}
-            <button type="button" className={`${CHIP} h-[26px]`} onClick={() => setNote("")}>
-              Done
+            {note.text}
+            <button
+              type="button"
+              className={`${CHIP} h-[26px]`}
+              onClick={() => {
+                if (note.show) setSel(note.show);
+                setNote({ text: "", show: "" });
+              }}
+            >
+              {note.show ? "Show" : "Done"}
             </button>
           </p>
         )}
@@ -136,11 +160,12 @@ export function PluginsScreen() {
                 {list?.map((p) => {
                   const st = statusOf(p);
                   const on = p.name === shown?.name;
+                  const dead = unusable(p);
                   return (
                     <tr
                       key={p.name}
                       aria-selected={on}
-                      className={on ? "bg-s3" : undefined}
+                      className={`${on ? "bg-s3" : ""} ${dead ? "opacity-[0.62]" : ""}`}
                       onClick={() => setSel(p.name)}
                     >
                       <td className={cell}>
@@ -152,13 +177,19 @@ export function PluginsScreen() {
                           {p.title}
                         </button>
                         <br />
-                        <span className="mono text-[12px] text-t2">
-                          {[p.version, p.author, p.source ?? `plugins/${p.name}`].join(" · ")}
-                        </span>
+                        <span className="mono text-[12px] text-t2">{subline(p)}</span>
                         {p.personal && (
                           <>
                             <br />
                             <span className={`${ME_TAG} mt-1 inline-block`}>Personal use only</span>
+                          </>
+                        )}
+                        {p.replaces && (
+                          <>
+                            <br />
+                            <span className={`${ME_TAG} mt-1 inline-block`}>
+                              Replaces built-in {p.replaces}
+                            </span>
                           </>
                         )}
                       </td>
@@ -166,7 +197,7 @@ export function PluginsScreen() {
                         <span className={KIND_TAG}>{KIND[p.kind]}</span>
                       </td>
                       <td className={`${cell} max-w-[260px] text-[12px] text-t1b`}>
-                        {p.may_do.join(" · ")}
+                        {dead ? problemCell(p) : p.may_do.join(" · ")}
                       </td>
                       <td className={cell}>
                         <Dot ok={st.ok} />{" "}
@@ -198,9 +229,11 @@ export function PluginsScreen() {
                               </button>
                             )
                           )}
-                          <button type="button" className={CHIP} onClick={() => void toggle(p)}>
-                            {p.enabled ? "Disable" : "Enable"}
-                          </button>
+                          {!dead && (
+                            <button type="button" className={CHIP} onClick={() => void toggle(p)}>
+                              {p.enabled ? "Disable" : "Enable"}
+                            </button>
+                          )}
                           <button type="button" className={CHIP} onClick={() => setRemoving(p)}>
                             Remove
                           </button>
@@ -234,7 +267,8 @@ export function PluginsScreen() {
         title={`Remove ${removing?.title}?`}
       >
         <p className="mb-4 text-[13px] text-t2">
-          {removing?.provider && "Its provider goes too. "}The folder stays in plugins/.
+          {removing?.provider && "Its provider goes too. "}The folder stays in{" "}
+          {removing?.origin === "yours" ? "~/.helm/plugins/" : "plugins/"}.
         </p>
         <div className="flex justify-end gap-2">
           <button
@@ -260,7 +294,8 @@ const Dot = ({ ok }: { ok: boolean }) => (
   />
 );
 
-/** Add plugin: from the plugins/ folder (copy it there, then Rescan); from a URL comes later. */
+/** Add plugin, where plugins come from (board SKILLS): built in, or yours dropped into ~/.helm/plugins/ (either
+ * Rescans now); upload comes later. */
 function AddMenu({ onRescan }: { onRescan: () => void }) {
   const id = useId().replace(/:/g, "");
   const close = () => document.getElementById(id)?.hidePopover?.();
@@ -280,7 +315,7 @@ function AddMenu({ onRescan }: { onRescan: () => void }) {
         popover="auto"
         role="menu"
         aria-label="Add plugin"
-        className="pop w-[240px] flex-col gap-0.5 p-1.5 open:flex"
+        className="pop w-[280px] flex-col gap-0.5 p-1.5 open:flex"
         style={
           {
             positionAnchor: `--${id}`,
@@ -289,22 +324,34 @@ function AddMenu({ onRescan }: { onRescan: () => void }) {
           } as React.CSSProperties
         }
       >
-        <button
-          type="button"
-          role="menuitem"
-          className="mi"
-          onClick={() => {
-            close();
-            onRescan();
-          }}
-        >
-          <span>
-            From the plugins/ folder
-            <small>Copy its folder there, then Rescan.</small>
-          </span>
-        </button>
+        {[
+          ["Built in", "Ship with helmstudio."],
+          ["Yours", "Found at once, no app update. Same name: yours wins."],
+        ].map(([name, sub]) => (
+          <button
+            key={name}
+            type="button"
+            role="menuitem"
+            className="mi"
+            onClick={() => {
+              close();
+              onRescan();
+            }}
+          >
+            <span>
+              {name === "Yours" ? (
+                <>
+                  Yours: drop a folder or a .zip into <span className="mono">~/.helm/plugins/</span>
+                </>
+              ) : (
+                name
+              )}
+              <small>{sub}</small>
+            </span>
+          </button>
+        ))}
         <button type="button" role="menuitem" className="mi" aria-disabled="true">
-          <span>From a URL · later</span>
+          <span>Upload a .zip here · later</span>
         </button>
       </div>
     </>
@@ -331,18 +378,28 @@ function PluginPanel({
   const st = statusOf(p);
   const [link, rest] = [p.disclaimer?.link, p.disclaimer?.text ?? ""];
   const cut = rest.indexOf(". ");
-  const rows: [string, React.ReactNode][] = [
-    ["Kind", KIND[p.kind]],
-    ["Version", p.version],
-    ["Source", p.source ?? `plugins/${p.name}`],
-    ["Author", p.author],
-    [
-      "Status",
-      <span key="s" className={st.ok ? "text-[#7fd88f]" : "text-t2"}>
-        {st.ok ? `Running · ${hostOf(p.url)}` : st.text}
-      </span>,
-    ],
-  ];
+  const skill = p.kind === "skill";
+  const alert = problemAlert(p);
+  const rows: [string, React.ReactNode][] = skill
+    ? [
+        ["Kind", KIND[p.kind]],
+        ["Version", p.format ? `${p.version} · format ${p.format}` : p.version],
+        ["Source", sourceRow(p)],
+      ]
+    : [
+        ["Kind", KIND[p.kind]],
+        ["Version", p.version],
+        ["Source", sourceOf(p)],
+        ["Author", p.author],
+        [
+          "Status",
+          <span key="s" className={st.ok ? "text-[#7fd88f]" : "text-t2"}>
+            {st.ok ? `Running · ${hostOf(p.url ?? "")}` : st.text}
+          </span>,
+        ],
+      ];
+  if (p.files?.length) rows.push(["Files", p.files.join(" · ")]);
+  if (p.recipes) rows.push(["Recipes", recipesRow(p.recipes)]);
   if (p.models?.length) rows.push(["Models", p.models.join(" · ")]);
   if (p.tools?.length) rows.push(["Tools", p.tools.map((t) => t.name).join(" · ")]);
   return (
@@ -357,13 +414,24 @@ function PluginPanel({
           role="switch"
           aria-checked={p.enabled}
           aria-label="Enabled"
+          disabled={unusable(p)}
           onClick={onToggle}
           className={`flex h-6 w-10 shrink-0 rounded-full p-0.5 ${p.enabled ? "justify-end bg-a1" : "bg-s4"}`}
         >
           <span className={`block size-5 rounded-full ${p.enabled ? "bg-on1" : "bg-t2"}`} />
         </button>
       </div>
-      <span className="text-[13px] text-t1b">{p.description}</span>
+      <span className="text-[13px] text-t1b">
+        {skill && p.when ? whenLine(p.when) : p.description}
+      </span>
+      {alert && (
+        <div
+          role="alert"
+          className={`rounded-[10px] px-2.5 py-2 text-[12px] ${alert.red ? "bg-[color-mix(in_srgb,#ff6b6b_14%,transparent)] text-[#ff8a8a]" : "bg-[color-mix(in_srgb,#f2c14e_14%,transparent)] text-[#f2c14e]"}`}
+        >
+          {alert.text}
+        </div>
+      )}
       <div className="flex flex-col gap-1 text-[13px]">
         {rows.map(([k, v]) => (
           <div key={k} className="flex justify-between gap-3">
