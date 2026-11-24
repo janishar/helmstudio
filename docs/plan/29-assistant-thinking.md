@@ -2,15 +2,16 @@
 
 [← Plan index](../README.md)
 
-Status: **decided by the owner (2026-11-24); board approved by the owner (2026-11-24, "Approve"); built 2026-11-24 (33.6).** API version: **1.54.0** (main is
+Status: **decided by the owner (2026-11-24); board approved by the owner (2026-11-24, "Approve"); built 2026-11-24 (33.6); moved into the chat by the owner (2026-11-24, 33.7), board redrawn, not built yet.** API version: **1.54.0** (main is
 at 1.53.0, plan 28; if another plan takes 1.54.0 first, this takes the next free one at build time). Not in a
 milestone, like plans 25, 27 and 28.
 
 The owner's ask, 2026-11-24: "when thinking show in the ui". The doubts were asked one by one (below).
 
 Board: [Assistant](../mock/Assistant.dc.html), board 4 · Small states, two new cells at the end: "Waiting for the
-model · it does not think" (today's `Working` chip, unchanged) and "Waiting for the model · it thinks" (the chip
-reads `Thinking… 8 s` with a small spinner). The board keeps its height; canvas.json is unchanged.
+model · it does not think" (today's drawer, unchanged: `Working` chip, no bubble) and "Waiting for the model · it
+thinks" (a quiet `Thinking… 8 s` bubble in the thread under the user's last message; the chip stays `Working`). Both
+are drawn at the drawer's width with the real header (Memory, New chat, Close). canvas.json is unchanged.
 
 Facts come from a read on 2026-11-24 of plan 18 (22.3, the turn loop and `evt.assistant.step`), plan 28 (thinking
 per model, the snapshot's `thinking`), `contracts/openapi.yaml` (`AssistantStatus`, `AssistantThread.state`) and
@@ -37,9 +38,12 @@ per model, the snapshot's `thinking`), `contracts/openapi.yaml` (`AssistantStatu
 - **How the drawer knows**: `AssistantStatus` (what every user may know) gains `thinks: boolean`. Studio sets it
   from the Assistant's provider and model in the AI agents settings: true when the resolved level (plan 28's
   snapshot rule) is not Off, or the model always thinks. No level, no rule, no provider: false.
-- **The chip**: when `thinks` is true and the thread is `working` (the model call, not actions), the header chip
-  reads `Thinking… N s` with a quiet spinner, in place of `Working`. Otherwise today's chip stays as it is
-  (`Working`, `Waiting for you`, `Read-only`). The phone sheet has the same header; its one-line bar shows only
+- **The bubble** (33.7 replaces the first design, a header chip): when `thinks` is true and the thread is `working`
+  (the model call, not actions), the thread shows a reply-in-progress bubble at the bottom, just under the user's
+  last message, where the reply will land: left-aligned like assistant messages, the quiet assistant-bubble look,
+  a small spinner and `Thinking… N s` in mono, muted text. The reply replaces it. It scrolls into view like a new
+  message. The header chip stays today's (`Working`, `Waiting for you`, `Read-only`) and the title `Assistant`
+  shows in full. The phone sheet has the same header; its one-line bar shows only
   while actions run, so it is unchanged.
 - **The timer** is the browser's: it starts at 0 when this tab sees the thread go to `working` (its own send, a
   resume after actions or a card) and stops when the step event lands (the state leaves `working`). It counts
@@ -47,7 +51,7 @@ per model, the snapshot's `thinking`), `contracts/openapi.yaml` (`AssistantStatu
 - **Tool calls in between**: server reads inside one `working` stretch (studio reads, memory) are quick and stay
   under the same count. Screen actions and cards park the turn (`waiting`): the chip goes back to today's, the
   lines show as now; when the turn resumes, a new `Thinking… 0 s` starts.
-- **Read-only tabs** keep `Read-only`. No thinking text, tokens or "Thought for" line is stored or sent.
+- **Read-only tabs** keep `Read-only` and show no bubble. No thinking text, tokens or "Thought for" line is stored or sent.
 
 ### 33.3 Contract change (1.54.0, back-compatible)
 
@@ -58,7 +62,7 @@ per model, the snapshot's `thinking`), `contracts/openapi.yaml` (`AssistantStatu
 
 - `make contracts-check`: the new field and fixtures.
 - **studio**: `thinks` from the settings: level High, Off, always thinks, a model without a rule, no provider.
-- **web** (vitest): chip `Thinking… 0 s` then `… 3 s` with fake timers while `working` and `thinks`; `Working` when
+- **web** (vitest): (33.7: the bubble, not the chip) `Thinking… 0 s` then `… 3 s` with fake timers while `working` and `thinks`; `Working` when
   `thinks` is false; back to the chip of the state on `waiting`; gone when the step lands; read-only unchanged.
 - **Contract suite** (`helmstudio-test`): `GET` status carries `thinks`.
 
@@ -100,3 +104,19 @@ per model, the snapshot's `thinking`), `contracts/openapi.yaml` (`AssistantStatu
 - **Deviations**: none from the plan. The dev-stack look with a real thinking model was not done (the dev stack's
   data is not changed by builds); the chip was checked by the tests only.
 
+### 33.7 Moved into the chat (owner, 2026-11-24)
+
+The owner, looking at the live drawer: "thinking is not intuitive its on the top where eye does not go i am focused
+on that chat bubble". Decided:
+
+1. **In the chat, not the header.** `Thinking… N s` is a quiet bubble at the bottom of the thread, under the last
+   message, where the reply will appear. The reply replaces it. It scrolls into view.
+2. **The header goes back to today's**: the chip says `Working` while the model works, and the title `Assistant`
+   shows in full again. The rule that hid the title while thinking is dropped.
+3. **A model that does not think**: no bubble, as today (the board never showed a typing bubble, so none is added).
+4. Unchanged: the timer rules, `AssistantStatus.thinks`, live only, no thinking text, read-only tabs.
+
+Build (web only, no contract change): move the counter from the chip in `assistant.tsx` into a bubble rendered as
+the thread's last item (`role="status"`, `aria-live="off"`); the chip reverts to `Working`; the `sr-only` title rule
+goes. Tests: the bubble shows and counts in the thread, the chip says `Working`, the title is visible, no bubble
+when `thinks` is false or the tab is read-only.
