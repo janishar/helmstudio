@@ -1,8 +1,8 @@
 # helmstudio for Mac (docs/plan/31-mac-app.md): an Electron shell plus what it ships under Contents/Resources.
 # Versions are owned by docs/plan/14-dependencies.md; the downloads are checked against their releases' sha256 files.
 #   make test lint    the step runner's unit tests (commands faked) and the syntax checks
-#   make app          dist/helmstudio.app (ad-hoc signed; limactl with the virtualization entitlement)
-#   make dmg          dist/helmstudio.dmg
+#   make app          dist.noindex/helmstudio.app (ad-hoc signed; limactl with the virtualization entitlement)
+#   make dmg          dist.noindex/helmstudio.dmg
 #   make run          the app from source on build/Resources (HELMSTUDIO_FAKE=1 HELMSTUDIO_HOME=/tmp/x to look around)
 
 COLIMA_VERSION := v0.10.3
@@ -12,7 +12,8 @@ UV_VERSION     := 0.13.8
 ROOT := $(abspath ..)
 DL   := downloads
 RES  := build/Resources
-APP  := dist/helmstudio.app
+# dist.noindex: Spotlight skips *.noindex folders, so only the installed app shows in search
+APP  := dist.noindex/helmstudio.app
 GH   := https://github.com
 
 .PHONY: test lint resources app dmg run clean
@@ -73,7 +74,7 @@ resources: $(DL)/colima/colima-Darwin-arm64 $(DL)/lima/lima-$(LIMA_VERSION)-Darw
 # ---------- the app: Electron's own bundle, renamed, our code in Resources/app
 
 app: node_modules resources
-	rm -rf $(APP) && mkdir -p dist
+	rm -rf $(APP) && mkdir -p dist.noindex
 	ditto node_modules/electron/dist/Electron.app $(APP)
 	rm -f $(APP)/Contents/Resources/default_app.asar
 	mkdir -p $(APP)/Contents/Resources/app
@@ -94,13 +95,13 @@ app: node_modules resources
 	@echo "built $(APP)"
 
 dmg: app
-	rm -rf build/dmg dist/helmstudio.dmg && mkdir -p build/dmg
+	rm -rf build/dmg dist.noindex/helmstudio.dmg && mkdir -p build/dmg
 	ditto $(APP) build/dmg/helmstudio.app && ln -s /Applications build/dmg/Applications
-	hdiutil create -volname helmstudio -srcfolder build/dmg -ov -format UDZO dist/helmstudio.dmg
+	hdiutil create -volname helmstudio -srcfolder build/dmg -ov -format UDZO dist.noindex/helmstudio.dmg
 	rm -rf build/dmg
 
 run: node_modules
 	node_modules/.bin/electron .
 
 clean:
-	rm -rf build dist
+	rm -rf build dist.noindex
