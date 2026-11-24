@@ -2131,6 +2131,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/studio/admin/assistant/cache": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * From 1.66: the assistant's prompt cache hit rate per provider and model (Admin › AI agents)
+         * @description Admin only (403). Over the last `days` days of every user's assistant model calls, from the hits each reply reported (DeepSeek prompt_cache_hit_tokens, OpenAI cached_tokens, Anthropic cache_read_input_tokens); 503 when pipelines does not answer in 5 s.
+         */
+        get: operations["studioAdminGetAssistantCache"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/studio/models": {
         parameters: {
             query?: never;
@@ -6810,6 +6830,28 @@ export interface components {
              * @description null before the first PUT
              */
             updated_at: string | null;
+            /**
+             * @description from 1.66: the chat window of `provider` and `model` (each model keeps its own; 60000 until set): past 70% of it the oldest half of a chat folds into a running summary (contracts/README.md, Assistant: context and cache)
+             * @default 60000
+             */
+            window_tokens?: number;
+        };
+        /** @description from 1.66: the prompt cache hit rate of the assistant's model calls per provider and model */
+        AssistantCacheStats: {
+            /** @description the window counted (30) */
+            days: number;
+            models: {
+                provider: string;
+                model: string;
+                /** @description model calls that reported their cache hits */
+                calls: number;
+                /** @description their prompt tokens */
+                prompt_tokens: number;
+                /** @description of those, read from the provider's cache */
+                hit_tokens: number;
+                /** @description hit_tokens / prompt_tokens; null with no prompt tokens */
+                hit_rate: number | null;
+            }[];
         };
         AssistantSettingsPut: {
             enabled: boolean;
@@ -6820,6 +6862,8 @@ export interface components {
             search_provider?: string | null;
             /** @description absent = unchanged */
             limits?: components["schemas"]["AssistantLimits"];
+            /** @description from 1.66: the chat window of the provider and model this PUT sets; absent = unchanged */
+            window_tokens?: number;
         };
         /** @description from 1.15: a custom node a pack registered (registry key pipelines.engine.custom) */
         CustomNode: {
@@ -11438,6 +11482,29 @@ export interface operations {
             403: components["responses"]["AdminRequired"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioAdminGetAssistantCache: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the hit rate per model */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantCacheStats"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["AdminRequired"];
             503: components["responses"]["Unavailable"];
         };
     };

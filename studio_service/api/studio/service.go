@@ -59,6 +59,7 @@ type Service struct {
 	putSettings func(ctx context.Context, host string, value []byte) error
 	// API 1.44: the assistant's memory in pipelines (nil answers 503) and the in-process engine its read tools ask
 	assistantMemory AssistantMemoryAsk
+	assistantCache  AssistantCacheAsk // API 1.66: the prompt cache hit rate (nil answers 503)
 	local           http.Handler
 }
 

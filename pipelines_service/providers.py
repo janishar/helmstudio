@@ -333,10 +333,27 @@ async def chat(name: str, p: dict, req: dict) -> dict:
             "output_tokens": limit,
         }
     out = {"text": text[:32768], "tool_calls": calls, "tokens_in": usage.get("input_tokens", 0),
-           "tokens_out": usage.get("output_tokens", 0), "seconds": round(time.monotonic() - t, 3)}  # fmt: skip
+           "tokens_out": usage.get("output_tokens", 0), "seconds": round(time.monotonic() - t, 3),
+           "cache": cache_hits(msg.response_metadata.get("token_usage"))}  # fmt: skip
     if len(raw) > 4:  # never cut silently: the turn is invalid (asked once more)
         out["error"] = f"the answer has {len(raw)} tool calls; at most 4 per turn"
     return out
+
+
+def cache_hits(u: dict | None) -> tuple[int, int] | None:
+    """(prompt tokens, of them read from the provider's prompt cache) as the reply's usage reported them (API 1.66):
+    DeepSeek prompt_cache_hit_tokens, Anthropic cache_read_input_tokens, OpenAI prompt_tokens_details.cached_tokens;
+    None when it reports none."""
+    u = u or {}
+    if (hit := u.get("prompt_cache_hit_tokens")) is not None:
+        miss = u.get("prompt_cache_miss_tokens")
+        return (hit + miss if miss is not None else u.get("prompt_tokens") or hit), hit
+    # Anthropic's input_tokens leave out what the cache read or wrote
+    if (hit := u.get("cache_read_input_tokens")) is not None:
+        return (u.get("input_tokens") or 0) + hit + (u.get("cache_creation_input_tokens") or 0), hit
+    if (hit := (u.get("prompt_tokens_details") or {}).get("cached_tokens")) is not None:
+        return u.get("prompt_tokens") or hit, hit
+    return None
 
 
 _NO_JSON_SCHEMA: set[str] = (

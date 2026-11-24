@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"regexp"
 	"slices"
 	"strings"
@@ -92,6 +93,31 @@ type AssistantSettings struct {
 	Limits         AssistantLimits `json:"limits"`
 	RemoteEnabled  bool            `json:"remote_enabled"`
 	UpdatedAt      *time.Time      `json:"updated_at"`
+	WindowTokens   int             `json:"window_tokens"` // API 1.66: the chat window of provider and model
+	windows        map[string]int  // "<provider>/<model>" → tokens (assistant_settings.windows)
+}
+
+// defaultWindow is a model's chat window before the admin sets its own (API 1.66).
+const defaultWindow = 60000
+
+// windowKey names a provider and model in assistant_settings.windows: the model by name, never "the default".
+func windowKey(provider, model string) string { return provider + "/" + model }
+
+// window is the chat window of a provider and model.
+func (s AssistantSettings) window(provider, model string) int {
+	return cmp.Or(s.windows[windowKey(provider, model)], defaultWindow)
+}
+
+// windowTokens is the window of the settings' provider and model, no model meaning the provider's default one.
+func (s AssistantSettings) windowTokens(ctx context.Context, tx pgx.Tx) (int, error) {
+	model := deref(s.Model)
+	if model == "" && s.Provider != nil {
+		err := tx.QueryRow(ctx, `SELECT default_model FROM providers WHERE name = $1`, *s.Provider).Scan(&model)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return 0, err
+		}
+	}
+	return s.window(deref(s.Provider), model), nil
 }
 
 // AssistantSettingsPut is PUT /admin/assistant's body.
@@ -102,6 +128,7 @@ type AssistantSettingsPut struct {
 	WebSearch      *bool            `json:"web_search"`
 	SearchProvider *string          `json:"search_provider"`
 	Limits         *AssistantLimits `json:"limits"`
+	WindowTokens   *int             `json:"window_tokens"` // API 1.66: absent = unchanged
 }
 
 // Validate checks the shape; the providers are checked by the service.
@@ -115,6 +142,8 @@ func (b *AssistantSettingsPut) Validate() string {
 		return "model must be a model name"
 	case b.SearchProvider != nil && !providerNameRe.MatchString(*b.SearchProvider):
 		return "search_provider must be a provider's name"
+	case b.WindowTokens != nil && (*b.WindowTokens < 8000 || *b.WindowTokens > 1000000):
+		return "window_tokens must be 8000 to 1000000"
 	case b.Limits != nil:
 		return b.Limits.check()
 	}
@@ -124,14 +153,17 @@ func (b *AssistantSettingsPut) Validate() string {
 // readAssistantSettings reads the settings row (off, with the default caps, before the first PUT).
 func readAssistantSettings(ctx context.Context, tx pgx.Tx) (AssistantSettings, error) {
 	out := AssistantSettings{Limits: defaultLimits()}
-	err := tx.QueryRow(ctx, `SELECT enabled, provider, model, web_search, search_provider, limits, updated_at
+	err := tx.QueryRow(ctx, `SELECT enabled, provider, model, web_search, search_provider, limits, updated_at, windows
 		FROM assistant_settings`).Scan(&out.Enabled, &out.Provider, &out.Model, &out.WebSearch, &out.SearchProvider,
-		&out.Limits, &out.UpdatedAt)
+		&out.Limits, &out.UpdatedAt, &out.windows)
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = nil
 	}
 	if err == nil {
 		err = ownChoice(ctx, tx, &out)
+	}
+	if err == nil {
+		out.WindowTokens, err = out.windowTokens(ctx, tx)
 	}
 	return out, err
 }
@@ -216,6 +248,13 @@ func (s *Service) PutAssistantSettings(ctx context.Context, caller common.Caller
 		if body.Limits != nil {
 			limits = *body.Limits
 		}
+		windows := maps.Clone(now.windows)
+		if windows == nil {
+			windows = map[string]int{}
+		}
+		if p, ok := find(body.Provider); ok && body.WindowTokens != nil {
+			windows[windowKey(p.Name, cmp.Or(deref(body.Model), p.DefaultModel))] = *body.WindowTokens
+		}
 		// API 1.61: an Only-you provider is the caller's own choice; the deployment's stays for everyone else
 		provider, model := body.Provider, body.Model
 		if p, ok := find(body.Provider); ok && p.OwnerID != nil {
@@ -232,17 +271,22 @@ func (s *Service) PutAssistantSettings(ctx context.Context, caller common.Caller
 		} else if _, err := tx.Exec(ctx, `DELETE FROM assistant_personal WHERE owner_id = $1`, caller.ID); err != nil {
 			return err
 		}
-		err = tx.QueryRow(ctx, `INSERT INTO assistant_settings (id, enabled, provider, model, web_search, search_provider, limits)
-			VALUES (true, $1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO UPDATE SET enabled = excluded.enabled,
+		err = tx.QueryRow(ctx, `INSERT INTO assistant_settings (id, enabled, provider, model, web_search, search_provider, limits,
+			windows) VALUES (true, $1, $2, $3, $4, $5, $6, $7) ON CONFLICT (id) DO UPDATE SET enabled = excluded.enabled,
 			provider = excluded.provider, model = excluded.model, web_search = excluded.web_search,
-			search_provider = excluded.search_provider, limits = excluded.limits, updated_at = clock_timestamp()
-			RETURNING enabled, provider, model, web_search, search_provider, limits, updated_at`,
-			*body.Enabled, provider, model, webSearch, body.SearchProvider, limits).Scan(&out.Enabled, &out.Provider,
-			&out.Model, &out.WebSearch, &out.SearchProvider, &out.Limits, &out.UpdatedAt)
+			search_provider = excluded.search_provider, limits = excluded.limits, windows = excluded.windows,
+			updated_at = clock_timestamp()
+			RETURNING enabled, provider, model, web_search, search_provider, limits, updated_at, windows`,
+			*body.Enabled, provider, model, webSearch, body.SearchProvider, limits, windows).Scan(&out.Enabled,
+			&out.Provider, &out.Model, &out.WebSearch, &out.SearchProvider, &out.Limits, &out.UpdatedAt, &out.windows)
 		if err != nil {
 			return err
 		}
-		return ownChoice(ctx, tx, &out)
+		if err = ownChoice(ctx, tx, &out); err != nil {
+			return err
+		}
+		out.WindowTokens, err = out.windowTokens(ctx, tx)
+		return err
 	})
 	out.RemoteEnabled = s.remoteOn
 	return out, err
@@ -290,6 +334,7 @@ func (s *Service) assistantConfig(ctx context.Context, tx pgx.Tx) (AssistantStat
 		status.Sees = modelSees(p.Preset, model)
 		snap.Sees = status.Sees
 		snap.Source = map[string]any{"kind": p.Kind, "provider": p.Name, "model": model}
+		snap.WindowTokens = set.window(p.Name, model)
 		if p.Kind == "server" {
 			snap.Source["host"] = deref(p.Host)
 		}
@@ -1364,4 +1409,52 @@ func (s *Service) DeleteAssistantMemory(ctx context.Context, caller common.Calle
 	}
 	_, err := s.askAssistantMemory(ctx, caller, message.AssistantMemoryRequest{Op: "delete", ItemID: id})
 	return err
+}
+
+// ------------------------------------------------------------------ cache (pipelines.assistant.cache, API 1.66)
+
+// AssistantCacheAsk asks pipelines for the prompt cache hits per provider and model; an error is no answer.
+type AssistantCacheAsk func(ctx context.Context, req message.AssistantCacheRequest) (message.AssistantCacheReply, error)
+
+// SetAssistantCache sets how the service reaches the hit rate; without one GET /admin/assistant/cache answers 503.
+func (s *Service) SetAssistantCache(fn AssistantCacheAsk) { s.assistantCache = fn }
+
+// cacheDays is the window GET /admin/assistant/cache counts.
+const cacheDays = 30
+
+// AssistantCacheModel is one provider and model's hits and their rate (null with no prompt tokens).
+type AssistantCacheModel struct {
+	message.AssistantCacheModel
+	HitRate *float64 `json:"hit_rate"`
+}
+
+// AssistantCacheStats is GET /admin/assistant/cache.
+type AssistantCacheStats struct {
+	Days   int                   `json:"days"`
+	Models []AssistantCacheModel `json:"models"`
+}
+
+// GetAssistantCache is GET /admin/assistant/cache: the last 30 days' hit rate per provider and model.
+func (s *Service) GetAssistantCache(ctx context.Context, caller common.Caller) (AssistantCacheStats, error) {
+	if !caller.IsAdmin() {
+		return AssistantCacheStats{}, errAdmin
+	}
+	unavailable := network.NewServiceUnavailableError("the pipeline service did not answer; try again", nil)
+	if s.assistantCache == nil {
+		return AssistantCacheStats{}, unavailable
+	}
+	reply, err := s.assistantCache(ctx, message.AssistantCacheRequest{Days: cacheDays})
+	if err != nil || reply.Code != "" {
+		return AssistantCacheStats{}, unavailable
+	}
+	out := AssistantCacheStats{Days: cacheDays, Models: []AssistantCacheModel{}}
+	for _, m := range reply.Models {
+		row := AssistantCacheModel{AssistantCacheModel: m}
+		if m.PromptTokens > 0 {
+			rate := min(float64(m.HitTokens)/float64(m.PromptTokens), 1)
+			row.HitRate = &rate
+		}
+		out.Models = append(out.Models, row)
+	}
+	return out, nil
 }

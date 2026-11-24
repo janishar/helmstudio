@@ -90,6 +90,29 @@ def test_a_turn_reads_through_studio(api, api_b, assistant):
     assert api.get(url).status_code == 404
 
 
+def test_the_window_per_model_and_the_cache_hit_rate(api, admin, assistant):
+    """API 1.66 (alpha.2 item 30): the chat window is the model's own; each reply's cache hits are kept and the
+    admin reads the hit rate per provider and model."""
+    now = ok(admin.get(SETTINGS))
+    assert now["window_tokens"] == 60000
+    body = {"enabled": True, "provider": now["provider"]}
+    assert admin.put(SETTINGS, json=body | {"window_tokens": 100}).status_code == 422
+    assert ok(admin.put(SETTINGS, json=body | {"window_tokens": 128000}))["window_tokens"] == 128000
+    fake("POST", "/__script", {assistant: [{"content": "Cached.", "usage": {
+        "prompt_tokens": 1000, "prompt_cache_hit_tokens": 900, "prompt_cache_miss_tokens": 100}}]})  # fmt: skip
+    chat = ok(api.post(THREADS, json={"client_id": TAB}), 201)
+    url = f"{THREADS}/{chat['id']}"
+    msg = {"kind": "message", "client_id": TAB, "text": "hi", "screen": screen()}
+    ok(api.post(f"{url}/messages", json=msg), 202)
+    wait_for(lambda: ok(api.get(url))["state"] == "idle", timeout=60, what="the assistant's answer")
+    assert api.get(f"{SETTINGS}/cache").status_code == 403
+    got = ok(admin.get(f"{SETTINGS}/cache"))
+    (row,) = [m for m in got["models"] if m["model"] == assistant]
+    assert got["days"] == 30 and row == {"provider": now["provider"], "model": assistant, "calls": 1,
+                                         "prompt_tokens": 1000, "hit_tokens": 900, "hit_rate": 0.9}  # fmt: skip
+    ok(api.delete(url), 204)
+
+
 def test_steer_while_it_answers(api, assistant):
     """API 1.59 (board Assistant frame 8): a message while the turn works is a steer: read at the next step (the next
     model call has it as the user's words), or, when the answer ends first, sent as the next message."""

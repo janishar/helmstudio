@@ -83,9 +83,11 @@ async def put(store, owner_id, kind: str, iid: str, text: str, thread_id) -> str
 
 
 async def delete(store, owner_id, iid: str) -> bool:
+    """A user's delete (Memory, or a Forget card approved): the chats read their memories again."""
     it = await find(store, owner_id, iid)
     if it:
         await store.adelete(ns(owner_id, it["kind"]), iid)
+        await _mark(store, owner_id)
     return bool(it)
 
 
@@ -98,6 +100,20 @@ async def preferences(store, owner_id) -> list[str]:
         out.append(i["text"])
         size += len(i["text"])
     return out
+
+
+CHANGED = "changed"  # namespace (<owner_id>, "assistant", "changed"), key "at": the user's last Memory change
+
+
+async def changed(store, owner_id) -> str | None:
+    """When the user last changed Memory (edit, delete, Clear all), or None: a chat's frozen memories (API 1.66)
+    are read again only after it."""
+    it = await store.aget(ns(owner_id, CHANGED), "at")
+    return it.value["at"] if it else None
+
+
+async def _mark(store, owner_id) -> None:
+    await store.aput(ns(owner_id, CHANGED), "at", {"at": uuid.uuid4().hex}, index=False)
 
 
 async def recall(store, owner_id, query: str, kind: str | None = None) -> list[dict]:
@@ -138,12 +154,16 @@ async def handle(store, req: dict) -> dict:
             return NOT_FOUND
         value = {"kind": it["kind"], "text": req["text"][:TEXT_MAX], "thread_id": it["thread_id"]}
         await store.aput(ns(owner, it["kind"]), it["id"], value, index=False)
+        await _mark(store, owner)
         return {"item": await find(store, owner, it["id"])}
     if op == "delete":
-        return {"deleted": 1} if await delete(store, owner, req["item_id"]) else NOT_FOUND
+        if not await delete(store, owner, req["item_id"]):
+            return NOT_FOUND
+        return {"deleted": 1}
     every = await items(store, owner)  # clear
     for i in every:
         await store.adelete(ns(owner, i["kind"]), i["id"])
+    await _mark(store, owner)
     return {"deleted": len(every)}
 
 
