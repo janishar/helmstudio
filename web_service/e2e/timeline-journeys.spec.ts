@@ -161,6 +161,7 @@ test("j03 trim five frames off the end of the first clip", async () => {
   await expect(clip(0)).toHaveAccessibleName(named(CLIPS[0], "Echo · 1.8 s"));
   await expect(inspector()).not.toHaveText(out!);
   await expect.poll(length).not.toBe(before);
+  await expect(exportKey()).toHaveAccessibleName(/re-encode · 1 trimmed$/); // not "1 other" (owner, Q11)
   await shot("j03-trimmed");
 });
 

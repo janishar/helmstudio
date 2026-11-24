@@ -642,7 +642,7 @@ function ExportBody({ tl, onClose }: { tl: Timeline; onClose: () => void }) {
   );
 }
 
-/** The Export key's second line: "stream copy", "re-encode · 1 still, 1 dissolve", or what blocks it. */
+/** The Export key's second line: "stream copy", "re-encode · 1 still, 3 trimmed", or what blocks it. */
 export function planLine(p: S<"ExportPlan"> | null): string {
   if (!p) return "planning…";
   if (p.blocked.length)
@@ -653,6 +653,7 @@ export function planLine(p: S<"ExportPlan"> | null): string {
     [n("image"), "still", "stills"],
     [n("transition"), "dissolve", "dissolves"],
     [n("gap"), "gap", "gaps"],
+    [n("trimmed"), "trimmed", "trimmed"],
   ];
   const other = p.reasons.length - words.reduce((s, [k]) => s + k, 0);
   words.push([other, "other", "other"]);
