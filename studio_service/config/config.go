@@ -35,6 +35,9 @@ type Env struct {
 
 	// RemoteModels is the deployment's switch for remote model providers (API 1.15): off unless 1, true, on or yes (SwitchOn)
 	RemoteModels bool
+
+	// PluginDirs are the read-only folders plugins/*/plugin.json are read from (API 1.61; STUDIO_PLUGINS_DIRS, `:`-separated)
+	PluginDirs []string
 }
 
 // Load resolves *_FILE secrets, then reads every variable with its default. It fails when DATABASE_URL is missing,
@@ -64,6 +67,7 @@ func Load() (Env, error) {
 		S3SecretKey:   os.Getenv("S3_SECRET_ACCESS_KEY"),
 		S3PathStyle:   helmgoconfig.Get("S3_FORCE_PATH_STYLE", "true") == "true",
 		RemoteModels:  SwitchOn(os.Getenv("STUDIO_REMOTE_MODELS")),
+		PluginDirs:    strings.Split(helmgoconfig.Get("STUDIO_PLUGINS_DIRS", "/plugins"), ":"),
 	}
 	var err error
 	if e.FileURLTTL, err = time.ParseDuration(helmgoconfig.Get("FILE_URL_TTL", "1h")); err != nil {

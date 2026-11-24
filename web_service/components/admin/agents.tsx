@@ -263,7 +263,7 @@ export function AgentsAdmin() {
           ref={namesPanel}
           key={names.updated_at ?? "unset"}
           names={names}
-          providers={pickable(providers, names.remote_enabled)}
+          providers={pickable(providers, names.remote_enabled).filter((p) => !p.owner_id)}
           onSaved={(n) => {
             setNames(n);
             setEditing((e) => (e === "names" ? null : e));

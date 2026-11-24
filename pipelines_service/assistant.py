@@ -9,7 +9,8 @@ differs is dropped). Plain nodes, like agent_loop.py, no prebuilt agent:
 - `steer` (API 1.59, contracts/README.md "Assistant: steer"): the boundary before each model call. The user's
   messages sent while the turn works (cmd.assistant.steer, kept in memory as they come, outside the chat's lock) join
   the transcript as User lines, in order, and evt.assistant.steered tells studio they were read; a Stop ends the turn
-  here (the calls not run yet do not run).
+  here (the calls not run yet do not run); a model call in flight is cancelled at once (API 1.62): its task is
+  kept per thread, nothing of its answer is kept, its prompt stays counted as spent.
 
 - `model`: one providers.chat_retried call with the fenced context and the offered tools (native tool calls). Every
   call is checked (offered, its input schema, @handles) before anything runs; an invalid answer is asked once more,
@@ -18,6 +19,9 @@ differs is dropped). Plain nodes, like agent_loop.py, no prebuilt agent:
 - `tools`: runs the calls in order, each result kept under its call id `<thread>:<turn>:<n>`. Studio reads
   (studio.tools, idempotent on the call id) and memory return at once; screen actions (a run of them) and the server
   cards (look_at, web_search, forget) stop it as `pending`, and the next calls wait for their results.
+- Plugin tools (API 1.61, contracts/README.md "Plugins"): the input's `plugins` offered as `<plugin>__<tool>`; one
+  with a risk flag asks first on a `plugin` card, one without runs at once: POST <url>/tools/<tool> with a
+  short-lived pass for that owner and call (providers.plugin_tool), the reply a line and a result fenced as data.
 - `wait` only calls interrupt() (a resumed node runs again from its start, so nothing with an effect sits before
   it). Each park and each end of a turn is one evt.assistant.step (seq per thread; a republish replaces).
 
@@ -25,10 +29,16 @@ Everything but the user's own messages is data in the <<< >>> fence: the screen 
 memory items, web results. Nothing but memory writes reaches the server without the user's click."""
 
 import asyncio
+import base64
 import contextlib
 import functools
+import hashlib
+import hmac
 import json
 import logging
+import re
+import secrets
+import time
 import uuid
 import weakref
 from datetime import UTC, datetime, timedelta
@@ -73,7 +83,11 @@ Prepare the screen, then call the action; never say it ran until its result says
 - Files to or from disk, signing in and out, the password, the theme, admin settings and messages to a pipeline's \
 director chat are the user's own: explain and point at the button, never try them.
 - Use only @handles the user wrote, that the form holds, or that a library read or a dialog returned.
-- Save lasting preferences, project facts and what worked with remember, in a few words.
+- Save lasting preferences, project facts and what worked with remember, in a few words: one plain sentence that \
+names things by their @handle or title, never JSON, ids or field names (voice_id).
+- Switching to a voice (audio) workflow keeps the old image or video prompt in the box: write what is spoken \
+yourself with change before generate (Voice-over: the spoken line only; Dialogue: a script, one "@name: text" line \
+each, every @name in the Cast).
 - The user may write while you work: a User line after your calls. Follow it at once and say in a few words what you \
 changed.
 - Answer in short plain text.
@@ -155,7 +169,63 @@ def offered(data: dict, route: str) -> dict[str, dict]:
     for n in data["actions"]:
         if n not in out and (a := action_spec(n, route, roles)):
             out[n] = {"kind": "action", "spec": a}
+    for n, spec in plugin_tools(data).items():
+        out[n] = {"kind": "plugin", "spec": spec}
     return out
+
+
+def plugin_tools(data: dict) -> dict[str, dict]:
+    """`<plugin>__<tool>` → the tool's manifest entry with its plugin's name, title and url: the input's on plugins
+    (studio sends them each input, so one turned off is gone at the next)."""
+    out = {}
+    for p in data.get("plugins") or []:
+        for t in p["tools"]:
+            if not _schema_ok(
+                t["input"]
+            ):  # a broken input schema never reaches the model or check()
+                log.warning(
+                    "plugin %s: tool %s skipped: its input is not a valid JSON Schema",
+                    p["name"],
+                    t["name"],
+                )
+                continue
+            out[f"{p['name']}__{t['name']}"] = t | {"plugin": p["name"], "title": p["title"], "url": p["url"],
+                                                   "tool": t["name"]}  # fmt: skip
+    return out
+
+
+@functools.lru_cache(maxsize=256)
+def _schema_ok_text(schema: str) -> bool:
+    try:
+        Draft202012Validator.check_schema(json.loads(schema))
+        Draft202012Validator(json.loads(schema), format_checker=FormatChecker()).is_valid({})
+    except Exception:  # noqa: BLE001 - any failure (a bad pattern, an unresolvable $ref) means broken
+        return False
+    return True
+
+
+def _schema_ok(schema) -> bool:
+    return _schema_ok_text(json.dumps(schema, sort_keys=True))
+
+
+RISK_TAGS = (("uses_gpu", "uses the GPU"), ("deletes", "can't be undone"),
+             ("sends_off_machine", "sends off the machine"))  # fmt: skip
+PASS_TTL = 300  # seconds
+# ponytail: a key per process, and nothing verifies the pass yet (plugins treat it as opaque); a verify endpoint comes
+# with the first plugin that calls back into the stack
+_PASS_KEY = secrets.token_bytes(32)
+
+
+def _b64(b: bytes) -> str:
+    return base64.urlsafe_b64encode(b).rstrip(b"=").decode()
+
+
+def plugin_pass(owner: str, call: str) -> str:
+    """A short-lived pass scoped to one owner and call: base64url({owner, call, exp}).base64url(HMAC-SHA256)."""
+    body = _b64(
+        agents.compact({"owner": owner, "call": call, "exp": int(time.time()) + PASS_TTL}).encode()
+    )
+    return f"{body}.{_b64(hmac.new(_PASS_KEY, body.encode(), hashlib.sha256).digest())}"
 
 
 def native(off: dict) -> list[dict]:
@@ -203,7 +273,10 @@ def check(got: dict, off: dict, s: State) -> tuple[list | None, str | None]:
             args = json.loads(c["arguments"] or "{}")
         except ValueError:
             return None, f"{c['name']}: the arguments are not JSON"
-        errs = [e.message for e in _validator(json.dumps(o["spec"]["input"])).iter_errors(args)]
+        try:
+            errs = [e.message for e in _validator(json.dumps(o["spec"]["input"])).iter_errors(args)]
+        except Exception:  # noqa: BLE001 - a broken schema must not end the turn's handling (NAK, redelivery)
+            return None, f"{c['name']}: the plugin's input schema is broken"
         if errs:
             return None, f"{c['name']}: {errs[0]}"[:500]
         if o["kind"] == "action":
@@ -211,8 +284,66 @@ def check(got: dict, off: dict, s: State) -> tuple[list | None, str | None]:
             if bad := [h for h in agents.mentions(json.dumps(args)) if h not in allowed]:
                 return None, (f"{c['name']}: @{bad[0]} is not a handle you were given; use only handles the "
                               "user wrote, the form holds or a library read returned")  # fmt: skip
+        if c["name"] == "remember" and (why := not_plain(args["text"])):
+            return None, f"remember: {why}; write it again as one plain sentence"
         calls.append({"name": c["name"], "args": args, "kind": o["kind"]})
+    if _voice_unwritten(s, calls):
+        return None, ("generate: the voice workflow's box still holds the old prompt; write what is spoken with change "
+                      'first (Voice-over: the spoken line only; Dialogue: one "@name: text" line each)')  # fmt: skip
     return calls, None
+
+
+_UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.IGNORECASE)
+_JSON = re.compile(r'[{\[]\s*"\w+"\s*[:,\]]')  # {"key": or ["a", ; not 'Call it "Warm": …'
+# voice_id, settings.source.model; never an @handle (old_man), a file name (final.cut.mp4) or a domain/URL
+_FIELD = re.compile(
+    r"(?<![@\w-])[a-z]\w*_\w+\b|(?<![@\w-])[a-z]\w*(?:\.[a-z]\w*){2,}\b", re.IGNORECASE
+)
+_WEB = re.compile(
+    r"\S*(?:://|www\.)\S*|\S+\.(?:com|org|net|io|ai|dev|in|mp4|mov|webm|png|jpe?g|webp|gif|wav|mp3|flac)\b",
+    re.IGNORECASE,
+)
+
+
+def not_plain(text: str) -> str | None:
+    """Why a memory is not plain words (the owner saw `Remembered: … {"voice_id": "<id>"}`), else None."""
+    if _JSON.search(text):
+        return "it has JSON"
+    if _UUID.search(text):
+        return "it has an id (UUID); name the thing by its @handle or title"
+    if m := _FIELD.search(_WEB.sub(" ", text)):
+        return f"it has a field name ({m.group()})"
+    return None
+
+
+# the spoken-line field of a voice workflow (`node.param`): the text or dialogue script; not voice, seed, speed, style
+_SPOKEN = re.compile(r"(?:^|\.)(?:prompt|text|script)$")
+
+
+def _voice_unwritten(s: State, calls: list) -> bool:
+    """A generate in this answer after a switch to an audio workflow with no change since: the old image prompt
+    would be spoken. Over this message's done calls, then the answer's, by the screen's workflows list."""
+    media = {}
+    for w in ((s.get("screen") or {}).get("fields") or {}).get("workflows") or []:
+        media[w["id"]] = media[w["title"].lower()] = w.get("media")
+    if not media:
+        return False
+    msg = f"{s['thread_id']}:{s['msg']}:"
+    done = [
+        e
+        for e in s["chat"]
+        if e["role"] == "call" and e["id"].startswith(msg) and e["status"] == "done"
+    ]
+    voice = False
+    for i, c in enumerate(done + calls):
+        if c["name"] == "switchTo":
+            w = c["args"]["workflow"]
+            voice = (media.get(w) or media.get(w.lower())) == "audio"
+        elif c["name"] == "change" and _SPOKEN.search(c["args"]["key"]):
+            voice = False
+        elif c["name"] == "generate" and voice and i >= len(done):
+            return True
+    return False
 
 
 # --- the prompt
@@ -302,6 +433,8 @@ class Assistant:
         # sends them as the next message, so nothing is lost
         self.steers: dict[str, list[dict]] = {}  # thread → [{id, turn, text, at, owner}]
         self.stops: dict[str, tuple[int, str]] = {}  # thread → (turn, owner)
+        # thread → (msg, owner, the model call in flight): a Stop cancels it at once
+        self.calls: dict[str, tuple[int, str, asyncio.Future]] = {}
         g = StateGraph(State)
         names = ("start", "steer", "model", "tools", "wait", "summarize", "reply")
         for name in names:
@@ -372,10 +505,25 @@ class Assistant:
         ):
             return err | {"caps": caps}
         caps["model_calls"] += 1
+        tid = s["thread_id"]
+        call = asyncio.ensure_future(providers.chat_retried(src["provider"], p, req))
+        self.calls[tid] = (s["msg"], s["owner_id"], call)
+        if self._stopped(s):  # a Stop that came while the spend was counted
+            call.cancel()
         try:
-            got, _ = await providers.chat_retried(src["provider"], p, req)
+            got, _ = await call
         except providers.CallError as e:
             return _end("off" if e.kind == "off" else "provider", str(e), caps=caps)
+        except asyncio.CancelledError:
+            # the node itself is cancelled (shutdown), not a Stop
+            if asyncio.current_task().cancelling():
+                raise
+            # Stop (API 1.62): the call is gone, no answer kept; what was sent stays spent
+            await self._spent(key, providers.estimate(system + req["prompt"]))
+            return {"caps": caps, "to": "steer"}  # steer sees the Stop and ends the turn
+        finally:
+            if self.calls.get(tid, (0, "", None))[2] is call:
+                del self.calls[tid]
         await self._spent(key, got["tokens_in"] + got["tokens_out"])
         calls, err = check(got, off, s)
         if err:
@@ -466,7 +614,14 @@ class Assistant:
                 return self._park(s, up | {"queue": q[n:], "chat": chat[-CHAT_KEEP:], "caps": caps,
                                            "lines": lines, "pending": pending})  # fmt: skip
             q.pop(0)
-            if c["name"] in CARDS:
+            if c["kind"] == "plugin" and not self._asks(
+                s, c
+            ):  # no risk flag (or gone): runs at once
+                got = await self.plugin_run(s, c)
+                chat.append(_entry(c, got["status"], got.get("result"), got.get("error")))
+                lines.append(got["line"])
+                continue
+            if c["name"] in CARDS or c["kind"] == "plugin":
                 card, error = await self.card_for(s, c)
                 if card:
                     pending = {"actions": [], "cards": [card], "call": c}
@@ -578,6 +733,20 @@ class Assistant:
     async def card_for(self, s: State, c: dict) -> tuple[dict | None, str | None]:
         """The server card a call asks first (22.6), or why it cannot be asked."""
         a, base = c["args"], {"id": c["id"], "state": "waiting"}
+        if c.get("kind") == "plugin":
+            t = plugin_tools(s["data"]).get(c["name"])
+            if not t:
+                return None, "the plugin is off"
+            tags = [tag for flag, tag in RISK_TAGS if t["risk"][flag]][:3]
+            note = (
+                {"note": "Sends this input off the machine."}
+                if t["risk"]["sends_off_machine"]
+                else {}
+            )
+            return base | {"kind": "plugin", "title": f"Use {t['title']}?"[:120],
+                           "rows": [{"label": "Tool", "value": f"{t['plugin']}.{t['tool']}"},
+                                    {"label": "Input", "value": agents.compact(a)[:300]}],
+                           "tags": tags} | note, None  # fmt: skip
         if c["name"] == "web_search":
             name = s["data"]["settings"]["search"]
             if not name:
@@ -604,6 +773,8 @@ class Assistant:
     async def card_yes(self, s: State, c: dict) -> dict:
         """The user's Yes on a server card: run its call. {status, result?, error?, line} or {end: …}."""
         a, line = c["args"], {"id": c["id"], "undo": False}
+        if c.get("kind") == "plugin":
+            return await self.plugin_run(s, c)
         if c["name"] == "web_search":
             name = s["data"]["settings"]["search"]
             p, who = s["data"]["settings"]["providers"].get(name or ""), (name or "").capitalize()
@@ -645,6 +816,29 @@ class Assistant:
             "result": {"deleted": gone},
             "line": line | {"status": "done", "text": text},
         }
+
+    @staticmethod
+    def _asks(s: State, c: dict) -> bool:
+        t = plugin_tools(s["data"]).get(c["name"])
+        return bool(t and any(t["risk"].values()))
+
+    async def plugin_run(self, s: State, c: dict) -> dict:
+        """A plugin tool's call, its plugin as the newest input has it: {status, result?, error?, line}."""
+        t, line = plugin_tools(s["data"]).get(c["name"]), {"id": c["id"], "undo": False}
+        label = f"{t['title']} · {t['tool']}" if t else c["name"].replace("__", ".")
+        try:
+            if not t:
+                raise providers.CallError("off", "the plugin is off")
+            headers = {"Authorization": f"Bearer {plugin_pass(s['owner_id'], c['id'])}",
+                       "X-Helm-Owner": s["owner_id"], "X-Helm-Call": c["id"]}  # fmt: skip
+            reply = await providers.plugin_tool(t["title"], t["url"], t["tool"], c["args"], headers)
+        except providers.CallError as e:
+            return {"status": "failed", "error": str(e),
+                    "line": line | {"status": "failed", "text": f"{label} failed · {e}"[:300]}}  # fmt: skip
+        done = line | {"status": "done", "text": reply.get("line") or label}
+        if reply.get("sources"):
+            done["sources"] = reply["sources"][:5]
+        return {"status": "done", "result": reply["result"], "line": done}
 
     # --- per-user caps (22.10), at the bound as remote.py counts them
 
@@ -781,6 +975,9 @@ class Assistant:
         d, tid = cmd["data"], cmd["data"]["thread_id"]
         if d.get("stop"):
             self.stops[tid] = (max(d["turn"], self.stops.get(tid, (0, ""))[0]), cmd["owner_id"])
+            msg, owner, call = self.calls.get(tid, (0, "", None))
+            if call and msg <= d["turn"] and owner == cmd["owner_id"]:
+                call.cancel()  # the model call in flight ends now, not at the next boundary
             return
         got = self.steers.setdefault(tid, [])
         if all(x["id"] != d["steer_id"] for x in got):

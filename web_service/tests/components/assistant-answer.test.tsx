@@ -199,7 +199,7 @@ describe("pick one (frame 11)", () => {
   it("a block that did not parse shows as text", async () => {
     serve([said(2, "assistant", "Pick one:\n1. Fix a part\n2. Shot 2")]);
     const d = await openDrawer();
-    expect(await within(d).findByText(/1\. Fix a part/)).toBeTruthy();
+    expect((await within(d).findByText("Fix a part")).closest("ol")).toBeTruthy(); // a numbered list
     expect(within(d).queryByRole("group", { name: "Pick one" })).toBeNull();
   });
 });
@@ -227,5 +227,38 @@ describe("chips, not ids (frame 10b)", () => {
     expect(d.textContent).not.toMatch(/9a1b|7a1b|\[\[|qwen3-tts\/elias|ltx-i2v/);
     fireEvent.click(take);
     expect(await screen.findByRole("dialog", { name: "Shot 1 keyframe" })).toBeTruthy();
+  });
+});
+
+describe("formatted answers with chips and cards (frames 10, 11)", () => {
+  it("bold, a chip in a list item and the options all render; Copy has titles, never [[ ]]", async () => {
+    const copied = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: copied },
+      configurable: true,
+    });
+    serve([
+      said(
+        2,
+        "assistant",
+        `**Shot 1** is done:\n- keyframe [[take:${TAKE}]]\n- \`[[take:${TAKE}]]\` stays code\n` +
+          "Next, pick one:\n```options\n" +
+          JSON.stringify(OPTS) +
+          "\n```",
+      ),
+    ]);
+    const d = await openDrawer();
+    expect((await within(d).findByText("Shot 1")).tagName).toBe("B");
+    const chip = await within(d).findByRole("button", { name: "take: Shot 1 keyframe" });
+    expect(chip.closest("li")?.closest("ul.md")).toBeTruthy();
+    expect(within(d).getAllByRole("button", { name: /Fix a part|Shot 2|Shot 3/ })).toHaveLength(3);
+    expect(d.querySelector("code")!.textContent).toBe(`[[take:${TAKE}]]`);
+    fireEvent.click(within(d).getByRole("button", { name: "Copy the answer" }));
+    await waitFor(() => expect(copied).toHaveBeenCalled());
+    const text = (copied.mock.calls[0] as unknown as [string])[0];
+    expect(text).toContain("Shot 1 is done");
+    expect(text).toContain("keyframe Shot 1 keyframe");
+    expect(text).toContain("2. Shot 2 — Elias at the window");
+    expect(text).not.toMatch(/\[\[|```|\*\*/);
   });
 });

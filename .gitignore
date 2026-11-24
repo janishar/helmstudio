@@ -19,3 +19,6 @@ tsconfig.tsbuildinfo
 
 # internal research notes: kept on the owner's machine, not published
 docs/reference-notes/
+
+# boards: the design canvas runtime, linked locally only to view docs/mock in a browser (never committed)
+docs/mock/support.js

@@ -1,0 +1,32 @@
+{
+  "plugins": [
+    {
+      "name": "web-search",
+      "title": "Web search",
+      "version": "0.1.0",
+      "kind": "assistant-tools",
+      "description": "Adds web search.",
+      "author": "helmstudio",
+      "may_do": [
+        "Add web search for the Assistant"
+      ],
+      "personal": false,
+      "url": "http://host.docker.internal:8421",
+      "tools": [
+        {
+          "name": "search",
+          "description": "Search the web.",
+          "risk": {
+            "uses_gpu": false,
+            "deletes": false,
+            "sends_off_machine": true
+          }
+        }
+      ],
+      "enabled": false,
+      "status": "off",
+      "provider": null,
+      "updated_at": "2026-11-25T10:00:00Z"
+    }
+  ]
+}

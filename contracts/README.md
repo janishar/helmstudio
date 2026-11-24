@@ -3933,7 +3933,9 @@ Write while it works, like Claude Code: the message joins the running answer and
   stopped turn on the thread (1.59.1): at its done step its steers still `waiting` become `read`. Only a running
   turn stops (the same states as a steer); on an idle chat, or one waiting only on a server card, it does nothing
   (202). Each Stop has its own message id (1.59.1): pipelines' inbox keeps ids for good, so a Stop after its
-  restart is never dropped as a duplicate.
+  restart is never dropped as a duplicate. (1.62) A model call in flight does not wait for the boundary: pipelines
+  keeps a handle per thread and cancels the call at once, the turn ends `done` with no error, nothing of that answer
+  is kept, and the call stays counted in `assistant_spend` at its prompt's estimate (not its whole bound).
 - **Restart.** pipelines keeps steers in memory: after a restart a steer it had is never read by that turn, so it
   becomes the next message at the turn's end. Nothing is lost.
 - **Known gap.** A read steer can show above the lines of server-tool calls that ran before it was read:
@@ -3970,6 +3972,11 @@ markup. Pipelines checks both before the step is published; the drawer shows the
 - A route under `/v1/studio/admin/` ⇔ `roles` [admin]; an admin tool is never offered to anyone else and studio
   checks the role again (`forbidden`).
 - A write is mcp only, or the assistant's behind a `card`; only memory writes (`remember`) go without one.
+- (1.62) Checks past the input schema, each an invalid answer (asked once more, then the turn ends `answer`):
+  `remember`'s text is plain words: no JSON, no UUID, no field name (a word with `_`, or a dotted path of three or
+  more parts; an `@handle` is fine). A `generate` after a `switchTo` (this message) to a workflow whose `media` is
+  `audio` in the screen's `fields.workflows`, with no `change` since: the box still holds the image or video prompt,
+  so the model must write the spoken line (or a Dialogue script, one `@name: text` line each) first.
 - (plan 16) A tool for `mcp` only is called by `helm mcp` over Kong as the signed-in user; its `routes` are the calls
   it makes and `served_by` stays studio, but studio never serves it on `studio.tools`. `destructive` (the deletes; from 1.49
   `edit_timeline` and `restore_timeline`) is an mcp-only write; `helm mcp` sends it as `destructiveHint` (and every other write as `destructiveHint` false), so
@@ -3983,6 +3990,58 @@ every screen. An action is never named like an assistant tool (an mcp-only tool 
 namespace) or a shell action; every screen route is a `navigate` target; a
 screen with `roles` registers only for them (`screen_actions`). The server's card kinds in assistant.schema.json are
 the tools' cards plus `delete` (Clear all).
+
+## Plugins (API 1.61; board docs/mock/Plugins.dc.html, release 0.1.0-alpha.2 items 33-34; normative)
+
+Owner, 2026-11-25: plugins are "a design of publishing additional features that plug into the system later". v1
+kinds: model providers and Assistant tools only.
+
+- **A plugin** is a small separate HTTP service in its own folder `plugins/<name>/` with its own dependencies, and a
+  manifest `plugins/<name>/plugin.json` (`plugins/manifest.schema.json`: name = the folder, title, version, kind,
+  description, author, source, `may_do`, `personal`, a disclaimer, `url` as the stack's containers reach it, a
+  `health` path, how to `start` it; a model-provider's `provider` {path, models, key_hint, memory_gb, timeout_s}; an
+  assistant-tools plugin's `tools` [{name, description, input, risk {uses_gpu, deletes, sends_off_machine}}]). The
+  stack never starts a plugin: whoever runs it starts it (`start`). check.py validates every manifest in the repo.
+- **Discovery.** `plugins/` is mounted read-only into studio (`/plugins`; dev, test and prod; the test stack adds
+  `contract_tests/fake_plugins`). Studio reads only `*/plugin.json`, on start and at Rescan: a new plugin is added
+  **off**, a known one's manifest replaced (on stays on), one whose folder or manifest is gone is dropped. A manifest
+  that is not valid, names another folder, or whose `url` breaks a local server's host rule (Model sources: the host
+  rule) is skipped and logged. Studio keeps them in its `plugins` table (name, manifest, enabled, settings).
+- **Admin only.** `GET /v1/studio/admin/plugins`, `POST …/plugins/rescan`, `PUT …/plugins/{plugin}` {enabled},
+  `DELETE …/plugins/{plugin}`, `POST …/plugins/{plugin}/provider`; anyone else 403. The web shows the Plugins rail
+  page (between Models and Admin) to admins only. A plugin that is off is never called. Status: `off`, `running`
+  (its health path answered 2xx within 2 s at this list), `not_running`.
+- **Remove** drops the plugin and every provider made from it (409 while an unfinished batch names one); the folder
+  stays, so a Rescan finds it again, off.
+- **Model provider: Add as provider.** The admin pastes the key (`key_hint`); studio asks
+  `pipelines.providers.key.write` (`op: save`, the plugin's `<url><path>` as a server snapshot, never a URL from the
+  browser) to check it on `/models` and write it to `plugin-<name>-<8 hex of the admin's id>`; refused is 422 `The key
+  doesn't match: copy it again from the plugin's .env`, unreachable 422 `<title> did not answer: start it, then Try
+  again` (nothing saved either way). Then studio creates or replaces the provider `<name>-<8 hex>` (kind server, the
+  manifest's models, `host` from the body or the first host by name, `plugin` = name, and `preset` = the preset of
+  providers/presets.json whose `plugin` is that plugin, if any: its thinking rules give the provider its levels, as
+  any preset's do; such a preset is never offered in the form, its Fetch and key save are 404). The Claude Code
+  bridge's: low, medium and high per model, sent as `reasoning_effort` (the bridge runs `claude -p --effort`).
+- **Only you.** A provider made from a `personal` plugin has `owner_id` = the admin who added it (Anthropic's terms
+  for plan credentials: "Only you"). The providers table's row-level policy shows it only to its owner (and to the
+  service itself): every provider list, `GET /model-sources`, the pipeline rules and batch snapshots, the assistant's
+  settings and turns of any other account never see it. Session naming never uses one (422). The assistant
+  (`AssistantSettings.personal`): picking an Only-you provider in Admin › AI agents sets the caller's own choice
+  (only the caller's chats use it); the deployment's provider stays for everyone else; picking a shared provider
+  clears the caller's own choice. A plugin that is off hides its providers too.
+- **Assistant tools.** Studio sends every input's `plugins` (cmd.assistant.turn): the on assistant-tools plugins with
+  their tools. pipelines offers each tool to the model as `<plugin>__<tool>` (shown as `<plugin>.<tool>`), checks the
+  call against its `input`, and: any risk flag true → a `plugin` card first (rows: the tool, its input; tags `uses
+  the GPU`, `can't be undone`, `sends off the machine`), answered Yes or Not now as the other server cards; all false
+  → runs at once. A call is `POST <url>/tools/<tool>` {input} (30 s) with `Authorization: Bearer <pass>` (a
+  short-lived pass pipelines signs for that user and call), `X-Helm-Owner` and `X-Helm-Call`; the plugin never gets
+  the database or a secret. The answer (`toolReply`): `result` goes to the model fenced as data, `line` (else
+  `<title> · <tool>`) and `sources` make a normal chat line; any failure (refused by the host rule, no answer, a
+  non-2xx, a reply off the schema) is a failed line with a short plain text, and the model is told. Off at once:
+  the next input carries no tools of a plugin turned off or removed.
+- **Web search** (`plugins/web-search`, item 34): one tool `search` {query, limit ≤ 10} → {results: [{title, url,
+  snippet}]} through DuckDuckGo (the unofficial `ddgs` library: free, no key; rate limits and errors are plain
+  lines), `sends_off_machine`. The built-in Brave `search` provider (API 1.44) still works and can be retired later.
 
 ## Rules
 

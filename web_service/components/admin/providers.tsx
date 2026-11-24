@@ -145,7 +145,9 @@ export function ProvidersAdmin() {
                   <td className={cell}>
                     <b className="font-semibold">{p.title || p.name}</b>
                     <br />
-                    <span className="mono text-[12px] text-t2">{p.name}</span>
+                    <span className="mono text-[12px] text-t2">
+                      {p.plugin ? `plugin · ${p.plugin}` : p.name}
+                    </span>
                   </td>
                   <td className={cell}>
                     <span className={`tag ${p.kind === "remote" ? "tag-accent" : ""}`}>

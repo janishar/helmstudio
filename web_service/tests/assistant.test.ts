@@ -4,13 +4,19 @@
 import { describe, expect, it } from "vitest";
 import {
   about,
+  answerBlocks,
   applyEvent,
   argsError,
   chatTime,
   elsewhere,
   fitScreen,
+  inlineParts,
   limitOf,
   mentionParts,
+  plainAnswer,
+  stepSummary,
+  timecode,
+  undoName,
   onRoute,
   ordinal,
   placeInLine,
@@ -297,5 +303,86 @@ describe("chatTime", () => {
     expect(chatTime(new Date(2026, 10, 25, 14, 2).toISOString(), now)).toBe("today · 14:02");
     expect(chatTime(new Date(2026, 10, 24, 18, 15).toISOString(), now)).toBe("yesterday · 18:15");
     expect(chatTime(new Date(2026, 10, 21, 9, 3).toISOString(), now)).toBe("21 Nov · 09:03");
+  });
+});
+
+describe("answers that read well (alpha.2 items 21, 22, 24, 25)", () => {
+  it("splits an answer into paragraphs, lists, a plan and code; headings and tables stay plain", () => {
+    const text = [
+      "# Plan",
+      "Two lines",
+      "of one paragraph",
+      "",
+      "- a",
+      "* b",
+      "1. one",
+      "2) two",
+      "- [x] done",
+      "- [ ] next",
+      "| a | b |",
+      "```prompt",
+      "  keep  spaces",
+      "```",
+    ].join("\n");
+    expect(answerBlocks(text)).toEqual([
+      { k: "p", text: "Plan" },
+      { k: "p", text: "Two lines\nof one paragraph" },
+      { k: "ul", items: ["a", "b"] },
+      { k: "ol", items: ["one", "two"] },
+      {
+        k: "plan",
+        items: [
+          { done: true, text: "done" },
+          { done: false, text: "next" },
+        ],
+      },
+      { k: "p", text: "| a | b |" },
+      { k: "code", lang: "prompt", text: "  keep  spaces" },
+    ]);
+    expect(answerBlocks("```\nnever closed")).toEqual([
+      { k: "code", lang: "", text: "never closed" },
+    ]);
+  });
+
+  it("marks bold, italic, code, timecodes and @handles; a link is its text", () => {
+    expect(
+      inlineParts("**Bold** and *it* or _it_ `code` at 0:17 with @mara, [guide](https://x.test)"),
+    ).toEqual([
+      { t: "Bold", k: "b" },
+      { t: " and " },
+      { t: "it", k: "i" },
+      { t: " or " },
+      { t: "it", k: "i" },
+      { t: " " },
+      { t: "code", k: "code" },
+      { t: " at " },
+      { t: "0:17", k: "tc" },
+      { t: " with " },
+      { t: "@mara", k: "at" },
+      { t: ", " },
+      { t: "guide" },
+    ]);
+    // aspect ratios and multiplications are not timecodes or italics
+    expect(inlineParts("16:9 and 2 * 3 * 4").every((p) => !p.k)).toBe(true);
+    expect(timecode("1:05")).toBe(65);
+  });
+
+  it("Copy's text, a folded turn's line and Undo's name", () => {
+    expect(plainAnswer("**Done**: `x` [see](https://x.test)\n```\ncode\n```")).toBe(
+      "Done: x see\n\ncode",
+    );
+    expect(
+      stepSummary([
+        { text: "Opened Create" },
+        { text: "Run done · 4 takes" },
+        { text: "Run done · 1 take" },
+        { text: "Remembered: warm light", memory_id: "m" },
+      ]),
+    ).toBe("4 steps · 5 takes · 1 memory");
+    expect(stepSummary([{ text: "Opened Create" }])).toBe("1 step");
+    expect(undoName("Set Lighting: Blue hour")).toBe("Set Lighting: Blue hour");
+    expect(undoName("Generated Elias at the window · 4 takes")).toBe(
+      "Generated Elias at the window",
+    );
   });
 });

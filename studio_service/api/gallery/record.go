@@ -61,7 +61,8 @@ func Record(ctx context.Context, tx pgx.Tx, output Output) (string, error) {
 	return id, err
 }
 
-// Title is a run output's first title: the prompt's first line (at most 80 characters), else the workflow's title.
+// Title is a run output's first title: the prompt's first line (at most 80 characters), else the workflow's title. A
+// longer line is cut at a word with "…" (alpha.2 item 21), never mid-word; one long word is cut where it must.
 func Title(madeWith dto.MadeWith) string {
 	line := ""
 	if madeWith.Prompt != nil {
@@ -69,7 +70,13 @@ func Title(madeWith dto.MadeWith) string {
 		line = strings.TrimSpace(line)
 	}
 	if utf8.RuneCountInString(line) > 80 {
-		line = strings.TrimSpace(string([]rune(line)[:80]))
+		cut := string([]rune(line)[:80]) // the 80th rune, when a space, means the word before it is whole
+		if i := strings.LastIndexByte(cut, ' '); i > 0 {
+			cut = cut[:i]
+		} else {
+			cut = string([]rune(cut)[:79])
+		}
+		line = strings.TrimRight(strings.TrimSpace(cut), ",;:.-–—") + "…"
 	}
 	if line == "" {
 		return madeWith.WorkflowTitle

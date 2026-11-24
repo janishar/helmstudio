@@ -7,6 +7,7 @@ import {
   Boxes,
   Clapperboard,
   Images,
+  Plug,
   Settings,
   ShieldCheck,
   Sparkles,
@@ -22,7 +23,7 @@ const UserContext = createContext<S<"User"> | null>(null);
 /** The signed-in user, for client components under the shell. */
 export const useUser = () => use(UserContext);
 
-/** Dock items: route, label, glyph and the tile's gradient. Admin is added for admins. */
+/** Dock items: route, label, glyph and the tile's gradient. Plugins and Admin are added for admins. */
 const ITEMS = [
   { href: "/", label: "Create", Icon: Sparkles, tile: "linear-gradient(155deg,#a393ff,#4a2fe0)" },
   {
@@ -50,6 +51,12 @@ const ITEMS = [
     tile: "linear-gradient(155deg,#7af5d6,#12967f)",
   },
 ];
+const PLUGINS = {
+  href: "/plugins",
+  label: "Plugins",
+  Icon: Plug,
+  tile: "linear-gradient(155deg,#f7a8e0,#a8329a)",
+};
 const ADMIN = {
   href: "/admin",
   label: "Admin",
@@ -94,7 +101,7 @@ export function AppShell({
 }) {
   const path = usePathname();
   const me = useMe(user);
-  const items = me?.roles.includes("admin") ? [...ITEMS, ADMIN] : ITEMS;
+  const items = me?.roles.includes("admin") ? [...ITEMS, PLUGINS, ADMIN] : ITEMS;
   const a = useAssistant(me);
   const { reg } = a;
   useEffect(() => {

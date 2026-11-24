@@ -1,10 +1,14 @@
 package studio
 
-import "testing"
+import (
+	"fmt"
+	"strings"
+	"testing"
+)
 
 // AssistantStatus.thinks (plan 29): from the saved level, the rule's default, always thinks; false without a rule.
 func TestModelThinks(t *testing.T) {
-	deepseek, anthropic, ollama, openrouter := "deepseek", "anthropic", "ollama", "openrouter"
+	deepseek, anthropic, ollama, openrouter, bridge := "deepseek", "anthropic", "ollama", "openrouter", "claude-code-bridge"
 	for _, c := range []struct {
 		name   string
 		preset *string
@@ -23,9 +27,29 @@ func TestModelThinks(t *testing.T) {
 		{"models preset, low", &openrouter, "x/y", map[string]string{"x/y": "low"}, true},
 		{"models preset, off", &openrouter, "x/y", map[string]string{"x/y": "off"}, false},
 		{"no preset", nil, "deepseek-flash", map[string]string{"deepseek-flash": "high"}, false},
+		{"bridge, high (API 1.61)", &bridge, "claude-opus", map[string]string{"claude-opus": "high"}, true},
+		{"bridge, nothing saved", &bridge, "claude-opus", nil, false},
 	} {
 		if got := modelThinks(c.preset, c.model, c.saved); got != c.want {
 			t.Errorf("%s: got %v", c.name, got)
 		}
+	}
+}
+
+// API 1.61: the bridge plugin's preset gives each of its models low, medium and high (claude -p --effort).
+func TestBridgeThinkingLevels(t *testing.T) {
+	bridge := "claude-code-bridge"
+	got := thinkingLevels(&bridge, []string{"claude-sonnet", "claude-opus", "claude-haiku", "other"})
+	for _, m := range []string{"claude-sonnet", "claude-opus", "claude-haiku"} {
+		if fmt.Sprint(got[m].Levels) != "[low medium high]" {
+			t.Errorf("%s: %v", m, got[m])
+		}
+	}
+	if _, ok := got["other"]; ok {
+		t.Error("a model the rule does not match has no control")
+	}
+	snap := thinkingSnapshot(&bridge, []string{"claude-opus"}, map[string]string{"claude-opus": "medium"})
+	if !strings.Contains(fmt.Sprint(snap), `"reasoning_effort": "medium"`) {
+		t.Error(snap)
 	}
 }

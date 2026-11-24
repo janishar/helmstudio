@@ -81,16 +81,19 @@ type providerRow struct {
 	Compat       *dto.ProviderCompat // API 1.51
 	Preset       *string
 	Thinking     map[string]string // API 1.53: {model: level}
+	OwnerID      *string           // API 1.61: Only you (the providers policy shows it to its owner only)
+	Plugin       *string           // API 1.61: the plugin it was made from
 }
 
 const providerCols = `name, kind, api, title, base_url, models, default_model, enabled, timeout_s, host, memory_gb,
-	key_secret, max_in_flight, created_at, updated_at, compat, preset, thinking`
+	key_secret, max_in_flight, created_at, updated_at, compat, preset, thinking, owner_id::text, plugin`
 
 func (p providerRow) dto() dto.Provider {
 	return dto.Provider{Name: p.Name, Kind: p.Kind, API: p.API, Title: p.Title, BaseURL: p.BaseURL, Models: p.Models,
 		DefaultModel: p.DefaultModel, Enabled: p.Enabled, TimeoutS: p.TimeoutS, Host: p.Host, MemoryGB: p.MemoryGB,
 		KeySecret: p.KeySecret, MaxInFlight: p.MaxInFlight, Compat: p.Compat, Preset: p.Preset, CreatedAt: p.CreatedAt,
-		UpdatedAt: p.UpdatedAt, Thinking: p.Thinking, ThinkingLevels: thinkingLevels(p.Preset, p.Models)}
+		UpdatedAt: p.UpdatedAt, Thinking: p.Thinking, ThinkingLevels: thinkingLevels(p.Preset, p.Models), OwnerID: p.OwnerID,
+		Plugin: p.Plugin}
 }
 
 // snapshot is defs providerSnapshot: the provider as a batch calls it.
@@ -110,11 +113,12 @@ func (p providerRow) snapshot() map[string]any {
 	return out
 }
 
-// readProviders reads every provider in tx (enabledOnly: those enabled).
+// readProviders reads every provider tx may see (API 1.61: never another account's Only-you one; enabledOnly: those
+// enabled whose plugin, if any, is on).
 func readProviders(ctx context.Context, tx pgx.Tx, enabledOnly bool) ([]providerRow, error) {
 	query := `SELECT ` + providerCols + ` FROM providers`
 	if enabledOnly {
-		query += ` WHERE enabled`
+		query += ` WHERE enabled AND ` + pluginOn
 	}
 	return collect[providerRow](ctx, tx, query+` ORDER BY name`)
 }
@@ -281,6 +285,9 @@ func (s *Service) PutProvider(ctx context.Context, caller common.Caller, name st
 	if thinkingSet == nil {
 		thinkingSet = map[string]string{}
 	}
+	if err := s.nameFree(ctx, caller, name, ""); err != nil {
+		return dto.Provider{}, false, err
+	}
 	var out dto.Provider
 	created := false
 	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
@@ -333,7 +340,9 @@ func (s *Service) DeleteProvider(ctx context.Context, caller common.Caller, name
 		return errAdmin
 	}
 	return common.System(ctx, s.db, func(tx pgx.Tx) error { // every user's batches count
-		if _, err := one[struct{ Name string }](ctx, tx, `SELECT name FROM providers WHERE name = $1 FOR UPDATE`, name); err != nil {
+		// API 1.61: another admin's Only-you provider is a 404 here too (System sees every row)
+		if _, err := one[struct{ Name string }](ctx, tx, `SELECT name FROM providers WHERE name = $1
+			AND (owner_id IS NULL OR owner_id::text = $2) FOR UPDATE`, name, caller.ID); err != nil {
 			return err
 		}
 		var used bool
@@ -343,7 +352,8 @@ func (s *Service) DeleteProvider(ctx context.Context, caller common.Caller, name
 		} else if used {
 			return network.NewConflictError(name+" is in use by an unfinished batch", nil)
 		}
-		_, err := tx.Exec(ctx, `DELETE FROM providers WHERE name = $1`, name)
+		_, err := tx.Exec(ctx, `DELETE FROM providers WHERE name = $1 AND (owner_id IS NULL OR owner_id::text = $2)`,
+			name, caller.ID)
 		return err
 	})
 }
@@ -409,7 +419,13 @@ func (s *Service) ProviderPresets(caller common.Caller) (dto.ProviderPresetList,
 	if !caller.IsAdmin() {
 		return dto.ProviderPresetList{}, errAdmin
 	}
-	return dto.ProviderPresetList{RemoteEnabled: s.remoteOn, Presets: presets()}, nil
+	out := dto.ProviderPresetList{RemoteEnabled: s.remoteOn, Presets: []dto.ProviderPreset{}}
+	for _, p := range presets() {
+		if p.Plugin == nil { // API 1.61: a plugin's preset is never offered in the form
+			out.Presets = append(out.Presets, p)
+		}
+	}
+	return out, nil
 }
 
 // FetchPresetModels answers POST /admin/provider-presets/{id}/models: the preset's provider lists its models, asked by
@@ -419,7 +435,7 @@ func (s *Service) FetchPresetModels(ctx context.Context, caller common.Caller, i
 	if !caller.IsAdmin() {
 		return dto.ProviderTest{}, errAdmin
 	}
-	i := slices.IndexFunc(presets(), func(p dto.ProviderPreset) bool { return p.ID == id })
+	i := slices.IndexFunc(presets(), func(p dto.ProviderPreset) bool { return p.ID == id && p.Plugin == nil })
 	if i < 0 {
 		return dto.ProviderTest{}, errNotFound
 	}
@@ -459,6 +475,12 @@ func (s *Service) ProviderKey(ctx context.Context, caller common.Caller, secret 
 	return dto.ProviderKey{KeySecret: secret, Path: keyPath(secret), Found: reply.Found, Writable: reply.Writable}, nil
 }
 
+// othersKey reports whether secret is a plugin provider's key file of another admin (API 1.61: Add as provider names
+// it plugin-<plugin>-<8 hex of its admin's id>): its PUT and DELETE are 404 to anyone else.
+func othersKey(caller common.Caller, secret string) bool {
+	return strings.HasPrefix(secret, "plugin-") && !strings.HasSuffix(secret, "-"+strings.ReplaceAll(caller.ID, "-", "")[:8])
+}
+
 // keyPath is a key file's deploy-side path (studio never reads the folder).
 func keyPath(secret string) string { return "deploy/secrets/providers/" + secret }
 
@@ -469,12 +491,12 @@ func (s *Service) SaveProviderKey(ctx context.Context, caller common.Caller, sec
 	if !caller.IsAdmin() {
 		return dto.ProviderKeySaved{}, errAdmin
 	}
-	if !dto.KeySecretName(secret) {
+	if !dto.KeySecretName(secret) || othersKey(caller, secret) {
 		return dto.ProviderKeySaved{}, errNotFound
 	}
 	var snapshot map[string]any
 	if body.Preset != nil {
-		i := slices.IndexFunc(presets(), func(p dto.ProviderPreset) bool { return p.ID == *body.Preset })
+		i := slices.IndexFunc(presets(), func(p dto.ProviderPreset) bool { return p.ID == *body.Preset && p.Plugin == nil })
 		if i < 0 {
 			return dto.ProviderKeySaved{}, errNotFound
 		}
@@ -523,7 +545,7 @@ func (s *Service) RemoveProviderKey(ctx context.Context, caller common.Caller, s
 	if !caller.IsAdmin() {
 		return dto.ProviderKey{}, errAdmin
 	}
-	if !dto.KeySecretName(secret) {
+	if !dto.KeySecretName(secret) || othersKey(caller, secret) {
 		return dto.ProviderKey{}, errNotFound
 	}
 	reply, err := s.askKeyWrite(ctx, message.ProviderKeyWriteRequest{Op: "remove", KeySecret: secret})

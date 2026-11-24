@@ -153,6 +153,8 @@ type Provider struct {
 	// API 1.53: the levels set, and what each saved model a rule covers offers (read only)
 	Thinking       map[string]string       `json:"thinking,omitempty"`
 	ThinkingLevels map[string]ThinkingInfo `json:"thinking_levels,omitempty"`
+	OwnerID        *string                 `json:"owner_id,omitempty"` // API 1.61: Only you
+	Plugin         *string                 `json:"plugin,omitempty"`   // API 1.61
 	CreatedAt      time.Time               `json:"created_at"`
 	UpdatedAt      time.Time               `json:"updated_at"`
 }
@@ -173,6 +175,7 @@ type ProviderPreset struct {
 	KeySecret *string         `json:"key_secret,omitempty"`
 	Compat    *ProviderCompat `json:"compat,omitempty"`
 	Thinking  json.RawMessage `json:"thinking,omitempty"` // API 1.53: the rules as in the file, or "models"
+	Plugin    *string         `json:"plugin,omitempty"`   // API 1.61: a plugin's preset (never offered in the form)
 	Docs      string          `json:"docs"`
 	Note      string          `json:"note"`
 }
@@ -333,3 +336,102 @@ func (b *ChatPost) Validate() string {
 	}
 	return ""
 }
+
+// ------------------------------------------------------------------ plugins (API 1.61)
+
+// PluginRisk is a tool's risk flags.
+type PluginRisk struct {
+	UsesGPU         bool `json:"uses_gpu"`
+	Deletes         bool `json:"deletes"`
+	SendsOffMachine bool `json:"sends_off_machine"`
+}
+
+// PluginTool is a tool as the admin sees it (no input schema).
+type PluginTool struct {
+	Name        string     `json:"name"`
+	Description string     `json:"description"`
+	Risk        PluginRisk `json:"risk"`
+}
+
+// PluginDisclaimer is a manifest's disclaimer.
+type PluginDisclaimer struct {
+	Text string  `json:"text"`
+	Link *string `json:"link,omitempty"`
+}
+
+// Plugin is one plugin as the admin sees it.
+type Plugin struct {
+	Name        string            `json:"name"`
+	Title       string            `json:"title"`
+	Version     string            `json:"version"`
+	Kind        string            `json:"kind"`
+	Description string            `json:"description"`
+	Author      string            `json:"author"`
+	Source      *string           `json:"source,omitempty"`
+	MayDo       []string          `json:"may_do"`
+	Personal    bool              `json:"personal"`
+	Disclaimer  *PluginDisclaimer `json:"disclaimer,omitempty"`
+	URL         string            `json:"url"`
+	Start       *string           `json:"start,omitempty"`
+	Models      []string          `json:"models,omitempty"`
+	KeyHint     *string           `json:"key_hint,omitempty"`
+	Tools       []PluginTool      `json:"tools,omitempty"`
+	Enabled     bool              `json:"enabled"`
+	Status      string            `json:"status"` // off | running | not_running
+	Provider    *string           `json:"provider"`
+	UpdatedAt   time.Time         `json:"updated_at"`
+}
+
+// PluginList is GET /admin/plugins.
+type PluginList struct {
+	Plugins []Plugin `json:"plugins"`
+}
+
+// PluginRescan is POST /admin/plugins/rescan.
+type PluginRescan struct {
+	Plugins []Plugin `json:"plugins"`
+	New     []string `json:"new"`
+}
+
+// PluginPut is PUT /admin/plugins/{plugin}.
+type PluginPut struct {
+	Enabled *bool `json:"enabled"`
+}
+
+// Validate checks the shape.
+func (b *PluginPut) Validate() string {
+	if b.Enabled == nil {
+		return "enabled is required"
+	}
+	return ""
+}
+
+// PluginProviderCreate is POST /admin/plugins/{plugin}/provider (Add as provider). Key is never printed or logged.
+type PluginProviderCreate struct {
+	Key          string  `json:"key"`
+	Title        *string `json:"title"`
+	DefaultModel *string `json:"default_model"`
+	Host         *string `json:"host"`
+}
+
+// Validate trims and checks the key as ProviderKeySave does, and the shape of the rest.
+func (b *PluginProviderCreate) Validate() string {
+	b.Key = strings.TrimSpace(b.Key)
+	if b.Key == "" || len(b.Key) > 1024 {
+		return "key must be 1-1024 characters"
+	}
+	for i := 0; i < len(b.Key); i++ {
+		if b.Key[i] < 0x21 || b.Key[i] > 0x7e {
+			return KeyCharsText
+		}
+	}
+	switch {
+	case b.Title != nil && (strings.TrimSpace(*b.Title) == "" || len([]rune(*b.Title)) > 60):
+		return "title must be 1-60 characters"
+	case b.Host != nil && !hostNameRe.MatchString(*b.Host):
+		return "host must be a host's name"
+	}
+	return ""
+}
+
+var hostNameRe = regexp.MustCompile(`^[a-z0-9]{1,32}$`)

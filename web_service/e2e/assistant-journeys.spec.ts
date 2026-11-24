@@ -254,6 +254,8 @@ test("J1 I open the assistant, ask what is on this screen, read the answer and c
   await expect(dock()).toHaveAttribute("aria-expanded", "false");
   await dock().click();
   await expect(drawer().getByText("You are on Create with the Echo workflow.")).toBeVisible();
+  // a short answer has no More (alpha.2 item 24)
+  await expect(drawer().getByRole("button", { name: "More" })).toHaveCount(0);
 });
 
 test("J2 make a portrait of an old fisherman, then make it warmer, then undo and redo that", async () => {
@@ -288,9 +290,9 @@ test("J2 make a portrait of an old fisherman, then make it warmer, then undo and
   await shot("j02-warmer-prompt");
 
   const last = line("Wrote prompt");
-  await last.getByRole("button", { name: "Undo" }).click();
+  await last.getByRole("button", { name: /^Undo: / }).click();
   await expect(prompt()).toHaveValue("portrait of an old fisherman");
-  await last.getByRole("button", { name: "Redo" }).click();
+  await last.getByRole("button", { name: /^Redo: / }).click();
   await expect(prompt()).toHaveValue(warm);
 
   // a setting the form does not have: a plain reason, no Undo
@@ -537,7 +539,7 @@ test("J7 I tell it a preference and a new chat remembers it", async () => {
   await replied("I'll keep that in mind.");
   await expect(line("Remembered: Likes warm, golden-hour light")).toBeVisible();
   await expect(
-    line("Remembered: Likes warm, golden-hour light").getByRole("button", { name: "Undo" }),
+    line("Remembered: Likes warm, golden-hour light").getByRole("button", { name: /^Undo: / }),
   ).toBeVisible();
 
   await drawer().getByRole("button", { name: "Memory" }).click();
@@ -559,11 +561,13 @@ test("J7 I tell it a preference and a new chat remembers it", async () => {
   // Memory: delete it by hand; Clear all asks first
   await drawer().getByRole("button", { name: "Memory" }).click();
   await drawer().getByRole("tab", { name: "Likes" }).click();
+  // Edit and Delete in the item's ⋯ menu (alpha.2 item 5)
   await likes
     .getByRole("listitem")
     .filter({ hasText: "Likes warm, golden-hour light" })
-    .getByRole("button", { name: "Delete" })
+    .getByRole("button", { name: "More for this item" })
     .click();
+  await drawer().getByRole("menuitem", { name: "Delete" }).click();
   await expect(drawer().getByText("Nothing here yet.")).toBeVisible();
   await drawer().getByRole("button", { name: "Clear all" }).click();
   const clear = drawer().getByRole("region", { name: "Confirm: Clear all memory?" });
@@ -634,9 +638,9 @@ test("J8 take me to the timeline and put my last 3 takes in order", async () => 
     await expect(v1.nth(i)).toHaveAccessibleName(new RegExp(`^Still · ${t},`));
   await shot("j08-timeline-three-clips");
 
-  await added.getByRole("button", { name: "Undo" }).click();
+  await added.getByRole("button", { name: /^Undo: / }).click();
   await expect(v1).toHaveCount(0);
-  await added.getByRole("button", { name: "Redo" }).click();
+  await added.getByRole("button", { name: /^Redo: / }).click();
   await expect(v1).toHaveCount(3);
 });
 
@@ -741,10 +745,10 @@ test("J10 the provider refuses or is down: the error is in plain words and I can
   );
   await say("do the thing");
   // the plain line; the checker's words only behind Details (board frame 7)
-  await expect(notes.last()).toContainText(
-    "The model gave a broken answer twice. Try again or rephrase.",
-    { timeout: 30_000 },
-  );
+  await expect(notes.last()).toContainText("The model gave a broken answer twice.", {
+    timeout: 30_000,
+  });
+  await expect(notes.last().getByRole("button", { name: "Retry" })).toBeVisible();
   const details = notes.last().getByRole("button", { name: "Details" });
   await expect(details).toHaveAttribute("aria-expanded", "false");
   await details.click();
@@ -1002,4 +1006,138 @@ test("J16 I write while it works: it reads me at the next step, or takes it as t
   await replied("Starting.");
   await expect(prompt()).not.toHaveValue("never");
   expect(sent(MODEL).length - n).toBe(1);
+});
+
+test("J17 answers that read well, older steps folded, full screen, the minimized bar, memory rows (alpha.2)", async () => {
+  test.setTimeout(180_000);
+  await page.goto("/");
+  await open();
+  if (!(await drawer().getByText("Hi. What should we make?").isVisible())) await newChat();
+  const bar = (p = page) => p.getByRole("button", { name: /^Open the Assistant/ });
+
+  // a · formatting, Copy, one-line steps (board frame 10a, 10c)
+  script(
+    MODEL,
+    {
+      content: "Setting it up.",
+      tool_calls: [
+        { tool: "change", args: { key: "prompt.text", value: "a red fox in the snow at dusk" } },
+        {
+          tool: "change",
+          args: { key: "look:the_window_light_of_an_early_winter_morning", value: 1 },
+        },
+        {
+          tool: "remember",
+          args: {
+            kind: "project",
+            text: "Widower film: five shots, Elias and Biscuit. Voice for Elias designed (warm, slow, a little hoarse) and saved. Shot 1 animated, 5 s; shot 2 waits on the window light; the narrator line was rewritten gentler twice.",
+          },
+        },
+      ],
+    },
+    {
+      content:
+        "**Name the move first.** LTX follows the first camera words.\n\n- One subject: the fox\n- 5 s or less\n- *slow* beats *very slow*\n\n1. Open Video\n2. Set Camera to `Dolly in`\n3. Start the prompt like this:\n\n```prompt\nSlow dolly in. A red fox trots across the snow at dusk, birches behind.\n```",
+    },
+  );
+  await say("How do I get a slow push-in on the fox shot?");
+  await replied("LTX follows the first camera words.");
+  await expect(drawer().locator(".cb pre")).toContainText("Slow dolly in.");
+  await expect(drawer().getByText("Dolly in", { exact: true })).toHaveJSProperty("tagName", "CODE");
+  await expect(drawer().getByRole("button", { name: "Copy the answer" })).toBeVisible();
+  await expect(drawer().getByRole("button", { name: "Copy the prompt" })).toBeVisible();
+  await shot("d1-formatting");
+
+  // b · a plan as a checklist; the earlier turn's steps fold into one line (frames 10f, 10h)
+  script(MODEL, {
+    content:
+      "Plan:\n- [x] Keyframe for each shot\n- [x] Voice for @elias\n- [ ] Animate shots 2 and 3\n- [ ] Place them on the Timeline",
+  });
+  await say("Make the whole park scene");
+  await replied("Animate shots 2 and 3");
+  await expect(drawer().getByRole("list", { name: "Plan" }).getByRole("listitem")).toHaveCount(4);
+  const sum = drawer().getByRole("button", { name: /^3 steps · 1 memory$/ });
+  await expect(sum).toHaveAttribute("aria-expanded", "false");
+  await shot("d1-plan-and-folded");
+  await sum.click();
+  await expect(line(/^Remembered: Widower film/)).toBeVisible();
+  await shot("d1-folded-open");
+
+  // c · full screen and back (frame 9)
+  await drawer()
+    .getByRole("button", { name: /^Full screen/ })
+    .click();
+  await expect(drawer()).toHaveClass(/full/);
+  await shot("d1-full-screen");
+  await box().focus();
+  await page.keyboard.press("Escape");
+  await expect(drawer()).not.toHaveClass(/full/);
+  await expect(drawer()).toBeVisible();
+
+  // d · minimized while it works, then a new answer; it never covers Generate
+  script(MODEL, { delay_s: 4, content: "Done: the window shot is set." });
+  await say("set up the window shot");
+  await drawer().getByRole("button", { name: "Minimize" }).click();
+  await expect(drawer()).toBeHidden();
+  await expect(page.getByRole("button", { name: "Open the Assistant · Working" })).toBeVisible();
+  await shot("d1-minimized-working");
+  await expect(page.getByRole("button", { name: "Open the Assistant · new answer" })).toBeVisible({
+    timeout: 30_000,
+  });
+  const b = (await bar().boundingBox())!;
+  expect(b.height).toBe(44);
+  for (const g of await page.locator("button.key").all()) {
+    const k = await g.boundingBox();
+    if (k)
+      expect(
+        k.x < b.x + b.width && b.x < k.x + k.width && k.y < b.y + b.height && b.y < k.y + k.height,
+        "the bar covers Generate",
+      ).toBe(false);
+  }
+  await shot("d1-minimized-new-answer");
+  await page.getByRole("button", { name: "Open the Assistant · new answer" }).click();
+  await expect(drawer().getByText("Done: the window shot is set.")).toBeVisible();
+
+  // e · Memory rows: full width, ⋯ menu with Edit and Delete (frame 14a)
+  await drawer().getByRole("button", { name: "Memory", exact: true }).click();
+  await drawer().getByRole("tab", { name: "Projects" }).click();
+  const row = drawer()
+    .getByRole("list", { name: "Projects" })
+    .getByRole("listitem")
+    .filter({ hasText: "Widower film" });
+  await row.getByRole("button", { name: "More for this item" }).click();
+  await expect(drawer().getByRole("menuitem", { name: "Edit" })).toBeVisible();
+  await shot("d1-memory-menu");
+  await drawer().getByRole("menuitem", { name: "Delete" }).click();
+  await expect(row).toHaveCount(0);
+  await drawer().getByRole("button", { name: "Close Memory" }).click();
+
+  // f · on the Timeline a timecode is a chip that moves the playhead (frame 10e)
+  await page.goto("/timeline");
+  await open();
+  script(MODEL, { content: "Three shots: 0:00 the harbour, 0:02 the boat, 0:04 the gulls." });
+  await say("What is on this timeline?");
+  await replied("the gulls.");
+  const tc = drawer().getByRole("button", { name: "Jump the Timeline to 0:02" });
+  await expect(tc).toBeVisible();
+  await tc.click();
+  await shot("d1-timecodes");
+
+  // g · on a phone: 44 px taps in the sheet, and Minimize is a 44 px bar
+  const p = await ctx.newPage();
+  try {
+    await p.setViewportSize({ width: 375, height: 812 });
+    await p.goto("/");
+    await open(p);
+    const min = drawer(p).getByRole("button", { name: "Minimize" });
+    expect((await min.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await shot("d1-phone-sheet", p);
+    await min.click();
+    expect((await bar(p).boundingBox())!.height).toBe(44);
+    await shot("d1-phone-minimized", p);
+    await bar(p).click();
+    await expect(drawer(p)).toBeVisible();
+  } finally {
+    await p.close();
+  }
 });

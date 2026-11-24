@@ -3,6 +3,7 @@
 // its lines use. Everything the model wrote or a tool returned is text: the drawer renders it as text, never HTML.
 import actionsJson from "@/gen/actions.json";
 import type { S } from "@/lib/api";
+import { refText, splitOptions } from "@/lib/answer-refs";
 
 export type Entry = S<"AssistantEntry">;
 export type Thread = S<"AssistantThread">;
@@ -345,3 +346,107 @@ export const MEMORY_TABS = [
 
 /** Sent by Admin › AI agents after a save, so the dock shows or hides the Assistant without a reload. */
 export const ASSISTANT_CHANGED = "hs.assistant.changed";
+
+/** An answer's blocks (alpha.2 item 22, board frame 10a): paragraphs, bullet and numbered lists, a plan checklist
+ * ("- [ ]" / "- [x]", item 24) and code blocks. Headings and table rows stay plain lines. Text only: the drawer builds
+ * React elements from them, never HTML. */
+export type Block =
+  | { k: "p"; text: string }
+  | { k: "ul" | "ol"; items: string[] }
+  | { k: "plan"; items: { done: boolean; text: string }[] }
+  | { k: "code"; lang: string; text: string };
+
+export function answerBlocks(text: string): Block[] {
+  const out: Block[] = [];
+  const lines = text.replace(/\r\n?/g, "\n").split("\n");
+  let blank = true;
+  const add = (k: "ul" | "ol" | "plan", item: string | { done: boolean; text: string }) => {
+    const last = out.at(-1);
+    if (last?.k === k) (last.items as unknown[]).push(item);
+    else out.push({ k, items: [item] } as Block);
+  };
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    const fence = /^\s*```\s*([\w-]*)/.exec(l);
+    let m: RegExpExecArray | null;
+    if (fence) {
+      const body: string[] = [];
+      for (i++; i < lines.length && !/^\s*```/.test(lines[i]); i++) body.push(lines[i]);
+      out.push({ k: "code", lang: fence[1], text: body.join("\n") });
+    } else if (!l.trim()) {
+      blank = true;
+      continue;
+    } else if ((m = /^\s*[-*+]\s+\[( |x|X)\]\s+(.*)$/.exec(l)))
+      add("plan", { done: m[1] !== " ", text: m[2] });
+    else if ((m = /^\s*[-*+•]\s+(.*)$/.exec(l))) add("ul", m[1]);
+    else if ((m = /^\s*\d+[.)]\s+(.*)$/.exec(l))) add("ol", m[1]);
+    else if ((m = /^\s*#{1,6}\s+(.*)$/.exec(l))) {
+      out.push({ k: "p", text: m[1].trim() }); // a heading: a line of its own, plain
+      blank = true;
+      continue;
+    } else {
+      const last = out.at(-1);
+      if (last?.k === "p" && !blank) last.text += `\n${l.trim()}`;
+      else out.push({ k: "p", text: l.trim() });
+    }
+    blank = false;
+  }
+  return out;
+}
+
+/** A piece of an answer's line: bold, italic, inline code, a timecode ("0:12"), an @handle, else text. A link
+ * [text](url) is its text only. */
+export type Inline = { t: string; k?: "b" | "i" | "code" | "tc" | "at" };
+const INLINE =
+  /(\[\[(?:take|element|voice|workflow):[^\]\s|]{1,128}\]\]|\*\*[^*\n]+\*\*|`[^`\n]+`|\[[^\]\n]+\]\([^)\s]+\)|(?<![\w*])\*[^*\s][^*\n]*?\*(?![\w*])|(?<!\w)_[^_\s][^_\n]*?_(?!\w)|(?<![\d:])\d{1,2}:[0-5]\d(?![\d:]))/;
+export function inlineParts(text: string): Inline[] {
+  return text.split(INLINE).flatMap((s, j): Inline[] => {
+    if (!s) return [];
+    if (j % 2 === 0) return mentionParts(s).map((p) => (p.at ? { t: p.t, k: "at" } : { t: p.t }));
+    if (s.startsWith("**")) return [{ t: s.slice(2, -2), k: "b" }];
+    if (s.startsWith("`")) return [{ t: s.slice(1, -1), k: "code" }];
+    if (s.startsWith("[[")) return [{ t: s }]; // a ref, kept whole for its chip (no italics inside an id)
+    if (s.startsWith("[")) return [{ t: s.slice(1, s.indexOf("](")) }];
+    if (/^\d/.test(s)) return [{ t: s, k: "tc" }];
+    return [{ t: s.slice(1, -1), k: "i" }];
+  });
+}
+
+/** "1:05" → 65 (seconds). */
+export const timecode = (t: string) => {
+  const [m, s] = t.split(":").map(Number);
+  return m * 60 + s;
+};
+
+/** An answer as Copy puts it on the clipboard: the text without its markers, refs as their titles, options as a
+ * numbered list. */
+export const plainAnswer = (answer: string) => {
+  const { text, options } = splitOptions(answer);
+  const opts = (options ?? []).map((o, i) => `${i + 1}. ${o.title}${o.line ? ` — ${o.line}` : ""}`);
+  return refText([text, ...opts].join("\n"))
+    .replace(/^\s*```[\w-]*\s*$/gm, "")
+    .replace(/\*\*([^*\n]+)\*\*/g, "$1")
+    .replace(/`([^`\n]+)`/g, "$1")
+    .replace(/\[([^\]\n]+)\]\([^)\s]+\)/g, "$1")
+    .trim();
+};
+
+/** A folded turn's line (item 25, board frame 10h): "14 steps · 2 takes · 1 memory". */
+export function stepSummary(lines: { text: string; memory_id?: string }[]) {
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  const takes = lines.reduce(
+    (s, l) => s + Number(/^(?:Run done ·|Generated) (\d+) takes?\b/.exec(l.text)?.[1] ?? 0),
+    0,
+  );
+  const memories = lines.filter((l) => l.memory_id || /^Remembered\b/.test(l.text)).length;
+  return [
+    plural(lines.length, "step", "steps"),
+    takes && plural(takes, "take", "takes"),
+    memories && plural(memories, "memory", "memories"),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/** What a line's Undo names (board frame 14c): its text up to the first " · ". */
+export const undoName = (text: string) => text.split(" · ")[0];

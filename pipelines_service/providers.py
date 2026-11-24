@@ -190,7 +190,9 @@ def _http(name: str, p: dict):
     """The HTTP client of one call: no redirects followed, no proxy from the environment, connections only to
     addresses that pass the host rule (_Pinned). A provider without a key (a server) sends no Authorization at
     all: the SDK insists on some api_key, so the header it builds from the "none" placeholder is dropped here."""
-    keyless = not p.get("key_secret")
+    keyless = not (
+        p.get("key_secret") or p.get("bearer")
+    )  # bearer: the caller sets its own (a plugin's pass)
     transport = httpx2.AsyncHTTPTransport()
     transport._pool._network_backend = _Pinned(
         name, p["kind"]
@@ -423,6 +425,40 @@ async def search(name: str, p: dict, query: str) -> list[dict]:
     return [{"title": str(x.get("title") or "")[:200], "url": str(x.get("url") or "")[:500],
              "text": str(x.get("description") or "")[:SEARCH_TEXT]}
             for x in found[:SEARCH_RESULTS] if isinstance(x, dict)]  # fmt: skip
+
+
+PLUGIN_TIMEOUT = 30.0
+
+
+async def plugin_tool(title: str, url: str, tool: str, args: dict, headers: dict) -> dict:
+    """An assistant-tools plugin's call (API 1.61, contracts/README.md Plugins): POST <url>/tools/<tool> {input}
+    through a local server's host rule and the pinned client, no redirects. The 200 answer when valid against the
+    manifest's toolReply; else CallError with a short plain reason (no name prefix): refused by the host rule, no
+    answer, a non-2xx (its detail), a reply off the schema."""
+    p = {"kind": "server", "base_url": url, "bearer": True}
+    try:
+        await check_host(title, p)
+        async with _http(title, p) as http:
+            r = await http.post(f"{url}/tools/{tool}", json={"input": args}, headers=headers,
+                                timeout=PLUGIN_TIMEOUT)  # fmt: skip
+    except Exception as e:  # noqa: BLE001 - every failure is classed
+        cause = e
+        while cause is not None:  # the host rule refused (before or at connect), a redirect
+            if isinstance(cause, CallError):
+                raise CallError(cause.kind, str(cause).removeprefix(f"{title}: ")) from None
+            cause = cause.__cause__ or cause.__context__
+        raise CallError("network", f"{title} did not answer") from None
+    try:
+        body = r.json()
+    except ValueError:
+        body = None
+    if not 200 <= r.status_code < 300:
+        detail = body.get("detail") if isinstance(body, dict) else None
+        why = detail if isinstance(detail, str) and detail.strip() else f"HTTP {r.status_code}"
+        raise CallError("answer", why.strip()[:200])
+    if schemas.plugin_reply_errors(body):
+        raise CallError("answer", f"{title} answered off the plugin contract")
+    return body
 
 
 # --- pipelines.providers.test

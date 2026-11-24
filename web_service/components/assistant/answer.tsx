@@ -7,7 +7,7 @@ import { usePlayer } from "@/components/create/audio";
 import { ElementEditor } from "@/components/create/elements";
 import { FullScreen } from "@/components/media";
 import { api, ok, type S } from "@/lib/api";
-import { pickOf, refParts, type Option, type RefKind } from "@/lib/answer-refs";
+import { pickOf, refParts, refTitles, type Option, type RefKind } from "@/lib/answer-refs";
 import type { Entry } from "@/lib/assistant";
 import { safeUrl } from "@/lib/format";
 import { reloadLibrary, useLibrary, useVoices } from "@/lib/library";
@@ -137,6 +137,8 @@ function Chip({ kind, id, onWorkflow }: { kind: RefKind; id: string; onWorkflow?
           ? lib?.name
           : (item as { title: string } | undefined)?.title;
   const gone = id === "?" || (kind === "take" ? take === null : !!list && !item && again.has(id));
+  if (gone || title)
+    refTitles.set(`${kind}:${id}`, gone ? `${id === "?" ? "unknown" : "deleted"} ${kind}` : title!);
   if (gone || !title)
     return (
       <span

@@ -221,7 +221,7 @@ func (s *Service) timelineTake(row gallerymodel.Take) dto.TimelineTake {
 	out := dto.TimelineTake{ID: t.ID, Kind: t.Kind, Source: t.Source, Title: t.Title, URL: t.URL, ThumbURL: t.ThumbURL,
 		Width: t.Width, Height: t.Height, Video: t.Video, Audio: t.Audio}
 	if m := t.MadeWith; m != nil {
-		out.Seed, out.WorkflowID, out.WorkflowTitle = m.Seed, &m.WorkflowID, &m.WorkflowTitle
+		out.Seed, out.WorkflowID, out.WorkflowTitle, out.RenderS = m.Seed, &m.WorkflowID, &m.WorkflowTitle, m.RenderS
 	}
 	return out
 }

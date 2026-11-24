@@ -63,3 +63,14 @@ export function refParts(text: string): RefPart[] {
   }
   return out;
 }
+
+/** The label each chip showed, by "kind:id" (Chip sets it), so Copy and the screen reader say titles, never ids. */
+export const refTitles = new Map<string, string>();
+
+/** Text with its refs as the titles their chips showed ("a take" before one rendered). */
+export const refText = (text: string) =>
+  text.replace(
+    new RegExp(REF.source, "g"),
+    (_, k: string, id: string) =>
+      refTitles.get(`${k}:${id}`) ?? (id === "?" ? `unknown ${k}` : `a ${k}`),
+  );

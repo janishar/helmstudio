@@ -485,6 +485,13 @@ func TestProviderPresets(t *testing.T) {
 	}
 	var want map[string]any
 	_ = json.Unmarshal(file, &want)
+	offered := []any{} // API 1.61: a plugin's preset is never in the list
+	for _, p := range want["presets"].([]any) {
+		if _, plugin := p.(map[string]any)["plugin"]; !plugin {
+			offered = append(offered, p)
+		}
+	}
+	want["presets"] = offered
 	e.call(userA, "GET", "/v1/studio/admin/provider-presets", nil, 403)
 	list := e.call(admin, "GET", "/v1/studio/admin/provider-presets", nil, 200)
 	if list["remote_enabled"] != false || fmt.Sprint(list["presets"]) != fmt.Sprint(want["presets"]) {
@@ -506,6 +513,7 @@ func TestProviderPresets(t *testing.T) {
 	}
 	e.call(admin, "POST", fetch+"ollama/models", map[string]any{"base_url": "http://169.254.169.254/latest"}, 422)
 	e.call(admin, "POST", fetch+"nope/models", map[string]any{}, 404)
+	e.call(admin, "POST", fetch+"claude-code-bridge/models", map[string]any{}, 404) // a plugin's preset
 	off := e.call(admin, "POST", fetch+"anthropic/models", nil, 200)
 	if off["ok"] != false || off["failure"] != "off" || len(asked) != 1 {
 		t.Fatal("a remote preset with the switch off", off, asked)
