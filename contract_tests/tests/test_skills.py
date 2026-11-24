@@ -18,6 +18,9 @@ PLUGINS = f"{STUDIO}/admin/plugins"
 SKILLS = f"{STUDIO}/skills"
 THREADS = f"{STUDIO}/assistant/threads"
 HELM = Path(__file__).parents[1] / "fake_helm" / "plugins"
+ANIMATOR = json.loads(
+    (Path(__file__).parents[2] / "plugins" / "animator" / "plugin.json").read_text()
+)
 
 
 def plugin(admin, name: str) -> dict | None:
@@ -50,9 +53,9 @@ def test_found_built_in_and_yours(admin):
         and a["files"][0] == "SKILL.md"
         and "camera-moves.md" in a["files"]
     )
-    assert (
-        a["recipes"]["ok"] + len(a["recipes"]["skipped"]) == 6
-    )  # the fake runner has no LTX or H3: skipped, with why
+    assert a["recipes"]["ok"] + len(a["recipes"]["skipped"]) == len(
+        ANIMATOR["recipes"]
+    )  # every recipe is checked; the fake runner has no LTX or H3: those are skipped, with why
     f = got["fake-skill"]
     assert (f["origin"], f["files"]) == ("yours", ["SKILL.md", "notes.md"]) and f["status"] in (
         "off",
