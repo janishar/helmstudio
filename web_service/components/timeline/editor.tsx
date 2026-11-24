@@ -544,7 +544,9 @@ export function TimelineEditor({ id }: { id?: string }) {
   const keys = useRef<(e: KeyboardEvent) => void>(() => {});
   const onKey = (e: KeyboardEvent) => {
     const el = e.target as HTMLElement;
+    // a modal open (focus can fall to the body, as after Rename's Save): its Esc must reach the dialog
     if (!doc || !g || el.closest("input, textarea, select, dialog, [contenteditable]")) return;
+    if (document.querySelector("dialog[open]")) return;
     const id: KeyId | null = keyOf(e);
     if (!id) return;
     if (id === "play" && el.closest("button, a")) return;

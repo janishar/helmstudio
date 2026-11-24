@@ -9,6 +9,7 @@ import type { ScreenSpec } from "@/components/assistant/tools";
 import { hasSound, takeById, type LibraryAsk } from "@/components/assistant/library";
 import type { VoiceCtx } from "@/components/create/voices";
 import type { ShotSlot } from "@/components/timeline/shot";
+import { mb } from "@/lib/format";
 import { withIds } from "@/lib/timeline-tools";
 import {
   Grid,
@@ -573,7 +574,7 @@ export function timelineTools(c: TimelineCtx): ScreenSpec {
                 ["Size", `${t.width} × ${t.height} · ${t.fps} fps`],
                 [
                   "Length",
-                  `${timecode(p.duration_s)} · about ${(p.estimated_bytes / 1e6).toFixed(1)} MB`,
+                  `${timecode(p.duration_s)} · about ${mb(p.estimated_bytes)} MB`,
                 ],
                 ["Runs on", p.host ?? "no host can run it now"],
               ],

@@ -138,9 +138,6 @@ test("j02 give the sequence a name I will recognise", async () => {
 });
 
 test("j02b after renaming, Esc closes the Sequences dialog", async () => {
-  // T1: the editor's window keydown takes Esc (preventDefault) once Save removed the focused field, so the
-  // dialog's own Esc never fires (components/timeline/editor.tsx onKey's dialog guard looks at the focus only)
-  test.fail();
   await page.getByRole("main").locator('button[aria-haspopup="dialog"]').first().click();
   const list = page.getByRole("dialog", { name: "Sequences" });
   await list.getByRole("button", { name: "Rename" }).click();
@@ -279,10 +276,6 @@ test("j09 add a voice line on a new audio track", async () => {
 });
 
 test("j10a the export plan names my clips the way the timeline does", async () => {
-  // T2: the plan's reasons number clips by position ("Shot 3 dissolves in…") while the lanes show each clip's
-  // kept shot number ("Shot 4 · harbour at dawn"), so after a reorder they point at the wrong clip
-  // (studio_service/api/studio/media_jobs.go:226, n = i+1 instead of the clip's number)
-  test.fail();
   await page.keyboard.press("Escape");
   const name = (await clip(2).getAttribute("aria-label"))!; // the clip with the dissolve
   const num = name.match(/^Shot \d+/)![0];
@@ -314,9 +307,6 @@ test("j10 export the sequence", async () => {
 });
 
 test("j10b the export says how big the file is", async () => {
-  // T3: a small export reads "0.0 MB" (components/timeline/dialogs.tsx:425 has its own mb() with one decimal;
-  // lib/format.ts mb() shows two below 0.1 MB)
-  test.fail();
   expect(exported).not.toMatch(/ · 0\.0 MB$/);
 });
 

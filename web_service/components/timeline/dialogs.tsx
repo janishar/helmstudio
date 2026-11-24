@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { ErrorNote, Modal } from "@/components/kit";
 import { FullScreen } from "@/components/media";
 import { api, message, ok, type S } from "@/lib/api";
+import { mb } from "@/lib/format";
 import { presetNames } from "@/lib/studio";
 import { RATES, shortTime, timecode } from "@/lib/timeline";
 
@@ -422,7 +423,7 @@ export function Rerender({
 }
 
 const ended = (j: Job) => j.status !== "queued" && j.status !== "running";
-const mb = (b: number) => `${(b / 1e6).toFixed(1)} MB`;
+const size = (b: number) => `${mb(b)} MB`;
 
 /** The Export dialog: the plan (stream copy, or why it re-encodes; what blocks it), then the job. */
 export function Export({
@@ -529,7 +530,7 @@ function ExportBody({ tl, onClose }: { tl: Timeline; onClose: () => void }) {
           <>
             <p className="m-0 text-[13px]">
               Exported · {job.mode === "copy" ? "stream copy" : "re-encode"}
-              {take ? ` · ${mb(take.bytes)}` : ""}
+              {take ? ` · ${size(take.bytes)}` : ""}
             </p>
             <div className="flex justify-end gap-2">
               <button type="button" className="chip bevel rounded-[10px]" onClick={onClose}>
@@ -606,7 +607,7 @@ function ExportBody({ tl, onClose }: { tl: Timeline; onClose: () => void }) {
       <div className="flex justify-between gap-2.5 text-[13px]">
         <span>Length · size</span>
         <span className="mono text-[12px] text-t2">
-          {timecode(plan.duration_s)} · about {mb(plan.estimated_bytes)}
+          {timecode(plan.duration_s)} · about {size(plan.estimated_bytes)}
         </span>
       </div>
       <div className="flex justify-between gap-2.5 text-[13px]">

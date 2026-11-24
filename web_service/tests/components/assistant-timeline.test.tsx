@@ -114,6 +114,7 @@ function start({
   answer("GET", {
     "/v1/studio/timelines": () => ({ data: { timelines: [cur] } }),
     "/v1/studio/timelines/{timeline_id}": () => ({ data: cur }),
+    "/v1/studio/timelines/{timeline_id}/exports": () => ({ data: { jobs: [] } }),
     "/v1/studio/workflows": () => ({ data: { workflows } }),
     "/v1/studio/takes": () => ({ data: { takes: [], next_cursor: null } }),
     "/v1/studio/takes/{take_id}": () => ({
@@ -428,6 +429,38 @@ describe("the Timeline's actions", () => {
     expect(out(await live("newLine", { text: "Hello" }))).toMatchObject({
       text: "New line · no voice workflow is installed",
     });
+  });
+
+  it("a small export reads in hundredths of a MB, on the card and in the Export dialog (QA T3)", async () => {
+    const was = plan.estimated_bytes;
+    plan.estimated_bytes = 50_000;
+    try {
+      const { call } = start();
+      await ready();
+      expect(card(await call("export")).card.rows).toContainEqual([
+        "Length",
+        expect.stringMatching(/about 0\.05 MB$/),
+      ]);
+      fireEvent.click(screen.getByRole("button", { name: /^Export/ }));
+      const dlg = await screen.findByRole("dialog", { name: `Export ${TL.name}` });
+      await waitFor(() => expect(dlg.textContent).toMatch(/about 0\.05 MB/));
+    } finally {
+      plan.estimated_bytes = was;
+    }
+  });
+
+  it("keys leave a modal alone even when the focus fell to the body (QA T1)", async () => {
+    start();
+    await ready();
+    const d = document.body.appendChild(document.createElement("dialog"));
+    d.setAttribute("open", "");
+    const esc = new KeyboardEvent("keydown", { key: "Escape", code: "Escape", cancelable: true, bubbles: true });
+    document.body.dispatchEvent(esc);
+    d.remove();
+    expect(esc.defaultPrevented).toBe(false);
+    const esc2 = new KeyboardEvent("keydown", { key: "Escape", code: "Escape", cancelable: true, bubbles: true });
+    document.body.dispatchEvent(esc2);
+    expect(esc2.defaultPrevented).toBe(true); // without a modal the editor takes it
   });
 
   it("Export and Re-render are cards; Yes posts what the screen's buttons post", async () => {
