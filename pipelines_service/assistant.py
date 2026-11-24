@@ -46,15 +46,16 @@ from messaging.publisher import now
 log = logging.getLogger(__name__)
 
 GEN = Path(__file__).resolve().parent / "gen" / "tools"
-MODEL_CALLS, TOOL_CALLS, MEMORY_WRITES = 12, 30, 4  # a message's caps (assistant.schema.json caps)
-MAX_TOKENS = 1200  # each model call's output allowance
+# a message's caps (assistant.schema.json caps; owner 2026-11-24 "Generous", were 12, 30, 4 and 1200 tokens)
+MODEL_CALLS, TOOL_CALLS, MEMORY_WRITES = 40, 100, 8
+MAX_TOKENS = 4096  # each model call's output allowance; plan 28's thinking tokens add on top (providers.chat)
 SUMMARY_TOKENS = 300
 PROMPT_ROOM = 48000  # characters of transcript and screen in one prompt
 CHAT_KEEP = 200  # transcript entries kept in the thread
 CARDS = ("look_at", "web_search", "forget")
 ACK_WAIT = 60  # seconds; a long turn sends in_progress every BEAT
 BEAT = 20
-RECURSION = 120
+RECURSION = 400  # graph steps per invocation: about 10 per model call
 ZERO = {"model_calls": 0, "tool_calls": 0, "memory_writes": 0}
 
 SYSTEM = f"""You are the assistant inside helmstudio, a studio that makes images, video and audio on the user's own \

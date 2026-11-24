@@ -39,7 +39,7 @@ const (
 
 var (
 	clientIDPattern   = regexp.MustCompile(`^[A-Za-z0-9_-]{8,64}$`)
-	assistantCallID   = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[1-9][0-9]{0,5}:([0-9]|[12][0-9])$`)
+	assistantCallID   = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[1-9][0-9]{0,5}:([0-9]|[1-9][0-9])$`)
 	screenRoute       = regexp.MustCompile(`^/[^\s]{0,199}$`)
 	screenIDKey       = regexp.MustCompile(`^[a-z][a-z_]{0,31}$`)
 	roleNamePattern   = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
@@ -62,7 +62,7 @@ func intp(n int) *int { return &n }
 
 // defaultLimits are the caps before the admin sets any.
 func defaultLimits() AssistantLimits {
-	return AssistantLimits{intp(200), intp(2000000), intp(20), intp(6)}
+	return AssistantLimits{intp(2000), intp(20000000), intp(200), intp(30)}
 }
 
 // check is the 422 detail of limits out of range.

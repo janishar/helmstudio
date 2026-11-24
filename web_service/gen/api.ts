@@ -6298,13 +6298,13 @@ export interface components {
         };
         /** @description twin of assistant.schema.json limits: the caps per user */
         AssistantLimits: {
-            /** @default 200 */
+            /** @default 2000 */
             model_calls_per_day: number;
-            /** @default 2000000 */
+            /** @default 20000000 */
             tokens_per_day: number;
-            /** @default 20 */
+            /** @default 200 */
             look_at_per_hour: number;
-            /** @default 6 */
+            /** @default 30 */
             messages_per_minute: number;
         };
         /** @description what every user may know: on or off (the dock item is hidden when off), where the model runs, web search, the caps, whether the model thinks */

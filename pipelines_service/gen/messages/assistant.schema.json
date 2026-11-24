@@ -6,8 +6,8 @@
   "$defs": {
     "callId": {
       "type": "string",
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[1-9][0-9]{0,5}:([0-9]|[12][0-9])$",
-      "description": "<thread_id>:<turn>:<n>, n below 30 (the tool calls of one message)"
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[1-9][0-9]{0,5}:([0-9]|[1-9][0-9])$",
+      "description": "<thread_id>:<turn>:<n>, n below 100 (the tool calls of one message; below 30 before API 1.56)"
     },
     "clientId": {
       "type": "string",
@@ -117,11 +117,11 @@
       "type": "object",
       "required": ["model_calls", "tool_calls", "memory_writes"],
       "additionalProperties": false,
-      "description": "used by this message so far (at most 12 model calls, 30 tool calls, 4 memory writes)",
+      "description": "used by this message so far (at most 40 model calls, 100 tool calls, 8 memory writes from API 1.56; were 12, 30, 4)",
       "properties": {
-        "model_calls": {"type": "integer", "minimum": 0, "maximum": 12},
-        "tool_calls": {"type": "integer", "minimum": 0, "maximum": 30},
-        "memory_writes": {"type": "integer", "minimum": 0, "maximum": 4}
+        "model_calls": {"type": "integer", "minimum": 0, "maximum": 40},
+        "tool_calls": {"type": "integer", "minimum": 0, "maximum": 100},
+        "memory_writes": {"type": "integer", "minimum": 0, "maximum": 8}
       }
     },
     "limits": {

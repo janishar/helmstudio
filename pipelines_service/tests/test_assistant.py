@@ -322,23 +322,35 @@ async def test_look_at_runs_after_yes_and_its_cap_ends_the_turn(pool, fake):
 
 
 async def test_the_per_message_caps(pool, fake):
+    # owner 2026-11-24 ("Generous"): 40 model calls, 100 tool calls, 8 memory writes, 4096 tokens out a call
+    assert (
+        assistant.MODEL_CALLS,
+        assistant.TOOL_CALLS,
+        assistant.MEMORY_WRITES,
+        assistant.MAX_TOKENS,
+    ) == (40, 100, 8, 4096)
+    assert assistant.RECURSION >= 10 * assistant.MODEL_CALLS
     c = Chat(pool, fake)
-    c.script(*[calls(("recall", {"query": "x"}))] * 13)
+    c.script(*[calls(("recall", {"query": "x"}))] * 41)
     step = await c.say("loop")
     assert (
         step["error"]["code"] == "cap_message"
-        and step["caps"]["model_calls"] == 12
-        and len(c.asked()) == 12
+        and step["caps"]["model_calls"] == 40
+        and len(c.asked()) == 40
+        and c.asked()[0]["max_tokens"] == 4096
     )
     fake.script.clear()
-    four = calls(*[("remember", {"kind": "preference", "text": f"likes {i}"}) for i in range(4)])
-    c.script(four, calls(("remember", {"kind": "project", "text": "five"})), {"content": "Saved."})
+    four = [
+        calls(*[("remember", {"kind": "preference", "text": f"likes {i}"}) for i in r])
+        for r in (range(4), range(4, 8))
+    ]  # at most 4 calls an answer (providers.chat)
+    c.script(*four, calls(("remember", {"kind": "project", "text": "nine"})), {"content": "Saved."})
     step = await c.say("remember these")
-    assert step["caps"]["memory_writes"] == 4 and [ln["text"] for ln in step["lines"]] == [
-        f"Remembered: likes {i}" for i in range(4)
+    assert step["caps"]["memory_writes"] == 8 and [ln["text"] for ln in step["lines"]] == [
+        f"Remembered: likes {i}" for i in range(8)
     ]
     assert all(ln["undo"] and ln["memory_id"] for ln in step["lines"])
-    assert "at most 4 memory writes" in c.asked()[-1]["messages"][1]["content"]
+    assert "at most 8 memory writes" in c.asked()[-1]["messages"][1]["content"]
 
 
 async def test_the_per_user_caps_keep_the_message(pool, fake):
@@ -353,7 +365,7 @@ async def test_the_per_user_caps_keep_the_message(pool, fake):
         and step["error"]["resets_at"].endswith("T00:00:00Z")
     )
     assert step["error"]["text"] == "You used today's 1 model calls." and len(c.asked()) == 1
-    c.limits = dict(LIMITS, tokens_per_day=1000)  # the bound (prompt and 1200 out) is past it
+    c.limits = dict(LIMITS, tokens_per_day=1000)  # the bound (prompt and 4096 out) is past it
     assert (await c.say("three"))["error"]["code"] == "cap_tokens"
     assert len(c.asked()) == 1
 

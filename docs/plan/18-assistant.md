@@ -110,8 +110,12 @@ start ─▶ model ─▶ tools ─▶ model … ─▶ reply (end of turn)
   SSE in `lib/runs.ts`, the batch events, the Models row, the export and media jobs, the dialog's close) with a cap
   of 10 min, then "still running"; a hidden tab waits until shown and its line says "Waiting for the tab". Nothing
   waits in pipelines but a parked checkpoint.
-- **Caps** per message: 12 model calls, 30 tool calls, 4 memory writes (as `MEMORY_WRITES`), 8 takes per `look_at`;
-  per user per day and per minute as the admin sets (22.10).
+- **Caps** per message: 40 model calls, 100 tool calls, 8 memory writes (as `MEMORY_WRITES`), 8 takes per `look_at`,
+  4096 output tokens per model call (plan 28's thinking tokens add on top), at most 4 tool calls per answer, graph
+  steps (`RECURSION`) 400; per user per day and per minute as the admin sets (22.10), by default 2000 model calls and
+  20,000,000 tokens a day, 200 `look_at` an hour, 30 messages a minute (owner 2026-11-24, "Generous", API 1.56; were
+  12 / 30 / 4 and 1200 tokens a message, 200 / 2,000,000 / 20 / 6 per user; studio migration 00035 moves a saved row
+  still on the old defaults).
 - **A closed tab**: nothing is resumed, the thread stays parked; your next message resumes it with "did not run:
   the tab was closed" for each pending action. **Several tabs**: each panel has a client id; a turn's actions run
   only in the tab that sent the message; other tabs show it read-only with "Continue here", which moves it.

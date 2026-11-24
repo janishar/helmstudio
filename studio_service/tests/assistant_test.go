@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"github.com/helmstudio/studio_service/api/studio"
 	"github.com/helmstudio/studio_service/api/studio/message"
 	"github.com/helmstudio/studio_service/gen"
+	"github.com/pressly/goose/v3"
 )
 
 // The in-app assistant in studio (plan 18, 22.3 and 22.11; contracts/README.md "Assistant", API 1.44).
@@ -65,9 +67,9 @@ func TestAssistantSettings(t *testing.T) {
 	e.call(userA, "GET", path, nil, 403)
 	e.call(userA, "PUT", path, map[string]any{"enabled": false}, 403)
 	got := e.call(admin, "GET", path, nil, 200)
-	if got["enabled"] != false || got["provider"] != nil || got["updated_at"] != nil ||
-		got["limits"].(map[string]any)["messages_per_minute"] != float64(6) {
-		t.Fatal(got)
+	if lim, _ := json.Marshal(got["limits"]); got["enabled"] != false || got["provider"] != nil || got["updated_at"] != nil ||
+		string(lim) != `{"look_at_per_hour":200,"messages_per_minute":30,"model_calls_per_day":2000,"tokens_per_day":20000000}` {
+		t.Fatal("the defaults are Generous (owner 2026-11-24)", got)
 	}
 	// off: the list is served with status off, New chat is 409
 	if list := e.call(userA, "GET", "/v1/studio/assistant/threads", nil, 200); list["status"].(map[string]any)["enabled"] != false {
@@ -526,4 +528,33 @@ func TestGalleryOrder(t *testing.T) {
 	page := e.call(userA, "GET", "/v1/studio/takes?limit=1&order=name", nil, 200)
 	e.call(userA, "GET", "/v1/studio/takes?order=oldest&cursor="+page["next_cursor"].(string), nil, 422)
 	e.call(userA, "GET", "/v1/studio/takes?order=best", nil, 422)
+}
+
+// Migration 00035 (owner, 2026-11-24, "Generous"): a saved row still holding the old defaults exactly moves to the
+// new ones; a customised one is left alone.
+func TestAssistantLimitsMigration(t *testing.T) {
+	e := setup(t)
+	sqldb, err := sql.Open("pgx", os.Getenv("TEST_DATABASE_URL"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sqldb.Close()
+	const old = `{"model_calls_per_day": 200, "tokens_per_day": 2000000, "look_at_per_hour": 20, "messages_per_minute": 6}`
+	const custom = `{"model_calls_per_day": 200, "tokens_per_day": 2000000, "look_at_per_hour": 20, "messages_per_minute": 7}`
+	for _, c := range []struct{ saved, want string }{
+		{old, `{"model_calls_per_day": 2000, "tokens_per_day": 20000000, "look_at_per_hour": 200, "messages_per_minute": 30}`},
+		{custom, custom},
+	} {
+		if err = goose.DownTo(sqldb, ".", 34); err != nil {
+			t.Fatal(err)
+		}
+		e.exec(`INSERT INTO assistant_settings (enabled, web_search, limits) VALUES (false, false, $1)
+			ON CONFLICT (id) DO UPDATE SET limits = excluded.limits`, c.saved)
+		if err = goose.Up(sqldb, "."); err != nil {
+			t.Fatal(err)
+		}
+		if e.count(`SELECT count(*) FROM assistant_settings WHERE limits = $1::jsonb`, c.want) != 1 {
+			t.Fatal("after the migration the row holds", c.want)
+		}
+	}
 }

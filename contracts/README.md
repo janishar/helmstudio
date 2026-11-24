@@ -3871,7 +3871,8 @@ chats (threads), their rows, roles, caps and SSE in studio_service.
   or `continue` = Continue here), `…/events` (JSON or SSE, `entry` and `thread` events), `memory` (list by kind, Clear
   all), `memory/{id}` (edit, delete). `/v1/studio/admin/assistant` holds the admin's settings: on or off, provider and
   model (a server or remote provider), web search's own switch and its provider (kind `search`), and the caps per
-  user (model calls and tokens a day, `look_at` an hour, messages a minute). Another user's chat or memory item is 404.
+  user (model calls and tokens a day, `look_at` an hour, messages a minute; from API 1.56 the defaults are 2000,
+  20000000, 200 and 30, owner 2026-11-24, were 200, 2000000, 20 and 6). Another user's chat or memory item is 404.
 - **Thinks** (API 1.54; plan 29, [docs/plan/29-assistant-thinking.md](../docs/plan/29-assistant-thinking.md)):
   `AssistantStatus.thinks` is true when the assistant's model thinks: its level resolved as the snapshot's `thinking`
   (Thinking, Model sources) is not `off` (a saved level, or with none saved the rule's `default`), or it always
@@ -3884,7 +3885,7 @@ chats (threads), their rows, roles, caps and SSE in studio_service.
   posts their `results`. A message to a chat parked on a tab that went away first resumes it with each pending
   action `did_not_run` (`the tab was closed`).
 - **Ids.** A call (a tool call, a screen action, a card) is `<thread_id>:<turn>:<n>`: `turn` counts the chat's
-  inputs from 1, `n` the calls of that message from 0 (below 30). A replay after a crash names the same call, and
+  inputs from 1, `n` the calls of that message from 0 (below 100; below 30 before API 1.56). A replay after a crash names the same call, and
   studio.tools and memory writes are idempotent on it.
 - **Costly, deleting or data-leaving actions wait for a card.** A screen action with `effect` card (actions.json)
   shows its screen's card; Yes is the user's click on the screen's own button. A server card (`look_at`, `web_search`,
