@@ -1318,10 +1318,12 @@ function Thread({ a, entries }: { a: AssistantApi; entries: Entry[] }) {
             )}
           </Clamp>
         )}
-        {parts.map(
-          // alpha.2 items 17, 19: the options blocks as cards, outside the clamp so they always show
-          (x) =>
-            x.options && (
+        {(() => {
+          // alpha.2 items 17, 19: one set of cards per reply, the newest (a reply that repeats its choices after a
+          // step shows them once), outside the clamp so they always show
+          const x = parts.findLast((y) => y.options);
+          return (
+            x?.options && (
               <Options
                 key={`o${x.w.id}`}
                 entry={x.w}
@@ -1330,8 +1332,9 @@ function Thread({ a, entries }: { a: AssistantApi; entries: Entry[] }) {
                 readOnly={a.readOnly}
                 send={a.send}
               />
-            ),
-        )}
+            )
+          );
+        })()}
         {fold !== null && <Folded key={`f${fold}`} lines={older.get(fold) ?? []} a={a} />}
         {rest.length > 0 && <Lines lines={rest} a={a} />}
         {lines

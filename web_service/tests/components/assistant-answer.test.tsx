@@ -157,6 +157,17 @@ async function openDrawer() {
 const offered = "Shot 1 is placed. Next, pick one:\n```options\n" + JSON.stringify(OPTS) + "\n```";
 
 describe("pick one (frame 11)", () => {
+  it("a reply that repeats its choices shows one set of cards, the newest", async () => {
+    serve([
+      said(1, "user", "Animate shot 1"),
+      said(2, "assistant", offered),
+      said(3, "assistant", "Remembered that.\n```options\n" + JSON.stringify(OPTS) + "\n```"),
+    ]);
+    const d = await openDrawer();
+    await within(d).findByText("Remembered that.");
+    expect(within(d).getAllByRole("group", { name: "Pick one" })).toHaveLength(1);
+  });
+
   it("shows the options as cards, Best next ringed, and a click sends the title", async () => {
     const posts = serve([said(1, "user", "Animate shot 1"), said(2, "assistant", offered)]);
     const d = await openDrawer();
