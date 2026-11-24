@@ -1016,7 +1016,16 @@ func (p *Projector) ApplyAssistantStep(ctx context.Context, ownerID string, step
 			if json.Unmarshal(raw, &line) != nil || line.ID == "" {
 				continue
 			}
-			if _, err := putEntry(ctx, tx, t, line.ID, step.Turn, "line", nil, raw, nil, nil); err != nil {
+			// a server card's call ends in a line of the same id: its own entry, never over the card's
+			lineKey := line.ID
+			var carded bool
+			if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM assistant_entries WHERE thread_id = $1 AND key = $2
+				AND kind = 'card')`, t.ID, line.ID).Scan(&carded); err != nil {
+				return err
+			} else if carded {
+				lineKey += ":line"
+			}
+			if _, err := putEntry(ctx, tx, t, lineKey, step.Turn, "line", nil, raw, nil, nil); err != nil {
 				return err
 			}
 		}

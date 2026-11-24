@@ -140,7 +140,9 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/__requests":
             with lock:
                 return self.reply(200, list(requests))
-        if self.path == "/health":  # API 1.60: the fake plugins' health (contract_tests/fake_plugins)
+        if (
+            self.path == "/health"
+        ):  # API 1.60: the fake plugins' health (contract_tests/fake_plugins)
             return self.reply(200, {"ok": True})
         self.reply(404, {"error": {"message": "not found"}})
 
@@ -159,7 +161,9 @@ class Handler(BaseHTTPRequestHandler):
                 scripts.clear()
                 requests.clear()
             return self.reply(200, {"ok": True})
-        if self.path.startswith("/tools/"):  # API 1.60: the fake-tools plugin's tools (manifest toolCall/toolReply)
+        if self.path.startswith(
+            "/tools/"
+        ):  # API 1.60: the fake-tools plugin's tools (manifest toolCall/toolReply)
             name = self.path.removeprefix("/tools/")
             with lock:
                 requests.append({"model": f"tool:{name}", "body": body, "authorization": self.headers.get("Authorization"),
@@ -168,7 +172,9 @@ class Handler(BaseHTTPRequestHandler):
             text = str((body.get("input") or {}).get("text", ""))
             if text.startswith("fail"):
                 return self.reply(500, {"detail": f"scripted failure: {text}"})
-            return self.reply(200, {"result": {"echo": body.get("input")}, "line": f"Echoed {text}"[:300]})
+            return self.reply(
+                200, {"result": {"echo": body.get("input")}, "line": f"Echoed {text}"[:300]}
+            )
         if not self.path.rstrip("/").endswith("/chat/completions"):
             return self.reply(404, {"error": {"message": "not found"}})
         model = body.get("model", "")
