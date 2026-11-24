@@ -36,6 +36,11 @@ export type Field = {
  * take id ("" for none), a rows param's items, or a media, span or voice param's value ("" for none). */
 export type Raw =
   string | boolean | S<"RowItem">[] | S<"MediaRef"> | S<"SpanValue"> | S<"VoiceRef">;
+/** Create's form as it was left (its session, the workflow picked, the values, the looks): Create opened again on
+ * that session starts from it, so going to Models and back keeps what was set. In memory: a reload starts afresh. */
+export const leftForm: {
+  current: { session: string; chosen: string; held: Record<string, Raw>; looks: unknown } | null;
+} = { current: null };
 /** A new value for a control, or how to make it from what it holds (undefined: the field's initial value). Uploads
  * and picks finish late, so they add to the list as it is then. */
 export type Update = Raw | ((old: Raw | undefined) => Raw);

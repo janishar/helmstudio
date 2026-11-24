@@ -313,6 +313,16 @@ describe("Create's actions", () => {
     await waitFor(async () => expect(asked(await call("generate"))).toBe(true));
   });
 
+  it("keeps the form when Create is left and opened again on the same session", async () => {
+    // the owner's run (2026-11-24): to Models and back, the prompt, look and size had to be set again
+    const box = () => document.getElementById(idOf("prompt.text")) as HTMLTextAreaElement;
+    const first = start();
+    await first.call("change", { key: "prompt.text", value: "a portrait at golden hour" });
+    cleanup();
+    start();
+    await waitFor(() => expect(box().value).toBe("a portrait at golden hour"));
+  });
+
   it("seeds, select, star and stop; view and a new session; a template refuses rename and delete", async () => {
     const t = take({ session_id: "s1", title: "Shot 2" });
     const running = {

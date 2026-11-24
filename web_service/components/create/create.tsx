@@ -165,6 +165,7 @@ import {
   display,
   fields as fieldsOf,
   isVoice,
+  leftForm,
   queueInputs,
   rawsFrom,
   presetHelp,
@@ -266,8 +267,14 @@ export function Create({
   const [sessionId, setSessionId] = useState<string | null>(initial?.sessionId ?? null);
   const [workflows, setWorkflows] = useState<S<"Workflow">[] | null>(initial?.workflows ?? null);
   // the workflow picked here or by a reuse; "" follows the session's newest run
-  const [chosen, setChosen] = useState("");
-  const [held, setRaws] = useState<Record<string, Raw>>({});
+  // the form as Create was left on this session (lib/workflow.ts leftForm), unless a take is being reused or used
+  const [back] = useState(() =>
+    !reuse && !use && leftForm.current?.session === (initial?.sessionId ?? "")
+      ? leftForm.current
+      : null,
+  );
+  const [chosen, setChosen] = useState(back?.chosen ?? "");
+  const [held, setRaws] = useState<Record<string, Raw>>(back?.held ?? {});
   // which variants are on a host and what each loads at: the precision pins and "Not downloaded" (GET models)
   const [modelList, setModelList] = useState<S<"ModelList"> | null>(null);
   const [sentErrors, setErrors] = useState<Record<string, string>>({});
@@ -292,7 +299,7 @@ export function Create({
   // the element whose voice the picker sets (a script line's chip, the cast, a line's fix)
   const [voiceFor, setVoiceFor] = useState<S<"LibraryItem"> | null>(null);
   // the chosen looks per group (the composer's look tiles), and the group whose picker is open
-  const [looksPicked, setLooksChosen] = useState<Chosen>({});
+  const [looksPicked, setLooksChosen] = useState<Chosen>((back?.looks as Chosen) ?? {});
   const [lookGroup, setLookGroup] = useState<S<"LibraryGroup"> | null>(null);
   // the empty screen (no run, no take: docs/mock/Direct.dc.html): the look group shown under the composer, and
   // whether a chip opened the Inspector in the aside in place of the Elements panel
@@ -316,6 +323,9 @@ export function Create({
   useEffect(() => {
     ok(api.GET("/v1/studio/models")).then(setModelList, () => undefined);
   }, [liveHosts]);
+  useEffect(() => {
+    if (sessionId) leftForm.current = { session: sessionId, chosen, held, looks: looksPicked };
+  }, [sessionId, chosen, held, looksPicked]);
   // Run on (docs/mock/RunOn.dc.html): the host every run is set to, "" = Auto; kept across workflows like the form
   const [runOnHost, setRunOnHost] = useState("");
   // why a version pick set Run on back to Auto ("Run on set to Auto: Base fp8 is NVIDIA only")

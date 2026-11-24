@@ -19,7 +19,8 @@ assistant"):
 2. **Cards for every costly, deleting or data-leaving action**, one layout, with "uses the GPU", "sends to
    DeepSeek" (or the search provider) or "can't be undone". Yes calls the screen's own button.
 3. **Downloads**: an admin gets the Models row and a card (size, machine, licence); the licence tick and Download
-   stay the admin's clicks; then `await`, then back to Create (which reads `/models` again when it mounts). A non-admin is told to ask an admin.
+   stay the admin's clicks; then `await`, then back to Create (which reads `/models` again when it mounts and whenever a host comes up or goes, and opens
+   with the form as it was left on that session). A non-admin is told to ask an admin.
 4. **Run on**: it may pick Auto, Mac or NVIDIA among the rows the form allows, with a reason. Every user gets the
    hosts read (up, busy, memory, queue; no pins or settings). The Generate card names the machine and place in line.
 5. **Library** (looks, elements, voices, clone and design): it opens the screen's own dialog prefilled; the user's
