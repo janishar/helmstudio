@@ -168,7 +168,7 @@ folder (no uninstall tool, 35.7).
    may pick an existing folder; the start screen shows on every open; the menu-bar icon is logo A in one colour.
 9. **Image access step (3b) approved** (owner, 2026-11-25, "yes approved"): shown only when the anonymous pull is
    refused; a read-only GitHub token (read:packages), kept only on this Mac.
-10. **The MCP works with the app:** `helm` (cli/) ships inside the app at `Contents/Resources/helm`; the user runs
+10. **The MCP works with the app:** `helm` (cli/) ships inside the app at `Contents/Resources/helm` (as built: `Contents/Resources/bin/helm`); the user runs
     `helm login --url http://127.0.0.1:8310 …` once and `claude mcp add -s user helmstudio -- <app>/Contents/Resources/helm mcp`;
     docs/guides/mcp.md gets these lines. No screen change. `helm` keeps one address, so it points at one stack at a time.
 11. **No upload for the prototype** (owner, 2026-11-25: "no upload for now, later public release"; private GitHub

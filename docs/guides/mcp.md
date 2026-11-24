@@ -28,6 +28,16 @@ wait, look at the takes, batch, pick, put takes on a Timeline and export. It cal
    { "mcpServers": { "helmstudio": { "command": "/absolute/path/to/cli/bin/helm", "args": ["mcp"] } } }
    ```
 
+**With the Mac app** ([guide](mac-app.md)), `helm` is inside the app and the studio is on port 8310:
+
+```sh
+/Applications/helmstudio.app/Contents/Resources/bin/helm login --url http://127.0.0.1:8310 --email <admin email> \
+  --api-key-file ~/Library/Application\ Support/helmstudio/stack/deploy/secrets/helm_api_key
+claude mcp add -s user helmstudio -- /Applications/helmstudio.app/Contents/Resources/bin/helm mcp
+```
+
+`helm` keeps one address, so it points at one stack at a time.
+
 If the session expires, run `helm login` again; the server picks up the new tokens on its next start.
 
 ## Check it works

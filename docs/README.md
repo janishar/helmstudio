@@ -56,3 +56,4 @@ other sections point to it rather than restate it.
 | Guide | For |
 |---|---|
 | [helm mcp](guides/mcp.md) | Using helmstudio from Claude Code or Claude Desktop: set-up, the tools, which ones ask first |
+| [Mac app](guides/mac-app.md) | helmstudio for Mac: first open, the menu bar, Quit entirely, the MCP with the app |
