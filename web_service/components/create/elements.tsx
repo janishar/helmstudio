@@ -616,7 +616,7 @@ function ElementVoice({
         <div className="flex items-center gap-2 rounded-xl bg-s3 px-3 py-1.5 text-t1">
           <span
             aria-hidden
-            className="h-7 w-11 shrink-0 rounded-md border border-s5 bg-[repeating-linear-gradient(90deg,transparent_0_3px,var(--s1)_3px_5px),linear-gradient(180deg,var(--s1)_22%,var(--s4)_22%_78%,var(--s1)_78%)]"
+            className="wave h-7 w-11 shrink-0 rounded-md"
           />
           <span className="flex min-w-0 flex-1 flex-col">
             <small className="mono text-[10px] text-t2">Voice</small>
