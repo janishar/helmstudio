@@ -244,8 +244,9 @@ def plugin_pass(owner: str, call: str) -> str:
 
 def native(off: dict) -> list[dict]:
     """The tools by name (API 1.66): the same offer is the same bytes, whatever order the tab registered them in.
-    ponytail: a screen's actions still differ by screen (same names, other inputs), so a screen change misses the
-    cache from the tools on once; one tool list per chat needs actions named per screen."""
+    ponytail: a screen's actions differ by screen (same names, other inputs), so a screen or plugin change misses the
+    cache from the tools on (contracts/README.md 1.66 says so); one tool list per chat needs actions named per
+    screen."""
     return [{"type": "function", "function": {"name": n, "description": o["spec"]["description"][:1000],
                                               "parameters": o["spec"]["input"]}}
             for n, o in sorted(off.items())]  # fmt: skip
@@ -550,7 +551,7 @@ class Assistant:
         room = window - fixed
         if fixed + len(prompt(s, room)) > FOLD_AT * window or len(s["chat"]) > CHAT_KEEP // 2:
             got = await self.fold(s, src, p, room)
-            if got.get("error"):
+            if got.get("error") or got.get("to"):
                 return got | up
             up |= got
         return up | await self.ask(s | up, caps, src, p, off, system, tools, room)
@@ -561,6 +562,8 @@ class Assistant:
         n = fold_cut(s)
         if not n:
             return {}
+        if self._stopped(s):
+            return {"to": "steer"}
         old = s["chat"][:n]
         text = _block("Your summary so far", s["digest"]) if s.get("digest") else ""
         req = {"model": src["model"], "system": FOLD_SYSTEM, "max_tokens": FOLD_TOKENS,
@@ -571,16 +574,33 @@ class Assistant:
         ):
             return err
         try:
-            got, _ = await providers.chat_retried(src["provider"], p, req)
+            got, _ = await self._call(s, providers.chat_retried(src["provider"], p, req))
         except providers.CallError as e:
             log.warning("assistant %s: no fold: %s", s["thread_id"], e)
             return {}
+        except asyncio.CancelledError:
+            if asyncio.current_task().cancelling():  # shutdown, not a Stop
+                raise
+            await self._spent(key, providers.estimate(FOLD_SYSTEM + req["prompt"]))
+            return {"to": "steer"}
         await self._spent(key, got["tokens_in"] + got["tokens_out"], src, got.get("cache"))
         digest = got["text"].strip()[:DIGEST_MAX]
         if not digest:
             return {}
         handles = sorted(allowed_handles(s | {"chat": old, "screen": None}))
         return {"chat": s["chat"][n:], "digest": digest, "handles": handles}
+
+    async def _call(self, s: State, coro):
+        """A model call a Stop cancels at once (CancelledError)."""
+        tid, call = s["thread_id"], asyncio.ensure_future(coro)
+        self.calls[tid] = (s["msg"], s["owner_id"], call)
+        if self._stopped(s):  # a Stop that came while the spend was counted
+            call.cancel()
+        try:
+            return await call
+        finally:
+            if self.calls.get(tid, (0, "", None))[2] is call:
+                del self.calls[tid]
 
     async def ask(self, s: State, caps, src, p, off, system, tools, room) -> State:
         """One model call and its answer checked."""
@@ -596,13 +616,8 @@ class Assistant:
         ):
             return err | {"caps": caps}
         caps["model_calls"] += 1
-        tid = s["thread_id"]
-        call = asyncio.ensure_future(providers.chat_retried(src["provider"], p, req))
-        self.calls[tid] = (s["msg"], s["owner_id"], call)
-        if self._stopped(s):  # a Stop that came while the spend was counted
-            call.cancel()
         try:
-            got, _ = await call
+            got, _ = await self._call(s, providers.chat_retried(src["provider"], p, req))
         except providers.CallError as e:
             return _end("off" if e.kind == "off" else "provider", str(e), caps=caps)
         except asyncio.CancelledError:
@@ -612,9 +627,6 @@ class Assistant:
             # Stop (API 1.62): the call is gone, no answer kept; what was sent stays spent
             await self._spent(key, providers.estimate(system + req["prompt"]))
             return {"caps": caps, "to": "steer"}  # steer sees the Stop and ends the turn
-        finally:
-            if self.calls.get(tid, (0, "", None))[2] is call:
-                del self.calls[tid]
         await self._spent(key, got["tokens_in"] + got["tokens_out"], src, got.get("cache"))
         calls, err = check(got, off, s)
         if err:

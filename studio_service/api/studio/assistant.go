@@ -100,12 +100,24 @@ type AssistantSettings struct {
 // defaultWindow is a model's chat window before the admin sets its own (API 1.66).
 const defaultWindow = 60000
 
-// windowKey names a provider and model in assistant_settings.windows (no model: the provider's default model).
-func windowKey(provider, model *string) string { return deref(provider) + "/" + deref(model) }
+// windowKey names a provider and model in assistant_settings.windows: the model by name, never "the default".
+func windowKey(provider, model string) string { return provider + "/" + model }
 
 // window is the chat window of a provider and model.
-func (s AssistantSettings) window(provider, model *string) int {
+func (s AssistantSettings) window(provider, model string) int {
 	return cmp.Or(s.windows[windowKey(provider, model)], defaultWindow)
+}
+
+// windowTokens is the window of the settings' provider and model, no model meaning the provider's default one.
+func (s AssistantSettings) windowTokens(ctx context.Context, tx pgx.Tx) (int, error) {
+	model := deref(s.Model)
+	if model == "" && s.Provider != nil {
+		err := tx.QueryRow(ctx, `SELECT default_model FROM providers WHERE name = $1`, *s.Provider).Scan(&model)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return 0, err
+		}
+	}
+	return s.window(deref(s.Provider), model), nil
 }
 
 // AssistantSettingsPut is PUT /admin/assistant's body.
@@ -150,7 +162,9 @@ func readAssistantSettings(ctx context.Context, tx pgx.Tx) (AssistantSettings, e
 	if err == nil {
 		err = ownChoice(ctx, tx, &out)
 	}
-	out.WindowTokens = out.window(out.Provider, out.Model)
+	if err == nil {
+		out.WindowTokens, err = out.windowTokens(ctx, tx)
+	}
 	return out, err
 }
 
@@ -238,8 +252,8 @@ func (s *Service) PutAssistantSettings(ctx context.Context, caller common.Caller
 		if windows == nil {
 			windows = map[string]int{}
 		}
-		if body.WindowTokens != nil && body.Provider != nil {
-			windows[windowKey(body.Provider, body.Model)] = *body.WindowTokens
+		if p, ok := find(body.Provider); ok && body.WindowTokens != nil {
+			windows[windowKey(p.Name, cmp.Or(deref(body.Model), p.DefaultModel))] = *body.WindowTokens
 		}
 		// API 1.61: an Only-you provider is the caller's own choice; the deployment's stays for everyone else
 		provider, model := body.Provider, body.Model
@@ -268,8 +282,10 @@ func (s *Service) PutAssistantSettings(ctx context.Context, caller common.Caller
 		if err != nil {
 			return err
 		}
-		err = ownChoice(ctx, tx, &out)
-		out.WindowTokens = out.window(out.Provider, out.Model)
+		if err = ownChoice(ctx, tx, &out); err != nil {
+			return err
+		}
+		out.WindowTokens, err = out.windowTokens(ctx, tx)
 		return err
 	})
 	out.RemoteEnabled = s.remoteOn
@@ -315,7 +331,7 @@ func (s *Service) assistantConfig(ctx context.Context, tx pgx.Tx) (AssistantStat
 		status.Provider = &AssistantProvider{Title: cmp.Or(deref(p.Title), p.Name), Remote: p.Kind == "remote"}
 		status.Thinks = modelThinks(p.Preset, model, p.Thinking)
 		snap.Source = map[string]any{"kind": p.Kind, "provider": p.Name, "model": model}
-		snap.WindowTokens = set.window(set.Provider, set.Model)
+		snap.WindowTokens = set.window(p.Name, model)
 		if p.Kind == "server" {
 			snap.Source["host"] = deref(p.Host)
 		}

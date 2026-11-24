@@ -83,9 +83,11 @@ async def put(store, owner_id, kind: str, iid: str, text: str, thread_id) -> str
 
 
 async def delete(store, owner_id, iid: str) -> bool:
+    """A user's delete (Memory, or a Forget card approved): the chats read their memories again."""
     it = await find(store, owner_id, iid)
     if it:
         await store.adelete(ns(owner_id, it["kind"]), iid)
+        await _mark(store, owner_id)
     return bool(it)
 
 
@@ -157,7 +159,6 @@ async def handle(store, req: dict) -> dict:
     if op == "delete":
         if not await delete(store, owner, req["item_id"]):
             return NOT_FOUND
-        await _mark(store, owner)
         return {"deleted": 1}
     every = await items(store, owner)  # clear
     for i in every:

@@ -3966,9 +3966,11 @@ The prompt is laid out so the provider's prompt cache hits (DeepSeek and OpenAI 
 
 - **Layout.** The system part is the rules and the knowledge (the same bytes in every chat), then the memories
   (preferences) as the chat's first model call read them: frozen per chat, read again only after the user changes
-  Memory (edit, delete, Clear all; the assistant's own `remember` does not). The tools are sorted by name. The user
+  Memory (edit, delete, Clear all, a Forget card approved; the assistant's own `remember` does not). The tools are
+  sorted by name; they are the screen's actions and the plugins on now, so moving to another screen or turning a
+  plugin on or off starts the cache again from the tools on (providers put the tools before the messages). The user
   part is the transcript, append-only (an entry once written renders the same bytes), then the screen now, then
-  the calls left. Only the screen and the last lines change between calls.
+  the calls left. On one screen only the screen and the last lines change between calls.
 - **Window.** `AssistantSettings.window_tokens` is the chat window of the assistant's provider and model (each model
   keeps its own; 60000 until set; `cmd.assistant.turn` `settings.window_tokens`). Before a model call whose prompt
   (system, tools and user part at 4 characters a token) passes 70% of it, the oldest half of the transcript (never

@@ -629,6 +629,10 @@ func TestAssistantWindowAndCache(t *testing.T) {
 	if got := e.call(admin, "PUT", path, map[string]any{"enabled": true, "provider": "ollama"}, 200); got["window_tokens"] != float64(128000) {
 		t.Fatal("absent: unchanged", got)
 	}
+	// the default model is the same model as named: one window, kept by name
+	if got := e.call(admin, "PUT", path, map[string]any{"enabled": true, "provider": "ollama", "model": "qwen2.5:7b"}, 200); got["window_tokens"] != float64(128000) {
+		t.Fatal("the default model named keeps its window", got)
+	}
 	chat := e.call(userA, "POST", "/v1/studio/assistant/threads", map[string]any{"client_id": tabA}, 201)
 	e.call(userA, "POST", "/v1/studio/assistant/threads/"+chat["id"].(string)+"/messages", map[string]any{"kind": "message",
 		"client_id": tabA, "text": "hi", "screen": screen("/")}, 202)

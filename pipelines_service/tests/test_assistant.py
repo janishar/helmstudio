@@ -74,6 +74,7 @@ class Chat:
         self.a = self.restart()
         self.roles, self.tool_names, self.search, self.limits = ["user"], TOOLS, None, dict(LIMITS)
         self.plugins: list[dict] = []  # cmd.assistant.turn data.plugins (API 1.61)
+        self.route = "/?s=2d4f6a8b-1c3e-4a5b-9c7d-8e0f1a2b3c4d"
 
     def restart(self) -> assistant.Assistant:
         """A new process: a fresh graph and saver on the same database."""
@@ -103,7 +104,7 @@ class Chat:
     async def say(
         self, text: str, results: list | None = None, more: dict | None = None, **kw
     ) -> dict:
-        screen = {"route": "/?s=2d4f6a8b-1c3e-4a5b-9c7d-8e0f1a2b3c4d", "ids": {}, "roles": self.roles,
+        screen = {"route": self.route, "ids": {}, "roles": self.roles,
                   "as_of": now(), "hidden": False, "actions": ACTIONS,
                   "fields": {"prompt": "@mara under a transparent umbrella"} | (more or {})}  # fmt: skip
         inp = {
@@ -1007,6 +1008,53 @@ async def test_the_prompt_start_is_byte_identical_across_turns_of_one_chat(pool,
         and "likes rain" in system
         and _talk(c.asked()[-1]).startswith(_talk(reqs[-1]))
     )
+
+
+async def test_a_forget_card_approved_reads_the_memories_again(pool, fake):
+    c = Chat(pool, fake)
+    iid = str(uuid.uuid4())
+    await mem.put(c.store, OWNER, "preference", iid, "likes 16:9", None)
+    c.script({"content": "Hi."}, calls(("forget", {"id": iid})), {"content": "Gone."})
+    await c.say("hi")
+    card = (await c.say("forget 16:9"))["cards"][0]
+    await c.answer(card["id"])
+    c.script({"content": "OK."})
+    await c.say("again")
+    assert "likes 16:9" in c.asked()[0]["messages"][0]["content"]
+    assert "likes 16:9" not in c.asked()[-1]["messages"][0]["content"]
+
+
+async def test_another_screen_keeps_the_system_and_the_transcript_start(pool, fake):
+    """A screen change restarts the cache only from the tools on (they are the screen's actions)."""
+    c = Chat(pool, fake)
+    c.script({"content": "One."}, {"content": "Two."})
+    await c.say("one")
+    c.route = "/pipelines/abc"
+    await c.say("two")
+    a, b = c.asked()
+    assert a["messages"][0] == b["messages"][0] and _talk(b).startswith(_talk(a))
+
+
+async def test_stop_cancels_a_fold_in_flight(pool, fake, monkeypatch):
+    c = Chat(pool, fake)
+    for i in range(3):
+        c.script({"content": "Plan."})
+        await c.say(f"Shot {i}: " + "rain " * 120)
+    monkeypatch.setattr(assistant, "WINDOW", 100)  # the next message folds first
+    c.script({"content": "A late summary.", "delay_s": 5})
+    run = asyncio.create_task(c.say("next"))
+    for _ in range(100):
+        if len(c.asked()) == 4:
+            break
+        await asyncio.sleep(0.05)
+    assert c.asked()[3]["messages"][0]["content"] == assistant.FOLD_SYSTEM
+    t = asyncio.get_running_loop().time()
+    await c.steer()
+    step = await asyncio.wait_for(run, 2)
+    assert asyncio.get_running_loop().time() - t < 2 and not c.a.calls and len(c.asked()) == 4
+    assert step["done"] and step["error"] is None
+    v = (await c.a.graph.aget_state(c.a.cfg(c.tid))).values
+    assert not v.get("digest")  # nothing folded
 
 
 async def test_the_oldest_half_folds_once_at_the_threshold(pool, fake, monkeypatch):
