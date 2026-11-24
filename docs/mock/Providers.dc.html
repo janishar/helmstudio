@@ -194,6 +194,28 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <div role="alertdialog" aria-label="Remove key" style="display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 12px; background: var(--s2); font-size: 12px"><span>Remove <span style="font-family: 'JetBrains Mono', monospace; color: var(--t2)">deploy/secrets/providers/deepseek</span>? Calls to DeepSeek fail until a key is saved.</span><div style="display: flex; gap: 8px; justify-content: flex-end"><button class="chip" style="height: 28px; font-size: 12px">Cancel</button><button class="chip" style="height: 28px; font-size: 12px; background: #ff6b6b; color: #2b0505; font-weight: 600">Remove</button></div></div>
 </div>
 </section>
+
+<section aria-label="Row menu · 1280 px" style="display: flex; flex-direction: column; gap: 8px; padding-bottom: 60px">
+<style>.rm td{white-space:normal}.rm .tag{white-space:nowrap}.rm td:last-child{width:34px}</style>
+<span style="font-size: 12px; color: var(--t2)">Row menu · 1280 px (QA 2026-11-25, Q13) · the table at its width in a 1280 px window, beside the provider panel. Test, Edit, Disable and Delete move into ⋯ at the row end; the first row's menu is open.</span>
+<span style="font-size: 12px; color: var(--t2)">Fits any width: the menu opens under ⋯, keeping to the window. Disabled rows read Enable. Delete… opens the same confirm as today. The address cuts with … and shows in full on hover.</span>
+<div style="position: relative; width: 790px; box-sizing: border-box; border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 6px 8px">
+<table class="rm" style="border-collapse: collapse; width: 100%">
+<thead><tr><th>Name</th><th>Kind</th><th>Address</th><th>Models</th><th>Limits</th><th>Status</th><th><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%)">Actions</span></th></tr></thead>
+<tbody>
+<tr><td style="font-weight: 600; vertical-align: top">Ollama on the Mac<br><span class="m" style="font-weight: 400">ollama</span></td><td style="vertical-align: top"><span class="tag">local server</span></td><td class="m" style="vertical-align: top; max-width: 150px; overflow: hidden; text-overflow: ellipsis">http://host.docker.internal:11434/v1</td><td class="m" style="vertical-align: top">qwen2.5:7b (default)<br>llama3.2:3b</td><td class="m" style="vertical-align: top">mac · 6.5 GB reserved<br>timeout 120 s</td><td style="vertical-align: top">Enabled<br><span style="font-size: 12px; color: var(--a1)">answered · 0.4 s</span></td><td style="vertical-align: top; text-align: right"><button class="chip" aria-label="Actions for this provider" aria-haspopup="menu" aria-expanded="true" style="background: var(--s5); color: var(--t1); width: 34px; height: 30px; padding: 0; display: grid; place-items: center"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="19" cy="12" r="1.8"></circle></svg></button></td></tr>
+<tr><td style="font-weight: 600; vertical-align: top">Fake AI<br><span class="m" style="font-weight: 400">fakeai</span></td><td style="vertical-align: top"><span class="tag adm">remote</span></td><td class="m" style="vertical-align: top; max-width: 150px; overflow: hidden; text-overflow: ellipsis">https://fake.test/v1</td><td class="m" style="vertical-align: top">fake-large (default)</td><td class="m" style="vertical-align: top">key file provider-fakeai<br>2 in flight · timeout 120 s</td><td style="vertical-align: top">Enabled</td><td style="vertical-align: top; text-align: right"><button class="chip" aria-label="Actions for this provider" aria-haspopup="menu" aria-expanded="false" style="width: 34px; height: 30px; padding: 0; display: grid; place-items: center"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="19" cy="12" r="1.8"></circle></svg></button></td></tr>
+</tbody>
+</table>
+<div role="menu" aria-label="Ollama on the Mac" style="position: absolute; right: 10px; top: 100px; z-index: 4; width: 180px; box-sizing: border-box; padding: 6px; border-radius: 14px; background: var(--s3); border: 1px solid var(--s5); box-shadow: 0 24px 40px -12px color-mix(in srgb, var(--shd) 80%, transparent); display: flex; flex-direction: column; gap: 2px">
+<button role="menuitem" class="act" style="height: 32px; background: var(--s5); box-shadow: none">Test</button>
+<button role="menuitem" class="act" style="height: 32px; background: transparent; box-shadow: none">Edit</button>
+<button role="menuitem" class="act" style="height: 32px; background: transparent; box-shadow: none">Disable</button>
+<div style="height: 1px; margin: 3px 6px; background: var(--s5)"></div>
+<button role="menuitem" class="act" style="height: 32px; background: transparent; box-shadow: none; color: #ff8a80">Delete…</button>
+</div>
+</div>
+</section>
 </main>
 
 <aside aria-label="Add a model provider" style="flex: 1 1 340px; box-sizing: border-box; padding: 16px 18px 24px; border-left: 1px solid var(--s3); background: var(--p0); display: flex; flex-direction: column; gap: 12px">
@@ -229,7 +251,7 @@ deepseek-v4-pro</textarea></div>
 
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":960}}'>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":1379}}'>
 class Component extends DCLogic {
 state = { theme: null };
 renderVals() {

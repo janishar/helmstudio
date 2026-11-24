@@ -396,11 +396,37 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 </div>
 <p class="note">A clip over 13.4 s gives its first 13.4 s; trim the clip to pick another part. Done, the shot fills the slot and keeps its lineage to the line.</p>
 </section>
+
+<section aria-label="No voice yet" class="card" style="grid-column: 1 / -1; background: var(--p0)">
+<p class="note">No voice yet (QA 2026-11-25, Q10) · Voice-over with the Voice tile empty: Generate line is greyed and says what to do. Picking a voice turns it on; the line never fails with "speak.voice: a voice is required".</p>
+<section aria-label="New line, no voice" style="border-radius: 16px; background: var(--s2); border: 1px solid var(--s5); padding: 12px 14px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 14px; font-weight: 700; letter-spacing: 0.04em">New line</h2>
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--t2)">Qwen3-TTS · Voice-over · at 0:15.00 on A3 · Narration</span>
+<div style="flex-grow: 1"></div>
+<div class="seg" role="group" aria-label="Kind of line"><button aria-pressed="true">Voice-over</button><button aria-pressed="false">Dialogue</button></div>
+<button aria-label="Close New line" style="width: 28px; height: 28px; flex: 0 0 auto; display: grid; place-items: center; padding: 0; border: 0; border-radius: 8px; background: transparent; box-shadow: none"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg></button>
+</div>
+<textarea aria-label="Text to speak" rows="2" style="width: 100%; box-sizing: border-box; resize: none; border: 0; outline: 0; background: transparent; color: var(--t1); font: inherit; font-size: 15px; line-height: 22px">Night came early to the harbour, and the lights went out one by one.</textarea>
+<div style="display: flex; flex-wrap: wrap; gap: 8px">
+<button class="tile" style="outline: 2px solid var(--a2); outline-offset: 2px"><small>Voice</small><b>Pick a voice</b></button>
+<button class="tile"><small>Language</small><b>Auto</b></button>
+<button class="tile"><small>Seed</small><b>Random</b></button>
+</div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+<button class="chip" style="display: flex; align-items: center; gap: 6px">Qwen3-TTS · Custom voice<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></button>
+<button class="chip">Open in Create</button>
+<div style="flex-grow: 1"></div>
+<button disabled aria-disabled="true" title="Pick a voice first" style="height: 52px; padding: 0 22px; border-radius: 12px; border: 0; background: var(--s4); color: var(--t2); box-shadow: none; cursor: not-allowed; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px"><span style="font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.04em">Generate line</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500">Pick a voice first</span></button>
+</div>
+</section>
+<p class="note">The hint takes the place of the time and memory line. The Voice tile is ringed to point at it. Dialogue keeps its own cast checks.</p>
+</section>
 </div>
 
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":1440}}'>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":2210}}'>
 class Component extends DCLogic {
 state = { theme: null, sel: 'dlg', open: true, running: false, mode: 'vo', preset: 'Steady', menu: false, makeOpen: true, made: null, gains: { dlg: -2, vo: 0 }, mutes: { dlg: false, vo: false } };
 renderVals() {
