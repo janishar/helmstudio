@@ -153,6 +153,10 @@ runners-stop:     ## stops the native runners (each by its pid file; only a proc
 	@for env in torch mlx native; do f=$(RUN_DIR)/runner-mac-$$env.pid; pid=$$(cat $$f 2>/dev/null) || continue; \
 	if ps -p $$pid -o command= | grep -q 'uv run'; then kill $$pid && echo "stopped runner $$env ($$pid)"; \
 	else echo "runner $$env ($$pid) is not running"; fi; rm -f $$f; done
+	@# API 1.65: plugin groups a killed runner left (pid = group), only while the process's cwd is that plugin's folder
+	@for f in $${HELM_HOME:-$$HOME/.helm}/run/*.pid; do [ -f "$$f" ] || continue; pid=$$(cat $$f); n=$$(basename $$f .pid); \
+	if [ -n "$$(ps -o command= -p $$pid)" ] && lsof -a -d cwd -p $$pid -Fn | grep -q "/plugins/$$n$$"; then \
+	kill -TERM -- -$$pid && echo "stopped plugin $$n ($$pid)"; fi; rm -f $$f; done
 
 # Remote GPU hosts (deploy/gpu-host/README.md; contracts/README.md, A remote GPU host). Each has its own NATS user
 # runner_<h>_torch and S3 identity runner-<h>, made by .tools/make-secrets; a running dev stack takes a new host

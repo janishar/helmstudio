@@ -9,6 +9,7 @@ const { Runners, layout } = require('../src/stack');
 test('a new start stops the runners a killed app left behind', async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'helm-runners-'));
   process.env.HELMSTUDIO_HOME = home;
+  process.env.HELM_HOME = path.join(home, 'helm'); // never the real ~/.helm/run
   const p = layout(home, home);
   // a stand-in runner: node under the venv's python name, running a main.py that idles
   fs.mkdirSync(path.join(p.venvs, 'runner', 'bin'), { recursive: true });
@@ -30,4 +31,27 @@ test('a new start stops the runners a killed app left behind', async () => {
   assert.notEqual(b.procs.torch.pid, old);
   await b.stop();
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(home, 'runners.json'))), {});
+});
+
+test('a stop or start stops the plugin groups a killed native runner left, only in their plugin folders', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'helm-plugins-'));
+  process.env.HELM_HOME = home;
+  const { spawn } = require('node:child_process');
+  const idle = (cwd) => spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { cwd, detached: true, stdio: 'ignore' });
+  fs.mkdirSync(path.join(home, 'plugins', 'web'), { recursive: true });
+  fs.mkdirSync(path.join(home, 'run'));
+  const left = idle(path.join(home, 'plugins', 'web'));
+  const other = idle(home); // a reused pid: not in its plugin's folder
+  fs.writeFileSync(path.join(home, 'run', 'web.pid'), `${left.pid}`);
+  fs.writeFileSync(path.join(home, 'run', 'x.pid'), `${other.pid}`);
+  const gone = new Promise((r) => left.once('exit', r));
+  try {
+    await new Runners({ p: { home, venvs: path.join(home, 'venvs') }, cfg: {}, settings: {} }).reapPlugins();
+    await gone;
+    assert.equal(other.exitCode, null, 'the other process runs on');
+    assert.deepEqual(fs.readdirSync(path.join(home, 'run')), []);
+  } finally {
+    left.kill();
+    other.kill();
+  }
 });

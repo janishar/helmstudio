@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import subprocess
 from types import SimpleNamespace
 
 import pytest
@@ -60,7 +61,10 @@ async def test_runs_logs_clean_env_and_stops(sup, tmp_path):
     assert not [k for k in env if k.startswith(("NATS_", "S3_"))]
     assert env["HELM_HOME"] == str(tmp_path / "home")
     proc = sup.procs["web"]
+    assert (tmp_path / "home/run/web.pid").read_text() == str(proc.pid)
+    assert (tmp_path / "home/run").stat().st_mode & 0o777 == 0o700
     await sup.want([])
+    assert not (tmp_path / "home/run/web.pid").exists()
     assert proc.returncode is not None and sup.states.get("web", {}).get("state") == "stopped"
     assert [p["plugins"]["web"]["state"] for p in sup.published] == [
         "starting",
@@ -87,7 +91,12 @@ async def test_first_folder_wins_and_refusals(tmp_path):
     plugin(b, "web")
     plugin(a, "web", cmd=["./main.py"])
     assert resolve([a, b], "web", "mac")[1] == (a / "web").resolve()
-    for cmd in (["/bin/sh", "x"], ["../x"], ["./../b/web/main.py"], ["./nope.sh"], ["bin/x"]):
+    plugin(a, "sub", cmd=["bin/start.sh", "x"])
+    (a / "sub/bin").mkdir()
+    (a / "sub/bin/start.sh").write_text("")
+    assert resolve([a], "sub", "mac")[0] == [str((a / "sub/bin/start.sh").resolve()), "x"]
+    for cmd in (["/bin/sh", "x"], ["../x"], ["./../b/web/main.py"], ["./nope.sh"], ["bin/x"],
+                [str(a / "web/main.py")]):  # fmt: skip
         plugin(a, "bad", cmd=cmd)
         with pytest.raises(Refused, match="not a file inside its folder"):
             resolve([a], "bad", "mac")
@@ -150,3 +159,44 @@ async def test_watch_reads_the_key_and_keeps_the_set_when_off_contract(sup, tmp_
     await until(lambda: sup.states.get("web", {}).get("state") == "stopped")
     stop.set()
     await task
+
+
+def leftover(argv, cwd=None):
+    """A group a dead runner left (its own session, not our child's supervisor)."""
+    return subprocess.Popen(argv, cwd=cwd, start_new_session=True, stdout=subprocess.DEVNULL)
+
+
+async def test_reaps_leftover_groups_only_when_still_the_plugins(sup, tmp_path):
+    d = plugin(tmp_path / "a", "web")
+    run = tmp_path / "home/run"
+    run.mkdir(parents=True)
+    left = leftover(["python", "main.py"], d)
+    other = leftover(["sleep", "60"])
+    (run / "web.pid").write_text(str(left.pid))
+    (run / "x.pid").write_text(str(other.pid))  # not a plugin's process: left alone
+    (run / "gone.pid").write_text("999999")
+    await sup.reap_all()
+    assert left.wait(5) is not None and other.poll() is None
+    assert list(run.iterdir()) == []
+    other.kill()
+    other.wait()
+
+
+async def test_a_new_retry_nonce_starts_a_failed_plugin_at_once(tmp_path):
+    plugin(tmp_path / "a", "crash", script="raise SystemExit(3)\n")
+
+    async def publish(value):
+        pass
+
+    s = Supervisor(
+        [tmp_path / "a"], tmp_path / "home", publish, up_s=0.3, backoff=(30, 60), host="mac"
+    )
+    value = {"schema_version": 1, "host": "mac", "plugins": ["crash"], "updated_at": now()}
+    await s.offer(json.dumps(value | {"retry": {"crash": 1}}).encode())
+    await until(lambda: s.states.get("crash", {}).get("state") == "failed")
+    await s.offer(json.dumps(value | {"retry": {"crash": 1}}).encode())  # same nonce: still waits
+    await asyncio.sleep(0.2)
+    assert s.states["crash"]["restarts"] == 0
+    await s.offer(json.dumps(value | {"retry": {"crash": 2}}).encode())
+    await until(lambda: s.states["crash"]["restarts"] == 1)
+    await s.close()

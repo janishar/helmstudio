@@ -5,7 +5,13 @@ keeps each one's `run.cmd` running from its own folder in RUNNER_PLUGINS_DIRS (f
 never a symlink or a .zip): its own process group, a clean env (never the runner's NATS or S3 secrets), output appended
 to $HELM_HOME/logs/<name>.log. One that exits is started again after a backoff (1 s doubling to 60 s, reset after 60 s
 up); one that leaves the list is stopped (SIGTERM to the group, SIGKILL after 5 s). Each state change is published to
-KV registry key <host>.<env>.plugins. The first read after the runner starts starts every plugin on the list."""
+KV registry key <host>.<env>.plugins. The first read after the runner starts starts every plugin on the list.
+
+Each child's pid (= its group) is in $HELM_HOME/run/<name>.pid while it runs: a runner that died without stopping its
+plugins (a stall's os._exit, a crash, SIGKILL) leaves them running, so at start and before starting a plugin the runner
+stops (SIGTERM, then SIGKILL) a leftover group whose process is still that plugin's (its command holds run.cmd, or its
+cwd is the plugin's folder). A `retry` {name: nonce} in the key restarts a waiting plugin at once when its nonce changes.
+Run one supervising runner per host (dev's make runners or the Mac app, not both): two would stop each other's plugins."""
 
 import asyncio
 import contextlib
@@ -13,6 +19,8 @@ import json
 import logging
 import os
 import signal
+import subprocess
+import sys
 from pathlib import Path
 
 from nats.js.errors import NotFoundError
@@ -62,7 +70,7 @@ def resolve(dirs: list[Path], name: str, host: str = HOST) -> tuple[list[str], P
     prog, root = cmd[0], folder.resolve()
     if "/" in prog:
         exe = (folder / prog).resolve()
-        if not prog.startswith("./") or not exe.is_relative_to(root) or not exe.is_file():
+        if prog.startswith("/") or not exe.is_relative_to(root) or not exe.is_file():
             raise Refused(f"run.cmd {prog[:100]} is not a file inside its folder")
         prog = str(exe)
     return [prog, *cmd[1:]], root
@@ -100,6 +108,45 @@ def signal_group(pid: int, sig: int) -> None:
         os.killpg(pid, sig)
 
 
+def command(pid: int) -> str:
+    """The process's command line ('' when it is gone)."""
+    try:
+        return subprocess.run(["ps", "-o", "command=", "-p", str(pid)], capture_output=True, check=False,
+                              text=True, timeout=5).stdout.strip()  # fmt: skip
+    except OSError, subprocess.SubprocessError:
+        return ""
+
+
+def cwd_of(pid: int) -> str:
+    """The process's working folder ('' when unknown)."""
+    if sys.platform == "linux":
+        with contextlib.suppress(OSError):
+            return os.readlink(f"/proc/{pid}/cwd")
+        return ""
+    try:
+        out = subprocess.run(["lsof", "-a", "-d", "cwd", "-p", str(pid), "-Fn"], capture_output=True, check=False,
+                             text=True, timeout=5).stdout  # fmt: skip
+    except OSError, subprocess.SubprocessError:
+        return ""
+    return next((x[1:] for x in out.splitlines() if x.startswith("n")), "")
+
+
+def owned(pid: int, argv: list[str], folder: Path) -> bool:
+    """Is pid (still) this plugin's process? Its command holds run.cmd, or (after an exec) its cwd is the folder."""
+    cmd = command(pid)
+    return bool(cmd) and (" ".join(argv) in cmd or cwd_of(pid) == str(folder))
+
+
+def alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
 class Supervisor:
     """Keeps the wanted plugins running and publishes their states through `publish(value)` (awaitable)."""
 
@@ -113,7 +160,9 @@ class Supervisor:
             kill_s,
             host,
         )
-        self.logs = self.home / "logs"
+        self.logs, self.run = self.home / "logs", self.home / "run"
+        self.kicks: dict[str, asyncio.Event] = {}  # set by a retry: start again now
+        self.nonces: dict[str, int] = {}
         self.states: dict[str, dict] = {}
         self.tasks: dict[str, asyncio.Task] = {}
         self.procs: dict[str, asyncio.subprocess.Process] = {}
@@ -135,6 +184,52 @@ class Supervisor:
             except Exception:
                 log.warning("could not publish %s", KEY, exc_info=True)
 
+    def forget(self, name: str, pid: int) -> None:
+        """Drop the pid file once its child is reaped (not one a later start wrote)."""
+        f = self.run / f"{name}.pid"
+        with contextlib.suppress(OSError):
+            if f.read_text().strip() == str(pid):
+                f.unlink()
+
+    async def reap(
+        self, name: str, argv: list[str] | None = None, folder: Path | None = None
+    ) -> None:
+        """Stop the group a dead (or other) runner left for `name`, when its process is still that plugin's."""
+        f = self.run / f"{name}.pid"
+        try:
+            pid = int(f.read_text().strip())
+        except OSError, ValueError:
+            pid = 0
+        if pid and pid not in {p.pid for p in self.procs.values() if p.returncode is None}:
+            if argv is None:
+                with contextlib.suppress(Refused):
+                    argv, folder = resolve(self.dirs, name, self.host)
+            if argv and await asyncio.to_thread(owned, pid, argv, folder):
+                log.warning("plugin %s was left running by another runner or one that died (group %d): "
+                            "stopping it; run one supervising runner per host", name, pid)  # fmt: skip
+                signal_group(pid, signal.SIGTERM)
+                for _ in range(int(self.kill_s / 0.1)):
+                    if not alive(pid):
+                        break
+                    await asyncio.sleep(0.1)
+                signal_group(pid, signal.SIGKILL)
+        elif pid:
+            return  # our own live child
+        with contextlib.suppress(OSError):
+            f.unlink()
+
+    async def reap_all(self) -> None:
+        """At start: the groups every leftover pid file names."""
+        for f in sorted(self.run.glob("*.pid")):
+            await self.reap(f.stem)
+
+    async def retry(self, nonces: dict) -> None:
+        """A changed nonce: reset that plugin's backoff and start it now if it waits."""
+        for name, n in nonces.items():
+            if self.nonces.get(name) != n and name in self.kicks:
+                self.kicks[name].set()
+            self.nonces[name] = n
+
     async def want(self, names: list[str]) -> None:
         """Start what is new on the list, stop what left it."""
         for name in [n for n in self.tasks if n not in names]:
@@ -147,11 +242,14 @@ class Supervisor:
     async def keep(self, name: str) -> None:
         """Run `name` until cancelled, again after the backoff each time it exits or can't start."""
         loop, delay, stops = asyncio.get_running_loop(), self.backoff[0], 0
+        kick = self.kicks[name] = asyncio.Event()
         self.logs.mkdir(parents=True, exist_ok=True, mode=0o700)
+        self.run.mkdir(parents=True, exist_ok=True, mode=0o700)
         path = self.logs / f"{name}.log"
         while True:
             try:
                 argv, cwd = resolve(self.dirs, name, self.host)
+                await self.reap(name, argv, cwd)
                 with contextlib.suppress(FileNotFoundError):
                     if path.stat().st_size > LOG_CAP:
                         path.write_bytes(b"")
@@ -159,6 +257,7 @@ class Supervisor:
                     proc = self.procs[name] = await asyncio.create_subprocess_exec(
                         *argv, cwd=cwd, env=child_env(self.home), stdin=asyncio.subprocess.DEVNULL,
                         stdout=out, stderr=asyncio.subprocess.STDOUT, start_new_session=True)  # fmt: skip
+                (self.run / f"{name}.pid").write_text(str(proc.pid))
             except Refused as e:
                 await self.set(name, "failed", str(e))
             except OSError as e:
@@ -174,6 +273,7 @@ class Supervisor:
                 signal_group(
                     proc.pid, signal.SIGKILL
                 )  # what it left behind (a server holding its port)
+                self.forget(name, proc.pid)
                 stops += 1
                 if loop.time() - started >= self.reset_s:
                     delay = self.backoff[0]
@@ -183,13 +283,16 @@ class Supervisor:
                     "failed",
                     f"it stopped {stops} times: exit {proc.returncode}: {last_line(path)}",
                 )
-            await asyncio.sleep(delay)
-            delay = min(delay * 2, self.backoff[1])
+            with contextlib.suppress(TimeoutError):
+                await asyncio.wait_for(kick.wait(), delay)
+            delay = self.backoff[0] if kick.is_set() else min(delay * 2, self.backoff[1])
+            kick.clear()
             self.states[name]["restarts"] += 1
 
     async def stop(self, name: str) -> None:
         """SIGTERM to its group, SIGKILL after kill_s; state stopped."""
         task = self.tasks.pop(name)
+        self.kicks.pop(name, None)
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await task
@@ -201,6 +304,8 @@ class Supervisor:
             except TimeoutError:
                 signal_group(proc.pid, signal.SIGKILL)
                 await proc.wait()
+        if proc:
+            self.forget(name, proc.pid)
         await self.set(name, "stopped")
 
     async def close(self) -> None:
@@ -215,16 +320,22 @@ class Supervisor:
             value = json.loads(raw)
         except ValueError:
             value = None
+        # ponytail: retry read leniently (checked here) until gen's schema has it; then validate the whole value
+        retry = value.pop("retry", {}) if isinstance(value, dict) else {}
+        if not (isinstance(retry, dict) and all(type(n) is int for n in retry.values())):
+            retry = {}
         if errs := schemas.registry_errors("plugin_runs", value):
             log.error(
                 "host_settings %s is off-contract, ignored: %s", WANT_KEY, "; ".join(errs[:3])
             )
             return
         await self.want(value["plugins"])
+        await self.retry(retry)
 
     async def watch(self, js, stop: asyncio.Event) -> None:
         """Read the key every POLL seconds until `stop` (a direct get, as messaging.settings)."""
         kv = None
+        await self.reap_all()
         while not stop.is_set():
             wait = POLL
             try:
