@@ -3,7 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { expect, type Browser, type Page } from "@playwright/test";
 
-const ADMIN = {
+export const ADMIN = {
   email: process.env.ADMIN_EMAIL ?? "admin@helm.test",
   password: process.env.HELM_TEST_ADMIN_PASSWORD ?? "helm test admin pass 1",
 };
