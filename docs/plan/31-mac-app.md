@@ -1,79 +1,105 @@
-# helmstudio-next plan — The Mac app: a launcher, the quick path
+# helmstudio-next plan — The Mac app: a standalone prototype
 
 [← Plan index](../README.md)
 
-Status: **decided by the owner (2026-11-25, decisions below); board not drawn yet.** Not in a milestone, like plans 25–30. It
-narrows [09 §12](09-scope-and-risks.md) ("a desktop app shell … deliberately not in v1"): a personal launcher is now
-in, an installer for other Macs is still out.
+Status: **decided by the owner (2026-11-25, decisions below); board not drawn yet. A fast prototype: essential tests
+only, robust testing later.** Not in a milestone, like plans 25–30. It narrows [09 §12](09-scope-and-risks.md) ("a
+desktop app shell and a one-click installer … deliberately not in v1"): a Mac app that installs everything is now in,
+as a prototype.
 
-The owner's ask, 2026-11-25: "now plan a mac desktop app quicker path". Earlier answers (2026-11-23) set the shape: the
-same web app in its own window, plus starting and stopping the stack and the Mac runners; Electron picked over Tauri
-and SwiftUI because it renders with Chromium, the engine the e2e suite tests in.
+The owner's asks, 2026-11-25: "now plan a mac desktop app quicker path"; then the VM route, installed all together;
+then "it should be simpler. take a vm that can run on mac, install the docker images from the repositories already
+there, run the web app inside chromium. why we need so much rewriting that already available for us to use"; then
+"more quicker smaller tests only essential less regression. fast prototype for this later robust testing". So the
+prototype reuses what exists (Colima, Docker images, compose, `.tools/make-secrets`, uv and our lockfiles) and adds only
+the app around them. The repo-based launcher (the first draft) is skipped: the app goes straight to a standalone
+install.
 
-## 35. The launcher
+## 35. The Mac app
 
-### 35.1 What it is
+### 35.1 The parts (all existing, wrapped)
 
-`helmstudio.app` on this Mac, opened from the Dock or Spotlight. On open it:
+1. **VM: Colima inside the app** (MIT; Lima underneath, Apple's virtualization). Its binaries ship in the app;
+   `COLIMA_HOME` (and `LIMA_HOME`) point at `~/Library/Application Support/helmstudio/`, so the VM, its Docker socket
+   and its disks belong to the app only: nothing in `/usr/local/bin`, the user's Docker or OrbStack untouched.
+   `colima start` fetches its own Linux image and Docker; we build no VM image. Memory about 2 GB.
+2. **Images: pulled, not built.** Postgres and NATS from Docker Hub; ours (web, studio, pipelines, auth, files, kong,
+   seaweedfs) pushed once per release to GitHub's registry by one script (`.tools/push-images`, arm64, tagged with
+   the app version). The app carries one compose file naming those images: `deploy/docker-compose.yml` with image
+   tags, no test-only overlays (no fake runner, no fake models).
+3. **Window: Electron** (Chromium) on the stack's Kong (35.3).
+4. **Secrets:** the app runs `.tools/make-secrets` (shipped inside) into its own folder on first open.
+5. **Runners: native, as today** (they need the Mac's GPU). The app ships the runner code, its lockfiles, the built
+   `h3` and `zonos3` and `uv`; first open runs `uv sync` per env (torch, mlx; about 2 GB); the app starts and stops
+   them the way `make runners` does. The user picks the models folder (default `~/helmstudio-models`).
 
-1. Starts OrbStack if it is not running (`open -a OrbStack`), waits for `docker info` (up to 60 s).
-2. Starts the dev stack without a rebuild: a new root target `make start` (as `make up`, minus `--build`: secrets,
-   envs, the nats reload, `up -d --wait`). About 10–30 s when the images exist; `make up` stays as is.
-3. Starts the Mac runners: `make runners` (already a no-op for a runner that runs).
-4. Waits for Kong `127.0.0.1:8300` and the runners' `/health` (8091–8093), showing each step on a small start
-   screen; then shows the studio at `http://127.0.0.1:8300` in its window. A step that fails says so in plain words
-   with **Show log** and **Try again**.
+Ports: the app's stack uses its own host ports (Kong 8310, NATS, S3, runner health 8191–8193), so it can run beside the
+dev stack (8300) on the owner's Mac. All on 127.0.0.1.
+
+### 35.2 First open, then every open
+
+First open (one screen, a step list with progress; a failed step says so in plain words with **Show log** and **Try
+again**, and Try again resumes from that step):
+
+1. Check the Mac: Apple Silicon, macOS version, about 6 GB free.
+2. Start the VM (Colima's first start downloads its Linux image).
+3. Pull the images (about 2 GB).
+4. Make the secrets; ask for the admin email and password.
+5. Set up the runners (`uv sync`, about 2 GB) and pick the models folder.
+6. Start the stack and the runners; show the studio.
+
+Every later open: start the VM if it is stopped, `compose up -d --wait`, start the runners, show the studio; the
+same step screen while it waits.
 
 A menu-bar item shows one status dot (ready / starting / something down) and a menu: **Open**, **Restart runners**,
-**Rebuild and restart** (`make up` then `make runners`), **Open logs**, **Keep running after quit** (a tick, on),
-**Open at login** (a tick, off), **Quit entirely**.
+**Open logs**, **Keep running after quit** (a tick, on), **Open at login** (a tick, off), **Quit entirely**.
 
-Quitting the app (Cmd+Q, the Dock's Quit, or closing the window) keeps the background running: the dev stack and the
-runners stay up, the window and Dock icon go, and the menu-bar item stays, so opening the app again is instant. A
-**Keep running after quit** tick in the menu-bar menu (on by default) turns this off.
-
-**Quit entirely** in the menu-bar menu stops everything: the runners (`make runners-stop`), then the dev stack
-(`make down`; data volumes stay), then the app and its menu-bar item. The next open starts both again.
-
-### 35.2 What it is not (the quick path)
-
-- It runs from this repo checkout (it calls `make` in it; the path is set when the app is built). No copy of the
-  services, images or models inside the app.
-- Built for this Mac only: Apple Silicon, ad-hoc signed, copied to `/Applications`. A locally built app is not
-  quarantined, so no Developer ID is needed.
-- Later, not now: a signed and notarized DMG for other Macs (Apple Developer ID, $99 a year), auto-update, first-run
-  setup without the repo (pulled images, secrets made by the app), Windows and Linux.
+Quitting the app (Cmd+Q, the Dock's Quit, or closing the window) keeps the background running: the stack and the
+runners stay up, the window and Dock icon go, the menu-bar item stays, so opening again is instant. **Quit entirely**
+stops the runners, the stack (`compose down`, data stays) and the VM, then the app.
 
 ### 35.3 The window
 
-- One `BrowserWindow` on `http://127.0.0.1:8300`, its own persistent session (sign in once, like a browser profile).
+- One `BrowserWindow` on the app's Kong (`http://127.0.0.1:8310`), its own persistent session.
 - No Node in the page: `contextIsolation` on, `nodeIntegration` off, no preload API; the page is the web app as is.
 - It never leaves the studio: other origins and `target=_blank` links open in the default browser.
-- Downloads (exports, takes) use the standard save dialog. Web notifications work as in Chrome.
-- Size and position are kept between opens. `Cmd+R` reloads; the app menu has the usual Edit items so copy and paste
-  work in the page.
+- Downloads use the standard save dialog. Size and position kept. `Cmd+R` reloads; the usual Edit menu.
 - Icon: logo A from the [Logo](../mock/Logo.dc.html) board, as `.icns`.
 
-### 35.4 Code and checks
+### 35.4 Code and essential checks only
 
 - A new top-level folder `desktop/`, isolated like a service (CLAUDE.md): its own `package.json`, lockfile,
-  `Makefile`, `.env.example` (the repo path, the URL); no Dockerfile (it is not a container). Never imports another
-  service's code.
-- Electron and the packager are pinned in [14-dependencies](14-dependencies.md) at build time (Node as the web's).
-- `make -C desktop test lint`: unit tests for the start steps and status logic (commands faked), and one Playwright
-  `_electron` smoke test that opens the app against the **test** stack (`127.0.0.1:8390`) with the start commands
-  faked, never the dev stack.
-- `make -C desktop app` builds `helmstudio.app`; `make -C desktop install` copies it to `/Applications`.
-- Size: about 200 MB on disk, 200–400 MB of RAM while open.
+  `Makefile`, `.env.example`; no Dockerfile. It copies what it ships (compose file, make-secrets, runner code and
+  lockfiles) at build time; it never imports another service's code.
+- Electron, its packager and Colima are pinned in [14-dependencies](14-dependencies.md) at build time.
+- **Essential checks (prototype):** `make -C desktop lint`, a few unit tests of the step runner (commands faked), and
+  one manual end-to-end install on this Mac (first open to the studio showing, a take generated, quit and reopen,
+  Quit entirely). Nothing else; the repo's other gates run only if a change touches another service (the shipped
+  compose file and the image push script should not).
+- **Later, robust testing:** a clean-Mac install in a fresh macOS VM, update and uninstall paths, an Electron smoke
+  test in CI, failure injection per step.
+- `make -C desktop app` builds `helmstudio.app` (ad-hoc signed, with the virtualization entitlement Colima needs);
+  `make -C desktop dmg` packs it.
 
 ### 35.5 Board first
 
-A Desktop board on the canvas before code: the start screen (each step, a failed step with Show log / Try again),
-the menu-bar menu in each status, and the window's title bar. The owner approves it, then the build.
+A Desktop board on the canvas before code: the first-open screen (each step, a failed step, the admin account and
+models folder asks), the every-open start screen, and the menu-bar menu in each status. The owner approves, then the
+build.
 
-### 35.6 Cost
+### 35.6 Cost and size
 
-About a day: half for the board and the start screen, half for the app, tests and packaging.
+About a week: a day for the board, three for the app and first-open steps, a day for the image push and packaging,
+a day for the manual install run and fixes. Download about 150 MB; after setup about 4–5 GB without models.
+
+### 35.7 Not in the prototype
+
+Auto-update (a new version is a new download; the data stays in the app's Colima disk), backup and export, an
+uninstall tool, a Homebrew tap or install command, notarization (Developer ID), Intel Macs, Windows and Linux.
+
+### Open before the build
+
+- Registry: are the pushed images public, or private (the app then needs a read token)?
 
 ### Decided by the owner, 2026-11-25 (asked one by one)
 
@@ -83,3 +109,6 @@ About a day: half for the board and the start screen, half for the app, tests an
    with menu bar"; this replaces the first answer, stop everything).
 3. **Open at login: off**, with an Open at login tick in the menu-bar menu.
 4. **Dock icon plus menu-bar item.**
+5. **The VM route, all installed together on first open**, with existing parts only (Colima, pulled images, compose,
+   make-secrets, uv); no own VM image; distributed without the App Store and without a Developer ID (ad-hoc signed).
+6. **A fast prototype:** essential checks only; robust testing later.
