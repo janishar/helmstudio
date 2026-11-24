@@ -77,6 +77,7 @@ class Chat:
         self.plugins: list[dict] = []  # cmd.assistant.turn data.plugins (API 1.61)
         self.skills: list[dict] = []  # data.skills (API 1.64)
         self.sees = False  # settings.sees (API 1.65)
+        self.auto = False  # settings.auto (API 1.68)
         self.route = "/?s=2d4f6a8b-1c3e-4a5b-9c7d-8e0f1a2b3c4d"
 
     def restart(self) -> assistant.Assistant:
@@ -100,7 +101,7 @@ class Chat:
                      "tools": self.tool_names, "actions": ACTIONS,
                      "settings": {"source": {"kind": "server", "provider": "local", "model": "fake-large", "host": "mac"},
                                   "providers": provs, "search": self.search, "limits": self.limits}
-                     | ({"sees": True} if self.sees else {}),
+                     | ({"sees": True} if self.sees else {}) | ({"auto": True} if self.auto else {}),
                      "input": inp} | ({"plugins": self.plugins} if self.plugins else {}) | (
                      {"skills": self.skills} if self.skills else {})  # fmt: skip
         assert not schemas.message_errors(c), schemas.message_errors(c)
@@ -420,6 +421,84 @@ async def test_a_text_only_model_looks_at_the_users_own_takes_without_a_card(poo
 
 
 # --- caps
+
+
+def test_auto_runs_generations_and_new_saves_and_asks_for_the_rest():
+    spec = lambda name: assistant.action_spec(name, "/?s=1", {"user"})
+    plan = {"fields": {"plan": {"runs": 4, "seconds": 20}}}
+    assert assistant.auto_plan("generate", spec("generate"), plan) == (4, 80)
+    assert assistant.auto_plan("generate", spec("generate"), None) == (
+        1,
+        60,
+    )  # no estimate: a minute a run
+    assert assistant.auto_plan("designVoice", spec("designVoice"), None) == (1, 60)
+    assert assistant.auto_plan("saveAsLook", spec("saveAsLook"), None) == (0, 0)
+    assert assistant.auto_plan("change", spec("change"), None) is None  # undo: never asks
+    assert assistant.auto_plan("star", spec("star"), None) is None
+    assert (
+        assistant.auto_plan("deleteItem", spec("deleteItem"), None)
+        == "Auto stops here: deleting needs you"
+    )
+    assert (
+        assistant.auto_plan("editItem", spec("editItem"), None)
+        == "Auto stops here: overwriting needs you"
+    )
+    assert assistant.auto_plan("cloneVoice", spec("cloneVoice"), None).endswith(
+        "the voice rights tick is yours"
+    )
+    batches = assistant.action_spec("start", "/batches/1", {"user"})
+    assert (
+        assistant.auto_plan("start", batches, None)
+        == "Auto stops here: a batch sends off the machine"
+    )
+
+
+async def test_auto_runs_a_generation_under_the_hours_cap_then_asks(pool, fake):
+    c = Chat(pool, fake)
+    c.auto, c.limits = True, dict(LIMITS, auto_takes_per_hour=3, auto_gpu_minutes_per_hour=30)
+    plan = {"plan": {"runs": 2, "seconds": 30}}
+    c.script(calls(("generate", {})), {"content": "Made 2."})
+    step = await c.say("Make two", more=plan)
+    assert step["actions"] == [{"id": c.cid(1, 0), "name": "generate", "args": {}, "auto": True}]
+    assert step["caps"]["auto_takes_hour"] == 2
+    await c.results(
+        done(c.cid(1, 0), "Auto · Generated 2 images", result={"run_ids": ["r1", "r2"]})
+    )
+    # 2 + 2 > 3: it asks, with the hour's count as its line
+    c.script(calls(("generate", {})), {"content": "Asked."})
+    step = await c.say("Two more", more=plan)
+    assert (
+        step["actions"][0]["asks"] == "Auto paused · 2 of 3 takes this hour"
+        and "auto" not in step["actions"][0]
+    )
+    await c.results(
+        {"id": c.cid(3, 0), "status": "cancelled", "line": {"text": "Not now", "undo": False}}
+    )
+    # bigger than the whole cap: a big run asks
+    c.script(calls(("generate", {})), {"content": "Asked."})
+    step = await c.say("Ten", more={"plan": {"runs": 10, "seconds": 5}})
+    assert step["actions"][0]["asks"] == "Auto stops here: a big run needs you"
+    await c.results(
+        {"id": c.cid(5, 0), "status": "cancelled", "line": {"text": "Not now", "undo": False}}
+    )
+    # a run that failed in the tab gives its takes back
+    async with pool.connection() as conn:
+        await conn.execute("DELETE FROM assistant_spend WHERE kind = 'auto'")
+    c.script(calls(("generate", {})), {"content": "Failed."})
+    step = await c.say("One", more={"plan": {"runs": 1, "seconds": 30}})
+    assert step["actions"][0]["auto"] is True and step["caps"]["auto_takes_hour"] == 1
+    await c.results(
+        {"id": c.cid(7, 0), "status": "failed", "line": {"text": "failed", "undo": False}}
+    )
+    async with pool.connection() as conn:
+        cur = await conn.execute("SELECT count(*) AS n FROM assistant_spend WHERE kind = 'auto'")
+        assert (await cur.fetchone())["n"] == 0
+    # off: no marks at all
+    c.auto = False
+    c.script(calls(("generate", {})), {"content": "Asked."})
+    step = await c.say("Again", more=plan)
+    assert step["actions"] == [{"id": c.cid(9, 0), "name": "generate", "args": {}}]
+    assert "auto_takes_hour" not in step["caps"]
 
 
 async def test_the_per_message_caps(pool, fake):
