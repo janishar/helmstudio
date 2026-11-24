@@ -111,6 +111,21 @@ make gpu-host-tunnel-stop
 `helmstudio-test` always runs with TLS (the fake runner joins over `tls://` and `https://`), from a self-signed CA
 that `.tools/make-secrets` makes (`deploy/secrets/tls_ca`, `stack_tls_cert`, `stack_tls_key`).
 
+## Production on this Mac
+
+`make prod` runs the current checkout as production next to the dev stack ([plan](docs/plan/26-production.md)):
+project `helmstudio-prod`, no fakes (no fake runner, no Echo), its own ports (Kong 127.0.0.1:8400, Postgres 5465,
+NATS 4324, S3 8435), network, volumes, images tagged `prod` and fresh secrets in `deploy/secrets-prod/` (provider keys
+in its `providers/`). Services restart unless stopped, logs are capped, memory is limited. Sign in with the admin from
+`auth_service/.env` (its password is set only when the account is made; change it in the app).
+
+```sh
+make prod                                  # first time: makes deploy/secrets-prod/; builds, starts, waits
+open http://localhost:8400
+make prod-ps; make prod-logs s=studio; make prod-down    # down keeps the data
+make runners-stop; make runners STACK=prod # the Mac runners on prod (STACK defaults to dev)
+```
+
 ## Ports
 
 Published on 127.0.0.1, set in `deploy/.env`: Kong on `8300` (`KONG_HTTP_PORT`), Postgres on `5463`

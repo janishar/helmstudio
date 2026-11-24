@@ -41,8 +41,8 @@ Notes from the owner while using the app. Not scheduled; each is picked up when 
 
 ## Deployment
 
-- **Production deployment (plan 26)** (owner, 2026-11-23: "add in tasks"). No production setup exists yet: only the dev
-  stack (`make up`, always with `deploy/compose/fake.yml`, so the fake runner and Echo) and the test stack. Plan it
+- **Production deployment (plan 26)** (owner, 2026-11-23: "add in tasks"). Production on this Mac is built
+  ([plan/26-production.md](plan/26-production.md): `make prod`, no fakes); what is left is the server deployment. Plan it
   with the owner's answers first (who uses it: just the owner, a team or the internet; where it runs: this Mac, a home
   server or a cloud VM, with the Mac runners and GCP as GPU hosts). Shape: the base compose without `fake.yml` (a
   check that no fake service or echo workflow is offered), fresh production secrets from `.tools/make-secrets`, a
