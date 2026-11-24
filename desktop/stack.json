@@ -45,5 +45,6 @@
   ],
   "minMacOS": 13,
   "minFreeGB": 6,
+  "imagesDiskGB": 2.2,
   "defaultModelsDir": "~/helmstudio-models"
 }

@@ -112,7 +112,7 @@ function imagesRun({ inVM, onHost = () => true, local = false, manifest = false 
     if (args[0] === 'manifest') {
       if (!manifest) throw new Error('no manifest');
       const layer = (d, size) => ({ digest: `sha256:${d.repeat(64)}`, size });
-      return JSON.stringify([{ Descriptor: { platform: { architecture: 'arm64', os: 'linux' } }, OCIManifest: { layers: [layer('a', 90e6), layer('b', 30e6)] } }]);
+      return JSON.stringify([{ Descriptor: { platform: { architecture: 'arm64', os: 'linux' } }, OCIManifest: { layers: [layer('a', 400e6), layer('b', 200e6)] } }]);
     }
     if (args[0] === 'pull') {
       ['aaaaaaaaaaaa: Pulling fs layer', 'bbbbbbbbbbbb: Already exists', 'aaaaaaaaaaaa: Pull complete', `Status: Downloaded ${img}`].forEach(onLine);
@@ -138,7 +138,7 @@ test('images: the released ones, pulled into the VM when missing', async () => {
   assert.ok(calls.every((c) => c.vm));
   assert.equal(pipes.length, 0);
   assert.deepEqual(seen.slice(0, 5), [0, 0, 0.25, 0.5, 0.5]); // per image, then per layer done
-  assert.equal(runner.snapshot().steps[0].detail, '1.0 GB');
+  assert.equal(runner.snapshot().steps[0].detail, '5.0 GB on disk'); // first open: all ten images' own sizes
   assert.match(fs.readFileSync(runner.logFile, 'utf8'), /Pull complete/);
 });
 
@@ -167,6 +167,10 @@ test('images: byte progress from the registry\'s layer sizes', async () => {
   const seen = [];
   runner.on('update', (s) => s.steps[0].progress != null && seen.push([s.steps[0].progress, s.steps[0].detail]));
   assert.equal(await runner.run(), 'done');
-  assert.deepEqual(seen.slice(0, 2), [[0.25, '30 of 120 MB'], [1, '120 of 120 MB']]); // bbbb… already there, then aaaa… pulled
-  assert.equal(runner.snapshot().steps[0].detail, '120 MB');
+  // bbbb… already there, then aaaa… pulled; first open labels download and on disk (stack.json's estimate, then measured)
+  assert.deepEqual(seen.slice(0, 2).map(([p, d]) => [p.toFixed(2), d]), [
+    ['0.33', `0.2 of 0.6 GB download · ${cfg.imagesDiskGB} GB on disk`],
+    ['1.00', `0.6 of 0.6 GB download · ${cfg.imagesDiskGB} GB on disk`],
+  ]);
+  assert.equal(runner.snapshot().steps[0].detail, '0.6 GB download · 5.0 GB on disk');
 });
