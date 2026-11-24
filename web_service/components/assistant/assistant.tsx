@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { api, message, ok, type S } from "@/lib/api";
 import {
+  ASSISTANT_CHANGED,
   MEMORY_TABS,
   ago,
   applyEvent,
@@ -122,7 +123,13 @@ export function useAssistant(me: S<"User"> | null) {
   }, []);
   const setLocal = (id: string, l: Local) => setLocalState((m) => ({ ...m, [id]: l }));
 
-  // the status and the newest chat, once the user is known
+  // the status and the newest chat, once the user is known, and again when Admin › AI agents saves (no reload)
+  const [rev, setRev] = useState(0);
+  useEffect(() => {
+    const bump = () => setRev((n) => n + 1);
+    window.addEventListener(ASSISTANT_CHANGED, bump);
+    return () => window.removeEventListener(ASSISTANT_CHANGED, bump);
+  }, []);
   useEffect(() => {
     if (!me) return;
     let stop = false;
@@ -143,7 +150,7 @@ export function useAssistant(me: S<"User"> | null) {
     return () => {
       stop = true;
     };
-  }, [me]);
+  }, [me, rev]);
 
   // the chat's events, live
   useEffect(() => {

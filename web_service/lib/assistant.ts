@@ -310,3 +310,6 @@ export const MEMORY_TABS = [
   ["worked", "Worked"],
   ["summary", "Chats"],
 ] as const;
+
+/** Sent by Admin › AI agents after a save, so the dock shows or hides the Assistant without a reload. */
+export const ASSISTANT_CHANGED = "hs.assistant.changed";

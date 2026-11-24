@@ -12,6 +12,7 @@ import { ErrorNote, Info } from "@/components/kit";
 import { AdminTabs } from "@/components/admin/users";
 import { useUser } from "@/components/shell";
 import { api, message, ok, type S } from "@/lib/api";
+import { ASSISTANT_CHANGED } from "@/lib/assistant";
 import { withThinking } from "@/lib/providers";
 
 type Names = S<"SessionNames">;
@@ -251,6 +252,7 @@ export function AgentsAdmin() {
             onSaved={(a) => {
               setAssistant(a);
               closeAssistant();
+              window.dispatchEvent(new Event(ASSISTANT_CHANGED)); // the dock follows at once
             }}
             onClose={closeAssistant}
           />

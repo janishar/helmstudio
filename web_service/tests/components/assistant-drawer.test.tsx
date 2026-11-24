@@ -8,7 +8,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { useEffect, useState } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { api, type S } from "@/lib/api";
-import { done, type Handler } from "@/lib/assistant";
+import { ASSISTANT_CHANGED, done, type Handler } from "@/lib/assistant";
 import { answer } from "./helpers";
 
 let path = "/";
@@ -216,6 +216,24 @@ describe("the drawer", () => {
     expect(screen.queryByRole("button", { name: "Assistant" })).toBeNull();
     fireEvent.keyDown(window, { key: "j", metaKey: true });
     expect(screen.queryByRole("complementary", { name: "Assistant" })).toBeNull();
+  });
+
+  it("shows in the dock as soon as Admin › AI agents turns it on, without a reload", async () => {
+    let on = false;
+    answer("GET", {
+      "/v1/studio/assistant/threads": () => ({
+        data: { status: { ...status(), enabled: on }, threads: [] },
+      }),
+    });
+    render(<AppShell user={user}>x</AppShell>);
+    await act(() => Promise.resolve());
+    expect(screen.queryByRole("button", { name: "Assistant" })).toBeNull();
+    on = true;
+    await act(async () => {
+      window.dispatchEvent(new Event(ASSISTANT_CHANGED));
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Assistant" })).toBeTruthy());
   });
 
   it("says a hidden tab's summary is hidden", async () => {
