@@ -112,3 +112,17 @@ Notes from the owner while using the app. Not scheduled; each is picked up when 
   (vendor links expire); seeds that may not repeat, queue waits, content-policy refusals, each vendor's terms.
   Magnific fits as an Upscale take action and a pipeline step; fal as a short curated list of models. Rough size if
   built: 2–4 days for the runner and the first vendor, about a day per further vendor or model family.
+
+## Skills (decided 2026-11-25, on the list after item 35 when the owner says)
+
+A plugin kind `skill`: text that teaches the Assistant a craft (an animator, a cinematographer, a voice director)
+and how to do it in helmstudio. `plugins/<name>/plugin.json` (kind skill, `"format": 1`, title, when to use) plus
+`SKILL.md`, optional extra files read on demand and recipes as data (checked against the install's settings). The
+prompt holds one line per skill that is on; the full guide is read into the chat when an ask fits or the user types
+@<skill> (a "Using skill" line). Text only: actions come from Assistant tools plugins with their cards.
+Added without an app update (owner: "i would want to add a skill into the plugin without upgrading the app"): drop a
+folder or a .zip into `~/.helm/plugins/` (owner: "use ~/.helm as the outside dir"); the app picks it up on start,
+Rescan or by watching the folder, off until turned on. Built-in plugins (shipped with the app) and the user's both
+show on the Plugins page; the user's copy of the same name wins ("replaces built-in"). An older app refuses a newer
+`format` with "needs a newer helmstudio". Later: upload a zip on the Plugins page for servers without folder access,
+skills in pipeline agent nodes.
