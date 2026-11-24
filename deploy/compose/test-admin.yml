@@ -5,7 +5,7 @@ services:
     environment:
       ADMIN_EMAIL: admin@helm.test
       ADMIN_PASSWORD: ${HELM_TEST_ADMIN_PASSWORD:-helm test admin pass 1}
-  # API 1.60: the fake plugins (contract_tests/fake_plugins: the fake OpenAI server as a provider and as tools) beside
+  # API 1.61: the fake plugins (contract_tests/fake_plugins: the fake OpenAI server as a provider and as tools) beside
   # the repo's plugins/
   studio:
     environment:
