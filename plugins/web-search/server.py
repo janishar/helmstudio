@@ -17,8 +17,20 @@ from ddgs.exceptions import DDGSException, RatelimitException
 MAX_BODY = 16_000
 
 
+# DuckDuckGo first; it often answers "No results found" to scripts, so then ddgs's other free, keyless engines in turn
+ENGINES = ("duckduckgo", "bing", "google", "yahoo")
+
+
 def search(query: str, limit: int) -> list[dict]:
-    return DDGS().text(query, max_results=limit, backend="duckduckgo")
+    err: DDGSException | None = None
+    for engine in ENGINES:
+        try:
+            found = DDGS().text(query, max_results=limit, backend=engine)
+            if found:
+                return found
+        except DDGSException as e:  # a rate limit or no results: the next engine
+            err = e
+    raise err or DDGSException("No results found.")
 
 
 def answer(body) -> tuple[int, dict]:
@@ -33,12 +45,12 @@ def answer(body) -> tuple[int, dict]:
     try:
         found = search(q.strip(), limit)
     except RatelimitException:
-        return 429, {"detail": "DuckDuckGo is rate-limiting searches; try again in a minute"}
+        return 429, {"detail": "the search engines are rate-limiting searches; try again in a minute"}
     except DDGSException as e:
-        return 502, {"detail": f"DuckDuckGo search failed: {str(e) or type(e).__name__}"[:200]}
+        return 502, {"detail": f"web search failed: {str(e) or type(e).__name__}"[:200]}
     results = [{"title": str(r.get("title") or "")[:200], "url": str(r.get("href") or "")[:500],
                 "snippet": str(r.get("body") or "")[:500]} for r in found[:limit]]  # fmt: skip
-    return 200, {"result": {"results": results}, "line": f'Searched the web · DuckDuckGo · "{q.strip()}"'[:300],
+    return 200, {"result": {"results": results}, "line": f'Searched the web · "{q.strip()}"'[:300],
                  "sources": [{"title": r["title"], "url": r["url"]} for r in results[:5]]}  # fmt: skip
 
 

@@ -15,7 +15,7 @@ def test_search_answers_and_errors(monkeypatch):
     monkeypatch.setattr(server, "search", fake)
     code, body = server.answer({"input": {"query": " ltx ", "limit": 7}})
     assert code == 200 and got == [("ltx", 7)]
-    assert body["line"] == 'Searched the web · DuckDuckGo · "ltx"'
+    assert body["line"] == 'Searched the web · "ltx"'
     assert len(body["result"]["results"]) == 7 and len(body["sources"]) == 5
     assert body["result"]["results"][0] == {"title": "T0", "url": "https://e.org/0", "snippet": "s"}
     assert server.answer({"input": {"query": "x"}})[0] == 200 and got[-1] == ("x", 5)
