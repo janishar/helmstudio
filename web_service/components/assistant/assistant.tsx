@@ -1315,10 +1315,16 @@ function Thread({ a, entries }: { a: AssistantApi; entries: Entry[] }) {
         {lines
           .filter((l) => l.sources?.length)
           .map((l) => (
+            // three sources as small text, the rest counted (board frame 6): never links, nothing in them acts
             <ol key={`s${l.id}`} className="src">
-              {l.sources!.map((s) => (
-                <li key={s.url}>{sourceText(s)}</li>
+              {l.sources!.slice(0, 3).map((s) => (
+                <li key={s.url} title={sourceText(s)}>
+                  {sourceText(s)}
+                </li>
               ))}
+              {l.sources!.length > 3 && (
+                <li className="list-none">+ {l.sources!.length - 3} more</li>
+              )}
             </ol>
           ))}
         {copy && (

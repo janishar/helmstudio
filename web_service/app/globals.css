@@ -1185,6 +1185,11 @@
     line-height: 16px;
     color: var(--t2);
   }
+  .ast .src li {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
   .ast .mn {
     padding: 0 3px;
     border-radius: 5px;
@@ -1986,6 +1991,8 @@
   gap: 9px;
   width: 100%;
   box-sizing: border-box;
+  /* grows with its line: the general .opt (a 36 px choice chip) must not clip the card (owner, 2026-11-25) */
+  height: auto;
   min-height: 44px;
   padding: 8px 10px;
   border: 0;
@@ -2011,6 +2018,7 @@
   color: var(--t2);
 }
 .ast .opt.rec {
+  padding-right: 86px; /* room for its Best next tag */
   box-shadow: inset 0 0 0 1px var(--a1);
 }
 .ast .opt.on {
