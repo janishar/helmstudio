@@ -60,8 +60,12 @@ def build(body):
     if tools and body.get("tool_choice") != "none":
         names = [t["name"] for t in tools]
         system.append(
-            "The caller has these tools (JSON schemas of their arguments). You cannot run them yourself: to use one, "
-            "list it in `tool_calls` and the caller runs it and sends you the result.\n" + json.dumps(tools, indent=1)
+            "# How to use tools here\n"
+            "The tools below are run by the caller, not by you: they are NOT in your own tool list, and calling one "
+            "directly fails with \"No such tool available\". Never call them directly. To use one, put it in the "
+            "`tool_calls` field of your JSON answer; the caller runs it and sends you the result in the next "
+            "message. That is how every tool in this conversation works, and it always works.\n\n"
+            "Tools (name, description, JSON schema of the arguments):\n" + json.dumps(tools, indent=1)
             + "\n\nAnswer as JSON: `text` is your reply to the user (may be empty when you call tools); "
             "`tool_calls` lists the tools to call now, each with its `name` and `arguments` object "
             "matching that tool's schema. Leave `tool_calls` empty when no tool is needed.")
