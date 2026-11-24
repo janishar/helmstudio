@@ -101,8 +101,9 @@ browsers.
   and the token of the user signed in with `helm login`.
 - **Root admin**, as in the reference: one account, named by `ADMIN_EMAIL` and
   `ADMIN_PASSWORD` in the server's `.env`. On every start auth_service creates
-  it or syncs it to those values (enabled, that password, the `admin` role)
-  and removes `admin` from every other account. The API refuses to grant
+  it with that password or syncs it (enabled, the `admin` role; the password
+  is only set on create, so one changed in the app survives a restart) and
+  removes `admin` from every other account. The API refuses to grant
   `admin` (`422`) and refuses any change to the root account (`409`); it is
   changed only by editing `.env` and restarting.
 - **Accounts**: there is no public sign-up. The root admin creates every

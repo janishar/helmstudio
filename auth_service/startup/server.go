@@ -23,9 +23,10 @@ import (
 	"github.com/helmstudio/auth_service/utils"
 )
 
-// EnsureAdmin makes ADMIN_EMAIL the one admin, on every start: the account is created when missing, else enabled,
-// given the user and admin roles and ADMIN_PASSWORD (a changed password signs it out everywhere). Every other
-// account loses the admin role and its sessions, and without ADMIN_EMAIL / ADMIN_PASSWORD no account is admin.
+// EnsureAdmin makes ADMIN_EMAIL the one admin, on every start: the account is created with ADMIN_PASSWORD when
+// missing, else enabled and given the user and admin roles; its password is never reset, so one changed in the app
+// survives a restart. Every other account loses the admin role and its sessions, and without ADMIN_EMAIL /
+// ADMIN_PASSWORD no account is admin.
 func EnsureAdmin(ctx context.Context, env config.Env, service *auth.Service) error {
 	var id string
 	if env.AdminEmail != "" && env.AdminPassword != "" {
@@ -42,7 +43,7 @@ func EnsureAdmin(ctx context.Context, env config.Env, service *auth.Service) err
 			log.Printf("created admin %s", email)
 			id = user.ID
 		case errors.Is(err, auth.ErrConflict):
-			if id, err = syncAdmin(ctx, service, email, env.AdminPassword); err != nil {
+			if id, err = syncAdmin(ctx, service, email); err != nil {
 				return err
 			}
 		default:
@@ -67,11 +68,10 @@ func EnsureAdmin(ctx context.Context, env config.Env, service *auth.Service) err
 }
 
 // syncAdmin brings the existing ADMIN_EMAIL account in line with the .env and returns its id: enabled, user and
-// admin roles, and ADMIN_PASSWORD when the stored one differs.
-func syncAdmin(ctx context.Context, service *auth.Service, email, password string) (string, error) {
-	var id, hash string
-	err := service.DB.QueryRow(ctx, `SELECT u.id::text, c.password_hash FROM users u JOIN credentials c ON c.user_id = u.id
-		WHERE u.email = $1`, email).Scan(&id, &hash)
+// admin roles (its password stays as it is).
+func syncAdmin(ctx context.Context, service *auth.Service, email string) (string, error) {
+	var id string
+	err := service.DB.QueryRow(ctx, `SELECT id::text FROM users WHERE email = $1`, email).Scan(&id)
 	if err != nil {
 		return "", err
 	}
@@ -80,10 +80,6 @@ func syncAdmin(ctx context.Context, service *auth.Service, email, password strin
 	}
 	if _, err := service.DB.Exec(ctx, `INSERT INTO roles (user_id, role) VALUES ($1, 'user'), ($1, 'admin') ON CONFLICT DO NOTHING`, id); err != nil {
 		return "", err
-	}
-	if !utils.VerifyPassword(password, hash) {
-		log.Printf("admin %s: password set from ADMIN_PASSWORD", email)
-		return id, service.SetPassword(ctx, id, password, "admin")
 	}
 	return id, nil
 }

@@ -11,8 +11,9 @@ Users, sessions and client API keys (Go, gomicro layout, Gin through helmgo). Co
   `WEB_API_KEY_FILE` and the CLI's key `HELM_API_KEY_FILE`, registered as clients "web" and "helm" on every start) come from `deploy/secrets/`. Alone, the JWT pair is
   `KEYS_DIR/private.pem`, generated on first start when missing (`auth_service/keys/`, git-ignored). NATS account `auth`: replies on
   `auth.validate.*`, publishes `evt.auth.revoked`, and answers the NATS micro service verbs (`$SRV.>`).
-- The root admin: `ADMIN_EMAIL` / `ADMIN_PASSWORD` here. On every start (or `.tools/create-admin`) that account is created,
-  or enabled with that password and the admin role; every other account loses admin. Nobody else can be made admin
+- The root admin: `ADMIN_EMAIL` / `ADMIN_PASSWORD` here. On every start (or `.tools/create-admin`) that account is created
+  with that password, or enabled with the admin role (its password is never reset: the admin changes it in the app);
+  every other account loses admin. Nobody else can be made admin
   (422), the API refuses any change to that account (409), and there is no public sign-up.
 - Tests: start a scratch Postgres (see `.test.env.example`), `cp .test.env.example .test.env`, `make test`.
   Each run creates and drops its own database; without `TEST_DATABASE_URL` the integration tests skip.

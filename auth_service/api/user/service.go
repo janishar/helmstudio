@@ -12,8 +12,8 @@ import (
 	"github.com/helmstudio/auth_service/api/user/dto"
 )
 
-// ErrAdminAccount refuses changes to the ADMIN_EMAIL account: its roles, password and state come from auth's .env
-// (startup.EnsureAdmin applies them on every start).
+// ErrAdminAccount refuses changes to the ADMIN_EMAIL account: its roles and state come from auth's .env
+// (startup.EnsureAdmin applies them on every start); only the admin itself changes its password (PUT /auth/password).
 var ErrAdminAccount = network.NewConflictError("the admin account is set by ADMIN_EMAIL / ADMIN_PASSWORD in auth's .env", nil)
 
 // Service holds the admin updates, on top of the auth service that owns the user tables. adminEmail is the

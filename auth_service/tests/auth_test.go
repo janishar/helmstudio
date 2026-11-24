@@ -789,11 +789,15 @@ func TestAccounts(t *testing.T) {
 		t.Fatalf("non-admin create %d", c)
 	}
 
-	// another admin (set behind the API's back) loses the role; a new ADMIN_PASSWORD replaces the old one
+	// the admin changes its own password in the app; another admin (set behind the API's back) loses the role at the
+	// next start, and ADMIN_PASSWORD is used only to create the account: the changed password survives the restart
+	if c := e.do("PUT", "/auth/password", admin.AccessToken, map[string]string{"current_password": "admin password 1", "new_password": "a changed admin pass 3"}, nil); c != 204 {
+		t.Fatalf("admin changes its password %d", c)
+	}
 	if _, err := e.db.Exec(ctx, `INSERT INTO roles (user_id, role) VALUES ($1, 'admin')`, made.ID); err != nil {
 		t.Fatal(err)
 	}
-	cfg := config.Env{AdminEmail: "admin@example.com", AdminPassword: "a new admin pass 2"}
+	cfg := config.Env{AdminEmail: "admin@example.com", AdminPassword: "admin password 1"}
 	if err := startup.EnsureAdmin(ctx, cfg, e.mod.Auth); err != nil {
 		t.Fatal(err)
 	}
@@ -802,9 +806,9 @@ func TestAccounts(t *testing.T) {
 		t.Fatalf("demoted roles %v %v", roles, err)
 	}
 	if c := e.do("POST", "/auth/signin", "", map[string]string{"email": "admin@example.com", "password": "admin password 1"}, nil); c != 401 {
-		t.Fatalf("old admin password %d", c)
+		t.Fatalf("ADMIN_PASSWORD reapplied over the changed one %d", c)
 	}
-	if c := e.do("POST", "/auth/signin", "", map[string]string{"email": "admin@example.com", "password": "a new admin pass 2"}, nil); c != 200 {
-		t.Fatalf("new admin password %d", c)
+	if c := e.do("POST", "/auth/signin", "", map[string]string{"email": "admin@example.com", "password": "a changed admin pass 3"}, nil); c != 200 {
+		t.Fatalf("changed admin password %d", c)
 	}
 }
