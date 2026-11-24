@@ -1,5 +1,5 @@
 // Renders the main process's step snapshot as the board's cells: 1 steps, 2 admin account, 3 models folder,
-// 4 a failed step, 5 the every-open start screen. Text goes in with textContent only.
+// 4 a failed step, 5 the every-open start screen, 10 the first open after an update. Text goes in with textContent only.
 const LOGO = '<svg aria-hidden="true" width="26" height="26" viewBox="0 0 24 24"><path d="M8 16C8 12.4 10.4 10.6 13.3 10.6S18.4 12.6 18.4 16V21" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/><path d="M8 7V21" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/><path d="M5.3 1.6H10.7A.9.9 0 0 1 11.6 2.5V5L8 8.4L4.4 5V2.5A.9.9 0 0 1 5.3 1.6Z" fill="currentColor"/></svg>';
 const TICK = '<svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"/></svg>';
 const CROSS = '<svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>';
@@ -166,7 +166,7 @@ function render(snap) {
     const split = el('div', 'split');
     const side = el('div', 'side');
     side.append(
-      brand(first ? 'Setting up helmstudio' : 'Starting helmstudio', `Step ${cur + 1} of ${snap.steps.length}`),
+      brand(first ? 'Setting up helmstudio' : snap.mode === 'update' ? 'Updating helmstudio' : 'Starting helmstudio', `Step ${cur + 1} of ${snap.steps.length}`),
       steps(snap, 'compact', true),
     );
     const pane = snap.error ? failPane(snap) : snap.ask.kind === 'admin' ? adminPane(snap.ask) : modelsPane(snap.ask);
@@ -186,7 +186,13 @@ function render(snap) {
     const start = el('div', 'start');
     const logo = el('span', 'logo lg');
     logo.innerHTML = LOGO.replace(/width="26" height="26"/, 'width="36" height="36"');
-    start.append(logo, el('h2', 'd', 'Starting…'), steps(snap, 'mini', false), el('span', 'mut sm', 'Usually under a minute.'));
+    const upd = snap.mode === 'update';
+    start.append(
+      logo,
+      el('h2', 'd', upd ? 'Updating…' : 'Starting…'),
+      steps(snap, 'mini', false),
+      el('span', 'mut sm', upd ? `First open of ${snap.version}. Only this once.` : 'Usually under a minute.'),
+    );
     root.replaceChildren(start);
   }
 }

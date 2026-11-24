@@ -2,12 +2,14 @@
 // on the app's Kong. Dock icon plus a menu-bar item; quitting keeps the background running (decision 2), Quit
 // stops the runners, the stack and the VM.
 // HELMSTUDIO_HOME moves the app's folder (a scratch run); HELMSTUDIO_FAKE=1 fakes every command (no VM, no Docker),
-// HELMSTUDIO_FAKE_FAIL=<word> then fails one of them (the failed-step screen).
+// HELMSTUDIO_FAKE_FAIL=<word> then fails one of them (the failed-step screen); HELMSTUDIO_UPDATE_URL (tests) points
+// the update check at a fake releases list; HELMSTUDIO_HIDE=1 (tests) never shows a window.
 const path = require('node:path');
 const fs = require('node:fs');
 const { app, BrowserWindow, Tray, Menu, nativeImage, shell, dialog, ipcMain, powerMonitor } = require('electron');
 const { StepRunner, exec, pipe } = require('./steps');
-const { layout, loadSettings, stackSteps, Runners } = require('./stack');
+const { layout, loadSettings, stackSteps, Runners, openMode } = require('./stack');
+const updates = require('./update');
 const cfg = require('../stack.json');
 
 const home = process.env.HELMSTUDIO_HOME || path.join(app.getPath('appData'), 'helmstudio');
@@ -51,12 +53,31 @@ let studioWin = null;
 let tray = null;
 let trayMenu = null;
 let quitting = false;
+// the update (board frames 8–9): state checking | none | checkfail | available | download | verify | ready | installing
+// | dlfail | sumfail | installfail; release: the newest one found
+let upd = { state: 'none', release: null, got: 0, error: null };
+let updWin = null;
+let updAbort = null;
+const shownUpdates = new Set(); // versions the check at start already showed
+const version = app.getVersion();
+// the bundle to replace: only the built app (make run is Electron from node_modules)
+const bundle = res === process.resourcesPath ? path.resolve(process.execPath, '..', '..', '..') : null;
 
 if (!app.requestSingleInstanceLock()) app.exit(0);
 
+// an error no code path caught goes to the log, never to a dialog over the user's screen
+const logError = (e) => {
+  try {
+    fs.mkdirSync(p.logs, { recursive: true });
+    fs.appendFileSync(logFile, `${new Date().toISOString()} uncaught: ${e?.stack || e}\n`);
+  } catch {}
+};
+process.on('uncaughtException', logError);
+process.on('unhandledRejection', logError);
+
 // ---------- status and the menu-bar item
 
-const COLORS = { ok: [0x3f, 0xd2, 0x6b], wait: [0xf2, 0xc1, 0x4e], bad: [0xff, 0x8a, 0x80] };
+const COLORS = { ok: [0x3f, 0xd2, 0x6b], wait: [0xf2, 0xc1, 0x4e], bad: [0xff, 0x8a, 0x80], upd: [0x4a, 0xa8, 0xff] };
 
 // logo A as a template image: macOS tints it to the menu bar (white over a dark wallpaper even in light mode), as it
 // does every other icon there. A template has no colour, so the status dot is the title beside it, in ANSI colour
@@ -66,6 +87,9 @@ const trayIcon = () => {
   return i;
 };
 const DOT_TITLE = { ok: '\x1b[32m⦁\x1b[0m', wait: '\x1b[33m⦁\x1b[0m', bad: '\x1b[31m⦁\x1b[0m' }; // ⦁: a 5 px dot in the menu bar font (• is 3, ● 11)
+// an update waits: a small blue dot raised at the top right of the icon (˙ sits at cap height), before the status dot
+const UPD_TITLE = '\x1b[34m˙\x1b[0m';
+const updWaits = () => upd.release && !['none', 'checking', 'checkfail'].includes(upd.state);
 
 function dotImage(dot) {
   const s = 16;
@@ -78,13 +102,23 @@ function dotImage(dot) {
 function setStatus(dot, text, sub = '') {
   status = { dot, text, sub };
   if (!tray) return;
-  tray.setTitle(DOT_TITLE[dot]);
+  tray.setTitle((updWaits() ? UPD_TITLE : '') + DOT_TITLE[dot]);
   const login = app.getLoginItemSettings().openAtLogin;
   tray.setContextMenu(
     (trayMenu = Menu.buildFromTemplate([
       { label: text, icon: dotImage(dot), enabled: false },
       ...(sub ? [{ label: sub, enabled: false }] : []),
       { type: 'separator' },
+      ...(updWaits()
+        ? [
+            {
+              label: upd.state === 'download' ? `Updating… ${Math.floor((100 * upd.got) / (upd.release.dmg.size || 1))}%` : upd.state === 'verify' || upd.state === 'installing' ? 'Updating…' : `Update to ${upd.release.version}`,
+              icon: dotImage('upd'),
+              click: showUpdate,
+            },
+            { type: 'separator' },
+          ]
+        : []),
       { label: 'Open', click: showApp },
       { label: 'Restart runners', enabled: phase === 'ready', click: restartRunners },
       { label: 'Open logs', click: () => (fs.mkdirSync(p.logs, { recursive: true }), shell.openPath(p.logs)) },
@@ -102,7 +136,8 @@ function setStatus(dot, text, sub = '') {
         click: (i) => (app.setLoginItemSettings({ openAtLogin: i.checked }), setStatus(...Object.values(status))),
       },
       { type: 'separator' },
-      { label: 'Quit', click: quitEntirely },
+      { label: 'Check for updates…', click: () => checkUpdates(true) },
+      { label: 'Quit', click: () => quitEntirely() },
     ])),
   );
 }
@@ -120,10 +155,10 @@ async function check() {
 
 function setupWindow() {
   if (setupWin && !setupWin.isDestroyed()) return setupWin;
-  const small = mode === 'start';
+  const [width, height] = { start: [420, 340], update: [460, 420] }[mode] || [672, 500];
   setupWin = new BrowserWindow({
-    width: small ? 420 : 672,
-    height: small ? 340 : 500,
+    width,
+    height,
     resizable: false,
     fullscreenable: false,
     title: 'helmstudio',
@@ -136,7 +171,7 @@ function setupWindow() {
   setupWin.on('close', (e) => {
     if (!quitting && phase !== 'ready') (e.preventDefault(), hideAll());
   });
-  setupWin.once('ready-to-show', () => setupWin.show());
+  setupWin.once('ready-to-show', () => reveal(setupWin));
   setupWin.loadFile(path.join(__dirname, 'ui', 'setup.html'));
   return setupWin;
 }
@@ -173,9 +208,17 @@ function studioWindow() {
   studioWin.on('close', (e) => {
     if (!quitting) (e.preventDefault(), hideAll());
   });
-  studioWin.once('ready-to-show', () => studioWin.show());
+  studioWin.once('ready-to-show', () => reveal(studioWin));
   studioWin.loadURL(cfg.studioUrl);
   return studioWin;
+}
+
+// HELMSTUDIO_HIDE=1 (test runs): windows are never shown, so a driven run stays off the screen
+function reveal(w) {
+  if (process.env.HELMSTUDIO_HIDE === '1' || w.isDestroyed()) return;
+  app.dock?.show();
+  w.show();
+  w.focus();
 }
 
 function hideAll() {
@@ -184,10 +227,7 @@ function hideAll() {
 }
 
 function showApp() {
-  app.dock?.show();
-  const w = phase === 'ready' || phase === 'restarting' ? studioWindow() : setupWindow();
-  w.show();
-  w.focus();
+  reveal(phase === 'ready' || phase === 'restarting' ? studioWindow() : setupWindow());
 }
 
 // ---------- the steps
@@ -195,13 +235,13 @@ function showApp() {
 function send() {
   if (setupWin && !setupWin.isDestroyed()) setupWin.webContents.send('update', snapshot());
 }
-const snapshot = () => runner && { mode, ...runner.snapshot() };
+const snapshot = () => runner && { mode, version, ...runner.snapshot() };
 
 async function startUp() {
   if (!runner) {
-    mode = settings.installed ? 'start' : 'first';
+    mode = openMode(settings, version);
     runner = new StepRunner({
-      steps: mode === 'first' ? stack.first : stack.every,
+      steps: { first: stack.first, update: stack.update, start: stack.every }[mode],
       stateFile: mode === 'first' ? p.state : null,
       logFile,
       exec: run,
@@ -218,7 +258,7 @@ async function startUp() {
   setupWindow();
   const result = await runner.run();
   if (result === 'done') {
-    if (mode === 'first') ((settings.installed = true), settings.save());
+    if (!settings.installed || settings.version !== version) Object.assign(settings, { installed: true, version }).save();
     phase = 'ready';
     setStatus('ok', 'Ready');
     const visible = setupWin?.isVisible();
@@ -228,7 +268,7 @@ async function startUp() {
   } else if (result === 'failed') {
     phase = 'failed';
     setStatus('bad', 'Something is down', runner.error?.title);
-    if (mode === 'start') setupWin?.setContentSize(672, 500); // the failed step's pane needs the room
+    if (mode !== 'first') setupWin?.setContentSize(672, 500); // the failed step's pane needs the room
   }
 }
 
@@ -243,17 +283,127 @@ async function restartRunners() {
   check();
 }
 
-async function quitEntirely() {
+// then: what runs after the stack stopped, before the app exits (the update's swap)
+async function quitEntirely(then = () => {}) {
   if (phase === 'stopping') return;
+  updAbort?.abort();
   phase = 'stopping';
   quitting = true;
   setStatus('wait', 'Stopping…');
   runner?.cancel();
   const log = (l) => runner?.log(l);
   await stack.stopAll((cmd, args, o) => run(cmd, args, { ...o, onLine: log }));
+  then();
   tray?.destroy();
   app.exit(0);
 }
+
+// ---------- updates (board frames 8–9): check, download on Install, SHA256 check, swap on Restart
+
+function setUpd(next) {
+  upd = { ...upd, ...next };
+  setStatus(...Object.values(status)); // the menu's update item and the blue dot
+  if (updWin && !updWin.isDestroyed()) updWin.webContents.send('upd', updSnap());
+}
+const updSnap = () => ({ ...upd, current: version });
+
+// manual: opens the window and shows the outcome; the check at start and every 24 h is quiet unless it finds one
+async function checkUpdates(manual = false) {
+  if (['download', 'verify', 'installing'].includes(upd.state)) return manual && showUpdate();
+  if (manual) (setUpd({ state: 'checking' }), showUpdate());
+  try {
+    const release = await updates.check(version);
+    if (upd.state === 'ready' && release?.version === upd.release?.version) return; // downloaded already
+    setUpd({ state: release ? 'available' : 'none', release, got: 0, error: null });
+    if (release && !manual && !shownUpdates.has(release.version)) (shownUpdates.add(release.version), showUpdate());
+  } catch (e) {
+    fs.mkdirSync(p.logs, { recursive: true });
+    fs.appendFileSync(logFile, `${new Date().toISOString()} update check: ${e.message}\n`);
+    if (manual) setUpd({ state: 'checkfail' });
+  }
+}
+
+function showUpdate() {
+  if (!updWin || updWin.isDestroyed()) {
+    updWin = new BrowserWindow({
+      width: 420,
+      height: 320,
+      resizable: false,
+      fullscreenable: false,
+      minimizable: false,
+      title: 'helmstudio',
+      backgroundColor: '#16201b',
+      show: false,
+      webPreferences: { preload: path.join(__dirname, 'ui', 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
+    });
+    updWin.webContents.on('will-navigate', (e) => e.preventDefault());
+    updWin.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    updWin.once('ready-to-show', () => reveal(updWin));
+    updWin.loadFile(path.join(__dirname, 'ui', 'update.html'));
+  } else reveal(updWin);
+}
+
+const dmgFile = () => path.join(p.home, 'updates', upd.release.dmg.name);
+
+// Install: download (Cancel stops it and deletes the part), then the SHA256 against the release's SHA256SUMS
+async function downloadUpdate() {
+  const why = updates.installProblem(bundle);
+  if (why) return setUpd({ state: 'installfail', error: why });
+  const { release } = upd;
+  const file = dmgFile();
+  fs.rmSync(path.dirname(file), { recursive: true, force: true }); // an earlier download
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  updAbort = new AbortController();
+  const signal = updAbort.signal;
+  setUpd({ state: 'download', got: 0, error: null });
+  let last = 0;
+  try {
+    await updates.download(release.dmg.url, file, {
+      signal,
+      onBytes: (n) => {
+        upd.got += n;
+        if (Date.now() - last > 250) ((last = Date.now()), setUpd({}));
+      },
+    });
+  } catch (e) {
+    fs.appendFileSync(logFile, `${new Date().toISOString()} update download: ${e.message}\n`);
+    return setUpd({ state: signal.aborted ? 'available' : 'dlfail', got: 0 });
+  }
+  setUpd({ state: 'verify' });
+  try {
+    const want = updates.sumFor(await (await fetch(release.sums, { headers: { 'User-Agent': 'helmstudio-app' }, signal })).text(), release.dmg.name);
+    const got = await updates.sha256(file);
+    if (signal.aborted) throw new Error('cancelled');
+    if (want !== got) {
+      fs.rmSync(file, { force: true });
+      fs.appendFileSync(logFile, `${new Date().toISOString()} update check: ${release.dmg.name} is ${got}, SHA256SUMS says ${want}\n`);
+      return setUpd({ state: 'sumfail' });
+    }
+  } catch (e) {
+    fs.rmSync(file, { force: true });
+    return setUpd({ state: signal.aborted ? 'available' : 'dlfail', got: 0 });
+  }
+  setUpd({ state: 'ready' });
+}
+
+// Restart: stop it all the way Quit does, then the detached script swaps the bundle and opens it again
+function installUpdate() {
+  const why = updates.installProblem(bundle);
+  if (why) return setUpd({ state: 'installfail', error: why });
+  setUpd({ state: 'installing' });
+  const dmg = dmgFile();
+  quitEntirely(() => updates.install({ dmg, bundle, logFile: path.join(p.logs, 'update.log') }));
+}
+
+ipcMain.handle('upd-hello', () => updSnap());
+ipcMain.on('upd', (_e, action) => {
+  if (action === 'install' && ['available', 'dlfail', 'sumfail'].includes(upd.state)) downloadUpdate();
+  else if (action === 'cancel') updAbort?.abort();
+  else if (action === 'restart' && upd.state === 'ready') installUpdate();
+  else if (action === 'recheck') checkUpdates(true);
+  else if (action === 'notes' && upd.release) openExternal(upd.release.page);
+  else if (action === 'close') updWin?.close();
+});
 
 // ---------- the app
 
@@ -281,7 +431,7 @@ app.on('before-quit', (e) => {
 });
 
 // the end-to-end run's hook (Playwright's _electron evaluates in this process): the menu-bar menu and the state
-if (process.env.HELMSTUDIO_TEST === '1') global.helmTest = { menu: () => trayMenu, state: () => ({ phase, mode, status }) };
+if (process.env.HELMSTUDIO_TEST === '1') global.helmTest = { menu: () => trayMenu, title: () => tray?.getTitle(), state: () => ({ phase, mode, status, upd: updSnap() }) };
 
 app.whenReady().then(() => {
   Menu.setApplicationMenu(
@@ -294,4 +444,6 @@ app.whenReady().then(() => {
   setStatus('wait', 'Starting…');
   setInterval(check, 20000);
   startUp();
+  setTimeout(checkUpdates, 5000);
+  setInterval(checkUpdates, 24 * 3600 * 1000);
 });

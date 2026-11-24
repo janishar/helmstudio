@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased (0.1.0-alpha.2)
+
+### The Mac app
+
+- Updates inside the app: it checks GitHub's releases at start and every 24 h (and on **Check for updates…**), shows
+  **Update to <version>** with a blue dot, downloads only on **Install**, checks the SHA256, then swaps itself and
+  opens again. The first open of a new version pulls its images (with MB progress), refreshes the runners and
+  removes the old images once it runs.
+- Image downloads show real progress (MB or GB of the total).
+
 ## 0.1.0-alpha.1 (2026-11-24)
 
 The first public alpha. Expect rough edges and breaking changes between releases.

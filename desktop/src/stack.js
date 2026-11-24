@@ -84,6 +84,9 @@ function imagesCfg(cfg, local = process.env.HELMSTUDIO_LOCAL_IMAGES === '1') {
   return { ...cfg, images, local, composeEnv: { ...cfg.composeEnv, IMAGE_PREFIX: 'helmstudio/', IMAGE_TAG: 'prod' } };
 }
 
+// first open, the first open of a new version (none recorded before 0.1.0-alpha.2), or a plain start
+const openMode = (settings, version) => (!settings.installed ? 'first' : settings.version !== version ? 'update' : 'start');
+
 function validateAdmin(a) {
   if (!/^[^\s@']+@[^\s@']+\.[^\s@']+$/.test(a?.email || '')) return 'Enter an email address.';
   if ((a.password || '').length < 12) return 'The password needs at least 12 characters.';
@@ -93,6 +96,33 @@ function validateAdmin(a) {
 }
 
 const gb = (n) => (n / 1e9).toFixed(1);
+
+// "38 of 112 MB", "1.2 of 2.0 GB"; with no first number only the total ("112 MB")
+function sizeOf(n, total) {
+  const [d, unit, digits] = total >= 1e9 ? [1e9, 'GB', 1] : [1e6, 'MB', 0];
+  const f = (x) => (x / d).toFixed(digits);
+  return n == null ? `${f(total)} ${unit}` : `${f(n)} of ${f(total)} ${unit}`;
+}
+
+// docker's sizes ("2.205GB", "512.3MB", "0B") to bytes
+function bytesOf(s) {
+  const m = /^([\d.]+)\s*([kKMGT]?)B$/.exec(s || '');
+  return m ? Number(m[1]) * { '': 1, k: 1e3, K: 1e3, M: 1e6, G: 1e9, T: 1e12 }[m[2]] : 0;
+}
+
+// the layers for linux/arm64 from `docker manifest inspect -v` (one manifest, or a list per platform)
+function layers(m) {
+  const list = Array.isArray(m) ? m : m ? [m] : [];
+  const one = list.length === 1 ? list[0] : list.find((x) => x.Descriptor?.platform?.architecture === 'arm64' && x.Descriptor?.platform?.os === 'linux');
+  return (one?.OCIManifest || one?.SchemaV2Manifest)?.layers || [];
+}
+
+// image refs ("repo:tag") to remove after an update: ours by name (the registry prefix, or helmstudio/ from a
+// developer build), never one in `keep` (the images this version runs), never a third-party or untagged one
+function oldImages(refs, keep, prefix) {
+  const k = new Set(keep);
+  return refs.map((r) => r.trim()).filter((r) => r && !r.endsWith(':<none>') && (r.startsWith(prefix) || r.startsWith('helmstudio/')) && !k.has(r));
+}
 
 function stackSteps({ p, cfg: shipped, settings, runners }) {
   const cfg = imagesCfg(shipped);
@@ -172,6 +202,90 @@ function stackSteps({ p, cfg: shipped, settings, runners }) {
     c.detail(total ? `${gb(total)} GB` : 'up to date');
   };
 
+  const inspect = (c, img, env) =>
+    c.run('docker', ['image', 'inspect', '-f', '{{.Id}} {{.Size}}', img], { env, quiet: true }).then((o) => o.trim().split(' '));
+
+  // docker pull with byte progress: each layer's size from the registry (docker manifest inspect -v), counted when
+  // docker says that layer is done (its 12-letter id is the start of its digest); without sizes, by layer count
+  const images = async (c) => {
+    if (cfg.local) return copyImages(c, (img, env) => inspect(c, img, env));
+    const todo = [];
+    for (const img of cfg.images) if (!(await inspect(c, img, e.docker).catch(() => null))) todo.push(img);
+    const sizes = new Map();
+    for (const img of todo) {
+      const m = await c.run('docker', ['manifest', 'inspect', '-v', img], { env: e.docker, quiet: true }).then((o) => JSON.parse(o)).catch(() => null);
+      for (const l of layers(m)) sizes.set(l.digest.replace(/^sha256:/, '').slice(0, 12), l.size);
+    }
+    const total = [...sizes.values()].reduce((a, b) => a + b, 0);
+    let bytes = 0;
+    let pulled = 0; // without sizes: the pulled images' sizes, for the detail
+    const counted = new Set();
+    for (const [i, img] of todo.entries()) {
+      const seen = new Map(); // layer id -> done, for the count when there are no sizes
+      if (!total) c.progress(i / todo.length, `${i + 1} of ${todo.length} images`);
+      await c.run('docker', ['pull', img], {
+        env: e.docker,
+        onLine: (l) => {
+          const m = /^(\w{12}): (.*)/.exec(l);
+          if (!m) return;
+          const done = /Pull complete|Already exists/.test(m[2]);
+          if (total) {
+            if (!done || counted.has(m[1])) return;
+            counted.add(m[1]);
+            bytes += sizes.get(m[1]) || 0;
+            return c.progress(Math.min(bytes / total, 1), sizeOf(Math.min(bytes, total), total));
+          }
+          seen.set(m[1], done);
+          c.progress((i + [...seen.values()].filter(Boolean).length / seen.size) / todo.length);
+        },
+      });
+      if (!total) pulled += Number((await inspect(c, img, e.docker))[1]);
+    }
+    c.detail(todo.length ? sizeOf(null, total || pulled) : 'up to date');
+  };
+  const imagesHint = cfg.local ? undefined : 'The images could not be downloaded. The internet is needed for this step.';
+
+  // the runner code from Resources and one venv per env (uv sync); asks for the models folder the first time
+  const setupRunners = async (c) => {
+    if (!settings.modelsDir) {
+      const dir = tilde(await c.ask('models', { dir: cfg.defaultModelsDir }));
+      fs.mkdirSync(dir, { recursive: true });
+      settings.modelsDir = dir;
+      settings.save();
+    }
+    fs.rmSync(p.runner, { recursive: true, force: true });
+    fs.cpSync(path.join(p.res, 'runner'), p.runner, { recursive: true });
+    // --managed-python: uv's own Python in the app's folder, never a Homebrew one an upgrade would break
+    const n = cfg.venvs.length;
+    for (const [i, v] of cfg.venvs.entries()) {
+      c.progress(i / n, `${i + 1} of ${n}`);
+      await c.run(
+        p.uv,
+        ['sync', '--frozen', '--no-dev', '--managed-python', '--project', path.join(p.runner, v.project), ...v.extras.flatMap((x) => ['--extra', x])],
+        { env: { ...e.base, UV_PROJECT_ENVIRONMENT: path.join(p.venvs, v.name), UV_PYTHON_INSTALL_DIR: p.python } },
+      );
+    }
+    c.detail('');
+  };
+
+  // after an update, once the new version runs: our images not in use any more (an older tag, or the helmstudio/*
+  // ones a developer build loaded), then the dangling layers
+  const removeOld = async (c) => {
+    const df = () =>
+      c.run('docker', ['system', 'df', '--format', '{{.Type}} {{.Size}}'], { env: e.docker, quiet: true }).then(
+        (o) => bytesOf(/^Images (\S+)/m.exec(o)?.[1]),
+        () => 0,
+      );
+    const before = await df();
+    const refs = await c.run('docker', ['image', 'ls', '--format', '{{.Repository}}:{{.Tag}}'], { env: e.docker, quiet: true });
+    for (const ref of oldImages(refs.split('\n'), [...shipped.images, ...cfg.images], shipped.composeEnv.IMAGE_PREFIX)) {
+      await c.run('docker', ['image', 'rm', ref], { env: e.docker }).catch((err) => c.log(`kept ${ref}: ${err.message}`));
+    }
+    await c.run('docker', ['image', 'prune', '-f'], { env: e.docker });
+    const freed = Math.max(before - (await df()), 0);
+    c.detail(freed ? `${sizeOf(null, freed)} freed` : '');
+  };
+
   const first = [
     {
       id: 'check',
@@ -188,35 +302,7 @@ function stackSteps({ p, cfg: shipped, settings, runners }) {
       },
     },
     { id: 'vm', title: 'Start the VM', hint: 'The VM did not start.', run: vm },
-    {
-      id: 'images',
-      title: 'Load the images',
-      hint: cfg.local ? undefined : 'The images could not be downloaded. The internet is needed for this step.',
-      run: async (c) => {
-        const inspect = (img, env) =>
-          c.run('docker', ['image', 'inspect', '-f', '{{.Id}} {{.Size}}', img], { env, quiet: true }).then((o) => o.trim().split(' '));
-        if (cfg.local) return copyImages(c, inspect);
-        const todo = [];
-        for (const img of cfg.images) if (!(await inspect(img, e.docker).catch(() => null))) todo.push(img);
-        let bytes = 0;
-        for (const [i, img] of todo.entries()) {
-          const at = `${i + 1} of ${todo.length} images`;
-          const layers = new Map(); // layer id -> done; docker pull prints a line per layer status
-          c.progress(i / todo.length, bytes ? `${at} · ${gb(bytes)} GB` : at);
-          await c.run('docker', ['pull', img], {
-            env: e.docker,
-            onLine: (l) => {
-              const m = /^(\w{12}): (.*)/.exec(l);
-              if (!m) return;
-              layers.set(m[1], /Pull complete|Already exists/.test(m[2]));
-              c.progress((i + [...layers.values()].filter(Boolean).length / layers.size) / todo.length);
-            },
-          });
-          bytes += Number((await inspect(img, e.docker))[1]);
-        }
-        c.detail(todo.length ? `${gb(bytes)} GB` : 'up to date');
-      },
-    },
+    { id: 'images', title: 'Load the images', hint: imagesHint, run: images },
     {
       id: 'secrets',
       title: 'Make the secrets',
@@ -242,27 +328,7 @@ function stackSteps({ p, cfg: shipped, settings, runners }) {
       id: 'runners',
       title: 'Set up the runners',
       hint: 'Setting up the runners failed. The internet is needed for this step (about 2 GB).',
-      run: async (c) => {
-        if (!settings.modelsDir) {
-          const dir = tilde(await c.ask('models', { dir: cfg.defaultModelsDir }));
-          fs.mkdirSync(dir, { recursive: true });
-          settings.modelsDir = dir;
-          settings.save();
-        }
-        fs.rmSync(p.runner, { recursive: true, force: true });
-        fs.cpSync(path.join(p.res, 'runner'), p.runner, { recursive: true });
-        // --managed-python: uv's own Python in the app's folder, never a Homebrew one an upgrade would break
-        const n = cfg.venvs.length;
-        for (const [i, v] of cfg.venvs.entries()) {
-          c.progress(i / n, `${i + 1} of ${n}`);
-          await c.run(
-            p.uv,
-            ['sync', '--frozen', '--no-dev', '--managed-python', '--project', path.join(p.runner, v.project), ...v.extras.flatMap((x) => ['--extra', x])],
-            { env: { ...e.base, UV_PROJECT_ENVIRONMENT: path.join(p.venvs, v.name), UV_PYTHON_INSTALL_DIR: p.python } },
-          );
-        }
-        c.detail('');
-      },
+      run: setupRunners,
     },
     {
       id: 'start',
@@ -281,6 +347,16 @@ function stackSteps({ p, cfg: shipped, settings, runners }) {
     { id: 'runners', title: 'Runners', hint: 'The runners did not start.', run: startRunners },
   ];
 
+  // the first open of a new version: its images (before the services), its runner code and packages, and once it
+  // all runs, the old images; a failure before that keeps them
+  const update = [
+    every[0],
+    { id: 'images', title: 'Update the images', hint: imagesHint, run: images },
+    every[1],
+    { ...every[2], run: async (c) => (await setupRunners(c), await startRunners(c)) },
+    { id: 'clean', title: 'Remove old images', hint: 'The old images could not be removed. Show log says why.', run: removeOld },
+  ];
+
   // Quit: the runners, the stack (data stays) and the VM
   const stopAll = async (run) => {
     await runners.stop();
@@ -288,7 +364,7 @@ function stackSteps({ p, cfg: shipped, settings, runners }) {
     await run(p.colima, ['stop', '--profile', cfg.profile], { env: e.vm }).catch(() => {});
   };
 
-  return { first, every, stopAll, envs: e };
+  return { first, every, update, stopAll, envs: e };
 }
 
 // Activity Monitor names a process after its binary, and the venv's python is a symlink to uv's python3.14: so the
@@ -437,4 +513,4 @@ class Runners {
   }
 }
 
-module.exports = { layout, loadSettings, stackSteps, Runners, validateAdmin, envs, imagesCfg };
+module.exports = { layout, loadSettings, stackSteps, Runners, validateAdmin, envs, imagesCfg, openMode, oldImages, layers, sizeOf, bytesOf };

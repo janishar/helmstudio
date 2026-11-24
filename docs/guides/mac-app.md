@@ -59,8 +59,31 @@ The helmstudio icon in the menu bar is tinted by macOS like every other icon the
 - **Keep running** (on): closing the window or Cmd+Q only hides the app; the studio keeps running and
   reopens at once.
 - **Open at login** (off).
+- **Check for updates…**: see Updates below.
 - **Quit**: stops the runners, the services and the VM (about 25 s). Your takes and data stay; the next open
   starts it all again.
+
+## Updates
+
+The app checks GitHub's releases at start and every 24 h (pre-releases too while the app is an alpha). When a newer
+release with a `.dmg` and `SHA256SUMS` is out, a small window says so, the menu shows **Update to <version>** with a
+blue dot, and the menu-bar icon gets a small blue dot. **Check for updates…** in the menu checks now.
+
+- Nothing is downloaded until you press **Install**. The `.dmg` goes to the app's folder (`updates/`); **Cancel**
+  stops it and deletes the part.
+- The download is checked against the release's `SHA256SUMS`; a mismatch deletes it and nothing changes.
+- **Restart** stops everything the way Quit does, then a small script waits for the app to exit, copies the new
+  `helmstudio.app` out of the `.dmg` beside the old one, swaps the two and opens the app again (its log:
+  `logs/update.log`). If anything fails, the old app stays. The app must be somewhere it can change, such as
+  Applications: run from the `.dmg` itself, it says so and installs nothing.
+- The first open of the new version shows **Updating…**: VM, Update the images, Services, Runners (the new runner
+  code and packages), then **Remove old images** once it all runs (our images of older versions, and `helmstudio/*`
+  ones from a developer build; never third-party images). If a step fails, the old images stay and the next open
+  tries again. Your data, models and settings stay.
+
+Developers can test it against a local fake: `HELMSTUDIO_UPDATE_URL=http://127.0.0.1:<port>/releases.json` points the
+check at a file shaped like GitHub's releases list; `HELMSTUDIO_HIDE=1` keeps the windows hidden for a driven run
+(with `HELMSTUDIO_FAKE=1` and `HELMSTUDIO_HOME` on a scratch folder, nothing touches a real install).
 
 ## Where things are
 

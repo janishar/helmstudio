@@ -94,7 +94,7 @@ test('admin account checks', () => {
 });
 
 // the images step alone, on a StepRunner whose commands are faked: inVM(img) says whether the VM's Docker has it
-function imagesRun({ inVM, onHost = () => true, local = false }) {
+function imagesRun({ inVM, onHost = () => true, local = false, manifest = false }) {
   const dir = tmp();
   process.env.HELMSTUDIO_HOME = dir;
   if (local) process.env.HELMSTUDIO_LOCAL_IMAGES = '1';
@@ -108,6 +108,11 @@ function imagesRun({ inVM, onHost = () => true, local = false }) {
     if (args[0] === 'image') {
       if (env.DOCKER_HOST ? !inVM.has(img) : !onHost(img)) throw new Error(`No such image: ${img}`);
       return 'sha256:1 500000000\n';
+    }
+    if (args[0] === 'manifest') {
+      if (!manifest) throw new Error('no manifest');
+      const layer = (d, size) => ({ digest: `sha256:${d.repeat(64)}`, size });
+      return JSON.stringify([{ Descriptor: { platform: { architecture: 'arm64', os: 'linux' } }, OCIManifest: { layers: [layer('a', 90e6), layer('b', 30e6)] } }]);
     }
     if (args[0] === 'pull') {
       ['aaaaaaaaaaaa: Pulling fs layer', 'bbbbbbbbbbbb: Already exists', 'aaaaaaaaaaaa: Pull complete', `Status: Downloaded ${img}`].forEach(onLine);
@@ -154,4 +159,14 @@ test('images: HELMSTUDIO_LOCAL_IMAGES=1 copies make prod\'s images from this Mac
   assert.equal(await runner.run(), 'done');
   assert.equal(calls.filter((c) => c.args[0] === 'pull').length, 0);
   assert.deepEqual(pipes, [[['save', 'helmstudio/web:prod'], ['load'], false, true]]);
+});
+
+test('images: byte progress from the registry\'s layer sizes', async () => {
+  const [kong] = cfg.images;
+  const { runner } = imagesRun({ inVM: new Set(cfg.images.filter((i) => i !== kong)), manifest: true });
+  const seen = [];
+  runner.on('update', (s) => s.steps[0].progress != null && seen.push([s.steps[0].progress, s.steps[0].detail]));
+  assert.equal(await runner.run(), 'done');
+  assert.deepEqual(seen.slice(0, 2), [[0.25, '30 of 120 MB'], [1, '120 of 120 MB']]); // bbbb… already there, then aaaa… pulled
+  assert.equal(runner.snapshot().steps[0].detail, '120 MB');
 });

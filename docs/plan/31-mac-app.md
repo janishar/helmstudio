@@ -160,6 +160,15 @@ helpers `helmstudio Helper (…)`, ships limactl as `helmstudio-vm` (signed with
 execs it for Colima, so the VM row reads "Virtual Machine Service for helmstudio-vm"), and the runners run a hard
 link of uv's python named `helmstudio-runner` in each venv. Only the system `ssh` mux keeps its own name.
 
+**Updates (owner, 2026-11-24; board frames 8–11; branch alpha.2):** `src/update.js` checks GitHub's releases (start,
+every 24 h, Check for updates…), picks the newest above the app with a `.dmg` and `SHA256SUMS`, downloads on Install
+(Node http, not fetch: undici's body stream crashed the main process when piped to a file), checks the SHA256, and on
+Restart stops the stack like Quit and runs `src/install-update.sh` detached (wait for exit, mount, ditto beside, swap,
+`open -n`). A version other than the recorded `settings.version` runs the update steps once (images with byte progress
+from the registry's layer sizes, the runner code re-synced, old images removed after it runs). Proven on a scratch copy
+with a local fake release and the faked stack: check, menu, Install, bad SHA256 (h), Cancel, download, Restart, the
+swap and relaunch, the update steps, the version recorded. Not yet run with the real stack (pull and image removal).
+
 ### Decided by the owner, 2026-11-25 (asked one by one)
 
 1. **Shell: Electron** (Chromium, the engine the e2e suite uses).

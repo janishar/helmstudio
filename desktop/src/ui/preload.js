@@ -1,4 +1,4 @@
-// The setup window only (never the studio window, which has no preload): the few calls its page needs
+// The setup and update windows only (never the studio window, which has no preload): the few calls their pages need
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('helm', {
@@ -8,4 +8,8 @@ contextBridge.exposeInMainWorld('helm', {
   chooseFolder: (current) => ipcRenderer.invoke('choose-folder', current),
   showLog: () => ipcRenderer.send('show-log'),
   retry: () => ipcRenderer.send('retry'),
+  // the update window: its state, and install | cancel | restart | recheck | notes | close
+  onUpd: (cb) => ipcRenderer.on('upd', (_e, u) => cb(u)),
+  updHello: () => ipcRenderer.invoke('upd-hello'),
+  upd: (action) => ipcRenderer.send('upd', action),
 });
