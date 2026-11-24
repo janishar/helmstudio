@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // Admin > Model providers (components/admin/providers.tsx; docs/mock/Providers.dc.html): a remote provider says it is
 // off while the deployment's remote switch is, and the form explains what Remote asks for.
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { api } from "@/lib/api";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { KEY_CHARS_TEXT, ProvidersAdmin } from "@/components/admin/providers";
@@ -356,7 +356,7 @@ describe("ProvidersAdmin", () => {
         fetchOk(["deepseek-flash", "deepseek-v4-pro"], { "deepseek-flash": deepseekLevels }),
     });
     render(<ProvidersAdmin />);
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Edit", hidden: true }));
     expect(await screen.findByText("2 found", {}, { timeout: 2000 })).toBeTruthy();
     expect(post.mock.calls[0][0]).toBe("/v1/studio/admin/providers/{name}/test");
     expect(ticked()).toEqual(["deepseek-flash", "deepseek-chat"]);
@@ -404,7 +404,7 @@ describe("ProvidersAdmin", () => {
     };
     serve(true, false, false, [saved]);
     render(<ProvidersAdmin />);
-    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Edit", hidden: true }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "Use deepseek-v4-pro" }));
     const pro = screen.getByRole("radiogroup", { name: "Thinking for deepseek-v4-pro" });
     expect(within(pro).getByRole("radio", { name: "High" }).getAttribute("aria-checked")).toBe(
@@ -624,5 +624,73 @@ describe("ProvidersAdmin", () => {
       target: { value: "https://proxy.example.com/v1" },
     });
     expect(button("Save key").disabled).toBe(true);
+  });
+});
+
+beforeAll(() => {
+  HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
+    this.open = true;
+  };
+  HTMLDialogElement.prototype.close ??= function (this: HTMLDialogElement) {
+    this.open = false;
+  };
+});
+
+// docs/mock/Providers.dc.html frame "Row menu · 1280 px" (QA Q13): Test, Edit, Disable and Delete… in ⋯ at the row end
+describe("the row menu", () => {
+  const open = async () => {
+    serve(true);
+    render(<ProvidersAdmin />);
+    const more = await screen.findByRole("button", { name: "Actions for this provider" });
+    const menu = screen.getByRole("menu", { hidden: true });
+    expect(menu.getAttribute("aria-label")).toBe("fakeai");
+    return { more, menu };
+  };
+
+  it("⋯ holds Test, Edit, Disable and a red Delete… after a divider; no buttons left in the row", async () => {
+    const { more, menu } = await open();
+    expect(more.getAttribute("aria-haspopup")).toBe("menu");
+    const items = within(menu).getAllByRole("menuitem", { hidden: true });
+    expect(items.map((i) => i.textContent)).toEqual(["Test", "Edit", "Disable", "Delete…"]);
+    expect(items[3].className).toContain("text-bad");
+    expect(within(menu).getByRole("separator", { hidden: true })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Test", hidden: true })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Edit", hidden: true })).toBeNull();
+  });
+
+  it("Delete… opens the same confirm; a disabled row reads Enable", async () => {
+    const { menu } = await open();
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Delete…", hidden: true }));
+    expect(await screen.findByText(/is deleted; pipelines that name it/)).toBeTruthy();
+    cleanup();
+    serve(true, true, false, [{ ...remote, enabled: false }]);
+    render(<ProvidersAdmin />);
+    expect(await screen.findByRole("menuitem", { name: "Enable", hidden: true })).toBeTruthy();
+  });
+
+  it("arrow keys move through the items, Home and End jump, Escape gives focus back to ⋯", async () => {
+    const { more, menu } = await open();
+    menu.removeAttribute("popover"); // jsdom has no popover API: an open one takes focus
+    const [test, edit, , del] = within(menu).getAllByRole("menuitem");
+    test.focus();
+    fireEvent.keyDown(menu, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(edit);
+    fireEvent.keyDown(menu, { key: "End" });
+    expect(document.activeElement).toBe(del);
+    fireEvent.keyDown(menu, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(test);
+    fireEvent.keyDown(menu, { key: "ArrowUp" });
+    expect(document.activeElement).toBe(del);
+    fireEvent.keyDown(menu, { key: "Home" });
+    expect(document.activeElement).toBe(test);
+    fireEvent.keyDown(menu, { key: "Escape" });
+    expect(document.activeElement).toBe(more);
+  });
+
+  it("the address cuts with … and shows in full on hover", async () => {
+    await open();
+    const cell = screen.getByText(remote.base_url);
+    expect(cell.getAttribute("title")).toBe(remote.base_url);
+    expect(cell.className).toContain("truncate");
   });
 });

@@ -1,13 +1,14 @@
 "use client";
 // Admin > Model providers (docs/mock/Providers.dc.html): local servers (any OpenAI-compatible endpoint on a loopback or
 // private address, with the memory their GPU host keeps reserved) and remote providers (https, only while the
-// deployment's remote switch is on). Test, Edit, Enable/Disable, Delete per row; the form adds or replaces one. A
+// deployment's remote switch is on). Test, Edit, Enable/Disable, Delete… in each row's ⋯ menu; the form adds or replaces one. A
 // provider names the key file pipelines_service reads. API 1.51 (plan 25): a Preset fills the form, Fetch lists the
 // provider's models (asked by pipelines, from the preset's or the saved URL only) as a tick list, and the key file's
 // status line says Found or Missing with Recheck. API 1.52 (plan 27): the key area takes a key (a password field, its
 // value in its own state, never in the form, a URL or storage), checked with the provider, then saved to the file and
 // never shown again; Replace key and Remove key once Found.
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useId, useRef, useState } from "react";
+import { MoreHorizontal } from "lucide-react";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { AdminTabs } from "@/components/admin/users";
 import { useUser } from "@/components/shell";
@@ -106,7 +107,7 @@ export function ProvidersAdmin() {
         Admins only.
       </main>
     );
-  const cell = "border-b border-s3 p-2.5 align-top"; // cells wrap as the board's do; the actions stay on one line
+  const cell = "border-b border-s3 p-2.5 align-top"; // cells wrap as the board's do
   return (
     <>
       <main id="main" className="flex min-w-0 flex-[999_1_560px] flex-col gap-4 px-5 pt-4 pb-6">
@@ -124,7 +125,7 @@ export function ProvidersAdmin() {
         )}
         {error && <ErrorNote onRetry={load}>{error}</ErrorNote>}
         <div className="panel min-h-0 overflow-auto px-2 py-1.5" aria-busy={!list && !error}>
-          <table className="w-full min-w-[760px] border-collapse text-[13px]">
+          <table className="w-full min-w-[640px] border-collapse text-[13px]">
             <thead>
               <tr className="text-left text-[11px] tracking-[0.04em] text-t2">
                 {["Name", "Kind", "Address", "Models", "Limits", "Status", "Actions"].map((h) => (
@@ -133,7 +134,7 @@ export function ProvidersAdmin() {
                     scope="col"
                     className="sticky -top-1.5 z-[1] border-b border-s3 bg-s1 p-2.5 font-semibold"
                   >
-                    {h}
+                    {h === "Actions" ? <span className="sr-only">{h}</span> : h}
                   </th>
                 ))}
               </tr>
@@ -151,7 +152,10 @@ export function ProvidersAdmin() {
                       {p.kind === "server" ? "local server" : "remote"}
                     </span>
                   </td>
-                  <td className={`${cell} mono max-w-[240px] truncate text-[12px] text-t2`}>
+                  <td
+                    className={`${cell} mono max-w-[150px] truncate text-[12px] text-t2`}
+                    title={p.base_url}
+                  >
                     {p.base_url}
                   </td>
                   <td className={`${cell} mono text-[12px] text-t2`}>
@@ -184,37 +188,16 @@ export function ProvidersAdmin() {
                       </div>
                     )}
                   </td>
-                  <td className={`${cell} whitespace-nowrap`}>
-                    <span className="flex gap-1.5">
-                      <button
-                        type="button"
-                        className="chip bevel h-[30px]"
-                        onClick={() => void test(p)}
-                      >
-                        Test
-                      </button>
-                      <button
-                        type="button"
-                        className="chip bevel h-[30px]"
-                        onClick={() => setForm(formOf(p))}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        className="chip bevel h-[30px]"
-                        onClick={() => void toggle(p)}
-                      >
-                        {p.enabled ? "Disable" : "Enable"}
-                      </button>
-                      <button
-                        type="button"
-                        className="chip bevel h-[30px] text-bad"
-                        onClick={() => setDeleting(p)}
-                      >
-                        Delete
-                      </button>
-                    </span>
+                  <td className={`${cell} w-[34px] text-right`}>
+                    <RowMenu
+                      label={p.title || p.name}
+                      items={[
+                        ["Test", () => void test(p)],
+                        ["Edit", () => setForm(formOf(p))],
+                        [p.enabled ? "Disable" : "Enable", () => void toggle(p)],
+                        ["Delete…", () => setDeleting(p)],
+                      ]}
+                    />
                   </td>
                 </tr>
               ))}
@@ -259,6 +242,87 @@ export function ProvidersAdmin() {
           </button>
         </div>
       </Modal>
+    </>
+  );
+}
+
+/** A row's ⋯ and its menu (docs/mock/Providers.dc.html "Row menu · 1280 px"): a popover kept to the window, the
+ * items in order with the last one (Delete…) red after a divider; arrow keys, Home and End move, Escape closes it and
+ * gives focus back to ⋯. */
+function RowMenu({ label, items }: { label: string; items: [string, () => void][] }) {
+  const id = useId().replace(/:/g, "");
+  const more = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const menuItems = () => [
+    ...(document.getElementById(id)?.querySelectorAll<HTMLElement>("[role=menuitem]") ?? []),
+  ];
+  function keys(e: React.KeyboardEvent) {
+    const all = menuItems();
+    const at = all.indexOf(document.activeElement as HTMLElement);
+    const to = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: all.length - 1 }[e.key];
+    if (e.key === "Escape") {
+      e.preventDefault();
+      document.getElementById(id)?.hidePopover?.();
+      more.current?.focus();
+    } else if (to !== undefined) {
+      e.preventDefault();
+      all[(to + all.length) % all.length]?.focus();
+    }
+  }
+  return (
+    <>
+      <button
+        ref={more}
+        type="button"
+        popoverTarget={id}
+        aria-label="Actions for this provider"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="chip bevel ml-auto grid h-[30px] w-[34px] place-items-center p-0 aria-expanded:bg-s5"
+        style={{ anchorName: `--${id}` } as React.CSSProperties}
+      >
+        <MoreHorizontal size={16} aria-hidden />
+      </button>
+      <div
+        id={id}
+        popover="auto"
+        role="menu"
+        aria-label={label}
+        onKeyDown={keys}
+        onToggle={(e) => {
+          const now = (e.nativeEvent as ToggleEvent).newState === "open";
+          setOpen(now);
+          if (now) menuItems()[0]?.focus();
+        }}
+        className="pop w-[180px] flex-col gap-0.5 p-1.5 open:flex"
+        style={
+          {
+            positionAnchor: `--${id}`,
+            positionArea: "bottom span-left",
+            positionTryFallbacks: "flip-block",
+            marginTop: 4,
+          } as React.CSSProperties
+        }
+      >
+        {items.map(([text, act], i) => (
+          <Fragment key={text}>
+            {i === items.length - 1 && (
+              <div role="separator" className="mx-1.5 my-[3px] h-px bg-s5" />
+            )}
+            <button
+              type="button"
+              role="menuitem"
+              className={`h-8 rounded-lg px-2.5 text-left text-[13px] outline-0 hover:bg-s5 focus-visible:bg-s5 ${i === items.length - 1 ? "text-bad" : ""}`}
+              onClick={() => {
+                document.getElementById(id)?.hidePopover?.();
+                act();
+              }}
+            >
+              {text}
+            </button>
+          </Fragment>
+        ))}
+      </div>
     </>
   );
 }

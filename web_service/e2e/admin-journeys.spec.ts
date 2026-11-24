@@ -147,7 +147,8 @@ test("a01 add DeepSeek from the preset, with my own model name and less thinking
 });
 
 test("a02 a wrong key gets a plain error, then the right key is saved and the models load", async () => {
-  await row(PROV).getByRole("button", { name: "Edit" }).click();
+  await row(PROV).getByRole("button", { name: "Actions for this provider" }).click();
+  await admin.getByRole("menu", { name: TITLE }).getByRole("menuitem", { name: "Edit" }).click();
   await expect(panel().getByRole("heading", { name: `Edit ${PROV}` })).toBeVisible();
   await expect(field("Name")).toHaveAttribute("readonly", "");
   await expect(panel().getByText("Missing", { exact: true })).toBeVisible();
@@ -186,15 +187,33 @@ test("a02 a wrong key gets a plain error, then the right key is saved and the mo
 
 test("a03 test the provider from the list, switch it off and on", async () => {
   const r = row(PROV);
-  await r.getByRole("button", { name: "Test" }).click();
+  // the row's ⋯ menu (docs/mock/Providers.dc.html "Row menu · 1280 px"): a real menu, keys and all
+  const more = r.getByRole("button", { name: "Actions for this provider" });
+  await more.click();
+  const menu = admin.getByRole("menu", { name: TITLE });
+  await expect(menu.getByRole("menuitem", { name: "Test" })).toBeFocused();
+  await admin.keyboard.press("ArrowDown");
+  await expect(menu.getByRole("menuitem", { name: "Edit" })).toBeFocused();
+  await admin.keyboard.press("End");
+  await expect(menu.getByRole("menuitem", { name: "Delete…" })).toBeFocused();
+  await shot(admin, "a03-row-menu");
+  await admin.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
+  await expect(more).toBeFocused();
+  await more.click();
+  await menu.getByRole("menuitem", { name: "Test" }).click();
   await expect(r).toContainText(/answered · [\d.]+ s|\d+ models listed · [\d.]+ s/, {
     timeout: 30_000,
   });
   await shot(admin, "a03-tested");
-  await r.getByRole("button", { name: "Disable" }).click();
+  await more.click();
+  await menu.getByRole("menuitem", { name: "Disable" }).click();
   await expect(r).toContainText("Disabled");
-  await r.getByRole("button", { name: "Enable" }).click();
-  await expect(r.getByRole("button", { name: "Disable" })).toBeVisible();
+  await more.click();
+  await menu.getByRole("menuitem", { name: "Enable" }).click();
+  await more.click();
+  await expect(menu.getByRole("menuitem", { name: "Disable" })).toBeVisible();
+  await admin.keyboard.press("Escape");
 });
 
 test("a04 make it the assistant, ask it something, then turn it off", async () => {
@@ -246,13 +265,20 @@ test("a04 make it the assistant, ask it something, then turn it off", async () =
 test("a05 delete a provider, after changing my mind once", async () => {
   await admin.getByRole("tab", { name: "Model providers" }).click();
   const r = row(PROV);
-  await r.getByRole("button", { name: "Delete" }).click();
+  const del = async () => {
+    await r.getByRole("button", { name: "Actions for this provider" }).click();
+    await admin
+      .getByRole("menu", { name: TITLE })
+      .getByRole("menuitem", { name: "Delete…" })
+      .click();
+  };
+  await del();
   const dlg = admin.getByRole("dialog", { name: "Delete this provider?" });
   await expect(dlg).toContainText(`“${TITLE}” is deleted`);
   await shot(admin, "a05-delete-asked");
   await dlg.getByRole("button", { name: "Keep it" }).click();
   await expect(r).toHaveCount(1);
-  await r.getByRole("button", { name: "Delete" }).click();
+  await del();
   await dlg.getByRole("button", { name: "Delete" }).click();
   await expect(r).toHaveCount(0);
 });
