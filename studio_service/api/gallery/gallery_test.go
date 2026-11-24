@@ -19,6 +19,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -208,7 +209,18 @@ func TestBodies(t *testing.T) {
 		t.Fatal(got)
 	}
 	long := strings.Repeat("é", 100)
-	if got := Title(dto.MadeWith{Prompt: &long}); got != strings.Repeat("é", 80) {
+	if got := Title(dto.MadeWith{Prompt: &long}); got != strings.Repeat("é", 79)+"…" {
+		t.Fatal(got)
+	}
+	// cut at a word with "…", at most 80 characters (alpha.2 item 21)
+	words := "Elias at the window, morning light through lace curtains, the warm hand-drawn look of an old film"
+	got := Title(dto.MadeWith{Prompt: &words})
+	if got != "Elias at the window, morning light through lace curtains, the warm hand-drawn…" ||
+		utf8.RuneCountInString(got) > 80 {
+		t.Fatal(got)
+	}
+	exact := strings.Repeat("a", 80)
+	if got := Title(dto.MadeWith{Prompt: &exact}); got != exact {
 		t.Fatal(got)
 	}
 }
