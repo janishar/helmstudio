@@ -107,7 +107,16 @@ import { presetNames, studioView } from "@/lib/studio";
 import { ApiError, api, message, ok, okOr, type S } from "@/lib/api";
 import { downloaded, precisionPins } from "@/lib/models";
 import { safeUrl } from "@/lib/format";
-import { mediaKinds, mediaOf, secondsText, workflowFor, type MediaKind } from "@/lib/media";
+import {
+  SIDES,
+  mediaKinds,
+  mediaOf,
+  secondsText,
+  sideOf,
+  workflowFor,
+  type MediaKind,
+  type Side,
+} from "@/lib/media";
 import {
   applyEvent,
   clock,
@@ -122,6 +131,7 @@ import {
   mergeRuns,
   nodeLabel,
   removable,
+  renderTime,
   seedOf,
   segments,
   track,
@@ -161,7 +171,7 @@ import { useLibraryDialog } from "@/components/assistant/library";
 import { createTools } from "@/components/create/assistant";
 import {
   buildInputs,
-  carry,
+  carryKind,
   display,
   fields as fieldsOf,
   isVoice,
@@ -239,8 +249,9 @@ export type CreateInitial = {
   naming?: S<"SessionList">["naming"];
 };
 
-/** The browser's key of a session's half-written prompt ("" before the first session). */
-const draftKey = (session: string | null) => `create-draft:${session ?? ""}`;
+/** The browser's key of a session's half-written prompt or script ("" before the first session), one per side
+ * (picture, sound: sideOf), so neither replaces the other. */
+const draftKey = (session: string | null, side: Side) => `create-draft:${session ?? ""}:${side}`;
 
 /** The Create screen; `initialSession` comes from `?s=`, `reuse` (a take id whose settings fill the form) from
  * `?reuse=`, `use` (a take to use in a workflow: the gallery's "Use in…") from `?use=&w=`, `initial` from the server
@@ -346,6 +357,10 @@ export function Create({
   }, []);
   /** Opens a session (null: none yet); its runs and takes load in the effect below. The workflow follows the
    * session's newest run unless `keep` (a new session keeps the one picked). */
+  // what the form held in each workflow when it was left (in this session): a value that did not suit the next one comes back
+  const left = useRef<Record<string, Record<string, Raw>>>({});
+  // the last prompt or script of each side, picture and sound (carryKind)
+  const keptTexts = useRef<Record<string, Record<string, Raw>>>({});
   const open = useCallback((id: string | null, keep = false) => {
     seeded.current = null;
     sessionRef.current = id;
@@ -357,6 +372,9 @@ export function Create({
     setInspect(false);
     setInlineGroup(null);
     if (!keep) setChosen("");
+    // another session's form and texts never carry over (item 14)
+    left.current = {};
+    keptTexts.current = {};
     runsRef.current = [];
     setRuns(id ? null : []);
   }, []);
@@ -594,8 +612,6 @@ export function Create({
     heldNeeds.push(...valueNeedsAt(allValueNeeds, f.key, cur, wiredIn(f.node)));
     heldBlock ??= valueBlocks[f.key]?.[cur] ?? null;
   }
-  // what the form held in each workflow when it was left: a value that did not suit the next one comes back
-  const left = useRef<Record<string, Record<string, Raw>>>({});
   // a workflow with a Studio block shows exactly what it places (lib/studio.ts)
   const layout = useMemo(() => (workflow ? studioView(workflow, all) : null), [workflow, all]);
   // the params whose `when` holds now: the others are neither shown nor sent
@@ -606,31 +622,40 @@ export function Create({
   const draft = promptKey ? held[promptKey] : undefined;
   const sentDraft = useRef<unknown>(undefined);
   const draftRead = useRef<string | null | undefined>(undefined); // the session whose draft was read
+  // each side's draft (alpha.2 item 14): the open workflow's side goes into the form, the other waits in keptTexts
+  // for a switch (carryKind), so a script never lands in a picture prompt after a reload, nor the reverse
+  const side = workflow ? sideOf(workflow) : undefined;
   useEffect(() => {
-    if (!workflows || draftRead.current === sessionId) return;
+    if (!workflows || !side || draftRead.current === sessionId) return;
     const first = draftRead.current === undefined;
     draftRead.current = sessionId;
     if (first && (back || reuse || use)) return;
     try {
-      const d = JSON.parse(localStorage.getItem(draftKey(sessionId)) ?? "null");
-      if (!d?.key || typeof d.text !== "string") return;
-      // only the words: the workflow follows the session as after any reload (its other inputs are not kept)
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- the browser store is only read in the browser
-      setRaws((h) => ({ ...h, [d.key]: d.text }));
+      for (const s of SIDES) {
+        const d = JSON.parse(localStorage.getItem(draftKey(sessionId, s)) ?? "null");
+        if (!d?.key || typeof d.text !== "string") continue;
+        // only the words: the workflow follows the session as after any reload (its other inputs are not kept)
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- the browser store is only read in the browser
+        if (s === side) setRaws((h) => ({ ...h, [d.key]: d.text }));
+        else keptTexts.current[s] = { [d.key]: d.text };
+      }
     } catch {
       /* no storage here: the draft is not kept */
     }
-  }, [workflows, back, reuse, use, sessionId]);
+  }, [workflows, side, back, reuse, use, sessionId]);
   useEffect(() => {
-    if (draftRead.current !== sessionId || !promptKey) return;
+    if (draftRead.current !== sessionId || !promptKey || !side) return;
     try {
       if (typeof draft === "string" && draft.trim() && draft !== sentDraft.current)
-        localStorage.setItem(draftKey(sessionId), JSON.stringify({ key: promptKey, text: draft }));
-      else localStorage.removeItem(draftKey(sessionId));
+        localStorage.setItem(
+          draftKey(sessionId, side),
+          JSON.stringify({ key: promptKey, text: draft }),
+        );
+      else localStorage.removeItem(draftKey(sessionId, side));
     } catch {
       /* no storage here */
     }
-  }, [draft, promptKey, sessionId]);
+  }, [draft, promptKey, sessionId, side]);
   // API 1.47 (contracts/README.md, Param rules): what studio would refuse, in red under its param before Generate,
   // which they block ("fix 2 problems"); an item field's line is its row's (MediaRows), studio's 422s after a send
   const rules = ruleErrors(workflow, all, raws, fields);
@@ -748,13 +773,15 @@ export function Create({
   };
   const uploads = useRefUploads(change);
   /** Opens another workflow of the session (the picker, the Image / Video switch): what the form holds carries over
-   * where the paths match (the session rule, lib/workflow.ts carry). */
+   * where the paths match (the session rule, lib/workflow.ts carry); a prompt or script never crosses between picture
+   * and sound workflows, each keeps its own (carryKind). */
   const switchTo = (id: string) => {
     const w = workflows?.find((x) => x.id === id);
     if (w)
       setRaws((r) => {
         if (workflow) left.current[workflow.id] = r;
-        return carry(r, fieldsOf(w), all, left.current[id]);
+        const sides = { from: sideOf(workflow), to: sideOf(w) };
+        return carryKind(r, fieldsOf(w), all, left.current[id], sides, keptTexts.current);
       });
     setChosen(id);
     setOpenKey(null);
@@ -1139,8 +1166,8 @@ export function Create({
       setReuseNote("");
       sentDraft.current = prompt ? raws[prompt.key] : undefined;
       try {
-        localStorage.removeItem(draftKey(sessionId));
-        localStorage.removeItem(draftKey(sid));
+        localStorage.removeItem(draftKey(sessionId, sideOf(workflow)));
+        localStorage.removeItem(draftKey(sid, sideOf(workflow)));
       } catch {
         /* no storage here */
       }
@@ -1832,12 +1859,15 @@ export function Create({
               voiceFields.length > 0 ||
               !!scriptField ||
               paramCards.length > 0) && (
-              // the empty screen's big tiles: equal columns, so a tile that wraps keeps their width
+              // the empty screen's big tiles: equal columns, so a tile that wraps keeps their width; the cards of a
+              // video or audio workflow too, one width per line however they wrap (alpha.2 item 16)
               <div
                 className={
                   empty
                     ? "grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2"
-                    : "flex flex-wrap items-center gap-2"
+                    : card
+                      ? "grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-2 [&>*]:max-w-none [&>*]:min-w-0"
+                      : "flex flex-wrap items-center gap-2"
                 }
               >
                 {scriptField && linesKey && (
@@ -2322,6 +2352,9 @@ function Stage({
             failed: "Failed",
             cancelled: "Stopped",
           }[run.status];
+  // a finished take's render time, low text (API 1.60; docs/mock/Main.dc.html "A finished take"): its own only, none
+  // until the take is in (a run of several outputs has one per take)
+  const took = label === "Take" || audioBadge ? renderTime(take?.made_with?.render_s) : "";
   // what a screen reader hears: the state and the node, not every step
   const said = node ? `Running ${node}` : label;
   return (
@@ -2354,6 +2387,12 @@ function Stage({
             className={`mono rounded-lg bg-s2/90 px-2.5 py-1.5 text-[12px] ${run?.status === "failed" ? "text-bad" : ""}`}
           >
             {label}
+            {took && (
+              <span className="text-t2" title="Render time (start to file)">
+                {" "}
+                · {took}
+              </span>
+            )}
           </span>
           <span className="flex items-center gap-2">
             {out?.kind === "video" && (

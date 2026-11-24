@@ -1006,13 +1006,19 @@ describe("thinking (plan 29)", () => {
     expect(bubble()?.textContent).toBe("Thinking… 7 s");
   });
 
-  it("Working when the model does not think", async () => {
+  it("Working… N s when the model does not think", async () => {
     serve({ existing: thread({ client_id: ME }) });
     await openDrawer();
     await waitFor(() => expect(onEvent).not.toBeNull());
+    vi.useFakeTimers();
     to("working", 20);
     expect(screen.getByText("Working")).toBeTruthy();
     expect(screen.queryByText(/^Thinking/)).toBeNull();
+    act(() => vi.advanceTimersByTime(2000));
+    const b = screen.getByText(/^Working… /);
+    expect(b.textContent).toBe("Working… 2 s");
+    expect(b.closest(".thr")).toBeTruthy();
+    // the chip takes the title's place (alpha.2, board frame 9)
     expect(title()).toBeNull();
   });
 
@@ -1242,7 +1248,7 @@ describe("alpha.2: size, answers that read well, polish (board frames 9, 10, 14)
     // while it works, the chip takes the title's place
     expect(screen.getByText("Working")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Minimize" }));
-    expect(bar("Open the Assistant · Working").textContent).toContain("Thinking…");
+    expect(bar("Open the Assistant · Working").textContent).toContain("Working…");
     fireEvent.click(screen.getByRole("button", { name: "Stop" }));
     await waitFor(() => expect(posts).toContainEqual(expect.objectContaining({ kind: "stop" })));
     const card = (state: S<"AssistantCard">["state"]): S<"AssistantCard"> => ({

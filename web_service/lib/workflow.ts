@@ -761,6 +761,28 @@ export function carry(
   return out;
 }
 
+/** `carry` across kinds (alpha.2 item 14): a text param (a prompt, a script) never crosses between a picture
+ * (image, video) and a sound (audio) workflow. The side left keeps its texts in `kept` (changed in place); the side
+ * entered gets back its own last ones, so an Audio workflow starts from the last script, never the picture prompt. */
+export function carryKind(
+  raws: Record<string, Raw>,
+  fs: Field[],
+  from: Field[],
+  back: Record<string, Raw> | undefined,
+  sides: { from: string; to: string },
+  kept: Record<string, Record<string, Raw>>,
+): Record<string, Raw> {
+  if (sides.from === sides.to) return carry(raws, fs, from, back);
+  const texts = (x: Field[]) => new Set(x.filter((f) => f.param.type === "text").map((f) => f.key));
+  const mine = texts(from);
+  kept[sides.from] = Object.fromEntries(Object.entries(raws).filter(([k]) => mine.has(k)));
+  const rest = Object.fromEntries(Object.entries(raws).filter(([k]) => !mine.has(k)));
+  const out = carry(rest, fs, from, back);
+  const theirs = texts(fs);
+  for (const [k, v] of Object.entries(kept[sides.to] ?? {})) if (theirs.has(k)) out[k] = v;
+  return out;
+}
+
 /** One run's inputs per queued seed: n consecutive seeds from the one set, or n random ones (-1). Without a seed
  * param, n copies. `errors` (by field key) when the last seed would pass the seed's max: then nothing is queued. */
 export function queueInputs(

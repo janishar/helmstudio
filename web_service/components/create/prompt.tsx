@@ -306,7 +306,7 @@ export function MentionChips({ texts }: { texts: string[] }) {
         title={
           bad ? `No element @${h}: make it in Elements, or write @@${h} for the text` : undefined
         }
-        className={`mono rounded-lg bg-s5 px-2.5 py-1 text-[12px] ${bad ? "text-bad underline decoration-wavy" : ""}`}
+        className={`mono self-center justify-self-start rounded-lg bg-s5 px-2.5 py-1 text-[12px] ${bad ? "text-bad underline decoration-wavy" : ""}`}
       >
         @{h}
       </span>

@@ -365,7 +365,7 @@ export function RowsEditor({
   return (
     <div
       ref={box}
-      className={`${compact ? "flex flex-wrap items-center gap-2" : "flex flex-col gap-2.5"} ${over ? "rounded-lg outline-2 outline-offset-2 outline-a1 outline-dashed" : ""}`}
+      className={`${compact ? "col-span-full flex flex-wrap items-center gap-2" : "flex flex-col gap-2.5"} ${over ? "rounded-lg outline-2 outline-offset-2 outline-a1 outline-dashed" : ""}`}
       onDragOver={(e) => {
         if (dragFrom.current !== null || !carriesImage(e.dataTransfer) || room <= 0) return;
         e.preventDefault();

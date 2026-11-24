@@ -96,6 +96,7 @@ function start({
   runs = [] as S<"Run">[],
   list = models as unknown,
   reuse = undefined as string | undefined,
+  workflows = [workflow],
 } = {}) {
   const queued: Record<string, unknown>[] = [];
   const patches: unknown[] = [];
@@ -168,7 +169,7 @@ function start({
         reuse={reuse}
         initial={{
           sessions: [{ id: "s1", title: "Rain", created_at: "", updated_at: "" }],
-          workflows: [workflow],
+          workflows,
           sessionId: "s1",
           runs,
           takes,
@@ -221,7 +222,12 @@ describe("Create's actions", () => {
     );
     // the workflows switchTo takes, by title, so the model never guesses a name such as "Text to image"
     expect(f().workflows).toEqual([
-      { id: "ltx-text-to-video", title: workflow.title, media: workflow.media ?? "image", downloaded: true },
+      {
+        id: "ltx-text-to-video",
+        title: workflow.title,
+        media: workflow.media ?? "image",
+        downloaded: true,
+      },
     ]);
   });
 
@@ -380,14 +386,58 @@ describe("Create's actions", () => {
     // reviewer, 2026-11-25: the draft came back only on the first load
     const box = () => document.getElementById(idOf("prompt.text")) as HTMLTextAreaElement;
     localStorage.setItem(
-      "create-draft:s2",
+      "create-draft:s2:picture",
       JSON.stringify({ key: "prompt.text", text: "s2 words" }),
     );
     const { call } = start();
     await call("change", { key: "prompt.text", value: "s1 words" });
     await call("newSession");
     await waitFor(() => expect(box().value).toBe("s2 words"));
-    expect(JSON.parse(localStorage.getItem("create-draft:s1")!).text).toBe("s1 words");
+    expect(JSON.parse(localStorage.getItem("create-draft:s1:picture")!).text).toBe("s1 words");
+  });
+
+  // an audio workflow with the same prompt path, as Qwen3-TTS Voice design's prompt.text (alpha.2 item 14)
+  const voice = {
+    ...workflow,
+    id: "voice-design",
+    title: "Voice design",
+    media: "audio",
+  } as S<"Workflow">;
+  const tab = (name: string) => act(() => screen.getByRole("tab", { name }).click());
+
+  it("keeps a draft per side over a reload: the picture prompt never lands in the audio workflow", async () => {
+    // reviewer, 2026-11-25: one draft per session lost the picture prompt, or put a script in it
+    const box = () => document.getElementById(idOf("prompt.text")) as HTMLTextAreaElement;
+    const { call } = start({ workflows: [workflow, voice] });
+    await call("change", { key: "prompt.text", value: "@elias @biscuit at the door" });
+    await tab("Audio");
+    await waitFor(() => expect(box().value).toBe(""));
+    await call("change", { key: "prompt.text", value: "Hello there." });
+    await waitFor(() =>
+      expect(JSON.parse(localStorage.getItem("create-draft:s1:sound")!).text).toBe("Hello there."),
+    );
+    expect(JSON.parse(localStorage.getItem("create-draft:s1:picture")!).text).toBe(
+      "@elias @biscuit at the door",
+    );
+    cleanup();
+    leftForm.current = null; // a reload: the session opens on its picture workflow
+    start({ workflows: [workflow, voice] });
+    await waitFor(() => expect(box().value).toBe("@elias @biscuit at the door"));
+    await tab("Audio");
+    await waitFor(() => expect(box().value).toBe("Hello there."));
+  });
+
+  it("another session never gets this session's script", async () => {
+    const box = () => document.getElementById(idOf("prompt.text")) as HTMLTextAreaElement;
+    const { call } = start({ workflows: [workflow, voice] });
+    await tab("Audio");
+    await call("change", { key: "prompt.text", value: "s1 script" });
+    await tab("Video");
+    await call("newSession");
+    await waitFor(() => expect(box().value).toBe(""));
+    await tab("Audio");
+    await waitFor(() => expect(box()).toBeTruthy());
+    expect(box().value).toBe("");
   });
 
   it("Reuse settings shows the reused take on the stage, not the newest", async () => {

@@ -34,6 +34,8 @@ type MadeWith struct {
 	Pipeline *MadeWithPipeline `json:"pipeline,omitempty"`
 	// API 1.18: the host that ran it (the run's host at the attempt that stored it); absent before 1.18
 	Host *string `json:"host,omitempty"`
+	// API 1.60: the render time in seconds, from the run's start to this output's file (0.1 s steps); absent without
+	RenderS *float64 `json:"render_s,omitempty"`
 }
 
 // MadeWithElement is an element a take's prompt mentioned, as it was expanded.
