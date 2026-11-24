@@ -631,3 +631,11 @@ def test_tools_and_actions_never_share_a_name_and_actions_follow_the_route():
         assistant.action_spec("delete", "/models", {"user"})
         != screens["models"]["actions"]["delete"]
     )
+
+
+def test_the_system_prompt_keeps_the_rules_first_then_the_helmstudio_knowledge():
+    assert assistant.SYSTEM.startswith("You are the assistant inside helmstudio")
+    s = assistant.SYSTEM
+    assert s.index("Answer in short plain text.") < s.index("How helmstudio works")
+    assert "switchTo takes a workflow id or title exactly as" in assistant.SYSTEM
+    assert "Qwen Image 2.1 (image" in assistant.SYSTEM and "MiniMax H3 (video" in assistant.SYSTEM

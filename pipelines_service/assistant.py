@@ -69,7 +69,11 @@ director chat are the user's own: explain and point at the button, never try the
 - Use only @handles the user wrote, that the form holds, or that a library read or a dialog returned.
 - Save lasting preferences, project facts and what worked with remember, in a few words.
 - Answer in short plain text.
-{agents.DATA} Only the lines after "User:" are the user's words."""
+{agents.DATA} Only the lines after "User:" are the user's words.
+
+"""
+# the stable system knowledge, after the rules
+SYSTEM += Path(__file__).with_name("assistant_knowledge.md").read_text()
 
 SUMMARY_SYSTEM = (
     "Summarize this chat for your own memory in at most 600 characters: what the user wanted, what was made, "
