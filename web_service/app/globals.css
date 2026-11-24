@@ -1799,7 +1799,8 @@
   .ast .mrow + .mrow {
     border-top: 1px solid var(--s3);
   }
-  .ast .pop {
+  /* the drawer's menus; never a dialog (a Modal shares the pop class and must stay hidden until opened) */
+  .ast .pop:not(dialog) {
     position: absolute;
     right: 0;
     top: calc(100% + 4px);
@@ -2194,7 +2195,11 @@
   flex: 0 0 auto;
   box-shadow: none;
 }
-.ast .med .pop {
+.ast .med .pop:not(dialog) {
+  /* a long Use in… list scrolls instead of running off the top of the thread (owner, 2026-11-25) */
+  max-height: min(300px, 50vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   top: auto;
   bottom: calc(100% + 4px);
 }
