@@ -212,9 +212,10 @@
           }
         }
       ],
+      "vision": "^claude-(sonnet|opus|haiku)$",
       "plugin": "claude-code-bridge",
       "docs": "https://code.claude.com/docs/en/legal-and-compliance.md",
-      "note": "Plugins only: the personal bridge's thinking levels (claude -p --effort)."
+      "note": "Plugins only: the personal bridge's thinking levels (claude -p --effort); it passes images to Claude."
     }
   ]
 }
