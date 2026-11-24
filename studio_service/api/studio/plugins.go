@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"maps"
 	"net/http"
@@ -70,7 +71,14 @@ type manifestTool struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description"`
 	Input       json.RawMessage `json:"input"`
-	Risk        *dto.PluginRisk `json:"risk"`
+	Risk        *manifestRisk   `json:"risk"`
+}
+
+// manifestRisk is a tool's flags, each required (nil: missing).
+type manifestRisk struct {
+	UsesGPU         *bool `json:"uses_gpu"`
+	Deletes         *bool `json:"deletes"`
+	SendsOffMachine *bool `json:"sends_off_machine"`
 }
 
 var (
@@ -112,7 +120,9 @@ func (s *Service) problem(ctx context.Context, m *manifest, folder string) strin
 			var input struct {
 				Type string `json:"type"`
 			}
-			if !toolNameRe.MatchString(t.Name) || !text(t.Description, 500) || t.Risk == nil ||
+			r := t.Risk
+			if !toolNameRe.MatchString(t.Name) || !text(t.Description, 500) || r == nil || r.UsesGPU == nil ||
+				r.Deletes == nil || r.SendsOffMachine == nil ||
 				json.Unmarshal(t.Input, &input) != nil || input.Type != "object" {
 				return "each tool needs name, description, an object input and risk"
 			}
@@ -130,7 +140,7 @@ func (s *Service) readManifests(ctx context.Context) map[string]manifest {
 		files, _ := filepath.Glob(filepath.Join(dir, "*", "plugin.json"))
 		for _, f := range files {
 			folder := filepath.Base(filepath.Dir(f))
-			raw, err := os.ReadFile(f)
+			raw, err := readLimited(f, 64<<10)
 			if err != nil || len(raw) > 64<<10 {
 				log.Printf("plugin %s skipped: unreadable or over 64 KB", folder)
 				continue
@@ -152,6 +162,16 @@ func (s *Service) readManifests(ctx context.Context) map[string]manifest {
 		}
 	}
 	return out
+}
+
+// readLimited reads at most max+1 bytes of a file (a longer one is refused by its caller, never read whole).
+func readLimited(path string, max int64) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(io.LimitReader(f, max+1))
 }
 
 // ScanPlugins reads the plugin folders into the table: a new one is added off, a known one's manifest replaced, one
@@ -223,7 +243,8 @@ func (s *Service) pluginDTOs(ctx context.Context, caller common.Caller, rows []p
 			p.Models, p.KeyHint = m.Provider.Models, &m.Provider.KeyHint
 		}
 		for _, t := range m.Tools {
-			p.Tools = append(p.Tools, dto.PluginTool{Name: t.Name, Description: t.Description, Risk: *t.Risk})
+			p.Tools = append(p.Tools, dto.PluginTool{Name: t.Name, Description: t.Description, Risk: dto.PluginRisk{
+				UsesGPU: *t.Risk.UsesGPU, Deletes: *t.Risk.Deletes, SendsOffMachine: *t.Risk.SendsOffMachine}})
 		}
 		out[i] = p
 		if r.Enabled {

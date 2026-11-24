@@ -70,7 +70,7 @@ func namer(ctx context.Context, tx pgx.Tx, set namesRow) (string, *providerRow, 
 	case "local":
 		return LocalNamer, nil, true, nil
 	case "remote":
-		p, err := one[providerRow](ctx, tx, `SELECT `+providerCols+` FROM providers WHERE name = $1 AND enabled AND owner_id IS NULL`, deref(set.Provider))
+		p, err := one[providerRow](ctx, tx, `SELECT `+providerCols+` FROM providers WHERE name = $1 AND enabled AND owner_id IS NULL AND `+pluginOn, deref(set.Provider))
 		if errors.Is(err, errNotFound) || (err == nil && !slices.Contains(p.Models, deref(set.Model))) {
 			return "", nil, false, nil
 		}

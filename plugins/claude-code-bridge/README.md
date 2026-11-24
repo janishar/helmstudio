@@ -15,15 +15,16 @@ it as a model provider.
 
     plugins/claude-code-bridge/run.sh
 
-Needs `claude` installed and logged in with your subscription (`claude auth status`). The first run writes `.env`
-here with a random `BRIDGE_TOKEN` (chmod 600, git-ignored). It listens on 127.0.0.1:8420 only; OrbStack containers
+Needs `claude` installed and logged in with your subscription (`claude auth status`). The first run writes its env
+file with a random `BRIDGE_TOKEN` (chmod 600) at `$BRIDGE_ENV`, by default `~/.config/helmstudio/claude-code-bridge.env`:
+outside plugins/, because the studio mounts that folder (an old `plugins/claude-code-bridge/.env` is moved there, same
+token). It listens on 127.0.0.1:8420 only; OrbStack containers
 reach it as `http://host.docker.internal:8420`.
 
 ## Add it in the dev stack's Admin
 
-1. Admin › Model providers: add a provider with the "llama-server" preset (OpenAI-compatible local server).
-   Base URL `http://host.docker.internal:8420/v1`, key = the `BRIDGE_TOKEN` value from `.env`.
-   Models: `claude-sonnet`, `claude-opus`, `claude-haiku`.
+1. Plugins: turn Claude Code bridge on, then Add as provider with the `BRIDGE_TOKEN` value from the env file. The
+   provider is Only you: no other account sees or uses it.
 2. Admin › AI agents: pick it for the Assistant.
 
 ## How it works
@@ -36,9 +37,9 @@ reach it as `http://host.docker.internal:8420`.
   subscription login is used.
 - Locked down: `--safe-mode --tools "" --strict-mcp-config --mcp-config '{"mcpServers":{}}' --setting-sources ""
   --disable-slash-commands --no-session-persistence --permission-prompts none`, run in an empty `work/` folder.
-- One call at a time, 180 s timeout (`BRIDGE_TIMEOUT` in `.env`). One log line per call: time, tokens, cost.
+- One call at a time, 180 s timeout (`BRIDGE_TIMEOUT` in the env file). One log line per call: time, tokens, cost.
 
-Up to 4 calls run at once (`BRIDGE_MAX_CONCURRENT` in `.env`; about 250 MB each), the rest wait their turn. Claude
+Up to 4 calls run at once (`BRIDGE_MAX_CONCURRENT` in the env file; about 250 MB each), the rest wait their turn. Claude
 Code starts with its update, telemetry and other background checks off, so start-up adds well under a second.
 
 Limits: your plan's usage limits apply (Anthropic may count `claude -p` against a separate Agent SDK allowance), no

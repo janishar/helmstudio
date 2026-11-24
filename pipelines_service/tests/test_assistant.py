@@ -779,6 +779,26 @@ REPLY = {"result": {"results": [{"title": "LTX", "url": "https://example.org/ltx
          "sources": [{"title": "LTX", "url": "https://example.org/ltx"}]}  # fmt: skip
 
 
+def test_a_broken_plugin_input_schema_is_skipped_never_raised():
+    d = copy.deepcopy(fixture("cmd.assistant.turn.valid.5")["data"])
+    good = d["plugins"][0]["tools"][0]
+    for name, schema in (("pattern", {"type": "object", "properties": {"q": {"type": "string", "pattern": "("}}}),
+                         ("ref", {"type": "object", "$ref": "#/nowhere"}), ("type", {"type": 7})):  # fmt: skip
+        d["plugins"][0]["tools"].append(good | {"name": name, "input": schema})
+    off = assistant.offered(d, "/")
+    assert SEARCH in off and not {f"web-search__{n}" for n in ("pattern", "ref", "type")} & set(off)
+    # a schema that breaks only on use (the spec handed to check() directly) is an invalid answer, never an error
+    broken = {
+        "x__y": {
+            "kind": "plugin",
+            "spec": {"input": {"type": "object", "properties": {"q": {"pattern": "("}}}},
+        }
+    }
+    got = {"tool_calls": [{"name": "x__y", "arguments": '{"q": "a"}'}]}
+    assert assistant.check(got, broken, {"chat": [], "screen": None}) == (
+        None, "x__y: the plugin's input schema is broken")  # fmt: skip
+
+
 def test_plugin_tools_are_offered_under_their_plugin_name_and_checked():
     d = fixture("cmd.assistant.turn.valid.5")["data"]
     off = assistant.offered(d, "/")

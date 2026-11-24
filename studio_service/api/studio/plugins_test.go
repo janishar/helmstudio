@@ -25,6 +25,7 @@ func TestReadManifests(t *testing.T) {
 		"wrong-name": `{"name":"other","title":"x","version":"0.1.0","kind":"assistant-tools","description":"x","author":"x","may_do":["x"],"url":"http://a:1","health":"/h","tools":[{"name":"t","description":"x","input":{"type":"object"},"risk":{"uses_gpu":false,"deletes":false,"sends_off_machine":false}}]}`,
 		"public":     `{"name":"public","title":"x","version":"0.1.0","kind":"assistant-tools","description":"x","author":"x","may_do":["x"],"url":"http://evil.example.com","health":"/h","tools":[{"name":"t","description":"x","input":{"type":"object"},"risk":{"uses_gpu":false,"deletes":false,"sends_off_machine":false}}]}`,
 		"unknown":    `{"name":"unknown","extra":1}`,
+		"empty-risk": `{"name":"empty-risk","title":"x","version":"0.1.0","kind":"assistant-tools","description":"x","author":"x","may_do":["x"],"url":"http://a:1","health":"/h","tools":[{"name":"t","description":"x","input":{"type":"object"},"risk":{}}]}`,
 		"no-tools":   `{"name":"no-tools","title":"x","version":"0.1.0","kind":"assistant-tools","description":"x","author":"x","may_do":["x"],"url":"http://a:1","health":"/h"}`,
 		"good":       `{"name":"good","title":"x","version":"0.1.0","kind":"model-provider","description":"x","author":"x","may_do":["x"],"url":"http://a:1","health":"/h","provider":{"path":"/v1","models":["m"],"key_hint":"k"}}`,
 	} {
@@ -42,7 +43,7 @@ func TestReadManifests(t *testing.T) {
 	if !slices.Equal(names, want) {
 		t.Fatalf("got %v, want %v", names, want)
 	}
-	if got["web-search"].Tools[0].Risk == nil || !got["web-search"].Tools[0].Risk.SendsOffMachine {
+	if r := got["web-search"].Tools[0].Risk; r == nil || r.SendsOffMachine == nil || !*r.SendsOffMachine {
 		t.Fatal("web-search's search sends off the machine")
 	}
 }

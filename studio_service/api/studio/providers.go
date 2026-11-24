@@ -340,7 +340,9 @@ func (s *Service) DeleteProvider(ctx context.Context, caller common.Caller, name
 		return errAdmin
 	}
 	return common.System(ctx, s.db, func(tx pgx.Tx) error { // every user's batches count
-		if _, err := one[struct{ Name string }](ctx, tx, `SELECT name FROM providers WHERE name = $1 FOR UPDATE`, name); err != nil {
+		// API 1.60: another admin's Only-you provider is a 404 here too (System sees every row)
+		if _, err := one[struct{ Name string }](ctx, tx, `SELECT name FROM providers WHERE name = $1
+			AND (owner_id IS NULL OR owner_id::text = $2) FOR UPDATE`, name, caller.ID); err != nil {
 			return err
 		}
 		var used bool
@@ -350,7 +352,8 @@ func (s *Service) DeleteProvider(ctx context.Context, caller common.Caller, name
 		} else if used {
 			return network.NewConflictError(name+" is in use by an unfinished batch", nil)
 		}
-		_, err := tx.Exec(ctx, `DELETE FROM providers WHERE name = $1`, name)
+		_, err := tx.Exec(ctx, `DELETE FROM providers WHERE name = $1 AND (owner_id IS NULL OR owner_id::text = $2)`,
+			name, caller.ID)
 		return err
 	})
 }
@@ -466,6 +469,12 @@ func (s *Service) ProviderKey(ctx context.Context, caller common.Caller, secret 
 	return dto.ProviderKey{KeySecret: secret, Path: keyPath(secret), Found: reply.Found, Writable: reply.Writable}, nil
 }
 
+// othersKey reports whether secret is a plugin provider's key file of another admin (API 1.60: Add as provider names
+// it plugin-<plugin>-<8 hex of its admin's id>): its PUT and DELETE are 404 to anyone else.
+func othersKey(caller common.Caller, secret string) bool {
+	return strings.HasPrefix(secret, "plugin-") && !strings.HasSuffix(secret, "-"+strings.ReplaceAll(caller.ID, "-", "")[:8])
+}
+
 // keyPath is a key file's deploy-side path (studio never reads the folder).
 func keyPath(secret string) string { return "deploy/secrets/providers/" + secret }
 
@@ -476,7 +485,7 @@ func (s *Service) SaveProviderKey(ctx context.Context, caller common.Caller, sec
 	if !caller.IsAdmin() {
 		return dto.ProviderKeySaved{}, errAdmin
 	}
-	if !dto.KeySecretName(secret) {
+	if !dto.KeySecretName(secret) || othersKey(caller, secret) {
 		return dto.ProviderKeySaved{}, errNotFound
 	}
 	var snapshot map[string]any
@@ -530,7 +539,7 @@ func (s *Service) RemoveProviderKey(ctx context.Context, caller common.Caller, s
 	if !caller.IsAdmin() {
 		return dto.ProviderKey{}, errAdmin
 	}
-	if !dto.KeySecretName(secret) {
+	if !dto.KeySecretName(secret) || othersKey(caller, secret) {
 		return dto.ProviderKey{}, errNotFound
 	}
 	reply, err := s.askKeyWrite(ctx, message.ProviderKeyWriteRequest{Op: "remove", KeySecret: secret})

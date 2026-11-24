@@ -170,9 +170,35 @@ def offered(data: dict, route: str) -> dict[str, dict]:
 def plugin_tools(data: dict) -> dict[str, dict]:
     """`<plugin>__<tool>` → the tool's manifest entry with its plugin's name, title and url: the input's on plugins
     (studio sends them each input, so one turned off is gone at the next)."""
-    return {f"{p['name']}__{t['name']}": t | {"plugin": p["name"], "title": p["title"], "url": p["url"],
-                                               "tool": t["name"]}
-            for p in data.get("plugins") or [] for t in p["tools"]}  # fmt: skip
+    out = {}
+    for p in data.get("plugins") or []:
+        for t in p["tools"]:
+            if not _schema_ok(
+                t["input"]
+            ):  # a broken input schema never reaches the model or check()
+                log.warning(
+                    "plugin %s: tool %s skipped: its input is not a valid JSON Schema",
+                    p["name"],
+                    t["name"],
+                )
+                continue
+            out[f"{p['name']}__{t['name']}"] = t | {"plugin": p["name"], "title": p["title"], "url": p["url"],
+                                                   "tool": t["name"]}  # fmt: skip
+    return out
+
+
+@functools.lru_cache(maxsize=256)
+def _schema_ok_text(schema: str) -> bool:
+    try:
+        Draft202012Validator.check_schema(json.loads(schema))
+        Draft202012Validator(json.loads(schema), format_checker=FormatChecker()).is_valid({})
+    except Exception:  # noqa: BLE001 - any failure (a bad pattern, an unresolvable $ref) means broken
+        return False
+    return True
+
+
+def _schema_ok(schema) -> bool:
+    return _schema_ok_text(json.dumps(schema, sort_keys=True))
 
 
 RISK_TAGS = (("uses_gpu", "uses the GPU"), ("deletes", "can't be undone"),
@@ -240,7 +266,10 @@ def check(got: dict, off: dict, s: State) -> tuple[list | None, str | None]:
             args = json.loads(c["arguments"] or "{}")
         except ValueError:
             return None, f"{c['name']}: the arguments are not JSON"
-        errs = [e.message for e in _validator(json.dumps(o["spec"]["input"])).iter_errors(args)]
+        try:
+            errs = [e.message for e in _validator(json.dumps(o["spec"]["input"])).iter_errors(args)]
+        except Exception:  # noqa: BLE001 - a broken schema must not end the turn's handling (NAK, redelivery)
+            return None, f"{c['name']}: the plugin's input schema is broken"
         if errs:
             return None, f"{c['name']}: {errs[0]}"[:500]
         if o["kind"] == "action":
