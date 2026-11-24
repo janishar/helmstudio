@@ -1599,13 +1599,15 @@
     font-size: 12px;
     font-weight: 500;
   }
-  /* 3 lines: an answer's 19 px lines (and one 6 px gap between its paragraphs), a memory row's 17 px */
+  /* 3 lines of the text's own line height (lh), whatever the font size; a clamped block fades out over its last line
+     so a paragraph gap never leaves a half-cut line showing (owner, 2026-11-25: "more is clipping the text") */
   .ast .clamp {
-    max-height: 63px;
+    max-height: 3lh;
     overflow: hidden;
   }
-  .ast .mrow .clamp {
-    max-height: 51px;
+  .ast .clamp.over {
+    -webkit-mask-image: linear-gradient(#000 calc(100% - 1lh), transparent);
+    mask-image: linear-gradient(#000 calc(100% - 1lh), transparent);
   }
   .ast .clamp > * + *,
   .ast .unclamp > * + * {

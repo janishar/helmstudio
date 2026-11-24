@@ -747,7 +747,7 @@ function Clamp({
   }, [k, more]);
   return (
     <>
-      <div ref={ref} className={more ? "unclamp" : "clamp"}>
+      <div ref={ref} className={more ? "unclamp" : over ? "clamp over" : "clamp"}>
         {children}
       </div>
       {!whole && (over || more) && (
