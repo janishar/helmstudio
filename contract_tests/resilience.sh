@@ -44,7 +44,7 @@ RUNNER_B_SVC="${RUNNER_B_SVC:-runner-b}"   # seconds a run may take to end after
 dc() { # exactly the root Makefile's TEST (else an up here recreates services without TLS or remote models)
   KONG_HTTP_PORT=8390 POSTGRES_HOST_PORT=5464 NATS_HOST_PORT=4323 S3_HOST_PORT=8434 S3_TLS_HOST_PORT=8444 \
     HELM_NET=172.30.98 IMAGE_TAG=gate REMOTE_MODELS=on docker compose -p helmstudio-test \
-    -f ../deploy/docker-compose.yml -f ../deploy/compose/fake.yml -f ../deploy/compose/tls.yml "$@"
+    -f ../deploy/docker-compose.yml -f ../deploy/compose/fake.yml -f ../deploy/compose/tls.yml -f ../deploy/compose/test-admin.yml "$@"
 }
 field() { python3 -c 'import json,sys; v=json.load(sys.stdin); [v:=v[k] for k in sys.argv[1:]]; print("" if v is None else v)' "$@" 2>/dev/null; }
 

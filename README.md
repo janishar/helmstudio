@@ -17,13 +17,14 @@ make up        # makes deploy/secrets/ and the .env files, builds, starts, waits
 open http://localhost:8300
 ```
 
-Sign in as the stack's admin, `admin@helm.test` / `helm test admin pass 1` (set by `deploy/compose/fake.yml`),
+Sign in as the stack's admin: `ADMIN_EMAIL` / `ADMIN_PASSWORD` from `auth_service/.env` (the test stack uses its own
+`admin@helm.test`, set by `deploy/compose/test-admin.yml`),
 and create users on Admin › Users. There is no public sign-up. The CLI's API key is `deploy/secrets/helm_api_key`
 (auth registers it as client `helm` on every start):
 
 ```sh
 make -C cli build
-cli/bin/helm login --url http://localhost:8300 --email admin@helm.test --api-key-file deploy/secrets/helm_api_key
+cli/bin/helm login --url http://localhost:8300 --email <your ADMIN_EMAIL> --api-key-file deploy/secrets/helm_api_key
 cli/bin/helm run echo -p echo.steps=5 -p prompt.text="hello" --out .
 ```
 

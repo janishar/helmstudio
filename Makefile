@@ -10,8 +10,8 @@ DEV  := docker compose -f deploy/docker-compose.yml -f deploy/compose/fake.yml -
 # TLS is always on in it (tls.yml): the fake runner joins over tls:// and https://
 TEST := KONG_HTTP_PORT=8390 POSTGRES_HOST_PORT=5464 NATS_HOST_PORT=4323 S3_HOST_PORT=8434 S3_TLS_HOST_PORT=8444 \
         HELM_NET=172.30.98 IMAGE_TAG=gate REMOTE_MODELS=on \
-        docker compose -p helmstudio-test -f deploy/docker-compose.yml -f deploy/compose/fake.yml -f deploy/compose/tls.yml
-# the test admin set by deploy/compose/fake.yml
+        docker compose -p helmstudio-test -f deploy/docker-compose.yml -f deploy/compose/fake.yml -f deploy/compose/tls.yml -f deploy/compose/test-admin.yml
+# the test admin set by deploy/compose/test-admin.yml (test stack only)
 TEST_ADMIN := ADMIN_EMAIL=admin@helm.test ADMIN_PASSWORD="$${HELM_TEST_ADMIN_PASSWORD:-helm test admin pass 1}"
 
 .PHONY: secrets envs build up dev down logs ps contracts-check test resilience test-down runners runner-torch runner-mlx runner-native runners-stop h3 zonos3 \

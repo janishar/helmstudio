@@ -3,5 +3,5 @@
 cd "$(dirname "$0")/.." || exit 1
 # init.sh again on an existing volume adds the databases and roles of services added since (it skips what exists).
 export KONG_HTTP_PORT=8390 POSTGRES_HOST_PORT=5464 NATS_HOST_PORT=4323 S3_HOST_PORT=8434 HELM_NET=172.30.98
-set -- docker compose -p helmstudio-test -f deploy/docker-compose.yml -f deploy/compose/fake.yml
+set -- docker compose -p helmstudio-test -f deploy/docker-compose.yml -f deploy/compose/fake.yml -f deploy/compose/test-admin.yml
 "$@" up -d --wait postgres && exec "$@" exec -T postgres sh /docker-entrypoint-initdb.d/init.sh

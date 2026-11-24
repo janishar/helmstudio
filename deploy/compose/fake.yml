@@ -1,12 +1,7 @@
-# Overlay (-f) for the dev and test stacks: a known test admin instead of auth_service/.env's, so the stack works on
-# first run and contract_tests can sign in as it to create users A and B. In M0 the only runner is the fake one.
+# Overlay (-f) for the dev and test stacks: the fake services. The admin comes from auth_service/.env on the dev
+# stack; the test stack adds compose/test-admin.yml for its known test admin (owner, 2026-11-24).
 #   docker compose -f deploy/docker-compose.yml -f deploy/compose/fake.yml up -d --build --wait      # make up
 services:
-  auth:
-    environment:
-      ADMIN_EMAIL: admin@helm.test
-      ADMIN_PASSWORD: ${HELM_TEST_ADMIN_PASSWORD:-helm test admin pass 1}
-
   # The fake OpenAI-compatible server (API 1.15; contract_tests/fake_openai): local servers and remote providers are
   # proven against it, never a real one. Inside the compose network only (no host port): http://fake-openai:8000/v1
   # (a server) and https://fake-openai:8443/v1 (a remote; its self-signed certificate is fake-openai.pem on the

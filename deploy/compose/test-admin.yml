@@ -1,0 +1,7 @@
+# Overlay (-f) for the test stack only (make test): a known test admin instead of auth_service/.env's, so
+# contract_tests can sign in as it to create users A and B. The dev stack uses auth_service/.env (owner, 2026-11-24).
+services:
+  auth:
+    environment:
+      ADMIN_EMAIL: admin@helm.test
+      ADMIN_PASSWORD: ${HELM_TEST_ADMIN_PASSWORD:-helm test admin pass 1}
