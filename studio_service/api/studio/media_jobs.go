@@ -213,17 +213,23 @@ func (s *Service) plan(ctx context.Context, tx pgx.Tx, row timelineRow, revision
 	return result, nil
 }
 
-// exportReason is a reason with its message (Shot n is the n-th V1 clip).
+// exportReason is a reason with its message (Shot n is the clip's own shot number, as the lanes show it; API 1.29).
 func exportReason(r timeline.Reason, doc timeline.Doc, takes map[string]timeline.Take) dto.ExportReason {
 	out := dto.ExportReason{Code: r.Code}
-	shot, n := "", 0
-	var stream, first *timeline.Stream
+	shot, n, firstN := "", 0, 0
+	var stream *timeline.Stream
+	num := func(i int, c timeline.Clip) int { // a document stored before 1.29 has no numbers: its position
+		if c.Number > 0 {
+			return c.Number
+		}
+		return i + 1
+	}
 	for i, c := range doc.Tracks[0].Clips {
 		if i == 0 {
-			first = takes[c.Take()].Stream
+			firstN = num(i, c)
 		}
 		if c.ID == r.Clip {
-			n, stream = i+1, takes[c.Take()].Stream
+			n, stream = num(i, c), takes[c.Take()].Stream
 		}
 	}
 	if r.Clip != "" {
@@ -234,7 +240,7 @@ func exportReason(r timeline.Reason, doc timeline.Doc, takes map[string]timeline
 	t := doc.Target
 	switch r.Code {
 	case "offline":
-		out.Message = "clip " + r.Clip + " is offline"
+		out.Message = "clip " + r.Clip + " is offline" // the 409 detail openapi.yaml names (studioExportTimeline)
 	case "empty":
 		out.Message = "the sequence has no clip on V1"
 	case "too_large":
@@ -258,8 +264,7 @@ func exportReason(r timeline.Reason, doc timeline.Doc, takes map[string]timeline
 	case "container", "codec", "pixel_format", "aspect", "field_order":
 		out.Message = fmt.Sprintf("%s is not H.264 yuv420p with square, progressive pixels in MP4 or MOV (%s)", shot, r.Code)
 	default: // profile, level, time_base, colour, parameter_sets: against the first clip
-		_ = first
-		out.Message = fmt.Sprintf("%s differs from shot 1 in its %s", shot, strings.ReplaceAll(r.Code, "_", " "))
+		out.Message = fmt.Sprintf("%s differs from Shot %d in its %s", shot, firstN, strings.ReplaceAll(r.Code, "_", " "))
 	}
 	return out
 }
