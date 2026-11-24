@@ -3,6 +3,7 @@ settings, a chat whose turn calls a studio read tool (studio.tools as the thread
 events, and isolation (another user's chat and memory item are 404). The model is the fake OpenAI-compatible server
 as a local server, scripted per model (test_director's `fake`); nothing real is ever called."""
 
+import time
 import uuid
 
 import pytest
@@ -87,3 +88,52 @@ def test_a_turn_reads_through_studio(api, api_b, assistant):
 
     ok(api.delete(url), 204)
     assert api.get(url).status_code == 404
+
+
+def test_steer_while_it_answers(api, assistant):
+    """API 1.59 (board Assistant frame 8): a message while the turn works is a steer: read at the next step (the next
+    model call has it as the user's words), or, when the answer ends first, sent as the next message."""
+    fake("POST", "/__script", {assistant: [
+        {"delay_s": 4, "content": "Looking.", "tool_calls": [{"tool": "search_takes", "args": {"limit": 3}}]},
+        {"content": "Switched to Turbo."},
+        {"delay_s": 4, "content": "Done."},
+        {"content": "Added the bus."},
+    ]})  # fmt: skip
+    tid = ok(api.post(THREADS, json={"client_id": TAB}), 201)["id"]
+    url = f"{THREADS}/{tid}"
+
+    def post(text: str) -> dict:
+        return ok(api.post(f"{url}/messages", json={"kind": "message", "client_id": TAB, "text": text,
+                                                    "screen": screen()}), 202)  # fmt: skip
+
+    def idle():
+        got = ok(api.get(url))
+        return got if got["state"] == "idle" else None
+
+    def steer_of(got: dict, text: str) -> str | None:
+        return next(e.get("steer") for e in got["entries"] if e.get("text") == text)
+
+    before = len([r for r in fake("GET", "/__requests") if r["model"] == assistant])
+    assert post("Make a rainy London still").get("steer") is not True
+    time.sleep(1.5)  # the turn is in its first model call
+    sent = post("Use Turbo instead")
+    assert sent["steer"] is True and sent["entry"]["steer"] == "waiting"
+    got = wait_for(idle, timeout=60, what="the steered answer")
+    assert steer_of(got, "Use Turbo instead") == "read"
+    calls = [r for r in fake("GET", "/__requests") if r["model"] == assistant][before:]
+    assert len(calls) == 2 and "User: Use Turbo instead" in str(calls[1]["body"]["messages"])
+    assert any("Switched to Turbo." in (e.get("text") or "") for e in got["entries"])
+
+    # the answer ends before its next step: the steer is sent as the next message, a new turn
+    post("Write the prompt")
+    time.sleep(1.5)  # past its first step: the model call runs
+    assert post("Add a red bus behind her")["steer"] is True
+    got = wait_for(lambda: (g := idle()) and any("Added the bus." in (e.get("text") or "") for e in g["entries"]) and g,
+                   timeout=60, what="the next message's answer")  # fmt: skip
+    assert steer_of(got, "Add a red bus behind her") == "next"
+    calls = [r for r in fake("GET", "/__requests") if r["model"] == assistant][before:]
+    assert len(calls) == 4 and "User: Add a red bus behind her" in str(calls[3]["body"]["messages"])
+
+    # Stop on an idle chat does nothing
+    assert ok(api.post(f"{url}/messages", json={"kind": "stop", "client_id": TAB}), 202)["entry"] is None
+    ok(api.delete(url), 204)

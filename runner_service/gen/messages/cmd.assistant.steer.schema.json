@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/cmd.assistant.steer.schema.json",
+  "title": "studio → pipelines: a steer (or Stop) for the running assistant turn",
+  "description": "From API 1.59 (board Assistant frame 8; contracts/README.md, Assistant: steer). Written by studio's outbox in the transaction that stores a message sent while the chat's turn works (POST …/messages answered `steer` true), or a `stop`; subject `cmd.assistant.steer` (stream CMD, durable `pipelines-assistant`), Nats-Msg-Id `<thread_id>:steer:<steer_id>` (a stop: `<thread_id>:stop:<turn>`). pipelines handles it at once, outside the chat's lock: the running turn reads it at its next step (before its next model call; a parked turn once its results come) and adds the text to the transcript as the user's words, in order, then publishes evt.assistant.steered; a stop ends the turn there (the calls not run yet do not run). One whose turn already ended is dropped: studio sends unread steers as the next message.",
+  "allOf": [{"$ref": "envelope.schema.json"}],
+  "properties": {
+    "type": {"const": "cmd.assistant.steer"},
+    "version": {"const": 1},
+    "job_id": {"$ref": "defs.schema.json#/$defs/uuid", "description": "the thread id"},
+    "data": {
+      "type": "object",
+      "required": ["thread_id", "turn", "at"],
+      "additionalProperties": false,
+      "properties": {
+        "thread_id": {"$ref": "defs.schema.json#/$defs/uuid"},
+        "turn": {"type": "integer", "minimum": 1, "maximum": 999999, "description": "the thread's input counter when it was sent: the running turn's (a steer is never read by a turn after it)"},
+        "steer_id": {"$ref": "defs.schema.json#/$defs/uuid", "description": "the stored message's id (its entry key message:<steer_id>)"},
+        "text": {"type": "string", "minLength": 1, "maxLength": 4000},
+        "stop": {"const": true, "description": "Stop: end the turn at its next step"},
+        "at": {"type": "string", "format": "date-time"}
+      },
+      "oneOf": [
+        {"required": ["steer_id", "text"], "not": {"required": ["stop"]}},
+        {"required": ["stop"], "not": {"anyOf": [{"required": ["steer_id"]}, {"required": ["text"]}]}}
+      ]
+    }
+  }
+}

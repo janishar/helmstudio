@@ -1,0 +1,16 @@
+{
+  "type": "evt.assistant.steered",
+  "version": 1,
+  "id": "6f1c2d3e-4b5a-4c7d-8e9f-000000004301",
+  "job_id": "3b7c9d1e-2f4a-4b6c-8d0e-1a2b3c4d5e6f",
+  "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+  "occurred_at": "2026-11-24T10:20:00Z",
+  "trace": {
+    "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+  },
+  "data": {
+    "thread_id": "3b7c9d1e-2f4a-4b6c-8d0e-1a2b3c4d5e6f",
+    "turn": 2,
+    "steer_ids": []
+  }
+}

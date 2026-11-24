@@ -65,6 +65,14 @@
         "code": "cap_day",
         "text": "Daily limit reached"
       }
+    },
+    {
+      "id": "9a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d",
+      "turn": 1,
+      "kind": "user",
+      "at": "2026-11-22T10:20:01Z",
+      "text": "Use Turbo instead",
+      "steer": "waiting"
     }
   ]
 }

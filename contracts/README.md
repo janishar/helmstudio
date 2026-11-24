@@ -25,6 +25,7 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `providers/presets.schema.json` | (API 1.51) the shape of `providers/presets.json` (check.py adds the host and ProviderPut rules) |
 | `messages/req.pipelines.judge.test.schema.json` | (API 1.28) NATS request/reply studio → pipelines (not enveloped): a judge test's filled template, and its verdict from the answer |
 | `messages/cmd.assistant.{turn,delete}.schema.json`, `evt.assistant.step.schema.json` | (API 1.44) studio → pipelines: one input to an assistant chat (a message, the actions' results, a card's answer, summarize), a deleted chat; pipelines → studio's projector: one step of a turn (Assistant, below) |
+| `messages/cmd.assistant.steer.schema.json`, `evt.assistant.steered.schema.json` | (API 1.59) studio → pipelines: a message sent while a turn works, or Stop; pipelines → studio's projector: the steers a turn read (Assistant: steer, below) |
 | `messages/req.pipelines.assistant.memory.schema.json` | (API 1.44) NATS request/reply studio → pipelines (not enveloped): the Memory list's list, edit, delete, clear, in the owner's namespace only |
 | `messages/assistant.schema.json` | (API 1.44) not a message: the assistant's shared shapes (screen summary, action, result, line, card, caps, limits, error, memory item); openapi.yaml's `Assistant*` twins copy them |
 | `tools/catalog.json` | (API 1.44) not a message: every tool the in-app assistant and `helm mcp` share (name, input, output, routes, roles, surfaces, card); studio_service embeds a copy (`gen/tools/`), pipelines_service copies it with the rest of `tools/`, cli embeds a copy for `helm mcp` (`gen/`, plan 16) |
@@ -89,6 +90,8 @@ make -C contract_tests check-contracts   # exit 1 on any failure
 | `pipelines.judge.test` | core request/reply, queue group `pipelines` | bare JSON (`req.pipelines.judge.test`) | studio → pipelines (5 s; API 1.28) |
 | `cmd.assistant.turn`, `cmd.assistant.delete` | stream `CMD` (work queue) | `cmd.assistant.<same>`, `Nats-Msg-Id <thread_id>:<turn>` (delete: `<thread_id>:delete`) | studio outbox relay → pipelines (durable `pipelines-assistant`, filter `cmd.assistant.>`: chats handled concurrently, each in order; API 1.44) |
 | `evt.assistant.<thread_id>.step` | stream `EVT` | `evt.assistant.step`, `Nats-Msg-Id <thread_id>:<seq>` | pipelines → studio projector (durable `studio-assistant`; API 1.44) |
+| `cmd.assistant.steer` | stream `CMD` (work queue) | `cmd.assistant.steer`, `Nats-Msg-Id <thread_id>:steer:<steer_id>` (stop: `<thread_id>:stop:<turn>`) | studio outbox relay → pipelines (durable `pipelines-assistant`, handled at once outside the chat's lock; API 1.59) |
+| `evt.assistant.<thread_id>.steered` | stream `EVT` | `evt.assistant.steered`, `Nats-Msg-Id <thread_id>:steered:<first steer id>` | pipelines → studio projector (durable `studio-assistant`, in order with the steps; API 1.59) |
 | `pipelines.assistant.memory` | core request/reply, queue group `pipelines` | bare JSON (`req.pipelines.assistant.memory`) | studio → pipelines (5 s; API 1.44) |
 | `cmd.run.<host>.server` | stream `CMD` (work queue) | `cmd.run.execute` of a `server-ask` run | studio outbox relay → pipelines' server executor (durable `runner-<host>-server`; API 1.15) |
 | `evt.auth.revoked` | core | `evt.auth.revoked` | auth → every Go service's token cache |
@@ -3897,6 +3900,33 @@ chats (threads), their rows, roles, caps and SSE in studio_service.
   shows its screen's card; Yes is the user's click on the screen's own button. A server card (`look_at`, `web_search`,
   `forget`, Clear all) is an `AssistantCard` answered with a message of kind `answer`. The licence tick is never set
   by the assistant.
+
+### Assistant: steer (API 1.59; board Assistant frame 8, owner 2026-11-24; normative)
+
+Write while it works, like Claude Code: the message joins the running answer and is read at the next step.
+
+- **When.** A `message` from the tab that runs the chat (`client_id`) while the thread is `working`, or `waiting`
+  with `pending.actions` (that tab is running them), is a steer: 202 with `steer` true, the entry kind `user` with
+  `steer` `waiting`, no new turn; the per-minute message limit counts it. From another tab, or while it waits only on
+  a server card, a message starts a new turn as before. The 409 `wait for the answer, or Stop` is gone.
+- **Plumbing.** Studio stores the entry and writes `cmd.assistant.steer` {turn = the thread's turn now, steer_id,
+  text} in one transaction, and keeps the would-be next turn's command (roles, tools, actions, settings, the screen
+  sent with the steer) on the thread. pipelines takes it at once (outside the chat's lock) and keeps it in memory;
+  a steer whose `turn` is below the running message's is stale and dropped.
+- **The boundary.** Before each model call (after the running tool or model step, never during one; a parked turn
+  once the tab's results or a card's answer resume it), the turn takes its unread steers, in order, into the
+  transcript as `User:` lines and publishes `evt.assistant.steered`; studio sets them `read`, their `at` to now (they
+  show where they were read) and sends the entries. The model's next answer says what it changed. Undo stays on every
+  step.
+- **Unread at the end.** When studio applies the turn's done step and steers of it are still `waiting`, in the same
+  transaction they become `next` (`at` now) and one new turn starts from them: `cmd.assistant.turn` kind `message`,
+  text = their texts in order joined by a blank line (at most 4000 characters), the screen of the last one; caps reset,
+  state `working`. No new user entry is made: the steers are the message.
+- **Stop.** `kind: stop` from the running tab writes `cmd.assistant.steer` {stop: true}: at its next boundary the turn
+  ends (`done`; its queued calls `did_not_run`, unread steers taken as read). The tab stops its own running actions
+  as before (`Did not run · you stopped it`). On an idle chat it does nothing (202).
+- **Restart.** pipelines keeps steers in memory: after a restart a steer it had is never read by that turn, so it
+  becomes the next message at the turn's end. Nothing is lost.
 
 ### Assistant: tools
 

@@ -1865,10 +1865,16 @@ export interface paths {
          *     (`the tab was closed`). `results` and `answer` resume the parked turn; they are accepted only from the tab that
          *     runs it (`client_id`, else 409 `this chat is working in another tab`) and only for the ids it waits on (409
          *     `nothing waits on <id>`). `continue` moves the chat to this tab (Continue here): its pending actions are sent
-         *     to it, the other tab turns read-only; no command is written. 409 `the assistant is off`, and for a message while
-         *     a turn is working (`wait for the answer, or Stop`); 429 above the admin's messages a minute (`at most <n>
-         *     messages a minute`); 422 for a blank text or a screen summary over 16 000 characters. A daily cap is not a 4xx:
-         *     the message is kept and the step's `error` says when it starts again.
+         *     to it, the other tab turns read-only; no command is written. 409 `the assistant is off`; 429 above the admin's
+         *     messages a minute (`at most <n> messages a minute`, steers count); 422 for a blank text or a screen summary over
+         *     16 000 characters. A daily cap is not a 4xx: the message is kept and the step's `error` says when it starts
+         *     again.
+         *
+         *     From 1.59, steer (contracts/README.md, Assistant: steer): a `message` from the tab that runs the chat while a
+         *     turn is `working`, or `waiting` on that tab's actions, joins the running answer (`steer` true): it is stored
+         *     with `steer` `waiting` and `cmd.assistant.steer` is written; the turn reads it at its next step (`read`), or,
+         *     when the turn ends first, it starts the next turn (`next`, several in order as one). `stop` (same tab) ends
+         *     the running turn at its next step: the rest of its calls do not run; idle, it does nothing (202).
          */
         post: operations["studioPostAssistantMessage"];
         delete?: never;
@@ -6374,6 +6380,11 @@ export interface components {
             line?: components["schemas"]["AssistantLine"];
             card?: components["schemas"]["AssistantCard"];
             error?: components["schemas"]["AssistantError"];
+            /**
+             * @description API 1.59, a user entry sent while a turn worked: waiting (shown dimmed, "at the next step"), read (the turn took it), next (the turn ended first: it started the next turn, "sent as the next message"). Absent on other entries
+             * @enum {string}
+             */
+            steer?: "waiting" | "read" | "next";
         } & (unknown & unknown & unknown);
         AssistantThreadDetail: components["schemas"]["AssistantThread"] & {
             /** @description the newest 200, oldest first */
@@ -6402,14 +6413,19 @@ export interface components {
             /** @enum {string} */
             answer: "yes" | "not_now";
         } | {
-            /** @constant */
-            kind: "continue";
+            /**
+             * @description continue: Continue here; stop (1.59): end the running turn at its next step
+             * @enum {string}
+             */
+            kind: "continue" | "stop";
             client_id: components["schemas"]["AssistantClientId"];
         };
         AssistantAccepted: {
             thread: components["schemas"]["AssistantThread"];
             /** @description message: your stored message; otherwise null */
             entry: components["schemas"]["AssistantEntry"] | null;
+            /** @description API 1.59: true when the message joined the running answer (a steer); absent or false otherwise */
+            steer?: boolean;
         };
         AssistantEvent: {
             seq: number;

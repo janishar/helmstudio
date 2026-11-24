@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/evt.assistant.steered.schema.json",
+  "title": "pipelines → studio's projector: steers the running turn read",
+  "description": "From API 1.59 (contracts/README.md, Assistant: steer). Subject `evt.assistant.<thread_id>.steered` (stream EVT, durable `studio-assistant`, in order with the chat's steps), Nats-Msg-Id `<thread_id>:steered:<first steer id>`. Published at a step boundary when the turn took steers into its transcript, before its next model call. Studio sets each one's entry `steer` read (its `at` now, so it shows where it was read) and sends it; an id not waiting is skipped.",
+  "allOf": [{"$ref": "envelope.schema.json"}],
+  "properties": {
+    "type": {"const": "evt.assistant.steered"},
+    "version": {"const": 1},
+    "job_id": {"$ref": "defs.schema.json#/$defs/uuid", "description": "the thread id"},
+    "data": {
+      "type": "object",
+      "required": ["thread_id", "turn", "steer_ids"],
+      "additionalProperties": false,
+      "properties": {
+        "thread_id": {"$ref": "defs.schema.json#/$defs/uuid"},
+        "turn": {"type": "integer", "minimum": 1, "maximum": 999999, "description": "the message turn that read them"},
+        "steer_ids": {"type": "array", "minItems": 1, "maxItems": 60, "uniqueItems": true, "items": {"$ref": "defs.schema.json#/$defs/uuid"}, "description": "in the order they were sent"}
+      }
+    }
+  }
+}
