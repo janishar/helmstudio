@@ -991,13 +991,18 @@ describe("thinking (plan 29)", () => {
     expect(bubble()?.textContent).toBe("Thinking… 7 s");
   });
 
-  it("Working when the model does not think", async () => {
+  it("Working… N s when the model does not think", async () => {
     serve({ existing: thread({ client_id: ME }) });
     await openDrawer();
     await waitFor(() => expect(onEvent).not.toBeNull());
+    vi.useFakeTimers();
     to("working", 20);
     expect(screen.getByText("Working")).toBeTruthy();
     expect(screen.queryByText(/^Thinking/)).toBeNull();
+    act(() => vi.advanceTimersByTime(2000));
+    const b = screen.getByText(/^Working… /);
+    expect(b.textContent).toBe("Working… 2 s");
+    expect(b.closest(".thr")).toBeTruthy();
     expect(title().className).toContain("truncate");
   });
 

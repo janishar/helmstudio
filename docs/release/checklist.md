@@ -56,6 +56,7 @@ own run of the platform). Tick each box in a copy of this list for the release (
   public registry is free); set each package public; a pull with no sign-in works.
 - [ ] **Mac app:** `make -C desktop test lint dmg`; it is ad-hoc signed, so the notes say right-click › Open on first
   launch; it pulls the public images instead of the local Docker (plan 31 decision 7).
+- [ ] Mac app: set `imagesDiskGB` in `desktop/stack.json` to the release images' size on disk (shown on first open).
 - [ ] `shasum -a 256` of every file attached to the release, in a `SHA256SUMS` file.
 
 ## 7. README and docs site (every major release)

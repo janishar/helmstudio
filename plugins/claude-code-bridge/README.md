@@ -38,4 +38,8 @@ reach it as `http://host.docker.internal:8420`.
   --disable-slash-commands --no-session-persistence --permission-prompts none`, run in an empty `work/` folder.
 - One call at a time, 180 s timeout (`BRIDGE_TIMEOUT` in `.env`). One log line per call: time, tokens, cost.
 
-Limits: a few seconds per call (CLI start-up), your plan's usage limits apply, no streaming, `max_tokens` ignored.
+Up to 4 calls run at once (`BRIDGE_MAX_CONCURRENT` in `.env`; about 250 MB each), the rest wait their turn. Claude
+Code starts with its update, telemetry and other background checks off, so start-up adds well under a second.
+
+Limits: your plan's usage limits apply (Anthropic may count `claude -p` against a separate Agent SDK allowance), no
+streaming, `max_tokens` ignored. A fresh `claude` per call: the prompt cache is on Anthropic's side, so it still hits.
