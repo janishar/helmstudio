@@ -741,6 +741,151 @@ describe("other tabs, server cards, limits, memory", () => {
   });
 });
 
+describe("older chats and a broken answer (board frame 7)", () => {
+  const tid = (n: number) => `${T.slice(0, -1)}${n}`;
+  const today = (h: number, m: number) => {
+    const d = new Date();
+    d.setHours(h, m, 0, 0);
+    return d.toISOString();
+  };
+  /** Seven chats, newest first: this one, a waiting one, five older; returns the bodies POSTed to …/messages. */
+  function serveChats() {
+    const titles = [
+      "Rain still: blue hour",
+      "Harbour clip for the opening",
+      "Why did the batch fail?",
+      "Bus stop scene, 3 shots",
+      "Narrator voice",
+      "Sixth chat",
+      "Seventh chat",
+    ];
+    const list = titles.map((title, i) =>
+      thread({
+        id: tid(i),
+        title,
+        updated_at: today(14, 2 - i),
+        ...(i === 1 ? { state: "waiting" as const, client_id: ME } : {}),
+      }),
+    );
+    const posts: { id: string; body: S<"AssistantPost"> }[] = [];
+    answer("GET", {
+      "/v1/studio/assistant/threads": () => ({ data: { status: status(), threads: list } }),
+      "/v1/studio/assistant/threads/{thread_id}": ({ params }) => {
+        const tid = (params as { path: { thread_id: string } }).path.thread_id;
+        const t = list.find((x) => x.id === tid)!;
+        return { data: { ...t, entries: [entry(1, { kind: "user", text: `${t.title}?` })] } };
+      },
+    });
+    answer("POST", {
+      "/v1/studio/assistant/threads/{thread_id}/messages": ({ params, body }) => {
+        const tid = (params as { path: { thread_id: string } }).path.thread_id;
+        posts.push({ id: tid, body: body as S<"AssistantPost"> });
+        return {
+          status: 202,
+          data: { thread: thread({ id: tid, state: "working" }), entry: null },
+        };
+      },
+    });
+    return posts;
+  }
+
+  it("Chats replaces New chat: newest first, this one Open, a waiting one Waiting, Show older after 5", async () => {
+    serveChats();
+    await openDrawer();
+    expect(screen.queryByRole("button", { name: "New chat" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Chats" }));
+    const menu = await screen.findByRole("menu", { name: "Chats" });
+    expect(within(menu).getByText("newest first")).toBeTruthy();
+    expect(within(menu).getAllByRole("menuitem")[0].textContent).toBe("New chat");
+    const rows = () => within(menu).getAllByRole("menuitemradio");
+    await waitFor(() => expect(rows()).toHaveLength(5));
+    expect(rows()[0].textContent).toBe("Rain still: blue hourtoday · 14:02Open");
+    expect(rows()[0].getAttribute("aria-checked")).toBe("true");
+    expect(rows()[1].textContent).toContain("Waiting");
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Show older" }));
+    expect(rows()).toHaveLength(7);
+    // Escape closes the list, not the drawer
+    fireEvent.keyDown(menu, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.getByRole("complementary", { name: "Assistant" })).toBeTruthy();
+    // a click outside closes it too
+    fireEvent.click(screen.getByRole("button", { name: "Chats" }));
+    await screen.findByRole("menu", { name: "Chats" });
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("an older chat picked brings its whole thread back, and writing in it goes to that chat", async () => {
+    const posts = serveChats();
+    await openDrawer(<Screen actions={{}} />);
+    await screen.findByText("Rain still: blue hour?");
+    fireEvent.click(screen.getByRole("button", { name: "Chats" }));
+    const menu = await screen.findByRole("menu", { name: "Chats" });
+    fireEvent.click(await within(menu).findByRole("menuitemradio", { name: /^Bus stop scene/ }));
+    expect(await screen.findByText("Bus stop scene, 3 shots?")).toBeTruthy();
+    expect(screen.queryByRole("menu")).toBeNull();
+    const box = screen.getByRole("textbox", { name: "Message the assistant" });
+    fireEvent.change(box, { target: { value: "Same idea, but a still" } });
+    fireEvent.keyDown(box, { key: "Enter" });
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0]).toMatchObject({
+      id: tid(3),
+      body: { kind: "message", text: "Same idea, but a still" },
+    });
+    expect((posts[0].body as { screen: S<"AssistantScreen"> }).screen.fields).toMatchObject({
+      screen: "create",
+    });
+  });
+
+  it("New chat is the list's first row", async () => {
+    serveChats();
+    const made = vi.fn();
+    await openDrawer();
+    answer("POST", {
+      "/v1/studio/assistant/threads": () => {
+        made();
+        return { status: 201, data: thread({ id: tid(9), client_id: ME }) };
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Chats" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "New chat" }));
+    await waitFor(() => expect(made).toHaveBeenCalled());
+    expect(await screen.findByText("Hi. What should we make?")).toBeTruthy();
+  });
+
+  it("a broken answer twice: the plain line, with the checker's words behind Details", async () => {
+    serve({
+      existing: thread(),
+      entries: [
+        entry(1, { kind: "user", text: "Launch the rockets" }),
+        entry(2, {
+          kind: "notice",
+          text: "The answer was invalid twice: launch_rockets is not one of your tools now",
+          error: {
+            code: "answer",
+            text: "The answer was invalid twice: launch_rockets is not one of your tools now",
+          },
+        }),
+      ],
+    });
+    await openDrawer();
+    const note = await screen.findByRole("note");
+    expect(
+      within(note).getByText("The model gave a broken answer twice. Try again or rephrase."),
+    ).toBeTruthy();
+    const details = within(note).getByRole("button", { name: "Details" });
+    expect(details.getAttribute("aria-expanded")).toBe("false");
+    expect(within(note).queryByText(/launch_rockets/)).toBeNull();
+    fireEvent.click(details);
+    expect(details.getAttribute("aria-expanded")).toBe("true");
+    expect(
+      within(note).getByText(
+        "The answer was invalid twice: launch_rockets is not one of your tools now",
+      ).className,
+    ).toContain("mono");
+  });
+});
+
 describe("thinking (plan 29)", () => {
   const to = (state: S<"AssistantThread">["state"], seq: number, over = {}) =>
     act(() => onEvent!({ seq, type: "thread", thread: thread({ state, client_id: ME, ...over }) }));

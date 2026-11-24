@@ -215,6 +215,8 @@ test("j09 tidy my sessions: rename, start a new one, go back, delete one", async
   await sessions().getByRole("button", { name: "Fox shoot", exact: true }).click();
   await expect(sessionButton()).toHaveAccessibleName("Session: Fox shoot. Change session");
   await expect(takes().getByRole("button", { name: /^Take, the fox runs, / })).toBeVisible();
+  // its half-written prompt comes back on a switch in the same tab, not only on a reload (review, 2026-11-25)
+  await expect(prompt()).toHaveValue("a draft I have not run yet");
 
   await sessionButton().click();
   // Rename and Delete show on the row under the pointer

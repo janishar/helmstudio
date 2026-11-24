@@ -372,6 +372,20 @@ describe("Create's actions", () => {
     expect(box().value).toBe("");
   });
 
+  it("switching to another session in the same tab brings back that session's draft", async () => {
+    // reviewer, 2026-11-25: the draft came back only on the first load
+    const box = () => document.getElementById(idOf("prompt.text")) as HTMLTextAreaElement;
+    localStorage.setItem(
+      "create-draft:s2",
+      JSON.stringify({ key: "prompt.text", text: "s2 words" }),
+    );
+    const { call } = start();
+    await call("change", { key: "prompt.text", value: "s1 words" });
+    await call("newSession");
+    await waitFor(() => expect(box().value).toBe("s2 words"));
+    expect(JSON.parse(localStorage.getItem("create-draft:s1")!).text).toBe("s1 words");
+  });
+
   it("Reuse settings shows the reused take on the stage, not the newest", async () => {
     // owner, 2026-11-25 (Q9): the form and the picture must match
     const old = take({ session_id: "s1", title: "Old one" });

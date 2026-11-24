@@ -298,6 +298,8 @@ func TestAssistantChat(t *testing.T) {
 	if len(sent) != 1 || *sent[0].JobID != id || sent[0].Data.Input["kind"] != "summarize" || len(sent[0].Data.Tools) != 0 {
 		t.Fatal(sent)
 	}
+	// the summary landing does not move the old chat above the new one in Chats (board frame 7)
+	e.step(userA, message.AssistantStep{ThreadID: id, Turn: 7, Seq: 8, Done: true})
 	if list := e.call(userA, "GET", threads, nil, 200)["threads"].([]any); len(list) != 2 ||
 		list[0].(map[string]any)["id"] != second["id"] {
 		t.Fatal(list)

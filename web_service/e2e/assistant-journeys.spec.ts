@@ -151,7 +151,12 @@ async function replied(text: string | RegExp, p = page) {
 /** New chat asks the old chat's summary with one call without tools: wait for it so it eats no script. */
 async function newChat(p = page) {
   const n = sent(MODEL).length;
-  await drawer(p).getByRole("button", { name: "New chat" }).click();
+  // Chats replaces the header's New chat button: New chat is the list's first row (board frame 7)
+  await drawer(p).getByRole("button", { name: "Chats" }).click();
+  await drawer(p)
+    .getByRole("menu", { name: "Chats" })
+    .getByRole("menuitem", { name: "New chat" })
+    .click();
   await expect(drawer(p).getByText("Hi. What should we make?")).toBeVisible();
   await expect
     .poll(
@@ -485,6 +490,25 @@ test("J6 I come back later in a new window, find my chat, and start a new one", 
     await shot("j06-chat-is-back", p);
 
     await newChat(p);
+    // the older chat is in Chats, below the new one; picked, its whole thread comes back (board frame 7)
+    await drawer(p).getByRole("button", { name: "Chats" }).click();
+    const list = drawer(p).getByRole("menu", { name: "Chats" });
+    const rows = list.getByRole("menuitemradio");
+    await expect(rows.first()).toHaveAttribute("aria-checked", "true");
+    await expect(rows.first()).toContainText("Open");
+    await shot("j06-chats-list", p);
+    await rows.nth(1).click();
+    await expect(list).toBeHidden();
+    await expect(drawer(p).getByText("Done without thinking.")).toBeVisible();
+    await expect(box(p)).toBeEnabled();
+    // Escape closes the list, not the drawer; then back to the new chat (still the newest, for J7)
+    await drawer(p).getByRole("button", { name: "Chats" }).click();
+    await p.keyboard.press("Escape");
+    await expect(list).toBeHidden();
+    await expect(drawer(p)).toBeVisible();
+    await drawer(p).getByRole("button", { name: "Chats" }).click();
+    await rows.first().click();
+    await expect(drawer(p).getByText("Hi. What should we make?")).toBeVisible();
     await drawer(p).getByRole("button", { name: "Memory" }).click();
     await drawer(p).getByRole("tab", { name: "Chats" }).click();
     await expect(
@@ -716,7 +740,16 @@ test("J10 the provider refuses or is down: the error is in plain words and I can
     { content: "Hm.", tool_calls: [{ tool: "launch_rockets", args: {} }] },
   );
   await say("do the thing");
-  await expect(notes.last()).toHaveText(/^The answer was invalid twice: /, { timeout: 30_000 });
+  // the plain line; the checker's words only behind Details (board frame 7)
+  await expect(notes.last()).toContainText(
+    "The model gave a broken answer twice. Try again or rephrase.",
+    { timeout: 30_000 },
+  );
+  const details = notes.last().getByRole("button", { name: "Details" });
+  await expect(details).toHaveAttribute("aria-expanded", "false");
+  await details.click();
+  await expect(notes.last()).toContainText(/The answer was invalid twice: /);
+  await shot("j10-broken-answer-details");
   for (const t of await notes.allTextContents())
     expect(t, "no code or JSON in a notice").not.toMatch(/[{}[\]]|Traceback|Error:/);
 });
@@ -845,7 +878,7 @@ test("J14 keyboard only: Cmd/Ctrl J, Enter, Tab to the header buttons, Escape", 
     await page.keyboard.press("Shift+Tab");
     names.add(await page.evaluate(() => document.activeElement?.getAttribute("aria-label") ?? ""));
   }
-  expect([...names]).toEqual(expect.arrayContaining(["Memory", "New chat"]));
+  expect([...names]).toEqual(expect.arrayContaining(["Memory", "Chats"]));
   expect([...names].some((x) => x.startsWith("Close ("))).toBe(true);
   await shot("j14-keyboard");
   // Escape closes it while the focus is in it (owner, 2026-11-25, Q3)

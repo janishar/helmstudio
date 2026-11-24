@@ -6219,7 +6219,7 @@ components:
         pending: {oneOf: [{$ref: '#/components/schemas/AssistantPending'}, {type: 'null'}]}
         caps: {$ref: '#/components/schemas/AssistantCaps'}
         created_at: {type: string, format: date-time}
-        updated_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time, description: 'the chat''s last message, turn end or Continue here; a summary landing does not move it. The list is newest first by it'}
     AssistantThreadList:
       type: object
       required: [status, threads]

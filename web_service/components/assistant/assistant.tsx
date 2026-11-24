@@ -21,10 +21,11 @@ import {
   Eye,
   Globe,
   LoaderCircle,
+  MessagesSquare,
   Monitor,
+  Plus,
   Redo2,
   Sparkles,
-  SquarePen,
   Undo2,
   X,
 } from "lucide-react";
@@ -37,6 +38,7 @@ import {
   asked,
   elsewhere,
   capNoticeId,
+  chatTime,
   limitOf,
   mentionParts,
   tabClientId,
@@ -336,18 +338,49 @@ export function useAssistant(me: S<"User"> | null) {
     [cid, post, reg, view?.thread.id],
   );
 
+  /** Leaves the chat on screen: a card it waits on is cancelled ("you left the screen"), the rest of its batch stops. */
+  const leave = useCallback(() => {
+    answerRef.current?.("gone");
+    stop.current = true;
+    setLocalState({});
+    setError("");
+  }, []);
+
   const newChat = useCallback(async () => {
     try {
       const n = await ok(api.POST("/v1/studio/assistant/threads", { body: { client_id: cid } }));
-      answerRef.current?.("gone");
-      stop.current = true;
+      leave();
       setView({ thread: n, entries: [] });
-      setLocalState({});
-      setError("");
     } catch (e) {
       setError(message(e));
     }
-  }, [cid]);
+  }, [cid, leave]);
+
+  // the Chats list (board frame 7): the chats newest first, read when the list opens
+  const [chats, setChats] = useState<Thread[] | null>(null);
+  const loadChats = useCallback(() => {
+    ok(api.GET("/v1/studio/assistant/threads"))
+      .then((l) => setChats(l.threads))
+      .catch((e) => setError(message(e)));
+  }, []);
+  /** An older chat picked: its whole thread comes back; writing in it works as in the newest one. */
+  const openChat = useCallback(
+    async (id: string) => {
+      try {
+        const d = await ok(
+          api.GET("/v1/studio/assistant/threads/{thread_id}", {
+            params: { path: { thread_id: id } },
+          }),
+        );
+        leave();
+        setView({ thread: d, entries: d.entries });
+        setCapRead(capNoticeId(d.entries));
+      } catch (e) {
+        setError(message(e));
+      }
+    },
+    [leave],
+  );
 
   const answerCard = (cardId: string, yes: boolean) =>
     threadId &&
@@ -419,6 +452,9 @@ export function useAssistant(me: S<"User"> | null) {
     error,
     send,
     newChat,
+    chats,
+    loadChats,
+    openChat,
     answerCard,
     continueHere,
     stopAll,
@@ -655,6 +691,102 @@ const serverCard = (c: S<"AssistantCard">): ScreenCard => ({
   danger: c.kind === "delete",
 });
 
+/** The model answered wrongly twice (board frame 7): the plain line, and the checker's own words behind Details,
+ * closed by default and after a reload. */
+function Broken({ raw }: { raw: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div role="note" className="msg note">
+      <p>The model gave a broken answer twice. Try again or rephrase.</p>
+      <button type="button" className="un det" aria-expanded={open} onClick={() => setOpen(!open)}>
+        Details
+        {open ? <ChevronUp size={12} aria-hidden /> : <ChevronDown size={12} aria-hidden />}
+      </button>
+      {open && <p className="raw mono">{raw}</p>}
+    </div>
+  );
+}
+
+const SHOWN = 5; // chats before Show older
+
+/** The Chats list (board frame 7): New chat first, then the chats newest first (title from the first message, time
+ * of the last), this one Open, one waiting on you Waiting. Esc or a click outside closes it; Delete stays in Memory. */
+function ChatsList({
+  a,
+  btn,
+  close,
+  pick,
+}: {
+  a: AssistantApi;
+  btn: React.RefObject<HTMLButtonElement | null>;
+  close: () => void;
+  pick: (id: string | null) => void;
+}) {
+  const [older, setOlder] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    ref.current?.querySelector("button")?.focus();
+    const out = (e: PointerEvent) => {
+      const t = e.target as Node;
+      if (!ref.current?.contains(t) && !btn.current?.contains(t)) close();
+    };
+    document.addEventListener("pointerdown", out);
+    return () => document.removeEventListener("pointerdown", out);
+  }, [btn, close]);
+  const list = a.chats ?? [];
+  const cur = a.view?.thread.id;
+  return (
+    <div
+      ref={ref}
+      role="menu"
+      aria-label="Chats"
+      className="chats"
+      onKeyDown={(e) => {
+        if (e.key !== "Escape") return;
+        e.preventDefault();
+        close();
+        btn.current?.focus();
+      }}
+    >
+      <div className="chh">
+        <span>Chats</span>
+        <span className="mono">newest first</span>
+      </div>
+      <button type="button" role="menuitem" className="new" onClick={() => pick(null)}>
+        <Plus size={14} strokeWidth={2} aria-hidden />
+        New chat
+      </button>
+      {(older ? list : list.slice(0, SHOWN)).map((t) => (
+        <button
+          key={t.id}
+          type="button"
+          role="menuitemradio"
+          aria-checked={t.id === cur}
+          onClick={() => pick(t.id)}
+        >
+          <span className="cht">
+            <span>{t.title}</span>
+            <small>{chatTime(t.updated_at)}</small>
+          </span>
+          {t.id === cur ? (
+            <span className="cho">
+              <Check size={14} strokeWidth={2.5} aria-hidden />
+              Open
+            </span>
+          ) : (
+            t.state === "waiting" && <span className="chw">Waiting</span>
+          )}
+        </button>
+      ))}
+      {!older && list.length > SHOWN && (
+        <button type="button" role="menuitem" className="un" onClick={() => setOlder(true)}>
+          Show older
+        </button>
+      )}
+    </div>
+  );
+}
+
 /** The chat as the board lays it out: your messages, its words with their lines under them, cards, notices. */
 function Thread({ a, entries }: { a: AssistantApi; entries: Entry[] }) {
   const known = new Set(entries.map((e) => e.id));
@@ -708,7 +840,9 @@ function Thread({ a, entries }: { a: AssistantApi; entries: Entry[] }) {
             onNo={() => a.answerCard(c.id, false)}
           />,
         );
-      } else if (e.kind === "notice" && !["cap_day", "cap_tokens"].includes(e.error?.code ?? ""))
+      } else if (e.kind === "notice" && e.error?.code === "answer")
+        out.push(<Broken key={e.id} raw={e.text ?? e.error.text} />);
+      else if (e.kind === "notice" && !["cap_day", "cap_tokens"].includes(e.error?.code ?? ""))
         out.push(
           <div key={e.id} role="note" className="msg note">
             <Text text={e.text ?? ""} />
@@ -930,6 +1064,13 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
   const [sending, setSending] = useState(false);
   const [top, setTop] = useState<number | null>(null);
   const [memory, setMemory] = useState(false);
+  const [chats, setChats] = useState(false);
+  const chatsBtn = useRef<HTMLButtonElement>(null);
+  const closeChats = useCallback(() => setChats(false), []);
+  const openChats = () => {
+    a.loadChats();
+    setChats(true);
+  };
   const phone = usePhone();
   const end = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -957,7 +1098,10 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
   useEffect(() => {
     if (a.open) input.current?.focus();
   }, [a.open]);
-  if (!a.open) return null;
+  if (!a.open) {
+    if (chats) setChats(false); // the list never comes back open with the drawer
+    return null;
+  }
   const limit = limitOf(entries, a.capLimits);
   const st = a.status;
   const t = a.view?.thread;
@@ -1086,13 +1230,16 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
               <Brain size={15} strokeWidth={1.75} aria-hidden />
             </button>
             <button
+              ref={chatsBtn}
               type="button"
               className="ib"
-              aria-label="New chat"
-              title="New chat"
-              onClick={() => void a.newChat()}
+              aria-label="Chats"
+              title="Chats"
+              aria-haspopup="menu"
+              aria-expanded={chats}
+              onClick={() => (chats ? setChats(false) : openChats())}
             >
-              <SquarePen size={15} strokeWidth={1.75} aria-hidden />
+              <MessagesSquare size={15} strokeWidth={1.75} aria-hidden />
             </button>
             {phone && (
               <button
@@ -1114,6 +1261,18 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
               <X size={16} strokeWidth={1.75} aria-hidden />
             </button>
           </div>
+          {chats && (
+            <ChatsList
+              a={a}
+              btn={chatsBtn}
+              close={closeChats}
+              pick={(id) => {
+                setChats(false);
+                if (id === null) void a.newChat();
+                else if (id !== a.view?.thread.id) void a.openChat(id);
+              }}
+            />
+          )}
           {!phone && sees.length > 0 && (
             <div className="where">
               Sees

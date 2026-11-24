@@ -320,6 +320,18 @@ export function ago(iso: string, now = Date.now()) {
   return n <= 0 ? "today" : n === 1 ? "yesterday" : `${n} days ago`;
 }
 
+/** A chat's time in the Chats list: the day of its last message, then the time ("today · 14:02", "21 Nov · 09:03"). */
+export function chatTime(iso: string, now = Date.now()) {
+  const d = new Date(iso);
+  const day = ago(iso, now);
+  const hm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  const on =
+    day === "today" || day === "yesterday"
+      ? day
+      : `${d.getDate()} ${d.toLocaleString("en-GB", { month: "short" })}`;
+  return `${on} · ${hm}`;
+}
+
 /** The Memory list's tabs (§22.8): the kinds as the board names them. */
 export const MEMORY_TABS = [
   ["preference", "Likes"],

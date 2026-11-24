@@ -959,7 +959,8 @@ func (p *Projector) ApplyAssistantStep(ctx context.Context, ownerID string, step
 				state = "waiting"
 				wait = toJSON(pending{Turn: step.Turn, Actions: append([]json.RawMessage{}, step.Actions...), Cards: cardIDs})
 			}
-			set += `, state = $3, pending = $4, updated_at = clock_timestamp()`
+			// a summary's end (summarized_at set; a new message clears it) leaves the chat's place in Chats
+			set += `, state = $3, pending = $4, updated_at = CASE WHEN summarized_at IS NULL THEN clock_timestamp() ELSE updated_at END`
 			args = append(args, state, wait)
 			if len(step.Caps) > 0 {
 				set += `, caps = $5`

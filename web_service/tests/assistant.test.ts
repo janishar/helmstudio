@@ -6,6 +6,7 @@ import {
   about,
   applyEvent,
   argsError,
+  chatTime,
   elsewhere,
   fitScreen,
   limitOf,
@@ -287,5 +288,14 @@ describe("the tab's id and drawer state survive a reload", () => {
     expect(tabOpen()).toBe(true);
     rememberOpen(false);
     expect(tabOpen()).toBe(false);
+  });
+});
+
+describe("chatTime", () => {
+  it("names the day of a chat's last message, then its time", () => {
+    const now = new Date(2026, 10, 25, 15, 0).getTime();
+    expect(chatTime(new Date(2026, 10, 25, 14, 2).toISOString(), now)).toBe("today · 14:02");
+    expect(chatTime(new Date(2026, 10, 24, 18, 15).toISOString(), now)).toBe("yesterday · 18:15");
+    expect(chatTime(new Date(2026, 10, 21, 9, 3).toISOString(), now)).toBe("21 Nov · 09:03");
   });
 });

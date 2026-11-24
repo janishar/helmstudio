@@ -601,15 +601,16 @@ export function Create({
   // the params whose `when` holds now: the others are neither shown nor sent
   const fields = visible(layout ? layout.shown : all, raws, all);
   // a half-written prompt survives a reload (owner, 2026-11-25): kept in this browser per session (a reload starts
-  // with an empty leftForm), dropped once Generate sends it
+  // with an empty leftForm), dropped once Generate sends it; switching to another session brings back its own
   const promptKey = all.find((f) => f.param.type === "text")?.key;
   const draft = promptKey ? held[promptKey] : undefined;
   const sentDraft = useRef<unknown>(undefined);
-  const draftRead = useRef(false);
+  const draftRead = useRef<string | null | undefined>(undefined); // the session whose draft was read
   useEffect(() => {
-    if (draftRead.current || !workflows) return;
-    draftRead.current = true;
-    if (back || reuse || use) return;
+    if (!workflows || draftRead.current === sessionId) return;
+    const first = draftRead.current === undefined;
+    draftRead.current = sessionId;
+    if (first && (back || reuse || use)) return;
     try {
       const d = JSON.parse(localStorage.getItem(draftKey(sessionId)) ?? "null");
       if (!d?.key || typeof d.text !== "string") return;
@@ -621,7 +622,7 @@ export function Create({
     }
   }, [workflows, back, reuse, use, sessionId]);
   useEffect(() => {
-    if (!draftRead.current || !promptKey) return;
+    if (draftRead.current !== sessionId || !promptKey) return;
     try {
       if (typeof draft === "string" && draft.trim() && draft !== sentDraft.current)
         localStorage.setItem(draftKey(sessionId), JSON.stringify({ key: promptKey, text: draft }));

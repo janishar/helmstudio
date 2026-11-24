@@ -6347,7 +6347,10 @@ export interface components {
             caps: components["schemas"]["AssistantCaps"];
             /** Format: date-time */
             created_at: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description the chat's last message, turn end or Continue here; a summary landing does not move it. The list is newest first by it
+             */
             updated_at: string;
         };
         AssistantThreadList: {
