@@ -40,7 +40,7 @@ import { ApiError, api, editTimeline, getTimeline, message, ok, type S } from "@
 import { safeUrl } from "@/lib/format";
 import { useLibrary, useLooks, useVoices } from "@/lib/library";
 import { MAX_LOOKS, chosenFrom, type Chosen } from "@/lib/looks";
-import { followSession } from "@/lib/runs";
+import { followSession, renderTime } from "@/lib/runs";
 import { Preview } from "@/lib/timeline-preview";
 import {
   Grid,
@@ -855,6 +855,11 @@ export function TimelineEditor({ id }: { id?: string }) {
         : under?.take_id && unplayable.includes(under.take_id)
           ? "This browser cannot play this clip"
           : "";
+  // the sequence's render time: its clips' takes, each once, that have one (API 1.60; docs/mock/Timeline.dc.html)
+  const renders = [...new Set(doc.tracks.flatMap((tr) => tr.clips.map((c) => c.take_id)))]
+    .map((id) => (id ? tl.takes[id]?.render_s : undefined))
+    .filter((s) => s != null);
+  const renderTotal = renders.length ? renderTime(renders.reduce((a, b) => a + b, 0)) : "";
 
   return (
     <>
@@ -884,6 +889,7 @@ export function TimelineEditor({ id }: { id?: string }) {
           </button>
           <span className="mono rounded-full bg-s2 px-2.5 py-1 text-[12px] text-t2">
             {t.width} × {t.height} · {t.fps} fps · {shortTime(doc.duration_s)}
+            {renderTotal && <span title="Render time of its shots, in all"> · {renderTotal}</span>}
           </span>
           <button
             type="button"
@@ -1512,6 +1518,7 @@ function ClipPanel({
         take.workflow_title,
         take.video && `${take.video.frames} frames`, // docs/mock/TakeActions.dc.html
         take.audio?.cues?.length && `${take.audio.cues.length} lines`, // docs/mock/TimelineAudio.dc.html
+        renderTime(take.render_s), // API 1.60: "⏱ 3:12" (docs/mock/Timeline.dc.html)
       ]
         .filter(Boolean)
         .join(" · ")

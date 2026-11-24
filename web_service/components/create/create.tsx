@@ -122,6 +122,7 @@ import {
   mergeRuns,
   nodeLabel,
   removable,
+  renderTime,
   seedOf,
   segments,
   track,
@@ -161,7 +162,7 @@ import { useLibraryDialog } from "@/components/assistant/library";
 import { createTools } from "@/components/create/assistant";
 import {
   buildInputs,
-  carry,
+  carryKind,
   display,
   fields as fieldsOf,
   isVoice,
@@ -596,6 +597,8 @@ export function Create({
   }
   // what the form held in each workflow when it was left: a value that did not suit the next one comes back
   const left = useRef<Record<string, Record<string, Raw>>>({});
+  // the last prompt or script of each side, picture and sound (carryKind)
+  const keptTexts = useRef<Record<string, Record<string, Raw>>>({});
   // a workflow with a Studio block shows exactly what it places (lib/studio.ts)
   const layout = useMemo(() => (workflow ? studioView(workflow, all) : null), [workflow, all]);
   // the params whose `when` holds now: the others are neither shown nor sent
@@ -748,13 +751,17 @@ export function Create({
   };
   const uploads = useRefUploads(change);
   /** Opens another workflow of the session (the picker, the Image / Video switch): what the form holds carries over
-   * where the paths match (the session rule, lib/workflow.ts carry). */
+   * where the paths match (the session rule, lib/workflow.ts carry); a prompt or script never crosses between picture
+   * and sound workflows, each keeps its own (carryKind). */
   const switchTo = (id: string) => {
     const w = workflows?.find((x) => x.id === id);
+    const side = (x?: Pick<S<"Workflow">, "media">) =>
+      x && mediaOf(x) === "audio" ? "sound" : "picture";
     if (w)
       setRaws((r) => {
         if (workflow) left.current[workflow.id] = r;
-        return carry(r, fieldsOf(w), all, left.current[id]);
+        const sides = { from: side(workflow), to: side(w) };
+        return carryKind(r, fieldsOf(w), all, left.current[id], sides, keptTexts.current);
       });
     setChosen(id);
     setOpenKey(null);
@@ -1832,12 +1839,15 @@ export function Create({
               voiceFields.length > 0 ||
               !!scriptField ||
               paramCards.length > 0) && (
-              // the empty screen's big tiles: equal columns, so a tile that wraps keeps their width
+              // the empty screen's big tiles: equal columns, so a tile that wraps keeps their width; the cards of a
+              // video or audio workflow too, one width per line however they wrap (alpha.2 item 16)
               <div
                 className={
                   empty
                     ? "grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2"
-                    : "flex flex-wrap items-center gap-2"
+                    : card
+                      ? "grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-2 [&>*]:min-w-0"
+                      : "flex flex-wrap items-center gap-2"
                 }
               >
                 {scriptField && linesKey && (
@@ -2322,6 +2332,17 @@ function Stage({
             failed: "Failed",
             cancelled: "Stopped",
           }[run.status];
+  // a finished take's render time, low text (API 1.60; docs/mock/Main.dc.html "A finished take"): its own, else
+  // the finished run's
+  const took =
+    label === "Take" || audioBadge
+      ? renderTime(
+          take?.made_with?.render_s ??
+            (run?.status === "succeeded" && run.started_at && run.finished_at
+              ? (Date.parse(run.finished_at) - Date.parse(run.started_at)) / 1000
+              : undefined),
+        )
+      : "";
   // what a screen reader hears: the state and the node, not every step
   const said = node ? `Running ${node}` : label;
   return (
@@ -2354,6 +2375,12 @@ function Stage({
             className={`mono rounded-lg bg-s2/90 px-2.5 py-1.5 text-[12px] ${run?.status === "failed" ? "text-bad" : ""}`}
           >
             {label}
+            {took && (
+              <span className="text-t2" title="Render time (start to file)">
+                {" "}
+                · {took}
+              </span>
+            )}
           </span>
           <span className="flex items-center gap-2">
             {out?.kind === "video" && (
