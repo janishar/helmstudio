@@ -48,6 +48,7 @@ class Tools:
         self.asked: list[dict] = []
         self.takes = {"takes": [], "more": False}
         self.fail_once: set[str] = set()
+        self.results: dict[str, dict] = {}
 
     async def __call__(self, req: dict) -> dict:
         assert not schemas.tools_errors("request", req), schemas.tools_errors("request", req)
@@ -59,7 +60,7 @@ class Tools:
             res = {"run_id": str(uuid.uuid4()), "session_id": str(uuid.uuid4()), "workflow_id": "qwen-image-ask",
                    "host": "mac", "position": 2}  # fmt: skip
         else:
-            res = {"search_takes": self.takes}.get(req["tool"], {})
+            res = ({"search_takes": self.takes} | self.results).get(req["tool"], {})
         return {"tool": req["tool"], "result": res}
 
 
@@ -73,6 +74,7 @@ class Chat:
         self.a = self.restart()
         self.roles, self.tool_names, self.search, self.limits = ["user"], TOOLS, None, dict(LIMITS)
         self.plugins: list[dict] = []  # cmd.assistant.turn data.plugins (API 1.61)
+        self.skills: list[dict] = []  # data.skills (API 1.64)
 
     def restart(self) -> assistant.Assistant:
         """A new process: a fresh graph and saver on the same database."""
@@ -95,7 +97,8 @@ class Chat:
                      "tools": self.tool_names, "actions": ACTIONS,
                      "settings": {"source": {"kind": "server", "provider": "local", "model": "fake-large", "host": "mac"},
                                   "providers": provs, "search": self.search, "limits": self.limits},
-                     "input": inp} | ({"plugins": self.plugins} if self.plugins else {})  # fmt: skip
+                     "input": inp} | ({"plugins": self.plugins} if self.plugins else {}) | (
+                     {"skills": self.skills} if self.skills else {})  # fmt: skip
         assert not schemas.message_errors(c), schemas.message_errors(c)
         return c
 
@@ -965,3 +968,48 @@ async def test_a_risky_plugin_tool_waits_for_its_card_and_off_means_off(pool, fa
     line = step["lines"][0]
     assert line["status"] == "failed" and line["text"].endswith("the plugin is off")
     assert len(plugin.requests) == 1 and SEARCH not in offered(c.asked()[-1])
+
+
+# --- skills (API 1.64)
+
+ANIMATOR = {"name": "animator", "title": "Animator", "when": "Planning an animated shot or film."}
+
+
+async def test_the_skills_block_is_in_the_prompt_only_with_skills(pool, fake):
+    c = Chat(pool, fake)
+    c.script({"content": "Hi."}, {"content": "Hi."})
+    await c.say("hello")
+    bare = c.asked()[0]["messages"][0]["content"]
+    assert (
+        "use_skill" not in bare.split(assistant.SYSTEM)[-1]
+    )  # the stable prefix alone, byte for byte
+    c.skills = [ANIMATOR]
+    await c.say("again")
+    system = c.asked()[1]["messages"][0]["content"]
+    assert system.startswith(assistant.SYSTEM)
+    assert "Skills you can read with use_skill" in system
+    assert "- animator: Animator. Planning an animated shot or film." in system
+
+
+async def test_use_skill_and_read_skill_file_make_their_lines(pool, fake):
+    c = Chat(pool, fake)
+    c.skills, c.tool_names = [ANIMATOR], TOOLS + ["use_skill", "read_skill_file"]
+    c.tools.results = {
+        "use_skill": {"name": "animator", "title": "Animator", "when": ANIMATOR["when"], "version": "0.1.0",
+                      "origin": "built_in", "text": "One action per shot.", "files": ["camera-moves.md"],
+                      "recipes": []},
+        "read_skill_file": {"skill": "animator", "file": "camera-moves.md", "text": "Slow dolly in."},
+    }  # fmt: skip
+    c.script(calls(("use_skill", {"skill": "animator"}),
+                   ("read_skill_file", {"skill": "animator", "file": "camera-moves.md"})),
+             {"content": "Planned."})  # fmt: skip
+    step = await c.say("@animator plan a shot")
+    assert {"use_skill", "read_skill_file"} <= set(offered(c.asked()[0]))
+    used, read = step["lines"]
+    assert used == {"id": c.cid(1, 0), "status": "done", "text": "Using skill: Animator", "undo": False,
+                    "skill": "animator"}  # fmt: skip
+    assert read == {"id": c.cid(1, 1), "status": "done", "text": "Read camera-moves.md · Animator",
+                    "undo": False}  # fmt: skip
+    assert (
+        "One action per shot." in c.asked()[1]["messages"][1]["content"]
+    )  # fenced data to the model
