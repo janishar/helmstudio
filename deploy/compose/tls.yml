@@ -23,7 +23,7 @@ services:
     secrets: [nats_runner_tls_url, tls_ca]
 
 secrets:
-  stack_tls_cert: {file: secrets/stack_tls_cert}
-  stack_tls_key: {file: secrets/stack_tls_key}
-  tls_ca: {file: secrets/tls_ca}
-  nats_runner_tls_url: {file: secrets/nats_runner_tls_url}
+  stack_tls_cert: {file: "${HELM_SECRETS:-secrets}/stack_tls_cert"}
+  stack_tls_key: {file: "${HELM_SECRETS:-secrets}/stack_tls_key"}
+  tls_ca: {file: "${HELM_SECRETS:-secrets}/tls_ca"}
+  nats_runner_tls_url: {file: "${HELM_SECRETS:-secrets}/nats_runner_tls_url"}

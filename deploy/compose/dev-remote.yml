@@ -10,6 +10,6 @@ services:
     environment:
       PIPELINES_PROVIDER_KEYS_DIR: /run/secrets/providers:/fake-keys
       SSL_CERT_FILE: /tmp/ca-bundle.pem
-    volumes: [./secrets/providers:/run/secrets/providers]
+    volumes: ["./${HELM_SECRETS:-secrets}/providers:/run/secrets/providers"]
     entrypoint: [sh, -c, 'cat "$$(python -c "import certifi; print(certifi.where())")" /certs/fake-openai.pem > /tmp/ca-bundle.pem && exec "$$@"', --]
     command: [python, main.py]

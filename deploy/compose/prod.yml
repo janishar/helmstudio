@@ -1,0 +1,20 @@
+# Overlay (-f) for production on this Mac (docs/plan/26-production.md): compose project helmstudio-prod, with the base
+# file only (no fake.yml, dev-remote.yml, test-admin.yml or tls.yml), so no fake runner, fake hub, fake OpenAI server
+# or Echo. Its own ports, network, volumes and secrets (deploy/secrets-prod, provider keys in its providers/) come from
+# the root Makefile's PROD variable: make prod. pipelines keeps the base: real provider keys from the writable providers/
+# folder, the image's public CA bundle, private remotes off, local Mac servers (host.docker.internal) allowed.
+# Every long-running service restarts unless stopped, logs are capped and memory is limited.
+x-log: &log {driver: json-file, options: {max-size: 10m, max-file: "3"}}
+
+services:
+  kong: {restart: unless-stopped, logging: *log, mem_limit: 512m}
+  auth: {restart: unless-stopped, logging: *log, mem_limit: 128m}
+  studio: {restart: unless-stopped, logging: *log, mem_limit: 512m}
+  files: {restart: unless-stopped, logging: *log, mem_limit: 256m}
+  web: {restart: unless-stopped, logging: *log, mem_limit: 512m}
+  pipelines: {restart: unless-stopped, logging: *log, mem_limit: 1g}
+  nats: {restart: unless-stopped, logging: *log, mem_limit: 512m}
+  postgres: {restart: unless-stopped, logging: *log, mem_limit: 1g}
+  seaweedfs: {restart: unless-stopped, logging: *log, mem_limit: 1g}
+  nats-setup: {logging: *log}       # one-shots: no restart
+  storage-setup: {logging: *log}

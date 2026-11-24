@@ -11,10 +11,17 @@ DEV  := docker compose -f deploy/docker-compose.yml -f deploy/compose/fake.yml -
 TEST := KONG_HTTP_PORT=8390 POSTGRES_HOST_PORT=5464 NATS_HOST_PORT=4323 S3_HOST_PORT=8434 S3_TLS_HOST_PORT=8444 \
         HELM_NET=172.30.98 IMAGE_TAG=gate REMOTE_MODELS=on \
         docker compose -p helmstudio-test -f deploy/docker-compose.yml -f deploy/compose/fake.yml -f deploy/compose/tls.yml -f deploy/compose/test-admin.yml
+# Production on this Mac (docs/plan/26-production.md): project helmstudio-prod, the base file and prod.yml only (no
+# fakes), its own ports, network, volumes, image tag and secrets folder (deploy/secrets-prod); the admin from
+# auth_service/.env as on the dev stack
+PROD_ENV := HELM_SECRETS=secrets-prod KONG_HTTP_PORT=8400 POSTGRES_HOST_PORT=5465 NATS_HOST_PORT=4324 S3_HOST_PORT=8435 \
+        S3_TLS_HOST_PORT=8445 HELM_NET=172.30.99 IMAGE_TAG=prod SERVER_HOSTS=
+PROD := $(PROD_ENV) docker compose -p helmstudio-prod -f deploy/docker-compose.yml -f deploy/compose/prod.yml
 # the test admin set by deploy/compose/test-admin.yml (test stack only)
 TEST_ADMIN := ADMIN_EMAIL=admin@helm.test ADMIN_PASSWORD="$${HELM_TEST_ADMIN_PASSWORD:-helm test admin pass 1}"
 
-.PHONY: secrets envs build up dev down logs ps contracts-check test resilience test-down runners runner-torch runner-mlx runner-native runners-stop h3 zonos3 \
+.PHONY: secrets envs build up dev down logs ps contracts-check test resilience test-down prod prod-secrets prod-down \
+        prod-logs prod-ps runners runner-torch runner-mlx runner-native runners-stop h3 zonos3 \
         gpu-host-secrets gpu-host-reload gpu-host-tunnel gpu-host-tunnel-stop
 
 secrets:          ## deploy/secrets/ (git-ignored); never overwrites
@@ -51,6 +58,22 @@ logs:             ## make logs s=studio (s empty = every service)
 ps:
 	$(DEV) ps
 
+prod-secrets:     ## deploy/secrets-prod/ (git-ignored, its own keys; never overwrites)
+	$(PROD_ENV) .tools/make-secrets
+
+prod: prod-secrets envs  ## production on this Mac: build the images (tag prod), start, wait until healthy (Kong 8400)
+	$(call nats_reload,$(PROD))
+	$(PROD) up -d --build --wait
+
+prod-down:        ## stop production; its data volumes stay
+	$(PROD) down
+
+prod-logs:        ## make prod-logs s=studio (s empty = every service)
+	$(PROD) logs -f --tail=100 $(s)
+
+prod-ps:
+	$(PROD) ps
+
 contract_tests/.venv:
 	$(MAKE) -C contract_tests venv
 
@@ -83,7 +106,10 @@ test-down:        ## stop the test stack; its volumes stay
 RUN_DIR := runner_service/.run
 # runner_service pins uv 0.13.8; an older uv on PATH is stood in for by uvx (the command line still holds "uv run")
 UV ?= $(shell uv --version 2>/dev/null | grep -q '^uv 0.13.8' && echo uv || echo 'uvx --from uv==0.13.8 uv')
-SECRETS := $(CURDIR)/deploy/secrets
+# STACK=prod joins them to production (make prod) instead of the dev stack: its secrets and loopback ports
+STACK ?= dev
+SECRETS := $(CURDIR)/deploy/$(if $(filter prod,$(STACK)),secrets-prod,secrets)
+RUNNER_S3 := $(if $(filter prod,$(STACK)),8435,$${S3_HOST_PORT:-8433})
 UV_RUN_torch := run --extra torch
 UV_RUN_mlx := run --project envs/mlx --extra llm
 UV_RUN_native := run
@@ -91,7 +117,7 @@ HEALTH_PORT_torch := 8091   # each runner's GET /health on 0.0.0.0 (envs on one 
 HEALTH_PORT_mlx := 8092
 HEALTH_PORT_native := 8093
 
-runners: runner-torch runner-mlx runner-native  ## the native runners in the background (needs make up); make runners-stop stops them
+runners: runner-torch runner-mlx runner-native  ## the native runners in the background (needs make up, or make prod with STACK=prod); make runners-stop stops them
 
 # the native env runs the vendored h3 (runner_service/vendor/h3c, pinned h3.c) and zonos3-server
 # (runner_service/vendor/zonos3): make rebuilds them only when a source changed
@@ -103,13 +129,13 @@ h3:               ## build the vendored h3 binary (Command Line Tools clang; abo
 zonos3:           ## build the vendored zonos3-server (cmake, offline; under 2 minutes from clean)
 	$(MAKE) -C runner_service zonos3
 
-runner-torch runner-mlx runner-native: runner-%: secrets  ## one native runner (env torch, mlx or native) in the background
+runner-torch runner-mlx runner-native: runner-%: $(if $(filter prod,$(STACK)),prod-secrets,secrets)  ## one native runner (env torch, mlx or native) in the background
 	@mkdir -p $(RUN_DIR); pid=$$(cat $(RUN_DIR)/runner-mac-$*.pid 2>/dev/null); \
 	if [ -n "$$pid" ] && ps -p $$pid -o command= | grep -q 'uv run'; then echo "runner $* already runs ($$pid)"; exit 0; fi; \
 	cd runner_service && nohup sh -c 'echo $$$$ > .run/runner-mac-$*.pid; trap "kill \$$c; wait \$$c; exit 143" TERM INT; \
 	while :; do env \
 	  RUNNER_HOST=mac RUNNER_ENV=$* HEALTH_PORT=$(HEALTH_PORT_$*) NATS_URL_FILE=$(SECRETS)/nats_runner_mac_$*_url \
-	  S3_ENDPOINT=http://127.0.0.1:$${S3_HOST_PORT:-8433} S3_BUCKET=$${S3_BUCKET:-helmstudio} \
+	  S3_ENDPOINT=http://127.0.0.1:$(RUNNER_S3) S3_BUCKET=$${S3_BUCKET:-helmstudio} \
 	  S3_ACCESS_KEY_ID_FILE=$(SECRETS)/s3_access_key_id S3_SECRET_ACCESS_KEY_FILE=$(SECRETS)/s3_secret_access_key \
 	  HELMSTUDIO_MODELS=$${HELMSTUDIO_MODELS:-$$HOME/GenAI/models} CONTRACTS_DIR=$(CURDIR)/contracts \
 	  $(UV) $(UV_RUN_$*) python main.py & c=$$!; wait $$c; s=$$?; [ $$s -eq 70 ] || [ $$s -eq 137 ] || exit $$s; \

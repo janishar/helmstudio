@@ -1,4 +1,4 @@
-# Overlay (-f) for the dev and test stacks: the fake services. The admin comes from auth_service/.env on the dev
+# Overlay (-f) for the dev and test stacks: the fake services (the fake runner too; the base file has no fakes). The admin comes from auth_service/.env on the dev
 # stack; the test stack adds compose/test-admin.yml for its known test admin (owner, 2026-11-24).
 #   docker compose -f deploy/docker-compose.yml -f deploy/compose/fake.yml up -d --build --wait      # make up
 services:
@@ -21,7 +21,7 @@ services:
       PIPELINES_PROVIDER_KEYS_DIR: /tmp/provider-keys:/fake-keys
       PIPELINES_REMOTE_ALLOW_PRIVATE: "on"  # the fake's remote (https://fake-openai:8443) is a compose address
       SSL_CERT_FILE: /certs/fake-openai.pem
-    volumes: [fakeai-certs:/certs:ro, ./secrets/providers:/run/secrets/providers:ro]
+    volumes: [fakeai-certs:/certs:ro, "./${HELM_SECRETS:-secrets}/providers:/run/secrets/providers:ro"]
     configs: [{source: fake_provider_key, target: /fake-keys/fake-openai}]
     depends_on:
       fake-openai: {condition: service_healthy}
@@ -43,16 +43,32 @@ services:
     entrypoint: [sh, -c, "chown 10001 /models /models-b"]
     volumes: [fake-models:/models, fake-models-b:/models-b]
 
-  # the fake runner downloads the echo pack's tiny model (runner_service/packs/echo) from the fake hub into a
-  # throwaway models root, never ~/GenAI/models; the host starts with it missing. Reserve 1 GB of the container's RAM.
+  # The fake runner (host fake, env fake: the echo family). It talks only to NATS and the object store, never to
+  # Postgres; real runners run natively on GPU hosts (M1). It downloads the echo pack's tiny model
+  # (runner_service/packs/echo) from the fake hub into a throwaway models root, never ~/GenAI/models; the host starts
+  # with it missing. Reserve 1 GB of the container's RAM.
   runner:
-    environment:
+    build: ../runner_service
+    image: helmstudio/runner:${IMAGE_TAG:-dev}
+    env_file: [{path: ../runner_service/.env, required: false}]
+    environment:                                      # credentials come from the secrets (<VAR>_FILE)
+      RUNNER_HOST: fake
+      RUNNER_ENV: fake
+      NATS_URL_FILE: /run/secrets/nats_runner_url
+      S3_ENDPOINT: http://seaweedfs:8333
+      S3_BUCKET: ${S3_BUCKET:-helmstudio}
+      S3_ACCESS_KEY_ID_FILE: /run/secrets/s3_access_key_id
+      S3_SECRET_ACCESS_KEY_FILE: /run/secrets/s3_secret_access_key
       HF_ENDPOINT: http://fake-hub:8000
       HELMSTUDIO_MODELS: /models
       RUNNER_HF_TOKEN_FILE: /hubsecrets/hf_token
       RUNNER_RESERVE_GB: "1"
+    secrets: [nats_runner_url, s3_access_key_id, s3_secret_access_key]
     volumes: [fake-models:/models, hubsecrets:/hubsecrets:ro]
+    healthcheck: {test: [CMD, python, health.py], interval: 5s, timeout: 5s, retries: 20}   # GET /health: NATS connected
     depends_on:
+      nats-setup: {condition: service_completed_successfully}
+      storage-setup: {condition: service_completed_successfully, required: false}
       fake-hub: {condition: service_healthy}
       fake-models: {condition: service_completed_successfully}
 
@@ -86,10 +102,10 @@ services:
       fake-models: {condition: service_completed_successfully}
 
 secrets:
-  nats_runner_fakeb_fake_url: {file: secrets/nats_runner_fakeb_fake_url}
-  tls_ca: {file: secrets/tls_ca}
-  s3_runner_fakeb_access_key_id: {file: secrets/s3_runner_fakeb_access_key_id}
-  s3_runner_fakeb_secret_access_key: {file: secrets/s3_runner_fakeb_secret_access_key}
+  nats_runner_fakeb_fake_url: {file: "${HELM_SECRETS:-secrets}/nats_runner_fakeb_fake_url"}
+  tls_ca: {file: "${HELM_SECRETS:-secrets}/tls_ca"}
+  s3_runner_fakeb_access_key_id: {file: "${HELM_SECRETS:-secrets}/s3_runner_fakeb_access_key_id"}
+  s3_runner_fakeb_secret_access_key: {file: "${HELM_SECRETS:-secrets}/s3_runner_fakeb_secret_access_key"}
 
 configs:
   fake_provider_key: {content: "placeholder-not-a-key"}

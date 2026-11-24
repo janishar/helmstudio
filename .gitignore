@@ -10,6 +10,7 @@ build/
 node_modules/
 .next/
 deploy/secrets/
+deploy/secrets-*/
 .test.env
 *.log
 tsconfig.tsbuildinfo
