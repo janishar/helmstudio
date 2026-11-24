@@ -3933,7 +3933,9 @@ Write while it works, like Claude Code: the message joins the running answer and
   stopped turn on the thread (1.59.1): at its done step its steers still `waiting` become `read`. Only a running
   turn stops (the same states as a steer); on an idle chat, or one waiting only on a server card, it does nothing
   (202). Each Stop has its own message id (1.59.1): pipelines' inbox keeps ids for good, so a Stop after its
-  restart is never dropped as a duplicate.
+  restart is never dropped as a duplicate. (1.62) A model call in flight does not wait for the boundary: pipelines
+  keeps a handle per thread and cancels the call at once, the turn ends `done` with no error, nothing of that answer
+  is kept, and the call stays counted in `assistant_spend` at its prompt's estimate (not its whole bound).
 - **Restart.** pipelines keeps steers in memory: after a restart a steer it had is never read by that turn, so it
   becomes the next message at the turn's end. Nothing is lost.
 - **Known gap.** A read steer can show above the lines of server-tool calls that ran before it was read:
@@ -3952,6 +3954,11 @@ Write while it works, like Claude Code: the message joins the running answer and
 - A route under `/v1/studio/admin/` ⇔ `roles` [admin]; an admin tool is never offered to anyone else and studio
   checks the role again (`forbidden`).
 - A write is mcp only, or the assistant's behind a `card`; only memory writes (`remember`) go without one.
+- (1.62) Checks past the input schema, each an invalid answer (asked once more, then the turn ends `answer`):
+  `remember`'s text is plain words: no JSON, no UUID, no field name (a word with `_`, or a dotted path of three or
+  more parts; an `@handle` is fine). A `generate` after a `switchTo` (this message) to a workflow whose `media` is
+  `audio` in the screen's `fields.workflows`, with no `change` since: the box still holds the image or video prompt,
+  so the model must write the spoken line (or a Dialogue script, one `@name: text` line each) first.
 - (plan 16) A tool for `mcp` only is called by `helm mcp` over Kong as the signed-in user; its `routes` are the calls
   it makes and `served_by` stays studio, but studio never serves it on `studio.tools`. `destructive` (the deletes; from 1.49
   `edit_timeline` and `restore_timeline`) is an mcp-only write; `helm mcp` sends it as `destructiveHint` (and every other write as `destructiveHint` false), so
