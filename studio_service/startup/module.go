@@ -39,6 +39,7 @@ type Module struct {
 	providerKeyWrite studio.ProviderKeyWriteAsk                                 // pipelines.providers.key.write (API 1.52)
 	judgeTest        studio.JudgeTestAsk                                        // pipelines.judge.test (API 1.28)
 	assistantMemory  studio.AssistantMemoryAsk                                  // pipelines.assistant.memory (API 1.44)
+	assistantCache   studio.AssistantCacheAsk                                   // pipelines.assistant.cache (API 1.66)
 	lookup           studio.Lookup                                              // a server provider's host name (nil: the system resolver)
 	purge            func(ctx context.Context, subject string) error            // a CMD subject's messages (API 1.16)
 	putSettings      func(ctx context.Context, host string, value []byte) error // KV host_settings (API 1.16)
@@ -73,6 +74,7 @@ func (m *Module) Controllers() []micro.Controller {
 	service.SetModelOps(m.purge, m.putSettings)
 	m.settings = service
 	service.SetAssistantMemory(m.assistantMemory)
+	service.SetAssistantCache(m.assistantCache)
 	galleryService := gallery.NewService(m.db, m.signer, m.store, m.registry, service.FindWorkflow)
 	galleryService.SetOffers(service.Offerable)
 	api := []micro.Controller{
