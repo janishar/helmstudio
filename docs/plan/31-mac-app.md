@@ -2,7 +2,8 @@
 
 [← Plan index](../README.md)
 
-Status: **decided by the owner (2026-11-25, decisions below); board not drawn yet. A fast prototype: essential tests
+Status: **decided by the owner (2026-11-25, decisions below); board [Desktop](../mock/Desktop.dc.html) approved by the
+owner (2026-11-25, "board approved"). A fast prototype: essential tests
 only, robust testing later.** Not in a milestone, like plans 25–30. It narrows [09 §12](09-scope-and-risks.md) ("a
 desktop app shell and a one-click installer … deliberately not in v1"): a Mac app that installs everything is now in,
 as a prototype.
@@ -97,10 +98,6 @@ a day for the manual install run and fixes. Download about 150 MB; after setup a
 Auto-update (a new version is a new download; the data stays in the app's Colima disk), backup and export, an
 uninstall tool, a Homebrew tap or install command, notarization (Developer ID), Intel Macs, Windows and Linux.
 
-### Open before the build
-
-- Registry: are the pushed images public, or private (the app then needs a read token)?
-
 ### Decided by the owner, 2026-11-25 (asked one by one)
 
 1. **Shell: Electron** (Chromium, the engine the e2e suite uses).
@@ -112,3 +109,8 @@ uninstall tool, a Homebrew tap or install command, notarization (Developer ID), 
 5. **The VM route, all installed together on first open**, with existing parts only (Colima, pulled images, compose,
    make-secrets, uv); no own VM image; distributed without the App Store and without a Developer ID (ad-hoc signed).
 6. **A fast prototype:** essential checks only; robust testing later.
+7. **Registry: private for now, public at the public release** (owner, 2026-11-25: "private for now but when i
+   release to public i will need public"). The app tries an anonymous pull first and asks for a read-only GitHub
+   token only when the images are private, so making them public later needs no app change.
+8. **The board as drawn**, its open points settled as drawn: the admin account is asked in the step list; Choose…
+   may pick an existing folder; the start screen shows on every open; the menu-bar icon is logo A in one colour.
