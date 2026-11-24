@@ -1,0 +1,8 @@
+{
+  "model_calls_per_day": 2000,
+  "tokens_per_day": 20000000,
+  "look_at_per_hour": 200,
+  "messages_per_minute": 30,
+  "auto_takes_per_hour": 8,
+  "auto_gpu_minutes_per_hour": 30
+}

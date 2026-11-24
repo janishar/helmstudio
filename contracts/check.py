@@ -99,7 +99,7 @@ HTTP_SCHEMAS = [
     "TimelineRerender", "ExportPlan", "MediaJob", "TakeFrame", "TakeUses", "ClipActions", "TimelineLineCreate",
     "TimelineEdits", "TimelineEditResult", "TimelineAgentView", "TimelineRevisionList", "TimelineFrame",  # 1.49
     "SessionList", "SessionNames", "SessionNamesPut",
-    "AssistantPost", "AssistantThreadList", "AssistantThreadDetail", "AssistantEvent", "AssistantMemoryList",
+    "AssistantPost", "AssistantThreadList", "AssistantThreadDetail", "AssistantThreadPatch", "AssistantEvent", "AssistantMemoryList",
     "AssistantSettings", "AssistantSettingsPut", "AssistantCacheStats", *TWINS,
     "PluginList", "PluginRescan", "PluginPut", "PluginProviderCreate",  # 1.61
     "Skill", "SkillList", "SkillFile",  # 1.64

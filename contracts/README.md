@@ -4014,6 +4014,36 @@ The prompt is laid out so the provider's prompt cache hits (DeepSeek and OpenAI 
   `pipelines.assistant.cache`: calls, prompt tokens, hit tokens and `hit_rate`.
 - **Later.** Anthropic `cache_control` markers (none sent today) and KV reuse on the local MLX runner.
 
+### Assistant: Auto mode (API 1.68; board Assistant frame 13, alpha.2 item 12; normative)
+
+A per-chat switch: safe steps run without asking, up to the admin's caps; the rest asks as before.
+
+- **The switch.** `AssistantThread.auto` (starts off), set by PATCH `/v1/studio/assistant/threads/{thread_id}`
+  `{auto}` (a `thread` event follows). Studio sends it in every `cmd.assistant.turn` as `settings.auto` (a message,
+  the tab's results, a card's answer, the next turn from steers), so turning it off mid-turn applies at the turn's
+  next park.
+- **Pipelines decides.** When a turn parks on screen actions and `settings.auto` is on, each action with a card or a
+  dialog (tools/actions.json) gets `auto` true (it runs by itself) or `asks` (the waiting line above its card):
+  - runs by itself: a card `generate` or `hear` (runs on your own machines) that fits the hour's room under both
+    caps; a dialog that saves a new item: `saveAsLook`, `saveAsElement`, `designVoice` (its Hear it is a run: counted
+    as one take).
+  - asks: deletes (`Auto stops here: deleting needs you`), batches and judge tests (they send off the machine),
+    exports, downloads, stops and picks, `editItem` (an overwrite), `cloneVoice` (the voice rights tick is yours) and
+    every other dialog; a generation past the hour's room (`Auto paused · 8 of 8 takes this hour`, or GPU minutes),
+    or bigger than a whole cap (`Auto stops here: a big run needs you`).
+  - Server cards (`look_at`, `web_search`, `forget`, plugin tools with a risk flag) and the remote model ask as
+    before; actions with effect `line` or `undo` (star, rename, add to timeline) run as before.
+- **The caps** (`AssistantLimits`, Admin › AI agents): `auto_takes_per_hour` (default 8) and
+  `auto_gpu_minutes_per_hour` (default 30) per user. A generation's size is the screen's `fields.plan` (`runs` and
+  `seconds` a run; else 1 run of 60 s). Pipelines reserves it in `assistant_spend` (kind `auto`, keyed by the call)
+  as it marks the action, counts the last hour's rows, and gives a reservation back when the action's result is not
+  `done` or `still_running`. Each step's `caps.auto_takes_hour` is the hour's takes (the chip "4 of 8 takes this
+  hour" while the turn runs).
+- **The tab.** An `auto` card action runs its Yes without showing the card; an `auto` dialog opens prefilled and saves
+  itself once ready (Design a voice: Hear it once, then Save as voice). Its line starts `Auto · ` and has Undo: a
+  generation's stops its runs still going and deletes their takes; a saved item's deletes it. An `asks` action shows
+  its card with `asks` as the waiting line. Stop ends the turn as before.
+
 ### Assistant: tools
 
 `tools/catalog.json` (validated against `tools/catalog.schema.json` `$defs/toolsFile`) holds every tool:
