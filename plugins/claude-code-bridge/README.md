@@ -16,10 +16,10 @@ it as a model provider.
     plugins/claude-code-bridge/run.sh
 
 Needs `claude` installed and logged in with your subscription (`claude auth status`). The first run writes its env
-file with a random `BRIDGE_TOKEN` (chmod 600) at `$BRIDGE_ENV`, by default `~/.config/helmstudio/claude-code-bridge.env`:
-outside plugins/, because the studio mounts that folder (an old `plugins/claude-code-bridge/.env` is moved there, same
-token). It listens on 127.0.0.1:8420 only; OrbStack containers
-reach it as `http://host.docker.internal:8420`.
+file with a random `BRIDGE_TOKEN` (chmod 600) at `$BRIDGE_ENV`, by default `~/.helm/claude-code-bridge.env`: outside
+plugins/, because the studio mounts that folder (an env from an old place, `plugins/claude-code-bridge/.env` or
+`~/.config/helmstudio/claude-code-bridge.env`, is moved there, same token). It listens on 127.0.0.1:8420 only;
+OrbStack containers reach it as `http://host.docker.internal:8420`.
 
 ## Add it in the dev stack's Admin
 

@@ -23,7 +23,7 @@
         "claude-sonnet",
         "claude-opus"
       ],
-      "key_hint": "BRIDGE_TOKEN in plugins/claude-code-bridge/.env",
+      "key_hint": "BRIDGE_TOKEN in ~/.helm/claude-code-bridge.env",
       "enabled": true,
       "status": "running",
       "provider": "claude-code-bridge-7d1e5c2a",

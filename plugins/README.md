@@ -5,4 +5,4 @@ deployments, nothing in the stack starts or depends on them, and they are not su
 README with its own terms; read it before running anything here.
 
 Rule: no secrets or logs inside plugins/. The studio mounts this folder read-only to read each `plugin.json`, so a
-plugin keeps its keys, tokens and logs elsewhere (the bridge's: `~/.config/helmstudio/`).
+plugin keeps its keys, tokens and logs elsewhere (the bridge's: `~/.helm/`).

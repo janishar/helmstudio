@@ -18,7 +18,7 @@
   "provider": {
     "path": "/v1",
     "models": ["claude-sonnet", "claude-opus", "claude-haiku"],
-    "key_hint": "BRIDGE_TOKEN in ~/.config/helmstudio/claude-code-bridge.env",
+    "key_hint": "BRIDGE_TOKEN in ~/.helm/claude-code-bridge.env",
     "memory_gb": 0.5,
     "timeout_s": 180
   }

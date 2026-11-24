@@ -1,7 +1,7 @@
 """Personal OpenAI-compatible bridge to the logged-in `claude -p` (subscription). Personal use only, never deploy.
 
 POST /v1/chat/completions, GET /v1/models. Bearer token BRIDGE_TOKEN from $BRIDGE_ENV
-(default ~/.config/helmstudio/claude-code-bridge.env: outside plugins/, which the studio mounts). Stdlib only.
+(default ~/.helm/claude-code-bridge.env: outside plugins/, which the studio mounts). Stdlib only.
 """
 
 import hmac
@@ -16,7 +16,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-ENV_FILE = Path(os.environ.get("BRIDGE_ENV") or "~/.config/helmstudio/claude-code-bridge.env").expanduser()
+ENV_FILE = Path(os.environ.get("BRIDGE_ENV") or "~/.helm/claude-code-bridge.env").expanduser()
 ENV = dict(l.split("=", 1) for l in ENV_FILE.read_text().split() if "=" in l)
 TOKEN = ENV["BRIDGE_TOKEN"]
 HOST, PORT = ENV.get("BRIDGE_HOST", "127.0.0.1"), int(ENV.get("BRIDGE_PORT", "8420"))
