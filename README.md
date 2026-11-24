@@ -2,7 +2,7 @@
   <img src="docs/brand/logo/a-as-drawn/app-icon.svg" width="96" height="96" alt="helmstudio logo">
 </p>
 
-<h1 align="center">helmstudio</h1>
+<h1 align="center">helmstudio <sup>alpha</sup></h1>
 
 <p align="center">
   <strong>Wire the models. Direct the film.</strong><br>
@@ -11,6 +11,12 @@
 </p>
 
 <p align="center">
+  <strong>Alpha:</strong> helmstudio is in early development. Expect rough edges and breaking changes between
+  releases; please <a href="https://github.com/janishar/helmstudio/issues">report what breaks</a>.
+</p>
+
+<p align="center">
+  <img src="docs/images/readme/badge-status.svg" alt="Status: alpha">
   <a href="LICENSE"><img src="docs/images/readme/badge-licence.svg" alt="Licence: Apache-2.0"></a>
   <a href="https://helmstudio.in"><img src="docs/images/readme/badge-docs.svg" alt="Docs: helmstudio.in"></a>
   <img src="docs/images/readme/badge-runs-on.svg" alt="Runs on Apple Silicon and NVIDIA">
