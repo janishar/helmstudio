@@ -1,0 +1,8 @@
+helmstudio
+Copyright 2026 Janishar Ali
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This product bundles third-party code under its own licences (MIT and Apache-2.0); each keeps its LICENSE file next to
+the code: runner_service/packs/ltx/vendor, runner_service/vendor/h3c, runner_service/vendor/zonos3 (with ggml, lmdb,
+json-schema-validator and zyphra-textnorm). Model weights are not part of this repository and keep their own licences.

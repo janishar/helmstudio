@@ -151,3 +151,8 @@ deploy/           compose files, Postgres init, NATS config, secrets (git-ignore
 .tools/           make-secrets, copy-envs, nats-setup, storage-setup, test-db, create-admin, gpu-host-tunnel
 docs/             the plan and notes on the reference system
 ```
+
+## Licence
+
+Apache-2.0 (see [LICENSE](LICENSE) and [NOTICE](NOTICE)). Bundled third-party code keeps its own MIT or Apache-2.0
+licence; model weights are not in this repository and keep their own licences.
