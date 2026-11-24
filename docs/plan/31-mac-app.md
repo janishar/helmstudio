@@ -119,3 +119,8 @@ uninstall tool, a Homebrew tap or install command, notarization (Developer ID), 
 10. **The MCP works with the app:** `helm` (cli/) ships inside the app at `Contents/Resources/helm`; the user runs
     `helm login --url http://127.0.0.1:8310 …` once and `claude mcp add -s user helmstudio -- <app>/Contents/Resources/helm mcp`;
     docs/guides/mcp.md gets these lines. No screen change. `helm` keeps one address, so it points at one stack at a time.
+11. **No upload for the prototype** (owner, 2026-11-25: "no upload for now, later public release"; private GitHub
+    packages beyond the free 500 MB would be refused or billed, and the owner pays nothing extra). On this Mac the app
+    loads the images straight from the local Docker into its VM (`docker save` | the VM's `docker load`), tagged
+    prod from `make prod`'s build. The registry push (35.1 item 2) waits for the public release, where public
+    packages are free. Step 3b (image access) stays on the board but is not built.
