@@ -59,7 +59,7 @@
               "description": "the web search provider when web search is on (a key of providers, kind search); null when off"
             },
             "limits": {"$ref": "assistant.schema.json#/$defs/limits"},
-            "sees": {"type": "boolean", "description": "from API 1.65 (contracts/README.md, Assistant: media and vision): the model sees images (AssistantStatus.sees): the message's images go to it directly (studio.assistant.see), and look_at needs no card; absent = false"}
+            "sees": {"type": "boolean", "description": "from API 1.65 (contracts/README.md, Assistant: media and vision): the model sees images (AssistantStatus.sees): the message's images go to it directly (studio.see), and look_at needs no card; absent = false"}
           }
         },
         "input": {

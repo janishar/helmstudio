@@ -73,6 +73,7 @@ class Chat:
         self.a = self.restart()
         self.roles, self.tool_names, self.search, self.limits = ["user"], TOOLS, None, dict(LIMITS)
         self.plugins: list[dict] = []  # cmd.assistant.turn data.plugins (API 1.61)
+        self.sees = False  # settings.sees (API 1.65)
 
     def restart(self) -> assistant.Assistant:
         """A new process: a fresh graph and saver on the same database."""
@@ -94,7 +95,8 @@ class Chat:
         c["data"] = {"thread_id": self.tid, "turn": turn or self.n, "client_id": "tab-8f3a2c91", "roles": self.roles,
                      "tools": self.tool_names, "actions": ACTIONS,
                      "settings": {"source": {"kind": "server", "provider": "local", "model": "fake-large", "host": "mac"},
-                                  "providers": provs, "search": self.search, "limits": self.limits},
+                                  "providers": provs, "search": self.search, "limits": self.limits}
+                     | ({"sees": True} if self.sees else {}),
                      "input": inp} | ({"plugins": self.plugins} if self.plugins else {})  # fmt: skip
         assert not schemas.message_errors(c), schemas.message_errors(c)
         return c
@@ -348,6 +350,68 @@ async def test_look_at_runs_after_yes_and_its_cap_ends_the_turn(pool, fake):
     step = await c.answer(card["id"])
     assert step["done"] and step["error"]["code"] == "cap_look_at" and step["error"]["resets_at"]
     assert len(c.tools.asked) == 1
+
+
+# --- media and vision (API 1.65)
+
+JPEG = base64.b64encode(b"\xff\xd8\xff\xe0 fake jpeg").decode()
+
+
+def images_of(req: dict) -> list[str]:
+    content = req["messages"][1]["content"]
+    return (
+        [p["image_url"]["url"] for p in content if p["type"] == "image_url"]
+        if isinstance(content, list)
+        else []
+    )
+
+
+async def test_a_model_that_sees_gets_the_messages_pictures_and_look_at_needs_no_card(pool, fake):
+    c = Chat(pool, fake)
+    c.sees, asked = True, []
+
+    async def see(req: dict) -> dict:
+        assert not schemas.see_errors("request", req), schemas.see_errors("request", req)
+        asked.append(req["take_id"])
+        if req["take_id"] == TAKES[1]:
+            return {"take_id": TAKES[1], "kind": "audio", "title": "Line", "images": []}
+        title = "Fox at dusk" if req["take_id"] == TAKES[0] else "Birch clearing"
+        return {"take_id": req["take_id"], "kind": "image", "title": title, "images": [JPEG]}
+
+    c.a.see = see
+    other = str(uuid.uuid4())
+    c.script(
+        calls(("look_at", {"take_ids": [other], "question": "which?"})),
+        {"content": "Snow, low sun."},
+    )
+    step = await c.say(f"Animate [[take:{TAKES[0]}]] with this\n\n(attached: [[take:{TAKES[1]}]])")
+    first, second = c.asked()
+    assert images_of(first) == [f"data:image/jpeg;base64,{JPEG}"]  # the audio take has no picture
+    assert len(images_of(second)) == 2  # look_at's take joined the next call, no card, no run
+    assert step["done"] and not step["cards"] and not c.tools.asked
+    # each picture said once a message, as it first reaches the model
+    assert [ln["text"] for ln in step["lines"]] == [
+        "Looked at Fox at dusk",
+        "Looked at Birch clearing",
+    ]
+    assert asked == [TAKES[0], TAKES[1], other]  # pictures kept in memory
+
+
+async def test_a_text_only_model_looks_at_the_users_own_takes_without_a_card(pool, fake):
+    c = Chat(pool, fake)
+    look = calls(("look_at", {"take_ids": [TAKES[0]], "question": "what light?"}))
+    c.script(look, {"content": "Neon from the left."})
+    step = await c.say(f"What light is this?\n\n(attached: [[take:{TAKES[0]}]])")
+    (req,) = c.tools.asked
+    assert (
+        req["tool"] == "look_at"
+        and not step["cards"]
+        and step["lines"][0]["text"].startswith("Looking at 1 take")
+    )
+    assert not images_of(c.asked()[0])
+    c.script(calls(("look_at", {"take_ids": TAKES, "question": "which?"})))
+    step = await c.say("and the other one?")
+    assert step["cards"][0]["kind"] == "look"  # a take the user never gave asks first
 
 
 # --- caps

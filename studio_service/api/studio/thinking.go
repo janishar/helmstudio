@@ -216,3 +216,14 @@ func modelThinks(preset *string, model string, saved map[string]string) bool {
 	t, ok := thinkingSnapshot(preset, []string{model}, saved)[model].(map[string]any)
 	return ok && t["level"] != "off"
 }
+
+// modelSees is AssistantStatus.sees (API 1.65): the provider's preset has a `vision` expression matching the model id.
+// No preset (or none in it): text-only, the assistant uses look_at.
+func modelSees(preset *string, model string) bool {
+	for _, p := range presets() {
+		if preset != nil && p.ID == *preset && p.Vision != nil {
+			return regexp.MustCompile(*p.Vision).MatchString(model) // check.py compiled it
+		}
+	}
+	return false
+}

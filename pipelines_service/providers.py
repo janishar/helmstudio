@@ -282,7 +282,12 @@ async def chat(name: str, p: dict, req: dict) -> dict:
         schema = json.loads(req["schema"])
         kw = {"response_format": {"type": "json_schema",
                                   "json_schema": {"name": "answer", "schema": schema, "strict": strict}}}  # fmt: skip
-    msgs = [SystemMessage(req["system"]), HumanMessage(req["prompt"])]
+    # API 1.65: a model that sees gets the message's pictures (JPEG, base64) as image parts after the text
+    user = [{"type": "text", "text": req["prompt"]}] + [
+        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b}"}}
+        for b in req.get("images") or []
+    ]
+    msgs = [SystemMessage(req["system"]), HumanMessage(user if len(user) > 1 else req["prompt"])]
     if "response_format" in kw and not strict and name in _NO_JSON_SCHEMA:
         kw, msgs = _json_object(req, msgs)
     think = (p.get("thinking") or {}).get(req["model"]) or {}

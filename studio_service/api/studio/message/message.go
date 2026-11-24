@@ -706,6 +706,7 @@ type AssistantSettings struct {
 	Providers map[string]map[string]any `json:"providers"`
 	Search    *string                   `json:"search"`
 	Limits    json.RawMessage           `json:"limits"`
+	Sees      bool                      `json:"sees,omitempty"` // API 1.65: the model sees images
 }
 
 // Type is cmd.assistant.turn.

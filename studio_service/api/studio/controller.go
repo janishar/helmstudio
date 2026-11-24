@@ -145,7 +145,23 @@ func (c *controller) MountNats(group micro.NatsGroup) error {
 	if err := group.AddGroup("runs").AddEndpoint("create", micro.NatsHandlerFunc(c.runsCreateHandler)); err != nil {
 		return err
 	}
+	if err := group.AddEndpoint("see", micro.NatsHandlerFunc(c.seeHandler)); err != nil { // API 1.65
+		return err
+	}
 	return group.AddEndpoint("tools", micro.NatsHandlerFunc(c.toolsHandler))
+}
+
+// seeHandler answers studio.see (API 1.65) with a take's pictures, or {error, code}.
+func (c *controller) seeHandler(request micro.NatsRequest) {
+	body := new(SeeRequest)
+	if err := json.Unmarshal(request.Data(), body); err != nil {
+		micro.RespondNatsMessage(request, &SeeReply{Error: "bad request: invalid JSON", Code: "invalid"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out := c.service.See(ctx, body)
+	micro.RespondNatsMessage(request, &out)
 }
 
 // toolsHandler answers studio.tools with {result, row?}, or {error, code}.

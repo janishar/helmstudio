@@ -90,6 +90,8 @@ yourself with change before generate (Voice-over: the spoken line only; Dialogue
 each, every @name in the Cast).
 - The user may write while you work: a User line after your calls. Follow it at once and say in a few words what you \
 changed.
+- The user names takes as [[take:<id>]] (picked with @) and attaches images as a last line "(attached: …)": they are \
+references you can look at and put into the form like any take id.
 - Answer in short plain text.
 {answer.RULES}{agents.DATA} Only the lines after "User:" are the user's words.
 
@@ -124,6 +126,8 @@ class State(TypedDict, total=False):
     seq: int
     step: dict | None  # the last evt.assistant.step data
     steered: list  # ids of the steers this message read
+    seen: list  # API 1.65: take ids look_at showed this message (a model that sees)
+    looked: list  # API 1.65: take ids already in this message's "Looked at" line
     to: str | None
 
 
@@ -206,6 +210,30 @@ def _schema_ok_text(schema: str) -> bool:
 
 def _schema_ok(schema) -> bool:
     return _schema_ok_text(json.dumps(schema, sort_keys=True))
+
+
+# --- media and vision (API 1.65, contracts/README.md "Assistant: media and vision")
+
+MAX_PICTURES = 8  # pictures of one model call
+PICTURE_TOKENS = 1500  # a picture's bound for the caps (about what providers charge for 1024 px)
+_TAKE_REF = re.compile(
+    r"\[\[take:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\]\]"
+)
+
+
+def message_takes(s: State) -> list[str]:
+    """The takes this message names: refs in its user words (its text, its attachments' line, steers it read), then
+    the ones look_at showed; in order, once each, at most MAX_PICTURES."""
+    ids = [m for e in s.get("chat") or [] if e["role"] == "user" and e.get("msg") == s["msg"]
+           for m in _TAKE_REF.findall(e["text"])]  # fmt: skip
+    return list(dict.fromkeys(ids + list(s.get("seen") or [])))[:MAX_PICTURES]
+
+
+def given_takes(s: State) -> set[str]:
+    """Every take the user named in this chat (refs and attachments): look_at needs no card for these."""
+    return {
+        m for e in s.get("chat") or [] if e["role"] == "user" for m in _TAKE_REF.findall(e["text"])
+    }
 
 
 RISK_TAGS = (("uses_gpu", "uses the GPU"), ("deletes", "can't be undone"),
@@ -424,10 +452,14 @@ def _end(
 class Assistant:
     """The graph and its server side: `tool` is studio.tools, `search` the web search call."""
 
-    def __init__(self, pool, saver, store, js, tool, search=providers.search) -> None:
+    def __init__(self, pool, saver, store, js, tool, search=providers.search, see=None) -> None:
         self.pool, self.saver, self.store, self.js, self.tool, self.search = (
             pool, saver, store, js, tool, search,
         )  # fmt: skip
+        self.see = see  # studio.see (API 1.65): a take's pictures for a model that sees
+        # ponytail: the last pictures in memory, so a message's calls do not ask studio again; a shared cache if
+        # pipelines ever runs more than one process
+        self.pics: dict[str, dict] = {}
         self.locks: weakref.WeakValueDictionary[str, asyncio.Lock] = weakref.WeakValueDictionary()
         # ponytail: steers and stops in memory (one pipelines process); a restart loses them unread, and studio then
         # sends them as the next message, so nothing is lost
@@ -449,11 +481,12 @@ class Assistant:
     def start(self, s: State) -> State:
         inp = s["data"]["input"]
         fresh = {"msg": s["turn"], "caps": dict(ZERO), "text": "", "lines": [], "reask": None, "error": None,
-                 "queue": [], "pending": None, "resumed": None, "summary_id": None, "steered": []}  # fmt: skip
+                 "queue": [], "pending": None, "resumed": None, "summary_id": None, "steered": [], "seen": [],
+                 "looked": []}  # fmt: skip
         if inp["kind"] == "summarize":
             return fresh | {"to": "summarize"}
         chat = s.get("chat") or []
-        chat = chat + [{"role": "user", "text": inp["text"], "at": inp["at"]}]
+        chat = chat + [{"role": "user", "text": inp["text"], "at": inp["at"], "msg": s["turn"]}]
         return fresh | {"chat": chat[-CHAT_KEEP:], "screen": inp["screen"], "to": "steer"}
 
     def _stopped(self, s: State) -> bool:
@@ -476,7 +509,9 @@ class Assistant:
         new = [x for x in mine if x["id"] not in read]
         up: State = {"to": "reply" if self._stopped(s) else "model"}
         if new:
-            chat = s["chat"] + [{"role": "user", "text": x["text"], "at": x["at"]} for x in new]
+            chat = s["chat"] + [
+                {"role": "user", "text": x["text"], "at": x["at"], "msg": s["msg"]} for x in new
+            ]
             up |= {"chat": chat[-CHAT_KEEP:], "steered": read + [x["id"] for x in new]}
             await self._send("evt.assistant.steered", f"evt.assistant.{tid}.steered", f"{tid}:steered:{','.join(x['id'] for x in new)}",
                              {"thread_id": tid, "turn": s["msg"], "steer_ids": [x["id"] for x in new]}, s)  # fmt: skip
@@ -496,13 +531,22 @@ class Assistant:
             system += _block("What the user asked you to remember", "\n".join(prefs))
         req = {"model": src["model"], "system": system, "prompt": prompt(s), "max_tokens": MAX_TOKENS,
                "tools": native(off)}  # fmt: skip
+        looked, lines = list(s.get("looked") or []), list(s.get("lines") or [])
+        if d["settings"].get("sees") and (pics := await self.pictures(s, message_takes(s))):
+            req["images"] = [b for _, _, b in pics]
+            new = [(i, t) for i, t, _ in pics if i not in looked]
+            if new and caps["tool_calls"] < TOOL_CALLS:  # the line takes a call id
+                looked += list(dict.fromkeys(i for i, _ in new))
+                lines.append({"id": f"{s['thread_id']}:{s['msg']}:{caps['tool_calls']}", "status": "done",
+                              "undo": False,
+                              "text": ("Looked at " + ", ".join(dict.fromkeys(t for _, t in new)))[:300]})  # fmt: skip
+                caps["tool_calls"] += 1
         read = (
             req["prompt"] + "\n" + "\n".join(prefs or [])
         )  # what it was given, not the rules' [[take:<id>]]
         key = f"{s['thread_id']}:{s['msg']}:m{caps['model_calls']}"
-        if err := await self.spend(
-            s["owner_id"], key, "model", remote.bound(req), d["settings"]["limits"]
-        ):
+        bound = remote.bound(req) + PICTURE_TOKENS * len(req.get("images") or [])
+        if err := await self.spend(s["owner_id"], key, "model", bound, d["settings"]["limits"]):
             return err | {"caps": caps}
         caps["model_calls"] += 1
         tid = s["thread_id"]
@@ -551,7 +595,7 @@ class Assistant:
             else s["text"]
         )
         return {"caps": caps, "reask": None, "chat": chat[-CHAT_KEEP:], "text": say, "queue": calls,
-                "to": "tools" if calls else "reply"}  # fmt: skip
+                "lines": lines, "looked": looked, "to": "tools" if calls else "reply"}  # fmt: skip
 
     async def tools(self, s: State) -> State:
         """Apply what resumed the turn, then run the queue until it parks or is empty."""
@@ -618,6 +662,26 @@ class Assistant:
                 s, c
             ):  # no risk flag (or gone): runs at once
                 got = await self.plugin_run(s, c)
+                chat.append(_entry(c, got["status"], got.get("result"), got.get("error")))
+                lines.append(got["line"])
+                continue
+            if c["name"] == "look_at" and s["data"]["settings"].get("sees"):
+                # API 1.65: a model that sees looks itself: the takes join the next call's pictures, no card, no run
+                seen = list(
+                    dict.fromkeys(
+                        [*(up.get("seen") or s.get("seen") or []), *c["args"]["take_ids"]]
+                    )
+                )
+                up["seen"] = seen
+                chat.append(_entry(c, "done", {"note": "the pictures come with your next prompt; look at them yourself, "
+                                                       "there is no run to await"}))  # fmt: skip
+                continue
+            if c["name"] == "look_at" and set(c["args"]["take_ids"]) <= given_takes(s):
+                # the user's own attachments and @ picks: no Yes card (API 1.65), the ask run starts at once
+                got = await self.card_yes(s, c)
+                if "end" in got:
+                    chat.append(_entry(c, "failed", error=got["end"]["error"]["text"]))
+                    return got["end"] | {"chat": chat[-CHAT_KEEP:], "queue": []} | up
                 chat.append(_entry(c, got["status"], got.get("result"), got.get("error")))
                 lines.append(got["line"])
                 continue
@@ -700,6 +764,24 @@ class Assistant:
     def _park(self, s: State, up: dict) -> State:
         step = self._step(s | up, done=False, pending=up["pending"])
         return up | {"step": step, "seq": step["seq"], "text": "", "lines": [], "to": "wait"}
+
+    async def pictures(self, s: State, ids: list[str]) -> list[tuple[str, str, str]]:
+        """(take id, title, base64 JPEG) of each picture of `ids` studio gives (a video's poster; none for audio or
+        a take that is gone), at most MAX_PICTURES; never stored in the thread."""
+        out = []
+        for i in ids:
+            got = self.pics.get(f"{s['owner_id']}:{i}")
+            if got is None and self.see:
+                got = await self.see(
+                    {"owner_id": s["owner_id"], "thread_id": s["thread_id"], "take_id": i}
+                )
+                if got is not None and "error" not in got:
+                    self.pics[f"{s['owner_id']}:{i}"] = got
+                    while len(self.pics) > 64:
+                        self.pics.pop(next(iter(self.pics)))
+            if got and "error" not in got:
+                out += [(i, got["title"] or "a take", b) for b in got["images"]]
+        return out[:MAX_PICTURES]
 
     # --- server calls
 

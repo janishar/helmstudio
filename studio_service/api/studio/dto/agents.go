@@ -176,6 +176,7 @@ type ProviderPreset struct {
 	Compat    *ProviderCompat `json:"compat,omitempty"`
 	Thinking  json.RawMessage `json:"thinking,omitempty"` // API 1.53: the rules as in the file, or "models"
 	Plugin    *string         `json:"plugin,omitempty"`   // API 1.61: a plugin's preset (never offered in the form)
+	Vision    *string         `json:"vision,omitempty"`   // API 1.65: the model ids that see images (a regular expression)
 	Docs      string          `json:"docs"`
 	Note      string          `json:"note"`
 }

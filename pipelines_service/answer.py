@@ -13,6 +13,8 @@ of 2 to 4 {"title": a few words, "line": one short line, "best": true on the one
 pick comes back as its title. Write no numbered list of the same choices.
 - Name a take, element, voice or workflow you were given as [[take:<id>]], [[element:<id>]], [[voice:<id>]] or \
 [[workflow:<id>]]: the user sees its picture and title. Never write an id any other way.
+- To show a take itself (the image, a playable video or sound), put its [[take:<id>]] alone on its own line; inside a \
+sentence it shows as a small chip.
 """
 
 
