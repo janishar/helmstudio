@@ -236,6 +236,9 @@ func exportReason(r timeline.Reason, doc timeline.Doc, takes map[string]timeline
 		clip := r.Clip
 		out.Clip = &clip
 		shot = fmt.Sprintf("Shot %d", n)
+		if n == 0 { // an audio-track clip (offline only) has no shot number
+			shot = "clip " + r.Clip
+		}
 	}
 	t := doc.Target
 	switch r.Code {

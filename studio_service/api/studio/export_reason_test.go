@@ -25,3 +25,16 @@ func TestExportReasonUsesShotNumber(t *testing.T) {
 		t.Errorf("old doc: %q", got)
 	}
 }
+
+// An offline clip on an audio track has no shot number: it keeps its id (API 1.58), never "Shot 0".
+func TestExportReasonOfflineAudioClip(t *testing.T) {
+	doc := timeline.Doc{Tracks: []timeline.Track{
+		{Kind: "video", Clips: []timeline.Clip{{ID: "a", Number: 3}}},
+		{Kind: "audio", Clips: []timeline.Clip{{ID: "s"}}},
+	}}
+	for clip, want := range map[string]string{"a": "Shot 3 is offline", "s": "clip s is offline"} {
+		if got := exportReason(timeline.Reason{Code: "offline", Clip: clip}, doc, nil).Message; got != want {
+			t.Errorf("%s: %q, want %q", clip, got, want)
+		}
+	}
+}

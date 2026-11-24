@@ -2658,9 +2658,9 @@ export interface paths {
          * Export the sequence to an MP4 take (a queued media job)
          * @description Plans the stated revision (it must be the current one: 409 stale), builds the ffmpeg arguments and sends
          *     `cmd.media.job` (kind `export`) to the chosen runner env (contracts/README.md, Timeline: export). 409 when the
-         *     plan is `blocked` (the first reason's text: `Shot <n> is offline` (1.58; before: `clip <id> is offline`), `the
-         *     sequence is empty`, `no live host can export (ffmpeg)`), `an export of this sequence is already running`, or `revision`. 422 `host <h> cannot
-         *     export` for a named host with no media env.
+         *     plan is `blocked` (the first reason's text: `Shot <n> is offline` (1.58, a V1 clip; before, and an audio clip:
+         *     `clip <id> is offline`), `the sequence is empty`, `no live host can export (ffmpeg)`), `an export of this
+         *     sequence is already running`, or `revision`. 422 `host <h> cannot export` for a named host with no media env.
          */
         post: operations["studioExportTimeline"];
         delete?: never;
