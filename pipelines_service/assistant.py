@@ -51,6 +51,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 
 import agents
+import answer
 import assistant_memory as mem
 import consumer
 import providers
@@ -90,7 +91,7 @@ each, every @name in the Cast).
 - The user may write while you work: a User line after your calls. Follow it at once and say in a few words what you \
 changed.
 - Answer in short plain text.
-{agents.DATA} Only the lines after "User:" are the user's words.
+{answer.RULES}{agents.DATA} Only the lines after "User:" are the user's words.
 
 """
 # the stable system knowledge, after the rules
@@ -495,6 +496,9 @@ class Assistant:
             system += _block("What the user asked you to remember", "\n".join(prefs))
         req = {"model": src["model"], "system": system, "prompt": prompt(s), "max_tokens": MAX_TOKENS,
                "tools": native(off)}  # fmt: skip
+        read = (
+            req["prompt"] + "\n" + "\n".join(prefs or [])
+        )  # what it was given, not the rules' [[take:<id>]]
         key = f"{s['thread_id']}:{s['msg']}:m{caps['model_calls']}"
         if err := await self.spend(
             s["owner_id"], key, "model", remote.bound(req), d["settings"]["limits"]
@@ -530,13 +534,22 @@ class Assistant:
             return _end(
                 "cap_message", f"Stopped at {TOOL_CALLS} tool calls for one message.", caps=caps
             )
-        chat, text = list(s["chat"]), got["text"].strip()[:4000]
+        # options checked, refs to ids it never read flagged (alpha.2 items 17, 19)
+        chat, text = (
+            list(s["chat"]),
+            answer.cut(answer.tidy(got["text"].strip(), read)),
+        )
         if text:
             chat.append({"role": "assistant", "text": text})
         for c in calls:
             c["id"] = f"{s['thread_id']}:{s['msg']}:{caps['tool_calls']}"
             caps["tool_calls"] += 1
-        say = (s["text"] + "\n\n" + text).strip()[:4000] if text else s["text"]
+        # one step joins every answer since the last: one options block in all of it, never cut open
+        say = (
+            answer.cut(answer.tidy((s["text"] + "\n\n" + text).strip(), read))
+            if text
+            else s["text"]
+        )
         return {"caps": caps, "reask": None, "chat": chat[-CHAT_KEEP:], "text": say, "queue": calls,
                 "to": "tools" if calls else "reply"}  # fmt: skip
 

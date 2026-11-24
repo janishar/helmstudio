@@ -3,6 +3,7 @@
 // its lines use. Everything the model wrote or a tool returned is text: the drawer renders it as text, never HTML.
 import actionsJson from "@/gen/actions.json";
 import type { S } from "@/lib/api";
+import { refText, splitOptions } from "@/lib/answer-refs";
 
 export type Entry = S<"AssistantEntry">;
 export type Thread = S<"AssistantThread">;
@@ -397,13 +398,14 @@ export function answerBlocks(text: string): Block[] {
  * [text](url) is its text only. */
 export type Inline = { t: string; k?: "b" | "i" | "code" | "tc" | "at" };
 const INLINE =
-  /(\*\*[^*\n]+\*\*|`[^`\n]+`|\[[^\]\n]+\]\([^)\s]+\)|(?<![\w*])\*[^*\s][^*\n]*?\*(?![\w*])|(?<!\w)_[^_\s][^_\n]*?_(?!\w)|(?<![\d:])\d{1,2}:[0-5]\d(?![\d:]))/;
+  /(\[\[(?:take|element|voice|workflow):[^\]\s|]{1,128}\]\]|\*\*[^*\n]+\*\*|`[^`\n]+`|\[[^\]\n]+\]\([^)\s]+\)|(?<![\w*])\*[^*\s][^*\n]*?\*(?![\w*])|(?<!\w)_[^_\s][^_\n]*?_(?!\w)|(?<![\d:])\d{1,2}:[0-5]\d(?![\d:]))/;
 export function inlineParts(text: string): Inline[] {
   return text.split(INLINE).flatMap((s, j): Inline[] => {
     if (!s) return [];
     if (j % 2 === 0) return mentionParts(s).map((p) => (p.at ? { t: p.t, k: "at" } : { t: p.t }));
     if (s.startsWith("**")) return [{ t: s.slice(2, -2), k: "b" }];
     if (s.startsWith("`")) return [{ t: s.slice(1, -1), k: "code" }];
+    if (s.startsWith("[[")) return [{ t: s }]; // a ref, kept whole for its chip (no italics inside an id)
     if (s.startsWith("[")) return [{ t: s.slice(1, s.indexOf("](")) }];
     if (/^\d/.test(s)) return [{ t: s, k: "tc" }];
     return [{ t: s.slice(1, -1), k: "i" }];
@@ -416,14 +418,18 @@ export const timecode = (t: string) => {
   return m * 60 + s;
 };
 
-/** An answer as Copy puts it on the clipboard: the text without its markers. */
-export const plainAnswer = (text: string) =>
-  text
+/** An answer as Copy puts it on the clipboard: the text without its markers, refs as their titles, options as a
+ * numbered list. */
+export const plainAnswer = (answer: string) => {
+  const { text, options } = splitOptions(answer);
+  const opts = (options ?? []).map((o, i) => `${i + 1}. ${o.title}${o.line ? ` — ${o.line}` : ""}`);
+  return refText([text, ...opts].join("\n"))
     .replace(/^\s*```[\w-]*\s*$/gm, "")
     .replace(/\*\*([^*\n]+)\*\*/g, "$1")
     .replace(/`([^`\n]+)`/g, "$1")
     .replace(/\[([^\]\n]+)\]\([^)\s]+\)/g, "$1")
     .trim();
+};
 
 /** A folded turn's line (item 25, board frame 10h): "14 steps · 2 takes · 1 memory". */
 export function stepSummary(lines: { text: string; memory_id?: string }[]) {

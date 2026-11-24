@@ -16,7 +16,7 @@
         "thread_id": {"$ref": "defs.schema.json#/$defs/uuid"},
         "turn": {"type": "integer", "minimum": 1, "maximum": 999999, "description": "the input it answers"},
         "seq": {"type": "integer", "minimum": 1, "description": "per thread, from 1"},
-        "text": {"type": "string", "maxLength": 4000, "description": "the assistant's words in this step, shown as text, never HTML"},
+        "text": {"type": "string", "maxLength": 4000, "description": "the assistant's words in this step, shown as text, never HTML; from API 1.63 with checked ```options blocks and [[kind:<id>]] refs (contracts/README.md, Assistant: pick one and refs)"},
         "lines": {"type": "array", "maxItems": 30, "items": {"$ref": "assistant.schema.json#/$defs/line"}, "description": "lines of the server's calls (Looked at, Searched the web, Remembered)"},
         "actions": {"type": "array", "maxItems": 30, "items": {"$ref": "assistant.schema.json#/$defs/action"}, "description": "pending: the screen actions to run, in order"},
         "cards": {"type": "array", "maxItems": 4, "items": {"$ref": "assistant.schema.json#/$defs/card"}, "description": "pending: the server's cards"},

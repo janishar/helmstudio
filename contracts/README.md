@@ -3942,6 +3942,24 @@ Write while it works, like Claude Code: the message joins the running answer and
   `evt.assistant.steered` (at the boundary) reaches studio before the step that carries those lines, so the steer's
   `at` is earlier than theirs. Display order only; the transcript the model reads has the right order.
 
+### Assistant: pick one and refs (API 1.63; board Assistant frames 10b and 11, alpha.2 items 17 and 19; normative)
+
+An answer's text (`AssistantEntry.text` of kind `assistant`, `evt.assistant.step` `text`) may carry two kinds of
+markup. Pipelines checks both before the step is published; the drawer shows them as UI and never shows them raw.
+
+- **Pick one.** At most one block per model answer: a fence `` ```options `` holding a JSON list of 2 to 4 options
+  `{"title": string 1-60, "line": string 0-120, "best": true}` (titles unique, `best` on at most one, `line` and
+  `best` optional), then `` ``` ``. Pipelines rewrites a valid block compact (keys in that order, `best` only when
+  true) and a broken one as a plain numbered list (`1. title · line`, or the block's lines as they were), so a stored
+  block always parses. The drawer shows cards (title, the line, the `best` one ringed "Best next", keys 1-4); a click
+  or the key sends the title as the user's own message. Only the newest answer's cards work: once a later message
+  exists they are disabled, and the one whose title that message is stays marked.
+- **Refs.** `[[take:<id>]]`, `[[element:<id>]]`, `[[voice:<id>]]`, `[[workflow:<id>]]` (an id: 1-128 characters, no
+  `]`, `|` or space) name an item; the drawer shows a chip (picture or icon and title; a take opens its preview, an
+  element its editor, a workflow is switched to on Create) and never the id. An id that appears nowhere in what the
+  model read (the transcript, the calls' results, the screen) is rewritten `?` (`[[take:?]]`): the drawer shows
+  "unknown take". An item deleted since shows "deleted take" (element, voice, workflow alike).
+
 ### Assistant: tools
 
 `tools/catalog.json` (validated against `tools/catalog.schema.json` `$defs/toolsFile`) holds every tool:
