@@ -106,7 +106,7 @@ func noContent(ctx *gin.Context, err error) {
 	network.SendNoContent(ctx)
 }
 
-// MountAssistant registers the handler of pipelines' evt.assistant.<thread_id>.step (durable studio-assistant).
+// MountAssistant registers the handlers of pipelines' evt.assistant.<thread_id>.{step,steered} (durable studio-assistant).
 func (p *Projector) MountAssistant(group *micro.NatsJetStreamGroup) {
 	group.AddHandler("evt.assistant.*.step", func(ctx context.Context, msg *micro.NatsJetStreamMessage) {
 		event, err := micro.JsonToMsg[gen.Message[message.AssistantStep]](msg.Data())
@@ -121,6 +121,23 @@ func (p *Projector) MountAssistant(group *micro.NatsJetStreamGroup) {
 			return
 		}
 		if err := p.ApplyAssistantStep(ctx, event.OwnerID, event.Data); err != nil {
+			micro.NakNatsJetStreamMessage(ctx, msg, err)
+			return
+		}
+		micro.AckNatsJetStreamMessage(msg)
+	}) // API 1.59: the steers a turn read, in order with its steps
+	group.AddHandler("evt.assistant.*.steered", func(ctx context.Context, msg *micro.NatsJetStreamMessage) {
+		event, err := micro.JsonToMsg[gen.Message[message.AssistantSteered]](msg.Data())
+		if err != nil {
+			micro.TermNatsJetStreamMessage(msg, err)
+			return
+		}
+		parts := strings.Split(msg.Subject(), ".")
+		if event.JobID == nil || len(parts) != 4 || parts[2] != *event.JobID || event.Data.ThreadID != *event.JobID {
+			micro.AckNatsJetStreamMessage(msg)
+			return
+		}
+		if err := p.ApplyAssistantSteered(ctx, event.OwnerID, event.Data); err != nil {
 			micro.NakNatsJetStreamMessage(ctx, msg, err)
 			return
 		}

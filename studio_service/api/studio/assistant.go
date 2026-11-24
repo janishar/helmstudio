@@ -288,9 +288,10 @@ type AssistantEntry struct {
 	Line  json.RawMessage `json:"line,omitempty"`
 	Card  json.RawMessage `json:"card,omitempty"`
 	Error json.RawMessage `json:"error,omitempty"`
+	Steer *string         `json:"steer,omitempty"` // API 1.59: waiting, read or next (a message sent while a turn worked)
 }
 
-const entryCols = `id::text, turn, kind, at, text, line, card, error`
+const entryCols = `id::text, turn, kind, at, text, line, card, error, steer`
 
 // threadRow is an assistant_threads row.
 type threadRow struct {
@@ -664,10 +665,10 @@ type AssistantPost struct {
 func (b *AssistantPost) Validate() string {
 	has := map[string]bool{"text": b.Text != nil, "screen": b.Screen != nil, "turn": b.Turn != nil, "results": b.Results != nil,
 		"card_id": b.CardID != nil, "answer": b.Answer != nil}
-	allowed := map[string][]string{"message": {"text", "screen"}, "results": {"turn", "results", "screen"},
-		"answer": {"card_id", "answer"}, "continue": {}}[b.Kind]
-	if _, known := map[string]bool{"message": true, "results": true, "answer": true, "continue": true}[b.Kind]; !known {
-		return "kind must be message, results, answer or continue"
+	allowed, known := map[string][]string{"message": {"text", "screen"}, "results": {"turn", "results", "screen"},
+		"answer": {"card_id", "answer"}, "continue": {}, "stop": {}}[b.Kind]
+	if !known {
+		return "kind must be message, results, answer, continue or stop"
 	}
 	if !clientIDPattern.MatchString(b.ClientID) {
 		return "client_id must be 8-64 letters, digits, _ or -"
@@ -734,6 +735,7 @@ func (b *AssistantPost) Validate() string {
 type AssistantAccepted struct {
 	Thread AssistantThread `json:"thread"`
 	Entry  *AssistantEntry `json:"entry"`
+	Steer  bool            `json:"steer,omitempty"` // API 1.59: the message joined the running answer
 }
 
 // cleanRoles are the token's roles as a command carries them.
@@ -765,6 +767,17 @@ func (s *Service) PostAssistant(ctx context.Context, caller common.Caller, id st
 			out.Thread = t.dto()
 			return err
 		}
+		out.Thread = t.dto()
+		// Stop (API 1.59): the running turn ends at its next step; an idle chat has nothing to stop
+		if body.Kind == "stop" {
+			if t.State == "idle" {
+				return nil
+			} else if deref(t.ClientID) != body.ClientID {
+				return network.NewConflictError("this chat is working in another tab", nil)
+			}
+			return messaging.Enqueue(ctx, tx, messaging.Command{JobID: t.ID, OwnerID: t.OwnerID, MsgID: fmt.Sprintf("%s:stop:%d", t.ID, t.Turn),
+				Data: message.AssistantSteer{ThreadID: t.ID, Turn: t.Turn, Stop: true, At: time.Now().UTC().Format(time.RFC3339Nano)}})
+		}
 		status, snap, err := s.assistantConfig(ctx, tx)
 		if err != nil {
 			return err
@@ -791,9 +804,6 @@ func (s *Service) PostAssistant(ctx context.Context, caller common.Caller, id st
 		set := `turn = $2, state = 'working', client_id = $3, pending = NULL, roles = $4, actions = $5, updated_at = clock_timestamp()`
 		switch body.Kind {
 		case "message":
-			if t.State == "working" {
-				return network.NewConflictError("wait for the answer, or Stop", nil)
-			}
 			var recent int
 			if err := tx.QueryRow(ctx, `SELECT count(*) FROM assistant_entries WHERE owner_id = $1 AND kind = 'user'
 				AND at > clock_timestamp() - interval '1 minute'`, t.OwnerID).Scan(&recent); err != nil {
@@ -804,6 +814,28 @@ func (s *Service) PostAssistant(ctx context.Context, caller common.Caller, id st
 			messageID := utility.NewID()
 			input["message_id"], input["text"], input["screen"] = messageID, *body.Text, body.Screen
 			input["at"] = time.Now().UTC().Format(time.RFC3339Nano)
+			// steer (API 1.59): from the tab running the turn, while it works or runs that tab's actions, the message
+			// joins the running answer; `next` keeps the turn it starts if the answer ends before reading it
+			mine := deref(t.ClientID) == body.ClientID
+			if t.State == "working" && !mine {
+				return network.NewConflictError("this chat is working in another tab", nil)
+			}
+			if mine && (t.State == "working" || t.State == "waiting" && wait != nil && len(wait.Actions) > 0) {
+				next := message.AssistantTurn{ClientID: body.ClientID, Roles: roles, Tools: offeredTools(roles, snap.Search != nil, lookAt),
+					Actions: append([]string{}, actions...), Settings: snap, Input: map[string]any{"kind": "message", "screen": body.Screen}}
+				entry, err := one[AssistantEntry](ctx, tx, `INSERT INTO assistant_entries (id, thread_id, owner_id, key, turn, kind, text,
+					steer, next) VALUES ($1, $2, $3, $4, $5, 'user', $6, 'waiting', $7) RETURNING `+entryCols,
+					utility.NewID(), t.ID, t.OwnerID, "message:"+messageID, t.Turn, *body.Text, toJSON(next))
+				if err == nil {
+					err = putAssistantEvent(ctx, tx, t.ID, t.OwnerID, map[string]any{"type": "entry", "entry": entry})
+				}
+				if err != nil {
+					return err
+				}
+				out.Entry, out.Steer = &entry, true
+				return messaging.Enqueue(ctx, tx, messaging.Command{JobID: t.ID, OwnerID: t.OwnerID, MsgID: fmt.Sprintf("%s:steer:%s", t.ID, messageID),
+					Data: message.AssistantSteer{ThreadID: t.ID, Turn: t.Turn, SteerID: messageID, Text: *body.Text, At: input["at"].(string)}})
+			}
 			if wait != nil { // parked on a tab that went away: what it waits on never ran
 				results := []map[string]any{}
 				for _, aid := range wait.actionIDs() {
@@ -970,8 +1002,80 @@ func (p *Projector) ApplyAssistantStep(ctx context.Context, ownerID string, step
 		if _, err := tx.Exec(ctx, `UPDATE assistant_threads SET `+set+` WHERE id = $1`, args...); err != nil {
 			return err
 		}
+		if step.Done && step.Turn >= t.Turn {
+			if err := nextFromSteers(ctx, tx, t); err != nil {
+				return err
+			}
+		}
 		_, err = threadEvent(ctx, tx, t.ID)
 		return err
+	})
+}
+
+// nextFromSteers (API 1.59): the turn ended with steers unread; they become the next message, in order, as one new
+// turn (the command kept with the last one, its screen; text their texts joined), and show "sent as the next message".
+func nextFromSteers(ctx context.Context, tx pgx.Tx, t threadRow) error {
+	type steerRow struct {
+		Key  string
+		Text string
+		Next json.RawMessage
+	}
+	rows, err := collect[steerRow](ctx, tx, `SELECT key, text, next FROM assistant_entries WHERE thread_id = $1
+		AND steer = 'waiting' ORDER BY at, id`, t.ID)
+	if err != nil || len(rows) == 0 {
+		return err
+	}
+	texts := []string{}
+	for _, r := range rows {
+		texts = append(texts, r.Text)
+		entry, err := one[AssistantEntry](ctx, tx, `UPDATE assistant_entries SET steer = 'next', at = clock_timestamp()
+			WHERE thread_id = $1 AND key = $2 RETURNING `+entryCols, t.ID, r.Key)
+		if err == nil {
+			err = putAssistantEvent(ctx, tx, t.ID, t.OwnerID, map[string]any{"type": "entry", "entry": entry})
+		}
+		if err != nil {
+			return err
+		}
+	}
+	var data message.AssistantTurn
+	if err := json.Unmarshal(rows[len(rows)-1].Next, &data); err != nil {
+		return err
+	}
+	data.ThreadID, data.Turn = t.ID, t.Turn+1
+	data.Input["message_id"], data.Input["text"] = utility.NewID(), cutRunes(strings.Join(texts, "\n\n"), 4000)
+	data.Input["at"] = time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := tx.Exec(ctx, `UPDATE assistant_threads SET turn = $2, state = 'working', pending = NULL, roles = $3, actions = $4,
+		caps = '{"model_calls": 0, "tool_calls": 0, "memory_writes": 0}', last_message_at = clock_timestamp(), summarized_at = NULL,
+		updated_at = clock_timestamp() WHERE id = $1`, t.ID, data.Turn, data.Roles, data.Actions); err != nil {
+		return err
+	}
+	return messaging.Enqueue(ctx, tx, messaging.Command{JobID: t.ID, OwnerID: t.OwnerID, MsgID: fmt.Sprintf("%s:%d", t.ID, data.Turn),
+		Data: data})
+}
+
+// ApplyAssistantSteered marks the steers a turn read (evt.assistant.steered, API 1.59): read, at now (they show where
+// they were read), each sent. An unknown thread, another owner's or a steer not waiting is skipped.
+func (p *Projector) ApplyAssistantSteered(ctx context.Context, ownerID string, read message.AssistantSteered) error {
+	return common.System(ctx, p.pool, func(tx pgx.Tx) error {
+		t, err := lockThread(ctx, tx, read.ThreadID)
+		if errors.Is(err, errNotFound) || (err == nil && t.OwnerID != ownerID) {
+			return nil
+		} else if err != nil {
+			return err
+		}
+		for _, id := range read.SteerIDs {
+			entry, err := one[AssistantEntry](ctx, tx, `UPDATE assistant_entries SET steer = 'read', at = clock_timestamp()
+				WHERE thread_id = $1 AND key = $2 AND steer = 'waiting' RETURNING `+entryCols, t.ID, "message:"+id)
+			if errors.Is(err, errNotFound) {
+				continue
+			} else if err == nil {
+				err = putAssistantEvent(ctx, tx, t.ID, t.OwnerID, map[string]any{"type": "entry", "entry": entry})
+			}
+			if err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 }
 

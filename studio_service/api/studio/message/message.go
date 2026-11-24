@@ -716,6 +716,29 @@ func (AssistantDelete) Type() string { return "cmd.assistant.delete" }
 // Subject is the type.
 func (AssistantDelete) Subject() string { return "cmd.assistant.delete" }
 
+// AssistantSteer is cmd.assistant.steer's data (API 1.59): a message sent while the turn works, or Stop.
+type AssistantSteer struct {
+	ThreadID string `json:"thread_id"`
+	Turn     int    `json:"turn"`
+	SteerID  string `json:"steer_id,omitempty"`
+	Text     string `json:"text,omitempty"`
+	Stop     bool   `json:"stop,omitempty"`
+	At       string `json:"at"`
+}
+
+// Type is cmd.assistant.steer.
+func (AssistantSteer) Type() string { return "cmd.assistant.steer" }
+
+// Subject is the type.
+func (AssistantSteer) Subject() string { return "cmd.assistant.steer" }
+
+// AssistantSteered is evt.assistant.steered's data (API 1.59): the steers a turn read, in order.
+type AssistantSteered struct {
+	ThreadID string   `json:"thread_id"`
+	Turn     int      `json:"turn"`
+	SteerIDs []string `json:"steer_ids"`
+}
+
 // AssistantStep is evt.assistant.step's data: one step of a turn.
 type AssistantStep struct {
 	ThreadID string            `json:"thread_id"`

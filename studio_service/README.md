@@ -348,7 +348,10 @@ and the Memory list (proxied to `pipelines.assistant.memory`, 5 s, in the caller
 offered tools, the screen's actions, the settings snapshot) in one transaction; the projector (durable
 `studio-assistant`, `evt.assistant.>`) stores each step's words, lines and cards and sets the thread's state and
 pending (a step at or below the last applied is skipped; an older turn's end leaves the current turn's state). Only the
-tab `client_id` posts results and answers; a message to a parked chat resumes it with each action `did_not_run`. New
+tab `client_id` posts results and answers; a message to a parked chat resumes it with each action `did_not_run`. From
+1.59 a message from that tab while the turn works is a steer (`steer` waiting, `cmd.assistant.steer`): the projector
+marks it read on `evt.assistant.steered`, and when the turn ends with steers unread they start the next turn as one
+message; `stop` ends the turn at its next step (contracts/README.md "Assistant: steer"). New
 chat and a sweep (every 10 min, chats idle 24 h) ask for summaries. `api/studio/assistant_tools.go` serves the
 catalog's studio tools on `studio.tools` as the thread's owner, by asking the service's own routes in process
 (`common.LocalEngine`, never served: its guard takes the caller from the context), so their answers are the API's

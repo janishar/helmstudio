@@ -175,8 +175,11 @@ func TestAssistantChat(t *testing.T) {
 			t.Fatalf("offered %s: %v", never, turn.Tools)
 		}
 	}
-	// a message while it works is 409
-	e.call(userA, "POST", msgs, map[string]any{"kind": "message", "client_id": tabA, "text": "again", "screen": screen("/")}, 409)
+	// a message from another tab while it works is 409 (from its own tab it steers: TestAssistantSteer)
+	if c := e.call(userA, "POST", msgs, map[string]any{"kind": "message", "client_id": tabB, "text": "again", "screen": screen("/")},
+		409); c["detail"] != "this chat is working in another tab" {
+		t.Fatal(c)
+	}
 
 	// the step parks on two actions and a card: entries, then waiting with pending
 	call := func(n int) string { return fmt.Sprintf("%s:1:%d", id, n) }
@@ -234,13 +237,14 @@ func TestAssistantChat(t *testing.T) {
 	}
 	e.step(userA, message.AssistantStep{ThreadID: id, Turn: 3, Seq: 3, Text: "OK, no search.", Done: true})
 
-	// a closed tab: the next message resumes the parked turn with each action did_not_run, its cards cancelled
+	// a closed tab: a message from another tab resumes the parked turn with each action did_not_run, its cards
+	// cancelled (from the tab running the actions it would steer)
 	e.call(userA, "POST", msgs, map[string]any{"kind": "message", "client_id": tabA, "text": "now?", "screen": screen("/")}, 202)
 	_ = e.turns()
 	e.step(userA, message.AssistantStep{ThreadID: id, Turn: 4, Seq: 4, Actions: []json.RawMessage{json.RawMessage(
 		fmt.Sprintf(`{"id": "%s:4:0", "name": "navigate", "args": {}}`, id))}, Cards: []json.RawMessage{json.RawMessage(
 		strings.ReplaceAll(string(card), call(2), id+":4:1"))}})
-	e.call(userA, "POST", msgs, map[string]any{"kind": "message", "client_id": tabA, "text": "hello?", "screen": screen("/")}, 202)
+	e.call(userA, "POST", msgs, map[string]any{"kind": "message", "client_id": tabB, "text": "hello?", "screen": screen("/")}, 202)
 	sent = e.turns()
 	resumed, _ := json.Marshal(sent[0].Data.Input["results"])
 	if len(sent) != 1 || !strings.Contains(string(resumed), `"status":"did_not_run"`) || !strings.Contains(string(resumed), id+":4:0") ||
@@ -313,6 +317,124 @@ func TestAssistantChat(t *testing.T) {
 		t.Fatal(sent)
 	}
 	e.call(userA, "GET", threads+"/"+id, nil, 404)
+}
+
+// steers sends the assistant commands since the last relay: the turns and the steers, decoded.
+func (e *env) steers() ([]message.AssistantTurn, []message.AssistantSteer) {
+	e.t.Helper()
+	_, sent := e.relay()
+	var turns []message.AssistantTurn
+	var steers []message.AssistantSteer
+	for _, env := range sent {
+		switch env.Type {
+		case "cmd.assistant.turn":
+			var d message.AssistantTurn
+			_ = json.Unmarshal(env.Data, &d)
+			turns = append(turns, d)
+		case "cmd.assistant.steer":
+			var d message.AssistantSteer
+			_ = json.Unmarshal(env.Data, &d)
+			steers = append(steers, d)
+		}
+	}
+	return turns, steers
+}
+
+// Steer while it answers (API 1.59; board Assistant frame 8): a message from the running tab while a turn works joins
+// it; the turn's read marks it; unread at the end, the steers start the next turn as one message; Stop.
+func TestAssistantSteer(t *testing.T) {
+	e := setup(t)
+	e.assistantOn()
+	threads := "/v1/studio/assistant/threads"
+	id := e.call(userA, "POST", threads, map[string]any{"client_id": tabA}, 201)["id"].(string)
+	msgs := threads + "/" + id + "/messages"
+	say := func(tab, text string, code int) map[string]any {
+		return e.call(userA, "POST", msgs, map[string]any{"kind": "message", "client_id": tab, "text": text, "screen": screen("/", "search")}, code)
+	}
+	entryOf := func(key string) map[string]any {
+		for _, raw := range e.call(userA, "GET", threads+"/"+id, nil, 200)["entries"].([]any) {
+			if entry := raw.(map[string]any); entry["id"] == key {
+				return entry
+			}
+		}
+		return nil
+	}
+	// idle: Stop does nothing
+	if got := e.call(userA, "POST", msgs, map[string]any{"kind": "stop", "client_id": tabA}, 202); got["steer"] != nil {
+		t.Fatal(got)
+	}
+	say(tabA, "Make a rainy London still", 202)
+	if turns, steers := e.steers(); len(turns) != 1 || len(steers) != 0 {
+		t.Fatal(turns, steers)
+	}
+	// working: a message from its tab is a steer, shown at once (waiting), no new turn; another tab's is 409
+	first := say(tabA, "Use Turbo instead", 202)
+	if entry := first["entry"].(map[string]any); first["steer"] != true || entry["steer"] != "waiting" || entry["turn"] != float64(1) ||
+		first["thread"].(map[string]any)["state"] != "working" {
+		t.Fatal(first)
+	}
+	say(tabB, "mine now", 409)
+	turns, steers := e.steers()
+	if len(turns) != 0 || len(steers) != 1 || steers[0].Text != "Use Turbo instead" || steers[0].Turn != 1 || steers[0].Stop {
+		t.Fatal(turns, steers)
+	}
+	// parked on the tab's actions: still a steer; the turn reads the first one at its next step
+	e.step(userA, message.AssistantStep{ThreadID: id, Turn: 1, Seq: 1, Actions: []json.RawMessage{json.RawMessage(
+		fmt.Sprintf(`{"id": "%s:1:0", "name": "search", "args": {}}`, id))}})
+	second, third := say(tabA, "And make it 16:9", 202), say(tabA, "Add a red bus", 202)
+	if second["steer"] != true || third["steer"] != true {
+		t.Fatal(second, third)
+	}
+	read := message.AssistantSteered{ThreadID: id, Turn: 1, SteerIDs: []string{steers[0].SteerID}}
+	if err := studio.NewProjector(e.pool).ApplyAssistantSteered(context.Background(), userB, read); err != nil {
+		t.Fatal(err)
+	}
+	if entryOf(first["entry"].(map[string]any)["id"].(string))["steer"] != "waiting" {
+		t.Fatal("another owner's read was applied")
+	}
+	if err := studio.NewProjector(e.pool).ApplyAssistantSteered(context.Background(), userA, read); err != nil {
+		t.Fatal(err)
+	}
+	if got := entryOf(first["entry"].(map[string]any)["id"].(string)); got["steer"] != "read" {
+		t.Fatal(got)
+	}
+	// the turn ends first: the two unread become one new turn, in order, with the last one's screen
+	_, _ = e.steers()
+	e.step(userA, message.AssistantStep{ThreadID: id, Turn: 1, Seq: 2, Text: "Done.", Done: true})
+	turns, _ = e.steers()
+	if len(turns) != 1 || turns[0].Turn != 2 || turns[0].Input["kind"] != "message" || turns[0].Input["text"] != "And make it 16:9\n\nAdd a red bus" ||
+		turns[0].Input["screen"] == nil || turns[0].ClientID != tabA || !slices.Equal(turns[0].Actions, []string{"navigate", "await", "search"}) {
+		t.Fatalf("%+v", turns)
+	}
+	detail := e.call(userA, "GET", threads+"/"+id, nil, 200)
+	entries := detail["entries"].([]any)
+	tail := []string{}
+	for _, raw := range entries[len(entries)-3:] {
+		entry := raw.(map[string]any)
+		tail = append(tail, fmt.Sprint(entry["kind"], ":", entry["steer"]))
+	}
+	if detail["state"] != "working" || !slices.Equal(tail, []string{"assistant:<nil>", "user:next", "user:next"}) {
+		t.Fatal(detail["state"], tail)
+	}
+	// steers count against the messages a minute (4 sent)
+	e.exec(`UPDATE assistant_settings SET limits = jsonb_set(limits, '{messages_per_minute}', '4')`)
+	if many := say(tabA, "one more", 429); many["detail"] != "at most 4 messages a minute" {
+		t.Fatal(many)
+	}
+	// Stop: only from the running tab; it reaches the turn as a steer with stop
+	e.call(userA, "POST", msgs, map[string]any{"kind": "stop", "client_id": tabB}, 409)
+	e.call(userA, "POST", msgs, map[string]any{"kind": "stop", "client_id": tabA, "text": "x"}, 422)
+	e.call(userA, "POST", msgs, map[string]any{"kind": "stop", "client_id": tabA}, 202)
+	if turns, steers := e.steers(); len(turns) != 0 || len(steers) != 1 || !steers[0].Stop || steers[0].Turn != 2 {
+		t.Fatal(turns, steers)
+	}
+	e.step(userA, message.AssistantStep{ThreadID: id, Turn: 2, Seq: 3, Done: true})
+	if got := e.call(userA, "GET", threads+"/"+id, nil, 200); got["state"] != "idle" {
+		t.Fatal(got["state"])
+	}
+	if turns, _ := e.steers(); len(turns) != 0 {
+		t.Fatal(turns)
+	}
 }
 
 func TestAssistantOffered(t *testing.T) {
