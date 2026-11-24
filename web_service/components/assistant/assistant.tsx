@@ -742,10 +742,17 @@ function ChatsList({
       aria-label="Chats"
       className="chats"
       onKeyDown={(e) => {
-        if (e.key !== "Escape") return;
-        e.preventDefault();
-        close();
-        btn.current?.focus();
+        const all = [...(ref.current?.querySelectorAll<HTMLElement>("[role^=menuitem]") ?? [])];
+        const at = all.indexOf(document.activeElement as HTMLElement);
+        const to = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: all.length - 1 }[e.key];
+        if (e.key === "Escape") {
+          e.preventDefault();
+          close();
+          btn.current?.focus();
+        } else if (to !== undefined) {
+          e.preventDefault();
+          all[(to + all.length) % all.length]?.focus();
+        }
       }}
     >
       <div className="chh">

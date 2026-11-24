@@ -815,6 +815,27 @@ describe("older chats and a broken answer (board frame 7)", () => {
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
+  it("the Chats list moves by keys: arrows wrap, Home and End jump, Esc gives focus back to Chats", async () => {
+    serveChats();
+    await openDrawer();
+    fireEvent.click(screen.getByRole("button", { name: "Chats" }));
+    const menu = await screen.findByRole("menu", { name: "Chats" });
+    await waitFor(() => expect(within(menu).getAllByRole("menuitemradio")).toHaveLength(5));
+    const items = () => [...menu.querySelectorAll<HTMLElement>("[role^=menuitem]")];
+    expect(document.activeElement).toBe(items()[0]);
+    fireEvent.keyDown(menu, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(items()[1]);
+    fireEvent.keyDown(menu, { key: "ArrowUp" });
+    fireEvent.keyDown(menu, { key: "ArrowUp" });
+    expect(document.activeElement).toBe(items().at(-1)); // Show older
+    fireEvent.keyDown(menu, { key: "Home" });
+    expect(document.activeElement).toBe(items()[0]);
+    fireEvent.keyDown(menu, { key: "End" });
+    expect(document.activeElement?.textContent).toBe("Show older");
+    fireEvent.keyDown(menu, { key: "Escape" });
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Chats" }));
+  });
+
   it("an older chat picked brings its whole thread back, and writing in it goes to that chat", async () => {
     const posts = serveChats();
     await openDrawer(<Screen actions={{}} />);
