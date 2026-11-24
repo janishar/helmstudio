@@ -54,3 +54,21 @@ def test_refs_to_ids_it_never_read_are_flagged():
 
 def test_the_rules_are_in_the_system_prompt():
     assert answer.RULES in assistant.SYSTEM
+
+
+def test_a_prefix_a_fragment_or_the_rules_placeholder_is_unknown():
+    read = f'"id": "{TAKE}" ... cats'  # what the model was given; the rules text is not in it
+    text = f"[[take:{TAKE[:8]}]] [[take:4e5f]] [[element:a]] [[take:<id>]] [[take:{TAKE}]]"
+    assert (
+        answer.tidy(text, read) == f"[[take:?]] [[take:?]] [[element:?]] [[take:?]] [[take:{TAKE}]]"
+    )
+
+
+def test_one_step_of_two_answers_keeps_one_block_and_is_never_cut_open():
+    # as assistant.model joins a step's answers: each tidied alone, then the joined text again
+    a, b = answer.tidy(block(OPTS), ""), answer.tidy(block(OPTS[:2]), "")
+    say = answer.cut(answer.tidy(a + "\n\n" + b, ""))
+    assert say.count("```options") == 1 and "1. Fix a part · Repaint the hands" in say
+    long = answer.cut(answer.tidy("x" * 3950 + "\n" + block(OPTS), ""))
+    assert len(long) <= 4000 and "```" not in long and long == "x" * 3950 + "\nNext, pick one:"
+    assert answer.cut("y" * 10 + "\n" + answer.tidy(block(OPTS), "")).count("```") == 2

@@ -3,6 +3,7 @@
 // 17, 19; contracts/README.md, Assistant: pick one and refs). Plain elements, never HTML; never a raw id.
 import { useEffect, useReducer, useState } from "react";
 import { AudioLines, Check, Trash2, Workflow } from "lucide-react";
+import { usePlayer } from "@/components/create/audio";
 import { ElementEditor } from "@/components/create/elements";
 import { FullScreen } from "@/components/media";
 import { api, ok, type S } from "@/lib/api";
@@ -12,7 +13,7 @@ import { safeUrl } from "@/lib/format";
 import { reloadLibrary, useLibrary, useVoices } from "@/lib/library";
 import { useTakes } from "@/lib/take-cache";
 
-type Switch = ((id: string) => void) | undefined;
+type Switch = ((id: string) => unknown) | undefined;
 
 /** An answer's options as cards (frame 11): title and one line, the suggested one ringed "Best next", keys 1–4. A
  * click sends the title as the user's message; once a message came after it the pick stays marked, the rest fade. */
@@ -109,6 +110,7 @@ function Chip({ kind, id, onWorkflow }: { kind: RefKind; id: string; onWorkflow?
   const voices = useVoices();
   const workflows = useWorkflows();
   const [open, setOpen] = useState(false);
+  const { toggle } = usePlayer();
   const list =
     kind === "element"
       ? elements
@@ -165,12 +167,18 @@ function Chip({ kind, id, onWorkflow }: { kind: RefKind; id: string; onWorkflow?
       ) : null}
     </i>
   );
+  // a voice plays its preview, as the voice picker does (a clip: its part of the take)
+  const clip = kind === "voice" ? safeUrl(lib?.thumb_url) : null;
+  const sound =
+    clip && (lib?.voice?.clip ? `${clip}#t=${lib.voice.clip.in},${lib.voice.clip.out}` : clip);
   const act =
     kind === "take" || kind === "element"
       ? () => setOpen(true)
       : kind === "workflow" && onWorkflow
-        ? () => onWorkflow(id)
-        : undefined;
+        ? () => void onWorkflow(id)
+        : sound
+          ? () => toggle(id, sound)
+          : undefined;
   if (!act)
     return (
       <span className="idc" title={title} aria-label={`${kind}: ${title}`}>

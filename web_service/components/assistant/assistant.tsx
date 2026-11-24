@@ -473,6 +473,7 @@ export function useAssistant(me: S<"User"> | null) {
     answerAsk: (yes: boolean) => answerRef.current?.(yes ? "yes" : "no"),
     running,
     error,
+    setError,
     send,
     newChat,
     chats,
@@ -837,7 +838,11 @@ function Thread({ a, entries }: { a: AssistantApi; entries: Entry[] }) {
   // a workflow chip switches to it where the screen can (Create)
   const switchTo = a.reg.current()?.spec.actions.switchTo;
   const pickWorkflow = switchTo
-    ? (id: string) => void switchTo({ workflow: id }, { progress: () => undefined })
+    ? async (id: string) => {
+        // not installed or not downloaded: say so (the drawer's error line), never a silent click
+        const r = await switchTo({ workflow: id }, { progress: () => undefined });
+        a.setError(!asked(r) && r.status === "failed" ? r.text : "");
+      }
     : undefined;
   const flush = (key: string) => {
     if (!words.length && !lines.length) return;
@@ -1172,8 +1177,7 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
   const count = entries.length + Object.keys(a.local).length + (a.asking ? 1 : 0);
   // the Thinking start, kept here (above the closed-drawer return) so closing and reopening keeps the count; a new
   // thread, actions running or the state leaving working start it again
-  const thinkId =
-    a.view?.thread.state === "working" && !a.running ? a.view.thread.id : null;
+  const thinkId = a.view?.thread.state === "working" && !a.running ? a.view.thread.id : null;
   const [since, setSince] = useState<{ id: string; at: number } | null>(null);
   if ((since?.id ?? null) !== thinkId)
     setSince(() => (thinkId ? { id: thinkId, at: Date.now() } : null));

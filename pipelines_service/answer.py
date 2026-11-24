@@ -52,7 +52,7 @@ def _plain(body: str) -> str:
 
 def tidy(text: str, read: str) -> str:
     """The answer as the drawer may show it: its first valid options block compact (any other as plain text), each
-    ref whose id is not in `read` (what the model was given) rewritten `?`."""
+    ref whose id is not a whole id in `read` (what the model was given, not the rules) rewritten `?`."""
     kept = False
 
     def block(m: re.Match) -> str:
@@ -66,4 +66,19 @@ def tidy(text: str, read: str) -> str:
         )
 
     text = OPTIONS.sub(block, text)
-    return REF.sub(lambda m: m.group(0) if m.group(2) in read else f"[[{m.group(1)}:?]]", text)
+    # a whole id only: a prefix or fragment of one the model read is still unknown
+    return REF.sub(
+        lambda m: (
+            m.group(0)
+            if re.search(r"(?<![\w/-])" + re.escape(m.group(2)) + r"(?![\w/-])", read)
+            else f"[[{m.group(1)}:?]]"
+        ),
+        text,
+    )
+
+
+def cut(text: str, n: int = 4000) -> str:
+    """The text at most `n` long; an options block the cut opened is dropped, never left without its closing fence."""
+    text = text[:n]
+    i = text.rfind("```options")
+    return text[:i].rstrip() if i >= 0 and "```" not in text[i + 10 :] else text
