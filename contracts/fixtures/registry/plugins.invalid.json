@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "plugins": {
+    "web-search": {
+      "state": "up",
+      "restarts": 0,
+      "since": "2026-11-25T10:42:00Z",
+      "log": "x"
+    }
+  },
+  "published_by": "runner mac.native",
+  "published_at": "2026-11-25T10:43:00Z"
+}

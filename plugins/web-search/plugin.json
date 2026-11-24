@@ -10,6 +10,7 @@
   "url": "http://host.docker.internal:8421",
   "health": "/health",
   "start": "plugins/web-search/run.sh",
+  "run": {"cmd": ["./run.sh"], "host": "mac"},
   "tools": [
     {
       "name": "search",

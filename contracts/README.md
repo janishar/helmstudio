@@ -4043,6 +4043,29 @@ kinds: model providers and Assistant tools only.
   snippet}]} through DuckDuckGo (the unofficial `ddgs` library: free, no key; rate limits and errors are plain
   lines), `sends_off_machine`. The built-in Brave `search` provider (API 1.44) still works and can be retired later.
 
+### Plugins: starts itself (API 1.65; board docs/mock/Plugins.dc.html STARTS ITSELF, release 0.1.0-alpha.2 item 37; normative)
+
+Owner, 2026-11-25: "when i toggle the websearch it should start autimatically and then will remain when the app
+launches next time".
+
+- **`run`** in a plugin's manifest ({cmd, host}, host default `mac`) says how its service starts; without it, you start
+  it yourself (`start`), as the Claude Code bridge stays (personal, repo only).
+- **What should run** (registry.schema.json `plugin_runs`): studio writes KV `host_settings` key `<host>.plugins` =
+  the names of the plugins that are on, usable, and declare `run` with that host, on every change (on, off, Remove,
+  Rescan, the folder watch) and at start. Names only.
+- **Who runs it**: one runner per host, the one started with `RUNNER_PLUGINS=on` (`make runners`: the native env; the
+  Mac app's native runner). It reads the key every 5 s and, for each name, the plugin's own `plugin.json` from its
+  plugin folders (`RUNNER_PLUGINS_DIRS`: the repo's or app's `plugins/`, then `~/.helm/plugins`; a folder only, never
+  a .zip) and runs `run.cmd` in that folder, in its own process group, output appended to `~/.helm/logs/<plugin>.log`
+  (`HELM_HOME` overrides `~/.helm`). A plugin that leaves the list is stopped (SIGTERM, then SIGKILL after 5 s). One
+  that exits is started again after a backoff (1 s, doubling to 60 s; reset after 60 s up). When the runner starts,
+  it starts every plugin on the list, so a plugin that is on stays on across app launches. When it stops, it stops
+  them.
+- **What is running** (registry.schema.json `plugins`): the runner writes KV `registry` key `<host>.<env>.plugins`
+  with each plugin's state (starting, running, failed with `detail`, stopped), restarts and log. The Plugins page:
+  a plugin that is on and starts itself is `running` while its health path answers, else `starting` or `failed`
+  (Couldn't start · `problem`), else `not_running` (no runner of its host is up).
+
 ### Skills (API 1.64; boards docs/mock/Plugins.dc.html SKILLS and Assistant.dc.html 16, release 0.1.0-alpha.2 item 36; normative)
 
 Owner, 2026-11-25: "plan skills support as plugin that will be used by agent to understand how to lets say a skill of

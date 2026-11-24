@@ -52,10 +52,17 @@
           }
         }
       ],
-      "enabled": false,
-      "status": "off",
+      "enabled": true,
+      "status": "failed",
       "provider": null,
-      "updated_at": "2026-11-25T10:00:00Z"
+      "updated_at": "2026-11-25T10:00:00Z",
+      "problem": "it stopped 3 times: ModuleNotFoundError: ddgs",
+      "starts": {
+        "host": "mac",
+        "log": "~/.helm/logs/web-search.log",
+        "restarts": 3,
+        "since": "2026-11-25T10:43:00Z"
+      }
     },
     {
       "name": "animator",

@@ -6407,12 +6407,21 @@ export interface components {
             /** @description on; off until an admin turns it on */
             enabled: boolean;
             /**
-             * @description off: not on (never called); running: its health path answered 2xx in 2 s; not_running: on, no answer. From 1.64: on (a skill that is on: it has no service), needs_newer (a skill of a newer format), broken (yours could not be read: `problem`); neither of the last two can be turned on
+             * @description from 1.65 starting (its runner launched it, its health path does not answer yet) and failed (Couldn't start: `problem` is why, the runner tries again after its backoff). off: not on (never called); running: its health path answered 2xx in 2 s; not_running: on, no answer. From 1.64: on (a skill that is on: it has no service), needs_newer (a skill of a newer format), broken (yours could not be read: `problem`); neither of the last two can be turned on
              * @enum {string}
              */
-            status: "off" | "running" | "not_running" | "on" | "needs_newer" | "broken";
+            status: "off" | "running" | "not_running" | "on" | "needs_newer" | "broken" | "starting" | "failed";
             /** @description the caller's own provider made from it (Add as provider), else null */
             provider: string | null;
+            /** @description from 1.65: it starts itself (its manifest's `run`): the host whose runner runs it, the log file there and how often it was started again */
+            starts?: {
+                host: string;
+                /** @example ~/.helm/logs/web-search.log */
+                log?: string;
+                restarts?: number;
+                /** Format: date-time */
+                since?: string;
+            };
             /** Format: date-time */
             updated_at: string;
         };
