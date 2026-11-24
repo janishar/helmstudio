@@ -2152,7 +2152,7 @@
   min-height: 20px;
 }
 .ast .med {
-  margin-top: 8px;
+  margin: 8px 0 10px; /* room for the text under a take (owner, 2026-11-25) */
   border-radius: 12px;
   overflow: hidden;
   background: var(--in);
