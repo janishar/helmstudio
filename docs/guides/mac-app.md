@@ -21,7 +21,7 @@ Python packages (about 2 GB).
 ## First open
 
 1. Open helmstudio from Applications.
-2. A step list runs: Check this Mac, Start the VM, Load the images, Make the secrets, Set up the runners, Start.
+2. A step list runs: Check this Mac, Start the VM, Download the images, Make the secrets, Set up the runners, Start.
    It takes about **5 minutes** on a Mac that has never downloaded the VM disk, the images or the runner packages.
 3. **Admin account:** the step list asks for an email and a password (12 characters or more, no quote). That is
    the studio's sign-in. It is kept only in the app's folder.

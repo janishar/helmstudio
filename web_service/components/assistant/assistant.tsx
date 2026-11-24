@@ -487,9 +487,9 @@ export function useAssistant(me: S<"User"> | null) {
 }
 export type AssistantApi = ReturnType<typeof useAssistant>;
 
-/** "Thinking… N s" (plan 29, 33.7): a quiet reply bubble under the last message, whole seconds since this tab saw the
- * model call start; the reply replaces it. */
-function Thinking({ since }: { since: number }) {
+/** "Thinking… N s" (plan 29, 33.7), "Working… N s" for a model that does not think (owner, 2026-11-25): a quiet reply
+ * bubble under the last message, whole seconds since this tab saw the model call start; the reply replaces it. */
+function Thinking({ since, thinks }: { since: number; thinks: boolean }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
@@ -498,7 +498,7 @@ function Thinking({ since }: { since: number }) {
   return (
     <div className="msg think" role="status" aria-live="off">
       <LoaderCircle size={12} strokeWidth={3} aria-hidden className="run" />
-      Thinking… {Math.max(0, Math.floor((now - since) / 1000))} s
+      {thinks ? "Thinking…" : "Working…"} {Math.max(0, Math.floor((now - since) / 1000))} s
     </div>
   );
 }
@@ -1150,7 +1150,7 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
   // the Thinking start, kept here (above the closed-drawer return) so closing and reopening keeps the count; a new
   // thread, actions running or the state leaving working start it again
   const thinkId =
-    a.status?.thinks && a.view?.thread.state === "working" && !a.running ? a.view.thread.id : null;
+    a.view?.thread.state === "working" && !a.running ? a.view.thread.id : null;
   const [since, setSince] = useState<{ id: string; at: number } | null>(null);
   if ((since?.id ?? null) !== thinkId)
     setSince(() => (thinkId ? { id: thinkId, at: Date.now() } : null));
@@ -1374,7 +1374,7 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
             ) : (
               <Thread a={a} entries={entries} />
             )}
-            {since && thinking && <Thinking since={since.at} />}
+            {since && thinking && <Thinking since={since.at} thinks={!!a.status?.thinks} />}
             <div ref={end} />
           </div>
 

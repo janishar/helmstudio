@@ -8,9 +8,10 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 import uuid
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -23,6 +24,11 @@ WORK = HERE / "work"  # empty cwd: no project CLAUDE.md to find
 # every env var that would switch the CLI off the subscription login
 DROP = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "CLAUDE_CODE_OAUTH_TOKEN",
         "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY", "AWS_BEARER_TOKEN_BEDROCK")
+# quiet start (as Hermes' subscription plugin does): skips update, telemetry and other network checks, ~4.4 s -> ~1.4 s
+QUIET = {"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1", "DISABLE_TELEMETRY": "1", "DISABLE_ERROR_REPORTING": "1",
+         "DISABLE_AUTOUPDATER": "1", "DISABLE_FEEDBACK_COMMAND": "1", "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1",
+         "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1", "CLAUDE_CODE_DISABLE_TERMINAL_TITLE": "1"}
+SLOTS = threading.BoundedSemaphore(int(ENV.get("BRIDGE_MAX_CONCURRENT", "4")))  # ~250 MB per claude process
 LOCKDOWN = ["--safe-mode", "--tools", "", "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
             "--setting-sources", "", "--disable-slash-commands", "--no-session-persistence",
             "--permission-prompts", "none", "--output-format", "json"]
@@ -60,8 +66,12 @@ def build(body):
     if tools and body.get("tool_choice") != "none":
         names = [t["name"] for t in tools]
         system.append(
-            "The caller has these tools (JSON schemas of their arguments). You cannot run them yourself: to use one, "
-            "list it in `tool_calls` and the caller runs it and sends you the result.\n" + json.dumps(tools, indent=1)
+            "# How to use tools here\n"
+            "The tools below are run by the caller, not by you: they are NOT in your own tool list, and calling one "
+            "directly fails with \"No such tool available\". Never call them directly. To use one, put it in the "
+            "`tool_calls` field of your JSON answer; the caller runs it and sends you the result in the next "
+            "message. That is how every tool in this conversation works, and it always works.\n\n"
+            "Tools (name, description, JSON schema of the arguments):\n" + json.dumps(tools, indent=1)
             + "\n\nAnswer as JSON: `text` is your reply to the user (may be empty when you call tools); "
             "`tool_calls` lists the tools to call now, each with its `name` and `arguments` object "
             "matching that tool's schema. Leave `tool_calls` empty when no tool is needed.")
@@ -84,9 +94,10 @@ def run_claude(model, system, prompt, schema):
     cmd += ["--system-prompt", system]
     if schema is not None:
         cmd += ["--json-schema", json.dumps(schema)]
-    env = {k: v for k, v in os.environ.items() if k not in DROP}
+    env = {k: v for k, v in os.environ.items() if k not in DROP} | QUIET
     try:
-        p = subprocess.run(cmd, input=prompt, capture_output=True, text=True, timeout=TIMEOUT, cwd=WORK, env=env)
+        with SLOTS:  # over the cap: wait in arrival order (inside the request's own timeout)
+            p = subprocess.run(cmd, input=prompt, capture_output=True, text=True, timeout=TIMEOUT, cwd=WORK, env=env)
     except subprocess.TimeoutExpired:
         raise Fail(504, f"claude did not answer in {TIMEOUT} s")
     try:
@@ -177,7 +188,6 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     WORK.mkdir(exist_ok=True)
-    # ponytail: single-threaded server, one claude call at a time; others wait in the listen queue
-    server = HTTPServer((HOST, PORT), Handler)
+    server = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"claude bridge on http://{HOST}:{PORT}/v1 (personal use only)", flush=True)
     server.serve_forever()

@@ -207,8 +207,11 @@ function stackSteps({ p, cfg: shipped, settings, runners }) {
 
   // docker pull with byte progress: each layer's size from the registry (docker manifest inspect -v), counted when
   // docker says that layer is done (its 12-letter id is the start of its digest); without sizes, by layer count
-  const images = async (c) => {
+  // first open labels the sizes: "0.4 of 0.6 GB download · 2.2 GB on disk" (on disk: stack.json's estimate while
+  // pulling, then the pulled images' own sizes); an update shows the download only
+  const images = async (c, first) => {
     if (cfg.local) return copyImages(c, (img, env) => inspect(c, img, env));
+    const disk = first ? ` · ${cfg.imagesDiskGB} GB on disk` : '';
     const todo = [];
     for (const img of cfg.images) if (!(await inspect(c, img, e.docker).catch(() => null))) todo.push(img);
     const sizes = new Map();
@@ -233,7 +236,8 @@ function stackSteps({ p, cfg: shipped, settings, runners }) {
             if (!done || counted.has(m[1])) return;
             counted.add(m[1]);
             bytes += sizes.get(m[1]) || 0;
-            return c.progress(Math.min(bytes / total, 1), sizeOf(Math.min(bytes, total), total));
+            const b = Math.min(bytes, total);
+            return c.progress(b / total, first ? `${gb(b)} of ${gb(total)} GB download${disk}` : sizeOf(b, total));
           }
           seen.set(m[1], done);
           c.progress((i + [...seen.values()].filter(Boolean).length / seen.size) / todo.length);
@@ -241,7 +245,10 @@ function stackSteps({ p, cfg: shipped, settings, runners }) {
       });
       if (!total) pulled += Number((await inspect(c, img, e.docker))[1]);
     }
-    c.detail(todo.length ? sizeOf(null, total || pulled) : 'up to date');
+    if (!first) return c.detail(todo.length ? sizeOf(null, total || pulled) : 'up to date');
+    let onDisk = 0;
+    for (const img of cfg.images) onDisk += Number((await inspect(c, img, e.docker))[1]);
+    c.detail(`${total ? `${gb(total)} GB download · ` : ''}${gb(onDisk)} GB on disk`);
   };
   const imagesHint = cfg.local ? undefined : 'The images could not be downloaded. The internet is needed for this step.';
 
@@ -302,7 +309,7 @@ function stackSteps({ p, cfg: shipped, settings, runners }) {
       },
     },
     { id: 'vm', title: 'Start the VM', hint: 'The VM did not start.', run: vm },
-    { id: 'images', title: 'Load the images', hint: imagesHint, run: images },
+    { id: 'images', title: 'Download the images', hint: imagesHint, run: (c) => images(c, true) },
     {
       id: 'secrets',
       title: 'Make the secrets',
