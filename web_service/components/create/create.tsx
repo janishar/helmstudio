@@ -1846,7 +1846,7 @@ export function Create({
                   empty
                     ? "grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2"
                     : card
-                      ? "grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-2 [&>*]:min-w-0"
+                      ? "grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-2 [&>*]:max-w-none [&>*]:min-w-0"
                       : "flex flex-wrap items-center gap-2"
                 }
               >
