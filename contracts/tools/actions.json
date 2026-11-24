@@ -118,6 +118,7 @@
                 "maximum": 500
               },
               "query": {
+                "description": "The target's URL params, each only on its route: / s (a session id), reuse (a take id), use (a take id) with w (a workflow id), the two always together; /gallery batch; /timeline t; /pipelines/{id} view studio; a row attempt; /models tab loras; /admin tab hosts, keys or providers. To pick a workflow on Create, go to / and call switchTo there.",
                 "type": "object",
                 "additionalProperties": {
                   "type": "string",

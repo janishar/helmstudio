@@ -14,6 +14,7 @@ import {
   ordinal,
   placeInLine,
   routeUrl,
+  SCREENS,
   screenLabel,
   toResult,
   type Entry,
@@ -76,11 +77,22 @@ describe("navigate's route table", () => {
     expect(routeUrl({ to: "/", query: { use: "t" } }, [])).toEqual({
       error: "use and w go together",
     });
+    // the owner's run (2026-11-24): w alone to open Create on a workflow says how to do it instead
+    expect(routeUrl({ to: "/", query: { w: "qwen-image" } }, [])).toEqual({
+      error: "w goes with use (a take); to pick a workflow, go to / and switchTo it",
+    });
     expect(routeUrl({ to: "/admin" }, ["user"])).toEqual({ error: "Admin is for admins only" });
     expect(routeUrl({ to: "/admin", query: { tab: "hosts" } }, ["admin"])).toEqual({
       url: "/admin?tab=hosts",
       path: "/admin",
     });
+  });
+  it("tells the model what each query param is, and that a workflow is picked with switchTo", () => {
+    const q = (
+      SCREENS.shell.actions.navigate.input.properties as Record<string, { description?: string }>
+    ).query;
+    expect(q.description).toContain("use (a take id) with w (a workflow id)");
+    expect(q.description).toContain("switchTo");
   });
   it("names screens and matches routes", () => {
     expect(screenLabel("/pipelines/batches/x/review")).toBe("Review");

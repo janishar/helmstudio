@@ -224,7 +224,9 @@ export function routeUrl(
     if (vs && !vs.includes(v)) return { error: `${k} must be ${vs.join(", ")}` };
     q.set(k, v);
   }
-  if (q.has("use") !== q.has("w")) return { error: "use and w go together" };
+  if (q.has("w") && !q.has("use"))
+    return { error: "w goes with use (a take); to pick a workflow, go to / and switchTo it" };
+  if (q.has("use") && !q.has("w")) return { error: "use and w go together" };
   const qs = q.toString();
   return { url: qs ? `${path}?${qs}` : path, path };
 }
