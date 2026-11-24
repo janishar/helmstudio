@@ -1,10 +1,9 @@
 "use client";
 // Plugins (docs/mock/Plugins.dc.html; API 1.60): the admin-only rail page. The table lists what studio found in
 // plugins/ (Rescan reads it again); a row opens its aside: the switch, its rows, MAY DO, the disclaimer and, for a
-// model-provider plugin that is on, Add as provider (a personal plugin's provider is Only you).
+// model-provider plugin that is on, Add as provider (a personal plugin's provider is its admin's own).
 import Link from "next/link";
 import { useCallback, useEffect, useId, useState } from "react";
-import { Lock } from "lucide-react";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { ApiError, api, message, ok, type S } from "@/lib/api";
 import { KEY_REFUSED, KIND, hostOf, providerTitle, rescanLine, statusOf } from "@/lib/plugins";
@@ -187,7 +186,6 @@ export function PluginsScreen() {
                             <>
                               <Dot ok />
                               <span className="text-[#7fd88f]">Added</span>
-                              {p.personal && <span className={ME_TAG}>Only you</span>}
                               <Link href="/admin?tab=providers" className={CHIP}>
                                 Open in Model providers
                               </Link>
@@ -564,16 +562,6 @@ function AddProvider({ p, onAdded }: { p: Plugin; onAdded: (title: string) => vo
               <option key={m}>{m}</option>
             ))}
           </select>
-        </div>
-      )}
-      {p.personal && (
-        <div className="flex items-center gap-2 rounded-[10px] bg-s2 px-2.5 py-2 text-[13px]">
-          <Lock size={14} aria-hidden />
-          <span className="grow">Only you can use it</span>
-          <Info label="Why only you">
-            It runs your own login and plan, for you only, so other accounts never see or use this
-            provider.
-          </Info>
         </div>
       )}
       {err && (

@@ -144,12 +144,6 @@ export function ProvidersAdmin() {
                 <tr key={p.name}>
                   <td className={cell}>
                     <b className="font-semibold">{p.title || p.name}</b>
-                    {p.owner_id && (
-                      <>
-                        {" "}
-                        <OnlyYou />
-                      </>
-                    )}
                     <br />
                     <span className="mono text-[12px] text-t2">
                       {p.plugin ? `plugin · ${p.plugin}` : p.name}
@@ -253,13 +247,6 @@ export function ProvidersAdmin() {
     </>
   );
 }
-
-/** An Only-you provider's tag (API 1.60: made from a personal plugin; only its owner sees it). */
-export const OnlyYou = () => (
-  <span className="tag bg-[color-mix(in_srgb,#f2c14e_22%,transparent)] text-[#f2c14e]">
-    Only you
-  </span>
-);
 
 /** A row's ⋯ and its menu (docs/mock/Providers.dc.html "Row menu · 1280 px"): a popover kept to the window, the
  * items in order with the last one (Delete…) red after a divider; arrow keys, Home and End move, Escape closes it and
