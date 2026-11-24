@@ -897,8 +897,15 @@ describe("older chats and a broken answer (board frame 7)", () => {
     const details = within(note).getByRole("button", { name: "Details" });
     expect(details.getAttribute("aria-expanded")).toBe("false");
     expect(within(note).queryByText(/launch_rockets/)).toBeNull();
+    const seen = vi.spyOn(Element.prototype, "scrollIntoView");
+    seen.mockClear();
     fireEvent.click(details);
     expect(details.getAttribute("aria-expanded")).toBe("true");
+    // opened on the last message, the words come into view rather than below the composer
+    await waitFor(() =>
+      expect(seen.mock.contexts).toContain(within(note).getByText(/launch_rockets/)),
+    );
+    seen.mockRestore();
     expect(
       within(note).getByText(
         "The answer was invalid twice: launch_rockets is not one of your tools now",

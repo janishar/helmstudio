@@ -695,6 +695,11 @@ const serverCard = (c: S<"AssistantCard">): ScreenCard => ({
  * closed by default and after a reload. */
 function Broken({ raw }: { raw: string }) {
   const [open, setOpen] = useState(false);
+  const rawRef = useRef<HTMLParagraphElement>(null);
+  // opened on the last message, its words come into view, not under the composer
+  useEffect(() => {
+    if (open) rawRef.current?.scrollIntoView({ block: "nearest" });
+  }, [open]);
   return (
     <div role="note" className="msg note">
       <p>The model gave a broken answer twice. Try again or rephrase.</p>
@@ -702,7 +707,11 @@ function Broken({ raw }: { raw: string }) {
         Details
         {open ? <ChevronUp size={12} aria-hidden /> : <ChevronDown size={12} aria-hidden />}
       </button>
-      {open && <p className="raw mono">{raw}</p>}
+      {open && (
+        <p className="raw mono" ref={rawRef}>
+          {raw}
+        </p>
+      )}
     </div>
   );
 }
