@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.56.0
+  version: 1.57.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -6168,6 +6168,7 @@ components:
         code: {type: string, enum: [cap_message, cap_day, cap_tokens, cap_look_at, answer, provider, 'off', internal]}
         text: {type: string, minLength: 1, maxLength: 500}
         resets_at: {type: string, format: date-time}
+        limit: {type: integer, minimum: 0, description: 'API 1.57: a per-user cap: the cap it hit (calls or tokens a day, looks an hour); the drawer unlocks once the current cap is above it'}
     AssistantLimits:
       type: object
       required: [model_calls_per_day, tokens_per_day, look_at_per_hour, messages_per_minute]

@@ -267,8 +267,13 @@ def _again(chat: list, c: dict, msg: str) -> str | None:
         f"Already done: {last['line']}. The screen shows it; go on"  # fmt: skip
 
 
-def _end(code: str, text: str, resets_at: str | None = None, **up) -> dict:
+def _end(
+    code: str, text: str, resets_at: str | None = None, limit: int | None = None, **up
+) -> dict:
     err = {"code": code, "text": text[:500]} | ({"resets_at": resets_at} if resets_at else {})
+    err |= (
+        {"limit": limit} if limit is not None else {}
+    )  # the cap it hit: the drawer unlocks once it is raised
     return up | {"error": err, "to": "reply"}
 
 
@@ -601,9 +606,9 @@ class Assistant:
                 )
                 n, t = limits["model_calls_per_day"], limits["tokens_per_day"]
                 if r["n"] >= n:
-                    return _end("cap_day", f"You used today's {n} model calls.", midnight)
+                    return _end("cap_day", f"You used today's {n} model calls.", midnight, n)
                 if r["t"] + tokens > t:
-                    return _end("cap_tokens", f"You used today's {t:,} tokens.", midnight)
+                    return _end("cap_tokens", f"You used today's {t:,} tokens.", midnight, t)
             else:
                 cur = await conn.execute(
                     "SELECT count(*) AS n, min(at) AS first FROM assistant_spend WHERE owner_id = %s "
@@ -613,7 +618,9 @@ class Assistant:
                 r, n = await cur.fetchone(), limits["look_at_per_hour"]
                 if r["n"] >= n:
                     again = _time((r["first"] or at) + timedelta(hours=1))
-                    return _end("cap_look_at", f"You used this hour's {n} looks at takes.", again)
+                    return _end(
+                        "cap_look_at", f"You used this hour's {n} looks at takes.", again, n
+                    )
             await conn.execute("INSERT INTO assistant_spend (key, owner_id, kind, tokens) VALUES (%s, %s, %s, %s)",
                                (key, owner, kind, tokens))  # fmt: skip
         return None

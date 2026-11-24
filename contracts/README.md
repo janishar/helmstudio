@@ -3878,6 +3878,8 @@ chats (threads), their rows, roles, caps and SSE in studio_service.
   (Thinking, Model sources) is not `off` (a saved level, or with none saved the rule's `default`), or it always
   thinks. No rule, no saved level of a `"models"` preset, no provider: false. The drawer shows `Thinking… N s` (a
   browser timer) while the thread is `working`; no thinking text is stored or sent.
+- **Cap hit** (API 1.57): a per-user cap's error carries `limit`, the cap it hit. The drawer keeps the composer shut
+  until `resets_at`, unless the cap now in `AssistantStatus.limits` is above `limit` (the admin raised it).
 - **One input = one command.** Studio stores the input and writes `cmd.assistant.turn` (owner from its thread row,
   roles from the token, `tools` = `offered_tools`, `actions` = the screen's registered ones, the settings) in one
   transaction; pipelines answers with `evt.assistant.step`s; studio stores their text, lines and cards as entries and

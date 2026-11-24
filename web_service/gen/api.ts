@@ -6295,6 +6295,8 @@ export interface components {
             text: string;
             /** Format: date-time */
             resets_at?: string;
+            /** @description API 1.57: a per-user cap: the cap it hit (calls or tokens a day, looks an hour); the drawer unlocks once the current cap is above it */
+            limit?: number;
         };
         /** @description twin of assistant.schema.json limits: the caps per user */
         AssistantLimits: {

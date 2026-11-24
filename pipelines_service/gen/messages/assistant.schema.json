@@ -143,7 +143,8 @@
       "properties": {
         "code": {"enum": ["cap_message", "cap_day", "cap_tokens", "cap_look_at", "answer", "provider", "off", "internal"], "description": "cap_message: a per-message cap ended the turn; cap_day, cap_tokens, cap_look_at: a per-user cap (the message is kept); answer: the model's answer failed its schema twice; provider: the model provider failed; off: the assistant or its provider is off"},
         "text": {"type": "string", "minLength": 1, "maxLength": 500},
-        "resets_at": {"type": "string", "format": "date-time", "description": "a per-user cap: when it starts again"}
+        "resets_at": {"type": "string", "format": "date-time", "description": "a per-user cap: when it starts again"},
+        "limit": {"type": "integer", "minimum": 0, "description": "a per-user cap: the cap it hit (calls or tokens a day, looks an hour)"}
       }
     },
     "memoryKind": {"enum": ["preference", "project", "worked", "summary"], "description": "the Memory list's Likes, Projects, Worked, Chats"},

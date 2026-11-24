@@ -25,7 +25,8 @@
     "error": {
       "code": "cap_day",
       "text": "You used today's 200 model calls.",
-      "resets_at": "2026-11-23T00:00:00Z"
+      "resets_at": "2026-11-23T00:00:00Z",
+      "limit": 200
     }
   }
 }
