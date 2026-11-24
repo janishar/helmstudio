@@ -1,158 +1,243 @@
-# helmstudio
+<p align="center">
+  <img src="docs/brand/logo/a-as-drawn/app-icon.svg" width="96" height="96" alt="helmstudio logo">
+</p>
 
-A self-hosted, multi-user image and video generation studio. Workflows (small graphs of typed nodes) run on GPU
-runners; everything is reached through one gateway. Go owns auth and the APIs, Python runs the models, Postgres
-holds the data, NATS JetStream carries the messages, an S3 store holds the media. The plan is in
-[docs/](docs/README.md); the service architecture is [docs/plan/13-services.md](docs/plan/13-services.md).
+<h1 align="center">helmstudio</h1>
 
-Milestone M0 (the walking skeleton) runs end to end on a laptop with no GPU: a **fake runner** with an `echo`
-workflow stands in for the models.
+<p align="center">
+  <strong>Wire the models. Direct the film.</strong><br>
+  A local-first AI studio for images, video and voice. It runs open-weight models on your own Mac and NVIDIA
+  machines, and keeps every take with how it was made.
+</p>
 
-## First run
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/licence-Apache--2.0-b9e37a?style=flat-square" alt="Licence: Apache-2.0"></a>
+  <a href="https://helmstudio.in"><img src="https://img.shields.io/badge/docs-helmstudio.in-ff8552?style=flat-square" alt="Docs: helmstudio.in"></a>
+  <img src="https://img.shields.io/badge/runs%20on-Apple%20Silicon%20%7C%20NVIDIA-26342d?style=flat-square" alt="Runs on Apple Silicon and NVIDIA">
+</p>
 
-Needs Docker with Compose 2.20 or later, `make`, `openssl` and, for the contract suite, `uv`.
+<p align="center">
+  <a href="https://helmstudio.in/start/install/">Install</a> ·
+  <a href="https://helmstudio.in/start/introduction/">What is helmstudio</a> ·
+  <a href="https://helmstudio.in/models/">Models</a> ·
+  <a href="https://helmstudio.in/mcp/">Use it from Claude</a> ·
+  <a href="https://helmstudio.in/reference/architecture/">Architecture</a>
+</p>
+
+<p align="center">
+  <img src="docs/images/readme/hero.jpg" alt="helmstudio Create: a Qwen Image edit of @mara in a neon alley rendering live, with its references, takes, presets and LoRA" width="100%">
+</p>
+
+## What you can do
+
+- **Create images, video and voice.** Pick a model, write a prompt, make takes. Call characters and places by name
+  with `@`, and set a look (film, camera, colour, lighting) once.
+- **Work with the Assistant.** An in-app assistant drives every screen: it fills the form, wires the graph, places
+  clips and asks before anything that costs GPU time. Each step it takes has its own Undo.
+- **See a workflow two ways.** Every workflow is a small graph of typed steps, shown as a **Studio** form or as a
+  **Graph** on a node canvas. Editing one edits the other.
+- **Run pipelines while you are away.** Chain workflows and run them over a list. Agent nodes judge each take
+  against your checklist, rewrite the prompt and retry, and learn from the takes you keep.
+- **Keep everything in the Gallery.** Every take keeps the exact settings and inputs that made it. Send any take to
+  Create, a pipeline or the timeline.
+- **Cut on the Timeline.** Put takes in a sequence, direct new shots and voice lines in place, trim, blade and
+  ripple, and export an MP4.
+- **Manage models.** Download weights per machine, pick variants (Base, Turbo, Distilled, community fp8 / int8),
+  add optional add-ons, and upload LoRAs to a shared library.
+- **Use it from Claude.** `helm mcp` gives Claude Code, Claude Desktop and other MCP clients the same tools as the
+  Assistant. Costly or destructive tools ask first.
+- **Host it for a team.** Self-hosted and multi-user. An admin adds accounts; each person sees only their own work.
+  Nothing you make leaves your machines.
+- **Try the Mac app.** A prototype `helmstudio.app` runs the whole studio on one Mac, with a menu-bar item.
+
+## A look inside
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/readme/assistant.jpg" alt="Create with the Assistant drawer: for a Neon rain still of @mara it set the model, wrote the prompt and set the Blue hour lighting, and asks before generating"></td>
+    <td width="50%"><img src="docs/images/readme/timeline.jpg" alt="Timeline of the Winter fox film: the preview, a new shot directed in place, and the tracks with the tool row (Select, Trim, Blade, Range, Overwrite), Blade picked and its cut line"></td>
+  </tr>
+  <tr>
+    <td><b>Create + Assistant.</b> Ask for a rainy neon still of @mara: the Assistant fills the form, rings what it changed, and asks before it uses the GPU.</td>
+    <td><b>Timeline.</b> Cut the Winter fox film with Select, Trim, Blade, Range and Overwrite, snap and zoom, and direct a new shot into a gap.</td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/readme/pipeline.jpg" alt="Pipeline graph for Winter fox stills to clips: Qwen Image, a judge agent node with memory, LTX video, and the batch rows with their results"></td>
+    <td><img src="docs/images/readme/gallery.jpg" alt="Gallery: takes from the Neon rain, Winter fox, Dune runner and Outpost campaigns, and a take's settings, lineage and Use in actions"></td>
+  </tr>
+  <tr>
+    <td><b>Pipelines.</b> Fox stills become clips while you are away. A judge checks each take, keeps the best, retries the rest, and waits for you when none pass.</td>
+    <td><b>Gallery.</b> Every take, from every campaign, with what made it, where it came from, and where it was used.</td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/readme/models.jpg" alt="Models: Qwen Image 2.1 and MiniMax H3 with their variants, sizes, hosts and add-ons"></td>
+    <td><img src="docs/images/readme/mac-app.jpg" alt="The Mac app: the start window and the menu-bar item in its ready, starting and something-down states"></td>
+  </tr>
+  <tr>
+    <td><b>Models.</b> Variants, sizes, licences and which machine has them; downloads per host.</td>
+    <td><b>Mac app.</b> One window to start the studio, and a menu-bar item that keeps it running.</td>
+  </tr>
+</table>
+
+<sub>Screens are from the approved design boards in <a href="docs/mock/">docs/mock</a>. Every picture in them was made by helmstudio with Qwen Image Turbo.</sub>
+
+## Models
+
+Weights are never in this repository. An admin downloads them per machine on the Models screen, and each keeps its
+own licence.
+
+| Family | Makes | Mac | NVIDIA |
+|---|---|---|---|
+| [Qwen Image 2.1](https://helmstudio.in/models/qwen-image/) | Images, edits | Base, Turbo | Base, Turbo, fp8 |
+| [MiniMax H3 Image](https://helmstudio.in/models/minimax-h3-image/) | Images, edits | Base | Base, fp8 |
+| [LTX-2.5](https://helmstudio.in/models/ltx/) | Video with sound | Distilled, Dev (MLX) | Distilled fp8, Dev int8 |
+| [MiniMax H3](https://helmstudio.in/models/minimax-h3/) | Video with sound | Base (native `h3`) | Base fp8 (SGLang) |
+| [Qwen3-TTS](https://helmstudio.in/models/qwen3-tts/) | Voice-over, voice design, dialogue | Custom voice, Voice design | Custom voice, Voice design |
+| [ZONOS3](https://helmstudio.in/models/zonos3/) | Voice-over, dialogue | Mini | Mini |
+| [Ask](https://helmstudio.in/models/ask/) | Text answers about takes | Qwen3.8 27B, Qwen3-VL 8B | Qwen3-VL 8B |
+
+Variants, precision, add-ons, LoRAs and licences: [helmstudio.in/models](https://helmstudio.in/models/).
+
+## Documentation
+
+The full docs are at **[helmstudio.in](https://helmstudio.in)**.
+
+| Start | Use | Reference |
+|---|---|---|
+| [What is helmstudio](https://helmstudio.in/start/introduction/) | [Create](https://helmstudio.in/studio/create/) | [Architecture](https://helmstudio.in/reference/architecture/) |
+| [Install and run](https://helmstudio.in/start/install/) | [Assistant](https://helmstudio.in/studio/assistant/) | [API overview](https://helmstudio.in/reference/api/) |
+| [Hosts and runners](https://helmstudio.in/start/hosts/) | [Pipelines and batches](https://helmstudio.in/studio/pipelines/) | [MCP (use it from Claude)](https://helmstudio.in/mcp/) |
+| [The Mac app](https://helmstudio.in/start/mac-app/) | [Gallery](https://helmstudio.in/studio/gallery/) · [Timeline](https://helmstudio.in/studio/timeline/) | [MCP tools](https://helmstudio.in/mcp/tools/) · [helm CLI](https://helmstudio.in/mcp/helm-cli/) |
+| [Production on a Mac](https://helmstudio.in/start/production/) | [Models](https://helmstudio.in/studio/models/) · [Admin](https://helmstudio.in/studio/admin/) | [FAQ](https://helmstudio.in/help/faq/) · [Troubleshooting](https://helmstudio.in/help/troubleshooting/) |
+
+The design plan and decisions live in [docs/](docs/README.md).
+
+## Quick start
+
+Needs a Mac with Apple Silicon, Docker with Compose 2.20 or later (OrbStack or Docker Desktop), `make` and `openssl`.
+The native runners also need [uv](https://docs.astral.sh/uv/), the Xcode Command Line Tools, CMake and Rust.
 
 ```sh
-make up        # makes deploy/secrets/ and the .env files, builds, starts, waits until healthy
+git clone https://github.com/janishar/helmstudio.git && cd helmstudio
+make envs                 # the .env files from their examples
+# now set ADMIN_EMAIL and ADMIN_PASSWORD in auth_service/.env
+make up                   # makes the secrets, builds, starts, waits until healthy
 open http://localhost:8300
 ```
 
-Sign in as the stack's admin: `ADMIN_EMAIL` / `ADMIN_PASSWORD` from `auth_service/.env` (the test stack uses its own
-`admin@helm.test`, set by `deploy/compose/test-admin.yml`),
-and create users on Admin › Users. There is no public sign-up. The CLI's API key is `deploy/secrets/helm_api_key`
-(auth registers it as client `helm` on every start):
+Sign in as the admin and add people on Admin › Users (there is no public sign-up). The stack ships a test host with an Echo workflow, so you
+can try the studio before any model is installed. For real models, start the runners on this Mac:
+
+```sh
+HELMSTUDIO_MODELS=~/models make runners    # torch, mlx and native, in the background
+```
+
+Weights are read from `HELMSTUDIO_MODELS` and never downloaded into an image. Download them on the Models screen.
+
+| Command | What it does |
+|---|---|
+| `make up` / `make down` | Start the stack and wait until healthy / stop it (the data stays) |
+| `make logs s=studio` · `make ps` | Follow one service's logs (no `s`: all) · show what is running |
+| `make runners` / `make runners-stop` | Start / stop the native runners of this Mac |
+| `make prod` | Run the checkout as production next to the dev stack (Kong on 8400) |
+
+To use the studio from Claude Code, build the CLI, sign in once in a real terminal (it asks for the password), and
+add it as an MCP server ([details](https://helmstudio.in/mcp/)):
 
 ```sh
 make -C cli build
-cli/bin/helm login --url http://localhost:8300 --email <your ADMIN_EMAIL> --api-key-file deploy/secrets/helm_api_key
-cli/bin/helm run echo -p echo.steps=5 -p prompt.text="hello" --out .
-```
-
-Run `helm login` in a real terminal: it asks for the password. To use helmstudio from Claude Code or Claude Desktop
-(MCP), add `helm mcp` once and check it connects; the steps and the tools are in
-[docs/guides/mcp.md](docs/guides/mcp.md):
-
-```sh
+cli/bin/helm login --url http://localhost:8300 --email <your ADMIN_EMAIL> \
+  --api-key-file deploy/secrets/helm_api_key
 claude mcp add -s user helmstudio -- "$PWD/cli/bin/helm" mcp
-claude mcp list        # helmstudio: … ✔ Connected
 ```
 
-## Daily commands
+Add an NVIDIA machine: [Hosts and runners](https://helmstudio.in/start/hosts/). Production on a Mac:
+[Run in production](https://helmstudio.in/start/production/).
 
-| Command | What |
-|---|---|
-| `make up` (= `make dev`) | build and start the stack, wait until healthy |
-| `make down` | stop it; the data volumes (`pgdata18a`, `natsdata`, `seaweeddata`) stay |
-| `make logs s=studio` | follow one service's logs (no `s`: all) |
-| `make ps` | what is running |
-| `make contracts-check` | validate `contracts/` (no stack needed) |
-| `make test` | the contract suite on its own stack, `helmstudio-test` (Kong on 8390); `make test T="tests/test_x.py"` runs only those; `make test-down` stops it |
-| `make resilience` | restart each service of `helmstudio-test` mid-run and check the stack recovers (`contract_tests/resilience.sh`) |
-| `.tools/test-db` | Postgres for the services' DB tests (`helmstudio-test`, port 5464) |
-| `make runners` | the native runners of this Mac (torch, mlx, native) in the background (`make runners-stop` stops them) |
+<details>
+<summary><b>Operations notes</b> (test stack, runners, GPU hosts, ports, upgrades)</summary>
 
-Each service has its own `Makefile` (at least `test` and `lint`; `dev` and `gen` where they apply).
+**Test stack.** `make test` runs the black-box contract suite through Kong on its own stack, `helmstudio-test`
+(Kong 8390, Postgres 5464, NATS 4323, S3 8434 and 8444). `make test T="tests/test_x.py"` runs only those; `make
+test-down` stops it. `make resilience` restarts each service mid-run and checks the stack recovers.
+`.tools/test-db` gives the services' DB tests a Postgres. Tests never touch the dev stack.
 
-A stack whose `pgdata18a` volume predates a service's database (pipelines, added in M1) gets it once from
-`deploy/postgres/init.sh` (idempotent; the first command recreates Postgres with the new secret, the volume stays):
+**Native runners.** On Apple Silicon there are three envs, each its own process: `torch` (PyTorch MPS; uv project
+`runner_service/`), `mlx` (MLX; uv project `runner_service/envs/mlx`) and `native` (packs that run a native binary
+as a child process, such as MiniMax H3 video through the vendored `h3` in `runner_service/vendor/h3c`). They join
+the stack over loopback: NATS on `4322` as `runner_mac_<env>` (each may only consume its own `cmd.run.mac.<env>`)
+and the S3 API on `8433`. Each has a pid file and a log in `runner_service/.run/`, a `GET /health` (torch `8091`,
+mlx `8092`, native `8093`), and a small supervisor that restarts it after a stall. One Mac is one memory budget:
+studio admits a run only when its planned peak fits, and otherwise asks the env holding the least recently used
+components to unload them first.
+
+**GPU hosts.** A Linux machine with an NVIDIA GPU joins as another host; only its runner runs there, in a container
+with the NVIDIA runtime (`deploy/gpu-host/`, with its own README). It reaches only NATS and the object store, over
+TLS, with its own NATS user and S3 identity. `make gpu-host-secrets GPU_HOSTS=<h>` makes its credentials (the
+running stack reloads); set `STACK_TLS=on` in `deploy/.env` and `make up`; `make gpu-host-tunnel` opens an SSH
+reverse tunnel.
+
+**Ports.** Published on 127.0.0.1 only, set in `deploy/.env`: Kong `8300`, Postgres `5463`, NATS `4322`, S3 `8433`
+(and S3 https `8443` with `STACK_TLS=on`). Production uses 8400, 5465, 4324 and 8435.
+
+**An older data volume.** A `pgdata18a` volume that predates a service's database gets it once from
+`deploy/postgres/init.sh` (idempotent):
 
 ```sh
 .tools/make-secrets
 docker compose -f deploy/docker-compose.yml -f deploy/compose/fake.yml up -d --wait postgres
-docker compose -f deploy/docker-compose.yml -f deploy/compose/fake.yml exec -T postgres sh /docker-entrypoint-initdb.d/init.sh
+docker compose -f deploy/docker-compose.yml -f deploy/compose/fake.yml \
+  exec -T postgres sh /docker-entrypoint-initdb.d/init.sh
 make up
 ```
 
-For `helmstudio-test`, `.tools/test-db` does the same.
+</details>
 
-## Native runners
+## Architecture
 
-Real models run outside Docker, natively on the GPU host. On Apple Silicon there are three envs, each its own
-process: `torch` (PyTorch MPS; the Qwen Image and MiniMax H3 Image packs; uv project `runner_service/`), `mlx` (MLX;
-the LTX and LLM packs; uv project `runner_service/envs/mlx`) and `native` (packs that run a native binary as a child
-process: MiniMax H3 video through the vendored `h3`, `runner_service/vendor/h3c`; uv project `runner_service/` with no
-extra, so no torch or MLX in the process). `make runner-native` builds `h3` first (`make h3`, about a second, Command
-Line Tools clang); `h3` must run with its folder as the working directory (it compiles its Metal shaders from there).
+helmstudio is a set of small services behind one gateway (Kong). Go services own sign-in, users and API keys
+(`auth_service`), the studio's API and the run dispatcher (`studio_service`) and signed file links
+(`files_service`). Python runners load the models and make takes (`runner_service`), and a LangGraph service runs
+batches, agent nodes and the Assistant (`pipelines_service`). Postgres holds the data with row-level security per
+user, NATS JetStream carries commands and events, and an S3 store holds the media. The web app is Next.js
+(`web_service`) and `cli/` builds the `helm` command and its MCP server. More:
+[Architecture](https://helmstudio.in/reference/architecture/) and [docs/plan/13-services.md](docs/plan/13-services.md).
 
-```sh
-make up                         # the stack (the fake runner stays in it for the contract suite)
-make runners                    # all three, in the background (host mac, envs torch, mlx and native)
-make runner-torch / runner-mlx / runner-native   # one of them
-make runners-stop               # stops them (only processes make started, by their pid files)
-```
-
-They join the stack through the loopback ports compose publishes for them: NATS on `4322` as user `runner_mac_<env>`
-(`deploy/secrets/nats_runner_mac_<env>_url`; each may only consume its `cmd.run.mac.<env>`, write its `mac.<env>`
-registry and hosts keys and answer its `runner.unload.mac.<env>`) and the SeaweedFS S3 API on `8433`. Weights are read from
-`HELMSTUDIO_MODELS` (default `~/GenAI/models`) and never downloaded, built into an image or put in the object store.
-Each has a pid file and a log, `runner_service/.run/runner-mac-<env>.{pid,log}`, and a `GET /health` on its own
-port (torch `8091`, mlx `8092`, native `8093`); a small sh supervisor restarts it after a stall (exit 70) or a
-SIGKILL (137).
-
-One GPU, one memory budget: studio admits a run only when its planned peak plus everything resident on the host's
-envs fits the host's budget; otherwise it asks the env(s) holding the least recently used components to unload exactly
-those (`runner.unload`), and keeps the run queued until they have (contracts/README.md, Two envs on one host).
-
-## Remote GPU hosts
-
-A Linux machine with an NVIDIA GPU joins the stack as another host (`gcp` in the test rig): only its runner runs
-there, as a container with the NVIDIA runtime (`deploy/gpu-host/`: compose file, `.env.example`, and a README with
-every step). It reaches only NATS and the object store, over TLS, with its own NATS user `runner_<h>_torch` and S3
-identity `runner-<h>`; the dispatcher picks among the eligible hosts and each host keeps its own budget
-(contracts/README.md, Several hosts).
-
-```sh
-make gpu-host-secrets GPU_HOSTS=gcp       # the host's credentials; the running stack reloads (no restart)
-# STACK_TLS=on in deploy/.env, then make up: NATS TLS (same port) and S3 https (8443) via deploy/compose/tls.yml
-make gpu-host-tunnel VM=<instance> ZONE=<zone>   # test rig: SSH reverse tunnel puts NATS and S3 on the VM's loopback
-make gpu-host-tunnel-stop
-```
-
-`helmstudio-test` always runs with TLS (the fake runner joins over `tls://` and `https://`), from a self-signed CA
-that `.tools/make-secrets` makes (`deploy/secrets/tls_ca`, `stack_tls_cert`, `stack_tls_key`).
-
-## Production on this Mac
-
-`make prod` runs the current checkout as production next to the dev stack ([plan](docs/plan/26-production.md)):
-project `helmstudio-prod`, no fakes (no fake runner, no Echo), its own ports (Kong 127.0.0.1:8400, Postgres 5465,
-NATS 4324, S3 8435), network, volumes, images tagged `prod` and fresh secrets in `deploy/secrets-prod/` (provider keys
-in its `providers/`). Services restart unless stopped, logs are capped, memory is limited. Sign in with the admin from
-`auth_service/.env` (its password is set only when the account is made; change it in the app).
-
-```sh
-make prod                                  # first time: makes deploy/secrets-prod/; builds, starts, waits
-open http://localhost:8400
-make prod-ps; make prod-logs s=studio; make prod-down    # down keeps the data
-make runners-stop; make runners STACK=prod # the Mac runners on prod (STACK defaults to dev)
-```
-
-## Ports
-
-Published on 127.0.0.1, set in `deploy/.env`: Kong on `8300` (`KONG_HTTP_PORT`), Postgres on `5463`
-(`POSTGRES_HOST_PORT`), and for native runners and the GPU host tunnel NATS on `4322` (`NATS_HOST_PORT`), the S3
-API on `8433` (`S3_HOST_PORT`) and, with `STACK_TLS=on`, S3 https on `8443` (`S3_TLS_HOST_PORT`).
-`helmstudio-test` uses 8390, 5464, 4323, 8434 and 8444.
-
-## Layout
+<details>
+<summary><b>Repository layout</b></summary>
 
 ```
-contracts/        openapi.yaml, NATS message schemas, registry schema, fixtures, check.py
-contract_tests/   black-box suite through Kong: the gate for every milestone
+contracts/         openapi.yaml, NATS message schemas, registry schema, fixtures, check.py
+contract_tests/    black-box suite through Kong: the gate for every change
 helmgo/            shared Go framework
-kong/             gateway config + the API-key plugin
-auth_service/     Go: sign-in, users, roles, API keys
-studio_service/   Go: /v1/studio (sessions, workflows, runs, events, hosts, batches)
-files_service/    Go: signed /files links from the object store
-runner_service/   Python: runs workflows (the fake runner in Docker; native envs torch, mlx and native)
-pipelines_service/ Python, LangGraph: runs batches (NATS only, database pipelines, health on 8082)
-web_service/      Next.js app and its BFF
-cli/              Go: the `helm` command (login, run)
-deploy/           compose files, Postgres init, NATS config, secrets (git-ignored), gpu-host/
-.tools/           make-secrets, copy-envs, nats-setup, storage-setup, test-db, create-admin, gpu-host-tunnel
-docs/             the plan and notes on the reference system
+kong/              gateway config and the API-key plugin
+auth_service/      Go: sign-in, users, roles, API keys
+studio_service/    Go: /v1/studio (sessions, workflows, runs, events, hosts, batches, timelines)
+files_service/     Go: signed /files links from the object store
+runner_service/    Python: runs workflows (native envs torch, mlx and native; the fake runner in Docker)
+pipelines_service/ Python, LangGraph: batches, agent nodes, the Assistant
+web_service/       Next.js app and its BFF
+cli/               Go: the helm command and helm mcp
+deploy/            compose files, Postgres init, NATS config, secrets (git-ignored), gpu-host/
+.tools/            make-secrets, copy-envs, nats-setup, storage-setup, test-db, create-admin, gpu-host-tunnel
+docs/              the plan, guides, brand and the approved design boards
 ```
+
+</details>
+
+## Contributing
+
+Issues and pull requests are welcome. The working rules are in [CLAUDE.md](CLAUDE.md); in short:
+
+- **Contracts first.** [contracts/](contracts/) is the single source for everything that crosses a service
+  boundary. Change it first, then the services, then run `make contracts-check`.
+- **Services are isolated.** Each service has its own dependencies, lockfile, `.env.example`, Dockerfile and
+  Makefile (`make test lint`). Services never import each other's code.
+- **Tests gate the work.** Run the touched service's `make test lint`, `make contracts-check`, and the contract tests
+  your change touches (`make test T="tests/test_x.py"`). Run the full `make test` once when a feature is done.
+- **No secrets in git.** Secrets are files in `deploy/secrets/`, made by `.tools/make-secrets`.
 
 ## Licence
 
 Apache-2.0 (see [LICENSE](LICENSE) and [NOTICE](NOTICE)). Bundled third-party code keeps its own MIT or Apache-2.0
-licence; model weights are not in this repository and keep their own licences.
+licence. Model weights are not in this repository and keep their own licences.
