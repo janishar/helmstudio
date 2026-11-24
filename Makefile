@@ -121,6 +121,8 @@ UV_RUN_native := run
 HEALTH_PORT_torch := 8091   # each runner's GET /health on 0.0.0.0 (envs on one Mac need their own ports)
 HEALTH_PORT_mlx := 8092
 HEALTH_PORT_native := 8093
+# API 1.65: the native runner starts the plugins that start themselves (the repo's plugins/, then ~/.helm/plugins)
+PLUGINS_native := RUNNER_PLUGINS=on RUNNER_PLUGINS_DIRS=$(CURDIR)/plugins:$${HELM_HOME:-$$HOME/.helm}/plugins
 
 runners: runner-torch runner-mlx runner-native  ## the native runners in the background (needs make up, or make prod with STACK=prod); make runners-stop stops them
 
@@ -142,7 +144,7 @@ runner-torch runner-mlx runner-native: runner-%: $(if $(filter prod,$(STACK)),pr
 	  RUNNER_HOST=mac RUNNER_ENV=$* HEALTH_PORT=$(HEALTH_PORT_$*) NATS_URL_FILE=$(SECRETS)/nats_runner_mac_$*_url \
 	  S3_ENDPOINT=http://127.0.0.1:$(RUNNER_S3) S3_BUCKET=$${S3_BUCKET:-helmstudio} \
 	  S3_ACCESS_KEY_ID_FILE=$(SECRETS)/s3_access_key_id S3_SECRET_ACCESS_KEY_FILE=$(SECRETS)/s3_secret_access_key \
-	  HELMSTUDIO_MODELS=$${HELMSTUDIO_MODELS:-$$HOME/GenAI/models} CONTRACTS_DIR=$(CURDIR)/contracts \
+	  HELMSTUDIO_MODELS=$${HELMSTUDIO_MODELS:-$$HOME/GenAI/models} CONTRACTS_DIR=$(CURDIR)/contracts $(PLUGINS_$*) \
 	  $(UV) $(UV_RUN_$*) python main.py & c=$$!; wait $$c; s=$$?; [ $$s -eq 70 ] || [ $$s -eq 137 ] || exit $$s; \
 	  echo "runner exited $$s: restarting"; sleep 2; done' > .run/runner-mac-$*.log 2>&1 & \
 	sleep 1; echo "runner $* started ($$(cat $(RUN_DIR)/runner-mac-$*.pid)); log runner_service/.run/runner-mac-$*.log"

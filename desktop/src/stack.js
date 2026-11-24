@@ -449,6 +449,11 @@ class Runners {
       S3_SECRET_ACCESS_KEY_FILE: path.join(s, 's3_secret_access_key'),
       HELMSTUDIO_MODELS: this.settings.modelsDir || tilde(this.cfg.defaultModelsDir),
       CONTRACTS_DIR: path.join(this.p.runner, 'contracts'),
+      // API 1.65: the native runner starts the plugins that start themselves (the app's plugins, then ~/.helm/plugins)
+      ...(r.env === 'native' && {
+        RUNNER_PLUGINS: 'on',
+        RUNNER_PLUGINS_DIRS: `${path.join(this.p.stack, 'plugins')}:${path.join(process.env.HELM_HOME || path.join(os.homedir(), '.helm'), 'plugins')}`,
+      }),
     };
   }
 
