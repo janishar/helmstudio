@@ -3960,6 +3960,30 @@ markup. Pipelines checks both before the step is published; the drawer shows the
   model read (the transcript, the calls' results, the screen) is rewritten `?` (`[[take:?]]`): the drawer shows
   "unknown take". An item deleted since shows "deleted take" (element, voice, workflow alike).
 
+### Assistant: context and cache (API 1.66; alpha.2 item 30, owner 2026-11-25; normative)
+
+The prompt is laid out so the provider's prompt cache hits (DeepSeek and OpenAI cache a stable start by themselves).
+
+- **Layout.** The system part is the rules and the knowledge (the same bytes in every chat), then the memories
+  (preferences) as the chat's first model call read them: frozen per chat, read again only after the user changes
+  Memory (edit, delete, Clear all; the assistant's own `remember` does not). The tools are sorted by name. The user
+  part is the transcript, append-only (an entry once written renders the same bytes), then the screen now, then
+  the calls left. Only the screen and the last lines change between calls.
+- **Window.** `AssistantSettings.window_tokens` is the chat window of the assistant's provider and model (each model
+  keeps its own; 60000 until set; `cmd.assistant.turn` `settings.window_tokens`). Before a model call whose prompt
+  (system, tools and user part at 4 characters a token) passes 70% of it, the oldest half of the transcript (never
+  the running message) folds once into the chat's running summary: one call to the same model, at most 2000
+  characters of plain words that keep plans, decisions, names and @handles; it is counted in `assistant_spend`
+  like any call. The summary opens the transcript (`Earlier in this chat`) until the next fold rewrites it, so the
+  start stays stable between folds; @handles of the folded part stay usable. A prompt still past the whole window
+  drops its oldest entries.
+- **Hits.** Each model call's row in `assistant_spend` keeps its provider, model, prompt tokens and the hits the
+  reply reported (DeepSeek `prompt_cache_hit_tokens` with `prompt_cache_miss_tokens`, OpenAI
+  `prompt_tokens_details.cached_tokens`, Anthropic `cache_read_input_tokens`); a reply that reports none is not
+  counted. GET `/v1/studio/admin/assistant/cache` (admin) answers the last 30 days per provider and model through
+  `pipelines.assistant.cache`: calls, prompt tokens, hit tokens and `hit_rate`.
+- **Later.** Anthropic `cache_control` markers (none sent today) and KV reuse on the local MLX runner.
+
 ### Assistant: tools
 
 `tools/catalog.json` (validated against `tools/catalog.schema.json` `$defs/toolsFile`) holds every tool:

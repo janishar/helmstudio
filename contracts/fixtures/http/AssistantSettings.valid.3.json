@@ -12,5 +12,6 @@
     "messages_per_minute": 30
   },
   "remote_enabled": false,
-  "updated_at": "2026-11-25T09:00:00Z"
+  "updated_at": "2026-11-25T09:00:00Z",
+  "window_tokens": 60000
 }

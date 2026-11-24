@@ -1,0 +1,1 @@
+{"models": [{"provider": "deepseek", "model": "deepseek-chat", "calls": 42, "prompt_tokens": 840000, "hit_tokens": 712000}, {"provider": "openai", "model": "gpt-5-mini", "calls": 3, "prompt_tokens": 30000, "hit_tokens": 0}]}

@@ -98,7 +98,7 @@ HTTP_SCHEMAS = [
     "TimelineEdits", "TimelineEditResult", "TimelineAgentView", "TimelineRevisionList", "TimelineFrame",  # 1.49
     "SessionList", "SessionNames", "SessionNamesPut",
     "AssistantPost", "AssistantThreadList", "AssistantThreadDetail", "AssistantEvent", "AssistantMemoryList",
-    "AssistantSettings", "AssistantSettingsPut", *TWINS,
+    "AssistantSettings", "AssistantSettingsPut", "AssistantCacheStats", *TWINS,
     "PluginList", "PluginRescan", "PluginPut", "PluginProviderCreate",  # 1.61
 ]
 OPENAPI = "https://helmstudio.local/contracts/openapi.yaml"

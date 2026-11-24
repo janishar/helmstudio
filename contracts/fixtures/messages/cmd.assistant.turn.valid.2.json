@@ -63,7 +63,8 @@
         "tokens_per_day": 2000000,
         "look_at_per_hour": 20,
         "messages_per_minute": 6
-      }
+      },
+      "window_tokens": 60000
     },
     "input": {
       "kind": "results",
