@@ -5,7 +5,7 @@
 // HELMSTUDIO_FAKE_FAIL=<word> then fails one of them (the failed-step screen).
 const path = require('node:path');
 const fs = require('node:fs');
-const { app, BrowserWindow, Tray, Menu, nativeImage, nativeTheme, shell, dialog, ipcMain, powerMonitor } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, shell, dialog, ipcMain, powerMonitor } = require('electron');
 const { StepRunner, exec, pipe } = require('./steps');
 const { layout, loadSettings, stackSteps, Runners } = require('./stack');
 const cfg = require('../stack.json');
@@ -58,25 +58,14 @@ if (!app.requestSingleInstanceLock()) app.exit(0);
 
 const COLORS = { ok: [0x3f, 0xd2, 0x6b], wait: [0xf2, 0xc1, 0x4e], bad: [0xff, 0x8a, 0x80] };
 
-// logo A in one colour (white on a dark menu bar) with the status dot at its corner, drawn into the @2x bitmap
-function trayImage(dot) {
-  const src = nativeImage.createFromPath(path.join(__dirname, '..', 'assets', 'trayTemplate.png'));
-  const buf = Buffer.from(src.toBitmap({ scaleFactor: 2 })); // BGRA, square
-  const w = Math.sqrt(buf.length / 4);
-  const h = w;
-  const ink = nativeTheme.shouldUseDarkColors ? 255 : 0;
-  const [r, g, b] = COLORS[dot];
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const i = (y * w + x) * 4;
-      const d = Math.hypot(x - (w - 6.5), y - (h - 6.5));
-      if (d <= 4.5) buf.set([b, g, r, 255], i);
-      else if (d <= 6.5) buf.set([0, 0, 0, 0], i); // a gap around the dot
-      else buf.set([(ink * buf[i + 3]) / 255, (ink * buf[i + 3]) / 255, (ink * buf[i + 3]) / 255], i);
-    }
-  }
-  return nativeImage.createFromBitmap(buf, { width: w, height: h, scaleFactor: 2 });
-}
+// logo A as a template image: macOS tints it to the menu bar (white over a dark wallpaper even in light mode), as it
+// does every other icon there. A template has no colour, so the status dot is the title beside it, in ANSI colour
+const trayIcon = () => {
+  const i = nativeImage.createFromPath(path.join(__dirname, '..', 'assets', 'trayTemplate.png'));
+  i.setTemplateImage(true);
+  return i;
+};
+const DOT_TITLE = { ok: '\x1b[32m●\x1b[0m', wait: '\x1b[33m●\x1b[0m', bad: '\x1b[31m●\x1b[0m' };
 
 function dotImage(dot) {
   const s = 16;
@@ -89,7 +78,7 @@ function dotImage(dot) {
 function setStatus(dot, text, sub = '') {
   status = { dot, text, sub };
   if (!tray) return;
-  tray.setImage(trayImage(dot));
+  tray.setTitle(DOT_TITLE[dot]);
   const login = app.getLoginItemSettings().openAtLogin;
   tray.setContextMenu(
     (trayMenu = Menu.buildFromTemplate([
@@ -300,9 +289,8 @@ app.whenReady().then(() => {
   );
   // log out, restart, shut down: let the quit through (else before-quit cancels the Mac's log out), stop the runners
   powerMonitor.on('shutdown', () => ((quitting = true), runners.stop()));
-  tray = new Tray(trayImage('wait'));
+  tray = new Tray(trayIcon());
   tray.setToolTip('helmstudio');
-  nativeTheme.on('updated', () => setStatus(...Object.values(status)));
   setStatus('wait', 'Starting…');
   setInterval(check, 20000);
   startUp();
