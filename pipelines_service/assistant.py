@@ -344,7 +344,7 @@ class Assistant:
         if new:
             chat = s["chat"] + [{"role": "user", "text": x["text"], "at": x["at"]} for x in new]
             up |= {"chat": chat[-CHAT_KEEP:], "steered": read + [x["id"] for x in new]}
-            await self._send("evt.assistant.steered", f"evt.assistant.{tid}.steered", f"{tid}:steered:{new[0]['id']}",
+            await self._send("evt.assistant.steered", f"evt.assistant.{tid}.steered", f"{tid}:steered:{','.join(x['id'] for x in new)}",
                              {"thread_id": tid, "turn": s["msg"], "steer_ids": [x["id"] for x in new]}, s)  # fmt: skip
         return up
 
@@ -773,7 +773,8 @@ class Assistant:
         if all(x["id"] != d["steer_id"] for x in got):
             got.append({"id": d["steer_id"], "turn": d["turn"], "text": d["text"], "at": d["at"],
                         "owner": cmd["owner_id"]})  # fmt: skip
-            got.sort(key=lambda x: x["at"])
+            # by time: RFC3339Nano trims trailing zeros, so the text's order is not the time's
+            got.sort(key=lambda x: datetime.fromisoformat(x["at"]))
 
     async def publish(self, v: dict) -> None:
         """The thread's last step as evt.assistant.<thread_id>.step (Nats-Msg-Id <thread_id>:<seq>); studio replaces a

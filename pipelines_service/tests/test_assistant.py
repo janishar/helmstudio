@@ -132,12 +132,14 @@ class Chat:
     def asked(self) -> list[dict]:
         return [r["body"] for r in self.fake.requests if r["body"]]
 
-    async def steer(self, text: str | None = None, turn: int | None = None) -> str:
+    async def steer(
+        self, text: str | None = None, turn: int | None = None, at: str | None = None
+    ) -> str:
         """A cmd.assistant.steer as studio writes it while the turn works (a Stop without text); the steer's id."""
         c = copy.deepcopy(fixture("cmd.assistant.steer.valid.1"))
         sid = str(uuid.uuid4())
         c["id"], c["job_id"], c["owner_id"] = str(uuid.uuid4()), self.tid, self.owner
-        c["data"] = {"thread_id": self.tid, "turn": turn or self.n, "at": now()} | (
+        c["data"] = {"thread_id": self.tid, "turn": turn or self.n, "at": at or now()} | (
             {"steer_id": sid, "text": text} if text else {"stop": True}
         )
         assert not schemas.message_errors(c), schemas.message_errors(c)
@@ -421,6 +423,9 @@ async def test_steers_are_read_at_the_next_boundary_in_order(pool, fake):
     step = await c.results(done(c.cid(1, 0), "Set model: Qwen Image"))
     assert step["done"] and step["text"] == "Switching to Turbo, 16:9."
     assert c.steered() == [{"thread_id": c.tid, "turn": 1, "steer_ids": [one, two]}]
+    # its id names every steer it read: a re-run that read more is a new event, not a duplicate
+    ids = [h["Nats-Msg-Id"] for s, _, h in c.js.sent if s.endswith(".steered")]
+    assert ids == [f"{c.tid}:steered:{one},{two}"]
     p = c.asked()[1]["messages"][1]["content"]
     assert (
         p.index("Set model: Qwen Image")
@@ -432,6 +437,14 @@ async def test_steers_are_read_at_the_next_boundary_in_order(pool, fake):
     c.script({"content": "OK."})
     await c.say("Add a red bus behind her\n\ntoo late")
     assert len(c.steered()) == 1 and c.asked()[-1]["messages"][1]["content"].count("too late") == 1
+
+
+async def test_steers_are_kept_in_time_order_not_text_order(pool, fake):
+    """RFC3339Nano trims trailing zeros: "…:00Z" sorts after "…:00.5Z" as text, yet is earlier."""
+    c = Chat(pool, fake)
+    late = await c.steer("second", turn=1, at="2026-11-24T10:00:00.5Z")
+    early = await c.steer("first", turn=1, at="2026-11-24T10:00:00Z")
+    assert [x["id"] for x in c.a.steers[c.tid]] == [early, late]
 
 
 async def test_stop_ends_the_turn_at_its_next_boundary(pool, fake):
