@@ -30,7 +30,7 @@ export function hhmm(iso?: string) {
 
 /** The Status column: running → "Running" over its host; on but no answer → "Not running" over "enabled · start it";
  * a skill that is on → "On"; one it can't use → "Needs a newer helmstudio" / "Can't be read"; off → "Off". One that
- * starts itself (API 1.65, board STARTS ITSELF): "Starting…" / "Couldn't start" on its host; running adds "Starts on
+ * starts itself (API 1.67, board STARTS ITSELF): "Starting…" / "Couldn't start" on its host; running adds "Starts on
  * its own · since 10:42"; not running says no runner on its host is up; off is "stopped on the Mac". */
 export function statusOf(p: Plugin): {
   text: string;

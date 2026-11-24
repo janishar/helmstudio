@@ -2131,6 +2131,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/studio/admin/assistant/cache": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * From 1.66: the assistant's prompt cache hit rate per provider and model (Admin › AI agents)
+         * @description Admin only (403). Over the last `days` days of every user's assistant model calls, from the hits each reply reported (DeepSeek prompt_cache_hit_tokens, OpenAI cached_tokens, Anthropic cache_read_input_tokens); 503 when pipelines does not answer in 5 s.
+         */
+        get: operations["studioAdminGetAssistantCache"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/studio/models": {
         parameters: {
             query?: never;
@@ -6282,6 +6302,8 @@ export interface components {
             thinking?: "models" | components["schemas"]["ThinkingRule"][];
             /** @description from 1.61: a plugin's preset (its providers' thinking rules); never in this list (the file only) */
             plugin?: string;
+            /** @description from 1.65: a regular expression on the model id (RE2 and JavaScript alike) for the models that see images; absent: none does */
+            vision?: string;
             docs: string;
             note: string;
         };
@@ -6407,13 +6429,13 @@ export interface components {
             /** @description on; off until an admin turns it on */
             enabled: boolean;
             /**
-             * @description from 1.65 starting (its runner launched it, its health path does not answer yet) and failed (Couldn't start: `problem` is why, the runner tries again after its backoff). off: not on (never called); running: its health path answered 2xx in 2 s; not_running: on, no answer. From 1.64: on (a skill that is on: it has no service), needs_newer (a skill of a newer format), broken (yours could not be read: `problem`); neither of the last two can be turned on
+             * @description from 1.67 starting (its runner launched it, its health path does not answer yet) and failed (Couldn't start: `problem` is why, the runner tries again after its backoff). off: not on (never called); running: its health path answered 2xx in 2 s; not_running: on, no answer. From 1.64: on (a skill that is on: it has no service), needs_newer (a skill of a newer format), broken (yours could not be read: `problem`); neither of the last two can be turned on
              * @enum {string}
              */
             status: "off" | "running" | "not_running" | "on" | "needs_newer" | "broken" | "starting" | "failed";
             /** @description the caller's own provider made from it (Add as provider), else null */
             provider: string | null;
-            /** @description from 1.65: it starts itself (its manifest's `run`): the host whose runner runs it, the log file there and how often it was started again */
+            /** @description from 1.67: it starts itself (its manifest's `run`): the host whose runner runs it, the log file there and how often it was started again */
             starts?: {
                 host: string;
                 /** @example ~/.helm/logs/web-search.log */
@@ -6631,7 +6653,7 @@ export interface components {
             /** @default 30 */
             messages_per_minute: number;
         };
-        /** @description what every user may know: on or off (the dock item is hidden when off), where the model runs, web search, the caps, whether the model thinks */
+        /** @description what every user may know: on or off (the dock item is hidden when off), where the model runs, web search, the caps, whether the model thinks, whether it sees images */
         AssistantStatus: {
             enabled: boolean;
             provider: {
@@ -6645,6 +6667,8 @@ export interface components {
             limits: components["schemas"]["AssistantLimits"];
             /** @description API 1.54 (plan 29): the model thinks (its resolved thinking level is not off, or it always thinks); the drawer shows `Thinking… N s` while a model call runs. False when off or no provider */
             thinks: boolean;
+            /** @description API 1.65: the model sees images (its provider's preset `vision` matches the model): attached and @-picked images go to it directly; false (a text-only model, a provider with no preset, off): it uses look_at, and the drawer says so once when you attach */
+            sees: boolean;
         };
         /** @description what the parked turn waits on: actions for the tab `client_id` to run, cards (ids of card entries) to answer */
         AssistantPending: {
@@ -6700,6 +6724,8 @@ export interface components {
              * @enum {string}
              */
             steer?: "waiting" | "read" | "next";
+            /** @description API 1.65, a user entry: the images attached to it (AssistantPost.takes), in order; absent when none */
+            takes?: string[];
         } & (unknown & unknown & unknown);
         AssistantThreadDetail: components["schemas"]["AssistantThread"] & {
             /** @description the newest 200, oldest first */
@@ -6709,9 +6735,11 @@ export interface components {
             /** @constant */
             kind: "message";
             client_id: components["schemas"]["AssistantClientId"];
-            /** @description trimmed; blank = 422 */
+            /** @description trimmed; blank = 422. From 1.65 it may hold [[take:<id>]] refs (a take picked with @), shown as chips */
             text: string;
             screen: components["schemas"]["AssistantScreen"];
+            /** @description from 1.65: images you attached (pasted, dropped or picked with the paperclip, uploaded first): your own ready takes, else 422 `takes: <id> is not one of your takes`; shown above your words (contracts/README.md, Assistant: media and vision) */
+            takes?: string[];
         } | {
             /** @constant */
             kind: "results";
@@ -6811,6 +6839,28 @@ export interface components {
              * @description null before the first PUT
              */
             updated_at: string | null;
+            /**
+             * @description from 1.66: the chat window of `provider` and `model` (each model keeps its own; 60000 until set): past 70% of it the oldest half of a chat folds into a running summary (contracts/README.md, Assistant: context and cache)
+             * @default 60000
+             */
+            window_tokens?: number;
+        };
+        /** @description from 1.66: the prompt cache hit rate of the assistant's model calls per provider and model */
+        AssistantCacheStats: {
+            /** @description the window counted (30) */
+            days: number;
+            models: {
+                provider: string;
+                model: string;
+                /** @description model calls that reported their cache hits */
+                calls: number;
+                /** @description their prompt tokens */
+                prompt_tokens: number;
+                /** @description of those, read from the provider's cache */
+                hit_tokens: number;
+                /** @description hit_tokens / prompt_tokens; null with no prompt tokens */
+                hit_rate: number | null;
+            }[];
         };
         AssistantSettingsPut: {
             enabled: boolean;
@@ -6821,6 +6871,8 @@ export interface components {
             search_provider?: string | null;
             /** @description absent = unchanged */
             limits?: components["schemas"]["AssistantLimits"];
+            /** @description from 1.66: the chat window of the provider and model this PUT sets; absent = unchanged */
+            window_tokens?: number;
         };
         /** @description from 1.15: a custom node a pack registered (registry key pipelines.engine.custom) */
         CustomNode: {
@@ -11439,6 +11491,29 @@ export interface operations {
             403: components["responses"]["AdminRequired"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioAdminGetAssistantCache: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the hit rate per model */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantCacheStats"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["AdminRequired"];
             503: components["responses"]["Unavailable"];
         };
     };

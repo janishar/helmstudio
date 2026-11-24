@@ -101,7 +101,7 @@ func TestBrokenScanKeepsASkillOn(t *testing.T) {
 	}
 }
 
-// API 1.65: turning a plugin that starts itself on writes host_settings <host>.plugins with its name; off empties it;
+// API 1.67: turning a plugin that starts itself on writes host_settings <host>.plugins with its name; off empties it;
 // the runner's registry plugins key shows as starting, running or Couldn't start.
 func TestPluginsToRun(t *testing.T) {
 	e := setup(t)
@@ -177,7 +177,7 @@ func TestPluginsToRun(t *testing.T) {
 	}
 }
 
-// API 1.65: for a plugin that starts itself the built-in wins; your copy is never used and the row says so.
+// API 1.67: for a plugin that starts itself the built-in wins; your copy is never used and the row says so.
 func TestBuiltInWinsForAPluginThatStartsItself(t *testing.T) {
 	e := setup(t)
 	builtIn, user := t.TempDir(), t.TempDir()

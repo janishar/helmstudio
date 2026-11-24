@@ -138,6 +138,18 @@ func Run() error {
 			}
 			return reply, err
 		},
+		// the assistant's prompt cache hits: the same 5 s (API 1.66)
+		assistantCache: func(ctx context.Context, req message.AssistantCacheRequest) (message.AssistantCacheReply, error) {
+			var reply message.AssistantCacheReply
+			body, _ := json.Marshal(req)
+			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+			answer, err := natsConn.RequestWithContext(ctx, message.SubjectAssistantCache, body)
+			if err == nil {
+				err = json.Unmarshal(answer.Data, &reply)
+			}
+			return reply, err
+		},
 		remoteModels:  env.RemoteModels,
 		pluginDirs:    env.PluginDirs,
 		userPluginDir: env.UserPluginDir,

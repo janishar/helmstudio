@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"regexp"
 	"slices"
 	"strings"
@@ -92,6 +93,31 @@ type AssistantSettings struct {
 	Limits         AssistantLimits `json:"limits"`
 	RemoteEnabled  bool            `json:"remote_enabled"`
 	UpdatedAt      *time.Time      `json:"updated_at"`
+	WindowTokens   int             `json:"window_tokens"` // API 1.66: the chat window of provider and model
+	windows        map[string]int  // "<provider>/<model>" → tokens (assistant_settings.windows)
+}
+
+// defaultWindow is a model's chat window before the admin sets its own (API 1.66).
+const defaultWindow = 60000
+
+// windowKey names a provider and model in assistant_settings.windows: the model by name, never "the default".
+func windowKey(provider, model string) string { return provider + "/" + model }
+
+// window is the chat window of a provider and model.
+func (s AssistantSettings) window(provider, model string) int {
+	return cmp.Or(s.windows[windowKey(provider, model)], defaultWindow)
+}
+
+// windowTokens is the window of the settings' provider and model, no model meaning the provider's default one.
+func (s AssistantSettings) windowTokens(ctx context.Context, tx pgx.Tx) (int, error) {
+	model := deref(s.Model)
+	if model == "" && s.Provider != nil {
+		err := tx.QueryRow(ctx, `SELECT default_model FROM providers WHERE name = $1`, *s.Provider).Scan(&model)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return 0, err
+		}
+	}
+	return s.window(deref(s.Provider), model), nil
 }
 
 // AssistantSettingsPut is PUT /admin/assistant's body.
@@ -102,6 +128,7 @@ type AssistantSettingsPut struct {
 	WebSearch      *bool            `json:"web_search"`
 	SearchProvider *string          `json:"search_provider"`
 	Limits         *AssistantLimits `json:"limits"`
+	WindowTokens   *int             `json:"window_tokens"` // API 1.66: absent = unchanged
 }
 
 // Validate checks the shape; the providers are checked by the service.
@@ -115,6 +142,8 @@ func (b *AssistantSettingsPut) Validate() string {
 		return "model must be a model name"
 	case b.SearchProvider != nil && !providerNameRe.MatchString(*b.SearchProvider):
 		return "search_provider must be a provider's name"
+	case b.WindowTokens != nil && (*b.WindowTokens < 8000 || *b.WindowTokens > 1000000):
+		return "window_tokens must be 8000 to 1000000"
 	case b.Limits != nil:
 		return b.Limits.check()
 	}
@@ -124,14 +153,17 @@ func (b *AssistantSettingsPut) Validate() string {
 // readAssistantSettings reads the settings row (off, with the default caps, before the first PUT).
 func readAssistantSettings(ctx context.Context, tx pgx.Tx) (AssistantSettings, error) {
 	out := AssistantSettings{Limits: defaultLimits()}
-	err := tx.QueryRow(ctx, `SELECT enabled, provider, model, web_search, search_provider, limits, updated_at
+	err := tx.QueryRow(ctx, `SELECT enabled, provider, model, web_search, search_provider, limits, updated_at, windows
 		FROM assistant_settings`).Scan(&out.Enabled, &out.Provider, &out.Model, &out.WebSearch, &out.SearchProvider,
-		&out.Limits, &out.UpdatedAt)
+		&out.Limits, &out.UpdatedAt, &out.windows)
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = nil
 	}
 	if err == nil {
 		err = ownChoice(ctx, tx, &out)
+	}
+	if err == nil {
+		out.WindowTokens, err = out.windowTokens(ctx, tx)
 	}
 	return out, err
 }
@@ -216,6 +248,13 @@ func (s *Service) PutAssistantSettings(ctx context.Context, caller common.Caller
 		if body.Limits != nil {
 			limits = *body.Limits
 		}
+		windows := maps.Clone(now.windows)
+		if windows == nil {
+			windows = map[string]int{}
+		}
+		if p, ok := find(body.Provider); ok && body.WindowTokens != nil {
+			windows[windowKey(p.Name, cmp.Or(deref(body.Model), p.DefaultModel))] = *body.WindowTokens
+		}
 		// API 1.61: an Only-you provider is the caller's own choice; the deployment's stays for everyone else
 		provider, model := body.Provider, body.Model
 		if p, ok := find(body.Provider); ok && p.OwnerID != nil {
@@ -232,17 +271,22 @@ func (s *Service) PutAssistantSettings(ctx context.Context, caller common.Caller
 		} else if _, err := tx.Exec(ctx, `DELETE FROM assistant_personal WHERE owner_id = $1`, caller.ID); err != nil {
 			return err
 		}
-		err = tx.QueryRow(ctx, `INSERT INTO assistant_settings (id, enabled, provider, model, web_search, search_provider, limits)
-			VALUES (true, $1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO UPDATE SET enabled = excluded.enabled,
+		err = tx.QueryRow(ctx, `INSERT INTO assistant_settings (id, enabled, provider, model, web_search, search_provider, limits,
+			windows) VALUES (true, $1, $2, $3, $4, $5, $6, $7) ON CONFLICT (id) DO UPDATE SET enabled = excluded.enabled,
 			provider = excluded.provider, model = excluded.model, web_search = excluded.web_search,
-			search_provider = excluded.search_provider, limits = excluded.limits, updated_at = clock_timestamp()
-			RETURNING enabled, provider, model, web_search, search_provider, limits, updated_at`,
-			*body.Enabled, provider, model, webSearch, body.SearchProvider, limits).Scan(&out.Enabled, &out.Provider,
-			&out.Model, &out.WebSearch, &out.SearchProvider, &out.Limits, &out.UpdatedAt)
+			search_provider = excluded.search_provider, limits = excluded.limits, windows = excluded.windows,
+			updated_at = clock_timestamp()
+			RETURNING enabled, provider, model, web_search, search_provider, limits, updated_at, windows`,
+			*body.Enabled, provider, model, webSearch, body.SearchProvider, limits, windows).Scan(&out.Enabled,
+			&out.Provider, &out.Model, &out.WebSearch, &out.SearchProvider, &out.Limits, &out.UpdatedAt, &out.windows)
 		if err != nil {
 			return err
 		}
-		return ownChoice(ctx, tx, &out)
+		if err = ownChoice(ctx, tx, &out); err != nil {
+			return err
+		}
+		out.WindowTokens, err = out.windowTokens(ctx, tx)
+		return err
 	})
 	out.RemoteEnabled = s.remoteOn
 	return out, err
@@ -255,6 +299,7 @@ type AssistantStatus struct {
 	WebSearch *string            `json:"web_search"`
 	Limits    AssistantLimits    `json:"limits"`
 	Thinks    bool               `json:"thinks"` // API 1.54 (plan 29): the model thinks (modelThinks)
+	Sees      bool               `json:"sees"`   // API 1.65: the model sees images (modelSees)
 }
 
 // AssistantProvider names where the model runs.
@@ -286,7 +331,10 @@ func (s *Service) assistantConfig(ctx context.Context, tx pgx.Tx) (AssistantStat
 		status.Enabled = true
 		status.Provider = &AssistantProvider{Title: cmp.Or(deref(p.Title), p.Name), Remote: p.Kind == "remote"}
 		status.Thinks = modelThinks(p.Preset, model, p.Thinking)
+		status.Sees = modelSees(p.Preset, model)
+		snap.Sees = status.Sees
 		snap.Source = map[string]any{"kind": p.Kind, "provider": p.Name, "model": model}
+		snap.WindowTokens = set.window(p.Name, model)
 		if p.Kind == "server" {
 			snap.Source["host"] = deref(p.Host)
 		}
@@ -327,9 +375,10 @@ type AssistantEntry struct {
 	Card  json.RawMessage `json:"card,omitempty"`
 	Error json.RawMessage `json:"error,omitempty"`
 	Steer *string         `json:"steer,omitempty"` // API 1.59: waiting, read or next (a message sent while a turn worked)
+	Takes []string        `json:"takes,omitempty"` // API 1.65: a user entry's attached images
 }
 
-const entryCols = `id::text, turn, kind, at, text, line, card, error, steer`
+const entryCols = `id::text, turn, kind, at, text, line, card, error, steer, takes::text[]`
 
 // threadRow is an assistant_threads row.
 type threadRow struct {
@@ -696,14 +745,15 @@ type AssistantPost struct {
 	Results  []AssistantResult `json:"results"`
 	CardID   *string           `json:"card_id"`
 	Answer   *string           `json:"answer"`
+	Takes    []string          `json:"takes"` // API 1.65: attached images (message only)
 	screen   *AssistantScreen
 }
 
 // Validate checks the body of its kind (every other field absent).
 func (b *AssistantPost) Validate() string {
 	has := map[string]bool{"text": b.Text != nil, "screen": b.Screen != nil, "turn": b.Turn != nil, "results": b.Results != nil,
-		"card_id": b.CardID != nil, "answer": b.Answer != nil}
-	allowed, known := map[string][]string{"message": {"text", "screen"}, "results": {"turn", "results", "screen"},
+		"card_id": b.CardID != nil, "answer": b.Answer != nil, "takes": b.Takes != nil}
+	allowed, known := map[string][]string{"message": {"text", "screen", "takes"}, "results": {"turn", "results", "screen"},
 		"answer": {"card_id", "answer"}, "continue": {}, "stop": {}}[b.Kind]
 	if !known {
 		return "kind must be message, results, answer, continue or stop"
@@ -739,6 +789,13 @@ func (b *AssistantPost) Validate() string {
 			return "text must be 1-4000 characters"
 		case b.screen == nil:
 			return "screen is required"
+		case len(b.Takes) > 8 || len(slices.Compact(slices.Sorted(slices.Values(b.Takes)))) < len(b.Takes):
+			return "takes: at most 8, none twice"
+		}
+		for _, id := range b.Takes {
+			if !utility.IsUUID(id) {
+				return "takes: each a take id"
+			}
 		}
 	case "results":
 		if b.Turn == nil || *b.Turn < 1 || len(b.Results) < 1 || len(b.Results) > 30 {
@@ -848,7 +905,7 @@ func (s *Service) PostAssistant(ctx context.Context, caller common.Caller, id st
 			actions = body.screen.Actions
 		}
 		roles := cleanRoles(caller.Roles)
-		lookAt := false
+		lookAt := status.Sees // API 1.65: a model that sees looks itself, no ask run
 		if _, ok := s.askWorkflow(); ok && *status.Limits.LookAtPerHour > 0 {
 			lookAt = true
 		}
@@ -863,8 +920,19 @@ func (s *Service) PostAssistant(ctx context.Context, caller common.Caller, id st
 			} else if n := *status.Limits.MessagesPerMinute; recent >= n {
 				return network.NewTooManyRequestsError(fmt.Sprintf("at most %d messages a minute", n), nil)
 			}
-			messageID := utility.NewID()
-			input["message_id"], input["text"], input["screen"] = messageID, *body.Text, body.Screen
+			if len(body.Takes) > 0 {
+				var stray string
+				err := tx.QueryRow(ctx, `SELECT x::text FROM unnest($1::uuid[]) WITH ORDINALITY AS u(x, i)
+					WHERE NOT EXISTS (SELECT 1 FROM takes WHERE id = x AND owner_id = $2 AND deleted_at IS NULL AND ready)
+					ORDER BY i LIMIT 1`, body.Takes, t.OwnerID).Scan(&stray)
+				if err == nil {
+					return network.NewUnprocessableError("takes: "+stray+" is not one of your takes", nil)
+				} else if !errors.Is(err, pgx.ErrNoRows) {
+					return err
+				}
+			}
+			messageID, said := utility.NewID(), withTakes(*body.Text, body.Takes)
+			input["message_id"], input["text"], input["screen"] = messageID, said, body.Screen
 			input["at"] = time.Now().UTC().Format(time.RFC3339Nano)
 			// steer (API 1.59): from the tab running the turn, while it works or runs that tab's actions, the message
 			// joins the running answer; `next` keeps the turn it starts if the answer ends before reading it
@@ -877,8 +945,8 @@ func (s *Service) PostAssistant(ctx context.Context, caller common.Caller, id st
 					Actions: append([]string{}, actions...), Settings: snap, Input: map[string]any{"kind": "message", "screen": body.Screen},
 					Plugins: plugins, Skills: skills}
 				entry, err := one[AssistantEntry](ctx, tx, `INSERT INTO assistant_entries (id, thread_id, owner_id, key, turn, kind, text,
-					steer, next) VALUES ($1, $2, $3, $4, $5, 'user', $6, 'waiting', $7) RETURNING `+entryCols,
-					utility.NewID(), t.ID, t.OwnerID, "message:"+messageID, t.Turn, *body.Text, toJSON(next))
+					steer, next, takes) VALUES ($1, $2, $3, $4, $5, 'user', $6, 'waiting', $7, $8::uuid[]) RETURNING `+entryCols,
+					utility.NewID(), t.ID, t.OwnerID, "message:"+messageID, t.Turn, *body.Text, toJSON(next), nilIfEmpty(body.Takes))
 				if err == nil {
 					err = putAssistantEvent(ctx, tx, t.ID, t.OwnerID, map[string]any{"type": "entry", "entry": entry})
 				}
@@ -887,7 +955,7 @@ func (s *Service) PostAssistant(ctx context.Context, caller common.Caller, id st
 				}
 				out.Entry, out.Steer = &entry, true
 				return messaging.Enqueue(ctx, tx, messaging.Command{JobID: t.ID, OwnerID: t.OwnerID, MsgID: fmt.Sprintf("%s:steer:%s", t.ID, messageID),
-					Data: message.AssistantSteer{ThreadID: t.ID, Turn: t.Turn, SteerID: messageID, Text: *body.Text, At: input["at"].(string)}})
+					Data: message.AssistantSteer{ThreadID: t.ID, Turn: t.Turn, SteerID: messageID, Text: said, At: input["at"].(string)}})
 			}
 			if wait != nil { // parked on a tab that went away: what it waits on never ran
 				results := []map[string]any{}
@@ -908,10 +976,17 @@ func (s *Service) PostAssistant(ctx context.Context, caller common.Caller, id st
 			if err != nil {
 				return err
 			} else if len(steers) > 0 {
-				text := []rune(strings.Join(append(steers, *body.Text), "\n\n"))
-				input["text"] = string(text[max(0, len(text)-4000):]) // the newest words win
+				text := []rune(strings.Join(append(steers, said), "\n\n"))
+				input["text"] = string(text[max(0, len(text)-maxTurnText):]) // the newest words win
 			}
 			entry, err := putEntry(ctx, tx, t, "message:"+messageID, turn, "user", body.Text, nil, nil, nil)
+			if err == nil && len(body.Takes) > 0 { // API 1.65: its images, the entry sent again with them
+				entry, err = one[AssistantEntry](ctx, tx, `UPDATE assistant_entries SET takes = $3::uuid[] WHERE thread_id = $1
+					AND key = $2 RETURNING `+entryCols, t.ID, "message:"+messageID, body.Takes)
+				if err == nil {
+					err = putAssistantEvent(ctx, tx, t.ID, t.OwnerID, map[string]any{"type": "entry", "entry": entry})
+				}
+			}
 			if err != nil {
 				return err
 			}
@@ -1106,7 +1181,7 @@ func nextFromSteers(ctx context.Context, tx pgx.Tx, t threadRow) error {
 		return err
 	}
 	data.ThreadID, data.Turn = t.ID, t.Turn+1
-	data.Input["message_id"], data.Input["text"] = utility.NewID(), cutRunes(strings.Join(texts, "\n\n"), 4000)
+	data.Input["message_id"], data.Input["text"] = utility.NewID(), cutRunes(strings.Join(texts, "\n\n"), maxTurnText)
 	data.Input["at"] = time.Now().UTC().Format(time.RFC3339Nano)
 	if _, err := tx.Exec(ctx, `UPDATE assistant_threads SET turn = $2, state = 'working', pending = NULL, roles = $3, actions = $4,
 		caps = '{"model_calls": 0, "tool_calls": 0, "memory_writes": 0}', last_message_at = clock_timestamp(), summarized_at = NULL,
@@ -1117,22 +1192,46 @@ func nextFromSteers(ctx context.Context, tx pgx.Tx, t threadRow) error {
 		Data: data})
 }
 
+// maxTurnText is a turn's or steer's text to pipelines: the user's 4000 characters and their images' line (API 1.65).
+const maxTurnText = 4400
+
+// withTakes is a message's text as pipelines reads it (API 1.65): its attached images as a last line of refs.
+func withTakes(text string, takes []string) string {
+	if len(takes) == 0 {
+		return text
+	}
+	refs := make([]string, len(takes))
+	for i, id := range takes {
+		refs[i] = "[[take:" + id + "]]"
+	}
+	return text + "\n\n(attached: " + strings.Join(refs, " ") + ")"
+}
+
+// nilIfEmpty is NULL for no takes.
+func nilIfEmpty(ids []string) any {
+	if len(ids) == 0 {
+		return nil
+	}
+	return ids
+}
+
 // takeSteers sets the thread's waiting steers to steer (next or read), at now, and sends them; their texts in order
 // and the last one's kept command.
 func takeSteers(ctx context.Context, tx pgx.Tx, t threadRow, steer string) ([]string, json.RawMessage, error) {
 	type steerRow struct {
-		Key  string
-		Text string
-		Next json.RawMessage
+		Key   string
+		Text  string
+		Next  json.RawMessage
+		Takes []string
 	}
-	rows, err := collect[steerRow](ctx, tx, `SELECT key, text, next FROM assistant_entries WHERE thread_id = $1
+	rows, err := collect[steerRow](ctx, tx, `SELECT key, text, next, takes::text[] FROM assistant_entries WHERE thread_id = $1
 		AND steer = 'waiting' ORDER BY at, id`, t.ID)
 	if err != nil || len(rows) == 0 {
 		return nil, nil, err
 	}
 	texts := []string{}
 	for _, r := range rows {
-		texts = append(texts, r.Text)
+		texts = append(texts, withTakes(r.Text, r.Takes))
 		entry, err := one[AssistantEntry](ctx, tx, `UPDATE assistant_entries SET steer = $3, at = clock_timestamp()
 			WHERE thread_id = $1 AND key = $2 RETURNING `+entryCols, t.ID, r.Key, steer)
 		if err == nil {
@@ -1310,4 +1409,52 @@ func (s *Service) DeleteAssistantMemory(ctx context.Context, caller common.Calle
 	}
 	_, err := s.askAssistantMemory(ctx, caller, message.AssistantMemoryRequest{Op: "delete", ItemID: id})
 	return err
+}
+
+// ------------------------------------------------------------------ cache (pipelines.assistant.cache, API 1.66)
+
+// AssistantCacheAsk asks pipelines for the prompt cache hits per provider and model; an error is no answer.
+type AssistantCacheAsk func(ctx context.Context, req message.AssistantCacheRequest) (message.AssistantCacheReply, error)
+
+// SetAssistantCache sets how the service reaches the hit rate; without one GET /admin/assistant/cache answers 503.
+func (s *Service) SetAssistantCache(fn AssistantCacheAsk) { s.assistantCache = fn }
+
+// cacheDays is the window GET /admin/assistant/cache counts.
+const cacheDays = 30
+
+// AssistantCacheModel is one provider and model's hits and their rate (null with no prompt tokens).
+type AssistantCacheModel struct {
+	message.AssistantCacheModel
+	HitRate *float64 `json:"hit_rate"`
+}
+
+// AssistantCacheStats is GET /admin/assistant/cache.
+type AssistantCacheStats struct {
+	Days   int                   `json:"days"`
+	Models []AssistantCacheModel `json:"models"`
+}
+
+// GetAssistantCache is GET /admin/assistant/cache: the last 30 days' hit rate per provider and model.
+func (s *Service) GetAssistantCache(ctx context.Context, caller common.Caller) (AssistantCacheStats, error) {
+	if !caller.IsAdmin() {
+		return AssistantCacheStats{}, errAdmin
+	}
+	unavailable := network.NewServiceUnavailableError("the pipeline service did not answer; try again", nil)
+	if s.assistantCache == nil {
+		return AssistantCacheStats{}, unavailable
+	}
+	reply, err := s.assistantCache(ctx, message.AssistantCacheRequest{Days: cacheDays})
+	if err != nil || reply.Code != "" {
+		return AssistantCacheStats{}, unavailable
+	}
+	out := AssistantCacheStats{Days: cacheDays, Models: []AssistantCacheModel{}}
+	for _, m := range reply.Models {
+		row := AssistantCacheModel{AssistantCacheModel: m}
+		if m.PromptTokens > 0 {
+			rate := min(float64(m.HitTokens)/float64(m.PromptTokens), 1)
+			row.HitRate = &rate
+		}
+		out.Models = append(out.Models, row)
+	}
+	return out, nil
 }

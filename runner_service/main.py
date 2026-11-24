@@ -321,7 +321,7 @@ async def main() -> None:
     idle = asyncio.create_task(idle_unload(consumer, host, stop)) if residency else None
     side = [asyncio.create_task(t) for t in (*side_jobs, settings.watch(js, stop), rescans(stop))]
     plugins = None
-    if config.PLUGINS:  # this host's plugins that start themselves (API 1.65)
+    if config.PLUGINS:  # this host's plugins that start themselves (API 1.67)
         plugins_kv = await js.key_value("registry")
 
         async def put_plugins(value: dict) -> None:

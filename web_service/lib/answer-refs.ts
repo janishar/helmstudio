@@ -74,3 +74,15 @@ export const refText = (text: string) =>
     (_, k: string, id: string) =>
       refTitles.get(`${k}:${id}`) ?? (id === "?" ? `unknown ${k}` : `a ${k}`),
   );
+
+/** The `@word` the caret is at the end of (item 7: the @ picker opens on it), or null. */
+export function atQuery(text: string, caret: number): { start: number; q: string } | null {
+  const m = /(^|\s)@([^\s@]{0,40})$/.exec(text.slice(0, caret));
+  return m ? { start: caret - m[2].length - 1, q: m[2] } : null;
+}
+
+/** The box's text as sent: each picked take's `[title]` becomes its ref `[[take:<id>]]` (the box never shows an id);
+ * one the user edited away stays text. */
+export function withPicks(text: string, picks: { label: string; id: string }[]): string {
+  return picks.reduce((t, p) => t.replace(`[${p.label}]`, `[[take:${p.id}]]`), text);
+}

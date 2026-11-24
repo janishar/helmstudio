@@ -12,7 +12,7 @@ services:
       STUDIO_PLUGINS_DIRS: /plugins:/fake-plugins
     # API 1.64: a test ~/.helm/plugins, never the real one
     volumes: [../contract_tests/fake_plugins:/fake-plugins:ro, ../contract_tests/fake_helm/plugins:/helm-plugins:ro]
-  # API 1.65: the fake runner supervises the fake plugins that start themselves (fake-run, fake-crash), logs in a test
+  # API 1.67: the fake runner supervises the fake plugins that start themselves (fake-run, fake-crash), logs in a test
   # HELM_HOME inside the container, never the real ~/.helm
   runner:
     environment:

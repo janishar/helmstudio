@@ -3,7 +3,7 @@
   "title": "Fake run",
   "version": "0.1.0",
   "kind": "assistant-tools",
-  "description": "Test stack only: a tiny service the fake runner starts while it is on (API 1.65).",
+  "description": "Test stack only: a tiny service the fake runner starts while it is on (API 1.67).",
   "author": "contract_tests",
   "may_do": ["Start a test service in the fake runner"],
   "url": "http://runner:8471",

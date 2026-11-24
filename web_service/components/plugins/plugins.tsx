@@ -479,7 +479,7 @@ function PluginPanel({
               type="button"
               className={CHIP}
               onClick={() =>
-                // on while on: the runner starts it again at once, its backoff reset (API 1.65 retry)
+                // on while on: the runner starts it again at once, its backoff reset (API 1.67 retry)
                 void api
                   .PUT("/v1/studio/admin/plugins/{plugin}", {
                     ...path(p.name),

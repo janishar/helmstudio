@@ -61,10 +61,10 @@ type manifest struct {
 	Format      *int                  `json:"format,omitempty"`  // API 1.64, a skill's
 	When        string                `json:"when,omitempty"`    // API 1.64, a skill's
 	Recipes     []recipe              `json:"recipes,omitempty"` // API 1.64, a skill's
-	Run         *manifestRun          `json:"run,omitempty"`     // API 1.65: it starts itself
+	Run         *manifestRun          `json:"run,omitempty"`     // API 1.67: it starts itself
 }
 
-// manifestRun is plugins/manifest.schema.json run (API 1.65): the runner reads cmd from its own copy; studio only
+// manifestRun is plugins/manifest.schema.json run (API 1.67): the runner reads cmd from its own copy; studio only
 // checks it and the host.
 type manifestRun struct {
 	Cmd  []string `json:"cmd"`
@@ -270,7 +270,7 @@ func (s *Service) pluginDTOs(ctx context.Context, caller common.Caller, rows []p
 		if r.Blocked != "" {
 			p.Status = r.Blocked
 		}
-		var run *registry.PluginRun // API 1.65: what its runner says
+		var run *registry.PluginRun // API 1.67: what its runner says
 		live := false               // a runner of its host is up
 		if m.Run != nil {
 			p.Starts = &dto.PluginStarts{Host: m.Run.host()}
@@ -360,7 +360,7 @@ func (s *Service) PutPlugin(ctx context.Context, caller common.Caller, name stri
 				return network.NewConflictError(name+" can't be read", nil)
 			}
 		}
-		// API 1.65: on while on is Try again: the runner starts it again at once (settings.retry, the nonce it reads)
+		// API 1.67: on while on is Try again: the runner starts it again at once (settings.retry, the nonce it reads)
 		if _, err := tx.Exec(ctx, `UPDATE plugins SET settings = CASE WHEN enabled AND $2 THEN jsonb_set(settings, '{retry}',
 			to_jsonb(COALESCE((settings->>'retry')::int, 0) + 1)) ELSE settings END, enabled = $2,
 			updated_at = clock_timestamp() WHERE name = $1`, name, *body.Enabled); err != nil {
@@ -376,7 +376,7 @@ func (s *Service) PutPlugin(ctx context.Context, caller common.Caller, name stri
 		return dto.Plugin{}, errNotFound
 	}
 	log.Printf("plugin %s turned %s by %s", name, map[bool]string{true: "on", false: "off"}[*body.Enabled], caller.ID)
-	s.publishRuns(ctx) // API 1.65: on starts it, off stops it
+	s.publishRuns(ctx) // API 1.67: on starts it, off stops it
 	list, err := s.pluginDTOs(ctx, caller, rows)
 	return list[0], err
 }
@@ -387,7 +387,7 @@ func (s *Service) RemovePlugin(ctx context.Context, caller common.Caller, name s
 	if !caller.IsAdmin() {
 		return errAdmin
 	}
-	defer s.publishRuns(ctx) // API 1.65: a removed plugin stops
+	defer s.publishRuns(ctx) // API 1.67: a removed plugin stops
 	return common.System(ctx, s.db, func(tx pgx.Tx) error {
 		if _, err := one[struct{ Name string }](ctx, tx, `SELECT name FROM plugins WHERE name = $1 FOR UPDATE`, name); err != nil {
 			return err

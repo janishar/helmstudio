@@ -164,7 +164,7 @@ describe("pick one (frame 11)", () => {
     const cards = within(group).getAllByRole("button");
     expect(cards.map((c) => c.textContent)).toEqual([
       "1Fix a partRepaint the hands in the keyframe",
-      "2Shot 2Elias at the window, Biscuit at his feetBest next",
+      "2Shot 2Best nextElias at the window, Biscuit at his feet",
       "3Shot 3 keyframeThe empty chair, morning light",
     ]);
     expect(cards[1].className).toContain("rec");

@@ -3,7 +3,7 @@
   "title": "Fake crash",
   "version": "0.1.0",
   "kind": "assistant-tools",
-  "description": "Test stack only: a service that stops at once, so the runner reports Couldn't start (API 1.65).",
+  "description": "Test stack only: a service that stops at once, so the runner reports Couldn't start (API 1.67).",
   "author": "contract_tests",
   "may_do": ["Fail to start in the fake runner"],
   "url": "http://runner:8472",

@@ -696,10 +696,10 @@ type Registry struct {
 	hosts     map[string]Host                 // "<host>.<env>" → its state
 	awaiting  map[string]bool                 // watched buckets whose current values have not all arrived yet
 	custom    []CustomNode                    // pipelines.engine.custom: the custom nodes pipelines' packs register (API 1.15)
-	plugins   map[string]map[string]PluginRun // "<host>.<env>" → the plugins its runner runs, by name (API 1.65)
+	plugins   map[string]map[string]PluginRun // "<host>.<env>" → the plugins its runner runs, by name (API 1.67)
 }
 
-// PluginRun is one plugin a host's runner runs (registry.schema.json plugins, API 1.65).
+// PluginRun is one plugin a host's runner runs (registry.schema.json plugins, API 1.67).
 type PluginRun struct {
 	State    string    `json:"state"` // starting | running | failed | stopped
 	Detail   *string   `json:"detail,omitempty"`
@@ -911,7 +911,7 @@ func (r *Registry) SetRegistry(key string, value []byte) error {
 			return err
 		}
 		r.custom = parsed.Nodes
-	case "plugins": // API 1.65
+	case "plugins": // API 1.67
 		if value == nil {
 			delete(r.plugins, source)
 			return nil

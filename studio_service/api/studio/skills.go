@@ -294,7 +294,7 @@ func (s *Service) readManifests(ctx context.Context) (map[string]foundPlugin, []
 			case !seen:
 				out[found.M.Name] = found
 			case mine.Origin == "yours" && (found.M.Run != nil || mine.M.Run != nil):
-				// API 1.65: a plugin that starts itself runs the built-in's command (the runner takes the built-in
+				// API 1.67: a plugin that starts itself runs the built-in's command (the runner takes the built-in
 				// folder first): your copy is never used, so a dropped folder can't swap the command under one that is on
 				why := "Can't replace a built-in that starts itself; using built in"
 				found.Problem = &why
@@ -322,7 +322,7 @@ func (s *Service) readManifests(ctx context.Context) (map[string]foundPlugin, []
 func (s *Service) ScanPlugins(ctx context.Context) ([]string, error) {
 	s.scanMu.Lock() // Rescan and the watch never unpack or write at once
 	defer s.scanMu.Unlock()
-	defer s.publishRuns(ctx) // API 1.65: what should run follows what was found
+	defer s.publishRuns(ctx) // API 1.67: what should run follows what was found
 	found, busy := s.readManifests(ctx)
 	added := []string{}
 	err := common.System(ctx, s.db, func(tx pgx.Tx) error {
@@ -508,7 +508,7 @@ func assistantSkills(ctx context.Context, tx pgx.Tx) ([]message.TurnSkill, error
 	return out, err
 }
 
-// publishRuns writes KV host_settings <host>.plugins (API 1.65, registry.schema.json plugin_runs): per host, the plugins
+// publishRuns writes KV host_settings <host>.plugins (API 1.67, registry.schema.json plugin_runs): per host, the plugins
 // that are on, usable and start themselves there, by name. Every host written before is written again (an empty list
 // stops them). Errors are logged: the next change or start writes it again.
 func (s *Service) publishRuns(ctx context.Context) {

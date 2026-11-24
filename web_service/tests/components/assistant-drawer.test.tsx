@@ -60,6 +60,7 @@ const user = { id: "u1", email: "u@x.test", name: "U", roles: ["user"] } as unkn
 const status = (remote = false, thinks = false): S<"AssistantStatus"> => ({
   enabled: true,
   thinks,
+  sees: false,
   provider: { title: "DeepSeek", remote },
   web_search: null,
   limits: {
@@ -289,7 +290,7 @@ describe("a turn's actions in this tab", () => {
     expect(card.textContent).toContain("uses the GPU");
     expect(screen.getByText("Set Lighting: Blue hour")).toBeTruthy();
     expect(screen.getByText("Waiting for your OK · Generate")).toBeTruthy();
-    expect(screen.getByText("Waiting for you")).toBeTruthy();
+    expect(screen.getByText("Waiting")).toBeTruthy();
     expect(yes).not.toHaveBeenCalled();
     expect(posts).toHaveLength(0);
     // Undo names its line, on hover and to screen readers (alpha.2 item 23, board frame 14c)
@@ -1454,18 +1455,34 @@ describe("alpha.2: size, answers that read well, polish (board frames 9, 10, 14)
     expect(setPlayhead).toHaveBeenCalledWith({ at_s: 26 }, expect.anything());
   });
 
-  it("a long answer stops at 3 lines with More", async () => {
+  it("an older long reply stops at 3 lines with one chevron for the whole bubble; the latest shows in full (board frame 17)", async () => {
     const tall = vi
       .spyOn(HTMLElement.prototype, "scrollHeight", "get")
       .mockImplementation(function (this: HTMLElement) {
-        return this.className === "clamp" ? 200 : 0;
+        return this.className.startsWith("clamp") ? 200 : 0;
       });
-    serve({ existing: thread(), entries: [entry(1, { kind: "assistant", text: "Five shots…" })] });
+    serve({
+      existing: thread(),
+      entries: [
+        entry(1, { kind: "assistant", text: "Opening Create…" }),
+        entry(2, { kind: "assistant", text: "Five shots…" }),
+        entry(3, { kind: "user", text: "Now shot 2" }),
+        entry(4, { kind: "assistant", text: "Shot 2 is set." }),
+      ],
+    });
     await openDrawer();
-    const more = await screen.findByRole("button", { name: "More" });
-    expect(more.getAttribute("aria-expanded")).toBe("false");
-    fireEvent.click(more);
-    expect(screen.getByRole("button", { name: "Less" }).getAttribute("aria-expanded")).toBe("true");
+    const show = await screen.findByRole("button", { name: "Show all" });
+    // one control for the older reply, not one per answer; the latest reply always shows in full
+    expect(screen.getAllByRole("button", { name: "Show all" })).toHaveLength(1);
+    expect(screen.getByText("Shot 2 is set.").closest(".unclamp")).toBeTruthy();
+    expect(screen.getByText("Opening Create…").closest(".clamp")).toBe(
+      screen.getByText("Five shots…").closest(".clamp"),
+    );
+    expect(show.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(show);
+    expect(screen.getByRole("button", { name: "Show less" }).getAttribute("aria-expanded")).toBe(
+      "true",
+    );
     expect(screen.getByText("Five shots…").closest(".unclamp")).toBeTruthy();
     tall.mockRestore();
   });

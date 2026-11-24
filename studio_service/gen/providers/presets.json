@@ -21,6 +21,7 @@
           }
         }
       ],
+      "vision": "(llava|vision|-vl|vl:|gemma3(:latest)?$|gemma-?3[-:]?(4|12|27)b|minicpm-v|moondream)",
       "docs": "https://docs.ollama.com/api/openai-compatibility",
       "note": "Listens on port 11434 and ignores the key. Fetch lists the models you pulled."
     },
@@ -30,6 +31,7 @@
       "kind": "server",
       "base_url": "http://host.docker.internal:1234/v1",
       "models": [],
+      "vision": "(llava|vision|-vl|gemma-?3[-:]?(4|12|27)b|pixtral|minicpm-v)",
       "docs": "https://lmstudio.ai/docs/developer/openai-compat",
       "note": "Start its server (port 1234). Fetch lists the models it has."
     },
@@ -39,6 +41,7 @@
       "kind": "server",
       "base_url": "http://host.docker.internal:9931/v1",
       "models": [],
+      "vision": "(llava|vision|-vl|gemma-?3[-:]?(4|12|27)b|pixtral|minicpm-v)",
       "docs": "https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md",
       "note": "Default port 9931: change the port if you started it with --port. A key file is optional (--api-key)."
     },
@@ -81,6 +84,7 @@
           }
         }
       ],
+      "vision": "^gpt-(4o|4\\.[15]|4-turbo|[5-9])",
       "docs": "https://developers.openai.com/api/docs/models",
       "note": "The OpenAI API itself."
     },
@@ -93,6 +97,7 @@
       "key_secret": "anthropic",
       "compat": {"temperature": false, "strict_schema": true, "headers": {"anthropic-version": "2023-06-01"}},
       "thinking": [{"match": "^claude-[a-z]+-5", "always": true}],
+      "vision": "^claude-",
       "docs": "https://platform.claude.com/docs/en/api/openai-sdk",
       "note": "Partial: Claude's OpenAI layer is for testing."
     },
@@ -113,6 +118,7 @@
           }
         }
       ],
+      "vision": "^gemini-",
       "docs": "https://ai.google.dev/gemini-api/docs/openai",
       "note": "Partial: the OpenAI layer is in beta; thinking stays on for Gemini 3 and 4."
     },
@@ -129,6 +135,7 @@
       ],
       "key_secret": "openrouter",
       "thinking": "models",
+      "vision": "^(openai/gpt-(4o|4\\.[15]|4-turbo|[5-9])|anthropic/claude-|google/gemini-)",
       "docs": "https://openrouter.ai/docs/quickstart",
       "note": "About 480 models: filter the Fetch list. Ids carry the maker's prefix."
     },
@@ -159,6 +166,7 @@
           }
         }
       ],
+      "vision": "llama-4",
       "docs": "https://console.groq.com/docs/openai",
       "note": "Temperature 0 is sent as 1e-8."
     },
@@ -184,6 +192,7 @@
           "levels": {"off": {"reasoning_effort": "none"}, "on": {"reasoning_effort": "high"}}
         }
       ],
+      "vision": "^(mistral-(small|medium)-(latest|250[3-9]|251|2[6-9])|pixtral)",
       "docs": "https://docs.mistral.ai/api",
       "note": "The -latest aliases of its examples."
     },
@@ -203,9 +212,10 @@
           }
         }
       ],
+      "vision": "^claude-(sonnet|opus|haiku)$",
       "plugin": "claude-code-bridge",
       "docs": "https://code.claude.com/docs/en/legal-and-compliance.md",
-      "note": "Plugins only: the personal bridge's thinking levels (claude -p --effort)."
+      "note": "Plugins only: the personal bridge's thinking levels (claude -p --effort); it passes images to Claude."
     }
   ]
 }

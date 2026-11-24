@@ -1,4 +1,4 @@
-"""The fake-run plugin's service (test stack only, API 1.65): the fake runner starts it while the plugin is on.
+"""The fake-run plugin's service (test stack only, API 1.67): the fake runner starts it while the plugin is on.
 GET /health and POST /tools/ping on 0.0.0.0:8471 (inside the fake runner's container)."""
 
 import json

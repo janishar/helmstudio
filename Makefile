@@ -121,7 +121,7 @@ UV_RUN_native := run
 HEALTH_PORT_torch := 8091   # each runner's GET /health on 0.0.0.0 (envs on one Mac need their own ports)
 HEALTH_PORT_mlx := 8092
 HEALTH_PORT_native := 8093
-# API 1.65: the native runner starts the plugins that start themselves (the repo's plugins/, then ~/.helm/plugins)
+# API 1.67: the native runner starts the plugins that start themselves (the repo's plugins/, then ~/.helm/plugins)
 PLUGINS_native := RUNNER_PLUGINS=on RUNNER_PLUGINS_DIRS=$(CURDIR)/plugins:$${HELM_HOME:-$$HOME/.helm}/plugins
 
 runners: runner-torch runner-mlx runner-native  ## the native runners in the background (needs make up, or make prod with STACK=prod); make runners-stop stops them
@@ -153,7 +153,7 @@ runners-stop:     ## stops the native runners (each by its pid file; only a proc
 	@for env in torch mlx native; do f=$(RUN_DIR)/runner-mac-$$env.pid; pid=$$(cat $$f 2>/dev/null) || continue; \
 	if ps -p $$pid -o command= | grep -q 'uv run'; then kill $$pid && echo "stopped runner $$env ($$pid)"; \
 	else echo "runner $$env ($$pid) is not running"; fi; rm -f $$f; done
-	@# API 1.65: plugin groups a killed runner left (pid = group), only while the process's cwd is that plugin's folder
+	@# API 1.67: plugin groups a killed runner left (pid = group), only while the process's cwd is that plugin's folder
 	@for f in $${HELM_HOME:-$$HOME/.helm}/run/*.pid; do [ -f "$$f" ] || continue; pid=$$(cat $$f); n=$$(basename $$f .pid); \
 	if [ -n "$$(ps -o command= -p $$pid)" ] && lsof -a -d cwd -p $$pid -Fn | grep -q "/plugins/$$n$$"; then \
 	kill -TERM -- -$$pid && echo "stopped plugin $$n ($$pid)"; fi; rm -f $$f; done

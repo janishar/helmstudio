@@ -82,6 +82,10 @@ func (c *controller) mountAssistant(group *gin.RouterGroup) {
 		out, err := c.service.GetAssistantSettings(ctx.Request.Context(), common.MustCaller(ctx))
 		reply(ctx, http.StatusOK, out, err)
 	})
+	group.GET("/admin/assistant/cache", func(ctx *gin.Context) {
+		out, err := c.service.GetAssistantCache(ctx.Request.Context(), common.MustCaller(ctx))
+		reply(ctx, http.StatusOK, out, err)
+	})
 	group.PUT("/admin/assistant", func(ctx *gin.Context) {
 		caller := common.MustCaller(ctx)
 		if !caller.IsAdmin() {

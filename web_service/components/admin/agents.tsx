@@ -5,7 +5,8 @@
 // pack, greyed while no host has it) · Remote (an enabled provider of Model providers: a remote one sends the prompt
 // out and needs the deployment's switch, a local server is "on this network"). Plan 25 (29.9): the Assistant box is
 // closed until its row's Edit, which opens it, marks the row and focuses its first field (Cancel or Save closes it);
-// Session names' Edit marks its row and moves focus to the panel beside.
+// Session names' Edit marks its row and moves focus to the panel beside. API 1.66 (board "Context and cache", owner
+// 2026-11-25): the chosen model's chat window in the Assistant box, and the prompt cache hits per model below it.
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ErrorNote, Info } from "@/components/kit";
@@ -19,9 +20,11 @@ type Names = S<"SessionNames">;
 type Settings = S<"AssistantSettings">;
 type Limits = S<"AssistantLimits">;
 type Provider = S<"Provider">;
+type Cache = S<"AssistantCacheStats">;
 type Mode = Names["mode"];
 
 const LOCAL = "Qwen3.8 27B";
+const WINDOW = 60000; // a model's chat window until set (AssistantSettings.window_tokens default)
 
 /** The model providers a job may pick: enabled servers, and remote ones while the deployment's switch is on. */
 export const pickable = (ps: Provider[], remoteOn: boolean) =>
@@ -61,18 +64,21 @@ export function AgentsAdmin() {
   }, [editing]);
   // assistant-tools plugins that are on: their tools reach every chat (web search now comes from one)
   const [tools, setTools] = useState<S<"Plugin">[]>([]);
+  const [cache, setCache] = useState<Cache | null>(null);
   const load = useCallback(() => {
     Promise.all([
       ok(api.GET("/v1/studio/admin/session-names")),
       ok(api.GET("/v1/studio/admin/providers")),
       ok(api.GET("/v1/studio/admin/assistant")),
       ok(api.GET("/v1/studio/admin/plugins")).catch(() => null),
+      ok(api.GET("/v1/studio/admin/assistant/cache")).catch(() => null),
     ])
-      .then(([n, p, a, pl]) => {
+      .then(([n, p, a, pl, c]) => {
         setNames(n);
         setAssistant(a);
         setProviders(p.providers);
         setTools((pl?.plugins ?? []).filter((x) => x.kind === "assistant-tools" && x.enabled));
+        setCache(c);
         setError("");
       })
       .catch((e) => setError(message(e)));
@@ -262,6 +268,7 @@ export function AgentsAdmin() {
             onClose={closeAssistant}
           />
         )}
+        {cache && <CachePanel cache={cache} providers={providers} />}
       </main>
       {names && (
         <NamesPanel
@@ -511,10 +518,14 @@ function AssistantPanel({
   const [sName, setSName] = useState(settings.search_provider ?? search[0]?.name ?? "");
   const sp = search.find((x) => x.name === sName) ?? search[0];
   const [caps, setCaps] = useState(() => capsText(settings.limits));
+  // the window of the saved provider and model; another model's is unknown here, so the field is sent only once edited
+  const [win, setWin] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   // "" = its default_model (sent as null)
   const chosenModel = p?.models.includes(model) && model !== p.default_model ? model : "";
+  // the provider and model the settings were saved with: their window is settings.window_tokens
+  const saved = p?.name === settings.provider && (chosenModel || null) === (settings.model ?? null);
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -532,6 +543,7 @@ function AssistantPanel({
               limits: Object.fromEntries(
                 CAPS.map(([k]) => [k, Number(caps[k])]),
               ) as unknown as Limits,
+              ...(win !== null && { window_tokens: Number(win) }),
             },
           }),
         ),
@@ -620,6 +632,31 @@ function AssistantPanel({
               <span className="text-[12px] text-t2">Set per model in Model providers.</span>
             )}
           </div>
+          <div className={field}>
+            <label htmlFor="a-win" className="label flex items-center">
+              Chat window, tokens
+              <Info>
+                The model&apos;s real limit. Past 70% the oldest half of a chat folds once into a
+                short summary, so plans and decisions stay. A smaller window costs less per answer.
+              </Info>
+            </label>
+            <input
+              id="a-win"
+              className="in"
+              type="number"
+              min={8000}
+              max={1000000}
+              required
+              value={win ?? (saved ? settings.window_tokens : WINDOW) ?? WINDOW}
+              onChange={(e) => setWin(e.target.value)}
+            />
+          </div>
+          <span className="self-end pb-[9px] text-[12px] text-t2">
+            for {chosenModel || p?.default_model} · {WINDOW} until set
+          </span>
+          <span className="col-span-2 text-[12px] text-t2">
+            Each model keeps its own. Past 70% the oldest half folds into a summary.
+          </span>
         </div>
       ) : (
         <span className="text-[13px] text-t2">
@@ -721,5 +758,80 @@ function AssistantPanel({
         </button>
       </div>
     </form>
+  );
+}
+
+/** Below the Assistant box: the prompt cache hits per model over the last 30 days (a model with no prompt tokens is
+ * not listed). */
+function CachePanel({ cache, providers }: { cache: Cache; providers: Provider[] }) {
+  const rows = cache.models.filter((m) => m.prompt_tokens > 0);
+  const cell = "border-b border-s3 p-2.5 align-middle";
+  return (
+    <section aria-labelledby="cache-h" className="flex flex-col gap-2">
+      <h2 id="cache-h" className="text-[12px] font-normal text-t2">
+        Prompt cache, last {cache.days} days
+      </h2>
+      <div className="panel overflow-auto px-2 py-1.5">
+        {rows.length ? (
+          <table className="w-full border-collapse text-[13px]">
+            <thead>
+              <tr className="text-left text-[11px] tracking-[0.04em] text-t2">
+                <th scope="col" className="border-b border-s3 p-2.5 font-semibold">
+                  Model
+                </th>
+                <th scope="col" className="border-b border-s3 p-2.5 font-semibold">
+                  Calls
+                </th>
+                <th scope="col" className="border-b border-s3 p-2.5 font-semibold">
+                  <span className="flex items-center">
+                    Cache hits
+                    <Info>
+                      The share of prompt tokens the provider read from its cache, as each reply
+                      reported. Hits cost less. A model whose replies report none is not listed.
+                    </Info>
+                  </span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((m) => {
+                const pr = providers.find((x) => x.name === m.provider);
+                const pct = Math.round((m.hit_rate ?? m.hit_tokens / m.prompt_tokens) * 100);
+                return (
+                  <tr key={`${m.provider}/${m.model}`}>
+                    <td className={`${cell} mono text-[12px]`}>
+                      {pr ? titleOf(pr) : m.provider} · {m.model}
+                    </td>
+                    <td className={`${cell} mono text-[12px]`}>
+                      {m.calls.toLocaleString("en-US")}
+                    </td>
+                    <td className={cell}>
+                      <span className="flex items-center gap-2">
+                        <span
+                          className="h-1.5 flex-[0_0_96px] overflow-hidden rounded-full bg-s4"
+                          role="meter"
+                          aria-label={`Cache hits, ${m.model}`}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuenow={pct}
+                        >
+                          <span className="block h-full bg-a1" style={{ width: `${pct}%` }} />
+                        </span>
+                        <b className="font-semibold">{pct}%</b>
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        ) : (
+          <p className="m-0 p-2.5 text-[13px] text-t2">
+            No cache hits reported yet. They show here once the assistant&apos;s replies report
+            them.
+          </p>
+        )}
+      </div>
+    </section>
   );
 }

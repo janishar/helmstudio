@@ -45,11 +45,14 @@ export function Options({
             onClick={() => void send(o.title)}
           >
             <span className="kbd">{i + 1}</span>
-            <span className={`min-w-0${o.best && !off ? " pr-16" : ""}`}>
-              <b>{o.title}</b>
+            <span className="min-w-0 flex-1">
+              {/* the tag sits beside the title, so the line below keeps the card's full width */}
+              <span className="flex items-start gap-2">
+                <b className="min-w-0 flex-1">{o.title}</b>
+                {o.best && !off && <span className="tag">Best next</span>}
+              </span>
               {o.line && <small>{o.line}</small>}
             </span>
-            {o.best && !off && <span className="tag">Best next</span>}
             {on && <Check size={14} strokeWidth={2.5} aria-hidden className="ml-auto shrink-0" />}
           </button>
         );

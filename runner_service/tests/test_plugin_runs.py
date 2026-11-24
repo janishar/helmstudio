@@ -1,4 +1,4 @@
-"""messaging.plugin_runs: plugins that start themselves (API 1.65), with tiny python scripts as plugins, no NATS."""
+"""messaging.plugin_runs: plugins that start themselves (API 1.67), with tiny python scripts as plugins, no NATS."""
 
 import asyncio
 import json

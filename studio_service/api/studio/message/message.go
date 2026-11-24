@@ -714,6 +714,9 @@ type AssistantSettings struct {
 	Providers map[string]map[string]any `json:"providers"`
 	Search    *string                   `json:"search"`
 	Limits    json.RawMessage           `json:"limits"`
+	Sees      bool                      `json:"sees,omitempty"` // API 1.65: the model sees images
+	// WindowTokens is the source model's chat window (API 1.66); 0 (absent) = pipelines' default
+	WindowTokens int `json:"window_tokens,omitempty"`
 }
 
 // Type is cmd.assistant.turn.
@@ -790,6 +793,30 @@ type AssistantMemoryItem struct {
 	ThreadID  *string `json:"thread_id"`
 	CreatedAt string  `json:"created_at"`
 	UpdatedAt string  `json:"updated_at"`
+}
+
+// SubjectAssistantCache is pipelines' request/reply subject for the assistant's prompt cache hits (API 1.66).
+const SubjectAssistantCache = "pipelines.assistant.cache"
+
+// AssistantCacheRequest is a pipelines.assistant.cache request.
+type AssistantCacheRequest struct {
+	Days int `json:"days"`
+}
+
+// AssistantCacheModel is one provider and model's model calls that reported their hits.
+type AssistantCacheModel struct {
+	Provider     string `json:"provider"`
+	Model        string `json:"model"`
+	Calls        int64  `json:"calls"`
+	PromptTokens int64  `json:"prompt_tokens"`
+	HitTokens    int64  `json:"hit_tokens"`
+}
+
+// AssistantCacheReply is its reply: models, or {error, code}.
+type AssistantCacheReply struct {
+	Models []AssistantCacheModel `json:"models"`
+	Error  string                `json:"error"`
+	Code   string                `json:"code"`
 }
 
 // AssistantMemoryReply is its reply: items and counts, item, deleted, or {error, code}.

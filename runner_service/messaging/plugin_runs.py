@@ -1,4 +1,4 @@
-"""Plugins that start themselves (contracts/README.md, Plugins: starts itself; API 1.65), only with RUNNER_PLUGINS on.
+"""Plugins that start themselves (contracts/README.md, Plugins: starts itself; API 1.67), only with RUNNER_PLUGINS on.
 
 Every POLL seconds this reads KV host_settings key <host>.plugins (the names studio wants running; missing = none) and
 keeps each one's `run.cmd` running from its own folder in RUNNER_PLUGINS_DIRS (first folder wins a name; a real folder,

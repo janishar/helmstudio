@@ -288,8 +288,10 @@
     z-index: -1;
     pointer-events: none;
     background: var(--s4);
-    -webkit-mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 100' preserveAspectRatio='none'><rect x='1' y='14' width='2' height='72' rx='1'/><rect x='5' y='14.5' width='2' height='71' rx='1'/><rect x='9' y='16.5' width='2' height='67' rx='1'/><rect x='13' y='7' width='2' height='86' rx='1'/><rect x='17' y='35' width='2' height='30' rx='1'/><rect x='21' y='35.5' width='2' height='29' rx='1'/><rect x='25' y='24.5' width='2' height='51' rx='1'/><rect x='29' y='32' width='2' height='36' rx='1'/><rect x='33' y='7.5' width='2' height='85' rx='1'/><rect x='37' y='7.5' width='2' height='85' rx='1'/><rect x='41' y='26.5' width='2' height='47' rx='1'/><rect x='45' y='19' width='2' height='62' rx='1'/><rect x='49' y='38' width='2' height='24' rx='1'/><rect x='53' y='37' width='2' height='26' rx='1'/><rect x='57' y='12.5' width='2' height='75' rx='1'/><rect x='61' y='20.5' width='2' height='59' rx='1'/><rect x='65' y='9.5' width='2' height='81' rx='1'/><rect x='69' y='11' width='2' height='78' rx='1'/><rect x='73' y='38.5' width='2' height='23' rx='1'/><rect x='77' y='28' width='2' height='44' rx='1'/><rect x='81' y='30.5' width='2' height='39' rx='1'/><rect x='85' y='30' width='2' height='40' rx='1'/><rect x='89' y='2.5' width='2' height='95' rx='1'/><rect x='93' y='15' width='2' height='70' rx='1'/><rect x='97' y='21' width='2' height='58' rx='1'/><rect x='101' y='19.5' width='2' height='61' rx='1'/><rect x='105' y='44' width='2' height='12' rx='1'/><rect x='109' y='29' width='2' height='42' rx='1'/><rect x='113' y='16' width='2' height='68' rx='1'/><rect x='117' y='22' width='2' height='56' rx='1'/></svg>") left center / 120px 100% repeat-x;
-    mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 100' preserveAspectRatio='none'><rect x='1' y='14' width='2' height='72' rx='1'/><rect x='5' y='14.5' width='2' height='71' rx='1'/><rect x='9' y='16.5' width='2' height='67' rx='1'/><rect x='13' y='7' width='2' height='86' rx='1'/><rect x='17' y='35' width='2' height='30' rx='1'/><rect x='21' y='35.5' width='2' height='29' rx='1'/><rect x='25' y='24.5' width='2' height='51' rx='1'/><rect x='29' y='32' width='2' height='36' rx='1'/><rect x='33' y='7.5' width='2' height='85' rx='1'/><rect x='37' y='7.5' width='2' height='85' rx='1'/><rect x='41' y='26.5' width='2' height='47' rx='1'/><rect x='45' y='19' width='2' height='62' rx='1'/><rect x='49' y='38' width='2' height='24' rx='1'/><rect x='53' y='37' width='2' height='26' rx='1'/><rect x='57' y='12.5' width='2' height='75' rx='1'/><rect x='61' y='20.5' width='2' height='59' rx='1'/><rect x='65' y='9.5' width='2' height='81' rx='1'/><rect x='69' y='11' width='2' height='78' rx='1'/><rect x='73' y='38.5' width='2' height='23' rx='1'/><rect x='77' y='28' width='2' height='44' rx='1'/><rect x='81' y='30.5' width='2' height='39' rx='1'/><rect x='85' y='30' width='2' height='40' rx='1'/><rect x='89' y='2.5' width='2' height='95' rx='1'/><rect x='93' y='15' width='2' height='70' rx='1'/><rect x='97' y='21' width='2' height='58' rx='1'/><rect x='101' y='19.5' width='2' height='61' rx='1'/><rect x='105' y='44' width='2' height='12' rx='1'/><rect x='109' y='29' width='2' height='42' rx='1'/><rect x='113' y='16' width='2' height='68' rx='1'/><rect x='117' y='22' width='2' height='56' rx='1'/></svg>") left center / 120px 100% repeat-x;
+    -webkit-mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 100' preserveAspectRatio='none'><rect x='1' y='14' width='2' height='72' rx='1'/><rect x='5' y='14.5' width='2' height='71' rx='1'/><rect x='9' y='16.5' width='2' height='67' rx='1'/><rect x='13' y='7' width='2' height='86' rx='1'/><rect x='17' y='35' width='2' height='30' rx='1'/><rect x='21' y='35.5' width='2' height='29' rx='1'/><rect x='25' y='24.5' width='2' height='51' rx='1'/><rect x='29' y='32' width='2' height='36' rx='1'/><rect x='33' y='7.5' width='2' height='85' rx='1'/><rect x='37' y='7.5' width='2' height='85' rx='1'/><rect x='41' y='26.5' width='2' height='47' rx='1'/><rect x='45' y='19' width='2' height='62' rx='1'/><rect x='49' y='38' width='2' height='24' rx='1'/><rect x='53' y='37' width='2' height='26' rx='1'/><rect x='57' y='12.5' width='2' height='75' rx='1'/><rect x='61' y='20.5' width='2' height='59' rx='1'/><rect x='65' y='9.5' width='2' height='81' rx='1'/><rect x='69' y='11' width='2' height='78' rx='1'/><rect x='73' y='38.5' width='2' height='23' rx='1'/><rect x='77' y='28' width='2' height='44' rx='1'/><rect x='81' y='30.5' width='2' height='39' rx='1'/><rect x='85' y='30' width='2' height='40' rx='1'/><rect x='89' y='2.5' width='2' height='95' rx='1'/><rect x='93' y='15' width='2' height='70' rx='1'/><rect x='97' y='21' width='2' height='58' rx='1'/><rect x='101' y='19.5' width='2' height='61' rx='1'/><rect x='105' y='44' width='2' height='12' rx='1'/><rect x='109' y='29' width='2' height='42' rx='1'/><rect x='113' y='16' width='2' height='68' rx='1'/><rect x='117' y='22' width='2' height='56' rx='1'/></svg>")
+      left center / 120px 100% repeat-x;
+    mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 100' preserveAspectRatio='none'><rect x='1' y='14' width='2' height='72' rx='1'/><rect x='5' y='14.5' width='2' height='71' rx='1'/><rect x='9' y='16.5' width='2' height='67' rx='1'/><rect x='13' y='7' width='2' height='86' rx='1'/><rect x='17' y='35' width='2' height='30' rx='1'/><rect x='21' y='35.5' width='2' height='29' rx='1'/><rect x='25' y='24.5' width='2' height='51' rx='1'/><rect x='29' y='32' width='2' height='36' rx='1'/><rect x='33' y='7.5' width='2' height='85' rx='1'/><rect x='37' y='7.5' width='2' height='85' rx='1'/><rect x='41' y='26.5' width='2' height='47' rx='1'/><rect x='45' y='19' width='2' height='62' rx='1'/><rect x='49' y='38' width='2' height='24' rx='1'/><rect x='53' y='37' width='2' height='26' rx='1'/><rect x='57' y='12.5' width='2' height='75' rx='1'/><rect x='61' y='20.5' width='2' height='59' rx='1'/><rect x='65' y='9.5' width='2' height='81' rx='1'/><rect x='69' y='11' width='2' height='78' rx='1'/><rect x='73' y='38.5' width='2' height='23' rx='1'/><rect x='77' y='28' width='2' height='44' rx='1'/><rect x='81' y='30.5' width='2' height='39' rx='1'/><rect x='85' y='30' width='2' height='40' rx='1'/><rect x='89' y='2.5' width='2' height='95' rx='1'/><rect x='93' y='15' width='2' height='70' rx='1'/><rect x='97' y='21' width='2' height='58' rx='1'/><rect x='101' y='19.5' width='2' height='61' rx='1'/><rect x='105' y='44' width='2' height='12' rx='1'/><rect x='109' y='29' width='2' height='42' rx='1'/><rect x='113' y='16' width='2' height='68' rx='1'/><rect x='117' y='22' width='2' height='56' rx='1'/></svg>")
+      left center / 120px 100% repeat-x;
   }
   .seg {
     display: flex;
@@ -1183,6 +1185,15 @@
     line-height: 16px;
     color: var(--t2);
   }
+  .ast .src li {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    list-style-position: inside; /* the number stays visible inside the cut line */
+  }
+  .ast .msg ol.src {
+    padding-left: 0;
+  }
   .ast .mn {
     padding: 0 3px;
     border-radius: 5px;
@@ -1620,15 +1631,25 @@
   .ast .msg .al + .sum {
     margin-top: 6px;
   }
+  /* the expand / collapse chevron (board frame 17): a small round icon under the clamped text */
   .ast .mmore {
-    height: 20px;
-    padding: 0 4px;
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    margin: 4px auto 8px;
+    padding: 0;
     border: 0;
-    background: transparent;
-    color: var(--a2);
-    font-size: 11px;
-    font-weight: 600;
+    border-radius: 999px;
+    background: var(--s4);
+    color: var(--t1);
     box-shadow: none !important;
+  }
+  @media (pointer: coarse) {
+    .ast .mmore {
+      width: 44px;
+      height: 44px;
+    }
   }
   .ast .msg ul.md,
   .ast .msg ol {
@@ -1814,11 +1835,6 @@
     background: var(--s5);
   }
   /* skills (board frame 16): the @ picker above the composer, the Using skill line and its box */
-  .ast .pop.atp {
-    top: auto;
-    bottom: calc(100% + 6px);
-    left: 0;
-  }
   .ast .atq {
     display: flex;
     align-items: center;
@@ -1963,8 +1979,8 @@
 .ast .opts {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-top: 8px;
+  gap: 8px;
+  margin: 8px 0;
   white-space: normal;
 }
 .ast .opt {
@@ -1974,6 +1990,8 @@
   gap: 9px;
   width: 100%;
   box-sizing: border-box;
+  /* grows with its line: the general .opt (a 36 px choice chip) must not clip the card (owner, 2026-11-25) */
+  height: auto;
   min-height: 44px;
   padding: 8px 10px;
   border: 0;
@@ -2012,9 +2030,7 @@
   cursor: default;
 }
 .ast .opt .tag {
-  position: absolute;
-  right: 8px;
-  top: 8px;
+  flex: none;
   display: inline-flex;
   align-items: center;
   padding: 1px 7px;
@@ -2077,4 +2093,228 @@
 .ast .idc.gone i {
   background: transparent;
   color: var(--t2);
+}
+
+/* media in the chat (alpha.2 items 7, 8, 10; docs/mock/Assistant.dc.html frame 12) */
+.ast .pic {
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+.ast .att {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--t2);
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  box-shadow: none;
+}
+.ast .att:hover {
+  background: var(--s4);
+  color: var(--t1);
+}
+.ast .att-chip {
+  position: relative;
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  margin-bottom: 4px;
+  padding: 3px 4px 3px 3px;
+  border-radius: 9px;
+  background: var(--s4);
+  font-size: 11px;
+  color: var(--t1b);
+  white-space: nowrap;
+}
+.ast .cmp .att-chip {
+  margin-bottom: 0;
+}
+.ast .att-chip i {
+  width: 36px;
+  height: 24px;
+  border-radius: 6px;
+  display: block;
+  flex: 0 0 auto;
+  background-color: var(--ln);
+}
+.ast .att-chip .x {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  min-height: 20px;
+}
+.ast .med {
+  margin-top: 8px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--in);
+}
+.ast .med .pv {
+  position: relative;
+  display: block;
+  aspect-ratio: 16 / 9;
+  background-color: var(--ln);
+}
+.ast .med .mt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 4px 4px 10px;
+  font-size: 11px;
+  color: var(--t2);
+  white-space: nowrap;
+}
+.ast .med .mt > span {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--t1b);
+  font-size: 12px;
+}
+.ast .mb {
+  height: 28px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--s4);
+  color: var(--t1);
+  font-size: 11px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  box-shadow: none;
+}
+.ast .med .pop {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+.ast .ply {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--t1);
+  color: var(--g);
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  box-shadow: none;
+}
+.ast .vbar {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+.ast .vbar i {
+  flex: 1 1 auto;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.3);
+  display: block;
+  overflow: hidden;
+}
+.ast .vbar i b {
+  display: block;
+  height: 100%;
+  background: var(--a2);
+}
+.ast .wf {
+  flex: 1 1 auto;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.ast .wf span {
+  flex: 1 1 0;
+  border-radius: 2px;
+  background: var(--ln);
+}
+.ast .wf span.p {
+  background: var(--a2);
+}
+.ast .pop h4 {
+  margin: 4px 0 2px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--t2);
+}
+.ast .pr i {
+  width: 40px;
+  height: 26px;
+  border-radius: 6px;
+  flex: 0 0 auto;
+  background-color: var(--ln);
+  display: grid;
+  place-items: center;
+  font-style: normal;
+}
+.ast .pr span {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ast .pr small {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  color: var(--t2);
+}
+.ast .pr.on {
+  background: var(--s5);
+}
+/* the @ picker opens above the box, its width */
+.ast .pop.at {
+  top: auto;
+  bottom: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  max-height: min(340px, 50vh);
+  overflow-y: auto;
+}
+.ast .atq {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 10px;
+  background: var(--s2);
+  font-size: 12px;
+  color: var(--t2);
+}
+.ast .atq span {
+  color: var(--t1);
+}
+.ast .drop {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  height: 56px;
+  border-radius: 16px;
+  border: 2px dashed var(--a2);
+  color: var(--a2);
+  font-size: 12px;
+  font-weight: 600;
+  gap: 2px;
 }

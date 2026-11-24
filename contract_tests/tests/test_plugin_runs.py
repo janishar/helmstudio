@@ -1,4 +1,4 @@
-"""Plugins that start themselves (API 1.65; contracts/README.md "Plugins: starts itself") on the test stack: the fake
+"""Plugins that start themselves (API 1.67; contracts/README.md "Plugins: starts itself") on the test stack: the fake
 runner (host fake, RUNNER_PLUGINS on, HELM_HOME /tmp/helm in its container) supervises contract_tests/fake_plugins'
 fake-run (a tiny service on runner:8471) and fake-crash (exits at once). Turning a plugin on starts it, off stops it;
 one that keeps stopping is Couldn't start with its log's last line."""
