@@ -59,16 +59,20 @@ export function AgentsAdmin() {
     box?.scrollIntoView?.({ block: "nearest" });
     box?.querySelector<HTMLElement>("[role=switch], select, input")?.focus();
   }, [editing]);
+  // assistant-tools plugins that are on: their tools reach every chat (web search now comes from one)
+  const [tools, setTools] = useState<S<"Plugin">[]>([]);
   const load = useCallback(() => {
     Promise.all([
       ok(api.GET("/v1/studio/admin/session-names")),
       ok(api.GET("/v1/studio/admin/providers")),
       ok(api.GET("/v1/studio/admin/assistant")),
+      ok(api.GET("/v1/studio/admin/plugins")).catch(() => null),
     ])
-      .then(([n, p, a]) => {
+      .then(([n, p, a, pl]) => {
         setNames(n);
         setAssistant(a);
         setProviders(p.providers);
+        setTools((pl?.plugins ?? []).filter((x) => x.kind === "assistant-tools" && x.enabled));
         setError("");
       })
       .catch((e) => setError(message(e)));
@@ -249,6 +253,7 @@ export function AgentsAdmin() {
             settings={assistant}
             providers={pickable(providers, assistant.remote_enabled)}
             search={searchable(providers, assistant.remote_enabled)}
+            tools={tools}
             onSaved={(a) => {
               setAssistant(a);
               closeAssistant();
@@ -482,6 +487,7 @@ function AssistantPanel({
   settings,
   providers,
   search,
+  tools,
   onSaved,
   onClose,
 }: {
@@ -491,6 +497,8 @@ function AssistantPanel({
   providers: Provider[];
   /** enabled search providers while the switch is on */
   search: Provider[];
+  /** assistant-tools plugins that are on (the Web search plugin among them) */
+  tools: S<"Plugin">[];
   onSaved: (s: Settings) => void;
   /** Cancel: the box closes (it opens fresh from the saved settings) */
   onClose: () => void;
@@ -620,14 +628,26 @@ function AssistantPanel({
             : "No enabled server: add one in Model providers (remote models are off on this deployment)"}
         </span>
       )}
-      <div className="grid grid-cols-2 items-end gap-2">
+      {tools.length > 0 && (
+        <span className="flex flex-wrap items-center gap-x-2 text-[13px]">
+          <span className="ok" aria-hidden>
+            ✓
+          </span>
+          {tools.map((t) => t.title).join(" · ")}
+          <span className="text-t2">· on in Plugins; the Assistant asks before it sends anything off the machine</span>
+          <Link href="/plugins" className="underline underline-offset-2">
+            Plugins
+          </Link>
+        </span>
+      )}
+      <div className={`grid grid-cols-2 items-end gap-2 ${!search.length && tools.length ? "hidden" : ""}`}>
         <label
           aria-disabled={!search.length || undefined}
           title={
             search.length
               ? undefined
               : settings.remote_enabled
-                ? "Add a search provider in Model providers"
+                ? "Turn on the Web search plugin in Plugins, or add a search provider in Model providers"
                 : "remote models are off on this deployment"
           }
           className="flex min-h-[38px] items-center gap-2.5 text-[13px] aria-disabled:opacity-55"
