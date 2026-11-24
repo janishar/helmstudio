@@ -1974,7 +1974,7 @@ function Drawer({ a }: { a: AssistantApi }) {
         <>
           <div className="dh">
             {/* while a chip shows (Working, Waiting) it takes the title's place, so every button fits */}
-            <h2 aria-label="Assistant" className={chip ? "grow-0" : ""}>
+            <h2 aria-label="Assistant" className={chip ? "shrink-0 grow-0" : ""}>
               <Sparkles aria-hidden strokeWidth={2} />
               {!chip && <span className="truncate">Assistant</span>}
             </h2>
