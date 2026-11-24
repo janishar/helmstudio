@@ -256,7 +256,12 @@ test("j09 add a voice line on a new audio track", async () => {
   const composer = page.getByRole("region", { name: "New line" });
   await expect(composer).toBeVisible();
   await composer.getByLabel("Text to speak").fill("The harbour wakes before the town.");
-  // D1 (design gap): Generate line is on with no voice picked and then says "speak.voice: a voice is required"
+  // no voice yet (docs/mock/TimelineAudio.dc.html "No voice yet"): Generate line is off and says what to do
+  await expect(composer.getByRole("button", { name: /^Generate line/ })).toBeDisabled();
+  await expect(composer.getByRole("button", { name: /^Generate line/ })).toContainText(
+    "Pick a voice first",
+  );
+  await shot("j09-no-voice");
   await composer.getByRole("button", { name: /^Voice: / }).click();
   const voices = page.getByRole("dialog", { name: "Voice" });
   await voices.getByRole("button", { name: /^Ada/ }).click();
@@ -264,6 +269,7 @@ test("j09 add a voice line on a new audio track", async () => {
   await expect(voices).toBeHidden();
   await expect(composer.getByRole("button", { name: /^Voice: / })).toHaveAccessibleName(/Ada/);
   await shot("j09-new-line");
+  await expect(composer.getByRole("button", { name: /^Generate line/ })).toBeEnabled();
   await composer.getByRole("button", { name: /^Generate line/ }).click();
   await expect(a2.getByRole("button", { name: /^The harbour wakes/ })).toBeVisible({
     timeout: 60_000,

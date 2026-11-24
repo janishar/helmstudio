@@ -162,6 +162,7 @@ export function LineComposer({
   async function generate(): Promise<Started> {
     if (!workflow) return { error: "no voice workflow is installed" };
     if (!track) return { error: "no audio track is free at the playhead" };
+    if (noVoice) return { error: "pick a voice first" };
     setBusy(true);
     setError("");
     const id = newId(doc);
@@ -203,6 +204,9 @@ export function LineComposer({
   const places = cast.filter((x) => x.group !== "character");
   // the form as the assistant's card reads it; its Generate is this one
   const voiceNow = voiceField ? raw(voiceField) : null;
+  // a voice-over with its Voice tile empty (docs/mock/TimelineAudio.dc.html "No voice yet"): Generate line is off and
+  // says so; a dialogue keeps its own cast checks
+  const noVoice = !scriptField && !!voiceField && !!built?.errors[voiceField.key];
   const voiceText =
     voiceNow && typeof voiceNow === "object" && "voice_id" in voiceNow
       ? (voices?.find((v) => v.id === voiceNow.voice_id)?.name ?? "a voice")
@@ -396,6 +400,7 @@ export function LineComposer({
             raws={raws}
             onChange={(k, v) => setRaws((r) => ({ ...r, [k]: v }))}
             ctx={ctx}
+            ring={noVoice}
           />
         )}
         {langField && (
@@ -464,15 +469,25 @@ export function LineComposer({
         {/* bottom right even when the row wraps */}
         <button
           type="button"
-          className="key ml-auto flex h-12 flex-col items-center justify-center gap-px rounded-xl px-[22px] text-sm"
-          disabled={busy || !workflow || !track || !text.trim() || (!!voiceField && !voices)}
+          // greyed while it waits for a voice, as the board draws it
+          className={`key ml-auto flex h-12 flex-col items-center justify-center gap-px rounded-xl px-[22px] text-sm ${noVoice ? "cursor-not-allowed bg-s4 bg-none text-t2 opacity-100 shadow-none" : ""}`}
+          disabled={
+            busy || !workflow || !track || !text.trim() || (!!voiceField && !voices) || noVoice
+          }
+          title={noVoice ? "Pick a voice first" : undefined}
           onClick={() => void generate()}
         >
           <span>{busy ? "Starting…" : "Generate line"}</span>
           <span className="mono text-[11px] font-medium">
-            ≈ {Math.floor(Math.round(seconds) / 60)}:
-            {String(Math.round(seconds) % 60).padStart(2, "0")}
-            {gb != null && ` · ${Math.round(gb)} GB`}
+            {noVoice ? (
+              "Pick a voice first"
+            ) : (
+              <>
+                ≈ {Math.floor(Math.round(seconds) / 60)}:
+                {String(Math.round(seconds) % 60).padStart(2, "0")}
+                {gb != null && ` · ${Math.round(gb)} GB`}
+              </>
+            )}
           </span>
         </button>
       </div>

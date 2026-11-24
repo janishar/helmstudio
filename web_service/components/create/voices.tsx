@@ -115,11 +115,14 @@ export function VoiceTile({
   raws,
   onChange,
   ctx,
+  ring,
 }: {
   f: Field;
   raws: Record<string, Raw>;
   onChange: (key: string, raw: Raw) => void;
   ctx: VoiceCtx;
+  /** ringed to point at it (an empty voice that Generate waits for) */
+  ring?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const voices = useVoices();
@@ -134,7 +137,7 @@ export function VoiceTile({
         aria-haspopup="dialog"
         aria-label={`${label}: ${text}`}
         onClick={() => setOpen(true)}
-        className={tileClass("card")}
+        className={`${tileClass("card")} ${ring ? "outline-2 outline-offset-2 outline-a2" : ""}`}
       >
         <Mic size={18} strokeWidth={1.75} aria-hidden className="shrink-0" />
         <TileWords big="card" label={label} value={text} />
