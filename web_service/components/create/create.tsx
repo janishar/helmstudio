@@ -239,6 +239,9 @@ export type CreateInitial = {
   naming?: S<"SessionList">["naming"];
 };
 
+/** The browser's key of a session's half-written prompt ("" before the first session). */
+const draftKey = (session: string | null) => `create-draft:${session ?? ""}`;
+
 /** The Create screen; `initialSession` comes from `?s=`, `reuse` (a take id whose settings fill the form) from
  * `?reuse=`, `use` (a take to use in a workflow: the gallery's "Use in…") from `?use=&w=`, `initial` from the server
  * (without it, Create loads everything itself). */
@@ -281,7 +284,8 @@ export function Create({
   const [runs, setRuns] = useState<Run[] | null>(initial?.runs ?? null);
   const [takes, setTakes] = useState<Take[]>(initial?.takes ?? []);
   const [tracks, setTracks] = useState<Record<string, RunTrack>>({});
-  const [selected, setSelected] = useState<string | null>(null);
+  // Reuse settings shows the reused take on the stage, so the form and the picture match (owner, 2026-11-25)
+  const [selected, setSelected] = useState<string | null>(reuse ?? null);
   const [lastRun, setLastRun] = useState<string | null>(null); // the newest run Generate queued here
   const [full, setFull] = useState(false);
   const [comparing, setComparing] = useState(false);
@@ -596,6 +600,36 @@ export function Create({
   const layout = useMemo(() => (workflow ? studioView(workflow, all) : null), [workflow, all]);
   // the params whose `when` holds now: the others are neither shown nor sent
   const fields = visible(layout ? layout.shown : all, raws, all);
+  // a half-written prompt survives a reload (owner, 2026-11-25): kept in this browser per session (a reload starts
+  // with an empty leftForm), dropped once Generate sends it
+  const promptKey = all.find((f) => f.param.type === "text")?.key;
+  const draft = promptKey ? held[promptKey] : undefined;
+  const sentDraft = useRef<unknown>(undefined);
+  const draftRead = useRef(false);
+  useEffect(() => {
+    if (draftRead.current || !workflows) return;
+    draftRead.current = true;
+    if (back || reuse || use) return;
+    try {
+      const d = JSON.parse(localStorage.getItem(draftKey(sessionId)) ?? "null");
+      if (!d?.key || typeof d.text !== "string") return;
+      // only the words: the workflow follows the session as after any reload (its other inputs are not kept)
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- the browser store is only read in the browser
+      setRaws((h) => ({ ...h, [d.key]: d.text }));
+    } catch {
+      /* no storage here: the draft is not kept */
+    }
+  }, [workflows, back, reuse, use, sessionId]);
+  useEffect(() => {
+    if (!draftRead.current || !promptKey) return;
+    try {
+      if (typeof draft === "string" && draft.trim() && draft !== sentDraft.current)
+        localStorage.setItem(draftKey(sessionId), JSON.stringify({ key: promptKey, text: draft }));
+      else localStorage.removeItem(draftKey(sessionId));
+    } catch {
+      /* no storage here */
+    }
+  }, [draft, promptKey, sessionId]);
   // API 1.47 (contracts/README.md, Param rules): what studio would refuse, in red under its param before Generate,
   // which they block ("fix 2 problems"); an item field's line is its row's (MediaRows), studio's 422s after a send
   const rules = ruleErrors(workflow, all, raws, fields);
@@ -1102,6 +1136,13 @@ export function Create({
         queuedIds.push(run.id);
       }
       setReuseNote("");
+      sentDraft.current = prompt ? raws[prompt.key] : undefined;
+      try {
+        localStorage.removeItem(draftKey(sessionId));
+        localStorage.removeItem(draftKey(sid));
+      } catch {
+        /* no storage here */
+      }
       return { ids: queuedIds, error: "" };
     } catch (err) {
       // a dialogue's line errors go on its lines (API 1.32), the rest as before

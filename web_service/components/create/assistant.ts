@@ -22,6 +22,7 @@ import { deleteLora, renameLora } from "@/lib/lora-library";
 import { LOOK_GROUPS, lookGroupLabel, reasonOf, type Chosen, type Tile } from "@/lib/looks";
 import { downloaded } from "@/lib/models";
 import { machineReason, type AddonNeed, type Machine } from "@/lib/run-on";
+import { gridOf, secondsText } from "@/lib/media";
 import { clipOf } from "@/lib/video";
 import {
   aspectOf,
@@ -159,6 +160,13 @@ function change(c: CreateCtx, key: string, value: unknown): Outcome {
   const blocked = opts && optionBlocked(f, String(raw), c.fields, c.raws);
   if (blocked) return failed(`${label(f)}: ${blocked}`);
   const read = readValue(f.param, raw);
+  // a clip's length reads in seconds (owner, 2026-11-25); the model is also told the frames
+  const fps = f.param.type === "frames" ? clipOf(c.fields, c.raws)?.fps : undefined;
+  const max = gridOf(f.param).max;
+  if ("error" in read && fps && Number(raw) > max) {
+    const why = `${label(f)}: the longest is ${secondsText(max / fps)}`;
+    return failed(why, `${why} (${max} frames at ${fps} fps)`);
+  }
   if ("error" in read) return failed(`${label(f)}: ${read.error}`);
   const old = c.held[key];
   const before = String(c.raws[key] ?? "");
@@ -173,7 +181,9 @@ function change(c: CreateCtx, key: string, value: unknown): Outcome {
       ? `Wrote ${label(f).toLowerCase()}${added.length ? ` · added ${added.map((h) => `@${h}`).join(" ")}` : ""}`
       : typeof raw === "object"
         ? `Set ${label(f)}`
-        : `Set ${d.label}: ${d.value}`;
+        : fps && typeof read.value === "number"
+          ? `Set ${d.label}: ${secondsText(read.value / fps)}`
+          : `Set ${d.label}: ${d.value}`;
   return done(text, { undo: { undo: () => c.restore(key, old), redo: () => c.change(key, raw) } });
 }
 
@@ -382,7 +392,7 @@ export function createTools(c: CreateCtx): ScreenSpec {
       switchTo: ({ workflow }) => {
         const v = String(workflow).toLowerCase();
         const to = c.workflows?.find((x) => x.id === workflow || x.title.toLowerCase() === v);
-        if (!to) return failed(`Switch · no workflow ${String(workflow)}`);
+        if (!to) return failed(`${String(workflow)} is not installed. Get it in Models.`);
         if (!downloaded(c.modelList, to.family))
           return failed(`${to.title}: not downloaded · Models`);
         const from = w?.id;

@@ -606,7 +606,12 @@ class Assistant:
                 )
                 n, t = limits["model_calls_per_day"], limits["tokens_per_day"]
                 if r["n"] >= n:
-                    return _end("cap_day", f"You used today's {n} model calls.", midnight, n)
+                    return _end(
+                        "cap_day",
+                        f"You used today's {n} model call{'' if n == 1 else 's'}.",
+                        midnight,
+                        n,
+                    )
                 if r["t"] + tokens > t:
                     return _end("cap_tokens", f"You used today's {t:,} tokens.", midnight, t)
             else:

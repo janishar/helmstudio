@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
@@ -188,6 +189,18 @@ func namePrompt(reg *registry.Registry, run model.Run) string {
 	return text
 }
 
+// promptTitle is a session title from a prompt: its first 5 words, trailing punctuation dropped, the first letter
+// upper-cased, at most 60 characters ("old fisherman on a pier, at dawn" → "Old fisherman on a pier").
+func promptTitle(prompt string) string {
+	words := strings.Fields(prompt)
+	title := strings.TrimRight(strings.Join(words[:min(5, len(words))], " "), ",.;:!?-")
+	if r := []rune(title); len(r) > 0 {
+		r[0] = unicode.ToUpper(r[0])
+		title = strings.TrimSpace(string(r[:min(60, len(r))]))
+	}
+	return title
+}
+
 // askName writes cmd.pipeline.name in the transaction that made run succeed, when run is the session's first
 // succeeded Create run with a prompt, the session's title is nobody's and the setting names something usable; the
 // session is marked asked, so it is asked once.
@@ -198,6 +211,21 @@ func (p *Projector) askName(ctx context.Context, tx pgx.Tx, run model.Run) error
 	prompt := namePrompt(p.Workflows, run)
 	if prompt == "" {
 		return nil // the next run with a prompt may ask
+	}
+	// an Untitled session takes the prompt's first words at once (owner, 2026-11-25): with no namer it keeps them, a
+	// namer may still replace them (title_source prompt)
+	if title := promptTitle(prompt); title != "" {
+		tag, err := tx.Exec(ctx, `UPDATE sessions SET title = $2, title_source = 'prompt' WHERE id = $1 AND NOT name_asked
+			AND title_source = 'default'`, run.SessionID, title)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() > 0 {
+			if err = appendEvent(ctx, tx, run, "session", time.Now(),
+				map[string]any{"title": title, "title_source": "prompt", "named_by": nil}); err != nil {
+				return err
+			}
+		}
 	}
 	// marked first, whatever the setting: only the first succeeded run with a prompt may name (naming turned on later
 	// never names an older session)

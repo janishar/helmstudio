@@ -327,8 +327,11 @@ test("J3 use this image and create video through ltx 10 sec", async () => {
   );
   await say("use this image and create video through ltx 10 sec");
   await replied("LTX is not installed here, so I can't make it with LTX.");
-  await expect(line(/^Switch · no workflow LTX 2\.3$/)).toBeVisible();
-  expect(told(n)[1]).toContain("no workflow LTX 2.3"); // the model was told why, in the same words
+  // owner, 2026-11-25 (Q6): say why, with a link to Models
+  const ltx = line("LTX 2.3 is not installed. Get it in Models.");
+  await expect(ltx).toHaveText("LTX 2.3 is not installed. Get it in Models.");
+  await expect(ltx.getByRole("link", { name: "Models" })).toHaveAttribute("href", "/models");
+  expect(told(n)[1]).toContain("LTX 2.3 is not installed. Get it in Models."); // told the same words
   await shot("j03-ltx-not-here");
 
   // the same request on Echo image to video: First frame, 10 s (over the fake's 5 s), then the Generate card
@@ -360,6 +363,7 @@ test("J3 use this image and create video through ltx 10 sec", async () => {
   await expect(page.getByRole("button", { name: "First frame: a red fox in snow" })).toBeVisible();
   await expect(page.getByRole("tab", { name: "Video" })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByText("121 frames · 5.0 s").first()).toBeVisible(); // the form took 5 s
+  await expect(line("Set Length: 5.0 s")).toBeVisible(); // in seconds (owner, 2026-11-25, Q1)
   await expect(card.getByText("uses the GPU")).toBeVisible();
   await expect(drawer().getByText("Waiting for you", { exact: true })).toBeVisible();
   await shot("j03-generate-card");
@@ -376,6 +380,7 @@ test("J3 use this image and create video through ltx 10 sec", async () => {
   await shot("j03-clip-made");
 
   // 10 s on a model that makes at most 5 s: refused with the form's reason
+  const n2 = sent(MODEL).length;
   script(
     MODEL,
     {
@@ -386,7 +391,8 @@ test("J3 use this image and create video through ltx 10 sec", async () => {
   );
   await say("make it 10 seconds");
   await replied("This model makes at most 5 s.");
-  await expect(line(/^Length: /)).toBeVisible();
+  await expect(line(/^Length: /)).toHaveText("Length: the longest is 5.0 s"); // seconds, not the frame grid
+  expect(told(n2).join()).toContain("(121 frames at 24 fps)"); // the model still gets the frames
   await shot("j03-ten-seconds-refused");
 });
 
@@ -744,7 +750,7 @@ test("J11 a long request stops at the per-message cap, and a daily cap locks the
     await say("one more");
     const bar = drawer().getByRole("alert").filter({ hasText: "Daily limit reached" });
     await expect(bar).toBeVisible({ timeout: 30_000 });
-    await expect(bar).toContainText(/You used today's 1 model call/);
+    await expect(bar).toContainText("You used today's 1 model call."); // singular (owner, 2026-11-25)
     await expect(
       drawer().getByText("Your message is kept. The screen still works as usual."),
     ).toBeVisible();
@@ -842,10 +848,11 @@ test("J14 keyboard only: Cmd/Ctrl J, Enter, Tab to the header buttons, Escape", 
   expect([...names]).toEqual(expect.arrayContaining(["Memory", "New chat"]));
   expect([...names].some((x) => x.startsWith("Close ("))).toBe(true);
   await shot("j14-keyboard");
-  // Escape closes a drawer in most apps; the board names only Close and Cmd/Ctrl J
+  // Escape closes it while the focus is in it (owner, 2026-11-25, Q3)
   await box().focus();
   await page.keyboard.press("Escape");
-  await expect(drawer()).toBeVisible();
+  await expect(drawer()).toBeHidden();
+  await expect(dock()).toBeVisible();
 });
 
 test("J15 on a phone: a bottom sheet that shrinks to one line while it acts", async () => {

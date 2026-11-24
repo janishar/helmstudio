@@ -6,7 +6,7 @@
 // card's answer, the daily limit, a Remembered line's Undo, and model text that stays text.
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { useEffect, useState } from "react";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { api, type S } from "@/lib/api";
 import { ASSISTANT_CHANGED, done, type Handler } from "@/lib/assistant";
 import { answer } from "./helpers";
@@ -648,6 +648,45 @@ describe("other tabs, server cards, limits, memory", () => {
     expect(generate).not.toHaveBeenCalled();
     expect(push).not.toHaveBeenCalled();
     expect(posts).toHaveLength(0);
+  });
+
+  it("a not-installed line links to Models", async () => {
+    serve({
+      existing: thread(),
+      entries: [
+        entry(1, {
+          kind: "line",
+          line: {
+            id: id(0),
+            status: "failed",
+            text: "LTX 2.3 is not installed. Get it in Models.",
+            undo: false,
+          },
+        }),
+      ],
+    });
+    await openDrawer();
+    const lines = await screen.findByRole("list", { name: "What it did" });
+    const link = within(lines).getByRole("link", { name: "Models" });
+    expect(link.getAttribute("href")).toBe("/models");
+    expect(link.closest("li")?.textContent).toBe("LTX 2.3 is not installed. Get it in Models.");
+  });
+
+  it("Escape closes the drawer when focus is in it, but not while a dialog is open", async () => {
+    HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
+      this.open = true;
+    };
+    serve();
+    await openDrawer();
+    const drawer = () => screen.queryByRole("complementary", { name: "Assistant" });
+    fireEvent.click(screen.getByRole("button", { name: "Expand" }));
+    fireEvent.keyDown(screen.getByRole("dialog", { name: "Message" }), { key: "Escape" });
+    expect(drawer()).not.toBeNull();
+    screen.getByRole("dialog", { name: "Message" }).removeAttribute("open");
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Message the assistant" }), {
+      key: "Escape",
+    });
+    expect(drawer()).toBeNull();
   });
 
   it("shows **bold** as bold and drops `code` ticks", async () => {

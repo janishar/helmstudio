@@ -365,7 +365,7 @@ async def test_the_per_user_caps_keep_the_message(pool, fake):
         and step["error"]["resets_at"].endswith("T00:00:00Z")
         and step["error"]["limit"] == 1
     )
-    assert step["error"]["text"] == "You used today's 1 model calls." and len(c.asked()) == 1
+    assert step["error"]["text"] == "You used today's 1 model call." and len(c.asked()) == 1
     c.limits = dict(LIMITS, tokens_per_day=1000)  # the bound (prompt and 4096 out) is past it
     three = (await c.say("three"))["error"]
     assert three["code"] == "cap_tokens" and three["limit"] == 1000

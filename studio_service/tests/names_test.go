@@ -275,6 +275,28 @@ func TestSessionTitlesAndNaming(t *testing.T) {
 	if len(e.typed(e.finish(group, off, run, "succeeded"), "cmd.pipeline.name")) != 0 {
 		t.Fatal("off")
 	}
+	// with no namer an Untitled session takes its first prompt's first words (owner, 2026-11-25), with its event
+	fisher := e.call(userA, "POST", "/v1/studio/sessions", nil, 201)["id"].(string)
+	run = e.call(userA, "POST", "/v1/studio/sessions/"+fisher+"/runs", map[string]any{"workflow_id": "echo",
+		"inputs": map[string]any{"prompt.text": " old fisherman on a pier, at dawn"}}, 202)["id"].(string)
+	e.finish(group, fisher, run, "succeeded")
+	if got := e.call(userA, "GET", "/v1/studio/sessions/"+fisher, nil, 200); got["title"] != "Old fisherman on a pier" ||
+		source(got) != "prompt" {
+		t.Fatal(got)
+	}
+	var named []any
+	for _, item := range e.call(userA, "GET", "/v1/studio/sessions/"+fisher+"/events?since=0", nil, 200)["events"].([]any) {
+		if ev := item.(map[string]any); ev["type"] == "session" {
+			named = append(named, ev["data"])
+		}
+	}
+	if len(named) != 1 || named[0].(map[string]any)["title"] != "Old fisherman on a pier" ||
+		named[0].(map[string]any)["title_source"] != "prompt" {
+		t.Fatal(named)
+	}
+	if got := e.call(userA, "GET", "/v1/studio/sessions/"+off, nil, 200); got["title"] != "Owl" {
+		t.Fatal(got)
+	}
 	// naming turned on later never names a session past its first succeeded run
 	e.call(admin, "PUT", names, map[string]any{"mode": "remote", "provider": "ollama"}, 200)
 	run = e.call(userA, "POST", "/v1/studio/sessions/"+off+"/runs", map[string]any{"workflow_id": "echo",

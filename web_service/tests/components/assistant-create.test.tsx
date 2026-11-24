@@ -12,6 +12,7 @@ import coreNodes from "../../../contracts/fixtures/registry/nodes.valid.json";
 import { Create } from "@/components/create/create";
 import { Registry, ToolsContext } from "@/components/assistant/tools";
 import { idOf } from "@/components/create/form";
+import { leftForm } from "@/lib/workflow";
 import { asked, type Asked, type Outcome } from "@/lib/assistant";
 import { api, type S } from "@/lib/api";
 import { answer, take } from "./helpers";
@@ -30,6 +31,7 @@ beforeAll(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  localStorage.clear();
 });
 
 const schemas = Object.fromEntries(
@@ -93,6 +95,7 @@ function start({
   takes = [] as S<"Take">[],
   runs = [] as S<"Run">[],
   list = models as unknown,
+  reuse = undefined as string | undefined,
 } = {}) {
   const queued: Record<string, unknown>[] = [];
   const patches: unknown[] = [];
@@ -117,6 +120,9 @@ function start({
   });
   answer("POST", {
     "/v1/studio/runs/plan": () => ({ data: { host: "mac", peak_gb: 24, reason: null } }),
+    "/v1/studio/takes/{take_id}/reuse": () => ({
+      data: { workflow_id: workflow.id, inputs: { "prompt.text": "reused words" }, looks: [] },
+    }),
     "/v1/studio/sessions": () => {
       posts.push("session");
       return { status: 201, data: { id: "s2", title: "Untitled", created_at: "", updated_at: "" } };
@@ -159,6 +165,7 @@ function start({
   render(
     <ToolsContext value={reg}>
       <Create
+        reuse={reuse}
         initial={{
           sessions: [{ id: "s1", title: "Rain", created_at: "", updated_at: "" }],
           workflows: [workflow],
@@ -228,6 +235,28 @@ describe("Create's actions", () => {
     });
     expect(out(await call("change", { key: "model.variant", value: "dev" }))).toMatchObject({
       status: "failed",
+    });
+  });
+
+  it("says a clip's length in seconds; the longest refused in seconds, the model also told frames", async () => {
+    const { call } = start();
+    expect(out(await call("change", { key: "duration.frames", value: 121 }))).toMatchObject({
+      status: "done",
+      text: "Set Length: 5.0 s",
+    });
+    expect(out(await call("change", { key: "duration.frames", value: 401 }))).toMatchObject({
+      status: "failed",
+      text: "Length: the longest is 13.4 s",
+      error: "Length: the longest is 13.4 s (321 frames at 24 fps)",
+    });
+  });
+
+  it("an unknown workflow is not installed: get it in Models", async () => {
+    const { call } = start();
+    expect(out(await call("switchTo", { workflow: "LTX 2.3" }))).toMatchObject({
+      status: "failed",
+      text: "LTX 2.3 is not installed. Get it in Models.",
+      error: "LTX 2.3 is not installed. Get it in Models.",
     });
   });
 
@@ -321,6 +350,41 @@ describe("Create's actions", () => {
     cleanup();
     start();
     await waitFor(() => expect(box().value).toBe("a portrait at golden hour"));
+  });
+
+  it("keeps a half-written prompt over a reload, in this browser per session, until Generate", async () => {
+    // owner, 2026-11-25 (Q8): a reload dropped the draft
+    const box = () => document.getElementById(idOf("prompt.text")) as HTMLTextAreaElement;
+    const first = start();
+    await first.call("change", { key: "prompt.text", value: "a half-written prompt" });
+    cleanup();
+    leftForm.current = null; // a reload: memory is gone, the browser's storage stays
+    const again = start();
+    await waitFor(() => expect(box().value).toBe("a half-written prompt"));
+    const card = await again.call("generate");
+    if (!asked(card)) throw new Error("no card");
+    await act(() => card.yes());
+    expect(again.queued).toHaveLength(1);
+    cleanup();
+    leftForm.current = null;
+    start();
+    await waitFor(() => expect(box()).toBeTruthy());
+    expect(box().value).toBe("");
+  });
+
+  it("Reuse settings shows the reused take on the stage, not the newest", async () => {
+    // owner, 2026-11-25 (Q9): the form and the picture must match
+    const old = take({ session_id: "s1", title: "Old one" });
+    const newest = take({ session_id: "s1", title: "Newest", created_at: "2026-11-02T00:00:00Z" });
+    start({ takes: [newest, old], reuse: old.id });
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Take, Old one" }).getAttribute("aria-pressed"),
+      ).toBe("true"),
+    );
+    expect(screen.getByRole("button", { name: "Take, Newest" }).getAttribute("aria-pressed")).toBe(
+      "false",
+    );
   });
 
   it("seeds, select, star and stop; view and a new session; a template refuses rename and delete", async () => {

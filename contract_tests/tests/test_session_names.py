@@ -85,9 +85,24 @@ def test_an_untitled_session_is_named_once(api, admin, fake_server):
     )
     assert named["title"] == "Red fox at dusk" and named["named_by"] == "Fake server"
     events = ok(api.get(f"{STUDIO}/sessions/{sid}/events", params={"since": 0}))["events"]
-    assert [e["data"]["title"] for e in events if e["type"] == "session"] == ["Red fox at dusk"]
+    titled = [e["data"] for e in events if e["type"] == "session"]
+    # the prompt's first words at once (owner, 2026-11-25), then the namer's title
+    assert [d["title_source"] for d in titled] == ["prompt", "model"] and titled[-1]["title"] == "Red fox at dusk"
     # once per session: a rename stays, a later run asks nothing
     ok(api.patch(f"{STUDIO}/sessions/{sid}", json={"title": "Mine"}))
     again = start_run(api, sid, {"prompt.text": answer, **FAST})
     assert wait_run(api, again["id"])["status"] == "succeeded"
     assert ok(api.get(f"{STUDIO}/sessions/{sid}"))["title"] == "Mine"
+
+
+def test_with_no_namer_an_untitled_session_takes_its_first_words(api):
+    # owner, 2026-11-25: naming off (the default) names a New session from its first prompt's first ~5 words
+    sid = ok(api.post(f"{STUDIO}/sessions"), 201)["id"]
+    run = start_run(api, sid, {"prompt.text": "old fisherman on a pier, at dawn", **FAST})
+    assert wait_run(api, run["id"])["status"] == "succeeded"
+    s = ok(api.get(f"{STUDIO}/sessions/{sid}"))
+    assert (s["title"], s["title_source"], s["named_by"]) == ("Old fisherman on a pier", "prompt", None)
+    events = ok(api.get(f"{STUDIO}/sessions/{sid}/events", params={"since": 0}))["events"]
+    assert [e["data"] for e in events if e["type"] == "session"] == [
+        {"title": "Old fisherman on a pier", "title_source": "prompt", "named_by": None}
+    ]

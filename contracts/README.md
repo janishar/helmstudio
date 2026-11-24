@@ -3838,8 +3838,11 @@ Numbers in fixtures compare by value (1 = 1.0).
 - **When.** In the transaction that makes a session's **first succeeded** Create run terminal (lane interactive, no
   batch, not a naming run) studio writes `cmd.pipeline.name` when the setting is not off, the session's title is
   `default` or `prompt` and the session was never asked; it marks the session asked (`name_asked`) and never asks
-  again, whatever the answer. A run without a prompt (an upload, a clone with no text) asks nothing; the next one with
-  one does. A remote provider is skipped while the switch is off, and a disabled or deleted provider skips too.
+  again, whatever the answer. In the same transaction a `default` title becomes the prompt's first 5 words (trailing
+  punctuation dropped, first letter upper-cased; `title_source` prompt, with a `session` event), whatever the setting,
+  so a session is never left "Untitled" when no namer runs. A run without a prompt (an upload, a clone with no text)
+  asks nothing; the next one with one does. A remote provider is skipped while the switch is off, and a disabled or
+  deleted provider skips too.
 - **What is sent**: the run's prompt only, the workflow's first unwired text param (node id, then schema order) as
   typed, `<imageN>` tags removed, trimmed, cut to 2000 characters. Never images, references, other runs or the user's
   name.

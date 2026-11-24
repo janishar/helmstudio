@@ -5,6 +5,7 @@
 // tab that sent the message (others show it read-only with Continue here) and posts their results. Every text is
 // rendered as text: React escapes it, nothing is parsed as HTML.
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight,
@@ -523,7 +524,17 @@ function Lines({ lines, a }: { lines: Line[]; a: AssistantApi }) {
                     : ""
               }
             >
-              <Text text={l.text} />
+              {/ in Models\.$/.test(l.text) ? (
+                <>
+                  <Text text={l.text.slice(0, -"Models.".length)} />
+                  <Link href="/models" className="underline">
+                    Models
+                  </Link>
+                  .
+                </>
+              ) : (
+                <Text text={l.text} />
+              )}
             </span>
             {l.undo && (l.status === "done" || off) && a.canUndo(l) && !(off && l.memory_id) && (
               <button type="button" className="un" onClick={() => void a.toggleUndo(l)}>
@@ -1025,6 +1036,17 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
       role="complementary"
       aria-label="Assistant"
       style={phone && top !== null ? { top } : undefined}
+      // Escape closes it (owner, 2026-11-25) unless a dialog, menu or card is open; the work keeps going
+      onKeyDown={(e) => {
+        if (
+          e.key === "Escape" &&
+          !e.defaultPrevented &&
+          !memory &&
+          !a.cardWaits &&
+          !document.querySelector('dialog[open], [role="dialog"], [role="menu"]')
+        )
+          a.setOpen(false);
+      }}
     >
       {phone && <span className="grab" aria-hidden onPointerDown={drag} />}
       {memory ? (

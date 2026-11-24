@@ -117,6 +117,11 @@ test("j05 reuse its settings: Create opens with the same workflow and prompt", a
   await panel().getByRole("link", { name: "Reuse settings" }).click();
   await expect(page.getByRole("button", { name: /^Workflow: Echo\./ })).toBeVisible();
   await expect(prompt()).toHaveValue("a red fox in snow");
+  // the stage shows the reused take, so form and picture match (owner, 2026-11-25, Q9)
+  await expect(takes().getByRole("button", { name: /^Take, a red fox in snow/ })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
   await shot("j05-reused");
 });
 
@@ -175,13 +180,11 @@ test("j08 leave Create half-written and come back: my prompt is still there", as
   await shot("j08-form-kept");
 });
 
-test("j08b reload Create with a half-written prompt: is it still there?", async () => {
+test("j08b reload Create with a half-written prompt: it is still there", async () => {
   await page.reload();
-  await expect(prompt()).toBeVisible();
+  // kept in this browser per session (owner, 2026-11-25, Q8)
+  await expect(prompt()).toHaveValue("a draft I have not run yet");
   await shot("j08b-after-reload");
-  // design-gap D2: the form is kept only in memory (lib/workflow.ts leftForm), so a reload drops the draft; we
-  // record what a user sees rather than fail on it
-  expect(await prompt().inputValue()).not.toBe("a draft I have not run yet");
 });
 
 test("j09 tidy my sessions: rename, start a new one, go back, delete one", async () => {
@@ -204,9 +207,9 @@ test("j09 tidy my sessions: rename, start a new one, go back, delete one", async
   await expect(sessionButton()).toHaveAccessibleName("Session: Untitled. Change session");
   await expect(takes()).toHaveCount(0);
   await generate("a lone pine");
-  // naming is off by default (plan 21 §25.5): it stays "Untitled" after its first run
-  await expect(sessionButton()).toHaveAccessibleName("Session: Untitled. Change session");
-  const pine = "Untitled";
+  // naming is off by default (plan 21 §25.5): its first prompt's first words name it (owner, 2026-11-25, Q7)
+  await expect(sessionButton()).toHaveAccessibleName("Session: A lone pine. Change session");
+  const pine = "A lone pine";
 
   await sessionButton().click();
   await sessions().getByRole("button", { name: "Fox shoot", exact: true }).click();
