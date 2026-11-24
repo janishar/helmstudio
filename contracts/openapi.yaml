@@ -6512,7 +6512,7 @@ components:
         turn: {type: integer, minimum: 1}
         kind: {type: string, enum: [user, assistant, line, card, notice]}
         at: {type: string, format: date-time}
-        text: {type: string, maxLength: 4000, description: 'user, assistant, notice: shown as text, never HTML'}
+        text: {type: string, maxLength: 4000, description: 'user, assistant, notice: shown as text, never HTML; from 1.63 an assistant text may hold an ```options block and [[take|element|voice|workflow:<id>]] refs, shown as cards and chips (contracts/README.md, Assistant: pick one and refs)'}
         line: {$ref: '#/components/schemas/AssistantLine'}
         card: {$ref: '#/components/schemas/AssistantCard'}
         error: {$ref: '#/components/schemas/AssistantError'}

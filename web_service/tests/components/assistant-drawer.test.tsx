@@ -1200,6 +1200,39 @@ describe("steer while it answers (board frame 8)", () => {
     await waitFor(() => expect(posts).toEqual([{ kind: "stop", client_id: ME }]));
   });
 
+  it("Stopping… (board frame 15): chip, bubble and Stop read it at once, focus to the box, until idle", async () => {
+    const posts = serveSteer([entry(1, { kind: "user", text: "Make it blue hour" })]);
+    await openDrawer();
+    fireEvent.click(await screen.findByRole("button", { name: "Stop" }));
+    const d = screen.getByRole("complementary", { name: "Assistant" });
+    const stop = within(d).getByRole("button", { name: "Stopping…" }) as HTMLButtonElement;
+    expect(stop.disabled).toBe(true);
+    expect(d.querySelector(".st")!.textContent).toBe("Stopping…");
+    const bubble = within(d).getByRole("status", { name: "" });
+    expect(bubble.textContent).toBe("Stopping…");
+    expect(d.textContent).not.toMatch(/Working…|Thinking…/);
+    expect(document.activeElement).toBe(box());
+    await waitFor(() => expect(posts).toEqual([{ kind: "stop", client_id: ME }]));
+    // minimized, the bar says it too
+    fireEvent.click(screen.getByRole("button", { name: "Minimize" }));
+    expect(
+      screen.getByRole("button", { name: "Open the Assistant · Stopping" }).textContent,
+    ).toContain("Stopping…");
+    fireEvent.click(screen.getByRole("button", { name: "Open the Assistant · Stopping" }));
+    // idle: no chip, no bubble, no Stopped line; the thread ends at your message
+    act(() =>
+      onEvent!({
+        seq: 70,
+        type: "thread",
+        thread: thread({ client_id: ME, updated_at: "2026-11-22T00:03:00Z" }),
+      }),
+    );
+    await waitFor(() => expect(screen.queryByText("Stopping…")).toBeNull());
+    expect(screen.queryByRole("button", { name: /^Stop/ })).toBeNull();
+    expect(screen.queryByText(/Stopped/)).toBeNull();
+    expect(box().getAttribute("placeholder")).toBe("Ask, or say what to do");
+  });
+
   it("Stop's reply never takes back a newer state (the turn ended first)", async () => {
     serve({ existing: working });
     answer("POST", {

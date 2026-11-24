@@ -5,6 +5,7 @@
 // tab that sent the message (others show it read-only with Continue here) and posts their results. Every text is
 // rendered as text: React escapes it, nothing is parsed as HTML.
 import {
+  Fragment,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -81,6 +82,8 @@ import {
 } from "@/lib/assistant";
 import { followEvents } from "@/lib/runs";
 import { Registry, awaitIt, navigateTo } from "@/components/assistant/tools";
+import { Options, Refs } from "@/components/assistant/answer";
+import { liveOptions, splitOptions } from "@/lib/answer-refs";
 import { TextArea } from "@/components/expand-text";
 import { SkillLine, SkillPicker, useSkills } from "@/components/assistant/skills";
 import { skillLines, skillsMatching } from "@/lib/skills";
@@ -132,6 +135,8 @@ export function useAssistant(me: S<"User"> | null) {
   const [undone, setUndone] = useState<Record<string, boolean>>({});
   const [asking, setAsking] = useState<Asking | null>(null);
   const [running, setRunning] = useState<{ n: number; of: number; text: string } | null>(null);
+  // Stop pressed while a turn works: "Stopping…" until the chat is idle (board frame 15; item 27)
+  const [stopFor, setStopFor] = useState<string | null>(null); // the thread it stops
   const [error, setError] = useState("");
   const undoFns = useRef<Record<string, NonNullable<Outcome["undo"]>>>({});
   const answerRef = useRef<((a: "yes" | "no" | "gone") => void) | null>(null);
@@ -362,6 +367,12 @@ export function useAssistant(me: S<"User"> | null) {
   useEffect(() => {
     if (thread?.state === "idle") stopNext.current = false;
   }, [thread?.state]);
+  // it ends once the chat is idle, or another chat opens
+  if (
+    stopFor &&
+    (stopFor !== thread?.id || (thread.state !== "working" && thread.state !== "waiting"))
+  )
+    setStopFor(null);
 
   const send = useCallback(
     async (text: string) => {
@@ -450,6 +461,7 @@ export function useAssistant(me: S<"User"> | null) {
     stop.current = true;
     answerRef.current?.("no");
     if (threadId && steering) {
+      setStopFor(threadId);
       stopNext.current = true;
       void post(threadId, { kind: "stop", client_id: cid });
     }
@@ -540,6 +552,7 @@ export function useAssistant(me: S<"User"> | null) {
     answerAsk: (yes: boolean) => answerRef.current?.(yes ? "yes" : "no"),
     running,
     error,
+    setError,
     send,
     newChat,
     chats,
@@ -548,6 +561,7 @@ export function useAssistant(me: S<"User"> | null) {
     answerCard,
     continueHere,
     stopAll,
+    stopping: !!stopFor,
     steering,
     toggleUndo,
     readOnly,
@@ -636,16 +650,21 @@ function Mentions({ text }: { text: string }) {
 /** Moves the Timeline's playhead; `max` is the open sequence's length (s). */
 type Seek = ((s: number) => void) & { max: number };
 
+/** Renders a run of plain answer text: refs as chips (items 17, 19); never given code. */
+type RefsHook = (t: string, key: number) => React.ReactNode;
+
 /** An answer's line (item 22): bold, italic, inline code, @handles; a timecode is a chip that jumps the Timeline's
- * playhead when `seek` is given (on the Timeline) and the time is within the sequence, else text. */
-function Inlines({ text, seek }: { text: string; seek?: Seek }) {
+ * playhead when `seek` is given (on the Timeline) and the time is within the sequence, else text. Plain, bold and
+ * italic text goes through `refs` when given. */
+function Inlines({ text, seek, refs }: { text: string; seek?: Seek; refs?: RefsHook }) {
+  const t = (x: string, k: number) => (refs ? refs(x, k) : x);
   return (
     <>
       {inlineParts(text).map((p, i) =>
         p.k === "b" ? (
-          <b key={i}>{p.t}</b>
+          <b key={i}>{t(p.t, 0)}</b>
         ) : p.k === "i" ? (
-          <i key={i}>{p.t}</i>
+          <i key={i}>{t(p.t, 0)}</i>
         ) : p.k === "code" ? (
           <code key={i}>{p.t}</code>
         ) : p.k === "at" ? (
@@ -663,15 +682,25 @@ function Inlines({ text, seek }: { text: string; seek?: Seek }) {
           >
             {p.t}
           </button>
-        ) : (
+        ) : p.k ? (
           p.t
+        ) : (
+          t(p.t, i)
         ),
       )}
     </>
   );
 }
 
-function CopyButton({ text, label, children }: { text: string; label?: string; children: string }) {
+function CopyButton({
+  text,
+  label,
+  children,
+}: {
+  text: string | (() => string);
+  label?: string;
+  children: string;
+}) {
   const [did, setDid] = useState(false);
   return (
     <button
@@ -679,7 +708,7 @@ function CopyButton({ text, label, children }: { text: string; label?: string; c
       className="un"
       aria-label={label}
       onClick={() =>
-        void navigator.clipboard?.writeText(text).then(
+        void navigator.clipboard?.writeText(typeof text === "function" ? text() : text).then(
           () => {
             setDid(true);
             setTimeout(() => setDid(false), 1500);
@@ -734,14 +763,14 @@ function Clamp({
 }
 
 /** One answer (item 22, board frame 10a): its blocks as plain elements, never HTML; no headings or tables. */
-function Answer({ text, seek }: { text: string; seek?: Seek }) {
+function Answer({ text, seek, refs }: { text: string; seek?: Seek; refs?: RefsHook }) {
   const blocks = answerBlocks(text);
   return (
     <Clamp k={text} whole={blocks.some((b) => b.k === "code" || b.k === "plan")}>
       {blocks.map((b, i) =>
         b.k === "p" ? (
           <p key={i}>
-            <Inlines text={b.text} seek={seek} />
+            <Inlines text={b.text} seek={seek} refs={refs} />
           </p>
         ) : b.k === "code" ? (
           <div key={i} className="cb">
@@ -764,7 +793,7 @@ function Answer({ text, seek }: { text: string; seek?: Seek }) {
                 )}
                 <span>
                   <span className="sr-only">{x.done ? "Done: " : "To do: "}</span>
-                  <Inlines text={x.text} seek={seek} />
+                  <Inlines text={x.text} seek={seek} refs={refs} />
                 </span>
               </li>
             ))}
@@ -773,7 +802,7 @@ function Answer({ text, seek }: { text: string; seek?: Seek }) {
           <ol key={i}>
             {b.items.map((x, j) => (
               <li key={j}>
-                <Inlines text={x} seek={seek} />
+                <Inlines text={x} seek={seek} refs={refs} />
               </li>
             ))}
           </ol>
@@ -781,7 +810,7 @@ function Answer({ text, seek }: { text: string; seek?: Seek }) {
           <ul key={i} className="md">
             {b.items.map((x, j) => (
               <li key={j}>
-                <Inlines text={x} seek={seek} />
+                <Inlines text={x} seek={seek} refs={refs} />
               </li>
             ))}
           </ul>
@@ -1187,6 +1216,19 @@ function Thread({ a, entries }: { a: AssistantApi; entries: Entry[] }) {
   let lines: Line[] = [];
   let fold: number | null = null;
   const steers: React.ReactNode[] = []; // sent while it works: at the bottom, dimmed, until the turn reads them
+  // a workflow chip switches to it where the screen can (Create)
+  const switchTo = a.reg.current()?.spec.actions.switchTo;
+  const pickWorkflow = switchTo
+    ? async (id: string) => {
+        // not installed or not downloaded: say so (the drawer's error line), never a silent click
+        const r = await switchTo({ workflow: id }, { progress: () => undefined });
+        a.setError(!asked(r) && r.status === "failed" ? r.text : "");
+      }
+    : undefined;
+  // refs in an answer's text as chips (item 19), inline wherever the text is formatted (not in code)
+  const refs = (t: string, k: number) => (
+    <Refs key={k} text={t} onWorkflow={pickWorkflow} plain={(x) => x} />
+  );
   // an earlier turn's steps fold into one line once a newer turn starts (item 25); the newest turn stays open. A turn
   // is what one message of yours started (an entry's `turn` counts inputs, results too, so it is not this); a steer
   // read while it worked stays in its turn
@@ -1219,7 +1261,9 @@ function Thread({ a, entries }: { a: AssistantApi; entries: Entry[] }) {
       : undefined;
   const flush = (key: string) => {
     if (!words.length && !lines.length && fold === null) return;
-    const copy = words.map((w) => plainAnswer(w.text ?? "")).join("\n\n");
+    const said = words;
+    // read on click: by then the chips have their titles (Copy says titles, never [[…]])
+    const copy = said.length > 0 && (() => said.map((w) => plainAnswer(w.text ?? "")).join("\n\n"));
     // a Using skill line leads the reply, the files it read in its box (board frame 16)
     const { used, rest } = skillLines(lines);
     out.push(
@@ -1227,9 +1271,24 @@ function Thread({ a, entries }: { a: AssistantApi; entries: Entry[] }) {
         {used.map((u) => (
           <SkillLine key={u.line.id} line={u.line} reads={u.reads} />
         ))}
-        {words.map((w) => (
-          <Answer key={w.id} text={w.text ?? ""} seek={seek} />
-        ))}
+        {words.map((w) => {
+          // alpha.2 items 17, 19: the options block split out as cards; the rest formatted, refs as chips
+          const { text, options } = splitOptions(w.text ?? "");
+          return (
+            <Fragment key={w.id}>
+              {text && <Answer text={text} seek={seek} refs={refs} />}
+              {options && (
+                <Options
+                  entry={w}
+                  entries={entries}
+                  options={options}
+                  readOnly={a.readOnly}
+                  send={a.send}
+                />
+              )}
+            </Fragment>
+          );
+        })}
         {fold !== null && <Folded key={`f${fold}`} lines={older.get(fold) ?? []} a={a} />}
         {rest.length > 0 && <Lines lines={rest} a={a} />}
         {lines
@@ -1638,16 +1697,18 @@ function MinBar({ a }: { a: AssistantApi }) {
   const working = !a.readOnly && (!!a.running || t?.state === "working" || t?.state === "waiting");
   const [state, text, sub, dot] = a.cardWaits
     ? ["Waiting for you", "Waiting for you", card && `${card.replace(/\?$/, "")}?`, "ask"]
-    : working
-      ? [
-          "Working",
-          a.running?.text ?? (a.status?.thinks ? "Thinking…" : "Working…"),
-          a.running ? `Working · ${a.running.n} of ${a.running.of}` : "Working",
-          "",
-        ]
-      : a.newAnswer !== null
-        ? ["new answer", "New answer", plainAnswer(a.newAnswer).split("\n")[0], "new"]
-        : ["", "Assistant", "", ""];
+    : working && a.stopping
+      ? ["Stopping", "Stopping…", "", ""]
+      : working
+        ? [
+            "Working",
+            a.running?.text ?? (a.status?.thinks ? "Thinking…" : "Working…"),
+            a.running ? `Working · ${a.running.n} of ${a.running.of}` : "Working",
+            "",
+          ]
+        : a.newAnswer !== null
+          ? ["new answer", "New answer", plainAnswer(a.newAnswer).split("\n")[0], "new"]
+          : ["", "Assistant", "", ""];
   return (
     <div ref={ref} className="ast-min" style={lift ? { marginBottom: lift } : undefined}>
       <button
@@ -1665,8 +1726,8 @@ function MinBar({ a }: { a: AssistantApi }) {
         </span>
       </button>
       {working && a.steering && (
-        <button type="button" className="no" onClick={a.stopAll}>
-          Stop
+        <button type="button" className="no" disabled={a.stopping} onClick={a.stopAll}>
+          {a.stopping ? "Stopping…" : "Stop"}
         </button>
       )}
     </div>
@@ -1752,6 +1813,10 @@ function Drawer({ a }: { a: AssistantApi }) {
   useEffect(() => {
     if (a.open) input.current?.focus();
   }, [a.open]);
+  // Stop greys out: focus goes to the message box (board frame 15)
+  useEffect(() => {
+    if (a.stopping) input.current?.focus();
+  }, [a.stopping]);
   if (!a.open) {
     if (chats) setChats(false); // the list never comes back open with the drawer
     return a.min ? <MinBar a={a} /> : null;
@@ -1762,6 +1827,8 @@ function Drawer({ a }: { a: AssistantApi }) {
   const t = a.view?.thread;
   const chip = a.readOnly ? (
     <span className="st ro-chip">Read-only</span>
+  ) : a.stopping ? (
+    <span className="st st-go">Stopping…</span>
   ) : a.cardWaits ? (
     <span className="st st-ask">Waiting for you</span>
   ) : a.running || t?.state === "working" || t?.state === "waiting" ? (
@@ -1780,6 +1847,7 @@ function Drawer({ a }: { a: AssistantApi }) {
     setSending(false);
   };
   const onMachine = st?.provider && !st.provider.remote;
+  const picks = a.readOnly ? null : liveOptions(entries); // keys 1–4 send one (board frame 11)
 
   if (phone && a.shrunk)
     return (
@@ -1800,8 +1868,13 @@ function Drawer({ a }: { a: AssistantApi }) {
             </span>
           )}
           {a.running && (
-            <button type="button" className="no h-8 px-3 text-xs" onClick={a.stopAll}>
-              Stop
+            <button
+              type="button"
+              className="no h-8 px-3 text-xs"
+              disabled={a.stopping}
+              onClick={a.stopAll}
+            >
+              {a.stopping ? "Stopping…" : "Stop"}
             </button>
           )}
           <button
@@ -1994,7 +2067,14 @@ function Drawer({ a }: { a: AssistantApi }) {
             ) : (
               <Thread a={a} entries={entries} />
             )}
-            {since && thinking && <Thinking since={since.at} thinks={!!a.status?.thinks} />}
+            {a.stopping ? (
+              <div className="msg think" role="status">
+                <LoaderCircle size={12} strokeWidth={3} aria-hidden className="run" />
+                Stopping…
+              </div>
+            ) : (
+              since && thinking && <Thinking since={since.at} thinks={!!a.status?.thinks} />
+            )}
             <div ref={end} />
           </div>
 
@@ -2070,22 +2150,34 @@ function Drawer({ a }: { a: AssistantApi }) {
                 onSelect={(e) => setCaret(e.currentTarget.selectionStart)}
                 onKeyDown={(e) => {
                   if (at && found.length) {
-                    const n = found.length;
-                    const move = { ArrowDown: 1, ArrowUp: n - 1 }[e.key];
+                    const m = found.length;
+                    const move = { ArrowDown: 1, ArrowUp: m - 1 }[e.key];
                     if (move) {
                       e.preventDefault();
-                      return setHi((Math.min(hi, n - 1) + move) % n);
+                      return setHi((Math.min(hi, m - 1) + move) % m);
                     }
                     if (e.key === "Enter" || e.key === "Tab") {
                       e.preventDefault();
-                      return pickSkill(found[Math.min(hi, n - 1)]);
+                      return pickSkill(found[Math.min(hi, m - 1)]);
                     }
                     if (e.key === "Escape") {
                       e.preventDefault();
                       return setCaret(null);
                     }
                   }
-                  if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                  const n = Number(e.key);
+                  if (
+                    picks &&
+                    !text &&
+                    n >= 1 &&
+                    n <= picks.length &&
+                    !e.metaKey &&
+                    !e.ctrlKey &&
+                    !e.altKey
+                  ) {
+                    e.preventDefault();
+                    void sendExample(picks[n - 1].title);
+                  } else if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                     e.preventDefault();
                     void submit();
                   }
@@ -2097,10 +2189,17 @@ function Drawer({ a }: { a: AssistantApi }) {
                     <>
                       <span className="kbd">↑↓</span> pick · <span className="kbd">Enter</span>
                     </>
-                  ) : a.steering ? (
+                  ) : a.stopping ? null : a.steering ? (
                     <>
                       <span className="kbd">Enter</span> steers this answer
                     </>
+                  ) : picks ? (
+                    !phone && (
+                      <>
+                        <span className="kbd">1</span>–<span className="kbd">{picks.length}</span>{" "}
+                        picks
+                      </>
+                    )
                   ) : (
                     !phone && (
                       <>
@@ -2116,8 +2215,13 @@ function Drawer({ a }: { a: AssistantApi }) {
                   )}
                 </small>
                 {a.steering && (
-                  <button type="button" className="no h-[34px] px-3 text-xs" onClick={a.stopAll}>
-                    Stop
+                  <button
+                    type="button"
+                    className="no h-[34px] px-3 text-xs"
+                    disabled={a.stopping}
+                    onClick={a.stopAll}
+                  >
+                    {a.stopping ? "Stopping…" : "Stop"}
                   </button>
                 )}
                 <button

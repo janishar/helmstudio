@@ -993,7 +993,8 @@ test("J16 I write while it works: it reads me at the next step, or takes it as t
   expect(told(n)).toHaveLength(2);
   expect(told(n)[1]).toContain("User: make it night");
 
-  // Stop ends it at the next step: no model call after
+  // Stop cancels the model call in flight (item 27, board frame 15): Stopping… at once, then idle with nothing of
+  // the answer kept, no Stopped line, no model call after
   n = sent(MODEL).length;
   script(MODEL, {
     delay_s: 4,
@@ -1001,9 +1002,15 @@ test("J16 I write while it works: it reads me at the next step, or takes it as t
     tool_calls: [{ tool: "change", args: { key: "prompt.text", value: "never" } }],
   });
   await say("write a long prompt");
-  await page.waitForTimeout(1500); // the model call runs: it finishes, its change does not
+  await page.waitForTimeout(1500); // the model call runs
   await drawer().getByRole("button", { name: "Stop" }).click();
-  await replied("Starting.");
+  await expect(drawer().getByRole("button", { name: "Stopping…" })).toBeDisabled();
+  await expect(drawer().getByRole("textbox", { name: "Message the assistant" })).toBeFocused();
+  await expect(drawer().getByText("Stopping…").first()).toBeHidden({ timeout: 20_000 });
+  await expect(working()).toBeHidden();
+  await page.waitForTimeout(4000); // past the call's delay: its answer never comes
+  await expect(drawer().getByText("Starting.")).toHaveCount(0);
+  await expect(drawer().getByText(/Stopped/)).toHaveCount(0);
   await expect(prompt()).not.toHaveValue("never");
   expect(sent(MODEL).length - n).toBe(1);
 });

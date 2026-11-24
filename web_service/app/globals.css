@@ -1385,6 +1385,11 @@
     font-size: 13px;
     font-weight: 500;
   }
+  /* Stopping… (board frame 15): Stop greys out */
+  :is(.ast, .ast-min) .no:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
   .ast .fine {
     margin: 0;
     font-size: 11px;
@@ -1950,4 +1955,124 @@
   .fade-late {
     animation: none;
   }
+}
+/* Pick one cards and id chips in the Assistant (docs/mock/Assistant.dc.html .opts, .opt, .idc; frames 10b and 11;
+   alpha.2 items 17, 19). Unlayered, so it beats the drawer's button shadow (.ast button) as the mock's !important does. */
+.ast .opts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  white-space: normal;
+}
+.ast .opt {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 14px 14px 14px 6px;
+  background: var(--s3);
+  color: var(--t1);
+  text-align: left;
+  font-size: 13px;
+  line-height: 17px;
+}
+.ast .opt .kbd {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+.ast .opt b {
+  display: block;
+  font-weight: 600;
+}
+.ast .opt small {
+  display: block;
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--t2);
+}
+.ast .opt.rec {
+  box-shadow: inset 0 0 0 1px var(--a1);
+}
+.ast .opt.on {
+  background: color-mix(in srgb, var(--a2) 16%, var(--s3));
+  box-shadow: inset 0 0 0 2px var(--a2);
+}
+.ast .opt.fade {
+  opacity: 0.4;
+}
+.ast .opt:disabled {
+  cursor: default;
+}
+.ast .opt .tag {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--a1) 18%, transparent);
+  color: var(--a1);
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.ast .opt > svg {
+  color: var(--a2);
+}
+.ast .idc {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  height: 22px;
+  margin: 0 1px;
+  padding: 0 7px 0 2px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--s4);
+  font-size: 12px;
+  line-height: 22px;
+  font-weight: 500;
+  vertical-align: -5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: none;
+  color: var(--t1);
+}
+.ast .idc i {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  flex: 0 0 auto;
+  background-color: var(--ln);
+  display: grid;
+  place-items: center;
+  color: var(--t1);
+}
+.ast .idc i.pic {
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+.ast button.idc:hover {
+  background: var(--s5);
+}
+.ast .idc.gone {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--ln);
+  color: var(--t2);
+  font-style: italic;
+  cursor: default;
+}
+.ast .idc.gone i {
+  background: transparent;
+  color: var(--t2);
 }
