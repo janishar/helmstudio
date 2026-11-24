@@ -1,0 +1,23 @@
+{
+  "name": "fake-skill",
+  "title": "Fake skill",
+  "version": "0.1.0",
+  "kind": "skill",
+  "format": 1,
+  "description": "Test stack only: Fake skill.",
+  "author": "contract_tests",
+  "may_do": [
+    "Teach the Assistant a test craft (text it reads)"
+  ],
+  "when": "Only in contract tests: when the user asks for fake skill.",
+  "recipes": [
+    {
+      "name": "missing",
+      "title": "A workflow this install lacks",
+      "workflow": "no-such-workflow",
+      "params": {
+        "a.b": 1
+      }
+    }
+  ]
+}

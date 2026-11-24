@@ -172,6 +172,8 @@
             "custom_nodes",
             "model_sources",
             "model_jobs",
+            "use_skill",
+            "read_skill_file",
             "look_at"
           ]
         },
@@ -483,6 +485,38 @@
               }
             }
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "tool": {
+                "const": "use_skill"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "args": {
+                "$ref": "../tools/catalog.json#/tools/use_skill/input"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "tool": {
+                "const": "read_skill_file"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "args": {
+                "$ref": "../tools/catalog.json#/tools/read_skill_file/input"
+              }
+            }
+          }
         }
       ]
     },
@@ -574,6 +608,8 @@
             "custom_nodes",
             "model_sources",
             "model_jobs",
+            "use_skill",
+            "read_skill_file",
             "look_at"
           ]
         },
@@ -939,6 +975,38 @@
             "properties": {
               "result": {
                 "$ref": "../tools/catalog.json#/tools/look_at/output"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "tool": {
+                "const": "use_skill"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "result": {
+                "$ref": "../tools/catalog.json#/tools/use_skill/output"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "tool": {
+                "const": "read_skill_file"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "result": {
+                "$ref": "../tools/catalog.json#/tools/read_skill_file/output"
               }
             }
           }

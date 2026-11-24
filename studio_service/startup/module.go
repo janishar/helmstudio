@@ -34,6 +34,7 @@ type Module struct {
 	dispatcher       *studio.Dispatcher                                         // positions use its skip counts; nil in tests
 	remoteModels     bool                                                       // the deployment's remote switch (API 1.15)
 	pluginDirs       []string                                                   // where plugins are read (API 1.61)
+	userPluginDir    string                                                     // ~/.helm/plugins as mounted (API 1.64)
 	providerTest     studio.ProviderTestAsk                                     // pipelines.providers.test
 	providerKey      studio.ProviderKeyAsk                                      // pipelines.providers.key (API 1.51)
 	providerKeyWrite studio.ProviderKeyWriteAsk                                 // pipelines.providers.key.write (API 1.52)
@@ -65,6 +66,7 @@ func (m *Module) Controllers() []micro.Controller {
 	service.SetDispatcher(m.dispatcher)
 	service.SetRemote(m.remoteModels)
 	service.SetPluginDirs(m.pluginDirs)
+	service.SetUserPluginDir(m.userPluginDir)
 	service.SetProviderTest(m.providerTest)
 	service.SetProviderKey(m.providerKey)
 	service.SetProviderKeyWrite(m.providerKeyWrite)

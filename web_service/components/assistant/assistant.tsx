@@ -85,6 +85,9 @@ import { Registry, awaitIt, navigateTo } from "@/components/assistant/tools";
 import { Options, Refs } from "@/components/assistant/answer";
 import { liveOptions, splitOptions } from "@/lib/answer-refs";
 import { TextArea } from "@/components/expand-text";
+import { SkillLine, SkillPicker, useSkills } from "@/components/assistant/skills";
+import { skillLines, skillsMatching } from "@/lib/skills";
+import { insertMention, mentionAt } from "@/lib/mentions";
 
 type Line = S<"AssistantLine">;
 /** A line this tab ran (or is running): shown until the server's entry of the same id comes. */
@@ -1261,8 +1264,13 @@ function Thread({ a, entries }: { a: AssistantApi; entries: Entry[] }) {
     const said = words;
     // read on click: by then the chips have their titles (Copy says titles, never [[…]])
     const copy = said.length > 0 && (() => said.map((w) => plainAnswer(w.text ?? "")).join("\n\n"));
+    // a Using skill line leads the reply, the files it read in its box (board frame 16)
+    const { used, rest } = skillLines(lines);
     out.push(
       <div key={`b${key}`} className="msg">
+        {used.map((u) => (
+          <SkillLine key={u.line.id} line={u.line} reads={u.reads} />
+        ))}
         {words.map((w) => {
           // alpha.2 items 17, 19: the options block split out as cards; the rest formatted, refs as chips
           const { text, options } = splitOptions(w.text ?? "");
@@ -1282,7 +1290,7 @@ function Thread({ a, entries }: { a: AssistantApi; entries: Entry[] }) {
           );
         })}
         {fold !== null && <Folded key={`f${fold}`} lines={older.get(fold) ?? []} a={a} />}
-        {lines.length > 0 && <Lines lines={lines} a={a} />}
+        {rest.length > 0 && <Lines lines={rest} a={a} />}
         {lines
           .filter((l) => l.sources?.length)
           .map((l) => (
@@ -1769,6 +1777,19 @@ function Drawer({ a }: { a: AssistantApi }) {
   const phone = usePhone();
   const end = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
+  // the @ picker (board frame 16c): the caret's @ token lists the skills that are on; Esc closes it until it moves
+  const [caret, setCaret] = useState<number | null>(null);
+  const [hi, setHi] = useState(0);
+  const at = caret === null ? null : mentionAt(text, caret);
+  const skills = useSkills(!!at);
+  const found = at ? skillsMatching(skills, at.query) : [];
+  const pickSkill = (s: S<"SkillSummary">) => {
+    if (!at) return;
+    const r = insertMention(text, at.start, at.end, s.name);
+    setText(r.text);
+    setCaret(r.caret);
+    requestAnimationFrame(() => input.current?.setSelectionRange(r.caret, r.caret));
+  };
   // the screen's Sees chips follow the screen as it changes
   const seen = useSyncExternalStore(
     (f) => a.reg.subscribe(f),
@@ -2095,7 +2116,18 @@ function Drawer({ a }: { a: AssistantApi }) {
             </p>
           )}
           {!a.readOnly && (
-            <form className={`cmp ${limit ? "opacity-50" : ""}`} onSubmit={(e) => void submit(e)}>
+            <form
+              className={`cmp relative ${limit ? "opacity-50" : ""}`}
+              onSubmit={(e) => void submit(e)}
+            >
+              {at && found.length > 0 && (
+                <SkillPicker
+                  query={at.query}
+                  items={found}
+                  hi={Math.min(hi, found.length - 1)}
+                  onPick={pickSkill}
+                />
+              )}
               <label htmlFor="assistant-in" className="sr-only">
                 Message the assistant
               </label>
@@ -2110,8 +2142,29 @@ function Drawer({ a }: { a: AssistantApi }) {
                   limit ? limit.until : a.steering ? "Steer the answer…" : "Ask, or say what to do"
                 }
                 value={text}
-                onChange={(e) => setText(e.target.value)}
+                onChange={(e) => {
+                  setText(e.target.value);
+                  setCaret(e.target.selectionStart);
+                  setHi(0);
+                }}
+                onSelect={(e) => setCaret(e.currentTarget.selectionStart)}
                 onKeyDown={(e) => {
+                  if (at && found.length) {
+                    const m = found.length;
+                    const move = { ArrowDown: 1, ArrowUp: m - 1 }[e.key];
+                    if (move) {
+                      e.preventDefault();
+                      return setHi((Math.min(hi, m - 1) + move) % m);
+                    }
+                    if (e.key === "Enter" || e.key === "Tab") {
+                      e.preventDefault();
+                      return pickSkill(found[Math.min(hi, m - 1)]);
+                    }
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      return setCaret(null);
+                    }
+                  }
                   const n = Number(e.key);
                   if (
                     picks &&
@@ -2132,7 +2185,11 @@ function Drawer({ a }: { a: AssistantApi }) {
               />
               <div className="cmpb">
                 <small>
-                  {a.stopping ? null : a.steering ? (
+                  {at && found.length > 0 ? (
+                    <>
+                      <span className="kbd">↑↓</span> pick · <span className="kbd">Enter</span>
+                    </>
+                  ) : a.stopping ? null : a.steering ? (
                     <>
                       <span className="kbd">Enter</span> steers this answer
                     </>

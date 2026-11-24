@@ -112,6 +112,9 @@ func (c *controller) MountRoutes(group *gin.RouterGroup) {
 	group.GET("/admin/provider-keys/:key_secret", c.providerKeyHandler)          // API 1.51
 	group.PUT("/admin/provider-keys/:key_secret", c.saveProviderKeyHandler)      // API 1.52
 	group.DELETE("/admin/provider-keys/:key_secret", c.removeProviderKeyHandler) // API 1.52
+	group.GET("/skills", c.listSkillsHandler)                                    // API 1.64
+	group.GET("/skills/:skill", c.getSkillHandler)                               // API 1.64
+	group.GET("/skills/:skill/files/:file", c.getSkillFileHandler)               // API 1.64
 	group.GET("/admin/plugins", c.listPluginsHandler)                            // API 1.61
 	group.POST("/admin/plugins/rescan", c.rescanPluginsHandler)                  // API 1.61
 	group.PUT("/admin/plugins/:plugin", c.putPluginHandler)                      // API 1.61
@@ -1013,6 +1016,24 @@ func (c *controller) saveProviderKeyHandler(ctx *gin.Context) {
 // removeProviderKeyHandler: DELETE /admin/provider-keys/{key_secret} (API 1.52).
 func (c *controller) removeProviderKeyHandler(ctx *gin.Context) {
 	out, err := c.service.RemoveProviderKey(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("key_secret"))
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// listSkillsHandler: GET /skills (API 1.64).
+func (c *controller) listSkillsHandler(ctx *gin.Context) {
+	out, err := c.service.ListSkills(ctx.Request.Context())
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// getSkillHandler: GET /skills/{skill} (API 1.64).
+func (c *controller) getSkillHandler(ctx *gin.Context) {
+	out, err := c.service.GetSkill(ctx.Request.Context(), ctx.Param("skill"))
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// getSkillFileHandler: GET /skills/{skill}/files/{file} (API 1.64).
+func (c *controller) getSkillFileHandler(ctx *gin.Context) {
+	out, err := c.service.GetSkillFile(ctx.Request.Context(), ctx.Param("skill"), ctx.Param("file"))
 	reply(ctx, http.StatusOK, out, err)
 }
 

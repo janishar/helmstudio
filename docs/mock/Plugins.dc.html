@@ -229,7 +229,7 @@ td{vertical-align:top}
 </div>
 <div class="st">
 <span class="cap">Added · the aside</span>
-<div style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600"><span class="ok">✓</span>Claude Code (personal) added</div>
+<div style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600"><span class="ok">✓</span>Claude Code bridge added</div>
 <span style="font-size: 12px; color: var(--t2)">Next: use it for the Assistant in AI agents.</span>
 <div style="display: flex; gap: 8px"><button class="chip" style="height: 30px; font-size: 12px; background: var(--a1); color: var(--on1); font-weight: 600">Open AI agents</button><button class="chip" style="height: 30px; font-size: 12px">Done</button></div>
 </div>
@@ -247,7 +247,7 @@ td{vertical-align:top}
 <span class="cap">Admin › Model providers · the new row</span>
 <div style="overflow-x: auto"><table style="border-collapse: collapse; width: 100%">
 <thead><tr><th>Name</th><th>Kind</th><th>Address</th><th>Models</th><th>Status</th></tr></thead>
-<tbody><tr><td style="font-weight: 600">Claude Code (personal)<br><span class="m" style="font-weight: 400">plugin · claude-code-bridge</span></td><td><span class="tag">local server</span></td><td class="m">http://host.docker.internal:8420/v1</td><td class="m">claude-sonnet (default)<br>claude-opus · claude-haiku</td><td>Enabled<br><span style="font-size: 12px; color: var(--a1)">answered · 4.1 s</span></td></tr></tbody>
+<tbody><tr><td style="font-weight: 600">Claude Code bridge<br><span class="m" style="font-weight: 400">plugin · claude-code-bridge</span></td><td><span class="tag">local server</span></td><td class="m">http://host.docker.internal:8420/v1</td><td class="m">claude-sonnet (default)<br>claude-opus · claude-haiku</td><td>Enabled<br><span style="font-size: 12px; color: var(--a1)">answered · 4.1 s</span></td></tr></tbody>
 </table></div>
 <span style="font-size: 12px; color: var(--t2)">Other admins don't see this row.</span>
 </div>
@@ -258,7 +258,7 @@ td{vertical-align:top}
 <div role="listbox" aria-label="Provider, you" style="display: flex; flex-direction: column; gap: 2px; padding: 6px; border-radius: 12px; background: var(--s2); font-size: 12px">
 <div role="option" style="padding: 4px 6px">DeepSeek</div>
 <div role="option" style="padding: 4px 6px">Ollama on the Mac</div>
-<div role="option" aria-selected="true" style="padding: 4px 6px; border-radius: 8px; background: var(--s4)">Claude Code (personal)</div>
+<div role="option" aria-selected="true" style="padding: 4px 6px; border-radius: 8px; background: var(--s4)">Claude Code bridge</div>
 </div></div>
 <div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 11px; font-weight: 600; color: var(--t2)">Another admin</span>
 <div role="listbox" aria-label="Provider, another admin" style="display: flex; flex-direction: column; gap: 2px; padding: 6px; border-radius: 12px; background: var(--s2); font-size: 12px">
@@ -273,6 +273,94 @@ td{vertical-align:top}
 <span style="font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 16px; font-weight: 700">No plugins found</span>
 <span style="font-size: 13px; color: var(--t2); max-width: 460px">Plugins are add-ons you copy into plugins/. They stay off until you turn them on.</span>
 <button class="chip" style="height: 30px; font-size: 12px">Rescan</button>
+</div>
+</div>
+</section>
+<h2 class="h" style="margin-top: 4px">SKILLS · ALPHA.2 ITEM 36 · TEXT THAT TEACHES THE ASSISTANT A CRAFT</h2>
+<section aria-label="Skills" style="display: flex; flex-direction: column; gap: 8px">
+<div style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 6px 8px; overflow-x: auto">
+<table style="border-collapse: collapse; width: 100%; min-width: 760px">
+<thead><tr><th>Plugin</th><th>Kind</th><th>May do</th><th>Status</th><th>Actions</th></tr></thead>
+<tbody>
+<tr aria-selected="true" style="background: var(--s3)">
+<td style="font-weight: 600; white-space: normal">Animator<br><span class="m" style="font-weight: 400">0.1.0 · built in · plugins/animator</span></td>
+<td><span class="tag kind">Skill</span></td>
+<td style="white-space: normal; font-size: 12px; color: var(--t1b); max-width: 260px">Teaches the Assistant shot planning, timing, motion and camera moves · text only</td>
+<td><span class="dot offb"></span> <span class="off" style="font-weight: 600">Off</span></td>
+<td><button class="chip" style="height: 30px">Enable</button></td>
+</tr>
+<tr>
+<td style="font-weight: 600; white-space: normal">Cinematographer<br><span class="m" style="font-weight: 400">0.2.0 · yours · ~/.helm/plugins/cinematographer.zip</span></td>
+<td><span class="tag kind">Skill</span></td>
+<td style="white-space: normal; font-size: 12px; color: var(--t1b); max-width: 260px">Teaches lighting, lenses and framing · text only</td>
+<td><span class="dot okb"></span> <span class="ok" style="font-weight: 600">On</span></td>
+<td><button class="chip" style="height: 30px">Disable</button> <button class="chip" style="height: 30px">Remove</button></td>
+</tr>
+<tr>
+<td style="font-weight: 600; white-space: normal">Voice director<br><span class="m" style="font-weight: 400">0.3.0 · yours · ~/.helm/plugins/voice-director</span><br><span class="tag me" style="display: inline-block; margin-top: 4px">Replaces built-in 0.2.0</span></td>
+<td><span class="tag kind">Skill</span></td>
+<td style="white-space: normal; font-size: 12px; color: var(--t1b); max-width: 260px">Your copy of the same name wins; remove it to get the built-in back</td>
+<td><span class="dot offb"></span> <span class="off" style="font-weight: 600">Off</span></td>
+<td><button class="chip" style="height: 30px">Enable</button> <button class="chip" style="height: 30px">Remove</button></td>
+</tr>
+<tr class="ex">
+<td style="font-weight: 600; white-space: normal">Storyboard artist<br><span class="m" style="font-weight: 400">1.0.0 · yours · ~/.helm/plugins/storyboard.zip</span></td>
+<td><span class="tag kind">Skill</span></td>
+<td style="white-space: normal; font-size: 12px; color: var(--t1b); max-width: 260px">Made for a newer helmstudio (format 2)</td>
+<td><span class="dot offb"></span> <span class="off" style="font-weight: 600">Needs a newer helmstudio</span></td>
+<td><button class="chip" style="height: 30px">Remove</button></td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; align-items: start">
+<div class="st">
+<span class="cap">A skill · the aside</span>
+<div style="display: flex; align-items: center; gap: 8px"><b style="flex: 1 1 auto; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 15px">Animator</b><button role="switch" aria-checked="false" aria-label="Enabled" class="sw"><span></span></button></div>
+<span style="font-size: 13px; color: var(--t1b)">Use when planning an animated shot or film: shots, timing, motion, camera moves, characters kept the same with @elements.</span>
+<div style="display: flex; flex-direction: column; gap: 4px">
+<div class="row"><span>Kind</span><span>Skill</span></div>
+<div class="row"><span>Version</span><span>0.1.0 · format 1</span></div>
+<div class="row"><span>Source</span><span>Built in · plugins/animator</span></div>
+<div class="row"><span>Files</span><span>SKILL.md · camera-moves.md</span></div>
+<div class="row"><span>Recipes</span><span>2 · 1 skipped: needs Wan 2.5</span></div>
+</div>
+<span class="h">MAY DO</span>
+<ul class="perm"><li>Teach the Assistant a craft (text it reads)</li><li>Suggest settings this install has; never runs anything itself</li></ul>
+</div>
+
+<div class="st">
+<span class="cap">Where skills come from</span>
+<div style="display: flex; flex-direction: column; gap: 2px; padding: 6px; border-radius: 12px; background: var(--s2); font-size: 13px">
+<div style="padding: 6px 8px; border-radius: 8px; background: var(--s4)">Built in<br><span style="font-size: 12px; color: var(--t2)">Ship with helmstudio.</span></div>
+<div style="padding: 6px 8px">Yours: drop a folder or a .zip into <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px">~/.helm/plugins/</span><br><span style="font-size: 12px; color: var(--t2)">Found at once, no app update. Same name: yours wins.</span></div>
+<div aria-disabled="true" style="padding: 6px 8px; color: var(--t2); opacity: 0.6">Upload a .zip here · later</div>
+</div>
+</div>
+
+<div class="st" style="box-shadow: inset 0 0 0 1px #f2c14e">
+<span class="cap" style="color: #f2c14e">For the owner to decide · a new skill when it's found</span>
+<div role="radiogroup" aria-label="A new skill" style="display: flex; flex-direction: column; gap: 6px; font-size: 13px">
+<label style="display: flex; gap: 8px; align-items: flex-start"><input type="radio" name="sk-new" checked style="accent-color: var(--a1); margin-top: 3px"><span><b>Off until you turn it on</b> (built now)<br><span style="font-size: 12px; color: var(--t2)">Nothing changes the Assistant until an admin switches the skill on here.</span></span></label>
+<label style="display: flex; gap: 8px; align-items: flex-start"><input type="radio" name="sk-new" style="accent-color: var(--a1); margin-top: 3px"><span><b>On when found</b><br><span style="font-size: 12px; color: var(--t2)">A skill dropped into ~/.helm/plugins/ works at once; turn it off here.</span></span></label>
+</div>
+<span style="font-size: 12px; color: var(--t2)">Owner, 2026-11-25: "will wait for our feature skills". Skills are text only either way; anything that runs still asks.</span>
+</div>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; align-items: start">
+<div class="st">
+<span class="cap">Found a new one · the note</span>
+<div style="display: flex; align-items: center; gap: 8px; font-size: 13px"><span style="flex: 1 1 auto">New skill in ~/.helm/plugins: Cinematographer. It stays Off.</span><button class="chip" style="height: 26px; font-size: 12px">Show</button></div>
+</div>
+<div class="st">
+<span class="cap">Needs a newer helmstudio · the aside</span>
+<div role="alert" class="alert amb2"><span style="flex: 1 1 auto">Storyboard artist is made for a newer helmstudio (format 2; this one reads 1). Update helmstudio to use it.</span></div>
+</div>
+<div class="st">
+<span class="cap">A bad file · the aside</span>
+<div role="alert" class="alert red"><span style="flex: 1 1 auto">storyboard.zip can't be read: a file in it points outside its folder. Nothing from it is used.</span></div>
 </div>
 </div>
 </section>
@@ -301,7 +389,7 @@ td{vertical-align:top}
 
 <div style="height: 1px; background: var(--s3)"></div>
 <h3 style="margin: 0; display: flex; align-items: center; font-size: 14px; font-weight: 700">Add as provider</h3>
-<div style="display: flex; flex-direction: column; gap: 6px"><label for="pl-name" style="font-size: 12px; color: var(--t2)">Name</label><input id="pl-name" class="in" value="Claude Code (personal)"></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="pl-name" style="font-size: 12px; color: var(--t2)">Name</label><input id="pl-name" class="in" value="Claude Code bridge"></div>
 <div style="display: flex; flex-direction: column; gap: 6px"><label for="pl-key" style="font-size: 12px; color: var(--t2)">Key</label><input id="pl-key" class="in" type="password" autocomplete="off" placeholder="Paste the key from run.sh"><span style="font-size: 12px; color: var(--t2)">BRIDGE_TOKEN in <span style="font-family: 'JetBrains Mono', monospace">~/.helm/claude-code-bridge.env</span></span></div>
 <div style="display: flex; flex-direction: column; gap: 6px"><label for="pl-model" style="font-size: 12px; color: var(--t2)">Default model</label><select id="pl-model" class="in"><option>claude-sonnet</option><option>claude-opus</option><option>claude-haiku</option></select></div>
 <button style="height: 48px; border-radius: 14px; border: 0; background: var(--a1); color: var(--on1); background-image: linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 55%); font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.04em">Add</button>
@@ -309,7 +397,7 @@ td{vertical-align:top}
 
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":1544}}'>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":2560}}'>
 class Component extends DCLogic {
 state = { theme: null };
 renderVals() {

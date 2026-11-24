@@ -100,6 +100,7 @@ HTTP_SCHEMAS = [
     "AssistantPost", "AssistantThreadList", "AssistantThreadDetail", "AssistantEvent", "AssistantMemoryList",
     "AssistantSettings", "AssistantSettingsPut", *TWINS,
     "PluginList", "PluginRescan", "PluginPut", "PluginProviderCreate",  # 1.61
+    "Skill", "SkillList", "SkillFile",  # 1.64
 ]
 OPENAPI = "https://helmstudio.local/contracts/openapi.yaml"
 OPERATION_PREFIX = {"/v1/studio/": "studio", "/files/": "files", "/auth/": "auth"}
@@ -4424,13 +4425,17 @@ def refs(node, out=None) -> list[str]:
     return out
 
 
-def offered_tools(catalog: dict, roles: list[str], web_search: bool, look_at: bool) -> list[str]:
+SKILL_TOOLS = ("use_skill", "read_skill_file")  # API 1.64: offered only while a skill is on
+
+
+def offered_tools(catalog: dict, roles: list[str], web_search: bool, look_at: bool, skills: bool = False) -> list[str]:
     """The catalog tools a turn offers (README, Assistant: tools): surface assistant, every role it needs held,
-    web_search only when on, look_at only when an ask workflow can run now. Studio (Go) runs the same fixtures."""
+    web_search only when on, look_at only when an ask workflow can run now, from API 1.64 use_skill and
+    read_skill_file only while a skill is on. Studio (Go) runs the same fixtures."""
     return sorted(
         n for n, t in catalog["tools"].items()
         if "assistant" in t["surfaces"] and set(t["roles"]) <= set(roles)
-        and (n != "web_search" or web_search) and (n != "look_at" or look_at)
+        and (n != "web_search" or web_search) and (n != "look_at" or look_at) and (n not in SKILL_TOOLS or skills)
     )
 
 
@@ -4535,7 +4540,7 @@ def check_tools(schemas: dict[str, dict], registry: Registry) -> None:
             fail(f"req.studio.tools $defs/{d}: each tool's {key} must $ref its catalog {part}")
     fx = json.loads((HERE / "fixtures" / "tools" / "offered.json").read_text())
     for c in fx["cases"]:
-        got = (offered_tools(catalog, c["roles"], c.get("web_search", False), c.get("look_at", False))
+        got = (offered_tools(catalog, c["roles"], c.get("web_search", False), c.get("look_at", False), c.get("skills", False))
                if "screen" not in c else screen_actions(actions, c["screen"], c["roles"]))
         if got != c["expect"]:
             fail(f"fixtures/tools/offered.json {c['description']!r}: got {got}, want {c['expect']}")
@@ -4641,14 +4646,25 @@ def check_plugins(schemas: dict[str, dict], registry: Registry) -> None:
     self-contained JSON Schema of an object."""
     v = Draft202012Validator({"$ref": schemas["plugins/manifest.schema.json"]["$id"]}, registry=registry)
     root = HERE.parent
-    found = sorted([*root.glob("plugins/*/plugin.json"), *root.glob("contract_tests/fake_plugins/*/plugin.json")])
+    found = sorted([*root.glob("plugins/*/plugin.json"), *root.glob("contract_tests/fake_plugins/*/plugin.json"),
+                    *root.glob("contract_tests/fake_helm/plugins/*/plugin.json")])
     for p in found:
         w, doc = str(p.relative_to(root)), json.loads(p.read_text())
+        if doc.get("kind") == "skill" and doc.get("format", 1) > 1:
+            continue  # API 1.64: a newer format (the test stack's future-skill) is listed needs_newer, never read
         if bad := list(v.iter_errors(doc)):
             fail(f"{w}: {bad[0].json_path}: {bad[0].message}")
             continue
         if doc["name"] != p.parent.name:
             fail(f"{w}: name {doc['name']!r} is not its folder's")
+        if doc["kind"] == "skill":  # API 1.64: SKILL.md and at most 16 small text files beside the manifest
+            extra = sorted(f.name for f in p.parent.iterdir() if f.name not in ("plugin.json", "SKILL.md"))
+            if not (p.parent / "SKILL.md").is_file() or len(extra) > 15:
+                fail(f"{w}: a skill has SKILL.md and at most 15 more files")
+            if bad := [f for f in [*extra, "SKILL.md"] if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}\.(md|txt|json)", f)
+                       or (p.parent / f).stat().st_size > 65536]:
+                fail(f"{w}: skill files are .md, .txt or .json under 64 KB with plain names: {bad}")
+            continue
         host = urlsplit(doc["url"]).hostname or ""
         try:
             ip = ipaddress.ip_address(host)

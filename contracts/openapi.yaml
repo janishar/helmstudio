@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.63.0
+  version: 1.64.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -27,7 +27,7 @@ servers:
 security:
   - {ApiKey: [], BearerJWT: []}
 tags:
-  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media); from 1.23 LoRA strengths 0..2 (looks saved before are clamped when read; contracts/README.md, Looks); from 1.24 the model component a node loads (NodeSchema.component); from 1.25 an inspector section''s help, the presets'' order (StudioLayout.preset_order) and a run''s planned peak before it is sent (POST /v1/studio/runs/plan); from 1.26 an inspector section''s choice tiles (LTX''s Recipe: two-stage or one-stage); from 1.28 a judge''s branch without `then` (Ask me) and a judge test on picked takes (POST /v1/studio/pipelines/{pipeline_id}/judge-tests); from 1.29 a V1 clip''s shot number (TimelineClip.number: "Shot 4"); from 1.30 voices: audio takes made by runs (the `Audio` port, `Workflow.media` audio), the `voice` param, saved voices in the library (designed voices and the packs'' starter voices; contracts/README.md, Voices); from 1.31 cloned voices (a 3–30 s clip of an audio take or a video''s sound, with consent), designed voices that keep a clip, Save as voice (`from_take` with `kind: voice`) and the zonos3 family (contracts/README.md, Voices: cloned voices); from 1.32 dialogue and Timeline audio: dialogue scripts (`script` text params expanded into `lines` rows whose items carry a voice), an element''s `voice_id`, cues on a dialogue''s take, audio takes on the audio tracks, New line (POST /v1/studio/timelines/{timeline_id}/lines), Make shot (a slot `exact` at an audio clip''s time), an export plan''s `sounds`, offers and pipeline binds into rows of one media field, `library.read` voices and the write node''s `form: script` (contracts/README.md, Dialogue and Timeline audio); from 1.44 the in-app assistant: chats, their events and memory, the admin''s assistant settings, search providers (kind `search`) and the Gallery''s `order` (contracts/README.md, Assistant); from 1.47 rules (refusals as data, ParamSchema.rules), option help (ParamSchema.option_help), a native node''s peak formula and sound limits (NodeSchema.peak_gb, sounds: the planned peak per run) and the Preset heading''s help (StudioLayout.preset_help); from 1.48 thumbnails: every list''s `thumb_url` is a small WebP of the image or the poster once made, `RunOutput.thumb_url` (contracts/README.md, Thumbnails); from 1.49 timeline edits by named ops (POST …/timelines/{timeline_id}/edits: a dry run, a diff, studio-made clip ids), the revision history and restore to any kept revision, the agent view (`view=agent`) and a stored frame at a sequence time (contracts/README.md, Timeline: edits by ops); from 1.50 the Timeline tools'' ops (roll, slip, slide, overwrite, split_all, remove_range, lift_range, an audio track''s ripple remove), linked sound clips (`TimelineClip.link`) and markers (`TimelineDoc.markers`, the marker ops; contracts/README.md, Timeline rules: tools, linked clips, markers); from 1.51 provider presets (GET /v1/studio/admin/provider-presets, a preset''s Fetch, a key file''s status, `Provider.compat` and `preset`; contracts/README.md, Model sources: presets); from 1.52 saving a provider key (PUT and DELETE /v1/studio/admin/provider-keys/{key_secret}, `ProviderKey.writable`; contracts/README.md, Model sources: Keys); from 1.53 thinking per model (`Provider.thinking`, `thinking_levels`, `ProviderPut.thinking`, `ProviderTest.thinking`, `ProviderPreset.thinking`, a model source''s `thinking`; contracts/README.md, Model sources: thinking); from 1.55 a provider''s fixed extra headers (`ProviderCompat.headers`: Anthropic''s anthropic-version; contracts/README.md, Model sources: compat); from 1.56 generous assistant defaults (AssistantLimits defaults 2000 model calls and 20000000 tokens a day, 200 look_at an hour, 30 messages a minute; AssistantCaps per message up to 40 model calls, 100 tool calls, 8 memory writes; a call''s n up to 99; contracts/README.md, Assistant); from 1.59 steering an answer (a message while a turn works joins it: `AssistantAccepted.steer`, `AssistantEntry.steer`; Stop: kind `stop`; contracts/README.md, Assistant: steer); from 1.59.1 steer fixes: waiting steers go first in a new turn, a stopped turn takes them as read, one message id per Stop (contracts/README.md, Assistant: steer); from 1.60 a take''s render time (`MadeWith.render_s`: the Create take, the Gallery''s Made with, the Timeline clip inspector and the sequence total); from 1.61 plugins: the admin''s Plugins page (GET /v1/studio/admin/plugins, Rescan, on and off, Remove, Add as provider), Only-you providers (`Provider.owner_id`, `plugin`; `AssistantSettings.personal`) and plugin tools in the assistant (a `plugin` card; contracts/README.md, Plugins); from 1.62 Stop cancels the model call in flight, and the assistant''s plain-words memory and voice-line checks (contracts/README.md, Assistant: steer; Assistant: tools)'}
+  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media); from 1.23 LoRA strengths 0..2 (looks saved before are clamped when read; contracts/README.md, Looks); from 1.24 the model component a node loads (NodeSchema.component); from 1.25 an inspector section''s help, the presets'' order (StudioLayout.preset_order) and a run''s planned peak before it is sent (POST /v1/studio/runs/plan); from 1.26 an inspector section''s choice tiles (LTX''s Recipe: two-stage or one-stage); from 1.28 a judge''s branch without `then` (Ask me) and a judge test on picked takes (POST /v1/studio/pipelines/{pipeline_id}/judge-tests); from 1.29 a V1 clip''s shot number (TimelineClip.number: "Shot 4"); from 1.30 voices: audio takes made by runs (the `Audio` port, `Workflow.media` audio), the `voice` param, saved voices in the library (designed voices and the packs'' starter voices; contracts/README.md, Voices); from 1.31 cloned voices (a 3–30 s clip of an audio take or a video''s sound, with consent), designed voices that keep a clip, Save as voice (`from_take` with `kind: voice`) and the zonos3 family (contracts/README.md, Voices: cloned voices); from 1.32 dialogue and Timeline audio: dialogue scripts (`script` text params expanded into `lines` rows whose items carry a voice), an element''s `voice_id`, cues on a dialogue''s take, audio takes on the audio tracks, New line (POST /v1/studio/timelines/{timeline_id}/lines), Make shot (a slot `exact` at an audio clip''s time), an export plan''s `sounds`, offers and pipeline binds into rows of one media field, `library.read` voices and the write node''s `form: script` (contracts/README.md, Dialogue and Timeline audio); from 1.44 the in-app assistant: chats, their events and memory, the admin''s assistant settings, search providers (kind `search`) and the Gallery''s `order` (contracts/README.md, Assistant); from 1.47 rules (refusals as data, ParamSchema.rules), option help (ParamSchema.option_help), a native node''s peak formula and sound limits (NodeSchema.peak_gb, sounds: the planned peak per run) and the Preset heading''s help (StudioLayout.preset_help); from 1.48 thumbnails: every list''s `thumb_url` is a small WebP of the image or the poster once made, `RunOutput.thumb_url` (contracts/README.md, Thumbnails); from 1.49 timeline edits by named ops (POST …/timelines/{timeline_id}/edits: a dry run, a diff, studio-made clip ids), the revision history and restore to any kept revision, the agent view (`view=agent`) and a stored frame at a sequence time (contracts/README.md, Timeline: edits by ops); from 1.50 the Timeline tools'' ops (roll, slip, slide, overwrite, split_all, remove_range, lift_range, an audio track''s ripple remove), linked sound clips (`TimelineClip.link`) and markers (`TimelineDoc.markers`, the marker ops; contracts/README.md, Timeline rules: tools, linked clips, markers); from 1.51 provider presets (GET /v1/studio/admin/provider-presets, a preset''s Fetch, a key file''s status, `Provider.compat` and `preset`; contracts/README.md, Model sources: presets); from 1.52 saving a provider key (PUT and DELETE /v1/studio/admin/provider-keys/{key_secret}, `ProviderKey.writable`; contracts/README.md, Model sources: Keys); from 1.53 thinking per model (`Provider.thinking`, `thinking_levels`, `ProviderPut.thinking`, `ProviderTest.thinking`, `ProviderPreset.thinking`, a model source''s `thinking`; contracts/README.md, Model sources: thinking); from 1.55 a provider''s fixed extra headers (`ProviderCompat.headers`: Anthropic''s anthropic-version; contracts/README.md, Model sources: compat); from 1.56 generous assistant defaults (AssistantLimits defaults 2000 model calls and 20000000 tokens a day, 200 look_at an hour, 30 messages a minute; AssistantCaps per message up to 40 model calls, 100 tool calls, 8 memory writes; a call''s n up to 99; contracts/README.md, Assistant); from 1.59 steering an answer (a message while a turn works joins it: `AssistantAccepted.steer`, `AssistantEntry.steer`; Stop: kind `stop`; contracts/README.md, Assistant: steer); from 1.59.1 steer fixes: waiting steers go first in a new turn, a stopped turn takes them as read, one message id per Stop (contracts/README.md, Assistant: steer); from 1.60 a take''s render time (`MadeWith.render_s`: the Create take, the Gallery''s Made with, the Timeline clip inspector and the sequence total); from 1.61 plugins: the admin''s Plugins page (GET /v1/studio/admin/plugins, Rescan, on and off, Remove, Add as provider), Only-you providers (`Provider.owner_id`, `plugin`; `AssistantSettings.personal`) and plugin tools in the assistant (a `plugin` card; contracts/README.md, Plugins); from 1.62 Stop cancels the model call in flight, and the assistant''s plain-words memory and voice-line checks (contracts/README.md, Assistant: steer; Assistant: tools); from 1.64 skills: plugins of kind `skill` (built in and from ~/.helm/plugins, folders and .zip files), GET /v1/studio/skills, a skill''s guide and files, the assistant''s use_skill and read_skill_file and its "Using skill" line (`AssistantLine.skill`; contracts/README.md, Skills)'}
   - {name: files, description: signed file downloads and uploads}
   - name: auth
     description: 'auth_service: users, sessions (JWT access + rotating refresh tokens), roles, client API keys'
@@ -1908,7 +1908,7 @@ paths:
       tags: [studio]
       operationId: studioAdminPutPlugin
       summary: 'From 1.61: turn a plugin on or off'
-      description: 'Admin only (403). Off at once: its assistant tools leave the next input''s tools, its providers leave every list and pipeline rule (they come back when it is on again). 404 unknown.'
+      description: 'Admin only (403). Off at once: its assistant tools leave the next input''s tools, its providers leave every list and pipeline rule (they come back when it is on again). 404 unknown. From 1.64 409 `<title> needs a newer helmstudio` (needs_newer) and `<name> can''t be read` (broken) for on.'
       parameters: [{$ref: '#/components/parameters/PluginName'}]
       requestBody:
         required: true
@@ -1918,6 +1918,7 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/AdminRequired'}
         '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
         '422': {$ref: '#/components/responses/Unprocessable'}
     delete:
       tags: [studio]
@@ -1959,6 +1960,42 @@ paths:
         '409': {$ref: '#/components/responses/Conflict'}
         '422': {$ref: '#/components/responses/Unprocessable'}
         '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/skills:
+    get:
+      tags: [studio]
+      operationId: studioListSkills
+      summary: 'From 1.64: the skills that are on (contracts/README.md, Skills)'
+      description: 'Every user. The skills an admin turned on, by name; a needs_newer or broken one never shows.'
+      responses:
+        '200': {description: the skills, content: {application/json: {schema: {$ref: '#/components/schemas/SkillList'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+
+  /v1/studio/skills/{skill}:
+    get:
+      tags: [studio]
+      operationId: studioGetSkill
+      summary: 'From 1.64: a skill''s guide (SKILL.md), its files and the recipes this install holds'
+      description: 'Every user. 404 unknown, off, needs_newer or broken.'
+      parameters: [{name: skill, in: path, required: true, schema: {type: string}}]
+      responses:
+        '200': {description: the skill, content: {application/json: {schema: {$ref: '#/components/schemas/Skill'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+
+  /v1/studio/skills/{skill}/files/{file}:
+    get:
+      tags: [studio]
+      operationId: studioGetSkillFile
+      summary: 'From 1.64: one extra file of a skill (text)'
+      description: 'Every user. `file` is one of the skill''s `files` (a plain name: no folders); 404 otherwise or for a skill that is not on.'
+      parameters:
+        - {name: skill, in: path, required: true, schema: {type: string}}
+        - {name: file, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: the file, content: {application/json: {schema: {$ref: '#/components/schemas/SkillFile'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
 
   /v1/studio/admin/session-names:
     get:
@@ -6141,16 +6178,30 @@ components:
         risk: {$ref: '#/components/schemas/PluginRisk'}
     Plugin:
       type: object
-      required: [name, title, version, kind, description, author, may_do, personal, url, enabled, status, provider, updated_at]
+      required: [name, title, version, kind, description, author, may_do, personal, enabled, status, provider, updated_at]
       additionalProperties: false
       description: 'from 1.61: one plugin as the admin sees it: its manifest (plugins/manifest.schema.json) and its state'
       properties:
         name: {type: string, pattern: '^[a-z][a-z0-9-]{0,22}$', description: 'its folder under plugins/'}
         title: {type: string, maxLength: 60}
         version: {type: string, maxLength: 40}
-        kind: {type: string, enum: [model-provider, assistant-tools]}
+        kind: {type: string, enum: [model-provider, assistant-tools, skill], description: 'from 1.64 skill'}
         description: {type: string, maxLength: 300}
         author: {type: string, maxLength: 60}
+        origin: {type: string, enum: [built_in, yours], description: 'from 1.64: built_in (plugins/ in the app) or yours (~/.helm/plugins: a folder or a .zip); absent before 1.64 = built_in'}
+        replaces: {type: string, maxLength: 40, description: 'from 1.64: yours replaces the built-in plugin of the same name; its version'}
+        format: {type: integer, minimum: 1, description: 'from 1.64, a skill''s manifest format (this helmstudio reads 1)'}
+        when: {type: string, maxLength: 200, description: 'from 1.64, a skill''s: when the Assistant reads it'}
+        files: {type: array, maxItems: 16, items: {type: string, maxLength: 64}, description: 'from 1.64, a skill''s files: SKILL.md first, then the extra ones'}
+        recipes:
+          type: object
+          required: [ok, skipped]
+          additionalProperties: false
+          description: 'from 1.64, a skill''s recipes checked against this install: how many hold, and each skipped with why'
+          properties:
+            ok: {type: integer, minimum: 0}
+            skipped: {type: array, maxItems: 16, items: {type: object, required: [name, why], additionalProperties: false, properties: {name: {type: string}, why: {type: string, maxLength: 200}}}}
+        problem: {type: string, maxLength: 300, description: 'from 1.64: why it can''t be used (status needs_newer or broken), in plain words; or, on a built-in one in use, why your copy of the same name is not (`Your copy is broken: <reason>; using built in`)'}
         source: {type: string, maxLength: 300}
         may_do: {type: array, maxItems: 8, items: {type: string, maxLength: 120}}
         personal: {type: boolean, description: 'personal use only: its provider is Only you'}
@@ -6167,9 +6218,58 @@ components:
         key_hint: {type: string, maxLength: 120, description: 'model-provider: where the key is'}
         tools: {type: array, maxItems: 8, items: {$ref: '#/components/schemas/PluginTool'}, description: 'assistant-tools: its tools'}
         enabled: {type: boolean, description: 'on; off until an admin turns it on'}
-        status: {type: string, enum: ['off', running, not_running], description: 'off: not on (never called); running: its health path answered 2xx in 2 s; not_running: on, no answer'}
+        status: {type: string, enum: ['off', running, not_running, 'on', needs_newer, broken], description: 'off: not on (never called); running: its health path answered 2xx in 2 s; not_running: on, no answer. From 1.64: on (a skill that is on: it has no service), needs_newer (a skill of a newer format), broken (yours could not be read: `problem`); neither of the last two can be turned on'}
         provider: {type: [string, 'null'], description: 'the caller''s own provider made from it (Add as provider), else null'}
         updated_at: {type: string, format: date-time}
+    SkillSummary:
+      type: object
+      required: [name, title, when, version]
+      additionalProperties: false
+      description: 'from 1.64: a skill that is on, as every user sees it (the @ picker)'
+      properties:
+        name: {type: string, pattern: '^[a-z][a-z0-9-]{0,22}$'}
+        title: {type: string, maxLength: 60}
+        when: {type: string, maxLength: 200}
+        version: {type: string, maxLength: 40}
+    SkillList:
+      type: object
+      required: [skills]
+      additionalProperties: false
+      properties:
+        skills: {type: array, maxItems: 64, items: {$ref: '#/components/schemas/SkillSummary'}}
+    SkillRecipe:
+      type: object
+      required: [name, title, workflow, params]
+      additionalProperties: false
+      description: 'from 1.64: a recipe this install can run (plugins/manifest.schema.json recipe)'
+      properties:
+        name: {type: string}
+        title: {type: string, maxLength: 80}
+        workflow: {type: string, maxLength: 80}
+        params: {$ref: '#/components/schemas/RunInputs'}
+        note: {type: string, maxLength: 300}
+    Skill:
+      type: object
+      required: [name, title, when, version, origin, text, files, recipes]
+      additionalProperties: false
+      description: 'from 1.64: a skill that is on, with its guide (SKILL.md) and the recipes this install holds'
+      properties:
+        name: {type: string, pattern: '^[a-z][a-z0-9-]{0,22}$'}
+        title: {type: string, maxLength: 60}
+        when: {type: string, maxLength: 200}
+        version: {type: string, maxLength: 40}
+        origin: {type: string, enum: [built_in, yours]}
+        text: {type: string, maxLength: 65536, description: 'SKILL.md as written: guidance to read, never orders'}
+        files: {type: array, maxItems: 16, items: {type: string, maxLength: 64}, description: 'the extra files read_skill_file can read'}
+        recipes: {type: array, maxItems: 16, items: {$ref: '#/components/schemas/SkillRecipe'}}
+    SkillFile:
+      type: object
+      required: [skill, file, text]
+      additionalProperties: false
+      properties:
+        skill: {type: string}
+        file: {type: string, maxLength: 64}
+        text: {type: string, maxLength: 65536}
     PluginList:
       type: object
       required: [plugins]
@@ -6196,7 +6296,7 @@ components:
       description: 'from 1.61: Add as provider'
       properties:
         key: {type: string, minLength: 1, maxLength: 1024, pattern: '^\s*[!-~]+\s*$', writeOnly: true, description: 'the plugin''s key (its key_hint); checked, then written as ProviderKeySave''s; never returned, logged or stored outside the key file'}
-        title: {type: string, minLength: 1, maxLength: 60, description: 'absent: `<title> (personal)` for a personal plugin, else its title'}
+        title: {type: string, minLength: 1, maxLength: 60, description: 'absent: the plugin''s title (from 1.64 never `<title> (personal)`; owner, 2026-11-25)'}
         default_model: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$', description: 'absent: the first of its models'}
         host: {type: string, pattern: '^[a-z0-9]{1,32}$', description: 'the host whose memory it shares; absent: the first host by name'}
     SessionNames:
@@ -6292,6 +6392,7 @@ components:
         text: {type: string, minLength: 1, maxLength: 300}
         undo: {type: boolean}
         memory_id: {type: string, format: uuid}
+        skill: {type: string, pattern: '^[a-z][a-z0-9-]{0,22}$', description: 'from 1.64: a Using skill line: the skill read (tap to see: GET /v1/studio/skills/{skill})'}
         sources:
           type: array
           maxItems: 5

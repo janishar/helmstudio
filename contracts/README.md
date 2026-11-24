@@ -4043,6 +4043,44 @@ kinds: model providers and Assistant tools only.
   snippet}]} through DuckDuckGo (the unofficial `ddgs` library: free, no key; rate limits and errors are plain
   lines), `sends_off_machine`. The built-in Brave `search` provider (API 1.44) still works and can be retired later.
 
+### Skills (API 1.64; boards docs/mock/Plugins.dc.html SKILLS and Assistant.dc.html 16, release 0.1.0-alpha.2 item 36; normative)
+
+Owner, 2026-11-25: "plan skills support as plugin that will be used by agent to understand how to lets say a skill of
+animator", "i would want to add a skill into the plugin without upgrading the app", "use ~/.helm as the outside dir".
+
+- **A skill** is a plugin of kind `skill` (`plugins/manifest.schema.json`: `format` 1, `when`, optional `recipes`; no
+  url, health, provider or tools): a folder with `plugin.json`, `SKILL.md` (the guide) and at most 15 more `.md`,
+  `.txt` or `.json` files, each under 64 KB with a plain name. Text only: a skill never runs anything; actions come
+  from the Assistant's tools and Assistant tools plugins, with their cards.
+- **Where from.** Built in: the app's `plugins/` (mounted read-only at `/plugins`). Yours: `~/.helm/plugins/`
+  (`HELM_HOME` overrides `~/.helm`; mounted read-only at `/helm-plugins`): a folder, or a `.zip` of one (at most
+  5 MB, 64 entries and 2 MB unpacked; every entry a plain relative path, no `..`, no absolute path, no symlink, else
+  the zip is listed `broken` with its `problem` and nothing in it is used). Studio reads them on start, at Rescan and
+  when the folder changes (checked every 10 s; one scan at a time; an entry changed in the last 2 s is still being
+  copied and is left as it was until the next scan). Yours wins over a built-in one of the same name while it is
+  usable (`origin` yours, `replaces` the built-in's version); a broken or newer copy of yours leaves the built-in in
+  use, its row saying why (`problem`: `Your copy is broken: <reason>; using built in`). A scan never turns a plugin
+  off: one that turns broken stays on and is simply not used until it reads well again. `~/.helm/plugins` is made
+  (`~/.helm` mode 700) before the stack starts (`make up`, `make prod`, the Mac app), never by Docker. Any kind may
+  come from `~/.helm/plugins`; only skills are new in 1.64.
+- **Formats.** This helmstudio reads skill `format` 1. A higher one is listed `needs_newer` (`problem` says so) from
+  its name, title, version and format alone, and can't be turned on (409). A skill folder that fails the schema is
+  `broken`.
+- **Off until on** (owner, 2026-11-25: "will wait for our feature skills"): a new skill is off until an admin turns it
+  on, as every plugin. `status` of a skill that is on: `on`.
+- **Recipes** are data: `{name, title, workflow, params: {<node>.<param>: value}}`. Each is checked against this
+  install's workflows (the workflow is published, each node is in it and each param in its node's schema); one that
+  fails is skipped with `why` (Plugin.recipes) and never offered.
+- **Every user** sees the skills that are on: `GET /v1/studio/skills` (the @ picker), `GET /v1/studio/skills/{skill}`
+  (SKILL.md, its files, the recipes that hold), `GET /v1/studio/skills/{skill}/files/{file}`; 404 for a skill that
+  is off, unknown, needs_newer or broken.
+- **The assistant.** Each input carries `skills` (cmd.assistant.turn): one line each (`- <name>: <title>. <when>`)
+  after the stable system prompt. `use_skill` {skill} and `read_skill_file` {skill, file} (studio tools, the routes
+  above) are offered only while a skill is on. A use_skill call makes a done line `Using skill: <title>` with
+  `skill` (tap to see); read_skill_file `Read <file> · <title>`. What they return goes to the model fenced as data:
+  guidance it follows, never orders, and it never overrides the system rules. Typing `@<skill>` in a message makes
+  the model read it first.
+
 ## Rules
 
 - **Claim check:** messages carry object keys under `u/<owner_id>/…`, never bytes or signed URLs. Producers only

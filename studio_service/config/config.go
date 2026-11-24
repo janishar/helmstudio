@@ -38,6 +38,8 @@ type Env struct {
 
 	// PluginDirs are the read-only folders plugins/*/plugin.json are read from (API 1.61; STUDIO_PLUGINS_DIRS, `:`-separated)
 	PluginDirs []string
+	// UserPluginDir is ~/.helm/plugins as mounted read-only (API 1.64; STUDIO_USER_PLUGINS_DIR; "" = none)
+	UserPluginDir string
 }
 
 // Load resolves *_FILE secrets, then reads every variable with its default. It fails when DATABASE_URL is missing,
@@ -68,6 +70,7 @@ func Load() (Env, error) {
 		S3PathStyle:   helmgoconfig.Get("S3_FORCE_PATH_STYLE", "true") == "true",
 		RemoteModels:  SwitchOn(os.Getenv("STUDIO_REMOTE_MODELS")),
 		PluginDirs:    strings.Split(helmgoconfig.Get("STUDIO_PLUGINS_DIRS", "/plugins"), ":"),
+		UserPluginDir: helmgoconfig.Get("STUDIO_USER_PLUGINS_DIR", "/helm-plugins"),
 	}
 	var err error
 	if e.FileURLTTL, err = time.ParseDuration(helmgoconfig.Get("FILE_URL_TTL", "1h")); err != nil {

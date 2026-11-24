@@ -2,7 +2,7 @@
   "name": "claude-code-bridge-7d1e5c2a",
   "kind": "server",
   "api": "openai",
-  "title": "Claude Code (personal)",
+  "title": "Claude Code bridge",
   "base_url": "http://host.docker.internal:8420/v1",
   "models": ["claude-sonnet", "claude-opus", "claude-haiku"],
   "default_model": "claude-sonnet",

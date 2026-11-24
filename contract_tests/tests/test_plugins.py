@@ -93,7 +93,7 @@ def test_add_as_provider_is_only_you(admin, admin_session, api, on, fake_ctl):  
     assert (made["owner_id"], made["plugin"], made["title"], made["kind"]) == (
         me,
         "fake-provider",
-        "Fake provider (personal)",
+        "Fake provider",
         "server",
     )
     assert made["base_url"] == "http://fake-openai:8000/v1" and made["models"] == [
@@ -123,7 +123,7 @@ def test_add_as_provider_is_only_you(admin, admin_session, api, on, fake_ctl):  
             assert (mine["provider"], mine["personal"]) == (name, True)
             assert ok(admin.get(SETTINGS))["provider"] == name
             assert (
-                ok(admin.get(THREADS))["status"]["provider"]["title"] == "Fake provider (personal)"
+                ok(admin.get(THREADS))["status"]["provider"]["title"] == "Fake provider"
             )
             assert ok(api.get(THREADS))["status"]["provider"]["title"] == "Fake server"
             back = ok(

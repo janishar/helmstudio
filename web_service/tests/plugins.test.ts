@@ -20,8 +20,8 @@ describe("plugins", () => {
     });
     expect(statusOf(search)).toEqual({ text: "Off", ok: false });
   });
-  it("names a personal plugin's provider (personal)", () => {
-    expect(providerTitle(bridge)).toBe("Claude Code bridge (personal)");
+  it("names a plugin's provider after the plugin, never (personal)", () => {
+    expect(providerTitle(bridge)).toBe("Claude Code bridge");
     expect(providerTitle(search)).toBe("Web search");
   });
   it("says what a Rescan found", () => {

@@ -1,0 +1,29 @@
+{
+  "name": "animator",
+  "title": "Animator",
+  "version": "0.1.0",
+  "kind": "skill",
+  "format": 1,
+  "description": "Teaches the Assistant to plan animated shots: one action per shot, timing in frames, simple motion, one named camera move, consistent characters, and the LTX-2.5 and MiniMax H3 settings that fit.",
+  "author": "helmstudio",
+  "source": "plugins/animator",
+  "may_do": [
+    "Teach the Assistant shot planning, timing, motion and camera moves (text it reads)",
+    "Suggest video settings as recipes (you still press Generate)"
+  ],
+  "when": "Planning or making an animated shot, clip or short film: a shot list, timing, motion, camera moves, or keeping characters the same across shots.",
+  "recipes": [
+    {"name": "ltx-animate-2s", "title": "LTX Animate, 2 s shot", "workflow": "ltx-image-to-video",
+     "params": {"duration.frames": 49, "duration.fps": 24}, "note": "A quick shot from a still: 49 frames at 24 fps."},
+    {"name": "ltx-animate-4s", "title": "LTX Animate, 4 s shot", "workflow": "ltx-image-to-video",
+     "params": {"duration.frames": 97, "duration.fps": 24}, "note": "97 frames at 24 fps (LTX lengths are 8k + 1)."},
+    {"name": "ltx-text-3s", "title": "LTX Text to video, 3 s shot", "workflow": "ltx-text-to-video",
+     "params": {"duration.frames": 73, "duration.fps": 24}, "note": "73 frames at 24 fps."},
+    {"name": "h3-first-last-5s", "title": "MiniMax H3 Image to video, 5 s", "workflow": "minimax-h3-image-to-video",
+     "params": {"duration.frames": 124, "generate.steps": 20}, "note": "First and / or last frame; 124 frames at 24 fps, 20 steps."},
+    {"name": "h3-draft-3s", "title": "MiniMax H3 Text to video, 3 s draft", "workflow": "minimax-h3-text-to-video",
+     "params": {"duration.frames": 73, "generate.steps": 4, "generate.lora": "none"}, "note": "A 4-step draft to check the shot before the final (73 frames: H3 lengths are 5 + 17k)."},
+    {"name": "h3-references-5s", "title": "MiniMax H3 References, 5 s", "workflow": "minimax-h3-references",
+     "params": {"duration.frames": 124, "generate.steps": 20}, "note": "Keeps a character or place from reference images."}
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "name": "animator",
+  "title": "Animator",
+  "when": "Planning an animated shot or film: shots, timing, motion, camera moves.",
+  "version": "0.1.0",
+  "origin": "zip",
+  "text": "# Animator\n\nOne action per shot.",
+  "files": [
+    "camera-moves.md"
+  ],
+  "recipes": [
+    {
+      "name": "slow-dolly",
+      "title": "Slow dolly in, 4 s",
+      "workflow": "ltx-image-to-video",
+      "params": {
+        "duration.frames": 97
+      },
+      "note": "24 fps"
+    }
+  ]
+}

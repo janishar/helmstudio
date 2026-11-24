@@ -1809,11 +1809,105 @@
     box-shadow: none !important;
   }
   .ast .pr:hover,
-  .ast .pr:focus-visible {
+  .ast .pr:focus-visible,
+  .ast .pr.on {
     background: var(--s5);
   }
+  /* skills (board frame 16): the @ picker above the composer, the Using skill line and its box */
+  .ast .pop.atp {
+    top: auto;
+    bottom: calc(100% + 6px);
+    left: 0;
+  }
+  .ast .atq {
+    display: flex;
+    align-items: center;
+    height: 30px;
+    padding: 0 8px;
+    border-radius: 10px;
+    background: var(--s2);
+    font-size: 12px;
+    color: var(--t1);
+  }
+  .ast .pop h4 {
+    margin: 4px 0 2px 8px;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--t2);
+  }
+  .ast .pr i {
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 40px;
+    height: 26px;
+    border-radius: 6px;
+    background: var(--s3);
+    color: var(--a2);
+  }
+  .ast .pr span {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ast .pr small {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--t2);
+  }
+  .ast .skl {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    height: 30px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--a2) 16%, transparent);
+    color: var(--t1);
+    font-size: 12px;
+    text-align: left;
+  }
+  .ast .skl span {
+    flex: 1 1 auto;
+  }
+  .ast .skl small {
+    font-size: 11px;
+    color: var(--t2);
+  }
+  .ast .skl svg {
+    flex: 0 0 auto;
+    color: var(--a2);
+  }
+  .ast .skl + * {
+    margin-top: 6px;
+  }
+  .ast .skb {
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: var(--s1);
+    font-size: 12px;
+    line-height: 17px;
+  }
+  .ast .skb p {
+    margin: 0;
+  }
+  .ast .skb ul {
+    margin: 4px 0;
+    padding-left: 16px;
+    list-style: disc;
+  }
+  .ast .skf {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--t2);
+  }
   /* the phone sheet: every tap is 44 px (item 23) */
-  .ast.sheet :is(.ib, .x, .un, .snd, .no, .sum, .pr, .mmore) {
+  .ast.sheet :is(.ib, .x, .un, .snd, .no, .sum, .pr, .mmore, .skl) {
     min-width: 44px;
     min-height: 44px;
   }
