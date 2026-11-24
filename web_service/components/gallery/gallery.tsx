@@ -26,7 +26,7 @@ import { FrameIn } from "@/components/create/frame-in";
 import { useScreenTools } from "@/components/assistant/tools";
 import { useLibraryDialog } from "@/components/assistant/library";
 import { ORDERS, galleryTools } from "@/components/gallery/assistant";
-import { useGridWindow } from "@/components/gallery/window";
+import { sliceFrom, useGridWindow } from "@/components/gallery/window";
 import {
   AUDIO_ACCEPT,
   UPLOAD_START,
@@ -583,30 +583,28 @@ export function Gallery({
               <small className="mono text-[10px] text-t2">Upload</small>
             </div>
           ))}
-          {takes
-            ?.slice(Math.max(0, win.start - uploads.length), win.end - uploads.length)
-            .map((t) => {
-              const on = selecting ? picked.has(t.id) : t.id === current?.id;
-              return (
-                <div key={t.id} role="listitem" className="min-w-0">
-                  <TakeCard
-                    take={t}
-                    on={on}
-                    selecting={selecting}
-                    onClick={() => (selecting ? toggle(t.id) : setCurrentId(t.id))}
-                    // a double-click opens the full preview, as the expand button (item 31)
-                    onDoubleClick={
-                      selecting
-                        ? undefined
-                        : () => {
-                            setCurrentId(t.id);
-                            setFull(true);
-                          }
-                    }
-                  />
-                </div>
-              );
-            })}
+          {takes?.slice(...sliceFrom(win, uploads.length)).map((t) => {
+            const on = selecting ? picked.has(t.id) : t.id === current?.id;
+            return (
+              <div key={t.id} role="listitem" className="min-w-0">
+                <TakeCard
+                  take={t}
+                  on={on}
+                  selecting={selecting}
+                  onClick={() => (selecting ? toggle(t.id) : setCurrentId(t.id))}
+                  // a double-click opens the full preview, as the expand button (item 31)
+                  onDoubleClick={
+                    selecting
+                      ? undefined
+                      : () => {
+                          setCurrentId(t.id);
+                          setFull(true);
+                        }
+                  }
+                />
+              </div>
+            );
+          })}
         </div>
 
         {takes === null && !error && (

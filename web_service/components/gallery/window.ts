@@ -29,6 +29,13 @@ export function windowOf(
   };
 }
 
+/** The window's part of a list that starts at item `offset` of the grid (the Gallery's takes after its uploads), as
+ * slice bounds; empty when the window ends before it. */
+export const sliceFrom = (w: GridWindow, offset: number): [number, number] => [
+  Math.max(0, w.start - offset),
+  Math.max(0, w.end - offset),
+];
+
 /** The window of the grid `g` now: its columns, its row stride (from its first two rows drawn; nothing drawn: `last`)
  * and the screen in its own coordinates (its top padding stands for the rows above). */
 function measure(g: HTMLElement, count: number, last: number) {
@@ -71,7 +78,11 @@ export function useGridWindow(el: React.RefObject<HTMLElement | null>, count: nu
     // capture: the grid may scroll in the page or in a dialog's own box
     document.addEventListener("scroll", on, { capture: true, passive: true });
     window.addEventListener("resize", on);
+    // the grid's own width changes too (a panel opens, a dialog's box): its columns change
+    const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(on);
+    if (el.current) ro?.observe(el.current);
     return () => {
+      ro?.disconnect();
       cancelAnimationFrame(raf);
       document.removeEventListener("scroll", on, { capture: true });
       window.removeEventListener("resize", on);
