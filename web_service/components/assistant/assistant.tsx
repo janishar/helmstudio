@@ -611,6 +611,7 @@ const GO: Record<S<"AssistantCard">["kind"], string> = {
   look: "LOOK",
   web_search: "SEARCH",
   delete: "DELETE",
+  plugin: "PLUGIN",
 };
 const CARD_STATE: Record<S<"AssistantCard">["state"], string> = {
   waiting: "",
@@ -709,7 +710,9 @@ const serverCard = (c: S<"AssistantCard">): ScreenCard => ({
       ? "Off unless your admin turns it on."
       : c.kind === "delete"
         ? "This can't be undone."
-        : "Runs on your machines.",
+        : c.kind === "plugin"
+          ? "Runs a plugin's tool."
+          : "Runs on your machines.",
   danger: c.kind === "delete",
 });
 

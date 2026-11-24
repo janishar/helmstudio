@@ -1585,7 +1585,7 @@ export interface paths {
         };
         /**
          * The local servers and remote providers a pipeline may name (names and models only)
-         * @description From 1.15. Enabled providers, redacted for every user: no base_url, key_secret, host or limits. Remote ones only when the deployment has remote models on. Never a search provider (1.44).
+         * @description From 1.15. Enabled providers, redacted for every user: no base_url, key_secret, host or limits. Remote ones only when the deployment has remote models on. Never a search provider (1.44). From 1.60 another account's Only-you provider is never listed, and a disabled plugin's providers are not either.
          */
         get: operations["studioListModelSources"];
         put?: never;
@@ -1769,6 +1769,98 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/studio/admin/plugins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * From 1.60: the plugins found in plugins/ (Plugins page)
+         * @description Admin only (403). Every plugin studio found (contracts/README.md, Plugins), by name, with its manifest, whether it is on and, for one that is on, whether its health path answers now (2 s). `provider` is the caller's own provider made from it.
+         */
+        get: operations["studioAdminListPlugins"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/admin/plugins/rescan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * From 1.60: read plugins/ again (Rescan)
+         * @description Admin only (403). Reads every plugins/*\/plugin.json again: a new one is added Off, a known one's manifest is replaced (on stays on), one whose folder or manifest is gone is dropped with its tools. `new` names the ones added.
+         */
+        post: operations["studioAdminRescanPlugins"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/admin/plugins/{plugin}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * From 1.60: turn a plugin on or off
+         * @description Admin only (403). Off at once: its assistant tools leave the next input's tools, its providers leave every list and pipeline rule (they come back when it is on again). 404 unknown.
+         */
+        put: operations["studioAdminPutPlugin"];
+        post?: never;
+        /**
+         * From 1.60: remove a plugin (its providers go too; the folder stays)
+         * @description Admin only (403). Drops the plugin and every provider made from it; the folder stays in plugins/, so a Rescan finds it again, Off. 404 unknown; 409 `<provider> is in use by an unfinished batch`.
+         */
+        delete: operations["studioAdminRemovePlugin"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/admin/plugins/{plugin}/provider": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * From 1.60: Add as provider — a model-provider plugin becomes the caller's own local server provider
+         * @description Admin only (403). The plugin must be a model-provider and on (409 `turn <title> on first`; 409 `<title> is not
+         *     a model provider`). Studio asks `pipelines.providers.key.write` to check `key` on the plugin's
+         *     `<url><provider.path>/models` and write it to the key file `plugin-<plugin>-<8 hex of the caller's id>`
+         *     (as PUT /admin/provider-keys does), then creates or replaces the provider `<plugin>-<8 hex>`: kind server,
+         *     base_url `<url><provider.path>`, the manifest's models, timeout and memory, host `host` (absent: the first host
+         *     by name). A personal plugin's provider is Only you (`owner_id` the caller): no other account sees or uses it.
+         *     422 `The key doesn't match: copy it again from the plugin's .env` (the check was refused: nothing saved),
+         *     `<title> did not answer: start it, then Try again` (unreachable: nothing saved), a default_model not in its
+         *     models, an unknown host; 409 `keys are set in files on this deployment`; 503 no answer from pipelines.
+         */
+        post: operations["studioAdminAddPluginProvider"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/studio/admin/session-names": {
         parameters: {
             query?: never;
@@ -1783,7 +1875,8 @@ export interface paths {
         get: operations["studioAdminGetSessionNames"];
         /**
          * Set how untitled sessions are named
-         * @description From 1.43. Admin only (403). Applies to sessions named from then on. 422 `<provider> is not an enabled provider`,
+         * @description From 1.43. Admin only (403). Applies to sessions named from then on. 422 `<provider> is not an enabled provider`
+         *     (from 1.60 also an Only-you provider: `<provider> is only yours; pick a shared provider`),
          *     `<model> is not a model of <provider>`, `provider and model are only for remote`, `remote needs a provider`,
          *     `Qwen3.8 27B is not downloaded` (local with no live host that can run `llm-ask`); 409 `remote models are off on
          *     this deployment` for a provider of kind remote while the deployment's switch is off (a server, "on this
@@ -6006,6 +6099,13 @@ export interface components {
             thinking_levels?: {
                 [key: string]: components["schemas"]["ThinkingInfo"];
             };
+            /**
+             * Format: uuid
+             * @description from 1.60 (read only): an Only-you provider's owner, the admin who added it from a personal plugin. Only that account sees or uses it (every list, the AI agents picker, pipeline rules, the assistant); absent = everyone's
+             */
+            owner_id?: string;
+            /** @description from 1.60 (read only): the plugin it was made from (Add as provider) */
+            plugin?: string;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -6174,6 +6274,80 @@ export interface components {
             /** @description refused or unreachable: our own short text, never the provider's */
             detail?: string;
         };
+        /** @description from 1.60: a tool's risk flags (plugins/manifest.schema.json risk): any true asks the user first */
+        PluginRisk: {
+            uses_gpu: boolean;
+            deletes: boolean;
+            sends_off_machine: boolean;
+        };
+        PluginTool: {
+            /** @description the model sees `<plugin>__<name>` */
+            name: string;
+            description: string;
+            risk: components["schemas"]["PluginRisk"];
+        };
+        /** @description from 1.60: one plugin as the admin sees it: its manifest (plugins/manifest.schema.json) and its state */
+        Plugin: {
+            /** @description its folder under plugins/ */
+            name: string;
+            title: string;
+            version: string;
+            /** @enum {string} */
+            kind: "model-provider" | "assistant-tools";
+            description: string;
+            author: string;
+            source?: string;
+            may_do: string[];
+            /** @description personal use only: its provider is Only you */
+            personal: boolean;
+            disclaimer?: {
+                text: string;
+                link?: string;
+            };
+            /** @example http://host.docker.internal:8420 */
+            url: string;
+            /** @description how to start it (Not running) */
+            start?: string;
+            /** @description model-provider: its models */
+            models?: string[];
+            /** @description model-provider: where the key is */
+            key_hint?: string;
+            /** @description assistant-tools: its tools */
+            tools?: components["schemas"]["PluginTool"][];
+            /** @description on; off until an admin turns it on */
+            enabled: boolean;
+            /**
+             * @description off: not on (never called); running: its health path answered 2xx in 2 s; not_running: on, no answer
+             * @enum {string}
+             */
+            status: "off" | "running" | "not_running";
+            /** @description the caller's own provider made from it (Add as provider), else null */
+            provider: string | null;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        PluginList: {
+            plugins: components["schemas"]["Plugin"][];
+        };
+        PluginRescan: {
+            plugins: components["schemas"]["Plugin"][];
+            /** @description the plugins this Rescan added (Off) */
+            new: string[];
+        };
+        PluginPut: {
+            enabled: boolean;
+        };
+        /** @description from 1.60: Add as provider */
+        PluginProviderCreate: {
+            /** @description the plugin's key (its key_hint); checked, then written as ProviderKeySave's; never returned, logged or stored outside the key file */
+            key: string;
+            /** @description absent: `<title> (personal)` for a personal plugin, else its title */
+            title?: string;
+            /** @description absent: the first of its models */
+            default_model?: string;
+            /** @description the host whose memory it shares; absent: the first host by name */
+            host?: string;
+        };
         /** @description from 1.43: how an untitled session is named (contracts/README.md, Sessions: titles and naming). Default off */
         SessionNames: {
             /**
@@ -6276,8 +6450,11 @@ export interface components {
         /** @description twin of assistant.schema.json card: a card the server asks (look_at, web_search, forget); Yes or Not now is a message of kind answer */
         AssistantCard: {
             id: components["schemas"]["AssistantCallId"];
-            /** @enum {string} */
-            kind: "look" | "web_search" | "delete";
+            /**
+             * @description from 1.60 plugin: a plugin tool with a risk flag (contracts/README.md, Plugins)
+             * @enum {string}
+             */
+            kind: "look" | "web_search" | "delete" | "plugin";
             title: string;
             rows: {
                 label: string;
@@ -6478,10 +6655,12 @@ export interface components {
         /** @description the admin's assistant settings (Admin › AI agents) */
         AssistantSettings: {
             enabled: boolean;
-            /** @description a server or remote provider's name */
+            /** @description a server or remote provider's name; from 1.60 the caller's own choice when they made one (`personal`) */
             provider: string | null;
             /** @description one of its models; null = its default_model */
             model: string | null;
+            /** @description from 1.60: `provider` is the caller's own Only-you provider: only the caller's chats use it; everyone else's use the deployment's provider. A PUT naming an Only-you provider sets the caller's own choice (the deployment's stays); naming another clears it and sets the deployment's */
+            personal?: boolean;
             /** @description web search's own egress switch (off by default) */
             web_search: boolean;
             /** @description a provider of kind search */
@@ -8027,6 +8206,8 @@ export interface components {
         Cursor: string;
         /** @description a provider's name (unknown = 404 on DELETE and test; malformed = 404) */
         ProviderName: string;
+        /** @description from 1.60: a plugin's name (its folder; unknown or malformed = 404) */
+        PluginName: string;
         Limit: number;
         /** @description sequence UUID (malformed = 404) */
         TimelineId: string;
@@ -10543,6 +10724,139 @@ export interface operations {
             403: components["responses"]["AdminRequired"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioAdminListPlugins: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the plugins */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["AdminRequired"];
+        };
+    };
+    studioAdminRescanPlugins: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the plugins after it */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginRescan"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["AdminRequired"];
+        };
+    };
+    studioAdminPutPlugin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description from 1.60: a plugin's name (its folder; unknown or malformed = 404) */
+                plugin: components["parameters"]["PluginName"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PluginPut"];
+            };
+        };
+        responses: {
+            /** @description the plugin */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Plugin"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["AdminRequired"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
+        };
+    };
+    studioAdminRemovePlugin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description from 1.60: a plugin's name (its folder; unknown or malformed = 404) */
+                plugin: components["parameters"]["PluginName"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["AdminRequired"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    studioAdminAddPluginProvider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description from 1.60: a plugin's name (its folder; unknown or malformed = 404) */
+                plugin: components["parameters"]["PluginName"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PluginProviderCreate"];
+            };
+        };
+        responses: {
+            /** @description the provider */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Provider"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["AdminRequired"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
             503: components["responses"]["Unavailable"];
         };
     };

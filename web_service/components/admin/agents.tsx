@@ -9,6 +9,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ErrorNote, Info } from "@/components/kit";
+import { OnlyYou } from "@/components/admin/providers";
 import { AdminTabs } from "@/components/admin/users";
 import { useUser } from "@/components/shell";
 import { api, message, ok, type S } from "@/lib/api";
@@ -132,6 +133,12 @@ export function AgentsAdmin() {
                     {aProvider
                       ? `${titleOf(aProvider)} · ${assistant.model ?? aProvider.default_model}`
                       : "—"}
+                    {aProvider?.owner_id && (
+                      <>
+                        {" "}
+                        <OnlyYou />
+                      </>
+                    )}
                     {assistant.web_search && (
                       <>
                         <br />
@@ -263,7 +270,7 @@ export function AgentsAdmin() {
           ref={namesPanel}
           key={names.updated_at ?? "unset"}
           names={names}
-          providers={pickable(providers, names.remote_enabled)}
+          providers={pickable(providers, names.remote_enabled).filter((p) => !p.owner_id)}
           onSaved={(n) => {
             setNames(n);
             setEditing((e) => (e === "names" ? null : e));
@@ -587,6 +594,7 @@ function AssistantPanel({
               {providers.map((x) => (
                 <option key={x.name} value={x.name}>
                   {titleOf(x)} ({x.kind === "remote" ? "remote" : "local server"})
+                  {x.owner_id ? " · Only you" : ""}
                 </option>
               ))}
             </select>
