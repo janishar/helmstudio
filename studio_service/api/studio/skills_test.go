@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func writeZip(t *testing.T, file string, entries map[string]string, link string) {
@@ -57,10 +58,24 @@ func TestUserPlugins(t *testing.T) {
 	writeZip(t, filepath.Join(user, "escape.zip"), map[string]string{"plugin.json": js("escape"), "SKILL.md": "e", "../x.md": "x"}, "")
 	writeZip(t, filepath.Join(user, "linked.zip"), map[string]string{"plugin.json": js("linked"), "SKILL.md": "l"}, "link.md")
 
+	// a broken copy of yours leaves the built-in in use
+	put(filepath.Join(builtIn, "camera"), map[string]string{"plugin.json": js("camera"), "SKILL.md": "built in"})
+	put(filepath.Join(user, "camera"), map[string]string{"plugin.json": js("camera")})
+	settle(t, user)
+	// still being written: left for the next scan
+	put(filepath.Join(user, "copying"), map[string]string{"plugin.json": js("copying"), "SKILL.md": "c"})
+
 	s := &Service{}
 	s.SetPluginDirs([]string{builtIn})
 	s.SetUserPluginDir(user)
-	got := s.readManifests(context.Background())
+	got, busy := s.readManifests(context.Background())
+	if _, seen := got["copying"]; seen || len(busy) != 1 || busy[0] != "copying" {
+		t.Fatalf("a folder changed in the last 2 s is busy: %v", busy)
+	}
+	if f := got["camera"]; f.Origin != "built_in" || f.Blocked != "" || f.Problem == nil ||
+		!strings.Contains(*f.Problem, "Your copy is broken: it has no SKILL.md; using built in") {
+		t.Fatalf("a broken copy of yours leaves the built-in: %+v", f)
+	}
 	check := func(name, origin, blocked, problem string) foundPlugin {
 		t.Helper()
 		f, ok := got[name]
@@ -83,5 +98,34 @@ func TestUserPlugins(t *testing.T) {
 	}
 	if got := skillFiles(got["animator"].Dir); len(got) != 1 || got[0] != "more.md" {
 		t.Fatal(got)
+	}
+}
+
+// settle dates everything in dir a minute back (a scan skips what changed in the last 2 s).
+func settle(t *testing.T, dir string) {
+	t.Helper()
+	old := time.Now().Add(-time.Minute)
+	_ = filepath.WalkDir(dir, func(p string, _ os.DirEntry, err error) error {
+		if err == nil {
+			err = os.Chtimes(p, old, old)
+		}
+		return err
+	})
+}
+
+// API 1.64: a plugin's file is never read through a symlink.
+func TestReadLimitedRefusesSymlinks(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "real.md"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(dir, "real.md"), filepath.Join(dir, "link.md")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readLimited(filepath.Join(dir, "link.md"), 100); err == nil {
+		t.Fatal("a symlink was followed")
+	}
+	if got, err := readLimited(filepath.Join(dir, "real.md"), 100); err != nil || string(got) != "x" {
+		t.Fatal(got, err)
 	}
 }

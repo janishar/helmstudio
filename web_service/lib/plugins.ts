@@ -76,6 +76,8 @@ export function problemAlert(p: Plugin): { text: string; red: boolean } | null {
       text: `${sourceOf(p).split("/").pop()} can't be read: ${why}. Nothing from it is used.`,
       red: true,
     };
+  // API 1.64: a built-in in use whose copy of yours can't be: "Your copy is broken: …; using built in."
+  if (why) return { text: `${why}.`, red: false };
   return null;
 }
 

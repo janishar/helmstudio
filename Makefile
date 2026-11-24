@@ -43,7 +43,11 @@ define nats_reload
   echo "nats config changed: restarting nats" && $(1) restart nats; :
 endef
 
+# API 1.64: ~/.helm/plugins (HELM_HOME overrides ~/.helm) exists before compose mounts it, so Docker never makes it as root
+HELM_PLUGINS = mkdir -p "$${HELM_HOME:-$$HOME/.helm}/plugins" && chmod 700 "$${HELM_HOME:-$$HOME/.helm}"
+
 up: secrets envs  ## build and start the stack (fake runner), wait until healthy
+	$(HELM_PLUGINS)
 	$(call nats_reload,$(DEV))
 	$(DEV) up -d --build --wait
 
@@ -62,6 +66,7 @@ prod-secrets:     ## deploy/secrets-prod/ (git-ignored, its own keys; never over
 	$(PROD_ENV) .tools/make-secrets
 
 prod: prod-secrets envs  ## production on this Mac: build the images (tag prod), start, wait until healthy (Kong 8400)
+	$(HELM_PLUGINS)
 	$(call nats_reload,$(PROD))
 	$(PROD) up -d --build --wait
 

@@ -48,6 +48,13 @@ describe("skills on the Plugins page", () => {
     expect(recipesRow({ ok: 6, skipped: [] })).toBe("6");
     expect(whenLine("Planning a shot.")).toBe("Use when planning a shot.");
     expect(problemAlert(animator)).toBeNull();
+    // API 1.64: a built-in in use whose copy of yours is broken says so
+    expect(
+      problemAlert({
+        ...animator,
+        problem: "Your copy is broken: it has no SKILL.md; using built in",
+      }),
+    ).toEqual({ text: "Your copy is broken: it has no SKILL.md; using built in.", red: false });
     expect(problemAlert(storyboard)).toEqual({
       text: "Storyboard artist is made for a newer helmstudio (format 2; this one reads 1). Update helmstudio to use it.",
       red: false,

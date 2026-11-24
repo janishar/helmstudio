@@ -165,6 +165,10 @@ function stackSteps({ p, cfg: shipped, settings, runners }) {
   const services = async (c) => {
     dockerConfig(p);
     await secrets(c);
+    // API 1.64: ~/.helm/plugins (the user's plugins, mounted read-only into studio) exists before compose mounts it
+    const helm = process.env.HELM_HOME || path.join(os.homedir(), '.helm');
+    fs.mkdirSync(path.join(helm, 'plugins'), { recursive: true });
+    fs.chmodSync(helm, 0o700);
     const t0 = Date.now();
     const tick = setInterval(() => c.detail(`${Math.round((Date.now() - t0) / 1000)} s`), 1000);
     try {

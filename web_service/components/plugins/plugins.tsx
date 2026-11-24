@@ -184,6 +184,12 @@ export function PluginsScreen() {
                             <span className={`${ME_TAG} mt-1 inline-block`}>Personal use only</span>
                           </>
                         )}
+                        {!dead && p.problem && (
+                          <>
+                            <br />
+                            <span className={`${ME_TAG} mt-1 inline-block`}>{p.problem}</span>
+                          </>
+                        )}
                         {p.replaces && (
                           <>
                             <br />

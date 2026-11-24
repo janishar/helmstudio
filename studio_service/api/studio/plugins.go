@@ -11,10 +11,12 @@ import (
 	"maps"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -166,13 +168,17 @@ func (s *Service) problem(ctx context.Context, m *manifest, folder string) strin
 	return s.hostRule(ctx, "server", m.URL)
 }
 
-// readLimited reads at most max+1 bytes of a file (a longer one is refused by its caller, never read whole).
+// readLimited reads at most max+1 bytes of a regular file (a longer one is refused by its caller, never read whole);
+// API 1.64: never through a symlink (O_NOFOLLOW), so one placed after a scan is not followed.
 func readLimited(path string, max int64) ([]byte, error) {
-	f, err := os.Open(path)
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
+	if info, err := f.Stat(); err != nil || !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("%s is not a regular file", filepath.Base(path))
+	}
 	return io.ReadAll(io.LimitReader(f, max+1))
 }
 

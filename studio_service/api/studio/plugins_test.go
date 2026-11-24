@@ -37,7 +37,7 @@ func TestReadManifests(t *testing.T) {
 		}
 	}
 	s.SetPluginDirs([]string{"../../../plugins", "../../../contract_tests/fake_plugins", bad})
-	got := s.readManifests(context.Background())
+	got, _ := s.readManifests(context.Background())
 	names := slices.Sorted(maps.Keys(got))
 	want := []string{"animator", "claude-code-bridge", "fake-provider", "fake-tools", "good", "web-search"}
 	if !slices.Equal(names, want) {

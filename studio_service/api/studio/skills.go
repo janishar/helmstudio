@@ -231,13 +231,34 @@ func writeEntry(f *zip.File, to string) error {
 	return cmpErr(err, w.Close())
 }
 
-// readManifests reads yours (~/.helm/plugins: folders and .zip files) and the built-in ones; yours wins a name.
-func (s *Service) readManifests(ctx context.Context) map[string]foundPlugin {
-	out := map[string]foundPlugin{}
+// settling is how long a file of yours must stay unchanged before a scan reads it (a .zip or a folder being copied).
+const settling = 2 * time.Second
+
+// changedSince reports whether anything in p (a file, or a folder and its files) changed after t.
+func changedSince(p string, t time.Time) bool {
+	changed := false
+	_ = filepath.WalkDir(p, func(_ string, d os.DirEntry, err error) error {
+		if info, e := d.Info(); err == nil && e == nil && info.ModTime().After(t) {
+			changed = true
+		}
+		return nil
+	})
+	return changed
+}
+
+// readManifests reads yours (~/.helm/plugins: folders and .zip files) and the built-in ones. Yours wins a name while it
+// is usable; a broken or newer copy of yours leaves the built-in in use, with your copy's problem. busy: names of yours
+// still being written (changed in the last 2 s), left as they are until the next scan.
+func (s *Service) readManifests(ctx context.Context) (map[string]foundPlugin, []string) {
+	out, busy := map[string]foundPlugin{}, []string{}
 	if s.userPluginDir != "" {
 		entries, _ := os.ReadDir(s.userPluginDir)
 		for _, e := range entries {
 			full := filepath.Join(s.userPluginDir, e.Name())
+			if changedSince(full, time.Now().Add(-settling)) {
+				busy = append(busy, strings.TrimSuffix(e.Name(), ".zip"))
+				continue
+			}
 			var found foundPlugin
 			ok := false
 			switch {
@@ -269,22 +290,33 @@ func (s *Service) readManifests(ctx context.Context) map[string]foundPlugin {
 			if !ok || found.Blocked == "broken" {
 				continue
 			}
-			if mine, seen := out[found.M.Name]; !seen {
+			switch mine, seen := out[found.M.Name]; {
+			case !seen:
 				out[found.M.Name] = found
-			} else if mine.Origin == "yours" && mine.Replaces == nil {
+			case mine.Origin == "yours" && mine.Blocked != "":
+				// your copy can't be used: the built-in stays in use, and the row says why yours is not
+				why := "Your copy is broken: " + *mine.Problem + "; using built in"
+				if mine.Blocked == "needs_newer" {
+					why = "Your copy needs a newer helmstudio; using built in"
+				}
+				found.Problem = &why
+				out[found.M.Name] = found
+			case mine.Origin == "yours" && mine.Replaces == nil:
 				v := found.M.Version
 				mine.Replaces = &v
 				out[found.M.Name] = mine
 			}
 		}
 	}
-	return out
+	return out, busy
 }
 
 // ScanPlugins reads the plugin folders into the table: a new one is added off, a known one's manifest replaced, one
 // gone is dropped. It returns the names added.
 func (s *Service) ScanPlugins(ctx context.Context) ([]string, error) {
-	found := s.readManifests(ctx)
+	s.scanMu.Lock() // Rescan and the watch never unpack or write at once
+	defer s.scanMu.Unlock()
+	found, busy := s.readManifests(ctx)
 	added := []string{}
 	err := common.System(ctx, s.db, func(tx pgx.Tx) error {
 		names := []string{}
@@ -296,7 +328,7 @@ func (s *Service) ScanPlugins(ctx context.Context) ([]string, error) {
 				VALUES ($1, $2, $3, $4, $5, $6, $7)
 				ON CONFLICT (name) DO UPDATE SET manifest = excluded.manifest, origin = excluded.origin, dir = excluded.dir,
 				replaces = excluded.replaces, blocked = excluded.blocked, problem = excluded.problem,
-				enabled = plugins.enabled AND excluded.blocked = '',
+				enabled = plugins.enabled,
 				updated_at = CASE WHEN plugins.manifest = excluded.manifest AND plugins.blocked = excluded.blocked
 					THEN plugins.updated_at ELSE clock_timestamp() END
 				RETURNING xmax = 0`, name, toJSON(f.M), f.Origin, f.Dir, f.Replaces, f.Blocked, f.Problem).Scan(&inserted); err != nil {
@@ -306,7 +338,7 @@ func (s *Service) ScanPlugins(ctx context.Context) ([]string, error) {
 				added = append(added, name)
 			}
 		}
-		_, err := tx.Exec(ctx, `DELETE FROM plugins WHERE NOT (name = ANY($1))`, names)
+		_, err := tx.Exec(ctx, `DELETE FROM plugins WHERE NOT (name = ANY($1))`, append(names, busy...)) // busy: kept as is
 		return err
 	})
 	return added, err

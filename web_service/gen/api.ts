@@ -6384,7 +6384,7 @@ export interface components {
                     why: string;
                 }[];
             };
-            /** @description from 1.64: why it can't be used (status needs_newer or broken), in plain words */
+            /** @description from 1.64: why it can't be used (status needs_newer or broken), in plain words; or, on a built-in one in use, why your copy of the same name is not (`Your copy is broken: <reason>; using built in`) */
             problem?: string;
             source?: string;
             may_do: string[];

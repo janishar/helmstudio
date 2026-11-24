@@ -6201,7 +6201,7 @@ components:
           properties:
             ok: {type: integer, minimum: 0}
             skipped: {type: array, maxItems: 16, items: {type: object, required: [name, why], additionalProperties: false, properties: {name: {type: string}, why: {type: string, maxLength: 200}}}}
-        problem: {type: string, maxLength: 300, description: 'from 1.64: why it can''t be used (status needs_newer or broken), in plain words'}
+        problem: {type: string, maxLength: 300, description: 'from 1.64: why it can''t be used (status needs_newer or broken), in plain words; or, on a built-in one in use, why your copy of the same name is not (`Your copy is broken: <reason>; using built in`)'}
         source: {type: string, maxLength: 300}
         may_do: {type: array, maxItems: 8, items: {type: string, maxLength: 120}}
         personal: {type: boolean, description: 'personal use only: its provider is Only you'}

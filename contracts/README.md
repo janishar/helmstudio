@@ -4056,8 +4056,13 @@ animator", "i would want to add a skill into the plugin without upgrading the ap
   (`HELM_HOME` overrides `~/.helm`; mounted read-only at `/helm-plugins`): a folder, or a `.zip` of one (at most
   5 MB, 64 entries and 2 MB unpacked; every entry a plain relative path, no `..`, no absolute path, no symlink, else
   the zip is listed `broken` with its `problem` and nothing in it is used). Studio reads them on start, at Rescan and
-  when the folder changes (checked every 10 s). Yours wins over a built-in one of the same name (`origin` yours,
-  `replaces` the built-in's version). Any kind may come from `~/.helm/plugins`; only skills are new in 1.64.
+  when the folder changes (checked every 10 s; one scan at a time; an entry changed in the last 2 s is still being
+  copied and is left as it was until the next scan). Yours wins over a built-in one of the same name while it is
+  usable (`origin` yours, `replaces` the built-in's version); a broken or newer copy of yours leaves the built-in in
+  use, its row saying why (`problem`: `Your copy is broken: <reason>; using built in`). A scan never turns a plugin
+  off: one that turns broken stays on and is simply not used until it reads well again. `~/.helm/plugins` is made
+  (`~/.helm` mode 700) before the stack starts (`make up`, `make prod`, the Mac app), never by Docker. Any kind may
+  come from `~/.helm/plugins`; only skills are new in 1.64.
 - **Formats.** This helmstudio reads skill `format` 1. A higher one is listed `needs_newer` (`problem` says so) from
   its name, title, version and format alone, and can't be turned on (409). A skill folder that fails the schema is
   `broken`.

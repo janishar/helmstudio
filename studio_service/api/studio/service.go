@@ -9,6 +9,7 @@ import (
 	"math"
 	"net/http"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -42,6 +43,7 @@ type Service struct {
 	stateGet         StateGet            // pipelines.state.get; nil answers 503
 	pluginDirs       []string            // API 1.61: where plugins/*/plugin.json are read (read-only mounts)
 	userPluginDir    string              // API 1.64: ~/.helm/plugins as mounted (read-only); "" = none
+	scanMu           sync.Mutex          // API 1.64: one plugins scan at a time (Rescan, start, the watch)
 	memory           MemoryAsk           // pipelines.memory; nil answers 503
 	lookup           Lookup              // resolves a server provider's host (nil: the system resolver)
 	providerTest     ProviderTestAsk     // pipelines.providers.test; nil answers 503
