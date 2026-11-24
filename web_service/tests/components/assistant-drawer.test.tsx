@@ -635,35 +635,59 @@ describe("thinking (plan 29)", () => {
     act(() => onEvent!({ seq, type: "thread", thread: thread({ state, client_id: ME, ...over }) }));
   afterEach(() => vi.useRealTimers());
 
+  // the bubble is in the thread (under the last message), never in the header; the title stays in full (33.7)
+  const bubble = () => {
+    const b = screen.queryByText(/^Thinking…/);
+    if (b) {
+      expect(b.closest(".thr")).toBeTruthy();
+      expect(b.closest(".dh")).toBeNull();
+      expect(b.className).toContain("msg");
+    }
+    return b;
+  };
+  const title = () =>
+    screen.getByRole("heading", { level: 2, name: "Assistant" }).querySelector("span")!;
+
   it("counts up while the model call runs, Working while actions run, gone when the step lands", async () => {
-    serve({ thinks: true, existing: thread({ client_id: ME }) });
+    serve({
+      thinks: true,
+      existing: thread({ client_id: ME }),
+      entries: [entry(1, { kind: "user", text: "Make it blue hour" })],
+    });
     let finish = () => undefined as void;
     const change = () =>
       new Promise<ReturnType<typeof done>>((r) => (finish = () => r(done("Set"))));
     await openDrawer(<Screen actions={{ change }} />);
     await waitFor(() => expect(onEvent).not.toBeNull());
     vi.useFakeTimers();
-    const title = () =>
-      screen.getByRole("heading", { level: 2, name: /Assistant/ }).querySelector("span")!;
-    expect(title().className).toContain("truncate");
+    await act(async () => undefined);
     to("working", 20);
-    expect(screen.getByText("Thinking… 0 s")).toBeTruthy();
-    // the word hides while the chip shows (still read out), so the buttons keep their room
-    expect(title().className).toContain("sr-only");
+    expect(bubble()?.textContent).toBe("Thinking… 0 s");
+    // under the user's last message, where the reply lands
+    const mine = screen.getByText("Make it blue hour").closest(".msg")!;
+    expect(mine.compareDocumentPosition(bubble()!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // the chip stays Working and the title shows in full
+    expect(screen.getByText("Working")).toBeTruthy();
+    expect(title().className).toContain("truncate");
     act(() => vi.advanceTimersByTime(3000));
-    expect(screen.getByText("Thinking… 3 s")).toBeTruthy();
-    // parked on this tab's actions: today's chip
+    expect(bubble()?.textContent).toBe("Thinking… 3 s");
+    // parked on this tab's actions: no bubble, today's chip
     park([{ id: id(0), name: "change", args: {} }]);
-    expect(screen.queryByText(/^Thinking/)).toBeNull();
+    expect(bubble()).toBeNull();
     expect(screen.getByText("Working")).toBeTruthy();
     // the actions done, the turn resumes: a new count from 0
     await act(async () => finish());
     to("working", 30);
-    expect(screen.getByText("Thinking… 0 s")).toBeTruthy();
+    expect(bubble()?.textContent).toBe("Thinking… 0 s");
     act(() => vi.advanceTimersByTime(1000));
-    expect(screen.getByText("Thinking… 1 s")).toBeTruthy();
-    to("idle", 31);
-    expect(screen.queryByText(/^Thinking/)).toBeNull();
+    expect(bubble()?.textContent).toBe("Thinking… 1 s");
+    // the reply lands and replaces it
+    act(() =>
+      onEvent!({ seq: 31, type: "entry", entry: entry(9, { kind: "assistant", text: "Done: blue hour" }) }),
+    );
+    to("idle", 32);
+    expect(bubble()).toBeNull();
+    expect(screen.getByText("Done: blue hour")).toBeTruthy();
   });
 
   it("closing and reopening the drawer keeps the count", async () => {
@@ -676,7 +700,7 @@ describe("thinking (plan 29)", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Close \(/ }));
     act(() => vi.advanceTimersByTime(3000));
     fireEvent.click(screen.getByRole("button", { name: /^Assistant/ }));
-    expect(screen.getByText("Thinking… 7 s")).toBeTruthy();
+    expect(bubble()?.textContent).toBe("Thinking… 7 s");
   });
 
   it("Working when the model does not think", async () => {
@@ -686,6 +710,7 @@ describe("thinking (plan 29)", () => {
     to("working", 20);
     expect(screen.getByText("Working")).toBeTruthy();
     expect(screen.queryByText(/^Thinking/)).toBeNull();
+    expect(title().className).toContain("truncate");
   });
 
   it("another tab's working chat stays Read-only", async () => {

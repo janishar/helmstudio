@@ -401,7 +401,8 @@ export function useAssistant(me: S<"User"> | null) {
 }
 export type AssistantApi = ReturnType<typeof useAssistant>;
 
-/** "Thinking… N s" (plan 29): whole seconds since this tab saw the model call start; it goes when the step lands. */
+/** "Thinking… N s" (plan 29, 33.7): a quiet reply bubble under the last message, whole seconds since this tab saw the
+ * model call start; the reply replaces it. */
 function Thinking({ since }: { since: number }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -409,10 +410,10 @@ function Thinking({ since }: { since: number }) {
     return () => clearInterval(id);
   }, []);
   return (
-    <span className="st st-go st-think" role="status" aria-live="off">
-      <LoaderCircle size={11} strokeWidth={3} aria-hidden className="run" />
+    <div className="msg think" role="status" aria-live="off">
+      <LoaderCircle size={12} strokeWidth={3} aria-hidden className="run" />
       Thinking… {Math.max(0, Math.floor((now - since) / 1000))} s
-    </span>
+    </div>
   );
 }
 
@@ -911,9 +912,10 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
   const [since, setSince] = useState<{ id: string; at: number } | null>(null);
   if ((since?.id ?? null) !== thinkId)
     setSince(() => (thinkId ? { id: thinkId, at: Date.now() } : null));
+  const thinking = !!since && !a.readOnly && !a.cardWaits;
   useEffect(() => {
     end.current?.scrollIntoView({ block: "nearest" });
-  }, [count]);
+  }, [count, thinking]);
   useEffect(() => {
     if (a.open) input.current?.focus();
   }, [a.open]);
@@ -925,8 +927,6 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
     <span className="st ro-chip">Read-only</span>
   ) : a.cardWaits ? (
     <span className="st st-ask">Waiting for you</span>
-  ) : since ? (
-    <Thinking since={since.at} />
   ) : a.running || t?.state === "working" || t?.state === "waiting" ? (
     <span className="st st-go">Working</span>
   ) : null;
@@ -1024,8 +1024,7 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
           <div className="dh">
             <h2>
               <Sparkles aria-hidden strokeWidth={2} />
-              {/* while Thinking… N s shows, the word hides (the icon stays) so the buttons keep their room (owner) */}
-              <span className={since ? "sr-only" : "truncate"}>Assistant</span>
+              <span className="truncate">Assistant</span>
             </h2>
             {chip}
             <button
@@ -1104,6 +1103,7 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
             ) : (
               <Thread a={a} entries={entries} />
             )}
+            {since && thinking && <Thinking since={since.at} />}
             <div ref={end} />
           </div>
 

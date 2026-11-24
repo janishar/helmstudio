@@ -2,7 +2,7 @@
 
 [← Plan index](../README.md)
 
-Status: **decided by the owner (2026-11-24); board approved by the owner (2026-11-24, "Approve"); built 2026-11-24 (33.6); moved into the chat by the owner (2026-11-24, 33.7), board redrawn and approved by the owner (2026-11-24, "Approve"); building.** API version: **1.54.0** (main is
+Status: **decided by the owner (2026-11-24); board approved by the owner (2026-11-24, "Approve"); built 2026-11-24 (33.6); moved into the chat by the owner (2026-11-24, 33.7), board redrawn and approved by the owner (2026-11-24, "Approve"); built 2026-11-24 (33.7).** API version: **1.54.0** (main is
 at 1.53.0, plan 28; if another plan takes 1.54.0 first, this takes the next free one at build time). Not in a
 milestone, like plans 25, 27 and 28.
 
@@ -120,3 +120,9 @@ Build (web only, no contract change): move the counter from the chip in `assista
 the thread's last item (`role="status"`, `aria-live="off"`); the chip reverts to `Working`; the `sr-only` title rule
 goes. Tests: the bubble shows and counts in the thread, the chip says `Working`, the title is visible, no bubble
 when `thinks` is false or the tab is read-only.
+
+As built (2026-11-24): `Thinking` in `assistant.tsx` is now a `.msg.think` bubble after the thread (globals.css: mono
+12px, muted, accent spinner), hidden on read-only tabs and while a card waits; the scroll-to-end effect also runs when
+it appears. The header chip is `Working`, the title is `Assistant` in full. Drawer tests cover the bubble in the
+thread (not the header), under the user's message, the count, the close/reopen count, gone on the reply, the full
+title, and no bubble for a model that does not think.

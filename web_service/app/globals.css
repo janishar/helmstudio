@@ -917,10 +917,18 @@
     box-shadow: inset 0 0 0 1px var(--a2);
     color: var(--a2);
   }
-  .ast .st-think {
-    gap: 5px;
+  .ast .msg.think {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    color: var(--t2);
     font-family: var(--font-mono);
-    font-weight: 500;
+    font-size: 12px;
+    line-height: 17px;
+  }
+  .ast .msg.think svg {
+    color: var(--a2);
   }
   .ast .ro-chip {
     background: var(--s3);
