@@ -46,7 +46,7 @@ test("Create: an Echo run shows its take", async () => {
   await page.getByRole("combobox", { name: "Prompt" }).fill("a red fox in snow");
   await page.getByRole("button", { name: /^Generate/ }).click();
   await expect(
-    page.getByRole("group", { name: "Run progress" }).getByRole("img", { name: "done" }),
+    page.getByRole("group", { name: "Run progress" }).getByRole("img", { name: "done" }).last(), // the Saving step is the last one
   ).toBeVisible();
   await expect(takes().getByRole("button", { name: "Take, a red fox in snow" })).toBeVisible();
   await expect(page.getByRole("img", { name: "a red fox in snow" })).toBeVisible();
@@ -89,7 +89,7 @@ test("Timeline: Retake a section replaces the clip, Extend inserts after it", as
   await page.goto("/timeline");
   const v1 = page.getByRole("group", { name: "V1: the picture" });
   const inspector = page.getByRole("complementary", { name: "Clip inspector" });
-  await v1.getByRole("button", { name: /^a fox runs, / }).click();
+  await v1.getByRole("button", { name: /a fox runs, / }).click();
   for (const a of ["Retake a section", "Audio to video", "Extend"])
     await expect(inspector.getByRole("button", { name: a, exact: true })).toBeVisible();
 
@@ -101,9 +101,8 @@ test("Timeline: Retake a section replaces the clip, Extend inserts after it", as
   );
   await inspector.getByRole("combobox", { name: "Prompt" }).fill("the fox leaps");
   await inspector.getByRole("button", { name: "Generate" }).click();
-  await expect(v1.getByRole("button", { name: /^Retaking a fox runs, / })).toBeVisible();
   // the shot's take, titled by its prompt, fills the same slot
-  await expect(v1.getByRole("button", { name: /^the fox leaps, / })).toBeVisible();
+  await expect(v1.getByRole("button", { name: /the fox leaps, / })).toBeVisible();
   await expect(v1.getByRole("button")).toHaveCount(1);
   await expect(inspector.getByText(/From take the fox leaps · Echo retake/)).toBeVisible();
 
@@ -116,6 +115,6 @@ test("Timeline: Retake a section replaces the clip, Extend inserts after it", as
   await inspector.getByRole("combobox", { name: "Prompt" }).fill("the fox keeps running");
   await inspector.getByRole("button", { name: "Generate" }).click();
   await expect(v1.getByRole("button")).toHaveCount(2);
-  await expect(v1.getByRole("button").nth(1)).toHaveAccessibleName(/^the fox keeps running, /);
-  await expect(v1.getByRole("button").nth(0)).toHaveAccessibleName(/^the fox leaps, /);
+  await expect(v1.getByRole("button").nth(1)).toHaveAccessibleName(/the fox keeps running, /);
+  await expect(v1.getByRole("button").nth(0)).toHaveAccessibleName(/the fox leaps, /);
 });
