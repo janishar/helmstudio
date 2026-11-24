@@ -355,4 +355,8 @@ message; `stop` ends the turn at its next step (contracts/README.md "Assistant: 
 chat and a sweep (every 10 min, chats idle 24 h) ask for summaries. `api/studio/assistant_tools.go` serves the
 catalog's studio tools on `studio.tools` as the thread's owner, by asking the service's own routes in process
 (`common.LocalEngine`, never served: its guard takes the caller from the context), so their answers are the API's
-shapes; an admin tool is checked against the thread's roles first, and `look_at` makes the ask run itself.
+shapes; an admin tool is checked against the thread's roles first, and `look_at` makes the ask run itself. From 1.65
+(contracts/README.md "Assistant: media and vision") a message may carry attached images (`takes`, the owner's ready
+takes, stored on the entry and sent to pipelines as the text's last line of refs), `AssistantStatus.sees` comes from
+the preset's `vision`, and `api/studio/assistant_see.go` answers `studio.see`: one take's thumbnail (or poster) as a
+JPEG of at most 1024 px for the assistant's model, never stored.

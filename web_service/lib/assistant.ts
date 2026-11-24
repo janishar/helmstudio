@@ -354,7 +354,8 @@ export type Block =
   | { k: "p"; text: string }
   | { k: "ul" | "ol"; items: string[] }
   | { k: "plan"; items: { done: boolean; text: string }[] }
-  | { k: "code"; lang: string; text: string };
+  | { k: "code"; lang: string; text: string }
+  | { k: "take"; id: string };
 
 export function answerBlocks(text: string): Block[] {
   const out: Block[] = [];
@@ -374,6 +375,10 @@ export function answerBlocks(text: string): Block[] {
       for (i++; i < lines.length && !/^\s*```/.test(lines[i]); i++) body.push(lines[i]);
       out.push({ k: "code", lang: fence[1], text: body.join("\n") });
     } else if (!l.trim()) {
+      blank = true;
+      continue;
+    } else if ((m = /^\s*\[\[take:([^\]\s|]{1,128})\]\]\s*$/.exec(l)) && m[1] !== "?") {
+      out.push({ k: "take", id: m[1] }); // alone on its line: the take itself (item 10, board frame 12)
       blank = true;
       continue;
     } else if ((m = /^\s*[-*+]\s+\[( |x|X)\]\s+(.*)$/.exec(l)))

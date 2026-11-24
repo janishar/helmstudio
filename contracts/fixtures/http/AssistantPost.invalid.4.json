@@ -1,0 +1,43 @@
+{
+  "kind": "message",
+  "client_id": "tab-8f3a2c91",
+  "text": "Animate [[take:a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d]] in this light",
+  "screen": {
+    "route": "/?s=2d4f6a8b-1c3e-4a5b-9c7d-8e0f1a2b3c4d",
+    "ids": {
+      "session": "2d4f6a8b-1c3e-4a5b-9c7d-8e0f1a2b3c4d",
+      "workflow": "qwen-image-2.1"
+    },
+    "roles": [
+      "user"
+    ],
+    "as_of": "2026-11-22T10:19:58Z",
+    "hidden": false,
+    "actions": [
+      "navigate",
+      "await",
+      "change",
+      "switchTo",
+      "runOn",
+      "seeds",
+      "generate"
+    ],
+    "fields": {
+      "prompt": "@mara under a transparent umbrella",
+      "variant": "turbo",
+      "run_on": {
+        "auto": true,
+        "hosts": {
+          "mac": {
+            "enabled": true,
+            "reason": null
+          }
+        }
+      }
+    }
+  },
+  "takes": [
+    "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e",
+    "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e"
+  ]
+}

@@ -53,3 +53,30 @@ func TestBridgeThinkingLevels(t *testing.T) {
 		t.Error(snap)
 	}
 }
+
+// AssistantStatus.sees (API 1.65): the preset's vision expression on the model id; no preset or none in it: false.
+// A message's text to pipelines carries its attached images as a last line of refs.
+func TestModelSeesAndWithTakes(t *testing.T) {
+	deepseek, anthropic, ollama := "deepseek", "anthropic", "ollama"
+	for _, c := range []struct {
+		preset *string
+		model  string
+		want   bool
+	}{
+		{&anthropic, "claude-sonnet-5-5", true},
+		{&deepseek, "deepseek-flash", false},
+		{&ollama, "llava:13b", true},
+		{&ollama, "qwen3:8b", false},
+		{nil, "gpt-6", false},
+	} {
+		if got := modelSees(c.preset, c.model); got != c.want {
+			t.Errorf("%v %s: got %v", c.preset, c.model, got)
+		}
+	}
+	if got := withTakes("Use this", []string{"a", "b"}); got != "Use this\n\n(attached: [[take:a]] [[take:b]])" {
+		t.Errorf("withTakes: %q", got)
+	}
+	if got := withTakes("Hi", nil); got != "Hi" {
+		t.Errorf("withTakes none: %q", got)
+	}
+}

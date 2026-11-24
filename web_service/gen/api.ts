@@ -6282,6 +6282,8 @@ export interface components {
             thinking?: "models" | components["schemas"]["ThinkingRule"][];
             /** @description from 1.61: a plugin's preset (its providers' thinking rules); never in this list (the file only) */
             plugin?: string;
+            /** @description from 1.65: a regular expression on the model id (RE2 and JavaScript alike) for the models that see images; absent: none does */
+            vision?: string;
             docs: string;
             note: string;
         };
@@ -6622,7 +6624,7 @@ export interface components {
             /** @default 30 */
             messages_per_minute: number;
         };
-        /** @description what every user may know: on or off (the dock item is hidden when off), where the model runs, web search, the caps, whether the model thinks */
+        /** @description what every user may know: on or off (the dock item is hidden when off), where the model runs, web search, the caps, whether the model thinks, whether it sees images */
         AssistantStatus: {
             enabled: boolean;
             provider: {
@@ -6636,6 +6638,8 @@ export interface components {
             limits: components["schemas"]["AssistantLimits"];
             /** @description API 1.54 (plan 29): the model thinks (its resolved thinking level is not off, or it always thinks); the drawer shows `Thinking… N s` while a model call runs. False when off or no provider */
             thinks: boolean;
+            /** @description API 1.65: the model sees images (its provider's preset `vision` matches the model): attached and @-picked images go to it directly; false (a text-only model, a provider with no preset, off): it uses look_at, and the drawer says so once when you attach */
+            sees: boolean;
         };
         /** @description what the parked turn waits on: actions for the tab `client_id` to run, cards (ids of card entries) to answer */
         AssistantPending: {
@@ -6691,6 +6695,8 @@ export interface components {
              * @enum {string}
              */
             steer?: "waiting" | "read" | "next";
+            /** @description API 1.65, a user entry: the images attached to it (AssistantPost.takes), in order; absent when none */
+            takes?: string[];
         } & (unknown & unknown & unknown);
         AssistantThreadDetail: components["schemas"]["AssistantThread"] & {
             /** @description the newest 200, oldest first */
@@ -6700,9 +6706,11 @@ export interface components {
             /** @constant */
             kind: "message";
             client_id: components["schemas"]["AssistantClientId"];
-            /** @description trimmed; blank = 422 */
+            /** @description trimmed; blank = 422. From 1.65 it may hold [[take:<id>]] refs (a take picked with @), shown as chips */
             text: string;
             screen: components["schemas"]["AssistantScreen"];
+            /** @description from 1.65: images you attached (pasted, dropped or picked with the paperclip, uploaded first): your own ready takes, else 422 `takes: <id> is not one of your takes`; shown above your words (contracts/README.md, Assistant: media and vision) */
+            takes?: string[];
         } | {
             /** @constant */
             kind: "results";

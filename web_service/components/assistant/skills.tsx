@@ -1,6 +1,6 @@
 "use client";
 // Skills in the drawer (docs/mock/Assistant.dc.html frame 16; API 1.64): the "Using skill" line (tap to see the
-// guide's first lines and the files it read) and the @ picker's Skills group.
+// guide's first lines and the files it read), and the skills the @ picker lists (AtPicker in media.tsx).
 import { useEffect, useState } from "react";
 import { Book, Check, ChevronDown } from "lucide-react";
 import { api, message, ok, type S } from "@/lib/api";
@@ -107,42 +107,4 @@ export function useSkills(want: boolean) {
         .catch(() => setList([]));
   }, [want]);
   return list;
-}
-
-/** The @ picker above the composer: what was typed, then Skills (the only group in the drawer for now). */
-export function SkillPicker({
-  query,
-  items,
-  hi,
-  onPick,
-}: {
-  query: string;
-  items: Summary[];
-  hi: number;
-  onPick: (s: Summary) => void;
-}) {
-  return (
-    <div className="pop atp" role="listbox" aria-label="Pick a skill">
-      <div className="atq">{query}</div>
-      <h4>Skills</h4>
-      {items.map((s, i) => (
-        <button
-          key={s.name}
-          type="button"
-          role="option"
-          aria-selected={i === hi}
-          className={`pr ${i === hi ? "on" : ""}`}
-          title={s.when}
-          onMouseDown={(e) => e.preventDefault()} // the composer keeps the focus
-          onClick={() => onPick(s)}
-        >
-          <i>
-            <Book size={14} strokeWidth={2} aria-hidden />
-          </i>
-          <span>@{s.name}</span>
-          <small>skill</small>
-        </button>
-      ))}
-    </div>
-  );
 }

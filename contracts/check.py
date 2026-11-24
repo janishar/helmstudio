@@ -4558,6 +4558,13 @@ def thinking_problems(doc: dict, shape: str, registry: Registry) -> list[str]:
         return [f"{bad[0].json_path}: {bad[0].message}"]
     out, tokens = [], doc["thinking_tokens"]
     for p in doc["presets"]:
+        if v := p.get("vision"):  # API 1.65: a regular expression on the model id, as a thinking match
+            try:
+                re.compile(v)
+            except re.error as e:
+                out.append(f"{p['id']} vision: does not compile ({e})")
+            if re.search(r"\(\?[=!<]|\\[1-9]", v):
+                out.append(f"{p['id']} vision: uses lookaround or a backreference")
         rules = p.get("thinking")
         for i, r in enumerate(rules if isinstance(rules, list) else []):
             w = f"{p['id']} thinking[{i}]"

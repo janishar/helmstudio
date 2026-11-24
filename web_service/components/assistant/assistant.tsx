@@ -29,13 +29,16 @@ import {
   Cpu,
   Ellipsis,
   Eye,
+  EyeOff,
   Globe,
+  ImagePlus,
   LoaderCircle,
   Maximize2,
   MessagesSquare,
   Minimize2,
   Minus,
   Monitor,
+  Paperclip,
   Pencil,
   Plus,
   Redo2,
@@ -82,11 +85,19 @@ import {
 import { followEvents } from "@/lib/runs";
 import { Registry, awaitIt, navigateTo } from "@/components/assistant/tools";
 import { Options, Refs } from "@/components/assistant/answer";
-import { liveOptions, splitOptions } from "@/lib/answer-refs";
+import { atQuery, liveOptions, splitOptions, withPicks } from "@/lib/answer-refs";
+import {
+  AtPicker,
+  AttChip,
+  SentAtt,
+  TakeMedia,
+  type AtKey,
+  type Pick,
+} from "@/components/assistant/media";
+import { uploadFile } from "@/lib/takes";
 import { TextArea } from "@/components/expand-text";
-import { SkillLine, SkillPicker, useSkills } from "@/components/assistant/skills";
-import { skillLines, skillsMatching } from "@/lib/skills";
-import { insertMention, mentionAt } from "@/lib/mentions";
+import { SkillLine } from "@/components/assistant/skills";
+import { skillLines } from "@/lib/skills";
 
 type Line = S<"AssistantLine">;
 /** A line this tab ran (or is running): shown until the server's entry of the same id comes. */
@@ -374,7 +385,7 @@ export function useAssistant(me: S<"User"> | null) {
     setStopFor(null);
 
   const send = useCallback(
-    async (text: string) => {
+    async (text: string, takes: string[] = []) => {
       const t = text.trim();
       if (!t) return false;
       let id = view?.thread.id;
@@ -390,7 +401,13 @@ export function useAssistant(me: S<"User"> | null) {
           return false;
         }
       }
-      return post(id, { kind: "message", client_id: cid, text: t, screen: reg.summary() });
+      return post(id, {
+        kind: "message",
+        client_id: cid,
+        text: t,
+        screen: reg.summary(),
+        ...(takes.length > 0 && { takes }),
+      });
     },
     [cid, post, reg, view?.thread.id],
   );
@@ -783,6 +800,8 @@ function Answer({ text, seek, refs }: { text: string; seek?: Seek; refs?: RefsHo
           <p key={i}>
             <Inlines text={b.text} seek={seek} refs={refs} />
           </p>
+        ) : b.k === "take" ? (
+          <TakeMedia key={i} id={b.id} />
         ) : b.k === "code" ? (
           <div key={i} className="cb">
             <div>
@@ -1358,7 +1377,7 @@ function Thread({ a, entries }: { a: AssistantApi; entries: Entry[] }) {
       if (e.kind === "user" && e.steer === "waiting")
         steers.push(
           <div key={e.id} className="msg me steer" aria-label="Waiting for the next step">
-            <Text text={e.text ?? ""} />
+            <Said e={e} />
             <small>
               <Clock3 size={11} strokeWidth={2} aria-hidden />
               at the next step
@@ -1368,7 +1387,7 @@ function Thread({ a, entries }: { a: AssistantApi; entries: Entry[] }) {
       else if (e.kind === "user")
         out.push(
           <div key={e.id} className="msg me">
-            <Text text={e.text ?? ""} />
+            <Said e={e} />
             {e.steer === "next" && (
               <small>
                 <ChevronRight size={11} strokeWidth={2} aria-hidden />
@@ -1427,6 +1446,18 @@ function Thread({ a, entries }: { a: AssistantApi; entries: Entry[] }) {
     <>
       {out}
       {steers}
+    </>
+  );
+}
+
+/** Your message: its attached images (item 8), then your words with the takes you picked with @ as chips (item 7). */
+function Said({ e }: { e: Entry }) {
+  return (
+    <>
+      {e.takes?.map((id) => (
+        <SentAtt key={id} id={id} />
+      ))}
+      <Refs text={e.text ?? ""} plain={(x, k) => <Text key={k} text={x} />} />
     </>
   );
 }
@@ -1792,9 +1823,23 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
   );
 }
 
+/** An image attached in the box: uploading until it has its take's id. */
+type Att = { key: string; name: string; url: string; id?: string };
+
 function Drawer({ a }: { a: AssistantApi }) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  // media in the box (board frame 12): images attached (uploaded at once, sent as takes) and takes picked with @ (the
+  // box shows their titles in brackets; sent as refs)
+  const [atts, setAtts] = useState<Att[]>([]);
+  const [chosen, setChosen] = useState<{ label: string; id: string }[]>([]);
+  const [caret, setCaret] = useState(0);
+  const [atOff, setAtOff] = useState<number | null>(null); // Escape closed the picker of the @ at this place
+  const atKeys = useRef<((k: AtKey) => void) | null>(null);
+  const [atCur, setAtCur] = useState(""); // the @ picker's highlighted option, for aria-activedescendant
+  const [dropping, setDropping] = useState(false);
+  const [told, setTold] = useState(false); // "This model can't see images" shows once
+  const file = useRef<HTMLInputElement>(null);
   const [top, setTop] = useState<number | null>(null);
   const [memory, setMemory] = useState(false);
   const [chats, setChats] = useState(false);
@@ -1807,19 +1852,6 @@ function Drawer({ a }: { a: AssistantApi }) {
   const phone = usePhone();
   const end = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
-  // the @ picker (board frame 16c): the caret's @ token lists the skills that are on; Esc closes it until it moves
-  const [caret, setCaret] = useState<number | null>(null);
-  const [hi, setHi] = useState(0);
-  const at = caret === null ? null : mentionAt(text, caret);
-  const skills = useSkills(!!at);
-  const found = at ? skillsMatching(skills, at.query) : [];
-  const pickSkill = (s: S<"SkillSummary">) => {
-    if (!at) return;
-    const r = insertMention(text, at.start, at.end, s.name);
-    setText(r.text);
-    setCaret(r.caret);
-    requestAnimationFrame(() => input.current?.setSelectionRange(r.caret, r.caret));
-  };
   // the screen's Sees chips follow the screen as it changes
   const seen = useSyncExternalStore(
     (f) => a.reg.subscribe(f),
@@ -1864,13 +1896,69 @@ function Drawer({ a }: { a: AssistantApi }) {
   ) : a.running || t?.state === "working" || t?.state === "waiting" ? (
     <span className="st st-go">Working</span>
   ) : null;
+  const uploading = atts.some((x) => !x.id);
   async function submit(e?: React.FormEvent) {
     e?.preventDefault();
-    if (!text.trim() || sending) return;
+    if (!text.trim() || sending || uploading) return;
+    const said = withPicks(text, chosen); // each picked title becomes a 45-character ref
+    if (said.length > 4000) {
+      a.setError("Too long with its picked takes: shorten the message.");
+      return;
+    }
     setSending(true);
-    if (await a.send(text)) setText("");
+    if (
+      await a.send(
+        said,
+        atts.map((x) => x.id!),
+      )
+    ) {
+      setText("");
+      setChosen([]);
+      if (atts.length) setTold(true);
+      atts.forEach((x) => URL.revokeObjectURL(x.url));
+      setAtts([]);
+    }
     setSending(false);
   }
+  /** Paperclip, paste or drop: each image uploads at once (to Uploads); the message names it once it has. */
+  const attach = (files: File[]) => {
+    const ok = files
+      .filter((f) => /^image\/(png|jpeg|webp)$/.test(f.type))
+      .slice(0, 8 - atts.length);
+    if (ok.length < files.length) a.setError("Attach PNG, JPEG or WebP images, at most 8.");
+    for (const f of ok) {
+      const key = `${Date.now()}-${Math.random()}`;
+      // a pasted screenshot has no name of its own
+      const name = f.name && f.name !== "image.png" ? f.name : "Pasted image";
+      setAtts((l) => [...l, { key, name, url: URL.createObjectURL(f) }]);
+      uploadFile(f, () => undefined)
+        .then((t) => setAtts((l) => l.map((x) => (x.key === key ? { ...x, id: t.id } : x))))
+        .catch((err) => {
+          setAtts((l) => l.filter((x) => x.key !== key));
+          a.setError(message(err));
+        });
+    }
+  };
+  // the @ picker (item 7, board frames 12c and 16c: skills, elements, takes, uploads): open while the caret ends an @word, until Escape closes that one
+  const at = a.readOnly ? null : atQuery(text, caret);
+  const atOpen = !!at && at.start !== atOff;
+  const pick = (p: Pick) => {
+    if (!at) return;
+    const ins =
+      p.kind === "skill"
+        ? `@${p.skill.name} `
+        : p.kind === "element"
+          ? `@${p.handle} `
+          : `[${p.take.title}] `;
+    if (p.kind === "take") setChosen((l) => [...l, { label: p.take.title, id: p.take.id }]);
+    setText(text.slice(0, at.start) + ins + text.slice(caret));
+    const c = at.start + ins.length;
+    setCaret(c);
+    requestAnimationFrame(() => {
+      input.current?.focus();
+      input.current?.setSelectionRange(c, c);
+    });
+  };
   const sendExample = async (x: string) => {
     setSending(true);
     await a.send(x);
@@ -2145,18 +2233,52 @@ function Drawer({ a }: { a: AssistantApi }) {
               {a.error}
             </p>
           )}
+          {!a.readOnly && atts.length > 0 && !told && st && !st.sees && (
+            <div className="bar2 bg-s2">
+              <EyeOff size={18} strokeWidth={1.75} aria-hidden className="shrink-0 text-t2" />
+              <span className="flex-1">This model can&apos;t see images; it will use Look at.</span>
+            </div>
+          )}
+          {!a.readOnly && dropping && (
+            <div className="drop" aria-hidden>
+              <ImagePlus size={18} strokeWidth={1.75} />
+              Drop to attach
+            </div>
+          )}
           {!a.readOnly && (
             <form
               className={`cmp relative ${limit ? "opacity-50" : ""}`}
               onSubmit={(e) => void submit(e)}
+              onDragOver={(e) => {
+                if (!limit && e.dataTransfer.types.includes("Files")) {
+                  e.preventDefault();
+                  setDropping(true);
+                }
+              }}
+              onDragLeave={() => setDropping(false)}
+              onDrop={(e) => {
+                setDropping(false);
+                if (limit || !e.dataTransfer.files.length) return;
+                e.preventDefault();
+                attach([...e.dataTransfer.files]);
+              }}
             >
-              {at && found.length > 0 && (
-                <SkillPicker
-                  query={at.query}
-                  items={found}
-                  hi={Math.min(hi, found.length - 1)}
-                  onPick={pickSkill}
-                />
+              {atOpen && <AtPicker q={at.q} keysRef={atKeys} onPick={pick} onActive={setAtCur} />}
+              {atts.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {atts.map((x) => (
+                    <AttChip
+                      key={x.key}
+                      name={x.name}
+                      url={x.url}
+                      busy={!x.id}
+                      onRemove={() => {
+                        URL.revokeObjectURL(x.url);
+                        setAtts((l) => l.filter((y) => y.key !== x.key));
+                      }}
+                    />
+                  ))}
+                </div>
               )}
               <label htmlFor="assistant-in" className="sr-only">
                 Message the assistant
@@ -2172,28 +2294,38 @@ function Drawer({ a }: { a: AssistantApi }) {
                   limit ? limit.until : a.steering ? "Steer the answer…" : "Ask, or say what to do"
                 }
                 value={text}
+                aria-autocomplete="list"
+                aria-expanded={atOpen}
+                aria-haspopup="listbox"
+                aria-controls={atOpen ? "at-list" : undefined}
+                aria-activedescendant={atOpen && atCur ? atCur : undefined}
                 onChange={(e) => {
                   setText(e.target.value);
                   setCaret(e.target.selectionStart);
-                  setHi(0);
                 }}
                 onSelect={(e) => setCaret(e.currentTarget.selectionStart)}
+                onPaste={(e) => {
+                  const files = [...e.clipboardData.files];
+                  if (files.length && !limit) {
+                    e.preventDefault();
+                    attach(files);
+                  }
+                }}
                 onKeyDown={(e) => {
-                  if (at && found.length) {
-                    const m = found.length;
-                    const move = { ArrowDown: 1, ArrowUp: m - 1 }[e.key];
-                    if (move) {
-                      e.preventDefault();
-                      return setHi((Math.min(hi, m - 1) + move) % m);
-                    }
-                    if (e.key === "Enter" || e.key === "Tab") {
-                      e.preventDefault();
-                      return pickSkill(found[Math.min(hi, m - 1)]);
-                    }
-                    if (e.key === "Escape") {
-                      e.preventDefault();
-                      return setCaret(null);
-                    }
+                  if (atOpen && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+                    e.preventDefault();
+                    atKeys.current?.(e.key === "ArrowDown" ? "down" : "up");
+                    return;
+                  }
+                  if (atOpen && ((e.key === "Enter" && !e.shiftKey) || e.key === "Tab")) {
+                    e.preventDefault();
+                    atKeys.current?.("enter");
+                    return;
+                  }
+                  if (atOpen && e.key === "Escape") {
+                    e.preventDefault(); // the drawer stays open
+                    setAtOff(at.start);
+                    return;
                   }
                   const n = Number(e.key);
                   if (
@@ -2214,12 +2346,34 @@ function Drawer({ a }: { a: AssistantApi }) {
                 }}
               />
               <div className="cmpb">
+                <button
+                  type="button"
+                  className="att"
+                  aria-label="Attach an image"
+                  title="Attach an image"
+                  disabled={!!limit}
+                  style={atts.length ? { background: "var(--s4)", color: "var(--t1)" } : undefined}
+                  onClick={() => file.current?.click()}
+                >
+                  <Paperclip size={16} strokeWidth={1.75} aria-hidden />
+                </button>
+                <input
+                  ref={file}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  multiple
+                  hidden
+                  onChange={(e) => {
+                    attach([...(e.target.files ?? [])]);
+                    e.target.value = "";
+                  }}
+                />
                 <small>
-                  {at && found.length > 0 ? (
+                  {a.stopping ? null : atOpen ? (
                     <>
                       <span className="kbd">↑↓</span> pick · <span className="kbd">Enter</span>
                     </>
-                  ) : a.stopping ? null : a.steering ? (
+                  ) : a.steering ? (
                     <>
                       <span className="kbd">Enter</span> steers this answer
                     </>
@@ -2233,11 +2387,12 @@ function Drawer({ a }: { a: AssistantApi }) {
                   ) : (
                     !phone && (
                       <>
-                        <span className="kbd">{shortcut()}</span> open or close
-                        {screen?.screen === "create" && (
+                        {atts.length > 0 ? (
+                          "or paste, or drop"
+                        ) : (
                           <>
-                            {" · "}
-                            <span className="kbd">@</span> elements
+                            <span className="kbd">{shortcut()}</span> open or close ·{" "}
+                            <span className="kbd">@</span> takes
                           </>
                         )}
                       </>
@@ -2258,7 +2413,7 @@ function Drawer({ a }: { a: AssistantApi }) {
                   type="submit"
                   className="snd"
                   aria-label="Send"
-                  disabled={!!limit || sending || !text.trim()}
+                  disabled={!!limit || sending || uploading || !text.trim()}
                 >
                   <ArrowUp size={16} strokeWidth={2} aria-hidden />
                 </button>

@@ -186,7 +186,7 @@ test("S2 the Assistant reads Animator for a shot plan; tapping its line shows th
 
 test("S3 typing @anim in the composer lists @animator; picking it inserts it", async () => {
   await box().fill("@anim");
-  const pick = drawer().getByRole("listbox", { name: "Pick a skill" });
+  const pick = drawer().getByRole("listbox", { name: "Pick a skill, take or element" });
   await expect(pick.getByRole("option", { name: /@animator/ })).toBeVisible();
   await expect(pick.getByRole("option", { name: /@animator/ })).toContainText("skill");
   await page.screenshot({ path: `${SHOTS}/s3-at-picker.png` });
