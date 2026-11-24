@@ -545,7 +545,8 @@ class Assistant:
             req["prompt"] + "\n" + "\n".join(prefs or [])
         )  # what it was given, not the rules' [[take:<id>]]
         key = f"{s['thread_id']}:{s['msg']}:m{caps['model_calls']}"
-        bound = remote.bound(req) + PICTURE_TOKENS * len(req.get("images") or [])
+        pic_tokens = PICTURE_TOKENS * len(req.get("images") or [])  # the pictures count on Stop too
+        bound = remote.bound(req) + pic_tokens
         if err := await self.spend(s["owner_id"], key, "model", bound, d["settings"]["limits"]):
             return err | {"caps": caps}
         caps["model_calls"] += 1
@@ -563,7 +564,7 @@ class Assistant:
             if asyncio.current_task().cancelling():
                 raise
             # Stop (API 1.62): the call is gone, no answer kept; what was sent stays spent
-            await self._spent(key, providers.estimate(system + req["prompt"]))
+            await self._spent(key, pic_tokens + providers.estimate(system + req["prompt"]))
             return {"caps": caps, "to": "steer"}  # steer sees the Stop and ends the turn
         finally:
             if self.calls.get(tid, (0, "", None))[2] is call:

@@ -164,7 +164,8 @@ def test_attached_images_reach_a_model_that_sees(api, api_b, anon, admin, fake_c
                 "text": "What light is this?",
                 "screen": screen(),
             }
-            assert api.post(f"{url}/messages", json=body | {"takes": [theirs]}).status_code == 422
+            r = api.post(f"{url}/messages", json=body | {"takes": [theirs]})
+            assert r.status_code == 422 and r.json()["detail"] == f"takes: {theirs} is not one of your takes"
             sent = ok(api.post(f"{url}/messages", json=body | {"takes": [mine]}), 202)
             assert (
                 sent["entry"]["takes"] == [mine] and sent["entry"]["text"] == "What light is this?"

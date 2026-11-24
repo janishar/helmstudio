@@ -871,13 +871,15 @@ func (s *Service) PostAssistant(ctx context.Context, caller common.Caller, id st
 			} else if n := *status.Limits.MessagesPerMinute; recent >= n {
 				return network.NewTooManyRequestsError(fmt.Sprintf("at most %d messages a minute", n), nil)
 			}
-			if n := len(body.Takes); n > 0 {
-				var mine int
-				if err := tx.QueryRow(ctx, `SELECT count(*) FROM takes WHERE id = ANY($1::uuid[]) AND owner_id = $2
-					AND deleted_at IS NULL AND ready`, body.Takes, t.OwnerID).Scan(&mine); err != nil {
+			if len(body.Takes) > 0 {
+				var stray string
+				err := tx.QueryRow(ctx, `SELECT x::text FROM unnest($1::uuid[]) WITH ORDINALITY AS u(x, i)
+					WHERE NOT EXISTS (SELECT 1 FROM takes WHERE id = x AND owner_id = $2 AND deleted_at IS NULL AND ready)
+					ORDER BY i LIMIT 1`, body.Takes, t.OwnerID).Scan(&stray)
+				if err == nil {
+					return network.NewUnprocessableError("takes: "+stray+" is not one of your takes", nil)
+				} else if !errors.Is(err, pgx.ErrNoRows) {
 					return err
-				} else if mine < n {
-					return network.NewUnprocessableError("takes: an attached image is not one of your takes", nil)
 				}
 			}
 			messageID, said := utility.NewID(), withTakes(*body.Text, body.Takes)

@@ -28,12 +28,12 @@ type SeeRequest struct {
 
 // SeeReply is req.studio.see's reply: ok (take_id, kind, title, images) or error and code.
 type SeeReply struct {
-	TakeID string   `json:"take_id,omitempty"`
-	Kind   string   `json:"kind,omitempty"`
-	Title  *string  `json:"title,omitempty"`
-	Images [][]byte `json:"images,omitempty"` // base64 in JSON
-	Error  string   `json:"error,omitempty"`
-	Code   string   `json:"code,omitempty"`
+	TakeID string    `json:"take_id,omitempty"`
+	Kind   string    `json:"kind,omitempty"`
+	Title  *string   `json:"title,omitempty"`
+	Images *[][]byte `json:"images,omitempty"` // base64 in JSON; a pointer so an ok reply keeps "images": [] and an error has none
+	Error  string    `json:"error,omitempty"`
+	Code   string    `json:"code,omitempty"`
 }
 
 // seeSide is the long side the model gets (alpha.2 item 8: "about 1024 px"); seeMax caps one picture's bytes.
@@ -62,16 +62,17 @@ func (s *Service) See(ctx context.Context, req *SeeRequest) SeeReply {
 		log.Printf("studio.see %s: %v", req.TakeID, err)
 		return SeeReply{Error: "internal error", Code: "internal"}
 	}
-	out := SeeReply{TakeID: req.TakeID, Kind: kind, Title: &title, Images: [][]byte{}}
+	pics := [][]byte{}
+	out := SeeReply{TakeID: req.TakeID, Kind: kind, Title: &title, Images: &pics}
 	if kind == "audio" {
 		return out
 	}
 	pic, err := s.seeJPEG(ctx, key)
 	if err != nil {
 		log.Printf("studio.see %s: %v", req.TakeID, err)
-		return out // the model still gets the title
+		return out // the model still gets the take's title, with no pictures
 	}
-	out.Images = append(out.Images, pic)
+	*out.Images = append(*out.Images, pic)
 	return out
 }
 

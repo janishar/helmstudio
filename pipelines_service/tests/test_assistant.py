@@ -565,6 +565,33 @@ async def test_stop_cancels_the_model_call_in_flight_at_once(pool, fake):
     assert (await c.say("again"))["text"] == "Here."  # the next message is untouched
 
 
+async def test_stop_keeps_the_pictures_spent(pool, fake):
+    """A Stop counts the pictures sent with the prompt (PICTURE_TOKENS each), as the bound did."""
+    c = Chat(pool, fake)
+    c.sees = True
+
+    async def see(req: dict) -> dict:
+        return {"take_id": req["take_id"], "kind": "image", "title": "Fox", "images": [JPEG]}
+
+    c.a.see = see
+    c.script({"content": "A late answer.", "delay_s": 5})
+    run = asyncio.create_task(c.say(f"what is in [[take:{TAKES[0]}]]?"))
+    for _ in range(100):
+        if c.asked():
+            break
+        await asyncio.sleep(0.05)
+    await c.steer()
+    await asyncio.wait_for(run, 2)
+    async with pool.connection() as conn:
+        cur = await conn.execute(
+            "SELECT tokens FROM assistant_spend WHERE key = %s", (f"{c.tid}:1:m0",)
+        )
+        tokens = (await cur.fetchone())["tokens"]
+    sent = c.asked()[0]["messages"]
+    text = sent[0]["content"] + sent[1]["content"][0]["text"]
+    assert tokens == providers.estimate(text) + assistant.PICTURE_TOKENS
+
+
 def test_memory_must_be_plain_words():
     for bad in ('Elias speaks with {"voice_id": "x"}', "Elias's voice is 9a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d",
                 "Elias uses voice_id v2", "Elias uses Voice_ID v2", "Set settings.source.model to fake"):  # fmt: skip
