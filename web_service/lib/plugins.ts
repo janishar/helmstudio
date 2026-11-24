@@ -18,16 +18,62 @@ export function hostOf(url: string): string {
   }
 }
 
+/** "on the Mac" for host mac, else "on <host>". */
+export const onHost = (host: string) => `on ${host === "mac" ? "the Mac" : host}`;
+
+/** "10:42": an ISO time as local HH:MM ("" when missing or unparsable). */
+export function hhmm(iso?: string) {
+  const d = new Date(iso ?? "");
+  if (Number.isNaN(d.getTime())) return "";
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
 /** The Status column: running → "Running" over its host; on but no answer → "Not running" over "enabled · start it";
- * a skill that is on → "On"; one it can't use → "Needs a newer helmstudio" / "Can't be read"; off → "Off". */
-export function statusOf(p: Plugin): { text: string; sub?: string; ok: boolean } {
-  if (p.status === "running") return { text: "Running", sub: hostOf(p.url ?? ""), ok: true };
+ * a skill that is on → "On"; one it can't use → "Needs a newer helmstudio" / "Can't be read"; off → "Off". One that
+ * starts itself (API 1.65, board STARTS ITSELF): "Starting…" / "Couldn't start" on its host; running adds "Starts on
+ * its own · since 10:42"; not running says no runner on its host is up; off is "stopped on the Mac". */
+export function statusOf(p: Plugin): {
+  text: string;
+  sub?: string;
+  ok: boolean;
+  tone?: "amber" | "red";
+  note?: string;
+} {
+  const s = p.starts;
+  if (p.status === "running") {
+    const since = hhmm(s?.since);
+    return {
+      text: "Running",
+      sub: hostOf(p.url ?? ""),
+      ok: true,
+      ...(s && { note: `Starts on its own${since ? ` · since ${since}` : ""}` }),
+    };
+  }
+  if (p.status === "starting")
+    return { text: "Starting…", sub: onHost(s?.host ?? "mac"), ok: false, tone: "amber" };
+  if (p.status === "failed")
+    return { text: "Couldn't start", sub: onHost(s?.host ?? "mac"), ok: false, tone: "red" };
   if (p.status === "not_running")
-    return { text: "Not running", sub: "enabled · start it", ok: false };
+    return s
+      ? { text: "Not running", sub: `no runner ${onHost(s.host)} is up`, ok: false }
+      : { text: "Not running", sub: "enabled · start it", ok: false };
   if (p.status === "on") return { text: "On", ok: true };
   if (p.status === "needs_newer") return { text: "Needs a newer helmstudio", ok: false };
   if (p.status === "broken") return { text: "Can't be read", ok: false };
-  return { text: "Off", ok: false };
+  return s
+    ? { text: "Off", sub: `stopped ${onHost(s.host)}`, ok: false }
+    : { text: "Off", ok: false };
+}
+
+/** A failed one's aside alert, as the board: "Couldn't start · it stopped 3 times: " then the reason (mono), then
+ * "Trying again in 1 min." (the runner's backoff tops out at 60 s); null unless failed. */
+export function failedAlert(p: Plugin): { lead: string; why: string } | null {
+  if (p.status !== "failed") return null;
+  const why = (p.problem ?? "").replace(/\.$/, "");
+  const cut = why.indexOf(": ");
+  return cut < 0
+    ? { lead: `Couldn't start · ${why}`, why: "" }
+    : { lead: `Couldn't start · ${why.slice(0, cut + 2)}`, why: why.slice(cut + 2) };
 }
 
 /** One this helmstudio can't use (a skill of a newer format, or yours that could not be read): faded, only Remove. */
@@ -78,6 +124,7 @@ export function problemAlert(p: Plugin): { text: string; red: boolean } | null {
       text: `${sourceOf(p).split("/").pop()} can't be read: ${why}. Nothing from it is used.`,
       red: true,
     };
+  if (p.status === "failed") return null; // failedAlert says it
   // API 1.64: a built-in in use whose copy of yours can't be: "Your copy is broken: …; using built in."
   if (why) return { text: `${why}.`, red: false };
   return null;

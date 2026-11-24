@@ -10,7 +10,9 @@ import { ApiError, api, message, ok, type S } from "@/lib/api";
 import {
   KEY_REFUSED,
   KIND,
+  failedAlert,
   hostOf,
+  onHost,
   newSkill,
   problemAlert,
   problemCell,
@@ -184,7 +186,7 @@ export function PluginsScreen() {
                             <span className={`${ME_TAG} mt-1 inline-block`}>Personal use only</span>
                           </>
                         )}
-                        {!dead && p.problem && (
+                        {!dead && p.problem && p.status !== "failed" && (
                           <>
                             <br />
                             <span className={`${ME_TAG} mt-1 inline-block`}>{p.problem}</span>
@@ -206,14 +208,18 @@ export function PluginsScreen() {
                         {dead ? problemCell(p) : p.may_do.join(" · ")}
                       </td>
                       <td className={cell}>
-                        <Dot ok={st.ok} />{" "}
-                        <span className={`font-semibold ${st.ok ? "text-[#7fd88f]" : "text-t2"}`}>
-                          {st.text}
-                        </span>
+                        <Dot ok={st.ok} tone={st.tone} />{" "}
+                        <span className={`font-semibold ${toneText(st)}`}>{st.text}</span>
                         {st.sub && (
                           <>
                             <br />
                             <span className="mono text-[11px] text-t2">{st.sub}</span>
+                          </>
+                        )}
+                        {st.note && (
+                          <>
+                            <br />
+                            <span className="text-[12px] text-t2">{st.note}</span>
                           </>
                         )}
                       </td>
@@ -297,10 +303,17 @@ export function PluginsScreen() {
   );
 }
 
-const Dot = ({ ok }: { ok: boolean }) => (
+// Starting… is amber, Couldn't start red (board STARTS ITSELF)
+type Tone = "amber" | "red";
+const TONE_TEXT = { amber: "text-[#f2c14e]", red: "text-[#ff8a8a]" };
+const TONE_BG = { amber: "bg-[#f2c14e]", red: "bg-[#ff8a8a]" };
+const toneText = (st: { ok: boolean; tone?: Tone }) =>
+  st.tone ? TONE_TEXT[st.tone] : st.ok ? "text-[#7fd88f]" : "text-t2";
+
+const Dot = ({ ok, tone }: { ok: boolean; tone?: Tone }) => (
   <span
     aria-hidden
-    className={`inline-block size-2 shrink-0 rounded-full ${ok ? "bg-[#7fd88f]" : "bg-t2"}`}
+    className={`inline-block size-2 shrink-0 rounded-full ${tone ? TONE_BG[tone] : ok ? "bg-[#7fd88f]" : "bg-t2"}`}
   />
 );
 
@@ -403,11 +416,20 @@ function PluginPanel({
         ["Author", p.author],
         [
           "Status",
-          <span key="s" className={st.ok ? "text-[#7fd88f]" : "text-t2"}>
-            {st.ok ? `Running · ${hostOf(p.url ?? "")}` : st.text}
+          <span key="s" className={toneText(st)}>
+            {st.ok
+              ? `Running · ${hostOf(p.url ?? "")}`
+              : p.starts && st.sub
+                ? `${st.text} · ${st.sub}`
+                : st.text}
           </span>,
         ],
       ];
+  if (p.starts) {
+    rows.push(["Starts", `On its own, ${onHost(p.starts.host)}`]);
+    if (p.starts.log) rows.push(["Log", p.starts.log]);
+  }
+  const failed = failedAlert(p);
   if (p.files?.length) rows.push(["Files", p.files.join(" · ")]);
   if (p.recipes) rows.push(["Recipes", recipesRow(p.recipes)]);
   if (p.models?.length) rows.push(["Models", p.models.join(" · ")]);
@@ -441,6 +463,23 @@ function PluginPanel({
         >
           {alert.text}
         </div>
+      )}
+      {failed && (
+        <>
+          <div
+            role="alert"
+            className="rounded-[10px] bg-[color-mix(in_srgb,#ff6b6b_14%,transparent)] px-2.5 py-2 text-[12px] text-[#ff8a8a]"
+          >
+            {failed.lead}
+            {failed.why && <span className="mono">{failed.why}</span>}. Trying again in 1 min.
+          </div>
+          {p.starts?.log && <CopyCode text={p.starts.log} />}
+          <div className="flex gap-1.5">
+            <button type="button" className={CHIP} onClick={onRetry}>
+              Try again
+            </button>
+          </div>
+        </>
       )}
       <div className="flex flex-col gap-1 text-[13px]">
         {rows.map(([k, v]) => (
@@ -487,19 +526,35 @@ function PluginPanel({
             <Added title={added} onDone={onDone} />
           ) : p.provider ? (
             <AlreadyAdded title={p.title} />
-          ) : p.status === "not_running" ? (
+          ) : p.status === "not_running" && !p.starts ? (
             <NotRunning p={p} onRetry={onRetry} />
-          ) : (
+          ) : p.status === "running" ? (
             <AddProvider p={p} onAdded={onAdded} />
-          )}
+          ) : null}
         </>
       )}
     </aside>
   );
 }
 
-function NotRunning({ p, onRetry }: { p: Plugin; onRetry: () => void }) {
+/** A command or path in a code box with Copy. */
+function CopyCode({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
+  return (
+    <div className="mono flex items-center gap-2 rounded-[10px] bg-[var(--in)] py-1.5 pr-1.5 pl-2.5 text-[12px]">
+      <span className="grow break-all">{text}</span>
+      <button
+        type="button"
+        className={`${CHIP} h-[26px]`}
+        onClick={() => void navigator.clipboard?.writeText(text).then(() => setCopied(true))}
+      >
+        {copied ? "Copied" : "Copy"}
+      </button>
+    </div>
+  );
+}
+
+function NotRunning({ p, onRetry }: { p: Plugin; onRetry: () => void }) {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2 text-[13px]">
@@ -507,20 +562,7 @@ function NotRunning({ p, onRetry }: { p: Plugin; onRetry: () => void }) {
         <span className="font-semibold text-t2">Not running</span>
         <span className="text-[12px] text-t2">start it in a terminal</span>
       </div>
-      {p.start && (
-        <div className="mono flex items-center gap-2 rounded-[10px] bg-[var(--in)] py-1.5 pr-1.5 pl-2.5 text-[12px]">
-          <span className="grow break-all">{p.start}</span>
-          <button
-            type="button"
-            className={`${CHIP} h-[26px]`}
-            onClick={() =>
-              void navigator.clipboard?.writeText(p.start ?? "").then(() => setCopied(true))
-            }
-          >
-            {copied ? "Copied" : "Copy"}
-          </button>
-        </div>
-      )}
+      {p.start && <CopyCode text={p.start} />}
       <div className="flex gap-1.5">
         <button type="button" className={CHIP} onClick={onRetry}>
           Try again
