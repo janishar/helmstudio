@@ -58,7 +58,8 @@
               "oneOf": [{"$ref": "defs.schema.json#/$defs/providerName"}, {"type": "null"}],
               "description": "the web search provider when web search is on (a key of providers, kind search); null when off"
             },
-            "limits": {"$ref": "assistant.schema.json#/$defs/limits"}
+            "limits": {"$ref": "assistant.schema.json#/$defs/limits"},
+            "sees": {"type": "boolean", "description": "from API 1.65 (contracts/README.md, Assistant: media and vision): the model sees images (AssistantStatus.sees): the message's images go to it directly (studio.assistant.see), and look_at needs no card; absent = false"}
           }
         },
         "input": {
@@ -70,7 +71,7 @@
               "properties": {
                 "kind": {"const": "message"},
                 "message_id": {"$ref": "defs.schema.json#/$defs/uuid"},
-                "text": {"type": "string", "minLength": 1, "maxLength": 4000},
+                "text": {"type": "string", "minLength": 1, "maxLength": 4400, "description": "the user's words; from API 1.65 [[take:<id>]] refs (taken with @) stay in it, and the attached images follow as a last line `(attached: [[take:<id>]] …)`"},
                 "screen": {"$ref": "assistant.schema.json#/$defs/screen"},
                 "at": {"type": "string", "format": "date-time"},
                 "results": {"type": "array", "maxItems": 30, "items": {"$ref": "assistant.schema.json#/$defs/result"}, "description": "the parked turn's pending actions that never ran (did_not_run: the tab was closed), resumed before this message starts a turn"}

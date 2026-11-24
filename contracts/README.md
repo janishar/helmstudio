@@ -26,6 +26,7 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `messages/req.pipelines.judge.test.schema.json` | (API 1.28) NATS request/reply studio → pipelines (not enveloped): a judge test's filled template, and its verdict from the answer |
 | `messages/cmd.assistant.{turn,delete}.schema.json`, `evt.assistant.step.schema.json` | (API 1.44) studio → pipelines: one input to an assistant chat (a message, the actions' results, a card's answer, summarize), a deleted chat; pipelines → studio's projector: one step of a turn (Assistant, below) |
 | `messages/cmd.assistant.steer.schema.json`, `evt.assistant.steered.schema.json` | (API 1.59) studio → pipelines: a message sent while a turn works, or Stop; pipelines → studio's projector: the steers a turn read (Assistant: steer, below) |
+| `messages/req.studio.see.schema.json` | (API 1.65) NATS request/reply pipelines → studio (not enveloped): one take's pictures (JPEG, long side at most 1024) for the assistant's model when it sees images (Assistant: media and vision) |
 | `messages/req.pipelines.assistant.memory.schema.json` | (API 1.44) NATS request/reply studio → pipelines (not enveloped): the Memory list's list, edit, delete, clear, in the owner's namespace only |
 | `messages/assistant.schema.json` | (API 1.44) not a message: the assistant's shared shapes (screen summary, action, result, line, card, caps, limits, error, memory item); openapi.yaml's `Assistant*` twins copy them |
 | `tools/catalog.json` | (API 1.44) not a message: every tool the in-app assistant and `helm mcp` share (name, input, output, routes, roles, surfaces, card); studio_service embeds a copy (`gen/tools/`), pipelines_service copies it with the rest of `tools/`, cli embeds a copy for `helm mcp` (`gen/`, plan 16) |
@@ -3959,6 +3960,33 @@ markup. Pipelines checks both before the step is published; the drawer shows the
   element its editor, a workflow is switched to on Create) and never the id. An id that appears nowhere in what the
   model read (the transcript, the calls' results, the screen) is rewritten `?` (`[[take:?]]`): the drawer shows
   "unknown take". An item deleted since shows "deleted take" (element, voice, workflow alike).
+
+### Assistant: media and vision (API 1.65; board Assistant frame 12, alpha.2 items 7, 8 and 10; normative)
+
+Takes in the chat both ways: you hand the assistant pictures, and its answers show takes as media.
+
+- **@ a take.** Typing `@` in the drawer lists elements, then Gallery takes and uploads, newest first (typing searches
+  all three). An element goes in as `@handle`, as before; a take as a `[[take:<id>]]` ref in your text (the box shows
+  its title; your bubble a chip, as an answer's).
+- **Attach.** The paperclip, a paste or a drop uploads the image first (Uploads, the usual optimised upload), then the
+  message names it in `AssistantPost.takes` (at most 8, your own ready takes: else 422). It is stored on your entry
+  (`AssistantEntry.takes`) and shown above your words. Studio sends it to pipelines as the text's last line
+  `(attached: [[take:<id>]] …)` (cmd.assistant.turn, cmd.assistant.steer; their text is at most 4400 characters), and
+  steers joined into one turn keep theirs.
+- **Vision.** A preset's `vision` (a regular expression on the model id) says which models see images;
+  `AssistantStatus.sees` and cmd.assistant.turn `settings.sees` are its answer for the assistant's model (a provider
+  with no preset: false). When it sees, every model call of a message carries the pictures of the takes that message
+  names (refs in the user's words and its attachments, then those it looked at with `look_at`), at most 8, as image
+  parts after the text: pipelines asks `studio.see` for each (req.studio.see: the thumbnail as JPEG, long side at most
+  1024; a video's poster; audio none) and never stores them. A line `Looked at <titles>` shows once per message.
+  `look_at` is then offered always and runs without a card or a run: its takes join the pictures of the next call.
+- **Text-only model.** `look_at` stays the way to see (an ask run on your machine), but on takes you attached or
+  @-picked in this chat it needs no card: they are yours to show. The drawer says once, when you attach, "This model
+  can't see images; it will use Look at."
+- **Media in answers.** A take ref alone on its line in an answer shows as the take itself: an image, a video with a
+  small player (sound off until you turn it on), audio with play and a waveform; one plays at a time. Under it the
+  title, Open (the Gallery viewer) and Use in… (the take's offers, as the Gallery's Use in…). A ref inside a sentence
+  stays a chip.
 
 ### Assistant: tools
 
