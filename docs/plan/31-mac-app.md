@@ -150,6 +150,11 @@ about 30 characters would again overflow Lima's socket path; Open logs opens Fin
 through the test hook, not with a real mouse; deleting the app leaves `~/.helmstudio-vm` and its Application Support
 folder (no uninstall tool, 35.7).
 
+**Helm names in Activity Monitor (owner, 2026-11-24):** `make app` renames the executable `helmstudio` and the
+helpers `helmstudio Helper (…)`, ships limactl as `helmstudio-vm` (signed with the entitlement; a `limactl` shim
+execs it for Colima, so the VM row reads "Virtual Machine Service for helmstudio-vm"), and the runners run a hard
+link of uv's python named `helmstudio-runner` in each venv. Only the system `ssh` mux keeps its own name.
+
 ### Decided by the owner, 2026-11-25 (asked one by one)
 
 1. **Shell: Electron** (Chromium, the engine the e2e suite uses).

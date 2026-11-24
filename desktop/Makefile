@@ -1,7 +1,7 @@
 # helmstudio for Mac (docs/plan/31-mac-app.md): an Electron shell plus what it ships under Contents/Resources.
 # Versions are owned by docs/plan/14-dependencies.md; the downloads are checked against their releases' sha256 files.
 #   make test lint    the step runner's unit tests (commands faked) and the syntax checks
-#   make app          dist.noindex/helmstudio.app (ad-hoc signed; limactl with the virtualization entitlement)
+#   make app          dist.noindex/helmstudio.app (ad-hoc signed; limactl, as helmstudio-vm, with the virtualization entitlement)
 #   make dmg          dist.noindex/helmstudio.dmg
 #   make run          the app from source on build/Resources (HELMSTUDIO_FAKE=1 HELMSTUDIO_HOME=/tmp/x to look around)
 
@@ -81,17 +81,30 @@ app: node_modules resources
 	cp -R package.json stack.json src assets $(APP)/Contents/Resources/app/
 	ditto $(RES) $(APP)/Contents/Resources
 	cp assets/icon.icns $(APP)/Contents/Resources/electron.icns
+	# helm names in Activity Monitor: the executable and the helpers renamed (Electron finds its helpers as
+	# "<executable> Helper*.app"); limactl renamed helmstudio-vm (the VM's service is named after it), with a
+	# limactl shim for colima, which calls it by name
+	mv $(APP)/Contents/MacOS/Electron $(APP)/Contents/MacOS/helmstudio
+	plutil -replace CFBundleExecutable -string helmstudio $(APP)/Contents/Info.plist
+	cd $(APP)/Contents/Frameworks && for s in "" " (GPU)" " (Plugin)" " (Renderer)"; do n="helmstudio Helper$$s"; \
+	  mv "Electron Helper$$s.app" "$$n.app" && mv "$$n.app/Contents/MacOS/Electron Helper$$s" "$$n.app/Contents/MacOS/$$n" && \
+	  plutil -replace CFBundleExecutable -string "$$n" "$$n.app/Contents/Info.plist" && \
+	  plutil -replace CFBundleName -string "$$n" "$$n.app/Contents/Info.plist" && \
+	  plutil -replace CFBundleIdentifier -string com.helmstudio.app.helper "$$n.app/Contents/Info.plist" || exit 1; done
+	mv $(APP)/Contents/Resources/vm/bin/limactl $(APP)/Contents/Resources/vm/bin/helmstudio-vm
+	printf '#!/bin/sh\nexec "$$(dirname "$$0")/helmstudio-vm" "$$@"\n' > $(APP)/Contents/Resources/vm/bin/limactl
+	chmod 755 $(APP)/Contents/Resources/vm/bin/limactl
 	plutil -replace CFBundleName -string helmstudio $(APP)/Contents/Info.plist
 	plutil -replace CFBundleDisplayName -string helmstudio $(APP)/Contents/Info.plist
 	plutil -replace CFBundleIdentifier -string com.helmstudio.app $(APP)/Contents/Info.plist
 	plutil -replace CFBundleShortVersionString -string $$(node -p 'require("./package.json").version') $(APP)/Contents/Info.plist
-	# ad-hoc signatures: every Mach-O we added, limactl with the virtualization entitlement (vz), then the app
+	# ad-hoc signatures: every Mach-O we added, helmstudio-vm (limactl) with the virtualization entitlement (vz), then the app
 	find $(APP)/Contents/Resources -type f -perm -u+x -not -name '*.sh' | while read -r f; do \
 	  file -b "$$f" | grep -q Mach-O && codesign --force --sign - "$$f" >/dev/null; done; :
-	codesign --force --sign - --entitlements limactl.entitlements $(APP)/Contents/Resources/vm/bin/limactl
+	codesign --force --sign - --entitlements limactl.entitlements $(APP)/Contents/Resources/vm/bin/helmstudio-vm
 	codesign --force --deep --sign - $(APP)
 	codesign --verify --deep --strict $(APP)
-	codesign -d --entitlements - $(APP)/Contents/Resources/vm/bin/limactl 2>&1 | grep -q com.apple.security.virtualization
+	codesign -d --entitlements - $(APP)/Contents/Resources/vm/bin/helmstudio-vm 2>&1 | grep -q com.apple.security.virtualization
 	@echo "built $(APP)"
 
 dmg: app

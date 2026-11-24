@@ -21,6 +21,7 @@ test('a new start stops the runners a killed app left behind', async () => {
   const a = new Runners({ p, cfg, settings: {} });
   await a.start();
   const old = a.procs.torch.pid;
+  assert.equal(a.procs.torch.spawnfile, path.join(p.venvs, 'runner', 'bin', 'helmstudio-runner'), 'runs under the helm name');
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(home, 'runners.json'))), { torch: old });
 
   const b = new Runners({ p, cfg, settings: {} }); // the app again, a forgotten

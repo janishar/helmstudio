@@ -12,7 +12,7 @@ const cfg = require('../stack.json');
 
 const home = process.env.HELMSTUDIO_HOME || path.join(app.getPath('appData'), 'helmstudio');
 if (process.env.HELMSTUDIO_HOME) app.setPath('userData', path.join(home, 'electron'));
-// the bundle's Resources when packaged (the executable keeps Electron's name, so app.isPackaged says no), else
+// the bundle's Resources when packaged (checked by path: `make run` is Electron from node_modules), else
 // build/Resources (make resources) for `make run`
 const res = __dirname.startsWith(process.resourcesPath) ? process.resourcesPath : path.join(__dirname, '..', 'build', 'Resources');
 const fake = process.env.HELMSTUDIO_FAKE === '1';

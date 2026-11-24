@@ -259,6 +259,26 @@ function stackSteps({ p, cfg, settings, runners }) {
   return { first, every, stopAll, envs: e };
 }
 
+// Activity Monitor names a process after its binary, and the venv's python is a symlink to uv's python3.14: so the
+// runners run a hard link (a copy across volumes) of that binary named helmstudio-runner, refreshed when uv's python
+// changes. Python finds the venv by the pyvenv.cfg beside its bin folder, whatever the name
+function runnerExe(bin) {
+  const real = fs.realpathSync(path.join(bin, 'python'));
+  const exe = path.join(bin, 'helmstudio-runner');
+  const a = fs.statSync(real);
+  const b = fs.statSync(exe, { throwIfNoEntry: false });
+  if (b && b.size === a.size && b.mtimeMs === a.mtimeMs) return exe;
+  const tmp = `${exe}.${process.pid}`;
+  try {
+    fs.linkSync(real, tmp);
+  } catch {
+    fs.copyFileSync(real, tmp);
+    fs.utimesSync(tmp, a.atime, a.mtime);
+  }
+  fs.renameSync(tmp, exe);
+  return exe;
+}
+
 // The native runners as `make runners` starts them (root Makefile): one process per env with its env vars, restarted
 // after a stall (exit 70) or a SIGKILL (jetsam), stopped with SIGTERM. Their pids go to runners.json, so a start after
 // the app was killed or crashed first stops the runners it left behind (else they hold the health ports, unstoppable)
@@ -272,7 +292,7 @@ class Runners {
     fs.writeFileSync(this.pidFile, JSON.stringify(Object.fromEntries(Object.entries(this.procs).map(([k, c]) => [k, c.pid]))));
   }
 
-  // the runners a killed app left: only pids whose command is still one of our venvs' python (a pid can be reused)
+  // the runners a killed app left: only pids whose command is still one of our venvs' runner (a pid can be reused)
   async reap() {
     let old = {};
     try {
@@ -322,7 +342,7 @@ class Runners {
   spawn(r) {
     fs.mkdirSync(this.p.logs, { recursive: true });
     const out = fs.openSync(path.join(this.p.logs, `runner-${r.env}.log`), 'a');
-    const child = spawn(path.join(this.p.venvs, r.venv, 'bin', 'python'), ['main.py'], {
+    const child = spawn(runnerExe(path.join(this.p.venvs, r.venv, 'bin')), ['main.py'], {
       cwd: path.join(this.p.runner, 'runner_service'),
       env: this.env(r),
       stdio: ['ignore', out, out],
