@@ -1,4 +1,4 @@
-# helmstudio-next plan — Sessions and clean-up: rename, delete, auto-name; delete takes and failed runs
+# helmstudio plan — Sessions and clean-up: rename, delete, auto-name; delete takes and failed runs
 
 [← Plan index](../README.md)
 

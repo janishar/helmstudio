@@ -1,4 +1,4 @@
-# helmstudio-next — docs
+# helmstudio — docs
 
 Status: revision 5 · 2026-11-14 · reviewed against the Qwen Image and LTX code, audited for redundancy; agent-powered pipelines on LangGraph; microservice architecture after the oralab reference
 

@@ -1,4 +1,4 @@
-# helmstudio-next plan — The NVIDIA quantized path
+# helmstudio plan — The NVIDIA quantized path
 
 [← Plan index](../README.md)
 

@@ -1,4 +1,4 @@
-# helmstudio-next plan — Timeline edit API: edits by agents, without the browser
+# helmstudio plan — Timeline edit API: edits by agents, without the browser
 
 [← Plan index](../README.md)
 

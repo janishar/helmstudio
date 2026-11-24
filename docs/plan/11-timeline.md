@@ -1,4 +1,4 @@
-# helmstudio-next plan — Timeline
+# helmstudio plan — Timeline
 
 [← Plan index](../README.md)
 

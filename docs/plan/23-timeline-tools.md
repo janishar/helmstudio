@@ -1,4 +1,4 @@
-# helmstudio-next plan — Timeline tools: blade, trim, roll, slip, slide, range, zoom
+# helmstudio plan — Timeline tools: blade, trim, roll, slip, slide, range, zoom
 
 [← Plan index](../README.md)
 

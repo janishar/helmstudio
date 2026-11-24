@@ -1,4 +1,4 @@
-# helmstudio-next plan — Runtime architecture
+# helmstudio plan — Runtime architecture
 
 [← Plan index](../README.md)
 

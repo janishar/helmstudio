@@ -1,4 +1,4 @@
-# helmstudio-next plan — MiniMax H3 options and optimised uploads
+# helmstudio plan — MiniMax H3 options and optimised uploads
 
 [← Plan index](../README.md)
 

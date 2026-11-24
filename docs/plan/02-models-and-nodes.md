@@ -1,4 +1,4 @@
-# helmstudio-next plan — Model config and nodes
+# helmstudio plan — Model config and nodes
 
 [← Plan index](../README.md)
 

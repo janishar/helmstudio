@@ -1,4 +1,4 @@
-# helmstudio-next plan — Concepts
+# helmstudio plan — Concepts
 
 [← Plan index](../README.md)
 

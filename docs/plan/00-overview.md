@@ -1,4 +1,4 @@
-# helmstudio-next plan — Overview
+# helmstudio plan — Overview
 
 [← Plan index](../README.md)
 

@@ -1,4 +1,4 @@
-# helmstudio-next plan — Platform services
+# helmstudio plan — Platform services
 
 [← Plan index](../README.md)
 

@@ -1,4 +1,4 @@
-# helmstudio-next plan — Dependencies
+# helmstudio plan — Dependencies
 
 [← Plan index](../README.md)
 
@@ -6,7 +6,7 @@
 
 The project starts on the latest stable release of everything, checked against
 the package registries on 2026-11-14. The reference repository is a patch or a
-minor behind on several of these; helmstudio-next does not copy its lockfiles.
+minor behind on several of these; helmstudio does not copy its lockfiles.
 This section owns version numbers; other sections name libraries without them.
 
 ### 18.1 Pins

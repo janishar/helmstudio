@@ -1,4 +1,4 @@
-# helmstudio-next plan — Provider keys from the UI: paste the key, the server writes the file
+# helmstudio plan — Provider keys from the UI: paste the key, the server writes the file
 
 [← Plan index](../README.md)
 

@@ -1,4 +1,4 @@
-# helmstudio-next plan — Elements and Looks
+# helmstudio plan — Elements and Looks
 
 [← Plan index](../README.md)
 

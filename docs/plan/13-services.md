@@ -1,10 +1,10 @@
-# helmstudio-next plan — Service architecture
+# helmstudio plan — Service architecture
 
 [← Plan index](../README.md)
 
 ## 17. Services, data and messaging
 
-Decided 2026-11-14: helmstudio-next is a **multi-user, self-hosted** system
+Decided 2026-11-14: helmstudio is a **multi-user, self-hosted** system
 built as microservices, following the reference repository
 `oralab-catalog-agents` (its `docs/ARCHITECTURE.md` and `docs/HELMGO.md`). Go
 owns auth and every API layer; Python owns model execution and LangGraph;
@@ -255,7 +255,7 @@ contract suite through Kong is the gate for every milestone.
 
 ### 17.9 What differs from the reference, and why
 
-| Reference | helmstudio-next | Why |
+| Reference | helmstudio | Why |
 |---|---|---|
 | `agents_service` does everything in Python | Split into `pipelines_service` (LangGraph, no GPU) and `runner_service` (models) | Runners must run natively on a Mac and hold tens of GB; orchestration should not live or die with them |
 | Commands go straight from the outbox to workers | Runs wait for the dispatcher | GPUs are scarce and shared between users |

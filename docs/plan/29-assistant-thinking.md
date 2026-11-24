@@ -1,4 +1,4 @@
-# helmstudio-next plan — Assistant thinking: "Thinking… 8 s" while the model thinks
+# helmstudio plan — Assistant thinking: "Thinking… 8 s" while the model thinks
 
 [← Plan index](../README.md)
 

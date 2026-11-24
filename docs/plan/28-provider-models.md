@@ -1,4 +1,4 @@
-# helmstudio-next plan — Provider models: a list from the API, a default, custom names, thinking per model
+# helmstudio plan — Provider models: a list from the API, a default, custom names, thinking per model
 
 [← Plan index](../README.md)
 

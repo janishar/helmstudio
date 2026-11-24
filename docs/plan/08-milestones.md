@@ -1,4 +1,4 @@
-# helmstudio-next plan — Milestones and testing
+# helmstudio plan — Milestones and testing
 
 [← Plan index](../README.md)
 

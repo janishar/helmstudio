@@ -1,4 +1,4 @@
-# helmstudio-next plan — The in-app assistant
+# helmstudio plan — The in-app assistant
 
 [← Plan index](../README.md)
 

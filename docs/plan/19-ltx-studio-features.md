@@ -1,4 +1,4 @@
-# helmstudio-next plan — The new ltx studio features in the LTX pack
+# helmstudio plan — The new ltx studio features in the LTX pack
 
 [← Plan index](../README.md)
 

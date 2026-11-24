@@ -1,4 +1,4 @@
-# helmstudio-next plan — The Mac app: a standalone prototype
+# helmstudio plan — The Mac app: a standalone prototype
 
 [← Plan index](../README.md)
 

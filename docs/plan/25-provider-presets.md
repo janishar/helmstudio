@@ -1,4 +1,4 @@
-# helmstudio-next plan — Model provider presets: pick DeepSeek, do not type it
+# helmstudio plan — Model provider presets: pick DeepSeek, do not type it
 
 [← Plan index](../README.md)
 

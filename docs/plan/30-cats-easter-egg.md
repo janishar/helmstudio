@@ -1,4 +1,4 @@
-# helmstudio-next plan — The cats: double-click the logo
+# helmstudio plan — The cats: double-click the logo
 
 [← Plan index](../README.md)
 

@@ -1,4 +1,4 @@
-# helmstudio-next plan — Agent-powered pipelines
+# helmstudio plan — Agent-powered pipelines
 
 [← Plan index](../README.md)
 

@@ -1,4 +1,4 @@
-# helmstudio-next plan — Out of scope and risks
+# helmstudio plan — Out of scope and risks
 
 [← Plan index](../README.md)
 

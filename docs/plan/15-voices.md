@@ -1,4 +1,4 @@
-# helmstudio-next plan — Voices
+# helmstudio plan — Voices
 
 [← Plan index](../README.md)
 

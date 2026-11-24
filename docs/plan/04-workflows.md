@@ -1,4 +1,4 @@
-# helmstudio-next plan — Workflows, batches and pipelines
+# helmstudio plan — Workflows, batches and pipelines
 
 [← Plan index](../README.md)
 

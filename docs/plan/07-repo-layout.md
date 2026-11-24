@@ -1,4 +1,4 @@
-# helmstudio-next plan — Repository layout
+# helmstudio plan — Repository layout
 
 [← Plan index](../README.md)
 
@@ -9,7 +9,7 @@ has its own dependencies, `.env`, Dockerfile, Makefile (`dev`, `test`, `gen`,
 `lint`), migrations and tests. No root virtualenv, `node_modules` or Go workspace.
 
 ```
-helmstudio-next/
+helmstudio/
   contracts/          openapi.yaml · messages/*.schema.json · registry.schema.json · fixtures
   contract_tests/     black-box suite through Kong; the gate for every milestone
   helmgo/              shared Go framework (from the reference)

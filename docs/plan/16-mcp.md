@@ -1,4 +1,4 @@
-# helmstudio-next plan — MCP server for agents
+# helmstudio plan — MCP server for agents
 
 [← Plan index](../README.md)
 

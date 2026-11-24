@@ -1,4 +1,4 @@
-# helmstudio-next plan — Thumbnails: small pictures in lists, the full file only where it is viewed
+# helmstudio plan — Thumbnails: small pictures in lists, the full file only where it is viewed
 
 [← Plan index](../README.md)
 
