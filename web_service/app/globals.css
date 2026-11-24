@@ -1385,6 +1385,11 @@
     font-size: 13px;
     font-weight: 500;
   }
+  /* Stopping… (board frame 15): Stop greys out */
+  :is(.ast, .ast-min) .no:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
   .ast .fine {
     margin: 0;
     font-size: 11px;

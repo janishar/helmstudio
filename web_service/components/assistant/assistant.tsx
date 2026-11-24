@@ -132,6 +132,8 @@ export function useAssistant(me: S<"User"> | null) {
   const [undone, setUndone] = useState<Record<string, boolean>>({});
   const [asking, setAsking] = useState<Asking | null>(null);
   const [running, setRunning] = useState<{ n: number; of: number; text: string } | null>(null);
+  // Stop pressed while a turn works: "Stopping…" until the chat is idle (board frame 15; item 27)
+  const [stopFor, setStopFor] = useState<string | null>(null); // the thread it stops
   const [error, setError] = useState("");
   const undoFns = useRef<Record<string, NonNullable<Outcome["undo"]>>>({});
   const answerRef = useRef<((a: "yes" | "no" | "gone") => void) | null>(null);
@@ -362,6 +364,12 @@ export function useAssistant(me: S<"User"> | null) {
   useEffect(() => {
     if (thread?.state === "idle") stopNext.current = false;
   }, [thread?.state]);
+  // it ends once the chat is idle, or another chat opens
+  if (
+    stopFor &&
+    (stopFor !== thread?.id || (thread.state !== "working" && thread.state !== "waiting"))
+  )
+    setStopFor(null);
 
   const send = useCallback(
     async (text: string) => {
@@ -450,6 +458,7 @@ export function useAssistant(me: S<"User"> | null) {
     stop.current = true;
     answerRef.current?.("no");
     if (threadId && steering) {
+      setStopFor(threadId);
       stopNext.current = true;
       void post(threadId, { kind: "stop", client_id: cid });
     }
@@ -549,6 +558,7 @@ export function useAssistant(me: S<"User"> | null) {
     answerCard,
     continueHere,
     stopAll,
+    stopping: !!stopFor,
     steering,
     toggleUndo,
     readOnly,
@@ -1679,16 +1689,18 @@ function MinBar({ a }: { a: AssistantApi }) {
   const working = !a.readOnly && (!!a.running || t?.state === "working" || t?.state === "waiting");
   const [state, text, sub, dot] = a.cardWaits
     ? ["Waiting for you", "Waiting for you", card && `${card.replace(/\?$/, "")}?`, "ask"]
-    : working
-      ? [
-          "Working",
-          a.running?.text ?? (a.status?.thinks ? "Thinking…" : "Working…"),
-          a.running ? `Working · ${a.running.n} of ${a.running.of}` : "Working",
-          "",
-        ]
-      : a.newAnswer !== null
-        ? ["new answer", "New answer", plainAnswer(a.newAnswer).split("\n")[0], "new"]
-        : ["", "Assistant", "", ""];
+    : working && a.stopping
+      ? ["Stopping", "Stopping…", "", ""]
+      : working
+        ? [
+            "Working",
+            a.running?.text ?? (a.status?.thinks ? "Thinking…" : "Working…"),
+            a.running ? `Working · ${a.running.n} of ${a.running.of}` : "Working",
+            "",
+          ]
+        : a.newAnswer !== null
+          ? ["new answer", "New answer", plainAnswer(a.newAnswer).split("\n")[0], "new"]
+          : ["", "Assistant", "", ""];
   return (
     <div ref={ref} className="ast-min" style={lift ? { marginBottom: lift } : undefined}>
       <button
@@ -1706,8 +1718,8 @@ function MinBar({ a }: { a: AssistantApi }) {
         </span>
       </button>
       {working && a.steering && (
-        <button type="button" className="no" onClick={a.stopAll}>
-          Stop
+        <button type="button" className="no" disabled={a.stopping} onClick={a.stopAll}>
+          {a.stopping ? "Stopping…" : "Stop"}
         </button>
       )}
     </div>
@@ -1780,6 +1792,10 @@ function Drawer({ a }: { a: AssistantApi }) {
   useEffect(() => {
     if (a.open) input.current?.focus();
   }, [a.open]);
+  // Stop greys out: focus goes to the message box (board frame 15)
+  useEffect(() => {
+    if (a.stopping) input.current?.focus();
+  }, [a.stopping]);
   if (!a.open) {
     if (chats) setChats(false); // the list never comes back open with the drawer
     return a.min ? <MinBar a={a} /> : null;
@@ -1790,6 +1806,8 @@ function Drawer({ a }: { a: AssistantApi }) {
   const t = a.view?.thread;
   const chip = a.readOnly ? (
     <span className="st ro-chip">Read-only</span>
+  ) : a.stopping ? (
+    <span className="st st-go">Stopping…</span>
   ) : a.cardWaits ? (
     <span className="st st-ask">Waiting for you</span>
   ) : a.running || t?.state === "working" || t?.state === "waiting" ? (
@@ -1829,8 +1847,13 @@ function Drawer({ a }: { a: AssistantApi }) {
             </span>
           )}
           {a.running && (
-            <button type="button" className="no h-8 px-3 text-xs" onClick={a.stopAll}>
-              Stop
+            <button
+              type="button"
+              className="no h-8 px-3 text-xs"
+              disabled={a.stopping}
+              onClick={a.stopAll}
+            >
+              {a.stopping ? "Stopping…" : "Stop"}
             </button>
           )}
           <button
@@ -2023,7 +2046,14 @@ function Drawer({ a }: { a: AssistantApi }) {
             ) : (
               <Thread a={a} entries={entries} />
             )}
-            {since && thinking && <Thinking since={since.at} thinks={!!a.status?.thinks} />}
+            {a.stopping ? (
+              <div className="msg think" role="status">
+                <LoaderCircle size={12} strokeWidth={3} aria-hidden className="run" />
+                Stopping…
+              </div>
+            ) : (
+              since && thinking && <Thinking since={since.at} thinks={!!a.status?.thinks} />
+            )}
             <div ref={end} />
           </div>
 
@@ -2102,7 +2132,7 @@ function Drawer({ a }: { a: AssistantApi }) {
               />
               <div className="cmpb">
                 <small>
-                  {a.steering ? (
+                  {a.stopping ? null : a.steering ? (
                     <>
                       <span className="kbd">Enter</span> steers this answer
                     </>
@@ -2128,8 +2158,13 @@ function Drawer({ a }: { a: AssistantApi }) {
                   )}
                 </small>
                 {a.steering && (
-                  <button type="button" className="no h-[34px] px-3 text-xs" onClick={a.stopAll}>
-                    Stop
+                  <button
+                    type="button"
+                    className="no h-[34px] px-3 text-xs"
+                    disabled={a.stopping}
+                    onClick={a.stopAll}
+                  >
+                    {a.stopping ? "Stopping…" : "Stop"}
                   </button>
                 )}
                 <button
