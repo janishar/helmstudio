@@ -276,6 +276,45 @@ td{vertical-align:top}
 </div>
 </div>
 </section>
+<h2 class="h" style="margin-top: 4px">STARTS ITSELF · ALPHA.2 ITEM 37 · ON MEANS RUNNING, ALSO AFTER THE APP OPENS AGAIN</h2>
+<span style="font-size: 12px; color: var(--t2); margin-top: -10px">Owner, 2026-11-25: "when i toggle the websearch it should start autimatically and then will remain when the app launches next time". The Mac's runner starts it, restarts it if it stops, and stops it when you turn it off. Its log is in ~/.helm/logs/.</span>
+<section aria-label="Starts itself" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; align-items: start">
+<div class="st">
+<span class="cap">Turned on · starting</span>
+<div style="display: flex; align-items: center; gap: 8px; font-size: 13px"><span class="dot" style="background: #f2c14e"></span><span style="font-weight: 600; color: #f2c14e">Starting…</span><span style="font-size: 12px; color: var(--t2)">on the Mac</span></div>
+<div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--t2)">Web search · Assistant tools<div style="flex-grow: 1"></div><button role="switch" aria-checked="true" aria-label="Enabled" class="sw"><span></span></button></div>
+</div>
+<div class="st">
+<span class="cap">Running · the list row</span>
+<div style="display: flex; align-items: center; gap: 8px; font-size: 13px"><span class="dot okb"></span><span class="ok" style="font-weight: 600">Running</span><span class="m" style="font-size: 11px">host.docker.internal:8421</span></div>
+<span style="font-size: 12px; color: var(--t2)">Starts on its own · since 10:42</span>
+</div>
+<div class="st">
+<span class="cap">Couldn't start · the aside</span>
+<div role="alert" class="alert red"><span style="flex: 1 1 auto">Couldn't start · it stopped 3 times: <span style="font-family: 'JetBrains Mono', monospace">ModuleNotFoundError: ddgs</span>. Trying again in 1 min.</span></div>
+<div class="code"><span>~/.helm/logs/web-search.log</span><button class="chip" style="height: 26px; font-size: 12px">Copy</button></div>
+<div style="display: flex; gap: 8px"><button class="chip" style="height: 30px; font-size: 12px">Try again</button></div>
+</div>
+<div class="st">
+<span class="cap">The aside · rows</span>
+<div style="display: flex; flex-direction: column; gap: 4px">
+<div class="row"><span>Status</span><span style="color: #7fd88f">Running · host.docker.internal:8421</span></div>
+<div class="row"><span>Starts</span><span>On its own, on the Mac</span></div>
+<div class="row"><span>Log</span><span>~/.helm/logs/web-search.log</span></div>
+</div>
+</div>
+<div class="st">
+<span class="cap">Turned off · stopping</span>
+<div style="display: flex; align-items: center; gap: 8px; font-size: 13px"><span class="dot offb"></span><span class="off" style="font-weight: 600">Off</span><span style="font-size: 12px; color: var(--t2)">stopped on the Mac</span></div>
+</div>
+<div class="st">
+<span class="cap">A plugin you start yourself (no start in its plugin.json)</span>
+<div style="display: flex; align-items: center; gap: 8px; font-size: 12px"><span class="dot offb"></span><span class="off" style="font-weight: 600">Not running</span><span style="color: var(--t2)">start it in a terminal</span></div>
+<div class="code"><span>plugins/claude-code-bridge/run.sh</span><button class="chip" style="height: 26px; font-size: 12px">Copy</button></div>
+<span style="font-size: 12px; color: var(--t2)">As today: the bridge stays one you start yourself (personal, repo only).</span>
+</div>
+</section>
+
 <h2 class="h" style="margin-top: 4px">SKILLS · ALPHA.2 ITEM 36 · TEXT THAT TEACHES THE ASSISTANT A CRAFT</h2>
 <section aria-label="Skills" style="display: flex; flex-direction: column; gap: 8px">
 <div style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 6px 8px; overflow-x: auto">
@@ -397,7 +436,7 @@ td{vertical-align:top}
 
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":2560}}'>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":3080}}'>
 class Component extends DCLogic {
 state = { theme: null };
 renderVals() {
