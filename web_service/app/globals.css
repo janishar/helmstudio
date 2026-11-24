@@ -1189,6 +1189,10 @@
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
+    list-style-position: inside; /* the number stays visible inside the cut line */
+  }
+  .ast .msg ol.src {
+    padding-left: 0;
   }
   .ast .mn {
     padding: 0 3px;
@@ -1980,8 +1984,8 @@
 .ast .opts {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-top: 8px;
+  gap: 8px;
+  margin: 8px 0;
   white-space: normal;
 }
 .ast .opt {
@@ -2018,7 +2022,6 @@
   color: var(--t2);
 }
 .ast .opt.rec {
-  padding-right: 86px; /* room for its Best next tag */
   box-shadow: inset 0 0 0 1px var(--a1);
 }
 .ast .opt.on {
@@ -2032,9 +2035,7 @@
   cursor: default;
 }
 .ast .opt .tag {
-  position: absolute;
-  right: 8px;
-  top: 8px;
+  flex: none;
   display: inline-flex;
   align-items: center;
   padding: 1px 7px;
