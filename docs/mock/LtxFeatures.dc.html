@@ -141,7 +141,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 .var{min-width:0;display:flex;flex-direction:column;gap:10px;padding:12px;border-radius:18px 18px 18px 8px;background:linear-gradient(180deg,var(--s3),var(--s2));box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 12px 22px -12px color-mix(in srgb, var(--shd) 80%, transparent)}
 .host{display:inline-flex;align-items:center;gap:6px;min-width:0;padding:4px 10px;border-radius:999px;background:var(--s1);font-size:12px}
 .stage{border-radius:12px;border:1px dashed var(--dash);display:flex;align-items:center;justify-content:center;color:var(--t2);font-size:13px;text-align:center}
-</style>
+.pic{background-size:cover!important;background-position:center!important;background-repeat:no-repeat!important;color:#fff!important;text-shadow:0 1px 3px rgba(0,0,0,.9)}.pic.pnb{border-color:transparent!important}</style>
 <style>
 /* Logo A in its own panel above the rail: same form as the rail (width, background, radius, shadow), 14 px apart */
 .rail{flex:0 0 68px;align-self:flex-start;display:flex;flex-direction:column;gap:14px;margin:14px 0 14px 14px}
@@ -197,7 +197,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <!-- 1 -->
 <section class="frame" aria-label="Detail pass running">
 <p class="note">1 · Recipe Detail, running. The progress row names the detail pass on both samples; the Generate key's estimate includes it. <span class="ph">phase 4</span></p>
-<div class="stage" style="aspect-ratio: 704 / 448; max-height: 240px; position: relative">Fox crossing · Detail pass<span style="position: absolute; left: 12px; top: 12px; padding: 4px 8px; border-radius: 8px; background: color-mix(in srgb, var(--s2) 92%, transparent); font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--t1)">704 × 448 · 49 frames</span></div>
+<div class="pic pnb stage" style="aspect-ratio: 704 / 448; max-height: 240px; position: relative; background-image: url(img/fox-dusk-44.jpg)">Fox crossing · Detail pass<span style="position: absolute; left: 12px; top: 12px; padding: 4px 8px; border-radius: 8px; background: color-mix(in srgb, var(--s2) 92%, transparent); font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--t1)">704 × 448 · 49 frames</span></div>
 <div aria-label="Run progress" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
 <span class="step"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg>Encode</span>
 <span class="step"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg>Sample 1 <span class="mono">detail layout</span></span>
@@ -296,7 +296,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <h2 class="h" style="display: flex; align-items: center">Frames<button class="i" aria-label="More information" title="Each row: an image, where it goes, how strongly it holds and how it binds.">i</button><span style="flex-grow: 1"></span><span class="mono" style="font-weight: 400">2 / 8</span></h2>
 <ol aria-label="Frames, in order" style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px">
 <li class="kf">
-<div style="display: flex; align-items: center; gap: 8px"><span class="thumb" aria-hidden="true"></span><span style="flex-grow: 1">[YOUR TAKE]</span><button class="x" aria-label="Remove frame 1">×</button></div>
+<div style="display: flex; align-items: center; gap: 8px"><span class="pic pnb thumb" aria-hidden="true" style="background-image: url(img/fox-dusk-42.jpg)"></span><span style="flex-grow: 1">[YOUR TAKE]</span><button class="x" aria-label="Remove frame 1">×</button></div>
 <div class="lbl"><span>At</span><span class="mono">frame 0 · 0.0 s</span></div>
 <input aria-label="At, frame 1" type="range" min="0" max="88" value="0" style="width: 100%; accent-color: var(--a2)">
 <div class="lbl"><span>Strength</span><span class="mono">1.00</span></div>
@@ -304,7 +304,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px"><span style="font-size: 12px; color: var(--t2)">Binding<button class="i" aria-label="More information" title="Auto: a frame at 0 s replaces the start, later ones guide. Replace pins the frame exactly. Guide lets the clip pass near it.">i</button></span><div class="seg" role="group" aria-label="Binding, frame 1"><button aria-pressed="true">Auto</button><button aria-pressed="false">Replace</button><button aria-pressed="false">Guide</button></div></div>
 </li>
 <li class="kf">
-<div style="display: flex; align-items: center; gap: 8px"><span class="thumb" aria-hidden="true"></span><span style="flex-grow: 1">[YOUR TAKE]</span><button class="x" aria-label="Remove frame 2">×</button></div>
+<div style="display: flex; align-items: center; gap: 8px"><span class="pic pnb thumb" aria-hidden="true" style="background-image: url(img/fox-dusk-45.jpg)"></span><span style="flex-grow: 1">[YOUR TAKE]</span><button class="x" aria-label="Remove frame 2">×</button></div>
 <div class="lbl"><span>At</span><span class="mono">frame 41 · 1.7 s</span></div>
 <input aria-label="At, frame 2" type="range" min="0" max="88" value="41" style="width: 100%; accent-color: var(--a2)">
 <div class="lbl"><span>Strength</span><span class="mono">0.80</span></div>
@@ -385,7 +385,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <div class="card" style="background: var(--p0)">
 <h2 style="margin: 0; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 16px; font-weight: 700">Extend · LTX-2.5 · Distilled</h2>
 <div style="display: flex; flex-wrap: wrap; gap: 8px">
-<button class="tile" style="display: flex; align-items: center; gap: 8px"><span class="thumb" aria-hidden="true"></span><span><small>Source video</small><b>Fox crossing · seed 11</b></span></button>
+<button class="tile" style="display: flex; align-items: center; gap: 8px"><span class="pic pnb thumb" aria-hidden="true" style="background-image: url(img/fox-dusk-44.jpg)"></span><span><small>Source video</small><b>Fox crossing · seed 11</b></span></button>
 <button class="tile"><small>Model</small><b>Distilled</b></button>
 </div>
 <label for="ex" style="display: flex; justify-content: space-between; gap: 8px"><span>Add</span><span class="mono" style="font-size: 12px">2.0 s · + 48 frames</span></label>
@@ -478,7 +478,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <section class="frame" aria-label="Use in on a video take">
 <p class="note">10 · Gallery, a video take selected. "Use in…" lists the three new templates after today's actions, by the existing rule (one free video input). <span class="ph">phases 6, 7</span> <span class="bl">Not now · backlog</span></p>
 <div class="card" style="background: var(--p0)">
-<div class="stage" style="height: 140px">Shot 3 · tree line</div>
+<div class="pic pnb stage" style="height: 140px; background-image: url(img/tree-line.jpg)">Shot 3 · tree line</div>
 <div class="row"><span>Size · frames</span><span>704 × 448 · 121 f · 24 fps</span></div>
 <h2 class="h">Use in…</h2>
 <button class="act">Retake a section · LTX-2.5 Retake</button>
@@ -496,7 +496,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <p class="note">11 · Deblur. The composer holds the Source video and the prompt, pre-filled with Lightricks' DEBLUR caption; one stage at the source's size. <span class="ph">phase 6</span> <span class="bl">Not now · backlog</span></p>
 <div class="comp">
 <div style="display: flex; flex-wrap: wrap; gap: 8px">
-<button class="tile" aria-haspopup="dialog" style="flex-basis: 220px; display: flex; align-items: center; gap: 8px"><span class="thumb" aria-hidden="true"></span><span><small>Source video</small><b>Shot 3 · tree line</b></span></button>
+<button class="tile" aria-haspopup="dialog" style="flex-basis: 220px; display: flex; align-items: center; gap: 8px"><span class="pic pnb thumb" aria-hidden="true" style="background-image: url(img/tree-line.jpg)"></span><span><small>Source video</small><b>Shot 3 · tree line</b></span></button>
 <button class="tile"><small>Strength</small><b>1.00</b></button>
 </div>
 <label for="db" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%)">Prompt</label>
@@ -525,7 +525,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <p class="note">12 · Refine details (optional). The same screen as Deblur with an Output size and a generic rendering prompt. <span class="ph">phase 6</span> <span class="bl">Not now · backlog</span></p>
 <div class="comp">
 <div style="display: flex; flex-wrap: wrap; gap: 8px">
-<button class="tile" style="flex-basis: 220px; display: flex; align-items: center; gap: 8px"><span class="thumb" aria-hidden="true"></span><span><small>Source video</small><b>Shot 3 · tree line</b></span></button>
+<button class="tile" style="flex-basis: 220px; display: flex; align-items: center; gap: 8px"><span class="pic pnb thumb" aria-hidden="true" style="background-image: url(img/tree-line.jpg)"></span><span><small>Source video</small><b>Shot 3 · tree line</b></span></button>
 <button class="tile"><small>Output size</small><b>×1.5 · 1056 × 672</b></button>
 </div>
 <label for="rf" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%)">Prompt</label>
@@ -551,7 +551,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <p class="note">13 · SDR to HDR. No prompt (the LoRA's scene embeddings stand in for it); three settings. <span class="ph">phase 7</span> <span class="bl">Not now · backlog</span></p>
 <div class="comp">
 <div style="display: flex; flex-wrap: wrap; gap: 8px">
-<button class="tile" style="flex-basis: 220px; display: flex; align-items: center; gap: 8px"><span class="thumb" aria-hidden="true"></span><span><small>Source video</small><b>Shot 3 · tree line</b></span></button>
+<button class="tile" style="flex-basis: 220px; display: flex; align-items: center; gap: 8px"><span class="pic pnb thumb" aria-hidden="true" style="background-image: url(img/tree-line.jpg)"></span><span><small>Source video</small><b>Shot 3 · tree line</b></span></button>
 <button class="tile"><small>Output</small><b>HLG master · EXR frames</b></button>
 </div>
 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
@@ -578,7 +578,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <section class="frame later" aria-label="An HDR take in the Gallery, not now, backlog">
 <p class="note">14 · The HDR take. An HDR badge; it plays a tone-mapped preview; its menu adds the two downloads; inputs and the Timeline refuse it. <span class="ph">phase 7</span> <span class="bl">Not now · backlog</span></p>
 <div class="card" style="background: var(--p0)">
-<div class="stage" style="height: 140px; position: relative">Shot 3 · tree line · HDR<span class="tag hdr" style="position: absolute; left: 10px; top: 10px">HDR</span><span class="mono" style="position: absolute; left: 10px; bottom: 10px; font-size: 11px">tone-mapped preview</span></div>
+<div class="pic pnb stage" style="height: 140px; position: relative; background-image: url(img/tree-line.jpg)">Shot 3 · tree line · HDR<span class="tag hdr" style="position: absolute; left: 10px; top: 10px">HDR</span><span class="mono" style="position: absolute; left: 10px; bottom: 10px; font-size: 11px">tone-mapped preview</span></div>
 <div class="row"><span>Master</span><span>HLG · BT.2020 · 10-bit HEVC · 704 × 448</span></div>
 <div class="row"><span>Frames</span><span>121 EXR · ACEScg · zip</span></div>
 <div role="menu" aria-label="Take menu" class="menu">

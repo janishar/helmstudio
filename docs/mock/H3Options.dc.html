@@ -141,7 +141,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 .var{min-width:0;display:flex;flex-direction:column;gap:10px;padding:12px;border-radius:18px 18px 18px 8px;background:linear-gradient(180deg,var(--s3),var(--s2));box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 12px 22px -12px color-mix(in srgb, var(--shd) 80%, transparent)}
 .host{display:inline-flex;align-items:center;gap:6px;min-width:0;padding:4px 10px;border-radius:999px;background:var(--s1);font-size:12px}
 .stage{border-radius:12px;border:1px dashed var(--dash);display:flex;align-items:center;justify-content:center;color:var(--t2);font-size:13px;text-align:center}
-</style>
+.pic{background-size:cover!important;background-position:center!important;background-repeat:no-repeat!important;color:#fff!important;text-shadow:0 1px 3px rgba(0,0,0,.9)}.pic.pnb{border-color:transparent!important}</style>
 <style>
 /* Logo A in its own panel above the rail: same form as the rail (width, background, radius, shadow), 14 px apart */
 .rail{flex:0 0 68px;align-self:flex-start;display:flex;flex-direction:column;gap:14px;margin:14px 0 14px 14px}
@@ -249,7 +249,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <!-- 2 -->
 <section class="frame" aria-label="Draft with core reuse and render 75 percent, running">
 <p class="note">2 · Draft picked, then Render 75%. At Reuse 1 Core reuse shows. The stage tag names the size h3 renders. <span class="ph">A3</span></p>
-<div class="stage" style="aspect-ratio: 864 / 480; max-height: 200px; position: relative">The take plays here<span style="position: absolute; left: 12px; top: 12px; padding: 4px 8px; border-radius: 8px; background: color-mix(in srgb, var(--s2) 92%, transparent); font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--t1)">renders 576 × 320 → 864 × 480</span></div>
+<div class="pic pnb stage" style="aspect-ratio: 864 / 480; max-height: 200px; position: relative; background-image: url(img/mara-motorbike.jpg)">The take plays here<span style="position: absolute; left: 12px; top: 12px; padding: 4px 8px; border-radius: 8px; background: color-mix(in srgb, var(--s2) 92%, transparent); font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--t1)">renders 576 × 320 → 864 × 480</span></div>
 <div aria-label="Run progress" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
 <span class="step"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg>Encode <span class="mono">8.9 s</span></span>
 <span class="step" style="background: var(--s2); border: 1px solid var(--s5); font-weight: 500; gap: 10px">Sample<span style="width: 70px; height: 4px; border-radius: 2px; background: var(--s5); display: block"><span style="display: block; width: 50%; height: 4px; border-radius: 2px; background: var(--a2)"></span></span><span class="mono" style="font-weight: 400">2 / 4</span></span>
@@ -374,7 +374,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <div>
 <h2 class="h" style="display: flex; align-items: center">Video references<button class="i" aria-label="More information" title="Videos the prompt names &lt;Video 1&gt;, &lt;Video 2&gt;, &lt;Video 3&gt;: 2 to 15 s each, 15 s in all.">i</button><span style="flex-grow: 1"></span><span class="mono" style="font-weight: 400" aria-label="1 of 3">1 / 3</span></h2>
 <div class="kf">
-<div style="display: flex; align-items: center; gap: 8px"><span class="thumb" aria-hidden="true"></span><span style="flex-grow: 1; min-width: 0"><b style="display: block; font-size: 13px">[YOUR VIDEO]</b><span class="mono" style="font-size: 11px">512 × 512 · 96 f · 4.00 s · sound</span></span><span class="mono" style="font-size: 11px; color: var(--t1)">&lt;Video 1&gt;</span><button class="x" aria-label="Remove &lt;Video 1&gt;">×</button></div>
+<div style="display: flex; align-items: center; gap: 8px"><span class="pic pnb thumb" aria-hidden="true" style="background-image: url(img/mara-motorbike.jpg)"></span><span style="flex-grow: 1; min-width: 0"><b style="display: block; font-size: 13px">[YOUR VIDEO]</b><span class="mono" style="font-size: 11px">512 × 512 · 96 f · 4.00 s · sound</span></span><span class="mono" style="font-size: 11px; color: var(--t1)">&lt;Video 1&gt;</span><button class="x" aria-label="Remove &lt;Video 1&gt;">×</button></div>
 <div class="bar" role="group" aria-label="Part of &lt;Video 1&gt;, in 0.50 s, out 3.50 s"><span class="sel" style="left: 12.5%; width: 75%"></span></div>
 <div class="row"><span>Part</span><span>3.0 s · 2 to 15 s</span></div>
 <div role="group" aria-label="Sound" style="display: flex; flex-direction: column; gap: 6px"><span style="font-size: 12px; color: var(--t2)">Sound<button class="i" aria-label="More information" title="Keep: the model also hears the video's sound. Silent: picture only. Replace: it hears the soundtrack you pick instead, cut to the part's length.">i</button></span><div class="seg"><button aria-pressed="false">Keep</button><button aria-pressed="false">Silent</button><button aria-pressed="true">Replace</button></div></div>
@@ -395,8 +395,8 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <p class="note">6 · Replace picked, no soundtrack yet: the row asks for one and Generate is blocked. <span class="ph">A4</span></p>
 <div class="comp">
 <div role="list" aria-label="References" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
-<span role="listitem" style="display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 6px 0 4px; border-radius: 8px; background: var(--s5); font-size: 12px; font-family: 'JetBrains Mono', monospace"><i aria-hidden="true" class="thumb" style="width: 24px; height: 24px; border-radius: 5px"></i>&lt;Picture 1&gt;</span>
-<span role="listitem" style="display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 6px 0 4px; border-radius: 8px; background: var(--s5); font-size: 12px; font-family: 'JetBrains Mono', monospace"><i aria-hidden="true" class="thumb" style="width: 24px; height: 24px; border-radius: 5px"></i>&lt;Video 1&gt;</span>
+<span role="listitem" style="display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 6px 0 4px; border-radius: 8px; background: var(--s5); font-size: 12px; font-family: 'JetBrains Mono', monospace"><i aria-hidden="true" class="pic pnb thumb" style="width: 24px; height: 24px; border-radius: 5px; background-image: url(img/mara-portrait.jpg)"></i>&lt;Picture 1&gt;</span>
+<span role="listitem" style="display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 6px 0 4px; border-radius: 8px; background: var(--s5); font-size: 12px; font-family: 'JetBrains Mono', monospace"><i aria-hidden="true" class="pic pnb thumb" style="width: 24px; height: 24px; border-radius: 5px; background-image: url(img/mara-motorbike.jpg)"></i>&lt;Video 1&gt;</span>
 </div>
 <textarea rows="2" aria-label="Prompt">The dancer from &lt;Picture 1&gt; moves like the one in &lt;Video 1&gt;, to the new beat</textarea>
 </div>
@@ -404,7 +404,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <div>
 <h2 class="h">Video references</h2>
 <div class="kf">
-<div style="display: flex; align-items: center; gap: 8px"><span class="thumb" aria-hidden="true"></span><span style="flex-grow: 1; min-width: 0"><b style="display: block; font-size: 13px">[YOUR VIDEO]</b><span class="mono" style="font-size: 11px">3.0 s part · sound</span></span><span class="mono" style="font-size: 11px; color: var(--t1)">&lt;Video 1&gt;</span></div>
+<div style="display: flex; align-items: center; gap: 8px"><span class="pic pnb thumb" aria-hidden="true" style="background-image: url(img/mara-motorbike.jpg)"></span><span style="flex-grow: 1; min-width: 0"><b style="display: block; font-size: 13px">[YOUR VIDEO]</b><span class="mono" style="font-size: 11px">3.0 s part · sound</span></span><span class="mono" style="font-size: 11px; color: var(--t1)">&lt;Video 1&gt;</span></div>
 <div class="seg"><button aria-pressed="false">Keep</button><button aria-pressed="false">Silent</button><button aria-pressed="true">Replace</button></div>
 <button class="dash">Pick soundtrack</button>
 <p class="err">generate.videos[1].soundtrack: Replace needs a soundtrack</p>
@@ -443,14 +443,14 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <section class="frame" aria-label="Last frame tile picks a frame of a video">
 <p class="note">8 · H3 Image to video's Last frame tile. Its picker shows video takes too; a video offers its last or first frame. <span class="ph">A2</span></p>
 <div style="display: flex; flex-wrap: wrap; gap: 8px">
-<button class="tile" aria-haspopup="dialog" aria-label="First frame: seed 42, last frame" style="display: flex; align-items: center; gap: 8px; flex: 0 1 220px"><span class="thumb" aria-hidden="true"></span><span><small>First frame</small><b>seed 42 · last frame</b></span></button>
+<button class="tile" aria-haspopup="dialog" aria-label="First frame: seed 42, last frame" style="display: flex; align-items: center; gap: 8px; flex: 0 1 220px"><span class="pic pnb thumb" aria-hidden="true" style="background-image: url(img/mara-street.jpg)"></span><span><small>First frame</small><b>seed 42 · last frame</b></span></button>
 <button class="tile" aria-haspopup="dialog" aria-expanded="true" aria-label="Last frame: None, optional" style="display: flex; align-items: center; gap: 8px; flex: 0 1 220px; outline: 2px solid var(--a1)"><span class="thumb" aria-hidden="true"></span><span><small>Last frame</small><b>None · optional</b></span></button>
 </div>
 <div class="card" style="gap: 10px">
 <div style="display: flex; align-items: center; gap: 8px"><b style="flex-grow: 1">Last frame</b><div class="seg"><button aria-pressed="false">Images</button><button aria-pressed="true">Video</button></div></div>
 <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px">
 <div class="pk"><i style="border: 2px solid var(--a1)">video</i><b>Shot 3 · tree line</b><small>H3 · Create</small></div>
-<div class="pk"><i>video</i><b>Fox trots in</b><small>LTX · pipeline</small></div>
+<div class="pk"><i class="pic pnb" style="background-image: url(img/fox-trots-in.jpg)">▶</i><b>Fox trots in</b><small>LTX · pipeline</small></div>
 <div class="pk"><i>video</i><b>[YOUR VIDEO]</b><small>Upload</small></div>
 </div>
 <div style="display: flex; gap: 8px; justify-content: flex-end"><button class="chip">Use first frame</button><button class="chip" style="background: var(--a1); color: var(--on1)">Use last frame</button></div>
@@ -525,7 +525,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <button role="menuitemradio" aria-checked="false" class="mi"><span>none<small>the model as it is</small></span></button>
 <button role="menuitemradio" aria-checked="true" class="mi"><span>turbo<small>8 steps, near the 50-step look</small></span><em>Turbo</em></button>
 </div>
-<div class="stage" style="aspect-ratio: 864 / 480; max-height: 150px">The take plays here</div>
+<div class="pic pnb stage" style="aspect-ratio: 864 / 480; max-height: 150px; background-image: url(img/mara-train.jpg)">The take plays here</div>
 </div>
 </div>
 <div aria-label="Run progress" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
@@ -629,7 +629,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <div style="flex: 1 1 380px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
 <div class="comp">
 <div role="list" aria-label="References" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
-<span role="listitem" style="display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 6px 0 4px; border-radius: 8px; background: var(--s5); font-size: 12px; font-family: 'JetBrains Mono', monospace"><i aria-hidden="true" class="thumb" style="width: 24px; height: 24px; border-radius: 5px"></i>&lt;Picture 1&gt;</span>
+<span role="listitem" style="display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 6px 0 4px; border-radius: 8px; background: var(--s5); font-size: 12px; font-family: 'JetBrains Mono', monospace"><i aria-hidden="true" class="pic pnb thumb" style="width: 24px; height: 24px; border-radius: 5px; background-image: url(img/mara-portrait.jpg)"></i>&lt;Picture 1&gt;</span>
 </div>
 <textarea rows="2" aria-label="Prompt">The woman from &lt;Picture 1&gt; walks through the rain and laughs</textarea>
 </div>

@@ -60,7 +60,7 @@ aside [style*="border-radius: 14px"],aside [style*="border-radius: 12px"],.set,.
 .n{border-radius:20px 20px 20px 8px!important;border-color:rgba(255,255,255,.08)}
 button[style*="border-radius: 14px"]{border-radius:20px 20px 20px 8px!important}
 main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -2px 0 color-mix(in srgb, var(--shd) 28%, transparent),0 3px 6px color-mix(in srgb, var(--shd) 35%, transparent)}
-</style>
+.pic{background-size:cover!important;background-position:center!important;background-repeat:no-repeat!important;color:#fff!important;text-shadow:0 1px 3px rgba(0,0,0,.9)}.pic.pnb{border-color:transparent!important}</style>
 <style>
 /* Logo A in its own panel above the rail: same form as the rail (width, background, radius, shadow), 14 px apart */
 .rail{flex:0 0 68px;align-self:flex-start;display:flex;flex-direction:column;gap:14px;margin:14px 0 14px 14px}
@@ -113,7 +113,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 </div>
 
 <div style="flex-grow: 1; min-height: 230px; border-radius: 16px; background: var(--in); border: 1px solid var(--s3); padding: 18px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px">
-<div style="width: 100%; max-width: 420px; aspect-ratio: 16 / 9; border-radius: 10px; border: 1px dashed var(--dash); display: flex; align-items: center; justify-content: center; color: var(--t2); font-size: 13px">Sequence preview · plays across cuts without rendering</div>
+<div class="pic pnb" style="width: 100%; max-width: 420px; aspect-ratio: 16 / 9; border-radius: 10px; border: 1px dashed var(--dash); display: flex; align-items: center; justify-content: center; color: var(--t2); font-size: 13px; background-image: url(img/fox-trots-in.jpg)">Sequence preview · plays across cuts without rendering</div>
 <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px">
 <button class="chip" aria-label="Previous frame"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="display: block; margin: auto"><path d="m15 18-6-6 6-6"></path></svg></button>
 <button aria-label="Play" style="width: 44px; height: 44px; border-radius: 999px; border: 0; background: var(--t1); color: var(--g); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8L7 4Z"></path></svg></button>
@@ -201,9 +201,9 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <div style="display: flex; flex-direction: column; gap: 10px">
 <h3 style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--t2)">Add clips</h3>
 <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
-<button aria-label="Add take seed 42" style="aspect-ratio: 16 / 10; border-radius: 8px; border: 1px dashed var(--dash); background: var(--s1); color: var(--t2); font-family: 'JetBrains Mono', monospace; font-size: 10px">seed 42</button>
-<button aria-label="Add take seed 44" style="aspect-ratio: 16 / 10; border-radius: 8px; border: 1px dashed var(--dash); background: var(--s1); color: var(--t2); font-family: 'JetBrains Mono', monospace; font-size: 10px">seed 44</button>
-<button aria-label="Add take seed 45" style="aspect-ratio: 16 / 10; border-radius: 8px; border: 1px dashed var(--dash); background: var(--s1); color: var(--t2); font-family: 'JetBrains Mono', monospace; font-size: 10px">seed 45</button>
+<button class="pic pnb" aria-label="Add take seed 42" style="aspect-ratio: 16 / 10; border-radius: 8px; border: 1px dashed var(--dash); background: var(--s1); color: var(--t2); font-family: 'JetBrains Mono', monospace; font-size: 10px; background-image: url(img/fox-dusk-42.jpg)">seed 42</button>
+<button class="pic pnb" aria-label="Add take seed 44" style="aspect-ratio: 16 / 10; border-radius: 8px; border: 1px dashed var(--dash); background: var(--s1); color: var(--t2); font-family: 'JetBrains Mono', monospace; font-size: 10px; background-image: url(img/fox-dusk-44.jpg)">seed 44</button>
+<button class="pic pnb" aria-label="Add take seed 45" style="aspect-ratio: 16 / 10; border-radius: 8px; border: 1px dashed var(--dash); background: var(--s1); color: var(--t2); font-family: 'JetBrains Mono', monospace; font-size: 10px; background-image: url(img/fox-dusk-45.jpg)">seed 45</button>
 </div>
 <button class="chip">Browse gallery</button>
 </div>

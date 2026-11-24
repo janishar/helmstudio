@@ -62,6 +62,7 @@ aside [style*="border-radius: 14px"],aside [style*="border-radius: 12px"],.set,.
 .n{border-radius:20px 20px 20px 8px!important;border-color:rgba(255,255,255,.08)}
 button[style*="border-radius: 14px"]{border-radius:20px 20px 20px 8px!important}
 main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -2px 0 color-mix(in srgb, var(--shd) 28%, transparent),0 3px 6px color-mix(in srgb, var(--shd) 35%, transparent)}
+.pic{background-size:cover!important;background-position:center!important;background-repeat:no-repeat!important;color:#fff!important;text-shadow:0 1px 3px rgba(0,0,0,.9)}.pic.pnb{border-color:transparent!important}
 </style>
 <style>
 /* Logo A in its own panel above the rail: same form as the rail (width, background, radius, shadow), 14 px apart */
@@ -125,36 +126,36 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 </div>
 
 <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px">
-<button class="take"><i>video</i><b>Shot 3 · tree line</b><small>LTX · timeline shot</small></button>
-<button class="take"><i>video</i><b>Fox trots in</b><small>LTX · pipeline step 2</small></button>
-<button class="take" aria-pressed="true"><i style="border: 2px solid var(--a1)">image</i><b>Fox at dusk · seed 43</b><small>Qwen Image · Create</small></button>
-<button class="take"><i>image</i><b>Fox at dusk · seed 42</b><small>Qwen Image · Create</small></button>
-<button class="take"><i>image</i><b>Fox at dusk · seed 44</b><small>Qwen Image · Create</small></button>
-<button class="take"><i>image</i><b>Fox at dusk · seed 45</b><small>Qwen Image · Create</small></button>
-<button class="take"><i>video</i><b>[YOUR SEQUENCE] export</b><small>Timeline export</small></button>
-<button class="take"><i>image</i><b>fox reference 1</b><small>Upload</small></button>
-<button class="take"><i>image</i><b>fox reference 2</b><small>Upload</small></button>
-<button class="take"><i>image</i><b>snowfield reference</b><small>Upload</small></button>
+<button class="take"><i class="pic pnb" style="background-image: url(img/tree-line.jpg)">▶</i><b>Shot 3 · tree line</b><small>LTX · timeline shot</small></button>
+<button class="take"><i class="pic pnb" style="background-image: url(img/fox-trots-in.jpg)">▶</i><b>Fox trots in</b><small>LTX · pipeline step 2</small></button>
+<button class="take" aria-pressed="true"><i class="pic" style="border: 2px solid var(--a1); background-image: url(img/mara-looks-back.jpg)"></i><b>Mara in the alley · seed 43</b><small>Qwen Image · Create</small></button>
+<button class="take"><i class="pic pnb" style="background-image: url(img/mara-street.jpg)"></i><b>Mara in the alley · seed 42</b><small>Qwen Image · Create</small></button>
+<button class="take"><i class="pic pnb" style="background-image: url(img/sneaker-splash.jpg)"></i><b>Sneaker splash · seed 44</b><small>Qwen Image · Pipeline</small></button>
+<button class="take"><i class="pic pnb" style="background-image: url(img/outpost-monolith.jpg)"></i><b>Outpost · seed 45</b><small>Qwen Image · Create</small></button>
+<button class="take"><i class="pic pnb" style="background-image: url(img/mara-motorbike.jpg)">▶</i><b>[YOUR SEQUENCE] export</b><small>Timeline export</small></button>
+<button class="take"><i class="pic pnb" style="background-image: url(img/mara-portrait.jpg)"></i><b>mara reference 1</b><small>Upload</small></button>
+<button class="take"><i class="pic pnb" style="background-image: url(img/mara-umbrella.jpg)"></i><b>mara reference 2</b><small>Upload</small></button>
+<button class="take"><i class="pic pnb" style="background-image: url(img/neon-alley.jpg)"></i><b>alley reference</b><small>Upload</small></button>
 <button class="take"><i>audio</i><b>[YOUR MUSIC]</b><small>Upload</small></button>
-<button class="take"><i>video</i><b>Fox crossing · seed 11</b><small>LTX · Create</small></button>
+<button class="take"><i class="pic pnb" style="background-image: url(img/fox-dusk-44.jpg)">▶</i><b>Fox crossing · seed 11</b><small>LTX · Create</small></button>
 </div>
 </main>
 
 <aside aria-label="Selected take" style="flex: 1 1 340px; box-sizing: border-box; padding: 16px 18px 24px; border-left: 1px solid var(--s3); background: var(--p0); display: flex; flex-direction: column; gap: 18px">
-<div style="position: relative; aspect-ratio: 16 / 9; border-radius: 12px; border: 1px dashed var(--dash); display: flex; align-items: center; justify-content: center; color: var(--t2); font-size: 13px">Fox at dusk · seed 43<button aria-label="Full screen" title="Full screen (F)" style="position: absolute; right: 8px; bottom: 8px; width: 32px; height: 32px; padding: 0; border-radius: 8px; border: 0; background: var(--s3); color: var(--t1); display: inline-flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"></path></svg></button></div>
+<div class="pic pnb" style="position: relative; aspect-ratio: 16 / 9; border-radius: 12px; border: 1px dashed var(--dash); display: flex; align-items: center; justify-content: center; color: var(--t2); font-size: 13px; background-image: url(img/mara-looks-back.jpg)">Mara in the alley · seed 43<button aria-label="Full screen" title="Full screen (F)" style="position: absolute; right: 8px; bottom: 8px; width: 32px; height: 32px; padding: 0; border-radius: 8px; border: 0; background: var(--s3); color: var(--t1); display: inline-flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"></path></svg></button></div>
 
 <div style="display: flex; flex-direction: column; gap: 6px">
 <h2 class="h">Made with</h2>
-<p style="margin: 0; font-size: 13px">Place the fox from @fox in the field from @snowfield at dusk, soft backlight, breath visible in the cold air</p>
+<p style="margin: 0; font-size: 13px">Place the woman from @mara in the alley from @neon-alley at night, rain, she looks back over her shoulder</p>
 <div class="row"><span>Template</span><span>Qwen Image · Base · int8</span></div>
 <div class="row"><span>Size · seed</span><span>2752 × 1536 · 43</span></div>
 </div>
 
 <div style="display: flex; flex-direction: column; gap: 6px">
 <h2 class="h">Lineage</h2>
-<div class="row" style="align-items: center"><span>Made from</span><span style="display: flex; align-items: center; gap: 6px"><button aria-label="Reference 1: fox reference 1" style="width: 32px; height: 32px; padding: 0; border-radius: 6px; border: 1px dashed var(--dash); background: var(--s1)"></button><button aria-label="Reference 2: fox reference 2" style="width: 32px; height: 32px; padding: 0; border-radius: 6px; border: 1px dashed var(--dash); background: var(--s1)"></button></span></div>
-<div class="row"><span></span><span>@fox (3 images) · @snowfield (2 images)</span></div>
-<div class="row"><span>Used in</span><span>Fox trots in (LTX) · [YOUR SEQUENCE]</span></div>
+<div class="row" style="align-items: center"><span>Made from</span><span style="display: flex; align-items: center; gap: 6px"><button class="pic pnb" aria-label="Reference 1: mara reference 1" style="width: 32px; height: 32px; padding: 0; border-radius: 6px; border: 1px dashed var(--dash); background: var(--s1); background-image: url(img/mara-portrait.jpg)"></button><button class="pic pnb" aria-label="Reference 2: mara reference 2" style="width: 32px; height: 32px; padding: 0; border-radius: 6px; border: 1px dashed var(--dash); background: var(--s1); background-image: url(img/mara-umbrella.jpg)"></button></span></div>
+<div class="row"><span></span><span>@mara (3 images) · @neon-alley (2 images)</span></div>
+<div class="row"><span>Used in</span><span>Mara turns (LTX) · [YOUR SEQUENCE]</span></div>
 </div>
 
 <div style="display: flex; flex-direction: column; gap: 8px">

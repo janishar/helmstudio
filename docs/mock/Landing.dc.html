@@ -61,6 +61,7 @@ a{color:inherit;text-decoration:none}
 .code b{font-weight:500;color:var(--a1)}.code u{text-decoration:none;color:var(--t2)}
 .ck{display:flex;gap:12px;align-items:flex-start;font-size:14px;line-height:22px;color:var(--t1b)}
 .ck::before{content:"";flex:0 0 auto;width:18px;height:18px;margin-top:2px;border-radius:6px;background:var(--a1);box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 4px 8px -2px color-mix(in srgb,var(--a1) 60%,transparent);border-radius:0;box-shadow:none;clip-path:polygon(14% 52%,0 66%,38% 100%,100% 22%,86% 8%,38% 72%)}
+.pic{background-size:cover!important;background-position:center!important;background-repeat:no-repeat!important;color:#fff!important;text-shadow:0 1px 3px rgba(0,0,0,.9)}.pic.pnb{border-color:transparent!important}
 </style>
 </helmet>
 <div class="pg" data-theme="{{theme}}">
@@ -100,9 +101,9 @@ a{color:inherit;text-decoration:none}
 </div>
 <div style="position: absolute; right: 0; top: 312px; width: 440px; padding: 20px; border-radius: 34px 34px 34px 14px; background: var(--s1); background-image: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,0) 46%); transform: rotate(2.5deg); box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 48px 70px -26px color-mix(in srgb, var(--shd) 95%, transparent); display: flex; flex-direction: column; gap: 14px">
 <div style="display: flex; align-items: center; gap: 10px"><svg aria-hidden="true" class="ic c1 s" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"></path><circle cx="12" cy="12" r="3"></circle></svg><span style="font-weight: 600">Create</span><span class="m" style="font-size: 11px; color: var(--t2)">Qwen Image</span></div>
-<div style="padding: 12px 14px; border-radius: 16px 16px 16px 6px; background: var(--in); font-size: 13px; line-height: 20px; color: var(--t1b)">A fox crossing a snowfield at dusk, <span style="color: var(--a1)">@fox</span>, long lens</div>
+<div style="padding: 12px 14px; border-radius: 16px 16px 16px 6px; background: var(--in); font-size: 13px; line-height: 20px; color: var(--t1b)"><span style="color: var(--a1)">@mara</span> in the rain, neon city at night, long lens</div>
 <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px">
-<div class="tk t1"></div><div class="tk t2" style="outline: 2px solid var(--a1); outline-offset: 2px"></div><div class="tk t3"></div><div class="tk t4"></div>
+<div class="pic tk t1" style="background-image: url(img/mara-street.jpg)"></div><div class="pic tk t2" style="outline: 2px solid var(--a1); outline-offset: 2px; background-image: url(img/mara-looks-back.jpg)"></div><div class="pic tk t3" style="background-image: url(img/mara-umbrella.jpg)"></div><div class="pic tk t4" style="background-image: url(img/mara-train.jpg)"></div>
 </div>
 <div style="display: flex; align-items: center; gap: 10px">
 <span class="pill" style="height: 30px; font-size: 12px">16:9</span><span class="pill" style="height: 30px; font-size: 12px">4 takes</span>
@@ -124,7 +125,7 @@ a{color:inherit;text-decoration:none}
 <svg aria-hidden="true" class="ic c1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"></path><circle cx="12" cy="12" r="3"></circle></svg>
 <h3>Create</h3>
 <p>Pick a model, write a prompt, shoot takes. Call your characters and places by name with @, and set a look once.</p>
-<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding-top: 6px"><div class="tk t3"></div><div class="tk t1"></div><div class="tk t4"></div><div class="tk t2"></div></div>
+<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding-top: 6px"><div class="pic tk t3" style="background-image: url(img/outpost-monolith.jpg)"></div><div class="pic tk t1" style="background-image: url(img/sneaker-dunes.jpg)"></div><div class="pic tk t4" style="background-image: url(img/mara-motorbike.jpg)"></div><div class="pic tk t2" style="background-image: url(img/fox-dusk-43.jpg)"></div></div>
 </article>
 <article class="card" style="grid-column: span 5; min-width: 0; border-radius: 32px 32px 12px 32px">
 <svg aria-hidden="true" class="ic c3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="9" cy="10" r="2"></circle><path d="m21 16-5-5L5 20"></path></svg>
@@ -141,7 +142,7 @@ a{color:inherit;text-decoration:none}
 <svg aria-hidden="true" class="ic c4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 17h18"></path><rect x="5" y="4" width="6" height="6" rx="1.5"></rect><rect x="12" y="14" width="7" height="6" rx="1.5"></rect></svg>
 <h3>Timeline</h3>
 <p>Direct shot by shot with a shared cast and look, cut the takes together, and export.</p>
-<div aria-hidden="true" style="display: flex; gap: 8px; padding-top: 6px"><div class="tk t1" style="flex: 3; aspect-ratio: auto; height: 46px"></div><div class="tk t4" style="flex: 2; aspect-ratio: auto; height: 46px"></div><div class="tk t3" style="flex: 4; aspect-ratio: auto; height: 46px"></div><div class="tk t2" style="flex: 2; aspect-ratio: auto; height: 46px"></div></div>
+<div aria-hidden="true" style="display: flex; gap: 8px; padding-top: 6px"><div class="pic tk t1" style="flex: 3; aspect-ratio: auto; height: 46px; background-image: url(img/mara-bus.jpg)"></div><div class="pic tk t4" style="flex: 2; aspect-ratio: auto; height: 46px; background-image: url(img/mara-street.jpg)"></div><div class="pic tk t3" style="flex: 4; aspect-ratio: auto; height: 46px; background-image: url(img/mara-motorbike.jpg)"></div><div class="pic tk t2" style="flex: 2; aspect-ratio: auto; height: 46px; background-image: url(img/mara-puddle.jpg)"></div></div>
 </article>
 </div>
 </section>
@@ -171,8 +172,8 @@ a{color:inherit;text-decoration:none}
 <span class="pill">Memory · your past picks</span>
 </div>
 <div style="display: flex; gap: 14px; align-items: center; padding: 14px 16px; border-radius: 18px 18px 18px 8px; background: var(--in)">
-<div class="tk t2" style="flex: 0 0 96px"></div>
-<p style="font-size: 13px; line-height: 20px; color: var(--t1b)">Kept take 2. Fox is in frame, no extra limbs, horizon level.</p>
+<div class="pic tk t2" style="flex: 0 0 96px; background-image: url(img/sneaker-splash.jpg)"></div>
+<p style="font-size: 13px; line-height: 20px; color: var(--t1b)">Kept take 2. Shoe is sharp, no logo, horizon level.</p>
 </div>
 </div>
 </section>

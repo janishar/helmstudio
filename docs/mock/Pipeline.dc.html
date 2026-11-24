@@ -53,7 +53,7 @@ aside [style*="border-radius: 14px"],aside [style*="border-radius: 12px"],.set,.
 .n{border-radius:20px 20px 20px 8px!important;border-color:rgba(255,255,255,.08)}
 button[style*="border-radius: 14px"]{border-radius:20px 20px 20px 8px!important}
 main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -2px 0 color-mix(in srgb, var(--shd) 28%, transparent),0 3px 6px color-mix(in srgb, var(--shd) 35%, transparent)}
-</style>
+.pic{background-size:cover!important;background-position:center!important;background-repeat:no-repeat!important;color:#fff!important;text-shadow:0 1px 3px rgba(0,0,0,.9)}.pic.pnb{border-color:transparent!important}</style>
 <style>
 /* Logo A in its own panel above the rail: same form as the rail (width, background, radius, shadow), 14 px apart */
 .rail{flex:0 0 68px;align-self:flex-start;display:flex;flex-direction:column;gap:14px;margin:14px 0 14px 14px}
@@ -122,10 +122,10 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <span style="font-size: 12px; color: var(--t2)">Step 1 results · batch of 4 seeds</span>
 </div>
 <div style="flex-grow: 1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
-<button aria-pressed="false" style="min-height: 150px; border-radius: 10px; border: 1px dashed var(--dash); background: var(--p0); color: var(--t2); font-family: 'JetBrains Mono', monospace; font-size: 12px">take · seed 42</button>
-<button aria-pressed="true" style="min-height: 150px; border-radius: 10px; border: 2px solid var(--a2); background: var(--s1); color: var(--t1); font-family: 'JetBrains Mono', monospace; font-size: 12px">take · seed 43 · picked</button>
-<button aria-pressed="false" style="min-height: 150px; border-radius: 10px; border: 1px dashed var(--dash); background: var(--p0); color: var(--t2); font-family: 'JetBrains Mono', monospace; font-size: 12px">take · seed 44</button>
-<button aria-pressed="false" style="min-height: 150px; border-radius: 10px; border: 1px dashed var(--dash); background: var(--p0); color: var(--t2); font-family: 'JetBrains Mono', monospace; font-size: 12px">take · seed 45</button>
+<button class="pic pnb" aria-pressed="false" style="min-height: 150px; border-radius: 10px; border: 1px dashed var(--dash); background: var(--p0); color: var(--t2); font-family: 'JetBrains Mono', monospace; font-size: 12px; background-image: url(img/sneaker-dunes.jpg)">take · seed 42</button>
+<button class="pic" aria-pressed="true" style="min-height: 150px; border-radius: 10px; border: 2px solid var(--a2); background: var(--s1); color: var(--t1); font-family: 'JetBrains Mono', monospace; font-size: 12px; background-image: url(img/sneaker-splash.jpg)">take · seed 43 · picked</button>
+<button class="pic pnb" aria-pressed="false" style="min-height: 150px; border-radius: 10px; border: 1px dashed var(--dash); background: var(--p0); color: var(--t2); font-family: 'JetBrains Mono', monospace; font-size: 12px; background-image: url(img/sneaker-pedestal.jpg)">take · seed 44</button>
+<button class="pic pnb" aria-pressed="false" style="min-height: 150px; border-radius: 10px; border: 1px dashed var(--dash); background: var(--p0); color: var(--t2); font-family: 'JetBrains Mono', monospace; font-size: 12px; background-image: url(img/sneaker-studio.jpg)">take · seed 45</button>
 </div>
 </div>
 
@@ -135,7 +135,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <button style="height: 32px; padding: 0 10px; border-radius: 8px; border: 1px dashed var(--dash); background: transparent; color: var(--t2); font-size: 12px">Add keyframe</button>
 </div>
 <label for="motion" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%)">Motion prompt</label>
-<textarea id="motion" rows="2" style="width: 100%; box-sizing: border-box; resize: none; border: 0; outline: 0; background: transparent; color: var(--t1); font: inherit; font-size: 15px; line-height: 22px">The fox lifts its head and trots toward the camera, snow crunching underfoot, wind in the grass</textarea>
+<textarea id="motion" rows="2" style="width: 100%; box-sizing: border-box; resize: none; border: 0; outline: 0; background: transparent; color: var(--t1); font: inherit; font-size: 15px; line-height: 22px">The sneaker turns slowly above the dunes, sand streaming off the sole, the camera pushes in</textarea>
 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; background: var(--s1); border: 1px solid var(--ln); font-size: 13px">
 <span style="flex: 1 1 280px">Step 2 runs on MLX. The pinned Qwen transformer (13 GB) will be unloaded first.</span>
 <button style="height: 36px; padding: 0 12px; border-radius: 10px; border: 0; background: var(--s4); font-size: 13px; font-weight: 500">Keep it and try anyway</button>

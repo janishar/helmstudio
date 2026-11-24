@@ -58,6 +58,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 .pk b{font-size:12px;font-weight:600}
 .pk small{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t2)}
 .chip{height:32px;padding:0 12px;border-radius:999px;border:0;background:var(--s3);font-size:12px;font-weight:500}
+.pic{background-size:cover!important;background-position:center!important;background-repeat:no-repeat!important;color:#fff!important;text-shadow:0 1px 3px rgba(0,0,0,.9)}.pic.pnb{border-color:transparent!important}
 </style>
 <style>
 /* Logo A in its own panel above the rail: same form as the rail (width, background, radius, shadow), 14 px apart */
@@ -110,7 +111,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 </div>
 
 <div style="flex-grow: 1; min-height: 400px; position: relative; border-radius: 16px; background: var(--in); border: 1px solid var(--s3); display: flex; align-items: center; justify-content: center; padding: 68px 24px 24px; box-sizing: border-box">
-<div style="width: 100%; max-width: 760px; aspect-ratio: 16 / 9; border-radius: 10px; border: 1px dashed var(--dash); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: var(--t2); text-align: center">
+<div class="pic pnb" style="width: 100%; max-width: 760px; aspect-ratio: 16 / 9; border-radius: 10px; border: 1px dashed var(--dash); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: var(--t2); text-align: center; background-image: url(img/fox-dusk-42.jpg)">
 <span style="font-size: 15px; font-weight: 500; color: var(--t1)">Live preview</span>
 <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px">2752 × 1536 · decoded every 4 steps</span>
 </div>
@@ -134,17 +135,17 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 </div>
 
 <div style="display: flex; align-items: center; gap: 10px; overflow-x: auto">
-<button aria-label="Take, seed 42" style="flex: 0 0 auto; width: 112px; height: 63px; border-radius: 8px; border: 2px solid var(--a1); background: var(--s1); color: var(--t2); font-family: 'JetBrains Mono', monospace; font-size: 11px">seed 42</button>
-<button aria-label="Take, seed 43" style="flex: 0 0 auto; width: 112px; height: 63px; border-radius: 8px; border: 1px solid var(--s5); background: var(--s1); color: var(--t2); font-family: 'JetBrains Mono', monospace; font-size: 11px">seed 43</button>
-<button aria-label="Take, seed 44" style="flex: 0 0 auto; width: 112px; height: 63px; border-radius: 8px; border: 1px solid var(--s5); background: var(--s1); color: var(--t2); font-family: 'JetBrains Mono', monospace; font-size: 11px">seed 44</button>
-<button aria-label="Take, seed 7" style="flex: 0 0 auto; width: 112px; height: 63px; border-radius: 8px; border: 1px solid var(--s5); background: var(--s1); color: var(--t2); font-family: 'JetBrains Mono', monospace; font-size: 11px">seed 7</button>
+<button class="pic" aria-label="Take, seed 42" style="flex: 0 0 auto; width: 112px; height: 63px; border-radius: 8px; border: 2px solid var(--a1); background: var(--s1); color: var(--t2); font-family: 'JetBrains Mono', monospace; font-size: 11px; background-image: url(img/fox-dusk-42.jpg)">seed 42</button>
+<button class="pic" aria-label="Take, seed 43" style="flex: 0 0 auto; width: 112px; height: 63px; border-radius: 8px; border: 1px solid var(--s5); background: var(--s1); color: var(--t2); font-family: 'JetBrains Mono', monospace; font-size: 11px; background-image: url(img/fox-dusk-43.jpg)">seed 43</button>
+<button class="pic" aria-label="Take, seed 44" style="flex: 0 0 auto; width: 112px; height: 63px; border-radius: 8px; border: 1px solid var(--s5); background: var(--s1); color: var(--t2); font-family: 'JetBrains Mono', monospace; font-size: 11px; background-image: url(img/fox-dusk-44.jpg)">seed 44</button>
+<button class="pic" aria-label="Take, seed 7" style="flex: 0 0 auto; width: 112px; height: 63px; border-radius: 8px; border: 1px solid var(--s5); background: var(--s1); color: var(--t2); font-family: 'JetBrains Mono', monospace; font-size: 11px; background-image: url(img/fox-dusk-45.jpg)">seed 7</button>
 <button style="flex: 0 0 auto; height: 44px; padding: 0 14px; border-radius: 10px; border: 1px dashed var(--dash); background: transparent; color: var(--t1); display: flex; align-items: center; gap: 6px; font-size: 13px"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Use in…</button>
 </div>
 
 <div style="border-radius: 16px; background: var(--s2); border: 1px solid var(--s5); box-shadow: 0 16px 40px color-mix(in srgb, var(--shd) 45%, transparent); padding: 14px 16px; display: flex; flex-direction: column; gap: 12px">
 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
-<span aria-label="Reference &lt;image1&gt;" style="display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 6px 0 4px; border-radius: 8px; background: var(--s5); font-size: 12px; font-family: 'JetBrains Mono', monospace"><span aria-hidden="true" style="width: 24px; height: 24px; border-radius: 5px; border: 1px dashed var(--dash); background: var(--s1)"></span>&lt;image1&gt;<button aria-label="Remove &lt;image1&gt;" style="width: 20px; height: 20px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--t2); box-shadow: none">×</button></span>
-<span aria-label="Reference &lt;image2&gt;" style="display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 6px 0 4px; border-radius: 8px; background: var(--s5); font-size: 12px; font-family: 'JetBrains Mono', monospace"><span aria-hidden="true" style="width: 24px; height: 24px; border-radius: 5px; border: 1px dashed var(--dash); background: var(--s1)"></span>&lt;image2&gt;<button aria-label="Remove &lt;image2&gt;" style="width: 20px; height: 20px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--t2); box-shadow: none">×</button></span>
+<span aria-label="Reference &lt;image1&gt;" style="display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 6px 0 4px; border-radius: 8px; background: var(--s5); font-size: 12px; font-family: 'JetBrains Mono', monospace"><span class="pic pnb" aria-hidden="true" style="width: 24px; height: 24px; border-radius: 5px; border: 1px dashed var(--dash); background: var(--s1); background-image: url(img/fox-portrait.jpg)"></span>&lt;image1&gt;<button aria-label="Remove &lt;image1&gt;" style="width: 20px; height: 20px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--t2); box-shadow: none">×</button></span>
+<span aria-label="Reference &lt;image2&gt;" style="display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 6px 0 4px; border-radius: 8px; background: var(--s5); font-size: 12px; font-family: 'JetBrains Mono', monospace"><span class="pic pnb" aria-hidden="true" style="width: 24px; height: 24px; border-radius: 5px; border: 1px dashed var(--dash); background: var(--s1); background-image: url(img/snowfield.jpg)"></span>&lt;image2&gt;<button aria-label="Remove &lt;image2&gt;" style="width: 20px; height: 20px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--t2); box-shadow: none">×</button></span>
 <span style="padding: 4px 10px; border-radius: 8px; background: var(--s5); font-size: 12px; font-family: 'JetBrains Mono', monospace">@fox</span>
 <span style="padding: 4px 10px; border-radius: 8px; background: var(--s5); font-size: 12px; font-family: 'JetBrains Mono', monospace">@snowfield</span>
 <button style="height: 32px; padding: 0 10px; border-radius: 8px; border: 1px dashed var(--dash); background: transparent; color: var(--t2); font-size: 12px">Add from gallery</button>
@@ -178,8 +179,8 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <div style="display: flex; flex-direction: column; gap: 10px">
 <h2 style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--t2); display: flex; align-items: center">References<button class="i" aria-label="More information" title="Images to edit or combine, in order; the prompt names them &lt;image1&gt;, &lt;image2&gt;, … Drag to reorder (or Alt+arrow), Delete removes.">i</button><span style="flex-grow: 1"></span><span style="font-family: 'JetBrains Mono', monospace; font-weight: 400">2 / 10</span></h2>
 <ol aria-label="References, in order" style="margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px">
-<li style="position: relative; aspect-ratio: 1; border-radius: 8px; border: 1px dashed var(--dash); background: var(--s1)"><span style="position: absolute; left: 4px; bottom: 4px; padding: 1px 5px; border-radius: 5px; background: color-mix(in srgb, var(--s2) 92%, transparent); font-family: 'JetBrains Mono', monospace; font-size: 10px">&lt;image1&gt;</span><button aria-label="Remove &lt;image1&gt;" style="position: absolute; right: 4px; top: 4px; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: var(--s4); font-size: 12px">×</button></li>
-<li style="position: relative; aspect-ratio: 1; border-radius: 8px; border: 1px dashed var(--dash); background: var(--s1)"><span style="position: absolute; left: 4px; bottom: 4px; padding: 1px 5px; border-radius: 5px; background: color-mix(in srgb, var(--s2) 92%, transparent); font-family: 'JetBrains Mono', monospace; font-size: 10px">&lt;image2&gt;</span><button aria-label="Remove &lt;image2&gt;" style="position: absolute; right: 4px; top: 4px; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: var(--s4); font-size: 12px">×</button></li>
+<li class="pic pnb" style="position: relative; aspect-ratio: 1; border-radius: 8px; border: 1px dashed var(--dash); background: var(--s1); background-image: url(img/fox-portrait.jpg)"><span style="position: absolute; left: 4px; bottom: 4px; padding: 1px 5px; border-radius: 5px; background: color-mix(in srgb, var(--s2) 92%, transparent); font-family: 'JetBrains Mono', monospace; font-size: 10px">&lt;image1&gt;</span><button aria-label="Remove &lt;image1&gt;" style="position: absolute; right: 4px; top: 4px; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: var(--s4); font-size: 12px">×</button></li>
+<li class="pic pnb" style="position: relative; aspect-ratio: 1; border-radius: 8px; border: 1px dashed var(--dash); background: var(--s1); background-image: url(img/snowfield.jpg)"><span style="position: absolute; left: 4px; bottom: 4px; padding: 1px 5px; border-radius: 5px; background: color-mix(in srgb, var(--s2) 92%, transparent); font-family: 'JetBrains Mono', monospace; font-size: 10px">&lt;image2&gt;</span><button aria-label="Remove &lt;image2&gt;" style="position: absolute; right: 4px; top: 4px; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: var(--s4); font-size: 12px">×</button></li>
 </ol>
 <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px">
 <button style="height: 36px; border-radius: 8px; border: 1px solid var(--ln); background: transparent; font-size: 12px">Add from gallery</button>
@@ -236,18 +237,18 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <button class="chip">Starred</button><button class="chip">From Create</button><button class="chip">From Pipelines</button><button class="chip">Uploads</button>
 </div>
 <div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px">
-<button class="pk" aria-pressed="true"><i style="border: 2px solid var(--a1)">image</i><b>fox reference 1</b><small>Upload</small></button>
-<button class="pk" aria-pressed="false"><i>image</i><b>fox reference 2</b><small>Upload</small></button>
-<button class="pk" aria-pressed="true"><i style="border: 2px solid var(--a1)">image</i><b>snowfield reference</b><small>Upload</small></button>
-<button class="pk" aria-pressed="false"><i>image</i><b>Fox at dusk · seed 43</b><small>Qwen Image · Create</small></button>
-<button class="pk" aria-pressed="false"><i>image</i><b>Fox at dusk · seed 42</b><small>Qwen Image · Create</small></button>
-<button class="pk" aria-pressed="false"><i>image</i><b>Fox at dusk · seed 44</b><small>Qwen Image · Create</small></button>
-<button class="pk" aria-pressed="false"><i>image</i><b>Fox at dusk · seed 45</b><small>Qwen Image · Create</small></button>
-<button class="pk" aria-pressed="false"><i>image</i><b>Heron at dawn</b><small>Qwen Image · Pipeline</small></button>
-<button class="pk" aria-pressed="false"><i>image</i><b>Market at dawn</b><small>Qwen Image · Pipeline</small></button>
-<button class="pk" aria-pressed="false"><i>image</i><b>Lighthouse in fog</b><small>Qwen Image · Create</small></button>
-<button class="pk" aria-pressed="false"><i>image</i><b>[YOUR UPLOAD]</b><small>Upload</small></button>
-<button class="pk" aria-pressed="false"><i>image</i><b>Snowfield · seed 7</b><small>Qwen Image · Create</small></button>
+<button class="pk" aria-pressed="true"><i class="pic" style="border: 2px solid var(--a1); background-image: url(img/fox-portrait.jpg)"></i><b>fox reference 1</b><small>Upload</small></button>
+<button class="pk" aria-pressed="false"><i class="pic pnb" style="background-image: url(img/fox-dusk-45.jpg)"></i><b>fox reference 2</b><small>Upload</small></button>
+<button class="pk" aria-pressed="true"><i class="pic" style="border: 2px solid var(--a1); background-image: url(img/snowfield.jpg)"></i><b>snowfield reference</b><small>Upload</small></button>
+<button class="pk" aria-pressed="false"><i class="pic pnb" style="background-image: url(img/fox-dusk-43.jpg)"></i><b>Fox at dusk · seed 43</b><small>Qwen Image · Create</small></button>
+<button class="pk" aria-pressed="false"><i class="pic pnb" style="background-image: url(img/fox-dusk-42.jpg)"></i><b>Fox at dusk · seed 42</b><small>Qwen Image · Create</small></button>
+<button class="pk" aria-pressed="false"><i class="pic pnb" style="background-image: url(img/fox-dusk-44.jpg)"></i><b>Fox at dusk · seed 44</b><small>Qwen Image · Create</small></button>
+<button class="pk" aria-pressed="false"><i class="pic pnb" style="background-image: url(img/fox-dusk-45.jpg)"></i><b>Fox at dusk · seed 45</b><small>Qwen Image · Create</small></button>
+<button class="pk" aria-pressed="false"><i class="pic pnb" style="background-image: url(img/sneaker-splash.jpg)"></i><b>Sneaker splash</b><small>Qwen Image · Pipeline</small></button>
+<button class="pk" aria-pressed="false"><i class="pic pnb" style="background-image: url(img/outpost-canyon.jpg)"></i><b>Canyon city at dusk</b><small>Qwen Image · Pipeline</small></button>
+<button class="pk" aria-pressed="false"><i class="pic pnb" style="background-image: url(img/lighthouse-storm.jpg)"></i><b>Lighthouse in a storm</b><small>Qwen Image · Create</small></button>
+<button class="pk" aria-pressed="false"><i class="pic pnb" style="background-image: url(img/dune-runner.jpg)"></i><b>[YOUR UPLOAD]</b><small>Upload</small></button>
+<button class="pk" aria-pressed="false"><i class="pic pnb" style="background-image: url(img/snowfield.jpg)"></i><b>Snowfield · seed 7</b><small>Qwen Image · Create</small></button>
 </div>
 <div style="display: flex; align-items: center; gap: 8px">
 <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--t2)">2 picked · up to 8</span>

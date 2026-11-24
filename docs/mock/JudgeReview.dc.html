@@ -93,7 +93,7 @@ textarea.in{height:auto;padding:8px 12px;resize:none}
 del{background:color-mix(in srgb,#f2c14e 22%,transparent);color:#f2c14e}
 ins{text-decoration:none;background:color-mix(in srgb,var(--a1) 22%,transparent);color:var(--a1)}
 dialog,.dlg{border:0;border-radius:28px 28px 28px 12px;background:var(--s1);color:var(--t1);box-shadow:0 40px 80px -20px color-mix(in srgb,var(--shd) 90%,transparent)}
-</style>
+.pic{background-size:cover!important;background-position:center!important;background-repeat:no-repeat!important;color:#fff!important;text-shadow:0 1px 3px rgba(0,0,0,.9)}.pic.pnb{border-color:transparent!important}</style>
 <style>
 /* Logo A in its own panel above the rail: same form as the rail (width, background, radius, shadow), 14 px apart */
 .rail{flex:0 0 68px;align-self:flex-start;display:flex;flex-direction:column;gap:14px;margin:14px 0 14px 14px}
@@ -145,13 +145,13 @@ dialog,.dlg{border:0;border-radius:28px 28px 28px 12px;background:var(--s1);colo
 <span style="font-size: 12px; color: var(--t2)">[ROW 6 PROMPT] · pick 1 of 4 · Local · Qwen vision</span>
 </div>
 <div role="group" aria-label="Row 6 candidates" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px">
-<div class="tk"><button aria-pressed="false" class="ph">take · seed 42</button><span class="why">Extra hand on the left.</span><div class="ck"><span class="no">limbs</span><span>text</span><span>brief</span><span>sharp</span></div></div>
-<div class="tk"><button aria-pressed="false" class="ph">take · seed 43</button><span class="why">Clean but soft.</span><div class="ck"><span>limbs</span><span>text</span><span>brief</span><span class="no">sharp</span></div></div>
-<div class="tk"><button aria-pressed="true" class="ph on">take · seed 44 · judge's pick</button><span class="why">Clean and sharp.</span><div class="ck"><span>limbs</span><span>text</span><span>brief</span><span>sharp</span></div></div>
-<div class="tk"><button aria-pressed="false" class="ph">take · seed 45</button><span class="why">Watermark bottom right.</span><div class="ck"><span>limbs</span><span class="no">text</span><span>brief</span><span>sharp</span></div></div>
+<div class="tk"><button aria-pressed="false" class="pic pnb ph" style="background-image: url(img/mara-street.jpg)">take · seed 42</button><span class="why">Extra hand on the left.</span><div class="ck"><span class="no">limbs</span><span>text</span><span>brief</span><span>sharp</span></div></div>
+<div class="tk"><button aria-pressed="false" class="pic pnb ph" style="background-image: url(img/mara-umbrella.jpg)">take · seed 43</button><span class="why">Clean but soft.</span><div class="ck"><span>limbs</span><span>text</span><span>brief</span><span class="no">sharp</span></div></div>
+<div class="tk"><button aria-pressed="true" class="pic ph on" style="background-image: url(img/mara-looks-back.jpg)">take · seed 44 · judge's pick</button><span class="why">Clean and sharp.</span><div class="ck"><span>limbs</span><span>text</span><span>brief</span><span>sharp</span></div></div>
+<div class="tk"><button aria-pressed="false" class="pic pnb ph" style="background-image: url(img/mara-bus.jpg)">take · seed 45</button><span class="why">Watermark bottom right.</span><div class="ck"><span>limbs</span><span class="no">text</span><span>brief</span><span>sharp</span></div></div>
 </div>
 <label for="note6" style="font-size: 12px; color: var(--t2)">Why this one? Kept with your pick as an example for the judge (optional)</label>
-<input id="note6" class="in" placeholder="The softer one keeps the fox's face; sharpness matters less">
+<input id="note6" class="in" placeholder="The softer one keeps Mara's face; sharpness matters less">
 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
 <span style="padding: 4px 10px; border-radius: 8px; background: var(--s5); font-size: 12px; font-family: 'JetBrains Mono', monospace">1 of 1 picked · the judge's</span>
 <div style="flex-grow: 1"></div>
@@ -167,10 +167,10 @@ dialog,.dlg{border:0;border-radius:28px 28px 28px 12px;background:var(--s1);colo
 <span style="font-size: 12px; color: var(--t2)">[ROW 7 PROMPT] · pick 1 of 4 · try 3 · gave up after 2 retries</span>
 </div>
 <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px">
-<div class="tk"><button aria-pressed="false" class="ph">take · seed 170</button><span class="why">Six fingers.</span></div>
-<div class="tk"><button aria-pressed="false" class="ph">take · seed 171</button><span class="why">Text on the sign.</span></div>
-<div class="tk"><button aria-pressed="false" class="ph">take · seed 172</button><span class="why">Off brief: a dog.</span></div>
-<div class="tk"><button aria-pressed="false" class="ph">take · seed 173</button><span class="why">Two tails.</span></div>
+<div class="tk"><button aria-pressed="false" class="pic pnb ph" style="background-image: url(img/mara-puddle.jpg)">take · seed 170</button><span class="why">Six fingers.</span></div>
+<div class="tk"><button aria-pressed="false" class="pic pnb ph" style="background-image: url(img/mara-train.jpg)">take · seed 171</button><span class="why">Text on the sign.</span></div>
+<div class="tk"><button aria-pressed="false" class="pic pnb ph" style="background-image: url(img/fox-dusk-45.jpg)">take · seed 172</button><span class="why">Off brief: a dog.</span></div>
+<div class="tk"><button aria-pressed="false" class="pic pnb ph" style="background-image: url(img/fox-trots-in.jpg)">take · seed 173</button><span class="why">Two tails.</span></div>
 </div>
 </section>
 </main>
@@ -181,7 +181,7 @@ dialog,.dlg{border:0;border-radius:28px 28px 28px 12px;background:var(--s1);colo
 <span style="font-size: 12px; color: var(--t2)">27 of 500 entries · read by the next batch</span>
 </div>
 <h3 class="h">Judge examples · 24</h3>
-<div class="mi"><span>"The softer one keeps the fox's face; sharpness matters less than the face."</span><div class="mt"><span></span><span class="x"></span><span class="x"></span><span class="x"></span></div><small>your pick at Judge · row 6 · you changed its pick · [DATE]</small><div style="display: flex; justify-content: flex-end"><button class="chip" style="height: 30px">Delete</button></div></div>
+<div class="mi"><span>"The softer one keeps Mara's face; sharpness matters less than the face."</span><div class="mt"><span></span><span class="x"></span><span class="x"></span><span class="x"></span></div><small>your pick at Judge · row 6 · you changed its pick · [DATE]</small><div style="display: flex; justify-content: flex-end"><button class="chip" style="height: 30px">Delete</button></div></div>
 <div class="mi"><span>"Fur detail beats a centred subject."</span><div class="mt"><span></span><span class="x"></span><span class="x"></span></div><small>your pick at Judge · row 2 · you agreed · [DATE]</small><div style="display: flex; justify-content: flex-end"><button class="chip" style="height: 30px">Delete</button></div></div>
 <h3 class="h">Notes · 3</h3>
 <div class="mi"><span>"Keep the snow; no city in the background."</span><small>note · added by you · [DATE]</small><div style="display: flex; justify-content: flex-end"><button class="chip" style="height: 30px">Delete</button></div></div>

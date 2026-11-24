@@ -98,7 +98,7 @@ aside [style*="border-radius: 14px"],aside [style*="border-radius: 12px"],.set,.
 .n{border-radius:20px 20px 20px 8px!important;border-color:rgba(255,255,255,.08)}
 button[style*="border-radius: 14px"]{border-radius:20px 20px 20px 8px!important}
 main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -2px 0 color-mix(in srgb, var(--shd) 28%, transparent),0 3px 6px color-mix(in srgb, var(--shd) 35%, transparent)}
-</style>
+.pic{background-size:cover!important;background-position:center!important;background-repeat:no-repeat!important;color:#fff!important;text-shadow:0 1px 3px rgba(0,0,0,.9)}.pic.pnb{border-color:transparent!important}</style>
 <style>
 /* Logo A in its own panel above the rail: same form as the rail (width, background, radius, shadow), 14 px apart */
 .rail{flex:0 0 68px;align-self:flex-start;display:flex;flex-direction:column;gap:14px;margin:14px 0 14px 14px}
@@ -151,7 +151,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 </div>
 
 <div style="border-radius: 16px; background: var(--in); border: 1px solid var(--s3); padding: 10px 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
-<div aria-label="Sequence preview" style="width: 96px; height: 54px; flex: 0 0 auto; margin-right: 6px; border-radius: 8px; border: 1px dashed var(--dash); display: grid; place-items: center; color: var(--t2)"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"></path></svg></div>
+<div class="pic pnb" aria-label="Sequence preview" style="width: 96px; height: 54px; flex: 0 0 auto; margin-right: 6px; border-radius: 8px; border: 1px dashed var(--dash); display: grid; place-items: center; color: var(--t2); background-image: url(img/look-silhouette.jpg)"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"></path></svg></div>
 <button class="chip" aria-label="Previous frame"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="display: block; margin: auto"><path d="m15 18-6-6 6-6"></path></svg></button>
 <button aria-label="Play" style="width: 44px; height: 44px; border-radius: 999px; border: 0; background: var(--t1); color: var(--g); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8L7 4Z"></path></svg></button>
 <button class="chip" aria-label="Next frame"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="display: block; margin: auto"><path d="m9 18 6-6-6-6"></path></svg></button>

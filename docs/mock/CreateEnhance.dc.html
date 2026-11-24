@@ -53,7 +53,7 @@ aside [style*="border-radius: 14px"],aside [style*="border-radius: 12px"],.set,.
 .n{border-radius:20px 20px 20px 8px!important;border-color:rgba(255,255,255,.08)}
 button[style*="border-radius: 14px"]{border-radius:20px 20px 20px 8px!important}
 main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -2px 0 color-mix(in srgb, var(--shd) 28%, transparent),0 3px 6px color-mix(in srgb, var(--shd) 35%, transparent)}
-</style>
+.pic{background-size:cover!important;background-position:center!important;background-repeat:no-repeat!important;color:#fff!important;text-shadow:0 1px 3px rgba(0,0,0,.9)}.pic.pnb{border-color:transparent!important}</style>
 <style>
 /* Logo A in its own panel above the rail: same form as the rail (width, background, radius, shadow), 14 px apart */
 .rail{flex:0 0 68px;align-self:flex-start;display:flex;flex-direction:column;gap:14px;margin:14px 0 14px 14px}
@@ -105,7 +105,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 </div>
 
 <div style="flex-grow: 1; min-height: 300px; position: relative; border-radius: 16px; background: var(--in); border: 1px solid var(--s3); display: flex; align-items: center; justify-content: center; padding: 24px; box-sizing: border-box">
-<div style="height: 300px; aspect-ratio: 1760 / 2368; border-radius: 10px; border: 1px dashed var(--dash); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: var(--t2); text-align: center">
+<div class="pic pnb" style="height: 300px; aspect-ratio: 1760 / 2368; border-radius: 10px; border: 1px dashed var(--dash); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: var(--t2); text-align: center; background-image: url(img/snow-owl.jpg)">
 <span style="font-size: 15px; font-weight: 500; color: var(--t1)">The take</span>
 <span style="font-family: 'JetBrains Mono', monospace; font-size: 12px">1760 × 2368</span>
 </div>
@@ -135,7 +135,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 
 <div style="border-radius: 16px; background: var(--s2); border: 1px solid var(--s5); box-shadow: 0 16px 40px color-mix(in srgb, var(--shd) 45%, transparent); padding: 14px 16px; display: flex; flex-direction: column; gap: 12px">
 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
-<span aria-label="Reference &lt;Picture 1&gt;" style="display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 6px 0 4px; border-radius: 8px; background: var(--s5); font-size: 12px; font-family: 'JetBrains Mono', monospace"><span aria-hidden="true" style="width: 24px; height: 24px; border-radius: 5px; border: 1px dashed var(--dash); background: var(--s1)"></span>&lt;Picture 1&gt;<button aria-label="Remove &lt;Picture 1&gt;" style="width: 20px; height: 20px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--t2); box-shadow: none">×</button></span>
+<span aria-label="Reference &lt;Picture 1&gt;" style="display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 6px 0 4px; border-radius: 8px; background: var(--s5); font-size: 12px; font-family: 'JetBrains Mono', monospace"><span class="pic pnb" aria-hidden="true" style="width: 24px; height: 24px; border-radius: 5px; border: 1px dashed var(--dash); background: var(--s1); background-image: url(img/snow-owl.jpg)"></span>&lt;Picture 1&gt;<button aria-label="Remove &lt;Picture 1&gt;" style="width: 20px; height: 20px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--t2); box-shadow: none">×</button></span>
 <span style="padding: 4px 10px; border-radius: 8px; background: var(--s5); font-size: 12px; font-family: 'JetBrains Mono', monospace">@owl</span>
 <button style="height: 32px; padding: 0 10px; border-radius: 8px; border: 1px dashed var(--dash); background: transparent; color: var(--t2); font-size: 12px">Add from gallery</button>
 </div>
@@ -178,7 +178,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <div style="display: flex; flex-direction: column; gap: 10px">
 <h2 style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--t2); display: flex; align-items: center">References<button class="i" aria-label="More information" title="Images to edit or combine, in order; the prompt names them &lt;Picture 1&gt;, &lt;Picture 2&gt;, … Alpha is dropped.">i</button><span style="flex-grow: 1"></span><span style="font-family: 'JetBrains Mono', monospace; font-weight: 400">1 / 16</span></h2>
 <ol aria-label="References, in order" style="margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px">
-<li style="position: relative; aspect-ratio: 1; border-radius: 8px; border: 1px dashed var(--dash); background: var(--s1)"><span style="position: absolute; left: 4px; bottom: 4px; padding: 1px 5px; border-radius: 5px; background: color-mix(in srgb, var(--s2) 92%, transparent); font-family: 'JetBrains Mono', monospace; font-size: 10px">&lt;Picture 1&gt;</span><button aria-label="Remove &lt;Picture 1&gt;" style="position: absolute; right: 4px; top: 4px; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: var(--s4); font-size: 12px">×</button></li>
+<li class="pic pnb" style="position: relative; aspect-ratio: 1; border-radius: 8px; border: 1px dashed var(--dash); background: var(--s1); background-image: url(img/snow-owl.jpg)"><span style="position: absolute; left: 4px; bottom: 4px; padding: 1px 5px; border-radius: 5px; background: color-mix(in srgb, var(--s2) 92%, transparent); font-family: 'JetBrains Mono', monospace; font-size: 10px">&lt;Picture 1&gt;</span><button aria-label="Remove &lt;Picture 1&gt;" style="position: absolute; right: 4px; top: 4px; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: var(--s4); font-size: 12px">×</button></li>
 </ol>
 <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px">
 <button style="height: 36px; border-radius: 8px; border: 1px solid var(--ln); background: transparent; font-size: 12px">Add from gallery</button>
