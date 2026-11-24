@@ -484,7 +484,8 @@ export function createTools(c: CreateCtx): ScreenSpec {
       },
       frameIn: async ({ take_id, at }) => {
         const t = takeOf(take_id);
-        if (t && t.kind !== "video") return failed(`Frame in · ${takeName(t)} is not a video`);
+        if (t && t.kind !== "video")
+          return failed(`Frame in · ${takeName(t)} is not a video: put it in with useIn`);
         const end = at === "last" ? "last" : "first";
         const frame = await frameTake(String(take_id), end);
         const uses = await ok(
@@ -497,6 +498,35 @@ export function createTools(c: CreateCtx): ScreenSpec {
         if (!o) return failed(`Frame in · nothing takes the ${end} frame`);
         c.applyOffer(o);
         return done(`Set ${end} frame: ${takeName(t)}`, { result: { take_id: frame } });
+      },
+      // the strip's and the First frame tile's "Use in…": the take's offers (GET …/uses), applied in place
+      useIn: async ({ take_id, workflow }) => {
+        const t = c.takes.find((x) => x.id === take_id);
+        const want = String(workflow ?? w?.id ?? "").toLowerCase();
+        const { uses } = await ok(
+          api.GET("/v1/studio/takes/{take_id}/uses", {
+            params: { path: { take_id: String(take_id) } },
+          }),
+        );
+        const fits = (o: S<"TakeOffer">) =>
+          o.workflow_id === workflow || o.title.toLowerCase() === want;
+        const o = uses.find(fits) ?? uses.find((x) => x.family === (workflow ? want : w?.family));
+        if (!o)
+          return failed(
+            `Use in · ${takeName(t)} goes in ${uses.map((x) => x.title).join(", ") || "no workflow"}`,
+          );
+        const from = w?.id;
+        const old = Object.keys(o.inputs).map((k) => [k, c.held[k]] as const);
+        c.applyOffer(o);
+        return done(`Put ${takeName(t)} in ${o.action ? `${o.action} · ` : ""}${o.title}`, {
+          undo: {
+            undo: () => {
+              old.forEach(([k, v]) => c.restore(k, v));
+              if (from) c.switchTo(from);
+            },
+            redo: () => c.applyOffer(o),
+          },
+        });
       },
       select: ({ take_id }) => {
         const t = takeOf(take_id);

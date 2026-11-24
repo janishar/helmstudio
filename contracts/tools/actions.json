@@ -344,7 +344,7 @@
           "card": "delete"
         },
         "frameIn": {
-          "description": "Use a take as the first or last frame.",
+          "description": "A video take's first or last frame (made as an image) into the frame input. An image take goes in with useIn.",
           "effect": "line",
           "input": {
             "type": "object",
@@ -365,6 +365,30 @@
             "required": [
               "take_id",
               "at"
+            ]
+          }
+        },
+        "useIn": {
+          "description": "Put a take into a workflow's input, as its Use in… menu does: an image as a video's first frame (Animate), an image to Edit, a video to Extend. Switches the form to that workflow.",
+          "effect": "undo",
+          "input": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "take_id": {
+                "type": "string",
+                "format": "uuid",
+                "description": "a take"
+              },
+              "workflow": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "description": "a workflow id, title or family (ltx); left out, the open one"
+              }
+            },
+            "required": [
+              "take_id"
             ]
           }
         },
