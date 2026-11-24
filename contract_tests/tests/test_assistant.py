@@ -7,7 +7,7 @@ import time
 import uuid
 
 import pytest
-from helpers import STUDIO, ok, wait_for
+from helpers import STUDIO, ok, png_bytes, upload, wait_for
 from test_director import fake, fake_ctl, provider, server_body  # noqa: F401  (fake_ctl is a fixture)
 
 THREADS = f"{STUDIO}/assistant/threads"
@@ -135,5 +135,51 @@ def test_steer_while_it_answers(api, assistant):
     assert len(calls) == 4 and "User: Add a red bus behind her" in str(calls[3]["body"]["messages"])
 
     # Stop on an idle chat does nothing
-    assert ok(api.post(f"{url}/messages", json={"kind": "stop", "client_id": TAB}), 202)["entry"] is None
+    assert (
+        ok(api.post(f"{url}/messages", json={"kind": "stop", "client_id": TAB}), 202)["entry"]
+        is None
+    )
     ok(api.delete(url), 204)
+
+
+def test_attached_images_reach_a_model_that_sees(api, api_b, anon, admin, fake_ctl):  # noqa: F811
+    """API 1.65 (board Assistant frame 12): a message's attached images are the owner's takes (else 422), stored on
+    its entry; a model whose preset's vision matches it (ollama: llava) gets them as image parts, a Looked at line
+    shows, and status.sees says so."""
+    model = f"llava-{uuid.uuid4().hex[:8]}"
+    was = ok(admin.get(SETTINGS))  # put back after: a later module's assistant may still be on
+    was = {k: was[k] for k in ("enabled", "provider", "model") if was.get(k) is not None}
+    with provider(admin, f"srv-{model}", server_body(model) | {"preset": "ollama"}) as name:
+        ok(admin.put(SETTINGS, json={"enabled": True, "provider": name}))
+        try:
+            fake("POST", "/__script", {model: [{"content": "Red, flat light."}]})
+            assert ok(api.get(THREADS))["status"]["sees"] is True
+            mine = upload(api, anon, png_bytes(1600, 900))["id"]
+            theirs = upload(api_b, anon, png_bytes(8, 8))["id"]
+            tid = ok(api.post(THREADS, json={"client_id": TAB}), 201)["id"]
+            url = f"{THREADS}/{tid}"
+            body = {
+                "kind": "message",
+                "client_id": TAB,
+                "text": "What light is this?",
+                "screen": screen(),
+            }
+            assert api.post(f"{url}/messages", json=body | {"takes": [theirs]}).status_code == 422
+            sent = ok(api.post(f"{url}/messages", json=body | {"takes": [mine]}), 202)
+            assert (
+                sent["entry"]["takes"] == [mine] and sent["entry"]["text"] == "What light is this?"
+            )
+            got = wait_for(
+                lambda: (g := ok(api.get(url)))["state"] == "idle" and g,
+                timeout=60,
+                what="the answer",
+            )
+            lines = [e["line"]["text"] for e in got["entries"] if e["kind"] == "line"]
+            assert lines == ["Looked at ref"], got["entries"]
+            (call,) = [r for r in fake("GET", "/__requests") if r["model"] == model]
+            user = call["body"]["messages"][1]["content"]
+            assert f"(attached: [[take:{mine}]])" in user[0]["text"]
+            assert user[1]["image_url"]["url"].startswith("data:image/jpeg;base64,/9j/")
+            ok(api.delete(url), 204)
+        finally:
+            ok(admin.put(SETTINGS, json=was if was.get("provider") else {"enabled": False}))
