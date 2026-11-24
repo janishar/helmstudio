@@ -42,6 +42,24 @@ class Fail(Exception):
         self.code = code
 
 
+IMAGE_TYPES = ("image/jpeg", "image/png", "image/webp", "image/gif")
+MAX_IMAGES, MAX_IMAGE_B64 = 8, 7_000_000  # about 5 MB each, as the Messages API takes
+
+
+def images_of(content) -> list[dict]:
+    """OpenAI image parts (data: URLs only, never fetched) -> Claude image blocks."""
+    out = []
+    for part in content if isinstance(content, list) else []:
+        url = ((part or {}).get("image_url") or {}).get("url", "") if isinstance(part, dict) else ""
+        if part.get("type") != "image_url" or not url.startswith("data:") or ";base64," not in url:
+            continue
+        head, data = url[5:].split(";base64,", 1)
+        if head not in IMAGE_TYPES or len(data) > MAX_IMAGE_B64:
+            raise Fail(400, f"an image must be {', '.join(IMAGE_TYPES)} as a base64 data URL, at most 5 MB")
+        out.append({"type": "image", "source": {"type": "base64", "media_type": head, "data": data}})
+    return out
+
+
 def text_of(content):
     if isinstance(content, list):
         return "\n".join(p.get("text", "") for p in content if isinstance(p, dict))
@@ -49,10 +67,12 @@ def text_of(content):
 
 
 def build(body):
-    """OpenAI body -> (system, prompt, schema or None, tool names)."""
-    system, turns = [], []
+    """OpenAI body -> (system, prompt, schema or None, tool names, the user's images)."""
+    system, turns, images = [], [], []
     for m in body.get("messages") or []:
         role, txt = m.get("role"), text_of(m.get("content"))
+        if role == "user":
+            images += images_of(m.get("content"))
         if role in ("system", "developer"):
             system.append(txt)
         elif role == "tool":
@@ -88,7 +108,9 @@ def build(body):
         elif rf.get("type") == "json_object":
             schema = {"type": "object"}
     # always a system prompt: without one the CLI uses its own long coding-agent prompt
-    return "\n\n".join(system) or "You are a helpful assistant.", "\n\n".join(turns), schema, names
+    if len(images) > MAX_IMAGES:
+        raise Fail(400, f"at most {MAX_IMAGES} images per request")
+    return "\n\n".join(system) or "You are a helpful assistant.", "\n\n".join(turns), schema, names, images
 
 
 # claude -p --effort's levels; the studio's thinking rule (presets.json claude-code-bridge) sends low, medium or high
@@ -103,8 +125,13 @@ def effort(body):
     return level
 
 
-def run_claude(model, system, prompt, schema, level=None):
+def run_claude(model, system, prompt, schema, level=None, images=()):
     cmd = ["claude", "-p", *LOCKDOWN, "--model", model]
+    if images:  # pictures go in as one structured user message (stream-json in and out)
+        cmd[cmd.index("json")] = "stream-json"
+        cmd += ["--input-format", "stream-json", "--verbose"]
+        prompt = json.dumps({"type": "user", "message": {"role": "user", "content": [
+            {"type": "text", "text": prompt}, *images]}}) + "\n"
     if level:
         cmd += ["--effort", level]
     cmd += ["--system-prompt", system]
@@ -117,8 +144,11 @@ def run_claude(model, system, prompt, schema, level=None):
     except subprocess.TimeoutExpired:
         raise Fail(504, f"claude did not answer in {TIMEOUT} s")
     try:
-        out = json.loads(p.stdout)
-    except ValueError:
+        if images:  # the last result event of the stream
+            out = [d for d in map(json.loads, filter(str.strip, p.stdout.splitlines())) if d.get("type") == "result"][-1]
+        else:
+            out = json.loads(p.stdout)
+    except (ValueError, IndexError):
         msg = (p.stderr or p.stdout).strip()[-500:] or f"claude exited {p.returncode}"
         raise Fail(503, msg)
     if out.get("is_error") or out.get("subtype") != "success":
@@ -129,11 +159,11 @@ def run_claude(model, system, prompt, schema, level=None):
 def complete(body):
     model = body.get("model") or "claude-sonnet"
     level = effort(body)
-    system, prompt, schema, names = build(body)
+    system, prompt, schema, names, images = build(body)
     if not prompt.strip():
         raise Fail(400, "no user message")
     t = time.monotonic()
-    out = run_claude(MODELS.get(model, model), system, prompt, schema, level)
+    out = run_claude(MODELS.get(model, model), system, prompt, schema, level, images)
     u = out.get("usage") or {}
     tin = u.get("input_tokens", 0) + u.get("cache_read_input_tokens", 0) + u.get("cache_creation_input_tokens", 0)
     tout = u.get("output_tokens", 0)
