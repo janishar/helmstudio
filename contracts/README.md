@@ -3993,7 +3993,10 @@ kinds: model providers and Assistant tools only.
   browser) to check it on `/models` and write it to `plugin-<name>-<8 hex of the admin's id>`; refused is 422 `The key
   doesn't match: copy it again from the plugin's .env`, unreachable 422 `<title> did not answer: start it, then Try
   again` (nothing saved either way). Then studio creates or replaces the provider `<name>-<8 hex>` (kind server, the
-  manifest's models, `host` from the body or the first host by name, `plugin` = name).
+  manifest's models, `host` from the body or the first host by name, `plugin` = name, and `preset` = the preset of
+  providers/presets.json whose `plugin` is that plugin, if any: its thinking rules give the provider its levels, as
+  any preset's do; such a preset is never offered in the form, its Fetch and key save are 404). The Claude Code
+  bridge's: low, medium and high per model, sent as `reasoning_effort` (the bridge runs `claude -p --effort`).
 - **Only you.** A provider made from a `personal` plugin has `owner_id` = the admin who added it (Anthropic's terms
   for plan credentials: "Only you"). The providers table's row-level policy shows it only to its owner (and to the
   service itself): every provider list, `GET /model-sources`, the pipeline rules and batch snapshots, the assistant's

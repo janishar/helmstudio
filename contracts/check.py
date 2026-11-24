@@ -4665,6 +4665,19 @@ def check_plugins(schemas: dict[str, dict], registry: Registry) -> None:
                 fail(f"{w} {t['name']}: input is model-facing, so self-contained: no $ref")
     if not found:
         fail("plugins/: no plugin.json found")
+    # a plugin's preset (presets.json `plugin`) names a model-provider plugin, and its rules cover every model of it
+    manifests = {p.parent.name: json.loads(p.read_text()) for p in found}
+    for pre in json.loads((HERE / "providers" / "presets.json").read_text())["presets"]:
+        if "plugin" not in pre:
+            continue
+        m = manifests.get(pre["plugin"])
+        if not m or m["kind"] != "model-provider":
+            fail(f"providers/presets.json {pre['id']}: plugin {pre['plugin']} is not a model-provider plugin")
+            continue
+        rules = pre.get("thinking") if isinstance(pre.get("thinking"), list) else []
+        for model in m["provider"]["models"]:
+            if not any(re.search(r["match"], model) for r in rules):
+                fail(f"providers/presets.json {pre['id']}: no thinking rule matches {pre['plugin']}'s {model}")
     print(f"ok   plugins ({len(found)} manifests)")
 
 

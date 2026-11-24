@@ -35,6 +35,10 @@ reach it as `http://host.docker.internal:8420`.
   back as OpenAI `tool_calls`.
 - The child process gets no `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN` or other provider variables, so the
   subscription login is used.
+- Thinking: `reasoning_effort` (low, medium or high; also xhigh, max) becomes `claude -p --effort <level>`; absent = the
+  CLI's default; anything else is 400. A provider made in Plugins › Add as provider gets the levels low, medium and
+  high per model (contracts/providers/presets.json `claude-code-bridge`), set in Admin › Model providers and AI agents.
+  Test: `python3 plugins/claude-code-bridge/test_bridge.py`.
 - Locked down: `--safe-mode --tools "" --strict-mcp-config --mcp-config '{"mcpServers":{}}' --setting-sources ""
   --disable-slash-commands --no-session-persistence --permission-prompts none`, run in an empty `work/` folder.
 - One call at a time, 180 s timeout (`BRIDGE_TIMEOUT` in the env file). One log line per call: time, tokens, cost.

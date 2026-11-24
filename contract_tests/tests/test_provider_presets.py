@@ -18,7 +18,9 @@ FILE = json.loads((Path(__file__).parents[2] / "contracts/providers/presets.json
 def test_presets_list_is_the_file_admin_only(api, admin):
     assert api.get(PRESETS).status_code == 403
     got = ok(admin.get(PRESETS))
-    assert got["presets"] == FILE["presets"]
+    # API 1.60: a plugin's preset (its providers' thinking rules) is never offered, and its Fetch is 404
+    assert got["presets"] == [p for p in FILE["presets"] if "plugin" not in p]
+    assert admin.post(f"{PRESETS}/claude-code-bridge/models", json={}).status_code == 404
     assert got["remote_enabled"] == ok(admin.get(PROVIDERS))["remote_enabled"]
 
 

@@ -175,6 +175,7 @@ type ProviderPreset struct {
 	KeySecret *string         `json:"key_secret,omitempty"`
 	Compat    *ProviderCompat `json:"compat,omitempty"`
 	Thinking  json.RawMessage `json:"thinking,omitempty"` // API 1.53: the rules as in the file, or "models"
+	Plugin    *string         `json:"plugin,omitempty"`   // API 1.60: a plugin's preset (never offered in the form)
 	Docs      string          `json:"docs"`
 	Note      string          `json:"note"`
 }

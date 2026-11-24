@@ -91,8 +91,22 @@ def build(body):
     return "\n\n".join(system) or "You are a helpful assistant.", "\n\n".join(turns), schema, names
 
 
-def run_claude(model, system, prompt, schema):
+# claude -p --effort's levels; the studio's thinking rule (presets.json claude-code-bridge) sends low, medium or high
+EFFORTS = ("low", "medium", "high", "xhigh", "max")
+
+
+def effort(body):
+    """The thinking level: OpenAI-style `reasoning_effort`, absent = the CLI's own default; anything else is 400."""
+    level = body.get("reasoning_effort")
+    if level is not None and level not in EFFORTS:
+        raise Fail(400, f"reasoning_effort must be one of {', '.join(EFFORTS)}")
+    return level
+
+
+def run_claude(model, system, prompt, schema, level=None):
     cmd = ["claude", "-p", *LOCKDOWN, "--model", model]
+    if level:
+        cmd += ["--effort", level]
     cmd += ["--system-prompt", system]
     if schema is not None:
         cmd += ["--json-schema", json.dumps(schema)]
@@ -114,11 +128,12 @@ def run_claude(model, system, prompt, schema):
 
 def complete(body):
     model = body.get("model") or "claude-sonnet"
+    level = effort(body)
     system, prompt, schema, names = build(body)
     if not prompt.strip():
         raise Fail(400, "no user message")
     t = time.monotonic()
-    out = run_claude(MODELS.get(model, model), system, prompt, schema)
+    out = run_claude(MODELS.get(model, model), system, prompt, schema, level)
     u = out.get("usage") or {}
     tin = u.get("input_tokens", 0) + u.get("cache_read_input_tokens", 0) + u.get("cache_creation_input_tokens", 0)
     tout = u.get("output_tokens", 0)

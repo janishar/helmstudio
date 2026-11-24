@@ -419,7 +419,13 @@ func (s *Service) ProviderPresets(caller common.Caller) (dto.ProviderPresetList,
 	if !caller.IsAdmin() {
 		return dto.ProviderPresetList{}, errAdmin
 	}
-	return dto.ProviderPresetList{RemoteEnabled: s.remoteOn, Presets: presets()}, nil
+	out := dto.ProviderPresetList{RemoteEnabled: s.remoteOn, Presets: []dto.ProviderPreset{}}
+	for _, p := range presets() {
+		if p.Plugin == nil { // API 1.60: a plugin's preset is never offered in the form
+			out.Presets = append(out.Presets, p)
+		}
+	}
+	return out, nil
 }
 
 // FetchPresetModels answers POST /admin/provider-presets/{id}/models: the preset's provider lists its models, asked by
@@ -429,7 +435,7 @@ func (s *Service) FetchPresetModels(ctx context.Context, caller common.Caller, i
 	if !caller.IsAdmin() {
 		return dto.ProviderTest{}, errAdmin
 	}
-	i := slices.IndexFunc(presets(), func(p dto.ProviderPreset) bool { return p.ID == id })
+	i := slices.IndexFunc(presets(), func(p dto.ProviderPreset) bool { return p.ID == id && p.Plugin == nil })
 	if i < 0 {
 		return dto.ProviderTest{}, errNotFound
 	}
@@ -490,7 +496,7 @@ func (s *Service) SaveProviderKey(ctx context.Context, caller common.Caller, sec
 	}
 	var snapshot map[string]any
 	if body.Preset != nil {
-		i := slices.IndexFunc(presets(), func(p dto.ProviderPreset) bool { return p.ID == *body.Preset })
+		i := slices.IndexFunc(presets(), func(p dto.ProviderPreset) bool { return p.ID == *body.Preset && p.Plugin == nil })
 		if i < 0 {
 			return dto.ProviderKeySaved{}, errNotFound
 		}

@@ -6218,6 +6218,8 @@ export interface components {
             compat?: components["schemas"]["ProviderCompat"];
             /** @description from 1.53: the thinking rules (the first whose match fits a model id gives its levels), or "models": the levels come from the provider's /models (OpenRouter) */
             thinking?: "models" | components["schemas"]["ThinkingRule"][];
+            /** @description from 1.60: a plugin's preset (its providers' thinking rules); never in this list (the file only) */
+            plugin?: string;
             docs: string;
             note: string;
         };

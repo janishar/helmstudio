@@ -431,20 +431,24 @@ func (s *Service) AddPluginProvider(ctx context.Context, caller common.Caller, n
 	if body.Title == nil && m.Personal {
 		title = m.Title + " (personal)"
 	}
-	var owner *string
+	var owner, preset *string
 	if m.Personal {
 		owner = &caller.ID
+	}
+	if i := slices.IndexFunc(presets(), func(p dto.ProviderPreset) bool { return deref(p.Plugin) == name }); i >= 0 {
+		preset = &presets()[i].ID // its thinking rules (presets.json `plugin`)
 	}
 	var out dto.Provider
 	err = s.tx(ctx, caller, func(tx pgx.Tx) error {
 		row, err := one[providerRow](ctx, tx, `INSERT INTO providers (name, kind, title, base_url, models, default_model,
-			enabled, timeout_s, host, memory_gb, key_secret, owner_id, plugin) VALUES ($1, 'server', $2, $3, $4, $5, true, $6,
-			$7, $8, $9, $10, $11)
+			enabled, timeout_s, host, memory_gb, key_secret, owner_id, plugin, preset) VALUES ($1, 'server', $2, $3, $4, $5, true,
+			$6, $7, $8, $9, $10, $11, $12)
 			ON CONFLICT (name) DO UPDATE SET title = excluded.title, base_url = excluded.base_url, models = excluded.models,
 			default_model = excluded.default_model, enabled = true, timeout_s = excluded.timeout_s, host = excluded.host,
-			memory_gb = excluded.memory_gb, key_secret = excluded.key_secret, updated_at = clock_timestamp()
+			memory_gb = excluded.memory_gb, key_secret = excluded.key_secret, preset = excluded.preset,
+			updated_at = clock_timestamp()
 			RETURNING `+providerCols, provider, title, baseURL, m.Provider.Models, model,
-			cmp.Or(deref(m.Provider.TimeoutS), 180), host, cmp.Or(deref(m.Provider.MemoryGB), 0.5), secret, owner, name)
+			cmp.Or(deref(m.Provider.TimeoutS), 180), host, cmp.Or(deref(m.Provider.MemoryGB), 0.5), secret, owner, name, preset)
 		out = row.dto()
 		return err
 	})
