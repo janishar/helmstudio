@@ -755,8 +755,10 @@ func (s *Service) PostAssistant(ctx context.Context, caller common.Caller, id st
 		if err != nil {
 			return err
 		}
-		if body.Kind == "continue" { // Continue here: the chat's actions run in this tab now; no command
-			if _, err := tx.Exec(ctx, `UPDATE assistant_threads SET client_id = $2 WHERE id = $1`, t.ID, body.ClientID); err != nil {
+		// Continue here: the chat's actions run in this tab now; no command. updated_at moves so a tab replaying the
+		// chat's events never takes the snapshot before the move for the newer one
+		if body.Kind == "continue" {
+			if _, err := tx.Exec(ctx, `UPDATE assistant_threads SET client_id = $2, updated_at = clock_timestamp() WHERE id = $1`, t.ID, body.ClientID); err != nil {
 				return err
 			}
 			t, err = threadEvent(ctx, tx, t.ID)

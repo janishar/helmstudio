@@ -35,6 +35,7 @@ import {
   applyEvent,
   asked,
   elsewhere,
+  capNoticeId,
   limitOf,
   mentionParts,
   tabClientId,
@@ -67,6 +68,8 @@ const page = (id: string) => (since: number) =>
     }),
   ) as Promise<S<"AssistantEventPage">>;
 
+/** A moment for the screen to render what the last action changed and register its fresh actions and summary. */
+const settle = () => new Promise((r) => setTimeout(r, 150));
 /** Phone width: the dock is the bar at the top and the drawer a bottom sheet. */
 const PHONE = "(max-width: 767px)";
 const usePhone = () =>
@@ -91,6 +94,7 @@ export function useAssistant(me: S<"User"> | null) {
   const [cid] = useState(tabClientId);
   const [status, setStatus] = useState<S<"AssistantStatus"> | null>(null);
   const [view, setView] = useState<ThreadView | null>(null);
+  const [capRead, setCapRead] = useState<string | undefined>(); // the cap notice the status was read after
   // reopen after a reload of this tab (false on the server; the drawer only renders once the status has loaded)
   const [open, setOpenState] = useState(tabOpen);
   const [shrunk, setShrunk] = useState(false);
@@ -144,13 +148,33 @@ export function useAssistant(me: S<"User"> | null) {
             params: { path: { thread_id: t.id } },
           }),
         );
-        if (!stop) setView({ thread: d, entries: d.entries });
+        if (stop) return;
+        setView({ thread: d, entries: d.entries });
+        setCapRead(capNoticeId(d.entries));
       })
       .catch(() => undefined); // no assistant: no dock item
     return () => {
       stop = true;
     };
   }, [me, rev]);
+
+  // a cap notice is checked against the caps read after it (the admin may have raised or lowered them since the
+  // status was read): until that read, the notice alone decides
+  const capId = capNoticeId(view?.entries);
+  useEffect(() => {
+    if (!capId || capId === capRead) return;
+    let stop = false;
+    ok(api.GET("/v1/studio/assistant/threads"))
+      .then((l) => {
+        if (stop) return;
+        setStatus(l.status);
+        setCapRead(capId);
+      })
+      .catch(() => undefined);
+    return () => {
+      stop = true;
+    };
+  }, [capId, capRead]);
 
   // the chat's events, live
   useEffect(() => {
@@ -243,6 +267,8 @@ export function useAssistant(me: S<"User"> | null) {
           results.push(toResult(a.id, { status: "did_not_run", text }));
           continue;
         }
+        // each action acts on the screen as the ones before it left it (Create's actions read the last render)
+        if (i > 0) await settle();
         const first = `${words(a.name)}…`;
         setRunning({ n: i + 1, of: p.actions.length, text: first });
         setLocal(a.id, { status: "running", text: first });
@@ -263,7 +289,7 @@ export function useAssistant(me: S<"User"> | null) {
       setRunning(null);
       // the screen as the actions left it, after their renders (a switchTo's new form): without it the model reads
       // the summary sent with the message, sees the old workflow and switches again (the switch loop)
-      await new Promise((r) => setTimeout(r, 150));
+      await settle();
       await post(t.id, {
         kind: "results",
         client_id: cid,
@@ -376,6 +402,7 @@ export function useAssistant(me: S<"User"> | null) {
     reg,
     cid,
     status,
+    capLimits: capId === capRead ? status?.limits : undefined,
     enabled,
     view,
     open,
@@ -920,7 +947,7 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
     if (a.open) input.current?.focus();
   }, [a.open]);
   if (!a.open) return null;
-  const limit = limitOf(entries);
+  const limit = limitOf(entries, a.capLimits);
   const st = a.status;
   const t = a.view?.thread;
   const chip = a.readOnly ? (

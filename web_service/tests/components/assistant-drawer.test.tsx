@@ -342,6 +342,36 @@ describe("a turn's actions in this tab", () => {
     expect(posts[0]).toMatchObject({ screen: { fields: { workflow: "Qwen Image" } } });
   });
 
+  it("a later action acts on the screen as the earlier ones left it, not on the old render", async () => {
+    const posts = serve({ existing: thread() });
+    function Switching() {
+      const [w, setW] = useState("Echo");
+      useScreenTools({
+        screen: "create",
+        sees: [w],
+        summary: () => ({ workflow: w }),
+        actions: {
+          switchTo: async ({ workflow }) => {
+            await Promise.resolve(); // as a real switch: the new render comes after the action returns
+            setW(String(workflow));
+            return done(`Switched to ${String(workflow)}`);
+          },
+          change: () => done(`Changed on ${w}`),
+        },
+      });
+      return null;
+    }
+    await openDrawer(<Switching />);
+    await waitFor(() => expect(onEvent).not.toBeNull());
+    park([
+      { id: id(0), name: "switchTo", args: { workflow: "Qwen Image" } },
+      { id: id(1), name: "change", args: { key: "prompt", value: "x" } },
+    ]);
+    await waitFor(() => expect(posts).toHaveLength(1));
+    const r = posts[0] as Extract<S<"AssistantPost">, { kind: "results" }>;
+    expect(r.results[1].line.text).toBe("Changed on Qwen Image");
+  });
+
   it("Not now cancels the card; leaving the screen cancels it too", async () => {
     const posts = serve({ existing: thread() });
     const yes = vi.fn(async () => done("ran"));
@@ -523,6 +553,48 @@ describe("other tabs, server cards, limits, memory", () => {
     expect(screen.getByText("Now make it snow instead")).toBeTruthy();
   });
 
+  it("a cap hit is checked against the caps read after it: lowered stays shut, raised opens", async () => {
+    serve({ existing: thread() }); // the status read first says 200 a day
+    await openDrawer();
+    await waitFor(() => expect(onEvent).not.toBeNull());
+    let perDay = 1; // the admin lowered it to 1 meanwhile
+    answer("GET", {
+      "/v1/studio/assistant/threads": () => ({
+        data: {
+          status: { ...status(), limits: { ...status().limits, model_calls_per_day: perDay } },
+          threads: [thread()],
+        },
+      }),
+    });
+    const hit = (n: number) =>
+      act(() =>
+        onEvent!({
+          seq: 40 + n,
+          type: "entry",
+          entry: entry(n, {
+            kind: "notice",
+            text: "You used today's 1 model calls.",
+            error: {
+              code: "cap_day",
+              text: "You used today's 1 model calls.",
+              resets_at: "2999-01-01T00:00:00Z",
+              limit: 1,
+            },
+          }),
+        }),
+      );
+    hit(3);
+    const box = screen.getByRole("textbox", {
+      name: "Message the assistant",
+    }) as HTMLTextAreaElement;
+    expect(box.disabled).toBe(true);
+    await act(() => new Promise((r) => setTimeout(r, 50))); // the caps read again
+    expect(box.disabled).toBe(true);
+    perDay = 2000; // raised: the next read opens it
+    hit(4);
+    await waitFor(() => expect(box.disabled).toBe(false));
+  });
+
   it("a Remembered line's Undo deletes the memory item", async () => {
     const mem = "99999999-2222-4333-8444-555555555555";
     serve({
@@ -683,7 +755,11 @@ describe("thinking (plan 29)", () => {
     expect(bubble()?.textContent).toBe("Thinking… 1 s");
     // the reply lands and replaces it
     act(() =>
-      onEvent!({ seq: 31, type: "entry", entry: entry(9, { kind: "assistant", text: "Done: blue hour" }) }),
+      onEvent!({
+        seq: 31,
+        type: "entry",
+        entry: entry(9, { kind: "assistant", text: "Done: blue hour" }),
+      }),
     );
     to("idle", 32);
     expect(bubble()).toBeNull();

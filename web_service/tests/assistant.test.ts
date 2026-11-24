@@ -164,6 +164,20 @@ describe("the chat's events", () => {
     v = applyEvent(v, { seq: 3, type: "thread", thread: thread({ state: "working" }) });
     expect(v.thread.state).toBe("working");
   });
+  it("a replayed older snapshot never replaces the newer one (a reload re-ran old parked turns)", () => {
+    const now = thread({ state: "idle", updated_at: "2026-11-22T10:00:00.123456Z" });
+    let v = { thread: now, entries: [] as Entry[] };
+    const old = thread({
+      state: "waiting",
+      client_id: "tabA-1234",
+      updated_at: "2026-11-22T09:00:00Z",
+      pending: { turn: 2, actions: [{ id: `${T}:2:1`, name: "edit", args: {} }], cards: [] },
+    });
+    v = applyEvent(v, { seq: 5, type: "thread", thread: old });
+    expect(v.thread).toBe(now);
+    const later = thread({ state: "working", updated_at: "2026-11-22T10:00:01Z" });
+    expect(applyEvent(v, { seq: 9, type: "thread", thread: later }).thread).toBe(later);
+  });
   it("another tab's chat is read-only here, an idle one is not", () => {
     expect(elsewhere(thread({ state: "waiting", client_id: "tabB-1234" }), "tabA-1234")).toBe(true);
     expect(elsewhere(thread({ state: "waiting", client_id: "tabA-1234" }), "tabA-1234")).toBe(
@@ -183,7 +197,7 @@ describe("the chat's events", () => {
       },
     });
     expect(limitOf([cap])?.title).toBe("Daily limit reached");
-    expect(limitOf([cap], Date.parse("3000-01-01T00:00:00Z"))).toBeNull();
+    expect(limitOf([cap], undefined, Date.parse("3000-01-01T00:00:00Z"))).toBeNull();
     expect(limitOf([cap, entry("u", { kind: "user", text: "hi", at })])).toBeNull();
     const other = entry("n2", {
       kind: "notice",
@@ -191,6 +205,24 @@ describe("the chat's events", () => {
       error: { code: "provider", text: "x" },
     });
     expect(limitOf([other])).toBeNull();
+  });
+  it("the cap lifts at once when the admin raised it above the one hit", () => {
+    const hit = (code: "cap_day" | "cap_tokens", limit: number) =>
+      entry("n", {
+        kind: "notice",
+        text: "x",
+        error: { code, text: "x", resets_at: "2999-01-01T00:00:00Z", limit },
+      });
+    const limits = {
+      model_calls_per_day: 2000,
+      tokens_per_day: 1000000,
+      look_at_per_hour: 20,
+      messages_per_minute: 6,
+    };
+    expect(limitOf([hit("cap_day", 1)], limits)).toBeNull();
+    expect(limitOf([hit("cap_day", 2000)], limits)?.title).toBe("Daily limit reached");
+    expect(limitOf([hit("cap_tokens", 1000)], limits)).toBeNull();
+    expect(limitOf([hit("cap_tokens", 1000000)], limits)?.title).toBe("Daily limit reached");
   });
 });
 

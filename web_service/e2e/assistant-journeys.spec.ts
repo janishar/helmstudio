@@ -9,8 +9,6 @@ import { script, sent } from "./fake";
 
 test.describe.configure({ mode: "serial" });
 
-// E2E_STRICT=1 runs the known failures (test.fail) as plain tests, to see every error
-const STRICT = !!process.env.E2E_STRICT;
 const SHOTS = process.env.E2E_SHOTS ?? "test-results/assistant";
 mkdirSync(SHOTS, { recursive: true });
 const hex = randomUUID().slice(0, 8);
@@ -303,7 +301,6 @@ test("J2 make a portrait of an old fisherman, then make it warmer, then undo and
 });
 
 test("J3 use this image and create video through ltx 10 sec", async () => {
-  test.fail(!STRICT); // finding A1: later actions of one reply act on the screen as it was before the earlier ones
   test.setTimeout(150_000);
   // the user made a still and picked it
   await page.goto("/");
@@ -366,9 +363,9 @@ test("J3 use this image and create video through ltx 10 sec", async () => {
   await expect(card.getByText("uses the GPU")).toBeVisible();
   await expect(drawer().getByText("Waiting for you", { exact: true })).toBeVisible();
   await shot("j03-generate-card");
-  // A1: an action sees the screen as it was before the earlier actions of the same reply
-  await expect.soft(line("duration.frames: no such setting")).toHaveCount(0); // asked after useIn switched
-  await expect.soft(card).toHaveAccessibleName(/^Confirm: Generate a 5 s clip\?/); // the form says 5.0 s
+  // A1 (fixed): each action sees the screen as the earlier actions of the same reply left it
+  await expect(line("duration.frames: no such setting")).toHaveCount(0); // asked after useIn switched
+  await expect(card).toHaveAccessibleName(/^Confirm: Generate a 5 s clip\?/); // the form says 5.0 s
 
   await card.getByRole("button", { name: "GENERATE" }).click();
   await expect(line(/^You clicked GENERATE · 1 /)).toBeVisible();
@@ -667,7 +664,6 @@ test("J9 I say Not now to a card, leave while one waits, and say yes to a delete
 });
 
 test("J9b I reload the page later: nothing from earlier in the chat runs again", async () => {
-  test.fail(!STRICT); // finding A3: a reload replays old events and re-runs old parked turns of this tab
   // this chat has run a navigate, timeline edits, generate and delete cards in this tab; it shows in full runs
   // (the replay is long enough), not always in a run of J8-J9b alone
   const posted: string[] = [];
@@ -762,13 +758,12 @@ test("J11 a long request stops at the per-message cap, and a daily cap locks the
 });
 
 test("J11b after the admin raises the daily cap, I can write again", async () => {
-  test.fail(!STRICT); // finding A2: the box stays locked until midnight after the cap is raised
   // real use: the user asks the admin, the admin raises it, the user reloads and expects to go on
   await page.reload();
   await open();
-  await expect.soft(box()).toBeEnabled();
-  await shot("j11b-still-locked-after-raise");
-  // the only way out today: a new chat
+  await expect(box()).toBeEnabled(); // A2 (fixed)
+  await shot("j11b-open-after-raise");
+  // and a new chat works too
   await newChat();
   await expect(box()).toBeEnabled();
   script(MODEL, { content: "Here again." });

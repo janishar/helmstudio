@@ -112,7 +112,12 @@ export function rememberOpen(open: boolean) {
 /** A chat's events folded: an entry with a known id replaces it (a line going from running to done), a thread
  * event replaces the chat's state. */
 export function applyEvent(v: ThreadView, e: S<"AssistantEvent">): ThreadView {
-  if (e.type === "thread" && e.thread) return { ...v, thread: e.thread };
+  // the log is replayed from its start when a tab opens the chat: an older snapshot never replaces a newer one (a
+  // reload would run old parked turns again)
+  if (e.type === "thread" && e.thread)
+    return Date.parse(e.thread.updated_at) < Date.parse(v.thread.updated_at)
+      ? v
+      : { ...v, thread: e.thread };
   if (e.type !== "entry" || !e.entry) return v;
   const en = e.entry;
   const i = v.entries.findIndex((x) => x.id === en.id);
@@ -264,15 +269,25 @@ export function fitScreen(s: Screen, max = 15000): Screen {
 export const waitingText = (c: ScreenCard) =>
   `Waiting for your OK · ${c.go[0]}${c.go.slice(1).toLowerCase()}`;
 
-/** A cap notice (a daily limit reached): its title and when it lifts, else null. */
+/** The newest daily cap notice of the chat, else undefined. */
+export const capNoticeId = (entries: Entry[] | undefined) =>
+  entries?.findLast(
+    (e) => e.kind === "notice" && ["cap_day", "cap_tokens"].includes(e.error?.code ?? ""),
+  )?.id;
+
+/** A cap notice (a daily limit reached): its title and when it lifts, else null. It lifts at once when the cap now
+ * (`limits`, the status) is above the one it hit: the admin raised it. */
 export function limitOf(
   entries: Entry[],
+  limits?: S<"AssistantLimits">,
   now = Date.now(),
 ): { title: string; text: string; until: string } | null {
   const last = [...entries].reverse().find((e) => e.kind === "notice" || e.kind === "user");
   const err = last?.kind === "notice" ? last.error : undefined;
   if (!err || !["cap_day", "cap_tokens"].includes(err.code)) return null;
   if (err.resets_at && Date.parse(err.resets_at) <= now) return null;
+  const cap = err.code === "cap_day" ? limits?.model_calls_per_day : limits?.tokens_per_day;
+  if (err.limit !== undefined && cap !== undefined && cap > err.limit) return null;
   const at = err.resets_at ? new Date(err.resets_at) : null;
   const until = at
     ? at.getHours() === 0 && at.getMinutes() === 0

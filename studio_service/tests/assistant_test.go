@@ -210,6 +210,10 @@ func TestAssistantChat(t *testing.T) {
 	if moved["thread"].(map[string]any)["client_id"] != tabB || moved["entry"] != nil || len(e.turns()) != 0 {
 		t.Fatal(moved)
 	}
+	// the move is newer than the snapshot before it: a tab replaying the events keeps the newest
+	if before, after := got["updated_at"].(string), moved["thread"].(map[string]any)["updated_at"].(string); !timeAfter(after, before) {
+		t.Fatal(before, after)
+	}
 	// only what it waits on
 	wrong := map[string]any{"kind": "answer", "client_id": tabB, "card_id": call(9), "answer": "yes"}
 	if conflict := e.call(userA, "POST", msgs, wrong, 409); conflict["detail"] != "nothing waits on "+call(9) {
@@ -557,4 +561,11 @@ func TestAssistantLimitsMigration(t *testing.T) {
 			t.Fatal("after the migration the row holds", c.want)
 		}
 	}
+}
+
+// timeAfter is whether RFC 3339 time a is after b.
+func timeAfter(a, b string) bool {
+	ta, _ := time.Parse(time.RFC3339Nano, a)
+	tb, _ := time.Parse(time.RFC3339Nano, b)
+	return ta.After(tb)
 }
