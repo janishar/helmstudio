@@ -18,6 +18,9 @@ differs is dropped). Plain nodes, like agent_loop.py, no prebuilt agent:
 - `tools`: runs the calls in order, each result kept under its call id `<thread>:<turn>:<n>`. Studio reads
   (studio.tools, idempotent on the call id) and memory return at once; screen actions (a run of them) and the server
   cards (look_at, web_search, forget) stop it as `pending`, and the next calls wait for their results.
+- Plugin tools (API 1.60, contracts/README.md "Plugins"): the input's `plugins` offered as `<plugin>__<tool>`; one
+  with a risk flag asks first on a `plugin` card, one without runs at once: POST <url>/tools/<tool> with a
+  short-lived pass for that owner and call (providers.plugin_tool), the reply a line and a result fenced as data.
 - `wait` only calls interrupt() (a resumed node runs again from its start, so nothing with an effect sits before
   it). Each park and each end of a turn is one evt.assistant.step (seq per thread; a republish replaces).
 
@@ -25,10 +28,15 @@ Everything but the user's own messages is data in the <<< >>> fence: the screen 
 memory items, web results. Nothing but memory writes reaches the server without the user's click."""
 
 import asyncio
+import base64
 import contextlib
 import functools
+import hashlib
+import hmac
 import json
 import logging
+import secrets
+import time
 import uuid
 import weakref
 from datetime import UTC, datetime, timedelta
@@ -154,7 +162,37 @@ def offered(data: dict, route: str) -> dict[str, dict]:
     for n in data["actions"]:
         if n not in out and (a := action_spec(n, route, roles)):
             out[n] = {"kind": "action", "spec": a}
+    for n, spec in plugin_tools(data).items():
+        out[n] = {"kind": "plugin", "spec": spec}
     return out
+
+
+def plugin_tools(data: dict) -> dict[str, dict]:
+    """`<plugin>__<tool>` → the tool's manifest entry with its plugin's name, title and url: the input's on plugins
+    (studio sends them each input, so one turned off is gone at the next)."""
+    return {f"{p['name']}__{t['name']}": t | {"plugin": p["name"], "title": p["title"], "url": p["url"],
+                                               "tool": t["name"]}
+            for p in data.get("plugins") or [] for t in p["tools"]}  # fmt: skip
+
+
+RISK_TAGS = (("uses_gpu", "uses the GPU"), ("deletes", "can't be undone"),
+             ("sends_off_machine", "sends off the machine"))  # fmt: skip
+PASS_TTL = 300  # seconds
+# ponytail: a key per process, and nothing verifies the pass yet (plugins treat it as opaque); a verify endpoint comes
+# with the first plugin that calls back into the stack
+_PASS_KEY = secrets.token_bytes(32)
+
+
+def _b64(b: bytes) -> str:
+    return base64.urlsafe_b64encode(b).rstrip(b"=").decode()
+
+
+def plugin_pass(owner: str, call: str) -> str:
+    """A short-lived pass scoped to one owner and call: base64url({owner, call, exp}).base64url(HMAC-SHA256)."""
+    body = _b64(
+        agents.compact({"owner": owner, "call": call, "exp": int(time.time()) + PASS_TTL}).encode()
+    )
+    return f"{body}.{_b64(hmac.new(_PASS_KEY, body.encode(), hashlib.sha256).digest())}"
 
 
 def native(off: dict) -> list[dict]:
@@ -453,7 +491,14 @@ class Assistant:
                 return self._park(s, up | {"queue": q[n:], "chat": chat[-CHAT_KEEP:], "caps": caps,
                                            "lines": lines, "pending": pending})  # fmt: skip
             q.pop(0)
-            if c["name"] in CARDS:
+            if c["kind"] == "plugin" and not self._asks(
+                s, c
+            ):  # no risk flag (or gone): runs at once
+                got = await self.plugin_run(s, c)
+                chat.append(_entry(c, got["status"], got.get("result"), got.get("error")))
+                lines.append(got["line"])
+                continue
+            if c["name"] in CARDS or c["kind"] == "plugin":
                 card, error = await self.card_for(s, c)
                 if card:
                     pending = {"actions": [], "cards": [card], "call": c}
@@ -565,6 +610,20 @@ class Assistant:
     async def card_for(self, s: State, c: dict) -> tuple[dict | None, str | None]:
         """The server card a call asks first (22.6), or why it cannot be asked."""
         a, base = c["args"], {"id": c["id"], "state": "waiting"}
+        if c.get("kind") == "plugin":
+            t = plugin_tools(s["data"]).get(c["name"])
+            if not t:
+                return None, "the plugin is off"
+            tags = [tag for flag, tag in RISK_TAGS if t["risk"][flag]][:3]
+            note = (
+                {"note": "Sends this input off the machine."}
+                if t["risk"]["sends_off_machine"]
+                else {}
+            )
+            return base | {"kind": "plugin", "title": f"Use {t['title']}?"[:120],
+                           "rows": [{"label": "Tool", "value": f"{t['plugin']}.{t['tool']}"},
+                                    {"label": "Input", "value": agents.compact(a)[:300]}],
+                           "tags": tags} | note, None  # fmt: skip
         if c["name"] == "web_search":
             name = s["data"]["settings"]["search"]
             if not name:
@@ -591,6 +650,8 @@ class Assistant:
     async def card_yes(self, s: State, c: dict) -> dict:
         """The user's Yes on a server card: run its call. {status, result?, error?, line} or {end: …}."""
         a, line = c["args"], {"id": c["id"], "undo": False}
+        if c.get("kind") == "plugin":
+            return await self.plugin_run(s, c)
         if c["name"] == "web_search":
             name = s["data"]["settings"]["search"]
             p, who = s["data"]["settings"]["providers"].get(name or ""), (name or "").capitalize()
@@ -632,6 +693,29 @@ class Assistant:
             "result": {"deleted": gone},
             "line": line | {"status": "done", "text": text},
         }
+
+    @staticmethod
+    def _asks(s: State, c: dict) -> bool:
+        t = plugin_tools(s["data"]).get(c["name"])
+        return bool(t and any(t["risk"].values()))
+
+    async def plugin_run(self, s: State, c: dict) -> dict:
+        """A plugin tool's call, its plugin as the newest input has it: {status, result?, error?, line}."""
+        t, line = plugin_tools(s["data"]).get(c["name"]), {"id": c["id"], "undo": False}
+        label = f"{t['title']} · {t['tool']}" if t else c["name"].replace("__", ".")
+        try:
+            if not t:
+                raise providers.CallError("off", "the plugin is off")
+            headers = {"Authorization": f"Bearer {plugin_pass(s['owner_id'], c['id'])}",
+                       "X-Helm-Owner": s["owner_id"], "X-Helm-Call": c["id"]}  # fmt: skip
+            reply = await providers.plugin_tool(t["title"], t["url"], t["tool"], c["args"], headers)
+        except providers.CallError as e:
+            return {"status": "failed", "error": str(e),
+                    "line": line | {"status": "failed", "text": f"{label} failed · {e}"[:300]}}  # fmt: skip
+        done = line | {"status": "done", "text": reply.get("line") or label}
+        if reply.get("sources"):
+            done["sources"] = reply["sources"][:5]
+        return {"status": "done", "result": reply["result"], "line": done}
 
     # --- per-user caps (22.10), at the bound as remote.py counts them
 

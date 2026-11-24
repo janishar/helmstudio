@@ -18,6 +18,22 @@
         "client_id": {"$ref": "assistant.schema.json#/$defs/clientId", "description": "the tab whose actions this turn runs"},
         "roles": {"type": "array", "maxItems": 8, "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{0,31}$"}},
         "tools": {"type": "array", "maxItems": 64, "uniqueItems": true, "items": {"$ref": "assistant.schema.json#/$defs/toolName"}, "description": "the tools of tools/catalog.json offered: surface assistant, the owner's roles; web_search only when it is on; look_at only when an ask workflow can run now"},
+        "plugins": {
+          "type": "array",
+          "maxItems": 16,
+          "description": "from API 1.60 (contracts/README.md, Plugins): the plugins of kind assistant-tools that are on, as studio read them at this input; pipelines offers each tool as `<name>__<tool>` and calls `<url>/tools/<tool>` (plugins/manifest.schema.json toolCall). Absent or [] = none",
+          "items": {
+            "type": "object",
+            "required": ["name", "title", "url", "tools"],
+            "additionalProperties": false,
+            "properties": {
+              "name": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,22}$"},
+              "title": {"type": "string", "minLength": 1, "maxLength": 60},
+              "url": {"type": "string", "pattern": "^https?://[^\\s/?#@]+$", "maxLength": 200},
+              "tools": {"type": "array", "minItems": 1, "maxItems": 8, "items": {"$ref": "../plugins/manifest.schema.json#/$defs/tool"}}
+            }
+          }
+        },
         "actions": {"type": "array", "maxItems": 64, "uniqueItems": true, "items": {"$ref": "assistant.schema.json#/$defs/actionName"}, "description": "the screen actions offered: the screen's registered ones (empty for summarize)"},
         "settings": {
           "type": "object",

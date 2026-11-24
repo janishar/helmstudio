@@ -17,10 +17,11 @@ lint:
 
 # message schemas, copied from contracts/ (committed; tests/test_messages.py fails when they drift)
 gen:
-	rm -rf gen && mkdir -p gen/messages gen/tools
+	rm -rf gen && mkdir -p gen/messages gen/tools gen/plugins
 	cp ../contracts/messages/*.schema.json gen/messages/
 	cp ../contracts/registry.schema.json gen/
 	cp ../contracts/tools/*.json gen/tools/
+	cp ../contracts/plugins/*.json gen/plugins/
 
 image:
 	docker build -t helmstudio/pipelines:dev .

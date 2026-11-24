@@ -21,6 +21,7 @@ def _registry() -> Registry:
         *GEN.glob("messages/*.schema.json"),
         GEN / "registry.schema.json",
         *GEN.glob("tools/*.json"),
+        *GEN.glob("plugins/*.json"),
     ]:
         schema = json.loads(p.read_text())
         resources.append((schema["$id"], Resource.from_contents(schema)))
@@ -89,6 +90,13 @@ def providers_key_write_errors(part: str, value) -> list[str]:
 def judge_test_errors(part: str, value) -> list[str]:
     """Errors of a pipelines.judge.test `request` or `reply` (API 1.28)."""
     return errors(f"{BASE}req.pipelines.judge.test.schema.json#/$defs/{part}", value)
+
+
+def plugin_reply_errors(value) -> list[str]:
+    """Errors of a plugin tool's 200 answer against plugins/manifest.schema.json#/$defs/toolReply (API 1.60)."""
+    return errors(
+        "https://helmstudio.local/contracts/plugins/manifest.schema.json#/$defs/toolReply", value
+    )
 
 
 def tool_errors(name: str, value) -> list[str]:
