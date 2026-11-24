@@ -1408,10 +1408,12 @@ describe("alpha.2: size, answers that read well, polish (board frames 9, 10, 14)
         ln(2, 1, "Opened Create · Image"),
         ln(3, 1, "Run done · 2 takes"),
         ln(4, 1, "Remembered: Elias's voice is warm", { memory_id: T }),
-        ln(5, 1, "Set Duration: 5 s"),
-        ln(6, 1, "Set Lighting: Window"),
-        entry(7, { kind: "user", turn: 2, text: "Now shot 2" }),
-        ln(8, 2, "Opened Create · Video"),
+        // an entry's turn counts inputs (results too): the turn is what one message of yours started
+        ln(5, 2, "Set Duration: 5 s"),
+        ln(6, 2, "Set Lighting: Window"),
+        entry(7, { kind: "user", turn: 3, text: "Now shot 2" }),
+        ln(8, 3, "Opened Create · Video"),
+        ln(9, 4, "Set Lighting: Rain"),
       ],
     });
     await openDrawer();
@@ -1419,6 +1421,8 @@ describe("alpha.2: size, answers that read well, polish (board frames 9, 10, 14)
     expect(sum.getAttribute("aria-expanded")).toBe("false");
     expect(screen.queryByText("Opened Create · Image")).toBeNull();
     expect(screen.getByText("Opened Create · Video")).toBeTruthy();
+    expect(screen.getByText("Set Lighting: Rain")).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: /steps?( ·|$)/ })).toHaveLength(1);
     fireEvent.click(sum);
     expect(sum.getAttribute("aria-expanded")).toBe("true");
     expect(screen.queryByText("Opened Create · Image")).toBeNull(); // the last 4, then "+ 1 more step"

@@ -680,20 +680,36 @@ function CopyButton({ text, label, children }: { text: string; label?: string; c
 }
 
 /** Text clamped to 3 lines with More when it is longer (items 5, 24): measured, so short text has no More. */
-function Clamp({ children, k }: { children: React.ReactNode; k: string }) {
+function Clamp({
+  children,
+  k,
+  whole = false,
+}: {
+  children: React.ReactNode;
+  k: string;
+  /** shown in full (a plan or a code block: board frames 10a, 10f) */
+  whole?: boolean;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const [over, setOver] = useState(false);
-  const [more, setMore] = useState(false);
+  const [open, setMore] = useState(false);
+  const more = open || whole;
   useLayoutEffect(() => {
     const el = ref.current;
-    if (el && !more) setOver(el.scrollHeight > el.clientHeight + 1);
+    if (!el || more) return;
+    const measure = () => setOver(el.scrollHeight > el.clientHeight + 1);
+    measure();
+    // measured again when its width changes (the drawer opening, full screen)
+    const ro = typeof ResizeObserver === "function" ? new ResizeObserver(measure) : null;
+    ro?.observe(el);
+    return () => ro?.disconnect();
   }, [k, more]);
   return (
     <>
       <div ref={ref} className={more ? "unclamp" : "clamp"}>
         {children}
       </div>
-      {(over || more) && (
+      {!whole && (over || more) && (
         <button type="button" className="mmore" aria-expanded={more} onClick={() => setMore(!more)}>
           {more ? "Less" : "More"}
         </button>
@@ -704,9 +720,10 @@ function Clamp({ children, k }: { children: React.ReactNode; k: string }) {
 
 /** One answer (item 22, board frame 10a): its blocks as plain elements, never HTML; no headings or tables. */
 function Answer({ text, seek }: { text: string; seek?: (s: number) => void }) {
+  const blocks = answerBlocks(text);
   return (
-    <Clamp k={text}>
-      {answerBlocks(text).map((b, i) =>
+    <Clamp k={text} whole={blocks.some((b) => b.k === "code" || b.k === "plan")}>
+      {blocks.map((b, i) =>
         b.k === "p" ? (
           <p key={i}>
             <Inlines text={b.text} seek={seek} />
@@ -1144,15 +1161,19 @@ function Thread({ a, entries }: { a: AssistantApi; entries: Entry[] }) {
   let lines: Line[] = [];
   let fold: number | null = null;
   const steers: React.ReactNode[] = []; // sent while it works: at the bottom, dimmed, until the turn reads them
-  // an earlier turn's steps fold into one line once a newer turn starts (item 25); the newest turn stays open
-  const last = Math.max(
-    0,
-    ...entries.filter((e) => !(e.kind === "user" && e.steer === "waiting")).map((e) => e.turn),
-  );
+  // an earlier turn's steps fold into one line once a newer turn starts (item 25); the newest turn stays open. A turn
+  // is what one message of yours started (an entry's `turn` counts inputs, results too, so it is not this); a steer
+  // read while it worked stays in its turn
+  const turnOf = new Map<string, number>();
+  let last = 0;
+  for (const e of entries) {
+    if (e.kind === "user" && (!e.steer || e.steer === "next")) last++;
+    turnOf.set(e.id, last);
+  }
   const older = new Map<number, Line[]>();
   for (const e of entries)
-    if (e.kind === "line" && e.line && e.turn < last)
-      older.set(e.turn, [...(older.get(e.turn) ?? []), e.line]);
+    if (e.kind === "line" && e.line && turnOf.get(e.id)! < last)
+      older.set(turnOf.get(e.id)!, [...(older.get(turnOf.get(e.id)!) ?? []), e.line]);
   const folded = new Set<number>();
   // timecodes jump the playhead on the Timeline (item 24), plain text elsewhere
   const tl = a.reg.current()?.spec;
@@ -1195,10 +1216,11 @@ function Thread({ a, entries }: { a: AssistantApi; entries: Entry[] }) {
   const lastEntry = entries.at(-1)?.id;
   for (const e of entries) {
     if (e.kind === "assistant") words.push(e);
-    else if (e.kind === "line" && e.line && e.turn < last) {
-      if (!folded.has(e.turn) && fold === null) {
-        folded.add(e.turn);
-        fold = e.turn;
+    else if (e.kind === "line" && e.line && turnOf.get(e.id)! < last) {
+      const n = turnOf.get(e.id)!;
+      if (!folded.has(n) && fold === null) {
+        folded.add(n);
+        fold = n;
       }
     } else if (e.kind === "line" && e.line) lines.push(e.line);
     else {
@@ -1519,6 +1541,17 @@ const mac = () =>
 export const shortcut = () => (mac() ? "⌘J" : "Ctrl J");
 const fullKey = () => (mac() ? "⇧⌘J" : "Ctrl Shift J");
 
+/** A dialog or menu is open (Esc is its own then): a screen's closed popover (Run on, Memory) does not count. */
+const overlayOpen = () =>
+  [...document.querySelectorAll('dialog[open], [role="dialog"], [role="menu"]')].some((el) => {
+    if (!el.hasAttribute("popover")) return true;
+    try {
+      return el.matches(":popover-open");
+    } catch {
+      return false;
+    }
+  });
+
 /** The minimized bar (item 4, board frame 9): bottom right, 44 px; Working with Stop, Waiting for you and what, a
  * new answer, else idle. A click opens the drawer as it was left. It moves up rather than cover a Generate button
  * (the screens' primary `.key` buttons). */
@@ -1753,7 +1786,7 @@ function Drawer({ a }: { a: AssistantApi }) {
           !e.defaultPrevented &&
           !memory &&
           !a.cardWaits &&
-          !document.querySelector('dialog[open], [role="dialog"], [role="menu"]')
+          !overlayOpen()
         ) {
           if (full) a.setFull(false);
           else a.setOpen(false);

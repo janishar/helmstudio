@@ -1583,9 +1583,13 @@
     font-size: 12px;
     font-weight: 500;
   }
+  /* 3 lines: an answer's 19 px lines (and one 6 px gap between its paragraphs), a memory row's 17 px */
   .ast .clamp {
-    max-height: 3lh;
+    max-height: 63px;
     overflow: hidden;
+  }
+  .ast .mrow .clamp {
+    max-height: 51px;
   }
   .ast .clamp > * + *,
   .ast .unclamp > * + * {
