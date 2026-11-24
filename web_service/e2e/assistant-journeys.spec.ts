@@ -372,7 +372,7 @@ test("J3 use this image and create video through ltx 10 sec", async () => {
   await expect(page.getByText("121 frames · 5.0 s").first()).toBeVisible(); // the form took 5 s
   await expect(line("Set Length: 5.0 s")).toBeVisible(); // in seconds (owner, 2026-11-25, Q1)
   await expect(card.getByText("uses the GPU")).toBeVisible();
-  await expect(drawer().getByText("Waiting for you", { exact: true })).toBeVisible();
+  await expect(drawer().getByText("Waiting", { exact: true })).toBeVisible();
   await shot("j03-generate-card");
   // A1 (fixed): each action sees the screen as the earlier actions of the same reply left it
   await expect(line("duration.frames: no such setting")).toHaveCount(0); // asked after useIn switched
@@ -713,7 +713,7 @@ test("J9b I reload the page later: nothing from earlier in the chat runs again",
   }
   await shot("j09b-after-reload");
   await expect.soft(page).not.toHaveURL(/\/timeline/); // not moved by an old navigate
-  await expect.soft(drawer().getByText("Waiting for you", { exact: true })).toBeHidden(); // no old card
+  await expect.soft(drawer().getByText("Waiting", { exact: true })).toBeHidden(); // no old card
   expect.soft(posted.filter((x) => x.includes('"kind":"results"'))).toEqual([]);
   await expect(drawer().getByRole("alert")).toHaveCount(0); // no "nothing waits on <id>"
 });
