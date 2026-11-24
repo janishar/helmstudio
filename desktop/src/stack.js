@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
+const { exec } = require('./steps');
 
 function layout(home, res) {
   // Lima's sockets (…/_lima/colima-<profile>/ssh.sock.<16 digits>) must stay under 104 characters: under
@@ -134,7 +135,7 @@ function stackSteps({ p, cfg, settings, runners }) {
   };
 
   const startRunners = async (c) => {
-    runners.start();
+    await runners.start();
     await runners.waitReady(c.signal);
   };
 
@@ -259,10 +260,40 @@ function stackSteps({ p, cfg, settings, runners }) {
 }
 
 // The native runners as `make runners` starts them (root Makefile): one process per env with its env vars, restarted
-// after a stall (exit 70) or a SIGKILL (jetsam), stopped with SIGTERM
+// after a stall (exit 70) or a SIGKILL (jetsam), stopped with SIGTERM. Their pids go to runners.json, so a start after
+// the app was killed or crashed first stops the runners it left behind (else they hold the health ports, unstoppable)
 class Runners {
   constructor({ p, cfg, settings, onChange = () => {} }) {
-    Object.assign(this, { p, cfg, settings, onChange, procs: {}, stopping: false });
+    Object.assign(this, { p, cfg, settings, onChange, procs: {}, stopping: false, pidFile: path.join(p.home, 'runners.json') });
+  }
+
+  savePids() {
+    fs.mkdirSync(this.p.home, { recursive: true });
+    fs.writeFileSync(this.pidFile, JSON.stringify(Object.fromEntries(Object.entries(this.procs).map(([k, c]) => [k, c.pid]))));
+  }
+
+  // the runners a killed app left: only pids whose command is still one of our venvs' python (a pid can be reused)
+  async reap() {
+    let old = {};
+    try {
+      old = JSON.parse(fs.readFileSync(this.pidFile, 'utf8'));
+    } catch {}
+    const mine = new Set(Object.values(this.procs).map((c) => c.pid));
+    const alive = (pid) => {
+      try {
+        return process.kill(pid, 0);
+      } catch {
+        return false;
+      }
+    };
+    for (const pid of Object.values(old)) {
+      if (mine.has(pid)) continue;
+      const cmd = await exec('/bin/ps', ['-p', `${pid}`, '-o', 'command=']).catch(() => '');
+      if (!cmd.includes(this.p.venvs)) continue;
+      process.kill(pid, 'SIGTERM');
+      for (let i = 0; i < 100 && alive(pid); i++) await new Promise((r) => setTimeout(r, 100));
+      if (alive(pid)) process.kill(pid, 'SIGKILL');
+    }
   }
 
   env(r) {
@@ -282,8 +313,9 @@ class Runners {
     };
   }
 
-  start() {
+  async start() {
     this.stopping = false;
+    await this.reap();
     for (const r of this.cfg.runners) if (!this.procs[r.env]) this.spawn(r);
   }
 
@@ -297,10 +329,12 @@ class Runners {
     });
     fs.closeSync(out);
     this.procs[r.env] = child;
+    this.savePids();
     child.on('error', () => {}); // reported by exit
     child.on('exit', (code, sig) => {
       if (this.procs[r.env] !== child) return;
       delete this.procs[r.env];
+      this.savePids();
       if (!this.stopping && (code === 70 || code === 137 || sig === 'SIGKILL')) setTimeout(() => !this.stopping && !this.procs[r.env] && this.spawn(r), 2000);
       this.onChange();
     });
@@ -325,11 +359,12 @@ class Runners {
       ),
     );
     this.procs = {};
+    this.savePids();
   }
 
   async restart() {
     await this.stop();
-    this.start();
+    await this.start();
   }
 
   healthy() {

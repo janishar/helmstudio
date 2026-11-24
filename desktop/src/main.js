@@ -5,7 +5,7 @@
 // HELMSTUDIO_FAKE_FAIL=<word> then fails one of them (the failed-step screen).
 const path = require('node:path');
 const fs = require('node:fs');
-const { app, BrowserWindow, Tray, Menu, nativeImage, nativeTheme, shell, dialog, ipcMain } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, nativeTheme, shell, dialog, ipcMain, powerMonitor } = require('electron');
 const { StepRunner, exec, pipe } = require('./steps');
 const { layout, loadSettings, stackSteps, Runners } = require('./stack');
 const cfg = require('../stack.json');
@@ -298,6 +298,8 @@ app.whenReady().then(() => {
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }, { role: 'viewMenu' }, { role: 'windowMenu' }]),
   );
+  // log out, restart, shut down: let the quit through (else before-quit cancels the Mac's log out), stop the runners
+  powerMonitor.on('shutdown', () => ((quitting = true), runners.stop()));
   tray = new Tray(trayImage('wait'));
   tray.setToolTip('helmstudio');
   nativeTheme.on('updated', () => setStatus(...Object.values(status)));
