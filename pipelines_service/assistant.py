@@ -9,7 +9,8 @@ differs is dropped). Plain nodes, like agent_loop.py, no prebuilt agent:
 - `steer` (API 1.59, contracts/README.md "Assistant: steer"): the boundary before each model call. The user's
   messages sent while the turn works (cmd.assistant.steer, kept in memory as they come, outside the chat's lock) join
   the transcript as User lines, in order, and evt.assistant.steered tells studio they were read; a Stop ends the turn
-  here (the calls not run yet do not run).
+  here (the calls not run yet do not run); a model call in flight is cancelled at once (API 1.62): its task is
+  kept per thread, nothing of its answer is kept, its prompt stays counted as spent.
 
 - `model`: one providers.chat_retried call with the fenced context and the offered tools (native tool calls). Every
   call is checked (offered, its input schema, @handles) before anything runs; an invalid answer is asked once more,
@@ -35,6 +36,7 @@ import hashlib
 import hmac
 import json
 import logging
+import re
 import secrets
 import time
 import uuid
@@ -80,7 +82,11 @@ Prepare the screen, then call the action; never say it ran until its result says
 - Files to or from disk, signing in and out, the password, the theme, admin settings and messages to a pipeline's \
 director chat are the user's own: explain and point at the button, never try them.
 - Use only @handles the user wrote, that the form holds, or that a library read or a dialog returned.
-- Save lasting preferences, project facts and what worked with remember, in a few words.
+- Save lasting preferences, project facts and what worked with remember, in a few words: one plain sentence that \
+names things by their @handle or title, never JSON, ids or field names (voice_id).
+- Switching to a voice (audio) workflow keeps the old image or video prompt in the box: write what is spoken \
+yourself with change before generate (Voice-over: the spoken line only; Dialogue: a script, one "@name: text" line \
+each, every @name in the Cast).
 - The user may write while you work: a User line after your calls. Follow it at once and say in a few words what you \
 changed.
 - Answer in short plain text.
@@ -277,8 +283,66 @@ def check(got: dict, off: dict, s: State) -> tuple[list | None, str | None]:
             if bad := [h for h in agents.mentions(json.dumps(args)) if h not in allowed]:
                 return None, (f"{c['name']}: @{bad[0]} is not a handle you were given; use only handles the "
                               "user wrote, the form holds or a library read returned")  # fmt: skip
+        if c["name"] == "remember" and (why := not_plain(args["text"])):
+            return None, f"remember: {why}; write it again as one plain sentence"
         calls.append({"name": c["name"], "args": args, "kind": o["kind"]})
+    if _voice_unwritten(s, calls):
+        return None, ("generate: the voice workflow's box still holds the old prompt; write what is spoken with change "
+                      'first (Voice-over: the spoken line only; Dialogue: one "@name: text" line each)')  # fmt: skip
     return calls, None
+
+
+_UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.IGNORECASE)
+_JSON = re.compile(r'[{\[]\s*"\w+"\s*[:,\]]')  # {"key": or ["a", ; not 'Call it "Warm": …'
+# voice_id, settings.source.model; never an @handle (old_man), a file name (final.cut.mp4) or a domain/URL
+_FIELD = re.compile(
+    r"(?<![@\w-])[a-z]\w*_\w+\b|(?<![@\w-])[a-z]\w*(?:\.[a-z]\w*){2,}\b", re.IGNORECASE
+)
+_WEB = re.compile(
+    r"\S*(?:://|www\.)\S*|\S+\.(?:com|org|net|io|ai|dev|in|mp4|mov|webm|png|jpe?g|webp|gif|wav|mp3|flac)\b",
+    re.IGNORECASE,
+)
+
+
+def not_plain(text: str) -> str | None:
+    """Why a memory is not plain words (the owner saw `Remembered: … {"voice_id": "<id>"}`), else None."""
+    if _JSON.search(text):
+        return "it has JSON"
+    if _UUID.search(text):
+        return "it has an id (UUID); name the thing by its @handle or title"
+    if m := _FIELD.search(_WEB.sub(" ", text)):
+        return f"it has a field name ({m.group()})"
+    return None
+
+
+# the spoken-line field of a voice workflow (`node.param`): the text or dialogue script; not voice, seed, speed, style
+_SPOKEN = re.compile(r"(?:^|\.)(?:prompt|text|script)$")
+
+
+def _voice_unwritten(s: State, calls: list) -> bool:
+    """A generate in this answer after a switch to an audio workflow with no change since: the old image prompt
+    would be spoken. Over this message's done calls, then the answer's, by the screen's workflows list."""
+    media = {}
+    for w in ((s.get("screen") or {}).get("fields") or {}).get("workflows") or []:
+        media[w["id"]] = media[w["title"].lower()] = w.get("media")
+    if not media:
+        return False
+    msg = f"{s['thread_id']}:{s['msg']}:"
+    done = [
+        e
+        for e in s["chat"]
+        if e["role"] == "call" and e["id"].startswith(msg) and e["status"] == "done"
+    ]
+    voice = False
+    for i, c in enumerate(done + calls):
+        if c["name"] == "switchTo":
+            w = c["args"]["workflow"]
+            voice = (media.get(w) or media.get(w.lower())) == "audio"
+        elif c["name"] == "change" and _SPOKEN.search(c["args"]["key"]):
+            voice = False
+        elif c["name"] == "generate" and voice and i >= len(done):
+            return True
+    return False
 
 
 # --- the prompt
@@ -368,6 +432,8 @@ class Assistant:
         # sends them as the next message, so nothing is lost
         self.steers: dict[str, list[dict]] = {}  # thread → [{id, turn, text, at, owner}]
         self.stops: dict[str, tuple[int, str]] = {}  # thread → (turn, owner)
+        # thread → (msg, owner, the model call in flight): a Stop cancels it at once
+        self.calls: dict[str, tuple[int, str, asyncio.Future]] = {}
         g = StateGraph(State)
         names = ("start", "steer", "model", "tools", "wait", "summarize", "reply")
         for name in names:
@@ -435,10 +501,25 @@ class Assistant:
         ):
             return err | {"caps": caps}
         caps["model_calls"] += 1
+        tid = s["thread_id"]
+        call = asyncio.ensure_future(providers.chat_retried(src["provider"], p, req))
+        self.calls[tid] = (s["msg"], s["owner_id"], call)
+        if self._stopped(s):  # a Stop that came while the spend was counted
+            call.cancel()
         try:
-            got, _ = await providers.chat_retried(src["provider"], p, req)
+            got, _ = await call
         except providers.CallError as e:
             return _end("off" if e.kind == "off" else "provider", str(e), caps=caps)
+        except asyncio.CancelledError:
+            # the node itself is cancelled (shutdown), not a Stop
+            if asyncio.current_task().cancelling():
+                raise
+            # Stop (API 1.62): the call is gone, no answer kept; what was sent stays spent
+            await self._spent(key, providers.estimate(system + req["prompt"]))
+            return {"caps": caps, "to": "steer"}  # steer sees the Stop and ends the turn
+        finally:
+            if self.calls.get(tid, (0, "", None))[2] is call:
+                del self.calls[tid]
         await self._spent(key, got["tokens_in"] + got["tokens_out"])
         calls, err = check(got, off, s)
         if err:
@@ -881,6 +962,9 @@ class Assistant:
         d, tid = cmd["data"], cmd["data"]["thread_id"]
         if d.get("stop"):
             self.stops[tid] = (max(d["turn"], self.stops.get(tid, (0, ""))[0]), cmd["owner_id"])
+            msg, owner, call = self.calls.get(tid, (0, "", None))
+            if call and msg <= d["turn"] and owner == cmd["owner_id"]:
+                call.cancel()  # the model call in flight ends now, not at the next boundary
             return
         got = self.steers.setdefault(tid, [])
         if all(x["id"] != d["steer_id"] for x in got):
