@@ -1454,18 +1454,31 @@ describe("alpha.2: size, answers that read well, polish (board frames 9, 10, 14)
     expect(setPlayhead).toHaveBeenCalledWith({ at_s: 26 }, expect.anything());
   });
 
-  it("a long answer stops at 3 lines with More", async () => {
+  it("a long reply stops at 3 lines with one chevron for the whole bubble (board frame 17)", async () => {
     const tall = vi
       .spyOn(HTMLElement.prototype, "scrollHeight", "get")
       .mockImplementation(function (this: HTMLElement) {
-        return this.className === "clamp" ? 200 : 0;
+        return this.className.startsWith("clamp") ? 200 : 0;
       });
-    serve({ existing: thread(), entries: [entry(1, { kind: "assistant", text: "Five shots…" })] });
+    serve({
+      existing: thread(),
+      entries: [
+        entry(1, { kind: "assistant", text: "Opening Create…" }),
+        entry(2, { kind: "assistant", text: "Five shots…" }),
+      ],
+    });
     await openDrawer();
-    const more = await screen.findByRole("button", { name: "More" });
-    expect(more.getAttribute("aria-expanded")).toBe("false");
-    fireEvent.click(more);
-    expect(screen.getByRole("button", { name: "Less" }).getAttribute("aria-expanded")).toBe("true");
+    const show = await screen.findByRole("button", { name: "Show all" });
+    // one control for the reply, not one per answer
+    expect(screen.getAllByRole("button", { name: "Show all" })).toHaveLength(1);
+    expect(screen.getByText("Opening Create…").closest(".clamp")).toBe(
+      screen.getByText("Five shots…").closest(".clamp"),
+    );
+    expect(show.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(show);
+    expect(screen.getByRole("button", { name: "Show less" }).getAttribute("aria-expanded")).toBe(
+      "true",
+    );
     expect(screen.getByText("Five shots…").closest(".unclamp")).toBeTruthy();
     tall.mockRestore();
   });

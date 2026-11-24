@@ -5,7 +5,6 @@
 // tab that sent the message (others show it read-only with Continue here) and posts their results. Every text is
 // rendered as text: React escapes it, nothing is parsed as HTML.
 import {
-  Fragment,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -723,7 +722,8 @@ function CopyButton({
   );
 }
 
-/** Text clamped to 3 lines with More when it is longer (items 5, 24): measured, so short text has no More. */
+/** Text clamped to 3 lines with a chevron to show all when it is longer (items 5, 24; board frame 17): measured, so
+ * short text has none. A reply clamps once, as a whole bubble, never per paragraph (owner, 2026-11-25). */
 function Clamp({
   children,
   k,
@@ -754,8 +754,19 @@ function Clamp({
         {children}
       </div>
       {!whole && (over || more) && (
-        <button type="button" className="mmore" aria-expanded={more} onClick={() => setMore(!more)}>
-          {more ? "Less" : "More"}
+        <button
+          type="button"
+          className="mmore"
+          aria-expanded={more}
+          aria-label={more ? "Show less" : "Show all"}
+          title={more ? "Show less" : "Show all"}
+          onClick={() => setMore(!more)}
+        >
+          {more ? (
+            <ChevronUp size={14} strokeWidth={2.25} aria-hidden />
+          ) : (
+            <ChevronDown size={14} strokeWidth={2.25} aria-hidden />
+          )}
         </button>
       )}
     </>
@@ -766,7 +777,7 @@ function Clamp({
 function Answer({ text, seek, refs }: { text: string; seek?: Seek; refs?: RefsHook }) {
   const blocks = answerBlocks(text);
   return (
-    <Clamp k={text} whole={blocks.some((b) => b.k === "code" || b.k === "plan")}>
+    <>
       {blocks.map((b, i) =>
         b.k === "p" ? (
           <p key={i}>
@@ -816,7 +827,7 @@ function Answer({ text, seek, refs }: { text: string; seek?: Seek; refs?: RefsHo
           </ul>
         ),
       )}
-    </Clamp>
+    </>
   );
 }
 
@@ -1266,29 +1277,39 @@ function Thread({ a, entries }: { a: AssistantApi; entries: Entry[] }) {
     const copy = said.length > 0 && (() => said.map((w) => plainAnswer(w.text ?? "")).join("\n\n"));
     // a Using skill line leads the reply, the files it read in its box (board frame 16)
     const { used, rest } = skillLines(lines);
+    const parts = said.map((w) => ({ w, ...splitOptions(w.text ?? "") }));
     out.push(
       <div key={`b${key}`} className="msg">
         {used.map((u) => (
           <SkillLine key={u.line.id} line={u.line} reads={u.reads} />
         ))}
-        {words.map((w) => {
-          // alpha.2 items 17, 19: the options block split out as cards; the rest formatted, refs as chips
-          const { text, options } = splitOptions(w.text ?? "");
-          return (
-            <Fragment key={w.id}>
-              {text && <Answer text={text} seek={seek} refs={refs} />}
-              {options && (
-                <Options
-                  entry={w}
-                  entries={entries}
-                  options={options}
-                  readOnly={a.readOnly}
-                  send={a.send}
-                />
-              )}
-            </Fragment>
-          );
-        })}
+        {parts.some((x) => x.text) && (
+          // one clamp for the whole reply (board frame 17): every note of the turn and the answer, never per paragraph
+          <Clamp
+            k={parts.map((x) => x.text).join("\n\n")}
+            whole={parts.some((x) =>
+              answerBlocks(x.text).some((b) => b.k === "code" || b.k === "plan"),
+            )}
+          >
+            {parts.map(
+              (x) => x.text && <Answer key={x.w.id} text={x.text} seek={seek} refs={refs} />,
+            )}
+          </Clamp>
+        )}
+        {parts.map(
+          // alpha.2 items 17, 19: the options blocks as cards, outside the clamp so they always show
+          (x) =>
+            x.options && (
+              <Options
+                key={`o${x.w.id}`}
+                entry={x.w}
+                entries={entries}
+                options={x.options}
+                readOnly={a.readOnly}
+                send={a.send}
+              />
+            ),
+        )}
         {fold !== null && <Folded key={`f${fold}`} lines={older.get(fold) ?? []} a={a} />}
         {rest.length > 0 && <Lines lines={rest} a={a} />}
         {lines
