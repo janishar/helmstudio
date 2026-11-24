@@ -2416,7 +2416,10 @@ a local model (`model_media`): server and remote calls carry **text only** in 1.
 - **`compat`** (`defs providerCompat`, `Provider.compat`, `ProviderPut.compat`, the snapshot): `temperature: false`
   sends no `temperature`; `strict_schema: true` sends a schema as `json_schema` with `strict: true` and never retries
   it as `json_object`. Absent = the usual calls. Anthropic's preset carries both (its OpenAI layer refuses
-  `temperature` below 1 and non-strict schemas).
+  `temperature` below 1 and non-strict schemas). From API 1.55 `headers`: fixed extra headers pipelines sends on
+  every call to that provider (chat, Test, Fetch, the key check), names only from an allow-list (today
+  `anthropic-version`; never `authorization`, `x-api-key`, `cookie`, `host`; schema and check.py). Anthropic's preset
+  sends `anthropic-version: 2023-06-01` (its `/models` answers 400 without it). A provider saved without it sends none.
 - **Thinking** (API 1.53; plan 28, [docs/plan/28-provider-models.md](../docs/plan/28-provider-models.md)): a preset may
   carry `thinking`, a list of rules (`presets.schema.json thinkingRule`): the first whose `match` (a regular expression
   on the model id, RE2 and JavaScript alike) fits gives that model's `levels`, each a body fragment (`defs

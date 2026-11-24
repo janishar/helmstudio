@@ -135,3 +135,16 @@ async def test_the_host_rule_holds_for_a_preset_snapshot(monkeypatch):
     assert off["code"] == "off" and off["error"] == "remote models are off on this deployment"
     meta = snap("ollama") | {"base_url": "http://169.254.169.254:11434/v1"}
     assert (await providers.test({"name": "ollama", "provider": meta}))["code"] == "refused"
+
+
+async def test_compat_headers_go_on_every_call(fake):
+    """API 1.55: Anthropic's anthropic-version on chat, Test (/models) and the key check; none without compat."""
+    p = server(fake.url, compat=PRESETS["anthropic"]["compat"])
+    fake.script["m"] = [{"content": "hi"}]
+    await providers.chat("claude", p, {"model": "m", "system": "s", "prompt": "p", "max_tokens": 8})
+    await providers.test({"name": "claude", "provider": p})
+    assert await providers.check_key("claude", p, "sk-test") == ("ok", "")
+    sent = [r["headers"] for r in fake.requests[-3:]]
+    assert [h.get("anthropic-version") for h in sent] == ["2023-06-01"] * 3
+    await providers.test({"name": "plain", "provider": server(fake.url)})
+    assert "anthropic-version" not in fake.requests[-1]["headers"]

@@ -4596,6 +4596,16 @@ def check_presets(schemas: dict[str, dict], registry: Registry) -> None:
             fail(f"check.py: thinking rules: {why} passes")
     put, item = (Draft202012Validator({"$ref": f"{OPENAPI}#/components/schemas/{n}"}, registry=registry)
                  for n in ("ProviderPut", "ProviderPreset"))  # fmt: skip
+    # API 1.55: compat.headers takes only allow-listed safe names (never auth, cookies or the host)
+    base = {"kind": "remote", "base_url": "https://api.example.com/v1", "models": ["m"], "key_secret": "x"}
+    if not list(put.iter_errors(base | {"compat": {"headers": {"anthropic-version": "2023-06-01"}}})):
+        for h in ("authorization", "Authorization", "x-api-key", "cookie", "host", "x-anything"):
+            if not list(put.iter_errors(base | {"compat": {"headers": {h: "v"}}})):
+                fail(f"check.py: compat.headers: {h} passes")
+        if not list(put.iter_errors(base | {"compat": {"headers": {"anthropic-version": "a\nb"}}})):
+            fail("check.py: compat.headers: a value with a newline passes")
+    else:
+        fail("check.py: compat.headers: anthropic-version is refused")
     seen: set[str] = set()
     for p in doc["presets"]:
         w = f"providers/presets.json {p['id']}"

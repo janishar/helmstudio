@@ -55,9 +55,15 @@ type ThinkingInfo struct {
 // ProviderCompat is defs providerCompat (API 1.51): false temperature sends none; strict_schema sends strict json_schema
 // without the json_object retry. Unknown fields are refused by the strict body.
 type ProviderCompat struct {
-	Temperature  *bool `json:"temperature,omitempty"`
-	StrictSchema *bool `json:"strict_schema,omitempty"`
+	Temperature  *bool             `json:"temperature,omitempty"`
+	StrictSchema *bool             `json:"strict_schema,omitempty"`
+	Headers      map[string]string `json:"headers,omitempty"` // API 1.55: fixed extra headers, allow-listed names only
 }
+
+// compatHeaders is ProviderCompat.headers' allow-list (API 1.55): never authorization, x-api-key, cookie or host.
+var compatHeaders = []string{"anthropic-version"}
+
+var headerValue = regexp.MustCompile(`^[\x21-\x7e][\x20-\x7e]{0,99}$`)
 
 // Validate checks the shape (the host rule is checked by the service): a server needs host and memory_gb and may name
 // a key (API 1.51); a remote one needs key_secret and https.
@@ -103,6 +109,16 @@ func (b *ProviderPut) Validate() string {
 		return "a " + b.Kind + " provider has no host or memory_gb"
 	case len(b.Thinking) > 16:
 		return "thinking has at most 16 models"
+	}
+	if b.Compat != nil && b.Compat.Headers != nil {
+		if len(b.Compat.Headers) < 1 || len(b.Compat.Headers) > 4 {
+			return "compat.headers has 1 to 4 headers"
+		}
+		for h, v := range b.Compat.Headers {
+			if !slices.Contains(compatHeaders, h) || !headerValue.MatchString(v) {
+				return "compat.headers: only anthropic-version, with a printable value"
+			}
+		}
 	}
 	for m, level := range b.Thinking {
 		if !slices.Contains(ThinkingLevels, level) {

@@ -6089,10 +6089,14 @@ export interface components {
                 [key: string]: components["schemas"]["ThinkingInfo"];
             };
         };
-        /** @description from 1.51: what a provider's OpenAI layer refuses of what pipelines sends (messages defs providerCompat; from a preset, Anthropic's). temperature false: none sent; strict_schema true: json_schema with strict true, never retried as json_object. Absent = the usual calls */
+        /** @description from 1.51: what a provider's OpenAI layer refuses of what pipelines sends (messages defs providerCompat; from a preset, Anthropic's). temperature false: none sent; strict_schema true: json_schema with strict true, never retried as json_object; from 1.55 headers: fixed extra headers on every call. Absent = the usual calls */
         ProviderCompat: {
             temperature?: boolean;
             strict_schema?: boolean;
+            /** @description from 1.55: fixed extra headers sent on every call to the provider (chat, Test, Fetch, the key check); only allow-listed safe names (never authorization, x-api-key, cookie, host): anthropic-version (Anthropic's preset: 2023-06-01) */
+            headers?: {
+                [key: string]: string;
+            };
         };
         /** @description from 1.51: one item of contracts/providers/presets.json (its schema: providers/presets.schema.json). A remote preset names `key_secret` (its id), a server preset none and no models (Fetch fills them) */
         ProviderPreset: {

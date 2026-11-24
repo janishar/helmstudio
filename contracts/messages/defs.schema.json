@@ -2591,13 +2591,28 @@
     "providerCompat": {
       "type": "object",
       "additionalProperties": false,
-      "description": "from API 1.51 (contracts/README.md, Model sources: presets): what a provider's OpenAI layer refuses of what pipelines sends, from a preset (contracts/providers/presets.json). temperature false: no temperature is sent; strict_schema true: a schema goes as json_schema with strict true and is never retried as json_object. Absent = the usual calls",
+      "description": "from API 1.51 (contracts/README.md, Model sources: presets): what a provider's OpenAI layer refuses of what pipelines sends, from a preset (contracts/providers/presets.json). temperature false: no temperature is sent; strict_schema true: a schema goes as json_schema with strict true and is never retried as json_object; from API 1.55 headers: fixed extra headers on every call. Absent = the usual calls",
       "properties": {
         "temperature": {
           "type": "boolean"
         },
         "strict_schema": {
           "type": "boolean"
+        },
+        "headers": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 4,
+          "description": "from API 1.55: fixed extra headers pipelines sends on every call to this provider (chat, Test, Fetch, the key check). Only safe names on this allow-list (never authorization, x-api-key, cookie, host): Anthropic's anthropic-version",
+          "propertyNames": {
+            "enum": [
+              "anthropic-version"
+            ]
+          },
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[\\x21-\\x7e][\\x20-\\x7e]{0,99}$"
+          }
         }
       }
     },

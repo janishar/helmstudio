@@ -15,7 +15,8 @@ opens a connection):
   in Admin › Model providers; the pipelines.providers.key.write responder checks it on /models, then `write_key`
   writes it into the first key folder only (temp file and rename, 0600); `remove_key` deletes it there.
 - **compat** (API 1.51, from a preset): `temperature: false` sends no temperature; `strict_schema: true` sends a schema
-  with `strict: true` and never retries it as `json_object`.
+  with `strict: true` and never retries it as `json_object`; `headers` (API 1.55, schema allow-listed: anthropic-version)
+  go on every call (chat, Test, Fetch, the key check) through `_http`.
 - **thinking** (API 1.53, plan 28): the snapshot's `thinking[model]` {level, body, tokens}, resolved by studio from
   the preset's rules: `body` is merged into the call's body, `tokens` added to max_tokens (thinking spends output
   tokens: a 24-token title still has room). A 400 on a call that carried a body is asked once more without it; when that answers,
@@ -202,8 +203,9 @@ def _http(name: str, p: dict):
             )
 
     hooks = {"request": [_no_auth] if keyless else [], "response": [no_redirect]}
+    headers = (p.get("compat") or {}).get("headers") or {}  # API 1.55: allow-listed by the schema
     return openai.DefaultAsyncHttpxClient(
-        transport=transport, follow_redirects=False, event_hooks=hooks
+        transport=transport, follow_redirects=False, event_hooks=hooks, headers=headers
     )
 
 

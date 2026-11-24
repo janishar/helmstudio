@@ -517,7 +517,7 @@ func TestProviderPresets(t *testing.T) {
 		t.Fatal(p)
 	}
 	raw, _ := json.Marshal(asked[1].Provider)
-	if !strings.Contains(string(raw), `"compat":{"temperature":false,"strict_schema":true}`) {
+	if !strings.Contains(string(raw), `"compat":{"temperature":false,"strict_schema":true,"headers":{"anthropic-version":"2023-06-01"}}`) { // API 1.55
 		t.Fatalf("%s", raw)
 	}
 
@@ -537,12 +537,17 @@ func TestProviderPresets(t *testing.T) {
 
 	// compat and preset round-trip; a server may name a key; the snapshot carries both
 	body := map[string]any{"kind": "remote", "base_url": "https://api.anthropic.com/v1/", "models": []string{"claude-sonnet-5-5"},
-		"key_secret": "anthropic", "compat": map[string]any{"temperature": false, "strict_schema": true}, "preset": "anthropic"}
+		"key_secret": "anthropic", "compat": map[string]any{"temperature": false, "strict_schema": true, "headers": map[string]any{"anthropic-version": "2023-06-01"}},
+		"preset": "anthropic"}
 	unknown := maps(body)
 	unknown["compat"] = map[string]any{"retry": true}
 	e.call(admin, "PUT", "/v1/studio/admin/providers/anthropic", unknown, 422)
+	for _, h := range []string{"authorization", "x-api-key", "cookie", "host"} { // API 1.55: only allow-listed headers
+		unknown["compat"] = map[string]any{"headers": map[string]any{h: "v"}}
+		e.call(admin, "PUT", "/v1/studio/admin/providers/anthropic", unknown, 422)
+	}
 	put := e.call(admin, "PUT", "/v1/studio/admin/providers/anthropic", body, 201)
-	if fmt.Sprint(put["compat"]) != "map[strict_schema:true temperature:false]" || put["preset"] != "anthropic" {
+	if fmt.Sprint(put["compat"]) != "map[headers:map[anthropic-version:2023-06-01] strict_schema:true temperature:false]" || put["preset"] != "anthropic" {
 		t.Fatal(put)
 	}
 	server := map[string]any{"kind": "server", "base_url": "http://192.168.1.20:9931/v1", "models": []string{"qwen3"}, "host": "mac",
@@ -552,13 +557,13 @@ func TestProviderPresets(t *testing.T) {
 	}
 	listed := e.call(admin, "GET", "/v1/studio/admin/providers", nil, 200)
 	raw, _ = json.Marshal(listed)
-	if !strings.Contains(string(raw), `"compat":{"strict_schema":true,"temperature":false}`) || !strings.Contains(string(raw), `"preset":"anthropic"`) {
+	if !strings.Contains(string(raw), `"compat":{"headers":{"anthropic-version":"2023-06-01"},"strict_schema":true,"temperature":false}`) || !strings.Contains(string(raw), `"preset":"anthropic"`) {
 		t.Fatalf("%s", raw)
 	}
 	e.call(admin, "POST", "/v1/studio/admin/providers/llama/test", nil, 200)
 	e.call(admin, "POST", "/v1/studio/admin/providers/anthropic/test", nil, 200)
 	raw, _ = json.Marshal(asked[2:])
-	if !strings.Contains(string(raw), `"key_secret":"llama-server"`) || !strings.Contains(string(raw), `"compat":{"temperature":false,"strict_schema":true}`) {
+	if !strings.Contains(string(raw), `"key_secret":"llama-server"`) || !strings.Contains(string(raw), `"compat":{"temperature":false,"strict_schema":true,"headers":{"anthropic-version":"2023-06-01"}}`) {
 		t.Fatalf("%s", raw)
 	}
 }
