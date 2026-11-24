@@ -8,9 +8,10 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 import uuid
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -23,6 +24,11 @@ WORK = HERE / "work"  # empty cwd: no project CLAUDE.md to find
 # every env var that would switch the CLI off the subscription login
 DROP = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "CLAUDE_CODE_OAUTH_TOKEN",
         "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY", "AWS_BEARER_TOKEN_BEDROCK")
+# quiet start (as Hermes' subscription plugin does): skips update, telemetry and other network checks, ~4.4 s -> ~1.4 s
+QUIET = {"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1", "DISABLE_TELEMETRY": "1", "DISABLE_ERROR_REPORTING": "1",
+         "DISABLE_AUTOUPDATER": "1", "DISABLE_FEEDBACK_COMMAND": "1", "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1",
+         "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1", "CLAUDE_CODE_DISABLE_TERMINAL_TITLE": "1"}
+SLOTS = threading.BoundedSemaphore(int(ENV.get("BRIDGE_MAX_CONCURRENT", "4")))  # ~250 MB per claude process
 LOCKDOWN = ["--safe-mode", "--tools", "", "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
             "--setting-sources", "", "--disable-slash-commands", "--no-session-persistence",
             "--permission-prompts", "none", "--output-format", "json"]
@@ -88,9 +94,10 @@ def run_claude(model, system, prompt, schema):
     cmd += ["--system-prompt", system]
     if schema is not None:
         cmd += ["--json-schema", json.dumps(schema)]
-    env = {k: v for k, v in os.environ.items() if k not in DROP}
+    env = {k: v for k, v in os.environ.items() if k not in DROP} | QUIET
     try:
-        p = subprocess.run(cmd, input=prompt, capture_output=True, text=True, timeout=TIMEOUT, cwd=WORK, env=env)
+        with SLOTS:  # over the cap: wait in arrival order (inside the request's own timeout)
+            p = subprocess.run(cmd, input=prompt, capture_output=True, text=True, timeout=TIMEOUT, cwd=WORK, env=env)
     except subprocess.TimeoutExpired:
         raise Fail(504, f"claude did not answer in {TIMEOUT} s")
     try:
@@ -179,7 +186,6 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     WORK.mkdir(exist_ok=True)
-    # ponytail: single-threaded server, one claude call at a time; others wait in the listen queue
-    server = HTTPServer((HOST, PORT), Handler)
+    server = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"claude bridge on http://{HOST}:{PORT}/v1 (personal use only)", flush=True)
     server.serve_forever()
