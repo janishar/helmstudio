@@ -101,3 +101,5 @@ Then "then agent will become assistant": with the page called Hub, the drawer an
 Plugins), "Same as Assistant", and the setup texts ("Set up the Assistant", "The Assistant is off", "Turned on in Hub ›
 Assistant").
 
+Then "Hub icon change": Hub's icon is lucide `Blocks` (pieces that plug together) on the green tile, in the rail, its title and the
+Assistant drawer's Hub button; the Assistant keeps the bot icon, System the shield.
