@@ -2,7 +2,7 @@
 
 [← Plan index](../README.md)
 
-Status: **draft for the owner (2026-11-25); boards to draw, then approval.** For 0.1.0-alpha.4
+Status: **owner said build it (2026-11-25, "make the web not design"), on the boards as drawn (Assistant frames 19–28 at 0de85ff1) with 37.7; the Create backdrops behind the drawer on that board are an old copy: Create is unchanged.** For 0.1.0-alpha.4
 ([release list](../release/0.1.0-alpha.4.md), item 2), after [plan 32](32-assistant-first-class.md).
 
 The owner's asks, 2026-11-25, trying plan 32 as a fresh user: "why model provider and ai agents are in admin?", then
