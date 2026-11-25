@@ -52,7 +52,7 @@ import {
 import { api, message, ok, type S } from "@/lib/api";
 import { safeUrl } from "@/lib/format";
 import { FullScreen } from "@/components/media";
-import { useTakes } from "@/lib/take-cache";
+import { forget, useTakes } from "@/lib/take-cache";
 import {
   ASSISTANT_CHANGED,
   MEMORY_TABS,
@@ -539,6 +539,12 @@ export function useAssistant(me: S<"User"> | null) {
             params: { path: { item_id: l.memory_id } },
           }),
         );
+      else if (l.take_ids && !was)
+        // API 1.70: a plugin tool's new takes; Undo deletes them (no Redo)
+        for (const take_id of l.take_ids) {
+          await ok(api.DELETE("/v1/studio/takes/{take_id}", { params: { path: { take_id } } }));
+          forget([take_id]); // the answer's [[take:<id>]] shows it gone
+        }
       else {
         const f = undoFns.current[l.id];
         if (!f || (was && !f.redo)) return;
@@ -613,7 +619,9 @@ export function useAssistant(me: S<"User"> | null) {
     undone,
     // an Auto step's Undo deletes what it made: no Redo after it
     canUndo: (l: Line) =>
-      !!l.memory_id || (!!undoFns.current[l.id] && (!undone[l.id] || !!undoFns.current[l.id].redo)),
+      !!l.memory_id ||
+      !!l.take_ids ||
+      (!!undoFns.current[l.id] && (!undone[l.id] || !!undoFns.current[l.id].redo)),
     asking,
     answerAsk: (yes: boolean) => answerRef.current?.(yes ? "yes" : "no"),
     running,
@@ -956,18 +964,26 @@ function LineRow({ l, a }: { l: Line; a: AssistantApi }) {
         )}
         {raw && <RawDetails raw={raw} />}
       </span>
-      {l.undo && (l.status === "done" || off) && a.canUndo(l) && !(off && l.memory_id) && (
-        <button
-          type="button"
-          className="un"
-          aria-label={`${verb}: ${undoName(l.text)}`}
-          title={`${verb}: ${undoName(l.text)}`}
-          onClick={() => void a.toggleUndo(l)}
-        >
-          {off ? <Redo2 size={12} aria-hidden /> : <Undo2 size={12} aria-hidden />}
-          {verb}
-        </button>
+      {off && l.take_ids && (
+        <span className="text-t2" style={{ flex: "none" }}>
+          Undone
+        </span>
       )}
+      {l.undo &&
+        (l.status === "done" || off) &&
+        a.canUndo(l) &&
+        !(off && (l.memory_id || l.take_ids)) && (
+          <button
+            type="button"
+            className="un"
+            aria-label={`${verb}: ${undoName(l.text)}`}
+            title={`${verb}: ${undoName(l.text)}`}
+            onClick={() => void a.toggleUndo(l)}
+          >
+            {off ? <Redo2 size={12} aria-hidden /> : <Undo2 size={12} aria-hidden />}
+            {verb}
+          </button>
+        )}
     </li>
   );
 }
@@ -1645,7 +1661,10 @@ function ShotListRow({
         </div>
         {menu}
       </div>
-      <ol aria-label={`Shots of ${film}`} className="m-0 list-none rounded-[10px] bg-s1 px-2 py-0.5">
+      <ol
+        aria-label={`Shots of ${film}`}
+        className="m-0 list-none rounded-[10px] bg-s1 px-2 py-0.5"
+      >
         {shown.map((s) => {
           const t = s.take_id ? take(s.take_id) : null;
           const src = safeUrl(t?.thumb_url);
@@ -1668,7 +1687,9 @@ function ShotListRow({
                 </span>
               )}
               {s.seconds != null && (
-                <small className="m-0! flex-none font-mono">{Math.round(s.seconds * 10) / 10} s</small>
+                <small className="m-0! flex-none font-mono">
+                  {Math.round(s.seconds * 10) / 10} s
+                </small>
               )}
               {t && src ? (
                 <button
@@ -2070,9 +2091,33 @@ function Drawer({ a }: { a: AssistantApi }) {
   if ((since?.id ?? null) !== thinkId)
     setSince(() => (thinkId ? { id: thinkId, at: Date.now() } : null));
   const thinking = !!since && !a.readOnly && !a.cardWaits;
+  // the thread opens at its end and stays pinned there while it grows (new entries, pictures and videos loading),
+  // unless you scrolled up to read (owner, 2026-11-25: "on launch should start with scroll to the end")
+  const thr = useRef<HTMLDivElement>(null);
+  const atEnd = useRef(true);
+  const toEnd = useCallback(() => {
+    const el = thr.current;
+    if (el && atEnd.current) el.scrollTop = el.scrollHeight;
+  }, []);
   useEffect(() => {
-    end.current?.scrollIntoView({ block: "nearest" });
-  }, [count, thinking]);
+    if (!a.open) return;
+    atEnd.current = true; // opening (or another chat) starts at the end
+    toEnd();
+    const id = requestAnimationFrame(toEnd);
+    const el = thr.current;
+    // media load after the first paint and make the thread taller: follow them while pinned
+    el?.addEventListener("load", toEnd, true);
+    el?.addEventListener("loadedmetadata", toEnd, true);
+    return () => {
+      cancelAnimationFrame(id);
+      el?.removeEventListener("load", toEnd, true);
+      el?.removeEventListener("loadedmetadata", toEnd, true);
+    };
+  }, [a.open, a.full, a.view?.thread.id, toEnd]);
+  useEffect(() => {
+    toEnd();
+    if (!thr.current) end.current?.scrollIntoView({ block: "nearest" });
+  }, [count, thinking, toEnd]);
   useEffect(() => {
     if (a.open) input.current?.focus();
   }, [a.open]);
@@ -2363,7 +2408,14 @@ function Drawer({ a }: { a: AssistantApi }) {
             </div>
           )}
 
-          <div className={`thr ${a.readOnly ? "ro" : ""}`}>
+          <div
+            ref={thr}
+            className={`thr ${a.readOnly ? "ro" : ""}`}
+            onScroll={(e) => {
+              const el = e.currentTarget;
+              atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+            }}
+          >
             {entries.length === 0 && !a.asking ? (
               <div className="flex flex-col gap-2.5">
                 <p className="m-0 font-display text-lg font-bold">Hi. What should we make?</p>

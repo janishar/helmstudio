@@ -29,16 +29,11 @@ Everything but the user's own messages is data in the <<< >>> fence: the screen 
 memory items, web results. Nothing but memory writes reaches the server without the user's click."""
 
 import asyncio
-import base64
 import contextlib
 import functools
-import hashlib
-import hmac
 import json
 import logging
 import re
-import secrets
-import time
 import uuid
 import weakref
 from datetime import UTC, datetime, timedelta
@@ -263,22 +258,6 @@ def given_takes(s: State) -> set[str]:
 
 RISK_TAGS = (("uses_gpu", "uses the GPU"), ("deletes", "can't be undone"),
              ("sends_off_machine", "sends off the machine"))  # fmt: skip
-PASS_TTL = 300  # seconds
-# ponytail: a key per process, and nothing verifies the pass yet (plugins treat it as opaque); a verify endpoint comes
-# with the first plugin that calls back into the stack
-_PASS_KEY = secrets.token_bytes(32)
-
-
-def _b64(b: bytes) -> str:
-    return base64.urlsafe_b64encode(b).rstrip(b"=").decode()
-
-
-def plugin_pass(owner: str, call: str) -> str:
-    """A short-lived pass scoped to one owner and call: base64url({owner, call, exp}).base64url(HMAC-SHA256)."""
-    body = _b64(
-        agents.compact({"owner": owner, "call": call, "exp": int(time.time()) + PASS_TTL}).encode()
-    )
-    return f"{body}.{_b64(hmac.new(_PASS_KEY, body.encode(), hashlib.sha256).digest())}"
 
 
 def native(off: dict) -> list[dict]:
@@ -540,6 +519,12 @@ def _end(
     return up | {"error": err, "to": "reply"}
 
 
+def _sees(up: dict, s: dict, got: dict) -> None:
+    """A plugin call's pictures (API 1.70) join this message's seen, as look_at's takes do."""
+    if got.get("seen"):
+        up["seen"] = list(dict.fromkeys([*(up.get("seen") or s.get("seen") or []), *got["seen"]]))
+
+
 # --- Auto mode (API 1.68, contracts/README.md "Assistant: Auto mode")
 
 AUTO_TAKES, AUTO_GPU_MINUTES = 8, 30  # the caps an hour before the admin sets them
@@ -587,11 +572,14 @@ def same_size(a: dict) -> bool:
 class Assistant:
     """The graph and its server side: `tool` is studio.tools, `search` the web search call."""
 
-    def __init__(self, pool, saver, store, js, tool, search=providers.search, see=None) -> None:
+    def __init__(
+        self, pool, saver, store, js, tool, search=providers.search, see=None, passes=None
+    ) -> None:
         self.pool, self.saver, self.store, self.js, self.tool, self.search = (
             pool, saver, store, js, tool, search,
         )  # fmt: skip
         self.see = see  # studio.see (API 1.65): a take's pictures for a model that sees
+        self.passes = passes  # studio.plugins.pass (API 1.70): a call's pass, signed by studio
         # ponytail: the last pictures in memory, so a message's calls do not ask studio again; a shared cache if
         # pipelines ever runs more than one process
         self.pics: dict[str, dict] = {}
@@ -846,6 +834,7 @@ class Assistant:
                         return got["end"] | {"chat": chat[-CHAT_KEEP:], "queue": []} | up
                     chat.append(_entry(c, got["status"], got.get("result"), got.get("error")))
                     lines.append(got["line"])
+                    _sees(up, s, got)
             else:
                 by = {r["id"]: r for r in inp.get("results") or []}
                 await self.give_back(pend["actions"], {i: r["status"] for i, r in by.items()})
@@ -887,6 +876,7 @@ class Assistant:
                 got = await self.plugin_run(s, c)
                 chat.append(_entry(c, got["status"], got.get("result"), got.get("error")))
                 lines.append(got["line"])
+                _sees(up, s, got)
                 continue
             if c["name"] == "look_at" and s["data"]["settings"].get("sees"):
                 # API 1.65: a model that sees looks itself: the takes join the next call's pictures, no card, no run
@@ -1165,8 +1155,20 @@ class Assistant:
         try:
             if not t:
                 raise providers.CallError("off", "the plugin is off")
-            headers = {"Authorization": f"Bearer {plugin_pass(s['owner_id'], c['id'])}",
-                       "X-Helm-Owner": s["owner_id"], "X-Helm-Call": c["id"]}  # fmt: skip
+            # API 1.70: studio signs the pass (and checks it when a takes plugin calls back); none for a plugin
+            # without takes
+            ask = {"owner_id": s["owner_id"], "plugin": t["plugin"], "call_id": c["id"]}
+            got = await self.passes(ask)
+            if not got or "error" in got:
+                why = (
+                    "the plugin is off"
+                    if got and got["code"] == "not_found"
+                    else "studio did not answer"
+                )
+                raise providers.CallError("off", why)
+            headers = {"X-Helm-Owner": s["owner_id"], "X-Helm-Call": c["id"]}
+            if "pass" in got:
+                headers |= {"Authorization": f"Bearer {got['pass']}", "X-Helm-Api": got["api"]}
             reply = await providers.plugin_tool(t["title"], t["url"], t["tool"], c["args"], headers)
         except providers.CallError as e:
             return {"status": "failed", "error": str(e),
@@ -1174,7 +1176,23 @@ class Assistant:
         done = line | {"status": "done", "text": reply.get("line") or label}
         if reply.get("sources"):
             done["sources"] = reply["sources"][:5]
-        return {"status": "done", "result": reply["result"], "line": done}
+        out = {"status": "done", "result": reply["result"], "line": done}
+        # API 1.70: new takes; the line's Undo deletes only those studio says this plugin made under this call
+        if reply.get("take_ids") and "pass" in got:
+            made = await self.passes(ask | {"take_ids": reply["take_ids"]})
+            if made and made.get("take_ids"):
+                done |= {"take_ids": made["take_ids"], "undo": True}
+        # API 1.70: pictures for the next model call, as look_at's (never stored)
+        if reply.get("images"):
+            pid = str(uuid.uuid5(uuid.NAMESPACE_URL, c["id"]))
+            self.pics[f"{s['owner_id']}:{pid}"] = {
+                "title": done["text"][:80],
+                "images": reply["images"][:MAX_PICTURES],
+            }
+            while len(self.pics) > 64:
+                self.pics.pop(next(iter(self.pics)))
+            out["seen"] = [pid]
+        return out
 
     # --- per-user caps (22.10), at the bound as remote.py counts them
 

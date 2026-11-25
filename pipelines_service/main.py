@@ -165,7 +165,8 @@ async def main() -> None:
         )
         runs = await durable(js, "EVT", "pipelines-runs", "evt.studio.>", events.ACK_WAIT, 64)
         namer = names.Names(js, studio.create_run)  # API 1.43: session names
-        helper = assistant.Assistant(pool, saver, store, js, studio.tool, see=studio.see)
+        helper = assistant.Assistant(pool, saver, store, js, studio.tool, see=studio.see,
+                                     passes=studio.plugin_pass)  # fmt: skip
         asks = await durable(js, "CMD", "pipelines-assistant", "cmd.assistant.>", assistant.ACK_WAIT, 16,
                              max_deliver=-1)  # fmt: skip
         server = await health.serve(nc, pool)

@@ -27,3 +27,4 @@ services:
     depends_on:
       postgres: {condition: service_healthy}
       nats-setup: {condition: service_completed_successfully}
+      media-tools: {condition: service_started, required: false}   # its plugin.json url resolves at the first scan

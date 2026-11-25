@@ -30,6 +30,7 @@
     "ghcr.io/janishar/helmstudio-files:0.1.0-alpha.1",
     "ghcr.io/janishar/helmstudio-web:0.1.0-alpha.1",
     "ghcr.io/janishar/helmstudio-seaweedfs:0.1.0-alpha.1",
+    "ghcr.io/janishar/helmstudio-media-tools:0.1.0-alpha.1",
     "nats:2.15.3-alpine3.22",
     "natsio/nats-box:0.20.2",
     "postgres:18.7-alpine3.24"
@@ -45,6 +46,6 @@
   ],
   "minMacOS": 13,
   "minFreeGB": 6,
-  "imagesDiskGB": 2.2,
+  "imagesDiskGB": 2.5,
   "defaultModelsDir": "~/helmstudio-models"
 }

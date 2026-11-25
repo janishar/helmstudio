@@ -304,6 +304,45 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <button class="act">Export file</button>
 </section>
 
+<section aria-label="Edit an image take" class="card" style="background: var(--p0)">
+<p class="note">Media tools (alpha.2 item 11; approved, owner 2026-11-25). Gallery, an image take selected: Edit under Use in…, shown while the Media tools plugin is on. Each makes a new take; the original stays.</p>
+<div class="pic pnb" style="aspect-ratio: 16 / 9; border-radius: 12px; border: 1px dashed var(--dash); position: relative; display: flex; align-items: center; justify-content: center; color: var(--t2); font-size: 13px; background-image: url(img/tree-line.jpg)"><div aria-label="Crop box" style="position: absolute; left: 12%; top: 14%; width: 62%; height: 64%; border: 2px solid var(--a1); box-shadow: 0 0 0 999px color-mix(in srgb, var(--g) 55%, transparent); border-radius: 4px"></div></div>
+<h2 class="h">Edit</h2>
+<div style="display: flex; flex-wrap: wrap; gap: 6px"><button class="chip" aria-pressed="true" style="background: var(--a1); color: var(--on1); font-weight: 600">Crop</button><button class="chip">Resize</button><button class="chip">Rotate</button><button class="chip">Flip</button><button class="chip">Extend</button><button class="chip">Convert</button></div>
+<div class="row"><span>Crop</span><span>16:9 · 1024 × 576 at 160, 90</span></div>
+<div style="display: flex; flex-wrap: wrap; gap: 6px"><button class="chip">Free</button><button class="chip" aria-pressed="true">16:9</button><button class="chip">9:16</button><button class="chip">1:1</button><button class="chip">4:3</button></div>
+<div style="display: flex; justify-content: flex-end; gap: 8px"><button class="chip">Cancel</button><button style="height: 40px; padding: 0 18px; border-radius: 10px; border: 0; background: var(--a1); color: var(--on1); font-weight: 600; font-size: 13px">Save as new</button></div>
+<p class="note">Resize: width or height (the other keeps the aspect). Rotate 90° steps; Flip across or down; Extend: pixels per side and a colour or transparent; Convert: PNG, JPEG, WebP.</p>
+</section>
+
+<section aria-label="Edit a video take" class="card" style="background: var(--p0)">
+<p class="note">Gallery, a video take selected (a Timeline export too): Edit.</p>
+<div class="pic pnb" style="aspect-ratio: 16 / 9; border-radius: 12px; border: 1px dashed var(--dash); display: flex; align-items: center; justify-content: center; color: var(--t2); font-size: 13px; background-image: url(img/tree-line.jpg)">Shot 3 · tree line</div>
+<div aria-label="Trim" style="position: relative; height: 36px; border-radius: 8px; background: var(--s2); overflow: hidden"><div style="position: absolute; left: 18%; right: 30%; top: 0; bottom: 0; border: 2px solid var(--a1); border-radius: 8px; background: color-mix(in srgb, var(--a1) 14%, transparent)"></div><div style="position: absolute; left: 44%; top: 0; bottom: 0; width: 2px; background: var(--t1)"></div></div>
+<div class="row"><span>Trim</span><span>0:00.90 – 0:03.53 · 2.63 s</span></div>
+<h2 class="h">Edit</h2>
+<div style="display: flex; flex-wrap: wrap; gap: 6px"><button class="chip" aria-pressed="true" style="background: var(--a1); color: var(--on1); font-weight: 600">Trim</button><button class="chip">Speed</button><button class="chip">Mute</button><button class="chip">New sound</button><button class="chip">Frame as image</button></div>
+<div style="display: flex; justify-content: flex-end; gap: 8px"><button class="chip">Cancel</button><button style="height: 40px; padding: 0 18px; border-radius: 10px; border: 0; background: var(--a1); color: var(--on1); font-weight: 600; font-size: 13px">Save as new</button></div>
+<p class="note">Speed 0.25×–4×; New sound picks an audio take (cut to the picture); Frame as image saves the frame under the playhead.</p>
+</section>
+
+<section aria-label="Edit an audio take" class="card" style="background: var(--p0)">
+<p class="note">Gallery, an audio take selected: Edit.</p>
+<div style="height: 96px; border-radius: 12px; border: 1px dashed var(--dash); background: repeating-linear-gradient(90deg, var(--ln) 0 2px, transparent 2px 6px) center / 100% 48px no-repeat; position: relative"><div style="position: absolute; left: 10%; right: 40%; top: 0; bottom: 0; border: 2px solid var(--a1); border-radius: 10px"></div></div>
+<div class="row"><span>Trim · volume</span><span>0:02.0 – 0:14.0 · −6 dB</span></div>
+<h2 class="h">Edit</h2>
+<div style="display: flex; flex-wrap: wrap; gap: 6px"><button class="chip" aria-pressed="true" style="background: var(--a1); color: var(--on1); font-weight: 600">Trim</button><button class="chip">Volume</button><button class="chip">Join</button></div>
+<p class="note">Join: pick 2–8 audio takes, drag to order; they play one after another.</p>
+</section>
+
+<section aria-label="Saved as new" class="card" style="background: var(--s1)">
+<p class="note">After Save as new: the new take is selected next to the original, with a toast.</p>
+<div role="status" style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--s3); font-size: 13px"><span style="flex: 1 1 auto">Saved as a new take · Shot 3 · trimmed</span><button class="chip" style="height: 28px; font-size: 12px">Undo</button></div>
+<div role="status" style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--s3); font-size: 13px"><span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #f2c14e"></span><span style="flex: 1 1 auto">Saving…</span></div>
+<div role="alert" style="display: flex; padding: 10px 12px; border-radius: 12px; font-size: 13px; background: color-mix(in srgb, #ff6b6b 18%, var(--s2)); color: var(--t1)"><span style="flex: 1 1 auto">Couldn't save · it took too long; try a shorter part</span></div>
+<p class="note">Undo deletes the new take. Plugin off or not running: Edit is hidden.</p>
+</section>
+
 <section aria-label="Remove an audio track" class="card">
 <p class="note">A lane's × (or Remove track when its name is selected) removes the track. An empty one goes at once; with clips it asks:</p>
 <div role="dialog" aria-label="Remove A3" style="display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 14px; background: var(--s3); border: 1px solid var(--s5)">
@@ -316,7 +355,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":2200}}'>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":3200}}'>
 class Component extends DCLogic {
 state = { theme: null };
 renderVals() {

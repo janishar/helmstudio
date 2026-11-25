@@ -8,6 +8,7 @@
   "may_do": ["Add echo tools for the Assistant"],
   "url": "http://fake-openai:8000",
   "health": "/health",
+  "takes": true,
   "tools": [
     {
       "name": "echo",

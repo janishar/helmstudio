@@ -666,6 +666,33 @@ describe("other tabs, server cards, limits, memory", () => {
     expect(screen.queryByRole("button", { name: /^Undo/ })).toBeNull();
   });
 
+  it("a plugin line's Undo deletes the takes it made (API 1.70), with no Redo", async () => {
+    const made = "99999999-2222-4333-8444-666666666666";
+    serve({
+      existing: thread(),
+      entries: [
+        entry(1, {
+          kind: "line",
+          line: { id: id(0), status: "done", text: "Cropped · Fox", undo: true, take_ids: [made] },
+        }),
+      ],
+    });
+    const del = vi.spyOn(api, "DELETE").mockResolvedValue({
+      data: undefined,
+      error: undefined,
+      response: new Response(null, { status: 204 }),
+    } as never);
+    await openDrawer();
+    fireEvent.click(await screen.findByRole("button", { name: /^Undo: Cropped/ }));
+    await waitFor(() =>
+      expect(del).toHaveBeenCalledWith("/v1/studio/takes/{take_id}", {
+        params: { path: { take_id: made } },
+      }),
+    );
+    await waitFor(() => expect(screen.queryByRole("button", { name: /^(Undo|Redo)/ })).toBeNull());
+    expect(screen.getByText("Undone")).toBeTruthy(); // board MEDIA TOOLS: the line says Undone
+  });
+
   it("model and tool text is shown as text: injected text runs nothing", async () => {
     const posts = serve({
       existing: thread(),

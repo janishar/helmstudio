@@ -126,3 +126,11 @@ Rescan or by watching the folder, off until turned on. Built-in plugins (shipped
 show on the Plugins page; the user's copy of the same name wins ("replaces built-in"). An older app refuses a newer
 `format` with "needs a newer helmstudio". Later: upload a zip on the Plugins page for servers without folder access,
 skills in pipeline agent nodes.
+
+## Multi-arch images (noted 2026-11-25)
+
+The published images (ghcr.io/janishar/helmstudio-*) are linux/arm64 only (.tools/push-images): right for the Mac app's
+VM and Apple Silicon. x86 (amd64) Linux servers, most NVIDIA machines, build from source with `make up` today. Before a
+Linux-focused release: build both platforms into one multi-arch image per service (buildx `--platform
+linux/arm64,linux/amd64`), including the media-tools image, and test a clean amd64 install.
+

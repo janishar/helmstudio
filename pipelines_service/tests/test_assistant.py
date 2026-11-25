@@ -87,9 +87,27 @@ class Chat:
     def restart(self) -> assistant.Assistant:
         """A new process: a fresh graph and saver on the same database."""
         self.a = assistant.Assistant(
-            self.pool, main.saver_for(self.pool), self.store, self.js, self.tools
+            self.pool,
+            main.saver_for(self.pool),
+            self.store,
+            self.js,
+            self.tools,
+            passes=self.passes,
         )
         return self.a
+
+    async def passes(self, req: dict) -> dict:
+        """studio.plugins.pass (API 1.70): a pass for a plugin that is on (in self.plugins), else not_found."""
+        assert not schemas.plugins_pass_errors("request", req), req
+        self.passed = [*getattr(self, "passed", []), req]
+        if not any(p["name"] == req["plugin"] for p in self.plugins):
+            return {"error": "the plugin is off", "code": "not_found"}
+        if "take_ids" in req:  # made: only the takes studio recorded under this plugin and call
+            made = getattr(self, "made", set())
+            return {"take_ids": [t for t in req["take_ids"] if (req["call_id"], t) in made]}
+        if getattr(self, "no_takes", False):
+            return {"api": "http://localhost:8300"}
+        return {"pass": "eyJvIjoxfQ.c2ln", "api": "http://localhost:8300"}
 
     def cmd(self, inp: dict, turn: int | None = None, owner: str | None = None) -> dict:
         if turn is None:
@@ -1101,9 +1119,6 @@ def test_plugin_tools_are_offered_under_their_plugin_name_and_checked():
     bad = {"tool_calls": [{"name": SEARCH, "arguments": '{"q": "ltx"}'}]}
     assert assistant.check(bad, off, s)[0] is None
     assert SEARCH not in assistant.offered(d | {"plugins": []}, "/")
-    body, sig = assistant.plugin_pass(OWNER, f"{OWNER}:1:0").split(".")
-    claims = json.loads(base64.urlsafe_b64decode(body + "=="))
-    assert claims["owner"] == OWNER and claims["call"] == f"{OWNER}:1:0" and sig
 
 
 async def test_plugin_call_failures_are_short_plain_reasons(plugin, monkeypatch):
@@ -1142,7 +1157,9 @@ async def test_a_plugin_tool_without_risk_runs_at_once(pool, fake, plugin):
     req = plugin.requests[0]
     assert req["path"] == "/tools/search" and req["body"] == {"input": {"query": "ltx"}}
     assert req["headers"]["X-Helm-Owner"] == OWNER and req["headers"]["X-Helm-Call"] == c.cid(1, 0)
-    assert req["headers"]["Authorization"].startswith("Bearer ")
+    assert req["headers"]["Authorization"] == "Bearer eyJvIjoxfQ.c2ln"  # studio's pass (API 1.70)
+    assert req["headers"]["X-Helm-Api"] == "http://localhost:8300"
+    assert c.passed[0] == {"owner_id": OWNER, "plugin": "web-search", "call_id": c.cid(1, 0)}
     third = c.asked()[2]["messages"][1]["content"]
     assert "https://example.org/ltx" in third and "rate limited" in third
     assert SEARCH in offered(c.asked()[0])
@@ -1172,6 +1189,77 @@ async def test_a_risky_plugin_tool_waits_for_its_card_and_off_means_off(pool, fa
     line = step["lines"][0]
     assert line["status"] == "failed" and line["text"].endswith("the plugin is off")
     assert len(plugin.requests) == 1 and SEARCH not in offered(c.asked()[-1])
+
+
+async def test_a_plugin_tools_new_takes_and_pictures(pool, fake, plugin):
+    """API 1.70: take_ids go on the line (Undo deletes them); images join the next call's pictures, never the
+    result."""
+    c = Chat(pool, fake)
+    c.sees = True
+    c.plugins = [plugin.manifest()]
+    made, source = str(uuid.uuid4()), str(uuid.uuid4())
+    c.made = {(c.cid(1, 0), made)}
+    plugin.script = [(200, {"result": {"take_id": made}, "line": "Cropped · Fox", "take_ids": [made, source]}, 0),
+                     (200, {"result": {"frames": [{"at": 0.5}]}, "line": "Frames · Fox", "images": [JPEG]}, 0),
+                     (200, {"result": {}, "line": "Sneaky · Fox", "take_ids": [source]}, 0)]  # fmt: skip
+    c.script(
+        calls((SEARCH, {"query": "crop"})),
+        calls((SEARCH, {"query": "frames"})),
+        calls((SEARCH, {"query": "sneaky"})),
+        {"content": "Seen."},
+    )
+    step = await c.say("crop it, then look at its frames")
+    crop, frames, looked, sneaky = step["lines"]
+    # a take the call did not make (here its source) never gets an Undo
+    assert sneaky["undo"] is False and "take_ids" not in sneaky
+    assert crop == {
+        "id": c.cid(1, 0),
+        "status": "done",
+        "undo": True,
+        "text": "Cropped · Fox",
+        "take_ids": [made],
+    }
+    assert frames["undo"] is False and "take_ids" not in frames
+    assert looked["text"] == "Looked at Frames · Fox"
+    last = c.asked()[-1]["messages"][1]["content"]
+    assert any(p.get("type") == "image_url" for p in last), last
+    assert JPEG not in json.dumps(
+        c.asked()[-1]["messages"][1]["content"][0]
+    )  # the result text has no picture
+
+
+async def test_a_plugin_without_takes_gets_no_pass_and_no_undo(pool, fake, plugin):
+    """API 1.70: studio gives a plugin without `takes` no pass: no Authorization, and take_ids it answers are dropped."""
+    c = Chat(pool, fake)
+    c.plugins, c.no_takes = [plugin.manifest()], True
+    plugin.script = [(200, {"result": {}, "line": "Searched", "take_ids": [str(uuid.uuid4())]}, 0)]
+    c.script(calls((SEARCH, {"query": "ltx"})), {"content": "Done."})
+    line = (await c.say("search"))["lines"][0]
+    headers = plugin.requests[0]["headers"]
+    assert (
+        "Authorization" not in headers
+        and "X-Helm-Api" not in headers
+        and headers["X-Helm-Owner"] == OWNER
+    )
+    assert line["undo"] is False and "take_ids" not in line
+    assert all("take_ids" not in r for r in c.passed)  # nothing to vouch for
+
+
+async def test_a_plugin_whose_pass_studio_refuses_is_a_failed_line(pool, fake, plugin):
+    c = Chat(pool, fake)
+    c.plugins = [plugin.manifest()]
+
+    async def off(req: dict) -> dict:
+        return {"error": "the plugin is off", "code": "not_found"}
+
+    c.a.passes = off
+    c.script(calls((SEARCH, {"query": "ltx"})), {"content": "Off."})
+    line = (await c.say("search"))["lines"][0]
+    assert (
+        line["status"] == "failed"
+        and line["text"].endswith("the plugin is off")
+        and not plugin.requests
+    )
 
 
 # --- skills (API 1.64)
