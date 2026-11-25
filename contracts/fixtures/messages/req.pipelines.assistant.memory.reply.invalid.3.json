@@ -1,0 +1,11 @@
+{
+  "item": {
+    "id": "4c5d6e7f-8a9b-4c0d-9e1f-2a3b4c5d6e71",
+    "kind": "project",
+    "text": "Shot list · Night diner: 1 shot",
+    "thread_id": null,
+    "created_at": "2026-11-25T10:20:00Z",
+    "updated_at": "2026-11-25T11:02:00Z",
+    "shots": {"film": "Night diner", "shots": [{"n": 0, "what": ""}]}
+  }
+}

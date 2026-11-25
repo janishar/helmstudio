@@ -1,0 +1,26 @@
+{
+  "items": [
+    {
+      "id": "4c5d6e7f-8a9b-4c0d-9e1f-2a3b4c5d6e71",
+      "kind": "project",
+      "text": "Shot list · Night diner: 3 shots, 1 with a take. 1 @june wipes the counter alone (3 s); 2 @stranger puts money on the counter (3 s); 3 @june looks up (2 s)",
+      "thread_id": "3b7c9d1e-2f4a-4b6c-8d0e-1a2b3c4d5e6f",
+      "created_at": "2026-11-25T10:20:00Z",
+      "updated_at": "2026-11-25T11:02:00Z",
+      "shots": {
+        "film": "Night diner",
+        "shots": [
+          {"n": 1, "what": "@june wipes the counter alone", "seconds": 3, "take_id": "9a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d"},
+          {"n": 2, "what": "@stranger puts money on the counter", "seconds": 3, "line": "@stranger: Keep the change."},
+          {"n": 3, "what": "@june looks up", "seconds": 2, "line": "@june: We're closed, you know."}
+        ]
+      }
+    }
+  ],
+  "counts": {
+    "preference": 0,
+    "project": 1,
+    "worked": 0,
+    "summary": 0
+  }
+}
