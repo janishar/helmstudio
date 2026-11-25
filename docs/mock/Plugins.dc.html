@@ -315,6 +315,57 @@ td{vertical-align:top}
 </div>
 </section>
 
+<h2 class="h" style="margin-top: 4px">MEDIA TOOLS · ALPHA.2 ITEMS 11 AND 13 · DRAWN, AWAITS APPROVAL</h2>
+<span style="font-size: 12px; color: var(--t2); margin-top: -10px">Owner, 2026-11-25: "yes add media tools to alpha.2", "frame extractor for video analysis to assistant". Built in, starts itself on the Mac like Web search, off until you turn it on. Every edit is a new take; the original stays. Nothing leaves the machine, so it never asks first.</span>
+<section aria-label="Media tools" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; align-items: start">
+<div class="st">
+<span class="cap">The list row · on</span>
+<div style="display: flex; align-items: center; gap: 8px; font-size: 13px"><b style="flex: 1 1 auto">Media tools</b><span class="tag kind">Assistant tools</span></div>
+<span style="font-size: 12px; color: var(--t1b)">Crops, resizes, trims and pulls frames · reads your takes, saves new ones</span>
+<div style="display: flex; align-items: center; gap: 8px; font-size: 13px"><span class="dot okb"></span><span class="ok" style="font-weight: 600">Running</span><span class="m" style="font-size: 11px">host.docker.internal:8422</span></div>
+</div>
+<div class="st">
+<span class="cap">The aside · rows</span>
+<div style="display: flex; flex-direction: column; gap: 4px">
+<div class="row"><span>Status</span><span style="color: #7fd88f">Running · host.docker.internal:8422</span></div>
+<div class="row"><span>Starts</span><span>On its own, on the Mac</span></div>
+<div class="row"><span>Takes</span><span>Reads yours, saves new ones</span></div>
+<div class="row"><span>Asks first</span><span>Never (stays on this Mac)</span></div>
+<div class="row"><span>Needs</span><span>ffmpeg (brew install ffmpeg)</span></div>
+<div class="row"><span>Log</span><span>~/.helm/logs/media-tools.log</span></div>
+</div>
+</div>
+<div class="st">
+<span class="cap">The aside · tools</span>
+<div style="display: flex; flex-direction: column; gap: 4px; font-size: 12px">
+<div class="row"><span>Edit image</span><span>Crop, resize, rotate, flip, extend, convert</span></div>
+<div class="row"><span>Edit video</span><span>Trim, speed, mute, new sound</span></div>
+<div class="row"><span>Frame as image</span><span>One frame → a new image</span></div>
+<div class="row"><span>Edit audio</span><span>Trim, volume</span></div>
+<div class="row"><span>Join audio</span><span>2–8 sounds in order</span></div>
+<div class="row"><span>Frames</span><span>For the Assistant to look at · no take</span></div>
+</div>
+</div>
+<div class="st">
+<span class="cap">In the chat · an edit (new take, Undo deletes it)</span>
+<div style="display: flex; align-items: center; gap: 8px; font-size: 12px"><span class="dot okb"></span><span style="flex: 1 1 auto">Cropped, resized to 1024 × 576 · Fox at the window</span><button class="chip" style="height: 24px; font-size: 11px">Undo</button></div>
+<div style="display: flex; gap: 8px; align-items: center; padding: 6px; border-radius: 10px; background: var(--s2)"><div style="width: 96px; height: 54px; border-radius: 6px; background: linear-gradient(135deg, #7a5a3a, #2b3d33)"></div><div style="font-size: 12px; display: flex; flex-direction: column; gap: 4px"><b>Fox at the window · cropped</b><span style="display: flex; gap: 6px"><button class="chip" style="height: 24px; font-size: 11px">Open</button><button class="chip" style="height: 24px; font-size: 11px">Use in…</button></span></div></div>
+<span style="font-size: 11px; color: var(--t2)">After Undo: the line says Undone and the take is gone (no Redo).</span>
+</div>
+<div class="st">
+<span class="cap">In the chat · frames (item 13)</span>
+<div style="display: flex; align-items: center; gap: 8px; font-size: 12px"><span class="dot okb"></span><span>Frames of Shot 3 · 4 evenly spaced</span></div>
+<div style="display: flex; align-items: center; gap: 8px; font-size: 12px"><span class="dot okb"></span><span>Looked at Frames of Shot 3</span></div>
+<span style="font-size: 12px; color: var(--t1b)">"At 0:01.25 the cat turns its head; by 0:03.75 the light is warmer…"</span>
+<span style="font-size: 11px; color: var(--t2)">Frames go to a model that sees, at most 8, with timecodes; no takes. Ask for one as a picture: Frame as image.</span>
+</div>
+<div class="st">
+<span class="cap">In the chat · it failed</span>
+<div style="display: flex; align-items: center; gap: 8px; font-size: 12px"><span class="dot" style="background: #ff6b6b"></span><span>Media tools · edit_video failed · it took too long; try a shorter part</span></div>
+<span style="font-size: 11px; color: var(--t2)">Plain words; the model is told and can try a shorter trim.</span>
+</div>
+</section>
+
 <h2 class="h" style="margin-top: 4px">SKILLS · ALPHA.2 ITEM 36 · TEXT THAT TEACHES THE ASSISTANT A CRAFT</h2>
 <section aria-label="Skills" style="display: flex; flex-direction: column; gap: 8px">
 <div style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 6px 8px; overflow-x: auto">
