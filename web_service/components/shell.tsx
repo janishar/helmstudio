@@ -7,13 +7,19 @@ import {
   Boxes,
   Clapperboard,
   Images,
+  MessagesSquare,
   Plug,
   Settings,
   ShieldCheck,
   Sparkles,
   Workflow,
 } from "lucide-react";
-import { AssistantDrawer, shortcut, useAssistant } from "@/components/assistant/assistant";
+import {
+  AssistantDrawer,
+  shortcut,
+  useAssistant,
+  type AssistantApi,
+} from "@/components/assistant/assistant";
 import { ToolsContext } from "@/components/assistant/tools";
 import { MarkPaths } from "@/components/kit";
 import { ApiError, api, ok, type S } from "@/lib/api";
@@ -22,6 +28,9 @@ import { ApiError, api, ok, type S } from "@/lib/api";
 const UserContext = createContext<S<"User"> | null>(null);
 /** The signed-in user, for client components under the shell. */
 export const useUser = () => use(UserContext);
+/** The drawer's state (plan 32: the Assistant page opens it after Save). */
+const AssistantContext = createContext<AssistantApi | null>(null);
+export const useAssistantApi = () => use(AssistantContext);
 
 /** Dock items: route, label, glyph and the tile's gradient. Plugins and Admin are added for admins. */
 const ITEMS = [
@@ -49,6 +58,13 @@ const ITEMS = [
     label: "Models",
     Icon: Boxes,
     tile: "linear-gradient(155deg,#7af5d6,#12967f)",
+  },
+  // plan 32: the Assistant's own page, for everyone (read-only for anyone but an admin)
+  {
+    href: "/assistant",
+    label: "Assistant",
+    Icon: Sparkles,
+    tile: "linear-gradient(155deg,#d8f58c,#3c9a2e)",
   },
 ];
 const PLUGINS = {
@@ -119,103 +135,108 @@ export function AppShell({
     nav.current
       ?.querySelector("[aria-current=page]")
       ?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
-  }, [path, a.enabled]);
+  }, [path, a.ready]);
   return (
     <UserContext value={me}>
-      <ToolsContext value={reg}>
-        <div
-          className="flex min-h-dvh flex-col md:flex-row lg:h-dvh lg:overflow-hidden"
-          data-drawer={(a.enabled && a.open) || undefined}
-        >
-          {/* the rail (md+): the logo in its own panel, 14 px above the menu; a phone's bar has no logo */}
-          <div className="contents md:z-10 md:m-3.5 md:mr-0 md:flex md:shrink-0 md:flex-col md:gap-3.5 md:self-start">
-            <div className="rail-logo panel hidden w-[76px] justify-center rounded-[30px] px-1 py-3.5 md:flex">
-              <Link
-                href="/"
-                aria-label="helmstudio, home (Create)"
-                title="helmstudio"
-                // on Create a click is a no-op, so a double-click never navigates twice
-                onClick={(e) => path === "/" && e.preventDefault()}
-                onDoubleClick={() =>
-                  void import("@/components/cats").then((m) => (cats.current = m).play())
-                }
-                className="tile text-on1"
-                style={
-                  {
-                    "--tile": "linear-gradient(155deg, var(--a1), var(--a2))",
-                    borderRadius: "12px 12px 12px 5px",
-                  } as React.CSSProperties
-                }
-              >
-                <svg width={24} height={24} viewBox="0 0 24 24" aria-hidden>
-                  <MarkPaths />
-                </svg>
-              </Link>
-            </div>
-            <nav
-              ref={nav}
-              aria-label="Sections"
-              className="panel z-10 m-3.5 mb-0 flex shrink-0 items-center gap-3.5 self-stretch overflow-x-auto rounded-[30px] px-3 py-1 md:m-0 md:w-[76px] md:flex-col md:self-start md:overflow-visible md:px-1 md:py-3.5"
-            >
-              {items.map(({ href, label, Icon, tile }) => (
+      <AssistantContext value={a}>
+        <ToolsContext value={reg}>
+          <div
+            className="flex min-h-dvh flex-col md:flex-row lg:h-dvh lg:overflow-hidden"
+            data-drawer={(a.ready && a.open) || undefined}
+          >
+            {/* the rail (md+): the logo in its own panel, 14 px above the menu; a phone's bar has no logo */}
+            <div className="contents md:z-10 md:m-3.5 md:mr-0 md:flex md:shrink-0 md:flex-col md:gap-3.5 md:self-start">
+              <div className="rail-logo panel hidden w-[76px] justify-center rounded-[30px] px-1 py-3.5 md:flex">
                 <Link
-                  key={href}
-                  href={href}
-                  aria-current={isCurrent(href, path) ? "page" : undefined}
-                  className="dock-item flex h-16 w-[58px] shrink-0 flex-col items-center justify-center gap-[5px] rounded-2xl text-[10px] font-medium text-t2 aria-[current]:text-t1"
+                  href="/"
+                  aria-label="helmstudio, home (Create)"
+                  title="helmstudio"
+                  // on Create a click is a no-op, so a double-click never navigates twice
+                  onClick={(e) => path === "/" && e.preventDefault()}
+                  onDoubleClick={() =>
+                    void import("@/components/cats").then((m) => (cats.current = m).play())
+                  }
+                  className="tile text-on1"
+                  style={
+                    {
+                      "--tile": "linear-gradient(155deg, var(--a1), var(--a2))",
+                      borderRadius: "12px 12px 12px 5px",
+                    } as React.CSSProperties
+                  }
                 >
-                  <span className="tile" style={{ "--tile": tile } as React.CSSProperties}>
-                    <Icon size={20} strokeWidth={1.75} aria-hidden />
-                  </span>
-                  {label}
+                  <svg width={24} height={24} viewBox="0 0 24 24" aria-hidden>
+                    <MarkPaths />
+                  </svg>
                 </Link>
-              ))}
-              {a.enabled && (
-                <button
-                  type="button"
-                  aria-expanded={a.open}
-                  title={`Assistant (${shortcut()})`}
-                  onClick={() => a.setOpen((o) => !o)}
-                  className="dock-item relative flex h-16 w-[58px] shrink-0 flex-col items-center justify-center gap-[5px] rounded-2xl text-[10px] font-medium text-t2 aria-expanded:text-t1"
+              </div>
+              <nav
+                ref={nav}
+                aria-label="Sections"
+                className="panel z-10 m-3.5 mb-0 flex shrink-0 items-center gap-3.5 self-stretch overflow-x-auto rounded-[30px] px-3 py-1 md:m-0 md:w-[76px] md:flex-col md:self-start md:overflow-visible md:px-1 md:py-3.5"
+              >
+                {items.map(({ href, label, Icon, tile }) => (
+                  <Link
+                    key={href}
+                    href={href}
+                    aria-current={isCurrent(href, path) ? "page" : undefined}
+                    className="dock-item flex h-16 w-[58px] shrink-0 flex-col items-center justify-center gap-[5px] rounded-2xl text-[10px] font-medium text-t2 aria-[current]:text-t1"
+                  >
+                    <span className="tile" style={{ "--tile": tile } as React.CSSProperties}>
+                      <Icon size={20} strokeWidth={1.75} aria-hidden />
+                    </span>
+                    {label}
+                  </Link>
+                ))}
+                {a.ready && <span aria-hidden className="h-8 w-px shrink-0 bg-s4 md:h-px md:w-8" />}
+                {a.ready && (
+                  <button
+                    type="button"
+                    aria-expanded={a.open}
+                    title={`Chat (${shortcut()})`}
+                    onClick={() => a.setOpen((o) => !o)}
+                    className="dock-item relative flex h-16 w-[58px] shrink-0 flex-col items-center justify-center gap-[5px] rounded-2xl text-[10px] font-medium text-t2 aria-expanded:text-t1"
+                  >
+                    <span
+                      className="tile"
+                      style={
+                        {
+                          "--tile": "linear-gradient(155deg,#b9f0d0,#2f8f6a)",
+                        } as React.CSSProperties
+                      }
+                    >
+                      <MessagesSquare size={20} strokeWidth={1.75} aria-hidden />
+                    </span>
+                    Chat
+                    {a.cardWaits && !a.open && (
+                      <span aria-label="1 card waits for you" className="dot" />
+                    )}
+                  </button>
+                )}
+                <Link
+                  href="/settings"
+                  aria-current={isCurrent("/settings", path) ? "page" : undefined}
+                  className="dock-item flex h-16 w-[58px] shrink-0 flex-col items-center justify-center gap-[5px] rounded-2xl text-[10px] font-medium text-t2 aria-[current]:text-t1 md:mt-1.5"
                 >
                   <span
                     className="tile"
                     style={
-                      { "--tile": "linear-gradient(155deg,#d8f58c,#3c9a2e)" } as React.CSSProperties
+                      { "--tile": "linear-gradient(155deg,#a7b0c2,#4b5468)" } as React.CSSProperties
                     }
                   >
-                    <Sparkles size={20} strokeWidth={1.75} aria-hidden />
+                    <Settings size={20} strokeWidth={1.75} aria-hidden />
                   </span>
-                  Assistant
-                  {a.cardWaits && !a.open && (
-                    <span aria-label="1 card waits for you" className="dot" />
-                  )}
-                </button>
-              )}
-              <Link
-                href="/settings"
-                aria-current={isCurrent("/settings", path) ? "page" : undefined}
-                className="dock-item flex h-16 w-[58px] shrink-0 flex-col items-center justify-center gap-[5px] rounded-2xl text-[10px] font-medium text-t2 aria-[current]:text-t1 md:mt-1.5"
-              >
-                <span
-                  className="tile"
-                  style={
-                    { "--tile": "linear-gradient(155deg,#a7b0c2,#4b5468)" } as React.CSSProperties
-                  }
-                >
-                  <Settings size={20} strokeWidth={1.75} aria-hidden />
-                </span>
-                Settings
-              </Link>
-            </nav>
+                  Settings
+                </Link>
+              </nav>
+            </div>
+            {/* lg+: the window never scrolls; the dock and the side panel stay put and only <main> scrolls */}
+            <div className="flex min-h-0 min-w-0 flex-1 flex-wrap content-start lg:flex-nowrap lg:overflow-hidden lg:[&>.aside]:max-h-[calc(100dvh-28px)] lg:[&>.aside]:shrink-0 lg:[&>.aside]:overflow-y-auto lg:[&>main]:min-h-0 lg:[&>main]:overflow-y-auto">
+              {children}
+            </div>
           </div>
-          {/* lg+: the window never scrolls; the dock and the side panel stay put and only <main> scrolls */}
-          <div className="flex min-h-0 min-w-0 flex-1 flex-wrap content-start lg:flex-nowrap lg:overflow-hidden lg:[&>.aside]:max-h-[calc(100dvh-28px)] lg:[&>.aside]:shrink-0 lg:[&>.aside]:overflow-y-auto lg:[&>main]:min-h-0 lg:[&>main]:overflow-y-auto">
-            {children}
-          </div>
-        </div>
-        {a.enabled && <AssistantDrawer a={a} />}
-      </ToolsContext>
+          {a.ready && <AssistantDrawer a={a} />}
+        </ToolsContext>
+      </AssistantContext>
     </UserContext>
   );
 }

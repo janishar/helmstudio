@@ -99,7 +99,7 @@ test.afterEach(async ({}, info) => {
 
 const row = (p: Page, text: string | RegExp) => p.getByRole("row").filter({ hasText: text });
 const dock = (p = page) =>
-  p.getByRole("navigation", { name: "Sections" }).getByRole("button", { name: /^Assistant/ });
+  p.getByRole("navigation", { name: "Sections" }).getByRole("button", { name: /^Chat/ });
 const drawer = (p = page) => p.getByRole("complementary", { name: "Assistant" });
 const box = (p = page) => drawer(p).getByLabel("Message the assistant");
 

@@ -216,33 +216,36 @@ test("a03 test the provider from the list, switch it off and on", async () => {
   await admin.keyboard.press("Escape");
 });
 
-test("a04 make it the assistant, ask it something, then turn it off", async () => {
+test("a04 make it the assistant on its own page, ask it something, then turn it off", async () => {
+  // plan 32: AI agents only links to the Assistant's page
   await admin.getByRole("tab", { name: "AI agents" }).click();
   await expect(admin).toHaveURL(/tab=agents/);
-  const arow = admin.getByRole("row").filter({ hasText: "the in-app assistant" });
-  await arow.getByRole("button", { name: "Edit" }).click();
-  const form = admin.getByRole("form", { name: "Assistant settings" });
-  await expect(form).toBeVisible();
-  const on = form.getByRole("switch", { name: "Assistant on" });
-  if ((await on.getAttribute("aria-checked")) !== "true") await on.click();
-  await form.getByLabel("Provider").selectOption({ label: `${TITLE} (remote)` });
-  await expect(form.getByLabel("Model", { exact: true })).toContainText(
-    "deepseek-flash · Thinking Low (default)",
-  );
+  await expect(admin.getByRole("row").filter({ hasText: "the in-app assistant" })).toHaveCount(0);
+  await admin.getByRole("link", { name: "Open the Assistant page" }).click();
+  await expect(admin).toHaveURL(/\/assistant$/);
+  const change = admin.getByRole("button", { name: "Change" });
+  const form = admin.getByRole("region", { name: "Set up the Model" });
+  await expect(change.or(form)).toBeVisible();
+  if (await change.isVisible()) await change.click(); // set up before: Change opens the form
+  await form.getByRole("radio", { name: new RegExp(TITLE) }).click();
+  await expect(form.getByLabel("Model", { exact: true })).toContainText("deepseek-flash");
   await expect(form).toContainText(
     `Sends your messages, the screen summary and tool results to ${TITLE}; never images.`,
   );
   await shot(admin, "a04-assistant-form");
   await form.getByRole("button", { name: "Save" }).click();
-  await expect(arow).toContainText(`${TITLE} · deepseek-flash`);
-  await expect(arow).toContainText(`your messages to ${TITLE}`);
-  await expect(arow).toContainText("On");
-  // the dock follows at once
-  await expect(dock(admin).getByRole("button", { name: "Assistant" })).toBeVisible();
+  // Save turns it on and opens the drawer
+  const drawer = admin.getByRole("complementary", { name: "Assistant" });
+  await expect(drawer).toBeVisible();
+  const model = admin.getByRole("region", { name: "Model" });
+  await expect(model).toContainText(TITLE);
+  await expect(model).toContainText("deepseek-flash · thinking low");
+  await expect(admin.getByRole("switch", { name: "Assistant on" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
   await shot(admin, "a04-assistant-on");
 
-  await dock(admin).getByRole("button", { name: "Assistant" }).click();
-  const drawer = admin.getByRole("complementary", { name: "Assistant" });
   const calls = sent("deepseek-flash").length;
   script("deepseek-flash", { content: `Hello from ${TITLE}.` });
   await drawer.getByLabel("Message the assistant").fill("hello");
@@ -255,11 +258,14 @@ test("a04 make it the assistant, ask it something, then turn it off", async () =
   await shot(admin, "a04-assistant-answered");
   await drawer.getByRole("button", { name: /^Close \(/ }).click();
 
-  await arow.getByRole("button", { name: "Edit" }).click();
-  await form.getByRole("switch", { name: "Assistant on" }).click();
-  await form.getByRole("button", { name: "Save" }).click();
-  await expect(arow).toContainText("no Assistant in the dock");
-  await expect(dock(admin).getByRole("button", { name: "Assistant" })).toHaveCount(0);
+  await admin.getByRole("switch", { name: "Assistant on" }).click();
+  await expect(admin.getByText("Off", { exact: true })).toBeVisible();
+  // Chat stays in the dock; its drawer says it is off, with Turn on
+  await dock(admin).getByRole("button", { name: "Chat" }).click();
+  await expect(drawer).toContainText("The Assistant is off");
+  await expect(drawer.getByRole("button", { name: "Turn on" })).toBeVisible();
+  await drawer.getByRole("button", { name: /^Close \(/ }).click();
+  await admin.goto("/admin");
 });
 
 test("a05 delete a provider, after changing my mind once", async () => {

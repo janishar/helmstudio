@@ -2373,3 +2373,353 @@
   font-weight: 600;
   gap: 2px;
 }
+/* the Assistant page (plan 32; docs/mock/Assistant.dc.html frames 19, 20 and 22), scoped to .apage */
+.apage .pt {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.apage .lgp {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: linear-gradient(155deg, #d8f58c, #3c9a2e);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent);
+}
+.apage .stp {
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.apage .sw {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 26px;
+  border-radius: 999px;
+  border: 0;
+  padding: 2px;
+  display: flex;
+  justify-content: flex-start;
+  background: var(--s1);
+  box-shadow: inset 0 0 0 1px var(--ln);
+}
+.apage .sw span {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: block;
+  background: var(--t2);
+}
+.apage .sw[aria-checked="true"] {
+  justify-content: flex-end;
+  background: var(--a1);
+  box-shadow: none;
+}
+.apage .sw[aria-checked="true"] span {
+  background: var(--on1);
+}
+.apage .sw:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.apage .pgg {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+@media (min-width: 1024px) {
+  .apage .pgg {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.apage .pgc {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+.apage .sec {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px;
+}
+.apage .pgh {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.apage .pgh h2 {
+  margin: 0;
+  flex: 1 1 auto;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+}
+.apage .pgh a,
+.apage .line a {
+  font-size: 12px;
+  color: var(--t2);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.apage .line {
+  font-size: 12px;
+  color: var(--t2);
+}
+.apage .fl {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.apage .fl label {
+  font-size: 12px;
+  color: var(--t2);
+}
+.apage .g2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  align-items: end;
+}
+.apage .g4 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+@media (min-width: 768px) {
+  .apage .g4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+.apage .sub {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--t2);
+}
+.apage .sv {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.apage .fine {
+  margin: 0;
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--t2);
+}
+.apage .warn {
+  font-size: 12px;
+  line-height: 17px;
+  color: #f2c14e;
+}
+.apage .byadm {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--s3);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--t2);
+  white-space: nowrap;
+}
+.apage :is(.who, .trow) {
+  display: flex;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--s2);
+}
+.apage .who {
+  align-items: center;
+}
+.apage .trow {
+  align-items: flex-start;
+}
+.apage :is(.who, .trow) > div {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.apage :is(.who, .trow, .pk) b {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+}
+.apage .who small {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--t2);
+}
+.apage .trow small {
+  display: block;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--t2);
+}
+.apage .lg {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border-radius: 10px 10px 10px 4px;
+  display: grid;
+  place-items: center;
+  font-style: normal;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+.apage .stp2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--t2);
+}
+.apage .stp2 b {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--s4);
+  color: var(--t1);
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+}
+.apage .pks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
+}
+.apage .pk {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 64px;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 16px 16px 16px 6px;
+  background: var(--s3);
+  text-align: left;
+  font-size: 13px;
+  line-height: 17px;
+}
+.apage .pk > span {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.apage .pk small {
+  display: block;
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--t2);
+}
+.apage .pk[aria-checked="true"] {
+  background: color-mix(in srgb, var(--a2) 16%, var(--s3));
+  box-shadow: inset 0 0 0 2px var(--a2);
+}
+.apage .pk[aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: default;
+}
+.apage .pst {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 3px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.apage .dt {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex: 0 0 auto;
+}
+.apage .bar2 {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 16px 16px 16px 6px;
+  background: var(--s2);
+  font-size: 12px;
+  line-height: 17px;
+}
+.apage .sum2 {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  border-radius: 14px 14px 14px 6px;
+  background: var(--s1);
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+}
+.apage .sum2 span {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--t2);
+}
+/* the drawer's Memory list on the page: the drawer's styles, in the page's flow */
+.ast.inline {
+  position: static;
+  z-index: auto;
+  overflow: visible;
+  background: none;
+  box-shadow: none;
+}
+.ast.inline .thr {
+  -webkit-mask-image: none;
+  mask-image: none;
+  overflow: visible;
+}
+.ast.inline .thr > :first-child {
+  margin-top: 0;
+  padding-top: 0;
+}
+/* the drawer's setup message (frame 21) */
+.ast .su {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+  padding: 8px 4px 12px;
+}
+.ast .su .go {
+  align-self: flex-start;
+  text-transform: uppercase;
+}
+.ast .sut {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 20px;
+  line-height: 26px;
+  font-weight: 700;
+}

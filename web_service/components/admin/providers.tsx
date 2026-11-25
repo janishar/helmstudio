@@ -7,6 +7,7 @@
 // status line says Found or Missing with Recheck. API 1.52 (plan 27): the key area takes a key (a password field, its
 // value in its own state, never in the form, a URL or storage), checked with the provider, then saved to the file and
 // never shown again; Replace key and Remove key once Found.
+import Link from "next/link";
 import { Fragment, useCallback, useEffect, useId, useRef, useState } from "react";
 import { MoreHorizontal } from "lucide-react";
 import { ErrorNote, Info, Modal } from "@/components/kit";
@@ -42,7 +43,11 @@ export function ProvidersAdmin() {
   const [tests, setTests] = useState<Record<string, string>>({});
   const [deleting, setDeleting] = useState<Provider | null>(null);
   const [presets, setPresets] = useState<Preset[]>([]);
+  const [used, setUsed] = useState<string | null>(null); // the Assistant's provider (plan 32)
   const load = useCallback(() => {
+    ok(api.GET("/v1/studio/admin/assistant"))
+      .then((a) => setUsed(a.provider))
+      .catch(() => setUsed(null));
     ok(api.GET("/v1/studio/admin/providers"))
       .then((l) => {
         setList(l);
@@ -148,6 +153,17 @@ export function ProvidersAdmin() {
                     <span className="mono text-[12px] text-t2">
                       {p.plugin ? `plugin · ${p.plugin}` : p.name}
                     </span>
+                    {p.name === used && (
+                      <>
+                        <br />
+                        <Link
+                          href="/assistant"
+                          className="text-[12px] text-a1 underline underline-offset-2"
+                        >
+                          used by the Assistant
+                        </Link>
+                      </>
+                    )}
                   </td>
                   <td className={cell}>
                     <span className={`tag ${p.kind === "remote" ? "tag-accent" : ""}`}>
@@ -658,16 +674,19 @@ const badKey = (v: string) => /[^!-~]/.test(v.trim());
 /** The key area (plan 27, the Providers board): the key file's line (a dot, Found or Missing, the path, Recheck); while
  * Missing an API key field with Save key; once Found, Replace key and Remove key (asked first). The check's answers:
  * Checking…, Refused (red), Could not check (amber, Save anyway). Not writable: plan 25's note, no field. */
-function KeyArea({
+export function KeyArea({
   status,
   source,
   title,
+  label,
   onStatus,
   onRecheck,
 }: {
   status: S<"ProviderKey">;
   source: ReturnType<typeof fetchFrom>;
   title: string;
+  /** the field's label while no key is found (the Assistant page: "DeepSeek API key") */
+  label?: string;
   onStatus: (k: S<"ProviderKey">) => void;
   onRecheck: () => void;
 }) {
@@ -808,7 +827,7 @@ function KeyArea({
       {field && (
         <div className="flex flex-col gap-1.5">
           <label htmlFor="p-api-key" className="label">
-            {status.found ? "New API key" : "API key"}
+            {status.found ? "New API key" : (label ?? "API key")}
           </label>
           <div className="flex gap-2">
             <input

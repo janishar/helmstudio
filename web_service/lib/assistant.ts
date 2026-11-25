@@ -393,7 +393,7 @@ export const MEMORY_TABS = [
   ["summary", "Chats"],
 ] as const;
 
-/** Sent by Admin › AI agents after a save, so the dock shows or hides the Assistant without a reload. */
+/** Sent by the Assistant page (and Turn on) after a save, so the drawer follows without a reload. */
 export const ASSISTANT_CHANGED = "hs.assistant.changed";
 
 /** An answer's blocks (alpha.2 item 22, board frame 10a): paragraphs, bullet and numbered lists, a plan checklist

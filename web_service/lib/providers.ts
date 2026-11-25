@@ -254,3 +254,17 @@ export function testLine(t: S<"ProviderTest">): string {
     return `${t.answer ? "answered" : `${t.models.length} models listed`} · ${Math.round(t.seconds * 10) / 10} s`;
   return [t.failure ?? "failed", t.error].filter(Boolean).join(" · ");
 }
+
+export const titleOf = (p: Provider) => p.title || p.name;
+
+/** The model providers a job may pick: enabled servers, and remote ones while the deployment's switch is on. */
+export const pickable = (ps: Provider[], remoteOn: boolean) =>
+  ps.filter((p) => p.enabled && (p.kind === "server" || (p.kind === "remote" && remoteOn)));
+
+/** Web search's providers: enabled ones of kind search, only while the switch is on (a search leaves the machine). */
+export const searchable = (ps: Provider[], remoteOn: boolean) =>
+  remoteOn ? ps.filter((p) => p.enabled && p.kind === "search") : [];
+
+/** What a provider is sent: "the prompt to DeepSeek", "the prompt to Ollama, on this network". */
+export const sendsTo = (p: Provider) =>
+  `the prompt to ${titleOf(p)}${p.kind === "server" ? ", on this network" : ""}`;

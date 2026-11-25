@@ -43,6 +43,7 @@ import {
   Plus,
   Redo2,
   RotateCcw,
+  Settings,
   Sparkles,
   Trash2,
   Undo2,
@@ -134,7 +135,8 @@ const words = (name: string) =>
   name.replace(/[A-Z]/g, (c) => ` ${c.toLowerCase()}`).replace(/^./, (c) => c.toUpperCase());
 
 /** The assistant of the signed-in user: status, the chat, the screen registry, and the tab's runner. Nothing is asked
- * until the user is known; the dock item shows only when the admin has it on. */
+ * until the user is known. Plan 32: the dock item (Chat) shows once the status is read, in every state; off or not set
+ * up, the drawer shows a setup message; an admin's first sign-in to a deployment never set up opens it by itself once. */
 export function useAssistant(me: S<"User"> | null) {
   const router = useRouter();
   const [reg] = useState(() => new Registry());
@@ -144,6 +146,8 @@ export function useAssistant(me: S<"User"> | null) {
   const [capRead, setCapRead] = useState<string | undefined>(); // the cap notice the status was read after
   // reopen after a reload of this tab (false on the server; the drawer only renders once the status has loaded)
   const [open, setOpenState] = useState(tabOpen);
+  // opened by itself on first launch (plan 32): its message says so until it is closed
+  const [first, setFirst] = useState(false);
   const [shrunk, setShrunk] = useState(false);
   const [local, setLocalState] = useState<Record<string, Local>>({});
   const [undone, setUndone] = useState<Record<string, boolean>>({});
@@ -175,6 +179,7 @@ export function useAssistant(me: S<"User"> | null) {
       return next;
     });
     setShrunk(false);
+    setFirst(false);
   }, []);
   const setLocal = (id: string, l: Local) => setLocalState((m) => ({ ...m, [id]: l }));
   // size (alpha.2 item 4, board frame 9): full screen, and minimized to the small bar; Close ends both, ⌘J and Esc
@@ -190,7 +195,7 @@ export function useAssistant(me: S<"User"> | null) {
     setMin(true);
   }, [setOpen]);
 
-  // the status and the newest chat, once the user is known, and again when Admin › AI agents saves (no reload)
+  // the status and the newest chat, once the user is known, and again when the Assistant page saves (no reload)
   const [rev, setRev] = useState(0);
   useEffect(() => {
     const bump = () => setRev((n) => n + 1);
@@ -204,6 +209,12 @@ export function useAssistant(me: S<"User"> | null) {
       .then(async (l) => {
         if (stop) return;
         setStatus(l.status);
+        if (l.status.first_launch) {
+          // once: the mark is the user's own, server side (the Mac app and a browser agree)
+          void api.POST("/v1/studio/assistant/first-launch").catch(() => undefined);
+          setOpen(true);
+          setFirst(true);
+        }
         const t = l.status.enabled ? l.threads[0] : undefined;
         if (!t) return;
         const d = await ok(
@@ -219,7 +230,7 @@ export function useAssistant(me: S<"User"> | null) {
     return () => {
       stop = true;
     };
-  }, [me, rev]);
+  }, [me, rev, setOpen]);
 
   // a cap notice is checked against the caps read after it (the admin may have raised or lowered them since the
   // status was read): until that read, the notice alone decides
@@ -557,9 +568,11 @@ export function useAssistant(me: S<"User"> | null) {
   };
 
   const enabled = !!status?.enabled;
-  // ⌘J (Ctrl J) opens and closes it on any screen; ⇧⌘J toggles full screen (opening it full when closed)
+  const ready = !!status;
+  // ⌘J (Ctrl J) opens and closes it on any screen, in every state (plan 32); ⇧⌘J toggles full screen (opening it
+  // full when closed)
   useEffect(() => {
-    if (!enabled) return;
+    if (!ready) return;
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === "j") {
         e.preventDefault();
@@ -571,7 +584,7 @@ export function useAssistant(me: S<"User"> | null) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [enabled, setOpen, open, full]);
+  }, [ready, setOpen, open, full]);
 
   // a new answer is one that came while the drawer was not open (the minimized bar's green dot)
   const lastAnswer = view?.entries.findLast((e) => e.kind === "assistant");
@@ -603,6 +616,10 @@ export function useAssistant(me: S<"User"> | null) {
     status,
     capLimits: capId === capRead ? status?.limits : undefined,
     enabled,
+    ready,
+    first,
+    /** read the status again (after the Assistant page saves, Turn on) */
+    refresh: () => setRev((n) => n + 1),
     view,
     open,
     setOpen,
@@ -1734,7 +1751,7 @@ function ShotListRow({
 
 /** The Memory list (§22.8, board frame 6): the four kinds as tabs, each item with its chat, Edit and Delete (your
  * clicks), and Clear all behind a card. Items are text, never orders. */
-function MemoryList() {
+export function MemoryList({ onItems }: { onItems?: (items: MemoryItem[]) => void } = {}) {
   const [kind, setKind] = useState<MemoryKind>("preference");
   const [items, setItems] = useState<MemoryItem[] | null>(null);
   const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
@@ -1754,6 +1771,9 @@ function MemoryList() {
   useEffect(() => {
     void load();
   }, [load]);
+  useEffect(() => {
+    if (items) onItems?.(items);
+  }, [items, onItems]);
   const act = async (f: () => Promise<unknown>) => {
     setBusy(true);
     try {
@@ -2043,6 +2063,136 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
   );
 }
 
+/** The header's gear (plan 32): the Assistant page. */
+function SettingsButton({ a }: { a: AssistantApi }) {
+  const router = useRouter();
+  return (
+    <button
+      type="button"
+      className="ib"
+      aria-label="Settings"
+      title="Settings"
+      onClick={() => {
+        a.close();
+        router.push("/assistant");
+      }}
+    >
+      <Settings size={15} strokeWidth={1.75} aria-hidden />
+    </button>
+  );
+}
+
+/** The drawer while the Assistant is not set up or off (board frame 21): a message, not a chat. An admin gets Set up
+ * (the Assistant page's setup form) or Turn on (for everyone, the saved settings as they are); anyone else is told
+ * who can. Opened by itself on first launch, it says it opens only once. */
+function SetupDrawer({ a, phone }: { a: AssistantApi; phone: boolean }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const st = a.status;
+  const admin = !!st?.can_set_up;
+  const off = !!st?.set_up;
+  async function turnOn() {
+    setBusy(true);
+    setError("");
+    try {
+      const s = await ok(api.GET("/v1/studio/admin/assistant"));
+      await ok(
+        api.PUT("/v1/studio/admin/assistant", {
+          body: {
+            enabled: true,
+            provider: s.provider,
+            model: s.model,
+            web_search: s.web_search,
+            search_provider: s.search_provider,
+          },
+        }),
+      );
+      window.dispatchEvent(new Event(ASSISTANT_CHANGED));
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div
+      className={`ast ${phone ? "sheet" : "drw"}`}
+      role="complementary"
+      aria-label="Assistant"
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && !e.defaultPrevented) a.close();
+      }}
+    >
+      <div className="dh">
+        <h2>
+          <Sparkles aria-hidden strokeWidth={2} />
+          <span className="truncate">Assistant</span>
+        </h2>
+        <SettingsButton a={a} />
+        <button
+          type="button"
+          className="x"
+          aria-label={`Close (${shortcut()})`}
+          title={`Close (${shortcut()})`}
+          onClick={a.close}
+        >
+          <X size={16} strokeWidth={1.75} aria-hidden />
+        </button>
+      </div>
+      <div className="su">
+        {off ? (
+          <>
+            <p className="sut">The Assistant is off</p>
+            <p className="note">
+              {admin
+                ? "Turn it on for everyone, or change it on the Assistant page."
+                : "Your admin turned it off."}
+            </p>
+            {admin && (
+              <button type="button" className="go" disabled={busy} onClick={() => void turnOn()}>
+                Turn on
+              </button>
+            )}
+          </>
+        ) : admin ? (
+          <>
+            <p className="sut">Set up the Assistant</p>
+            <p className="note">
+              Pick the model it talks to. It helps you plan shots, pick workflows and run them.
+            </p>
+            <button
+              type="button"
+              className="go"
+              onClick={() => {
+                a.close();
+                router.push("/assistant?setup=1");
+              }}
+            >
+              Set up
+            </button>
+            <p className="fine">
+              {a.first
+                ? `Opens once, on your first sign-in. Closed, it stays closed; Chat or ${shortcut()} opens it again.`
+                : "Opens the Assistant page."}
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="sut">The Assistant isn&apos;t set up yet</p>
+            <p className="note">Ask your admin to set it up.</p>
+          </>
+        )}
+        {error && (
+          <p role="alert" className="fine text-bad">
+            {error}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** An image attached in the box: uploading until it has its take's id. */
 type Att = { key: string; name: string; url: string; id?: string };
 
@@ -2129,6 +2279,7 @@ function Drawer({ a }: { a: AssistantApi }) {
     if (chats) setChats(false); // the list never comes back open with the drawer
     return a.min ? <MinBar a={a} /> : null;
   }
+  if (!a.enabled) return <SetupDrawer a={a} phone={phone} />;
   const full = a.full && !phone;
   const limit = limitOf(entries, a.capLimits);
   const st = a.status;
@@ -2338,6 +2489,7 @@ function Drawer({ a }: { a: AssistantApi }) {
             >
               <MessagesSquare size={15} strokeWidth={1.75} aria-hidden />
             </button>
+            <SettingsButton a={a} />
             {phone ? (
               <button
                 type="button"

@@ -119,7 +119,7 @@ const shot = (name: string, p = page) =>
 
 // ---- what the user sees and does
 const dock = (p = page) =>
-  p.getByRole("navigation", { name: "Sections" }).getByRole("button", { name: /^Assistant/ });
+  p.getByRole("navigation", { name: "Sections" }).getByRole("button", { name: /^Chat/ });
 const drawer = (p = page) => p.getByRole("complementary", { name: "Assistant" });
 const box = (p = page) => drawer(p).getByLabel("Message the assistant");
 const lines = (p = page) =>
@@ -816,32 +816,27 @@ test("J11b after the admin raises the daily cap, I can write again", async () =>
   await replied("Here again.");
 });
 
-test("J12 the admin turns the assistant off and on: the dock follows", async () => {
-  await admin.goto("/admin?tab=agents");
-  await expect(dock(admin)).toBeVisible();
-  const form = admin.getByRole("form", { name: "Assistant settings" });
-  const edit = admin.locator('[aria-controls="assistant-settings"]');
+test("J12 the admin turns the assistant off and on on its page: the drawer follows", async () => {
+  await admin.goto("/assistant");
+  const sw = admin.getByRole("switch", { name: "Assistant on" });
   try {
-    await edit.click();
-    await form.getByRole("switch", { name: "Assistant on" }).click();
-    await expect(form.getByRole("switch", { name: "Assistant on" })).toHaveAttribute(
-      "aria-checked",
-      "false",
-    );
-    await form.getByRole("button", { name: "Save" }).click();
-    await expect(dock(admin)).toBeHidden(); // in that page, no reload
+    await expect(sw).toHaveAttribute("aria-checked", "true");
+    await sw.click();
+    await expect(sw).toHaveAttribute("aria-checked", "false");
     await shot("j12-admin-off", admin);
+    // plan 32: Chat stays in the dock; the drawer says the admin turned it off
     await page.reload();
-    await expect(page.getByRole("navigation", { name: "Sections" })).toBeVisible();
-    await expect(dock()).toBeHidden();
+    await open();
+    await expect(drawer()).toContainText("The Assistant is off");
+    await expect(drawer()).toContainText("Your admin turned it off.");
+    await expect(box()).toBeHidden();
+    await shot("j12-user-off");
 
-    await edit.click();
-    await form.getByRole("switch", { name: "Assistant on" }).click();
-    await form.getByLabel("Provider").selectOption(PROV);
-    await form.getByRole("button", { name: "Save" }).click();
-    await expect(dock(admin)).toBeVisible();
+    await sw.click();
+    await expect(sw).toHaveAttribute("aria-checked", "true");
     await page.reload();
-    await expect(dock()).toBeVisible();
+    await open();
+    await expect(box()).toBeVisible();
   } finally {
     await settings({ enabled: true, provider: PROV, model: null, limits: LIMITS });
   }

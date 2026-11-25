@@ -227,7 +227,7 @@ export function PluginsScreen() {
                         <div className="flex flex-wrap items-center gap-1.5 min-[1400px]:flex-nowrap">
                           {p.provider ? (
                             <>
-                              {/* one line at 1440 px: the aside has Open in Model providers and AI agents */}
+                              {/* one line at 1440 px: the aside has Open in Model providers and Open Assistant */}
                               <Link
                                 href="/admin?tab=providers"
                                 title="Open in Model providers"
@@ -461,6 +461,15 @@ function PluginPanel({
       <span className="text-[13px] text-t1b">
         {skill && p.when ? whenLine(p.when) : p.description}
       </span>
+      {(skill || p.kind === "assistant-tools") && (
+        <span className="text-[12px] text-t2">
+          Also on the{" "}
+          <Link href="/assistant" className="underline underline-offset-2">
+            Assistant page
+          </Link>
+          .
+        </span>
+      )}
       {alert && (
         <div
           role="alert"
@@ -609,10 +618,10 @@ function Added({ title, onDone }: { title: string; onDone: () => void }) {
         <span className="text-[#7fd88f]">✓</span>
         {title} added
       </div>
-      <span className="text-[12px] text-t2">Next: use it for the Assistant in AI agents.</span>
+      <span className="text-[12px] text-t2">Next: use it for the Assistant.</span>
       <div className="flex gap-1.5">
-        <Link href="/admin?tab=agents" className={`${CHIP} bg-a1 font-semibold text-on1`}>
-          Open AI agents
+        <Link href="/assistant" className={`${CHIP} bg-a1 font-semibold text-on1`}>
+          Open Assistant
         </Link>
         <button type="button" className={CHIP} onClick={onDone}>
           Done
@@ -635,8 +644,8 @@ function AlreadyAdded({ title }: { title: string }) {
         <Link href="/admin?tab=providers" className={CHIP}>
           Open in Model providers
         </Link>
-        <Link href="/admin?tab=agents" className={CHIP}>
-          Open AI agents
+        <Link href="/assistant" className={CHIP}>
+          Open Assistant
         </Link>
       </div>
     </div>

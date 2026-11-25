@@ -52,6 +52,10 @@ const id = (n: number, turn = 1) => `${T}:${turn}:${n}`;
 const user = { id: "u1", email: "u@x.test", name: "U", roles: ["user"] } as unknown as S<"User">;
 const status = (remote = false, thinks = false): S<"AssistantStatus"> => ({
   enabled: true,
+  set_up: true,
+  can_set_up: false,
+  first_launch: false,
+  tools: [],
   thinks,
   sees: false,
   provider: { title: "DeepSeek", remote },
@@ -114,7 +118,7 @@ function serve({
 
 async function openDrawer() {
   const r = render(<AppShell user={user}>{null}</AppShell>);
-  fireEvent.click(await screen.findByRole("button", { name: /^Assistant/ }));
+  fireEvent.click(await screen.findByRole("button", { name: /^Chat/ }));
   await screen.findByRole("complementary", { name: "Assistant" });
   return r;
 }
@@ -249,7 +253,9 @@ describe("a film's shot list (board frame 18)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Memory" }));
     fireEvent.click(screen.getByRole("tab", { name: "Projects" }));
     expect(await screen.findByText("Neon rain · shot list")).toBeTruthy();
-    expect(screen.getByText("4 shots · 1 with a take · 12 s planned · Rain still · today")).toBeTruthy();
+    expect(
+      screen.getByText("4 shots · 1 with a take · 12 s planned · Rain still · today"),
+    ).toBeTruthy();
     const ol = screen.getByRole("list", { name: "Shots of Neon rain" });
     const rows = ol.querySelectorAll(":scope > li");
     expect(rows).toHaveLength(4);

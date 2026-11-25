@@ -8,7 +8,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { useEffect, useState } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { api, type S } from "@/lib/api";
-import { ASSISTANT_CHANGED, done, type Handler } from "@/lib/assistant";
+import { done, type Handler } from "@/lib/assistant";
 import { answer } from "./helpers";
 
 let path = "/";
@@ -59,6 +59,10 @@ const id = (n: number, turn = 1) => `${T}:${turn}:${n}`;
 const user = { id: "u1", email: "u@x.test", name: "U", roles: ["user"] } as unknown as S<"User">;
 const status = (remote = false, thinks = false): S<"AssistantStatus"> => ({
   enabled: true,
+  set_up: true,
+  can_set_up: false,
+  first_launch: false,
+  tools: [],
   thinks,
   sees: false,
   provider: { title: "DeepSeek", remote },
@@ -144,7 +148,7 @@ function Screen({ actions }: { actions: Record<string, Handler> }) {
 
 async function openDrawer(children: React.ReactNode = null) {
   const r = render(<AppShell user={user}>{children}</AppShell>);
-  fireEvent.click(await screen.findByRole("button", { name: /^Assistant/ }));
+  fireEvent.click(await screen.findByRole("button", { name: /^Chat/ }));
   await screen.findByRole("complementary", { name: "Assistant" });
   return r;
 }
@@ -207,35 +211,115 @@ describe("the drawer", () => {
     expect(screen.getByText(/^· Esc closes$/)).toBeTruthy();
   });
 
-  it("is hidden when the admin has it off", async () => {
+  // plan 32 (board frame 21): the dock always has Chat; off or not set up, the drawer shows a message, not a chat
+  const off = (over: Partial<S<"AssistantStatus">>) =>
     answer("GET", {
       "/v1/studio/assistant/threads": () => ({
-        data: { status: { ...status(), enabled: false }, threads: [] },
+        data: { status: { ...status(), enabled: false, provider: null, ...over }, threads: [] },
       }),
     });
+  const admin = { ...user, roles: ["user", "admin"] } as S<"User">;
+  const drawer = () => screen.getByRole("complementary", { name: "Assistant" });
+
+  it("off: Chat stays in the dock and ⌘J opens the message; anyone else is told their admin did it", async () => {
+    off({ set_up: true });
     render(<AppShell user={user}>x</AppShell>);
-    await act(() => Promise.resolve());
-    expect(screen.queryByRole("button", { name: "Assistant" })).toBeNull();
+    await screen.findByRole("button", { name: "Chat" });
     fireEvent.keyDown(window, { key: "j", metaKey: true });
+    expect(within(drawer()).getByText("The Assistant is off")).toBeTruthy();
+    expect(within(drawer()).getByText("Your admin turned it off.")).toBeTruthy();
+    expect(within(drawer()).queryByRole("button", { name: "Turn on" })).toBeNull();
+    expect(screen.queryByRole("textbox", { name: "Message the assistant" })).toBeNull();
+    fireEvent.click(within(drawer()).getByRole("button", { name: "Settings" }));
+    expect(push).toHaveBeenCalledWith("/assistant");
+  });
+
+  it("not set up: anyone else asks their admin; an admin gets Set up, which opens the page's form", async () => {
+    off({ set_up: false });
+    const r = render(<AppShell user={user}>x</AppShell>);
+    fireEvent.click(await screen.findByRole("button", { name: "Chat" }));
+    expect(within(drawer()).getByText("The Assistant isn't set up yet")).toBeTruthy();
+    expect(within(drawer()).getByText("Ask your admin to set it up.")).toBeTruthy();
+    r.unmount();
+    sessionStorage.clear();
+    off({ set_up: false, can_set_up: true });
+    render(<AppShell user={admin}>x</AppShell>);
+    fireEvent.click(await screen.findByRole("button", { name: "Chat" }));
+    expect(within(drawer()).getByText("Set up the Assistant")).toBeTruthy();
+    expect(within(drawer()).getByText("Opens the Assistant page.")).toBeTruthy();
+    fireEvent.click(within(drawer()).getByRole("button", { name: "Set up" }));
+    expect(push).toHaveBeenCalledWith("/assistant?setup=1");
     expect(screen.queryByRole("complementary", { name: "Assistant" })).toBeNull();
   });
 
-  it("shows in the dock as soon as Admin › AI agents turns it on, without a reload", async () => {
+  it("off, an admin: Turn on saves it on as it was, and the chat follows without a reload", async () => {
     let on = false;
     answer("GET", {
       "/v1/studio/assistant/threads": () => ({
-        data: { status: { ...status(), enabled: on }, threads: [] },
+        data: {
+          status: on ? status() : { ...status(), enabled: false, provider: null, can_set_up: true },
+          threads: [],
+        },
+      }),
+      "/v1/studio/admin/assistant": () => ({
+        data: {
+          enabled: false,
+          provider: "deepseek",
+          model: null,
+          personal: false,
+          web_search: false,
+          search_provider: null,
+          limits: status().limits,
+          remote_enabled: true,
+          updated_at: "2026-11-25T00:00:00Z",
+        },
       }),
     });
-    render(<AppShell user={user}>x</AppShell>);
-    await act(() => Promise.resolve());
-    expect(screen.queryByRole("button", { name: "Assistant" })).toBeNull();
-    on = true;
-    await act(async () => {
-      window.dispatchEvent(new Event(ASSISTANT_CHANGED));
-      await Promise.resolve();
+    const put = answer("PUT", {
+      "/v1/studio/admin/assistant": () => {
+        on = true;
+        return { data: {} };
+      },
     });
-    await waitFor(() => expect(screen.getByRole("button", { name: "Assistant" })).toBeTruthy());
+    render(<AppShell user={admin}>x</AppShell>);
+    fireEvent.click(await screen.findByRole("button", { name: "Chat" }));
+    expect(
+      within(drawer()).getByText("Turn it on for everyone, or change it on the Assistant page."),
+    ).toBeTruthy();
+    fireEvent.click(within(drawer()).getByRole("button", { name: "Turn on" }));
+    await waitFor(() => expect(put).toHaveBeenCalled());
+    expect(put.mock.calls[0][1]).toEqual({
+      body: {
+        enabled: true,
+        provider: "deepseek",
+        model: null,
+        web_search: false,
+        search_provider: null,
+      },
+    });
+    expect(await screen.findByText("Hi. What should we make?")).toBeTruthy();
+  });
+
+  it("first launch: it opens by itself once, says so, and marks it for this user", async () => {
+    off({ set_up: false, can_set_up: true, first_launch: true });
+    const mark = answer("POST", { "/v1/studio/assistant/first-launch": () => ({ status: 204 }) });
+    render(<AppShell user={admin}>x</AppShell>);
+    expect(await screen.findByText("Set up the Assistant")).toBeTruthy();
+    expect(screen.getByText(/^Opens once, on your first sign-in/)).toBeTruthy();
+    expect(mark).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Chat" }).getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(within(drawer()).getByRole("button", { name: /^Close/ }));
+    expect(screen.queryByRole("complementary", { name: "Assistant" })).toBeNull();
+    fireEvent.keyDown(window, { key: "j", metaKey: true });
+    expect(within(drawer()).getByText("Opens the Assistant page.")).toBeTruthy(); // reopened by you
+  });
+
+  it("the rail has the Assistant page, then Chat with ⌘J", async () => {
+    serve();
+    render(<AppShell user={user}>x</AppShell>);
+    const chat = await screen.findByRole("button", { name: "Chat" });
+    expect(chat.getAttribute("title")).toMatch(/^Chat \((⌘J|Ctrl J)\)$/);
+    expect(screen.getByRole("link", { name: "Assistant" }).getAttribute("href")).toBe("/assistant");
   });
 
   it("says a hidden tab's summary is hidden", async () => {
@@ -517,7 +601,7 @@ describe("other tabs, server cards, limits, memory", () => {
     render(<AppShell user={user}>{null}</AppShell>);
     // the dock's dot: a card waits
     fireEvent.click(
-      await screen.findByRole("button", { name: /^Assistant.*1 card waits for you/ }),
+      await screen.findByRole("button", { name: /^Chat.*1 card waits for you/ }),
     );
     const c = await screen.findByRole("region", { name: "Confirm: Search the web?" });
     expect(c.textContent).toContain("ltx 2.3 prompt tips");
@@ -1089,7 +1173,7 @@ describe("thinking (plan 29)", () => {
     act(() => vi.advanceTimersByTime(4000));
     fireEvent.click(screen.getByRole("button", { name: /^Close \(/ }));
     act(() => vi.advanceTimersByTime(3000));
-    fireEvent.click(screen.getByRole("button", { name: /^Assistant/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Chat/ }));
     expect(bubble()?.textContent).toBe("Thinking… 7 s");
   });
 

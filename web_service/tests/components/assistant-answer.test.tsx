@@ -75,6 +75,10 @@ function serve(entries: S<"AssistantEntry">[]) {
       data: {
         status: {
           enabled: true,
+          set_up: true,
+          can_set_up: false,
+          first_launch: false,
+          tools: [],
           thinks: false,
           provider: { title: "DeepSeek", remote: true },
           web_search: null,
@@ -150,7 +154,7 @@ function serve(entries: S<"AssistantEntry">[]) {
 
 async function openDrawer() {
   render(<AppShell user={user}>{null}</AppShell>);
-  fireEvent.click(await screen.findByRole("button", { name: /^Assistant/ }));
+  fireEvent.click(await screen.findByRole("button", { name: /^Chat/ }));
   return screen.findByRole("complementary", { name: "Assistant" });
 }
 
