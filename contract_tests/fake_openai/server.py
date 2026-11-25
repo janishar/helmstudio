@@ -168,6 +168,7 @@ class Handler(BaseHTTPRequestHandler):
             with lock:
                 requests.append({"model": f"tool:{name}", "body": body, "authorization": self.headers.get("Authorization"),
                                  "owner": self.headers.get("X-Helm-Owner"), "call": self.headers.get("X-Helm-Call"),
+                                 "api": self.headers.get("X-Helm-Api"),
                                  "t0": time.time(), "status": 200})  # fmt: skip
             text = str((body.get("input") or {}).get("text", ""))
             if text.startswith("fail"):

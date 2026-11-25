@@ -6,7 +6,8 @@ tools in the assistant (run at once, a risk flag asks on a plugin card, a failur
 import uuid
 
 import pytest
-from helpers import STUDIO, ok, wait_for
+from conftest import make_client  # a plugin's client sends only its pass, no user token
+from helpers import STUDIO, ok, png_bytes, upload, wait_for
 from test_assistant import TAB, assistant, screen  # noqa: F401  (assistant is a fixture)
 from test_director import SERVER_HOST, fake, fake_ctl, provider, server_body  # noqa: F401
 
@@ -122,9 +123,7 @@ def test_add_as_provider_is_only_you(admin, admin_session, api, on, fake_ctl):  
             )
             assert (mine["provider"], mine["personal"]) == (name, True)
             assert ok(admin.get(SETTINGS))["provider"] == name
-            assert (
-                ok(admin.get(THREADS))["status"]["provider"]["title"] == "Fake provider"
-            )
+            assert ok(admin.get(THREADS))["status"]["provider"]["title"] == "Fake provider"
             assert ok(api.get(THREADS))["status"]["provider"]["title"] == "Fake server"
             back = ok(
                 admin.put(SETTINGS, json={"enabled": True, "provider": shared})
@@ -216,4 +215,74 @@ def test_plugin_tools_in_the_assistant(admin, api, user_a, assistant, on):  # no
     assert not any(
         "fake-tools__" in t["function"]["name"] for t in last["body"].get("tools") or []
     ), last["body"].get("tools")
+    ok(api.delete(f"{THREADS}/{tid}"), 204)
+
+
+def test_a_plugin_pass_opens_only_its_owners_takes(admin, api, api_b, anon, assistant, on):  # noqa: F811
+    """API 1.70 (contracts/README.md "Plugins: takes"): the call's pass is studio's; with it, and no API key, the
+    plugin reads one of the owner's takes and makes a new one from it (source tool); another user's take is 404, a
+    forged pass 401, and the pass stops working once the plugin is off."""
+    on("fake-tools")
+    mine = upload(api, anon, png_bytes(6, 4), "mine.png")
+    theirs = upload(api_b, anon, png_bytes(5, 5), "theirs.png")
+    word = uuid.uuid4().hex[:8]
+    fake("POST", "/__script", {assistant: [
+        {"content": "Echoing.", "tool_calls": [{"tool": "fake-tools__echo", "args": {"text": word}}]},
+        {"content": "Done."},
+    ]})  # fmt: skip
+    tid, _ = _turn(api, "echo it")
+    call = next(
+        r
+        for r in fake("GET", "/__requests")
+        if r["model"] == "tool:echo" and r["body"]["input"]["text"] == word
+    )
+    assert call["api"] and call["api"].startswith("http")  # X-Helm-Api: the stack's public base URL
+    with (
+        make_client({"Authorization": call["authorization"]}) as plug,
+        make_client({"Authorization": "Bearer a.b"}) as forged,
+    ):
+        got = ok(plug.get(f"{STUDIO}/plugin/takes/{mine['id']}"))
+        assert (
+            got["id"] == mine["id"]
+            and got["kind"] == "image"
+            and (got["width"], got["height"]) == (6, 4)
+        )
+        assert anon.get(got["url"]).content == png_bytes(6, 4)
+        assert plug.get(f"{STUDIO}/plugin/takes/{theirs['id']}").status_code == 404
+        assert forged.get(f"{STUDIO}/plugin/takes/{mine['id']}").status_code == 401
+        assert (
+            api.get(f"{STUDIO}/plugin/takes/{mine['id']}").status_code == 401
+        )  # a user token is no pass
+        assert (
+            plug.get(f"{STUDIO}/takes/{mine['id']}").status_code == 401
+        )  # nor is a pass a user token
+
+        data = png_bytes(4, 6)
+        body = {"parents": [mine["id"]], "tool": "echo", "input": {"text": word}, "title": "mine · rotated",
+                "kind": "image", "content_type": "image/png", "bytes": len(data), "width": 4, "height": 6}  # fmt: skip
+        assert (
+            plug.post(f"{STUDIO}/plugin/takes", json=body | {"parents": [theirs["id"]]}).status_code
+            == 404
+        )
+        up = ok(plug.post(f"{STUDIO}/plugin/takes", json=body), 201)
+        assert (
+            anon.put(
+                up["upload_url"], content=data, headers={"Content-Type": "image/png"}
+            ).status_code
+            == 204
+        )
+        made = ok(plug.post(f"{STUDIO}/plugin/takes/{up['take_id']}/complete"))
+        assert (
+            made["source"] == "tool"
+            and made["parents"] == [mine["id"]]
+            and made["made_with"] is None
+        )
+        assert made["tool"] == {"plugin": "fake-tools", "tool": "echo", "input": {"text": word}}
+        assert ok(api.get(f"{STUDIO}/takes/{made['id']}"))["tool"]["plugin"] == "fake-tools"
+        assert api_b.get(f"{STUDIO}/takes/{made['id']}").status_code == 404
+        ok(api.delete(f"{STUDIO}/takes/{made['id']}"), 204)  # the line's Undo
+        admin.put(f"{PLUGINS}/fake-tools", json={"enabled": False})
+        assert (
+            plug.get(f"{STUDIO}/plugin/takes/{mine['id']}").status_code == 401
+        )  # off: the pass opens nothing
     ok(api.delete(f"{THREADS}/{tid}"), 204)
