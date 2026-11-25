@@ -94,8 +94,16 @@ type manifestProvider struct {
 	Path     string   `json:"path"`
 	Models   []string `json:"models"`
 	KeyHint  string   `json:"key_hint"`
+	KeyFrom  *keyFrom `json:"key_from,omitempty"` // API 1.73: its key from a file on its run host
 	MemoryGB *float64 `json:"memory_gb,omitempty"`
 	TimeoutS *int     `json:"timeout_s,omitempty"`
+}
+
+// keyFrom is plugins/manifest.schema.json provider.key_from (API 1.73): the runner of its run host reads Var from
+// File in HELM_HOME.
+type keyFrom struct {
+	File string `json:"file"`
+	Var  string `json:"var"`
 }
 
 type manifestTool struct {
@@ -129,6 +137,8 @@ var (
 	runHostRe    = regexp.MustCompile(`^[a-z0-9]{1,32}$`)
 	recipeNameRe = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
 	recipeKeyRe  = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}\.[a-z][a-z0-9_]{0,47}$`)
+	keyFileRe    = regexp.MustCompile(`^[a-z][a-z0-9-]{0,22}\.[A-Za-z0-9._-]{1,40}$`)
+	keyVarRe     = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,63}$`)
 )
 
 // problem is why a manifest is skipped (the schema's rules a scan can trip on), or "".
@@ -184,6 +194,10 @@ func (s *Service) problem(ctx context.Context, m *manifest, folder string) strin
 		if p == nil || m.Tools != nil || !pluginPathRe.MatchString(p.Path) || !text(p.KeyHint, 120) || len(p.Models) < 1 ||
 			len(p.Models) > 16 || slices.ContainsFunc(p.Models, func(v string) bool { return !modelNameRe.MatchString(v) }) {
 			return "a model-provider needs provider {path, models, key_hint} and no tools"
+		}
+		if k := p.KeyFrom; k != nil && (m.Run == nil || !keyFileRe.MatchString(k.File) ||
+			!strings.HasPrefix(k.File, m.Name+".") || !keyVarRe.MatchString(k.Var)) {
+			return "provider.key_from needs run and a file of its own (<name>.…) and a variable"
 		}
 	case "assistant-tools":
 		if m.Provider != nil || len(m.Tools) < 1 || len(m.Tools) > 8 {
@@ -267,7 +281,7 @@ func (s *Service) pluginDTOs(ctx context.Context, caller common.Caller, rows []p
 			Author: m.Author, Source: m.Source, MayDo: m.MayDo, Personal: m.Personal, Disclaimer: m.Disclaimer, URL: m.URL,
 			Start: m.Start, Enabled: r.Enabled, Status: "off", UpdatedAt: r.UpdatedAt}
 		if m.Provider != nil {
-			p.Models, p.KeyHint = m.Provider.Models, &m.Provider.KeyHint
+			p.Models, p.KeyHint, p.KeyFromHost = m.Provider.Models, &m.Provider.KeyHint, m.Provider.KeyFrom != nil
 		}
 		for _, t := range m.Tools {
 			p.Tools = append(p.Tools, dto.PluginTool{Name: t.Name, Description: t.Description, Risk: dto.PluginRisk{
@@ -489,13 +503,26 @@ func (s *Service) AddPluginProvider(ctx context.Context, caller common.Caller, n
 	if err := s.nameFree(ctx, caller, provider, name); err != nil {
 		return dto.Provider{}, err
 	}
+	key, fromHost := body.Key, body.Key == "" && m.Provider.KeyFrom != nil
+	switch {
+	case fromHost:
+		var err error
+		if key, err = s.hostKey(ctx, name, m); err != nil {
+			return dto.Provider{}, err
+		}
+	case key == "":
+		return dto.Provider{}, network.NewUnprocessableError(dto.PluginKeyText, nil)
+	}
 	baseURL, secret := m.URL+m.Provider.Path, "plugin-"+provider
-	reply, err := s.askKeyWrite(ctx, message.ProviderKeyWriteRequest{Op: "save", KeySecret: secret, Key: body.Key,
+	reply, err := s.askKeyWrite(ctx, message.ProviderKeyWriteRequest{Op: "save", KeySecret: secret, Key: key,
 		Provider: map[string]any{"kind": "server", "api": "openai", "base_url": baseURL, "timeout_s": 15}})
 	if err != nil {
 		return dto.Provider{}, err
 	}
 	switch {
+	case reply.Check == "refused" && fromHost:
+		log.Printf("plugin %s: its own key refused by the plugin, not saved, by %s", name, caller.ID)
+		return dto.Provider{}, network.NewConflictError(m.Title+" refused its own key: turn it off and on, then Try again", nil)
 	case reply.Check == "refused":
 		log.Printf("plugin %s: key refused by the plugin, not saved, by %s", name, caller.ID)
 		return dto.Provider{}, network.NewUnprocessableError("The key doesn't match: copy it again from the plugin's .env", nil)
@@ -526,6 +553,34 @@ func (s *Service) AddPluginProvider(ctx context.Context, caller common.Caller, n
 		return err
 	})
 	return out, err
+}
+
+// hostKey is the key of a plugin whose manifest has provider.key_from (API 1.73), from the runner of its run host. The
+// key is never logged and never in an error.
+func (s *Service) hostKey(ctx context.Context, name string, m manifest) (string, error) {
+	host := m.Run.host()
+	if _, live := s.registry.PluginRuns(host, time.Now()); !live {
+		return "", network.NewConflictError("No runner is up on "+host+": start helmstudio there", nil)
+	}
+	if !running(ctx, m) {
+		return "", network.NewConflictError(m.Title+" is not running: turn it on first", nil)
+	}
+	unavailable := network.NewServiceUnavailableError("the runner on "+host+" did not answer; try again", nil)
+	if s.pluginKey == nil {
+		return "", unavailable
+	}
+	reply, err := s.pluginKey(ctx, host, message.PluginKeyRequest{Plugin: name})
+	key := dto.PluginProviderCreate{Key: reply.Key}
+	switch {
+	case err != nil:
+		return "", unavailable
+	case reply.Code == "no_key":
+		return "", network.NewConflictError(m.Title+" makes its key on first start: turn it on, then Try again", nil)
+	case reply.Code != "" || key.Validate() != "" || key.Key == "":
+		log.Printf("plugin %s: the runner on %s gave no key (%s: %s)", name, host, reply.Code, reply.Error)
+		return "", network.NewConflictError("the runner on "+host+" can't read "+m.Title+"'s key: see its log", nil)
+	}
+	return key.Key, nil
 }
 
 // assistantPlugins is a turn's `plugins`: the assistant-tools plugins that are on, as studio read them.

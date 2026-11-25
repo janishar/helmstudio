@@ -2005,7 +2005,8 @@ paths:
         for it, then checks and writes it the same way; the key is never in a response, an event or a log. Its errors:
         409 `No runner is up on <host>: start helmstudio there`, `<title> is not running: turn it on first`,
         `<title> makes its key on first start: turn it on, then Try again` (no key yet), `<title> refused its own key:
-        turn it off and on, then Try again` (the check was refused); 503 `the runner on <host> did not answer; try
+        turn it off and on, then Try again` (the check was refused), `the runner on <host> can't read <title>'s key:
+        see its log` (refused or not found by the runner); 503 `the runner on <host> did not answer; try
         again`.
         422 `The key doesn't match: copy it again from the plugin's .env` (the check was refused: nothing saved),
         `<title> did not answer: start it, then Try again` (unreachable: nothing saved), a default_model not in its

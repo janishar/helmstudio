@@ -390,9 +390,10 @@ type Plugin struct {
 	Files       []string          `json:"files,omitempty"`
 	Recipes     *PluginRecipes    `json:"recipes,omitempty"`
 	Problem     *string           `json:"problem,omitempty"`
-	Starts      *PluginStarts     `json:"starts,omitempty"` // API 1.67: it starts itself
-	Takes       bool              `json:"takes,omitempty"`  // API 1.70
-	Needs       *string           `json:"needs,omitempty"`  // API 1.70
+	Starts      *PluginStarts     `json:"starts,omitempty"`        // API 1.67: it starts itself
+	Takes       bool              `json:"takes,omitempty"`         // API 1.70
+	Needs       *string           `json:"needs,omitempty"`         // API 1.70
+	KeyFromHost bool              `json:"key_from_host,omitempty"` // API 1.73: Add as provider needs no key
 }
 
 // PluginUse is GET /plugins/{plugin} (API 1.70): a takes plugin that is on, as every user sees it.
@@ -518,11 +519,15 @@ type PluginProviderCreate struct {
 	Host         *string `json:"host"`
 }
 
-// Validate trims and checks the key as ProviderKeySave does, and the shape of the rest.
+// PluginKeyText is Add as provider's 422 without a key, for a plugin that does not get it from its host (API 1.73).
+const PluginKeyText = "key must be 1-1024 characters"
+
+// Validate trims and checks the key as ProviderKeySave does (from API 1.73 it may be absent: the service decides),
+// and the shape of the rest.
 func (b *PluginProviderCreate) Validate() string {
 	b.Key = strings.TrimSpace(b.Key)
-	if b.Key == "" || len(b.Key) > 1024 {
-		return "key must be 1-1024 characters"
+	if len(b.Key) > 1024 {
+		return PluginKeyText
 	}
 	for i := 0; i < len(b.Key); i++ {
 		if b.Key[i] < 0x21 || b.Key[i] > 0x7e {

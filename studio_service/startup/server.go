@@ -194,6 +194,18 @@ func Run() error {
 			}
 			return reply, err
 		},
+		// a plugin's key from its host (API 1.73): 5 s; the reply holds the key: it is never logged here
+		pluginKey: func(ctx context.Context, host string, req message.PluginKeyRequest) (message.PluginKeyReply, error) {
+			var reply message.PluginKeyReply
+			body, _ := json.Marshal(req)
+			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+			answer, err := natsConn.RequestWithContext(ctx, message.SubjectPluginKey+host, body)
+			if err == nil {
+				err = json.Unmarshal(answer.Data, &reply)
+			}
+			return reply, err
+		},
 	}
 	module.purge, module.putSettings = messaging.NatsPurge(client), messaging.NatsKVPut(client, "host_settings")
 	if module.store, err = objectStore(ctx, env); err != nil {

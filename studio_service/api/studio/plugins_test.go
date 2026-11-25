@@ -28,6 +28,8 @@ func TestReadManifests(t *testing.T) {
 		"unknown":    `{"name":"unknown","extra":1}`,
 		"empty-risk": `{"name":"empty-risk","title":"x","version":"0.1.0","kind":"assistant-tools","description":"x","author":"x","may_do":["x"],"url":"http://a:1","health":"/h","tools":[{"name":"t","description":"x","input":{"type":"object"},"risk":{}}]}`,
 		"no-tools":   `{"name":"no-tools","title":"x","version":"0.1.0","kind":"assistant-tools","description":"x","author":"x","may_do":["x"],"url":"http://a:1","health":"/h"}`,
+		"key-norun":  `{"name":"key-norun","title":"x","version":"0.1.0","kind":"model-provider","description":"x","author":"x","may_do":["x"],"url":"http://a:1","health":"/h","provider":{"path":"/v1","models":["m"],"key_hint":"k","key_from":{"file":"key-norun.env","var":"K"}}}`,
+		"key-other":  `{"name":"key-other","title":"x","version":"0.1.0","kind":"model-provider","description":"x","author":"x","may_do":["x"],"url":"http://a:1","health":"/h","run":{"cmd":["./r"]},"provider":{"path":"/v1","models":["m"],"key_hint":"k","key_from":{"file":"claude-code-bridge.env","var":"K"}}}`,
 		"good":       `{"name":"good","title":"x","version":"0.1.0","kind":"model-provider","description":"x","author":"x","may_do":["x"],"url":"http://a:1","health":"/h","provider":{"path":"/v1","models":["m"],"key_hint":"k"}}`,
 	} {
 		if err := os.MkdirAll(filepath.Join(bad, name), 0o755); err != nil {
@@ -45,7 +47,7 @@ func TestReadManifests(t *testing.T) {
 			t.Fatalf("%s missing: %v", want, names)
 		}
 	}
-	for _, bad := range []string{"wrong-name", "public", "unknown", "no-tools", "empty-risk"} {
+	for _, bad := range []string{"wrong-name", "public", "unknown", "no-tools", "empty-risk", "key-norun", "key-other"} {
 		if slices.Contains(names, bad) {
 			t.Fatalf("%s read: %v", bad, names)
 		}
@@ -56,6 +58,9 @@ func TestReadManifests(t *testing.T) {
 	// alpha.3 item 1: Your Claude subscription is personal, starts itself on the Mac, and its name never says Claude
 	// Code or Anthropic
 	b := got["claude-code-bridge"].M
+	if k := b.Provider.KeyFrom; k == nil || k.File != "claude-code-bridge.env" || k.Var != "BRIDGE_TOKEN" {
+		t.Fatal("claude-code-bridge: its key comes from its host (API 1.73)")
+	}
 	if title := strings.ToLower(b.Title); !b.Personal || b.Run == nil || b.Run.Host == nil || *b.Run.Host != "mac" ||
 		strings.Contains(title, "claude code") || strings.Contains(title, "anthropic") {
 		t.Fatalf("claude-code-bridge: %+v", b)

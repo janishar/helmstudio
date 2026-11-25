@@ -468,6 +468,22 @@ type ProviderKeyWriteRequest struct {
 	Force     bool           `json:"force,omitempty"`
 }
 
+// SubjectPluginKey is a host's supervising runner's request/reply subject prefix (API 1.73): runner.plugins.key.<host>
+// answers a plugin's key from its file in HELM_HOME. Core request/reply only; the reply is never printed or logged.
+const SubjectPluginKey = "runner.plugins.key."
+
+// PluginKeyRequest is req.runner.plugins.key's request.
+type PluginKeyRequest struct {
+	Plugin string `json:"plugin"`
+}
+
+// PluginKeyReply is its reply: {key} or {error, code: not_found | no_key | refused}. Never printed or logged.
+type PluginKeyReply struct {
+	Key   string `json:"key"`
+	Error string `json:"error"`
+	Code  string `json:"code"`
+}
+
 // ProviderKeyWriteReply is its reply: {found, writable, saved?, check?, detail?} or {error, code: readonly | not_file |
 // internal}.
 type ProviderKeyWriteReply struct {

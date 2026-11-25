@@ -52,6 +52,13 @@ type ProviderKeyAsk func(ctx context.Context, req message.ProviderKeyRequest) (m
 // SetProviderKey sets how the service reaches pipelines' key check; without one the route answers 503.
 func (s *Service) SetProviderKey(fn ProviderKeyAsk) { s.providerKey = fn }
 
+// PluginKeyAsk asks the supervising runner of a host for a plugin's key (req.runner.plugins.key, API 1.73); an error
+// is no answer.
+type PluginKeyAsk func(ctx context.Context, host string, req message.PluginKeyRequest) (message.PluginKeyReply, error)
+
+// SetPluginKey sets how a plugin's key is asked of its host (nil: 503).
+func (s *Service) SetPluginKey(fn PluginKeyAsk) { s.pluginKey = fn }
+
 // ProviderKeyWriteAsk asks pipelines_service to save or remove a key file (API 1.52); an error is no answer.
 type ProviderKeyWriteAsk func(ctx context.Context, req message.ProviderKeyWriteRequest) (message.ProviderKeyWriteReply, error)
 

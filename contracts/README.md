@@ -4271,7 +4271,8 @@ that makes its own key on its run host needs no key pasted anywhere.
   (its `run.host` must be this host), refuses a file outside `HELM_HOME`, a symlink, or one not named after the plugin
   (`refused`), and reads only that variable (`no_key` when the file or the line is not there yet: 409 `<title> makes
   its key on first start: turn it on, then Try again`). Studio then checks and writes the key as for a pasted one
-  (refused: 409 `<title> refused its own key: turn it off and on, then Try again`). The key travels only in the core
+  (refused: 409 `<title> refused its own key: turn it off and on, then Try again`; the runner's `refused` or
+  `not_found`: 409 `the runner on <host> can't read <title>'s key: see its log`). The key travels only in the core
   request/reply and pipelines.providers.key.write: never in an event, a log, an error or an HTTP response. A pasted
   `key` still works for such a plugin; any other plugin still needs one (422 `key must be 1-1024 characters`).
 - **The web**: such a plugin has no Key field (Plugins › Add as provider, the Assistant's setup); Add just works once

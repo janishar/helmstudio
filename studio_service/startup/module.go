@@ -41,6 +41,7 @@ type Module struct {
 	providerTest     studio.ProviderTestAsk                                     // pipelines.providers.test
 	providerKey      studio.ProviderKeyAsk                                      // pipelines.providers.key (API 1.51)
 	providerKeyWrite studio.ProviderKeyWriteAsk                                 // pipelines.providers.key.write (API 1.52)
+	pluginKey        studio.PluginKeyAsk                                        // runner.plugins.key.<host> (API 1.73)
 	judgeTest        studio.JudgeTestAsk                                        // pipelines.judge.test (API 1.28)
 	assistantMemory  studio.AssistantMemoryAsk                                  // pipelines.assistant.memory (API 1.44)
 	assistantCache   studio.AssistantCacheAsk                                   // pipelines.assistant.cache (API 1.66)
@@ -94,6 +95,7 @@ func (m *Module) Controllers() []micro.Controller {
 	service.SetProviderTest(m.providerTest)
 	service.SetProviderKey(m.providerKey)
 	service.SetProviderKeyWrite(m.providerKeyWrite)
+	service.SetPluginKey(m.pluginKey)
 	service.SetJudgeTest(m.judgeTest)
 	service.SetLookup(m.lookup)
 	service.SetModelOps(m.purge, m.putSettings)
