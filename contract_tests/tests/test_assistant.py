@@ -47,6 +47,22 @@ def test_settings_are_the_admins(api, admin):
     assert admin.put(SETTINGS, json={"enabled": True}).status_code == 422  # no provider
 
 
+def test_status_says_who_may_set_it_up_and_the_first_launch_is_per_user(api, api_b, admin):
+    """API 1.72 (plan 32): set_up, can_set_up, first_launch and tools on every user's status; the first-launch mark is
+    the caller's own (POST again: 204); the page's settings routes stay the admin's."""
+    mine = ok(api.get(THREADS))["status"]
+    assert mine["can_set_up"] is False and mine["first_launch"] is False
+    assert isinstance(mine["set_up"], bool) and isinstance(mine["tools"], list)
+    assert all(set(t) == {"name", "title"} for t in mine["tools"])
+    assert ok(admin.get(THREADS))["status"]["can_set_up"] is True
+    for c in (api, api, api_b, admin):
+        assert c.post(f"{STUDIO}/assistant/first-launch").status_code == 204
+    assert ok(admin.get(THREADS))["status"]["first_launch"] is False  # marked
+    for path in ("/admin/assistant", "/admin/assistant/cache", "/admin/providers", "/admin/plugins",
+                 "/admin/provider-presets"):  # fmt: skip
+        assert api.get(f"{STUDIO}{path}").status_code == 403, path
+
+
 def test_a_turn_reads_through_studio(api, api_b, assistant):
     fake("POST", "/__script", {assistant: [
         {"content": "Looking.", "tool_calls": [{"tool": "search_takes", "args": {"limit": 3}}]},
@@ -54,6 +70,7 @@ def test_a_turn_reads_through_studio(api, api_b, assistant):
     ]})  # fmt: skip
     status = ok(api.get(THREADS))["status"]
     assert status["enabled"] and status["provider"]["remote"] is False
+    assert status["set_up"] is True and status["provider"]["model"] == assistant  # API 1.72
     assert status["thinks"] is False  # API 1.54: the fake model has no preset, so no thinking rule
     chat = ok(api.post(THREADS, json={"client_id": TAB}), 201)
     tid = chat["id"]
