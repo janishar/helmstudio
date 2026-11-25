@@ -1,0 +1,25 @@
+#!/bin/sh
+# Makes the server pack (docs/plan/34-release-builds.md §38.3) in the current folder: helmstudio-server-<version>.tar.gz
+# and its .sha256. It holds deploy/server/ (compose.yml, the scripts, README.md) at its top, the base stack's tracked
+# files (compose files, nats.conf, postgres/init.sh), .tools/make-secrets and the one-shots' scripts as they are (one
+# copy of the secrets logic), and the built-in plugins as the Mac app bundles them; never deploy/secrets*, never fakes.
+#   .tools/make-server-pack 0.1.0-alpha.4
+set -eu
+[ $# -eq 1 ] && [ -n "$1" ] || { echo "usage: .tools/make-server-pack <version>   (e.g. 0.1.0-alpha.4)" >&2; exit 2; }
+v=${1#v} out=$(pwd)
+root=$(cd "$(dirname "$0")/.." && pwd)
+name=helmstudio-server-$v
+t=$(mktemp -d) && trap 'rm -rf "$t"' EXIT
+mkdir "$t/$name"
+cd "$root"
+git ls-files -z deploy/docker-compose.yml deploy/nats deploy/postgres .tools/make-secrets .tools/nats-setup \
+  .tools/storage-setup deploy/compose/prod.yml \
+  $(sed -n 's/^ *- {path: \(compose\/[a-z-]*\.yml\).*/deploy\/\1/p' deploy/docker-compose.yml) |
+  tar --null -T - -cf - | tar -xf - -C "$t/$name"
+make -s -C desktop plugin-files | tr '\n' '\0' | tar --null -T - -cf - | tar -xf - -C "$t/$name"
+cp deploy/server/compose.yml deploy/server/README.md deploy/server/*.sh "$t/$name/"
+echo "$v" >"$t/$name/VERSION"
+cd "$t" && tar -czf "$out/$name.tar.gz" "$name"
+cd "$out"
+if command -v sha256sum >/dev/null; then sha256sum "$name.tar.gz"; else shasum -a 256 "$name.tar.gz"; fi >"$name.tar.gz.sha256"
+echo "made $name.tar.gz ($(du -k "$name.tar.gz" | cut -f1) KB) and $name.tar.gz.sha256"

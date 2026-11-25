@@ -1,0 +1,22 @@
+# The server pack's overlay (docs/plan/34-release-builds.md §38.3): the base stack (deploy/docker-compose.yml) and
+# production (deploy/compose/prod.yml) with the release images from GitHub's registry instead of builds, so a server
+# needs no source. No fakes (they are only in compose/fake.yml, not in the pack); every published port stays on
+# 127.0.0.1 (the base file). The settings are HELMSTUDIO_HOME/helmstudio.env (the pack's .env links there: the three
+# files, HELMSTUDIO_VERSION, HELMSTUDIO_HOME, the ports); the secrets are HELMSTUDIO_HOME/secrets (deploy/secrets
+# links there, where the base file and .tools/make-secrets expect them). install.sh makes both.
+services:
+  kong:
+    build: !reset null
+    image: ghcr.io/janishar/helmstudio-kong:${HELMSTUDIO_VERSION:?set in .env}
+    environment: {KONG_NGINX_WORKER_PROCESSES: "2"}   # one worker per core otherwise
+  auth:
+    build: !reset null
+    image: ghcr.io/janishar/helmstudio-auth:${HELMSTUDIO_VERSION:?}
+    env_file: [{path: "${HELMSTUDIO_HOME:?}/secrets/admin.env", required: true}]   # ADMIN_EMAIL, ADMIN_PASSWORD (600)
+  studio: {build: !reset null, image: "ghcr.io/janishar/helmstudio-studio:${HELMSTUDIO_VERSION:?}"}
+  files: {build: !reset null, image: "ghcr.io/janishar/helmstudio-files:${HELMSTUDIO_VERSION:?}"}
+  web: {build: !reset null, image: "ghcr.io/janishar/helmstudio-web:${HELMSTUDIO_VERSION:?}"}
+  pipelines: {build: !reset null, image: "ghcr.io/janishar/helmstudio-pipelines:${HELMSTUDIO_VERSION:?}"}
+  media-tools: {build: !reset null, image: "ghcr.io/janishar/helmstudio-media-tools:${HELMSTUDIO_VERSION:?}"}
+  seaweedfs: {build: !reset null, image: "ghcr.io/janishar/helmstudio-seaweedfs:${HELMSTUDIO_VERSION:?}"}
+  storage-setup: {build: !reset null, image: "ghcr.io/janishar/helmstudio-seaweedfs:${HELMSTUDIO_VERSION:?}"}

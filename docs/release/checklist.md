@@ -52,12 +52,20 @@ own run of the platform). Tick each box in a copy of this list for the release (
 
 ## 6. Artifacts (as decided in step 0)
 
-- [ ] **Images:** build with the release tag and push to `ghcr.io/janishar/…` (plan 31 §35.1: one script, arm64; the
-  public registry is free); set each package public; a pull with no sign-in works.
-- [ ] **Mac app:** `make -C desktop test lint dmg`; it is ad-hoc signed, so the notes say right-click › Open on first
-  launch; it pulls the public images instead of the local Docker (plan 31 decision 7).
+- [ ] **Release builds by GitHub Actions** (plan 34; `.github/workflows/release-images.yml`): first a draft release
+  for the tag (`gh release create v<version> --draft --prerelease --title "helmstudio <version>" --notes-file <notes>`),
+  then push the tag. The workflow builds the 8 images for linux/amd64 and linux/arm64, smoke-tests the server pack on
+  both, and only then publishes one multi-arch tag per image to `ghcr.io/janishar/helmstudio-<name>:<version>` and
+  attaches `helmstudio-<version>.dmg`, `helmstudio-server-<version>.tar.gz` (+ `.sha256`), `install.sh` (the one-line Linux install) and `SHA256SUMS` to the
+  draft. Without a release the files are the run's artifact `release-<version>` (attach them by hand). The workflow
+  sets the version in `desktop/package.json` and the image tags in `desktop/stack.json` from the tag.
+- [ ] First release from the workflow only: set each new package public; a pull with no sign-in works.
+- [ ] Fallback by hand (arm64 images only): `.tools/push-images <version>`, `make -C desktop test lint dmg`,
+  `.tools/make-server-pack <version>`, then `shasum -a 256` of every file into `SHA256SUMS`.
+- [ ] The Mac app is ad-hoc signed, so the notes say right-click › Open on first launch; it pulls the public images
+  instead of the local Docker (plan 31 decision 7). The workflow's .dmg has no native packs' binaries (h3,
+  zonos3-server) yet: build the .dmg by hand on the owner's Mac when they must ship.
 - [ ] Mac app: set `imagesDiskGB` in `desktop/stack.json` to the release images' size on disk (shown on first open).
-- [ ] `shasum -a 256` of every file attached to the release, in a `SHA256SUMS` file.
 
 ## 7. README and docs site (every major release)
 
@@ -69,8 +77,7 @@ own run of the platform). Tick each box in a copy of this list for the release (
 
 ## 8. GitHub release
 
-- [ ] `gh release create v0.1.0-alpha.1 --prerelease --title "helmstudio 0.1.0-alpha.1" --notes-file <notes>` with
-  the artifacts and `SHA256SUMS` attached.
+- [ ] The draft from step 6 has the artifacts and `SHA256SUMS`; publish it: `gh release edit v<version> --draft=false`.
 - [ ] The repo's description, topics and website (helmstudio.in) are set; issues are on.
 
 ## 9. Release notes (draft)

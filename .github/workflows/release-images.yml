@@ -1,0 +1,268 @@
+# Release builds (docs/plan/34-release-builds.md §38): the 8 images for linux/amd64 and linux/arm64 on native runners,
+# the server pack, a smoke test of the pack on each kind of machine, and the Mac app's .dmg. Every push and pull
+# request builds and tests everything and publishes nothing (the files are this run's artifacts). A pushed tag v*
+# also publishes, only after both smoke tests pass: one multi-arch tag ghcr.io/janishar/helmstudio-<name>:<version>
+# per image, and the .dmg, the pack and SHA256SUMS attached to the GitHub release of that tag if it exists.
+name: release-builds
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-builds-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+env:
+  REGISTRY: ghcr.io/janishar/helmstudio-
+  SOURCE: https://github.com/janishar/helmstudio
+
+jobs:
+  meta:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      release: ${{ steps.v.outputs.release }}
+    steps:
+      - id: v
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = tag ]; then v=${GITHUB_REF_NAME#v} r=true; else v=ci-${GITHUB_SHA::7} r=false; fi
+          echo "version=$v" >>"$GITHUB_OUTPUT"; echo "release=$r" >>"$GITHUB_OUTPUT"; echo "version $v, release $r"
+
+  images:
+    needs: meta
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [kong, auth, studio, pipelines, files, web, seaweedfs, media-tools]
+        arch: [amd64, arm64]
+        include:
+          - {image: kong, context: kong}
+          - {image: auth, context: auth_service, contexts: helmgo=helmgo}
+          - {image: studio, context: studio_service, contexts: helmgo=helmgo}
+          - {image: files, context: files_service, contexts: helmgo=helmgo}
+          - {image: pipelines, context: pipelines_service}
+          - {image: web, context: web_service}
+          - {image: seaweedfs, context: deploy/seaweedfs}
+          - {image: media-tools, context: plugins/media-tools}
+          - {arch: amd64, runner: ubuntu-24.04}
+          - {arch: arm64, runner: ubuntu-24.04-arm}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          build-contexts: ${{ matrix.contexts }}
+          platforms: linux/${{ matrix.arch }}
+          tags: ${{ env.REGISTRY }}${{ matrix.image }}:${{ needs.meta.outputs.version }}
+          labels: org.opencontainers.image.source=${{ env.SOURCE }}
+          outputs: type=docker,dest=${{ runner.temp }}/${{ matrix.image }}.tar
+          cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.arch }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: image-${{ matrix.image }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/${{ matrix.image }}.tar
+          retention-days: 1
+          compression-level: 0
+
+  server-pack:
+    needs: meta
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: shellcheck -s sh .tools/make-server-pack deploy/server/*.sh
+      # the pack, and install.sh on its own (the one-line install: curl …/install.sh | sh)
+      - run: mkdir pack && cd pack && ../.tools/make-server-pack "${{ needs.meta.outputs.version }}" && cp ../deploy/server/install.sh .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: server-pack
+          path: pack/
+
+  # the one-line install as a user runs it (install.sh piped into sh, the pack's folder in place of the release's), on
+  # this run's pack and images (loaded, never pulled from the registry), on each kind of machine
+  smoke:
+    needs: [meta, images, server-pack]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {arch: amd64, runner: ubuntu-24.04}
+          - {arch: arm64, runner: ubuntu-24.04-arm}
+    runs-on: ${{ matrix.runner }}
+    env:
+      VERSION: ${{ needs.meta.outputs.version }}
+      ADMIN: ci-admin@example.com
+    steps:
+      - uses: actions/download-artifact@v4
+        with: {pattern: 'image-*-${{ matrix.arch }}', path: images, merge-multiple: true}
+      - uses: actions/download-artifact@v4
+        with: {name: server-pack, path: pack}
+      - run: for f in images/*.tar; do docker load -q -i "$f"; done
+      - name: install (curl … | sh)
+        run: |
+          cd pack && sha256sum "helmstudio-server-$VERSION.tar.gz" >SHA256SUMS   # as release-files makes it
+          (umask 077 && openssl rand -hex 16 >"$RUNNER_TEMP/admin_password")
+          echo "::add-mask::$(cat "$RUNNER_TEMP/admin_password")"
+          curl -fsSL "file://$PWD/install.sh" | HELMSTUDIO_PACK_URL="file://$PWD" HELMSTUDIO_ADMIN_EMAIL=$ADMIN \
+            HELMSTUDIO_ADMIN_PASSWORD_FILE=$RUNNER_TEMP/admin_password sh -s -- "$VERSION"
+      - name: sign in through Kong
+        run: |
+          cat >"$RUNNER_TEMP/signin.sh" <<'EOF'
+          set -eu
+          key=$(cat ~/.helmstudio/secrets/web_api_key) && echo "::add-mask::$key"
+          tok=$(jq -n --arg e "$ADMIN" --rawfile p "$RUNNER_TEMP/admin_password" '{email: $e, password: ($p | rtrimstr("\n"))}' |
+            curl -fsS -H "x-api-key: $key" -H 'content-type: application/json' -d @- http://127.0.0.1:8300/auth/signin |
+            jq -er .access_token) && echo "::add-mask::$tok"
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -H "x-api-key: $key" -H "authorization: Bearer $tok" \
+            http://127.0.0.1:8300/v1/studio/sessions)
+          echo "signed in; GET /v1/studio/sessions: $code"; [ "$code" = 200 ]
+          EOF
+          sh "$RUNNER_TEMP/signin.sh"
+          docker stats --no-stream --format 'table {{.Name}}\t{{.MemUsage}}\t{{.CPUPerc}}'
+      - name: update (the pack replaced, the data kept)
+        run: |
+          before=$(docker volume inspect -f '{{.CreatedAt}}' helmstudio_pgdata18a)
+          HELMSTUDIO_PACK_URL="file://$PWD/pack" ~/helmstudio/update.sh "$VERSION"
+          [ "$(docker volume inspect -f '{{.CreatedAt}}' helmstudio_pgdata18a)" = "$before" ]
+          [ -L ~/helmstudio/.env ] && [ -L ~/helmstudio/deploy/secrets ] && ! ls -d ~/helmstudio.new.* 2>/dev/null
+          sh "$RUNNER_TEMP/signin.sh"
+      - name: logs
+        if: failure()
+        working-directory: /home/runner/helmstudio
+        run: docker compose ps -a; docker compose logs --tail 80
+      - name: uninstall
+        if: always()
+        run: |
+          [ -f ~/helmstudio/.env ] || exit 0
+          ~/helmstudio/uninstall.sh
+          docker volume rm helmstudio_pgdata18a helmstudio_natsdata helmstudio_seaweeddata
+          ls -A ~/.helmstudio   # uninstall keeps the settings and secrets
+
+  mac:
+    needs: meta
+    runs-on: macos-15
+    env:
+      VERSION: ${{ needs.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '26.13.1'}
+      - uses: actions/setup-go@v5
+        with: {go-version-file: cli/go.mod, cache-dependency-path: cli/go.sum}
+      - run: make -C desktop node_modules
+      - name: the release's version and image tags
+        if: needs.meta.outputs.release == 'true'
+        working-directory: desktop
+        run: |
+          node -e '
+            const fs = require("fs"), v = process.argv[1], put = (f, o) => fs.writeFileSync(f, JSON.stringify(o, null, 2) + "\n");
+            const p = JSON.parse(fs.readFileSync("package.json")); p.version = v; put("package.json", p);
+            const s = JSON.parse(fs.readFileSync("stack.json")); s.composeEnv.IMAGE_TAG = v;
+            s.images = s.images.map((i) => i.startsWith(process.env.REGISTRY) ? i.replace(/:[^:]+$/, ":" + v) : i); put("stack.json", s);
+          ' "$VERSION"
+      - run: make -C desktop test lint dmg
+      - run: mkdir dmg && mv desktop/dist.noindex/helmstudio.dmg "dmg/helmstudio-$VERSION.dmg" && ls -l dmg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dmg
+          path: dmg/
+          compression-level: 0
+
+  # ---------- a tag only, after both smoke tests: push each image by digest (from this run's cache), then one tag
+
+  push:
+    if: needs.meta.outputs.release == 'true'
+    needs: [meta, smoke]
+    permissions: {contents: read, packages: write}
+    strategy:
+      matrix:
+        image: [kong, auth, studio, pipelines, files, web, seaweedfs, media-tools]
+        arch: [amd64, arm64]
+        include:
+          - {image: kong, context: kong}
+          - {image: auth, context: auth_service, contexts: helmgo=helmgo}
+          - {image: studio, context: studio_service, contexts: helmgo=helmgo}
+          - {image: files, context: files_service, contexts: helmgo=helmgo}
+          - {image: pipelines, context: pipelines_service}
+          - {image: web, context: web_service}
+          - {image: seaweedfs, context: deploy/seaweedfs}
+          - {image: media-tools, context: plugins/media-tools}
+          - {arch: amd64, runner: ubuntu-24.04}
+          - {arch: arm64, runner: ubuntu-24.04-arm}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with: {registry: ghcr.io, username: '${{ github.actor }}', password: '${{ secrets.GITHUB_TOKEN }}'}
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          build-contexts: ${{ matrix.contexts }}
+          platforms: linux/${{ matrix.arch }}
+          labels: org.opencontainers.image.source=${{ env.SOURCE }}
+          outputs: type=image,name=${{ env.REGISTRY }}${{ matrix.image }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
+      - run: mkdir digests && touch "digests/${DIGEST#sha256:}"
+        env: {DIGEST: '${{ steps.build.outputs.digest }}'}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ matrix.image }}-${{ matrix.arch }}
+          path: digests/*
+          retention-days: 1
+
+  publish:
+    needs: [meta, push]
+    runs-on: ubuntu-24.04
+    permissions: {contents: read, packages: write}
+    strategy:
+      matrix:
+        image: [kong, auth, studio, pipelines, files, web, seaweedfs, media-tools]
+    steps:
+      - uses: actions/download-artifact@v4
+        with: {pattern: 'digest-${{ matrix.image }}-*', path: digests, merge-multiple: true}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with: {registry: ghcr.io, username: '${{ github.actor }}', password: '${{ secrets.GITHUB_TOKEN }}'}
+      - run: |
+          img=$REGISTRY${{ matrix.image }}
+          docker buildx imagetools create -t "$img:${{ needs.meta.outputs.version }}" \
+            --annotation "index:org.opencontainers.image.source=$SOURCE" $(for d in digests/*; do echo "$img@sha256:${d#digests/}"; done)
+          docker buildx imagetools inspect "$img:${{ needs.meta.outputs.version }}"
+
+  # the release files: one artifact on every run; on a tag also attached to its GitHub release, if one exists
+  release-files:
+    needs: [meta, server-pack, smoke, mac, publish]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') }}
+    runs-on: ubuntu-24.04
+    permissions: {contents: write}
+    env:
+      VERSION: ${{ needs.meta.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with: {name: server-pack, path: files}
+      - uses: actions/download-artifact@v4
+        with: {name: dmg, path: files}
+      - run: cd files && sha256sum ./*.dmg ./*.tar.gz ./install.sh | sed 's| \./| |' >SHA256SUMS && cat SHA256SUMS && ls -l
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ env.VERSION }}
+          path: files/
+          compression-level: 0
+      - if: needs.meta.outputs.release == 'true'
+        env: {GH_TOKEN: '${{ github.token }}', GH_REPO: '${{ github.repository }}'}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" files/* --clobber
+          else
+            echo "::notice::no GitHub release $GITHUB_REF_NAME yet: the files are this run's artifact release-$VERSION"
+          fi
