@@ -1,0 +1,309 @@
+# helmstudio on Windows and Linux with Docker (docs/plan/34-release-builds.md §38.3; deploy/release/README.md).
+# The Mac has its own app (the .dmg) and needs none of this.
+#
+# Needs Docker with Compose 2.26 or later: Docker Desktop on Windows (WSL2 backend), Docker Engine or Desktop on Linux;
+# about 3 GB of disk for the images and 2 GB of memory. In a folder holding only this file:
+#
+#   HELMSTUDIO_ADMIN_EMAIL=you@example.com HELMSTUDIO_ADMIN_PASSWORD='10 characters or more' docker compose up -d --wait
+#
+# (or put the two lines HELMSTUDIO_ADMIN_EMAIL=… and HELMSTUDIO_ADMIN_PASSWORD=… in a .env beside this file), then
+# open http://localhost:8300 and sign in as that admin. The admin is read on the first start only; later starts need
+# nothing: docker compose up -d. A password changed in the app is kept.
+#
+#   With an NVIDIA card:  docker compose --profile nvidia up -d --wait   (NVIDIA driver; on Linux also the NVIDIA
+#                         Container Toolkit; Docker Desktop on WSL2 passes the card through). Models download into the
+#                         volume `models`, or HELMSTUDIO_MODELS_DIR=/path/to/models uses a folder of your own.
+#   Update:               download the new release's compose.yml over this one (or set HELMSTUDIO_VERSION in .env),
+#                         then docker compose pull && docker compose up -d --wait. The data and keys stay.
+#   Stop / remove:        docker compose down (keeps everything); docker compose down -v also deletes the data and keys.
+#   From source:          git clone https://github.com/janishar/helmstudio && make up (the repo's README).
+#
+# Settings (environment or .env): HELMSTUDIO_PORT (8300, on 127.0.0.1 only), PUBLIC_BASE_URL (the address people
+# open, e.g. behind a TLS proxy; then also WEB_COOKIE_SECURE=true), REMOTE_MODELS=on (remote model providers).
+#
+# How it runs without the source: the `secrets` step (the helmstudio-setup image) makes the stack's secrets once into
+# the volume `keys` with the same .tools/make-secrets as a source install (never overwriting one), gives each service
+# only its own at /run/secrets, and puts this version's config files in the volume `config`; `admin` creates the admin
+# once (auth create-admin, as .tools/create-admin). Images ghcr.io/janishar/helmstudio-<name>, for Intel/AMD and ARM.
+name: helmstudio
+
+x-log: &log {driver: json-file, options: {max-size: 10m, max-file: "3"}}
+
+# Fixed addresses for the two hops allowed to set X-Forwarded-For: Kong (trusted by auth) and the web BFF (trusted by
+# Kong and auth), as in deploy/docker-compose.yml; every other container gets one from .128/25.
+networks:
+  default:
+    ipam: {config: [{subnet: "${HELM_NET:-172.30.97}.0/24", ip_range: "${HELM_NET:-172.30.97}.128/25"}]}
+
+services:
+  secrets:
+    image: ghcr.io/janishar/helmstudio-setup:${HELMSTUDIO_VERSION:-0.1.0-alpha.4}
+    environment:
+      HELMSTUDIO_ADMIN_EMAIL: ${HELMSTUDIO_ADMIN_EMAIL:-}
+      HELMSTUDIO_ADMIN_PASSWORD: ${HELMSTUDIO_ADMIN_PASSWORD:-}
+    volumes: [keys:/stack/deploy/secrets, config:/config]
+    logging: *log
+
+  admin:                                              # one-shot: creates the admin once; an existing one is left as is
+    image: ghcr.io/janishar/helmstudio-auth:${HELMSTUDIO_VERSION:-0.1.0-alpha.4}
+    command: [create-admin]
+    environment:
+      DATABASE_URL_FILE: /run/secrets/auth_database_url
+      ADMIN_EMAIL_FILE: /run/secrets/admin_email
+      ADMIN_PASSWORD_FILE: /run/secrets/admin_password
+    volumes: [{type: volume, source: keys, target: /run/secrets, read_only: true, volume: {subpath: run/admin}}]
+    logging: *log
+    depends_on:
+      secrets: {condition: service_completed_successfully}
+      postgres: {condition: service_healthy}
+
+  kong:
+    image: ghcr.io/janishar/helmstudio-kong:${HELMSTUDIO_VERSION:-0.1.0-alpha.4}
+    restart: unless-stopped
+    logging: *log
+    mem_limit: 512m
+    environment:
+      KONG_NGINX_WORKER_PROCESSES: "2"                # one per CPU core otherwise
+      KONG_PORT_MAPS: "${HELMSTUDIO_PORT:-8300}:8000"   # X-Forwarded-Port = the host port (web's redirects)
+      KONG_TRUSTED_IPS: ${HELM_NET:-172.30.97}.11       # only the web BFF may name the client (X-Forwarded-For)
+      KONG_REAL_IP_HEADER: X-Forwarded-For
+      KONG_REAL_IP_RECURSIVE: "on"
+      KONG_DNS_VALID_TTL: "5"
+      KONG_DNS_NOT_FOUND_TTL: "1"
+      KONG_DNS_STALE_TTL: "1"
+    networks: {default: {ipv4_address: "${HELM_NET:-172.30.97}.10"}}
+    ports: ["127.0.0.1:${HELMSTUDIO_PORT:-8300}:8000"]   # the only published port
+    healthcheck: {test: [CMD, kong, health], interval: 5s, timeout: 5s, retries: 20}
+    depends_on:
+      auth: {condition: service_healthy}
+      studio: {condition: service_healthy}
+      files: {condition: service_healthy}
+      web: {condition: service_healthy}
+
+  auth:
+    image: ghcr.io/janishar/helmstudio-auth:${HELMSTUDIO_VERSION:-0.1.0-alpha.4}
+    restart: unless-stopped
+    logging: *log
+    mem_limit: 128m
+    environment:
+      DATABASE_URL_FILE: /run/secrets/auth_database_url
+      NATS_URL_FILE: /run/secrets/nats_auth_url
+      NATS_USER: ""
+      JWT_PRIVATE_KEY_FILE: /run/secrets/jwt_private_key
+      WEB_API_KEY_FILE: /run/secrets/web_api_key
+      HELM_API_KEY_FILE: /run/secrets/helm_api_key
+      ADMIN_EMAIL_FILE: /run/secrets/admin_email      # kept the one admin on every start (never resets its password)
+      ADMIN_PASSWORD_FILE: /run/secrets/admin_password
+      TRUSTED_PROXIES: ${HELM_NET:-172.30.97}.10,${HELM_NET:-172.30.97}.11
+    volumes: [{type: volume, source: keys, target: /run/secrets, read_only: true, volume: {subpath: run/auth}}]
+    healthcheck: {test: [CMD, /app/auth, health], interval: 5s, timeout: 3s, retries: 20}
+    depends_on:
+      admin: {condition: service_completed_successfully}
+      nats-setup: {condition: service_completed_successfully}
+
+  studio:
+    image: ghcr.io/janishar/helmstudio-studio:${HELMSTUDIO_VERSION:-0.1.0-alpha.4}
+    restart: unless-stopped
+    logging: *log
+    mem_limit: 512m
+    environment:
+      DATABASE_URL_FILE: /run/secrets/studio_database_url
+      NATS_URL_FILE: /run/secrets/nats_studio_url
+      NATS_USER: ""
+      FILE_URL_SECRET_FILE: /run/secrets/file_url_secret
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:${HELMSTUDIO_PORT:-8300}}
+      STORAGE_DRIVER: s3
+      S3_ENDPOINT: http://seaweedfs:8333
+      S3_BUCKET: helmstudio
+      S3_ACCESS_KEY_ID_FILE: /run/secrets/s3_access_key_id
+      S3_SECRET_ACCESS_KEY_FILE: /run/secrets/s3_secret_access_key
+      STUDIO_REMOTE_MODELS: ${REMOTE_MODELS:-off}
+    volumes:
+      - {type: volume, source: keys, target: /run/secrets, read_only: true, volume: {subpath: run/studio}}
+      - {type: volume, source: config, target: /plugins, read_only: true, volume: {subpath: plugins}}   # the built-in plugins
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    healthcheck: {test: [CMD, /app/studio, health], interval: 5s, timeout: 3s, retries: 20}
+    depends_on:
+      postgres: {condition: service_healthy}
+      nats-setup: {condition: service_completed_successfully}
+      media-tools: {condition: service_started}
+
+  files:
+    image: ghcr.io/janishar/helmstudio-files:${HELMSTUDIO_VERSION:-0.1.0-alpha.4}
+    restart: unless-stopped
+    logging: *log
+    mem_limit: 256m
+    environment:
+      FILE_URL_SECRET_FILE: /run/secrets/file_url_secret
+      STORAGE_DRIVER: s3
+      S3_ENDPOINT: http://seaweedfs:8333
+      S3_BUCKET: helmstudio
+      S3_ACCESS_KEY_ID_FILE: /run/secrets/s3_access_key_id
+      S3_SECRET_ACCESS_KEY_FILE: /run/secrets/s3_secret_access_key
+    volumes: [{type: volume, source: keys, target: /run/secrets, read_only: true, volume: {subpath: run/files}}]
+    healthcheck: {test: [CMD, /app/files, health], interval: 5s, timeout: 3s, retries: 20}
+    depends_on:
+      storage-setup: {condition: service_completed_successfully}
+
+  web:
+    image: ghcr.io/janishar/helmstudio-web:${HELMSTUDIO_VERSION:-0.1.0-alpha.4}
+    restart: unless-stopped
+    logging: *log
+    mem_limit: 512m
+    environment:
+      KONG_URL: http://kong:8000
+      WEB_API_KEY_FILE: /run/secrets/web_api_key
+      COOKIE_SECURE: ${WEB_COOKIE_SECURE:-false}
+    volumes: [{type: volume, source: keys, target: /run/secrets, read_only: true, volume: {subpath: run/web}}]
+    networks: {default: {ipv4_address: "${HELM_NET:-172.30.97}.11"}}
+    healthcheck: {test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/signin').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"], interval: 5s, timeout: 3s, retries: 20}
+    depends_on:
+      secrets: {condition: service_completed_successfully}
+
+  pipelines:
+    image: ghcr.io/janishar/helmstudio-pipelines:${HELMSTUDIO_VERSION:-0.1.0-alpha.4}
+    restart: unless-stopped
+    logging: *log
+    mem_limit: 1g
+    environment:
+      DATABASE_URL_FILE: /run/secrets/pipelines_database_url
+      NATS_URL_FILE: /run/secrets/nats_pipelines_url
+      HEALTH_PORT: "8082"
+      PIPELINES_REMOTE_MODELS: ${REMOTE_MODELS:-off}
+      PIPELINES_PROVIDER_KEYS_DIR: /run/secrets/providers
+      PIPELINES_SERVER_HOSTS: ""
+    volumes:
+      - {type: volume, source: keys, target: /run/secrets, read_only: true, volume: {subpath: run/pipelines}}
+      # writable: a key pasted in Admin › Model providers is saved here
+      - {type: volume, source: keys, target: /run/secrets/providers, volume: {subpath: providers}}
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request as u; u.urlopen('http://127.0.0.1:8082/health', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    depends_on:
+      postgres: {condition: service_healthy}
+      nats-setup: {condition: service_completed_successfully}
+
+  media-tools:
+    image: ghcr.io/janishar/helmstudio-media-tools:${HELMSTUDIO_VERSION:-0.1.0-alpha.4}
+    restart: unless-stopped
+    logging: *log
+    mem_limit: 512m
+    environment: {HELM_API_URL: "http://kong:8000"}
+    read_only: true
+    tmpfs: [/tmp]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request as u; u.urlopen('http://127.0.0.1:8422/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  nats:
+    image: nats:2.15.3-alpine3.22
+    restart: unless-stopped
+    logging: *log
+    mem_limit: 512m
+    entrypoint: [sh, -c, 'for u in admin auth studio runner runner_mac_torch runner_mac_mlx runner_mac_native pipelines; do export NATS_$$(echo $$u | tr a-z A-Z)_PASSWORD="$$(cat /run/secrets/nats_$${u}_password)"; done; exec nats-server -c /etc/nats/nats.conf']
+    volumes:
+      - {type: volume, source: keys, target: /run/secrets, read_only: true, volume: {subpath: run/nats}}
+      - {type: volume, source: config, target: /etc/nats, read_only: true, volume: {subpath: nats}}
+      - natsdata:/data
+    healthcheck:
+      test: [CMD, wget, -qO-, "http://localhost:8222/healthz?js-enabled-only=true"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    depends_on:
+      secrets: {condition: service_completed_successfully}
+
+  nats-setup:                                         # one-shot: streams and KV buckets, idempotent
+    image: natsio/nats-box:0.20.2
+    entrypoint: [sh, /tools/nats-setup]
+    environment: {NATS_URL_FILE: /run/secrets/nats_admin_url}
+    logging: *log
+    volumes:
+      - {type: volume, source: keys, target: /run/secrets, read_only: true, volume: {subpath: run/nats-setup}}
+      - {type: volume, source: config, target: /tools, read_only: true, volume: {subpath: tools}}
+    depends_on:
+      nats: {condition: service_healthy}
+
+  postgres:
+    image: postgres:18.7-alpine3.24
+    restart: unless-stopped
+    logging: *log
+    mem_limit: 1g
+    environment:
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_INITDB_ARGS: --locale-provider=builtin --locale=C.UTF-8
+    volumes:
+      - {type: volume, source: keys, target: /run/secrets, read_only: true, volume: {subpath: run/postgres}}
+      - {type: volume, source: config, target: /docker-entrypoint-initdb.d, read_only: true, volume: {subpath: postgres}}
+      - pgdata:/var/lib/postgresql
+    healthcheck: {test: [CMD-SHELL, "pg_isready -U postgres -d auth"], interval: 2s, timeout: 3s, retries: 30}
+    depends_on:
+      secrets: {condition: service_completed_successfully}
+
+  seaweedfs:
+    image: ghcr.io/janishar/helmstudio-seaweedfs:${HELMSTUDIO_VERSION:-0.1.0-alpha.4}
+    restart: unless-stopped
+    logging: *log
+    mem_limit: 1g
+    entrypoint: [sh, -c, 'export AWS_ACCESS_KEY_ID="$$(cat /run/secrets/s3_access_key_id)" AWS_SECRET_ACCESS_KEY="$$(cat /run/secrets/s3_secret_access_key)"; exec weed -logtostderr=true server -dir=/data -volume.max=0 -master.volumeSizeLimitMB=1024 -s3 -s3.port=8333 -s3.config=/run/secrets/s3_config -ip=seaweedfs -ip.bind=0.0.0.0']
+    volumes:
+      - {type: volume, source: keys, target: /run/secrets, read_only: true, volume: {subpath: run/seaweedfs}}
+      - seaweeddata:/data
+    healthcheck: {test: [CMD, wget, -qO-, http://localhost:8333/healthz], interval: 3s, timeout: 3s, retries: 30}
+    depends_on:
+      secrets: {condition: service_completed_successfully}
+
+  storage-setup:                                      # one-shot: creates the bucket, idempotent
+    image: ghcr.io/janishar/helmstudio-seaweedfs:${HELMSTUDIO_VERSION:-0.1.0-alpha.4}
+    entrypoint: [sh, /tools/storage-setup]
+    environment: {S3_BUCKET: helmstudio, WEED_MASTER: "seaweedfs:9333"}
+    logging: *log
+    volumes: [{type: volume, source: config, target: /tools, read_only: true, volume: {subpath: tools}}]
+    depends_on:
+      seaweedfs: {condition: service_healthy}
+
+  # The NVIDIA runner (--profile nvidia): runner_service's CUDA image (env torch), host `gpu` with its own NATS user
+  # and S3 identity, on this machine and this network (no tunnel, no TLS). Intel/AMD only. Later: env native (ZONOS3,
+  # SGLang), deploy/gpu-host's runner-native.
+  runner:
+    image: ghcr.io/janishar/helmstudio-runner-cuda:${HELMSTUDIO_VERSION:-0.1.0-alpha.4}
+    profiles: [nvidia]
+    restart: unless-stopped
+    logging: *log
+    environment:
+      RUNNER_HOST: gpu
+      RUNNER_ENV: torch
+      NATS_URL_FILE: /run/secrets/nats_url
+      S3_ENDPOINT: http://seaweedfs:8333
+      S3_BUCKET: helmstudio
+      S3_ACCESS_KEY_ID_FILE: /run/secrets/s3_runner_gpu_access_key_id
+      S3_SECRET_ACCESS_KEY_FILE: /run/secrets/s3_runner_gpu_secret_access_key
+      HF_HUB_DISABLE_XET: "1"
+      HELMSTUDIO_MODELS: /models
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility,video   # video: NVENC for media jobs
+    volumes:
+      - {type: volume, source: keys, target: /run/secrets, read_only: true, volume: {subpath: run/runner}}
+      - ${HELMSTUDIO_MODELS_DIR:-models}:/models
+      - runner-cache:/cache
+    deploy:
+      resources:
+        reservations:
+          devices: [{driver: nvidia, count: 1, capabilities: [gpu]}]
+    healthcheck: {test: [CMD, python, health.py], interval: 10s, timeout: 5s, retries: 30, start_period: 60s}
+    depends_on:
+      nats-setup: {condition: service_completed_successfully}
+      storage-setup: {condition: service_completed_successfully}
+
+volumes:
+  keys:          # the secrets (and the admin's first password): docker compose down -v deletes them with the data
+  config:        # this version's config files, rewritten on every start
+  pgdata:
+  natsdata:
+  seaweeddata:
+  models:
+  runner-cache:

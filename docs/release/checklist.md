@@ -52,12 +52,27 @@ own run of the platform). Tick each box in a copy of this list for the release (
 
 ## 6. Artifacts (as decided in step 0)
 
-- [ ] **Images:** build with the release tag and push to `ghcr.io/janishar/…` (plan 31 §35.1: one script, arm64; the
-  public registry is free); set each package public; a pull with no sign-in works.
-- [ ] **Mac app:** `make -C desktop test lint dmg`; it is ad-hoc signed, so the notes say right-click › Open on first
-  launch; it pulls the public images instead of the local Docker (plan 31 decision 7).
+- [ ] **The workflow is the release build** (plan 34; `.github/workflows/release-images.yml`): first a draft release
+  for the tag (`gh release create v<version> --draft --prerelease --title "helmstudio <version>" --notes-file <notes>`),
+  then push the tag. The workflow builds the 9 images for linux/amd64 and linux/arm64 (and `runner-cuda` for
+  linux/amd64), smoke-tests the release `compose.yml` on both (first `up` with a throwaway admin, sign-in, one
+  authenticated read, a second `up`, `down -v`), and only then publishes one tag per image to
+  `ghcr.io/janishar/helmstudio-<name>:<version>` and attaches `helmstudio-<version>.dmg`, `compose.yml` (Windows and
+  Linux with Docker: `deploy/release/README.md`) and `SHA256SUMS` to the draft. Without a release the files are the
+  run's artifact `release-<version>` (attach them by hand). The workflow sets the version in `desktop/package.json`,
+  the image tags in `desktop/stack.json` and the default version in `compose.yml` from the tag.
+- [ ] First release from the workflow only: set each new package public (`helmstudio-setup`, `helmstudio-runner-cuda`
+  too); a pull with no sign-in works.
+- [ ] By hand once per release: Windows with Docker Desktop (WSL2) runs the release `compose.yml` (`up`, sign in, one
+  generation on a host); the Mac app's Check for updates. GPU generation (the nvidia profile) was checked once by hand
+  on a GCP GPU machine for 0.1.0-alpha.4; not automated.
+- [ ] Manual fallbacks only (the workflow failing, or the owner's Mac on purpose): `.tools/push-images <version>`
+  (arm64 images only), `make -C desktop test lint dmg`, then `shasum -a 256` of the .dmg and the compose.yml (the
+  version set in it) into `SHA256SUMS`.
+- [ ] The Mac app is ad-hoc signed, so the notes say right-click › Open on first launch; it pulls the public images
+  instead of the local Docker (plan 31 decision 7). The workflow's .dmg has no native packs' binaries (h3,
+  zonos3-server) yet: build the .dmg by hand on the owner's Mac when they must ship.
 - [ ] Mac app: set `imagesDiskGB` in `desktop/stack.json` to the release images' size on disk (shown on first open).
-- [ ] `shasum -a 256` of every file attached to the release, in a `SHA256SUMS` file.
 
 ## 7. README and docs site (every major release)
 
@@ -69,8 +84,7 @@ own run of the platform). Tick each box in a copy of this list for the release (
 
 ## 8. GitHub release
 
-- [ ] `gh release create v0.1.0-alpha.1 --prerelease --title "helmstudio 0.1.0-alpha.1" --notes-file <notes>` with
-  the artifacts and `SHA256SUMS` attached.
+- [ ] The draft from step 6 has the artifacts and `SHA256SUMS`; publish it: `gh release edit v<version> --draft=false`.
 - [ ] The repo's description, topics and website (helmstudio.in) are set; issues are on.
 
 ## 9. Release notes (draft)

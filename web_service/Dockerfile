@@ -11,7 +11,7 @@ RUN npm run build
 FROM alpine:3.24.3
 WORKDIR /app
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0
-RUN apk add --no-cache libstdc++ && adduser -D -u 10001 app
+RUN apk add --no-cache libstdc++ libatomic && adduser -D -u 10001 app
 COPY --from=build /usr/local/bin/node /usr/local/bin/node
 COPY --from=build --chown=app /app/.next/standalone ./
 COPY --from=build --chown=app /app/.next/static ./.next/static
