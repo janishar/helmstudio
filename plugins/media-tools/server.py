@@ -283,7 +283,7 @@ def edit_video(st: Studio, inp: dict, work: Path, deadline: float) -> dict:
         parents.append(aid)
         done.append(f"sound from {_short(snd['title'])}")
     elif inp.get("mute"):
-        maps = ["-map", "0:v:0", "-an"]
+        maps, af = ["-map", "0:v:0", "-an"], []
         done.append("muted")
     else:
         maps = ["-map", "0:v:0", "-map", "0:a?"]
