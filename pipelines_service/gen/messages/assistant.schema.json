@@ -39,7 +39,9 @@
       "properties": {
         "id": {"$ref": "#/$defs/callId"},
         "name": {"$ref": "#/$defs/actionName"},
-        "args": {"type": "object", "description": "the action's input in tools/actions.json"}
+        "args": {"type": "object", "description": "the action's input in tools/actions.json"},
+        "auto": {"type": "boolean", "description": "from API 1.68 (Auto mode): runs by itself: a generation without its card, a safe save in its dialog; absent = false"},
+        "asks": {"type": "string", "minLength": 1, "maxLength": 80, "description": "from API 1.68: Auto is on but this one still asks: the waiting line above its card"}
       }
     },
     "result": {
@@ -122,7 +124,8 @@
       "properties": {
         "model_calls": {"type": "integer", "minimum": 0, "maximum": 40},
         "tool_calls": {"type": "integer", "minimum": 0, "maximum": 100},
-        "memory_writes": {"type": "integer", "minimum": 0, "maximum": 8}
+        "memory_writes": {"type": "integer", "minimum": 0, "maximum": 8},
+        "auto_takes_hour": {"type": "integer", "minimum": 0, "description": "from API 1.68: with Auto on, the takes Auto mode started for the user in the last hour"}
       }
     },
     "limits": {
@@ -134,7 +137,9 @@
         "model_calls_per_day": {"type": "integer", "minimum": 1, "maximum": 100000},
         "tokens_per_day": {"type": "integer", "minimum": 1000, "maximum": 100000000},
         "look_at_per_hour": {"type": "integer", "minimum": 0, "maximum": 1000},
-        "messages_per_minute": {"type": "integer", "minimum": 1, "maximum": 60}
+        "messages_per_minute": {"type": "integer", "minimum": 1, "maximum": 60},
+        "auto_takes_per_hour": {"type": "integer", "minimum": 0, "maximum": 1000, "description": "from API 1.68: takes Auto mode may start for one user in an hour; absent = 8"},
+        "auto_gpu_minutes_per_hour": {"type": "integer", "minimum": 0, "maximum": 600, "description": "from API 1.68: GPU minutes (the runs' estimates) Auto mode may start for one user in an hour; absent = 30"}
       }
     },
     "error": {

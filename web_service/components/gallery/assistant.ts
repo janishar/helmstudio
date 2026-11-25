@@ -173,17 +173,20 @@ export function galleryTools(c: GalleryCtx): ScreenSpec {
         c.push(`/pipelines/${p.id}`);
         return done(`Saved as pipeline · ${p.title}`, { result: { pipeline_id: p.id } });
       },
-      saveAsElement: async ({ take_id, handle }, { progress }) => {
+      saveAsElement: async ({ take_id, handle }, { progress, auto }) => {
         const t = await takeById(take_id, shown);
         if (!t) return failed("Save as element · no such take");
         if (t.kind !== "image") return failed("Save as element · an element's pictures are images");
         const h = handle === undefined ? undefined : String(handle).replace(/^@/, "");
-        return c.dialog({ kind: "element", takes: [t], handle: h }, progress);
+        return c.dialog({ kind: "element", takes: [t], handle: h, auto }, progress);
       },
-      saveAsLook: async ({ take_id, name }, { progress }) => {
+      saveAsLook: async ({ take_id, name }, { progress, auto }) => {
         const t = await takeById(take_id, shown);
         if (!t) return failed("Save as look · no such take");
-        return c.dialog({ kind: "look", take: t, name: name as string | undefined }, progress);
+        return c.dialog(
+          { kind: "look", take: t, name: name as string | undefined, auto },
+          progress,
+        );
       },
       delete: ({ take_ids }) => {
         const ids = [...new Set(take_ids as string[])];

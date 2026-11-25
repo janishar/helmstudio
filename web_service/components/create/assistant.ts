@@ -252,14 +252,16 @@ async function generateCard(c: CreateCtx): Promise<Outcome | Asked> {
       go: "GENERATE",
       fine: "Same as the Generate button on the screen. Change anything there first if you like.",
     },
-    yes: async () => {
+    yes: async (auto) => {
       const now = c.cannot();
       if (now) return failed(`Generate · ${now}`);
       const r = await c.generate();
+      // Auto (board frame 13): "Auto · Generated 1 take · Mac"
+      const made = auto
+        ? `Generated ${n} take${n === 1 ? "" : "s"} · ${mc?.label ?? host ?? "Auto"}`
+        : `You clicked GENERATE · ${what.replace(/^a /, "1 ")}`;
       return r.ids.length
-        ? done(`You clicked GENERATE · ${what.replace(/^a /, "1 ")}`, {
-            result: { run_ids: r.ids, session_id: c.session?.id ?? null },
-          })
+        ? done(made, { result: { run_ids: r.ids, session_id: c.session?.id ?? null } })
         : failed(`Generate failed · ${r.error || "see the screen"}`);
     },
   };
@@ -602,18 +604,21 @@ export function createTools(c: CreateCtx): ScreenSpec {
           },
         );
       },
-      saveAsLook: async ({ take_id, name }, { progress }) => {
+      saveAsLook: async ({ take_id, name }, { progress, auto }) => {
         const t = take_id ? await takeById(take_id, c.takes) : c.shownTake;
         if (!t) return failed("Save as look · no such take");
-        return c.dialog({ kind: "look", take: t, name: name as string | undefined }, progress);
+        return c.dialog(
+          { kind: "look", take: t, name: name as string | undefined, auto },
+          progress,
+        );
       },
-      saveAsElement: async ({ take_id, handle }, { progress }) => {
+      saveAsElement: async ({ take_id, handle }, { progress, auto }) => {
         const t = take_id ? await takeById(take_id, c.takes) : c.shownTake;
         if (take_id && !t) return failed("Save as element · no such take");
         if (t && t.kind !== "image")
           return failed("Save as element · an element's pictures are images");
         const h = handle === undefined ? undefined : String(handle).replace(/^@/, "");
-        return c.dialog({ kind: "element", takes: t ? [t] : [], handle: h }, progress);
+        return c.dialog({ kind: "element", takes: t ? [t] : [], handle: h, auto }, progress);
       },
       editItem: ({ item_id }, { progress }) => {
         const it = [...(c.library ?? []), ...(c.looks ?? [])].find((x) => x.id === item_id);
@@ -637,7 +642,7 @@ export function createTools(c: CreateCtx): ScreenSpec {
           progress,
         );
       },
-      designVoice: ({ description, name }, { progress }) => {
+      designVoice: ({ description, name }, { progress, auto }) => {
         if (!c.voiceCtx?.design)
           return failed("Design · no workflow here designs a voice: open an audio workflow");
         return c.dialog(
@@ -646,6 +651,7 @@ export function createTools(c: CreateCtx): ScreenSpec {
             ctx: c.voiceCtx,
             text: description as string | undefined,
             name: name as string | undefined,
+            auto,
           },
           progress,
         );

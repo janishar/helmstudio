@@ -34,6 +34,18 @@ func (c *controller) mountAssistant(group *gin.RouterGroup) {
 		out, err := c.service.GetAssistantThread(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"))
 		reply(ctx, http.StatusOK, out, err)
 	})
+	group.PATCH("/assistant/threads/:id", func(ctx *gin.Context) {
+		if !utility.IsUUID(ctx.Param("id")) {
+			network.SendMixedError(ctx, errNotFound)
+			return
+		}
+		body, err := strictBody[AssistantThreadPatch](ctx, false)
+		var out AssistantThread
+		if err == nil {
+			out, err = c.service.PatchAssistantThread(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"), body)
+		}
+		reply(ctx, http.StatusOK, out, err)
+	})
 	group.DELETE("/assistant/threads/:id", func(ctx *gin.Context) {
 		noContent(ctx, c.service.DeleteAssistantThread(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id")))
 	})

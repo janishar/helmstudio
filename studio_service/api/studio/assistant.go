@@ -57,13 +57,23 @@ type AssistantLimits struct {
 	TokensPerDay      *int `json:"tokens_per_day"`
 	LookAtPerHour     *int `json:"look_at_per_hour"`
 	MessagesPerMinute *int `json:"messages_per_minute"`
+	// API 1.68 (Auto mode): absent in a PUT = the current one; absent in a stored row = the default
+	AutoTakesPerHour      *int `json:"auto_takes_per_hour"`
+	AutoGPUMinutesPerHour *int `json:"auto_gpu_minutes_per_hour"`
 }
 
 func intp(n int) *int { return &n }
 
 // defaultLimits are the caps before the admin sets any.
 func defaultLimits() AssistantLimits {
-	return AssistantLimits{intp(2000), intp(20000000), intp(200), intp(30)}
+	return AssistantLimits{intp(2000), intp(20000000), intp(200), intp(30), intp(8), intp(30)}
+}
+
+// orAuto fills the Auto caps a row or PUT left out from `from`.
+func (l AssistantLimits) orAuto(from AssistantLimits) AssistantLimits {
+	l.AutoTakesPerHour = cmp.Or(l.AutoTakesPerHour, from.AutoTakesPerHour)
+	l.AutoGPUMinutesPerHour = cmp.Or(l.AutoGPUMinutesPerHour, from.AutoGPUMinutesPerHour)
+	return l
 }
 
 // check is the 422 detail of limits out of range.
@@ -78,6 +88,10 @@ func (l AssistantLimits) check() string {
 		return "limits.look_at_per_hour must be 0 to 1000"
 	case !in(l.MessagesPerMinute, 1, 60):
 		return "limits.messages_per_minute must be 1 to 60"
+	case l.AutoTakesPerHour != nil && !in(l.AutoTakesPerHour, 0, 1000):
+		return "limits.auto_takes_per_hour must be 0 to 1000"
+	case l.AutoGPUMinutesPerHour != nil && !in(l.AutoGPUMinutesPerHour, 0, 600):
+		return "limits.auto_gpu_minutes_per_hour must be 0 to 600"
 	}
 	return ""
 }
@@ -159,6 +173,7 @@ func readAssistantSettings(ctx context.Context, tx pgx.Tx) (AssistantSettings, e
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = nil
 	}
+	out.Limits = out.Limits.orAuto(defaultLimits())
 	if err == nil {
 		err = ownChoice(ctx, tx, &out)
 	}
@@ -246,7 +261,7 @@ func (s *Service) PutAssistantSettings(ctx context.Context, caller common.Caller
 		}
 		limits := now.Limits
 		if body.Limits != nil {
-			limits = *body.Limits
+			limits = body.Limits.orAuto(now.Limits)
 		}
 		windows := maps.Clone(now.windows)
 		if windows == nil {
@@ -360,6 +375,7 @@ type AssistantThread struct {
 	ClientID  *string         `json:"client_id"`
 	Pending   json.RawMessage `json:"pending"`
 	Caps      json.RawMessage `json:"caps"`
+	Auto      bool            `json:"auto"` // API 1.68: the chat's Auto switch
 	CreatedAt time.Time       `json:"created_at"`
 	UpdatedAt time.Time       `json:"updated_at"`
 }
@@ -395,10 +411,11 @@ type threadRow struct {
 	StepSeq   int
 	CreatedAt time.Time
 	UpdatedAt time.Time
+	Auto      bool
 }
 
 const threadCols = `id::text, owner_id::text, title, state, client_id, pending, caps, roles, actions, turn, step_seq,
-	created_at, updated_at`
+	created_at, updated_at, auto`
 
 func (t threadRow) dto() AssistantThread {
 	pending := t.Pending
@@ -406,7 +423,7 @@ func (t threadRow) dto() AssistantThread {
 		pending = json.RawMessage("null")
 	}
 	return AssistantThread{ID: t.ID, Title: t.Title, State: t.State, ClientID: t.ClientID, Pending: pending, Caps: t.Caps,
-		CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt}
+		Auto: t.Auto, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt}
 }
 
 // pending is AssistantPending.
@@ -619,6 +636,37 @@ func (s *Service) GetAssistantThread(ctx context.Context, caller common.Caller, 
 		out.AssistantThread = t.dto()
 		out.Entries, err = collect[AssistantEntry](ctx, tx, `SELECT * FROM (SELECT `+entryCols+` FROM assistant_entries
 			WHERE thread_id = $1 ORDER BY at DESC, id DESC LIMIT $2) e ORDER BY at, id`, id, maxAssistantEntries)
+		return err
+	})
+	return out, err
+}
+
+// AssistantThreadPatch is PATCH /assistant/threads/{id}'s body (API 1.68).
+type AssistantThreadPatch struct {
+	Auto *bool `json:"auto"`
+}
+
+// Validate checks the shape.
+func (b *AssistantThreadPatch) Validate() string {
+	if b.Auto == nil {
+		return "auto is required"
+	}
+	return ""
+}
+
+// PatchAssistantThread is PATCH /assistant/threads/{id} (API 1.68): the chat's Auto switch, from its next input.
+func (s *Service) PatchAssistantThread(ctx context.Context, caller common.Caller, id string, body *AssistantThreadPatch) (AssistantThread, error) {
+	var out AssistantThread
+	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
+		t, err := lockThread(ctx, tx, id)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE assistant_threads SET auto = $2 WHERE id = $1`, t.ID, *body.Auto); err != nil {
+			return err
+		}
+		t, err = threadEvent(ctx, tx, t.ID)
+		out = t.dto()
 		return err
 	})
 	return out, err
@@ -892,6 +940,7 @@ func (s *Service) PostAssistant(ctx context.Context, caller common.Caller, id st
 		} else if !status.Enabled {
 			return errAssistantOff
 		}
+		snap.Auto = t.Auto                        // API 1.68: the chat's switch travels with every input
 		plugins, err := assistantPlugins(ctx, tx) // API 1.61: the on assistant-tools plugins' tools, at every input
 		if err != nil {
 			return err
@@ -1181,6 +1230,7 @@ func nextFromSteers(ctx context.Context, tx pgx.Tx, t threadRow) error {
 		return err
 	}
 	data.ThreadID, data.Turn = t.ID, t.Turn+1
+	data.Settings.Auto = t.Auto // API 1.68: the switch now, not at the steer
 	data.Input["message_id"], data.Input["text"] = utility.NewID(), cutRunes(strings.Join(texts, "\n\n"), maxTurnText)
 	data.Input["at"] = time.Now().UTC().Format(time.RFC3339Nano)
 	if _, err := tx.Exec(ctx, `UPDATE assistant_threads SET turn = $2, state = 'working', pending = NULL, roles = $3, actions = $4,

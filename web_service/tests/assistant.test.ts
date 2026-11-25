@@ -35,6 +35,7 @@ const T = "11111111-2222-4333-8444-555555555555";
 const thread = (over: Partial<Thread> = {}): Thread => ({
   id: T,
   title: "New chat",
+  auto: false,
   state: "idle",
   client_id: null,
   pending: null,

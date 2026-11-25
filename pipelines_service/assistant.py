@@ -494,6 +494,50 @@ def _end(
     return up | {"error": err, "to": "reply"}
 
 
+# --- Auto mode (API 1.68, contracts/README.md "Assistant: Auto mode")
+
+AUTO_TAKES, AUTO_GPU_MINUTES = 8, 30  # the caps an hour before the admin sets them
+RUN_S = 60  # a short voice run's GPU seconds (designVoice's Hear it, hear)
+# the dialogs that save a new item by themselves: (takes, GPU seconds); designVoice's Hear it is a run
+AUTO_DIALOGS = {"saveAsLook": (0, 0), "saveAsElement": (0, 0), "designVoice": (1, RUN_S)}
+# earlier actions in a batch that leave a generation's size as the screen showed it (the rest resize it: it asks)
+SAME_SIZE = {"select", "star", "view", "pickTake", "setPlayhead"}
+AUTO_ASKS = {
+    "delete": "deleting needs you", "batch": "a batch sends off the machine",
+    "judge_test": "a judge test sends off the machine", "export": "an export needs you",
+    "download": "a download needs you", "stop": "stopping needs you", "pick": "a pick needs you",
+    "editItem": "overwriting needs you", "cloneVoice": "the voice rights tick is yours",
+    "saveAsVoice": "the voice rights tick is yours",
+}  # fmt: skip
+
+
+def auto_plan(name: str, spec: dict | None, screen: dict | None) -> tuple[int, int] | str | None:
+    """An action's size when Auto may run it by itself ((takes, GPU seconds)), the line when it still asks, or None
+    when it never asks (effect line or undo). A generation's size is the screen's plan: runs × seconds a run; a
+    screen with no plan or no time yet (a workflow never run, Timeline, Pipelines) asks."""
+    if not spec or spec["effect"] not in ("card", "dialog"):
+        return None
+    if name in AUTO_DIALOGS and spec["effect"] == "dialog":
+        return AUTO_DIALOGS[name]
+    card = spec.get("card")
+    if card == "hear":
+        return 1, RUN_S
+    if card == "generate":
+        plan = ((screen or {}).get("fields") or {}).get("plan") or {}
+        runs, secs = plan.get("runs"), plan.get("seconds")
+        if not (isinstance(runs, int) and runs >= 1 and isinstance(secs, int | float) and secs > 0):
+            return "Auto stops here: no time estimate for this run yet"
+        return runs, int(runs * secs + 0.999)
+    why = AUTO_ASKS.get(name) or AUTO_ASKS.get(card or "") or "this needs you"
+    return f"Auto stops here: {why}"
+
+
+def same_size(a: dict) -> bool:
+    """An action that leaves a generation's size alone: a pick, a star, or a prompt's text."""
+    key = (a.get("args") or {}).get("key")
+    return a["name"] in SAME_SIZE or (a["name"] == "change" and str(key).startswith("prompt"))
+
+
 class Assistant:
     """The graph and its server side: `tool` is studio.tools, `search` the web search call."""
 
@@ -720,6 +764,7 @@ class Assistant:
             inp = res.get("input") or {}
             if res.get("end"):  # a new message came first: what was pending never ran
                 by = {r["id"]: r for r in res.get("results") or []}
+                await self.give_back(pend["actions"], {i: r["status"] for i, r in by.items()})
                 for a in pend["actions"]:
                     r = by.get(a["id"]) or {"status": "did_not_run", "error": "the tab was closed"}
                     chat.append(_entry(a, r["status"], r.get("result"), r.get("error"),
@@ -741,6 +786,7 @@ class Assistant:
                     lines.append(got["line"])
             else:
                 by = {r["id"]: r for r in inp.get("results") or []}
+                await self.give_back(pend["actions"], {i: r["status"] for i, r in by.items()})
                 for a in pend["actions"]:
                     r = by.get(a["id"]) or {"status": "did_not_run", "error": "no result came back"}
                     line = r.get("line") or {}
@@ -768,6 +814,7 @@ class Assistant:
             if c["kind"] == "action":
                 n = next((i for i, x in enumerate(q) if x["kind"] != "action"), len(q))
                 acts = [{"id": x["id"], "name": x["name"], "args": x["args"]} for x in q[:n]]
+                acts, caps = await self.auto(s, acts, up.get("screen") or s.get("screen"), caps)
                 pending = {"actions": acts, "cards": [], "call": None}
                 return self._park(s, up | {"queue": q[n:], "chat": chat[-CHAT_KEEP:], "caps": caps,
                                            "lines": lines, "pending": pending})  # fmt: skip
@@ -1112,6 +1159,87 @@ class Assistant:
                 "hit_tokens = %s WHERE key = %s",
                 (tokens, src.get("provider"), src.get("model"), prompt_tokens, hits, key),
             )
+
+    async def auto(
+        self, s: State, acts: list[dict], screen: dict | None, caps: dict
+    ) -> tuple[list, dict]:
+        """Auto mode (API 1.68): each parked action with a card or a dialog runs by itself (`auto`, a generation
+        reserved under the hour's caps) or still asks (`asks`); the caps with the hour's takes. Idempotent on a replay:
+        the batch's own reservations are dropped first."""
+        st = s["data"]["settings"]
+        if not st.get("auto"):
+            return acts, caps
+        lim = st["limits"]
+        tcap = lim.get("auto_takes_per_hour", AUTO_TAKES)
+        gcap = lim.get("auto_gpu_minutes_per_hour", AUTO_GPU_MINUTES) * 60
+        route, roles = (screen or {}).get("route") or "/", set(s["data"]["roles"])
+        out = []
+        async with self.pool.connection() as conn, conn.transaction():
+            owner = s["owner_id"]
+            await conn.execute(
+                "SELECT pg_advisory_xact_lock(hashtext(%s))", (f"assistant:{owner}",)
+            )
+            await conn.execute(
+                "DELETE FROM assistant_spend WHERE kind = 'auto' AND key = ANY(%s)",
+                ([a["id"] for a in acts],),
+            )
+            cur = await conn.execute(
+                "SELECT coalesce(sum(takes), 0) AS t, coalesce(sum(gpu_s), 0) AS g FROM assistant_spend "
+                "WHERE owner_id = %s AND kind = 'auto' AND at > now() - interval '1 hour'",
+                (owner,),
+            )
+            r = await cur.fetchone()
+            took, gpu = int(r["t"]), int(r["g"])
+            resized = (
+                False  # an earlier action of the batch changed the screen the plan was read from
+            )
+            for a in acts:
+                spec = action_spec(a["name"], route, roles)
+                got = auto_plan(a["name"], spec, screen)
+                if got is None:
+                    resized |= not same_size(a)
+                    out.append(a)
+                    continue
+                if resized and spec and spec.get("card") == "generate" and not isinstance(got, str):
+                    got = "Auto stops here: this run changed in the same step"
+                if isinstance(got, str):
+                    out.append(a | {"asks": got})
+                    continue
+                t, g = got
+                if t > tcap or g > gcap:
+                    out.append(a | {"asks": "Auto stops here: a big run needs you"})
+                elif took + t > tcap:
+                    out.append(a | {"asks": f"Auto paused · {took} of {tcap} takes this hour"})
+                elif gpu + g > gcap:
+                    out.append(
+                        a
+                        | {
+                            "asks": f"Auto paused · {gpu // 60} of {gcap // 60} GPU minutes this hour"
+                        }
+                    )
+                else:
+                    if t or g:
+                        await conn.execute(
+                            "INSERT INTO assistant_spend (key, owner_id, kind, takes, gpu_s) "
+                            "VALUES (%s, %s, 'auto', %s, %s)",
+                            (a["id"], owner, t, g),
+                        )
+                    took, gpu = took + t, gpu + g
+                    out.append(a | {"auto": True})
+        return out, caps | {"auto_takes_hour": took}
+
+    async def give_back(self, actions: list[dict], status: dict[str, str]) -> None:
+        """An auto action that did not run (or failed, or was cancelled) leaves the hour's count."""
+        ids = [
+            a["id"]
+            for a in actions
+            if a.get("auto") and status.get(a["id"]) not in ("done", "still_running")
+        ]
+        if ids:
+            async with self.pool.connection() as conn:
+                await conn.execute(
+                    "DELETE FROM assistant_spend WHERE kind = 'auto' AND key = ANY(%s)", (ids,)
+                )
 
     # --- commands
 

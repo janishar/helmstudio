@@ -715,6 +715,7 @@ type AssistantSettings struct {
 	Search    *string                   `json:"search"`
 	Limits    json.RawMessage           `json:"limits"`
 	Sees      bool                      `json:"sees,omitempty"` // API 1.65: the model sees images
+	Auto      bool                      `json:"auto,omitempty"` // API 1.68: the chat's Auto switch
 	// WindowTokens is the source model's chat window (API 1.66); 0 (absent) = pipelines' default
 	WindowTokens int `json:"window_tokens,omitempty"`
 }

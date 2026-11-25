@@ -2,7 +2,7 @@
 // Elements (docs/mock/Elements.dc.html): the composer's Elements button, the picker (a grid by group with search,
 // insert at the caret, New element, edit, delete with confirm) and the editor (name, handle, group, text, 1-4
 // images from the gallery picker). Saved through /v1/studio/library.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Mic, Pencil, UsersRound, X } from "lucide-react";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { VisualPicker } from "@/components/create/visual-picker";
@@ -324,6 +324,7 @@ export function ElementEditor({
   item,
   takes,
   handle,
+  auto,
   onSaved,
 }: {
   open: boolean;
@@ -332,6 +333,8 @@ export function ElementEditor({
   takes?: S<"Take">[];
   /** the handle to start from (the assistant's Save as element, prefilled) */
   handle?: string;
+  /** Auto mode: a new element saves itself and closes */
+  auto?: boolean;
   /** the element its Save made or changed */
   onSaved?: (x: Item) => void;
 }) {
@@ -347,6 +350,7 @@ export function ElementEditor({
         item={item}
         takes={takes}
         handle={handle}
+        auto={auto && !item}
         onSaved={onSaved}
         onClose={onClose}
       />
@@ -362,12 +366,14 @@ function Editor({
   item,
   takes,
   handle: h0,
+  auto,
   onSaved,
   onClose,
 }: {
   item?: Item;
   takes?: S<"Take">[];
   handle?: string;
+  auto?: boolean;
   onSaved?: (x: Item) => void;
   onClose: () => void;
 }) {
@@ -392,8 +398,8 @@ function Editor({
       : !images.length
         ? "Add 1 to 4 images from the gallery."
         : "";
-  async function save(e: React.FormEvent) {
-    e.preventDefault();
+  async function save(e?: React.FormEvent) {
+    e?.preventDefault();
     if (problem || busy) return;
     setBusy(true);
     setError("");
@@ -424,6 +430,14 @@ function Editor({
       setBusy(false);
     }
   }
+  // Auto mode (API 1.68): saves itself once, as soon as it opens; a problem leaves it open for you
+  const ran = useRef(false);
+  useEffect(() => {
+    if (!auto || ran.current) return;
+    ran.current = true;
+    void save();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auto]);
   const box = "h-[38px] w-full rounded-[10px] bg-s4 px-3 text-[13px] text-t1";
   return (
     <form onSubmit={save} noValidate className="flex flex-col gap-3.5">
@@ -614,10 +628,7 @@ function ElementVoice({
       </span>
       {value ? (
         <div className="flex items-center gap-2 rounded-xl bg-s3 px-3 py-1.5 text-t1">
-          <span
-            aria-hidden
-            className="wave h-7 w-11 shrink-0 rounded-md"
-          />
+          <span aria-hidden className="wave h-7 w-11 shrink-0 rounded-md" />
           <span className="flex min-w-0 flex-1 flex-col">
             <small className="mono text-[10px] text-t2">Voice</small>
             <b className="truncate text-[13px] font-semibold">

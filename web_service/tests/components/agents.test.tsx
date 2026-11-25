@@ -189,7 +189,12 @@ describe("AgentsAdmin", () => {
         model: null,
         web_search: true,
         search_provider: "brave",
-        limits: { ...assistantOn.limits, messages_per_minute: 3 },
+        limits: {
+          ...assistantOn.limits,
+          messages_per_minute: 3,
+          auto_takes_per_hour: 8, // API 1.68: the defaults when studio left them out
+          auto_gpu_minutes_per_hour: 30,
+        },
       },
     });
     expect(await screen.findByText("no Assistant in the dock")).toBeTruthy();

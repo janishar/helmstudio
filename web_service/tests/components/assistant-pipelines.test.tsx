@@ -315,7 +315,7 @@ describe("the Studio view's actions", () => {
     expect(picks.still).toBe(b.id);
     await p.undo!.undo();
     expect(picks.still).toBeUndefined();
-    await p.undo!.redo();
+    await p.undo!.redo!();
     const o = card(await call("runStep", { node: "edit" }));
     expect(o.card).toMatchObject({
       kind: "generate",

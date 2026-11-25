@@ -2,7 +2,7 @@
 // Looks (docs/mock/Looks.dc.html): the composer's tiles (Elements and one per look group, from `studio.quick` or the
 // default), the Looks picker (the shared visual picker: groups, starter vs mine, greyed with the reason, Auto clears a
 // group, edit and delete one's own), the look editor (New look, ✎) and the gallery's Save as look.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Camera, Film, Lightbulb, Palette, Pencil, X, type LucideIcon } from "lucide-react";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import {
@@ -796,19 +796,29 @@ function Editor({
 export function SaveAsLook({
   take,
   name,
+  auto,
   onSaved,
   onClose,
 }: {
   take: S<"Take"> | null;
   /** the name to start from (the assistant's Save as look, prefilled) */
   name?: string;
+  /** Auto mode: saves itself and closes */
+  auto?: boolean;
   onSaved?: (x: Item) => void;
   onClose: () => void;
 }) {
   return (
     <Modal open={!!take} onClose={onClose} title="Save as look" width="w-[min(94vw,560px)]">
       {take && (
-        <SaveForm key={take.id} take={take} name={name} onSaved={onSaved} onClose={onClose} />
+        <SaveForm
+          key={take.id}
+          take={take}
+          name={name}
+          auto={auto}
+          onSaved={onSaved}
+          onClose={onClose}
+        />
       )}
     </Modal>
   );
@@ -817,11 +827,13 @@ export function SaveAsLook({
 function SaveForm({
   take: t,
   name: n0,
+  auto,
   onSaved,
   onClose,
 }: {
   take: S<"Take">;
   name?: string;
+  auto?: boolean;
   onSaved?: (x: Item) => void;
   onClose: () => void;
 }) {
@@ -843,8 +855,8 @@ function SaveForm({
     : !prompt && !(withLoras && loras.length) && !image
       ? "Copy the prompt, the LoRAs or the take: a look needs one of them."
       : "";
-  async function save(e: React.FormEvent) {
-    e.preventDefault();
+  async function save(e?: React.FormEvent) {
+    e?.preventDefault();
     if (problem || busy) return;
     setBusy(true);
     setError("");
@@ -862,13 +874,22 @@ function SaveForm({
       );
       await reloadLibrary();
       onSaved?.(x);
-      setDone(true);
+      if (auto) onClose();
+      else setDone(true);
     } catch (err) {
       setError(message(err));
     } finally {
       setBusy(false);
     }
   }
+  // Auto mode (API 1.68): saves itself once, as soon as it opens; a problem leaves it open for you
+  const ran = useRef(false);
+  useEffect(() => {
+    if (!auto || ran.current) return;
+    ran.current = true;
+    void save();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auto]);
   const ck = "flex items-start gap-2.5 text-[13px] text-t1";
   const sub = "mono block text-[11px] break-words text-t2";
   if (done)
