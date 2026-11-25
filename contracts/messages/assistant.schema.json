@@ -76,6 +76,7 @@
         "undo": {"type": "boolean"},
         "memory_id": {"$ref": "defs.schema.json#/$defs/uuid", "description": "a Remembered line: the item its Undo deletes"},
         "skill": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,22}$", "description": "from API 1.64: a Using skill line: the skill read"},
+        "take_ids": {"type": "array", "minItems": 1, "maxItems": 8, "uniqueItems": true, "items": {"$ref": "defs.schema.json#/$defs/uuid"}, "description": "from API 1.70: a plugin tool's line: the takes it made (its Undo deletes them)"},
         "sources": {
           "type": "array",
           "maxItems": 5,

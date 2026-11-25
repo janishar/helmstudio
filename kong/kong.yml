@@ -32,6 +32,15 @@ services:
       - name: studio
         paths: [/v1/studio]
         strip_path: false
+      - name: studio-plugin                   # API 1.70: a plugin tool call's pass is the auth (studio checks it; no key)
+        paths: [/v1/studio/plugin/]
+        strip_path: false
+        plugins:
+          - name: apikey-auth-plugin
+            config:
+              verification_urls: [http://auth:8080/verify/apikey]
+              timeout_ms: 2000
+              bypass_paths: ['^/v1/studio/plugin/']
 
   - name: files
     url: http://files:8080

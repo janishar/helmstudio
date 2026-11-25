@@ -28,6 +28,7 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `messages/cmd.assistant.steer.schema.json`, `evt.assistant.steered.schema.json` | (API 1.59) studio → pipelines: a message sent while a turn works, or Stop; pipelines → studio's projector: the steers a turn read (Assistant: steer, below) |
 | `messages/req.studio.see.schema.json` | (API 1.65) NATS request/reply pipelines → studio (not enveloped): one take's pictures (JPEG, long side at most 1024) for the assistant's model when it sees images (Assistant: media and vision) |
 | `messages/req.pipelines.assistant.memory.schema.json` | (API 1.44) NATS request/reply studio → pipelines (not enveloped): the Memory list's list, edit, delete, clear, in the owner's namespace only |
+| `messages/req.studio.plugins.pass.schema.json` | (API 1.70) NATS request/reply pipelines → studio (not enveloped): the pass of one plugin tool call, signed by studio (Plugins: takes) |
 | `messages/assistant.schema.json` | (API 1.44) not a message: the assistant's shared shapes (screen summary, action, result, line, card, caps, limits, error, memory item); openapi.yaml's `Assistant*` twins copy them |
 | `tools/catalog.json` | (API 1.44) not a message: every tool the in-app assistant and `helm mcp` share (name, input, output, routes, roles, surfaces, card); studio_service embeds a copy (`gen/tools/`), pipelines_service copies it with the rest of `tools/`, cli embeds a copy for `helm mcp` (`gen/`, plan 16) |
 | `tools/actions.json` | (API 1.44) not a message: the assistant's screen actions per screen and its card kinds; web_service and pipelines_service copy it |
@@ -4130,6 +4131,49 @@ launches next time".
   is up (a fresh hosts key), `failed` when that runner says so (Couldn't start · `problem`) and `starting` otherwise
   (launched, up but not answering yet, or not seen yet); `not_running` only when no runner of its host is up. Only
   the registry keys of its own host count.
+
+### Plugins: takes (API 1.70; boards docs/mock/Plugins.dc.html MEDIA TOOLS and TakeActions.dc.html (drawn, await approval), release 0.1.0-alpha.2 items 11 and 13; normative)
+
+Owner, 2026-11-25: "yes add media tools to alpha.2", "frame extractor for video analysis to assistant". A plugin tool
+that reads one of your takes and makes a new one, with no user token and never another user's take.
+
+- **The pass.** Before every plugin tool call pipelines asks studio for its pass (`studio.plugins.pass`,
+  req.studio.plugins.pass: owner, plugin, call id; not_found while the plugin is off). Studio signs
+  `base64url({owner, plugin, call, exp}).base64url(HMAC-SHA256)` with a key only it holds (derived from
+  `FILE_URL_SECRET`, so a restart keeps passes valid; pipelines never sees it), valid 300 s, and answers its public
+  base URL too. The call carries `Authorization: Bearer <pass>`, `X-Helm-Owner`, `X-Helm-Call` and `X-Helm-Api`
+  (that base URL). A plugin that is not a `takes` plugin may ignore all of it.
+- **The plugin API** (`/v1/studio/plugin/*`): Kong lets it through without an API key (its route bypasses the key
+  check, as `/files/`); studio checks the pass itself instead of a user token: the signature, `exp`, and that the
+  plugin is on, unblocked, of kind assistant-tools and its manifest says `"takes": true`; else 401. It acts as the
+  pass's owner under row-level security, so another user's take is 404, as everywhere.
+  - `GET /v1/studio/plugin/takes/{take_id}` → `PluginTake`: kind, title, type, size, pixel size, a video's length,
+    rate and sound, an audio's length, and `url` signed for 10 minutes. A pending or deleted take is 404.
+  - `POST /v1/studio/plugin/takes` `PluginTakeCreate` → 201 `PluginTakeUpload`: a pending take, `source: tool`,
+    `tool` {plugin (the pass's), tool, input}, `made_with` null, `parents` = the takes it was made from (each the
+    owner's, ready and live, else 404). Keys as an upload's (`u/<owner>/uploads/<id>.<png|jpg|webp|wav|mp3|m4a>`,
+    at most 50 MB) or an import's video (`u/<owner>/imports/<id>.mp4` and its poster beside it, at most 2 GB), so
+    files_service needs no new key shape. PUT links valid 15 minutes; not completed within an hour, it is discarded.
+  - `POST /v1/studio/plugin/takes/{take_id}/complete` checks the objects as an import's (size, the header of the
+    declared type and pixel size; a video's `ftyp` and poster; audio as an upload's) and shows the take; a failed
+    check discards it (422). The thumbs job makes its thumbnail as for an upload.
+- **Lines.** A reply's `take_ids` (toolReply) go on the chat line (`AssistantLine.take_ids`); its Undo deletes them
+  (`DELETE /v1/studio/takes/{take_id}`; no Redo: a deleted take is gone). The model shows a new take as media by
+  writing its `[[take:<id>]]` alone on a line (Assistant: media and vision).
+- **Pictures.** A reply's `images` (base64 JPEG, at most 8) are for a model that sees: they join the next model
+  call's pictures as look_at's do (`Looked at <line>` once) and are never stored nor put in `result`. A text-only
+  model gets the result alone (the frames' timecodes).
+- **Media tools** (`plugins/media-tools`, items 11 and 13; built in, starts itself on host mac, port 8422, off until
+  turned on; every risk flag false: each tool makes a new take and the original stays). ffmpeg and ffprobe from PATH
+  (as the runner's), Pillow for images; argument lists only, never a shell; fixed codecs (H.264 + AAC in MP4, AAC
+  m4a, PNG / JPEG / WebP); an input at most 2 GB and 10 minutes, an image at most 50 MP; each ffmpeg run 25 s at most
+  (the call's 30 s).
+  - `edit_image` {take_id, crop, resize, rotate, flip, extend, format}: applied in that order → a new image take.
+  - `edit_video` {take_id, trim {start, end}, speed 0.25–4, mute, audio_take_id} → a new video take.
+  - `frame_image` {take_id, at} → a new image take of one frame ("frame as image").
+  - `edit_audio` {take_id, trim, volume_db} and `join_audio` {take_ids, 2–8} → a new audio take (m4a).
+  - `frames` {take_id, at[] | count | scenes, size} → no take: up to 8 frames as `images` for the model and their
+    timecodes in `result`; a Timeline export is a video take like any other.
 
 ### Skills (API 1.64; boards docs/mock/Plugins.dc.html SKILLS and Assistant.dc.html 16, release 0.1.0-alpha.2 item 36; normative)
 
