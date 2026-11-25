@@ -1,7 +1,8 @@
 #!/bin/sh
 # Start the bridge (plugin "Your Claude subscription"). Its env (random token, chmod 600) lives outside plugins/ (the
-# studio mounts that folder, and the Mac app's copy is inside the app): ${BRIDGE_ENV:-~/.helm/claude-code-bridge.env},
-# made on first run; an env from an old place (plugins/claude-code-bridge/.env,
+# studio mounts that folder, and the Mac app's copy is inside the app): ${BRIDGE_ENV:-$HELM_HOME/claude-code-bridge.env}
+# (HELM_HOME defaults to ~/.helm), made on first run; the runner reads BRIDGE_TOKEN there for Add as provider (plugin.json
+# key_from: no key to paste); an env from an old place (plugins/claude-code-bridge/.env,
 # ~/.config/helmstudio/claude-code-bridge.env) is moved there, same token.
 # No claude, or not signed in: one plain line and exit 78, so the runner shows it and waits for Try again. Only
 # `claude auth status` is asked; no credential file is ever read.
@@ -12,8 +13,9 @@ if ! command -v claude >/dev/null 2>&1 || ! claude auth status --json 2>/dev/nul
   echo "Install Claude Code and sign in, then Try again"
   exit 78
 fi
-[ -d "$HOME/.helm" ] || mkdir -m 700 "$HOME/.helm"
-export BRIDGE_ENV="${BRIDGE_ENV:-$HOME/.helm/claude-code-bridge.env}"
+HELM="${HELM_HOME:-$HOME/.helm}"
+[ -d "$HELM" ] || mkdir -m 700 "$HELM"
+export BRIDGE_ENV="${BRIDGE_ENV:-$HELM/claude-code-bridge.env}"
 mkdir -p "$(dirname "$BRIDGE_ENV")"
 for old in .env "$HOME/.config/helmstudio/claude-code-bridge.env"; do
   if [ ! -f "$BRIDGE_ENV" ] && [ -f "$old" ]; then

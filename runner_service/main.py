@@ -329,6 +329,18 @@ async def main() -> None:
 
         plugins = plugin_runs.Supervisor(config.PLUGINS_DIRS, config.HELM_HOME, put_plugins)
         side.append(asyncio.create_task(plugins.watch(js, stop)))
+
+        # API 1.73: a plugin's key from its file in HELM_HOME (req.runner.plugins.key), never logged
+        async def on_key(msg) -> None:
+            try:
+                name = json.loads(msg.data or b"{}").get("plugin")
+            except ValueError, AttributeError:
+                name = None
+            reply = plugin_runs.host_key(config.PLUGINS_DIRS, config.HELM_HOME, name)
+            log.info("plugin key asked for %s: %s", str(name)[:40], reply.get("code", "sent"))
+            await msg.respond(json.dumps(reply).encode())
+
+        await nc.subscribe(f"runner.plugins.key.{HOST}", cb=on_key)
     server = await health.serve(nc)
     log.info("runner %s.%s ready on %s (device %s)", HOST, ENV, SUBJECT, device)
     try:

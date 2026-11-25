@@ -19,6 +19,7 @@ import contextlib
 import json
 import logging
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -45,8 +46,8 @@ class Refused(Exception):
     """Why a plugin can't start (the published `detail`)."""
 
 
-def resolve(dirs: list[Path], name: str, host: str = HOST) -> tuple[list[str], Path]:
-    """(argv, folder) of plugin `name`, or Refused with the reason."""
+def find(dirs: list[Path], name: str) -> tuple[Path, dict]:
+    """(folder, manifest) of plugin `name` (the first folder wins), or Refused with the reason."""
     zipped = False
     for d in dirs:
         folder = d / name
@@ -61,9 +62,18 @@ def resolve(dirs: list[Path], name: str, host: str = HOST) -> tuple[list[str], P
             else "not found in its plugin folders"
         )
     try:
-        run = json.loads(mf.read_text()).get("run")
-    except OSError, ValueError, AttributeError:
-        raise Refused("its plugin.json can't be read") from None
+        m = json.loads(mf.read_text())
+    except OSError, ValueError:
+        m = None
+    if not isinstance(m, dict):
+        raise Refused("its plugin.json can't be read")
+    return folder, m
+
+
+def resolve(dirs: list[Path], name: str, host: str = HOST) -> tuple[list[str], Path]:
+    """(argv, folder) of plugin `name`, or Refused with the reason."""
+    folder, m = find(dirs, name)
+    run = m.get("run")
     cmd = run.get("cmd") if isinstance(run, dict) else None
     if not (isinstance(cmd, list) and cmd and all(isinstance(a, str) and a for a in cmd)):
         raise Refused("no run in its plugin.json")
@@ -76,6 +86,51 @@ def resolve(dirs: list[Path], name: str, host: str = HOST) -> tuple[list[str], P
             raise Refused(f"run.cmd {prog[:100]} is not a file inside its folder")
         prog = str(exe)
     return [prog, *cmd[1:]], root
+
+
+NAME_RE = re.compile(r"^[a-z][a-z0-9-]{0,22}$")
+KEY_FILE_RE = re.compile(r"^[a-z][a-z0-9-]{0,22}\.[A-Za-z0-9._-]{1,40}$")
+KEY_VAR_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+
+
+def host_key(dirs: list[Path], home: Path, name, host: str = HOST) -> dict:
+    """The req.runner.plugins.key reply (API 1.73) for plugin `name`: only its manifest's key_from.var, read from
+    key_from.file directly in `home` (a regular file named `<name>.`…). The key is never logged."""
+
+    def no(code: str, text: str) -> dict:
+        return {"error": text, "code": code}
+
+    if not isinstance(name, str) or not NAME_RE.match(name):
+        return no("not_found", "no such plugin")
+    try:
+        _, m = find(dirs, name)
+    except Refused as e:
+        return no("not_found", str(e))
+    provider, run = m.get("provider"), m.get("run")
+    kf = provider.get("key_from") if isinstance(provider, dict) else None
+    if not isinstance(kf, dict):
+        return no("not_found", "its plugin.json names no key_from")
+    if not isinstance(run, dict) or run.get("host", "mac") != host:
+        return no("refused", f"its run is not for host {host}")
+    file, var, home = kf.get("file"), kf.get("var"), Path(home)
+    path = home / file if isinstance(file, str) else home
+    if not (isinstance(file, str) and KEY_FILE_RE.match(file) and file.startswith(name + ".")
+            and isinstance(var, str) and KEY_VAR_RE.match(var)) or path.is_symlink() \
+            or path.resolve().parent != home.resolve():  # fmt: skip
+        return no("refused", "its key_from must name a file of its own directly in HELM_HOME")
+    try:
+        text = path.read_text() if path.is_file() else ""
+    except OSError, UnicodeDecodeError:
+        text = ""
+    for line in text.splitlines():
+        k, eq, v = line.strip().removeprefix("export ").partition("=")
+        if eq and k.strip() == var:
+            v = v.strip()
+            if len(v) >= 2 and v[0] == v[-1] and v[0] in "'\"":
+                v = v[1:-1]
+            if 0 < len(v) <= 1024 and all("!" <= c <= "~" for c in v):
+                return {"key": v}
+    return no("no_key", "its key is not made yet: it makes it on first start")
 
 
 def child_env(home: Path) -> dict:

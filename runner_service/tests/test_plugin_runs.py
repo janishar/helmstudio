@@ -233,3 +233,55 @@ async def test_no_claude_or_not_signed_in_waits_for_try_again(sup, tmp_path, mon
     await sup.retry({"claude-code-bridge": 1})
     await until(lambda: sup.states["claude-code-bridge"]["restarts"] == 1)
     await sup.close()
+
+
+def test_host_key_reads_only_the_named_var_of_its_own_file(tmp_path):
+    """API 1.73: req.runner.plugins.key: only key_from.var of key_from.file directly in HELM_HOME."""
+    dirs, home = [tmp_path / "plugins"], tmp_path / "helm"
+    home.mkdir()
+
+    def manifest(name, key_from, host="mac"):
+        d = dirs[0] / name
+        d.mkdir(parents=True, exist_ok=True)
+        m = {
+            "name": name,
+            "run": {"cmd": ["./run.sh"], "host": host},
+            "provider": {"key_from": key_from},
+        }
+        (d / "plugin.json").write_text(json.dumps(m))
+
+    def ask(name, host="mac"):
+        return plugin_runs.host_key(dirs, home, name, host)
+
+    manifest("bridge", {"file": "bridge.env", "var": "TOKEN"})
+    assert ask("bridge")["code"] == "no_key"  # not made yet
+    (home / "bridge.env").write_text(
+        "OTHER=nope\nTOKEN=\nexport TOKEN='s3cret-Key_1'\nHOST=127.0.0.1\n"
+    )
+    assert ask("bridge") == {"key": "s3cret-Key_1"}
+    assert ask("bridge", host="box")["code"] == "refused"
+    (home / "bridge.env").write_text("TOKEN_X=nope\n")
+    assert ask("bridge")["code"] == "no_key"
+    # never a path outside HELM_HOME, a symlink, or a file not named after the plugin
+    (tmp_path / "outside.env").write_text("TOKEN=leak\n")
+    for bad in [
+        "../outside.env",
+        "/etc/passwd",
+        "other.env",
+        "bridgeX.env",
+        "bridge.env/../x",
+        "bridge",
+    ]:
+        manifest("bridge", {"file": bad, "var": "TOKEN"})
+        got = ask("bridge")
+        assert got["code"] == "refused" and "leak" not in json.dumps(got), (bad, got)
+    manifest("bridge", {"file": "bridge.env", "var": "../TOKEN"})
+    assert ask("bridge")["code"] == "refused"
+    manifest("bridge", {"file": "bridge.env", "var": "TOKEN"})
+    (home / "bridge.env").unlink()
+    (home / "bridge.env").symlink_to(tmp_path / "outside.env")
+    assert ask("bridge")["code"] == "refused"
+    manifest("plain", None)
+    assert ask("plain")["code"] == "not_found"
+    for name in ["../x", None, 7, "missing"]:
+        assert ask(name)["code"] == "not_found"

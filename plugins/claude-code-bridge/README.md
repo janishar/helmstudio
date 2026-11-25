@@ -25,14 +25,14 @@ What helmstudio does and doesn't do (Anthropic's conditions for products that ru
    in.
 2. Plugins: turn Your Claude subscription on. The Mac's runner starts `run.sh` (the Mac app, or `make runners` in dev);
    with no `claude` or not signed in it shows Couldn't start · Install Claude Code and sign in, then Try again.
-3. Add as provider with the `BRIDGE_TOKEN` value from `~/.helm/claude-code-bridge.env`. The provider is Only you: no
-   other account sees or uses it.
+3. Add as provider, once it is Running: no key to paste (the Mac's runner reads `BRIDGE_TOKEN` from
+   `~/.helm/claude-code-bridge.env` for studio). The provider is Only you: no other account sees or uses it.
 4. Admin › AI agents: pick it for the Assistant.
 
 To run it by hand instead: `plugins/claude-code-bridge/run.sh`.
 
 The first run writes its env file with a random `BRIDGE_TOKEN` (chmod 600) at `$BRIDGE_ENV`, by default
-`~/.helm/claude-code-bridge.env`: outside plugins/, because the studio mounts that folder and the Mac app's copy is
+`~/.helm/claude-code-bridge.env` (`$HELM_HOME` overrides `~/.helm`): outside plugins/, because the studio mounts that folder and the Mac app's copy is
 inside the app (an env from an old place, `plugins/claude-code-bridge/.env` or
 `~/.config/helmstudio/claude-code-bridge.env`, is moved there, same token). It listens on 127.0.0.1:8420 only;
 containers reach it as `http://host.docker.internal:8420` (OrbStack in dev; the Mac app's VM, whose DNS answers with
