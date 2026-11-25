@@ -7,7 +7,7 @@ import uuid
 
 import pytest
 from conftest import make_client  # a plugin's client sends only its pass, no user token
-from helpers import STUDIO, ok, png_bytes, upload, wait_for
+from helpers import STUDIO, docker_exec, ok, png_bytes, upload, wait_for
 from test_assistant import TAB, assistant, screen  # noqa: F401  (assistant is a fixture)
 from test_director import SERVER_HOST, fake, fake_ctl, provider, server_body  # noqa: F401
 
@@ -149,6 +149,32 @@ def test_add_as_provider_is_only_you(admin, admin_session, api, on, fake_ctl):  
     again = ok(admin.post(f"{PLUGINS}/rescan"))
     assert "fake-provider" in again["new"]
     assert plugin(admin, "fake-provider")["enabled"] is False
+
+
+def test_add_as_provider_takes_the_key_from_its_host(admin, on):
+    """API 1.73: fake-hostkey makes its own key in the fake runner's HELM_HOME; Add as provider needs none."""
+    url = f"{PLUGINS}/fake-hostkey/provider"
+    ok(admin.post(f"{PLUGINS}/rescan"))
+    assert plugin(admin, "fake-hostkey")["key_from_host"] is True
+    assert "key_from_host" not in plugin(admin, "fake-provider")
+    on("fake-hostkey")
+    wait_for(lambda: plugin(admin, "fake-hostkey")["status"] == "running", timeout=60, what="Running")
+    r = admin.post(url, json={"key": "not-its-key", "host": SERVER_HOST})
+    assert r.status_code == 422  # the plugin checks the key for real
+    env = docker_exec("runner", "cat", "/tmp/helm/fake-hostkey.env")
+    key = next(line.split("=", 1)[1] for line in env.splitlines() if line.startswith("FAKE_HOSTKEY_KEY="))
+    try:
+        made = admin.post(url, json={"host": SERVER_HOST})
+        assert made.status_code == 201, made.text
+        assert key not in made.text
+        got = made.json()
+        assert (got["plugin"], got["base_url"]) == ("fake-hostkey", "http://runner:8472/v1")
+    finally:
+        ok(admin.delete(f"{PLUGINS}/fake-hostkey"), 204)  # its provider goes too
+    ok(admin.post(f"{PLUGINS}/rescan"))
+    on("fake-provider")  # a plugin without key_from still needs a key
+    r = admin.post(f"{PLUGINS}/fake-provider/provider", json={"host": SERVER_HOST})
+    assert r.status_code == 422 and r.json()["detail"] == "key must be 1-1024 characters"
 
 
 def _turn(api, text: str) -> tuple[str, dict]:

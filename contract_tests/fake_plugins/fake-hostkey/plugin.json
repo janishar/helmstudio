@@ -1,0 +1,18 @@
+{
+  "name": "fake-hostkey",
+  "title": "Fake host key",
+  "version": "0.1.0",
+  "kind": "model-provider",
+  "description": "Test stack only: a provider that makes its own key on its host; Add as provider needs none (API 1.73).",
+  "author": "contract_tests",
+  "may_do": ["Add a model provider", "Make its own key in the test HELM_HOME"],
+  "url": "http://runner:8472",
+  "health": "/health",
+  "run": {"cmd": ["python3", "service.py"], "host": "fake"},
+  "provider": {
+    "path": "/v1",
+    "models": ["fake-small"],
+    "key_hint": "FAKE_HOSTKEY_KEY in ~/.helm/fake-hostkey.env",
+    "key_from": {"file": "fake-hostkey.env", "var": "FAKE_HOSTKEY_KEY"}
+  }
+}
