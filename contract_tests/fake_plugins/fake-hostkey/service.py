@@ -11,7 +11,11 @@ from pathlib import Path
 ENV = Path(os.environ["HELM_HOME"]) / "fake-hostkey.env"
 if not ENV.exists():
     ENV.write_text(f"OTHER=not-the-key\nFAKE_HOSTKEY_KEY={secrets.token_urlsafe(24)}\n")
-KEY = next(v for k, _, v in (x.partition("=") for x in ENV.read_text().splitlines()) if k == "FAKE_HOSTKEY_KEY")
+KEY = next(
+    v
+    for k, _, v in (x.partition("=") for x in ENV.read_text().splitlines())
+    if k == "FAKE_HOSTKEY_KEY"
+)
 
 
 class Handler(BaseHTTPRequestHandler):

@@ -158,11 +158,15 @@ def test_add_as_provider_takes_the_key_from_its_host(admin, on):
     assert plugin(admin, "fake-hostkey")["key_from_host"] is True
     assert "key_from_host" not in plugin(admin, "fake-provider")
     on("fake-hostkey")
-    wait_for(lambda: plugin(admin, "fake-hostkey")["status"] == "running", timeout=60, what="Running")
+    wait_for(
+        lambda: plugin(admin, "fake-hostkey")["status"] == "running", timeout=60, what="Running"
+    )
     r = admin.post(url, json={"key": "not-its-key", "host": SERVER_HOST})
     assert r.status_code == 422  # the plugin checks the key for real
     env = docker_exec("runner", "cat", "/tmp/helm/fake-hostkey.env")
-    key = next(line.split("=", 1)[1] for line in env.splitlines() if line.startswith("FAKE_HOSTKEY_KEY="))
+    key = next(
+        line.split("=", 1)[1] for line in env.splitlines() if line.startswith("FAKE_HOSTKEY_KEY=")
+    )
     try:
         made = admin.post(url, json={"host": SERVER_HOST})
         assert made.status_code == 201, made.text
