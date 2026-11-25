@@ -59,3 +59,18 @@ HELMSTUDIO_MODELS=/path/to/models make runners-nvidia STACK=release
 The stack makes host `gpu`'s runner credentials on its first start (`HELMSTUDIO_GPU_HOST` in its `.env` names it
 otherwise) and publishes NATS (4322) and S3 (8433) on 127.0.0.1 only; `STACK=release` copies the credentials out of
 its `keys` volume into `deploy/secrets-release/`. Stop: `make runners-nvidia-stop STACK=release`.
+
+## Windows (WSL2): untested
+
+The same steps run inside WSL2 (Ubuntu 24.04). Differences:
+
+- Install the NVIDIA driver on **Windows** only; WSL2 passes the card through (`nvidia-smi` works inside WSL2). Do
+  not install a Linux driver inside WSL2.
+- Install Docker Desktop with the WSL2 backend and turn on its integration for your Ubuntu distro (Settings ›
+  Resources › WSL integration), so `docker` works inside WSL2 and the stack's ports on 127.0.0.1 reach the runners.
+- Do everything else (git, ffmpeg, uv, build-essential, python3.12-dev, SGLang, `make runners-nvidia`) inside WSL2.
+- Keep the repo and the models inside WSL2's own disk (e.g. `~/helmstudio`, `~/models`), not under `/mnt/c`: the
+  Windows drive is much slower from WSL2.
+- Open http://localhost:8300 in a Windows browser.
+
+Nobody has run this on Windows yet: please report what breaks.
