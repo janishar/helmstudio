@@ -146,6 +146,48 @@ export function placeInLine(q: S<"Queue"> | null, host: string | null | undefine
   return 1 + mine + (q.hosts.find((h) => h.host === host)?.others_queued ?? 0);
 }
 
+const LOST = "Lost the connection to the studio for a moment; try again";
+// raw error text → plain words (item 23, board frame 6): a provider's CallError ("<name>: …", pipelines
+// providers.py), Kong's or the browser's lost connection, studio's bare HTTP statuses
+const PLAIN: [RegExp, (m: RegExpExecArray) => string][] = [
+  [/^(load failed|failed to fetch|networkerror[^]*)$/i, () => LOST], // the browser's fetch errors, whole text only
+  [/name resolution failed|failure to get a peer|invalid response was received from the upstream/i, () => LOST], // prettier-ignore
+  [/^(?:(.+?): )?the provider is busy or down \(HTTP \d+\)$/, (m) => `${m[1] ?? "The provider"} is busy. Try again in a minute.`], // prettier-ignore
+  [/^(?:(.+?): |(.+?) )?(timed out|did not answer)$/, (m) => `${m[1] ?? m[2] ?? "It"} took too long to answer. Try again.`], // prettier-ignore
+  [/^(?:(.+?): )?(could not connect|cannot resolve [\s\S]*)$/, (m) => `Could not reach ${m[1] ?? "it"}. Try again in a minute.`], // prettier-ignore
+  [/^(?:(.+?): )?the key was refused$/, (m) => `${m[1] ?? "The provider"} refused its key. Ask your admin to check it.`], // prettier-ignore
+  [/^(?:(.+?): )?HTTP \d+$/, (m) => `${m[1] ?? "The provider"} turned the request down. Try again or rephrase.`], // prettier-ignore
+  [/^(?:(.+?): )?the answer is not a (chat completion|search result)/, (m) => `${m[1] ?? "The provider"} sent an answer the assistant can't read. Try again.`], // prettier-ignore
+  [
+    /^The server had a problem \(\d+\)\. Try again\.$/,
+    () => "The studio had a problem. Try again.",
+  ],
+  [/^Request failed \(\d+\)\.$/, () => "The studio could not do that. Try again."],
+];
+const ACTION = /^[a-z]+([A-Z][A-Za-z]*)?$/; // an action's name ("switchTo"), not words
+
+function plainWords(t: string): string {
+  const i = t.indexOf(" · ");
+  if (i > 0) {
+    const head = t.slice(0, i);
+    const tail = t.slice(i + 3);
+    const p = plainWords(tail);
+    if (!ACTION.test(head)) return `${head} · ${p}`;
+    return p !== tail ? p : `Failed · ${p}`;
+  }
+  for (const [re, say] of PLAIN) {
+    const m = re.exec(t);
+    if (m) return say(m);
+  }
+  return t;
+}
+
+/** A failed line's or a provider error's text in plain words, and the raw text (for Details) when it differs. */
+export function plainError(text: string): { plain: string; raw?: string } {
+  const plain = plainWords(text);
+  return plain === text ? { plain } : { plain, raw: text };
+}
+
 /** "about 1 min 20 s" from seconds. */
 export function about(s: number) {
   const m = Math.floor(s / 60);
