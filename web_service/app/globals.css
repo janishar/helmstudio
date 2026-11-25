@@ -1944,6 +1944,11 @@
     min-width: 44px;
     min-height: 44px;
   }
+  /* the rail's menu when the window is too short for it: a thin scrollbar, none while it all fits */
+  .rail-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: var(--s4) transparent;
+  }
   .dock-item:not([aria-current]) .tile {
     filter: saturate(0.55) brightness(0.8);
   }

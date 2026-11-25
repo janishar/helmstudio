@@ -152,8 +152,9 @@ export function AppShell({
             className="flex min-h-dvh flex-col md:flex-row lg:h-dvh lg:overflow-hidden"
             data-drawer={(a.ready && a.open) || undefined}
           >
-            {/* the rail (md+): the logo in its own panel, 14 px above the menu; a phone's bar has no logo */}
-            <div className="contents md:z-10 md:m-3.5 md:mr-0 md:flex md:shrink-0 md:flex-col md:gap-3.5 md:self-start">
+            {/* the rail (md+): the logo in its own panel, 14 px above the menu; a phone's bar has no logo. A window too short
+                for every item scrolls the menu (owner, 2026-11-25: "make it scoll insted") */}
+            <div className="contents md:z-10 md:m-3.5 md:mr-0 md:flex md:max-h-[calc(100dvh-28px)] md:shrink-0 md:flex-col md:gap-3.5 md:self-start">
               <div className="rail-logo panel hidden w-[76px] justify-center rounded-[30px] px-1 py-3.5 md:flex">
                 <Link
                   href="/"
@@ -180,7 +181,7 @@ export function AppShell({
               <nav
                 ref={nav}
                 aria-label="Sections"
-                className="panel z-10 m-3.5 mb-0 flex shrink-0 items-center gap-3.5 self-stretch overflow-x-auto rounded-[30px] px-3 py-1 md:m-0 md:w-[76px] md:flex-col md:self-start md:overflow-visible md:px-1 md:py-3.5"
+                className="panel z-10 m-3.5 mb-0 flex shrink-0 items-center gap-3.5 self-stretch overflow-x-auto rounded-[30px] px-3 py-1 md:m-0 md:min-h-0 md:w-[76px] md:shrink md:flex-col md:self-start md:overflow-y-auto md:overflow-x-hidden md:px-1 md:py-3.5 rail-scroll"
               >
                 {ITEMS.map((it) => (
                   <DockLink key={it.href} it={it} path={path} />
