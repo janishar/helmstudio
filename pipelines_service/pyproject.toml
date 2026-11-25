@@ -1,6 +1,6 @@
 [project]
 name = "helmstudio-pipelines"
-version = "0.1.0a2"
+version = "0.1.0a3"
 description = "helmstudio pipelines_service: runs batches (one workflow per row) as LangGraph threads, driven by NATS"
 requires-python = ">=3.14,<3.15"
 dependencies = [

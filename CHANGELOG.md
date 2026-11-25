@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.1.0-alpha.3 (2026-11-25)
+
+A small alpha: an optional way to use your own Claude plan, and fixes to the AI agents and Plugins pages.
+
+### What's new
+
+- **Your Claude subscription.** An optional personal plugin in Admin › Plugins, off by default. Turned on, it runs
+  your own Claude Code on the Mac (you install it and sign in yourself) and adds a model provider only you can use.
+  helmstudio never handles your Claude login. Its disclaimer: "Personal use only. Runs your own Claude login and
+  plan, for you only. Never shared with other accounts." If Claude Code is missing or signed out it says Couldn't
+  start · Install Claude Code and sign in, with Try again.
+- **AI agents loads at once.** The table no longer waits on the plugins list. A job whose saved provider is off says
+  "<Provider> is off · Edit to pick another".
+- **Plugins that need you.** A plugin waiting on you (for example, to sign in) no longer says "Trying again in
+  1 min."; only a plugin the runner retries by itself does.
+
+### Known limits
+
+- The Mac app needs Apple Silicon and is ad-hoc signed (no Developer ID): open it the first time with right-click ›
+  Open. From 0.1.0-alpha.2 it updates itself; from 0.1.0-alpha.1 it is one manual `.dmg` replace.
+- The released images are linux/arm64 only. On an x86 Linux host, build them from source (`make prod`).
+- No uninstall tool for the app; delete its folders by hand (docs/guides/mac-app.md).
+- NVIDIA hosts are set up by hand (deploy/gpu-host/README.md).
+- Your Claude subscription runs on the Mac only, and needs Claude Code installed and signed in by you.
+- Web search uses unofficial search pages: it can be rate-limited or break.
+- The Assistant sees a video as its poster frame only (use the frames tool to look closer).
+- An Assistant steer is kept only in memory: if pipelines restarts mid-answer, it becomes the next message.
+- Models are downloaded separately (on the Models screen) and keep their own licences; no weights ship with
+  helmstudio.
+
 ## 0.1.0-alpha.2 (2026-11-25)
 
 The second alpha: a much more capable Assistant, plugins, media tools, and a Mac app that updates itself. Expect
