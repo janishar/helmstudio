@@ -1,0 +1,16 @@
+# only what setup.Dockerfile copies; never deploy/secrets*, an .env, a log, a token or a plugin's venv
+*
+!.tools/make-secrets
+!.tools/nats-setup
+!.tools/storage-setup
+!deploy/nats
+!deploy/postgres/init.sh
+!deploy/release/setup.sh
+!plugins
+plugins/**/.env*
+plugins/**/*.log
+plugins/**/*token*
+plugins/**/.venv
+plugins/**/__pycache__
+plugins/**/.pytest_cache
+plugins/**/.ruff_cache

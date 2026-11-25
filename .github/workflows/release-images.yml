@@ -1,8 +1,9 @@
-# Release builds (docs/plan/34-release-builds.md §38): the 8 images for linux/amd64 and linux/arm64 on native runners,
-# the server pack, a smoke test of the pack on each kind of machine, and the Mac app's .dmg. Every push and pull
+# Release builds (docs/plan/34-release-builds.md §38): the 9 images for linux/amd64 and linux/arm64 on native runners
+# (and the NVIDIA runner's for linux/amd64), the release compose.yml (deploy/release/compose.yml with the version
+# baked in), a smoke test of that compose.yml on each kind of machine, and the Mac app's .dmg. Every push and pull
 # request builds and tests everything and publishes nothing (the files are this run's artifacts). A pushed tag v*
-# also publishes, only after both smoke tests pass: one multi-arch tag ghcr.io/janishar/helmstudio-<name>:<version>
-# per image, and the .dmg, the pack and SHA256SUMS attached to the GitHub release of that tag if it exists.
+# also publishes, only after both smoke tests pass: one tag ghcr.io/janishar/helmstudio-<name>:<version> per image
+# (multi-arch), and the .dmg, compose.yml and SHA256SUMS attached to the GitHub release of that tag if it exists.
 name: release-builds
 
 on:
@@ -39,7 +40,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: [kong, auth, studio, pipelines, files, web, seaweedfs, media-tools]
+        image: [kong, auth, studio, pipelines, files, web, seaweedfs, media-tools, setup]
         arch: [amd64, arm64]
         include:
           - {image: kong, context: kong}
@@ -50,6 +51,7 @@ jobs:
           - {image: web, context: web_service}
           - {image: seaweedfs, context: deploy/seaweedfs}
           - {image: media-tools, context: plugins/media-tools}
+          - {image: setup, context: ., file: deploy/release/setup.Dockerfile}
           - {arch: amd64, runner: ubuntu-24.04}
           - {arch: arm64, runner: ubuntu-24.04-arm}
     runs-on: ${{ matrix.runner }}
@@ -59,6 +61,7 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
           build-contexts: ${{ matrix.contexts }}
           platforms: linux/${{ matrix.arch }}
           tags: ${{ env.REGISTRY }}${{ matrix.image }}:${{ needs.meta.outputs.version }}
@@ -73,23 +76,27 @@ jobs:
           retention-days: 1
           compression-level: 0
 
-  server-pack:
+  # the release compose.yml: deploy/release/compose.yml with this run's version as the default
+  compose:
     needs: meta
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - run: shellcheck -s sh .tools/make-server-pack deploy/server/*.sh
-      # the pack, and install.sh on its own (the one-line install: curl …/install.sh | sh)
-      - run: mkdir pack && cd pack && ../.tools/make-server-pack "${{ needs.meta.outputs.version }}" && cp ../deploy/server/install.sh .
+      - run: shellcheck -s sh deploy/release/setup.sh
+      - run: |
+          mkdir out && sed "s/HELMSTUDIO_VERSION:-[^}]*}/HELMSTUDIO_VERSION:-${{ needs.meta.outputs.version }}}/" \
+            deploy/release/compose.yml >out/compose.yml
+          ! grep -n 'build:' out/compose.yml
+          [ "$(grep -c "helmstudio-[a-z-]*:\${HELMSTUDIO_VERSION:-${{ needs.meta.outputs.version }}}" out/compose.yml)" -ge 11 ]
+          cd out && docker compose config -q && docker compose --profile nvidia config -q
       - uses: actions/upload-artifact@v4
-        with:
-          name: server-pack
-          path: pack/
+        with: {name: compose, path: out/compose.yml}
 
-  # the one-line install as a user runs it (install.sh piped into sh, the pack's folder in place of the release's), on
-  # this run's pack and images (loaded, never pulled from the registry), on each kind of machine
+  # the release compose.yml as a user runs it, on this run's images (loaded, never pulled from the registry), on each
+  # kind of machine: the first `up` with a throwaway admin, sign in through Kong, one authenticated read; a second `up`
+  # with no admin given (the secrets and the admin kept), the same checks; then `down -v`
   smoke:
-    needs: [meta, images, server-pack]
+    needs: [meta, images, compose]
     strategy:
       fail-fast: false
       matrix:
@@ -98,53 +105,76 @@ jobs:
           - {arch: arm64, runner: ubuntu-24.04-arm}
     runs-on: ${{ matrix.runner }}
     env:
-      VERSION: ${{ needs.meta.outputs.version }}
       ADMIN: ci-admin@example.com
+    defaults:
+      run: {working-directory: /home/runner/hs}
     steps:
+      - run: mkdir -p /home/runner/hs
+        working-directory: /home/runner
       - uses: actions/download-artifact@v4
-        with: {pattern: 'image-*-${{ matrix.arch }}', path: images, merge-multiple: true}
+        with: {pattern: 'image-*-${{ matrix.arch }}', path: /home/runner/images, merge-multiple: true}
       - uses: actions/download-artifact@v4
-        with: {name: server-pack, path: pack}
-      - run: for f in images/*.tar; do docker load -q -i "$f"; done
-      - name: install (curl … | sh)
+        with: {name: compose, path: /home/runner/hs}
+      - run: docker version --format 'docker {{.Server.Version}}'; docker compose version; for f in ../images/*.tar; do docker load -q -i "$f"; done
+      - name: first up (with the admin)
         run: |
-          cd pack && sha256sum "helmstudio-server-$VERSION.tar.gz" >SHA256SUMS   # as release-files makes it
           (umask 077 && openssl rand -hex 16 >"$RUNNER_TEMP/admin_password")
           echo "::add-mask::$(cat "$RUNNER_TEMP/admin_password")"
-          curl -fsSL "file://$PWD/install.sh" | HELMSTUDIO_PACK_URL="file://$PWD" HELMSTUDIO_ADMIN_EMAIL=$ADMIN \
-            HELMSTUDIO_ADMIN_PASSWORD_FILE=$RUNNER_TEMP/admin_password sh -s -- "$VERSION"
+          HELMSTUDIO_ADMIN_EMAIL=$ADMIN HELMSTUDIO_ADMIN_PASSWORD=$(cat "$RUNNER_TEMP/admin_password") \
+            docker compose up -d --wait --wait-timeout 300
       - name: sign in through Kong
         run: |
-          cat >"$RUNNER_TEMP/signin.sh" <<'EOF'
+          cat >"$RUNNER_TEMP/signin.sh" <<'SH'
           set -eu
-          key=$(cat ~/.helmstudio/secrets/web_api_key) && echo "::add-mask::$key"
+          key=$(docker compose exec -T web cat /run/secrets/web_api_key) && echo "::add-mask::$key"
           tok=$(jq -n --arg e "$ADMIN" --rawfile p "$RUNNER_TEMP/admin_password" '{email: $e, password: ($p | rtrimstr("\n"))}' |
             curl -fsS -H "x-api-key: $key" -H 'content-type: application/json' -d @- http://127.0.0.1:8300/auth/signin |
             jq -er .access_token) && echo "::add-mask::$tok"
           code=$(curl -sS -o /dev/null -w '%{http_code}' -H "x-api-key: $key" -H "authorization: Bearer $tok" \
             http://127.0.0.1:8300/v1/studio/sessions)
           echo "signed in; GET /v1/studio/sessions: $code"; [ "$code" = 200 ]
-          EOF
+          SH
           sh "$RUNNER_TEMP/signin.sh"
           docker stats --no-stream --format 'table {{.Name}}\t{{.MemUsage}}\t{{.CPUPerc}}'
-      - name: update (the pack replaced, the data kept)
+      - name: second up (no admin given; the secrets and the admin kept)
         run: |
-          before=$(docker volume inspect -f '{{.CreatedAt}}' helmstudio_pgdata18a)
-          HELMSTUDIO_PACK_URL="file://$PWD/pack" ~/helmstudio/update.sh "$VERSION"
-          [ "$(docker volume inspect -f '{{.CreatedAt}}' helmstudio_pgdata18a)" = "$before" ]
-          [ -L ~/helmstudio/.env ] && [ -L ~/helmstudio/deploy/secrets ] && ! ls -d ~/helmstudio.new.* 2>/dev/null
+          docker compose down
+          docker compose up -d --wait --wait-timeout 300
           sh "$RUNNER_TEMP/signin.sh"
       - name: logs
         if: failure()
-        working-directory: /home/runner/helmstudio
         run: docker compose ps -a; docker compose logs --tail 80
-      - name: uninstall
+      - name: down -v
         if: always()
+        run: docker compose down -v
+
+  # the NVIDIA runner's image (runner_service/Dockerfile.cuda, target runtime): Intel/AMD only (CUDA wheels); built on
+  # every run, pushed on a tag only after both smoke tests (the smoke test has no GPU). Large: the runner's preinstalled
+  # toolchains go first, and no GitHub cache.
+  runner-cuda:
+    needs: [meta, smoke]
+    runs-on: ubuntu-24.04
+    permissions: {contents: read, packages: write}
+    steps:
+      - name: free disk
         run: |
-          [ -f ~/helmstudio/.env ] || exit 0
-          ~/helmstudio/uninstall.sh
-          docker volume rm helmstudio_pgdata18a helmstudio_natsdata helmstudio_seaweeddata
-          ls -A ~/.helmstudio   # uninstall keeps the settings and secrets
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /usr/local/share/boost /opt/hostedtoolcache/CodeQL
+          docker image prune -af >/dev/null; df -h /
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - if: needs.meta.outputs.release == 'true'
+        uses: docker/login-action@v3
+        with: {registry: ghcr.io, username: '${{ github.actor }}', password: '${{ secrets.GITHUB_TOKEN }}'}
+      - uses: docker/build-push-action@v6
+        with:
+          context: runner_service
+          file: runner_service/Dockerfile.cuda
+          target: runtime
+          platforms: linux/amd64
+          tags: ${{ env.REGISTRY }}runner-cuda:${{ needs.meta.outputs.version }}
+          labels: org.opencontainers.image.source=${{ env.SOURCE }}
+          push: ${{ needs.meta.outputs.release == 'true' }}
+      - run: df -h /
 
   mac:
     needs: meta
@@ -184,7 +214,7 @@ jobs:
     permissions: {contents: read, packages: write}
     strategy:
       matrix:
-        image: [kong, auth, studio, pipelines, files, web, seaweedfs, media-tools]
+        image: [kong, auth, studio, pipelines, files, web, seaweedfs, media-tools, setup]
         arch: [amd64, arm64]
         include:
           - {image: kong, context: kong}
@@ -195,6 +225,7 @@ jobs:
           - {image: web, context: web_service}
           - {image: seaweedfs, context: deploy/seaweedfs}
           - {image: media-tools, context: plugins/media-tools}
+          - {image: setup, context: ., file: deploy/release/setup.Dockerfile}
           - {arch: amd64, runner: ubuntu-24.04}
           - {arch: arm64, runner: ubuntu-24.04-arm}
     runs-on: ${{ matrix.runner }}
@@ -207,6 +238,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
           build-contexts: ${{ matrix.contexts }}
           platforms: linux/${{ matrix.arch }}
           labels: org.opencontainers.image.source=${{ env.SOURCE }}
@@ -226,7 +258,7 @@ jobs:
     permissions: {contents: read, packages: write}
     strategy:
       matrix:
-        image: [kong, auth, studio, pipelines, files, web, seaweedfs, media-tools]
+        image: [kong, auth, studio, pipelines, files, web, seaweedfs, media-tools, setup]
     steps:
       - uses: actions/download-artifact@v4
         with: {pattern: 'digest-${{ matrix.image }}-*', path: digests, merge-multiple: true}
@@ -239,9 +271,9 @@ jobs:
             --annotation "index:org.opencontainers.image.source=$SOURCE" $(for d in digests/*; do echo "$img@sha256:${d#digests/}"; done)
           docker buildx imagetools inspect "$img:${{ needs.meta.outputs.version }}"
 
-  # the release files: one artifact on every run; on a tag also attached to its GitHub release, if one exists
+  # the release files (the .dmg, compose.yml, SHA256SUMS): one artifact on every run; on a tag also attached to its GitHub release, if one exists
   release-files:
-    needs: [meta, server-pack, smoke, mac, publish]
+    needs: [meta, compose, smoke, mac, publish, runner-cuda]
     if: ${{ !cancelled() && !contains(needs.*.result, 'failure') }}
     runs-on: ubuntu-24.04
     permissions: {contents: write}
@@ -249,10 +281,10 @@ jobs:
       VERSION: ${{ needs.meta.outputs.version }}
     steps:
       - uses: actions/download-artifact@v4
-        with: {name: server-pack, path: files}
+        with: {name: compose, path: files}
       - uses: actions/download-artifact@v4
         with: {name: dmg, path: files}
-      - run: cd files && sha256sum ./*.dmg ./*.tar.gz ./install.sh | sed 's| \./| |' >SHA256SUMS && cat SHA256SUMS && ls -l
+      - run: cd files && sha256sum ./*.dmg ./compose.yml | sed 's| \./| |' >SHA256SUMS && cat SHA256SUMS && ls -l
       - uses: actions/upload-artifact@v4
         with:
           name: release-${{ env.VERSION }}

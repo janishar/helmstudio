@@ -1,4 +1,4 @@
-# helmstudio plan — Release builds on GitHub Actions, and a server pack
+# helmstudio plan — Release builds on GitHub Actions, and Docker for Windows and Linux
 
 [← Plan index](../README.md)
 
@@ -14,8 +14,8 @@ Release images are built on the owner's Mac by `.tools/push-images`: linux/arm64
 
 ### 38.2 GitHub Actions builds the release images
 
-- A workflow `.github/workflows/release-images.yml`: on a pushed tag `v*`, build the 8 images (kong, auth, studio,
-  pipelines, files, web, seaweedfs, media-tools) for **linux/amd64 and linux/arm64**, on GitHub's native runners of
+- A workflow `.github/workflows/release-images.yml`: on a pushed tag `v*`, build the 9 images (kong, auth, studio,
+  pipelines, files, web, seaweedfs, media-tools, setup) for **linux/amd64 and linux/arm64**, on GitHub's native runners of
   each kind (ubuntu-24.04 and ubuntu-24.04-arm, free for a public repo), then publish one multi-arch tag per image
   to `ghcr.io/janishar/helmstudio-<name>:<version>` (each machine pulls its own). Sign-in by the workflow's own
   `GITHUB_TOKEN` (packages: write); no personal token.
@@ -24,13 +24,10 @@ Release images are built on the owner's Mac by `.tools/push-images`: linux/arm64
 - `.tools/push-images` stays for a release by hand; the release checklist names the workflow first.
 - The Mac app needs no change: it pulls the same names, and gets the arm64 half.
 - **The Mac app too** (owner, 2026-11-25: "also build mac desktop binary on there only"): a job on a macOS Apple Silicon
-  runner builds the .dmg (ad-hoc signed, as today) and a SHA256SUMS covering it and the server pack; on a tag they are
+  runner builds the .dmg (ad-hoc signed, as today) and a SHA256SUMS covering it and compose.yml; on a tag they are
   attached to the release. Releases no longer need the owner's Mac.
-- **The pack is checked on every build** (owner, 2026-11-25: "then check at that only every build"): a smoke job on
-  each kind of runner loads that run's images (never pulled), runs `curl …/install.sh | sh` against the run's own pack
-  (into `~/.helmstudio`) with a throwaway admin,
-  signs in through Kong, reads `/v1/studio/sessions` (200), then `uninstall.sh` and removes the volumes. On a tag,
-  nothing is published until both pass: then each image is pushed by digest from the run's build cache and merged
+- **Checked on every build** (owner, 2026-11-25: "then check at that only every build"): 38.4. On a tag, nothing is
+  published until both smoke tests pass: then each image is pushed by digest from the run's build cache and merged
   into the multi-arch tag, and the files go to the release (only if the GitHub release already exists; otherwise they
   stay the run's artifact `release-<version>`).
 - Later, not now: the contract suite on every push.
@@ -59,4 +56,23 @@ Owner, 2026-11-25: "then check at that only every build". On every push, pull re
 Intel/AMD and ARM Linux runners runs the release `compose.yml` with that run's images: first `up`, healthy, sign in as
 the admin, read one authenticated route, `down -v`; a tag publishes only after both pass. GitHub's Windows and Mac
 machines cannot run the Linux VM, so Windows (Docker Desktop) and the Mac app are checked by hand once per release
-(the owner's Check for updates on the Mac). Not covered: GPU generation on an NVIDIA machine.
+(the owner's Check for updates on the Mac). GPU generation (the nvidia profile) was checked once by hand on a GCP GPU
+machine for 0.1.0-alpha.4; not automated.
+
+### 38.5 Built (branch alpha4-release-builds)
+
+- `deploy/release/compose.yml` (README.md beside it): the release images, no build, no fakes, only Kong published
+  (127.0.0.1:8300), `KONG_NGINX_WORKER_PROCESSES=2`, the prod limits and restarts. Volumes `keys` (secrets), `config`,
+  `pgdata`, `natsdata`, `seaweeddata`, `models`, `runner-cache`.
+- `secrets` (image `helmstudio-setup`, `deploy/release/setup.Dockerfile`): runs `.tools/make-secrets` (GPU host `gpu`)
+  into `keys` on every `up` (it never overwrites), saves the admin's email and password on the first start only, gives
+  each service only its own files at `/run/secrets` (volume subpaths: Compose 2.26 / Docker 26 or later) and copies
+  this version's nats.conf, postgres init.sh, the one-shots' scripts and the built-in plugins into `config`.
+- `admin`: `auth create-admin` from those files; on later starts the account exists and nothing changes (auth keeps
+  them too: without ADMIN_EMAIL it would demote every admin).
+- `--profile nvidia`: `runner` from `helmstudio-runner-cuda` (Dockerfile.cuda, target runtime; linux/amd64 only), host
+  `gpu`, its own NATS user and S3 identity over the compose network, one GPU, models in `models` or
+  `HELMSTUDIO_MODELS_DIR`. Later: the `native` target (ZONOS3, SGLang).
+- The workflow: the `compose` job bakes the version in; `smoke` on both runners; `runner-cuda` built on every run and
+  pushed on a tag only; the release gets the .dmg, compose.yml and SHA256SUMS. The server pack and its scripts
+  (dc20b878) are gone.
