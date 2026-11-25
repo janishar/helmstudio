@@ -70,3 +70,22 @@ To draw before building ([Assistant](../mock/Assistant.dc.html), new frames 23�
   chips (admin), a full-width Set up / Turn on button; built with this plan. Also built already: the setup message
   centred, the first-launch line "Close it now and set up the Assistant later from Agent or ⌘J.", and the header's
   Assistant-page button with the Assistant icon.
+
+### 37.7 Names and who sees it (owner, 2026-11-25)
+
+The owner: "group assitant, admin - rename admin to system and Assitant to AI, it will only be accesible to admin user.
+Agent get available to user when admin set the AI on". So:
+
+- **Rail:** the pages Create, Pipelines, Gallery, Timeline, Models; then, for admins only, a group of two: **AI** (was
+  Assistant, the sparkle icon) and **System** (was Admin, the shield icon); then **Agent** (the drawer, ⌘J) and
+  Settings.
+- **AI** (`/ai`; `/assistant` redirects) holds the tabs Agent · In pipelines · Providers · Plugins. **System**
+  (`/system`; `/admin` redirects) holds Users · Hosts · API keys. Both are admin only: a non-admin gets no rail item
+  and a 404 page, as `/admin` today. Frame 22 (the read-only page) goes.
+- **Agent for users:** a non-admin sees the Agent rail item (and ⌘J works) only while the admin has the Agent on and
+  set up; otherwise neither the item nor the shortcut is there (frame 21 b and d go). An admin always has it, with the
+  setup messages (frame 21 a, c, first launch), now titled "Set up the Agent" / "The Agent is off", the button opening
+  AI.
+- **Switches have one home:** tools and skills are switched on and off only on AI › Agent; AI › Plugins adds, removes
+  and rescans, and each row says where it is used.
+
