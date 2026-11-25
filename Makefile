@@ -21,7 +21,7 @@ PROD := $(PROD_ENV) docker compose -p helmstudio-prod -f deploy/docker-compose.y
 TEST_ADMIN := ADMIN_EMAIL=admin@helm.test ADMIN_PASSWORD="$${HELM_TEST_ADMIN_PASSWORD:-helm test admin pass 1}"
 
 .PHONY: secrets envs build up dev down logs ps contracts-check test resilience test-down prod prod-secrets prod-down \
-        prod-logs prod-ps runners runner-torch runner-mlx runner-native runners-stop h3 zonos3 \
+        prod-logs prod-ps runners runner-torch runner-mlx runner-native runners-stop runners-nvidia runners-nvidia-stop h3 zonos3 \
         gpu-host-secrets gpu-host-reload gpu-host-tunnel gpu-host-tunnel-stop
 
 secrets:          ## deploy/secrets/ (git-ignored); never overwrites
@@ -162,6 +162,37 @@ runners-stop:     ## stops the native runners (each by its pid file; only a proc
 # runner_<h>_torch and S3 identity runner-<h>, made by .tools/make-secrets; a running dev stack takes a new host
 # without a restart of the stack: NATS reloads (and restarts when its accounts changed), SeaweedFS (identities)
 # restarts alone.
+# The runners of a Linux NVIDIA machine (or WSL2) on the host, from source (docs/guides/nvidia-linux.md): no CUDA
+# image ships. Env torch always; env native when SGLang is found (SGLANG_BIN, else `sglang` on PATH). Host GPU_HOST
+# (default the short hostname, lower-case letters and digits) with the NATS user and S3 identity that
+# make up GPU_HOSTS=<h> made, over plain nats:// and http:// on 127.0.0.1 (this machine's stack: no tunnel, no TLS).
+# Logs and pid files as the Mac's: runner_service/.run/runner-<h>-<env>.{pid,log}; make runners-nvidia-stop.
+GPU_HOST ?= $(or $(firstword $(GPU_HOSTS)),$(shell hostname -s | tr A-Z a-z | tr -cd a-z0-9))
+SGLANG_FOUND = $(or $(SGLANG_BIN),$(shell command -v sglang))
+runners-nvidia:   ## the NVIDIA host runners in the background (needs make up GPU_HOSTS=<h>); GPU_HOST=<h>, SGLANG_BIN, HELMSTUDIO_MODELS
+	@h=$(GPU_HOST); [ -f $(SECRETS)/nats_runner_$${h}_torch_password ] || { echo "no credentials for host $$h: make up GPU_HOSTS=$$h"; exit 2; }; \
+	mkdir -p $(RUN_DIR); for e in torch $(if $(SGLANG_FOUND),native); do \
+	pid=$$(cat $(RUN_DIR)/runner-$$h-$$e.pid 2>/dev/null); \
+	if [ -n "$$pid" ] && ps -p $$pid -o command= | grep -q 'uv run'; then echo "runner $$e already runs ($$pid)"; continue; fi; \
+	(umask 077; printf 'nats://runner_%s_%s:%s@127.0.0.1:%s' $$h $$e "$$(cat $(SECRETS)/nats_runner_$${h}_$${e}_password)" \
+	  "$${NATS_HOST_PORT:-4322}" > $(SECRETS)/nats_runner_$${h}_$${e}_local_url); \
+	port=$$([ $$e = torch ] && echo 8091 || echo 8093); extra=$$([ $$e = torch ] && echo '--extra torch'); \
+	(cd runner_service && E=$$e H=$$h P=$$port X="$$extra" nohup sh -c 'echo $$$$ > .run/runner-$$H-$$E.pid; \
+	trap "kill \$$c; wait \$$c; exit 143" TERM INT; while :; do env \
+	  RUNNER_HOST=$$H RUNNER_ENV=$$E HEALTH_PORT=$$P NATS_URL_FILE=$(SECRETS)/nats_runner_$${H}_$${E}_local_url \
+	  S3_ENDPOINT=http://127.0.0.1:$${S3_HOST_PORT:-8433} S3_BUCKET=$${S3_BUCKET:-helmstudio} \
+	  S3_ACCESS_KEY_ID_FILE=$(SECRETS)/s3_runner_$${H}_access_key_id \
+	  S3_SECRET_ACCESS_KEY_FILE=$(SECRETS)/s3_runner_$${H}_secret_access_key HF_HUB_DISABLE_XET=1 \
+	  HELMSTUDIO_MODELS=$${HELMSTUDIO_MODELS:-$$HOME/GenAI/models} CONTRACTS_DIR=$(CURDIR)/contracts \
+	  $(if $(SGLANG_BIN),SGLANG_BIN=$(SGLANG_BIN)) $(UV) run $$X python main.py & c=$$!; wait $$c; s=$$?; \
+	  [ $$s -eq 70 ] || [ $$s -eq 137 ] || exit $$s; echo "runner exited $$s: restarting"; sleep 2; done' \
+	  > .run/runner-$$h-$$e.log 2>&1 &); \
+	sleep 1; echo "runner $$e started ($$(cat $(RUN_DIR)/runner-$$h-$$e.pid)); log $(RUN_DIR)/runner-$$h-$$e.log"; done
+
+runners-nvidia-stop: ## stops the NVIDIA host runners (by their pid files)
+	@for f in $(RUN_DIR)/runner-$(GPU_HOST)-*.pid; do [ -f "$$f" ] || continue; pid=$$(cat $$f); \
+	if ps -p $$pid -o command= | grep -q 'uv run'; then kill $$pid && echo "stopped $$f ($$pid)"; fi; rm -f $$f; done
+
 gpu-host-secrets: ## a GPU host's credentials (GPU_HOSTS="gcp"; default: those that exist, else gcp), then gpu-host-reload
 	GPU_HOSTS="$(GPU_HOSTS)" .tools/make-secrets
 	@$(MAKE) --no-print-directory gpu-host-reload

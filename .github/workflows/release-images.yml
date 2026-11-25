@@ -98,7 +98,7 @@ jobs:
             deploy/release/compose.yml >out/compose.yml
           ! grep -n 'build:' out/compose.yml
           [ "$(grep -c "helmstudio-[a-z-]*:\${HELMSTUDIO_VERSION:-${{ needs.meta.outputs.version }}}" out/compose.yml)" -ge 11 ]
-          cd out && docker compose config -q && docker compose --profile nvidia config -q
+          cd out && docker compose config -q
       - uses: actions/upload-artifact@v4
         with: {name: compose, path: out/compose.yml}
 
@@ -158,35 +158,6 @@ jobs:
       - name: down -v
         if: always()
         run: docker compose down -v
-
-  # the NVIDIA runner's image (runner_service/Dockerfile.cuda, target runtime): Intel/AMD only (CUDA wheels); built on
-  # every run, pushed on a tag only after both smoke tests (the smoke test has no GPU). Large: the runner's preinstalled
-  # toolchains go first, and no GitHub cache.
-  runner-cuda:
-    needs: [meta, smoke]
-    if: needs.meta.outputs.on_main == 'true'
-    runs-on: ubuntu-24.04
-    permissions: {contents: read, packages: write}
-    steps:
-      - name: free disk
-        run: |
-          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /usr/local/share/boost /opt/hostedtoolcache/CodeQL
-          docker image prune -af >/dev/null; df -h /
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - if: needs.meta.outputs.release == 'true'
-        uses: docker/login-action@v3
-        with: {registry: ghcr.io, username: '${{ github.actor }}', password: '${{ secrets.GITHUB_TOKEN }}'}
-      - uses: docker/build-push-action@v6
-        with:
-          context: runner_service
-          file: runner_service/Dockerfile.cuda
-          target: runtime
-          platforms: linux/amd64
-          tags: ${{ env.REGISTRY }}runner-cuda:${{ needs.meta.outputs.version }}
-          labels: org.opencontainers.image.source=${{ env.SOURCE }}
-          push: ${{ needs.meta.outputs.release == 'true' }}
-      - run: df -h /
 
   mac:
     needs: meta
@@ -280,14 +251,14 @@ jobs:
       - uses: docker/login-action@v3
         with: {registry: ghcr.io, username: '${{ github.actor }}', password: '${{ secrets.GITHUB_TOKEN }}'}
       - run: |
-          img=$REGISTRY${{ matrix.image }}
+          img=${REGISTRY}${{ matrix.image }}
           docker buildx imagetools create -t "$img:${{ needs.meta.outputs.version }}" \
             --annotation "index:org.opencontainers.image.source=$SOURCE" $(for d in digests/*; do echo "$img@sha256:${d#digests/}"; done)
           docker buildx imagetools inspect "$img:${{ needs.meta.outputs.version }}"
 
   # the release files (the .dmg, compose.yml, SHA256SUMS): one artifact on every run; on a tag also attached to its GitHub release, if one exists
   release-files:
-    needs: [meta, compose, smoke, mac, publish, runner-cuda]
+    needs: [meta, compose, smoke, mac, publish]
     if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && needs.meta.outputs.on_main == 'true' }}
     runs-on: ubuntu-24.04
     permissions: {contents: write}

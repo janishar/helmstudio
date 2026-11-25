@@ -36,11 +36,9 @@ Open http://localhost:8300. Every port is on 127.0.0.1: from another machine use
 
 ## An NVIDIA card
 
-`docker compose --profile nvidia up -d --wait` adds the GPU runner (host `gpu` on the Hosts board). It needs the
-NVIDIA driver; on Linux also the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html);
-Docker Desktop on WSL2 passes the card through on Windows. Intel/AMD machines only. Models download into the
-volume `models`; to use a folder of your own, set `HELMSTUDIO_MODELS_DIR=/path/to/models` in `.env`. Use the same
-`--profile nvidia` on every later command (or `COMPOSE_PROFILES=nvidia` in `.env`).
+No NVIDIA image ships: a CUDA image would be many GB and tied to one driver. The GPU runners run on the machine
+itself, from source, on the card's own driver: [docs/guides/nvidia-linux.md](../../docs/guides/nvidia-linux.md)
+(Linux, or Windows through WSL2).
 
 ## Update
 
@@ -61,7 +59,6 @@ everything and keeps them; `docker compose down -v` deletes them too.
 | `PUBLIC_BASE_URL` | http://localhost:8300 | the address people open |
 | `WEB_COOKIE_SECURE` | false | true behind TLS |
 | `REMOTE_MODELS` | off | on: remote model providers (OpenAI and others) |
-| `HELMSTUDIO_MODELS_DIR` | the volume `models` | the NVIDIA runner's models folder |
 | `HELMSTUDIO_VERSION` | the file's release | another release's images |
 | `HELM_NET` | 172.30.97 | the stack network's first three numbers, if it clashes with yours |
 

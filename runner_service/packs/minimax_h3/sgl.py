@@ -24,6 +24,7 @@ import json
 import math
 import os
 import re
+import shutil
 import socket
 import time
 import urllib.error
@@ -33,7 +34,27 @@ from pathlib import Path
 from core import child, media, models
 from core.graph import RunError
 
-SGLANG = Path("/opt/sglang/bin/sglang")  # Dockerfile.cuda
+
+def find(env=os.environ) -> Path:
+    """SGLang's binary: SGLANG_BIN, else `sglang` on PATH, else /opt/sglang (deploy/gpu-host's image)."""
+    if b := env.get("SGLANG_BIN"):
+        return Path(b).expanduser()
+    on_path = shutil.which("sglang", path=env.get("PATH"))
+    return Path(on_path) if on_path else Path("/opt/sglang/bin/sglang")
+
+
+def child_env(exe: Path, env=os.environ) -> dict[str, str]:
+    """PATH with SGLang's venv bin and its bundled CUDA bin (ninja, nvcc for its JIT kernels), CUDA_HOME."""
+    paths = [str(exe.parent)]
+    cuda = next(exe.parent.parent.glob("lib/python*/site-packages/nvidia/cu13"), None)
+    extra = {}
+    if cuda:
+        paths.append(str(cuda / "bin"))
+        extra["CUDA_HOME"] = env.get("CUDA_HOME") or str(cuda)
+    return {"PATH": os.pathsep.join([*paths, env.get("PATH", os.defpath)]), **extra}
+
+
+SGLANG = find()
 # uvicorn's start line (use_colors: the URL may be wrapped in ANSI codes); SGLang starts it after the weights loaded
 READY = re.compile(r"Uvicorn running on (?:\x1b\[[0-9;]*m)?http://127\.0\.0\.1:(\d+)")
 READY_S = (
@@ -224,13 +245,13 @@ def generate(ctx, model, body: dict, out: Path, tmp: Path, lora: Path | None = N
     """Start the partition's server (with `lora`: its LoRA), run `body`, write its MP4 to `out`."""
     if not SGLANG.is_file():
         raise RunError(
-            f"{ctx.node}: SGLang is not installed (the runner-cuda-native image, Dockerfile.cuda target native)"
+            f"{ctx.node}: SGLang is not found at {SGLANG} (set SGLANG_BIN; docs/guides: NVIDIA on Linux)"
         )
     partition = "ref2va" if body["task"] == "ref2va" else "fl2va"
     ctx.progress(1, 1, "starting sglang", "encode")  # a phase without steps: 1 of 1
     lora = ready_lora(lora) if lora else None
     with child.serve(ctx, argv(model, partition, free_port(), tmp, lora), cwd=tmp, name="sglang",
-                     ready=READY, ready_s=READY_S) as port:  # fmt: skip
+                     ready=READY, ready_s=READY_S, env=child_env(SGLANG)) as port:  # fmt: skip
         job = json.loads(call(ctx.node, port, "/v1/videos", body))["id"]
         wait(ctx, port, job)
         out.write_bytes(call(ctx.node, port, f"/v1/videos/{job}/content", timeout=600))

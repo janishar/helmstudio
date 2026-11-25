@@ -241,5 +241,21 @@ def test_generate_refusals_failures_and_cancel(fake, monkeypatch):
     with pytest.raises(ProcessLookupError):  # the server's process group was killed
         os.kill(ctx.pid, 0)
     monkeypatch.setattr(sgl, "SGLANG", Path("/nonexistent/sglang"))
-    with pytest.raises(RunError, match="SGLang is not installed"):
+    with pytest.raises(RunError, match="SGLang is not found"):
         native.generate(ctx, params, inputs)
+
+
+def test_find_and_child_env(tmp_path):
+    """SGLANG_BIN wins, then `sglang` on PATH, then /opt; the child's PATH and CUDA_HOME point into SGLang's venv."""
+    exe = tmp_path / "venv/bin/sglang"
+    cuda = tmp_path / "venv/lib/python3.12/site-packages/nvidia/cu13"
+    (cuda / "bin").mkdir(parents=True)
+    exe.parent.mkdir(parents=True)
+    exe.write_text("#!/bin/sh\n")
+    exe.chmod(0o755)
+    assert sgl.find({"SGLANG_BIN": "/x/sglang", "PATH": str(exe.parent)}) == Path("/x/sglang")
+    assert sgl.find({"PATH": str(exe.parent)}) == exe
+    assert sgl.find({"PATH": str(tmp_path)}) == Path("/opt/sglang/bin/sglang")
+    env = sgl.child_env(exe, {"PATH": "/usr/bin"})
+    assert env["PATH"].split(os.pathsep) == [str(exe.parent), str(cuda / "bin"), "/usr/bin"]
+    assert env["CUDA_HOME"] == str(cuda)

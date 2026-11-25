@@ -44,8 +44,8 @@ docker file?", then "for mac wwe already have the app we dont need docker deskto
 - **Mac:** the Mac app (.dmg) as today: its own VM, the Apple GPU through the native runners; no Docker Desktop.
 - **Windows and Linux:** Docker (Docker Desktop on Windows, with WSL2; Docker Engine or Desktop on Linux) and one
   `compose.yml` attached to each release: `docker compose up -d`, then http://localhost:8300. With an NVIDIA card:
-  `docker compose --profile nvidia up -d` adds the GPU runner (NVIDIA Container Toolkit on Linux; Docker Desktop on
-  WSL2 passes the card through on Windows).
+  no CUDA image ships (owner, 2026-11-25); the runners run on the host from source on its installed driver
+  (`make up GPU_HOSTS=<h>` and `make runners-nvidia`, docs/guides/nvidia-linux.md).
 - **No install scripts:** a first-start container makes the secrets into a Docker volume once (the same values as
   `.tools/make-secrets`), and an init step creates the admin from `HELMSTUDIO_ADMIN_EMAIL` and
   `HELMSTUDIO_ADMIN_PASSWORD` given on the first `up` (or a `.env` beside the file), then never again. Ports on
@@ -61,8 +61,8 @@ tag (a commit on main), a smoke test on GitHub's
 Intel/AMD and ARM Linux runners runs the release `compose.yml` with that run's images: first `up`, healthy, sign in as
 the admin, read one authenticated route, `down -v`; a tag publishes only after both pass. GitHub's Windows and Mac
 machines cannot run the Linux VM, so Windows (Docker Desktop) and the Mac app are checked by hand once per release
-(the owner's Check for updates on the Mac). GPU generation (the nvidia profile) was checked once by hand on a GCP GPU
-machine for 0.1.0-alpha.4; not automated.
+(the owner's Check for updates on the Mac). GPU generation (host runners, make runners-nvidia) is checked by hand on
+the GCP GPU machine; not automated.
 
 ### 38.5 Built (branch alpha4-release-builds)
 
@@ -75,9 +75,8 @@ machine for 0.1.0-alpha.4; not automated.
   this version's nats.conf, postgres init.sh, the one-shots' scripts and the built-in plugins into `config`.
 - `admin`: `auth create-admin` from those files; on later starts the account exists and nothing changes (auth keeps
   them too: without ADMIN_EMAIL it would demote every admin).
-- `--profile nvidia`: `runner` from `helmstudio-runner-cuda` (Dockerfile.cuda, target runtime; linux/amd64 only), host
-  `gpu`, its own NATS user and S3 identity over the compose network, one GPU, models in `models` or
-  `HELMSTUDIO_MODELS_DIR`. Later: the `native` target (ZONOS3, SGLang).
-- The workflow: the `compose` job bakes the version in; `smoke` on both runners; `runner-cuda` built on every run and
-  pushed on a tag only; the release gets the .dmg, compose.yml and SHA256SUMS. The server pack and its scripts
+- NVIDIA (owner, 2026-11-25): the `nvidia` profile and the `runner-cuda` job are gone; no CUDA image ships. Host
+  runners from source instead (`make runners-nvidia`, docs/guides/nvidia-linux.md); SGLang is found, not shipped
+  (SGLANG_BIN, else `sglang` on PATH).
+- The workflow: the `compose` job bakes the version in; `smoke` on both runners; the release gets the .dmg, compose.yml and SHA256SUMS. The server pack and its scripts
   (dc20b878) are gone.

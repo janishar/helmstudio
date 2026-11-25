@@ -10,9 +10,8 @@
 # open http://localhost:8300 and sign in as that admin. The admin is read on the first start only; later starts need
 # nothing: docker compose up -d. A password changed in the app is kept.
 #
-#   With an NVIDIA card:  docker compose --profile nvidia up -d --wait   (NVIDIA driver; on Linux also the NVIDIA
-#                         Container Toolkit; Docker Desktop on WSL2 passes the card through). Models download into the
-#                         volume `models`, or HELMSTUDIO_MODELS_DIR=/path/to/models uses a folder of your own.
+#   With an NVIDIA card:  no image ships for it; the runners run on the host from source with the card's own driver
+#                         (docs/guides/nvidia-linux.md: make up GPU_HOSTS=<h> && make runners-nvidia).
 #   Update:               download the new release's compose.yml over this one (or set HELMSTUDIO_VERSION in .env),
 #                         then docker compose pull && docker compose up -d --wait. The data and keys stay.
 #   Stop / remove:        docker compose down (keeps everything); docker compose down -v also deletes the data and keys.
@@ -267,43 +266,9 @@ services:
     depends_on:
       seaweedfs: {condition: service_healthy}
 
-  # The NVIDIA runner (--profile nvidia): runner_service's CUDA image (env torch), host `gpu` with its own NATS user
-  # and S3 identity, on this machine and this network (no tunnel, no TLS). Intel/AMD only. Later: env native (ZONOS3,
-  # SGLang), deploy/gpu-host's runner-native.
-  runner:
-    image: ghcr.io/janishar/helmstudio-runner-cuda:${HELMSTUDIO_VERSION:-0.1.0-alpha.4}
-    profiles: [nvidia]
-    restart: unless-stopped
-    logging: *log
-    environment:
-      RUNNER_HOST: gpu
-      RUNNER_ENV: torch
-      NATS_URL_FILE: /run/secrets/nats_url
-      S3_ENDPOINT: http://seaweedfs:8333
-      S3_BUCKET: helmstudio
-      S3_ACCESS_KEY_ID_FILE: /run/secrets/s3_runner_gpu_access_key_id
-      S3_SECRET_ACCESS_KEY_FILE: /run/secrets/s3_runner_gpu_secret_access_key
-      HF_HUB_DISABLE_XET: "1"
-      HELMSTUDIO_MODELS: /models
-      NVIDIA_DRIVER_CAPABILITIES: compute,utility,video   # video: NVENC for media jobs
-    volumes:
-      - {type: volume, source: keys, target: /run/secrets, read_only: true, volume: {subpath: run/runner}}
-      - ${HELMSTUDIO_MODELS_DIR:-models}:/models
-      - runner-cache:/cache
-    deploy:
-      resources:
-        reservations:
-          devices: [{driver: nvidia, count: 1, capabilities: [gpu]}]
-    healthcheck: {test: [CMD, python, health.py], interval: 10s, timeout: 5s, retries: 30, start_period: 60s}
-    depends_on:
-      nats-setup: {condition: service_completed_successfully}
-      storage-setup: {condition: service_completed_successfully}
-
 volumes:
   keys:          # the secrets (and the admin's first password): docker compose down -v deletes them with the data
   config:        # this version's config files, rewritten on every start
   pgdata:
   natsdata:
   seaweeddata:
-  models:
-  runner-cache:

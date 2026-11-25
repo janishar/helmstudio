@@ -60,6 +60,7 @@ other sections point to it rather than restate it.
 |---|---|
 | [helm mcp](guides/mcp.md) | Using helmstudio from Claude Code or Claude Desktop: set-up, the tools, which ones ask first |
 | [Mac app](guides/mac-app.md) | helmstudio for Mac: first open, the menu bar, Quit, the MCP with the app |
+| [NVIDIA on Linux](guides/nvidia-linux.md) | Linux or Windows (WSL2) with an NVIDIA card: the driver, uv, SGLang, make runners-nvidia |
 | [Release checklist](release/checklist.md) | The steps for every release, first for 0.1.0-alpha.1: gates, clean-room install, hygiene, versions, artifacts, README and docs site |
 
 Research notes (`docs/reference-notes/`) stay on the owner's machine and are not published; links to them from the plan

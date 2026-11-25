@@ -20,6 +20,7 @@ prefix: its stderr lines `<name>: ` are its diagnostics, its environment knobs `
   only when that pid still runs the same binary and has lost its runner (parent pid 1: never a live runner's child,
   say another runner of this env sharing RUNNER_CACHE)."""
 
+import collections
 import contextlib
 import logging
 import os
@@ -114,6 +115,9 @@ class _Child:
             ready,
         )
         self.seen, self.progress, self.diag, self.ready = time.monotonic(), None, [], None
+        self.tail = collections.deque(
+            maxlen=20
+        )  # every stderr line's last: logged when a server fails
         self.loose = loose
         self.lock = threading.Lock()
         self.reader = threading.Thread(target=self.read, name="child-stderr", daemon=True)
@@ -122,6 +126,8 @@ class _Child:
     def take(self, line: str) -> None:
         m = PROGRESS.match(line)
         with self.lock:
+            if line:
+                self.tail.append(line)
             if m and not line.startswith(self.name):
                 phase = m.group(1).strip()
                 # `<phase> 0/N` only opens a phase: evt.run.progress counts from 1
@@ -184,6 +190,8 @@ class _Child:
             return f"killed by signal {-code}"  # jetsam or another process: no line of its own
         with self.lock:
             diag = self.diag
+        if not diag and self.loose:  # a server (SGLang) prints tracebacks: its last line says why
+            diag = list(self.tail)
         return last_line("\n".join(diag)) if diag else f"exited with status {code}"
 
 
@@ -214,12 +222,21 @@ def run(ctx, argv: list[str], *, cwd: Path, name: str, phases: dict[str, str | t
 
 
 @contextlib.contextmanager
-def serve(ctx, argv: list[str], *, cwd: Path, name: str, ready: re.Pattern, ready_s: float):
+def serve(
+    ctx,
+    argv: list[str],
+    *,
+    cwd: Path,
+    name: str,
+    ready: re.Pattern,
+    ready_s: float,
+    env: dict[str, str] | None = None,
+):
     """Start the server `argv` (as run(): absolute paths) and wait for its ready line, `ready` with the port as its
     group 1 (polling ctx.check() meanwhile), then yield the port for the body; the process group is killed when the
     body ends, raises or is cancelled. No ready line within `ready_s`, or an exit before it: RunError. The body's
     error when the server died under it: RunError with the server's reason instead."""
-    c = _Child(argv, cwd, name, ready=ready, loose=True)
+    c = _Child(argv, cwd, name, ready=ready, loose=True, env=env)
     try:
         until = time.monotonic() + ready_s
         while True:
@@ -240,5 +257,9 @@ def serve(ctx, argv: list[str], *, cwd: Path, name: str, ready: re.Pattern, read
             if c.proc.poll() is not None and not isinstance(e, Cancelled):
                 raise RunError(f"{ctx.node}: {c.why()}") from e
             raise
+    except RunError:
+        c.reader.join(5)
+        log.error("%s failed; its last stderr lines:\n%s", name, "\n".join(c.tail))
+        raise
     finally:
         c.stop()
