@@ -24,6 +24,8 @@ source, on the card's own driver (like the Mac's `make runners`). On Windows do 
   uv venv --python 3.12 ~/sglang
   VIRTUAL_ENV=~/sglang uv pip sync runner_service/sglang-requirements.txt
   export SGLANG_BIN=~/sglang/bin/sglang
+  # SGLang's kernels link CUDA's runtime from <cu13>/lib64; the wheel ships lib/ and libcudart.so.13 only
+  (cd ~/sglang/lib/python3.12/site-packages/nvidia/cu13 && ln -s lib lib64 && ln -s libcudart.so.13 lib/libcudart.so)
   ```
 
   SGLang compiles GPU kernels on its first run, so it also needs a C compiler and Python's headers:
