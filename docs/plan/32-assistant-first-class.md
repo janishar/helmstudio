@@ -127,7 +127,10 @@ To draw before building ([Assistant](../mock/Assistant.dc.html), new frames):
 - **Your Claude subscription.** Add as provider needs the bridge's own token (`BRIDGE_TOKEN` in
   `~/.helm/claude-code-bridge.env`, never a Claude credential), so the card asks for it once, while its provider is not
   added yet ("Bridge token"). Save turns the plugin on, waits about 20 s for it to run, adds it and saves the
-  Assistant with it. A keyless Add as provider would need a contract change; left for later.
+  Assistant with it. Done since (API 1.73, owner 2026-11-25: "rather pick automatically?"): the manifest's
+  `provider.key_from` names `BRIDGE_TOKEN` in `claude-code-bridge.env`; Add as provider without a key asks the Mac's
+  runner for it (`runner.plugins.key.mac`), so neither the card nor Plugins › Add as provider has a key field (contracts/
+  README.md, Plugins: a key from its host).
 - **Key.** The remote cards use Model providers' key area (KeyArea): the field and Save key, checked with the provider
   and saved to the key file before Save; then "✓ Checked with … · N models" and the model list fetched by itself.
   Found, it shows Found, Replace key and Remove key as in Model providers.
