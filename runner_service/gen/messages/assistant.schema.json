@@ -39,7 +39,9 @@
       "properties": {
         "id": {"$ref": "#/$defs/callId"},
         "name": {"$ref": "#/$defs/actionName"},
-        "args": {"type": "object", "description": "the action's input in tools/actions.json"}
+        "args": {"type": "object", "description": "the action's input in tools/actions.json"},
+        "auto": {"type": "boolean", "description": "from API 1.68 (Auto mode): runs by itself: a generation without its card, a safe save in its dialog; absent = false"},
+        "asks": {"type": "string", "minLength": 1, "maxLength": 80, "description": "from API 1.68: Auto is on but this one still asks: the waiting line above its card"}
       }
     },
     "result": {
@@ -122,7 +124,8 @@
       "properties": {
         "model_calls": {"type": "integer", "minimum": 0, "maximum": 40},
         "tool_calls": {"type": "integer", "minimum": 0, "maximum": 100},
-        "memory_writes": {"type": "integer", "minimum": 0, "maximum": 8}
+        "memory_writes": {"type": "integer", "minimum": 0, "maximum": 8},
+        "auto_takes_hour": {"type": "integer", "minimum": 0, "description": "from API 1.68: with Auto on, the takes Auto mode started for the user in the last hour"}
       }
     },
     "limits": {
@@ -134,7 +137,9 @@
         "model_calls_per_day": {"type": "integer", "minimum": 1, "maximum": 100000},
         "tokens_per_day": {"type": "integer", "minimum": 1000, "maximum": 100000000},
         "look_at_per_hour": {"type": "integer", "minimum": 0, "maximum": 1000},
-        "messages_per_minute": {"type": "integer", "minimum": 1, "maximum": 60}
+        "messages_per_minute": {"type": "integer", "minimum": 1, "maximum": 60},
+        "auto_takes_per_hour": {"type": "integer", "minimum": 0, "maximum": 1000, "description": "from API 1.68: takes Auto mode may start for one user in an hour; absent = 8"},
+        "auto_gpu_minutes_per_hour": {"type": "integer", "minimum": 0, "maximum": 600, "description": "from API 1.68: GPU minutes (the runs' estimates) Auto mode may start for one user in an hour; absent = 30"}
       }
     },
     "error": {
@@ -159,7 +164,31 @@
         "text": {"type": "string", "minLength": 1, "maxLength": 600, "description": "at most 500 characters; a summary 600"},
         "thread_id": {"oneOf": [{"$ref": "defs.schema.json#/$defs/uuid"}, {"type": "null"}], "description": "the chat that saved it (null once that chat is deleted)"},
         "created_at": {"type": "string", "format": "date-time"},
-        "updated_at": {"type": "string", "format": "date-time"}
+        "updated_at": {"type": "string", "format": "date-time"},
+        "shots": {"$ref": "#/$defs/shotList", "description": "from API 1.69: a film's shot list (kind project only); `text` is then its summary, rewritten at each save_shots"}
+      }
+    },
+    "shot": {
+      "type": "object",
+      "required": ["n", "what"],
+      "additionalProperties": false,
+      "description": "from API 1.69 (contracts/README.md, Assistant: shot list): one shot of a film's plan",
+      "properties": {
+        "n": {"type": "integer", "minimum": 1, "maximum": 999, "description": "the shot number, unique in its list"},
+        "what": {"type": "string", "minLength": 1, "maxLength": 300, "description": "what happens, in plain words"},
+        "seconds": {"type": "number", "exclusiveMinimum": 0, "maximum": 600, "description": "the planned length"},
+        "line": {"type": "string", "minLength": 1, "maxLength": 300, "description": "the line spoken (`@name: text`), if any"},
+        "take_id": {"$ref": "defs.schema.json#/$defs/uuid", "description": "the take used for the shot, once picked"}
+      }
+    },
+    "shotList": {
+      "type": "object",
+      "required": ["film", "shots"],
+      "additionalProperties": false,
+      "description": "from API 1.69: a film's shot list, its shots by number ascending",
+      "properties": {
+        "film": {"type": "string", "minLength": 1, "maxLength": 80, "description": "the film's title; one list per title (any case) per owner"},
+        "shots": {"type": "array", "minItems": 1, "maxItems": 60, "items": {"$ref": "#/$defs/shot"}}
       }
     }
   }

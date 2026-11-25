@@ -1055,6 +1055,233 @@
       },
       "card": "delete"
     },
+    "save_shots": {
+      "description": "Save the film's shot list in Memory, Projects, so any chat can read it: shots by number are added or updated (only the fields you give); replace makes the list exactly these shots; remove drops numbers. Set take_id once the user picks a shot's take.",
+      "surfaces": [
+        "assistant"
+      ],
+      "served_by": "pipelines",
+      "read_only": false,
+      "roles": [],
+      "routes": [],
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "film": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "description": "the film's title; one list per title"
+          },
+          "shots": {
+            "type": "array",
+            "maxItems": 60,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "n": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 999,
+                  "description": "the shot number"
+                },
+                "what": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 300,
+                  "description": "what happens, in plain words (needed for a new shot)"
+                },
+                "seconds": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 600,
+                  "description": "the planned length"
+                },
+                "line": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 300,
+                  "description": "the line spoken, as @name: text"
+                },
+                "take_id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "description": "the take used for the shot, once the user picked it"
+                }
+              },
+              "required": [
+                "n"
+              ]
+            }
+          },
+          "replace": {
+            "type": "boolean",
+            "description": "true: the list becomes exactly these shots (a new plan)"
+          },
+          "remove": {
+            "type": "array",
+            "maxItems": 60,
+            "items": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 999
+            },
+            "description": "shot numbers to drop"
+          }
+        },
+        "required": [
+          "film"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "film": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "shots": {
+            "type": "array",
+            "maxItems": 60,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "n": {
+                  "type": "integer"
+                },
+                "what": {
+                  "type": "string",
+                  "maxLength": 300
+                },
+                "seconds": {
+                  "type": "number"
+                },
+                "line": {
+                  "type": "string",
+                  "maxLength": 300
+                },
+                "take_id": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "required": [
+                "n",
+                "what"
+              ]
+            }
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "film",
+          "shots",
+          "updated_at"
+        ]
+      }
+    },
+    "shot_list": {
+      "description": "Read the saved shot lists: with film, that film's (any case); without, every film's, newest first, at most 8.",
+      "surfaces": [
+        "assistant"
+      ],
+      "served_by": "pipelines",
+      "read_only": true,
+      "roles": [],
+      "routes": [],
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "film": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "lists": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "film": {
+                  "type": "string",
+                  "maxLength": 80
+                },
+                "shots": {
+                  "type": "array",
+                  "maxItems": 60,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "n": {
+                        "type": "integer"
+                      },
+                      "what": {
+                        "type": "string",
+                        "maxLength": 300
+                      },
+                      "seconds": {
+                        "type": "number"
+                      },
+                      "line": {
+                        "type": "string",
+                        "maxLength": 300
+                      },
+                      "take_id": {
+                        "type": "string",
+                        "format": "uuid"
+                      }
+                    },
+                    "required": [
+                      "n",
+                      "what"
+                    ]
+                  }
+                },
+                "updated_at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              },
+              "required": [
+                "id",
+                "film",
+                "shots",
+                "updated_at"
+              ]
+            }
+          }
+        },
+        "required": [
+          "lists"
+        ]
+      }
+    },
     "run_workflow": {
       "description": "Start a run of a workflow; returns the run at once (queued). Use wait_run to wait for its takes. At most 4 of your runs wait at once.",
       "surfaces": [

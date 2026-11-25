@@ -4050,6 +4050,39 @@ A per-chat switch: safe steps run without asking, up to the admin's caps; the re
   takes; a saved item's deletes it. An `asks` action shows
   its card with `asks` as the waiting line. Stop ends the turn as before.
 
+### Assistant: shot list (API 1.69; alpha.2 items 28 and 29, owner 2026-11-25; Assistant board frame 18, owner approved; normative)
+
+The owner's case: in a new chat, "For Shot 3, I don't have your shot list". The plan of a film now lives in Memory,
+so every chat on every screen reads it, and a shot that is not in it is asked about, never guessed.
+
+- **Stored** as a Projects item (kind `project`) in the owner's memory namespace, one per film: its id is
+  uuid5(`helmstudio:assistant:shots:<film>`), the title trimmed, spaces collapsed and case-folded, so the same title
+  (any case) is the same list. `memoryItem.shots` / `AssistantMemoryItem.shots` is `{film, shots: [{n, what, seconds?,
+  line?, take_id?}]}` (1-60 shots, by `n` ascending, `n` unique); `text` is its summary in plain words (`Shot list ·
+  <film>: N shots, K with a take. 1 <what> (3 s); …`, at most 500 characters), rewritten at each save. It counts
+  toward the 200 items; `thread_id` is the chat that saved it last. A PATCH changes the text only (the shots stay);
+  Delete and Clear all remove it. Memory › Projects shows a list as its own row (board frame 18).
+- **`save_shots`** {film, shots?, replace?, remove?} (served by pipelines, no card, a memory write: 8 a message,
+  merged by number, so replaying it gives the same list): a shot by `n` is added or updated, only the fields given (`what` is
+  needed for a new one); `replace` true makes the list exactly `shots`; `remove` drops numbers. `film` and each `what`
+  are plain words (the `remember` check). A list left empty, a new shot without `what` or more than 60 shots is an
+  error told to the model, nothing saved. Answers the whole list; the line `Shot list · <film>: N shots` (no Undo).
+- **`shot_list`** {film?} (read): that film's list (any case), else every list, newest first, at most 8.
+- **Read in every chat.** A chat's first model call reads the lists with the preferences and keeps them frozen the
+  same way (read again after the user changes Memory or any chat saves a list): a block `The film shot lists` after the preferences,
+  newest first, each shot one line (`<n>. <what> · <s> s · "<line>" · take [[take:<id>]]`), at most 3000 characters
+  (a list that does not fit is skipped, a smaller one after it may fit), the rest named by title only (shot_list reads them). The take ids in it count as read for the refs check.
+- **Rules** (prompt): planning a film, save its shot list with save_shots as soon as you write it (and again when it changes), and set a
+  shot's `take_id` when the user picks its take; for "shot N" or "the next shot" use the saved list (shot_list when
+  the block does not hold it); on the Timeline, mirror the list when asked: the shots that have a take as clips in
+  shot order (edit), a marker `Shot N` at each; a shot not in the list (or no list) is asked with one options block
+  (2-4 choices such as the planned shots left, plan it first, or a new shot described by the user), never guessed.
+- **Check** (item 29): an answer whose calls include a generation, `generate` (any screen) or the Timeline's `shot`
+  {kind new}, to a message whose user words name a shot (`shot 3`, `shot #3`, `next shot`), is invalid when that shot
+  is not planned: `shot N` in no saved list, or `next shot` with no list that has a shot without a take, also counting
+  this answer's own save_shots. The model is asked once more with `… is not in a saved shot list: if this chat
+  planned it, save it with save_shots first; else ask which shot with an options block, never guess`.
+
 ### Assistant: tools
 
 `tools/catalog.json` (validated against `tools/catalog.schema.json` `$defs/toolsFile`) holds every tool:
@@ -4061,7 +4094,7 @@ A per-chat switch: safe steps run without asking, up to the admin's caps; the re
   (memory, web search): no routes.
 - A route under `/v1/studio/admin/` ⇔ `roles` [admin]; an admin tool is never offered to anyone else and studio
   checks the role again (`forbidden`).
-- A write is mcp only, or the assistant's behind a `card`; only memory writes (`remember`) go without one.
+- A write is mcp only, or the assistant's behind a `card`; only memory writes (`remember`, from 1.69 `save_shots`) go without one.
 - (1.62) Checks past the input schema, each an invalid answer (asked once more, then the turn ends `answer`):
   `remember`'s text is plain words: no JSON, no UUID, no field name (a word with `_`, or a dotted path of three or
   more parts; an `@handle` is fine). A `generate` after a `switchTo` (this message) to a workflow whose `media` is

@@ -98,6 +98,12 @@ changed.
 its guide names.
 - The user names takes as [[take:<id>]] (picked with @) and attaches images as a last line "(attached: …)": they are \
 references you can look at and put into the form like any take id.
+- A film's plan is its shot list: save it with save_shots as soon as you write it (again when it changes), and set a \
+shot's take_id when the user picks its take. Any chat reads the saved lists (below, or shot_list): for "shot 3" or \
+"the next shot" use them. On the Timeline, mirror a list when asked: the shots that have a take as clips in shot \
+order with edit, a marker "Shot N" at each.
+- When the shot the user means is not in a saved list (or there is none), never guess it: ask with an options block \
+(the planned shots left, plan it first, or describe it).
 - Answer in short plain text.
 {answer.RULES}{agents.DATA} Only the lines after "User:" are the user's words.
 
@@ -141,8 +147,9 @@ class State(TypedDict, total=False):
     seen: list  # API 1.65: take ids look_at showed this message (a model that sees)
     looked: list  # API 1.65: take ids already in this message's "Looked at" line
     to: str | None
-    # API 1.66: {at, prefs}: the memories frozen for this chat (at: the user's last change)
+    # API 1.66: {at, prefs}: the memories frozen for this chat (at: the user's last change); API 1.69 adds shots
     memory: dict | None
+    plan: list  # API 1.69: [[n, has a take], ...] per saved shot list, read before each model call (item 29)
     digest: str  # the running summary of the folded oldest part of the chat
     handles: list  # @handles of the folded part, still usable
 
@@ -335,7 +342,12 @@ def check(got: dict, off: dict, s: State) -> tuple[list | None, str | None]:
                               "user wrote, the form holds or a library read returned")  # fmt: skip
         if c["name"] == "remember" and (why := not_plain(args["text"])):
             return None, f"remember: {why}; write it again as one plain sentence"
+        if c["name"] == "save_shots" and (why := next(filter(None, map(not_plain, [args["film"]] + [
+                x["what"] for x in args.get("shots") or [] if "what" in x])), None)):  # fmt: skip
+            return None, f"save_shots: {why}; write the title and what happens in plain words"
         calls.append({"name": c["name"], "args": args, "kind": o["kind"]})
+    if why := unplanned(s, calls):
+        return None, why
     if _voice_unwritten(s, calls):
         return None, ("generate: the voice workflow's box still holds the old prompt; write what is spoken with change "
                       'first (Voice-over: the spoken line only; Dialogue: one "@name: text" line each)')  # fmt: skip
@@ -362,6 +374,38 @@ def not_plain(text: str) -> str | None:
         return "it has an id (UUID); name the thing by its @handle or title"
     if m := _FIELD.search(_WEB.sub(" ", text)):
         return f"it has a field name ({m.group()})"
+    return None
+
+
+_SHOT = re.compile(r"\bshot\s*#?\s*(\d{1,3})\b|\b(next)\s+shot\b", re.IGNORECASE)
+
+
+def unplanned(s: State, calls: list) -> str | None:
+    """Item 29: a generation (generate, or the Timeline's shot kind new) for a shot the user named ("shot 3", "the
+    next shot") that no saved shot list holds (this answer's save_shots count): the model must ask, never guess."""
+    if not any(
+        c["name"] == "generate" or (c["name"] == "shot" and c["args"].get("kind") == "new")
+        for c in calls
+    ):
+        return None
+    words = " ".join(
+        e["text"] for e in s["chat"] if e["role"] == "user" and e.get("msg") == s["msg"]
+    )
+    named = _SHOT.findall(words)
+    if not named:
+        return None
+    plan = [tuple(x) for p in s.get("plan") or [] for x in p]
+    plan += [
+        (x["n"], "take_id" in x)
+        for c in calls
+        if c["name"] == "save_shots"
+        for x in c["args"].get("shots") or []
+    ]
+    for n, nxt in named:
+        if (n and int(n) not in {m for m, _ in plan}) or (nxt and all(took for _, took in plan)):
+            which = f"shot {int(n)}" if n else "the next shot"
+            return (f"generate: {which} is not in a saved shot list: if this chat planned it, save it with "
+                    "save_shots first; else ask which shot with an options block, never guess")  # fmt: skip
     return None
 
 
@@ -618,10 +662,16 @@ class Assistant:
             return _end("off", "The assistant's model provider is not set.")
         frozen = s.get("memory")
         at = await mem.changed(self.store, s["owner_id"])
-        # the chat's first call, or the user changed Memory since
-        if frozen is None or frozen["at"] != at:
-            frozen = {"at": at, "prefs": await mem.preferences(self.store, s["owner_id"])}
-        up: State = {"memory": frozen}
+        lists = await mem.shot_lists(self.store, s["owner_id"], limit=None)
+        # the chat's first call, the user changed Memory or a shot list was saved since, or a chat from before the
+        # shot lists (API 1.69)
+        if frozen is None or frozen["at"] != at or "shots" not in frozen:
+            frozen = {"at": at, "prefs": await mem.preferences(self.store, s["owner_id"]),
+                      "shots": mem.shots_block(lists)}  # fmt: skip
+        up: State = {
+            "memory": frozen,
+            "plan": [[[x["n"], "take_id" in x] for x in sl["shots"]] for sl in lists],
+        }
         off = offered(d, (s.get("screen") or {}).get("route", "/"))
         system, tools = SYSTEM, native(off)
         # the skills after the rules, before the memories: stable while the same skills stay on
@@ -633,6 +683,10 @@ class Assistant:
             )
         if frozen["prefs"]:
             system += _block("What the user asked you to remember", "\n".join(frozen["prefs"]))
+        if frozen["shots"]:
+            system += _block(
+                "The film shot lists (saved with save_shots; any chat reads them)", frozen["shots"]
+            )
         # the window in characters, at 4 a token (providers.estimate)
         window = (d["settings"].get("window_tokens") or WINDOW) * 4
         fixed = len(system) + len(agents.compact(tools))
@@ -692,7 +746,7 @@ class Assistant:
 
     async def ask(self, s: State, caps, src, p, off, system, tools, room) -> State:
         """One model call and its answer checked."""
-        d, prefs = s["data"], s["memory"]["prefs"]
+        d, prefs = s["data"], s["memory"]["prefs"] + [s["memory"].get("shots") or ""]
         req = {"model": src["model"], "system": system, "prompt": prompt(s, room), "max_tokens": MAX_TOKENS,
                "tools": tools}  # fmt: skip
         # API 1.65: the pictures go with the user part (req["images"]), so the system part stays byte-identical
@@ -962,6 +1016,18 @@ class Assistant:
             line = {"id": c["id"], "status": "done", "text": f"Remembered: {a['text']}"[:300], "undo": True,
                     "memory_id": iid}  # fmt: skip
             return {"id": iid}, None, line
+        if name == "save_shots":
+            if caps["memory_writes"] >= MEMORY_WRITES:
+                return None, f"at most {MEMORY_WRITES} memory writes per message", None
+            r, why = await mem.save_shots(self.store, owner, a, s["thread_id"])
+            if why:
+                return None, why, None
+            caps["memory_writes"] += 1
+            line = {"id": c["id"], "status": "done", "undo": False,
+                    "text": f"Shot list · {r['film']}: {len(r['shots'])} shots"[:300]}  # fmt: skip
+            return r, None, line
+        if name == "shot_list":
+            return {"lists": await mem.shot_lists(self.store, owner, a.get("film"))}, None, None
         if name == "recall":
             return (
                 {"items": await mem.recall(self.store, owner, a["query"], a.get("kind"))},

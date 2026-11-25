@@ -38,4 +38,4 @@
 - export, with no preset (it exports at the sequence's size). The card shows the mode, size and fps, the length
   and the machine. It makes an MP4 take: stream copy when every clip matches,
   else re-encode. Keeping one size and frame rate (24 fps) for every shot keeps it fast.
-- Update the project note: done, the sequence name, the export.
+- Update the project note: done, the sequence name, the export. The shot list's take_ids are the cut's takes.

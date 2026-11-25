@@ -26,7 +26,9 @@ One row per shot. One action per shot. Frames at 24 fps, on the family's grid.
 | 3 | Close-up | Slow dolly in | grins at the apple | "Mine!" | the line's length | set by the line | LTX Audio to video |
 | 4 | Wide | Static | an apple drops on his head; he squashes down | "Ow." | 3 s | 73 | MiniMax H3 Image to video |
 
-Fill in per shot as you go: the keyframe take, the seed, the picked clip.
+Save it with save_shots as soon as it is written (film title; per shot n, what = the action, seconds, line), and
+again when it changes. Fill in per shot as you go: the keyframe take, the seed, the picked clip; the picked clip
+goes in the saved list as the shot's take_id.
 
 ## Frame grids (24 fps)
 

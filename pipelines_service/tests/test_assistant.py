@@ -1393,3 +1393,106 @@ async def test_skills_and_pictures_keep_the_system_part_byte_identical(pool, fak
     assert system.startswith(assistant.SYSTEM)
     assert system.index("Skills you can read with use_skill") < system.index("likes 16:9")
     assert isinstance(a["messages"][1]["content"], list)  # the picture went with the user part
+
+
+# --- the film's shot list (API 1.69, alpha.2 items 28 and 29)
+
+SHOTS = TOOLS + ["save_shots", "shot_list"]
+
+
+async def test_save_shots_merges_replaces_and_keeps_its_shots_through_edit_and_a_deleted_chat(
+    pool, fake
+):
+    store, tid = AsyncPostgresStore(pool), str(uuid.uuid4())
+    plan = {"film": "Night  Diner", "shots": [{"n": 2, "what": "@stranger pays", "seconds": 3},
+                                              {"n": 1, "what": "@june wipes the counter", "seconds": 3}]}  # fmt: skip
+    at = await mem.changed(store, OWNER)
+    got, why = await mem.save_shots(store, OWNER, plan, tid)
+    assert await mem.changed(store, OWNER) != at  # every open chat reads the lists again
+    assert why is None and got["film"] == "Night Diner" and [x["n"] for x in got["shots"]] == [1, 2]
+    got, _ = await mem.save_shots(store, OWNER, {"film": "night diner", "shots": [{"n": 1, "take_id": TAKES[0]},
+                                                 {"n": 3, "what": "@june looks up", "line": "@june: Closed."}]}, tid)  # fmt: skip
+    assert got["id"] == mem.shots_id("NIGHT DINER") and len(got["shots"]) == 3
+    assert got["shots"][0] == {
+        "n": 1,
+        "what": "@june wipes the counter",
+        "seconds": 3,
+        "take_id": TAKES[0],
+    }
+    new = await mem.save_shots(store, OWNER, {"film": "night diner", "shots": [{"n": 9}]}, tid)
+    assert new[1].startswith("shot 9 is new")
+    assert "empty" in (await mem.save_shots(store, OWNER, {"film": "x", "remove": [1]}, tid))[1]
+    (item,) = await mem.items(store, OWNER, "project")
+    assert item["text"].startswith(
+        "Shot list · night diner: 3 shots, 1 with a take. 1 @june wipes the counter (3 s)"
+    )
+    assert not schemas.errors(f"{schemas.BASE}assistant.schema.json#/$defs/memoryItem", item)
+    edited = await mem.answer(store, json.dumps({"owner_id": OWNER, "op": "edit", "item_id": item["id"],
+                                                 "text": "The diner film"}).encode())  # fmt: skip
+    assert edited["item"]["text"] == "The diner film" and edited["item"]["shots"] == item["shots"]
+    await mem.drop_thread(store, OWNER, tid)
+    (item,) = await mem.items(store, OWNER, "project")
+    assert item["thread_id"] is None and len(item["shots"]["shots"]) == 3
+    got, _ = await mem.save_shots(store, OWNER, {"film": "Night diner", "replace": True,
+                                                 "shots": [{"n": 1, "what": "A new opening"}]}, tid)  # fmt: skip
+    assert got["shots"] == [{"n": 1, "what": "A new opening"}]
+    block = mem.shots_block(await mem.shot_lists(store, OWNER))
+    assert block == "Night diner (1 shots):\n1. A new opening"
+    big = {"film": "Big", "shots": [{"n": n, "what": "x" * 60} for n in range(1, 61)]}
+    block = mem.shots_block([big, {"film": "Diner", "shots": [{"n": 1, "what": "A"}]}])
+    assert block == "Diner (1 shots):\n1. A\n\nAlso (read them with shot_list): Big"
+
+
+async def test_a_new_chat_reads_the_shot_list_another_chat_saved(pool, fake):
+    """The owner's case: a new chat asked for shot 3 said "I don't have your shot list"."""
+    a = Chat(pool, fake)
+    a.tool_names = SHOTS
+    a.script(calls(("save_shots", {"film": "Widower", "shots": [{"n": 1, "what": "@elias at the window", "seconds": 5},
+                                                                {"n": 3, "what": "@biscuit sleeps", "line": "@elias: Good boy."}]})),
+             {"content": "Saved."})  # fmt: skip
+    step = await a.say("plan the widower film")
+    assert (
+        step["lines"][0]["text"] == "Shot list · Widower: 2 shots" and not step["lines"][0]["undo"]
+    )
+    b = Chat(pool, fake)
+    b.tool_names = SHOTS
+    b.script(calls(("shot_list", {"film": "widower"})), {"content": "Shot 3: @biscuit sleeps."})
+    await b.say("For Shot 3, what was it?")
+    system = b.asked()[2]["messages"][0]["content"]
+    assert "The film shot lists" in system and '3. @biscuit sleeps · "@elias: Good boy."' in system
+    assert '"film":"Widower"' in b.asked()[-1]["messages"][1]["content"]
+
+
+def test_a_shot_not_in_a_saved_list_is_never_generated():
+    """Item 29: generate (or the Timeline's New shot) for a named shot that no list holds is an invalid answer."""
+    s = {"thread_id": "t", "msg": 2, "plan": [[[1, True], [2, False]]],
+         "chat": [{"role": "user", "msg": 1, "text": "make shot 7"}, {"role": "user", "msg": 2, "text": "Now shot 3"}]}  # fmt: skip
+    gen = [{"name": "generate", "args": {}}]
+    assert "shot 3 is not in a saved shot list" in assistant.unplanned(s, gen)
+    assert assistant.unplanned(s, [{"name": "shot", "args": {"kind": "new"}}])
+    assert assistant.unplanned(s, [{"name": "shot", "args": {"kind": "retake"}}]) is None
+    assert assistant.unplanned(s, [{"name": "change", "args": {}}]) is None  # not a generation
+    saved = [{"name": "save_shots", "args": {"film": "f", "shots": [{"n": 3, "what": "x"}]}}]
+    assert assistant.unplanned(s, saved + gen) is None
+    assert assistant.unplanned(s | {"plan": [[[3, False]]]}, gen) is None
+    nxt = s | {"chat": [{"role": "user", "msg": 2, "text": "the next shot please"}]}
+    assert assistant.unplanned(nxt, gen) is None  # shot 2 has no take yet
+    assert "the next shot" in assistant.unplanned(nxt | {"plan": [[[1, True]]]}, gen)
+    assert "the next shot" in assistant.unplanned(nxt | {"plan": []}, gen)
+    other = s | {"chat": [{"role": "user", "msg": 2, "text": "a screenshot 2 of 3 shots"}]}
+    assert assistant.unplanned(other, gen) is None
+
+
+async def test_generating_an_unplanned_shot_is_asked_again_and_the_model_asks(pool, fake):
+    c = Chat(pool, fake)
+    c.tool_names = SHOTS
+    ask = 'Which shot?\n```options\n[{"title": "Plan shot 3", "best": true}, {"title": "Shot 2"}]\n```'
+    c.script(calls(("generate", {})), {"content": ask})
+    step = await c.say("make shot 3")
+    assert "shot 3 is not in a saved shot list" in c.asked()[1]["messages"][1]["content"]
+    assert (
+        step["done"]
+        and step["error"] is None
+        and "```options" in step["text"]
+        and not step.get("actions")
+    )
