@@ -2783,7 +2783,8 @@ function RunTile({
 }
 
 /** The Image / Video / Audio switch beside the composer (docs/mock/TextToVideo.dc.html "Output kind"): which media's
- * workflows the model chip offers. */
+ * workflows the model chip offers. One fixed size (the owner, 2026-11-25: the Image composer's), so switching kinds
+ * never resizes it. */
 function MediaSwitch({
   kinds,
   media,
@@ -2797,7 +2798,7 @@ function MediaSwitch({
     <div
       role="tablist"
       aria-label="Output kind"
-      className="panel flex shrink-0 flex-col gap-1.5 p-1.5"
+      className="panel flex shrink-0 flex-col gap-1.5 self-start p-1.5"
     >
       {kinds.map((m) => (
         <button
@@ -2806,7 +2807,7 @@ function MediaSwitch({
           role="tab"
           aria-selected={m === media}
           onClick={() => m !== media && onPick(m)}
-          className="bevel min-h-11 w-16 flex-1 rounded-xl text-[12px] font-semibold text-t2 aria-selected:bg-s5 aria-selected:text-t1"
+          className="bevel h-[63px] w-16 rounded-xl text-[12px] font-semibold text-t2 aria-selected:bg-s5 aria-selected:text-t1"
         >
           {{ image: "Image", video: "Video", audio: "Audio", text: "Text" }[m]}
         </button>
