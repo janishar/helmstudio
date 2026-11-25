@@ -442,6 +442,12 @@ type Skill struct {
 	Recipes []SkillRecipe `json:"recipes"`
 }
 
+// ModelGuide is GET /model-guides/{family} (API 1.71): a family's guide and recipes, and whether a known host holds it.
+type ModelGuide struct {
+	registry.Guide
+	Downloaded bool `json:"downloaded"`
+}
+
 // SkillFile is GET /skills/{skill}/files/{file}.
 type SkillFile struct {
 	Skill string `json:"skill"`

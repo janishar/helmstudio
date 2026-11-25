@@ -693,6 +693,8 @@ type Registry struct {
 	looksAt   map[string]time.Time            // "<host>.<env>" → when its looks were published
 	voices    map[string][]StarterVoice       // "<host>.<env>" → the starter voices of its packs (API 1.30)
 	voicesAt  map[string]time.Time            // "<host>.<env>" → when its voices were published
+	guides    map[string][]Guide              // "<host>.<env>" → its packs' assistant guides (API 1.71)
+	guidesAt  map[string]time.Time            // "<host>.<env>" → when its guides were published
 	hosts     map[string]Host                 // "<host>.<env>" → its state
 	awaiting  map[string]bool                 // watched buckets whose current values have not all arrived yet
 	custom    []CustomNode                    // pipelines.engine.custom: the custom nodes pipelines' packs register (API 1.15)
@@ -896,6 +898,21 @@ func (r *Registry) SetRegistry(key string, value []byte) error {
 		}
 		set(&r.voices, source, kept)
 		set(&r.voicesAt, source, received(parsed.PublishedAt))
+	case "guides": // API 1.71
+		if value == nil {
+			delete(r.guides, source)
+			delete(r.guidesAt, source)
+			return nil
+		}
+		var parsed struct {
+			Guides      []Guide   `json:"guides"`
+			PublishedAt time.Time `json:"published_at"`
+		}
+		if err := json.Unmarshal(value, &parsed); err != nil {
+			return err
+		}
+		set(&r.guides, source, parsed.Guides)
+		set(&r.guidesAt, source, received(parsed.PublishedAt))
 	case "custom":
 		if source != "pipelines.engine" {
 			return nil

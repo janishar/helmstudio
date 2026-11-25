@@ -52,14 +52,14 @@ var toolCatalog = sync.OnceValue(func() map[string]catalogTool {
 })
 
 // offeredTools are the tools a turn offers (contracts check.py offered_tools): surface assistant, every role it needs
-// held, web_search only when on, look_at only when an ask workflow can run now; sorted.
-func offeredTools(roles []string, webSearch, lookAt bool, skills ...bool) []string {
-	skillOn := len(skills) > 0 && skills[0] // API 1.64: use_skill and read_skill_file only while a skill is on
+// held, web_search only when on, look_at only when an ask workflow can run now, use_skill and read_skill_file only while
+// a skill is on (API 1.64), read_model_guide only while a model guide is published (API 1.71); sorted.
+func offeredTools(roles []string, webSearch, lookAt, skillOn, guides bool) []string {
 	out := []string{}
 	for name, t := range toolCatalog() {
 		if slices.Contains(t.Surfaces, "assistant") && !slices.ContainsFunc(t.Roles, func(r string) bool { return !slices.Contains(roles, r) }) &&
 			(name != "web_search" || webSearch) && (name != "look_at" || lookAt) &&
-			(name != "use_skill" && name != "read_skill_file" || skillOn) {
+			(name != "use_skill" && name != "read_skill_file" || skillOn) && (name != "read_model_guide" || guides) {
 			out = append(out, name)
 		}
 	}
@@ -68,8 +68,31 @@ func offeredTools(roles []string, webSearch, lookAt bool, skills ...bool) []stri
 }
 
 // OfferedTools is offeredTools, for the contract's offer fixtures.
-func OfferedTools(roles []string, webSearch, lookAt, skills bool) []string {
-	return offeredTools(roles, webSearch, lookAt, skills)
+func OfferedTools(roles []string, webSearch, lookAt, skills, guides bool) []string {
+	return offeredTools(roles, webSearch, lookAt, skills, guides)
+}
+
+// turnGuides are a turn's model cards (API 1.71) and whether any guide is published (read_model_guide is offered).
+func (s *Service) turnGuides() ([]message.TurnGuide, bool) {
+	all, _ := s.registry.Guides()
+	out := []message.TurnGuide{}
+	for _, g := range s.registry.Cards() {
+		if len(out) < 32 {
+			out = append(out, message.TurnGuide{Family: g.Family, Title: g.Title, Card: g.Card})
+		}
+	}
+	return out, len(all) > 0
+}
+
+// GetModelGuide answers GET /model-guides/{family} (API 1.71): the newest guide a known host publishes.
+func (s *Service) GetModelGuide(family string) (dto.ModelGuide, error) {
+	all, held := s.registry.Guides()
+	g, ok := all[family]
+	if !ok {
+		return dto.ModelGuide{}, network.NewNotFoundError("no guide for "+family, nil)
+	}
+	g.Recipes = append([]registry.Recipe{}, g.Recipes...) // [] never null
+	return dto.ModelGuide{Guide: g, Downloaded: held[family]}, nil
 }
 
 // askWorkflow is the ask workflow look_at runs now: a template answering text whose ask node takes media (Qwen Image's
@@ -218,6 +241,7 @@ type toolArgs struct {
 	Before     *int    `json:"before"`
 	Skill      *string `json:"skill"` // use_skill, read_skill_file (API 1.64)
 	File       *string `json:"file"`
+	Family     *string `json:"family"` // read_model_guide (API 1.71)
 }
 
 // toolInputs are the args each read tool takes, and which it needs.
@@ -242,6 +266,7 @@ var toolInputs = map[string][2][]string{
 	"model_jobs":         {},
 	"use_skill":          {{"skill"}, {"skill"}},                 // API 1.64
 	"read_skill_file":    {{"skill", "file"}, {"skill", "file"}}, // API 1.64
+	"read_model_guide":   {{"family"}, {"family"}},               // API 1.71
 }
 
 // readTool runs one read tool through its routes.
@@ -427,6 +452,8 @@ func (s *Service) readTool(ctx context.Context, caller common.Caller, name strin
 		return single(get("", "/skills/"+esc(args.Skill)), refused)
 	case "read_skill_file":
 		return single(get("", "/skills/"+esc(args.Skill)+"/files/"+esc(args.File)), refused)
+	case "read_model_guide": // API 1.71
+		return single(get("", "/model-guides/"+esc(args.Family)), refused)
 	case "custom_nodes":
 		return single(get("", "/custom-nodes"), refused)
 	case "model_sources":

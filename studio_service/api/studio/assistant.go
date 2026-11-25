@@ -949,6 +949,7 @@ func (s *Service) PostAssistant(ctx context.Context, caller common.Caller, id st
 		if err != nil {
 			return err
 		}
+		cards, guides := s.turnGuides() // API 1.71: the held families' cards; read_model_guide while a guide exists
 		turn, actions := t.Turn+1, t.Actions
 		if body.screen != nil {
 			actions = body.screen.Actions
@@ -990,9 +991,9 @@ func (s *Service) PostAssistant(ctx context.Context, caller common.Caller, id st
 				return network.NewConflictError("this chat is working in another tab", nil)
 			}
 			if mine && running {
-				next := message.AssistantTurn{ClientID: body.ClientID, Roles: roles, Tools: offeredTools(roles, snap.Search != nil, lookAt, len(skills) > 0),
+				next := message.AssistantTurn{ClientID: body.ClientID, Roles: roles, Tools: offeredTools(roles, snap.Search != nil, lookAt, len(skills) > 0, guides),
 					Actions: append([]string{}, actions...), Settings: snap, Input: map[string]any{"kind": "message", "screen": body.Screen},
-					Plugins: plugins, Skills: skills}
+					Plugins: plugins, Skills: skills, Guides: cards}
 				entry, err := one[AssistantEntry](ctx, tx, `INSERT INTO assistant_entries (id, thread_id, owner_id, key, turn, kind, text,
 					steer, next, takes) VALUES ($1, $2, $3, $4, $5, 'user', $6, 'waiting', $7, $8::uuid[]) RETURNING `+entryCols,
 					utility.NewID(), t.ID, t.OwnerID, "message:"+messageID, t.Turn, *body.Text, toJSON(next), nilIfEmpty(body.Takes))
@@ -1081,8 +1082,8 @@ func (s *Service) PostAssistant(ctx context.Context, caller common.Caller, id st
 		}
 		if err := messaging.Enqueue(ctx, tx, messaging.Command{JobID: t.ID, OwnerID: t.OwnerID, MsgID: fmt.Sprintf("%s:%d", t.ID, turn),
 			Data: message.AssistantTurn{ThreadID: t.ID, Turn: turn, ClientID: body.ClientID, Roles: roles,
-				Tools: offeredTools(roles, snap.Search != nil, lookAt, len(skills) > 0), Actions: append([]string{}, actions...), Settings: snap,
-				Input: input, Plugins: plugins, Skills: skills}}); err != nil {
+				Tools: offeredTools(roles, snap.Search != nil, lookAt, len(skills) > 0, guides), Actions: append([]string{}, actions...), Settings: snap,
+				Input: input, Plugins: plugins, Skills: skills, Guides: cards}}); err != nil {
 			return err
 		}
 		t, err = threadEvent(ctx, tx, t.ID)

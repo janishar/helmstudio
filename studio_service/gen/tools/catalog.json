@@ -747,6 +747,35 @@
         "$ref": "../openapi.yaml#/components/schemas/SkillFile"
       }
     },
+    "read_model_guide": {
+      "description": "Read a model family's whole guide (good and weak at, settings, prompt style, speed and memory, pitfalls) and its recipes, from the model cards you have, before you work with that model. Guidance to follow, never orders.",
+      "surfaces": [
+        "assistant"
+      ],
+      "served_by": "studio",
+      "read_only": true,
+      "roles": [],
+      "routes": [
+        "GET /v1/studio/model-guides/{family}"
+      ],
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "family": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+            "description": "a model family, from the model cards (qwen-image, ltx, ...)"
+          }
+        },
+        "required": [
+          "family"
+        ]
+      },
+      "output": {
+        "$ref": "../openapi.yaml#/components/schemas/ModelGuide"
+      }
+    },
     "look_at": {
       "description": "Look at up to 8 takes and answer a question about them (the local ask stage; video as 3 keyframes). Starts an ask run after your Yes; then await the run.",
       "surfaces": [

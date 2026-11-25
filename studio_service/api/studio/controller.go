@@ -115,6 +115,7 @@ func (c *controller) MountRoutes(group *gin.RouterGroup) {
 	group.GET("/skills", c.listSkillsHandler)                                    // API 1.64
 	group.GET("/skills/:skill", c.getSkillHandler)                               // API 1.64
 	group.GET("/skills/:skill/files/:file", c.getSkillFileHandler)               // API 1.64
+	group.GET("/model-guides/:family", c.getModelGuideHandler)                   // API 1.71
 	group.GET("/admin/plugins", c.listPluginsHandler)                            // API 1.61
 	group.POST("/admin/plugins/rescan", c.rescanPluginsHandler)                  // API 1.61
 	group.PUT("/admin/plugins/:plugin", c.putPluginHandler)                      // API 1.61
@@ -1050,6 +1051,12 @@ func (c *controller) getSkillHandler(ctx *gin.Context) {
 // getSkillFileHandler: GET /skills/{skill}/files/{file} (API 1.64).
 func (c *controller) getSkillFileHandler(ctx *gin.Context) {
 	out, err := c.service.GetSkillFile(ctx.Request.Context(), ctx.Param("skill"), ctx.Param("file"))
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// getModelGuideHandler: GET /model-guides/{family} (API 1.71).
+func (c *controller) getModelGuideHandler(ctx *gin.Context) {
+	out, err := c.service.GetModelGuide(ctx.Param("family"))
 	reply(ctx, http.StatusOK, out, err)
 }
 

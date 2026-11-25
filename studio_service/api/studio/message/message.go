@@ -691,6 +691,14 @@ type AssistantTurn struct {
 	Input    map[string]any    `json:"input"`
 	Plugins  []TurnPlugin      `json:"plugins,omitempty"` // API 1.61: the assistant-tools plugins that are on
 	Skills   []TurnSkill       `json:"skills,omitempty"`  // API 1.64: the skills that are on
+	Guides   []TurnGuide       `json:"guides,omitempty"`  // API 1.71: the held families' model cards
+}
+
+// TurnGuide is one held model family's card, as a turn's prompt lists it (API 1.71).
+type TurnGuide struct {
+	Family string `json:"family"`
+	Title  string `json:"title"`
+	Card   string `json:"card"`
 }
 
 // TurnSkill is one skill that is on, as a turn's prompt lists it (API 1.64).
