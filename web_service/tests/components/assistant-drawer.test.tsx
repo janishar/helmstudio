@@ -600,9 +600,7 @@ describe("other tabs, server cards, limits, memory", () => {
     const posts = serve({ existing: waiting, entries: [card("waiting")] });
     render(<AppShell user={user}>{null}</AppShell>);
     // the dock's dot: a card waits
-    fireEvent.click(
-      await screen.findByRole("button", { name: /^Chat.*1 card waits for you/ }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: /^Chat.*1 card waits for you/ }));
     const c = await screen.findByRole("region", { name: "Confirm: Search the web?" });
     expect(c.textContent).toContain("ltx 2.3 prompt tips");
     expect(c.textContent).toContain("sends to Brave");
