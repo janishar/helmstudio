@@ -47,47 +47,6 @@ def test_settings_are_the_admins(api, admin):
     assert admin.put(SETTINGS, json={"enabled": True}).status_code == 422  # no provider
 
 
-def test_auto_mode_runs_a_generation_by_itself_and_asks_past_the_cap(api, api_b, admin, assistant):
-    """API 1.68 (board Assistant frame 13): the chat's Auto switch travels with the turn; pipelines lets a generation
-    within the hour's caps run without its card (`auto`) and asks past them (`asks`)."""
-    tid = ok(api.post(THREADS, json={"client_id": TAB}), 201)["id"]
-    url = f"{THREADS}/{tid}"
-    assert ok(api.get(url))["auto"] is False
-    assert api_b.patch(url, json={"auto": True}).status_code == 404
-    assert api.patch(url, json={"auto": "on"}).status_code == 422
-    assert ok(api.patch(url, json={"auto": True}))["auto"] is True
-    gen = screen("/") | {"actions": ["navigate", "await", "generate"], "fields": {"plan": {"runs": 1, "seconds": 5}}}
-
-    def parked():
-        got = ok(api.get(url))
-        return got if got["state"] == "waiting" and got["pending"] else None
-
-    def run(cap: int) -> dict:
-        now = ok(admin.get(SETTINGS))
-        ok(admin.put(SETTINGS, json={"enabled": True, "provider": now["provider"],
-                                     "limits": now["limits"] | {"auto_takes_per_hour": cap}}))  # fmt: skip
-        fake("POST", "/__script", {assistant: [
-            {"content": "Making it.", "tool_calls": [{"tool": "generate", "args": {}}]}, {"content": "Done."}]})  # fmt: skip
-        ok(api.post(f"{url}/messages", json={"kind": "message", "client_id": TAB, "text": "Make one",
-                                             "screen": gen}), 202)  # fmt: skip
-        got = wait_for(parked, timeout=60, what="the parked generate")
-        (a,) = got["pending"]["actions"]
-        ok(api.post(f"{url}/messages", json={"kind": "results", "client_id": TAB, "turn": got["pending"]["turn"],
-                                             "results": [{"id": a["id"], "status": "cancelled",
-                                                          "line": {"text": "Not now", "undo": False}}]}), 202)  # fmt: skip
-        wait_for(lambda: ok(api.get(url))["state"] == "idle", timeout=60, what="the answer")
-        return got
-
-    got = run(1000)
-    assert got["pending"]["actions"][0]["auto"] is True and "auto_takes_hour" in got["caps"]
-    got = run(0)  # bigger than the whole cap: it asks
-    assert got["pending"]["actions"][0]["asks"] == "Auto stops here: a big run needs you"
-    now = ok(admin.get(SETTINGS))
-    ok(admin.put(SETTINGS, json={"enabled": True, "provider": now["provider"],
-                                 "limits": now["limits"] | {"auto_takes_per_hour": 8}}))  # fmt: skip
-    ok(api.delete(url), 204)
-
-
 def test_a_turn_reads_through_studio(api, api_b, assistant):
     fake("POST", "/__script", {assistant: [
         {"content": "Looking.", "tool_calls": [{"tool": "search_takes", "args": {"limit": 3}}]},
@@ -250,3 +209,45 @@ def test_attached_images_reach_a_model_that_sees(api, api_b, anon, admin, fake_c
             ok(api.delete(url), 204)
         finally:
             ok(admin.put(SETTINGS, json=was if was.get("provider") else {"enabled": False}))
+
+
+def test_auto_mode_runs_a_generation_by_itself_and_asks_past_the_cap(api, api_b, admin, assistant):
+    """Last: it shares the module's model with the tests that count its calls. API 1.68 (board Assistant frame 13): the chat's Auto switch travels with the turn; pipelines lets a generation
+    within the hour's caps run without its card (`auto`) and asks past them (`asks`)."""
+    tid = ok(api.post(THREADS, json={"client_id": TAB}), 201)["id"]
+    url = f"{THREADS}/{tid}"
+    assert ok(api.get(url))["auto"] is False
+    assert api_b.patch(url, json={"auto": True}).status_code == 404
+    assert api.patch(url, json={"auto": "on"}).status_code == 422
+    assert ok(api.patch(url, json={"auto": True}))["auto"] is True
+    gen = screen("/") | {"actions": ["navigate", "await", "generate"], "fields": {"plan": {"runs": 1, "seconds": 5}}}
+
+    def parked():
+        got = ok(api.get(url))
+        return got if got["state"] == "waiting" and got["pending"] else None
+
+    def run(cap: int) -> dict:
+        now = ok(admin.get(SETTINGS))
+        ok(admin.put(SETTINGS, json={"enabled": True, "provider": now["provider"],
+                                     "limits": now["limits"] | {"auto_takes_per_hour": cap}}))  # fmt: skip
+        fake("POST", "/__script", {assistant: [
+            {"content": "Making it.", "tool_calls": [{"tool": "generate", "args": {}}]}, {"content": "Done."}]})  # fmt: skip
+        ok(api.post(f"{url}/messages", json={"kind": "message", "client_id": TAB, "text": "Make one",
+                                             "screen": gen}), 202)  # fmt: skip
+        got = wait_for(parked, timeout=60, what="the parked generate")
+        (a,) = got["pending"]["actions"]
+        ok(api.post(f"{url}/messages", json={"kind": "results", "client_id": TAB, "turn": got["pending"]["turn"],
+                                             "results": [{"id": a["id"], "status": "cancelled",
+                                                          "line": {"text": "Not now", "undo": False}}]}), 202)  # fmt: skip
+        wait_for(lambda: ok(api.get(url))["state"] == "idle", timeout=60, what="the answer")
+        return got
+
+    got = run(1000)
+    assert got["pending"]["actions"][0]["auto"] is True and "auto_takes_hour" in got["caps"]
+    got = run(0)  # bigger than the whole cap: it asks
+    assert got["pending"]["actions"][0]["asks"] == "Auto stops here: a big run needs you"
+    now = ok(admin.get(SETTINGS))
+    ok(admin.put(SETTINGS, json={"enabled": True, "provider": now["provider"],
+                                 "limits": now["limits"] | {"auto_takes_per_hour": 8}}))  # fmt: skip
+    ok(api.delete(url), 204)
+
