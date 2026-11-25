@@ -414,9 +414,9 @@
     },
     "Assistant.dc.html": {
       "expand": "fill",
-      "h": 26540,
+      "h": 31520,
       "is_interactive": true,
-      "title": "Assistant \u00b7 the drawer on Create, Graph and Timeline, phone, cards, chains, memory, web search \u00b7 its own page and setup (alpha.4)",
+      "title": "Agent and AI \u00b7 the Agent drawer on Create, Graph and Timeline, phone, cards, chains, memory, web search \u00b7 AI (admin): setup, tabs Agent, In pipelines, Providers, Plugins \u00b7 System (alpha.4)",
       "w": 1440,
       "x": 0,
       "y": 0,
@@ -534,9 +534,9 @@
     },
     "Plugins.dc.html": {
       "expand": "fill",
-      "h": 3660,
+      "h": 3970,
       "is_interactive": true,
-      "title": "Plugins \u00b7 its own rail page: the list, the Claude Code bridge, Add as provider, skills",
+      "title": "Plugins \u00b7 its own rail page: the list, Your Claude subscription (starts itself on the Mac), Add as provider, skills",
       "w": 1440,
       "x": 0,
       "y": 3480,
