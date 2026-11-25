@@ -20,6 +20,7 @@
       "hosts",
       "look_at",
       "models",
+      "read_model_guide",
       "read_skill_file",
       "recall",
       "remember",
@@ -136,6 +137,18 @@
         "name": "animator",
         "title": "Animator",
         "when": "Planning an animated shot or film: shots, timing, motion, camera moves."
+      }
+    ],
+    "guides": [
+      {
+        "family": "ltx",
+        "title": "LTX-2.5",
+        "card": "LTX-2.5 makes video with sound. Distilled drafts fast."
+      },
+      {
+        "family": "qwen-image",
+        "title": "Qwen Image 2.1",
+        "card": "Qwen Image 2.1 makes and edits stills."
       }
     ]
   }

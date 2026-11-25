@@ -1,5 +1,5 @@
 {
-  "description": "Which tools of tools/catalog.json a turn offers (offered_tools: roles, web_search on, an ask workflow runnable, from API 1.64 a skill on) and which actions a screen registers (screen_actions). check.py and studio_service run them.",
+  "description": "Which tools of tools/catalog.json a turn offers (offered_tools: roles, web_search on, an ask workflow runnable, from API 1.64 a skill on, from API 1.71 a model guide) and which actions a screen registers (screen_actions). check.py and studio_service run them.",
   "cases": [
     {
       "description": "a user, web search off, no ask workflow",
@@ -62,6 +62,38 @@
         "show_timeline",
         "timeline_revisions",
         "use_skill"
+      ]
+    },
+    {
+      "description": "a user, some model guide published (API 1.71)",
+      "roles": [
+        "user"
+      ],
+      "guides": true,
+      "expect": [
+        "batch_status",
+        "custom_nodes",
+        "forget",
+        "get_run",
+        "get_take",
+        "get_workflow",
+        "hosts",
+        "list_library",
+        "list_timelines",
+        "list_workflows",
+        "model_sources",
+        "models",
+        "pipelines",
+        "plan_run",
+        "read_model_guide",
+        "recall",
+        "remember",
+        "save_shots",
+        "search_takes",
+        "sessions",
+        "shot_list",
+        "show_timeline",
+        "timeline_revisions"
       ]
     },
     {

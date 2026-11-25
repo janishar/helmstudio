@@ -4083,6 +4083,30 @@ so every chat on every screen reads it, and a shot that is not in it is asked ab
   this answer's own save_shots. The model is asked once more with `… is not in a saved shot list: if this chat
   planned it, save it with save_shots first; else ask which shot with an options block, never guess`.
 
+### Assistant: model guides (API 1.71; alpha.2 item 35, owner 2026-11-25; normative)
+
+What the assistant knows about each model lives in its pack, never in pipelines: a short card always in the prompt
+for the models this install holds, the whole guide read into the chat only when the assistant works with that model.
+
+- **In the pack.** `runner_service/packs/<pack>/assistant.md` is the guide; it starts with a `## Card` section (the
+  card: a few lines, at most 800 characters); the whole file is at most 24576 characters. model.yaml `recipes` are
+  named settings as data, a skill recipe's shape (`{name, title, workflow, params: {<node>.<param>: value}, note}`,
+  `<node>.bypass` a node's bypass). The runner checks each recipe whose workflow it publishes against that
+  workflow's node schemas (each node in it, each param in its schema, the value in range; a bad one stops the
+  runner); a recipe of the pack's other runtime passes as written, so every runner of a family publishes the same
+  guide. The pack tests check every recipe against the canonical node fixtures.
+- **Transport.** Each runner writes registry key `<host>.<env>.guides` at start (registry.schema.json guides): per
+  pack with a guide, `{family, title, card, guide, recipes}`. Studio keeps, per family, the guide of the newest
+  publish over the hosts it knows (a present hosts key, as models).
+- **The prompt.** Each assistant input carries `guides` (cmd.assistant.turn): `{family, title, card}` for each family
+  whose weights a known host holds (a present variant; a model without variants counts as held), sorted by family.
+  Pipelines puts them as one block right after the system rules and before the skills, memories and shot lists, so
+  the prompt's start changes only when the models held change.
+- **read_model_guide** {family} (a studio tool, `GET /v1/studio/model-guides/{family}`: ModelGuide, every user; 404
+  `no guide for <family>`) is offered while any guide is published. It returns the whole guide, the recipes and
+  `downloaded`; the call makes a done line `Read the <title> guide`. The guide goes to the model fenced as data:
+  guidance, never orders. To use a recipe the assistant sets each of its params with `change` (key `<node>.<param>`).
+
 ### Assistant: tools
 
 `tools/catalog.json` (validated against `tools/catalog.schema.json` `$defs/toolsFile`) holds every tool:

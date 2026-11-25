@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "host": "mac",
+  "env": "torch",
+  "published_at": "2026-11-25T10:00:00Z",
+  "published_by": "runner 0.1.0",
+  "guides": [
+    {
+      "family": "qwen-image",
+      "title": "Qwen Image 2.1",
+      "card": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "guide": "# Qwen Image 2.1: assistant guide\n\n## Card\n\nQwen Image 2.1 makes stills from text and edits up to 10 references. Turbo drafts fast; Base for finals.\n\n## Pitfalls\n\n- Turbo ignores Steps.\n",
+      "recipes": [
+        {
+          "name": "fast-draft",
+          "title": "Fast draft",
+          "workflow": "qwen-image",
+          "params": {
+            "model.variant": "turbo",
+            "enhance.bypass": true,
+            "canvas.mode": "fixed",
+            "canvas.width": 1024,
+            "canvas.height": 1024
+          },
+          "note": "Make 2 to 4 seeds."
+        }
+      ]
+    }
+  ]
+}

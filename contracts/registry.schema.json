@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helmstudio.local/contracts/registry.schema.json",
-  "title": "NATS KV values: bucket registry (keys <host>.<env>.nodes|workflows|models|loras|looks), bucket hosts (key <host>.<env>) and bucket host_settings (key <host>)",
+  "title": "NATS KV values: bucket registry (keys <host>.<env>.nodes|workflows|models|loras|looks|voices|guides), bucket hosts (key <host>.<env>) and bucket host_settings (key <host>)",
   "description": "Each runner writes only its own keys: the registry keys at start (from API 1.16 `models` and `loras` again whenever a rescan finds a change: every 60 s and after each model job), its hosts key every 10 s (studio treats a hosts key older than 30 s as offline). studio_service reads them, and alone writes bucket host_settings (the admin's per-host settings, API 1.16), which the runners of that host watch. Every value carries schema_version (major, versioned like a message).",
   "$defs": {
     "meta": {
@@ -3743,6 +3743,112 @@
         "published_at": {
           "type": "string",
           "format": "date-time"
+        }
+      }
+    },
+    "guides": {
+      "description": "from API 1.71 (contracts/README.md, Assistant: model guides): registry key <host>.<env>.guides, written at start: per loaded pack that ships an assistant guide (packs/<pack>/assistant.md), its card, the whole guide and its recipes. Studio keeps the newest per family over the hosts it knows",
+      "allOf": [
+        {
+          "$ref": "#/$defs/meta"
+        },
+        {
+          "type": "object",
+          "required": [
+            "guides"
+          ],
+          "properties": {
+            "guides": {
+              "type": "array",
+              "maxItems": 32,
+              "items": {
+                "$ref": "#/$defs/guide"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "guide": {
+      "type": "object",
+      "required": [
+        "family",
+        "title",
+        "card",
+        "guide",
+        "recipes"
+      ],
+      "additionalProperties": false,
+      "description": "from API 1.71: one model family's assistant guide",
+      "properties": {
+        "family": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "model.yaml `title`"
+        },
+        "card": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 800,
+          "description": "the guide's `## Card` section without its heading: the few lines the assistant's prompt holds while the family is downloaded on a host"
+        },
+        "guide": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24576,
+          "description": "assistant.md as written; read into a chat by read_model_guide"
+        },
+        "recipes": {
+          "type": "array",
+          "maxItems": 24,
+          "items": {
+            "$ref": "#/$defs/recipe"
+          },
+          "description": "model.yaml `recipes`, each naming one of the pack's workflows; one whose workflow this runner publishes is checked against that workflow's node schemas (a bad one stops the runner), the others (the pack's other runtime) pass as written: the pack tests check every one"
+        }
+      }
+    },
+    "recipe": {
+      "type": "object",
+      "required": [
+        "name",
+        "title",
+        "workflow",
+        "params"
+      ],
+      "additionalProperties": false,
+      "description": "from API 1.71: named settings for one workflow, as a skill's recipe (plugins/manifest.schema.json recipe): values by `<node>.<param>` (`<node>.bypass`: the node's bypass), set with the change action",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "workflow": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "params": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 24,
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]{0,31}\\.[a-z][a-z0-9_]{0,47}$"
+          }
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 300
         }
       }
     }
