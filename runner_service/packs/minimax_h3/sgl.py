@@ -21,6 +21,7 @@ decode); cancel kills the server (SGLang has no abort). Its MP4 (H.264 + AAC 32 
 
 import hashlib
 import json
+import logging
 import math
 import os
 import re
@@ -33,6 +34,8 @@ from pathlib import Path
 
 from core import child, media, models
 from core.graph import RunError
+
+log = logging.getLogger(__name__)
 
 
 def find(env=os.environ) -> Path:
@@ -228,7 +231,9 @@ def wait(ctx, port: int, job: str) -> None:
             return
         if v["status"] == "failed":
             why = (v.get("error") or {}).get("message") or "no reason given"
-            raise RunError(f"{ctx.node}: SGLang failed: {media.last_line(why)}")
+            log.error("sglang job %s failed: %s", job, why)  # the whole message: its last line can be only "stderr:"
+            text = " ".join(line.strip() for line in why.splitlines() if line.strip() and line.strip() != "stderr:")
+            raise RunError(f"{ctx.node}: SGLang failed: {text[-400:] or why}")
         if (p := int(v.get("progress") or 0)) > sent:
             ctx.progress(p, 100, "sampling", "sample")
             if (
