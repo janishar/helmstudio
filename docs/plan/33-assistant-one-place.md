@@ -23,7 +23,7 @@ or steers either face lives on the Assistant page. Nothing about AI agents stays
 
 1. **Agent** (was "Chat"; owner, 2026-11-25: "rename chat to Agent and appropriate icon"): today's page (plan 32 frame 19): Model, Tools, Skills, Auto mode, Context, Memory, the on/off switch.
 2. **In pipelines** (the silent assistant):
-   - **Default model** for pipeline write, decide, agent and judge steps: what a step's "Runs on · Auto" means.
+   - **Default model** for pipeline write, decide and agent steps (a judge keeps its family's vision model): what a step's "Runs on · Auto" means.
      Today Auto is the local LLM pack (and a family's own vision model for a judge); the admin may pick a provider
      model instead, or "Same as Agent". A step that names a model keeps it.
    - **Session names** (moved from Admin › AI agents): Off · Local LLM · a provider model, as today.

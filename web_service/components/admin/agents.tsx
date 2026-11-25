@@ -136,7 +136,7 @@ export function InPipelines() {
                   Pipeline steps
                   <br />
                   <span className={`${MONO} font-normal`}>
-                    write, decide, agent and judge, on Runs on · Auto
+                    write, decide and agent, on Runs on · Auto
                   </span>
                 </td>
                 <td className={`${cell} ${MONO}`}>
@@ -441,7 +441,7 @@ function DefaultPanel({
           <h2>Default model</h2>
         </div>
         <span className="line">
-          What Runs on · Auto means for write, decide, agent and judge steps.
+          What Runs on · Auto means for write, decide and agent steps; a judge keeps its family&apos;s vision model.
         </span>
         <div role="radiogroup" aria-label="Default model" className="flex flex-col gap-2">
           <Option
