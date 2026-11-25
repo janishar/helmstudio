@@ -57,7 +57,7 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `fixtures/timelines/` | the **shared timeline fixtures** (API 1.17, Timeline rules, below): `rates.json`, `normalize.json`, `edits.json`, `snap.json`, `frame-at.json`, `plan.json`, `shot-keyframes.json`, `rerender.json`, each `{description, takes?, cases: [{description, …, expect}]}`. studio_service (Go) and the web (TypeScript) both run them | (API 1.32) `make-shot.json` (an audio clip → `make_shot`)
 | `fixtures/video/` | the **shared video-rule fixtures** (Video, below): `auto-frames.json` (predicted seconds → frames), `keyframes.json` (a graph with merged values → the keyframe position errors); `sources.json` and `uses.json` (Media inputs); (API 1.21) `minimax-h3.json` (minimax-h3/generate's refusals → the run's error text: the native runner runs it; 1.22 adds the reference cases); (API 1.22) `media-rows.json` (rows of media, `not_with`, optional nodes → studio's 422 text or the values it sends). studio_service, the web and the mlx runner run them |
 | `fixtures/graphs/` | the **shared graph-rule fixtures** (Graph rules, below): `palette.json` (a `NodePalette`), `valid.*` / `invalid.*` (a `WorkflowDoc` and its expected problems), `autowire.*`, `wiredrop.*`. studio_service (Go) and the web editor (TypeScript) both run them |
-| `fixtures/pipelines/` | the **shared pipeline-rule fixtures** (Pipeline rules, below): `workflows.json` (the workflows the caller can run), `valid.*` / `invalid.*` `{description, pipeline, problems}`, optionally `looks` and `loras` (the caller's usable looks and LoRAs, as the look fixtures take them), (API 1.15) `providers` (the enabled providers: `{name, kind, models, default_model, host?, memory_gb?}`), `remote_deployment` (the deployment's remote switch, absent = off), `custom` (the registered custom nodes, absent = `pipelines.custom.valid.json`'s) and the expected `bounds`, `models`, `egress`, `reserved`. studio_service and the web editor both run them |
+| `fixtures/pipelines/` | the **shared pipeline-rule fixtures** (Pipeline rules, below): `workflows.json` (the workflows the caller can run), `valid.*` / `invalid.*` `{description, pipeline, problems}`, optionally `looks` and `loras` (the caller's usable looks and LoRAs, as the look fixtures take them), (API 1.15) `providers` (the enabled providers: `{name, kind, models, default_model, host?, memory_gb?}`), `remote_deployment` (the deployment's remote switch, absent = off), `custom` (the registered custom nodes, absent = `pipelines.custom.valid.json`'s), (API 1.74) `auto_model` (the pipelines default model as resolved, usable: `server:<n>/<m>` or `remote:<p>/<m>`; absent = the local LLM) and the expected `bounds`, `models`, `egress`, `reserved`. studio_service and the web editor both run them |
 | `fixtures/mentions/` | the **shared mention and look fixtures** (Mentions, Looks, below): `scan.json` (prompt → parts), `fit.json` (an item and a workflow → the fit reason), `resolve.*.json` (a graph with merged values, a library, chosen looks → the expanded inputs, `typed`, `elements`, `looks`, or `errors`), against `fixtures/graphs/palette.json`. studio_service and the web editor both run them |
 | `fixtures/voices/` | (API 1.30) the **shared voice fixtures** (Voices, below): `media.json` (a graph → `Workflow.media`, audio included), `fit.json` (a LibraryItem and a workflow → the voice fit's reason; looks and elements in an audio workflow), `seconds.json` (a graph and a stage → the `peak_gb` variable `speech_seconds`), each `{description, workflows: {name: WorkflowDoc}, cases: [{description, workflow, …, expect}]}` against `fixtures/graphs/palette.json`. studio_service, the web and the runner core run them | (API 1.32) `scripts.json` (a dialogue graph, the caller's elements and voices → `expand_script`; the fake take → `echo_dialogue`; write-script answers → `script_check`)
 | `fixtures/loras/` | the **shared LoRA fixtures** (LoRA normaliser, below): header-only files `{description, name, family?, metadata, tensors: {key: {dtype, shape}}, values: {alpha key: number}, ignore?, expect}` that runner_service and studio_service tests turn into synthetic safetensors (random A/B values, `values` for the alphas); `expect` = `{key_style, rank, total, applied, ignored, unapplied, error, family, licence}` against the canonical lora block of `family` (absent = qwen-image; `ltx`: `ltx.models.valid.json`'s) (`ignore`, when present, replaces its ignore list); `detect/families.json`: family detection cases (families with their envs and blocks, a LoRA fixture, the detected family) |
@@ -2523,6 +2523,26 @@ a local model (`model_media`): server and remote calls carry **text only** in 1.
   queues responses per model (each `{content?, tool_calls?, usage?}` or `{status, body}` for a failure, `{delay_s}`
   for a timeout), `GET /__requests` returns what it received (for the egress and "what leaves the machine" asserts).
   It needs no key; one that sends `Authorization` gets it recorded.
+
+### Model sources: the pipelines default model (API 1.74; plan 33, board Assistant frames 24 and 27; normative)
+
+What a write, decide or agent step's `auto` resolves to (Hub › In pipelines; `GET/PUT /v1/studio/admin/pipeline-model`,
+admin only, 403 otherwise; one row, `pipeline_model`, no owner, like session names):
+
+- `local` (the default, and the setting until the first PUT): exactly as before 1.74 (the family ask, else `llm-ask`).
+- `remote` + `provider` + `model` (absent: its `default_model`): an enabled shared provider of kind server or remote
+  (an Only-you one is 422: pipelines run for every account); kind remote needs the deployment's switch (409).
+- `assistant` (Same as Assistant): the Assistant's provider and model (`assistant_settings`, the deployment's, never an admin's Only-you
+  choice), followed as the Assistant changes; 422 while the Assistant has none, 409 while it is remote and the switch is off.
+
+At every check and Submit studio resolves `auto` for write, decide and agent nodes to `server:<name>/<model>` or
+`remote:<name>/<model>` while the setting names a usable provider now (enabled, its plugin on, shared, with that
+model, a remote one under the deployment's switch); otherwise to the local LLM as before. A judge's `auto` is always
+its family's vision model (judges send thumbnails). A node that names a model keeps it. The default is the admin's
+choice for every pipeline: a remote one needs no pipeline remote switch; Submit turns `snapshot.pipeline.remote` on
+for that provider (the pipeline's own caps, else 200 calls and 400 000 tokens), and it is listed in `egress` and
+`bounds` like a named one. `ModelSourceList.auto` tells every user what Auto resolves to now (null: the local LLM),
+for the editor's "Runs on · Auto" line.
 
 ### Tool calling on the ask contract
 

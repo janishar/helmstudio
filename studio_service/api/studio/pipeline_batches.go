@@ -290,6 +290,16 @@ func (s *Service) createPipelineBatch(ctx context.Context, tx pgx.Tx, caller com
 		SeedParams: map[string]string{}, Models: map[string]string{}, Near: info.Near, Bounds: info.Bounds,
 		Listed: info.Models, Sources: map[string]map[string]string{}, Providers: map[string]map[string]any{},
 		Remote: doc.RemoteFilled(), Fan: info.Fan, Lists: info.Lists, Custom: map[string]registry.CustomNode{}}
+	// API 1.74: the admin's remote default needs no pipeline switch; its calls count against the pipeline's caps
+	for id, wid := range info.Models {
+		if name, ok := strings.CutPrefix(wid, "remote:"); ok && doc.Nodes[id].ModelOr() == "auto" {
+			name, _, _ = strings.Cut(name, "/")
+			stored.Remote.Enabled = true
+			if !slices.Contains(stored.Remote.Providers, name) {
+				stored.Remote.Providers = append(slices.Clone(stored.Remote.Providers), name)
+			}
+		}
+	}
 	if err := s.modelSources(ctx, tx, &stored); err != nil {
 		return dto.Batch{}, err
 	}

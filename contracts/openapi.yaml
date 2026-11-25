@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.73.0
+  version: 1.74.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -2112,7 +2112,7 @@ paths:
     get:
       tags: [studio]
       operationId: studioAdminGetSessionNames
-      summary: How untitled sessions are named (Admin › AI agents)
+      summary: How untitled sessions are named (Hub › In pipelines)
       description: 'From 1.43. Admin only (403). contracts/README.md, Sessions: titles and naming.'
       responses:
         '200': {description: the setting, content: {application/json: {schema: {$ref: '#/components/schemas/SessionNames'}}}}
@@ -2135,6 +2135,39 @@ paths:
         content: {application/json: {schema: {$ref: '#/components/schemas/SessionNamesPut'}}}
       responses:
         '200': {description: the setting, content: {application/json: {schema: {$ref: '#/components/schemas/SessionNames'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/AdminRequired'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/admin/pipeline-model:
+    get:
+      tags: [studio]
+      operationId: studioAdminGetPipelineModel
+      summary: 'From 1.74: what Runs on · Auto means for pipeline write, decide and agent steps (Hub › In pipelines)'
+      description: 'Admin only (403). Local LLM (today''s behaviour) until the admin sets it. contracts/README.md, Model sources: the pipelines default model.'
+      responses:
+        '200': {description: the setting, content: {application/json: {schema: {$ref: '#/components/schemas/PipelineDefaultModel'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/AdminRequired'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    put:
+      tags: [studio]
+      operationId: studioAdminPutPipelineModel
+      summary: 'From 1.74: set the pipelines default model'
+      description: |
+        Admin only (403). Applies to pipelines checked and submitted from then on (a batch keeps what it was submitted
+        with). 422 `provider and model are only for remote`, `remote needs a provider`, `<provider> is not an enabled
+        provider`, `<provider> is only yours; pick a shared provider` (an Only-you provider: pipelines run for every
+        account), `<model> is not a model of <provider>`, `the Assistant is not set up` (assistant with no Assistant provider),
+        `the Assistant's provider is only yours; pick a shared provider`; 409 `remote models are off on this deployment` for
+        a provider of kind remote (or an Assistant on one) while the deployment's switch is off.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/PipelineDefaultModelPut'}}}
+      responses:
+        '200': {description: the setting, content: {application/json: {schema: {$ref: '#/components/schemas/PipelineDefaultModel'}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/AdminRequired'}
         '409': {$ref: '#/components/responses/Conflict'}
@@ -2348,7 +2381,7 @@ paths:
     get:
       tags: [studio]
       operationId: studioAdminGetAssistant
-      summary: 'From 1.44: the assistant''s settings (Admin › AI agents)'
+      summary: 'From 1.44: the assistant''s settings (Hub › Assistant)'
       description: 'Admin only (403). Off, with no provider, until the admin sets it.'
       responses:
         '200': {description: the settings, content: {application/json: {schema: {$ref: '#/components/schemas/AssistantSettings'}}}}
@@ -2379,7 +2412,7 @@ paths:
     get:
       tags: [studio]
       operationId: studioAdminGetAssistantCache
-      summary: 'From 1.66: the assistant''s prompt cache hit rate per provider and model (Admin › AI agents)'
+      summary: 'From 1.66: the assistant''s prompt cache hit rate per provider and model (Hub › Assistant)'
       description: 'Admin only (403). Over the last `days` days of every user''s assistant model calls, from the hits each reply reported (DeepSeek prompt_cache_hit_tokens, OpenAI cached_tokens, Anthropic cache_read_input_tokens); 503 when pipelines does not answer in 5 s.'
       responses:
         '200': {description: the hit rate per model, content: {application/json: {schema: {$ref: '#/components/schemas/AssistantCacheStats'}}}}
@@ -6514,7 +6547,7 @@ components:
       required: [mode, provider, model, local_available, remote_enabled, updated_at]
       description: 'from 1.43: how an untitled session is named (contracts/README.md, Sessions: titles and naming). Default off'
       properties:
-        mode: {type: string, enum: ['off', local, remote], description: 'off; local: the llm pack (Qwen3.8 27B) on the local GPU queue, nothing leaves the machine; remote: a provider of Admin › Model providers, kind remote (sends the prompt out) or server (on this network)'}
+        mode: {type: string, enum: ['off', local, remote], description: 'off; local: the llm pack (Qwen3.8 27B) on the local GPU queue, nothing leaves the machine; remote: a provider of Hub › Providers, kind remote (sends the prompt out) or server (on this network)'}
         provider: {type: [string, 'null'], description: 'remote: the provider''s name; null otherwise'}
         model: {type: [string, 'null'], description: 'remote: one of its models; null otherwise'}
         local_available: {type: boolean, description: 'a live host can run llm-ask now (else Local is greyed: "Qwen3.8 27B not downloaded")'}
@@ -6526,6 +6559,24 @@ components:
       additionalProperties: false
       properties:
         mode: {type: string, enum: ['off', local, remote]}
+        provider: {type: string, pattern: '^[a-z][a-z0-9-]{0,31}$', description: 'remote only, required there'}
+        model: {type: string, maxLength: 128, description: 'remote only; absent = the provider''s default_model'}
+    PipelineDefaultModel:
+      type: object
+      required: [mode, provider, model, remote_enabled, updated_at]
+      description: 'from 1.74: what a write, decide or agent step''s Runs on · Auto runs on (a judge keeps its family''s vision model). contracts/README.md, Model sources: the pipelines default model'
+      properties:
+        mode: {type: string, enum: [local, remote, assistant], description: 'local: the local LLM, as before 1.74 (the default); remote: a provider of Hub › Providers, kind server or remote; assistant: the Assistant''s own provider and model (Same as Assistant), followed as it changes'}
+        provider: {type: [string, 'null'], description: 'remote: the provider''s name; null otherwise'}
+        model: {type: [string, 'null'], description: 'remote: one of its models; null otherwise'}
+        remote_enabled: {type: boolean, description: 'the deployment''s remote switch'}
+        updated_at: {type: [string, 'null'], format: date-time, description: 'null until first set'}
+    PipelineDefaultModelPut:
+      type: object
+      required: [mode]
+      additionalProperties: false
+      properties:
+        mode: {type: string, enum: [local, remote, assistant]}
         provider: {type: string, pattern: '^[a-z][a-z0-9-]{0,31}$', description: 'remote only, required there'}
         model: {type: string, maxLength: 128, description: 'remote only; absent = the provider''s default_model'}
     ModelSourceList:
@@ -6547,6 +6598,16 @@ components:
               models: {type: array, items: {type: string}}
               default_model: {type: string}
               thinking: {type: object, additionalProperties: {$ref: '#/components/schemas/ThinkingLevel'}, description: 'from 1.53: the level set per model (absent: none set), shown where a model is picked'}
+        auto:
+          type: [object, 'null']
+          required: [kind, provider, model, title]
+          additionalProperties: false
+          description: 'from 1.74: what Runs on · Auto resolves to now for write, decide and agent steps (PipelineDefaultModel, usable now); null: the local LLM. A judge''s Auto is always its family''s vision model'
+          properties:
+            kind: {type: string, enum: [server, remote]}
+            provider: {type: string}
+            model: {type: string}
+            title: {type: string}
     # ---------------------------------------------------------- studio: the assistant (from 1.44; plan 18 22; the twins
     # of messages/assistant.schema.json are marked, check.py runs their fixtures against both)
     AssistantCallId: {type: string, pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[1-9][0-9]{0,5}:([0-9]|[1-9][0-9])$', description: '<thread_id>:<turn>:<n>'}
@@ -6888,7 +6949,7 @@ components:
     AssistantSettings:
       type: object
       required: [enabled, provider, model, web_search, search_provider, limits, remote_enabled, updated_at]
-      description: 'the admin''s assistant settings (Admin › AI agents)'
+      description: 'the admin''s assistant settings (Hub › Assistant)'
       properties:
         enabled: {type: boolean}
         provider: {type: [string, 'null'], description: 'a server or remote provider''s name; from 1.61 the caller''s own choice when they made one (`personal`)'}

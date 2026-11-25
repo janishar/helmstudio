@@ -76,6 +76,7 @@ func TestPipelineFixtures(t *testing.T) {
 				Reserved  *[]dto.PipelineReserved `json:"reserved"`
 				Providers []providerInfo          `json:"providers"`
 				Remote    bool                    `json:"remote_deployment"`
+				AutoModel string                  `json:"auto_model"`
 				Custom    []registry.CustomNode   `json:"custom"`
 			}
 			data, _ := os.ReadFile(file)
@@ -95,7 +96,7 @@ func TestPipelineFixtures(t *testing.T) {
 			}
 			problems, info := pipelineProblems(fixture.Pipeline, workflows, palette, fixture.Looks,
 				func(string) map[string]string { return fixture.Loras },
-				ruleEnv{Providers: fixture.Providers, RemoteOn: fixture.Remote, Custom: fixture.Custom})
+				ruleEnv{Providers: fixture.Providers, RemoteOn: fixture.Remote, Custom: fixture.Custom, Auto: fixture.AutoModel})
 			for _, p := range problems {
 				got[key(p)] = true
 				if p.Message == "" || (p.Blocks == "run") != pipelineRunOnly[p.Code] {
@@ -173,5 +174,22 @@ func TestMediaRowItems(t *testing.T) {
 	mediaRowItems(wf, inputs)
 	if got, _ := json.Marshal(inputs); string(got) != `{"generate.audios":[{"audio":{"take_id":"t"}}]}` {
 		t.Fatal(string(got))
+	}
+}
+
+// TestPipelineModelPutValidate: the pipelines default model's modes (API 1.74), a provider only with remote.
+func TestPipelineModelPutValidate(t *testing.T) {
+	s := func(v string) *string { return &v }
+	for _, c := range []struct {
+		body dto.PipelineModelPut
+		ok   bool
+	}{{dto.PipelineModelPut{Mode: "local"}, true}, {dto.PipelineModelPut{Mode: "assistant"}, true},
+		{dto.PipelineModelPut{Mode: "remote", Provider: s("ollama")}, true}, {dto.PipelineModelPut{Mode: "remote", Provider: s("ollama"), Model: s("m")}, true},
+		{dto.PipelineModelPut{Mode: "agent"}, false}, {dto.PipelineModelPut{Mode: "remote"}, false},
+		{dto.PipelineModelPut{Mode: "local", Provider: s("ollama")}, false}, {dto.PipelineModelPut{Mode: "assistant", Model: s("m")}, false},
+		{dto.PipelineModelPut{Mode: "remote", Provider: s("Bad Name")}, false}, {dto.PipelineModelPut{Mode: "remote", Provider: s("x"), Model: s("")}, false}} {
+		if got := c.body.Validate(); (got == "") != c.ok {
+			t.Errorf("%+v: %q", c.body, got)
+		}
 	}
 }

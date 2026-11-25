@@ -104,6 +104,8 @@ func (c *controller) MountRoutes(group *gin.RouterGroup) {
 	group.GET("/admin/providers", c.listProvidersHandler)
 	group.GET("/admin/session-names", c.getSessionNamesHandler)
 	group.PUT("/admin/session-names", c.putSessionNamesHandler)
+	group.GET("/admin/pipeline-model", c.getPipelineModelHandler)
+	group.PUT("/admin/pipeline-model", c.putPipelineModelHandler)
 	group.PUT("/admin/providers/:name", c.putProviderHandler)
 	group.DELETE("/admin/providers/:name", c.deleteProviderHandler)
 	group.POST("/admin/providers/:name/test", c.testProviderHandler)
@@ -968,6 +970,32 @@ func (c *controller) putSessionNamesHandler(ctx *gin.Context) {
 	var out dto.SessionNames
 	if err == nil {
 		out, err = c.service.PutSessionNames(ctx.Request.Context(), caller, body)
+	}
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// getPipelineModelHandler: GET /admin/pipeline-model (API 1.74).
+func (c *controller) getPipelineModelHandler(ctx *gin.Context) {
+	out, err := c.service.GetPipelineModel(ctx.Request.Context(), common.MustCaller(ctx))
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// putPipelineModelHandler: PUT /admin/pipeline-model — 403 before the body is read.
+func (c *controller) putPipelineModelHandler(ctx *gin.Context) {
+	caller := common.MustCaller(ctx)
+	if !caller.IsAdmin() {
+		network.SendMixedError(ctx, errAdmin)
+		return
+	}
+	body, err := strictBody[dto.PipelineModelPut](ctx, false)
+	if err == nil {
+		if detail := body.Validate(); detail != "" {
+			err = network.NewUnprocessableError(detail, nil)
+		}
+	}
+	var out dto.PipelineModel
+	if err == nil {
+		out, err = c.service.PutPipelineModel(ctx.Request.Context(), caller, body)
 	}
 	reply(ctx, http.StatusOK, out, err)
 }

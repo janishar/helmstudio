@@ -135,6 +135,9 @@ func readProviders(ctx context.Context, tx pgx.Tx, enabledOnly bool) ([]provider
 func (s *Service) ruleEnv(ctx context.Context, tx pgx.Tx) (ruleEnv, error) {
 	rows, err := readProviders(ctx, tx, true)
 	env := ruleEnv{RemoteOn: s.remoteOn, Custom: s.registry.Custom()}
+	if err == nil {
+		env.Auto, err = s.pipelineAutoWid(ctx, tx)
+	}
 	for _, p := range rows {
 		env.Providers = append(env.Providers, providerInfo{Name: p.Name, Kind: p.Kind, Models: p.Models,
 			DefaultModel: p.DefaultModel, Host: deref(p.Host), MemoryGB: deref(p.MemoryGB)})
@@ -593,6 +596,13 @@ func (s *Service) ModelSources(ctx context.Context, caller common.Caller) (dto.M
 			}
 			out.Sources = append(out.Sources, dto.ModelSource{Name: p.Name, Kind: p.Kind, Title: cmp.Or(deref(p.Title), p.Name),
 				Models: p.Models, DefaultModel: p.DefaultModel, Thinking: p.Thinking})
+		}
+		if err != nil {
+			return err
+		}
+		p, model, ok, err := s.pipelineAuto(ctx, tx) // API 1.74
+		if ok {
+			out.Auto = &dto.AutoSource{Kind: p.Kind, Provider: p.Name, Model: model, Title: cmp.Or(deref(p.Title), p.Name)}
 		}
 		return err
 	})

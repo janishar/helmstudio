@@ -141,6 +141,9 @@ def test_pipeline_rules_match_the_fixtures(name):
     info = {}
     got = pipeline.problems(doc, info, fx.get("custom") or custom.registry(), fx.get("providers"))
     assert got == want
+    # studio resolves auto to the pipelines default at Submit: the snapshot carries it
+    if "auto_model" in fx:
+        return
     if bounds:  # Submit's worst case per row: runs, LLM calls, tool calls, remote calls and tokens
         assert info["bounds"] == bounds
     if "egress" in fx:  # what leaves the machine, and what the servers reserve

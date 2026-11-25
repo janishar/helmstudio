@@ -783,11 +783,12 @@ def settable(wf: dict, palette: dict) -> dict[str, dict]:
 
 def pipeline_problems(doc: dict, workflows: dict[str, dict], palette: dict, looks: list[dict] | None = None,
                       loras: dict[str, str] | None = None, info: dict | None = None, providers: list[dict] | None = None,
-                      remote_on: bool = False, custom: list[dict] | None = None) -> set[tuple]:
+                      remote_on: bool = False, custom: list[dict] | None = None, auto: str | None = None) -> set[tuple]:
     """Every problem as (code, node, port, param); workflows: the id → WorkflowDoc the caller can run; looks, loras:
     the looks and LoRAs the caller can use now (as resolve_mentions takes them); providers: the enabled model
     providers (name, kind, models, default_model, host, memory_gb); remote_on: the deployment's remote switch;
-    custom: the registered custom nodes. `info`, when given, receives the worst case per row (`bounds`), the model
+    custom: the registered custom nodes; auto (from 1.74): the pipelines default model as resolved and usable now
+    (`server:<n>/<m>`, `remote:<p>/<m>`; None: the local LLM), what a write, decide or agent node's auto runs on. `info`, when given, receives the worst case per row (`bounds`), the model
     nodes' models as resolved (`models`), what leaves the machine (`egress`) and the servers' memory (`reserved`)."""
     out, nodes = set(), doc["nodes"]
     add = lambda code, node=None, port=None, param=None: out.add((code, node, port, param))
@@ -1001,8 +1002,10 @@ def pipeline_problems(doc: dict, workflows: dict[str, dict], palette: dict, look
                 model or p["default_model"]) in p["models"] else None
         elif m != "auto":
             wid = m if text_workflow(m) else None
-        elif n["kind"] == "judge":
+        elif n["kind"] == "judge":  # a judge sends thumbnails: always its family's vision model
             wid = family_ask(n["takes"])
+        elif auto:  # 1.74: the admin's default for every pipeline (no pipeline remote switch)
+            wid = auto
         else:  # the step nearest before it: the one every other step before it comes before
             doms = [s for s in of("step") if dominates(s, nid) and s != nid]
             wid = family_ask(next((d for d in doms if all(o == d or dominates(o, d) for o in doms)), None))
@@ -1157,7 +1160,8 @@ def check_pipelines(registry: Registry, palette: dict) -> None:
             continue
         info = {}
         got = pipeline_problems(fx["pipeline"], workflows, palette, fx.get("looks"), fx.get("loras"), info,
-                                fx.get("providers"), fx.get("remote_deployment", False), fx.get("custom", custom))
+                                fx.get("providers"), fx.get("remote_deployment", False), fx.get("custom", custom),
+                                fx.get("auto_model"))
         want = {(x["code"], x.get("node"), x.get("port"), x.get("param")) for x in fx["problems"]}
         if not p.name.startswith(("valid.", "invalid.")) or p.name.startswith("valid.") != (not want):
             fail(f"{name}: valid.* has no problems, invalid.* has some")

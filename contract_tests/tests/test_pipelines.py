@@ -247,12 +247,14 @@ def live_workflows(client, pipeline: dict) -> dict:
 def live_sources(client) -> dict:
     """check.pipeline_problems' 1.15 context as the caller sees it now: the enabled providers (GET /model-sources,
     redacted: no host or memory_gb, so `reserved` needs the admin's list), the deployment's remote switch and the
-    registered custom nodes."""
+    registered custom nodes; from 1.74 what Auto resolves to."""
     ms = ok(client.get(f"{STUDIO}/model-sources"))
     return {
         "providers": [s | {"enabled": True} for s in ms["sources"]],
         "remote_on": ms["remote_enabled"],
         "custom": ok(client.get(f"{STUDIO}/custom-nodes"))["nodes"],
+        # 1.74: the pipelines default model as Auto resolves now (null: the local LLM)
+        "auto": f"{a['kind']}:{a['provider']}/{a['model']}" if (a := ms.get("auto")) else None,
     }
 
 

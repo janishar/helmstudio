@@ -280,6 +280,15 @@ type ModelSource struct {
 type ModelSourceList struct {
 	RemoteEnabled bool          `json:"remote_enabled"`
 	Sources       []ModelSource `json:"sources"`
+	Auto          *AutoSource   `json:"auto"` // API 1.74: what Runs on · Auto resolves to now; nil: the local LLM
+}
+
+// AutoSource is ModelSourceList.auto.
+type AutoSource struct {
+	Kind     string `json:"kind"`
+	Provider string `json:"provider"`
+	Model    string `json:"model"`
+	Title    string `json:"title"`
 }
 
 // CustomNodeList is GET /custom-nodes.

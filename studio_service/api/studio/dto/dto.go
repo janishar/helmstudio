@@ -70,6 +70,39 @@ func (b *SessionNamesPut) Validate() string {
 	return ""
 }
 
+// PipelineModel is GET/PUT /admin/pipeline-model (API 1.74).
+type PipelineModel struct {
+	Mode          string     `json:"mode"`
+	Provider      *string    `json:"provider"`
+	Model         *string    `json:"model"`
+	RemoteEnabled bool       `json:"remote_enabled"`
+	UpdatedAt     *time.Time `json:"updated_at"`
+}
+
+// PipelineModelPut sets the pipelines default model.
+type PipelineModelPut struct {
+	Mode     string  `json:"mode"`
+	Provider *string `json:"provider"`
+	Model    *string `json:"model"`
+}
+
+// Validate wants a known mode, and a provider only with remote.
+func (b *PipelineModelPut) Validate() string {
+	switch {
+	case b.Mode != "local" && b.Mode != "remote" && b.Mode != "assistant":
+		return "mode must be local, remote or assistant"
+	case b.Mode != "remote" && (b.Provider != nil || b.Model != nil):
+		return "provider and model are only for remote"
+	case b.Mode == "remote" && b.Provider == nil:
+		return "remote needs a provider"
+	case b.Provider != nil && !ProviderName.MatchString(*b.Provider):
+		return "provider must be a provider's name"
+	case b.Model != nil && (*b.Model == "" || len(*b.Model) > 128):
+		return "model must be 1-128 characters"
+	}
+	return ""
+}
+
 // SessionCreate is POST /sessions; a missing or blank title is "Untitled".
 type SessionCreate struct {
 	Title      *string `json:"title"`

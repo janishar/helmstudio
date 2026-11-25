@@ -161,6 +161,9 @@ type ruleEnv struct {
 	Providers []providerInfo
 	RemoteOn  bool
 	Custom    []registry.CustomNode
+	// Auto is the pipelines default model for a write, decide or agent node's auto (API 1.74): `server:<name>/<model>`
+	// or `remote:<name>/<model>`, usable now; "" for the local LLM
+	Auto string
 }
 
 // promptTokens bounds one prompt for the remote worst case (32768 characters / 4); answerTokens is each kind's
@@ -539,7 +542,7 @@ func pipelineProblems(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc,
 		}
 		return false
 	}
-	pipelineModels(doc, workflows, of("step"), dominates, providers, remoteOK, &info, add)
+	pipelineModels(doc, workflows, of("step"), dominates, providers, remoteOK, env.Auto, &info, add)
 	for _, id := range of("custom") {
 		n := nodes[id]
 		c, ok := registered[n.CustomNode]
@@ -690,9 +693,10 @@ func pipelineProblems(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc,
 // Model sources): a named one must be a text workflow the caller can run; auto is the ask template of the family of a
 // judge's takes step, or of the nearest step before the node (the step before it that every other step before it
 // precedes), else llm-ask; `server:<name>[/<model>]` an enabled server with that model (default filled);
-// `remote:<provider>/<model>` an enabled remote one, both switches on (remoteOK). None is unknown_model.
+// `remote:<provider>/<model>` an enabled remote one, both switches on (remoteOK). None is unknown_model. From API 1.74
+// a write, decide or agent node's auto is the pipelines default model (auto, already checked usable) when one is set.
 func pipelineModels(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc, steps []string, dominates func(a, b string) bool,
-	providers map[string]providerInfo, remoteOK func(id, name string) bool, info *pipelineInfo,
+	providers map[string]providerInfo, remoteOK func(id, name string) bool, auto string, info *pipelineInfo,
 	add func(code, node, port, param, message string, args ...any)) {
 	text := func(id string) bool { wf, ok := workflows[id]; return ok && isText(wf) }
 	familyAsk := func(step string) string {
@@ -747,6 +751,8 @@ func pipelineModels(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc, s
 			if text(m) {
 				wid = m
 			}
+		} else if auto != "" && n.Kind != "judge" { // a judge sends thumbnails: its family's vision model
+			wid = auto
 		} else {
 			wid = familyAsk(near)
 		}
