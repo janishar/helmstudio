@@ -28,6 +28,6 @@ GPU_HOST=gpu1 HELMSTUDIO_MODELS=/path/to/models make runners-nvidia
 ```
 
 Then open http://localhost:8300. `make runners-nvidia` starts env torch, and env native when SGLang is found
-(`SGLANG_BIN`, else `sglang` on PATH). The host name is `GPU_HOST` (default: the first of `GPU_HOSTS`, else the
-machine's short name in lower-case letters and digits); it must be one `make up GPU_HOSTS=…` made. Logs:
+(`SGLANG_BIN`, else `sglang` on PATH). The host name is `GPU_HOST` (default: the first of `GPU_HOSTS`, else the one
+host `make up` made, else the machine's short name); it must be one `make up GPU_HOSTS=…` made. Logs:
 `runner_service/.run/runner-<host>-<env>.log`. Stop: `make runners-nvidia-stop`, then `make down`.

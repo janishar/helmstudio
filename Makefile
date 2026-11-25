@@ -164,10 +164,10 @@ runners-stop:     ## stops the native runners (each by its pid file; only a proc
 # restarts alone.
 # The runners of a Linux NVIDIA machine (or WSL2) on the host, from source (docs/guides/nvidia-linux.md): no CUDA
 # image ships. Env torch always; env native when SGLang is found (SGLANG_BIN, else `sglang` on PATH). Host GPU_HOST
-# (default the short hostname, lower-case letters and digits) with the NATS user and S3 identity that
+# (default: the first of GPU_HOSTS, else the one GPU host deploy/secrets has, else the short hostname) with the NATS user and S3 identity that
 # make up GPU_HOSTS=<h> made, over plain nats:// and http:// on 127.0.0.1 (this machine's stack: no tunnel, no TLS).
 # Logs and pid files as the Mac's: runner_service/.run/runner-<h>-<env>.{pid,log}; make runners-nvidia-stop.
-GPU_HOST ?= $(or $(firstword $(GPU_HOSTS)),$(shell hostname -s | tr A-Z a-z | tr -cd a-z0-9))
+GPU_HOST ?= $(or $(firstword $(GPU_HOSTS)),$(shell ls $(SECRETS) 2>/dev/null | sed -n 's/^nats_runner_\([a-z0-9]*\)_torch_password$$/\1/p' | grep -vx mac | head -1),$(shell hostname -s | tr A-Z a-z | tr -cd a-z0-9))
 SGLANG_FOUND = $(or $(SGLANG_BIN),$(shell command -v sglang))
 runners-nvidia:   ## the NVIDIA host runners in the background (needs make up GPU_HOSTS=<h>); GPU_HOST=<h>, SGLANG_BIN, HELMSTUDIO_MODELS
 	@h=$(GPU_HOST); [ -f $(SECRETS)/nats_runner_$${h}_torch_password ] || { echo "no credentials for host $$h: make up GPU_HOSTS=$$h"; exit 2; }; \
