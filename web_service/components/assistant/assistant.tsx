@@ -2091,9 +2091,33 @@ function Drawer({ a }: { a: AssistantApi }) {
   if ((since?.id ?? null) !== thinkId)
     setSince(() => (thinkId ? { id: thinkId, at: Date.now() } : null));
   const thinking = !!since && !a.readOnly && !a.cardWaits;
+  // the thread opens at its end and stays pinned there while it grows (new entries, pictures and videos loading),
+  // unless you scrolled up to read (owner, 2026-11-25: "on launch should start with scroll to the end")
+  const thr = useRef<HTMLDivElement>(null);
+  const atEnd = useRef(true);
+  const toEnd = useCallback(() => {
+    const el = thr.current;
+    if (el && atEnd.current) el.scrollTop = el.scrollHeight;
+  }, []);
   useEffect(() => {
-    end.current?.scrollIntoView({ block: "nearest" });
-  }, [count, thinking]);
+    if (!a.open) return;
+    atEnd.current = true; // opening (or another chat) starts at the end
+    toEnd();
+    const id = requestAnimationFrame(toEnd);
+    const el = thr.current;
+    // media load after the first paint and make the thread taller: follow them while pinned
+    el?.addEventListener("load", toEnd, true);
+    el?.addEventListener("loadedmetadata", toEnd, true);
+    return () => {
+      cancelAnimationFrame(id);
+      el?.removeEventListener("load", toEnd, true);
+      el?.removeEventListener("loadedmetadata", toEnd, true);
+    };
+  }, [a.open, a.full, a.view?.thread.id, toEnd]);
+  useEffect(() => {
+    toEnd();
+    if (!thr.current) end.current?.scrollIntoView({ block: "nearest" });
+  }, [count, thinking, toEnd]);
   useEffect(() => {
     if (a.open) input.current?.focus();
   }, [a.open]);
@@ -2384,7 +2408,14 @@ function Drawer({ a }: { a: AssistantApi }) {
             </div>
           )}
 
-          <div className={`thr ${a.readOnly ? "ro" : ""}`}>
+          <div
+            ref={thr}
+            className={`thr ${a.readOnly ? "ro" : ""}`}
+            onScroll={(e) => {
+              const el = e.currentTarget;
+              atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+            }}
+          >
             {entries.length === 0 && !a.asking ? (
               <div className="flex flex-col gap-2.5">
                 <p className="m-0 font-display text-lg font-bold">Hi. What should we make?</p>
