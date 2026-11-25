@@ -4014,7 +4014,7 @@ The prompt is laid out so the provider's prompt cache hits (DeepSeek and OpenAI 
   `pipelines.assistant.cache`: calls, prompt tokens, hit tokens and `hit_rate`.
 - **Later.** Anthropic `cache_control` markers (none sent today) and KV reuse on the local MLX runner.
 
-### Assistant: shot list (API 1.69; alpha.2 items 28 and 29, owner 2026-11-25; Memory board Assistant frame 18 awaits approval; normative)
+### Assistant: shot list (API 1.69; alpha.2 items 28 and 29, owner 2026-11-25; Assistant board frame 18, owner approved; normative)
 
 The owner's case: in a new chat, "For Shot 3, I don't have your shot list". The plan of a film now lives in Memory,
 so every chat on every screen reads it, and a shot that is not in it is asked about, never guessed.
@@ -4025,7 +4025,7 @@ so every chat on every screen reads it, and a shot that is not in it is asked ab
   line?, take_id?}]}` (1-60 shots, by `n` ascending, `n` unique); `text` is its summary in plain words (`Shot list ·
   <film>: N shots, K with a take. 1 <what> (3 s); …`, at most 500 characters), rewritten at each save. It counts
   toward the 200 items; `thread_id` is the chat that saved it last. A PATCH changes the text only (the shots stay);
-  Delete and Clear all remove it. The Memory › Projects UI for a list is on the board (frame 18), not built.
+  Delete and Clear all remove it. Memory › Projects shows a list as its own row (board frame 18).
 - **`save_shots`** {film, shots?, replace?, remove?} (served by pipelines, no card, a memory write: 8 a message,
   merged by number, so replaying it gives the same list): a shot by `n` is added or updated, only the fields given (`what` is
   needed for a new one); `replace` true makes the list exactly `shots`; `remove` drops numbers. `film` and each `what`

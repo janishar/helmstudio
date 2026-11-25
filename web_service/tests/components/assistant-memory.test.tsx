@@ -5,6 +5,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { api, type S } from "@/lib/api";
+import { remember } from "@/lib/take-cache";
 import { answer } from "./helpers";
 
 let path = "/";
@@ -28,6 +29,9 @@ const { AppShell } = await import("@/components/shell");
 beforeAll(() => {
   HTMLElement.prototype.hidePopover ??= () => undefined;
   Element.prototype.scrollIntoView ??= () => undefined;
+  HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
+    this.open = true;
+  };
 });
 beforeEach(() => {
   sessionStorage.clear(); // the drawer's open state and tab id live per tab
@@ -199,6 +203,99 @@ describe("the Memory list", () => {
     expect(await screen.findByText("Nothing here yet.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Close Memory" }));
     expect(screen.getByRole("textbox", { name: "Message the assistant" })).toBeTruthy();
+  });
+});
+
+describe("a film's shot list (board frame 18)", () => {
+  const TAKE = "77777777-0000-4000-8000-000000000001";
+  const shots = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      n: i + 1,
+      what: i === 0 ? "Wide: @mara on the wet street" : `Shot ${i + 1} what`,
+      seconds: 3,
+      ...(i === 0 ? { take_id: TAKE } : {}),
+      ...(i === 2 ? { line: "@mara: Wait for me." } : {}),
+    }));
+  const list = (n: number, over: Partial<S<"AssistantMemoryItem">> = {}) => ({
+    ...mem(5, "project", "Shot list · Neon rain: …"),
+    shots: { film: "Neon rain", shots: shots(n) },
+    ...over,
+  });
+  const memoryWith = (items: S<"AssistantMemoryItem">[]) => {
+    const get = vi.spyOn(api, "GET");
+    const base = get.getMockImplementation() as unknown as (p: string, init: unknown) => unknown;
+    get.mockImplementation(((p: string, init: unknown) =>
+      p === "/v1/studio/assistant/memory"
+        ? Promise.resolve({ data: { items, counts: {} }, response: new Response() })
+        : base(p, init)) as never);
+  };
+
+  it("a: its own row with counts, one line per shot, the take or a dashed box, Next; ⋯ Edit and Delete", async () => {
+    serve({ existing: thread() });
+    remember([
+      { id: TAKE, title: "Street", kind: "image", thumb_url: "https://x.test/t.jpg" } as S<"Take">,
+    ]);
+    memoryWith([list(4)]);
+    const deletes: string[] = [];
+    vi.spyOn(api, "DELETE").mockImplementation(((
+      _: string,
+      init: { params: { path: { item_id: string } } },
+    ) => {
+      deletes.push(init.params.path.item_id);
+      return Promise.resolve({ data: undefined, response: new Response(null, { status: 204 }) });
+    }) as never);
+    await openDrawer();
+    fireEvent.click(screen.getByRole("button", { name: "Memory" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Projects" }));
+    expect(await screen.findByText("Neon rain · shot list")).toBeTruthy();
+    expect(screen.getByText("4 shots · 1 with a take · 12 s planned · Rain still · today")).toBeTruthy();
+    const ol = screen.getByRole("list", { name: "Shots of Neon rain" });
+    const rows = ol.querySelectorAll(":scope > li");
+    expect(rows).toHaveLength(4);
+    expect(rows[0].querySelector(".mn")?.textContent).toBe("@mara");
+    expect(rows[2].textContent).toContain('"@mara: Wait for me."');
+    expect(rows[0].textContent).toContain("3 s");
+    // the first shot without a take is Next; no take is a dashed box
+    expect(within(rows[1] as HTMLElement).getByText("Next")).toBeTruthy();
+    expect(ol.querySelectorAll(".tag")).toHaveLength(1);
+    expect(within(rows[1] as HTMLElement).getByLabelText("No take yet")).toBeTruthy();
+    fireEvent.click(within(ol).getByRole("button", { name: "Open the take of shot 1" }));
+    expect(screen.getByRole("dialog", { name: "Street" })).toBeTruthy();
+    // no chevron for a short list
+    expect(screen.queryByRole("button", { name: /^Show all/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "More for this item" }));
+    expect(screen.getByRole("menuitem", { name: "Edit" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+    await waitFor(() => expect(deletes).toEqual([list(4).id]));
+  });
+
+  it("b: a long list shows its first 3 shots and the chevron, up again to fold", async () => {
+    serve({ existing: thread() });
+    memoryWith([list(8)]);
+    await openDrawer();
+    fireEvent.click(screen.getByRole("button", { name: "Memory" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Projects" }));
+    const ol = await screen.findByRole("list", { name: "Shots of Neon rain" });
+    expect(ol.querySelectorAll(":scope > li")).toHaveLength(3);
+    fireEvent.click(screen.getByRole("button", { name: "Show all 8 shots" }));
+    expect(ol.querySelectorAll(":scope > li")).toHaveLength(8);
+    fireEvent.click(screen.getByRole("button", { name: "Show less" }));
+    expect(ol.querySelectorAll(":scope > li")).toHaveLength(3);
+  });
+
+  it("b: the chat's line names the film and its count, with no Undo", async () => {
+    serve({
+      existing: thread(),
+      entries: [
+        entry(1, {
+          kind: "line",
+          line: { id: id(0), status: "done", text: "Shot list · Neon rain: 6 shots", undo: false },
+        }),
+      ],
+    });
+    await openDrawer();
+    const line = (await screen.findByText("Shot list · Neon rain: 6 shots")).closest("li")!;
+    expect(within(line).queryByRole("button", { name: /Undo/ })).toBeNull();
   });
 });
 

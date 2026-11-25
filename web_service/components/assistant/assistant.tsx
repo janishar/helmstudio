@@ -50,6 +50,7 @@ import {
 } from "lucide-react";
 import { api, message, ok, type S } from "@/lib/api";
 import { safeUrl } from "@/lib/format";
+import { FullScreen } from "@/components/media";
 import { useTakes } from "@/lib/take-cache";
 import {
   ASSISTANT_CHANGED,
@@ -1528,6 +1529,116 @@ function RowMenu({ busy, edit, remove }: { busy: boolean; edit: () => void; remo
 type MemoryItem = S<"AssistantMemoryItem">;
 type MemoryKind = S<"AssistantMemoryKind">;
 
+/** A list of more shots than this shows its first SHOTS_SHOWN, then the round chevron (board frame 18b). */
+const SHOTS_FOLD = 6;
+const SHOTS_SHOWN = 3;
+
+/** A film's shot list in Memory › Projects (items 28, 29; board frame 18a, b): the film and its counts, then one
+ * line per shot (number, what, the line spoken, length, the take or a dashed box); the first without a take is Next. */
+function ShotListRow({
+  item,
+  list,
+  menu,
+}: {
+  item: MemoryItem;
+  list: S<"AssistantShotList">;
+  menu: React.ReactNode;
+}) {
+  const [all, setAll] = useState(false);
+  const [open, setOpen] = useState<S<"Take"> | null>(null);
+  const take = useTakes(list.shots.flatMap((s) => (s.take_id ? [s.take_id] : [])));
+  const { film, shots } = list;
+  const took = shots.filter((s) => s.take_id).length;
+  const secs = Math.round(shots.reduce((a, s) => a + (s.seconds ?? 0), 0));
+  const next = shots.find((s) => !s.take_id)?.n;
+  const fold = shots.length > SHOTS_FOLD;
+  const shown = fold && !all ? shots.slice(0, SHOTS_SHOWN) : shots;
+  const box = "h-6 w-10 flex-none rounded-md";
+  return (
+    <li className="mrow flex-col items-stretch! gap-1">
+      <div className="flex items-start gap-1.5">
+        <div className="min-w-0 flex-auto">
+          <p className="m-0 font-semibold text-t1">{film} · shot list</p>
+          <small>
+            {[
+              `${shots.length} shot${shots.length === 1 ? "" : "s"}`,
+              `${took} with a take`,
+              secs ? `${secs} s planned` : "",
+              item.thread?.title || "deleted",
+              ago(item.updated_at),
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </small>
+        </div>
+        {menu}
+      </div>
+      <ol aria-label={`Shots of ${film}`} className="m-0 list-none rounded-[10px] bg-s1 px-2 py-0.5">
+        {shown.map((s) => {
+          const t = s.take_id ? take(s.take_id) : null;
+          const src = safeUrl(t?.thumb_url);
+          return (
+            <li key={s.n} className="flex items-center gap-2 px-0.5 py-[5px]">
+              <span className="kbd mt-0! min-w-3 flex-none text-center">{s.n}</span>
+              <span className="min-w-0 flex-auto">
+                <span className="block truncate">
+                  <Mentions text={s.what} />
+                </span>
+                {s.line && (
+                  <small className="m-0! mt-px! block truncate text-[11px]! italic">
+                    &quot;{s.line}&quot;
+                  </small>
+                )}
+              </span>
+              {s.n === next && (
+                <span className="tag bg-[color-mix(in_srgb,var(--a1)_18%,transparent)] text-a1">
+                  Next
+                </span>
+              )}
+              {s.seconds != null && (
+                <small className="m-0! flex-none font-mono">{Math.round(s.seconds * 10) / 10} s</small>
+              )}
+              {t && src ? (
+                <button
+                  type="button"
+                  className={`pic ${box} border-0 bg-cover bg-center shadow-none!`}
+                  aria-label={`Open the take of shot ${s.n}`}
+                  title={t.title}
+                  style={{ backgroundImage: `url("${src}")` }}
+                  onClick={() => setOpen(t)}
+                />
+              ) : (
+                <span
+                  className={`${box} box-border border border-dashed border-line`}
+                  aria-label={s.take_id ? (t === null ? "Take deleted" : "Take") : "No take yet"}
+                  title={s.take_id ? (t === null ? "Take deleted" : "Take") : "No take yet"}
+                />
+              )}
+            </li>
+          );
+        })}
+      </ol>
+      {fold && (
+        <button
+          type="button"
+          className="mmore mt-0.5! mb-0!"
+          aria-expanded={all}
+          aria-label={all ? "Show less" : `Show all ${shots.length} shots`}
+          title={all ? "Show less" : `Show all ${shots.length} shots`}
+          onClick={() => setAll(!all)}
+        >
+          {all ? (
+            <ChevronUp size={14} strokeWidth={2.25} aria-hidden />
+          ) : (
+            <ChevronDown size={14} strokeWidth={2.25} aria-hidden />
+          )}
+        </button>
+      )}
+      {open && <FullScreen take={open} onClose={() => setOpen(null)} onStep={() => undefined} />}
+    </li>
+  );
+}
+
 /** The Memory list (§22.8, board frame 6): the four kinds as tabs, each item with its chat, Edit and Delete (your
  * clicks), and Clear all behind a card. Items are text, never orders. */
 function MemoryList() {
@@ -1632,6 +1743,19 @@ function MemoryList() {
                   Cancel
                 </button>
               </li>
+            ) : x.shots ? (
+              <ShotListRow
+                key={x.id}
+                item={x}
+                list={x.shots}
+                menu={
+                  <RowMenu
+                    busy={busy}
+                    edit={() => setEditing({ id: x.id, text: x.text })}
+                    remove={() => void remove(x.id)}
+                  />
+                }
+              />
             ) : (
               // the text takes the full width, 3 lines then More; Edit and Delete in ⋯ (item 5, board frame 14a)
               <li key={x.id} className="mrow">
