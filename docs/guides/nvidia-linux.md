@@ -26,8 +26,9 @@ source, on the card's own driver (like the Mac's `make runners`). On Windows do 
   export SGLANG_BIN=~/sglang/bin/sglang
   ```
 
-  A venv on the system's Python also needs its headers (`sudo apt install python3.12-dev`): SGLang's Triton
-  kernels compile against `Python.h` on the first run.
+  SGLang compiles GPU kernels on its first run, so it also needs a C compiler and Python's headers:
+  `sudo apt install build-essential python3.12-dev` (without them: "gcc: No such file or directory" or "Python.h:
+  No such file or directory"). The first video takes a few minutes longer while it compiles.
 
 ## 2. Run
 
