@@ -718,7 +718,7 @@ export function MemoryCard({ hosts, env }: { hosts: S<"Host">[] | null; env: str
           <Info>
             {c.host}: what its envs hold together.{" "}
             {admin
-              ? "The same controls as Admin › Hosts."
+              ? "The same controls as System › Hosts."
               : "Only admins can pin, unload or change what stays after the queue."}
           </Info>
         </h2>

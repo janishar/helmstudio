@@ -2071,7 +2071,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * How untitled sessions are named (Admin › AI agents)
+         * How untitled sessions are named (Hub › In pipelines)
          * @description From 1.43. Admin only (403). contracts/README.md, Sessions: titles and naming.
          */
         get: operations["studioAdminGetSessionNames"];
@@ -2085,6 +2085,35 @@ export interface paths {
          *     network", needs no switch).
          */
         put: operations["studioAdminPutSessionNames"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/admin/pipeline-model": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * From 1.74: what Runs on · Auto means for pipeline write, decide and agent steps (Hub › In pipelines)
+         * @description Admin only (403). Local LLM (today's behaviour) until the admin sets it. contracts/README.md, Model sources: the pipelines default model.
+         */
+        get: operations["studioAdminGetPipelineModel"];
+        /**
+         * From 1.74: set the pipelines default model
+         * @description Admin only (403). Applies to pipelines checked and submitted from then on (a batch keeps what it was submitted
+         *     with). 422 `provider and model are only for remote`, `remote needs a provider`, `<provider> is not an enabled
+         *     provider`, `<provider> is only yours; pick a shared provider` (an Only-you provider: pipelines run for every
+         *     account), `<model> is not a model of <provider>`, `the Assistant is not set up` (assistant with no Assistant provider),
+         *     `the Assistant's provider is only yours; pick a shared provider`; 409 `remote models are off on this deployment` for
+         *     a provider of kind remote (or an Assistant on one) while the deployment's switch is off.
+         */
+        put: operations["studioAdminPutPipelineModel"];
         post?: never;
         delete?: never;
         options?: never;
@@ -2281,7 +2310,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * From 1.44: the assistant's settings (Admin › AI agents)
+         * From 1.44: the assistant's settings (Hub › Assistant)
          * @description Admin only (403). Off, with no provider, until the admin sets it.
          */
         get: operations["studioAdminGetAssistant"];
@@ -2308,7 +2337,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * From 1.66: the assistant's prompt cache hit rate per provider and model (Admin › AI agents)
+         * From 1.66: the assistant's prompt cache hit rate per provider and model (Hub › Assistant)
          * @description Admin only (403). Over the last `days` days of every user's assistant model calls, from the hits each reply reported (DeepSeek prompt_cache_hit_tokens, OpenAI cached_tokens, Anthropic cache_read_input_tokens); 503 when pipelines does not answer in 5 s.
          */
         get: operations["studioAdminGetAssistantCache"];
@@ -6724,7 +6753,7 @@ export interface components {
         /** @description from 1.43: how an untitled session is named (contracts/README.md, Sessions: titles and naming). Default off */
         SessionNames: {
             /**
-             * @description off; local: the llm pack (Qwen3.8 27B) on the local GPU queue, nothing leaves the machine; remote: a provider of Admin › Model providers, kind remote (sends the prompt out) or server (on this network)
+             * @description off; local: the llm pack (Qwen3.8 27B) on the local GPU queue, nothing leaves the machine; remote: a provider of Hub › Providers, kind remote (sends the prompt out) or server (on this network)
              * @enum {string}
              */
             mode: "off" | "local" | "remote";
@@ -6750,6 +6779,33 @@ export interface components {
             /** @description remote only; absent = the provider's default_model */
             model?: string;
         };
+        /** @description from 1.74: what a write, decide or agent step's Runs on · Auto runs on (a judge keeps its family's vision model). contracts/README.md, Model sources: the pipelines default model */
+        PipelineDefaultModel: {
+            /**
+             * @description local: the local LLM, as before 1.74 (the default); remote: a provider of Hub › Providers, kind server or remote; assistant: the Assistant's own provider and model (Same as Assistant), followed as it changes
+             * @enum {string}
+             */
+            mode: "local" | "remote" | "assistant";
+            /** @description remote: the provider's name; null otherwise */
+            provider: string | null;
+            /** @description remote: one of its models; null otherwise */
+            model: string | null;
+            /** @description the deployment's remote switch */
+            remote_enabled: boolean;
+            /**
+             * Format: date-time
+             * @description null until first set
+             */
+            updated_at: string | null;
+        };
+        PipelineDefaultModelPut: {
+            /** @enum {string} */
+            mode: "local" | "remote" | "assistant";
+            /** @description remote only, required there */
+            provider?: string;
+            /** @description remote only; absent = the provider's default_model */
+            model?: string;
+        };
         /** @description from 1.15: what a user may name as a model (the editor's "Runs on"): enabled providers, redacted to names and models */
         ModelSourceList: {
             remote_enabled: boolean;
@@ -6768,6 +6824,14 @@ export interface components {
                     [key: string]: components["schemas"]["ThinkingLevel"];
                 };
             }[];
+            /** @description from 1.74: what Runs on · Auto resolves to now for write, decide and agent steps (PipelineDefaultModel, usable now); null: the local LLM. A judge's Auto is always its family's vision model */
+            auto?: {
+                /** @enum {string} */
+                kind: "server" | "remote";
+                provider: string;
+                model: string;
+                title: string;
+            } | null;
         };
         /** @description <thread_id>:<turn>:<n> */
         AssistantCallId: string;
@@ -7092,7 +7156,7 @@ export interface components {
             /** @description trimmed; blank = 422 */
             text: string;
         };
-        /** @description the admin's assistant settings (Admin › AI agents) */
+        /** @description the admin's assistant settings (Hub › Assistant) */
         AssistantSettings: {
             enabled: boolean;
             /** @description a server or remote provider's name; from 1.61 the caller's own choice when they made one (`personal`) */
@@ -11681,6 +11745,58 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SessionNames"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["AdminRequired"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioAdminGetPipelineModel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the setting */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineDefaultModel"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["AdminRequired"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioAdminPutPipelineModel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PipelineDefaultModelPut"];
+            };
+        };
+        responses: {
+            /** @description the setting */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineDefaultModel"];
                 };
             };
             401: components["responses"]["Unauthorized"];

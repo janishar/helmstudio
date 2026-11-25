@@ -12,9 +12,10 @@ Screens (navigate moves between them; actions after it in the same batch are dro
   export (an MP4 take; stream copy when every clip matches, else re-encode).
 - Models (/models): each model family, its variants and add-ons and which machine has them; the LoRA library
   (tab loras), where users upload LoRAs. Only admins download or delete weights.
-- Admin (/admin, admins): Users, Hosts (runners, memory, pins), API keys, Model providers, AI agents (which model
-  each AI job uses, the assistant's settings). Settings (account, theme, password, sign out) is the user's own:
-  point at it, never try it.
+- Hub (/hub, admins): everything AI: Assistant (this assistant's model, tools, skills, caps), In pipelines (the
+  model pipeline steps on Auto and session names use), Providers, Plugins. System (/system, admins; navigate's
+  /admin): Users, Hosts (runners, memory, pins), API keys. Settings (account, theme, password, sign out) is the
+  user's own: point at it, never try it.
 - Picking a workflow: navigate to / then switchTo there (navigate has no workflow target).
 
 Workflows and models:
@@ -60,8 +61,8 @@ Studio objects:
 
 Model providers:
 - Local models run on the user's hosts (everything above). Remote or local LLM servers (DeepSeek, OpenAI,
-  Anthropic, Gemini, OpenRouter, Groq, Mistral, Ollama, LM Studio, llama-server...) are set in Admin > Model
-  providers (key, models, default, thinking level) and only power text jobs: this assistant, pipeline agents,
+  Anthropic, Gemini, OpenRouter, Groq, Mistral, Ollama, LM Studio, llama-server...) are set in Hub > Providers
+  (key, models, default, thinking level) and only power text jobs: this assistant, pipeline agents,
   session names. They never make images, video or sound.
 
 Deciding:

@@ -2,7 +2,7 @@
 // screen actions' outcomes and cards, navigate's route table (§22.4), the screen summary's size cap, and the words
 // its lines use. Everything the model wrote or a tool returned is text: the drawer renders it as text, never HTML.
 import actionsJson from "@/gen/actions.json";
-import type { S } from "@/lib/api";
+import { api, ok, type S } from "@/lib/api";
 import { refText, splitOptions } from "@/lib/answer-refs";
 
 export type Entry = S<"AssistantEntry">;
@@ -255,7 +255,9 @@ const LABEL: [string, string][] = [
   ["/gallery", "Gallery"],
   ["/timeline", "Timeline"],
   ["/models", "Models"],
-  ["/admin", "Admin"],
+  ["/admin", "System"],
+  ["/system", "System"],
+  ["/hub", "Hub"],
   ["/", "Create"],
 ];
 /** A screen's name for a line ("Gallery", "Batch"). */
@@ -269,7 +271,7 @@ export function routeUrl(
 ): { url: string; path: string } | { error: string } {
   const allowed = QUERY[a.to];
   if (!allowed) return { error: `${a.to} is not a screen` };
-  if (a.to === "/admin" && !roles.includes("admin")) return { error: "Admin is for admins only" };
+  if (a.to === "/admin" && !roles.includes("admin")) return { error: "System is for admins only" };
   if (a.to.includes("{id}") && !a.id) return { error: "id is required" };
   if (a.to.includes("{row}") && !a.row) return { error: "row is required" };
   const path = a.to
@@ -286,6 +288,10 @@ export function routeUrl(
     return { error: "w goes with use (a take); to pick a workflow, go to / and switchTo it" };
   if (q.has("use") && !q.has("w")) return { error: "use and w go together" };
   const qs = q.toString();
+  // plan 33: /admin (the tools catalog's name) is System; its providers tab is Hub's
+  if (a.to === "/admin" && q.get("tab") === "providers")
+    return { url: "/hub?tab=providers", path: "/hub" };
+  if (a.to === "/admin") return { url: qs ? `/system?${qs}` : "/system", path: "/system" };
   return { url: qs ? `${path}?${qs}` : path, path };
 }
 
@@ -395,6 +401,26 @@ export const MEMORY_TABS = [
 
 /** Sent by the Assistant page (and Turn on) after a save, so the drawer follows without a reload. */
 export const ASSISTANT_CHANGED = "hs.assistant.changed";
+
+/** Turns the Assistant on or off for everyone with its saved settings as they are (Hub's switch, the drawer's Turn on);
+ * web search only while remote is on (the server refuses a saved one after REMOTE_MODELS went off). Admin only. */
+export async function putAssistantEnabled(enabled: boolean) {
+  const s = await ok(api.GET("/v1/studio/admin/assistant"));
+  const web = s.web_search && s.remote_enabled;
+  const out = await ok(
+    api.PUT("/v1/studio/admin/assistant", {
+      body: {
+        enabled,
+        provider: s.provider,
+        model: s.model,
+        web_search: web,
+        search_provider: web ? s.search_provider : null,
+      },
+    }),
+  );
+  window.dispatchEvent(new Event(ASSISTANT_CHANGED));
+  return out;
+}
 
 /** An answer's blocks (alpha.2 item 22, board frame 10a): paragraphs, bullet and numbered lists, a plan checklist
  * ("- [ ]" / "- [x]", item 24) and code blocks. Headings and table rows stay plain lines. Text only: the drawer builds

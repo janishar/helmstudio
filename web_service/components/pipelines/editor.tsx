@@ -38,6 +38,7 @@ import { until, useAssistantChanges, useScreenTools } from "@/components/assista
 import { editorTools } from "@/components/pipelines/assistant";
 import { presetNames } from "@/lib/studio";
 import { withThinking } from "@/lib/providers";
+import { useUser } from "@/components/shell";
 import {
   addRewrite,
   blankPipeline,
@@ -189,6 +190,9 @@ export function PipelineEditor({
       providers: sources?.sources ?? [],
       remoteOn: sources?.remote_enabled ?? false,
       custom,
+      auto: sources?.auto
+        ? `${sources.auto.kind}:${sources.auto.provider}/${sources.auto.model}`
+        : undefined,
     }),
     [sources, custom],
   );
@@ -1268,8 +1272,9 @@ function GatePanel({
   );
 }
 
-/** The model a judge, write, decide or agent runs on (docs/mock/AgentSettings.dc.html "Runs on"): Auto (the step's
- * family's own vision model, else the llm pack's), a named ask workflow, and (not for a judge, which sends
+/** The model a judge, write, decide or agent runs on (docs/mock/AgentSettings.dc.html "Runs on"; Assistant.dc.html
+ * frame 27 b, c): Auto (a write, decide or agent: the default set in Hub › In pipelines, API 1.74; a judge, and every
+ * step while that is the local LLM: the step's family's own vision model, else the llm pack's), a named ask workflow, and (not for a judge, which sends
  * thumbnails) a local server's or, when this deployment allows them, a remote provider's models. */
 function ModelChoice({
   doc,
@@ -1289,6 +1294,14 @@ function ModelChoice({
   const m = n.model ?? "auto";
   const now = models[id];
   const title = (w: string) => titles[w] ?? w;
+  const admin = !!useUser()?.roles.includes("admin");
+  // Auto on the pipelines default (null: the local LLM); a judge keeps its family's vision model
+  const auto = n.kind === "judge" ? null : (sources?.auto ?? null);
+  const autoLabel = auto
+    ? `Auto · ${auto.title} · ${auto.model}`
+    : now && m === "auto"
+      ? `Auto · ${title(now)}`
+      : "Auto";
   const others = n.kind === "judge" ? [] : (sources?.sources ?? []);
   const group = (kind: "server" | "remote") =>
     others
@@ -1307,52 +1320,77 @@ function ModelChoice({
   const known = [...asks.map((w) => w.id), ...servers, ...remotes].map((x) =>
     typeof x === "string" ? x : x[0],
   );
+  const where = admin ? (
+    <Link href="/hub?tab=pipelines">Hub › In pipelines</Link>
+  ) : (
+    "Hub › In pipelines"
+  );
   return (
-    <label className="set flex flex-col gap-1">
-      <small className="text-[12px] text-t2">{label}</small>
-      <select
-        className="bg-transparent font-semibold text-t1"
-        value={m}
-        onChange={(e) => {
-          const { model: _drop, ...rest } = n; // eslint-disable-line @typescript-eslint/no-unused-vars
-          edit((d) =>
-            setNode(
-              d,
-              id,
-              (e.target.value === "auto" ? rest : { ...rest, model: e.target.value }) as PNodeOf,
-            ),
-          );
-        }}
-      >
-        <optgroup label="Local">
-          <option value="auto">{now && m === "auto" ? `Auto · ${title(now)}` : "Auto"}</option>
-          {asks.map((w) => (
-            <option key={w.id} value={w.id}>
-              {w.title}
-            </option>
-          ))}
-        </optgroup>
-        {servers.length > 0 && (
-          <optgroup label="Local server">
-            {servers.map(([v, l]) => (
-              <option key={v} value={v}>
-                {l}
+    <div className="flex flex-col gap-1">
+      <label className="set flex flex-col gap-1">
+        <small className="text-[12px] text-t2">{label}</small>
+        <select
+          className="bg-transparent font-semibold text-t1"
+          value={m}
+          onChange={(e) => {
+            const { model: _drop, ...rest } = n; // eslint-disable-line @typescript-eslint/no-unused-vars
+            edit((d) =>
+              setNode(
+                d,
+                id,
+                (e.target.value === "auto" ? rest : { ...rest, model: e.target.value }) as PNodeOf,
+              ),
+            );
+          }}
+        >
+          <optgroup label="Local">
+            <option value="auto">{autoLabel}</option>
+            {asks.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.title}
               </option>
             ))}
           </optgroup>
-        )}
-        {remotes.length > 0 && (
-          <optgroup label="Remote">
-            {remotes.map(([v, l]) => (
-              <option key={v} value={v}>
-                {l}
-              </option>
-            ))}
-          </optgroup>
-        )}
-        {m !== "auto" && !known.includes(m) && <option value={m}>{title(m)}</option>}
-      </select>
-    </label>
+          {servers.length > 0 && (
+            <optgroup label="Local server">
+              {servers.map(([v, l]) => (
+                <option key={v} value={v}>
+                  {l}
+                </option>
+              ))}
+            </optgroup>
+          )}
+          {remotes.length > 0 && (
+            <optgroup label="Remote">
+              {remotes.map(([v, l]) => (
+                <option key={v} value={v}>
+                  {l}
+                </option>
+              ))}
+            </optgroup>
+          )}
+          {m !== "auto" && !known.includes(m) && <option value={m}>{title(m)}</option>}
+        </select>
+      </label>
+      {m === "auto" && n.kind !== "judge" && (
+        <>
+          <span className="self-end text-[11px] text-t2 [&_a]:underline [&_a]:underline-offset-2">
+            Auto · set in {where}
+          </span>
+          {auto?.kind === "remote" ? (
+            <span className="text-[12px] text-[#f2c14e]">
+              Sends the step&apos;s prompt and text to {auto.title}; never images. Submit lists it.
+            </span>
+          ) : (
+            <span className="text-[12px] text-t2">
+              {auto
+                ? `Sends the step's prompt and text to ${auto.title}, on this network.`
+                : "Sends nothing out."}
+            </span>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 type PNodeOf = S<"PipelineNode">;

@@ -1,7 +1,7 @@
 "use client";
-// Admin > Model providers (docs/mock/Providers.dc.html): local servers (any OpenAI-compatible endpoint on a loopback or
-// private address, with the memory their GPU host keeps reserved) and remote providers (https, only while the
-// deployment's remote switch is on). Test, Edit, Enable/Disable, Delete… in each row's ⋯ menu; the form adds or replaces one. A
+// Hub › Providers (was Admin › Model providers; docs/mock/Providers.dc.html, Assistant.dc.html frame 25): local
+// servers (any OpenAI-compatible endpoint on a loopback or private address, with the memory their GPU host keeps
+// reserved) and remote providers (https, only while the deployment's remote switch is on). Test, Edit, Enable/Disable, Delete… in each row's ⋯ menu; the form adds or replaces one. A
 // provider names the key file pipelines_service reads. API 1.51 (plan 25): a Preset fills the form, Fetch lists the
 // provider's models (asked by pipelines, from the preset's or the saved URL only) as a tick list, and the key file's
 // status line says Found or Missing with Recheck. API 1.52 (plan 27): the key area takes a key (a password field, its
@@ -11,7 +11,7 @@ import Link from "next/link";
 import { Fragment, useCallback, useEffect, useId, useRef, useState } from "react";
 import { MoreHorizontal } from "lucide-react";
 import { ErrorNote, Info, Modal } from "@/components/kit";
-import { AdminTabs } from "@/components/admin/users";
+import { HubHead, hubHref } from "@/components/hub";
 import { useUser } from "@/components/shell";
 import { api, message, ok, type S } from "@/lib/api";
 import {
@@ -115,13 +115,31 @@ export function ProvidersAdmin() {
   const cell = "border-b border-s3 p-2.5 align-top"; // cells wrap as the board's do
   return (
     <>
-      <main id="main" className="flex min-w-0 flex-[999_1_560px] flex-col gap-4 px-5 pt-4 pb-6">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="font-display text-[22px] font-bold tracking-[0.01em]">Admin</h1>
-          <div className="grow" />
-          <span className="tag tag-accent">Signed in as root admin</span>
+      <main
+        id="main"
+        className="apage flex min-w-0 flex-[999_1_560px] flex-col gap-4 px-5 pt-4 pb-6"
+      >
+        <HubHead
+          tab="providers"
+          line={
+            <span className="flex items-center">
+              Every AI job picks from here: the Assistant, pipeline steps and session names.
+              <Info>
+                A local server runs on your own network; a remote provider gets what each job sends,
+                and only while the deployment&apos;s remote switch (REMOTE_MODELS) is on.
+              </Info>
+            </span>
+          }
+        />
+        <div className="-mb-2 flex justify-end">
+          <button
+            type="button"
+            className="chip h-[34px] bg-a1 font-semibold text-on1"
+            onClick={() => setForm(blankForm())}
+          >
+            Add provider
+          </button>
         </div>
-        <AdminTabs current="providers" />
         {list && !list.remote_enabled && (
           <p className="m-0 text-[13px] text-t2">
             Remote models are off on this deployment (REMOTE_MODELS in deploy/.env). Local servers
@@ -157,7 +175,7 @@ export function ProvidersAdmin() {
                       <>
                         <br />
                         <Link
-                          href="/assistant"
+                          href={hubHref("assistant")}
                           className="text-[12px] text-a1 underline underline-offset-2"
                         >
                           used by the Assistant

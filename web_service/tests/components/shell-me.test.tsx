@@ -26,7 +26,7 @@ afterEach(() => {
 const admin = { id: "u1", email: "a@x.test", roles: ["admin"] } as unknown as S<"User">;
 
 describe("sign-in check retry", () => {
-  it("retries /auth/me with a backoff until it answers, then shows Admin", async () => {
+  it("retries /auth/me with a backoff until it answers, then shows System", async () => {
     vi.useFakeTimers();
     let calls = 0;
     answer("GET", {
@@ -34,10 +34,10 @@ describe("sign-in check retry", () => {
         ++calls < 3 ? { status: 503, error: { detail: "down" } } : { data: admin },
     });
     render(<AppShell user={null}>page</AppShell>);
-    expect(screen.queryByRole("link", { name: /admin/i })).toBeNull();
+    expect(screen.queryByRole("link", { name: "System" })).toBeNull();
     await act(() => vi.advanceTimersByTimeAsync(1000 + 2000 + 4000));
     expect(calls).toBe(3);
-    expect(screen.getByRole("link", { name: /admin/i })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "System" })).toBeTruthy();
   });
   it("stops after about 30 s, and at once on a 401", async () => {
     vi.useFakeTimers();
@@ -57,7 +57,7 @@ describe("sign-in check retry", () => {
     render(<AppShell user={admin}>page</AppShell>);
     // (the assistant's status is asked once the user is known)
     expect(spy.mock.calls.filter((c) => c[0] === "/auth/me")).toEqual([]);
-    expect(screen.getByRole("link", { name: /admin/i })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "System" })).toBeTruthy();
   });
 });
 

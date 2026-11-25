@@ -16,7 +16,10 @@ vi.mock("next/link", () => ({
     </a>
   ),
 }));
-vi.mock("@/components/shell", () => ({ useUser: () => ({ roles: ["admin"] }) }));
+vi.mock("@/components/shell", () => ({
+  useUser: () => ({ roles: ["admin"] }),
+  useAssistantApi: () => null,
+}));
 
 afterEach(() => {
   cleanup();

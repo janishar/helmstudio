@@ -424,8 +424,14 @@ export type ModelProvider = {
   memory_gb?: number;
 };
 /** What the rules need besides the documents (README, Model sources and Custom nodes): the enabled providers, the
- * deployment's remote switch, the registered custom nodes. */
-export type RuleEnv = { providers?: ModelProvider[]; remoteOn?: boolean; custom?: Custom[] };
+ * deployment's remote switch, the registered custom nodes, and (API 1.74) the pipelines default model a write's,
+ * decide's or agent's `auto` runs on (`server:<n>/<m>` or `remote:<p>/<m>`, usable now; absent: the local LLM). */
+export type RuleEnv = {
+  providers?: ModelProvider[];
+  remoteOn?: boolean;
+  custom?: Custom[];
+  auto?: string;
+};
 
 /** The model each judge, write, decide and agent node runs (README, Model): a named ask workflow the caller can run;
  * `auto`: a judge → the ask template of its takes step's family, the others → that of the nearest step before them,
@@ -473,6 +479,8 @@ export function resolveModels(
       if (p && p.kind === where && p.models.includes(model)) wid = `${where}:${name}/${model}`;
     } else if (m !== "auto") wid = text(m) ? m : undefined;
     else if (n.kind === "judge") wid = familyAsk(n.takes);
+    // the admin's default: no pipeline switch (README, Model sources: the pipelines default model)
+    else if (env.auto) wid = env.auto;
     else {
       const doms = steps.filter((s) => s !== id && a.dominates(s, id));
       wid = familyAsk(doms.find((d) => doms.every((o) => o === d || a.dominates(o, d))));

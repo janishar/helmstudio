@@ -224,7 +224,7 @@ export function putOf(f: ProviderForm): { body: Put } | { error: string } {
     const mem = num(f.memory_gb);
     const key = f.key_secret.trim();
     if (!/^[a-z0-9]{1,32}$/.test(f.host))
-      return { error: "GPU host: its name, as Admin > Hosts lists it." };
+      return { error: "GPU host: its name, as System › Hosts lists it." };
     if (!(mem >= 0.5 && mem <= 1024)) return { error: "Memory: 0.5 to 1024 GB." };
     if (key && !KEY.test(key))
       return {

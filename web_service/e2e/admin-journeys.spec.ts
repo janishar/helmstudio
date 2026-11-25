@@ -84,9 +84,13 @@ const row = (name: string) => admin.getByRole("row").filter({ hasText: name });
 const dock = (p: Page) => p.getByRole("navigation", { name: "Sections" });
 
 test("a01 add DeepSeek from the preset, with my own model name and less thinking", async () => {
-  await admin.goto("/admin");
-  await admin.getByRole("tab", { name: "Model providers" }).click();
-  await expect(admin).toHaveURL(/tab=providers/);
+  // plan 33: the old link opens Hub › Providers
+  await admin.goto("/admin?tab=providers");
+  await expect(admin).toHaveURL(/\/hub\?tab=providers/);
+  await expect(admin.getByRole("tab", { name: "Providers" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
   await expect(panel().getByRole("heading", { name: /Add a model provider/ })).toBeVisible();
   await field("Preset").selectOption({ label: "DeepSeek" });
   // the preset fills the form
@@ -216,13 +220,13 @@ test("a03 test the provider from the list, switch it off and on", async () => {
   await admin.keyboard.press("Escape");
 });
 
-test("a04 make it the assistant on its own page, ask it something, then turn it off", async () => {
-  // plan 32: AI agents only links to the Assistant's page
-  await admin.getByRole("tab", { name: "AI agents" }).click();
-  await expect(admin).toHaveURL(/tab=agents/);
-  await expect(admin.getByRole("row").filter({ hasText: "the in-app assistant" })).toHaveCount(0);
-  await admin.getByRole("link", { name: "Open the Assistant page" }).click();
-  await expect(admin).toHaveURL(/\/assistant$/);
+test("a04 make it the assistant in Hub, ask it something, then turn it off", async () => {
+  // plan 33: In pipelines holds the silent assistant's jobs; the Assistant tab holds the chat's settings
+  await admin.getByRole("tab", { name: "In pipelines" }).click();
+  await expect(admin).toHaveURL(/tab=pipelines/);
+  await expect(admin.getByRole("row").filter({ hasText: "Pipeline steps" })).toHaveCount(1);
+  await admin.getByRole("tab", { name: "Assistant" }).click();
+  await expect(admin).toHaveURL(/\/hub$/);
   const change = admin.getByRole("button", { name: "Change" });
   const form = admin.getByRole("region", { name: "Set up the Model" });
   await expect(change.or(form)).toBeVisible();
@@ -260,16 +264,16 @@ test("a04 make it the assistant on its own page, ask it something, then turn it 
 
   await admin.getByRole("switch", { name: "Assistant on" }).click();
   await expect(admin.getByText("Off", { exact: true })).toBeVisible();
-  // Chat stays in the dock; its drawer says it is off, with Turn on
-  await dock(admin).getByRole("button", { name: "Chat" }).click();
+  // the Assistant stays in the dock; its drawer says it is off, with Turn on
+  await dock(admin).getByRole("button", { name: "Assistant" }).click();
   await expect(drawer).toContainText("The Assistant is off");
+  await expect(drawer).toContainText("Turn it on for everyone in Hub.");
   await expect(drawer.getByRole("button", { name: "Turn on" })).toBeVisible();
   await drawer.getByRole("button", { name: /^Close \(/ }).click();
-  await admin.goto("/admin");
 });
 
 test("a05 delete a provider, after changing my mind once", async () => {
-  await admin.getByRole("tab", { name: "Model providers" }).click();
+  await admin.getByRole("tab", { name: "Providers" }).click();
   const r = row(PROV);
   const del = async () => {
     await r.getByRole("button", { name: "Actions for this provider" }).click();
@@ -316,7 +320,8 @@ test("a06 add a user who signs in and sees only their own work", async ({ browse
     .toBe("succeeded");
   await op.context().close();
 
-  await admin.goto("/admin");
+  await dock(admin).getByRole("link", { name: "System" }).click();
+  await expect(admin).toHaveURL(/\/system$/);
   const add = admin.getByRole("complementary", { name: "Add a user" });
   person = { name: `Rita ${t}`, email: `rita-${t}@example.com`, password: "" };
   await add.getByLabel("Name").fill(person.name);
@@ -336,13 +341,18 @@ test("a06 add a user who signs in and sees only their own work", async ({ browse
   await shot(admin, "a06-user-added");
 
   personPage = await signedIn(browser, person);
-  await expect(dock(personPage).getByRole("link", { name: "Admin" })).toHaveCount(0);
+  // plan 33: no Hub or System for a user; the Assistant is there in every state
+  await expect(dock(personPage).getByRole("link", { name: "System" })).toHaveCount(0);
+  await expect(dock(personPage).getByRole("link", { name: "Hub" })).toHaveCount(0);
+  await expect(dock(personPage).getByRole("button", { name: "Assistant" })).toBeVisible();
   await personPage.goto("/gallery");
   await expect(personPage.getByRole("heading", { name: "Gallery", level: 1 })).toBeVisible();
   await expect(personPage.getByText(`secret fox ${t}`)).toHaveCount(0);
   await shot(personPage, "a06-user-gallery");
-  await personPage.goto("/admin");
-  await expect(personPage.getByRole("heading", { name: "Not found" })).toBeVisible();
+  for (const path of ["/system", "/hub", "/admin", "/assistant", "/plugins"]) {
+    await personPage.goto(path);
+    await expect(personPage.getByRole("heading", { name: "Not found" })).toBeVisible();
+  }
 });
 
 test("a07 reset a user's password, then disable and enable the account", async ({ browser }) => {
@@ -391,7 +401,7 @@ test("a08 an API key made on the server shows up, and revoking it shuts it out",
     });
   expect((await me()).status()).toBe(200);
 
-  await admin.goto("/admin?tab=keys");
+  await admin.goto("/system?tab=keys");
   const r = row(`e2e-${t}`);
   await expect(r).toContainText(key!.slice(0, 12) + "…");
   await expect(r).toContainText("Active");
@@ -415,7 +425,7 @@ test("a08 an API key made on the server shows up, and revoking it shuts it out",
 });
 
 test("a09 check the hosts", async () => {
-  await admin.goto("/admin?tab=hosts");
+  await admin.goto("/system?tab=hosts");
   const card = admin.getByRole("region", { name: /^fake / });
   await expect(card).toBeVisible();
   await expect(card.getByRole("meter", { name: "Memory used" })).toBeVisible();

@@ -48,6 +48,7 @@ describe("pipeline rules against contracts/fixtures/pipelines", () => {
         providers: fx.providers,
         remoteOn: fx.remote_deployment ?? false,
         custom: fx.custom ?? customFixture.nodes,
+        auto: fx.auto_model,
       });
       expect(new Set(got.map(key))).toEqual(new Set(fx.problems.map(key)));
       for (const p of got) expect(p.message).toBeTruthy();

@@ -90,10 +90,15 @@ describe("navigate's route table", () => {
     expect(routeUrl({ to: "/", query: { w: "qwen-image" } }, [])).toEqual({
       error: "w goes with use (a take); to pick a workflow, go to / and switchTo it",
     });
-    expect(routeUrl({ to: "/admin" }, ["user"])).toEqual({ error: "Admin is for admins only" });
+    expect(routeUrl({ to: "/admin" }, ["user"])).toEqual({ error: "System is for admins only" });
+    // plan 33: the catalog's /admin opens System; its providers tab is Hub's
     expect(routeUrl({ to: "/admin", query: { tab: "hosts" } }, ["admin"])).toEqual({
-      url: "/admin?tab=hosts",
-      path: "/admin",
+      url: "/system?tab=hosts",
+      path: "/system",
+    });
+    expect(routeUrl({ to: "/admin", query: { tab: "providers" } }, ["admin"])).toEqual({
+      url: "/hub?tab=providers",
+      path: "/hub",
     });
   });
   it("tells the model what each query param is, and that a workflow is picked with switchTo", () => {
@@ -107,6 +112,8 @@ describe("navigate's route table", () => {
     expect(screenLabel("/pipelines/batches/x/review")).toBe("Review");
     expect(screenLabel("/pipelines/x")).toBe("Pipeline");
     expect(screenLabel("/")).toBe("Create");
+    expect(screenLabel("/hub")).toBe("Hub");
+    expect(screenLabel("/system")).toBe("System");
     expect(onRoute(["/pipelines/{id}"], "/pipelines/abc")).toBe(true);
     expect(onRoute(["/pipelines/{id}"], "/pipelines/batches/abc")).toBe(false);
     expect(onRoute(["*"], "/anything")).toBe(true);

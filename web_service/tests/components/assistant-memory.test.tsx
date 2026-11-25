@@ -118,7 +118,7 @@ function serve({
 
 async function openDrawer() {
   const r = render(<AppShell user={user}>{null}</AppShell>);
-  fireEvent.click(await screen.findByRole("button", { name: /^Chat/ }));
+  fireEvent.click(await screen.findByRole("button", { name: /^Assistant/ }));
   await screen.findByRole("complementary", { name: "Assistant" });
   return r;
 }

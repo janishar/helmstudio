@@ -17,6 +17,11 @@ import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   ArrowUp,
+  Blocks,
+  Bot,
+  Clapperboard,
+  Power,
+  SlidersHorizontal,
   Brain,
   Check,
   ChevronDown,
@@ -55,6 +60,7 @@ import { FullScreen } from "@/components/media";
 import { forget, useTakes } from "@/lib/take-cache";
 import {
   ASSISTANT_CHANGED,
+  putAssistantEnabled,
   MEMORY_TABS,
   ago,
   answerBlocks,
@@ -2017,7 +2023,7 @@ function MinBar({ a }: { a: AssistantApi }) {
         onClick={() => a.setOpen(true)}
       >
         <span className="lg">
-          <Sparkles size={18} strokeWidth={2} aria-hidden />
+          <Bot size={18} strokeWidth={2} aria-hidden />
           {dot && <span className={`dot ${dot}`} />}
         </span>
         <span className="tx">
@@ -2062,28 +2068,48 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
   );
 }
 
-/** The header's Assistant button (plan 32; the rail's Assistant icon, owner 2026-11-25): opens the Assistant page. */
-function SettingsButton({ a }: { a: AssistantApi }) {
+/** The header's Hub button (plan 33 37.9: the Blocks icon), admins only: opens Hub. */
+function HubButton({ a }: { a: AssistantApi }) {
   const router = useRouter();
+  if (!a.status?.can_set_up) return null;
   return (
     <button
       type="button"
       className="ib"
-      aria-label="Assistant page"
-      title="Assistant page"
+      aria-label="Hub"
+      title="Hub"
       onClick={() => {
         a.close();
-        router.push("/assistant");
+        router.push("/hub");
       }}
     >
-      <Sparkles size={15} strokeWidth={1.75} aria-hidden />
+      <Blocks size={15} strokeWidth={1.75} aria-hidden />
     </button>
   );
 }
 
-/** The drawer while the Assistant is not set up or off (board frame 21): a message, not a chat. An admin gets Set up
- * (the Assistant page's setup form) or Turn on (for everyone, the saved settings as they are); anyone else is told
- * who can. Opened by itself on first launch, it says it opens only once. */
+/** What the Assistant helps with (frame 21's rows). */
+const HELPS: [typeof Bot, string][] = [
+  [Clapperboard, "Plan shots and a shot list"],
+  [SlidersHorizontal, "Pick workflows and settings"],
+  [Eye, "Run, look at and fix takes"],
+];
+const Helps = () => (
+  <ul className="sl">
+    {HELPS.map(([Icon, text]) => (
+      <li key={text}>
+        <i>
+          <Icon size={15} strokeWidth={1.75} aria-hidden />
+        </i>
+        {text}
+      </li>
+    ))}
+  </ul>
+);
+
+/** The drawer while the Assistant is not set up or off (board frame 21, redesigned; plan 33 37.9): a message, not a
+ * chat. An admin gets Set up (Hub's setup form) or Turn on (for everyone, the saved settings as they are); anyone else
+ * is told who can, with no button. Opened by itself on first launch, it says it opens only once. */
 function SetupDrawer({ a, phone }: { a: AssistantApi; phone: boolean }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -2095,20 +2121,7 @@ function SetupDrawer({ a, phone }: { a: AssistantApi; phone: boolean }) {
     setBusy(true);
     setError("");
     try {
-      const s = await ok(api.GET("/v1/studio/admin/assistant"));
-      const web = s.web_search && s.remote_enabled;
-      await ok(
-        api.PUT("/v1/studio/admin/assistant", {
-          body: {
-            enabled: true,
-            provider: s.provider,
-            model: s.model,
-            web_search: web,
-            search_provider: web ? s.search_provider : null,
-          },
-        }),
-      );
-      window.dispatchEvent(new Event(ASSISTANT_CHANGED));
+      await putAssistantEnabled(true);
     } catch (e) {
       setError(message(e));
     } finally {
@@ -2126,10 +2139,10 @@ function SetupDrawer({ a, phone }: { a: AssistantApi; phone: boolean }) {
     >
       <div className="dh">
         <h2>
-          <Sparkles aria-hidden strokeWidth={2} />
+          <Bot aria-hidden strokeWidth={2} />
           <span className="truncate">Assistant</span>
         </h2>
-        <SettingsButton a={a} />
+        <HubButton a={a} />
         <button
           type="button"
           className="x"
@@ -2141,46 +2154,55 @@ function SetupDrawer({ a, phone }: { a: AssistantApi; phone: boolean }) {
         </button>
       </div>
       <div className="su">
+        <span className={`sk ${off ? "off" : ""}`} aria-hidden>
+          <Sparkles size={34} strokeWidth={1.75} />
+        </span>
         {off ? (
           <>
             <p className="sut">The Assistant is off</p>
-            <p className="note">
-              {admin
-                ? "Turn it on for everyone, or change it on the Assistant page."
-                : "Your admin turned it off."}
+            <p className="sd">
+              {admin ? "Turn it on for everyone in Hub." : "Your admin turned it off."}
             </p>
             {admin && (
-              <button type="button" className="go" disabled={busy} onClick={() => void turnOn()}>
+              <button type="button" className="sb" disabled={busy} onClick={() => void turnOn()}>
                 Turn on
+                <Power size={16} strokeWidth={2.25} aria-hidden />
               </button>
             )}
           </>
         ) : admin ? (
           <>
             <p className="sut">Set up the Assistant</p>
-            <p className="note">
-              Pick the model it talks to. It helps you plan shots, pick workflows and run them.
-            </p>
+            <p className="sd">Ask in plain words. It does the steps in the app for you.</p>
+            <Helps />
+            <div className="sc">
+              <small>Runs on</small>
+              <span>Your Claude subscription</span>
+              <span>DeepSeek</span>
+              <span>A local server</span>
+            </div>
             <button
               type="button"
-              className="go"
+              className="sb"
               onClick={() => {
                 a.close();
-                router.push("/assistant?setup=1");
+                router.push("/hub?setup=1");
               }}
             >
               Set up
+              <ArrowRight size={16} strokeWidth={2.25} aria-hidden />
             </button>
             <p className="fine">
               {a.first
-                ? `Close it now and set up the Assistant later from Agent or ${shortcut()}.`
-                : "Opens the Assistant page."}
+                ? `Close it now and set up the Assistant later from Assistant or ${shortcut()}.`
+                : "Opens Hub."}
             </p>
           </>
         ) : (
           <>
             <p className="sut">The Assistant isn&apos;t set up yet</p>
-            <p className="note">Ask your admin to set it up.</p>
+            <p className="sd">Ask your admin to set it up.</p>
+            <Helps />
           </>
         )}
         {error && (
@@ -2465,7 +2487,7 @@ function Drawer({ a }: { a: AssistantApi }) {
                 drawer the Settings gear (plan 32) leaves room for the mark only, the word shows full screen and on a
                 phone */}
             <h2 aria-label="Assistant" className={chip ? "shrink-0 grow-0" : ""}>
-              <Sparkles aria-hidden strokeWidth={2} />
+              <Bot aria-hidden strokeWidth={2} />
               {!chip && (full || phone) && <span className="truncate">Assistant</span>}
             </h2>
             {chip}
@@ -2491,7 +2513,7 @@ function Drawer({ a }: { a: AssistantApi }) {
             >
               <MessagesSquare size={15} strokeWidth={1.75} aria-hidden />
             </button>
-            <SettingsButton a={a} />
+            <HubButton a={a} />
             {phone ? (
               <button
                 type="button"

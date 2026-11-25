@@ -148,7 +148,7 @@ function Screen({ actions }: { actions: Record<string, Handler> }) {
 
 async function openDrawer(children: React.ReactNode = null) {
   const r = render(<AppShell user={user}>{children}</AppShell>);
-  fireEvent.click(await screen.findByRole("button", { name: /^Chat/ }));
+  fireEvent.click(await screen.findByRole("button", { name: /^Assistant/ }));
   await screen.findByRole("complementary", { name: "Assistant" });
   return r;
 }
@@ -221,34 +221,36 @@ describe("the drawer", () => {
   const admin = { ...user, roles: ["user", "admin"] } as S<"User">;
   const drawer = () => screen.getByRole("complementary", { name: "Assistant" });
 
-  it("off: Chat stays in the dock and ⌘J opens the message; anyone else is told their admin did it", async () => {
+  it("off: Assistant stays in the dock and ⌘J opens the message; anyone else is told their admin did it, with no Hub", async () => {
     off({ set_up: true });
     render(<AppShell user={user}>x</AppShell>);
-    await screen.findByRole("button", { name: "Chat" });
+    await screen.findByRole("button", { name: "Assistant" });
     fireEvent.keyDown(window, { key: "j", metaKey: true });
     expect(within(drawer()).getByText("The Assistant is off")).toBeTruthy();
     expect(within(drawer()).getByText("Your admin turned it off.")).toBeTruthy();
     expect(within(drawer()).queryByRole("button", { name: "Turn on" })).toBeNull();
     expect(screen.queryByRole("textbox", { name: "Message the assistant" })).toBeNull();
-    fireEvent.click(within(drawer()).getByRole("button", { name: "Assistant page" }));
-    expect(push).toHaveBeenCalledWith("/assistant");
+    expect(within(drawer()).queryByRole("button", { name: "Hub" })).toBeNull();
   });
 
-  it("not set up: anyone else asks their admin; an admin gets Set up, which opens the page's form", async () => {
+  it("not set up: anyone else asks their admin, no button; an admin gets Set up, which opens Hub's form", async () => {
     off({ set_up: false });
     const r = render(<AppShell user={user}>x</AppShell>);
-    fireEvent.click(await screen.findByRole("button", { name: "Chat" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Assistant" }));
     expect(within(drawer()).getByText("The Assistant isn't set up yet")).toBeTruthy();
     expect(within(drawer()).getByText("Ask your admin to set it up.")).toBeTruthy();
+    expect(within(drawer()).getByText("Plan shots and a shot list")).toBeTruthy();
+    expect(within(drawer()).queryByRole("button", { name: "Set up" })).toBeNull();
     r.unmount();
     sessionStorage.clear();
     off({ set_up: false, can_set_up: true });
     render(<AppShell user={admin}>x</AppShell>);
-    fireEvent.click(await screen.findByRole("button", { name: "Chat" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Assistant" }));
     expect(within(drawer()).getByText("Set up the Assistant")).toBeTruthy();
-    expect(within(drawer()).getByText("Opens the Assistant page.")).toBeTruthy();
+    expect(within(drawer()).getByText("Opens Hub.")).toBeTruthy();
+    expect(within(drawer()).getByText("Your Claude subscription")).toBeTruthy();
     fireEvent.click(within(drawer()).getByRole("button", { name: "Set up" }));
-    expect(push).toHaveBeenCalledWith("/assistant?setup=1");
+    expect(push).toHaveBeenCalledWith("/hub?setup=1");
     expect(screen.queryByRole("complementary", { name: "Assistant" })).toBeNull();
   });
 
@@ -282,10 +284,8 @@ describe("the drawer", () => {
       },
     });
     render(<AppShell user={admin}>x</AppShell>);
-    fireEvent.click(await screen.findByRole("button", { name: "Chat" }));
-    expect(
-      within(drawer()).getByText("Turn it on for everyone, or change it on the Assistant page."),
-    ).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: "Assistant" }));
+    expect(within(drawer()).getByText("Turn it on for everyone in Hub.")).toBeTruthy();
     fireEvent.click(within(drawer()).getByRole("button", { name: "Turn on" }));
     await waitFor(() => expect(put).toHaveBeenCalled());
     expect(put.mock.calls[0][1]).toEqual({
@@ -307,19 +307,32 @@ describe("the drawer", () => {
     expect(await screen.findByText("Set up the Assistant")).toBeTruthy();
     expect(screen.getByText(/^Close it now and set up the Assistant later/)).toBeTruthy();
     expect(mark).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole("button", { name: "Chat" }).getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("button", { name: "Assistant" }).getAttribute("aria-expanded")).toBe(
+      "true",
+    );
     fireEvent.click(within(drawer()).getByRole("button", { name: /^Close/ }));
     expect(screen.queryByRole("complementary", { name: "Assistant" })).toBeNull();
     fireEvent.keyDown(window, { key: "j", metaKey: true });
-    expect(within(drawer()).getByText("Opens the Assistant page.")).toBeTruthy(); // reopened by you
+    expect(within(drawer()).getByText("Opens Hub.")).toBeTruthy(); // reopened by you
+    fireEvent.click(within(drawer()).getByRole("button", { name: "Hub" }));
+    expect(push).toHaveBeenCalledWith("/hub");
   });
 
-  it("the rail has the Assistant page, then Chat with ⌘J", async () => {
+  it("the rail: anyone has the Assistant with ⌘J; Hub and System only for an admin, as a group", async () => {
     serve();
-    render(<AppShell user={user}>x</AppShell>);
-    const chat = await screen.findByRole("button", { name: "Chat" });
-    expect(chat.getAttribute("title")).toMatch(/^Chat \((⌘J|Ctrl J)\)$/);
-    expect(screen.getByRole("link", { name: "Assistant" }).getAttribute("href")).toBe("/assistant");
+    const r = render(<AppShell user={user}>x</AppShell>);
+    const chat = await screen.findByRole("button", { name: "Assistant" });
+    expect(chat.getAttribute("title")).toMatch(/^Assistant \((⌘J|Ctrl J)\)$/);
+    expect(screen.queryByRole("link", { name: "Hub" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "System" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Plugins" })).toBeNull();
+    r.unmount();
+    render(<AppShell user={{ ...user, roles: ["user", "admin"] }}>x</AppShell>);
+    const group = await screen.findByRole("group", { name: "Admin only" });
+    expect(within(group).getByRole("link", { name: "Hub" }).getAttribute("href")).toBe("/hub");
+    expect(within(group).getByRole("link", { name: "System" }).getAttribute("href")).toBe(
+      "/system",
+    );
   });
 
   it("says a hidden tab's summary is hidden", async () => {
@@ -547,7 +560,7 @@ describe("a turn's actions in this tab", () => {
     await waitFor(() => expect(posts).toHaveLength(1));
     expect(push).not.toHaveBeenCalled();
     expect(posts[0]).toMatchObject({
-      results: [{ status: "failed", line: { text: "Can't go there · Admin is for admins only" } }],
+      results: [{ status: "failed", line: { text: "Can't go there · System is for admins only" } }],
     });
   });
 });
@@ -600,7 +613,9 @@ describe("other tabs, server cards, limits, memory", () => {
     const posts = serve({ existing: waiting, entries: [card("waiting")] });
     render(<AppShell user={user}>{null}</AppShell>);
     // the dock's dot: a card waits
-    fireEvent.click(await screen.findByRole("button", { name: /^Chat.*1 card waits for you/ }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: /^Assistant.*1 card waits for you/ }),
+    );
     const c = await screen.findByRole("region", { name: "Confirm: Search the web?" });
     expect(c.textContent).toContain("ltx 2.3 prompt tips");
     expect(c.textContent).toContain("sends to Brave");
@@ -1171,7 +1186,7 @@ describe("thinking (plan 29)", () => {
     act(() => vi.advanceTimersByTime(4000));
     fireEvent.click(screen.getByRole("button", { name: /^Close \(/ }));
     act(() => vi.advanceTimersByTime(3000));
-    fireEvent.click(screen.getByRole("button", { name: /^Chat/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Assistant/ }));
     expect(bubble()?.textContent).toBe("Thinking… 7 s");
   });
 

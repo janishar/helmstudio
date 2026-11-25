@@ -1,11 +1,13 @@
 "use client";
-// Plugins (docs/mock/Plugins.dc.html; API 1.61): the admin-only rail page. The table lists what studio found in
-// plugins/ (Rescan reads it again); a row opens its aside: the switch, its rows, MAY DO, the disclaimer and, for a
+// Hub › Plugins (docs/mock/Plugins.dc.html, Assistant.dc.html frame 26; API 1.61; plan 33): admins only. The table
+// lists what studio found in plugins/ (Rescan reads it again); rows have no on/off: tools and skills are turned on in
+// Hub › Assistant (their only home). A row opens its aside: a model-provider plugin's switch, its rows, MAY DO, the disclaimer and, for a
 // model-provider plugin that is on, Add as provider (a personal plugin's provider is its admin's own). From API 1.64
 // skills (board SKILLS): built in or yours (~/.helm/plugins), a faded row with only Remove when it can't be used.
 import Link from "next/link";
 import { useCallback, useEffect, useId, useState } from "react";
 import { ErrorNote, Info, Modal } from "@/components/kit";
+import { HubHead, hubHref } from "@/components/hub";
 import { ApiError, api, message, ok, type S } from "@/lib/api";
 import {
   KEY_REFUSED,
@@ -28,6 +30,17 @@ import {
 } from "@/lib/plugins";
 
 type Plugin = S<"Plugin">;
+/** Tools and skills are switched on and off only in Hub › Assistant (plan 33 37.9). */
+const turnedOnElsewhere = (p: Plugin) => p.kind === "assistant-tools" || p.kind === "skill";
+const TurnedOnIn = () => (
+  <Link
+    href={hubHref("assistant")}
+    className="text-[12px] text-t2 underline underline-offset-2"
+    onClick={(e) => e.stopPropagation()}
+  >
+    Turned on in Hub › Assistant
+  </Link>
+);
 const path = (plugin: string) => ({ params: { path: { plugin } } });
 const ME_TAG = "tag bg-[color-mix(in_srgb,#f2c14e_22%,transparent)] text-[#f2c14e]";
 const KIND_TAG = "tag whitespace-nowrap bg-[color-mix(in_srgb,var(--a2)_22%,transparent)] text-t1";
@@ -93,29 +106,30 @@ export function PluginsScreen() {
   const cell = "border-b border-s3 p-2.5 align-top";
   return (
     <>
-      <main id="main" className="flex min-w-0 flex-[999_1_560px] flex-col gap-4 px-5 pt-4 pb-6">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="font-display text-[22px] font-bold tracking-[0.01em]">Plugins</h1>
-          <div className="grow" />
-          <button type="button" className="chip bevel" onClick={() => void rescan()}>
-            Rescan
-          </button>
-          <AddMenu onRescan={() => void rescan()} />
-        </div>
-        <div className="-mt-1.5 flex flex-col gap-0.5">
-          <span className="text-[13px] text-t2">
-            Add-ons that plug new features in. Found in plugins/ on start; off until you turn them
-            on.
-            <Info>
-              A plugin is a folder in plugins/ with a manifest: name, kind, version, source, what it
-              may do. The studio lists it on start and never runs it until an admin turns it on.
-              Kinds: Model provider, Assistant tools.
-            </Info>
-          </span>
-          <span className="text-[11px] text-t2 opacity-80">
-            Admins only: other users don&apos;t see this page.
-          </span>
-        </div>
+      <main
+        id="main"
+        className="apage flex min-w-0 flex-[999_1_560px] flex-col gap-4 px-5 pt-4 pb-6"
+      >
+        <HubHead
+          tab="plugins"
+          line={
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="flex flex-auto items-center">
+                Add-ons that plug new features in. Found in plugins/ on start. Tools and skills turn
+                on in Hub › Assistant.
+                <Info>
+                  A plugin is a folder in plugins/ with a manifest: name, kind, version, source,
+                  what it may do. The studio lists it on start and never runs it until an admin
+                  turns it on. Kinds: Model provider, Assistant tools, Media tools, Skill.
+                </Info>
+              </span>
+              <button type="button" className="chip bevel" onClick={() => void rescan()}>
+                Rescan
+              </button>
+              <AddMenu onRescan={() => void rescan()} />
+            </div>
+          }
+        />
         {error && <ErrorNote onRetry={load}>{error}</ErrorNote>}
         {note.text && (
           <p role="status" className="flex flex-wrap items-center gap-2.5 text-[13px]">
@@ -222,15 +236,21 @@ export function PluginsScreen() {
                             <span className="text-[12px] text-t2">{st.note}</span>
                           </>
                         )}
+                        {turnedOnElsewhere(p) && !dead && (
+                          <>
+                            <br />
+                            <TurnedOnIn />
+                          </>
+                        )}
                       </td>
                       <td className={cell} onClick={(e) => e.stopPropagation()}>
                         <div className="flex flex-wrap items-center gap-1.5 min-[1400px]:flex-nowrap">
                           {p.provider ? (
                             <>
-                              {/* one line at 1440 px: the aside has Open in Model providers and Open Assistant */}
+                              {/* one line at 1440 px: the aside has Open in Providers and Open Assistant */}
                               <Link
-                                href="/admin?tab=providers"
-                                title="Open in Model providers"
+                                href={hubHref("providers")}
+                                title="Open in Providers"
                                 className="flex items-center gap-1.5 whitespace-nowrap text-[13px] text-[#7fd88f]"
                               >
                                 <Dot ok />
@@ -244,11 +264,6 @@ export function PluginsScreen() {
                                 Add as provider
                               </button>
                             )
-                          )}
-                          {!dead && (
-                            <button type="button" className={CHIP} onClick={() => void toggle(p)}>
-                              {p.enabled ? "Disable" : "Enable"}
-                            </button>
                           )}
                           <button type="button" className={CHIP} onClick={() => setRemoving(p)}>
                             Remove
@@ -446,30 +461,24 @@ function PluginPanel({
     >
       <div className="flex items-center gap-2">
         <h2 className="grow font-display text-base leading-5 font-bold">{p.title}</h2>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={p.enabled}
-          aria-label="Enabled"
-          disabled={unusable(p)}
-          onClick={onToggle}
-          className={`flex h-6 w-10 shrink-0 rounded-full p-0.5 ${p.enabled ? "justify-end bg-a1" : "bg-s4"}`}
-        >
-          <span className={`block size-5 rounded-full ${p.enabled ? "bg-on1" : "bg-t2"}`} />
-        </button>
+        {!turnedOnElsewhere(p) && (
+          <button
+            type="button"
+            role="switch"
+            aria-checked={p.enabled}
+            aria-label="Enabled"
+            disabled={unusable(p)}
+            onClick={onToggle}
+            className={`flex h-6 w-10 shrink-0 rounded-full p-0.5 ${p.enabled ? "justify-end bg-a1" : "bg-s4"}`}
+          >
+            <span className={`block size-5 rounded-full ${p.enabled ? "bg-on1" : "bg-t2"}`} />
+          </button>
+        )}
       </div>
       <span className="text-[13px] text-t1b">
         {skill && p.when ? whenLine(p.when) : p.description}
       </span>
-      {(skill || p.kind === "assistant-tools") && (
-        <span className="text-[12px] text-t2">
-          Also on the{" "}
-          <Link href="/assistant" className="underline underline-offset-2">
-            Assistant page
-          </Link>
-          .
-        </span>
-      )}
+      {turnedOnElsewhere(p) && !unusable(p) && <TurnedOnIn />}
       {alert && (
         <div
           role="alert"
@@ -620,7 +629,7 @@ function Added({ title, onDone }: { title: string; onDone: () => void }) {
       </div>
       <span className="text-[12px] text-t2">Next: use it for the Assistant.</span>
       <div className="flex gap-1.5">
-        <Link href="/assistant" className={`${CHIP} bg-a1 font-semibold text-on1`}>
+        <Link href={hubHref("assistant")} className={`${CHIP} bg-a1 font-semibold text-on1`}>
           Open Assistant
         </Link>
         <button type="button" className={CHIP} onClick={onDone}>
@@ -641,10 +650,10 @@ function AlreadyAdded({ title }: { title: string }) {
         {title} added
       </div>
       <div className="flex flex-wrap gap-1.5">
-        <Link href="/admin?tab=providers" className={CHIP}>
-          Open in Model providers
+        <Link href={hubHref("providers")} className={CHIP}>
+          Open in Providers
         </Link>
-        <Link href="/assistant" className={CHIP}>
+        <Link href={hubHref("assistant")} className={CHIP}>
           Open Assistant
         </Link>
       </div>

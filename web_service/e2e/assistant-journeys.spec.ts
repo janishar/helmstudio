@@ -119,7 +119,7 @@ const shot = (name: string, p = page) =>
 
 // ---- what the user sees and does
 const dock = (p = page) =>
-  p.getByRole("navigation", { name: "Sections" }).getByRole("button", { name: /^Chat/ });
+  p.getByRole("navigation", { name: "Sections" }).getByRole("button", { name: /^Assistant/ });
 const drawer = (p = page) => p.getByRole("complementary", { name: "Assistant" });
 const box = (p = page) => drawer(p).getByLabel("Message the assistant");
 const lines = (p = page) =>
@@ -431,7 +431,7 @@ test("J4 take me to the gallery (and what happens to the rest of that reply)", a
   );
   await say("open the admin page");
   await replied("Admin is only for admins.");
-  await expect(line("Can't go there · Admin is for admins only")).toBeVisible();
+  await expect(line("Can't go there · System is for admins only")).toBeVisible();
   await expect(page).toHaveURL(/\/gallery/);
 });
 
@@ -816,15 +816,15 @@ test("J11b after the admin raises the daily cap, I can write again", async () =>
   await replied("Here again.");
 });
 
-test("J12 the admin turns the assistant off and on on its page: the drawer follows", async () => {
-  await admin.goto("/assistant");
+test("J12 the admin turns the assistant off and on in Hub: the drawer follows", async () => {
+  await admin.goto("/hub");
   const sw = admin.getByRole("switch", { name: "Assistant on" });
   try {
     await expect(sw).toHaveAttribute("aria-checked", "true");
     await sw.click();
     await expect(sw).toHaveAttribute("aria-checked", "false");
     await shot("j12-admin-off", admin);
-    // plan 32: Chat stays in the dock; the drawer says the admin turned it off
+    // plan 32: the Assistant stays in the dock; the drawer says the admin turned it off
     await page.reload();
     await open();
     await expect(drawer()).toContainText("The Assistant is off");

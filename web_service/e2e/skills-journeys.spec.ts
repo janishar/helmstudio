@@ -99,12 +99,12 @@ test.afterEach(async ({}, info) => {
 
 const row = (p: Page, text: string | RegExp) => p.getByRole("row").filter({ hasText: text });
 const dock = (p = page) =>
-  p.getByRole("navigation", { name: "Sections" }).getByRole("button", { name: /^Chat/ });
+  p.getByRole("navigation", { name: "Sections" }).getByRole("button", { name: /^Assistant/ });
 const drawer = (p = page) => p.getByRole("complementary", { name: "Assistant" });
 const box = (p = page) => drawer(p).getByLabel("Message the assistant");
 
 test("S1 the admin finds skills, built in and in ~/.helm/plugins, and turns Animator on", async () => {
-  await admin.goto("/plugins");
+  await admin.goto("/hub?tab=plugins");
   await admin.getByRole("button", { name: "Rescan", exact: true }).first().click();
   await expect(admin.getByRole("status")).toBeVisible(); // what the Rescan found (or "No new plugins.")
 
@@ -117,18 +117,22 @@ test("S1 the admin finds skills, built in and in ~/.helm/plugins, and turns Anim
   const anim = row(admin, /^Animator/);
   await expect(anim).toContainText("0.2.0 · built in · plugins/animator");
   await expect(anim).toContainText("Skill");
-  if ((await anim.getByRole("button", { name: "Enable" }).count()) > 0)
-    await anim.getByRole("button", { name: "Enable" }).click();
+  // plan 33: no on/off on the rows; a skill is turned on in Hub › Assistant, its only home
+  await expect(anim.getByRole("button", { name: /^(Enable|Disable)$/ })).toHaveCount(0);
+  await anim.getByRole("link", { name: "Turned on in Hub › Assistant" }).click();
+  await expect(admin).toHaveURL(/\/hub$/);
+  const skills = admin.getByRole("region", { name: "Skills" });
+  const sw = skills.getByRole("switch", { name: "Animator on" });
+  if ((await sw.getAttribute("aria-checked")) !== "true") await sw.click();
+  await expect(sw).toHaveAttribute("aria-checked", "true");
+  await admin.getByRole("tab", { name: "Plugins" }).click();
   await expect(anim).toContainText("On");
-  await expect(anim.getByRole("button", { name: "Disable" })).toBeVisible();
 
-  // its aside, as the board's "A skill · the aside"
+  // its aside, as the board's "A skill · the aside": no switch, where it is turned on
   await anim.getByRole("button", { name: "Animator" }).click();
   const aside = admin.getByRole("complementary", { name: "Plugin: Animator" });
-  await expect(aside.getByRole("switch", { name: "Enabled" })).toHaveAttribute(
-    "aria-checked",
-    "true",
-  );
+  await expect(aside.getByRole("switch")).toHaveCount(0);
+  await expect(aside.getByRole("link", { name: "Turned on in Hub › Assistant" })).toBeVisible();
   await expect(aside).toContainText("Use when making a cartoon or animated shot");
   await expect(aside).toContainText("0.2.0 · format 1");
   await expect(aside).toContainText("Built in · plugins/animator");

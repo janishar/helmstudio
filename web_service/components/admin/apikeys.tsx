@@ -3,7 +3,7 @@
 // confirm; the New key panel gives the server command that makes one (it prints the full key once).
 import { useCallback, useEffect, useState } from "react";
 import { ErrorNote, Info, Modal } from "@/components/kit";
-import { AdminTabs } from "@/components/admin/users";
+import { SystemTabs } from "@/components/admin/users";
 import { api, message, ok, type S } from "@/lib/api";
 import { CLIENT_NOTE, CREATE_COMMAND, keyCounts, keyOrder, lastUsed } from "@/lib/apikeys";
 import { when } from "@/lib/format";
@@ -46,11 +46,11 @@ export function ApiKeysAdmin() {
     <>
       <main id="main" className="flex min-w-0 flex-[999_1_560px] flex-col gap-4 px-5 pt-4 pb-6">
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="font-display text-[22px] font-bold tracking-[0.01em]">Admin</h1>
+          <h1 className="font-display text-[22px] font-bold tracking-[0.01em]">System</h1>
           <div className="grow" />
           <span className="tag tag-accent">Signed in as root admin</span>
         </div>
-        <AdminTabs current="keys" />
+        <SystemTabs current="keys" />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div className={tile}>
             <span className="heading">Active keys</span>

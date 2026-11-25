@@ -154,7 +154,7 @@ function serve(entries: S<"AssistantEntry">[]) {
 
 async function openDrawer() {
   render(<AppShell user={user}>{null}</AppShell>);
-  fireEvent.click(await screen.findByRole("button", { name: /^Chat/ }));
+  fireEvent.click(await screen.findByRole("button", { name: /^Assistant/ }));
   return screen.findByRole("complementary", { name: "Assistant" });
 }
 

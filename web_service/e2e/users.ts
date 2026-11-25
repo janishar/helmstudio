@@ -33,7 +33,7 @@ export async function newUser(browser: Browser, name: string): Promise<Creds> {
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
   await signIn(page, ADMIN);
-  await page.goto("/admin");
+  await page.goto("/system");
   const add = page.getByRole("complementary", { name: "Add a user" });
   await add.getByLabel("Name").fill(`E2E ${name}`);
   await add.getByLabel("Email").fill(c.email);

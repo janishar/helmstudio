@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Monitor, Server, X } from "lucide-react";
 import { ErrorNote, Info, Modal } from "@/components/kit";
-import { AdminTabs } from "@/components/admin/users";
+import { SystemTabs } from "@/components/admin/users";
 import { api, message, ok, type S } from "@/lib/api";
 import { MAC_RUNTIMES } from "@/lib/models";
 import {
@@ -124,11 +124,11 @@ export function HostsAdmin() {
     <>
       <main id="main" className="flex min-w-0 flex-[999_1_560px] flex-col gap-4 px-5 pt-4 pb-6">
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="font-display text-[22px] font-bold tracking-[0.01em]">Admin</h1>
+          <h1 className="font-display text-[22px] font-bold tracking-[0.01em]">System</h1>
           <div className="grow" />
           <span className="tag tag-accent">Signed in as root admin</span>
         </div>
-        <AdminTabs current="hosts" />
+        <SystemTabs current="hosts" />
         <div className="flex items-center gap-2 text-[13px] text-t2">
           <span className="mono text-[12px]">
             {cards.length} host{cards.length === 1 ? "" : "s"} ·{" "}

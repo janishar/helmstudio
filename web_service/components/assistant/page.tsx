@@ -1,15 +1,15 @@
 "use client";
-// The Assistant's own page (plan 32; docs/mock/Assistant.dc.html frames 19, 20 and 22): everything about the
-// Assistant in one place. An admin edits it: the on/off switch for everyone, Model (who answers, set up in one form),
-// Tools and Skills (the same plugin switches as Plugins), Auto mode (the caps), Context (the chat window and the prompt
-// cache), and their own Memory. Anyone else sees Model, Tools and Skills read-only ("Set by your admin") and their own
-// Memory. Behind it are the admin routes as they are (providers, provider-keys, /admin/assistant, the plugins and their
+// Hub › Assistant (plan 32, plan 33; docs/mock/Assistant.dc.html frames 19, 20 and 23): everything about the
+// Assistant in one place, admins only: the on/off switch for everyone, Model (who answers, set up in one form),
+// Tools and Skills (the plugins' on/off switches: their only home), Auto mode (the caps), Context (the chat window and
+// the prompt cache), and their own Memory. Behind it are the admin routes as they are (providers, provider-keys, /admin/assistant, the plugins and their
 // switches, Add as provider); keys are checked by KeyArea, never kept in React state.
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Brain, Lock } from "lucide-react";
+import { Brain } from "lucide-react";
 import { ErrorNote, Info } from "@/components/kit";
+import { Head, Switch, hubHref } from "@/components/hub";
 import { KeyArea } from "@/components/admin/providers";
 import { MemoryList } from "@/components/assistant/assistant";
 import { useAssistantApi, useUser } from "@/components/shell";
@@ -110,90 +110,13 @@ const capsText = (l: Limits) =>
     string
   >;
 
-/** Route /assistant: the admin's page or the read-only one. `setup`: open the setup form (the drawer's Set up). */
+/** Hub › Assistant (plan 33; frames 19, 20 and 23), admins only: the page. `setup`: open the setup form (the drawer's
+ * Set up). */
 export function AssistantScreen({ setup }: { setup: boolean }) {
   const me = useUser();
   if (!me) return <main id="main" className="apage flex-1" aria-busy />;
-  return me.roles.includes("admin") ? <AdminPage setup={setup} /> : <ReadOnlyPage />;
+  return <AdminPage setup={setup} />;
 }
-
-function Head({
-  chip,
-  line,
-  children,
-}: {
-  chip: "On" | "Off" | "Not set up";
-  line: string;
-  children?: React.ReactNode;
-}) {
-  const tone =
-    chip === "On"
-      ? { boxShadow: "inset 0 0 0 1px var(--a1)", color: "var(--a1)" }
-      : chip === "Off"
-        ? { boxShadow: "inset 0 0 0 1px var(--ln)", color: "var(--t2)" }
-        : { boxShadow: "inset 0 0 0 1px #f2c14e", color: "#f2c14e" };
-  return (
-    <>
-      <div className="flex flex-wrap items-center gap-3">
-        <h1 className="pt">
-          <i className="lgp" aria-hidden>
-            <SparklesMark />
-          </i>
-          Assistant
-        </h1>
-        <span className="stp" style={tone}>
-          {chip}
-        </span>
-        <div className="grow" />
-        {children}
-      </div>
-      <span className="text-[13px] text-t2">{line}</span>
-    </>
-  );
-}
-
-const SparklesMark = () => (
-  <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"
-    />
-  </svg>
-);
-
-function Switch({
-  on,
-  label,
-  disabled,
-  onClick,
-}: {
-  on: boolean;
-  label: string;
-  disabled?: boolean;
-  onClick?: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      aria-label={label}
-      disabled={disabled}
-      className="sw"
-      onClick={onClick}
-    >
-      <span />
-    </button>
-  );
-}
-
-const ByAdmin = () => (
-  <span className="byadm">
-    <Lock size={11} strokeWidth={2.25} aria-hidden />
-    Set by your admin
-  </span>
-);
 
 function Row({
   title,
@@ -238,99 +161,6 @@ function MemorySection() {
         Memory.
       </p>
     </section>
-  );
-}
-
-// ------------------------------------------------------------------ anyone else (frame 22)
-
-function ReadOnlyPage() {
-  const a = useAssistantApi();
-  const st = a?.status;
-  const [skills, setSkills] = useState<S<"SkillSummary">[]>([]);
-  useEffect(() => {
-    ok(api.GET("/v1/studio/skills"))
-      .then((l) => setSkills(l.skills))
-      .catch(() => setSkills([]));
-  }, []);
-  return (
-    <main
-      id="main"
-      className="apage flex min-w-0 flex-[999_1_560px] flex-col gap-4 px-5 pt-4 pb-16"
-    >
-      <Head
-        chip={st?.enabled ? "On" : st?.set_up ? "Off" : "Not set up"}
-        line="What it talks to and what it can use, set by your admin. Memory is yours."
-      />
-      <div className="pgg">
-        <div className="pgc">
-          <section aria-label="Model" className="panel sec">
-            <div className="pgh">
-              <h2>Model</h2>
-              <ByAdmin />
-            </div>
-            {st?.enabled && st.provider ? (
-              <>
-                <div className="who">
-                  <Tile id={st.provider.title.toLowerCase()} title={st.provider.title} />
-                  <div>
-                    <b>{st.provider.title}</b>
-                    <small>
-                      {st.provider.model ?? ""}
-                      {st.provider.model ? " · " : ""}
-                      {st.thinks ? "thinks" : "thinking off"}
-                    </small>
-                  </div>
-                  <span className={`tag ${st.provider.remote ? "tag-accent" : ""}`}>
-                    {st.provider.remote ? "remote" : "on this network"}
-                  </span>
-                </div>
-                <span className={st.provider.remote ? "warn" : "line"}>
-                  {sendsLine(st.provider.title, !st.provider.remote)}
-                </span>
-              </>
-            ) : (
-              <span className="line">
-                {st?.set_up
-                  ? "Your admin turned it off."
-                  : "The Assistant isn't set up yet. Ask your admin to set it up."}
-              </span>
-            )}
-          </section>
-          <section aria-label="Tools" className="panel sec">
-            <div className="pgh">
-              <h2>Tools</h2>
-              <ByAdmin />
-            </div>
-            {st?.tools.length ? (
-              st.tools.map((t) => (
-                <Row key={t.name} title={t.title} sub={SHORT[t.name]} on readOnly />
-              ))
-            ) : (
-              <span className="line">None turned on.</span>
-            )}
-          </section>
-          <section aria-label="Skills" className="panel sec">
-            <div className="pgh">
-              <h2>Skills</h2>
-              <ByAdmin />
-            </div>
-            {skills.length ? (
-              skills.map((k) => (
-                <Row key={k.name} title={k.title} sub={SHORT[k.name] ?? k.when} on readOnly />
-              ))
-            ) : (
-              <span className="line">None turned on.</span>
-            )}
-            <p className="fine">
-              It reads a skill when an ask fits, or when you type @ and pick one.
-            </p>
-          </section>
-        </div>
-        <div className="pgc">
-          <MemorySection />
-        </div>
-      </div>
-    </main>
   );
 }
 
@@ -466,6 +296,7 @@ function AdminPage({ setup }: { setup: boolean }) {
       className="apage flex min-w-0 flex-[999_1_560px] flex-col gap-4 px-5 pt-4 pb-16"
     >
       <Head
+        tab="assistant"
         chip={on ? "On" : setUp ? "Off" : "Not set up"}
         line={
           open
@@ -495,7 +326,7 @@ function AdminPage({ setup }: { setup: boolean }) {
               setForm(false);
               load();
               changed();
-              router.replace("/assistant");
+              router.replace("/hub");
               a?.setOpen(true); // done: the drawer opens
             }}
           />
@@ -522,8 +353,7 @@ function AdminPage({ setup }: { setup: boolean }) {
                 </span>
               </div>
               <span className="line">
-                Thinking is set per model in{" "}
-                <Link href="/admin?tab=providers">Model providers</Link>.
+                Thinking is set per model in <Link href={hubHref("providers")}>Providers</Link>.
               </span>
               <span className={live!.kind === "remote" ? "warn" : "line"}>
                 {sendsLine(titleOf(live!), live!.kind === "server")}
@@ -532,7 +362,7 @@ function AdminPage({ setup }: { setup: boolean }) {
             <section aria-label="Tools" className="panel sec">
               <div className="pgh">
                 <h2>Tools</h2>
-                <Link href="/plugins">Plugins</Link>
+                <Link href={hubHref("plugins")}>Plugins</Link>
               </div>
               {plugins && !tools.length && (
                 <span className="line">No assistant tools in Plugins.</span>
@@ -550,12 +380,12 @@ function AdminPage({ setup }: { setup: boolean }) {
                   )}
                 </Row>
               ))}
-              <p className="fine">Same switches as in Plugins.</p>
+              <p className="fine">Turned on and off only here.</p>
             </section>
             <section aria-label="Skills" className="panel sec">
               <div className="pgh">
                 <h2>Skills</h2>
-                <Link href="/plugins">Plugins</Link>
+                <Link href={hubHref("plugins")}>Plugins</Link>
               </div>
               {plugins && !skills.length && <span className="line">No skills in Plugins.</span>}
               {skills.map((p) => (
@@ -616,7 +446,7 @@ function SearchWith({
         <option value="">DuckDuckGo, then Bing, Google or Yahoo</option>
         {search.map((p) => (
           <option key={p.name} value={p.name}>
-            {titleOf(p)} (key in Model providers)
+            {titleOf(p)} (key in Providers)
           </option>
         ))}
       </select>
@@ -1043,7 +873,7 @@ function SetupForm({
                     : c.kind === "local"
                       ? "Ollama or LM Studio · sends nothing out"
                       : c.kind === "saved"
-                        ? "Remote · saved in Model providers"
+                        ? "Remote · saved in Providers"
                         : "Remote · needs a key"}
                 </small>
                 {st && (
@@ -1327,7 +1157,7 @@ function SavedStep({ saved, settings, onCancel, saveWith }: Step & { saved: Prov
   return (
     <>
       <span className="line">
-        Its key is set in <Link href="/admin?tab=providers">Model providers</Link>.
+        Its key is set in <Link href={hubHref("providers")}>Providers</Link>.
       </span>
       <ModelPick
         id="f-saved"
@@ -1557,7 +1387,7 @@ function LocalStep({
   if (!c)
     return (
       <span className="line">
-        No local server yet: add one in <Link href="/admin?tab=providers">Model providers</Link>.
+        No local server yet: add one in <Link href={hubHref("providers")}>Providers</Link>.
       </span>
     );
   const title = "saved" in c ? titleOf(c.saved) : c.preset.title;

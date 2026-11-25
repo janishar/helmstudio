@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
-// Admin > AI agents (components/admin/agents.tsx; docs/mock/AdminAgents.dc.html): the Session names row and editor:
-// Local greyed while Qwen3.8 is not downloaded, Remote greyed while remote models are off and no server is on this
-// network, a remote provider's "sends the prompt to …", and Save's PUT. Plan 32: no Assistant row, a line linking to
-// its own page (tests/components/assistant-page.test.tsx has its settings).
+// Hub › In pipelines (components/admin/agents.tsx; plan 33; docs/mock/Assistant.dc.html frame 24): the Pipeline steps
+// and Session names rows and their editors. Default model: Local LLM by default, a shared provider model (never an
+// Only-you one), Same as Assistant (greyed while it is not set up); Save's PUT. Session names: Local greyed while
+// Qwen3.8 is not downloaded, Provider model greyed while remote models are off and no server is on this network, a
+// remote provider's "sends the prompt to …", and Save's PUT.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { AgentsAdmin } from "@/components/admin/agents";
+import { InPipelines } from "@/components/admin/agents";
 import { pickable, searchable } from "@/lib/providers";
 import server from "../../../contracts/fixtures/http/Provider.valid.1.json";
 import remote from "../../../contracts/fixtures/http/Provider.valid.2.json";
@@ -19,7 +20,10 @@ vi.mock("next/link", () => ({
     </a>
   ),
 }));
-vi.mock("@/components/shell", () => ({ useUser: () => ({ roles: ["admin"] }) }));
+vi.mock("@/components/shell", () => ({
+  useUser: () => ({ roles: ["admin"] }),
+  useAssistantApi: () => null,
+}));
 
 afterEach(() => {
   cleanup();
@@ -46,14 +50,30 @@ const brave = {
   default_model: "",
 };
 
-function serve(n: S<"SessionNames">, providers: unknown[]) {
+const local: S<"PipelineDefaultModel"> = {
+  mode: "local",
+  provider: null,
+  model: null,
+  remote_enabled: false,
+  updated_at: null,
+};
+const noAssistant = { provider: null, model: null, personal: false } as S<"AssistantSettings">;
+
+function serve(
+  n: S<"SessionNames">,
+  providers: unknown[],
+  d: S<"PipelineDefaultModel"> = local,
+  assistant: Partial<S<"AssistantSettings">> = noAssistant,
+) {
   answer("GET", {
+    "/v1/studio/admin/pipeline-model": () => ({ data: { ...d, remote_enabled: n.remote_enabled } }),
     "/v1/studio/admin/session-names": () => ({ data: n }),
     "/v1/studio/admin/providers": () => ({
       data: { providers, remote_enabled: n.remote_enabled },
     }),
+    "/v1/studio/admin/assistant": () => ({ data: assistant }),
   });
-  render(<AgentsAdmin />);
+  render(<InPipelines />);
 }
 
 const row = (job: string) =>
@@ -64,32 +84,100 @@ const row = (job: string) =>
 const edit = (job: string) =>
   fireEvent.click(within(row(job)).getByRole("button", { name: "Edit" }));
 
-const radio = (name: RegExp) =>
-  within(screen.getByRole("radiogroup", { name: "Session names" })).getByRole("radio", { name });
+const radio = (name: RegExp, group = "Session names") =>
+  within(screen.getByRole("radiogroup", { name: group })).getByRole("radio", { name });
+const section = (name: string) => screen.getByRole("region", { name });
 
-describe("AgentsAdmin", () => {
+describe("InPipelines", () => {
   it("Off by default; Local and Remote greyed with their reasons", async () => {
     serve(names(), [remote]);
     expect(await screen.findByText("titles stay as they are")).toBeTruthy();
     expect((radio(/Local LLM/) as HTMLInputElement).disabled).toBe(true);
     expect(screen.getByText(/Qwen3\.8 27B not downloaded/)).toBeTruthy();
     expect(screen.getByRole("link", { name: "Models" }).getAttribute("href")).toBe("/models");
-    expect((radio(/Remote/) as HTMLInputElement).disabled).toBe(true);
+    expect((radio(/Provider model/) as HTMLInputElement).disabled).toBe(true);
     expect(screen.getByText("remote models are off on this deployment")).toBeTruthy();
-    expect(screen.getByRole("tab", { name: "AI agents" }).getAttribute("aria-selected")).toBe(
+    expect(screen.getByRole("tab", { name: "In pipelines" }).getAttribute("aria-selected")).toBe(
       "true",
     );
   });
 
-  it("no Assistant row: one line links to its own page (plan 32)", async () => {
+  it("Default model: Local LLM by default; a judge keeps its family's vision model; nothing goes out", async () => {
     serve(names(), [server]);
-    await screen.findAllByText("Session names");
-    expect(screen.queryByText("the in-app assistant")).toBeNull();
-    expect(screen.getAllByRole("row")).toHaveLength(2); // the head and Session names
-    expect(screen.getByRole("note").textContent).toContain("The Assistant has its own page.");
-    expect(screen.getByRole("link", { name: "Open the Assistant page" }).getAttribute("href")).toBe(
-      "/assistant",
-    );
+    await screen.findAllByText("Pipeline steps");
+    expect(screen.getAllByRole("row")).toHaveLength(3); // the head, Pipeline steps, Session names
+    expect(within(row("Pipeline steps")).getByText(/Local LLM · Qwen3\.8 27B/)).toBeTruthy();
+    expect(within(row("Pipeline steps")).getByText("nothing out")).toBeTruthy();
+    expect((radio(/^Local LLM/, "Default model") as HTMLInputElement).checked).toBe(true);
+    expect(within(section("Default model")).getByText("Sends nothing out.")).toBeTruthy();
+    const same = radio(/Same as Assistant/, "Default model") as HTMLInputElement;
+    expect(same.disabled).toBe(true);
+    expect(within(section("Default model")).getByText("the Assistant is not set up")).toBeTruthy();
+  });
+
+  it("Default model: a shared provider model, never an Only-you one; Save sends it", async () => {
+    const mine = {
+      ...remote,
+      name: "claude-code-bridge",
+      title: "Your Claude subscription",
+      owner_id: "u1",
+    };
+    serve(names({ remote_enabled: true }), [remote, server, mine]);
+    await screen.findAllByText("Pipeline steps");
+    const dm = section("Default model");
+    expect(
+      within(dm).getByText(
+        "Your Claude subscription is not offered here: it answers only for you.",
+      ),
+    ).toBeTruthy();
+    fireEvent.click(radio(/Provider model/, "Default model"));
+    const prov = within(dm).getByLabelText("Provider") as HTMLSelectElement;
+    expect([...prov.options].map((o) => o.value)).toEqual(["fakeai", "ollama"]);
+    expect(
+      within(dm).getByText("Sends the step's prompt and text to fakeai. Never images."),
+    ).toBeTruthy();
+    const put = answer("PUT", {
+      "/v1/studio/admin/pipeline-model": (init) => ({
+        data: {
+          ...local,
+          ...(init.body as object),
+          remote_enabled: true,
+          updated_at: "2026-11-25T10:00:00Z",
+        },
+      }),
+    });
+    fireEvent.click(within(dm).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(put).toHaveBeenCalled());
+    expect(put.mock.calls[0][1]).toEqual({
+      body: { mode: "remote", provider: "fakeai", model: "fake-large" },
+    });
+    expect(await within(row("Pipeline steps")).findByText("the prompt to fakeai")).toBeTruthy();
+  });
+
+  it("Default model: Same as Assistant follows the Assistant's model", async () => {
+    serve(names({ local_available: true }), [server], local, {
+      provider: "ollama",
+      model: null,
+      personal: false,
+    });
+    await screen.findAllByText("Pipeline steps");
+    const same = radio(/Same as Assistant/, "Default model") as HTMLInputElement;
+    expect(same.disabled).toBe(false);
+    expect(
+      within(section("Default model")).getByText("Ollama on the Mac · qwen2.5:7b"),
+    ).toBeTruthy();
+    fireEvent.click(same);
+    const put = answer("PUT", {
+      "/v1/studio/admin/pipeline-model": () => ({
+        data: { ...local, mode: "assistant", updated_at: "2026-11-25T10:00:00Z" },
+      }),
+    });
+    fireEvent.click(within(section("Default model")).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(put).toHaveBeenCalled());
+    expect(put.mock.calls[0][1]).toEqual({ body: { mode: "assistant" } });
+    expect(
+      await within(row("Pipeline steps")).findByText(/Same as Assistant · Ollama on the Mac/),
+    ).toBeTruthy();
   });
 
   it("a server on this network needs no switch", () => {
@@ -99,9 +187,10 @@ describe("AgentsAdmin", () => {
     expect(pickable([remote, server] as S<"Provider">[], true)).toHaveLength(2);
   });
 
-  it("Remote: says what is sent where, and saves the provider and model", async () => {
+  it("Session names, a provider model: says what is sent where, and saves the provider and model", async () => {
     serve(names({ remote_enabled: true, local_available: true }), [remote, server]);
-    fireEvent.click(await screen.findByRole("radio", { name: /Remote/ }));
+    await screen.findAllByText("Session names");
+    fireEvent.click(radio(/Provider model/));
     expect(
       screen.getByText("Sends the prompt to fakeai. Never images or references."),
     ).toBeTruthy();
@@ -115,7 +204,7 @@ describe("AgentsAdmin", () => {
       }),
     });
     fireEvent.click(
-      within(screen.getByRole("complementary", { name: "Session names" })).getByRole("button", {
+      within(section("Session names")).getByRole("button", {
         name: "Save",
       }),
     );
@@ -123,7 +212,7 @@ describe("AgentsAdmin", () => {
     expect(put.mock.calls[0][1]).toEqual({
       body: { mode: "remote", provider: "fakeai", model: "fake-large" },
     });
-    expect(screen.getByText("the prompt to fakeai")).toBeTruthy();
+    expect(within(row("Session names")).getByText("the prompt to fakeai")).toBeTruthy();
   });
 
   it("a local server is marked on this network", async () => {
@@ -161,6 +250,6 @@ describe("AgentsAdmin", () => {
     );
     await screen.findAllByText("Session names");
     edit("Session names");
-    expect(document.activeElement).toBe(radio(/^Remote/));
+    expect(document.activeElement).toBe(radio(/^Provider model/));
   });
 });

@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
-// The Assistant's own page (components/assistant/page.tsx; plan 32; docs/mock/Assistant.dc.html frames 19, 20, 22):
+// Hub › Assistant (components/assistant/page.tsx; plans 32, 33; docs/mock/Assistant.dc.html frames 19, 20, 23):
 // the admin's sections in the board's order and what each saves (the on/off switch, a plugin's switch, web search's
 // Search with, Auto mode's caps, Context's chat window and the prompt cache table), the setup form (cards greyed
 // while remote models are off, a remote preset's key checked before Save, the models fetched by themselves, Save
-// creating the provider, saving the Assistant on and opening the drawer) and the read-only page anyone else sees.
+// creating the provider, saving the Assistant on and opening the drawer). Hub is admin only (no read-only page).
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import assistantOn from "../../../contracts/fixtures/http/AssistantSettings.valid.1.json";
@@ -166,9 +166,21 @@ describe("the admin's page", () => {
         "Sends your messages, the screen summary and tool results to DeepSeek; never images.",
       ),
     ).toBeTruthy();
-    expect(within(model).getByRole("link", { name: "Model providers" }).getAttribute("href")).toBe(
-      "/admin?tab=providers",
+    expect(within(model).getByRole("link", { name: "Providers" }).getAttribute("href")).toBe(
+      "/hub?tab=providers",
     );
+    // plan 33: Hub's header and tabs above the Assistant tab
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Hub");
+    expect(
+      within(screen.getByRole("tablist", { name: "Hub sections" }))
+        .getAllByRole("tab")
+        .map((t) => [t.textContent, t.getAttribute("aria-selected")]),
+    ).toEqual([
+      ["Assistant", "true"],
+      ["In pipelines", "false"],
+      ["Providers", "false"],
+      ["Plugins", "false"],
+    ]);
     const put = echo();
     fireEvent.click(screen.getByRole("switch", { name: "Assistant on" }));
     await waitFor(() => expect(put).toHaveBeenCalled());
@@ -184,7 +196,7 @@ describe("the admin's page", () => {
     expect(await screen.findByText("Off")).toBeTruthy();
   });
 
-  it("Tools and Skills: the same switches as Plugins; Search with picks web search's provider", async () => {
+  it("Tools and Skills: their only switches; Search with picks web search's provider", async () => {
     serve(settings(), [deepseek, brave]);
     render(<AssistantScreen setup={false} />);
     const tools = await screen.findByRole("region", { name: "Tools" });
@@ -415,7 +427,7 @@ describe("the admin's page", () => {
         },
       },
     ]);
-    expect(replace).toHaveBeenCalledWith("/assistant");
+    expect(replace).toHaveBeenCalledWith("/hub");
   });
 
   it("Change opens the form; Cancel goes back", async () => {
@@ -430,44 +442,5 @@ describe("the admin's page", () => {
     ).toBe("true");
     fireEvent.click(within(form).getByRole("button", { name: "Cancel" }));
     expect(screen.getByRole("region", { name: "Model" })).toBeTruthy();
-  });
-});
-
-describe("anyone else's page", () => {
-  it("Model, Tools and Skills read-only, set by the admin; their own Memory; no switch, Auto mode or Context", async () => {
-    roles = ["user"];
-    status = {
-      enabled: true,
-      set_up: true,
-      can_set_up: false,
-      first_launch: false,
-      tools: [{ name: "web-search", title: "Web search" }],
-      provider: { title: "DeepSeek", remote: true, model: "deepseek-chat" },
-      web_search: null,
-      limits: assistantOn.limits,
-      thinks: false,
-      sees: false,
-    };
-    answer("GET", {
-      "/v1/studio/skills": () => ({
-        data: { skills: [{ name: "animator", title: "Animator", when: "w", version: "1" }] },
-      }),
-      "/v1/studio/assistant/memory": () => ({ data: { items: [], counts: {} } }),
-    });
-    render(<AssistantScreen setup={false} />);
-    expect(
-      await within(section("Skills")).findByText("A cartoon film in one style, script to MP4."),
-    ).toBeTruthy();
-    expect(screen.getAllByText("Set by your admin")).toHaveLength(3);
-    expect(within(section("Model")).getByText("deepseek-chat · thinking off")).toBeTruthy();
-    expect(
-      screen.getByText("What it talks to and what it can use, set by your admin. Memory is yours."),
-    ).toBeTruthy();
-    for (const s of screen.getAllByRole("switch"))
-      expect((s as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.queryByRole("switch", { name: "Assistant on" })).toBeNull();
-    expect(screen.queryByRole("form", { name: "Auto mode" })).toBeNull();
-    expect(screen.queryByRole("form", { name: "Context" })).toBeNull();
-    expect(section("Memory")).toBeTruthy();
   });
 });

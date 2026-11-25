@@ -4,11 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createContext, use, useEffect, useRef, useState } from "react";
 import {
+  Blocks,
+  Bot,
   Boxes,
   Clapperboard,
   Images,
-  MessagesSquare,
-  Plug,
   Settings,
   ShieldCheck,
   Sparkles,
@@ -32,7 +32,7 @@ export const useUser = () => use(UserContext);
 const AssistantContext = createContext<AssistantApi | null>(null);
 export const useAssistantApi = () => use(AssistantContext);
 
-/** Dock items: route, label, glyph and the tile's gradient. Plugins and Admin are added for admins. */
+/** Dock items: route, label, glyph and the tile's gradient. Hub and System follow for admins (plan 33), as a group. */
 const ITEMS = [
   { href: "/", label: "Create", Icon: Sparkles, tile: "linear-gradient(155deg,#a393ff,#4a2fe0)" },
   {
@@ -59,26 +59,34 @@ const ITEMS = [
     Icon: Boxes,
     tile: "linear-gradient(155deg,#7af5d6,#12967f)",
   },
-  // plan 32: the Assistant's own page, for everyone (read-only for anyone but an admin)
+];
+/** plan 33 37.9: everything AI (Hub) and the deployment (System), admins only */
+const ADMIN_ITEMS = [
+  { href: "/hub", label: "Hub", Icon: Blocks, tile: "linear-gradient(155deg,#d8f58c,#3c9a2e)" },
   {
-    href: "/assistant",
-    label: "Assistant",
-    Icon: Sparkles,
-    tile: "linear-gradient(155deg,#d8f58c,#3c9a2e)",
+    href: "/system",
+    label: "System",
+    Icon: ShieldCheck,
+    tile: "linear-gradient(155deg,#c9ced9,#5b6478)",
   },
 ];
-const PLUGINS = {
-  href: "/plugins",
-  label: "Plugins",
-  Icon: Plug,
-  tile: "linear-gradient(155deg,#f7a8e0,#a8329a)",
-};
-const ADMIN = {
-  href: "/admin",
-  label: "Admin",
-  Icon: ShieldCheck,
-  tile: "linear-gradient(155deg,#c9ced9,#5b6478)",
-};
+type Item = (typeof ITEMS)[number];
+
+/** One page in the dock. */
+function DockLink({ it: { href, label, Icon, tile }, path }: { it: Item; path: string }) {
+  return (
+    <Link
+      href={href}
+      aria-current={isCurrent(href, path) ? "page" : undefined}
+      className="dock-item flex h-16 w-[58px] shrink-0 flex-col items-center justify-center gap-[5px] rounded-2xl text-[10px] font-medium text-t2 aria-[current]:text-t1"
+    >
+      <span className="tile" style={{ "--tile": tile } as React.CSSProperties}>
+        <Icon size={20} strokeWidth={1.75} aria-hidden />
+      </span>
+      {label}
+    </Link>
+  );
+}
 
 /** True when `path` is the item's page or below it ("/" only matches itself). */
 export const isCurrent = (href: string, path: string) =>
@@ -117,7 +125,7 @@ export function AppShell({
 }) {
   const path = usePathname();
   const me = useMe(user);
-  const items = me?.roles.includes("admin") ? [...ITEMS, PLUGINS, ADMIN] : ITEMS;
+  const admin = !!me?.roles.includes("admin");
   const a = useAssistant(me);
   const { reg } = a;
   useEffect(() => {
@@ -174,25 +182,26 @@ export function AppShell({
                 aria-label="Sections"
                 className="panel z-10 m-3.5 mb-0 flex shrink-0 items-center gap-3.5 self-stretch overflow-x-auto rounded-[30px] px-3 py-1 md:m-0 md:w-[76px] md:flex-col md:self-start md:overflow-visible md:px-1 md:py-3.5"
               >
-                {items.map(({ href, label, Icon, tile }) => (
-                  <Link
-                    key={href}
-                    href={href}
-                    aria-current={isCurrent(href, path) ? "page" : undefined}
-                    className="dock-item flex h-16 w-[58px] shrink-0 flex-col items-center justify-center gap-[5px] rounded-2xl text-[10px] font-medium text-t2 aria-[current]:text-t1"
-                  >
-                    <span className="tile" style={{ "--tile": tile } as React.CSSProperties}>
-                      <Icon size={20} strokeWidth={1.75} aria-hidden />
-                    </span>
-                    {label}
-                  </Link>
+                {ITEMS.map((it) => (
+                  <DockLink key={it.href} it={it} path={path} />
                 ))}
+                {admin && (
+                  <div
+                    role="group"
+                    aria-label="Admin only"
+                    className="flex shrink-0 items-center gap-2 rounded-2xl bg-[color-mix(in_srgb,var(--s3)_55%,transparent)] px-1 md:flex-col md:px-0 md:py-1.5"
+                  >
+                    {ADMIN_ITEMS.map((it) => (
+                      <DockLink key={it.href} it={it} path={path} />
+                    ))}
+                  </div>
+                )}
                 {a.ready && <span aria-hidden className="h-8 w-px shrink-0 bg-s4 md:h-px md:w-8" />}
                 {a.ready && (
                   <button
                     type="button"
                     aria-expanded={a.open}
-                    title={`Chat (${shortcut()})`}
+                    title={`Assistant (${shortcut()})`}
                     onClick={() => a.setOpen((o) => !o)}
                     className="dock-item relative flex h-16 w-[58px] shrink-0 flex-col items-center justify-center gap-[5px] rounded-2xl text-[10px] font-medium text-t2 aria-expanded:text-t1"
                   >
@@ -204,9 +213,9 @@ export function AppShell({
                         } as React.CSSProperties
                       }
                     >
-                      <MessagesSquare size={20} strokeWidth={1.75} aria-hidden />
+                      <Bot size={20} strokeWidth={1.75} aria-hidden />
                     </span>
-                    Chat
+                    Assistant
                     {a.cardWaits && !a.open && (
                       <span aria-label="1 card waits for you" className="dot" />
                     )}

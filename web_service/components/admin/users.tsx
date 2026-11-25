@@ -57,11 +57,11 @@ export function UsersAdmin({ initialUsers }: { initialUsers?: User[] }) {
     <>
       <main id="main" className="flex min-w-0 flex-[999_1_560px] flex-col gap-4 px-5 pt-4 pb-6">
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="font-display text-[22px] font-bold tracking-[0.01em]">Admin</h1>
+          <h1 className="font-display text-[22px] font-bold tracking-[0.01em]">System</h1>
           <div className="grow" />
           <span className="tag tag-accent">Signed in as root admin</span>
         </div>
-        <AdminTabs current="users" />
+        <SystemTabs current="users" />
         {error && <ErrorNote onRetry={load}>{error}</ErrorNote>}
         <div className="panel min-h-0 overflow-auto px-2 py-1.5" aria-busy={!users && !error}>
           <table className="w-full min-w-[760px] border-collapse text-[13px]">
@@ -101,22 +101,16 @@ export function UsersAdmin({ initialUsers }: { initialUsers?: User[] }) {
   );
 }
 
-/** The Admin sections, in the boards' order (docs/mock/Users.dc.html, Hosts.dc.html, ApiKeys.dc.html,
- * Providers.dc.html, AdminAgents.dc.html). */
-export function AdminTabs({
-  current,
-}: {
-  current: "users" | "hosts" | "keys" | "providers" | "agents";
-}) {
+/** The System sections (plan 33: was Admin; its Model providers and AI agents tabs moved to Hub), in the boards' order
+ * (docs/mock/Users.dc.html, Hosts.dc.html, ApiKeys.dc.html). */
+export function SystemTabs({ current }: { current: "users" | "hosts" | "keys" }) {
   const tabs = [
-    ["users", "Users", "/admin"],
-    ["hosts", "Hosts", "/admin?tab=hosts"],
-    ["keys", "API keys", "/admin?tab=keys"],
-    ["providers", "Model providers", "/admin?tab=providers"],
-    ["agents", "AI agents", "/admin?tab=agents"],
+    ["users", "Users", "/system"],
+    ["hosts", "Hosts", "/system?tab=hosts"],
+    ["keys", "API keys", "/system?tab=keys"],
   ] as const;
   return (
-    <div role="tablist" aria-label="Admin sections" className="flex flex-wrap gap-2">
+    <div role="tablist" aria-label="System sections" className="flex flex-wrap gap-2">
       {tabs.map(([id, label, href]) => (
         <Link
           key={id}
