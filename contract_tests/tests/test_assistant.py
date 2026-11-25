@@ -90,6 +90,42 @@ def test_a_turn_reads_through_studio(api, api_b, assistant):
     assert api.get(url).status_code == 404
 
 
+def test_a_shot_list_saved_in_one_chat_is_read_in_the_next(api, api_b, assistant):
+    """API 1.69 (alpha.2 items 28, 29): save_shots keeps the film's shot list as a Projects item with its shots, the
+    next chat's model reads it, and a PATCH of its text keeps the shots."""
+    film = f"Diner {uuid.uuid4().hex[:6]}"
+    plan = [{"n": 1, "what": "@june wipes the counter", "seconds": 3},
+            {"n": 2, "what": "@stranger pays", "seconds": 3, "line": "@stranger: Keep the change."}]  # fmt: skip
+    fake("POST", "/__script", {assistant: [
+        {"content": "Saving the plan.", "tool_calls": [{"tool": "save_shots", "args": {"film": film, "shots": plan}}]},
+        {"content": "Saved."},
+        {"content": "Shot 2: @stranger pays."},
+    ]})  # fmt: skip
+
+    def chat(text: str) -> dict:
+        tid = ok(api.post(THREADS, json={"client_id": TAB}), 201)["id"]
+        url = f"{THREADS}/{tid}"
+        ok(api.post(f"{url}/messages", json={"kind": "message", "client_id": TAB, "text": text,
+                                             "screen": screen()}), 202)  # fmt: skip
+        got = wait_for(lambda: (g := ok(api.get(url)))["state"] == "idle" and g, timeout=60, what="the answer")
+        ok(api.delete(url), 204)
+        return got
+
+    before = len([r for r in fake("GET", "/__requests") if r["model"] == assistant])
+    got = chat("Plan the diner film")
+    assert any(f"Shot list · {film}: 2 shots" in (e.get("line") or {}).get("text", "") for e in got["entries"]), got["entries"]
+    item = next(i for i in ok(api.get(f"{STUDIO}/assistant/memory", params={"kind": "project"}))["items"]
+                if (i.get("shots") or {}).get("film") == film)  # fmt: skip
+    assert item["shots"]["shots"] == plan and item["text"].startswith(f"Shot list · {film}: 2 shots")
+    chat("For Shot 2, what was it?")
+    calls = [r for r in fake("GET", "/__requests") if r["model"] == assistant][before:]
+    assert '2. @stranger pays · 3 s · "@stranger: Keep the change."' in calls[2]["body"]["messages"][0]["content"]
+    edited = ok(api.patch(f"{STUDIO}/assistant/memory/{item['id']}", json={"text": "The diner film"}))
+    assert edited["text"] == "The diner film" and edited["shots"] == item["shots"]
+    assert api_b.delete(f"{STUDIO}/assistant/memory/{item['id']}").status_code == 404
+    ok(api.delete(f"{STUDIO}/assistant/memory/{item['id']}"), 204)
+
+
 def test_the_window_per_model_and_the_cache_hit_rate(api, admin, assistant):
     """API 1.66 (alpha.2 item 30): the chat window is the model's own; each reply's cache hits are kept and the
     admin reads the hit rate per provider and model."""

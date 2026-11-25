@@ -1286,6 +1286,8 @@ type AssistantMemoryItem struct {
 	Thread    map[string]any `json:"thread"`
 	CreatedAt string         `json:"created_at"`
 	UpdatedAt string         `json:"updated_at"`
+	// Shots is a film's shot list (API 1.69): a Projects item save_shots wrote.
+	Shots json.RawMessage `json:"shots,omitempty"`
 }
 
 // AssistantMemoryList is GET /assistant/memory.
@@ -1339,7 +1341,7 @@ func (s *Service) memoryItems(ctx context.Context, caller common.Caller, items [
 	}
 	out := []AssistantMemoryItem{}
 	for _, it := range items {
-		item := AssistantMemoryItem{ID: it.ID, Kind: it.Kind, Text: it.Text, CreatedAt: it.CreatedAt, UpdatedAt: it.UpdatedAt}
+		item := AssistantMemoryItem{ID: it.ID, Kind: it.Kind, Text: it.Text, CreatedAt: it.CreatedAt, UpdatedAt: it.UpdatedAt, Shots: it.Shots}
 		if title, ok := titles[deref(it.ThreadID)]; ok {
 			item.Thread = map[string]any{"id": *it.ThreadID, "title": title}
 		}

@@ -6804,6 +6804,27 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+            shots?: components["schemas"]["AssistantShotList"];
+        };
+        /** @description From 1.69: a film's shot list, kept as a Projects item (kind project); the item's `text` is its summary, rewritten at each save. Shots by number ascending (contracts/README.md, Assistant: shot list) */
+        AssistantShotList: {
+            /** @description the film's title; one list per title (any case) */
+            film: string;
+            shots: {
+                /** @description the shot number, unique in the list */
+                n: number;
+                /** @description what happens */
+                what: string;
+                /** @description the planned length */
+                seconds?: number;
+                /** @description the line spoken (`@name: text`), if any */
+                line?: string;
+                /**
+                 * Format: uuid
+                 * @description the take used, once picked
+                 */
+                take_id?: string;
+            }[];
         };
         AssistantMemoryList: {
             items: components["schemas"]["AssistantMemoryItem"][];

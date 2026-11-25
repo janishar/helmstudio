@@ -159,7 +159,31 @@
         "text": {"type": "string", "minLength": 1, "maxLength": 600, "description": "at most 500 characters; a summary 600"},
         "thread_id": {"oneOf": [{"$ref": "defs.schema.json#/$defs/uuid"}, {"type": "null"}], "description": "the chat that saved it (null once that chat is deleted)"},
         "created_at": {"type": "string", "format": "date-time"},
-        "updated_at": {"type": "string", "format": "date-time"}
+        "updated_at": {"type": "string", "format": "date-time"},
+        "shots": {"$ref": "#/$defs/shotList", "description": "from API 1.69: a film's shot list (kind project only); `text` is then its summary, rewritten at each save_shots"}
+      }
+    },
+    "shot": {
+      "type": "object",
+      "required": ["n", "what"],
+      "additionalProperties": false,
+      "description": "from API 1.69 (contracts/README.md, Assistant: shot list): one shot of a film's plan",
+      "properties": {
+        "n": {"type": "integer", "minimum": 1, "maximum": 999, "description": "the shot number, unique in its list"},
+        "what": {"type": "string", "minLength": 1, "maxLength": 300, "description": "what happens, in plain words"},
+        "seconds": {"type": "number", "exclusiveMinimum": 0, "maximum": 600, "description": "the planned length"},
+        "line": {"type": "string", "minLength": 1, "maxLength": 300, "description": "the line spoken (`@name: text`), if any"},
+        "take_id": {"$ref": "defs.schema.json#/$defs/uuid", "description": "the take used for the shot, once picked"}
+      }
+    },
+    "shotList": {
+      "type": "object",
+      "required": ["film", "shots"],
+      "additionalProperties": false,
+      "description": "from API 1.69: a film's shot list, its shots by number ascending",
+      "properties": {
+        "film": {"type": "string", "minLength": 1, "maxLength": 80, "description": "the film's title; one list per title (any case) per owner"},
+        "shots": {"type": "array", "minItems": 1, "maxItems": 60, "items": {"$ref": "#/$defs/shot"}}
       }
     }
   }
