@@ -21,11 +21,11 @@ or steers either face lives on the Assistant page. Nothing about AI agents stays
 
 `/assistant` keeps one rail item (Assistant) and gets tabs, like Admin's:
 
-1. **Chat**: today's page (plan 32 frame 19): Model, Tools, Skills, Auto mode, Context, Memory, the on/off switch.
+1. **Agent** (was "Chat"; owner, 2026-11-25: "rename chat to Agent and appropriate icon"): today's page (plan 32 frame 19): Model, Tools, Skills, Auto mode, Context, Memory, the on/off switch.
 2. **In pipelines** (the silent assistant):
    - **Default model** for pipeline write, decide, agent and judge steps: what a step's "Runs on · Auto" means.
      Today Auto is the local LLM pack (and a family's own vision model for a judge); the admin may pick a provider
-     model instead, or "Same as Chat". A step that names a model keeps it.
+     model instead, or "Same as Agent". A step that names a model keeps it.
    - **Session names** (moved from Admin › AI agents): Off · Local LLM · a provider model, as today.
    - What leaves the machine, per choice, as today's AI agents table says it.
 3. **Providers**: Admin › Model providers moved as it is (list, add from presets, keys, models, thinking per model,
@@ -33,14 +33,14 @@ or steers either face lives on the Assistant page. Nothing about AI agents stays
 4. **Plugins**: the Plugins page moved here (model-provider, assistant-tools and skill plugins are all AI). The
    Plugins rail item goes. (A later plugin kind that is not AI would get its own home then.)
 
-Who sees what: an admin edits every tab; anyone else sees Chat read-only plus their own Memory (plan 32 frame 22),
+Who sees what: an admin edits every tab; anyone else sees Agent read-only plus their own Memory (plan 32 frame 22),
 and not the other tabs.
 
 ### 37.3 What leaves Admin and the rail
 
 - Admin keeps **Users, Hosts, API keys**. Model providers and AI agents tabs go; old links
   (`/admin?tab=providers`, `?tab=agents`, `/plugins`) open the matching Assistant tab.
-- The rail loses Plugins: Create, Pipelines, Gallery, Timeline, Models, Assistant, Admin, then Chat and Settings.
+- The rail loses Plugins: Create, Pipelines, Gallery, Timeline, Models, Assistant, Admin, then Agent (the drawer, ⌘J; was Chat, with an agent icon instead of the speech bubble) and Settings.
 - Links that pointed there now point to the Assistant tabs: a pipeline step's Runs on ("Set the default in Assistant
   › In pipelines"), plan 32's "used by the Assistant" line, Add as provider's "Open in Providers".
 
@@ -60,7 +60,7 @@ what leaves the machine shown where the provider is picked.
 
 To draw before building ([Assistant](../mock/Assistant.dc.html), new frames 23–26):
 
-- 23 · The Assistant page's tabs, Chat selected (frame 19 under tabs), the rail without Plugins.
+- 23 · The Assistant page's tabs, Agent selected (frame 19 under tabs), the rail without Plugins.
 - 24 · In pipelines: Default model and Session names.
 - 25 · Providers (today's Model providers board under the Assistant tabs).
 - 26 · Plugins (today's Plugins list under the Assistant tabs).
