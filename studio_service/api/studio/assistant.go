@@ -315,12 +315,26 @@ type AssistantStatus struct {
 	Limits    AssistantLimits    `json:"limits"`
 	Thinks    bool               `json:"thinks"` // API 1.54 (plan 29): the model thinks (modelThinks)
 	Sees      bool               `json:"sees"`   // API 1.65: the model sees images (modelSees)
+	// API 1.72 (plan 32): a usable provider is saved (on or off), the caller is an admin, the drawer opens by itself
+	// now, and the assistant-tools plugins that are on
+	SetUp       bool              `json:"set_up"`
+	CanSetUp    bool              `json:"can_set_up"`
+	FirstLaunch bool              `json:"first_launch"`
+	Tools       []AssistantPlugin `json:"tools"`
+	neverSet    bool              // AssistantSettings.updated_at is null
 }
 
 // AssistantProvider names where the model runs.
 type AssistantProvider struct {
 	Title  string `json:"title"`
 	Remote bool   `json:"remote"`
+	Model  string `json:"model"` // API 1.72
+}
+
+// AssistantPlugin is an assistant-tools plugin that is on (API 1.72).
+type AssistantPlugin struct {
+	Name  string `json:"name"`
+	Title string `json:"title"`
 }
 
 // assistantConfig is the settings as an input sees them: the status and the command's settings snapshot. The
@@ -335,16 +349,20 @@ func (s *Service) assistantConfig(ctx context.Context, tx pgx.Tx) (AssistantStat
 	if err != nil {
 		return AssistantStatus{}, message.AssistantSettings{}, err
 	}
-	status := AssistantStatus{Limits: set.Limits}
+	status := AssistantStatus{Limits: set.Limits, Tools: []AssistantPlugin{}, neverSet: set.UpdatedAt == nil}
 	snap := message.AssistantSettings{Providers: map[string]map[string]any{}, Limits: toJSON(set.Limits)}
 	for _, p := range rows {
 		model := cmp.Or(deref(set.Model), p.DefaultModel)
-		if !set.Enabled || p.Name != deref(set.Provider) || !slices.Contains(p.Models, model) ||
+		if p.Name != deref(set.Provider) || !slices.Contains(p.Models, model) ||
 			!(p.Kind == "server" || p.Kind == "remote" && s.remoteOn) {
 			continue
 		}
+		status.SetUp = true
+		if !set.Enabled {
+			continue
+		}
 		status.Enabled = true
-		status.Provider = &AssistantProvider{Title: cmp.Or(deref(p.Title), p.Name), Remote: p.Kind == "remote"}
+		status.Provider = &AssistantProvider{Title: cmp.Or(deref(p.Title), p.Name), Remote: p.Kind == "remote", Model: model}
 		status.Thinks = modelThinks(p.Preset, model, p.Thinking)
 		status.Sees = modelSees(p.Preset, model)
 		snap.Sees = status.Sees
@@ -507,6 +525,9 @@ func (s *Service) ListAssistantThreads(ctx context.Context, caller common.Caller
 		if out.Status, _, err = s.assistantConfig(ctx, tx); err != nil {
 			return err
 		}
+		if out.Status, err = s.statusFor(ctx, tx, caller, out.Status); err != nil {
+			return err
+		}
 		rows, err := collect[threadRow](ctx, tx, `SELECT `+threadCols+` FROM assistant_threads ORDER BY updated_at DESC, id DESC
 			LIMIT $1`, MaxAssistantThreads)
 		for _, t := range rows {
@@ -515,6 +536,32 @@ func (s *Service) ListAssistantThreads(ctx context.Context, caller common.Caller
 		return err
 	})
 	return out, err
+}
+
+// statusFor adds what only GET /assistant/threads tells the caller (API 1.72): the plugins' tools, whether they may
+// set it up, and whether their drawer opens by itself now (an admin, never set up, not yet marked).
+func (s *Service) statusFor(ctx context.Context, tx pgx.Tx, caller common.Caller, st AssistantStatus) (AssistantStatus, error) {
+	plugins, err := assistantPlugins(ctx, tx)
+	if err != nil {
+		return st, err
+	}
+	for _, p := range plugins {
+		st.Tools = append(st.Tools, AssistantPlugin{Name: p.Name, Title: p.Title})
+	}
+	st.CanSetUp = caller.IsAdmin()
+	if st.CanSetUp && st.neverSet {
+		// row-level security: only the caller's own mark is seen
+		err = tx.QueryRow(ctx, `SELECT NOT EXISTS (SELECT 1 FROM assistant_first_launch)`).Scan(&st.FirstLaunch)
+	}
+	return st, err
+}
+
+// MarkAssistantFirstLaunch is POST /assistant/first-launch: the caller's drawer opened by itself once (API 1.72).
+func (s *Service) MarkAssistantFirstLaunch(ctx context.Context, caller common.Caller) error {
+	return s.tx(ctx, caller, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `INSERT INTO assistant_first_launch (owner_id) VALUES ($1) ON CONFLICT DO NOTHING`, caller.ID)
+		return err
+	})
 }
 
 // AssistantThreadCreate is POST /assistant/threads's body.

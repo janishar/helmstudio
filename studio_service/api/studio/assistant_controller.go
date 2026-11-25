@@ -22,6 +22,9 @@ func (c *controller) mountAssistant(group *gin.RouterGroup) {
 		out, err := c.service.ListAssistantThreads(ctx.Request.Context(), common.MustCaller(ctx))
 		reply(ctx, http.StatusOK, out, err)
 	})
+	group.POST("/assistant/first-launch", func(ctx *gin.Context) {
+		noContent(ctx, c.service.MarkAssistantFirstLaunch(ctx.Request.Context(), common.MustCaller(ctx)))
+	})
 	group.POST("/assistant/threads", func(ctx *gin.Context) {
 		body, err := strictBody[AssistantThreadCreate](ctx, false)
 		var out AssistantThread

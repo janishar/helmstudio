@@ -120,6 +120,48 @@ func TestAssistantSettings(t *testing.T) {
 	}
 }
 
+// API 1.72 (plan 32): set_up, can_set_up, first_launch (an admin's, once, never set up) and its mark, per user.
+func TestAssistantFirstLaunch(t *testing.T) {
+	e := setup(t)
+	threads := "/v1/studio/assistant/threads"
+	status := func(user string) map[string]any {
+		return e.call(user, "GET", threads, nil, 200)["status"].(map[string]any)
+	}
+	if st := status(userA); st["set_up"] != false || st["can_set_up"] != false || st["first_launch"] != false ||
+		len(st["tools"].([]any)) != 0 {
+		t.Fatal("anyone else: not set up, no Set up, never a first launch", st)
+	}
+	if st := status(admin); st["can_set_up"] != true || st["first_launch"] != true {
+		t.Fatal("an admin, never set up: the drawer opens by itself", st)
+	}
+	e.call(admin, "POST", "/v1/studio/assistant/first-launch", nil, 204)
+	e.call(admin, "POST", "/v1/studio/assistant/first-launch", nil, 204) // again: unchanged
+	e.call(userA, "POST", "/v1/studio/assistant/first-launch", nil, 204)
+	if status(admin)["first_launch"] != false || status(admin2)["first_launch"] != true {
+		t.Fatal("the mark is the caller's own: another admin still gets theirs")
+	}
+	// saved once (even off): never a first launch again; set up while its provider is usable, on or off
+	e.call(admin, "PUT", "/v1/studio/admin/providers/ollama", providerServer, 201)
+	e.call(admin, "PUT", "/v1/studio/admin/assistant", map[string]any{"enabled": false, "provider": "ollama"}, 200)
+	if st := status(admin2); st["first_launch"] != false || st["set_up"] != true || st["enabled"] != false {
+		t.Fatal(st)
+	}
+	e.call(admin, "PUT", "/v1/studio/admin/assistant", map[string]any{"enabled": true, "provider": "ollama"}, 200)
+	if st := status(userA); st["enabled"] != true || st["set_up"] != true ||
+		st["provider"].(map[string]any)["model"] != "qwen2.5:7b" {
+		t.Fatal(st)
+	}
+	// the provider turned off: not set up any more
+	off := map[string]any{"enabled": false}
+	for k, v := range providerServer {
+		off[k] = v
+	}
+	e.call(admin, "PUT", "/v1/studio/admin/providers/ollama", off, 200)
+	if st := status(userA); st["set_up"] != false || st["enabled"] != false {
+		t.Fatal(st)
+	}
+}
+
 func TestAssistantChat(t *testing.T) {
 	e := setup(t)
 	e.assistantOn()
