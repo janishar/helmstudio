@@ -103,3 +103,22 @@ Assistant").
 
 Then "Hub icon change": Hub's icon is lucide `Blocks` (pieces that plug together) on the green tile, in the rail, its title and the
 Assistant drawer's Hub button; the Assistant keeps the bot icon, System the shield.
+
+### 37.9 Final (owner, 2026-11-25: "lets finalize"); this list wins over every earlier line
+
+- **Rail:** Create · Pipelines · Gallery · Timeline · Models; then, admins only, **Hub** (lucide Blocks, green tile,
+  `/hub`) and **System** (shield, `/system`); then **Assistant** (bot icon, the drawer, ⌘J, every user) and Settings.
+  No Plugins, Admin or AI item.
+- **Hub** (admin only; a non-admin gets not-found): header Hub, On tag, the Assistant on/off switch; tabs
+  **Assistant** (model, tools and skills with their only on/off switches, Auto caps, context, memory) · **In
+  pipelines** (default model for pipeline AI steps on Auto: Local LLM · a provider model · Same as Assistant; Session
+  names) · **Providers** (as Model providers was) · **Plugins** (add, remove, rescan; no on/off; "Turned on in Hub ›
+  Assistant").
+- **System** (admin only): Users · Hosts · API keys.
+- **Old links:** /admin → System; /admin?tab=providers, ?tab=agents, /plugins, /assistant → the matching Hub tab.
+- **Assistant drawer:** header Assistant (bot icon) and, for admins, a Hub button (Blocks icon). Not set up: an admin
+  sees the redesigned welcome with "Set up the Assistant", "Runs on" chips and a full-width Set up (opens Hub); anyone
+  else "The Assistant isn't set up yet · Ask your admin to set it up." with no button. Off: an admin "The Assistant is
+  off" with Turn on; anyone else "Your admin turned it off." First launch (admin, never set up): opens once, "Close it
+  now and set up the Assistant later from Assistant or ⌘J."
+- **Your Claude subscription:** its key is picked automatically (no Key field); not offered as the pipelines default.
