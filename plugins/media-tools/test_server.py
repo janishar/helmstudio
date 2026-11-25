@@ -258,3 +258,17 @@ def test_out_of_time_makes_no_take(st):
             studio, {"take_id": tid, "rotate": 90}, Path(server.tempfile.mkdtemp()), studio.deadline
         )
     assert not st.made
+
+
+def test_signed_links_go_to_the_stack_inside_the_network():
+    """In the container: a link signed under the public base (X-Helm-Api) is read at HELM_API_URL, same path and sig."""
+    st = server.Studio("http://kong:8000", PASS, public="http://127.0.0.1:8310")
+    assert (
+        st.here("http://127.0.0.1:8310/files/u/a/b.png?exp=1&sig=x")
+        == "http://kong:8000/files/u/a/b.png?exp=1&sig=x"
+    )
+    assert st.here("http://elsewhere/files/x") == "http://elsewhere/files/x"
+    assert (
+        server.Studio("http://127.0.0.1:8300", PASS).here("http://127.0.0.1:8300/f")
+        == "http://127.0.0.1:8300/f"
+    )

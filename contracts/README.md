@@ -4236,9 +4236,13 @@ that reads one of your takes and makes a new one, with no user token and never a
 - **Pictures.** A reply's `images` (base64 JPEG, at most 8) are for a model that sees: they join the next model
   call's pictures as look_at's do (`Looked at <line>` once) and are never stored nor put in `result`. A text-only
   model gets the result alone (the frames' timecodes).
-- **Media tools** (`plugins/media-tools`, items 11 and 13; built in, starts itself on host mac, port 8422, off until
-  turned on; every risk flag false: each tool makes a new take and the original stays). ffmpeg and ffprobe from PATH
-  (as the runner's), Pillow for images; argument lists only, never a shell; fixed codecs (H.264 + AAC in MP4, AAC
+- **Media tools** (`plugins/media-tools`, items 11 and 13; built in, off until turned on; every risk flag false: each
+  tool makes a new take and the original stays). It runs as the stack's `media-tools` container (owner, 2026-11-25:
+  the same on the Mac app's VM, dev and a Linux server, nothing to install; deploy/compose/media-tools.yml): Alpine
+  Python, ffmpeg from apk, non-root, read-only with a /tmp tmpfs, 512 MB, on the compose network only at
+  `http://media-tools:8422` (a private address the server host rule already allows). It calls the stack at
+  `HELM_API_URL` (`http://kong:8000`) and reads the signed links (made under the public base URL, `X-Helm-Api`) at that
+  address. Pillow for images; argument lists only, never a shell; fixed codecs (H.264 + AAC in MP4, AAC
   m4a, PNG / JPEG / WebP); an input at most 2 GB and 10 minutes, an image at most 50 MP; each ffmpeg run 25 s at most
   (the call's 30 s).
   - `edit_image` {take_id, crop, resize, rotate, flip, extend, format}: applied in that order → a new image take.

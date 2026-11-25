@@ -6,13 +6,10 @@
   "description": "Crop, resize, rotate, convert and extend images; trim, speed up and re-sound videos; trim, level and join audio; pull frames from a video for the Assistant to look at. Each edit is a new take; the original stays.",
   "author": "helmstudio",
   "source": "plugins/media-tools",
-  "may_do": ["Crops, resizes, trims and pulls frames", "Reads your takes, saves new ones", "Runs ffmpeg and Pillow on this Mac", "Reaches host.docker.internal:8422"],
-  "url": "http://host.docker.internal:8422",
+  "may_do": ["Crops, resizes, trims and pulls frames", "Reads your takes, saves new ones", "Runs ffmpeg and Pillow in its own container", "Reaches media-tools:8422 inside the stack"],
+  "url": "http://media-tools:8422",
   "health": "/health",
-  "start": "plugins/media-tools/run.sh",
-  "run": {"cmd": ["./run.sh"], "host": "mac"},
   "takes": true,
-  "needs": "ffmpeg (brew install ffmpeg)",
   "tools": [
     {
       "name": "edit_image",

@@ -18,14 +18,18 @@ user token, never the database, never another user's take.
 
 ## Start it
 
-It starts itself: turn it on in the Plugins page (admins) and the Mac's runner runs `run.sh`. By hand:
+It runs as the stack's `media-tools` container (deploy/compose/media-tools.yml; owner, 2026-11-25: the same on the
+Mac app's VM, dev and a Linux server, nothing to install): Alpine Python with ffmpeg from apk, the deps from `uv.lock`,
+a non-root user, 0.0.0.0:8422 on the compose network only (studio and pipelines reach it as
+`http://media-tools:8422`). Turn it on in the Plugins page (admins). It calls the stack at `HELM_API_URL`
+(`http://kong:8000`) and reads the signed links studio gives it (made under the public base URL, the call's
+`X-Helm-Api`) at that address too.
 
-    plugins/media-tools/run.sh
+By hand, outside the stack (needs uv and ffmpeg + ffprobe on PATH; `FFMPEG`, `FFPROBE` override):
 
-Needs [uv](https://docs.astral.sh/uv/) and ffmpeg + ffprobe on PATH (`brew install ffmpeg`; `FFMPEG`, `FFPROBE`
-override). It listens on 127.0.0.1:8422 (`MEDIA_TOOLS_HOST`, `MEDIA_TOOLS_PORT`); OrbStack containers reach it as
-`http://host.docker.internal:8422`. It calls the stack at the call's `X-Helm-Api` (only a loopback address), or
-`HELM_API_URL` when set.
+    uv run --frozen python server.py      # 127.0.0.1:8422 (MEDIA_TOOLS_HOST, MEDIA_TOOLS_PORT)
+
+Without `HELM_API_URL` it calls the call's `X-Helm-Api`, only a loopback address.
 
 ## Limits
 

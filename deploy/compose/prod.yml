@@ -13,6 +13,7 @@ services:
   files: {restart: unless-stopped, logging: *log, mem_limit: 256m}
   web: {restart: unless-stopped, logging: *log, mem_limit: 512m}
   pipelines: {restart: unless-stopped, logging: *log, mem_limit: 1g}
+  media-tools: {restart: unless-stopped, logging: *log, mem_limit: 512m}
   nats: {restart: unless-stopped, logging: *log, mem_limit: 512m}
   postgres: {restart: unless-stopped, logging: *log, mem_limit: 1g}
   seaweedfs: {restart: unless-stopped, logging: *log, mem_limit: 1g}

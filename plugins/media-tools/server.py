@@ -1,7 +1,8 @@
 """helmstudio plugin media-tools (contracts/README.md "Plugins: takes", alpha.2 items 11 and 13): Assistant tools that
 make a new take from your takes (the original stays) and pull frames from a video for the Assistant to look at.
 
-Stdlib HTTP server on MEDIA_TOOLS_HOST:MEDIA_TOOLS_PORT (127.0.0.1:8422):
+Stdlib HTTP server on MEDIA_TOOLS_HOST:MEDIA_TOOLS_PORT (127.0.0.1:8422; in the stack's container 0.0.0.0:8422 on the
+compose network only, HELM_API_URL Kong's address there, http://kong:8000):
 
     GET  /health            → 200 {"ok": true}
     POST /tools/<tool>      {"input": {...}} → 200 {"result", "line", "take_ids"?, "images"?}
@@ -65,8 +66,18 @@ class Fail(Exception):
 
 
 class Studio:
-    def __init__(self, api: str, token: str, deadline: float = float("inf")) -> None:
+    def __init__(
+        self, api: str, token: str, deadline: float = float("inf"), public: str = ""
+    ) -> None:
         self.api, self.token, self.deadline = api.rstrip("/"), token, deadline
+        self.public = public.rstrip("/") or self.api
+
+    def here(self, url: str) -> str:
+        """A signed link (made under the stack's public base URL, X-Helm-Api) as this container reaches it: the same
+        path and signature at HELM_API_URL."""
+        if self.public != self.api and url.startswith(self.public + "/"):
+            return self.api + url[len(self.public) :]
+        return url
 
     def in_time(self, need: float = 3.0) -> float:
         """Seconds left of the call's budget; Fail when fewer than `need` are (pipelines would give up first and the
@@ -104,7 +115,10 @@ class Studio:
         if take["bytes"] > cap:
             raise Fail(422, "the take is too large for media tools")
         try:
-            with urllib.request.urlopen(take["url"], timeout=20) as r, dest.open("wb") as f:
+            with (
+                urllib.request.urlopen(self.here(take["url"]), timeout=20) as r,
+                dest.open("wb") as f,
+            ):
                 n = 0
                 while chunk := r.read(1 << 20):
                     n += len(chunk)
@@ -120,10 +134,10 @@ class Studio:
         """A new take: create it, PUT its file (and a video's poster), complete it."""
         self.in_time()
         up = self._ask("POST", "/takes", body | {"bytes": file.stat().st_size})
-        _put(up["upload_url"], file, body["content_type"], self.in_time())
+        _put(self.here(up["upload_url"]), file, body["content_type"], self.in_time())
         if poster is not None:
             _put(
-                up["poster_upload_url"],
+                self.here(up["poster_upload_url"]),
                 poster,
                 body["video"]["poster"]["content_type"],
                 self.in_time(),
@@ -489,7 +503,15 @@ def answer(tool: str, body, headers) -> tuple[int, dict]:
         with tempfile.TemporaryDirectory(prefix="media-tools-") as tmp:
             os.chmod(tmp, 0o700)
             return 200, RUN[tool](
-                Studio(api, token, deadline := time.monotonic() + BUDGET), inp, Path(tmp), deadline
+                Studio(
+                    api,
+                    token,
+                    deadline := time.monotonic() + BUDGET,
+                    headers.get("X-Helm-Api") or "",
+                ),
+                inp,
+                Path(tmp),
+                deadline,
             )
     except Fail as e:
         return e.code, {"detail": e.detail}

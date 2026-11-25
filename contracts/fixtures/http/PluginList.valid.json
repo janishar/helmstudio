@@ -127,11 +127,11 @@
       "may_do": [
         "Crops, resizes, trims and pulls frames",
         "Reads your takes, saves new ones",
-        "Runs ffmpeg and Pillow on this Mac",
-        "Reaches host.docker.internal:8422"
+        "Runs ffmpeg and Pillow in its own container",
+        "Reaches media-tools:8422 inside the stack"
       ],
       "personal": false,
-      "url": "http://host.docker.internal:8422",
+      "url": "http://media-tools:8422",
       "tools": [
         {
           "name": "edit_image",
@@ -204,14 +204,7 @@
       "status": "running",
       "provider": null,
       "takes": true,
-      "needs": "ffmpeg (brew install ffmpeg)",
-      "updated_at": "2026-11-25T10:00:00Z",
-      "starts": {
-        "host": "mac",
-        "log": "~/.helm/logs/media-tools.log",
-        "restarts": 0,
-        "since": "2026-11-25T10:42:00Z"
-      }
+      "updated_at": "2026-11-25T10:00:00Z"
     }
   ]
 }

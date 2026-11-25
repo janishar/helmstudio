@@ -1,0 +1,20 @@
+# The media-tools plugin on the helmstudio stack (plugins/media-tools; owner, 2026-11-25: a container, the same on the
+# Mac app's VM, dev and a Linux server, nothing to install). On the compose network only (no published port): studio
+# and pipelines reach it as http://media-tools:8422 (its plugin.json url, a private address the host rule allows). It
+# reads and makes takes through Kong with each call's pass. Paths are relative to deploy/:
+#   docker compose -f deploy/docker-compose.yml up -d --build media-tools
+services:
+  media-tools:
+    build: ../plugins/media-tools
+    image: ${IMAGE_PREFIX:-helmstudio/}media-tools:${IMAGE_TAG:-dev}
+    environment:
+      HELM_API_URL: http://kong:8000                  # the stack inside the network: /v1/studio/plugin/* and /files/*
+    restart: unless-stopped
+    mem_limit: 512m                                   # ffmpeg on one 1080p video at a time; idle ~20 MB
+    read_only: true
+    tmpfs: [/tmp]                                     # each call's work folder
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request as u; u.urlopen('http://127.0.0.1:8422/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20

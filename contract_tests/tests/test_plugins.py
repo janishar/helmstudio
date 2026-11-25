@@ -323,3 +323,24 @@ def test_save_as_new_runs_a_takes_plugin_tool_for_you(admin, api, api_b, anon, o
     admin.put(f"{PLUGINS}/fake-tools", json={"enabled": False})
     assert api.get(use).status_code == 404
     assert api.post(f"{use}/tools/echo", json={"input": {"text": "x"}}).status_code == 404
+
+
+def test_media_tools_container_saves_as_new(admin, api, api_b, anon, on):
+    """The real media-tools plugin as the stack's container (owner, 2026-11-25): on, it runs (http://media-tools:8422),
+    Save as new rotates one of your images into a new take through Kong with the call's pass, and another user's take
+    is a plain 502 from it (studio answers it 404)."""
+    use = f"{STUDIO}/plugins/media-tools"
+    on("media-tools")
+    got = wait_for(lambda: (r := ok(api.get(use)))["running"] and r, timeout=30)
+    assert {"edit_image", "frames"} <= set(got["tools"]), got
+    src = upload(api, anon, png_bytes(6, 4), "src.png")
+    done = ok(
+        api.post(f"{use}/tools/edit_image", json={"input": {"take_id": src["id"], "rotate": 90}})
+    )
+    made = ok(api.get(f"{STUDIO}/takes/{done['take_ids'][0]}"))
+    assert (made["width"], made["height"], made["parents"]) == (4, 6, [src["id"]]), made
+    assert made["tool"]["plugin"] == "media-tools" and made["tool"]["tool"] == "edit_image"
+    theirs = upload(api_b, anon, png_bytes(5, 5), "theirs.png")
+    r = api.post(f"{use}/tools/edit_image", json={"input": {"take_id": theirs["id"], "rotate": 90}})
+    assert r.status_code == 502 and "not one of yours" in r.json()["detail"], r.text
+    ok(api.delete(f"{STUDIO}/takes/{made['id']}"), 204)

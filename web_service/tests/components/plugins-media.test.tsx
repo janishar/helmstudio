@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // The Plugins page's Media tools aside (components/plugins/plugins.tsx; docs/mock/Plugins.dc.html MEDIA TOOLS, alpha.2
-// items 11 and 13): Status, Starts, Takes, Asks first, Needs and Log rows, then a row per tool with its name for people.
+// items 11 and 13): Status, Takes and Asks first rows (Starts, Needs and Log only for a plugin that has them), then a row per tool with its name for people.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import list from "../../../contracts/fixtures/http/PluginList.valid.json";
@@ -27,12 +27,12 @@ describe("Plugins: Media tools", () => {
     const aside = within(screen.getByRole("complementary", { name: "Plugin: Media tools" }));
     const row = (k: string) =>
       aside.getByText(k, { selector: "span.text-t2" }).nextSibling?.textContent;
-    expect(row("Status")).toBe("Running · host.docker.internal:8422");
-    expect(row("Starts")).toBe("On its own, on the Mac");
+    expect(row("Status")).toBe("Running · media-tools:8422"); // the stack's container (owner, 2026-11-25)
     expect(row("Takes")).toBe("Reads yours, saves new ones");
     expect(row("Asks first")).toBe("Never (stays on this Mac)");
-    expect(row("Needs")).toBe("ffmpeg (brew install ffmpeg)");
-    expect(row("Log")).toBe("~/.helm/logs/media-tools.log");
+    // nothing to install and no runner: no Starts, Needs or Log rows
+    for (const k of ["Starts", "Needs", "Log"])
+      expect(aside.queryByText(k, { selector: "span.text-t2" })).toBeNull();
     expect(aside.queryByText("Tools")).toBeNull(); // a row per tool instead
     const tools = within(aside.getByLabelText("Tools"));
     expect(tools.getByText("Edit image").nextSibling?.textContent).toBe(
