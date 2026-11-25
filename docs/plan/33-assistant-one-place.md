@@ -90,3 +90,10 @@ Agent get available to user when admin set the AI on". So:
 - **Switches have one home:** tools and skills are switched on and off only on AI › Agent; AI › Plugins adds, removes
   and rescans, and each row says where it is used.
 
+### 37.8 Hub (owner, 2026-11-25)
+
+"since plugin is here and its better to call it Hub": the admin page called AI in 37.7 is **Hub** (`/hub`; the sparkle
+icon and green tile), with the tabs Agent · In pipelines · Providers · Plugins. Texts that named AI name Hub ("Opens
+Hub.", "Auto · set in Hub › In pipelines", "Turned on in Hub › Agent"). The rail: pages, then Hub and System (admins),
+then Agent and Settings.
+
