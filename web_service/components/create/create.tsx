@@ -125,6 +125,7 @@ import {
   failedCount,
   followSession,
   fraction,
+  progressText,
   isActive,
   lastDuration,
   pinnedNote,
@@ -564,11 +565,15 @@ export function Create({
   const workflow = workflows?.find((w) => w.id === workflowId);
   const unpinned = useMemo(() => (workflow ? fieldsOf(workflow) : []), [workflow]);
   // a variant that loads at one precision (fp8) fixes the Precision tile to it, and the run sends it
-  const pins = useMemo(() => precisionPins(unpinned, held, modelList), [unpinned, held, modelList]);
+  // and a variant that loads at some precisions offers only those (Base: bf16 or int8, never Base fp8's fp8)
+  const { enums, pins } = useMemo(
+    () => precisionPins(unpinned, held, modelList),
+    [unpinned, held, modelList],
+  );
   const all = useMemo(
     () =>
-      unpinned.map((f) => (pins[f.key] ? { ...f, param: { ...f.param, enum: [pins[f.key]] } } : f)),
-    [unpinned, pins],
+      unpinned.map((f) => (enums[f.key] ? { ...f, param: { ...f.param, enum: enums[f.key] } } : f)),
+    [unpinned, enums],
   );
   const machineList = useMemo(() => machines(hosts), [hosts]);
   const runOn = pinnedMachine(machineList, runOnHost);
@@ -606,7 +611,7 @@ export function Create({
   )) {
     const cur = String(raws[f.key] ?? toRaw(f.initial, f.param));
     for (const o of f.param.enum ?? []) {
-      const why = valueBlock(allValueNeeds, f.key, o, wiredIn(f.node), canRun, runOn);
+      const why = valueBlock(allValueNeeds, f.key, o, wiredIn(f.node), canRun, runOn, chosenModels);
       if (why) (valueBlocks[f.key] ??= {})[o] = why;
     }
     heldNeeds.push(...valueNeedsAt(allValueNeeds, f.key, cur, wiredIn(f.node)));
@@ -2515,7 +2520,7 @@ function Stage({
             ) : (
               <span className="text-[15px] font-medium text-t1">
                 {isActive(run.status)
-                  ? `${Math.round(fraction(run) * 100)}%`
+                  ? progressText(run)
                   : run.status === "cancelled"
                     ? "Stopped"
                     : "No output"}
@@ -2727,7 +2732,7 @@ function RunTile({
   const label = seed == null ? `take ${n}` : seedLabel(seed);
   const state =
     run.status === "running"
-      ? `${Math.round(fraction(run) * 100)}%`
+      ? progressText(run)
       : run.status === "succeeded"
         ? ""
         : run.status === "cancelled"

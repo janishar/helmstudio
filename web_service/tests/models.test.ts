@@ -206,12 +206,22 @@ describe("Create's model data", () => {
     fieldOf("variant", ["base", "base-fp8"], "base"),
     fieldOf("precision", ["bf16", "int8", "fp8"], "int8"),
   ];
-  it("pins the precision of a variant that loads at one", () => {
-    expect(precisionPins(fs, {}, withFp8)).toEqual({}); // base: bf16 or int8, a choice
-    expect(precisionPins(fs, { "model.variant": "base-fp8" }, withFp8)).toEqual({
-      "model.precision": "fp8",
+  it("offers only the precisions the chosen variant loads at", () => {
+    // base: bf16 or int8, a choice; never fp8 (Base fp8's)
+    expect(precisionPins(fs, {}, withFp8)).toEqual({
+      enums: { "model.precision": ["bf16", "int8"] },
+      pins: {},
     });
-    expect(precisionPins(fs, { "model.variant": "base-fp8" }, null)).toEqual({}); // list not known yet
+    expect(precisionPins(fs, { "model.variant": "base-fp8" }, withFp8)).toEqual({
+      enums: { "model.precision": ["fp8"] },
+      pins: { "model.precision": "fp8" },
+    });
+    // back on Base with fp8 still held: the default is sent instead
+    expect(
+      precisionPins(fs, { "model.variant": "base", "model.precision": "fp8" }, withFp8).pins,
+    ).toEqual({ "model.precision": "int8" });
+    const none = { enums: {}, pins: {} };
+    expect(precisionPins(fs, { "model.variant": "base-fp8" }, null)).toEqual(none); // list not known yet
   });
   it("knows a family with no variant present on a live host", () => {
     expect(downloaded(list, qwen.family)).toBe(true); // base present on the live mac

@@ -408,4 +408,21 @@ describe("an add-on per value (API 1.41)", () => {
     const held = valueNeedsAt(needs, "generate.lora", "turbo", refs);
     expect(machineReason(mac, "native", [], held)).toBe("Turbo Ref LoRA not downloaded on mac");
   });
+
+  it("greys it on a variant its add-on is not for: SGLang's Base fp8 takes no Turbo LoRA", () => {
+    const l = list({ mac: "present" }, {});
+    const [m] = l.models;
+    const scoped = {
+      ...l,
+      models: [{ ...m, addons: m.addons!.map((a) => ({ ...a, variants: ["base"] })) }],
+    } as S<"ModelList">;
+    const needs = valueNeeds(w, scoped);
+    const [base, fp8] = m.variants.map((v, i) => ({ ...v, id: ["base", "base-fp8"][i] }));
+    expect(valueBlock(needs, "generate.lora", "turbo", none, [gcp], undefined, [{ m, v: fp8 }])).toBe(
+      "Turbo LoRA does not run on Base fp8",
+    );
+    expect(valueBlock(needs, "generate.lora", "none", none, [gcp], undefined, [{ m, v: fp8 }])).toBeNull();
+    // the Mac's Base is unchanged
+    expect(valueBlock(needs, "generate.lora", "turbo", none, [mac], mac, [{ m, v: base }])).toBeNull();
+  });
 });

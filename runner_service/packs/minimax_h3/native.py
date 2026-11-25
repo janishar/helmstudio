@@ -195,8 +195,13 @@ def lora_file(node: str, model, params: dict, inputs: dict) -> Path | None:
     if not names:
         return None
     (c,) = names  # one file per value and partition (h3 merges one LoRA)
+    spec = model.pack.component(c)
+    a = spec["addon"]
+    # Base fp8 (SGLang) takes no Turbo LoRA yet: the add-ons are Base's (model.yaml `variants`)
+    if model.variant not in spec.get("variants", [model.variant]):
+        title = model.pack.spec["variants"][model.variant]["title"]
+        raise RunError(f"{node}: {a.get('short', a['title'])} does not run on {title}")
     if not (files := model.files(c)):
-        a = model.pack.component(c)["addon"]
         raise RunError(f"{node}: {a.get('short', a['title'])} not downloaded on host {config.HOST}")
     return files[0].resolve()
 

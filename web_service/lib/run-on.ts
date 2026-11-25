@@ -229,6 +229,7 @@ export function valueNeeds(
             ),
           ],
           free: as.length ? [...new Set(free)].filter((h) => !listed.has(h)) : [],
+          ...(as[0]?.variants && { variants: as[0].variants }),
           always: w.nodes[node].bypass !== true,
           field: `${node}.${p.name}`,
           value,
@@ -254,9 +255,10 @@ export function valueNeedsAt(
   );
 }
 
-/** Why value `o` of `field` cannot run now (API 1.41), else null: under Run on `mc` an add-on it asks for is missing
- * there ("Turbo LoRA not downloaded on gcp"); under Auto on every machine that could take the run (`can`; none known:
- * every live host), "Turbo LoRA not downloaded". */
+/** Why value `o` of `field` cannot run now (API 1.41), else null: an add-on it asks for is scoped to other variants
+ * than the chosen one (`picks`; MiniMax H3's Turbo LoRA is Base's, SGLang on Base fp8 takes none: "Turbo LoRA does
+ * not run on Base fp8"); under Run on `mc` one is missing there ("Turbo LoRA not downloaded on gcp"); under Auto on
+ * every machine that could take the run (`can`; none known: every live host), "Turbo LoRA not downloaded". */
 export function valueBlock(
   needs: ValueNeed[],
   field: string,
@@ -264,8 +266,15 @@ export function valueBlock(
   wired: (name: string) => boolean,
   can: Machine[],
   mc?: Machine,
+  picks: { m: Model; v: Variant }[] = [],
 ): string | null {
-  const n = valueNeedsAt(needs, field, o, wired).find((x) =>
+  const at = valueNeedsAt(needs, field, o, wired);
+  for (const x of at) {
+    const pick = picks.find((p) => p.m.family === x.family);
+    if (x.variants && pick && !x.variants.includes(pick.v.id))
+      return `${x.title} does not run on ${pick.v.title}`;
+  }
+  const n = at.find((x) =>
     mc ? lacks(x, mc) : can.length ? can.every((m) => lacks(x, m)) : !x.hosts.length,
   );
   return n ? `${n.title} not downloaded${mc ? ` on ${mc.host}` : ""}` : null;

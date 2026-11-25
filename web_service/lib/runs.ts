@@ -296,6 +296,13 @@ export function segments(w: S<"Workflow">, run: Run, t?: RunTrack): Segment[] {
 /** The share of the work done, 0..1, from the last progress event. */
 export const fraction = (r: Run) => (r.progress ? Math.min(1, r.progress.step / r.progress.of) : 0);
 
+/** The stage's progress text: the share done ("62%"), or a phase without steps (1 of 1, SGLang's "starting sglang")
+ * by its text alone: its 1 / 1 is no share of the work. */
+export const progressText = (r: Run) => {
+  const p = r.progress;
+  return p && p.of <= 1 && p.phase ? p.phase : `${Math.round(fraction(r) * 100)}%`;
+};
+
 /** Fetches the session's events after `since` (the JSON form of the events route, no Accept: text/event-stream). */
 const eventPage = (sessionId: string, since: number) =>
   ok(

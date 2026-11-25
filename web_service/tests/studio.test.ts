@@ -11,6 +11,7 @@ import {
   etaText,
   followSession,
   fraction,
+  progressText,
   lastDuration,
   pinnedNote,
   mergeRuns,
@@ -208,6 +209,10 @@ describe("folding session events into runs", () => {
     runs = applyEvent(runs, progress(2, 3)).runs;
     expect(runs[0].status).toBe("running");
     expect(fraction(runs[0])).toBeCloseTo(0.3);
+    expect(progressText(runs[0])).toBe("30%");
+    // a phase without steps (1 of 1, SGLang's start) shows its text, never 100%
+    const p = { node: "generate", step: 1, of: 1, phase: "starting sglang" } as S<"Run">["progress"];
+    expect(progressText({ ...runs[0], progress: p })).toBe("starting sglang");
     runs = applyEvent(runs, output).runs;
     runs = applyEvent(runs, output).runs; // replayed: added once
     expect(runs[0].outputs).toHaveLength(1);

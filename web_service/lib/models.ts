@@ -203,16 +203,19 @@ export function canDelete(v: Pick<Part, "hosts">, host: string): boolean {
   return s === "present" || s === "partial" || s === "mismatch";
 }
 
-/** Create's model node pins (API 1.33 RunsAt): each precision field whose node's chosen variant loads at exactly
- * one precision → that precision (shown fixed and sent). `raws` is what the form holds; a field it lacks keeps the
- * workflow's value. */
+/** Create's model node precisions (API 1.33 RunsAt): each precision field whose node's chosen variant loads at only
+ * some of the field's values → those values (`enums`: the tile offers only them, so Base never offers Base fp8's fp8)
+ * and, when the form's value is not one of them, the one to send instead (`pins`: the field's default when allowed,
+ * else the first, as stored; one value left is always pinned). `raws` is what the form holds; a field it lacks keeps
+ * the workflow's value. */
 export function precisionPins(
   fields: readonly Field[],
   raws: Record<string, unknown>,
   list: S<"ModelList"> | null,
-): Record<string, string> {
+): { enums: Record<string, string[]>; pins: Record<string, string> } {
+  const enums: Record<string, string[]> = {};
   const pins: Record<string, string> = {};
-  if (!list) return pins;
+  if (!list) return { enums, pins };
   for (const f of fields) {
     if (!f.model || f.param.name !== "precision") continue;
     const vf = fields.find((x) => x.node === f.node && x.param.name === "variant");
@@ -221,10 +224,14 @@ export function precisionPins(
       .filter((m) => m.family === f.family)
       .flatMap((m) => m.variants)
       .find((x) => x.id === vid);
-    const p = v?.precisions.length === 1 ? v.precisions[0] : undefined;
-    if (p && f.param.enum?.includes(p)) pins[f.key] = p;
+    const ok = (f.param.enum ?? []).filter((p) => (v?.precisions as string[] | undefined)?.includes(p));
+    if (!ok.length || ok.length === f.param.enum?.length) continue;
+    enums[f.key] = ok;
+    const cur = String(raws[f.key] ?? f.initial ?? "");
+    if (ok.length === 1 || !ok.includes(cur))
+      pins[f.key] = ok.includes(String(f.param.default)) ? String(f.param.default) : ok[0];
   }
-  return pins;
+  return { enums, pins };
 }
 
 /** Whether some model of the family has a variant present on a live host (Create greys a workflow without one:
