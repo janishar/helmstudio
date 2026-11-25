@@ -76,6 +76,11 @@ def see_errors(part: str, value) -> list[str]:
     return errors(f"{BASE}req.studio.see.schema.json#/$defs/{part}", value)
 
 
+def plugins_pass_errors(part: str, value) -> list[str]:
+    """Errors of a studio.plugins.pass `request` or `reply` (API 1.70)."""
+    return errors(f"{BASE}req.studio.plugins.pass.schema.json#/$defs/{part}", value)
+
+
 def providers_test_errors(part: str, value) -> list[str]:
     """Errors of a pipelines.providers.test `request` or `reply`."""
     return errors(f"{BASE}req.pipelines.providers.test.schema.json#/$defs/{part}", value)
