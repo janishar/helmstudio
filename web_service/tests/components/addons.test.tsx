@@ -141,7 +141,10 @@ function start(enhancerOn: string[]) {
       initial={{ sessions: [], workflows: [workflow], sessionId: "s1", runs: [done], takes: [] }}
     />,
   );
-  return { runs, composer: screen.getByRole("form", { name: "Composer" }) };
+  const form = screen.getByRole("form", { name: "Composer" });
+  const box = form.querySelector("textarea");
+  if (box) fireEvent.change(box, { target: { value: "a fox at dusk" } }); // Generate waits for a prompt
+  return { runs, composer: form };
 }
 
 const inspector = () => screen.getByRole("complementary", { name: "Inspector" });

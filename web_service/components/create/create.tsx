@@ -993,6 +993,8 @@ export function Create({
     (f) => f.param.type === "text" && !f.param.script,
   );
   const texts = textFields.map((f) => String(raws[f.key] ?? toRaw(f.initial, f.param)));
+  // an empty prompt is never sent: the model would refuse it (SGLang: "prompt must be a non-empty string")
+  const noPrompt = textFields.length > 0 && texts[0].trim() === "";
   const handles = [...new Set(texts.flatMap(mentioned))];
   const formInputs = buildInputs(fields, raws).inputs;
   // the graph as the form sets it: what the picker's fit reasons are about
@@ -2128,6 +2130,7 @@ export function Create({
                   badLine > 0 ||
                   notDownloaded ||
                   runOnOffline ||
+                  noPrompt ||
                   !!heldBlock
                 }
               >
@@ -2142,9 +2145,11 @@ export function Create({
                           ? "Pick a voice"
                           : badLine
                             ? "Generate"
-                            : anyActive
-                              ? "Add to queue"
-                              : "Generate"}
+                            : noPrompt && rules.length === 0 && !runOnOffline && !heldBlock
+                              ? "Write a prompt"
+                              : anyActive
+                                ? "Add to queue"
+                                : "Generate"}
                 </span>
                 {badLine > 0 && !busy ? (
                   <span className="mono text-[11px] font-medium">Fix line {badLine} first</span>

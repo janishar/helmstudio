@@ -130,10 +130,13 @@ function start(gcp = "idle", wf = workflow, list: unknown = models) {
   render(
     <Create initial={{ sessions: [], workflows: [wf], sessionId: "s1", runs: [], takes: [] }} />,
   );
+  const form = screen.getByRole("form", { name: "Composer" });
+  const box = form.querySelector("textarea");
+  if (box) fireEvent.change(box, { target: { value: "a fox at dusk" } }); // Generate waits for a prompt
   return {
     runs,
     plans,
-    composer: screen.getByRole("form", { name: "Composer" }),
+    composer: form,
     setGcp: (s: string) => (gcpState = s),
   };
 }
