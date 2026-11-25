@@ -1303,7 +1303,9 @@ async def test_save_shots_merges_replaces_and_keeps_its_shots_through_edit_and_a
     store, tid = AsyncPostgresStore(pool), str(uuid.uuid4())
     plan = {"film": "Night  Diner", "shots": [{"n": 2, "what": "@stranger pays", "seconds": 3},
                                               {"n": 1, "what": "@june wipes the counter", "seconds": 3}]}  # fmt: skip
+    at = await mem.changed(store, OWNER)
     got, why = await mem.save_shots(store, OWNER, plan, tid)
+    assert await mem.changed(store, OWNER) != at  # every open chat reads the lists again
     assert why is None and got["film"] == "Night Diner" and [x["n"] for x in got["shots"]] == [1, 2]
     got, _ = await mem.save_shots(store, OWNER, {"film": "night diner", "shots": [{"n": 1, "take_id": TAKES[0]},
                                                  {"n": 3, "what": "@june looks up", "line": "@june: Closed."}]}, tid)  # fmt: skip
@@ -1333,6 +1335,9 @@ async def test_save_shots_merges_replaces_and_keeps_its_shots_through_edit_and_a
     assert got["shots"] == [{"n": 1, "what": "A new opening"}]
     block = mem.shots_block(await mem.shot_lists(store, OWNER))
     assert block == "Night diner (1 shots):\n1. A new opening"
+    big = {"film": "Big", "shots": [{"n": n, "what": "x" * 60} for n in range(1, 61)]}
+    block = mem.shots_block([big, {"film": "Diner", "shots": [{"n": 1, "what": "A"}]}])
+    assert block == "Diner (1 shots):\n1. A\n\nAlso (read them with shot_list): Big"
 
 
 async def test_a_new_chat_reads_the_shot_list_another_chat_saved(pool, fake):

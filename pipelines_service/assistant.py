@@ -619,7 +619,8 @@ class Assistant:
         frozen = s.get("memory")
         at = await mem.changed(self.store, s["owner_id"])
         lists = await mem.shot_lists(self.store, s["owner_id"], limit=None)
-        # the chat's first call, the user changed Memory since, or a chat from before the shot lists (API 1.69)
+        # the chat's first call, the user changed Memory or a shot list was saved since, or a chat from before the
+        # shot lists (API 1.69)
         if frozen is None or frozen["at"] != at or "shots" not in frozen:
             frozen = {"at": at, "prefs": await mem.preferences(self.store, s["owner_id"]),
                       "shots": mem.shots_block(lists)}  # fmt: skip

@@ -11,6 +11,7 @@ owner's namespace is ever read: another user's item id is simply not found.
 Also the `pipelines.assistant.memory` responder (core request/reply, queue group `pipelines`, bare JSON) for
 /v1/studio/assistant/memory: list, edit, delete, clear."""
 
+import asyncio
 import json
 import logging
 import uuid
@@ -31,6 +32,9 @@ LISTS_MAX = 8  # lists shot_list answers
 SHOTS_PROMPT_MAX = 3000  # characters of shot lists put in every chat
 LABELS = {"preference": "Like", "project": "Project", "worked": "Worked", "summary": "Chat"}
 NOT_FOUND = {"error": "memory item not found", "code": "not_found"}
+# save_shots and a user's edit read an item and write it back whole: one at a time, so neither loses the other's
+# ponytail: one lock a process; replicas in the `pipelines` queue group can still race (compare updated_at then)
+_WRITE = asyncio.Lock()
 
 
 def ns(owner_id, kind: str) -> tuple[str, ...]:
@@ -119,7 +123,7 @@ CHANGED = "changed"  # namespace (<owner_id>, "assistant", "changed"), key "at":
 
 
 async def changed(store, owner_id) -> str | None:
-    """When the user last changed Memory (edit, delete, Clear all), or None: a chat's frozen memories (API 1.66)
+    """When the user last changed Memory (edit, delete, Clear all) or a shot list was saved, or None: a chat's frozen memories (API 1.66)
     are read again only after it."""
     it = await store.aget(ns(owner_id, CHANGED), "at")
     return it.value["at"] if it else None
@@ -192,7 +196,15 @@ async def shot_lists(
 
 async def save_shots(store, owner_id, a: dict, thread_id) -> tuple[dict | None, str | None]:
     """save_shots: shots by number added or updated (the fields given), `replace` the whole list, `remove` numbers.
-    The whole list, or why nothing was saved."""
+    The whole list, or why nothing was saved; every chat reads the lists again (_mark)."""
+    async with _WRITE:
+        got = await _save_shots(store, owner_id, a, thread_id)
+        if got[0]:
+            await _mark(store, owner_id)
+        return got
+
+
+async def _save_shots(store, owner_id, a: dict, thread_id) -> tuple[dict | None, str | None]:
     film = _film(a["film"])
     if not film:
         return None, "the film needs a title"
@@ -227,7 +239,8 @@ def shots_block(lists: list[dict]) -> str:
             for x in sl["shots"]
         ]  # fmt: skip
         text = "\n".join(lines)
-        if rest or sum(map(len, out)) + len(text) > SHOTS_PROMPT_MAX:
+        # a list too long is named only; a smaller one after it may still fit
+        if sum(map(len, out)) + len(text) > SHOTS_PROMPT_MAX:
             rest.append(sl["film"])
         else:
             out.append(text)
@@ -249,11 +262,12 @@ async def handle(store, req: dict) -> dict:
             "counts": counts,
         }
     if op == "edit":
-        it = await find(store, owner, req["item_id"])
-        if not it:
-            return NOT_FOUND
-        value = _value(it, text=req["text"][:TEXT_MAX])  # a shot list keeps its shots
-        await store.aput(ns(owner, it["kind"]), it["id"], value, index=False)
+        async with _WRITE:
+            it = await find(store, owner, req["item_id"])
+            if not it:
+                return NOT_FOUND
+            value = _value(it, text=req["text"][:TEXT_MAX])  # a shot list keeps its shots
+            await store.aput(ns(owner, it["kind"]), it["id"], value, index=False)
         await _mark(store, owner)
         return {"item": await find(store, owner, it["id"])}
     if op == "delete":

@@ -4027,15 +4027,15 @@ so every chat on every screen reads it, and a shot that is not in it is asked ab
   toward the 200 items; `thread_id` is the chat that saved it last. A PATCH changes the text only (the shots stay);
   Delete and Clear all remove it. The Memory › Projects UI for a list is on the board (frame 18), not built.
 - **`save_shots`** {film, shots?, replace?, remove?} (served by pipelines, no card, a memory write: 8 a message,
-  idempotent on its call id as `remember` is): a shot by `n` is added or updated, only the fields given (`what` is
+  merged by number, so replaying it gives the same list): a shot by `n` is added or updated, only the fields given (`what` is
   needed for a new one); `replace` true makes the list exactly `shots`; `remove` drops numbers. `film` and each `what`
   are plain words (the `remember` check). A list left empty, a new shot without `what` or more than 60 shots is an
   error told to the model, nothing saved. Answers the whole list; the line `Shot list · <film>: N shots` (no Undo).
 - **`shot_list`** {film?} (read): that film's list (any case), else every list, newest first, at most 8.
 - **Read in every chat.** A chat's first model call reads the lists with the preferences and keeps them frozen the
-  same way (read again only after the user changes Memory): a block `The film shot lists` after the preferences,
-  newest first, each shot one line (`<n>. <what> · <s> s · "<line>" · take [[take:<id>]]`), at most 3000 characters,
-  the rest named by title only (shot_list reads them). The take ids in it count as read for the refs check.
+  same way (read again after the user changes Memory or any chat saves a list): a block `The film shot lists` after the preferences,
+  newest first, each shot one line (`<n>. <what> · <s> s · "<line>" · take [[take:<id>]]`), at most 3000 characters
+  (a list that does not fit is skipped, a smaller one after it may fit), the rest named by title only (shot_list reads them). The take ids in it count as read for the refs check.
 - **Rules** (prompt): planning a film, save its shot list with save_shots as soon as you write it (and again when it changes), and set a
   shot's `take_id` when the user picks its take; for "shot N" or "the next shot" use the saved list (shot_list when
   the block does not hold it); on the Timeline, mirror the list when asked: the shots that have a take as clips in
