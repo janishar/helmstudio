@@ -149,6 +149,6 @@ user installs and signs in to Claude Code themselves through Anthropic's own flo
 intermediates credentials and never pays for or resells usage. Build: rename the plugin (no "Claude Code" or
 "Anthropic" in its name, e.g. "Your Claude subscription"; plain text may say it runs Claude Code), off by default and
 only-you, keep the disclaimer, `run` on host mac (starts itself; Couldn't start · "install Claude Code and sign in"
-when missing), bundle it in the .dmg, check the app VM reaches it, docs page. Open for the owner: confirm Anthropic's
-Commercial Terms are accepted (the page says products running Claude Code fall under them).
+when missing), bundle it in the .dmg, check the app VM reaches it, docs page. The owner confirmed
+Anthropic's Commercial Terms are accepted (2026-11-25; the page says products running Claude Code fall under them).
 
