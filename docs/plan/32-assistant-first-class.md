@@ -2,7 +2,7 @@
 
 [← Plan index](../README.md)
 
-Status: **boards approved by the owner (2026-11-25, "Approve"): [Assistant](../mock/Assistant.dc.html) frames 19–22 and [AdminAgents](../mock/AdminAgents.dc.html), with the boards' answers to 36.9 (a top-level Assistant page; the drawer's rail button renamed Chat, ⌘J; Memory on the page and in the drawer; a non-admin sees the page read-only; Your Claude subscription stays pickable when remote models are off). Frames 1–18 get the Chat rename when built.** For 0.1.0-alpha.4
+Status: **boards approved by the owner (2026-11-25, "Approve"): [Assistant](../mock/Assistant.dc.html) frames 19–22 and [AdminAgents](../mock/AdminAgents.dc.html), with the boards' answers to 36.9 (a top-level Assistant page; the drawer's rail button renamed Chat, ⌘J; Memory on the page and in the drawer; a non-admin sees the page read-only; Your Claude subscription stays pickable when remote models are off). Frames 1–18 get the Chat rename when built.** Built 2026-11-25 on branch alpha.4 (API 1.72; what differs from the plan or boards: 36.10). For 0.1.0-alpha.4
 ([release list](../release/0.1.0-alpha.4.md)). Not in a milestone, like plans 25–31.
 
 The owner's asks, 2026-11-25: "next alpha.4 plan better ux for assitant - move from the model provider and ai agents
@@ -115,3 +115,28 @@ To draw before building ([Assistant](../mock/Assistant.dc.html), new frames):
 1. The page's place: top-level **Assistant** in the main navigation (recommended), or a section of Settings.
 2. Memory: on the page and in the drawer (recommended), or only on the page.
 3. Should a non-admin see the Assistant page at all, or only the drawer messages?
+
+### 36.10 As built (2026-11-25, branch alpha.4, API 1.72)
+
+- **Contract.** `AssistantStatus` gained `set_up`, `can_set_up`, `first_launch`, and also `tools` (the assistant-tools
+  plugins that are on, name and title) and `provider.model`: a non-admin has no admin route to read them, and the
+  read-only page (frame 22) shows both. The first-launch mark is `POST /v1/studio/assistant/first-launch` (204, every
+  user, the caller's own row in `assistant_first_launch`, row-level security by owner); `first_launch` is true for an
+  admin while the settings were never saved and the mark is absent.
+- **Rail.** Plugins (admins) stays, between Assistant and Admin: the boards' rail predates it.
+- **Your Claude subscription.** Add as provider needs the bridge's own token (`BRIDGE_TOKEN` in
+  `~/.helm/claude-code-bridge.env`, never a Claude credential), so the card asks for it once, while its provider is not
+  added yet ("Bridge token"). Save turns the plugin on, waits about 20 s for it to run, adds it and saves the
+  Assistant with it. A keyless Add as provider would need a contract change; left for later.
+- **Key.** The remote cards use Model providers' key area (KeyArea): the field and Save key, checked with the provider
+  and saved to the key file before Save; then "✓ Checked with … · N models" and the model list fetched by itself.
+  Found, it shows Found, Replace key and Remove key as in Model providers.
+- **Model.** A plain select, as the board draws it (ModelsArea is not used: thinking stays set in Model providers).
+- **Local server.** A saved local server, else the Ollama or LM Studio preset (its models fetched by themselves); a new
+  one reserves 8 GB on the first GPU host (Model providers edits it). A saved remote provider other than DeepSeek,
+  Anthropic and OpenAI is a card of its own ("an existing provider is a pick").
+- **Search with** shows under Web search only while a search provider exists (and remote models are on).
+- **The drawer's header** keeps every button: in the 340 px drawer the title is the mark only (the word shows full
+  screen and on a phone), so the Settings gear fits beside Memory, Chats, Full screen, Minimize and Close.
+- **e2e** sign-in marks the first launch, so journeys on a fresh test stack start without the drawer open.
+
