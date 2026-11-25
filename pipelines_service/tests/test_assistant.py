@@ -50,10 +50,13 @@ class Tools:
         self.takes = {"takes": [], "more": False}
         self.fail_once: set[str] = set()
         self.results: dict[str, dict] = {}
+        self.errors: dict[str, dict] = {}  # tool → {error, code}: studio's refusal
 
     async def __call__(self, req: dict) -> dict:
         assert not schemas.tools_errors("request", req), schemas.tools_errors("request", req)
         self.asked.append(req)
+        if req["tool"] in self.errors:
+            return self.errors[req["tool"]]
         if req["tool"] in self.fail_once:
             self.fail_once.discard(req["tool"])
             raise RuntimeError("studio went away")
@@ -76,6 +79,7 @@ class Chat:
         self.roles, self.tool_names, self.search, self.limits = ["user"], TOOLS, None, dict(LIMITS)
         self.plugins: list[dict] = []  # cmd.assistant.turn data.plugins (API 1.61)
         self.skills: list[dict] = []  # data.skills (API 1.64)
+        self.guides: list[dict] = []  # data.guides (API 1.71)
         self.sees = False  # settings.sees (API 1.65)
         self.auto = False  # settings.auto (API 1.68)
         self.route = "/?s=2d4f6a8b-1c3e-4a5b-9c7d-8e0f1a2b3c4d"
@@ -103,7 +107,8 @@ class Chat:
                                   "providers": provs, "search": self.search, "limits": self.limits}
                      | ({"sees": True} if self.sees else {}) | ({"auto": True} if self.auto else {}),
                      "input": inp} | ({"plugins": self.plugins} if self.plugins else {}) | (
-                     {"skills": self.skills} if self.skills else {})  # fmt: skip
+                     {"skills": self.skills} if self.skills else {}) | (
+                     {"guides": self.guides} if self.guides else {})  # fmt: skip
         assert not schemas.message_errors(c), schemas.message_errors(c)
         return c
 
@@ -998,7 +1003,10 @@ def test_the_system_prompt_keeps_the_rules_first_then_the_helmstudio_knowledge()
     s = assistant.SYSTEM
     assert s.index("Answer in short plain text.") < s.index("How helmstudio works")
     assert "switchTo takes a workflow id or title exactly as" in assistant.SYSTEM
-    assert "Qwen Image 2.1 (image" in assistant.SYSTEM and "MiniMax H3 (video" in assistant.SYSTEM
+    # API 1.71: the per-model facts live in the packs' guides; the knowledge points at them
+    assert (
+        "read_model_guide" in assistant.SYSTEM and "Qwen Image 2.1 (image" not in assistant.SYSTEM
+    )
 
 
 # --- plugin tools (API 1.61)
@@ -1209,6 +1217,77 @@ async def test_use_skill_and_read_skill_file_make_their_lines(pool, fake):
     assert (
         "One action per shot." in c.asked()[1]["messages"][1]["content"]
     )  # fenced data to the model
+
+
+# --- model guides (API 1.71, alpha.2 item 35)
+
+CARDS = [{"family": "ltx", "title": "LTX-2.5", "card": "LTX-2.5 makes video with sound; Distilled drafts fast."},
+         {"family": "qwen-image", "title": "Qwen Image 2.1", "card": "Qwen Image 2.1 makes and edits stills."}]  # fmt: skip
+GUIDE = {"family": "qwen-image", "title": "Qwen Image 2.1", "card": CARDS[1]["card"], "downloaded": True,
+         "guide": "## Card\n...\n## Pitfalls\n- Turbo ignores Steps.",
+         "recipes": [{"name": "fast-draft", "title": "Fast draft", "workflow": "qwen-image",
+                      "params": {"model.variant": "turbo"}}]}  # fmt: skip
+
+
+async def test_the_model_cards_follow_the_rules_before_skills_and_memories_and_never_change(
+    pool, fake
+):
+    c = Chat(pool, fake)
+    await mem.put(c.store, OWNER, "preference", str(uuid.uuid4()), "likes 16:9", None)
+    c.guides, c.skills = CARDS, [ANIMATOR]
+    c.script(
+        {"content": "One."},
+        calls(("change", {"key": "prompt", "value": "rain"})),
+        {"content": "Set."},
+    )
+    await c.say("one")
+    await c.say("write rain")
+    await c.results(done(c.cid(2, 0), "Wrote prompt"))
+    reqs = c.asked()
+    system = reqs[0]["messages"][0]["content"]
+    assert system.startswith(assistant.SYSTEM)
+    rest = system[len(assistant.SYSTEM) :]
+    assert rest.startswith("\n\nThe models this install holds")
+    i, j = (
+        rest.index("LTX-2.5 (ltx): LTX-2.5 makes video"),
+        rest.index("Qwen Image 2.1 (qwen-image): Qwen Image"),
+    )
+    assert i < j < rest.index("Skills you can read") < rest.index("likes 16:9")
+    assert all(
+        r["messages"][0] == reqs[0]["messages"][0] for r in reqs
+    )  # byte-identical across turns
+
+
+async def test_no_cards_without_guides(pool, fake):
+    c = Chat(pool, fake)
+    c.script({"content": "Hi."})
+    await c.say("hello")
+    assert "The models this install holds" not in c.asked()[0]["messages"][0]["content"]
+
+
+async def test_read_model_guide_returns_the_guide_and_makes_its_line(pool, fake):
+    c = Chat(pool, fake)
+    c.guides, c.tool_names = CARDS, TOOLS + ["read_model_guide"]
+    c.tools.results = {"read_model_guide": GUIDE}
+    c.script(calls(("read_model_guide", {"family": "qwen-image"})), {"content": "Read."})
+    step = await c.say("make a still")
+    assert "read_model_guide" in offered(c.asked()[0])
+    assert step["lines"][0] == {"id": c.cid(1, 0), "status": "done", "text": "Read the Qwen Image 2.1 guide",
+                                "undo": False}  # fmt: skip
+    got = json.dumps(c.asked()[1]["messages"])
+    assert (
+        "Turbo ignores Steps." in got and "fast-draft" in got
+    )  # the guide and its recipes reach the model
+
+
+async def test_an_unknown_family_is_a_plain_error_to_the_model(pool, fake):
+    c = Chat(pool, fake)
+    c.guides, c.tool_names = CARDS, TOOLS + ["read_model_guide"]
+    c.tools.errors = {"read_model_guide": {"error": "no guide for nope", "code": "not_found"}}
+    c.script(calls(("read_model_guide", {"family": "nope"})), {"content": "No such model."})
+    step = await c.say("nope?")
+    assert step["error"] is None and not step["lines"]
+    assert "no guide for nope" in json.dumps(c.asked()[1]["messages"])
 
 
 # --- context and cache (API 1.66, alpha.2 item 30)

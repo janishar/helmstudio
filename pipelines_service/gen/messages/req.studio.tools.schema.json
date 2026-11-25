@@ -174,6 +174,7 @@
             "model_jobs",
             "use_skill",
             "read_skill_file",
+            "read_model_guide",
             "look_at"
           ]
         },
@@ -517,6 +518,22 @@
               }
             }
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "tool": {
+                "const": "read_model_guide"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "args": {
+                "$ref": "../tools/catalog.json#/tools/read_model_guide/input"
+              }
+            }
+          }
         }
       ]
     },
@@ -610,6 +627,7 @@
             "model_jobs",
             "use_skill",
             "read_skill_file",
+            "read_model_guide",
             "look_at"
           ]
         },
@@ -1007,6 +1025,22 @@
             "properties": {
               "result": {
                 "$ref": "../tools/catalog.json#/tools/read_skill_file/output"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "tool": {
+                "const": "read_model_guide"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "result": {
+                "$ref": "../tools/catalog.json#/tools/read_model_guide/output"
               }
             }
           }

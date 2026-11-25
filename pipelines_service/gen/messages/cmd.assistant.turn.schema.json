@@ -33,6 +33,21 @@
             }
           }
         },
+        "guides": {
+          "type": "array",
+          "maxItems": 32,
+          "description": "from API 1.71 (contracts/README.md, Assistant: model guides): the card of each model family whose weights some known host holds (a present variant), sorted by family; pipelines puts them right after the system rules. read_model_guide reads a whole guide. Absent or [] = none",
+          "items": {
+            "type": "object",
+            "required": ["family", "title", "card"],
+            "additionalProperties": false,
+            "properties": {
+              "family": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"},
+              "title": {"type": "string", "minLength": 1, "maxLength": 80},
+              "card": {"type": "string", "minLength": 1, "maxLength": 800}
+            }
+          }
+        },
         "plugins": {
           "type": "array",
           "maxItems": 16,

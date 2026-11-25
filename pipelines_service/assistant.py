@@ -96,6 +96,8 @@ each, every @name in the Cast).
 changed.
 - When a skill fits the ask, or the user wrote @<skill name>, call use_skill first; read_skill_file only for files \
 its guide names.
+- Before you set up or advise on a model, read its guide once in this chat with read_model_guide; to use one of its \
+recipes, set each of its params with change.
 - The user names takes as [[take:<id>]] (picked with @) and attaches images as a last line "(attached: …)": they are \
 references you can look at and put into the form like any take id.
 - A film's plan is its shot list: save it with save_shots as soon as you write it (again when it changes), and set a \
@@ -674,6 +676,12 @@ class Assistant:
         }
         off = offered(d, (s.get("screen") or {}).get("route", "/"))
         system, tools = SYSTEM, native(off)
+        # API 1.71: the held models' cards right after the rules, sorted by family: stable while the same models are held
+        if g := d.get("guides"):
+            system += _block(
+                "The models this install holds (their cards; read_model_guide reads one's whole guide and recipes)",
+                "\n\n".join(f"{x['title']} ({x['family']}): {x['card']}" for x in g),
+            )
         # the skills after the rules, before the memories: stable while the same skills stay on
         if sk := d.get("skills"):
             system += _block(
@@ -1042,6 +1050,9 @@ class Assistant:
         if name == "use_skill":
             line = {"id": c["id"], "status": "done", "text": f"Using skill: {r['title']}"[:300], "undo": False,
                     "skill": a["skill"]}  # fmt: skip
+        elif name == "read_model_guide":  # API 1.71
+            line = {"id": c["id"], "status": "done", "text": f"Read the {r['title']} guide"[:300],
+                    "undo": False}  # fmt: skip
         elif name == "read_skill_file":
             title = next(
                 (k["title"] for k in s["data"].get("skills") or [] if k["name"] == a["skill"]),
