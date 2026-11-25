@@ -491,6 +491,10 @@ export function useAssistant(me: S<"User"> | null) {
             params: { path: { item_id: l.memory_id } },
           }),
         );
+      else if (l.take_ids && !was)
+        // API 1.70: a plugin tool's new takes; Undo deletes them (no Redo)
+        for (const take_id of l.take_ids)
+          await ok(api.DELETE("/v1/studio/takes/{take_id}", { params: { path: { take_id } } }));
       else {
         const f = undoFns.current[l.id];
         if (!f) return;
@@ -563,7 +567,7 @@ export function useAssistant(me: S<"User"> | null) {
     setShrunk,
     local,
     undone,
-    canUndo: (l: Line) => !!l.memory_id || !!undoFns.current[l.id],
+    canUndo: (l: Line) => !!l.memory_id || !!l.take_ids || !!undoFns.current[l.id],
     asking,
     answerAsk: (yes: boolean) => answerRef.current?.(yes ? "yes" : "no"),
     running,
@@ -901,18 +905,21 @@ function LineRow({ l, a }: { l: Line; a: AssistantApi }) {
           text
         )}
       </span>
-      {l.undo && (l.status === "done" || off) && a.canUndo(l) && !(off && l.memory_id) && (
-        <button
-          type="button"
-          className="un"
-          aria-label={`${verb}: ${undoName(l.text)}`}
-          title={`${verb}: ${undoName(l.text)}`}
-          onClick={() => void a.toggleUndo(l)}
-        >
-          {off ? <Redo2 size={12} aria-hidden /> : <Undo2 size={12} aria-hidden />}
-          {verb}
-        </button>
-      )}
+      {l.undo &&
+        (l.status === "done" || off) &&
+        a.canUndo(l) &&
+        !(off && (l.memory_id || l.take_ids)) && (
+          <button
+            type="button"
+            className="un"
+            aria-label={`${verb}: ${undoName(l.text)}`}
+            title={`${verb}: ${undoName(l.text)}`}
+            onClick={() => void a.toggleUndo(l)}
+          >
+            {off ? <Redo2 size={12} aria-hidden /> : <Undo2 size={12} aria-hidden />}
+            {verb}
+          </button>
+        )}
     </li>
   );
 }
