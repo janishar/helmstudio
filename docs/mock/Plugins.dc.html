@@ -162,10 +162,10 @@ td{vertical-align:top}
 <thead><tr><th>Plugin</th><th>Kind</th><th>May do</th><th>Status</th><th>Actions</th></tr></thead>
 <tbody>
 <tr aria-selected="true" style="background: var(--s3)">
-<td style="font-weight: 600; white-space: normal">Claude Code bridge<br><span class="m" style="font-weight: 400">0.1.0 · plugins/claude-code-bridge</span><br><span class="tag me" style="display: inline-block; margin-top: 4px">Personal use only</span></td>
+<td style="font-weight: 600; white-space: normal">Your Claude subscription<br><span class="m" style="font-weight: 400">0.2.0 · helmstudio · plugins/claude-code-bridge</span><br><span class="tag me" style="display: inline-block; margin-top: 4px">Personal use only</span></td>
 <td><span class="tag kind">Model provider</span></td>
-<td style="white-space: normal; font-size: 12px; color: var(--t1b); max-width: 260px">Adds a model provider · reaches host.docker.internal:8420</td>
-<td><span class="dot okb"></span> <span class="ok" style="font-weight: 600">Running</span><br><span class="m" style="font-size: 11px">host.docker.internal:8420</span></td>
+<td style="white-space: normal; font-size: 12px; color: var(--t1b); max-width: 260px">Adds a model provider, only for you · runs Claude Code on this Mac, signed in by you · sends your prompts to Claude on your own plan</td>
+<td><span class="dot okb"></span> <span class="ok" style="font-weight: 600">Running</span><br><span class="m" style="font-size: 11px">host.docker.internal:8420</span><br><span style="font-size: 12px; color: var(--t2)">Starts on its own · since 10:42</span></td>
 <td><button class="chip" style="height: 30px">Add as provider</button> <button class="chip" style="height: 30px">Disable</button> <button class="chip" style="height: 30px">Remove</button></td>
 </tr>
 <tr>
@@ -200,18 +200,35 @@ td{vertical-align:top}
 </div>
 <div class="st">
 <span class="cap">Remove</span>
-<span style="font-size: 13px">Remove Claude Code bridge? Its provider goes too. The folder stays in plugins/.</span>
+<span style="font-size: 13px">Remove Your Claude subscription? Its provider goes too. The folder stays in plugins/.</span>
 <div style="display: flex; gap: 8px"><button class="chip" style="height: 30px; font-size: 12px; background: #ff6b6b; color: #2b0505; font-weight: 600">Remove</button><button class="chip" style="height: 30px; font-size: 12px">Cancel</button></div>
 </div>
 </section>
 
-<h2 class="h" style="margin-top: 4px">CLAUDE CODE BRIDGE · STATES</h2>
-<section aria-label="Bridge states" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; align-items: start">
+<h2 class="h" style="margin-top: 4px">YOUR CLAUDE SUBSCRIPTION · ALPHA.3 · STARTS ITSELF ON THE MAC</h2>
+<span style="font-size: 12px; color: var(--t2); margin-top: -10px">Owner, 2026-11-25: "then alpha.3 with claude plugin". In the Mac app and the repo, off until you turn it on; the Mac's runner starts it like Web search. You install Claude Code and sign in yourself; helmstudio never does.</span>
+<section aria-label="Subscription states" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; align-items: start">
 <div class="st">
-<span class="cap">Not running</span>
-<div style="display: flex; align-items: center; gap: 8px; font-size: 12px"><span class="dot offb"></span><span class="off" style="font-weight: 600">Not running</span><span style="color: var(--t2)">start it in a terminal</span></div>
-<div class="code"><span>plugins/claude-code-bridge/run.sh</span><button class="chip" style="height: 26px; font-size: 12px">Copy</button></div>
-<div style="display: flex; gap: 8px"><button class="chip" style="height: 30px; font-size: 12px">Try again</button><button class="chip" disabled style="height: 30px; font-size: 12px; opacity: 0.5">Add as provider</button></div>
+<span class="cap">Off · the list row (as found)</span>
+<div style="display: flex; align-items: center; gap: 8px; font-size: 13px"><span class="dot offb"></span><span class="off" style="font-weight: 600">Off</span><span style="font-size: 12px; color: var(--t2)">stopped on the Mac</span><div style="flex-grow: 1"></div><button class="chip" style="height: 26px; font-size: 12px">Enable</button></div>
+</div>
+<div class="st">
+<span class="cap">Turned on · starting</span>
+<div style="display: flex; align-items: center; gap: 8px; font-size: 13px"><span class="dot" style="background: #f2c14e"></span><span style="font-weight: 600; color: #f2c14e">Starting…</span><span style="font-size: 12px; color: var(--t2)">on the Mac</span></div>
+<div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--t2)">Your Claude subscription · Model provider<div style="flex-grow: 1"></div><button role="switch" aria-checked="true" aria-label="Enabled" class="sw"><span></span></button></div>
+</div>
+<div class="st">
+<span class="cap">Running · the list row</span>
+<div style="display: flex; align-items: center; gap: 8px; font-size: 13px"><span class="dot okb"></span><span class="ok" style="font-weight: 600">Running</span><span class="m" style="font-size: 11px">host.docker.internal:8420</span></div>
+<span style="font-size: 12px; color: var(--t2)">Starts on its own · since 10:42</span>
+<button class="chip" style="height: 30px; font-size: 12px; align-self: flex-start">Add as provider</button>
+</div>
+<div class="st">
+<span class="cap">Needs you · no Claude Code, or not signed in</span>
+<div role="alert" class="alert red"><span style="flex: 1 1 auto">Couldn't start · Install Claude Code and sign in, then Try again</span></div>
+<div class="code"><span>~/.helm/logs/claude-code-bridge.log</span><button class="chip" style="height: 26px; font-size: 12px">Copy</button></div>
+<div style="display: flex; gap: 8px"><button class="chip" style="height: 30px; font-size: 12px">Try again</button></div>
+<span style="font-size: 12px; color: var(--t2)">It waits for Try again: no restarts on its own.</span>
 </div>
 <div class="st">
 <span class="cap">Wrong key · 401</span>
@@ -219,9 +236,9 @@ td{vertical-align:top}
 <span style="font-size: 12px; color: var(--t2)">The key field empties; nothing is saved.</span>
 </div>
 <div class="st">
-<span class="cap">Bridge error · not signed in</span>
+<span class="cap">Its error · not signed in</span>
 <div role="alert" class="alert amb2"><span style="flex: 1 1 auto">Claude isn't signed in. Sign in with claude in a terminal, then Try again.</span><button class="chip" style="height: 26px; font-size: 12px">Try again</button></div>
-<span style="font-size: 12px; color: var(--t2)">Any other bridge message shows as is.</span>
+<span style="font-size: 12px; color: var(--t2)">Any other message from it shows as is.</span>
 </div>
 <div class="st">
 <span class="cap">Added · the list row</span>
@@ -229,13 +246,13 @@ td{vertical-align:top}
 </div>
 <div class="st">
 <span class="cap">Added · the aside</span>
-<div style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600"><span class="ok">✓</span>Claude Code bridge added</div>
+<div style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600"><span class="ok">✓</span>Your Claude subscription added</div>
 <span style="font-size: 12px; color: var(--t2)">Next: use it for the Assistant in AI agents.</span>
 <div style="display: flex; gap: 8px"><button class="chip" style="height: 30px; font-size: 12px; background: var(--a1); color: var(--on1); font-weight: 600">Open AI agents</button><button class="chip" style="height: 30px; font-size: 12px">Done</button></div>
 </div>
 <div class="st">
 <span class="cap">Adding</span>
-<div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--t2)"><span class="dot offb"></span>Checking the key with the bridge…</div>
+<div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--t2)"><span class="dot offb"></span>Checking the key with Your Claude subscription…</div>
 <button class="chip" disabled style="height: 30px; font-size: 12px; opacity: 0.6; align-self: flex-start">Adding…</button>
 </div>
 </section>
@@ -247,7 +264,7 @@ td{vertical-align:top}
 <span class="cap">Admin › Model providers · the new row</span>
 <div style="overflow-x: auto"><table style="border-collapse: collapse; width: 100%">
 <thead><tr><th>Name</th><th>Kind</th><th>Address</th><th>Models</th><th>Status</th></tr></thead>
-<tbody><tr><td style="font-weight: 600">Claude Code bridge<br><span class="m" style="font-weight: 400">plugin · claude-code-bridge</span></td><td><span class="tag">local server</span></td><td class="m">http://host.docker.internal:8420/v1</td><td class="m">claude-sonnet (default)<br>claude-opus · claude-haiku</td><td>Enabled<br><span style="font-size: 12px; color: var(--a1)">answered · 4.1 s</span></td></tr></tbody>
+<tbody><tr><td style="font-weight: 600">Your Claude subscription<br><span class="m" style="font-weight: 400">plugin · claude-code-bridge</span></td><td><span class="tag">local server</span></td><td class="m">http://host.docker.internal:8420/v1</td><td class="m">claude-sonnet (default)<br>claude-opus · claude-haiku</td><td>Enabled<br><span style="font-size: 12px; color: var(--a1)">answered · 4.1 s</span></td></tr></tbody>
 </table></div>
 <span style="font-size: 12px; color: var(--t2)">Other admins don't see this row.</span>
 </div>
@@ -258,7 +275,7 @@ td{vertical-align:top}
 <div role="listbox" aria-label="Provider, you" style="display: flex; flex-direction: column; gap: 2px; padding: 6px; border-radius: 12px; background: var(--s2); font-size: 12px">
 <div role="option" style="padding: 4px 6px">DeepSeek</div>
 <div role="option" style="padding: 4px 6px">Ollama on the Mac</div>
-<div role="option" aria-selected="true" style="padding: 4px 6px; border-radius: 8px; background: var(--s4)">Claude Code bridge</div>
+<div role="option" aria-selected="true" style="padding: 4px 6px; border-radius: 8px; background: var(--s4)">Your Claude subscription</div>
 </div></div>
 <div style="display: flex; flex-direction: column; gap: 4px"><span style="font-size: 11px; font-weight: 600; color: var(--t2)">Another admin</span>
 <div role="listbox" aria-label="Provider, another admin" style="display: flex; flex-direction: column; gap: 2px; padding: 6px; border-radius: 12px; background: var(--s2); font-size: 12px">
@@ -308,10 +325,10 @@ td{vertical-align:top}
 <div style="display: flex; align-items: center; gap: 8px; font-size: 13px"><span class="dot offb"></span><span class="off" style="font-weight: 600">Off</span><span style="font-size: 12px; color: var(--t2)">stopped on the Mac</span></div>
 </div>
 <div class="st">
-<span class="cap">A plugin you start yourself (no start in its plugin.json)</span>
+<span class="cap">A plugin you start yourself (no run in its plugin.json)</span>
 <div style="display: flex; align-items: center; gap: 8px; font-size: 12px"><span class="dot offb"></span><span class="off" style="font-weight: 600">Not running</span><span style="color: var(--t2)">start it in a terminal</span></div>
 <div class="code"><span>plugins/claude-code-bridge/run.sh</span><button class="chip" style="height: 26px; font-size: 12px">Copy</button></div>
-<span style="font-size: 12px; color: var(--t2)">As today: the bridge stays one you start yourself (personal, repo only).</span>
+<span style="font-size: 12px; color: var(--t2)">From alpha.3 Your Claude subscription starts itself; its run.sh still works by hand.</span>
 </div>
 </section>
 
@@ -457,29 +474,32 @@ td{vertical-align:top}
 <div style="height: 40px"></div>
 </main>
 
-<aside aria-label="Plugin: Claude Code bridge" style="flex: 1 1 340px; box-sizing: border-box; padding: 16px 18px 24px; border-left: 1px solid var(--s3); background: var(--p0); display: flex; flex-direction: column; gap: 12px">
+<aside aria-label="Plugin: Your Claude subscription" style="flex: 1 1 340px; box-sizing: border-box; padding: 16px 18px 24px; border-left: 1px solid var(--s3); background: var(--p0); display: flex; flex-direction: column; gap: 12px">
 <div style="display: flex; align-items: center; gap: 8px">
-<h2 style="margin: 0; flex: 1 1 auto; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 16px; font-weight: 700">Claude Code bridge</h2>
+<h2 style="margin: 0; flex: 1 1 auto; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 16px; font-weight: 700">Your Claude subscription</h2>
 <button role="switch" aria-checked="true" aria-label="Enabled" class="sw"><span></span></button>
 </div>
-<span style="font-size: 13px; color: var(--t1b)">Answers with your own logged-in claude CLI, as an OpenAI-compatible endpoint.</span>
+<span style="font-size: 13px; color: var(--t1b)">Answers with your own Claude plan: it runs Claude Code on this Mac, which you install and sign in to yourself.</span>
 <div style="display: flex; flex-direction: column; gap: 4px">
 <div class="row"><span>Kind</span><span>Model provider</span></div>
-<div class="row"><span>Version</span><span>0.1.0</span></div>
+<div class="row"><span>Version</span><span>0.2.0</span></div>
 <div class="row"><span>Source</span><span>plugins/claude-code-bridge</span></div>
-<div class="row"><span>Author</span><span>this repo</span></div>
+<div class="row"><span>Author</span><span>helmstudio</span></div>
 <div class="row"><span>Status</span><span style="color: #7fd88f">Running · host.docker.internal:8420</span></div>
+<div class="row"><span>Starts</span><span>On its own, on the Mac</span></div>
+<div class="row"><span>Needs</span><span>Claude Code, installed and signed in by you (claude.com/claude-code)</span></div>
+<div class="row"><span>Log</span><span>~/.helm/logs/claude-code-bridge.log</span></div>
 <div class="row"><span>Models</span><span>claude-sonnet · claude-opus · claude-haiku</span></div>
 </div>
 <div style="display: flex; flex-direction: column; gap: 4px">
 <span class="h">MAY DO</span>
-<ul class="perm"><li>Add a model provider</li><li>Reach host.docker.internal:8420</li><li>Read your prompts (sent to your Claude plan)</li></ul>
+<ul class="perm"><li>Add a model provider, only for you</li><li>Run Claude Code on this Mac, signed in by you</li><li>Send your prompts to Claude on your own plan</li><li>Reach host.docker.internal:8420</li></ul>
 </div>
 <div class="amb"><span><b>Personal use only.</b> Runs your own Claude login and plan, for you only. Never shared with other accounts. <a href="https://code.claude.com/docs/en/legal-and-compliance.md">Anthropic's terms</a></span></div>
 
 <div style="height: 1px; background: var(--s3)"></div>
 <h3 style="margin: 0; display: flex; align-items: center; font-size: 14px; font-weight: 700">Add as provider</h3>
-<div style="display: flex; flex-direction: column; gap: 6px"><label for="pl-name" style="font-size: 12px; color: var(--t2)">Name</label><input id="pl-name" class="in" value="Claude Code bridge"></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="pl-name" style="font-size: 12px; color: var(--t2)">Name</label><input id="pl-name" class="in" value="Your Claude subscription"></div>
 <div style="display: flex; flex-direction: column; gap: 6px"><label for="pl-key" style="font-size: 12px; color: var(--t2)">Key</label><input id="pl-key" class="in" type="password" autocomplete="off" placeholder="Paste the key from run.sh"><span style="font-size: 12px; color: var(--t2)">BRIDGE_TOKEN in <span style="font-family: 'JetBrains Mono', monospace">~/.helm/claude-code-bridge.env</span></span></div>
 <div style="display: flex; flex-direction: column; gap: 6px"><label for="pl-model" style="font-size: 12px; color: var(--t2)">Default model</label><select id="pl-model" class="in"><option>claude-sonnet</option><option>claude-opus</option><option>claude-haiku</option></select></div>
 <button style="height: 48px; border-radius: 14px; border: 0; background: var(--a1); color: var(--on1); background-image: linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 55%); font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.04em">Add</button>
@@ -487,7 +507,7 @@ td{vertical-align:top}
 
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":3660}}'>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":3970}}'>
 class Component extends DCLogic {
 state = { theme: null };
 renderVals() {
