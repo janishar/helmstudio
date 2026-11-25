@@ -157,6 +157,18 @@ def test_bad_input_and_foreign_takes_are_refused(st):
     )  # another user's: 404
     assert call(st, "edit_video", {"take_id": tid, "mute": True})[0] == 422  # not a video
     assert call(st, "nope", {})[0] == 404
+    # the size limit holds before Pillow allocates: 1 × 4000 resized to 8192 wide would be 268 gigapixels
+    tall = st.add("image", png(1, 4000), "image/png", width=1, height=4000)
+    code, body = call(st, "edit_image", {"take_id": tall, "resize": {"width": 8192}})
+    assert code == 422 and "50 MP" in body["detail"]
+    assert (
+        call(
+            st,
+            "edit_image",
+            {"take_id": tid, "extend": {"left": 4096, "right": 4096, "top": 4096, "bottom": 4096}},
+        )[0]
+        == 422
+    )  # 8232 × 8222
     code, body = call(st, "edit_image", {"take_id": tid, "rotate": 90}, api="http://10.0.0.5:8300")
     assert (
         code == 422 and "this machine" in body["detail"]
@@ -235,3 +247,14 @@ def test_audio_tools(st, tmp_path):
     assert (
         call(st, "edit_audio", {"take_id": a, "trim": {"start": 3, "end": 4}})[0] == 422
     )  # outside the take
+
+
+def test_out_of_time_makes_no_take(st):
+    """Past the budget the call gives up before it makes a take: pipelines would already have given up on it."""
+    tid = st.add("image", png(), "image/png", width=40, height=30)
+    studio = server.Studio(st.url, PASS, deadline=server.time.monotonic() + 1)
+    with pytest.raises(server.Fail, match="too long"):
+        server.edit_image(
+            studio, {"take_id": tid, "rotate": 90}, Path(server.tempfile.mkdtemp()), studio.deadline
+        )
+    assert not st.made

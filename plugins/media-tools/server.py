@@ -65,8 +65,16 @@ class Fail(Exception):
 
 
 class Studio:
-    def __init__(self, api: str, token: str) -> None:
-        self.api, self.token = api.rstrip("/"), token
+    def __init__(self, api: str, token: str, deadline: float = float("inf")) -> None:
+        self.api, self.token, self.deadline = api.rstrip("/"), token, deadline
+
+    def in_time(self, need: float = 3.0) -> float:
+        """Seconds left of the call's budget; Fail when fewer than `need` are (pipelines would give up first and the
+        take would land with no line and no Undo)."""
+        left = self.deadline - time.monotonic()
+        if left < need:
+            raise Fail(500, "it took too long; try a shorter part")
+        return left
 
     def _ask(self, method: str, path: str, body: dict | None = None) -> dict:
         req = urllib.request.Request(f"{self.api}/v1/studio/plugin{path}", method=method,
@@ -102,6 +110,7 @@ class Studio:
                     n += len(chunk)
                     if n > cap:
                         raise Fail(422, "the take is too large for media tools")
+                    self.in_time(0)
                     f.write(chunk)
         except OSError:
             raise Fail(502, "could not read the take's file") from None
@@ -109,19 +118,26 @@ class Studio:
 
     def make(self, body: dict, file: Path, poster: Path | None = None) -> dict:
         """A new take: create it, PUT its file (and a video's poster), complete it."""
+        self.in_time()
         up = self._ask("POST", "/takes", body | {"bytes": file.stat().st_size})
-        _put(up["upload_url"], file, body["content_type"])
+        _put(up["upload_url"], file, body["content_type"], self.in_time())
         if poster is not None:
-            _put(up["poster_upload_url"], poster, body["video"]["poster"]["content_type"])
+            _put(
+                up["poster_upload_url"],
+                poster,
+                body["video"]["poster"]["content_type"],
+                self.in_time(),
+            )
+        self.in_time(1)  # not completed, the pending take is discarded and never shown
         return self._ask("POST", f"/takes/{up['take_id']}/complete")
 
 
-def _put(url: str, file: Path, ctype: str) -> None:
+def _put(url: str, file: Path, ctype: str, left: float = 60) -> None:
     with file.open("rb") as f:
         req = urllib.request.Request(url, method="PUT", data=f,
                                      headers={"Content-Type": ctype, "Content-Length": str(file.stat().st_size)})  # fmt: skip
         try:
-            urllib.request.urlopen(req, timeout=60).close()
+            urllib.request.urlopen(req, timeout=min(60, left)).close()
         except (OSError, ValueError):
             raise Fail(502, "could not upload the new take") from None
 
@@ -208,6 +224,13 @@ def _atempo(speed: float) -> str:
 # --- the tools
 
 
+def _fits(w: int, h: int) -> None:
+    """Checked before Pillow allocates: resize keeps the aspect from one side, so a 1 × 4000 crop resized to 8192 wide
+    would ask for 268 gigapixels."""
+    if w * h > 50_000_000 or max(w, h) > 16384:
+        raise Fail(422, "the result would be over 50 MP or 16384 px")
+
+
 def edit_image(st: Studio, inp: dict, work: Path, deadline: float) -> dict:
     src = st.take(inp["take_id"])
     if src["kind"] != "image":
@@ -231,6 +254,7 @@ def edit_image(st: Studio, inp: dict, work: Path, deadline: float) -> dict:
     if z := inp.get("resize"):
         w = z.get("width") or max(1, round(img.width * z["height"] / img.height))
         h = z.get("height") or max(1, round(img.height * z["width"] / img.width))
+        _fits(w, h)
         img = img.resize((w, h), Image.Resampling.LANCZOS)
         done.append(f"resized to {w} × {h}")
     if e := inp.get("extend"):
@@ -241,6 +265,10 @@ def edit_image(st: Studio, inp: dict, work: Path, deadline: float) -> dict:
             fill = tuple(int(color[i : i + 2], 16) for i in (1, 3, 5))
             fill = fill + (255,) if img.mode == "RGBA" else fill
             img = img if img.mode in ("RGB", "RGBA") else img.convert("RGB")
+        _fits(
+            img.width + e.get("left", 0) + e.get("right", 0),
+            img.height + e.get("top", 0) + e.get("bottom", 0),
+        )
         img = ImageOps.expand(
             img, (e.get("left", 0), e.get("top", 0), e.get("right", 0), e.get("bottom", 0)), fill
         )
@@ -250,8 +278,7 @@ def edit_image(st: Studio, inp: dict, work: Path, deadline: float) -> dict:
     )
     if inp.get("format"):
         done.append(f"as {fmt.upper()}")
-    if img.width * img.height > 50_000_000 or max(img.size) > 16384:
-        raise Fail(422, "the result would be over 50 MP or 16384 px")
+    _fits(*img.size)
     if fmt == "jpeg" and img.mode != "RGB":
         img = img.convert("RGB")
     out = work / f"out.{fmt}"
@@ -266,7 +293,9 @@ def edit_video(st: Studio, inp: dict, work: Path, deadline: float) -> dict:
     if (src.get("duration_s") or 0) > MAX_SECONDS:
         raise Fail(422, "media tools take videos of at most 10 minutes")
     path = st.fetch(src, work / "in.mp4")
-    start, end = _span(inp.get("trim"), probe(path)["duration"])
+    if (length := probe(path)["duration"]) > MAX_SECONDS:  # studio's duration_s may be null
+        raise Fail(422, "media tools take videos of at most 10 minutes")
+    start, end = _span(inp.get("trim"), length)
     args, done = ["-ss", f"{start:.3f}", "-to", f"{end:.3f}", "-i", str(path)], []
     if inp.get("trim"):
         done.append(f"trimmed {_tc(start)}–{_tc(end)}")
@@ -341,7 +370,9 @@ def _audio_in(st: Studio, take_id: str, work: Path, name: str) -> tuple[dict, Pa
 
 def edit_audio(st: Studio, inp: dict, work: Path, deadline: float) -> dict:
     src, path = _audio_in(st, inp["take_id"], work, "in")
-    start, end = _span(inp.get("trim"), probe(path)["duration"])
+    if (length := probe(path)["duration"]) > MAX_SECONDS:
+        raise Fail(422, "media tools take sounds of at most 10 minutes")
+    start, end = _span(inp.get("trim"), length)
     done = [f"trimmed {_tc(start)}–{_tc(end)}"] if inp.get("trim") else []
     af = []
     if (db := inp.get("volume_db")) is not None:
@@ -457,7 +488,9 @@ def answer(tool: str, body, headers) -> tuple[int, dict]:
     try:
         with tempfile.TemporaryDirectory(prefix="media-tools-") as tmp:
             os.chmod(tmp, 0o700)
-            return 200, RUN[tool](Studio(api, token), inp, Path(tmp), time.monotonic() + BUDGET)
+            return 200, RUN[tool](
+                Studio(api, token, deadline := time.monotonic() + BUDGET), inp, Path(tmp), deadline
+            )
     except Fail as e:
         return e.code, {"detail": e.detail}
 
