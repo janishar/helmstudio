@@ -7,10 +7,17 @@ source, on the card's own driver (like the Mac's `make runners`). On Windows do 
 
 ## 1. Install
 
-- **NVIDIA driver**, recent enough for CUDA 13 (`nvidia-smi` must work; on WSL2 install the Windows driver only).
+- **NVIDIA driver**, recent enough for CUDA 13, with its tools: `nvidia-smi` must work (on WSL2 install the Windows
+  driver only). On Ubuntu, e.g. `sudo apt install nvidia-headless-no-dkms-595-server-open
+  linux-modules-nvidia-595-server-open-$(uname -r | sed 's/.*-//') nvidia-utils-595-server`, then reboot; a minimal
+  "headless" driver alone has no `nvidia-smi`. If `apt` downloads crawl, switch to `http://archive.ubuntu.com/ubuntu`
+  in `/etc/apt/sources.list.d/ubuntu.sources`.
 - **Docker** with Compose 2.26 or later, and `git`, `make`, `ffmpeg` (`sudo apt install git make ffmpeg`).
-- **uv 0.13.8**: `curl -LsSf https://astral.sh/uv/0.13.8/install.sh | sh`. The runner's torch comes with its own
-  CUDA libraries; no CUDA toolkit is needed.
+- **uv 0.13.8**: `curl -LsSf https://astral.sh/uv/0.13.8/install.sh | sh`. It installs into `~/.local/bin`: open a
+  new shell, or `export PATH="$HOME/.local/bin:$PATH"` (a script or an SSH command does not read your login profile;
+  without it `make runners-nvidia` fails with "uvx: No such file or directory"). The runner's torch comes with its
+  own CUDA libraries; no CUDA toolkit is needed. The first start downloads them (a few GB): the host appears in
+  System › Hosts only after that.
 - **SGLang 0.5.23**, optional (MiniMax H3 Base fp8), in its own venv:
 
   ```sh
@@ -30,7 +37,9 @@ make up GPU_HOSTS=gpu1                       # the stack, plus host gpu1's NATS 
 GPU_HOST=gpu1 HELMSTUDIO_MODELS=/path/to/models make runners-nvidia
 ```
 
-Then open http://localhost:8300. `make runners-nvidia` starts env torch, and env native when SGLang is found
+Then open http://localhost:8300. From another computer, tunnel the same port (`ssh -N -L 8300:127.0.0.1:8300 <machine>`,
+then http://localhost:8300 there): the web app accepts sign-in only at its own address, so a different local port
+fails with a server error; to use another address set `PUBLIC_BASE_URL` (and `HELMSTUDIO_PORT`) in `.env`. `make runners-nvidia` starts env torch, and env native when SGLang is found
 (`SGLANG_BIN`, else `sglang` on PATH). The host name is `GPU_HOST` (default: the first of `GPU_HOSTS`, else the one
 host `make up` made, else the machine's short name); it must be one `make up GPU_HOSTS=…` made. Logs:
 `runner_service/.run/runner-<host>-<env>.log`. Stop: `make runners-nvidia-stop`, then `make down`.
