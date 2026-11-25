@@ -46,6 +46,7 @@ import {
   Sparkles,
   Trash2,
   Undo2,
+  Zap,
   X,
 } from "lucide-react";
 import { api, message, ok, type S } from "@/lib/api";
@@ -58,6 +59,7 @@ import {
   answerBlocks,
   applyEvent,
   asked,
+  autoText,
   elsewhere,
   capNoticeId,
   chatTime,
@@ -83,7 +85,7 @@ import {
   type ThreadView,
 } from "@/lib/assistant";
 import { followEvents } from "@/lib/runs";
-import { Registry, awaitIt, navigateTo } from "@/components/assistant/tools";
+import { Registry, awaitIt, navigateTo, undoRuns } from "@/components/assistant/tools";
 import { Options, Refs } from "@/components/assistant/answer";
 import { atQuery, liveOptions, splitOptions, withPicks } from "@/lib/answer-refs";
 import {
@@ -277,12 +279,13 @@ export function useAssistant(me: S<"User"> | null) {
   /** A screen card: the drawer opens on it; Yes calls the screen's own function, Not now cancels, and leaving the
    * screen cancels it too. */
   const ask = useCallback(
-    (id: string, a: Asked, key: number | null) =>
+    (id: string, a: Asked, key: number | null, asks?: string) =>
       new Promise<Outcome>((resolve) => {
         setOpenState(true);
         setShrunk(false);
         setAsking({ id, card: a.card });
-        setLocal(id, { status: "waiting", text: waitingText(a.card) });
+        // Auto on but this one still asks (API 1.68): its line says why, above the card
+        setLocal(id, { status: "waiting", text: asks ?? waitingText(a.card) });
         const off = reg.subscribe(() => key !== null && !reg.alive(key) && answer("gone"));
         function answer(how: "yes" | "no" | "gone") {
           off();
@@ -338,7 +341,27 @@ export function useAssistant(me: S<"User"> | null) {
           setRunning({ n: i + 1, of: p.actions.length, text });
         };
         const { out, key } = await reg.run(a as Action, progress);
-        const o = asked(out) ? await ask(a.id, out, key) : out;
+        // Auto (API 1.68, board frame 13): pipelines let it run by itself: its Yes without the card, "Auto · " first,
+        // and a generation's Undo stops its runs and deletes their takes
+        let o = !asked(out)
+          ? out
+          : a.auto
+            ? await out
+                .yes(true)
+                .catch((e: unknown): Outcome => ({ status: "failed", text: message(e) }))
+            : await ask(a.id, out, key, a.asks);
+        if (a.auto && o.status === "done") {
+          const runs = (o.result as { run_ids?: unknown } | undefined)?.run_ids;
+          o = {
+            ...o,
+            text: autoText(o.text),
+            undo:
+              o.undo ??
+              (Array.isArray(runs) && runs.length
+                ? { undo: () => undoRuns(runs as string[]) }
+                : undefined),
+          };
+        }
         if (o.undo) undoFns.current[a.id] = o.undo;
         setLocal(a.id, {
           status: o.status === "still_running" ? "running" : (o.status as Line["status"]),
@@ -431,6 +454,29 @@ export function useAssistant(me: S<"User"> | null) {
     }
   }, [cid, leave]);
 
+  /** Auto mode's switch (API 1.68, board frame 13): per chat, starts off; a chat is made first when there is none. */
+  const setAuto = useCallback(
+    async (on: boolean) => {
+      try {
+        const id =
+          threadId ??
+          (await ok(api.POST("/v1/studio/assistant/threads", { body: { client_id: cid } }))).id;
+        const t = await ok(
+          api.PATCH("/v1/studio/assistant/threads/{thread_id}", {
+            params: { path: { thread_id: id } },
+            body: { auto: on },
+          }),
+        );
+        setView((v) =>
+          v && v.thread.id === t.id ? { ...v, thread: t } : { thread: t, entries: [] },
+        );
+      } catch (e) {
+        setError(message(e));
+      }
+    },
+    [cid, threadId],
+  );
+
   // the Chats list (board frame 7): the chats newest first, read when the list opens
   const [chats, setChats] = useState<Thread[] | null>(null);
   const loadChats = useCallback(() => {
@@ -493,8 +539,8 @@ export function useAssistant(me: S<"User"> | null) {
         );
       else {
         const f = undoFns.current[l.id];
-        if (!f) return;
-        await (was ? f.redo() : f.undo());
+        if (!f || (was && !f.redo)) return;
+        await (was ? f.redo?.() : f.undo());
       }
       setUndone((u) => ({ ...u, [l.id]: !was }));
     } catch (e) {
@@ -563,7 +609,9 @@ export function useAssistant(me: S<"User"> | null) {
     setShrunk,
     local,
     undone,
-    canUndo: (l: Line) => !!l.memory_id || !!undoFns.current[l.id],
+    // an Auto step's Undo deletes what it made: no Redo after it
+    canUndo: (l: Line) =>
+      !!l.memory_id || (!!undoFns.current[l.id] && (!undone[l.id] || !!undoFns.current[l.id].redo)),
     asking,
     answerAsk: (yes: boolean) => answerRef.current?.(yes ? "yes" : "no"),
     running,
@@ -571,6 +619,7 @@ export function useAssistant(me: S<"User"> | null) {
     setError,
     send,
     newChat,
+    setAuto,
     chats,
     loadChats,
     openChat,
@@ -627,6 +676,7 @@ function LineIcon({ status, text }: { status: Line["status"]; text: string }) {
     return <CircleMinus {...p} strokeWidth={2} />;
   if (/^(Opened|Went to)/.test(text)) return <ArrowRight {...p} strokeWidth={2} />;
   if (/^Remembered/.test(text)) return <Brain {...p} strokeWidth={2} />;
+  if (/^Auto · /.test(text)) return <Zap {...p} strokeWidth={2} />; // ran by itself (board frame 13)
   return <Check {...p} />;
 }
 
@@ -1842,6 +1892,8 @@ function Drawer({ a }: { a: AssistantApi }) {
   const [atCur, setAtCur] = useState(""); // the @ picker's highlighted option, for aria-activedescendant
   const [dropping, setDropping] = useState(false);
   const [told, setTold] = useState(false); // "This model can't see images" shows once
+  const [autoTip, setAutoTip] = useState(false); // the Auto switch's line (board frame 13a): hover, focus or hold
+  const hold = useRef<ReturnType<typeof setTimeout> | null>(null);
   const file = useRef<HTMLInputElement>(null);
   const [top, setTop] = useState<number | null>(null);
   const [memory, setMemory] = useState(false);
@@ -2242,6 +2294,21 @@ function Drawer({ a }: { a: AssistantApi }) {
               <span className="flex-1">This model can&apos;t see images; it will use Look at.</span>
             </div>
           )}
+          {!a.readOnly && t?.auto && a.steering && typeof t.caps.auto_takes_hour === "number" && (
+            <div className="est">
+              <Zap size={12} strokeWidth={2} aria-hidden />
+              <span>
+                {t.caps.auto_takes_hour} of {st?.limits.auto_takes_per_hour ?? 8} takes this hour
+              </span>
+            </div>
+          )}
+          {!a.readOnly && autoTip && (
+            <div className="tip" role="tooltip" id="auto-tip">
+              <b>Auto</b>
+              Runs safe steps without asking: generations on your machines, Hear it, saves you can
+              undo. Up to the cap. Deletes, anything off the machine and big runs still ask.
+            </div>
+          )}
           {!a.readOnly && dropping && (
             <div className="drop" aria-hidden>
               <ImagePlus size={18} strokeWidth={1.75} />
@@ -2371,6 +2438,29 @@ function Drawer({ a }: { a: AssistantApi }) {
                     e.target.value = "";
                   }}
                 />
+                <button
+                  type="button"
+                  className="aut"
+                  role="switch"
+                  aria-checked={!!t?.auto}
+                  aria-describedby={autoTip ? "auto-tip" : undefined}
+                  title="Auto: safe steps run without asking"
+                  onClick={() => void a.setAuto(!t?.auto)}
+                  onMouseEnter={() => setAutoTip(true)}
+                  onMouseLeave={() => setAutoTip(false)}
+                  onFocus={() => setAutoTip(true)}
+                  onBlur={() => setAutoTip(false)}
+                  onPointerDown={(e) => {
+                    if (e.pointerType === "touch")
+                      hold.current = setTimeout(() => setAutoTip(true), 500);
+                  }}
+                  onPointerUp={() => {
+                    if (hold.current) clearTimeout(hold.current);
+                  }}
+                >
+                  <Zap size={11} strokeWidth={2} aria-hidden />
+                  Auto
+                </button>
                 <small>
                   {a.stopping ? null : atOpen ? (
                     <>

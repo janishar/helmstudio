@@ -18,7 +18,8 @@ export type Outcome = {
   text: string;
   result?: Record<string, unknown>;
   error?: string;
-  undo?: { undo: () => unknown; redo: () => unknown };
+  /** no redo: Undo only once (an Auto step's undo deletes what it made, API 1.68) */
+  undo?: { undo: () => unknown; redo?: () => unknown };
 };
 /** A card the screen asks before its own button runs (§22.6): Yes is the user's click. */
 export type ScreenCard = {
@@ -40,12 +41,18 @@ export type ScreenCard = {
   /** Yes is off, with why (a licence not ticked yet) */
   off?: string;
 };
-export type Asked = { card: ScreenCard; yes: () => Promise<Outcome> };
-/** A screen action's handler: an outcome now, or a card whose Yes makes it. */
+/** `yes(true)`: Auto mode ran it without the card (API 1.68); its line says what it made, not "You clicked". */
+export type Asked = { card: ScreenCard; yes: (auto?: boolean) => Promise<Outcome> };
+/** A screen action's handler: an outcome now, or a card whose Yes makes it. `auto`: Auto mode lets it run by itself
+ * (a dialog saves itself once ready). */
 export type Handler = (
   args: Record<string, unknown>,
-  ctx: { progress: (text: string) => void },
+  ctx: { progress: (text: string) => void; auto?: boolean },
 ) => Outcome | Asked | Promise<Outcome | Asked>;
+
+/** An Auto step's line (board frame 13): "Auto · " first, never "You clicked". */
+export const autoText = (text: string) =>
+  text.startsWith("Auto · ") ? text : `Auto · ${text.replace(/^You clicked /, "")}`;
 
 export const asked = (o: Outcome | Asked): o is Asked => "card" in o;
 export const done = (text: string, more: Partial<Outcome> = {}): Outcome => ({
@@ -454,4 +461,4 @@ export function stepSummary(lines: { text: string; memory_id?: string }[]) {
 }
 
 /** What a line's Undo names (board frame 14c): its text up to the first " · ". */
-export const undoName = (text: string) => text.split(" · ")[0];
+export const undoName = (text: string) => text.replace(/^Auto · /, "").split(" · ")[0];

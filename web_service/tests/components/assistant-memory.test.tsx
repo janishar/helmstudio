@@ -62,6 +62,7 @@ const status = (remote = false, thinks = false): S<"AssistantStatus"> => ({
 const thread = (over: Partial<S<"AssistantThread">> = {}): S<"AssistantThread"> => ({
   id: T,
   title: "New chat",
+  auto: false,
   state: "idle",
   client_id: null,
   pending: null,

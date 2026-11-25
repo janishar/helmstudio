@@ -478,14 +478,26 @@ export const capsLine = (l: Limits) =>
       : l.tokens_per_day.toLocaleString("en")
   } tokens a day`;
 
+// the Auto caps before the admin sets any (API 1.68; an older studio leaves them out)
+const AUTO_CAPS: Partial<Record<keyof Limits, number>> = {
+  auto_takes_per_hour: 8,
+  auto_gpu_minutes_per_hour: 30,
+};
+
 const capsText = (l: Limits) =>
-  Object.fromEntries(CAPS.map(([k]) => [k, String(l[k])])) as Record<keyof Limits, string>;
+  Object.fromEntries(CAPS.map(([k]) => [k, String(l[k] ?? AUTO_CAPS[k] ?? "")])) as Record<
+    keyof Limits,
+    string
+  >;
 
 const CAPS: [keyof Limits, string][] = [
   ["model_calls_per_day", "Model calls a day"],
   ["tokens_per_day", "Tokens a day"],
   ["look_at_per_hour", "Look at, an hour"],
   ["messages_per_minute", "Messages a minute"],
+  // Auto mode (API 1.68, board Assistant frame 13d): what it may start by itself for one user
+  ["auto_takes_per_hour", "Auto takes, an hour"],
+  ["auto_gpu_minutes_per_hour", "Auto GPU minutes, an hour"],
 ];
 
 /** The Assistant's settings under the table: on or off, provider and model, web search, caps, then Cancel and Save. */
@@ -733,7 +745,7 @@ function AssistantPanel({
               id={`a-${k}`}
               className="in"
               type="number"
-              min={1}
+              min={k.startsWith("auto_") ? 0 : 1}
               required
               value={caps[k]}
               onChange={(e) => setCaps({ ...caps, [k]: e.target.value })}

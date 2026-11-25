@@ -73,6 +73,7 @@ const status = (remote = false, thinks = false): S<"AssistantStatus"> => ({
 const thread = (over: Partial<S<"AssistantThread">> = {}): S<"AssistantThread"> => ({
   id: T,
   title: "New chat",
+  auto: false,
   state: "idle",
   client_id: null,
   pending: null,
@@ -1575,5 +1576,105 @@ describe("alpha.2: size, answers that read well, polish (board frames 9, 10, 14)
       expect(thumbs.querySelector("img")?.getAttribute("src")).toBe("/files/u/x/fox.png"),
     );
     expect(thumbs.querySelector("img")!.getAttribute("alt")).toBe("Fox at dusk");
+  });
+});
+
+describe("Auto mode (API 1.68, board frame 13)", () => {
+  const generate =
+    (yes: (auto?: boolean) => Promise<ReturnType<typeof done>>): Handler =>
+    () => ({
+      card: {
+        kind: "generate",
+        title: "Generate 4 images?",
+        rows: [],
+        tags: ["uses the GPU"],
+        go: "GENERATE",
+        fine: "",
+      },
+      yes,
+    });
+
+  it("a · the switch in the box starts off, its line on hover, and a click turns the chat's Auto on", async () => {
+    serve({ existing: thread() });
+    const patched: unknown[] = [];
+    answer("PATCH", {
+      "/v1/studio/assistant/threads/{thread_id}": ({ body }) => {
+        patched.push(body);
+        return { data: thread({ auto: true }) };
+      },
+    });
+    await openDrawer();
+    const sw = await screen.findByRole("switch", { name: "Auto" });
+    expect(sw.getAttribute("aria-checked")).toBe("false");
+    fireEvent.mouseEnter(sw);
+    expect(screen.getByRole("tooltip").textContent).toContain("Deletes, anything off the machine");
+    fireEvent.click(sw);
+    await waitFor(() => expect(sw.getAttribute("aria-checked")).toBe("true"));
+    expect(patched).toEqual([{ auto: true }]);
+  });
+
+  it("b · an auto generation runs without its card, says Auto and has Undo; c · one that asks shows why", async () => {
+    const posts = serve({ existing: thread({ auto: true }) });
+    const yes = vi.fn(async (auto?: boolean) =>
+      done(auto ? "Generated 4 takes · Mac" : "You clicked GENERATE", {
+        result: { run_ids: ["r1"] },
+      }),
+    );
+    await openDrawer(<Screen actions={{ generate: generate(yes) }} />);
+    await waitFor(() => expect(onEvent).not.toBeNull());
+    park([{ id: id(0), name: "generate", args: {}, auto: true } as never]);
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(yes).toHaveBeenCalledWith(true);
+    expect(screen.queryByRole("region", { name: /^Confirm/ })).toBeNull();
+    expect(posts[0]).toMatchObject({
+      results: [
+        { id: id(0), status: "done", line: { text: "Auto · Generated 4 takes · Mac", undo: true } },
+      ],
+    });
+    act(() =>
+      onEvent!({
+        seq: 30,
+        type: "entry",
+        entry: entry(5, {
+          kind: "line",
+          line: { id: id(0), status: "done", text: "Auto · Generated 4 takes · Mac", undo: true },
+        }),
+      }),
+    );
+    expect(await screen.findByRole("button", { name: "Undo: Generated 4 takes" })).toBeTruthy();
+
+    park(
+      [
+        {
+          id: id(0, 2),
+          name: "generate",
+          args: {},
+          asks: "Auto paused · 8 of 8 takes this hour",
+        } as never,
+      ],
+      2,
+    );
+    await screen.findByRole("region", { name: "Confirm: Generate 4 images?" });
+    expect(screen.getByText("Auto paused · 8 of 8 takes this hour")).toBeTruthy();
+    expect(yes).toHaveBeenCalledTimes(1);
+  });
+
+  it("the cap chip shows under the thread while an Auto turn runs", async () => {
+    serve({ existing: thread({ auto: true }) });
+    await openDrawer();
+    await waitFor(() => expect(onEvent).not.toBeNull());
+    act(() =>
+      onEvent!({
+        seq: 20,
+        type: "thread",
+        thread: thread({
+          auto: true,
+          state: "working",
+          client_id: ME,
+          caps: { model_calls: 1, tool_calls: 1, memory_writes: 0, auto_takes_hour: 4 },
+        }),
+      }),
+    );
+    expect(await screen.findByText("4 of 8 takes this hour")).toBeTruthy();
   });
 });

@@ -68,7 +68,14 @@ export const designedOf = (t: Pick<Take, "made_with">) =>
 
 /** What the assistant prefills in Design a voice (its description, the name) or Clone from a clip (the part, the
  * name). The consent tick, Hear it and Save stay the user's. */
-export type Prefill = { text?: string; name?: string; from_s?: number; to_s?: number };
+export type Prefill = {
+  text?: string;
+  name?: string;
+  from_s?: number;
+  to_s?: number;
+  /** Auto mode (API 1.68): Design a voice hears it once and saves itself */
+  auto?: boolean;
+};
 
 /** Hear it's line in Clone from a clip until it is changed. */
 const SAMPLE_LINE = "Hello. This is how I sound when I read a line.";
@@ -1025,6 +1032,21 @@ function Designer({
   const [name, setName] = useState(prefill?.name ?? "");
   const t = useTries(design, draft, setDraft);
   const named = name.trim() || "Untitled voice";
+  // Auto mode (API 1.68, board frame 13): Hear it once, then Save as voice; a problem leaves it open for you
+  const heard = useRef(false);
+  useEffect(() => {
+    if (!prefill?.auto || heard.current || !text.trim() || !line.trim()) return;
+    heard.current = true;
+    void t.hear(save, line);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefill?.auto]);
+  const kept = useRef(false);
+  useEffect(() => {
+    if (!prefill?.auto || kept.current || !t.n || t.busy) return;
+    kept.current = true;
+    void keep();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefill?.auto, t.n, t.busy]);
 
   /** The draft voice as the form says it now: made on the first Hear it, edited when the words changed. */
   async function save(): Promise<Item> {

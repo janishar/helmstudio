@@ -136,13 +136,31 @@ export class Registry {
     const why = argsError(shellOwn ? "shell" : (c?.spec.screen ?? ""), a.name, a.args);
     if (why) return { out: failed(`${a.name} · ${why}`), key: null };
     try {
-      const out = await h(a.args, { progress });
+      const out = await h(a.args, { progress, auto: !!a.auto });
       return { out, key: shellOwn || !asked(out) ? null : (c?.key ?? null) };
     } catch (e) {
       return { out: failed(`${a.name} · ${message(e)}`), key: null };
     }
   }
 }
+
+/** An Auto generation's Undo (API 1.68): its runs still going stop, the takes they made are deleted. */
+export async function undoRuns(ids: string[]) {
+  for (const id of ids) {
+    const r = await ok(api.GET("/v1/studio/runs/{run_id}", { params: { path: { run_id: id } } }));
+    if (r.status === "queued" || r.status === "running")
+      await ok(api.POST("/v1/studio/runs/{run_id}/cancel", { params: { path: { run_id: id } } }));
+    for (const o of r.outputs)
+      if (o.take_id)
+        await api.DELETE("/v1/studio/takes/{take_id}", {
+          params: { path: { take_id: o.take_id } },
+        });
+  }
+}
+
+/** An Auto library save's Undo (API 1.68): the new item is deleted. */
+export const undoItem = (id: string) =>
+  ok(api.DELETE("/v1/studio/library/{item_id}", { params: { path: { item_id: id } } }));
 
 export const ToolsContext = createContext<Registry | null>(null);
 export const useRegistry = () => use(ToolsContext);

@@ -294,7 +294,7 @@ describe("the Timeline's actions", () => {
       path: "/v1/studio/timelines/{timeline_id}/undo",
       body: { revision: 5 },
     });
-    await act(async () => void (await o.undo!.redo()));
+    await act(async () => void (await o.undo!.redo!()));
     expect(posts.at(-1)).toMatchObject({
       path: "/v1/studio/timelines/{timeline_id}/redo",
       body: { revision: 6 },
@@ -454,11 +454,21 @@ describe("the Timeline's actions", () => {
     await ready();
     const d = document.body.appendChild(document.createElement("dialog"));
     d.setAttribute("open", "");
-    const esc = new KeyboardEvent("keydown", { key: "Escape", code: "Escape", cancelable: true, bubbles: true });
+    const esc = new KeyboardEvent("keydown", {
+      key: "Escape",
+      code: "Escape",
+      cancelable: true,
+      bubbles: true,
+    });
     document.body.dispatchEvent(esc);
     d.remove();
     expect(esc.defaultPrevented).toBe(false);
-    const esc2 = new KeyboardEvent("keydown", { key: "Escape", code: "Escape", cancelable: true, bubbles: true });
+    const esc2 = new KeyboardEvent("keydown", {
+      key: "Escape",
+      code: "Escape",
+      cancelable: true,
+      bubbles: true,
+    });
     document.body.dispatchEvent(esc2);
     expect(esc2.defaultPrevented).toBe(true); // without a modal the editor takes it
   });
