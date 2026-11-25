@@ -48,7 +48,8 @@
 - **Edit takes with media tools.** Crop, resize, rotate or convert an image; trim, speed up or re-sound a video;
   trim, level or join audio. Each edit is a new take with Undo, from the Gallery or by asking the Assistant.
 - **Extend it with plugins and skills.** Admin › Plugins turns on model providers and Assistant tools such as web
-  search (no key needed). Skills teach the Assistant a craft (Animator, Cinematic filmmaker); add your own by
+  search (no key needed), or, on the Mac, your own Claude plan through Claude Code you sign in to yourself (off
+  by default, only for you). Skills teach the Assistant a craft (Animator, Cinematic filmmaker); add your own by
   dropping a folder into `~/.helm/plugins/`.
 - **See a workflow two ways.** Every workflow is a small graph of typed steps, shown as a **Studio** form or as a
   **Graph** on a node canvas. Editing one edits the other.
@@ -239,7 +240,7 @@ runner_service/    Python: runs workflows (native envs torch, mlx and native; th
 pipelines_service/ Python, LangGraph: batches, agent nodes, the Assistant
 web_service/       Next.js app and its BFF
 cli/               Go: the helm command and helm mcp
-plugins/           built-in plugins: skills, media tools (a container in the stack), web search
+plugins/           built-in plugins: skills, media tools (a container in the stack), web search, Claude subscription
 deploy/            compose files, Postgres init, NATS config, secrets (git-ignored), gpu-host/
 .tools/            make-secrets, copy-envs, nats-setup, storage-setup, test-db, create-admin, gpu-host-tunnel
 docs/              the plan, guides, brand and the approved design boards

@@ -1,6 +1,6 @@
 [project]
 name = "helmstudio-contract-tests"
-version = "0.1.0a2"
+version = "0.1.0a3"
 description = "Black-box HTTP contract suite for the helmstudio public API (through Kong)"
 requires-python = ">=3.14,<3.15"
 dependencies = ["pytest>=9.2.0", "httpx>=0.28.1", "pillow>=13.0.0", "jsonschema>=4.26.0", "pyyaml>=6.0.3",

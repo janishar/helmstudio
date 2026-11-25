@@ -66,14 +66,17 @@ export function statusOf(p: Plugin): {
 }
 
 /** A failed one's aside alert, as the board: "Couldn't start · it stopped 3 times: " then the reason (mono), then
- * "Trying again in 1 min." (the runner's backoff tops out at 60 s); null unless failed. */
-export function failedAlert(p: Plugin): { lead: string; why: string } | null {
+ * "Trying again in 1 min." (the runner's backoff tops out at 60 s) only when the runner retries: its own reasons start
+ * "it …", "its …", "no run …" or "run.cmd …"; a plugin that exits 78 (needs you) gives its own line and waits for
+ * Try again. Null unless failed. */
+export function failedAlert(p: Plugin): { lead: string; why: string; retries: boolean } | null {
   if (p.status !== "failed") return null;
   const why = (p.problem ?? "").replace(/\.$/, "");
+  const retries = /^(it |its |no run |run\.cmd )/.test(why);
   const cut = why.indexOf(": ");
   return cut < 0
-    ? { lead: `Couldn't start · ${why}`, why: "" }
-    : { lead: `Couldn't start · ${why.slice(0, cut + 2)}`, why: why.slice(cut + 2) };
+    ? { lead: `Couldn't start · ${why}`, why: "", retries }
+    : { lead: `Couldn't start · ${why.slice(0, cut + 2)}`, why: why.slice(cut + 2), retries };
 }
 
 /** One this helmstudio can't use (a skill of a newer format, or yours that could not be read): faded, only Remove. */

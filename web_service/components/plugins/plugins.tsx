@@ -494,7 +494,8 @@ function PluginPanel({
             className="rounded-[10px] bg-[color-mix(in_srgb,#ff6b6b_14%,transparent)] px-2.5 py-2 text-[12px] text-[#ff8a8a]"
           >
             {failed.lead}
-            {failed.why && <span className="mono">{failed.why}</span>}. Trying again in 1 min.
+            {failed.why && <span className="mono">{failed.why}</span>}.
+            {failed.retries && " Trying again in 1 min."}
           </div>
           {p.starts?.log && <CopyCode text={p.starts.log} />}
           <div className="flex gap-1.5">
