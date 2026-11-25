@@ -48,6 +48,12 @@ Notes from the owner while using the app. Not scheduled; each is picked up when 
   check that no fake service or echo workflow is offered), fresh production secrets from `.tools/make-secrets`, a
   domain and HTTPS in front of Kong (NATS and S3 private or tunnelled), the admin account, releases by tag with
   migrate, health checks and rollback, logs. The owner's `oralab-deploy` skill covers a one-VM compose beta.
+- **Windows support** (owner, 2026-11-25: "Windows support add to future features"). Today: Apple Silicon Macs and
+  Linux NVIDIA hosts only; the Mac app is macOS only. Likely path: the stack in Docker on WSL2 (the Makefiles and
+  shell scripts run inside WSL2), and a Windows PC with an NVIDIA card as a GPU runner inside WSL2 (CUDA in WSL), set
+  up like a Linux NVIDIA host. Needs: amd64 images (see Multi-arch images below), a test run on a real Windows
+  machine, fixes for what breaks (paths, line endings, host.docker.internal, ports), and a short Windows setup page
+  in the docs. A native Windows app is a later step, if ever.
 
 ## Checks and hardening
 
