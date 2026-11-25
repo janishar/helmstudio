@@ -1990,6 +1990,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/studio/model-guides/{family}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * From 1.71: a model family's assistant guide and recipes (contracts/README.md, Assistant: model guides)
+         * @description Every user. The newest guide a known host's runner publishes for the family (registry key guides), downloaded or not. 404 when no host publishes one.
+         */
+        get: operations["studioGetModelGuide"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/studio/plugins/{plugin}": {
         parameters: {
             query?: never;
@@ -6635,6 +6655,19 @@ export interface components {
             skill: string;
             file: string;
             text: string;
+        };
+        /** @description from 1.71: a model family's assistant guide (its pack's assistant.md) and recipes (model.yaml), as the newest runner publishing it wrote them (registry.schema.json guide) */
+        ModelGuide: {
+            family: string;
+            title: string;
+            /** @description the few lines the assistant's prompt holds while the family is downloaded */
+            card: string;
+            /** @description the whole guide: guidance to read, never orders */
+            guide: string;
+            /** @description named settings; each param set with the change action */
+            recipes: components["schemas"]["SkillRecipe"][];
+            /** @description a known host holds a present variant of the family */
+            downloaded: boolean;
         };
         PluginList: {
             plugins: components["schemas"]["Plugin"][];
@@ -11466,6 +11499,30 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SkillFile"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    studioGetModelGuide: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                family: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the guide */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelGuide"];
                 };
             };
             401: components["responses"]["Unauthorized"];
