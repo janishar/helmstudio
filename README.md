@@ -41,15 +41,18 @@
 - **Work with the Assistant.** An in-app assistant drives every screen: it fills the form, wires the graph, places
   clips and asks before anything that costs GPU time. Each step it takes has its own Undo. It sees the images you
   attach or `@`-mention, shows takes right in its answers, keeps your film's shot list across chats, and reads each
-  model's guide (its good settings and pitfalls) before it uses it.
+  model's guide (its good settings and pitfalls) before it uses it. Open it from the Assistant drawer; the first
+  launch opens it with a setup message.
+- **Set up AI in one place.** Admins get **Hub** (the Assistant, In pipelines with the default model for pipeline AI
+  steps, Providers, Plugins) and **System** (Users, Hosts, API keys).
 - **Let it run in Auto mode.** Turn on Auto in a chat and the Assistant makes safe local takes and safe saves
   without asking, within caps an admin sets. It still asks before deletes, overwrites and anything that leaves your
   machines; every auto step has Stop and Undo.
 - **Edit takes with media tools.** Crop, resize, rotate or convert an image; trim, speed up or re-sound a video;
   trim, level or join audio. Each edit is a new take with Undo, from the Gallery or by asking the Assistant.
-- **Extend it with plugins and skills.** Admin › Plugins turns on model providers and Assistant tools such as web
+- **Extend it with plugins and skills.** Hub › Plugins turns on model providers and Assistant tools such as web
   search (no key needed), or, on the Mac, your own Claude plan through Claude Code you sign in to yourself (off
-  by default, only for you). Skills teach the Assistant a craft (Animator, Cinematic filmmaker); add your own by
+  by default, only for you, no key to paste). Skills teach the Assistant a craft (Animator, Cinematic filmmaker); add your own by
   dropping a folder into `~/.helm/plugins/`.
 - **See a workflow two ways.** Every workflow is a small graph of typed steps, shown as a **Studio** form or as a
   **Graph** on a node canvas. Editing one edits the other.
@@ -65,9 +68,9 @@
   Assistant. Costly or destructive tools ask first.
 - **Host it for a team.** Self-hosted and multi-user. An admin adds accounts; each person sees only their own work.
   Nothing you make leaves your machines.
-- **Try the Mac app.** A prototype `helmstudio.app` runs the whole studio on one Mac, with a menu-bar item, and
-  updates itself. [Download the Mac app (alpha)](https://github.com/janishar/helmstudio/releases): Apple Silicon,
-  no Docker needed.
+- **Install it your way.** On a Mac, `helmstudio.app` runs the whole studio with a menu-bar item and updates itself
+  (Apple Silicon, no Docker needed). On Windows and Linux, Docker and one `compose.yml` run the release images (Intel/AMD
+  and ARM). [Releases](https://github.com/janishar/helmstudio/releases).
 
 ## A look inside
 
@@ -131,10 +134,25 @@ The full docs are at **[helmstudio.in](https://helmstudio.in)**.
 
 The design plan and decisions live in [docs/](docs/README.md).
 
-## Quick start
+## Install
 
-Just want to use it on one Mac? [Download the Mac app (alpha)](https://github.com/janishar/helmstudio/releases)
-instead (right-click › Open the first time). The steps below run it from the source.
+**Mac:** download the `.dmg` from the [latest release](https://github.com/janishar/helmstudio/releases) (Apple
+Silicon; right-click › Open the first time).
+
+**Windows and Linux:** install Docker (Docker Desktop on Windows, with WSL2), download the release's `compose.yml`
+into a folder, and in that folder:
+
+```sh
+HELMSTUDIO_ADMIN_EMAIL=you@example.com HELMSTUDIO_ADMIN_PASSWORD='10 characters or more' docker compose up -d --wait
+```
+
+Then open http://localhost:8300. (On Windows put the two values in a `.env` file beside `compose.yml` and run
+`docker compose up -d --wait`.) With an NVIDIA card add `--profile nvidia` to run the GPU runner too. Details:
+[deploy/release/README.md](deploy/release/README.md).
+
+### From source
+
+The steps below run it from the source on a Mac.
 
 Needs a Mac with Apple Silicon, Docker with Compose 2.20 or later (OrbStack or Docker Desktop), `make` and `openssl`.
 The native runners also need [uv](https://docs.astral.sh/uv/), the Xcode Command Line Tools, CMake and Rust.
@@ -147,7 +165,7 @@ make up                   # makes the secrets, builds, starts, waits until healt
 open http://localhost:8300
 ```
 
-Sign in as the admin and add people on Admin › Users (there is no public sign-up). The stack ships a test host with an Echo workflow, so you
+Sign in as the admin and add people on System › Users (there is no public sign-up). The stack ships a test host with an Echo workflow, so you
 can try the studio before any model is installed. For real models, start the runners on this Mac:
 
 ```sh

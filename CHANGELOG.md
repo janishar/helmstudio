@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.1.0-alpha.4 (2026-11-25)
+
+The Assistant gets its own place, and helmstudio installs on Windows and Linux with Docker.
+
+### What's new
+
+- **Hub and System.** Admins get two rail items. **Hub** holds everything AI: Assistant, In pipelines, Providers and
+  Plugins. **System** holds Users, Hosts and API keys. The old Admin and Plugins items are gone (`/admin` opens
+  System).
+- **The Assistant for everyone.** It opens from the Assistant drawer. The first launch opens it with a setup message
+  and a button; setup is one flow: pick who answers, the key, the model.
+- **The pipelines default model.** Hub › In pipelines sets the model a pipeline's AI step uses on Auto (Local LLM, a
+  provider model, or the same as the Assistant), next to Session names.
+- **Your Claude subscription, no key to paste.** Add as provider takes the bridge's key from the Mac by itself.
+- **Windows and Linux with Docker.** Each release has one `compose.yml`: `docker compose up -d --wait` with
+  `HELMSTUDIO_ADMIN_EMAIL` and `HELMSTUDIO_ADMIN_PASSWORD` on the first start, then http://localhost:8300. The first
+  start makes the secrets and the admin; no install script. `--profile nvidia` adds the GPU runner. The images are
+  built on GitHub for Intel/AMD and Apple Silicon (linux/amd64 and linux/arm64).
+- **The Mac app as before.** The `.dmg` is now built on GitHub too; from 0.1.0-alpha.2 it updates itself.
+
+### Known limits
+
+- Windows is untested.
+- GPU generation on Windows and Linux needs `--profile nvidia`, an Intel/AMD machine with an NVIDIA card and, on
+  Linux, NVIDIA's Container Toolkit. ZONOS3 and MiniMax H3 on NVIDIA are not in the compose yet.
+- The Mac app needs Apple Silicon and is ad-hoc signed (no Developer ID): open it the first time with right-click ›
+  Open. From 0.1.0-alpha.1 it is one manual `.dmg` replace.
+- No uninstall tool for the app; delete its folders by hand (docs/guides/mac-app.md).
+- A separate NVIDIA machine joining a Mac's stack is set up by hand (deploy/gpu-host/README.md).
+- Your Claude subscription runs on the Mac only, and needs Claude Code installed and signed in by you.
+- Web search uses unofficial search pages: it can be rate-limited or break.
+- The Assistant sees a video as its poster frame only (use the frames tool to look closer).
+- An Assistant steer is kept only in memory: if pipelines restarts mid-answer, it becomes the next message.
+- Models are downloaded separately (on the Models screen) and keep their own licences; no weights ship with
+  helmstudio.
+
 ## 0.1.0-alpha.3 (2026-11-25)
 
 A small alpha: an optional way to use your own Claude plan, and fixes to the AI agents and Plugins pages.
