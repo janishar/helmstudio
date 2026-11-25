@@ -65,3 +65,8 @@ To draw before building ([Assistant](../mock/Assistant.dc.html), new frames 23�
 - 25 · Providers (today's Model providers board under the Assistant tabs).
 - 26 · Plugins (today's Plugins list under the Assistant tabs).
 - Admin with three tabs; a pipeline step's Runs on with the new line.
+- Frame 21 redesigned (owner, 2026-11-25: "this ui looks like its very basic improve it", then "good"): the drawer's
+  setup states get a large Assistant mark, a line of what it does, three rows of what it helps with, the provider
+  chips (admin), a full-width Set up / Turn on button; built with this plan. Also built already: the setup message
+  centred, the first-launch line "Close it now and set up the Assistant later from Agent or ⌘J.", and the header's
+  Assistant-page button with the Assistant icon.
