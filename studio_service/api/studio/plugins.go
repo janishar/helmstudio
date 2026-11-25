@@ -63,6 +63,7 @@ type manifest struct {
 	Recipes     []recipe              `json:"recipes,omitempty"` // API 1.64, a skill's
 	Run         *manifestRun          `json:"run,omitempty"`     // API 1.67: it starts itself
 	Takes       bool                  `json:"takes,omitempty"`   // API 1.70: its pass opens /v1/studio/plugin/takes
+	Needs       string                `json:"needs,omitempty"`   // API 1.70: what it needs on its host
 }
 
 // manifestRun is plugins/manifest.schema.json run (API 1.67): the runner reads cmd from its own copy; studio only
@@ -102,6 +103,13 @@ type manifestTool struct {
 	Description string          `json:"description"`
 	Input       json.RawMessage `json:"input"`
 	Risk        *manifestRisk   `json:"risk"`
+	Title       string          `json:"title,omitempty"`   // API 1.70: its name for people
+	Summary     string          `json:"summary,omitempty"` // API 1.70
+}
+
+// safe reports whether no risk flag is set (it never needs a question first).
+func (t manifestTool) safe() bool {
+	return t.Risk != nil && !*t.Risk.UsesGPU && !*t.Risk.Deletes && !*t.Risk.SendsOffMachine
 }
 
 // manifestRisk is a tool's flags, each required (nil: missing).
@@ -159,6 +167,9 @@ func (s *Service) problem(ctx context.Context, m *manifest, folder string) strin
 	if m.Takes && m.Kind != "assistant-tools" { // API 1.70
 		return "takes is an assistant-tools plugin's"
 	}
+	if len([]rune(m.Needs)) > 120 { // API 1.70
+		return "needs is at most 120 characters"
+	}
 	if !pluginURLRe.MatchString(m.URL) || !pluginPathRe.MatchString(m.Health) {
 		return "url (no path) and health (a path) are required"
 	}
@@ -184,6 +195,7 @@ func (s *Service) problem(ctx context.Context, m *manifest, folder string) strin
 			}
 			r := t.Risk
 			if !toolNameRe.MatchString(t.Name) || !text(t.Description, 500) || r == nil || r.UsesGPU == nil ||
+				len([]rune(t.Title)) > 40 || len([]rune(t.Summary)) > 120 ||
 				r.Deletes == nil || r.SendsOffMachine == nil ||
 				json.Unmarshal(t.Input, &input) != nil || input.Type != "object" {
 				return "each tool needs name, description, an object input and risk"
@@ -259,8 +271,10 @@ func (s *Service) pluginDTOs(ctx context.Context, caller common.Caller, rows []p
 		}
 		for _, t := range m.Tools {
 			p.Tools = append(p.Tools, dto.PluginTool{Name: t.Name, Description: t.Description, Risk: dto.PluginRisk{
-				UsesGPU: *t.Risk.UsesGPU, Deletes: *t.Risk.Deletes, SendsOffMachine: *t.Risk.SendsOffMachine}})
+				UsesGPU: *t.Risk.UsesGPU, Deletes: *t.Risk.Deletes, SendsOffMachine: *t.Risk.SendsOffMachine},
+				Title: nonEmpty(t.Title), Summary: nonEmpty(t.Summary)})
 		}
+		p.Takes, p.Needs = m.Takes, nonEmpty(m.Needs)
 		p.Origin, p.Replaces, p.Problem = &r.Origin, r.Replaces, r.Problem
 		if m.Kind == "skill" { // API 1.64
 			p.Format, p.When = m.Format, &m.When

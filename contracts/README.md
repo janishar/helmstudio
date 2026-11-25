@@ -4132,7 +4132,7 @@ launches next time".
   (launched, up but not answering yet, or not seen yet); `not_running` only when no runner of its host is up. Only
   the registry keys of its own host count.
 
-### Plugins: takes (API 1.70; boards docs/mock/Plugins.dc.html MEDIA TOOLS and TakeActions.dc.html (drawn, await approval), release 0.1.0-alpha.2 items 11 and 13; normative)
+### Plugins: takes (API 1.70; boards docs/mock/Plugins.dc.html MEDIA TOOLS and TakeActions.dc.html (approved, owner 2026-11-25), release 0.1.0-alpha.2 items 11 and 13; normative)
 
 Owner, 2026-11-25: "yes add media tools to alpha.2", "frame extractor for video analysis to assistant". A plugin tool
 that reads one of your takes and makes a new one, with no user token and never another user's take.
@@ -4178,6 +4178,15 @@ that reads one of your takes and makes a new one, with no user token and never a
   - `edit_audio` {take_id, trim, volume_db} and `join_audio` {take_ids, 2–8} → a new audio take (m4a).
   - `frames` {take_id, at[] | count | scenes, size} → no take: up to 8 frames as `images` for the model and their
     timecodes in `result`; a Timeline export is a video take like any other.
+- **The Gallery's Edit** (boards TakeActions.dc.html Edit an image / a video / an audio take and Saved as new; approved
+  by the owner, 2026-11-25). `GET /v1/studio/plugins/{plugin}` tells every user whether a takes plugin is on and
+  running (`PluginUse`; 404 otherwise): Edit shows only then. Save as new is `POST /v1/studio/plugins/{plugin}/tools/{tool}`
+  {input}: studio signs a pass for the caller and a new call id (as `studio.plugins.pass`), calls the plugin as
+  pipelines does (the same headers, 30 s, no redirects) and answers `take_ids` only as far as it vouches for them (as
+  a line's) and the plugin's `line`; a tool with a risk flag is 404 (it would need a question first), the plugin's 422
+  stays a 422, any other failure is a 502 in plain words (its detail, else `<title> did not answer`). The Gallery's
+  Undo deletes the new take. A manifest's `needs` (what it needs on its host) and a tool's `title` and `summary` (its
+  name and what it does, for people) show on the Plugins page with `takes`.
 
 ### Skills (API 1.64; boards docs/mock/Plugins.dc.html SKILLS and Assistant.dc.html 16, release 0.1.0-alpha.2 item 36; normative)
 

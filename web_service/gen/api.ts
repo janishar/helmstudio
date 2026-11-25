@@ -1990,6 +1990,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/studio/plugins/{plugin}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * From 1.70: a takes plugin as every user may use it (the Gallery's Edit)
+         * @description Every user. A plugin that is on, usable, of kind assistant-tools and whose manifest says `takes`; `running` when its health path answers 2xx now (2 s): the Gallery shows Edit only then. 404 otherwise (unknown, off, not a takes plugin).
+         */
+        get: operations["studioGetPluginUse"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/plugins/{plugin}/tools/{tool}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * From 1.70: run a takes plugin's tool for you (the Gallery's Save as new)
+         * @description Every user, on their own takes (contracts/README.md, Plugins: takes, Save as new). The plugin as GET
+         *     /plugins/{plugin} has it, and a tool of its manifest with no risk flag; else 404. Studio signs a pass for the
+         *     caller and a new call id, as studio.plugins.pass does, and POSTs `<url>/tools/<tool>` {input} with the call's
+         *     headers (30 s, no redirects). 200: `take_ids` only those studio vouches for (the caller's takes with source tool
+         *     this plugin made under this call id, as a chat line's), `line` the plugin's. The plugin's 422 is a 422 with its
+         *     detail; any other failure (no answer, too slow, a non-2xx) is a 502 with a plain detail (its detail, else
+         *     `<title> did not answer`).
+         */
+        post: operations["studioRunPluginTool"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/studio/admin/session-names": {
         parameters: {
             query?: never;
@@ -6442,6 +6488,10 @@ export interface components {
             name: string;
             description: string;
             risk: components["schemas"]["PluginRisk"];
+            /** @description from 1.70: its name for people (the aside's tools: `Edit image`) */
+            title?: string;
+            /** @description from 1.70: what it does, in a few words (`Crop, resize, rotate, flip, extend, convert`) */
+            summary?: string;
         };
         /** @description from 1.61: one plugin as the admin sees it: its manifest (plugins/manifest.schema.json) and its state */
         Plugin: {
@@ -6515,8 +6565,31 @@ export interface components {
                 /** Format: date-time */
                 since?: string;
             };
+            /** @description from 1.70: its manifest's `takes` (reads your takes, saves new ones); absent = false */
+            takes?: boolean;
+            /** @description from 1.70: what it needs on its host, as its manifest says (`ffmpeg (brew install ffmpeg)`) */
+            needs?: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        /** @description from 1.70: a takes plugin that is on, as every user sees it (GET /plugins/{plugin}) */
+        PluginUse: {
+            name: string;
+            title: string;
+            /** @description its health path answered 2xx now (2 s) */
+            running: boolean;
+            /** @description its tools with no risk flag (the ones POST …/tools/{tool} runs) */
+            tools: string[];
+        };
+        /** @description from 1.70: a tool's input, as its manifest's input schema has it (the plugin checks it: 422) */
+        PluginToolRun: {
+            input: Record<string, never>;
+        };
+        PluginToolDone: {
+            /** @description the new takes studio vouches for (Undo deletes them) */
+            take_ids: string[];
+            /** @description the plugin's line (`Trimmed · Shot 3`), else `<title> · <tool>` */
+            line: string;
         };
         /** @description from 1.64: a skill that is on, as every user sees it (the @ picker) */
         SkillSummary: {
@@ -11346,6 +11419,71 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    studioGetPluginUse: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description from 1.61: a plugin's name (its folder; unknown or malformed = 404) */
+                plugin: components["parameters"]["PluginName"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the plugin */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginUse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    studioRunPluginTool: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description from 1.61: a plugin's name (its folder; unknown or malformed = 404) */
+                plugin: components["parameters"]["PluginName"];
+                tool: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PluginToolRun"];
+            };
+        };
+        responses: {
+            /** @description what it made */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginToolDone"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
+            /** @description the plugin failed: `{"detail"}` in plain words */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     studioAdminGetSessionNames: {

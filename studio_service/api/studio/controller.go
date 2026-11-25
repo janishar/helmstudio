@@ -115,6 +115,8 @@ func (c *controller) MountRoutes(group *gin.RouterGroup) {
 	group.GET("/skills", c.listSkillsHandler)                                    // API 1.64
 	group.GET("/skills/:skill", c.getSkillHandler)                               // API 1.64
 	group.GET("/skills/:skill/files/:file", c.getSkillFileHandler)               // API 1.64
+	group.GET("/plugins/:plugin", c.getPluginUseHandler)                         // API 1.70
+	group.POST("/plugins/:plugin/tools/:tool", c.runPluginToolHandler)           // API 1.70
 	group.GET("/admin/plugins", c.listPluginsHandler)                            // API 1.61
 	group.POST("/admin/plugins/rescan", c.rescanPluginsHandler)                  // API 1.61
 	group.PUT("/admin/plugins/:plugin", c.putPluginHandler)                      // API 1.61
@@ -1066,6 +1068,22 @@ func (c *controller) getSkillHandler(ctx *gin.Context) {
 // getSkillFileHandler: GET /skills/{skill}/files/{file} (API 1.64).
 func (c *controller) getSkillFileHandler(ctx *gin.Context) {
 	out, err := c.service.GetSkillFile(ctx.Request.Context(), ctx.Param("skill"), ctx.Param("file"))
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// getPluginUseHandler: GET /plugins/{plugin} (API 1.70).
+func (c *controller) getPluginUseHandler(ctx *gin.Context) {
+	out, err := c.service.GetPluginUse(ctx.Request.Context(), ctx.Param("plugin"))
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// runPluginToolHandler: POST /plugins/{plugin}/tools/{tool} (API 1.70).
+func (c *controller) runPluginToolHandler(ctx *gin.Context) {
+	body, err := strictBody[dto.PluginToolRun](ctx, false)
+	var out dto.PluginToolDone
+	if err == nil {
+		out, err = c.service.RunPluginTool(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("plugin"), ctx.Param("tool"), body)
+	}
 	reply(ctx, http.StatusOK, out, err)
 }
 

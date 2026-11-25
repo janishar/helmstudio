@@ -42,6 +42,7 @@
       }
     },
     "takes": {"type": "boolean", "default": false, "description": "from API 1.70 (contracts/README.md, Plugins: takes), an assistant-tools plugin's: its pass may read the caller's takes and make new ones through /v1/studio/plugin/takes; absent or false, its pass opens nothing"},
+    "needs": {"type": "string", "minLength": 1, "maxLength": 120, "description": "from API 1.70: what it needs on its host, shown on the Plugins page (`ffmpeg (brew install ffmpeg)`)"},
     "provider": {"$ref": "#/$defs/provider"},
     "tools": {"type": "array", "minItems": 1, "maxItems": 8, "items": {"$ref": "#/$defs/tool"}}
   },
@@ -97,7 +98,9 @@
         "name": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,23}$", "description": "the model sees `<plugin>__<name>`"},
         "description": {"type": "string", "minLength": 1, "maxLength": 500},
         "input": {"type": "object", "description": "model-facing JSON Schema of the input: an object, self-contained (no $ref)", "required": ["type"], "properties": {"type": {"const": "object"}}},
-        "risk": {"$ref": "#/$defs/risk"}
+        "risk": {"$ref": "#/$defs/risk"},
+        "title": {"type": "string", "minLength": 1, "maxLength": 40, "description": "from API 1.70: its name for people (the Plugins page: `Edit image`)"},
+        "summary": {"type": "string", "minLength": 1, "maxLength": 120, "description": "from API 1.70: what it does in a few words (`Crop, resize, rotate, flip, extend, convert`)"}
       }
     },
     "toolCall": {

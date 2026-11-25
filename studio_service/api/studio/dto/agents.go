@@ -352,6 +352,8 @@ type PluginTool struct {
 	Name        string     `json:"name"`
 	Description string     `json:"description"`
 	Risk        PluginRisk `json:"risk"`
+	Title       *string    `json:"title,omitempty"`   // API 1.70
+	Summary     *string    `json:"summary,omitempty"` // API 1.70
 }
 
 // PluginDisclaimer is a manifest's disclaimer.
@@ -389,6 +391,35 @@ type Plugin struct {
 	Recipes     *PluginRecipes    `json:"recipes,omitempty"`
 	Problem     *string           `json:"problem,omitempty"`
 	Starts      *PluginStarts     `json:"starts,omitempty"` // API 1.67: it starts itself
+	Takes       bool              `json:"takes,omitempty"`  // API 1.70
+	Needs       *string           `json:"needs,omitempty"`  // API 1.70
+}
+
+// PluginUse is GET /plugins/{plugin} (API 1.70): a takes plugin that is on, as every user sees it.
+type PluginUse struct {
+	Name    string   `json:"name"`
+	Title   string   `json:"title"`
+	Running bool     `json:"running"`
+	Tools   []string `json:"tools"`
+}
+
+// PluginToolRun is POST /plugins/{plugin}/tools/{tool} (API 1.70).
+type PluginToolRun struct {
+	Input map[string]any `json:"input"`
+}
+
+// Validate checks the shape.
+func (b *PluginToolRun) Validate() string {
+	if b.Input == nil || len(b.Input) > 16 {
+		return "input is required (an object of at most 16 keys)"
+	}
+	return ""
+}
+
+// PluginToolDone is its answer: the takes studio vouches for and the plugin's line.
+type PluginToolDone struct {
+	TakeIDs []string `json:"take_ids"`
+	Line    string   `json:"line"`
 }
 
 // PluginStarts is a plugin that starts itself: the host whose runner runs it, its log there, how often it restarted.

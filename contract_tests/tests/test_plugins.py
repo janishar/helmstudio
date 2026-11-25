@@ -287,3 +287,39 @@ def test_a_plugin_pass_opens_only_its_owners_takes(admin, api, api_b, anon, assi
             plug.get(f"{STUDIO}/plugin/takes/{mine['id']}").status_code == 401
         )  # off: the pass opens nothing
     ok(api.delete(f"{THREADS}/{tid}"), 204)
+
+
+def test_save_as_new_runs_a_takes_plugin_tool_for_you(admin, api, api_b, anon, on):
+    """API 1.70 (contracts/README.md "Plugins: takes", The Gallery's Edit): every user sees whether a takes plugin is
+    on and running; Save as new runs its tool with a pass studio signs for the caller, and answers the new take it
+    vouches for (Undo deletes it); a risky tool is 404, a failure a plain 502, off is 404."""
+    use = f"{STUDIO}/plugins/fake-tools"
+    on("fake-tools")
+    got = ok(api.get(use))
+    assert got == {"name": "fake-tools", "title": "Fake tools", "running": True, "tools": ["echo"]}
+    src = upload(api, anon, png_bytes(6, 4), "src.png")
+    done = ok(api.post(f"{use}/tools/echo", json={"input": {"text": f"make:{src['id']}"}}))
+    assert done["line"] == "Made a copy" and len(done["take_ids"]) == 1, done
+    made = ok(api.get(f"{STUDIO}/takes/{done['take_ids'][0]}"))
+    assert (
+        made["source"] == "tool"
+        and made["parents"] == [src["id"]]
+        and made["tool"]["plugin"] == "fake-tools"
+    )
+    assert api_b.get(f"{STUDIO}/takes/{made['id']}").status_code == 404
+    call = next(r for r in reversed(fake("GET", "/__requests")) if r["model"] == "tool:echo")
+    assert (
+        call["authorization"].startswith("Bearer ") and call["call"] == made["tool"]["call"]
+    )  # a pass for this call
+    # another user's take: the plugin gets 404 from studio, the caller a plain 502
+    theirs = upload(api_b, anon, png_bytes(5, 5), "theirs.png")
+    r = api.post(f"{use}/tools/echo", json={"input": {"text": f"make:{theirs['id']}"}})
+    assert r.status_code == 502 and r.json()["detail"] == "studio: HTTP 404", r.text
+    r = api.post(f"{use}/tools/echo", json={"input": {"text": "fail-now"}})
+    assert r.status_code == 502 and r.json()["detail"] == "scripted failure: fail-now"
+    assert api.post(f"{use}/tools/wipe", json={"input": {"text": "x"}}).status_code == 404
+    assert api.post(f"{use}/tools/echo", json={}).status_code == 422
+    ok(api.delete(f"{STUDIO}/takes/{made['id']}"), 204)  # the toast's Undo
+    admin.put(f"{PLUGINS}/fake-tools", json={"enabled": False})
+    assert api.get(use).status_code == 404
+    assert api.post(f"{use}/tools/echo", json={"input": {"text": "x"}}).status_code == 404

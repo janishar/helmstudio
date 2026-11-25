@@ -6,15 +6,18 @@
   "description": "Crop, resize, rotate, convert and extend images; trim, speed up and re-sound videos; trim, level and join audio; pull frames from a video for the Assistant to look at. Each edit is a new take; the original stays.",
   "author": "helmstudio",
   "source": "plugins/media-tools",
-  "may_do": ["Read your takes and make new takes from them (the original stays)", "Run ffmpeg and Pillow on this Mac (no network but the stack's own)", "Reach host.docker.internal:8422"],
+  "may_do": ["Crops, resizes, trims and pulls frames", "Reads your takes, saves new ones", "Runs ffmpeg and Pillow on this Mac", "Reaches host.docker.internal:8422"],
   "url": "http://host.docker.internal:8422",
   "health": "/health",
   "start": "plugins/media-tools/run.sh",
   "run": {"cmd": ["./run.sh"], "host": "mac"},
   "takes": true,
+  "needs": "ffmpeg (brew install ffmpeg)",
   "tools": [
     {
       "name": "edit_image",
+      "title": "Edit image",
+      "summary": "Crop, resize, rotate, flip, extend, convert",
       "description": "Make a new image take from an image take: crop, resize, rotate, flip, extend the canvas, convert (applied in that order). The original stays. Show the new take with its [[take:<id>]] alone on a line.",
       "input": {
         "type": "object",
@@ -40,6 +43,8 @@
     },
     {
       "name": "edit_video",
+      "title": "Edit video",
+      "summary": "Trim, speed, mute, new sound",
       "description": "Make a new video take from a video take: trim, change speed (0.25-4x), mute, or replace its sound with an audio take. The original stays. Show the new take with its [[take:<id>]] alone on a line.",
       "input": {
         "type": "object",
@@ -59,6 +64,8 @@
     },
     {
       "name": "frame_image",
+      "title": "Frame as image",
+      "summary": "One frame → a new image",
       "description": "Make a new image take of one frame of a video take (frame as image). For looking at frames, use frames instead (no take).",
       "input": {
         "type": "object",
@@ -70,6 +77,8 @@
     },
     {
       "name": "edit_audio",
+      "title": "Edit audio",
+      "summary": "Trim, volume",
       "description": "Make a new audio take (m4a) from an audio take or a video's sound: trim and change the volume. The original stays.",
       "input": {
         "type": "object",
@@ -87,6 +96,8 @@
     },
     {
       "name": "join_audio",
+      "title": "Join audio",
+      "summary": "2–8 sounds in order",
       "description": "Make a new audio take (m4a) of 2-8 audio takes one after another, in order. The originals stay.",
       "input": {
         "type": "object",
@@ -98,6 +109,8 @@
     },
     {
       "name": "frames",
+      "title": "Frames",
+      "summary": "For the Assistant to look at · no take",
       "description": "Look at frames of a video take (a Timeline export too): at given times, N evenly spaced, or at scene changes; at most 8, with timecodes. Makes no take: the frames come with your next prompt.",
       "input": {
         "type": "object",
