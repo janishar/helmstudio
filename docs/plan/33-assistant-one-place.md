@@ -2,7 +2,7 @@
 
 [← Plan index](../README.md)
 
-Status: **owner said build it (2026-11-25, "make the web not design"), on the boards as drawn (Assistant frames 19–28 at 0de85ff1) with 37.7; the Create backdrops behind the drawer on that board are an old copy: Create is unchanged.** For 0.1.0-alpha.4
+Status: **built (37.10); owner said build it (2026-11-25, "make the web not design"), on the boards as drawn (Assistant frames 19–28 at 0de85ff1) with 37.7; the Create backdrops behind the drawer on that board are an old copy: Create is unchanged.** For 0.1.0-alpha.4
 ([release list](../release/0.1.0-alpha.4.md), item 2), after [plan 32](32-assistant-first-class.md).
 
 The owner's asks, 2026-11-25, trying plan 32 as a fresh user: "why model provider and ai agents are in admin?", then
@@ -122,3 +122,29 @@ Assistant drawer's Hub button; the Assistant keeps the bot icon, System the shie
   off" with Turn on; anyone else "Your admin turned it off." First launch (admin, never set up): opens once, "Close it
   now and set up the Assistant later from Assistant or ⌘J."
 - **Your Claude subscription:** its key is picked automatically (no Key field); not offered as the pipelines default.
+
+### 37.10 As built (2026-11-25, branch alpha.4, API 1.74), and what differs from the boards
+
+- **Contract.** `GET/PUT /v1/studio/admin/pipeline-model` (`PipelineDefaultModel`, mode `local` · `remote` ·
+  `assistant`; admin only; the Assistant's 409 and only-you rules) and `ModelSourceList.auto` (what Auto resolves to
+  now for a write, decide or agent step; null: the local LLM). Studio resolves Auto at every check and Submit; pipelines
+  needed no change (it runs the snapshot). contracts/README.md, Model sources: the pipelines default model.
+- **A judge on Auto always keeps its family's vision model** (judges send thumbnails; a server or remote model gets
+  text only). Board 27 c draws a Judge on Auto · DeepSeek; the app shows the default and the "Auto · set in Hub › In
+  pipelines" line only on write, decide and agent steps.
+- **A remote default needs no pipeline remote switch:** it is the admin's choice for every pipeline, so Submit turns the
+  snapshot's remote on for that provider (the pipeline's own caps, else 200 calls and 400 000 tokens) and lists it in
+  what leaves the machine. A default that is not usable now (disabled, deleted, a model it no longer lists, remote while
+  REMOTE_MODELS is off) falls back to the local LLM.
+- **In pipelines:** the Local LLM rows say "Qwen3.8 27B" without the host (no API names it). "Your Claude subscription
+  is not offered here" shows only while an Only-you provider exists. A non-admin's step line says "Hub › In pipelines"
+  as plain text (Hub is admin only).
+- **Drawer:** the 340 px chat drawer's header stays the bot mark only (plan 32 36.10: every button fits); the setup
+  states write "Assistant". "The Assistant isn't set up yet" wraps to two lines (the board's "Agent" was shorter).
+- **Providers:** the form beside the table is always there; Add provider empties it.
+- **Plugins:** a model-provider plugin's aside keeps its switch (board 26 draws one); tools and skills have none and
+  say "Turned on in Hub › Assistant", except a skill that cannot be used.
+- **The Assistant's navigate tool** keeps its `/admin` target (the tools catalog): it opens System, and its providers
+  tab opens Hub › Providers. assistant_knowledge.md describes Hub and System.
+- **Old links:** /admin → /system (tabs hosts, keys kept), /admin?tab=providers → /hub?tab=providers, ?tab=agents →
+  /hub?tab=pipelines, /plugins → /hub?tab=plugins, /assistant → /hub (?setup=1 kept).
