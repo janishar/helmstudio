@@ -38,6 +38,7 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `messages/cmd.media.job.schema.json`, `evt.media.{status,progress}.schema.json` | (API 1.17) studio → a runner: one media job (a sequence's export, a video take's frame) run with ffmpeg outside the GPU loop; runner → studio's projector: its lifecycle and export progress (Timeline: media jobs) |
 | `messages/evt.auth.revoked.schema.json` | auth_service → studio: drop cached token validations |
 | `messages/req.runner.unload.schema.json` | NATS request/reply studio's dispatcher → a runner (not enveloped): unload the named components now, reply what was freed and what remains (Two envs on one host: the hand-over) |
+| `messages/req.runner.plugins.key.schema.json` | (API 1.73) NATS request/reply studio → a host's supervising runner (not enveloped): a plugin's key from its file in `~/.helm` (Plugins: a key from its host) |
 | `messages/defs.schema.json` | shared definitions (uuid, object keys, seq, host/env names, the workflow graph, param values: `inputValue` with `imageRef` / `loraRef`, `resolvedValue` with `image` / `lora`) |
 | `registry.schema.json` | KV values: `$defs/nodes`, `$defs/workflows`, `$defs/models` (with a family's `loraBlock`), `$defs/loras`, `$defs/looks`, (API 1.30) `$defs/voices` (bucket `registry`), `$defs/host` (bucket `hosts`), (API 1.16) `$defs/settings` (bucket `host_settings`, key `<host>`: Hosts admin) and `$defs/pin`, (API 1.15) `$defs/custom` (key `pipelines.engine.custom`: the registered custom nodes) |
 | `fixtures/{messages,registry}/` | `<name>.valid[.N].json` must pass, `<name>.invalid[.N].json` must fail (request/reply: `<type>.{request,reply}.…`) |
@@ -4180,7 +4181,8 @@ kinds: model providers and Assistant tools only.
   (its health path answered 2xx within 2 s at this list), `not_running`.
 - **Remove** drops the plugin and every provider made from it (409 while an unfinished batch names one); the folder
   stays, so a Rescan finds it again, off.
-- **Model provider: Add as provider.** The admin pastes the key (`key_hint`); studio asks
+- **Model provider: Add as provider.** The admin pastes the key (`key_hint`; from API 1.73 none for a plugin with
+  `provider.key_from`: Plugins: a key from its host); studio asks
   `pipelines.providers.key.write` (`op: save`, the plugin's `<url><path>` as a server snapshot, never a URL from the
   browser) to check it on `/models` and write it to `plugin-<name>-<8 hex of the admin's id>`; refused is 422 `The key
   doesn't match: copy it again from the plugin's .env`, unreachable 422 `<title> did not answer: start it, then Try
@@ -4253,6 +4255,27 @@ launches next time".
   is up (a fresh hosts key), `failed` when that runner says so (Couldn't start · `problem`) and `starting` otherwise
   (launched, up but not answering yet, or not seen yet); `not_running` only when no runner of its host is up. Only
   the registry keys of its own host count.
+
+### Plugins: a key from its host (API 1.73; alpha.4, board docs/mock/Plugins.dc.html ADD AS PROVIDER; normative)
+
+Owner, 2026-11-25, on Add as provider asking for a key: "why have you done so? rather pick automatically?". A plugin
+that makes its own key on its run host needs no key pasted anywhere.
+
+- **`provider.key_from`** {file, var} in a model-provider's manifest (needs `run`): the key is the line `var=value` of
+  the file `file` directly in `~/.helm` (`HELM_HOME`), named after the plugin (`<name>.`…). The Claude Code bridge's:
+  `BRIDGE_TOKEN` in `claude-code-bridge.env` (run.sh makes it on first start). The Plugin's `key_from_host` is true.
+- **Add as provider** without `key`: studio checks that a runner of the plugin's run host is up (409 `No runner is up
+  on <host>: start helmstudio there`) and that the plugin answers (409 `<title> is not running: turn it on first`),
+  then asks `runner.plugins.key.<host>` (messages/req.runner.plugins.key.schema.json, 5 s; no answer 503 `the runner
+  on <host> did not answer; try again`). The runner with `RUNNER_PLUGINS=on` finds the plugin in its own plugin folders
+  (its `run.host` must be this host), refuses a file outside `HELM_HOME`, a symlink, or one not named after the plugin
+  (`refused`), and reads only that variable (`no_key` when the file or the line is not there yet: 409 `<title> makes
+  its key on first start: turn it on, then Try again`). Studio then checks and writes the key as for a pasted one
+  (refused: 409 `<title> refused its own key: turn it off and on, then Try again`). The key travels only in the core
+  request/reply and pipelines.providers.key.write: never in an event, a log, an error or an HTTP response. A pasted
+  `key` still works for such a plugin; any other plugin still needs one (422 `key must be 1-1024 characters`).
+- **The web**: such a plugin has no Key field (Plugins › Add as provider, the Assistant's setup); Add just works once
+  it is Running.
 
 ### Plugins: takes (API 1.70; boards docs/mock/Plugins.dc.html MEDIA TOOLS and TakeActions.dc.html (approved, owner 2026-11-25), release 0.1.0-alpha.2 items 11 and 13; normative)
 

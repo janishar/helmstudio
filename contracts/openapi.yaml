@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.72.0
+  version: 1.73.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -2001,6 +2001,12 @@ paths:
         (as PUT /admin/provider-keys does), then creates or replaces the provider `<plugin>-<8 hex>`: kind server,
         base_url `<url><provider.path>`, the manifest's models, timeout and memory, host `host` (absent: the first host
         by name). A personal plugin's provider is Only you (`owner_id` the caller): no other account sees or uses it.
+        From 1.73, a key_from_host plugin needs no `key`: studio asks the runner of its run host (req.runner.plugins.key)
+        for it, then checks and writes it the same way; the key is never in a response, an event or a log. Its errors:
+        409 `No runner is up on <host>: start helmstudio there`, `<title> is not running: turn it on first`,
+        `<title> makes its key on first start: turn it on, then Try again` (no key yet), `<title> refused its own key:
+        turn it off and on, then Try again` (the check was refused); 503 `the runner on <host> did not answer; try
+        again`.
         422 `The key doesn't match: copy it again from the plugin's .env` (the check was refused: nothing saved),
         `<title> did not answer: start it, then Try again` (unreachable: nothing saved), a default_model not in its
         models, an unknown host; 409 `keys are set in files on this deployment`; 503 no answer from pipelines.
@@ -6371,6 +6377,7 @@ components:
         start: {type: string, maxLength: 200, description: 'how to start it (Not running)'}
         models: {type: array, maxItems: 16, items: {type: string}, description: 'model-provider: its models'}
         key_hint: {type: string, maxLength: 120, description: 'model-provider: where the key is'}
+        key_from_host: {type: boolean, description: 'from 1.73: its manifest''s provider.key_from: Add as provider needs no key (studio gets it from the runner of its host); absent = false'}
         tools: {type: array, maxItems: 8, items: {$ref: '#/components/schemas/PluginTool'}, description: 'assistant-tools: its tools'}
         enabled: {type: boolean, description: 'on; off until an admin turns it on'}
         status: {type: string, enum: ['off', running, not_running, 'on', needs_newer, broken, starting, failed], description: 'from 1.67 starting (its runner launched it, its health path does not answer yet) and failed (Couldn''t start: `problem` is why, the runner tries again after its backoff). off: not on (never called); running: its health path answered 2xx in 2 s; not_running: on, no answer. From 1.64: on (a skill that is on: it has no service), needs_newer (a skill of a newer format), broken (yours could not be read: `problem`); neither of the last two can be turned on'}
@@ -6494,11 +6501,10 @@ components:
         enabled: {type: boolean}
     PluginProviderCreate:
       type: object
-      required: [key]
       additionalProperties: false
       description: 'from 1.61: Add as provider'
       properties:
-        key: {type: string, minLength: 1, maxLength: 1024, pattern: '^\s*[!-~]+\s*$', writeOnly: true, description: 'the plugin''s key (its key_hint); checked, then written as ProviderKeySave''s; never returned, logged or stored outside the key file'}
+        key: {type: string, minLength: 1, maxLength: 1024, pattern: '^\s*[!-~]+\s*$', writeOnly: true, description: 'the plugin''s key (its key_hint); checked, then written as ProviderKeySave''s; never returned, logged or stored outside the key file. Required (422 `key must be 1-1024 characters`) unless the plugin is key_from_host (from 1.73: absent, studio gets it from the runner of its host)'}
         title: {type: string, minLength: 1, maxLength: 60, description: 'absent: the plugin''s title (from 1.64 never `<title> (personal)`; owner, 2026-11-25)'}
         default_model: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$', description: 'absent: the first of its models'}
         host: {type: string, pattern: '^[a-z0-9]{1,32}$', description: 'the host whose memory it shares; absent: the first host by name'}

@@ -1919,6 +1919,12 @@ export interface paths {
          *     (as PUT /admin/provider-keys does), then creates or replaces the provider `<plugin>-<8 hex>`: kind server,
          *     base_url `<url><provider.path>`, the manifest's models, timeout and memory, host `host` (absent: the first host
          *     by name). A personal plugin's provider is Only you (`owner_id` the caller): no other account sees or uses it.
+         *     From 1.73, a key_from_host plugin needs no `key`: studio asks the runner of its run host (req.runner.plugins.key)
+         *     for it, then checks and writes it the same way; the key is never in a response, an event or a log. Its errors:
+         *     409 `No runner is up on <host>: start helmstudio there`, `<title> is not running: turn it on first`,
+         *     `<title> makes its key on first start: turn it on, then Try again` (no key yet), `<title> refused its own key:
+         *     turn it off and on, then Try again` (the check was refused); 503 `the runner on <host> did not answer; try
+         *     again`.
          *     422 `The key doesn't match: copy it again from the plugin's .env` (the check was refused: nothing saved),
          *     `<title> did not answer: start it, then Try again` (unreachable: nothing saved), a default_model not in its
          *     models, an unknown host; 409 `keys are set in files on this deployment`; 503 no answer from pipelines.
@@ -6592,6 +6598,8 @@ export interface components {
             models?: string[];
             /** @description model-provider: where the key is */
             key_hint?: string;
+            /** @description from 1.73: its manifest's provider.key_from: Add as provider needs no key (studio gets it from the runner of its host); absent = false */
+            key_from_host?: boolean;
             /** @description assistant-tools: its tools */
             tools?: components["schemas"]["PluginTool"][];
             /** @description on; off until an admin turns it on */
@@ -6703,8 +6711,8 @@ export interface components {
         };
         /** @description from 1.61: Add as provider */
         PluginProviderCreate: {
-            /** @description the plugin's key (its key_hint); checked, then written as ProviderKeySave's; never returned, logged or stored outside the key file */
-            key: string;
+            /** @description the plugin's key (its key_hint); checked, then written as ProviderKeySave's; never returned, logged or stored outside the key file. Required (422 `key must be 1-1024 characters`) unless the plugin is key_from_host (from 1.73: absent, studio gets it from the runner of its host) */
+            key?: string;
             /** @description absent: the plugin's title (from 1.64 never `<title> (personal)`; owner, 2026-11-25) */
             title?: string;
             /** @description absent: the first of its models */
