@@ -15,7 +15,7 @@ the studio in one window. It runs beside the dev and prod stacks (its own ports:
 
 Needs a Mac with Apple Silicon, macOS 13 or later and about 6 GB of free disk. **No Docker or OrbStack:** the app
 ships its own VM and docker tools. The internet is needed on the first open only: the VM's system disk (about
-320 MB), the images (pulled from GitHub's registry and Docker Hub, about 2.2 GB once unpacked) and the runners'
+320 MB), the images (pulled from GitHub's registry and Docker Hub, about 0.6 GB to download, 2.5 GB once unpacked) and the runners'
 Python packages (about 2 GB).
 
 ## First open

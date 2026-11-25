@@ -39,7 +39,17 @@
 - **Create images, video and voice.** Pick a model, write a prompt, make takes. Call characters and places by name
   with `@`, and set a look (film, camera, colour, lighting) once.
 - **Work with the Assistant.** An in-app assistant drives every screen: it fills the form, wires the graph, places
-  clips and asks before anything that costs GPU time. Each step it takes has its own Undo.
+  clips and asks before anything that costs GPU time. Each step it takes has its own Undo. It sees the images you
+  attach or `@`-mention, shows takes right in its answers, keeps your film's shot list across chats, and reads each
+  model's guide (its good settings and pitfalls) before it uses it.
+- **Let it run in Auto mode.** Turn on Auto in a chat and the Assistant makes safe local takes and safe saves
+  without asking, within caps an admin sets. It still asks before deletes, overwrites and anything that leaves your
+  machines; every auto step has Stop and Undo.
+- **Edit takes with media tools.** Crop, resize, rotate or convert an image; trim, speed up or re-sound a video;
+  trim, level or join audio. Each edit is a new take with Undo, from the Gallery or by asking the Assistant.
+- **Extend it with plugins and skills.** Admin › Plugins turns on model providers and Assistant tools such as web
+  search (no key needed). Skills teach the Assistant a craft (Animator, Cinematic filmmaker); add your own by
+  dropping a folder into `~/.helm/plugins/`.
 - **See a workflow two ways.** Every workflow is a small graph of typed steps, shown as a **Studio** form or as a
   **Graph** on a node canvas. Editing one edits the other.
 - **Run pipelines while you are away.** Chain workflows and run them over a list. Agent nodes judge each take
@@ -54,8 +64,9 @@
   Assistant. Costly or destructive tools ask first.
 - **Host it for a team.** Self-hosted and multi-user. An admin adds accounts; each person sees only their own work.
   Nothing you make leaves your machines.
-- **Try the Mac app.** A prototype `helmstudio.app` runs the whole studio on one Mac, with a menu-bar item.
-  [Download the Mac app (alpha)](https://github.com/janishar/helmstudio/releases): Apple Silicon, no Docker needed.
+- **Try the Mac app.** A prototype `helmstudio.app` runs the whole studio on one Mac, with a menu-bar item, and
+  updates itself. [Download the Mac app (alpha)](https://github.com/janishar/helmstudio/releases): Apple Silicon,
+  no Docker needed.
 
 ## A look inside
 
@@ -228,6 +239,7 @@ runner_service/    Python: runs workflows (native envs torch, mlx and native; th
 pipelines_service/ Python, LangGraph: batches, agent nodes, the Assistant
 web_service/       Next.js app and its BFF
 cli/               Go: the helm command and helm mcp
+plugins/           built-in plugins: skills, media tools (a container in the stack), web search
 deploy/            compose files, Postgres init, NATS config, secrets (git-ignored), gpu-host/
 .tools/            make-secrets, copy-envs, nats-setup, storage-setup, test-db, create-admin, gpu-host-tunnel
 docs/              the plan, guides, brand and the approved design boards

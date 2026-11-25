@@ -211,7 +211,7 @@ function stackSteps({ p, cfg: shipped, settings, runners }) {
 
   // docker pull with byte progress: each layer's size from the registry (docker manifest inspect -v), counted when
   // docker says that layer is done (its 12-letter id is the start of its digest); without sizes, by layer count
-  // first open labels the sizes: "0.4 of 0.6 GB download · 2.2 GB on disk" (on disk: stack.json's estimate while
+  // first open labels the sizes: "0.4 of 0.6 GB download · 2.5 GB on disk" (on disk: stack.json's estimate while
   // pulling, then the pulled images' own sizes); an update shows the download only
   const images = async (c, first) => {
     if (cfg.local) return copyImages(c, (img, env) => inspect(c, img, env));
