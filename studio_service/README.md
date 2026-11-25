@@ -362,4 +362,6 @@ the preset's `vision`, and `api/studio/assistant_see.go` answers `studio.see`: o
 JPEG of at most 1024 px for the assistant's model, never stored. From 1.70 ("Plugins: takes") `api/studio/plugin_pass.go` signs each plugin tool call's pass on
 `studio.plugins.pass` (a key derived from the file secret) and checks it on `/v1/studio/plugin/*` (the /v1 guard in
 `startup/module.go`), and `api/gallery/plugin_takes.go` lets a `takes` plugin read one of the owner's takes and make a
-new one (source `tool`, `takes.tool`, migration 00050).
+new one (source `tool`, `takes.tool`, migration 00050). `api/studio/plugin_use.go` is the Gallery's Edit: `GET /plugins/{plugin}` (a takes plugin on and
+running) and `POST /plugins/{plugin}/tools/{tool}` (Save as new: a pass signed for the caller, the plugin called as
+pipelines does, only the takes studio vouches for in the answer).

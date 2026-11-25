@@ -50,7 +50,7 @@ import {
 } from "lucide-react";
 import { api, message, ok, type S } from "@/lib/api";
 import { safeUrl } from "@/lib/format";
-import { useTakes } from "@/lib/take-cache";
+import { forget, useTakes } from "@/lib/take-cache";
 import {
   ASSISTANT_CHANGED,
   MEMORY_TABS,
@@ -493,8 +493,10 @@ export function useAssistant(me: S<"User"> | null) {
         );
       else if (l.take_ids && !was)
         // API 1.70: a plugin tool's new takes; Undo deletes them (no Redo)
-        for (const take_id of l.take_ids)
+        for (const take_id of l.take_ids) {
           await ok(api.DELETE("/v1/studio/takes/{take_id}", { params: { path: { take_id } } }));
+          forget([take_id]); // the answer's [[take:<id>]] shows it gone
+        }
       else {
         const f = undoFns.current[l.id];
         if (!f) return;
@@ -905,6 +907,11 @@ function LineRow({ l, a }: { l: Line; a: AssistantApi }) {
           text
         )}
       </span>
+      {off && l.take_ids && (
+        <span className="text-t2" style={{ flex: "none" }}>
+          Undone
+        </span>
+      )}
       {l.undo &&
         (l.status === "done" || off) &&
         a.canUndo(l) &&

@@ -6362,7 +6362,7 @@ components:
       additionalProperties: false
       description: 'from 1.70: a tool''s input, as its manifest''s input schema has it (the plugin checks it: 422)'
       properties:
-        input: {type: object, maxProperties: 16}
+        input: {type: object, maxProperties: 16, additionalProperties: true}
     PluginToolDone:
       type: object
       required: [take_ids, line]

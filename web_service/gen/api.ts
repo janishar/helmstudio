@@ -6583,7 +6583,9 @@ export interface components {
         };
         /** @description from 1.70: a tool's input, as its manifest's input schema has it (the plugin checks it: 422) */
         PluginToolRun: {
-            input: Record<string, never>;
+            input: {
+                [key: string]: unknown;
+            };
         };
         PluginToolDone: {
             /** @description the new takes studio vouches for (Undo deletes them) */

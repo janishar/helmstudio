@@ -656,6 +656,7 @@ describe("other tabs, server cards, limits, memory", () => {
       }),
     );
     await waitFor(() => expect(screen.queryByRole("button", { name: /^(Undo|Redo)/ })).toBeNull());
+    expect(screen.getByText("Undone")).toBeTruthy(); // board MEDIA TOOLS: the line says Undone
   });
 
   it("model and tool text is shown as text: injected text runs nothing", async () => {
