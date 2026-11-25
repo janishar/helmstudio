@@ -2112,6 +2112,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/studio/assistant/first-launch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * From 1.72: the drawer opened by itself once for you (contracts/README.md, Assistant: setup and first launch)
+         * @description Every user. Marks the first launch shown for the caller only (stored per user, server side, so the Mac app and
+         *     a browser agree); `AssistantStatus.first_launch` is false for them from then on. Again: 204, unchanged.
+         */
+        post: operations["studioMarkAssistantFirstLaunch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/studio/assistant/threads/{thread_id}": {
         parameters: {
             query?: never;
@@ -6856,14 +6877,28 @@ export interface components {
              */
             auto_gpu_minutes_per_hour?: number;
         };
-        /** @description what every user may know: on or off (the dock item is hidden when off), where the model runs, web search, the caps, whether the model thinks, whether it sees images */
+        /** @description what every user may know: on or off (from 1.72 the drawer shows a setup message instead of a chat while off or not set up), where the model runs, web search, the caps, whether the model thinks, whether it sees images */
         AssistantStatus: {
+            /** @description on and set up: chats work */
             enabled: boolean;
+            /** @description from 1.72: a provider is saved for you and usable (enabled, with that model; a remote one under the deployment's switch), on or off */
+            set_up: boolean;
+            /** @description from 1.72: you are an admin (the drawer offers Set up or Turn on; the routes check the role again) */
+            can_set_up: boolean;
+            /** @description from 1.72: open the drawer by itself now: you are an admin, the Assistant was never set up (AssistantSettings.updated_at null) and POST /assistant/first-launch was not called for you */
+            first_launch: boolean;
+            /** @description from 1.72: the assistant-tools plugins that are on and usable, by name (the Assistant page's Tools, read-only for anyone) */
+            tools: {
+                name: string;
+                title: string;
+            }[];
             provider: {
                 /** @description `DeepSeek` */
                 title: string;
                 /** @description true: your messages leave this machine (the notice shows first) */
                 remote: boolean;
+                /** @description from 1.72: the model it answers with (`deepseek-chat`) */
+                model?: string;
             } | null;
             /** @description the search provider's title when web search is on */
             web_search: string | null;
@@ -11693,6 +11728,26 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioMarkAssistantFirstLaunch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description marked */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
             503: components["responses"]["Unavailable"];
         };
     };

@@ -3,7 +3,8 @@
     "enabled": true,
     "provider": {
       "title": "DeepSeek",
-      "remote": true
+      "remote": true,
+      "model": "deepseek-chat"
     },
     "web_search": "Brave",
     "limits": {
@@ -13,7 +14,16 @@
       "messages_per_minute": 6
     },
     "thinks": true,
-    "sees": true
+    "sees": true,
+    "set_up": true,
+    "can_set_up": false,
+    "first_launch": false,
+    "tools": [
+      {
+        "name": "web-search",
+        "title": "Web search"
+      }
+    ]
   },
   "threads": [
     {

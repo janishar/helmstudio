@@ -4108,6 +4108,25 @@ for the models this install holds, the whole guide read into the chat only when 
   `downloaded`; the call makes a done line `Read the <title> guide`. The guide goes to the model fenced as data:
   guidance, never orders. To use a recipe the assistant sets each of its params with `change` (key `<node>.<param>`).
 
+### Assistant: setup and first launch (API 1.72; plan 32, boards Assistant frames 19-22 and AdminAgents, owner approved 2026-11-25; normative)
+
+The Assistant is a first-class feature: its own page (`/assistant`) and a drawer that is always in the dock (Chat, ⌘J),
+showing a setup message instead of a chat while it is not set up or off.
+
+- **Status.** `AssistantStatus` (GET /assistant/threads, every user) carries `set_up` (a provider is saved for the
+  caller and usable: enabled, with that model, a remote one under the deployment's switch; on or off), `can_set_up`
+  (the caller is an admin), `first_launch` and `tools` (the assistant-tools plugins that are on and usable, name and
+  title); `provider.model` names the model it answers with. The drawer picks its message from them without an admin
+  call: not set up (admin: Set up; anyone else: ask your admin), off (admin: Turn on; anyone else: your admin turned it
+  off).
+- **First launch.** `first_launch` is true only for an admin, while `AssistantSettings.updated_at` is null (never
+  saved) and the caller has no first-launch mark. The drawer opens by itself once, then calls
+  POST /assistant/first-launch (204, again 204): the mark is the caller's own row (`assistant_first_launch`, row-level
+  security by owner), never browser storage, so the Mac app and a browser agree; another user's mark is never seen or
+  set.
+- **No new settings routes.** The page uses the admin routes as they are (providers, provider-keys,
+  /admin/assistant, the plugins and their switches, Add as provider); each still checks the admin role.
+
 ### Assistant: tools
 
 `tools/catalog.json` (validated against `tools/catalog.schema.json` `$defs/toolsFile`) holds every tool:

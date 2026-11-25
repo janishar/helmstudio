@@ -10,7 +10,11 @@
       "messages_per_minute": 6
     },
     "thinks": false,
-    "sees": false
+    "sees": false,
+    "set_up": false,
+    "can_set_up": false,
+    "first_launch": false,
+    "tools": []
   },
   "threads": []
 }
