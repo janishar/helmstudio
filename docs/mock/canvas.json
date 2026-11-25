@@ -534,9 +534,9 @@
     },
     "Plugins.dc.html": {
       "expand": "fill",
-      "h": 3660,
+      "h": 3970,
       "is_interactive": true,
-      "title": "Plugins \u00b7 its own rail page: the list, the Claude Code bridge, Add as provider, skills",
+      "title": "Plugins \u00b7 its own rail page: the list, Your Claude subscription (starts itself on the Mac), Add as provider, skills",
       "w": 1440,
       "x": 0,
       "y": 3480,
