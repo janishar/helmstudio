@@ -75,7 +75,8 @@
             },
             "limits": {"$ref": "assistant.schema.json#/$defs/limits"},
             "sees": {"type": "boolean", "description": "from API 1.65 (contracts/README.md, Assistant: media and vision): the model sees images (AssistantStatus.sees): the message's images go to it directly (studio.see), and look_at needs no card; absent = false"},
-            "window_tokens": {"type": "integer", "minimum": 8000, "maximum": 1000000, "description": "From API 1.66: the source model's chat window (AssistantSettings.window_tokens); absent = 60000. Past 70% of it the oldest half of the chat folds into a running summary"}
+            "window_tokens": {"type": "integer", "minimum": 8000, "maximum": 1000000, "description": "From API 1.66: the source model's chat window (AssistantSettings.window_tokens); absent = 60000. Past 70% of it the oldest half of the chat folds into a running summary"},
+            "auto": {"type": "boolean", "description": "From API 1.68: the chat's Auto switch at this input (AssistantThread.auto); absent = false. Pipelines decides which screen actions run by themselves (contracts/README.md, Assistant: Auto mode)"}
           }
         },
         "input": {

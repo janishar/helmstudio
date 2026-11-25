@@ -715,6 +715,7 @@ type AssistantSettings struct {
 	Search    *string                   `json:"search"`
 	Limits    json.RawMessage           `json:"limits"`
 	Sees      bool                      `json:"sees,omitempty"` // API 1.65: the model sees images
+	Auto      bool                      `json:"auto,omitempty"` // API 1.68: the chat's Auto switch
 	// WindowTokens is the source model's chat window (API 1.66); 0 (absent) = pipelines' default
 	WindowTokens int `json:"window_tokens,omitempty"`
 }
@@ -793,6 +794,8 @@ type AssistantMemoryItem struct {
 	ThreadID  *string `json:"thread_id"`
 	CreatedAt string  `json:"created_at"`
 	UpdatedAt string  `json:"updated_at"`
+	// Shots is a film's shot list (API 1.69, assistant.schema.json shotList), passed through as pipelines wrote it.
+	Shots json.RawMessage `json:"shots,omitempty"`
 }
 
 // SubjectAssistantCache is pipelines' request/reply subject for the assistant's prompt cache hits (API 1.66).

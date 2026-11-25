@@ -2114,7 +2114,13 @@ export interface paths {
         delete: operations["studioDeleteAssistantThread"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * From 1.68: switch the chat's Auto mode on or off
+         * @description Sets the chat's `auto` (contracts/README.md, Assistant: Auto mode) and sends a `thread` event. It applies from
+         *     the chat's next input: a running turn reads it when the tab's results or a card's answer resume it. Another
+         *     user's chat is 404.
+         */
+        patch: operations["studioPatchAssistantThread"];
         trace?: never;
     };
     "/v1/studio/assistant/threads/{thread_id}/messages": {
@@ -6723,6 +6729,10 @@ export interface components {
             id: components["schemas"]["AssistantCallId"];
             name: string;
             args: Record<string, never>;
+            /** @description from 1.68 (Auto mode): pipelines lets it run by itself: a generation on your machines within the Auto caps runs without its card, a safe save in a dialog (a new item) saves itself; its line starts `Auto · ` and has Undo. Absent = false */
+            auto?: boolean;
+            /** @description from 1.68: Auto is on but this one still asks: the waiting line above its card (`Auto stops here: deleting needs you`, `Auto paused · 8 of 8 takes this hour`) */
+            asks?: string;
         };
         AssistantLineText: {
             text: string;
@@ -6779,6 +6789,8 @@ export interface components {
             model_calls: number;
             tool_calls: number;
             memory_writes: number;
+            /** @description from 1.68: with Auto on, the takes Auto mode started for you in the last hour (the chip `4 of 8 takes this hour`); absent with Auto off */
+            auto_takes_hour?: number;
         };
         /** @description twin of assistant.schema.json error: why a turn ended early */
         AssistantError: {
@@ -6800,6 +6812,16 @@ export interface components {
             look_at_per_hour: number;
             /** @default 30 */
             messages_per_minute: number;
+            /**
+             * @description from 1.68: takes Auto mode may start for one user in an hour (0: Auto never generates); a PUT without it keeps the current one
+             * @default 8
+             */
+            auto_takes_per_hour?: number;
+            /**
+             * @description from 1.68: GPU minutes (the runs' estimates) Auto mode may start for one user in an hour; a PUT without it keeps the current one
+             * @default 30
+             */
+            auto_gpu_minutes_per_hour?: number;
         };
         /** @description what every user may know: on or off (the dock item is hidden when off), where the model runs, web search, the caps, whether the model thinks, whether it sees images */
         AssistantStatus: {
@@ -6827,6 +6849,8 @@ export interface components {
         AssistantThread: {
             /** Format: uuid */
             id: string;
+            /** @description from 1.68: the chat's Auto switch (starts off): safe steps run without asking (contracts/README.md, Assistant: Auto mode) */
+            auto: boolean;
             /** @description from the first message; `New chat` before */
             title: string;
             /**
@@ -6849,6 +6873,10 @@ export interface components {
         AssistantThreadList: {
             status: components["schemas"]["AssistantStatus"];
             threads: components["schemas"]["AssistantThread"][];
+        };
+        /** @description from 1.68 */
+        AssistantThreadPatch: {
+            auto: boolean;
         };
         AssistantThreadCreate: {
             client_id: components["schemas"]["AssistantClientId"];
@@ -6952,6 +6980,27 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+            shots?: components["schemas"]["AssistantShotList"];
+        };
+        /** @description From 1.69: a film's shot list, kept as a Projects item (kind project); the item's `text` is its summary, rewritten at each save. Shots by number ascending (contracts/README.md, Assistant: shot list) */
+        AssistantShotList: {
+            /** @description the film's title; one list per title (any case) */
+            film: string;
+            shots: {
+                /** @description the shot number, unique in the list */
+                n: number;
+                /** @description what happens */
+                what: string;
+                /** @description the planned length */
+                seconds?: number;
+                /** @description the line spoken (`@name: text`), if any */
+                line?: string;
+                /**
+                 * Format: uuid
+                 * @description the take used, once picked
+                 */
+                take_id?: string;
+            }[];
         };
         AssistantMemoryList: {
             items: components["schemas"]["AssistantMemoryItem"][];
@@ -11637,6 +11686,37 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioPatchAssistantThread: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description from 1.44: an assistant chat's UUID (another user's or malformed = 404) */
+                thread_id: components["parameters"]["ThreadId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistantThreadPatch"];
+            };
+        };
+        responses: {
+            /** @description the chat */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantThread"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
             503: components["responses"]["Unavailable"];
         };
     };

@@ -99,7 +99,7 @@ HTTP_SCHEMAS = [
     "TimelineRerender", "ExportPlan", "MediaJob", "TakeFrame", "TakeUses", "ClipActions", "TimelineLineCreate",
     "TimelineEdits", "TimelineEditResult", "TimelineAgentView", "TimelineRevisionList", "TimelineFrame",  # 1.49
     "SessionList", "SessionNames", "SessionNamesPut",
-    "AssistantPost", "AssistantThreadList", "AssistantThreadDetail", "AssistantEvent", "AssistantMemoryList",
+    "AssistantPost", "AssistantThreadList", "AssistantThreadDetail", "AssistantThreadPatch", "AssistantEvent", "AssistantMemoryList",
     "AssistantSettings", "AssistantSettingsPut", "AssistantCacheStats", *TWINS,
     "PluginList", "PluginRescan", "PluginPut", "PluginProviderCreate",  # 1.61
     "Skill", "SkillList", "SkillFile",  # 1.64
@@ -4459,6 +4459,18 @@ def check_tools(schemas: dict[str, dict], registry: Registry) -> None:
     spec = yaml.safe_load((HERE / "openapi.yaml").read_text())
     ops = {f"{m.upper()} {path}" for path, item in spec["paths"].items() for m in item if m in METHODS}
     cards, tags = actions["cards"], actions["tags"]
+    # the Timeline edit's ops carry each op's own fields, as openapi TimelineOp (plus studio's fill), so the model
+    # never guesses field names (owner, 2026-11-25: the assistant tried take, take_id, takeId before take_ids)
+    edit = actions["screens"]["timeline"]["actions"]["edit"]["input"]["properties"]["ops"]["items"]
+    want = {v["title"]: (sorted(v["required"]), sorted(v["properties"]))
+            for v in spec["components"]["schemas"]["TimelineOp"]["oneOf"]}
+    have = {v.get("title"): (sorted(v.get("required", [])), sorted(v.get("properties", {})))
+            for v in edit.get("oneOf", [])}
+    have.pop("fill", None)
+    if have != want:
+        fail("tools/actions.json timeline edit: ops must match openapi TimelineOp's variants "
+             f"(differ: {sorted(k for k in set(want) | set(have) if want.get(k) != have.get(k))}); "
+             "regenerate them from TimelineOp")
     used = set()
 
     def schema_ok(where: str, sch: dict, model_facing: bool) -> None:

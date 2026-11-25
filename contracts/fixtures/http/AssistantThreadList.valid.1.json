@@ -47,6 +47,7 @@
         ],
         "cards": []
       },
+      "auto": false,
       "caps": {
         "model_calls": 2,
         "tool_calls": 5,
@@ -61,6 +62,7 @@
       "state": "idle",
       "client_id": null,
       "pending": null,
+      "auto": false,
       "caps": {
         "model_calls": 0,
         "tool_calls": 0,

@@ -724,7 +724,9 @@ test("J10 the provider refuses or is down: the error is in plain words and I can
   const notes = drawer().getByRole("note");
   script(MODEL, { status: 401 });
   await say("hello?");
-  await expect(notes.last()).toHaveText(/the key was refused/, { timeout: 30_000 });
+  await expect(notes.last()).toHaveText(/refused its key\. Ask your admin to check it\./, {
+    timeout: 30_000,
+  });
   await expect(working()).toBeHidden();
   script(MODEL, { content: "Back." });
   await say("hello again");
@@ -732,7 +734,7 @@ test("J10 the provider refuses or is down: the error is in plain words and I can
 
   script(MODEL, { status: 503 }, { status: 503 }, { status: 503 }, { status: 503 });
   await say("are you there?");
-  await expect(notes.last()).toHaveText(/the provider is busy or down \(HTTP 503\)/, {
+  await expect(notes.last()).toHaveText(/is busy\. Try again in a minute\./, {
     timeout: 60_000,
   });
   await shot("j10-provider-down");
@@ -1147,4 +1149,56 @@ test("J17 answers that read well, older steps folded, full screen, the minimized
   } finally {
     await p.close();
   }
+});
+
+test("J18 Auto mode: the switch and a generation that runs by itself with Undo (alpha.2 item 12)", async () => {
+  await page.goto("/");
+  await open();
+  await newChat();
+  const sw = drawer().getByRole("switch", { name: "Auto" });
+  await expect(sw).toHaveAttribute("aria-checked", "false"); // a · off by default, per chat
+  await sw.hover();
+  await expect(drawer().getByRole("tooltip")).toContainText("big runs still ask");
+  await shot("j18-auto-off");
+  await sw.click();
+  await expect(sw).toHaveAttribute("aria-checked", "true");
+
+  // b · a workflow never run has no time estimate: its first generation still asks; Yes runs it
+  const make = (done: string) =>
+    script(
+      MODEL,
+      {
+        content: "Making it.",
+        tool_calls: [
+          { tool: "change", args: { key: "prompt.text", value: "a lighthouse at dusk" } },
+          { tool: "generate", args: {} },
+        ],
+      },
+      { content: done },
+    );
+  make("Made the first.");
+  await say("make a lighthouse at dusk");
+  const card = drawer().getByRole("region", { name: /^Confirm: Generate/ });
+  await expect(
+    drawer().getByText("Auto stops here: no time estimate for this run yet"),
+  ).toBeVisible();
+  await card.getByRole("button", { name: "GENERATE" }).click();
+  await replied("Made the first.");
+  await expect(
+    page.getByRole("group", { name: "Run progress" }).getByRole("img", { name: "done" }).last(),
+  ).toBeVisible({ timeout: 40_000 });
+
+  // c · now it has a time: the next generation on your machines runs without its card, says Auto, has Undo
+  make("Made it.");
+  await say("another one");
+  await replied("Made it.");
+  await expect(line(/^Auto · Generated 1 take/)).toBeVisible();
+  await expect(drawer().getByRole("region", { name: /^Confirm/ })).toHaveCount(0);
+  await expect(
+    line(/^Auto · Generated 1 take/).getByRole("button", { name: /^Undo: Generated 1 take/ }),
+  ).toBeVisible();
+  await shot("j18-auto-generated");
+
+  await sw.click(); // off again: the next generation asks
+  await expect(sw).toHaveAttribute("aria-checked", "false");
 });

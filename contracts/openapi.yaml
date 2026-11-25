@@ -2167,6 +2167,24 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
         '503': {$ref: '#/components/responses/Unavailable'}
+    patch:
+      tags: [studio]
+      operationId: studioPatchAssistantThread
+      summary: 'From 1.68: switch the chat''s Auto mode on or off'
+      description: |
+        Sets the chat's `auto` (contracts/README.md, Assistant: Auto mode) and sends a `thread` event. It applies from
+        the chat's next input: a running turn reads it when the tab's results or a card's answer resume it. Another
+        user's chat is 404.
+      parameters: [{$ref: '#/components/parameters/ThreadId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/AssistantThreadPatch'}}}
+      responses:
+        '200': {description: the chat, content: {application/json: {schema: {$ref: '#/components/schemas/AssistantThread'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
     delete:
       tags: [studio]
       operationId: studioDeleteAssistantThread
@@ -6512,6 +6530,8 @@ components:
         id: {$ref: '#/components/schemas/AssistantCallId'}
         name: {type: string, pattern: '^[a-z][A-Za-z0-9]{0,47}$'}
         args: {type: object}
+        auto: {type: boolean, description: 'from 1.68 (Auto mode): pipelines lets it run by itself: a generation on your machines within the Auto caps runs without its card, a safe save in a dialog (a new item) saves itself; its line starts `Auto · ` and has Undo. Absent = false'}
+        asks: {type: string, minLength: 1, maxLength: 80, description: 'from 1.68: Auto is on but this one still asks: the waiting line above its card (`Auto stops here: deleting needs you`, `Auto paused · 8 of 8 takes this hour`)'}
     AssistantLineText:
       type: object
       required: [text, undo]
@@ -6581,6 +6601,7 @@ components:
         model_calls: {type: integer, minimum: 0, maximum: 40}
         tool_calls: {type: integer, minimum: 0, maximum: 100}
         memory_writes: {type: integer, minimum: 0, maximum: 8}
+        auto_takes_hour: {type: integer, minimum: 0, description: 'from 1.68: with Auto on, the takes Auto mode started for you in the last hour (the chip `4 of 8 takes this hour`); absent with Auto off'}
     AssistantError:
       type: object
       required: [code, text]
@@ -6601,6 +6622,8 @@ components:
         tokens_per_day: {type: integer, minimum: 1000, maximum: 100000000, default: 20000000}
         look_at_per_hour: {type: integer, minimum: 0, maximum: 1000, default: 200}
         messages_per_minute: {type: integer, minimum: 1, maximum: 60, default: 30}
+        auto_takes_per_hour: {type: integer, minimum: 0, maximum: 1000, default: 8, description: 'from 1.68: takes Auto mode may start for one user in an hour (0: Auto never generates); a PUT without it keeps the current one'}
+        auto_gpu_minutes_per_hour: {type: integer, minimum: 0, maximum: 600, default: 30, description: 'from 1.68: GPU minutes (the runs'' estimates) Auto mode may start for one user in an hour; a PUT without it keeps the current one'}
     AssistantStatus:
       type: object
       required: [enabled, provider, web_search, limits, thinks, sees]
@@ -6632,9 +6655,10 @@ components:
         cards: {type: array, maxItems: 4, items: {$ref: '#/components/schemas/AssistantCallId'}}
     AssistantThread:
       type: object
-      required: [id, title, state, client_id, pending, caps, created_at, updated_at]
+      required: [id, title, state, client_id, pending, caps, auto, created_at, updated_at]
       properties:
         id: {type: string, format: uuid}
+        auto: {type: boolean, description: 'from 1.68: the chat''s Auto switch (starts off): safe steps run without asking (contracts/README.md, Assistant: Auto mode)'}
         title: {type: string, maxLength: 120, description: 'from the first message; `New chat` before'}
         state: {type: string, enum: [idle, working, waiting], description: 'working: the agent is thinking; waiting: parked on actions, cards or a run'}
         client_id: {oneOf: [{$ref: '#/components/schemas/AssistantClientId'}, {type: 'null'}], description: 'the tab that runs its actions; other tabs show it read-only with Continue here'}
@@ -6648,6 +6672,13 @@ components:
       properties:
         status: {$ref: '#/components/schemas/AssistantStatus'}
         threads: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/AssistantThread'}}
+    AssistantThreadPatch:
+      type: object
+      required: [auto]
+      additionalProperties: false
+      description: 'from 1.68'
+      properties:
+        auto: {type: boolean}
     AssistantThreadCreate:
       type: object
       required: [client_id]
@@ -6755,6 +6786,28 @@ components:
             - {type: 'null'}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
+        shots: {$ref: '#/components/schemas/AssistantShotList'}
+    AssistantShotList:
+      type: object
+      description: 'From 1.69: a film''s shot list, kept as a Projects item (kind project); the item''s `text` is its summary, rewritten at each save. Shots by number ascending (contracts/README.md, Assistant: shot list)'
+      required: [film, shots]
+      additionalProperties: false
+      properties:
+        film: {type: string, minLength: 1, maxLength: 80, description: 'the film''s title; one list per title (any case)'}
+        shots:
+          type: array
+          minItems: 1
+          maxItems: 60
+          items:
+            type: object
+            required: [n, what]
+            additionalProperties: false
+            properties:
+              n: {type: integer, minimum: 1, maximum: 999, description: 'the shot number, unique in the list'}
+              what: {type: string, minLength: 1, maxLength: 300, description: what happens}
+              seconds: {type: number, exclusiveMinimum: 0, maximum: 600, description: the planned length}
+              line: {type: string, minLength: 1, maxLength: 300, description: 'the line spoken (`@name: text`), if any'}
+              take_id: {type: string, format: uuid, description: 'the take used, once picked'}
     AssistantMemoryList:
       type: object
       required: [items, counts]

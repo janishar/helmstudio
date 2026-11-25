@@ -29,6 +29,7 @@
     ],
     "cards": []
   },
+  "auto": false,
   "caps": {
     "model_calls": 2,
     "tool_calls": 5,

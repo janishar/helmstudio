@@ -46,10 +46,12 @@ import {
   Sparkles,
   Trash2,
   Undo2,
+  Zap,
   X,
 } from "lucide-react";
 import { api, message, ok, type S } from "@/lib/api";
 import { safeUrl } from "@/lib/format";
+import { FullScreen } from "@/components/media";
 import { forget, useTakes } from "@/lib/take-cache";
 import {
   ASSISTANT_CHANGED,
@@ -58,6 +60,7 @@ import {
   answerBlocks,
   applyEvent,
   asked,
+  autoText,
   elsewhere,
   capNoticeId,
   chatTime,
@@ -65,6 +68,7 @@ import {
   limitOf,
   mentionParts,
   plainAnswer,
+  plainError,
   stepSummary,
   tabClientId,
   tabOpen,
@@ -83,7 +87,7 @@ import {
   type ThreadView,
 } from "@/lib/assistant";
 import { followEvents } from "@/lib/runs";
-import { Registry, awaitIt, navigateTo } from "@/components/assistant/tools";
+import { Registry, awaitIt, navigateTo, undoRuns } from "@/components/assistant/tools";
 import { Options, Refs } from "@/components/assistant/answer";
 import { atQuery, liveOptions, splitOptions, withPicks } from "@/lib/answer-refs";
 import {
@@ -277,12 +281,13 @@ export function useAssistant(me: S<"User"> | null) {
   /** A screen card: the drawer opens on it; Yes calls the screen's own function, Not now cancels, and leaving the
    * screen cancels it too. */
   const ask = useCallback(
-    (id: string, a: Asked, key: number | null) =>
+    (id: string, a: Asked, key: number | null, asks?: string) =>
       new Promise<Outcome>((resolve) => {
         setOpenState(true);
         setShrunk(false);
         setAsking({ id, card: a.card });
-        setLocal(id, { status: "waiting", text: waitingText(a.card) });
+        // Auto on but this one still asks (API 1.68): its line says why, above the card
+        setLocal(id, { status: "waiting", text: asks ?? waitingText(a.card) });
         const off = reg.subscribe(() => key !== null && !reg.alive(key) && answer("gone"));
         function answer(how: "yes" | "no" | "gone") {
           off();
@@ -338,7 +343,27 @@ export function useAssistant(me: S<"User"> | null) {
           setRunning({ n: i + 1, of: p.actions.length, text });
         };
         const { out, key } = await reg.run(a as Action, progress);
-        const o = asked(out) ? await ask(a.id, out, key) : out;
+        // Auto (API 1.68, board frame 13): pipelines let it run by itself: its Yes without the card, "Auto · " first,
+        // and a generation's Undo stops its runs and deletes their takes
+        let o = !asked(out)
+          ? out
+          : a.auto
+            ? await out
+                .yes(true)
+                .catch((e: unknown): Outcome => ({ status: "failed", text: message(e) }))
+            : await ask(a.id, out, key, a.asks);
+        if (a.auto && o.status === "done") {
+          const runs = (o.result as { run_ids?: unknown } | undefined)?.run_ids;
+          o = {
+            ...o,
+            text: autoText(o.text),
+            undo:
+              o.undo ??
+              (Array.isArray(runs) && runs.length
+                ? { undo: () => undoRuns(runs as string[]) }
+                : undefined),
+          };
+        }
         if (o.undo) undoFns.current[a.id] = o.undo;
         setLocal(a.id, {
           status: o.status === "still_running" ? "running" : (o.status as Line["status"]),
@@ -431,6 +456,29 @@ export function useAssistant(me: S<"User"> | null) {
     }
   }, [cid, leave]);
 
+  /** Auto mode's switch (API 1.68, board frame 13): per chat, starts off; a chat is made first when there is none. */
+  const setAuto = useCallback(
+    async (on: boolean) => {
+      try {
+        const id =
+          threadId ??
+          (await ok(api.POST("/v1/studio/assistant/threads", { body: { client_id: cid } }))).id;
+        const t = await ok(
+          api.PATCH("/v1/studio/assistant/threads/{thread_id}", {
+            params: { path: { thread_id: id } },
+            body: { auto: on },
+          }),
+        );
+        setView((v) =>
+          v && v.thread.id === t.id ? { ...v, thread: t } : { thread: t, entries: [] },
+        );
+      } catch (e) {
+        setError(message(e));
+      }
+    },
+    [cid, threadId],
+  );
+
   // the Chats list (board frame 7): the chats newest first, read when the list opens
   const [chats, setChats] = useState<Thread[] | null>(null);
   const loadChats = useCallback(() => {
@@ -499,8 +547,8 @@ export function useAssistant(me: S<"User"> | null) {
         }
       else {
         const f = undoFns.current[l.id];
-        if (!f) return;
-        await (was ? f.redo() : f.undo());
+        if (!f || (was && !f.redo)) return;
+        await (was ? f.redo?.() : f.undo());
       }
       setUndone((u) => ({ ...u, [l.id]: !was }));
     } catch (e) {
@@ -569,7 +617,11 @@ export function useAssistant(me: S<"User"> | null) {
     setShrunk,
     local,
     undone,
-    canUndo: (l: Line) => !!l.memory_id || !!l.take_ids || !!undoFns.current[l.id],
+    // an Auto step's Undo deletes what it made: no Redo after it
+    canUndo: (l: Line) =>
+      !!l.memory_id ||
+      !!l.take_ids ||
+      (!!undoFns.current[l.id] && (!undone[l.id] || !!undoFns.current[l.id].redo)),
     asking,
     answerAsk: (yes: boolean) => answerRef.current?.(yes ? "yes" : "no"),
     running,
@@ -577,6 +629,7 @@ export function useAssistant(me: S<"User"> | null) {
     setError,
     send,
     newChat,
+    setAuto,
     chats,
     loadChats,
     openChat,
@@ -633,6 +686,7 @@ function LineIcon({ status, text }: { status: Line["status"]; text: string }) {
     return <CircleMinus {...p} strokeWidth={2} />;
   if (/^(Opened|Went to)/.test(text)) return <ArrowRight {...p} strokeWidth={2} />;
   if (/^Remembered/.test(text)) return <Brain {...p} strokeWidth={2} />;
+  if (/^Auto · /.test(text)) return <Zap {...p} strokeWidth={2} />; // ran by itself (board frame 13)
   return <Check {...p} />;
 }
 
@@ -860,19 +914,21 @@ function LineRow({ l, a }: { l: Line; a: AssistantApi }) {
   const [wide, setWide] = useState(false);
   const off = !!a.undone[l.id];
   const status = off ? "undone" : l.status;
-  const text = / in Models\.$/.test(l.text) ? (
+  // a failed line in plain words, its raw text under Details (item 23, board frame 6)
+  const { plain, raw } = l.status === "failed" ? plainError(l.text) : { plain: l.text, raw: "" };
+  const text = / in Models\.$/.test(plain) ? (
     <>
-      <Text text={l.text.slice(0, -"Models.".length)} />
+      <Text text={plain.slice(0, -"Models.".length)} />
       <Link href="/models" className="underline">
         Models
       </Link>
       .
     </>
   ) : (
-    <Text text={l.text} />
+    <Text text={plain} />
   );
   // one line with "…", tap opens it in full, hover shows it (item 21, board frame 10c); a memory line wraps in full
-  const long = l.text.length > 36 && !/^Remembered\b/.test(l.text);
+  const long = plain.length > 36 && !/^Remembered\b/.test(plain) && !raw;
   const verb = off ? "Redo" : "Undo";
   return (
     <li>
@@ -906,6 +962,7 @@ function LineRow({ l, a }: { l: Line; a: AssistantApi }) {
         ) : (
           text
         )}
+        {raw && <RawDetails raw={raw} />}
       </span>
       {off && l.take_ids && (
         <span className="text-t2" style={{ flex: "none" }}>
@@ -1117,6 +1174,20 @@ const serverCard = (c: S<"AssistantCard">): ScreenCard => ({
           : "Runs on your machines.",
   danger: c.kind === "delete",
 });
+
+/** Details under a failed line or a provider's error: the raw text, closed by default. */
+function RawDetails({ raw }: { raw: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button type="button" className="un det" aria-expanded={open} onClick={() => setOpen(!open)}>
+        Details
+        {open ? <ChevronUp size={12} aria-hidden /> : <ChevronDown size={12} aria-hidden />}
+      </button>
+      {open && <span className="raw mono block">{raw}</span>}
+    </>
+  );
+}
 
 /** The model answered wrongly twice (board frame 7): the plain line, and the checker's own words behind Details,
  * closed by default and after a reload. */
@@ -1434,12 +1505,16 @@ function Thread({ a, entries }: { a: AssistantApi; entries: Entry[] }) {
             retry={e.id === lastEntry && !a.readOnly && !a.steering ? a.retry : undefined}
           />,
         );
-      else if (e.kind === "notice" && !["cap_day", "cap_tokens"].includes(e.error?.code ?? ""))
+      else if (e.kind === "notice" && !["cap_day", "cap_tokens"].includes(e.error?.code ?? "")) {
+        // a provider's error in plain words, its raw text under Details (item 23, board frame 6)
+        const { plain, raw } = plainError(e.text ?? "");
         out.push(
           <div key={e.id} role="note" className="msg note">
-            <Text text={e.text ?? ""} />
+            <Text text={plain} />
+            {raw && <RawDetails raw={raw} />}
           </div>,
         );
+      }
     }
   }
   // what this tab runs now, until the server's lines come
@@ -1541,6 +1616,121 @@ function RowMenu({ busy, edit, remove }: { busy: boolean; edit: () => void; remo
 
 type MemoryItem = S<"AssistantMemoryItem">;
 type MemoryKind = S<"AssistantMemoryKind">;
+
+/** A list of more shots than this shows its first SHOTS_SHOWN, then the round chevron (board frame 18b). */
+const SHOTS_FOLD = 6;
+const SHOTS_SHOWN = 3;
+
+/** A film's shot list in Memory › Projects (items 28, 29; board frame 18a, b): the film and its counts, then one
+ * line per shot (number, what, the line spoken, length, the take or a dashed box); the first without a take is Next. */
+function ShotListRow({
+  item,
+  list,
+  menu,
+}: {
+  item: MemoryItem;
+  list: S<"AssistantShotList">;
+  menu: React.ReactNode;
+}) {
+  const [all, setAll] = useState(false);
+  const [open, setOpen] = useState<S<"Take"> | null>(null);
+  const take = useTakes(list.shots.flatMap((s) => (s.take_id ? [s.take_id] : [])));
+  const { film, shots } = list;
+  const took = shots.filter((s) => s.take_id).length;
+  const secs = Math.round(shots.reduce((a, s) => a + (s.seconds ?? 0), 0));
+  const next = shots.find((s) => !s.take_id)?.n;
+  const fold = shots.length > SHOTS_FOLD;
+  const shown = fold && !all ? shots.slice(0, SHOTS_SHOWN) : shots;
+  const box = "h-6 w-10 flex-none rounded-md";
+  return (
+    <li className="mrow flex-col items-stretch! gap-1">
+      <div className="flex items-start gap-1.5">
+        <div className="min-w-0 flex-auto">
+          <p className="m-0 font-semibold text-t1">{film} · shot list</p>
+          <small>
+            {[
+              `${shots.length} shot${shots.length === 1 ? "" : "s"}`,
+              `${took} with a take`,
+              secs ? `${secs} s planned` : "",
+              item.thread?.title || "deleted",
+              ago(item.updated_at),
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </small>
+        </div>
+        {menu}
+      </div>
+      <ol
+        aria-label={`Shots of ${film}`}
+        className="m-0 list-none rounded-[10px] bg-s1 px-2 py-0.5"
+      >
+        {shown.map((s) => {
+          const t = s.take_id ? take(s.take_id) : null;
+          const src = safeUrl(t?.thumb_url);
+          return (
+            <li key={s.n} className="flex items-center gap-2 px-0.5 py-[5px]">
+              <span className="kbd mt-0! min-w-3 flex-none text-center">{s.n}</span>
+              <span className="min-w-0 flex-auto">
+                <span className="block truncate">
+                  <Mentions text={s.what} />
+                </span>
+                {s.line && (
+                  <small className="m-0! mt-px! block truncate text-[11px]! italic">
+                    &quot;{s.line}&quot;
+                  </small>
+                )}
+              </span>
+              {s.n === next && (
+                <span className="tag bg-[color-mix(in_srgb,var(--a1)_18%,transparent)] text-a1">
+                  Next
+                </span>
+              )}
+              {s.seconds != null && (
+                <small className="m-0! flex-none font-mono">
+                  {Math.round(s.seconds * 10) / 10} s
+                </small>
+              )}
+              {t && src ? (
+                <button
+                  type="button"
+                  className={`pic ${box} border-0 bg-cover bg-center shadow-none!`}
+                  aria-label={`Open the take of shot ${s.n}`}
+                  title={t.title}
+                  style={{ backgroundImage: `url("${src}")` }}
+                  onClick={() => setOpen(t)}
+                />
+              ) : (
+                <span
+                  className={`${box} box-border border border-dashed border-line`}
+                  aria-label={s.take_id ? (t === null ? "Take deleted" : "Take") : "No take yet"}
+                  title={s.take_id ? (t === null ? "Take deleted" : "Take") : "No take yet"}
+                />
+              )}
+            </li>
+          );
+        })}
+      </ol>
+      {fold && (
+        <button
+          type="button"
+          className="mmore mt-0.5! mb-0!"
+          aria-expanded={all}
+          aria-label={all ? "Show less" : `Show all ${shots.length} shots`}
+          title={all ? "Show less" : `Show all ${shots.length} shots`}
+          onClick={() => setAll(!all)}
+        >
+          {all ? (
+            <ChevronUp size={14} strokeWidth={2.25} aria-hidden />
+          ) : (
+            <ChevronDown size={14} strokeWidth={2.25} aria-hidden />
+          )}
+        </button>
+      )}
+      {open && <FullScreen take={open} onClose={() => setOpen(null)} onStep={() => undefined} />}
+    </li>
+  );
+}
 
 /** The Memory list (§22.8, board frame 6): the four kinds as tabs, each item with its chat, Edit and Delete (your
  * clicks), and Clear all behind a card. Items are text, never orders. */
@@ -1646,6 +1836,19 @@ function MemoryList() {
                   Cancel
                 </button>
               </li>
+            ) : x.shots ? (
+              <ShotListRow
+                key={x.id}
+                item={x}
+                list={x.shots}
+                menu={
+                  <RowMenu
+                    busy={busy}
+                    edit={() => setEditing({ id: x.id, text: x.text })}
+                    remove={() => void remove(x.id)}
+                  />
+                }
+              />
             ) : (
               // the text takes the full width, 3 lines then More; Edit and Delete in ⋯ (item 5, board frame 14a)
               <li key={x.id} className="mrow">
@@ -1856,6 +2059,8 @@ function Drawer({ a }: { a: AssistantApi }) {
   const [atCur, setAtCur] = useState(""); // the @ picker's highlighted option, for aria-activedescendant
   const [dropping, setDropping] = useState(false);
   const [told, setTold] = useState(false); // "This model can't see images" shows once
+  const [autoTip, setAutoTip] = useState(false); // the Auto switch's line (board frame 13a): hover, focus or hold
+  const hold = useRef<ReturnType<typeof setTimeout> | null>(null);
   const file = useRef<HTMLInputElement>(null);
   const [top, setTop] = useState<number | null>(null);
   const [memory, setMemory] = useState(false);
@@ -2256,6 +2461,21 @@ function Drawer({ a }: { a: AssistantApi }) {
               <span className="flex-1">This model can&apos;t see images; it will use Look at.</span>
             </div>
           )}
+          {!a.readOnly && t?.auto && a.steering && typeof t.caps.auto_takes_hour === "number" && (
+            <div className="est">
+              <Zap size={12} strokeWidth={2} aria-hidden />
+              <span>
+                {t.caps.auto_takes_hour} of {st?.limits.auto_takes_per_hour ?? 8} takes this hour
+              </span>
+            </div>
+          )}
+          {!a.readOnly && autoTip && (
+            <div className="tip" role="tooltip" id="auto-tip">
+              <b>Auto</b>
+              Runs safe steps without asking: generations on your machines, Hear it, saves you can
+              undo. Up to the cap. Deletes, anything off the machine and big runs still ask.
+            </div>
+          )}
           {!a.readOnly && dropping && (
             <div className="drop" aria-hidden>
               <ImagePlus size={18} strokeWidth={1.75} />
@@ -2385,6 +2605,29 @@ function Drawer({ a }: { a: AssistantApi }) {
                     e.target.value = "";
                   }}
                 />
+                <button
+                  type="button"
+                  className="aut"
+                  role="switch"
+                  aria-checked={!!t?.auto}
+                  aria-describedby={autoTip ? "auto-tip" : undefined}
+                  title="Auto: safe steps run without asking"
+                  onClick={() => void a.setAuto(!t?.auto)}
+                  onMouseEnter={() => setAutoTip(true)}
+                  onMouseLeave={() => setAutoTip(false)}
+                  onFocus={() => setAutoTip(true)}
+                  onBlur={() => setAutoTip(false)}
+                  onPointerDown={(e) => {
+                    if (e.pointerType === "touch")
+                      hold.current = setTimeout(() => setAutoTip(true), 500);
+                  }}
+                  onPointerUp={() => {
+                    if (hold.current) clearTimeout(hold.current);
+                  }}
+                >
+                  <Zap size={11} strokeWidth={2} aria-hidden />
+                  Auto
+                </button>
                 <small>
                   {a.stopping ? null : atOpen ? (
                     <>

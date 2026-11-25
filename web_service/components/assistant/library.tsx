@@ -7,19 +7,21 @@ import { useState } from "react";
 import { ElementEditor } from "@/components/create/elements";
 import { LookEditor, SaveAsLook } from "@/components/create/looks";
 import { VoicePicker, type Prefill, type VoiceCtx } from "@/components/create/voices";
-import { useDialogWait } from "@/components/assistant/tools";
+import { undoItem, useDialogWait } from "@/components/assistant/tools";
 import { done, failed, type Outcome } from "@/lib/assistant";
 import { api, ok, type S } from "@/lib/api";
 
 type Take = S<"Take">;
 type Item = S<"LibraryItem">;
 
-export type LibraryAsk =
+/** `auto` (API 1.68): Auto mode let it save by itself (Save as look, a new element, Design a voice). */
+export type LibraryAsk = (
   | { kind: "look"; take: Take; name?: string }
   | { kind: "element"; takes?: Take[]; handle?: string }
   | { kind: "edit"; item: Item }
   | ({ kind: "clone"; take: Take; ctx: VoiceCtx } & Prefill)
-  | ({ kind: "design"; ctx: VoiceCtx } & Prefill);
+  | ({ kind: "design"; ctx: VoiceCtx } & Prefill)
+) & { auto?: boolean };
 
 /** The dialog's title, as its line says it: "Waiting for you · Save in Clone a voice". */
 export function dialogTitle(a: LibraryAsk) {
@@ -68,19 +70,28 @@ export function useLibraryDialog() {
     const title = dialogTitle(a);
     const saved = w.wait();
     setOpen(a);
-    progress(`Waiting for you · Save in ${title}`);
+    progress(a.auto ? `Saving in ${title}…` : `Waiting for you · Save in ${title}`);
     const x = await saved;
     if (!x) return { status: "cancelled", text: `${title} · cancelled` };
     const name = x.handle ? `@${x.handle}` : x.name;
-    return done(`Saved ${name}`, {
+    // Auto (board frame 13): "Auto · Saved voice Elias", Undo deletes the new item
+    return done(a.auto ? `Saved ${x.kind} ${name}` : `Saved ${name}`, {
       result: { item_id: x.id, kind: x.kind, name: x.name, ...(x.handle && { handle: name }) },
+      ...(a.auto && { undo: { undo: () => undoItem(x.id) } }),
     });
   }
   const a = open;
   const node = !a ? null : a.kind === "look" ? (
-    <SaveAsLook take={a.take} name={a.name} onSaved={w.saved} onClose={close} />
+    <SaveAsLook take={a.take} name={a.name} auto={a.auto} onSaved={w.saved} onClose={close} />
   ) : a.kind === "element" ? (
-    <ElementEditor open takes={a.takes} handle={a.handle} onSaved={w.saved} onClose={close} />
+    <ElementEditor
+      open
+      takes={a.takes}
+      handle={a.handle}
+      auto={a.auto}
+      onSaved={w.saved}
+      onClose={close}
+    />
   ) : a.kind === "edit" ? (
     a.item.kind === "look" ? (
       <LookEditor open item={a.item} onSaved={w.saved} onClose={close} />
@@ -96,7 +107,14 @@ export function useLibraryDialog() {
       onSaved={w.saved}
       ctx={a.ctx}
       take={a.kind === "clone" ? a.take : undefined}
-      start={{ view: a.kind, text: a.text, name: a.name, from_s: a.from_s, to_s: a.to_s }}
+      start={{
+        view: a.kind,
+        text: a.text,
+        name: a.name,
+        from_s: a.from_s,
+        to_s: a.to_s,
+        auto: a.kind === "design" && a.auto,
+      }}
     />
   );
   return { ask, node };

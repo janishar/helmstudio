@@ -115,7 +115,7 @@ test("S1 the admin finds skills, built in and in ~/.helm/plugins, and turns Anim
   await expect(fake).toContainText("Off");
 
   const anim = row(admin, /^Animator/);
-  await expect(anim).toContainText("0.1.0 · built in · plugins/animator");
+  await expect(anim).toContainText("0.2.0 · built in · plugins/animator");
   await expect(anim).toContainText("Skill");
   if ((await anim.getByRole("button", { name: "Enable" }).count()) > 0)
     await anim.getByRole("button", { name: "Enable" }).click();
@@ -129,8 +129,8 @@ test("S1 the admin finds skills, built in and in ~/.helm/plugins, and turns Anim
     "aria-checked",
     "true",
   );
-  await expect(aside).toContainText("Use when planning");
-  await expect(aside).toContainText("0.1.0 · format 1");
+  await expect(aside).toContainText("Use when making a cartoon or animated shot");
+  await expect(aside).toContainText("0.2.0 · format 1");
   await expect(aside).toContainText("Built in · plugins/animator");
   await expect(aside).toContainText("SKILL.md · camera-moves.md");
   await expect(aside).toContainText("Recipes");
@@ -179,8 +179,10 @@ test("S2 the Assistant reads Animator for a shot plan; tapping its line shows th
   await skl.click();
   const open = drawer().getByRole("button", { name: "Using skill: Animator · tap to hide" });
   await expect(open).toHaveAttribute("aria-expanded", "true");
-  await expect(open).toContainText("built in · 0.1.0");
-  await expect(drawer().getByText(/A guide for planning and making animated shots/)).toBeVisible();
+  await expect(open).toContainText("built in · 0.2.0");
+  await expect(
+    drawer().getByText(/A guide for making a short animated \(cartoon\) film/),
+  ).toBeVisible();
   await page.screenshot({ path: `${SHOTS}/s2-using-skill-open.png` });
 });
 

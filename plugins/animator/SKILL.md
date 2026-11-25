@@ -48,6 +48,11 @@ Never Generate a long or final run the user has not seen planned. Generate alway
 - Start wide to show the place, then go closer for feelings. Cut on an action (a turn, a jump) so the next shot
   picks it up.
 - Ask: show the shot list and the total length; change it until the user approves.
+- Save it with save_shots (the film's title; per shot the number, the action, the length in seconds, the line) as
+  soon as you write it, and again when it changes: it shows under Memory, Projects, and any chat reads it. When the
+  user picks a shot's final clip, set that shot's take_id.
+- For "shot 3" or "the next shot", read the saved list. A shot that isn't in it: ask with pick-one choices, never
+  guess.
 
 ## 3. Characters
 
@@ -195,7 +200,7 @@ Ask: "a 20 s cartoon of @pip the fox stealing an apple".
 1. Style line: "2D cartoon, bold clean outlines, flat colours, simple cel shading, warm pastel palette". User agrees.
 2. Shot list: 1 wide, static, @pip sneaks toward the tree, 3 s (73 frames). 2 medium, static, @pip crouches, then
    jumps and grabs the apple, 2 s (49). 3 close-up, slow dolly in, @pip grins, "Mine!", about 2 s (the line, voiced with silence around it, sets it). 4 wide, static,
-   the apple falls on @pip's head, 3 s (73). About 10 s; the user asks for more, add shots.
+   the apple falls on @pip's head, 3 s (73). About 10 s; the user asks for more, add shots. save_shots "Apple thief".
 3. Model sheet (cartoon-sheet-draft, 3 seeds); user picks; clean front view; saveAsElement `@pip`.
 4. designVoice for @pip; user saves it; put it on @pip (a Character element).
 5. `@orchard` background, empty, golden afternoon; saveAsElement, group Location.

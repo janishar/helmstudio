@@ -9,6 +9,8 @@ import { act, cleanup, render, screen, waitFor, within } from "@testing-library/
 import ltxWorkflows from "../../../contracts/fixtures/registry/ltx.workflows.valid.json";
 import ltxNodes from "../../../contracts/fixtures/registry/ltx.nodes.valid.json";
 import coreNodes from "../../../contracts/fixtures/registry/nodes.valid.json";
+import ttsWorkflows from "../../../contracts/fixtures/registry/qwen3-tts.workflows.valid.json";
+import ttsNodes from "../../../contracts/fixtures/registry/qwen3-tts.nodes.valid.json";
 import { Create } from "@/components/create/create";
 import { Registry, ToolsContext } from "@/components/assistant/tools";
 import { idOf } from "@/components/create/form";
@@ -425,6 +427,32 @@ describe("Create's actions", () => {
     await waitFor(() => expect(box().value).toBe("@elias @biscuit at the door"));
     await tab("Audio");
     await waitFor(() => expect(box().value).toBe("Hello there."));
+  });
+
+  it("a voice field refused says what it takes and what it got (item 23)", async () => {
+    const tts = {
+      ...ttsWorkflows.workflows.find((w) => w.id === "qwen3-tts-voice-over"),
+      node_schemas: Object.fromEntries(
+        [...coreNodes.nodes, ...ttsNodes.nodes].map((n) => [n.kind, n]),
+      ),
+      source: "template",
+    } as unknown as S<"Workflow">;
+    const { call } = start({ workflows: [workflow, tts] });
+    await tab("Audio");
+    await waitFor(() => expect(document.getElementById(idOf("prompt.text"))).toBeTruthy());
+    expect(out(await call("change", { key: "speak.voice", value: "narrator 2" }))).toMatchObject({
+      status: "failed",
+      text: 'Voice: expected one of your voices; got "narrator 2"',
+      error: expect.stringContaining('{"voice_id": "<id>"}'),
+    });
+    // a wrong shape stays out of the line: no JSON or ids, only in the model's error
+    expect(
+      out(await call("change", { key: "speak.voice", value: { id: "0b1c-uuid" } })),
+    ).toMatchObject({
+      status: "failed",
+      text: "Voice: expected one of your voices",
+      error: expect.stringContaining('{"id":"0b1c-uuid"}'),
+    });
   });
 
   it("another session never gets this session's script", async () => {

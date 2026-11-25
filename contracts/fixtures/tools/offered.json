@@ -23,8 +23,10 @@
         "plan_run",
         "recall",
         "remember",
+        "save_shots",
         "search_takes",
         "sessions",
+        "shot_list",
         "show_timeline",
         "timeline_revisions"
       ]
@@ -53,8 +55,10 @@
         "read_skill_file",
         "recall",
         "remember",
+        "save_shots",
         "search_takes",
         "sessions",
+        "shot_list",
         "show_timeline",
         "timeline_revisions",
         "use_skill"
@@ -87,8 +91,10 @@
         "plan_run",
         "recall",
         "remember",
+        "save_shots",
         "search_takes",
         "sessions",
+        "shot_list",
         "show_timeline",
         "timeline_revisions",
         "web_search"
