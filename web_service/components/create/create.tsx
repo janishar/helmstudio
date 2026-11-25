@@ -2797,7 +2797,7 @@ function MediaSwitch({
     <div
       role="tablist"
       aria-label="Output kind"
-      className="flex shrink-0 flex-col gap-1.5 rounded-2xl bg-s1 p-1.5"
+      className="panel flex shrink-0 flex-col gap-1.5 p-1.5"
     >
       {kinds.map((m) => (
         <button
@@ -2806,7 +2806,7 @@ function MediaSwitch({
           role="tab"
           aria-selected={m === media}
           onClick={() => m !== media && onPick(m)}
-          className="min-h-11 w-16 flex-1 rounded-xl text-[12px] font-semibold text-t2 aria-selected:bg-s5 aria-selected:text-t1"
+          className="bevel min-h-11 w-16 flex-1 rounded-xl text-[12px] font-semibold text-t2 aria-selected:bg-s5 aria-selected:text-t1"
         >
           {{ image: "Image", video: "Video", audio: "Audio", text: "Text" }[m]}
         </button>
