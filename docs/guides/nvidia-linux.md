@@ -29,6 +29,8 @@ source, on the card's own driver (like the Mac's `make runners`). On Windows do 
   SGLang compiles GPU kernels on its first run, so it also needs a C compiler and Python's headers:
   `sudo apt install build-essential python3.12-dev` (without them: "gcc: No such file or directory" or "Python.h:
   No such file or directory"). The first video takes a few minutes longer while it compiles.
+  A machine whose hostname is long (a cloud VM's full internal name, e.g. 65 characters) breaks SGLang's start
+  ("File name too long" from torch.distributed): give it a short one, `sudo hostnamectl set-hostname gpu1`.
 
 ## 2. Run
 
