@@ -116,7 +116,7 @@ class _Child:
         )
         self.seen, self.progress, self.diag, self.ready = time.monotonic(), None, [], None
         self.tail = collections.deque(
-            maxlen=20
+            maxlen=200
         )  # every stderr line's last: logged when a server fails
         self.loose = loose
         self.lock = threading.Lock()
