@@ -879,7 +879,7 @@ function TakePanel({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <h2 className="heading">{m ? "Made with" : "Uploaded"}</h2>
+        <h2 className="heading">{m ? "Made with" : t.source === "tool" ? "Edited" : "Uploaded"}</h2>
         {m?.prompt && <p className="m-0 text-[13px] break-words">{m.prompt}</p>}
         {m && <Row label="Template" value={templateLine(m)} />}
         {m?.host && <Row label="Host" value={m.host} />}

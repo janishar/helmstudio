@@ -299,10 +299,10 @@ function ImageEdit({
   };
   return (
     <>
-      <div className="flex aspect-video shrink-0 items-center justify-center overflow-hidden rounded-xl">
+      <div className="relative aspect-video shrink-0 overflow-hidden rounded-xl">
         <div
           ref={pic}
-          className="relative max-h-full max-w-full touch-none bg-contain bg-center bg-no-repeat"
+          className="absolute inset-0 m-auto touch-none bg-cover bg-center"
           style={{
             aspectRatio: `${w} / ${h}`,
             height: w / h < 16 / 9 ? "100%" : undefined,
