@@ -3,6 +3,7 @@ package common
 import (
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"net/url"
 	"strconv"
@@ -60,4 +61,48 @@ func (s *Signer) SignPtr(key *string) *string {
 	}
 	link := s.Sign(*key)
 	return &link
+}
+
+// SignUntil signs a GET link to key valid until expiry (API 1.70: a plugin's 10-minute read link).
+func (s *Signer) SignUntil(key string, expiry time.Time) string {
+	exp := expiry.Unix()
+	return s.baseURL + "/files/" + (&url.URL{Path: key}).EscapedPath() + "?exp=" + strconv.FormatInt(exp, 10) + "&sig=" + s.signature(key, exp)
+}
+
+// BaseURL is the public base URL links are signed under (a plugin call's X-Helm-Api, API 1.70).
+func (s *Signer) BaseURL() string { return s.baseURL }
+
+// passKey is the key of plugin call passes (API 1.70): derived from the file secret, so a /files signature never
+// verifies as a pass and the secret itself never signs one.
+func (s *Signer) passKey() []byte {
+	mac := hmac.New(sha256.New, s.secret)
+	mac.Write([]byte("helmstudio plugin pass v1"))
+	return mac.Sum(nil)
+}
+
+// Pass signs body: base64url(body) "." base64url(HMAC-SHA256(passKey, base64url(body))).
+func (s *Signer) Pass(body []byte) string {
+	head := base64.RawURLEncoding.EncodeToString(body)
+	mac := hmac.New(sha256.New, s.passKey())
+	mac.Write([]byte(head))
+	return head + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+}
+
+// PassBody is a pass's body when its signature holds (checked in constant time), else false.
+func (s *Signer) PassBody(pass string) ([]byte, bool) {
+	head, sig, ok := strings.Cut(pass, ".")
+	if !ok || len(pass) > 1000 {
+		return nil, false
+	}
+	got, err := base64.RawURLEncoding.DecodeString(sig)
+	if err != nil {
+		return nil, false
+	}
+	mac := hmac.New(sha256.New, s.passKey())
+	mac.Write([]byte(head))
+	if !hmac.Equal(got, mac.Sum(nil)) {
+		return nil, false
+	}
+	body, err := base64.RawURLEncoding.DecodeString(head)
+	return body, err == nil
 }

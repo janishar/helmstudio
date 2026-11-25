@@ -142,6 +142,8 @@ type Take struct {
 	// API 1.19: an audio take's length; a video made from a media take: how it lines up with that take
 	Audio     *AudioInfo `json:"audio,omitempty"`
 	SourceMap *SourceMap `json:"source_map,omitempty"`
+	// API 1.70, source tool: the plugin tool that made it {plugin, tool, input}
+	Tool json.RawMessage `json:"tool,omitempty"`
 }
 
 // AudioInfo is an audio take's length as the client declared it at upload, or (API 1.30) a run's WAV's length and

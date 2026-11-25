@@ -151,6 +151,9 @@ func (c *controller) MountNats(group micro.NatsGroup) error {
 	if err := group.AddEndpoint("see", micro.NatsHandlerFunc(c.seeHandler)); err != nil { // API 1.65
 		return err
 	}
+	if err := group.AddGroup("plugins").AddEndpoint("pass", micro.NatsHandlerFunc(c.passHandler)); err != nil { // API 1.70
+		return err
+	}
 	return group.AddEndpoint("tools", micro.NatsHandlerFunc(c.toolsHandler))
 }
 
@@ -164,6 +167,19 @@ func (c *controller) seeHandler(request micro.NatsRequest) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	out := c.service.See(ctx, body)
+	micro.RespondNatsMessage(request, &out)
+}
+
+// passHandler answers studio.plugins.pass (API 1.70) with a plugin call's pass, or {error, code}.
+func (c *controller) passHandler(request micro.NatsRequest) {
+	body := new(PassRequest)
+	if err := json.Unmarshal(request.Data(), body); err != nil {
+		micro.RespondNatsMessage(request, &PassReply{Error: "bad request: invalid JSON", Code: "invalid"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out := c.service.PluginPass(ctx, body)
 	micro.RespondNatsMessage(request, &out)
 }
 

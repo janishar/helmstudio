@@ -13,6 +13,7 @@ type Caller struct {
 	Roles    []string
 	ClientID string // X-Client-Id set by Kong's plugin; may be empty
 	Via      string // API 1.49: where a write came from, by X-Helm-Client (ViaOf); a label, never a permission
+	Plugin   string // API 1.70: the plugin whose call pass this is (/v1/studio/plugin/* only); "" for a user
 }
 
 // ViaOf is a timeline revision's via for an X-Helm-Client value (contracts/README.md, Timeline: edits by ops): web,

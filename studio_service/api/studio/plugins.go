@@ -62,6 +62,7 @@ type manifest struct {
 	When        string                `json:"when,omitempty"`    // API 1.64, a skill's
 	Recipes     []recipe              `json:"recipes,omitempty"` // API 1.64, a skill's
 	Run         *manifestRun          `json:"run,omitempty"`     // API 1.67: it starts itself
+	Takes       bool                  `json:"takes,omitempty"`   // API 1.70: its pass opens /v1/studio/plugin/takes
 }
 
 // manifestRun is plugins/manifest.schema.json run (API 1.67): the runner reads cmd from its own copy; studio only
@@ -154,6 +155,9 @@ func (s *Service) problem(ctx context.Context, m *manifest, folder string) strin
 	}
 	if m.Format != nil || m.When != "" || m.Recipes != nil {
 		return "format, when and recipes are a skill's"
+	}
+	if m.Takes && m.Kind != "assistant-tools" { // API 1.70
+		return "takes is an assistant-tools plugin's"
 	}
 	if !pluginURLRe.MatchString(m.URL) || !pluginPathRe.MatchString(m.Health) {
 		return "url (no path) and health (a path) are required"

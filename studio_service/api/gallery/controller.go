@@ -41,6 +41,36 @@ func (c *controller) MountRoutes(group *gin.RouterGroup) {
 	group.POST("/uploads/:id/complete", c.completeUploadHandler)
 	group.POST("/admin/imports/takes", c.createImportHandler)
 	group.POST("/admin/imports/takes/:id/complete", c.completeImportHandler)
+	group.GET("/plugin/takes/:id", c.pluginTakeHandler)                   // API 1.70: a plugin call's pass only
+	group.POST("/plugin/takes", c.createPluginTakeHandler)                // API 1.70
+	group.POST("/plugin/takes/:id/complete", c.completePluginTakeHandler) // API 1.70
+}
+
+// pluginTakeHandler: GET /plugin/takes/{take_id}.
+func (c *controller) pluginTakeHandler(ctx *gin.Context) {
+	out, err := c.service.GetPluginTake(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"))
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// createPluginTakeHandler: POST /plugin/takes.
+func (c *controller) createPluginTakeHandler(ctx *gin.Context) {
+	if common.MustCaller(ctx).Plugin == "" { // never a user token (the guard already refuses one)
+		network.SendMixedError(ctx, errNotFound)
+		return
+	}
+	body, err := network.ReqBody[dto.PluginTakeCreate](ctx)
+	if err != nil {
+		network.SendMixedError(ctx, err)
+		return
+	}
+	out, err := c.service.CreatePluginTake(ctx.Request.Context(), common.MustCaller(ctx), body)
+	reply(ctx, http.StatusCreated, out, err)
+}
+
+// completePluginTakeHandler: POST /plugin/takes/{take_id}/complete.
+func (c *controller) completePluginTakeHandler(ctx *gin.Context) {
+	out, err := c.service.CompletePluginTake(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"))
+	reply(ctx, http.StatusOK, out, err)
 }
 
 // createImportHandler: POST /admin/imports/takes — 201 a new key, 200 one seen before; 403 before the body is read.
