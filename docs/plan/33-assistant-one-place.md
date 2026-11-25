@@ -96,4 +96,8 @@ Agent get available to user when admin set the AI on". So:
 icon and green tile), with the tabs Agent · In pipelines · Providers · Plugins. Texts that named AI name Hub ("Opens
 Hub.", "Auto · set in Hub › In pipelines", "Turned on in Hub › Agent"). The rail: pages, then Hub and System (admins),
 then Agent and Settings.
+Then "then agent will become assistant": with the page called Hub, the drawer and helper are named **Assistant** again
+(the bot icon stays): the rail button, the drawer header, Hub's first tab (Assistant · In pipelines · Providers ·
+Plugins), "Same as Assistant", and the setup texts ("Set up the Assistant", "The Assistant is off", "Turned on in Hub ›
+Assistant").
 
