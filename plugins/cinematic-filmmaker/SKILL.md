@@ -6,7 +6,7 @@ is greyed stays greyed, and a workflow not `downloaded` can't run).
 
 Extra files you can read with read_skill_file:
 - `script-template.md`: logline, treatment, scenes and dialogue, with an example.
-- `shot-list-template.md`: the shot list format, lengths in frames, and the short note to remember.
+- `shot-list-template.md`: the shot list format, lengths in frames, and how to save it with save_shots.
 - `character-sheet.md`: prompts for a turnaround and expressions, and how to save a character with a voice.
 - `camera-and-lighting.md`: shot sizes, camera moves, lens, light and colour words, coverage and the 180-degree rule.
 - `edit-checklist.md`: the Timeline pass, continuity checks and export.
@@ -37,9 +37,14 @@ checkpoints, choose and say why; ask only when a choice really matters (a long r
 - One shot = one action. If a shot has "and then", split it.
 - Show the user the whole shot list and wait for a yes before any generating. A change here costs nothing; a change
   after ten shots costs ten runs.
-- Keep it: save a short project note with remember (kind `project`, at most 500 characters: the title, the cast
-  handles, the look, the shot count and where you are). It shows under Memory, Projects, so the next chat can pick
-  up. The full shot list stays in the chat; restate it when you resume.
+- Keep it: save the shot list with save_shots (the film's title; each shot's number, what happens, length in
+  seconds and the line spoken) as soon as you write it, and again when it changes. It shows under Memory, Projects,
+  and every chat on every screen reads it, so the next chat picks up at the right shot. When the user picks a
+  shot's final take, set that shot's take_id.
+- Working on "shot 3" or "the next shot", read it from the saved list. If the shot is not there, don't guess:
+  ask with pick-one choices (the shots left, plan it first, or describe it).
+- Keep a short project note too with remember (kind `project`: the cast handles, the look, where you are), in
+  plain words.
 
 ## 2. Characters
 
@@ -167,7 +172,7 @@ change), then Generate waits for the user.
 ## A worked start
 
 Ask: "a 45 s film about a night-shift waitress who finds a stranger's letter".
-1. Logline, a 3-scene treatment, 9 shots with lines. Show them; wait for yes. remember a project note.
+1. Logline, a 3-scene treatment, 9 shots with lines. Show them; save_shots; wait for yes.
 2. Sheets for @june and @stranger; the user picks; save as elements; design two voices, link them.
 3. A still of the diner, saved as `@diner`; a grade still saved as the look `Night diner`.
 4. Shot 1: wide, static, 3 s. Keyframe "Static wide shot. @diner at night, @june wiping the counter alone,

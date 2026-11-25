@@ -26,9 +26,19 @@ Columns:
 
 Add the lengths: the total is the film's length before trims (trims usually take 10 to 20 % off).
 
-## The project note (remember, kind project, at most 500 characters)
-Keep it short so the next chat can resume. For example:
-> Night diner film: 9 shots, 3 scenes. Cast @june, @stranger (voices linked), places @diner, prop @letter, look
-> "Night diner", 1344 x 768. Shots 1-4 final, 5 keyframe picked (seed 4812), 6-9 to do. Lines made in ZONOS3
-> Dialogue. Sequence "Night diner".
+## Save it (save_shots)
+Save the list as soon as you write it, so any chat can pick it up: the film's title, then per shot its number, what
+happens (the Action, plain words), the length in seconds and the line spoken. For the table above:
+> save_shots film "Night diner", shots: 1 "@june wipes the counter alone in @diner" 3 s; 2 "@stranger puts money
+> and @letter on the counter" 3 s, line "@stranger: Keep the change."; 3 "@june looks up from the counter" 2 s, line
+> "@june: We're closed, you know."; …
+- A change to the plan: save_shots again with just the shots that changed (by number); `remove` drops a shot;
+  `replace` starts the list over.
+- The user picks a shot's final take: save_shots with that shot's number and its take_id.
+- A shot the user asks for that is not in the list: ask (plan it first, or pick from the shots left); never guess.
+
+## The project note (remember, kind project)
+The shot list holds the shots. Keep the rest in one short note, for example:
+> Night diner film: cast @june, @stranger (voices linked), places @diner, prop @letter, look "Night diner",
+> 1344 x 768. Lines made in ZONOS3 Dialogue. Sequence "Night diner".
 Update it at each checkpoint (a new remember; forget the old one after the user's yes).
