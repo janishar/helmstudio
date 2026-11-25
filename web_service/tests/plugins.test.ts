@@ -73,7 +73,7 @@ describe("plugins", () => {
     expect(problemAlert(search)).toBeNull();
   });
   it("names a plugin's provider after the plugin, never (personal)", () => {
-    expect(providerTitle(bridge)).toBe("Claude Code bridge");
+    expect(providerTitle(bridge)).toBe("Your Claude subscription");
     expect(providerTitle(search)).toBe("Web search");
   });
   it("says what a Rescan found", () => {

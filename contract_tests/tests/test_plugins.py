@@ -48,6 +48,9 @@ def test_found_off_then_on(admin, on, fake_ctl):  # noqa: F811
     assert {"claude-code-bridge", "web-search", "fake-provider", "fake-tools"} <= names, names
     bridge = next(p for p in got["plugins"] if p["name"] == "claude-code-bridge")
     assert bridge["kind"] == "model-provider" and bridge["personal"] is True and bridge["models"]
+    # alpha.3 item 1: Your Claude subscription starts itself on the Mac; its name never says Claude Code or Anthropic
+    assert bridge["title"] == "Your Claude subscription" and bridge["starts"]["host"] == "mac"
+    assert "claude code" not in bridge["title"].lower() and "anthropic" not in bridge["title"].lower()
     ws = next(p for p in got["plugins"] if p["name"] == "web-search")
     assert ws["kind"] == "assistant-tools" and ws["tools"][0]["risk"]["sends_off_machine"] is True
     tools = plugin(admin, "fake-tools")

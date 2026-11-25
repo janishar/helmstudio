@@ -19,7 +19,14 @@ RES  := build/Resources
 APP  := dist.noindex/helmstudio.app
 GH   := https://github.com
 
-.PHONY: test lint resources app dmg run clean
+.PHONY: test lint resources app dmg run clean plugin-files
+
+# every plugin folder's tracked files (personal ones too, off until turned on), never an .env, a log or a token (none is
+# tracked: .gitignore; this guards it); `make plugin-files` lists them (test/bundle.test.js)
+PLUGIN_FILES = cd $(ROOT) && for d in plugins/*/; do [ -f $$d/plugin.json ] && git ls-files -z $$d; done \
+  | grep -zvE '(^|/)(\.env[^/]*|[^/]*\.log|[^/]*token[^/]*)$$'
+plugin-files:
+	@$(PLUGIN_FILES) | tr '\0' '\n'
 
 node_modules: package-lock.json
 	npm ci --no-audit --no-fund
@@ -89,11 +96,10 @@ resources: $(DL)/colima/colima-Darwin-arm64 $(DL)/lima/lima-$(LIMA_VERSION)-Darw
 	  else echo "note: runner_service/$$b is not built (make h3 / make zonos3 at the root): the native packs will not run"; fi; done
 	# make-secrets, the one-shots' scripts (nats-setup, storage-setup) and the deploy files (compose, nats.conf it rewrites); never deploy/secrets*
 	cd $(ROOT) && git ls-files -z deploy .tools/make-secrets .tools/nats-setup .tools/storage-setup | tar --null -T - -cf - | tar -xf - -C $(abspath $(RES))/stack
-	# the built-in plugins (API 1.64 skills; API 1.67 web search, which the native runner starts while it is on; studio
-	# mounts stack/plugins read-only): every plugin folder but a personal one (the Claude Code bridge stays in the repo);
-	# ~/.helm/plugins (the user's) reaches the VM through Colima's home mount
-	cd $(ROOT) && for d in plugins/*/; do [ -f $$d/plugin.json ] && ! grep -q '"personal": true' $$d/plugin.json && git ls-files -z $$d; done \
-	  | tar --null -T - -cf - | tar -xf - -C $(abspath $(RES))/stack
+	# the built-in plugins (API 1.64 skills; API 1.67 web search and Your Claude subscription, which the native runner
+	# starts while they are on; studio mounts stack/plugins read-only); ~/.helm/plugins (the user's) reaches the VM
+	# through Colima's home mount
+	$(PLUGIN_FILES) | tar --null -T - -cf - | tar -xf - -C $(abspath $(RES))/stack
 
 # ---------- the app: Electron's own bundle, renamed, our code in Resources/app
 

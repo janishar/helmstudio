@@ -4187,6 +4187,14 @@ kinds: model providers and Assistant tools only.
   `<title> · <tool>`) and `sources` make a normal chat line; any failure (refused by the host rule, no answer, a
   non-2xx, a reply off the schema) is a failed line with a short plain text, and the model is told. Off at once:
   the next input carries no tools of a plugin turned off or removed.
+- **Your Claude subscription** (`plugins/claude-code-bridge`, release 0.1.0-alpha.3 item 1; the name kept, so
+  existing installs and providers carry on): personal, a model provider that starts itself on the Mac (`run`), built
+  into the Mac app and off until turned on. Its `run.sh` runs the user's own unmodified `claude` (Claude Code), which
+  each user installs and signs in to themselves through Anthropic's own flow; it asks only `claude auth status` and,
+  with no `claude` or not signed in, exits 78 with `Install Claude Code and sign in, then Try again`. helmstudio never
+  sees, stores or passes on a Claude credential: its only secret is the bridge token run.sh generates in
+  `~/.helm/claude-code-bridge.env` (the key for Add as provider). Containers reach it at
+  `http://host.docker.internal:8420` (dev on OrbStack; the Mac app's VM, whose DNS answers with the Mac's address).
 - **Web search** (`plugins/web-search`, item 34): one tool `search` {query, limit ≤ 10} → {results: [{title, url,
   snippet}]} through DuckDuckGo (the unofficial `ddgs` library: free, no key; rate limits and errors are plain
   lines), `sends_off_machine`. The built-in Brave `search` provider (API 1.44) still works and can be retired later.
@@ -4197,7 +4205,7 @@ Owner, 2026-11-25: "when i toggle the websearch it should start autimatically an
 launches next time".
 
 - **`run`** in a plugin's manifest ({cmd, host}, host default `mac`) says how its service starts; without it, you start
-  it yourself (`start`), as the Claude Code bridge stays (personal, repo only).
+  it yourself (`start`).
 - **What should run** (registry.schema.json `plugin_runs`): studio writes KV `host_settings` key `<host>.plugins` =
   the names of the plugins that are on, usable, and declare `run` with that host, on every change (on, off, Remove,
   Rescan, the folder watch) and at start. Names only.
@@ -4206,7 +4214,9 @@ launches next time".
   plugin folders (`RUNNER_PLUGINS_DIRS`: the repo's or app's `plugins/`, then `~/.helm/plugins`; a folder only, never
   a .zip) and runs `run.cmd` in that folder, in its own process group, output appended to `~/.helm/logs/<plugin>.log`
   (`HELM_HOME` overrides `~/.helm`). A plugin that leaves the list is stopped (SIGTERM, then SIGKILL after 5 s). One
-  that exits is started again after a backoff (1 s, doubling to 60 s; reset after 60 s up). When the runner starts,
+  that exits is started again after a backoff (1 s, doubling to 60 s; reset after 60 s up). One that exits 78 (EX_CONFIG) needs
+  you (to install or sign in to something): `failed` with its last output line as the `detail`, started again only
+  at Try again (release 0.1.0-alpha.3 item 1). When the runner starts,
   it starts every plugin on the list, so a plugin that is on stays on across app launches. When it stops, it stops
   them. Each child's process group id is kept in `~/.helm/run/<plugin>.pid`: a group left by a runner that died
   (its command still the plugin's) is stopped before the plugin starts again, at the runner's start, by the Mac app's

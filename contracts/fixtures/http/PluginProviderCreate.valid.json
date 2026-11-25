@@ -1,5 +1,5 @@
 {
   "key": "abc123-token",
-  "title": "Claude Code bridge",
+  "title": "Your Claude subscription",
   "default_model": "claude-sonnet"
 }

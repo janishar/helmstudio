@@ -4,7 +4,8 @@ Every POLL seconds this reads KV host_settings key <host>.plugins (the names stu
 keeps each one's `run.cmd` running from its own folder in RUNNER_PLUGINS_DIRS (first folder wins a name; a real folder,
 never a symlink or a .zip): its own process group, a clean env (never the runner's NATS or S3 secrets), output appended
 to $HELM_HOME/logs/<name>.log. One that exits is started again after a backoff (1 s doubling to 60 s, reset after 60 s
-up); one that leaves the list is stopped (SIGTERM to the group, SIGKILL after 5 s). Each state change is published to
+up); one that exits 78 needs you (install, sign in): failed with its last output line, started again only at Try again.
+One that leaves the list is stopped (SIGTERM to the group, SIGKILL after 5 s). Each state change is published to
 KV registry key <host>.<env>.plugins. The first read after the runner starts starts every plugin on the list.
 
 Each child's pid (= its group) is in $HELM_HOME/run/<name>.pid while it runs: a runner that died without stopping its
@@ -37,6 +38,7 @@ KEY = f"{HOST}.{ENV}.plugins"
 POLL = 5  # seconds between reads of the key
 RETRY = 60  # seconds between tries to open the bucket
 LOG_CAP = 5 * 1024 * 1024  # a log over this when a plugin starts is emptied first
+NEEDS_YOU = 78  # EX_CONFIG: a plugin that can't run until you act (install, sign in): no backoff, waits for Try again
 
 
 class Refused(Exception):
@@ -80,8 +82,9 @@ def child_env(home: Path) -> dict:
     """A plugin's whole env: never the runner's own (NATS_*, S3_*, …)."""
     env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin:/usr/sbin:/sbin"),
            "HOME": os.environ.get("HOME", str(Path.home())), "HELM_HOME": str(home)}  # fmt: skip
-    if lang := os.environ.get("LANG"):
-        env["LANG"] = lang
+    for k in ("LANG", "USER", "LOGNAME"):  # USER: macOS keychain lookups (claude's sign-in) need it
+        if v := os.environ.get(k):
+            env[k] = v
     return env
 
 
@@ -247,6 +250,7 @@ class Supervisor:
         self.run.mkdir(parents=True, exist_ok=True, mode=0o700)
         path = self.logs / f"{name}.log"
         while True:
+            needs_you = False
             try:
                 argv, cwd = resolve(self.dirs, name, self.host)
                 await self.reap(name, argv, cwd)
@@ -278,13 +282,13 @@ class Supervisor:
                 if loop.time() - started >= self.reset_s:
                     delay = self.backoff[0]
                 log.warning("plugin %s exited %s", name, proc.returncode)
-                await self.set(
-                    name,
-                    "failed",
-                    f"it stopped {stops} times: exit {proc.returncode}: {last_line(path)}",
-                )
+                if needs_you := proc.returncode == NEEDS_YOU:
+                    await self.set(name, "failed", last_line(path) or "it needs you: see its log")
+                else:
+                    await self.set(name, "failed",
+                                   f"it stopped {stops} times: exit {proc.returncode}: {last_line(path)}")  # fmt: skip
             with contextlib.suppress(TimeoutError):
-                await asyncio.wait_for(kick.wait(), delay)
+                await asyncio.wait_for(kick.wait(), None if needs_you else delay)
             delay = self.backoff[0] if kick.is_set() else min(delay * 2, self.backoff[1])
             kick.clear()
             self.states[name]["restarts"] += 1

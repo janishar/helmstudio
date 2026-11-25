@@ -15,14 +15,14 @@ import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
 ENV_FILE = Path(os.environ.get("BRIDGE_ENV") or "~/.helm/claude-code-bridge.env").expanduser()
 ENV = dict(l.split("=", 1) for l in ENV_FILE.read_text().split() if "=" in l)
 TOKEN = ENV["BRIDGE_TOKEN"]
 HOST, PORT = ENV.get("BRIDGE_HOST", "127.0.0.1"), int(ENV.get("BRIDGE_PORT", "8420"))
 TIMEOUT = int(ENV.get("BRIDGE_TIMEOUT", "180"))
 MODELS = {"claude-sonnet": "sonnet", "claude-opus": "opus", "claude-haiku": "haiku"}
-WORK = HERE / "work"  # empty cwd: no project CLAUDE.md to find
+# empty cwd: no project CLAUDE.md; never in plugins/ (the app's copy is read-only), never a shared /tmp path
+WORK = Path(os.environ.get("HELM_HOME") or Path.home() / ".helm") / "run" / "claude-bridge-work"
 # every env var that would switch the CLI off the subscription login
 DROP = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "CLAUDE_CODE_OAUTH_TOKEN",
         "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY", "AWS_BEARER_TOKEN_BEDROCK")
@@ -234,7 +234,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    WORK.mkdir(exist_ok=True)
+    WORK.mkdir(parents=True, exist_ok=True, mode=0o700)
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"claude bridge on http://{HOST}:{PORT}/v1 (personal use only)", flush=True)
     server.serve_forever()

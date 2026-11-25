@@ -90,7 +90,7 @@ describe("skills on the Plugins page", () => {
       "New skill in plugins/: Animator. It stays Off.",
     );
     expect(rescanLine({ ...r, new: ["claude-code-bridge", "cine"] })).toBe(
-      "1 new plugin: Claude Code bridge. It stays Off. New skill in ~/.helm/plugins: Cinematographer. It stays Off.",
+      "1 new plugin: Your Claude subscription. It stays Off. New skill in ~/.helm/plugins: Cinematographer. It stays Off.",
     );
     expect(newSkill({ ...r, new: ["claude-code-bridge"] })).toBe("");
   });
