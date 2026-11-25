@@ -43,7 +43,6 @@ import {
   Plus,
   Redo2,
   RotateCcw,
-  Settings,
   Sparkles,
   Trash2,
   Undo2,
@@ -2063,21 +2062,21 @@ export function AssistantDrawer({ a }: { a: AssistantApi }) {
   );
 }
 
-/** The header's gear (plan 32): the Assistant page. */
+/** The header's Assistant button (plan 32; the rail's Assistant icon, owner 2026-11-25): opens the Assistant page. */
 function SettingsButton({ a }: { a: AssistantApi }) {
   const router = useRouter();
   return (
     <button
       type="button"
       className="ib"
-      aria-label="Settings"
-      title="Settings"
+      aria-label="Assistant page"
+      title="Assistant page"
       onClick={() => {
         a.close();
         router.push("/assistant");
       }}
     >
-      <Settings size={15} strokeWidth={1.75} aria-hidden />
+      <Sparkles size={15} strokeWidth={1.75} aria-hidden />
     </button>
   );
 }

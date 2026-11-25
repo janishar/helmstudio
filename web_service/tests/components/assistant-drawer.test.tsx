@@ -230,7 +230,7 @@ describe("the drawer", () => {
     expect(within(drawer()).getByText("Your admin turned it off.")).toBeTruthy();
     expect(within(drawer()).queryByRole("button", { name: "Turn on" })).toBeNull();
     expect(screen.queryByRole("textbox", { name: "Message the assistant" })).toBeNull();
-    fireEvent.click(within(drawer()).getByRole("button", { name: "Settings" }));
+    fireEvent.click(within(drawer()).getByRole("button", { name: "Assistant page" }));
     expect(push).toHaveBeenCalledWith("/assistant");
   });
 
