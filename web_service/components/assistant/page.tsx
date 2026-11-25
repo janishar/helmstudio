@@ -1357,7 +1357,7 @@ function SavedStep({ saved, settings, onCancel, saveWith }: Step & { saved: Prov
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** A model-provider plugin (Your Claude subscription): no API key, its state and disclaimer; Save turns the plugin on,
- * waits for it to run, adds it as the caller's own provider once (Add as provider, with the plugin's own token) and
+ * waits for it to run, adds it as the caller's own provider once (Add as provider; its token from its host, API 1.73) and
  * saves the Assistant with it. */
 function PluginStep({
   plugin: p,
@@ -1378,6 +1378,7 @@ function PluginStep({
   // the plugin's token (its key_hint), only in the field itself
   const token = useRef<HTMLInputElement>(null);
   const [typed, setTyped] = useState(false);
+  const needsKey = !p.provider && !p.key_from_host; // API 1.73: studio gets its key from its host
   const { busy, error, setError, run } = useBusy();
   const tone = st.tone === "red" ? "#ff8a8a" : "#f2c14e";
   const [rest, link] = [p.disclaimer?.text ?? "", p.disclaimer?.link];
@@ -1414,7 +1415,7 @@ function PluginStep({
         </div>
       )}
       <span className="line">No key: it uses your own Claude login. Save turns the plugin on.</span>
-      {!p.provider && (
+      {needsKey && (
         <div className="fl">
           <label htmlFor="f-token">Bridge token</label>
           <input
@@ -1452,7 +1453,7 @@ function PluginStep({
       <Foot
         error={error}
         busy={busy}
-        disabled={(p.enabled && !running) || !chosen || (!p.provider && !typed)}
+        disabled={(p.enabled && !running) || !chosen || (needsKey && !typed)}
         onCancel={onCancel}
         onSave={() =>
           void run(async () => {
@@ -1481,7 +1482,10 @@ function PluginStep({
                 await ok(
                   api.POST("/v1/studio/admin/plugins/{plugin}/provider", {
                     params: { path: { plugin: p.name } },
-                    body: { key: token.current?.value ?? "", default_model: chosen },
+                    body: {
+                      key: needsKey ? token.current?.value : undefined,
+                      default_model: chosen,
+                    },
                   }),
                 )
               ).name;

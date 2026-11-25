@@ -328,6 +328,39 @@ describe("the admin's page", () => {
     }
   });
 
+  it("setup with Your Claude subscription: no token field; Save adds it without a key (API 1.73)", async () => {
+    plugins.push(
+      plugin({
+        name: "claude-code-bridge",
+        title: "Your Claude subscription",
+        kind: "model-provider",
+        status: "running",
+        models: ["claude-sonnet"],
+        key_from_host: true,
+      }),
+    );
+    try {
+      serve(settings({ enabled: false, provider: null, updated_at: null }), []);
+      const post = answer("POST", {
+        "/v1/studio/admin/plugins/{plugin}/provider": () => ({
+          data: { ...server, name: "claude-code-bridge-7d1e5c2a", plugin: "claude-code-bridge" },
+        }),
+      });
+      render(<AssistantScreen setup={false} />);
+      const form = await screen.findByRole("region", { name: "Set up the Model" });
+      fireEvent.click(within(form).getByRole("radio", { name: /Your Claude subscription/ }));
+      expect(within(form).queryByLabelText("Bridge token")).toBeNull();
+      echo();
+      fireEvent.click(within(form).getByRole("button", { name: "Save" }));
+      await waitFor(() => expect(post).toHaveBeenCalled());
+      const body = (post.mock.calls[0][1] as { body: Record<string, unknown> }).body;
+      expect(body.key).toBeUndefined();
+      expect(body.default_model).toBe("claude-sonnet");
+    } finally {
+      plugins.pop();
+    }
+  });
+
   it("setup with DeepSeek: the key found, the models fetched by themselves, Save creates it, saves it on and opens the drawer", async () => {
     serve(settings({ enabled: false, provider: null, updated_at: null }), [], {
       "/v1/studio/admin/provider-keys/{key_secret}": () => ({

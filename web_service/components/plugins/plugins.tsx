@@ -658,6 +658,7 @@ function AddProvider({ p, onAdded }: { p: Plugin; onAdded: (title: string) => vo
   const [model, setModel] = useState(p.models?.[0] ?? "");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<{ text: string; red: boolean } | null>(null);
+  const fromHost = !!p.key_from_host; // API 1.73: studio gets its key from its host
   async function add() {
     setBusy(true);
     setErr(null);
@@ -665,7 +666,11 @@ function AddProvider({ p, onAdded }: { p: Plugin; onAdded: (title: string) => vo
       const made = await ok(
         api.POST("/v1/studio/admin/plugins/{plugin}/provider", {
           ...path(p.name),
-          body: { key, title: title.trim() || undefined, default_model: model || undefined },
+          body: {
+            key: fromHost ? undefined : key,
+            title: title.trim() || undefined,
+            default_model: model || undefined,
+          },
         }),
       );
       setKey("");
@@ -698,34 +703,38 @@ function AddProvider({ p, onAdded }: { p: Plugin; onAdded: (title: string) => vo
           onChange={(e) => setTitle(e.target.value)}
         />
       </div>
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="pl-key" className="label">
-          Key
-        </label>
-        <input
-          id="pl-key"
-          className="in"
-          type="password"
-          autoComplete="off"
-          required
-          placeholder={p.start ? `Paste the key from ${p.start.split("/").pop()}` : "Paste the key"}
-          value={key}
-          onChange={(e) => setKey(e.target.value)}
-        />
-        {p.key_hint && (
-          <span className="text-[12px] text-t2">
-            {keyPath ? (
-              <>
-                {p.key_hint.slice(0, p.key_hint.indexOf(keyPath))}
-                <span className="mono">{keyPath}</span>
-                {p.key_hint.slice(p.key_hint.indexOf(keyPath) + keyPath.length)}
-              </>
-            ) : (
-              p.key_hint
-            )}
-          </span>
-        )}
-      </div>
+      {!fromHost && (
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="pl-key" className="label">
+            Key
+          </label>
+          <input
+            id="pl-key"
+            className="in"
+            type="password"
+            autoComplete="off"
+            required
+            placeholder={
+              p.start ? `Paste the key from ${p.start.split("/").pop()}` : "Paste the key"
+            }
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+          />
+          {p.key_hint && (
+            <span className="text-[12px] text-t2">
+              {keyPath ? (
+                <>
+                  {p.key_hint.slice(0, p.key_hint.indexOf(keyPath))}
+                  <span className="mono">{keyPath}</span>
+                  {p.key_hint.slice(p.key_hint.indexOf(keyPath) + keyPath.length)}
+                </>
+              ) : (
+                p.key_hint
+              )}
+            </span>
+          )}
+        </div>
+      )}
       {!!p.models?.length && (
         <div className="flex flex-col gap-1.5">
           <label htmlFor="pl-model" className="label">
@@ -762,7 +771,11 @@ function AddProvider({ p, onAdded }: { p: Plugin; onAdded: (title: string) => vo
           Checking the key with {p.title}…
         </div>
       )}
-      <button type="submit" className="key h-12 rounded-[14px] text-sm" disabled={busy || !key}>
+      <button
+        type="submit"
+        className="key h-12 rounded-[14px] text-sm"
+        disabled={busy || (!fromHost && !key)}
+      >
         {busy ? "Adding…" : "Add"}
       </button>
     </form>
