@@ -2,7 +2,7 @@
 
 [← Plan index](../README.md)
 
-Status: **draft for the owner (2026-11-25); boards to draw, then approval.** For 0.1.0-alpha.4
+Status: **boards approved by the owner (2026-11-25, "Approve"): [Assistant](../mock/Assistant.dc.html) frames 19–22 and [AdminAgents](../mock/AdminAgents.dc.html), with the boards' answers to 36.9 (a top-level Assistant page; the drawer's rail button renamed Chat, ⌘J; Memory on the page and in the drawer; a non-admin sees the page read-only; Your Claude subscription stays pickable when remote models are off). Frames 1–18 get the Chat rename when built.** For 0.1.0-alpha.4
 ([release list](../release/0.1.0-alpha.4.md)). Not in a milestone, like plans 25–31.
 
 The owner's asks, 2026-11-25: "next alpha.4 plan better ux for assitant - move from the model provider and ai agents
@@ -110,7 +110,7 @@ To draw before building ([Assistant](../mock/Assistant.dc.html), new frames):
 - 22 · The Assistant page for a non-admin (read-only).
 - [AdminAgents](../mock/AdminAgents.dc.html): the table without the Assistant, with the link line.
 
-### 36.9 Open questions (owner)
+### 36.9 Open questions (answered by the approved boards)
 
 1. The page's place: top-level **Assistant** in the main navigation (recommended), or a section of Settings.
 2. Memory: on the page and in the drawer (recommended), or only on the page.
