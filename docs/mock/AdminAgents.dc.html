@@ -58,6 +58,9 @@ th{font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--t2)}
 tbody tr:last-child td{border-bottom:0}
 td.m{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t2)}
 nav button[aria-label="Admin"] svg{background:linear-gradient(155deg,#c9ced9,#5b6478)}
+nav button[aria-label="Assistant"] svg{background:linear-gradient(155deg,#d8f58c,#3c9a2e)}
+nav button[aria-label="Chat"] svg{background:linear-gradient(155deg,#b9f0d0,#2f8f6a)}
+.rsep{width:32px;height:1px;background:var(--s4);display:block}
 .in{width:100%;height:38px;box-sizing:border-box;border-radius:10px;border:0;background:var(--s4);color:var(--t1);font:inherit;font-size:13px;padding:0 12px}
 .tag{padding:2px 8px;border-radius:999px;background:var(--s4);font-size:11px;font-weight:500}
 .tag.adm{background:var(--a1);color:var(--on1)}
@@ -99,7 +102,10 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <button aria-label="Gallery" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="9" cy="10" r="2"></circle><path d="m21 16-5-5L5 20"></path></svg></button>
 <button aria-label="Timeline" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 17h18"></path><rect x="5" y="4" width="6" height="6" rx="1.5"></rect><rect x="12" y="14" width="7" height="6" rx="1.5"></rect></svg></button>
 <button aria-label="Models" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"></path><path d="m3 8 9 5 9-5M12 13v8"></path></svg></button>
+<button aria-label="Assistant" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path><path d="M20 3v4M22 5h-4"></path></svg></button>
 <button aria-label="Admin" aria-current="page" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: var(--s2); color: var(--a1); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.5 3.2 7.6 8 9 4.8-1.4 8-4.5 8-9V6l-8-3Z"></path><path d="m9 12 2 2 4-4"></path></svg></button>
+<span class="rsep" aria-hidden="true"></span>
+<button aria-label="Chat" aria-expanded="false" title="Chat (⌘J)" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"></path><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"></path></svg></button>
 <details style="position: relative; margin-top: 6px">
 <summary aria-label="Settings" style="list-style: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10px; font-weight: 500; color: var(--t2)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 36px; height: 36px; padding: 8px; box-sizing: border-box; border-radius: 12px; color: #fff; background: linear-gradient(155deg, #a7b0c2, #4b5468); box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg>Settings</summary>
 <div style="position: absolute; left: 70px; bottom: 0; z-index: 5; width: 220px; box-sizing: border-box; padding: 14px; border-radius: 18px 18px 18px 8px; background: var(--s2); box-shadow: 0 24px 40px -12px color-mix(in srgb, var(--shd) 80%, transparent); display: flex; flex-direction: column; gap: 8px">
@@ -132,44 +138,21 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <button role="tab" aria-selected="false" class="chip">Model providers</button>
 <button role="tab" aria-selected="true" class="chip" style="background: var(--t1); color: var(--p0); font-weight: 600">AI agents</button>
 </div>
+<div role="note" style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 12px; background: var(--s1); font-size: 13px"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--a1)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 auto"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path></svg><span style="flex: 1 1 auto">The Assistant has its own page.</span><a href="#" aria-label="Open the Assistant page" style="font-weight: 600; color: var(--t1)">Open</a></div>
 <span style="font-size: 13px; color: var(--t2)">Each AI job and the model that does it. Providers and their keys are set in Model providers.<button class="i" aria-label="More information" title="Local runs on your own GPU hosts in the shared queue and sends nothing out. Remote sends what the row says to that provider, and only while the deployment's remote switch (REMOTE_MODELS) is on.">i</button></span>
 <div style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 6px 8px; overflow-x: auto">
 <table style="border-collapse: collapse; width: 100%; min-width: 760px">
 <thead><tr><th>Job</th><th>Model</th><th>Sends</th><th>Status</th><th>Actions</th></tr></thead>
 <tbody>
-<tr aria-selected="true" style="background: var(--s3)"><td style="font-weight: 600">Assistant<br><span class="m" style="font-weight: 400">the in-app assistant (plan 18)</span></td><td class="m">DeepSeek · deepseek-chat<br>web search: Brave</td><td><span class="tag adm">remote</span><br><span style="font-size: 12px; color: #f2c14e">your messages to DeepSeek</span></td><td>On<br><span style="font-size: 12px; color: var(--t2)">200 calls · 2 M tokens a day</span></td><td><button class="chip" style="height: 30px">Edit</button></td></tr>
 <tr aria-selected="true" style="background: var(--s3)"><td style="font-weight: 600">Session names<br><span class="m" style="font-weight: 400">names an untitled session after its first run</span></td><td class="m">DeepSeek · deepseek-chat</td><td><span class="tag adm">remote</span><br><span style="font-size: 12px; color: #f2c14e">the prompt to DeepSeek</span></td><td>On<br><span style="font-size: 12px; color: var(--t2)">never over your titles</span></td><td><button class="chip" style="height: 30px">Edit</button></td></tr>
 </tbody>
 </table>
 </div>
 
-<section aria-label="Assistant settings" style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px">
-<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
-<h2 style="margin: 0; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 16px; font-weight: 700">Assistant<button class="i" aria-label="More information" title="Plan 18's settings, moved here from Model providers when branch assistant merges. Same API: /v1/studio/admin/assistant.">i</button></h2>
-<button role="switch" aria-checked="true" aria-label="Assistant on" style="flex: 0 0 auto; width: 44px; height: 26px; border-radius: 999px; border: 0; background: var(--a1); padding: 2px; display: flex; justify-content: flex-end"><span style="width: 20px; height: 20px; border-radius: 50%; background: var(--on1); display: block"></span></button>
-</div>
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px">
-<div style="display: flex; flex-direction: column; gap: 6px"><label for="a-prov" style="font-size: 12px; color: var(--t2)">Provider</label><select id="a-prov" class="in"><option>DeepSeek (remote)</option><option>Ollama on the Mac (local server)</option></select></div>
-<div style="display: flex; flex-direction: column; gap: 6px"><label for="a-model" style="font-size: 12px; color: var(--t2)">Model</label><select id="a-model" class="in"><option>deepseek-chat (default)</option></select></div>
-</div>
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: end">
-<label style="display: flex; align-items: center; gap: 10px; min-height: 38px; font-size: 13px"><input type="checkbox" checked style="accent-color: var(--a1)">Web search</label>
-<div style="display: flex; flex-direction: column; gap: 6px"><label for="a-search" style="font-size: 12px; color: var(--t2)">Search provider</label><select id="a-search" class="in"><option>Brave (search)</option></select></div>
-</div>
-<span style="font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--t2)">Caps per user</span>
-<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px">
-<div style="display: flex; flex-direction: column; gap: 6px"><label for="a-c1" style="font-size: 12px; color: var(--t2)">Model calls a day</label><input id="a-c1" class="in" value="200"></div>
-<div style="display: flex; flex-direction: column; gap: 6px"><label for="a-c2" style="font-size: 12px; color: var(--t2)">Tokens a day</label><input id="a-c2" class="in" value="2000000"></div>
-<div style="display: flex; flex-direction: column; gap: 6px"><label for="a-c3" style="font-size: 12px; color: var(--t2)">Look at, an hour</label><input id="a-c3" class="in" value="20"></div>
-<div style="display: flex; flex-direction: column; gap: 6px"><label for="a-c4" style="font-size: 12px; color: var(--t2)">Messages a minute</label><input id="a-c4" class="in" value="6"></div>
-</div>
-<div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap"><span style="font-size: 12px; color: #f2c14e">Sends your messages, the screen summary and tool results to DeepSeek; never images.</span><div style="flex-grow: 1"></div><button class="chip">Cancel</button><button style="height: 38px; padding: 0 18px; border-radius: 10px; border: 0; background: var(--a1); color: var(--on1); font-weight: 600; font-size: 13px">Save</button></div>
-</section>
-
 <section aria-label="Other states" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start">
-<div style="grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 12px; background: var(--s1); font-size: 12px; color: var(--t2)"><span style="flex: 1 1 auto">Until Edit the Assistant box is closed. Edit opens it and marks the row; Cancel or Save closes it. Session names' Edit marks its row and moves to the panel beside.</span><button class="chip" style="height: 30px">Edit</button></div>
+<div style="grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 12px; background: var(--s1); font-size: 12px; color: var(--t2)"><span style="flex: 1 1 auto">Edit marks the row and moves to the panel beside.</span><button class="chip" style="height: 30px">Edit</button></div>
 <div style="display: flex; flex-direction: column; gap: 8px">
-<span style="font-size: 12px; color: var(--t2)">Before branch assistant merges: the Session names row alone</span>
+<span style="font-size: 12px; color: var(--t2)">Session names off</span>
 <div style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 6px 8px">
 <table style="border-collapse: collapse; width: 100%">
 <thead><tr><th>Job</th><th>Model</th><th>Status</th></tr></thead>
@@ -187,31 +170,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 </div>
 </section>
 
-<h2 class="h" style="margin-top: 4px">CONTEXT AND CACHE · ALPHA.2 ITEM 30 · APPROVED (OWNER, 2026-11-25)</h2>
-<section aria-label="Context and cache" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start">
-<div style="display: flex; flex-direction: column; gap: 8px">
-<span style="font-size: 12px; color: var(--t2)">In the Assistant box, under Provider and Model</span>
-<div style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 16px 18px; display: flex; flex-direction: column; gap: 10px">
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: end">
-<div style="display: flex; flex-direction: column; gap: 6px"><label for="a-win" style="font-size: 12px; color: var(--t2)">Chat window, tokens<button class="i" aria-label="More information" title="The model's real limit. Past 70% the oldest half of a chat folds once into a short summary, so plans and decisions stay. A smaller window costs less per answer.">i</button></label><input id="a-win" class="in" value="60000"></div>
-<span style="font-size: 12px; color: var(--t2); padding-bottom: 9px">for deepseek-chat · 60000 until set</span>
-</div>
-<span style="font-size: 12px; color: var(--t2)">Each model keeps its own. Past 70% the oldest half folds into a summary.</span>
-</div>
-</div>
-<div style="display: flex; flex-direction: column; gap: 8px">
-<span style="font-size: 12px; color: var(--t2)">Below the Assistant box: prompt cache, last 30 days</span>
-<div style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 6px 8px">
-<table style="border-collapse: collapse; width: 100%">
-<thead><tr><th>Model</th><th>Calls</th><th>Cache hits<button class="i" aria-label="More information" title="The share of prompt tokens the provider read from its cache, as each reply reported. Hits cost less. A model whose replies report none is not listed.">i</button></th></tr></thead>
-<tbody>
-<tr><td class="m">DeepSeek · deepseek-chat</td><td class="m">1,284</td><td><span style="display: flex; align-items: center; gap: 8px"><span style="flex: 0 0 96px; height: 6px; border-radius: 999px; background: var(--s4); overflow: hidden"><span style="display: block; width: 85%; height: 100%; background: var(--a1)"></span></span><b style="font-weight: 600">85%</b></span></td></tr>
-<tr><td class="m">OpenAI · gpt-5-mini</td><td class="m">12</td><td><span style="display: flex; align-items: center; gap: 8px"><span style="flex: 0 0 96px; height: 6px; border-radius: 999px; background: var(--s4); overflow: hidden"><span style="display: block; width: 41%; height: 100%; background: var(--a1)"></span></span><b style="font-weight: 600">41%</b></span></td></tr>
-</tbody>
-</table>
-</div>
-</div>
-</section>
+<h2 class="h" style="margin-top: 4px">PLAN 32 · ALPHA.4 DRAFT: THE ASSISTANT ROW, ITS SETTINGS AND CONTEXT AND CACHE MOVED TO THE ASSISTANT PAGE</h2>
 </main>
 
 <aside aria-label="Session names" style="flex: 1 1 340px; box-sizing: border-box; padding: 16px 18px 24px; border-left: 1px solid var(--s3); background: var(--p0); display: flex; flex-direction: column; gap: 12px">

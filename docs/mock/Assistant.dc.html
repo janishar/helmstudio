@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Assistant: the drawer on Create, Graph and Timeline, phone, cards, chains, memory</title>
+<title>Assistant: the drawer on Create, Graph and Timeline, phone, cards, chains, memory, the Assistant page</title>
 <script src="./support.js"></script>
 </head>
 <body>
@@ -224,6 +224,64 @@ nav button[aria-label="Assistant"][aria-expanded="true"] svg{filter:none;outline
 .sum{display:flex;align-items:center;gap:8px;width:100%;min-height:32px;padding:0 8px;border:0;border-radius:10px;background:var(--s1);color:var(--t1b);font-size:12px;text-align:left;box-shadow:none!important}
 .sum span{flex:1 1 auto}
 /* A2-CSS-END */
+/* A4-CSS-START */
+/* plan 32: the Assistant page, the setup form, the drawer's setup states */
+nav button[aria-label="Admin"] svg{background:linear-gradient(155deg,#c9ced9,#5b6478)}
+nav button[aria-label="Chat"] svg{background:linear-gradient(155deg,#b9f0d0,#2f8f6a)}
+nav button[aria-label="Chat"][aria-expanded="true"]{color:var(--t1)!important}
+nav button[aria-label="Chat"][aria-expanded="true"] svg{filter:none;outline:2px solid rgba(255,255,255,.85);outline-offset:2px}
+.rsep{width:32px;height:1px;background:var(--s4);display:block}
+.in{width:100%;height:38px;box-sizing:border-box;border-radius:10px;border:0;background:var(--s4);color:var(--t1);font:inherit;font-size:13px;padding:0 12px}
+.in:disabled{opacity:.6}
+.tag.adm{background:var(--a1);color:var(--on1)}
+.pt{margin:0;font-family:'Bricolage Grotesque',Inter,sans-serif;font-size:22px;font-weight:700;letter-spacing:.01em;display:flex;align-items:center;gap:10px}
+.lgp{width:32px;height:32px;border-radius:10px;display:grid;place-items:center;color:#fff;background:linear-gradient(155deg,#d8f58c,#3c9a2e);box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 8px 14px -4px color-mix(in srgb,var(--shd) 70%,transparent)}
+.stp{padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600;white-space:nowrap}
+.sw{flex:0 0 auto;width:44px;height:26px;border-radius:999px;border:0;padding:2px;display:flex;box-shadow:none!important}
+.sw span{width:20px;height:20px;border-radius:50%;display:block}
+.pgg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start}
+.pgc{display:flex;flex-direction:column;gap:16px;min-width:0}
+.pgh{display:flex;align-items:center;gap:10px}
+.pgh h2{margin:0;flex:1 1 auto;font-family:'Bricolage Grotesque',Inter,sans-serif;font-size:16px;font-weight:700}
+.fl{display:flex;flex-direction:column;gap:6px;min-width:0}
+.fl label{font-size:12px;color:var(--t2)}
+.g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.g4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.sub{font-size:12px;font-weight:600;letter-spacing:.04em;color:var(--t2)}
+.sv{display:flex;align-items:center;gap:8px}
+.key{height:34px;padding:0 18px;border-radius:10px;border:0;background:var(--a1);color:var(--on1);font-weight:600;font-size:13px}
+.warn{font-size:12px;line-height:17px;color:#f2c14e}
+.byadm{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:999px;background:var(--s3);font-size:11px;font-weight:600;color:var(--t2);white-space:nowrap}
+.who{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;background:var(--s2)}
+.who>div{flex:1 1 auto;min-width:0}
+.who b{display:block;font-weight:600}
+.who small{display:block;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t2)}
+.lg{width:34px;height:34px;flex:0 0 auto;border-radius:10px 10px 10px 4px;display:grid;place-items:center;font-style:normal;font-family:'Bricolage Grotesque',Inter,sans-serif;font-weight:700;font-size:15px;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.35)}
+.trow{display:flex;align-items:flex-start;gap:12px;padding:10px 12px;border-radius:12px;background:var(--s2)}
+.trow>div{flex:1 1 auto;min-width:0}
+.trow b{display:block;font-size:13px;font-weight:600}
+.trow small{display:block;font-size:12px;line-height:16px;color:var(--t2)}
+.tb{border-collapse:collapse;width:100%}
+.tb th{padding:8px 10px;text-align:left;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--t2);border-bottom:1px solid var(--s3)}
+.tb td{padding:8px 10px;font-size:13px}
+.m{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t2)}
+.stp2{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:var(--t2)}
+.stp2 b{width:20px;height:20px;border-radius:50%;background:var(--s4);color:var(--t1);display:grid;place-items:center;font-size:11px}
+.pks{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px}
+.pk{position:relative;display:flex;align-items:flex-start;gap:10px;min-height:64px;box-sizing:border-box;padding:10px 12px;border:0;border-radius:16px 16px 16px 6px;background:var(--s3);text-align:left;font-size:13px;line-height:17px}
+.pk>span{flex:1 1 auto;min-width:0}
+.pk b{display:block;font-weight:600}
+.pk small{display:block;font-size:11px;line-height:15px;color:var(--t2)}
+.pk.on{background:color-mix(in srgb,var(--a2) 16%,var(--s3));box-shadow:inset 0 0 0 2px var(--a2)!important}
+.pk.fade{opacity:.4;cursor:default}
+.pst{display:inline-flex;align-items:center;gap:5px;margin-top:3px;font-size:11px;font-weight:600;color:#f2c14e}
+.dt{width:8px;height:8px;border-radius:50%;display:inline-block;flex:0 0 auto}
+.sum2{display:flex;align-items:center;gap:12px;padding:12px 18px;border-radius:14px 14px 14px 6px;background:var(--s1);font-family:'Bricolage Grotesque',Inter,sans-serif;font-size:14px;font-weight:700}
+.sum2 span{font-family:Inter,sans-serif;font-size:12px;font-weight:400;color:var(--t2)}
+.su{flex:1 1 auto;display:flex;flex-direction:column;justify-content:center;gap:10px;padding:8px 4px 12px}
+.mini .su{padding:28px 4px 20px}
+.sut{margin:0;font-family:'Bricolage Grotesque',Inter,sans-serif;font-size:20px;line-height:26px;font-weight:700}
+/* A4-CSS-END */
 </style>
 </helmet>
 <div data-theme="{{theme}}" style="display: flex; flex-wrap: wrap; background: var(--g); color: var(--t1); font-family: Inter, system-ui, sans-serif; font-size: 14px; line-height: 20px">
@@ -1521,9 +1579,364 @@ nav button[aria-label="Assistant"][aria-expanded="true"] svg{filter:none;outline
 </div>
 </section>
 <!-- A2-END -->
+<!-- A4-START -->
+<!-- ============ 19 · The Assistant page, admin (plan 32) ============ -->
+<section class="board" aria-label="The Assistant page" style="min-height: 960px">
+<div class="rail">
+<div class="rail-logo"><a class="brand" href="#" aria-label="helmstudio, home (Create)" title="helmstudio"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24"><path d="M8 16C8 12.4 10.4 10.6 13.3 10.6S18.4 12.6 18.4 16V21" style="fill:none;stroke:currentColor;stroke-width:3.2;stroke-linecap:round"/><path d="M8 7V21" style="stroke:currentColor;stroke-width:3.2;stroke-linecap:round"/><path d="M5.3 1.6H10.7A.9.9 0 0 1 11.6 2.5V5L8 8.4L4.4 5V2.5A.9.9 0 0 1 5.3 1.6Z" style="fill:currentColor"/></svg></a></div>
+<nav aria-label="Sections" style="flex: 0 0 64px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 0; border-right: 1px solid var(--s3)">
+<button aria-label="Create" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"></path><circle cx="12" cy="12" r="3"></circle></svg></button>
+<button aria-label="Pipelines" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="6" height="6" rx="1.5"></rect><rect x="15" y="14" width="6" height="6" rx="1.5"></rect><path d="M9 7h4a2 2 0 0 1 2 2v5"></path></svg></button>
+<button aria-label="Gallery" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="9" cy="10" r="2"></circle><path d="m21 16-5-5L5 20"></path></svg></button>
+<button aria-label="Timeline" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 17h18"></path><rect x="5" y="4" width="6" height="6" rx="1.5"></rect><rect x="12" y="14" width="7" height="6" rx="1.5"></rect></svg></button>
+<button aria-label="Models" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"></path><path d="m3 8 9 5 9-5M12 13v8"></path></svg></button>
+<button aria-label="Assistant" aria-current="page" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: var(--s2); color: var(--a1); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path><path d="M20 3v4M22 5h-4"></path></svg></button>
+<button aria-label="Admin" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.5 3.2 7.6 8 9 4.8-1.4 8-4.5 8-9V6l-8-3Z"></path><path d="m9 12 2 2 4-4"></path></svg></button>
+<span class="rsep" aria-hidden="true"></span>
+<button aria-label="Chat" aria-expanded="false" title="Chat (⌘J)" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"></path><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"></path></svg></button>
+<details style="position: relative; margin-top: 6px">
+<summary aria-label="Settings" style="list-style: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10px; font-weight: 500; color: var(--t2)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 36px; height: 36px; padding: 8px; box-sizing: border-box; border-radius: 12px; color: #fff; background: linear-gradient(155deg, #a7b0c2, #4b5468); box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg>Settings</summary>
+</details>
+</nav>
+</div>
+<main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 16px; padding: 16px 20px 64px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+<h1 class="pt"><i class="lgp"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path></svg></i>Assistant</h1><span class="stp" style="box-shadow: inset 0 0 0 1px var(--a1); color: var(--a1)">On</span>
+<div style="flex-grow: 1"></div>
+<button role="switch" aria-checked="true" aria-label="Assistant on" class="sw" style="background: var(--a1); justify-content: flex-end"><span style="background: var(--on1)"></span></button>
+</div>
+<span style="font-size: 13px; color: var(--t2)">Who answers, what it can use and what it remembers. Set here for everyone; Memory is yours.</span>
+<div class="pgg">
+<div class="pgc">
+<section aria-label="Model" style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px">
+<div class="pgh"><h2>Model</h2><button class="chip" style="height: 30px">Change</button></div>
+<div class="who"><i class="lg" style="background: linear-gradient(155deg,#7aa8ff,#2f4fd0)">D</i><div><b>DeepSeek</b><small>deepseek-chat · thinking off</small></div><span class="tag adm">remote</span></div>
+<span style="font-size: 12px; color: var(--t2)">Thinking is set per model in <a href="#">Model providers</a>.</span>
+<span class="warn">Sends your messages, the screen summary and tool results to DeepSeek; never images.</span>
+</section>
+<section aria-label="Tools" style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px">
+<div class="pgh"><h2>Tools</h2><a href="#" style="font-size: 12px">Plugins</a></div>
+<div class="trow"><div><b>Web search</b><small>Free, no key. It asks before each search.</small><div class="fl" style="margin: 8px 0 0"><label for="t-s">Search with</label><select id="t-s" class="in"><option>DuckDuckGo, then Bing, Google or Yahoo</option><option>Brave (key in Model providers)</option></select></div></div><button role="switch" aria-checked="true" aria-label="Web search on" class="sw" style="background: var(--a1); justify-content: flex-end"><span style="background: var(--on1)"></span></button></div>
+<div class="trow"><div><b>Media tools</b><small>Crop, resize, trim, join, pull frames. Each edit is a new take.</small></div><button role="switch" aria-checked="true" aria-label="Media tools on" class="sw" style="background: var(--a1); justify-content: flex-end"><span style="background: var(--on1)"></span></button></div>
+<p class="fine">Same switches as in Plugins.</p>
+</section>
+<section aria-label="Skills" style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px">
+<div class="pgh"><h2>Skills</h2><a href="#" style="font-size: 12px">Plugins</a></div>
+<div class="trow"><div><b>Cinematic filmmaker</b><small>A short live-action film, script to MP4.</small></div><button role="switch" aria-checked="true" aria-label="Cinematic filmmaker on" class="sw" style="background: var(--a1); justify-content: flex-end"><span style="background: var(--on1)"></span></button></div>
+<div class="trow"><div><b>Animator</b><small>A cartoon film in one style, script to MP4.</small></div><button role="switch" aria-checked="false" aria-label="Animator on" class="sw" style="background: var(--s1); justify-content: flex-start; box-shadow: inset 0 0 0 1px var(--ln)!important"><span style="background: var(--t2)"></span></button></div>
+<p class="fine">It reads a skill when an ask fits, or when you type @ and pick one.</p>
+</section>
+</div>
+<div class="pgc">
+<section aria-label="Auto mode" style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px">
+<div class="pgh"><h2>Auto mode</h2></div>
+<div class="g4"><div class="fl"><label for="c-at">Auto takes, an hour</label><input id="c-at" class="in" value="8"></div><div class="fl"><label for="c-ag">Auto GPU minutes, an hour</label><input id="c-ag" class="in" value="20"></div></div>
+<span class="sub">Caps per user</span>
+<div class="g4"><div class="fl"><label for="c-mc">Model calls a day</label><input id="c-mc" class="in" value="200"></div><div class="fl"><label for="c-tk">Tokens a day</label><input id="c-tk" class="in" value="2000000"></div><div class="fl"><label for="c-la">Look at, an hour</label><input id="c-la" class="in" value="20"></div><div class="fl"><label for="c-mm">Messages a minute</label><input id="c-mm" class="in" value="6"></div></div>
+<div class="sv"><p class="fine" style="flex: 1 1 auto">Auto still asks for deletes, overwrites and anything sent off the machine.</p><button class="chip" style="height: 34px">Cancel</button><button class="key">Save</button></div>
+</section>
+<section aria-label="Context" style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px">
+<div class="pgh"><h2>Context</h2></div>
+<div class="g2" style="align-items: end"><div class="fl"><label for="c-win">Chat window, tokens</label><input id="c-win" class="in" value="60000"></div><span style="font-size: 12px; color: var(--t2); padding-bottom: 9px">for deepseek-chat · 60000 until set</span></div>
+<span style="font-size: 12px; color: var(--t2)">Each model keeps its own. Past 70% the oldest half folds into a summary.</span>
+<span class="sub">Prompt cache, last 30 days</span>
+<table class="tb"><thead><tr><th>Model</th><th>Calls</th><th>Cache hits</th></tr></thead><tbody>
+<tr><td class="m">DeepSeek · deepseek-chat</td><td class="m">1,284</td><td><span style="display: flex; align-items: center; gap: 8px"><span style="flex: 0 0 96px; height: 6px; border-radius: 999px; background: var(--s4); overflow: hidden"><span style="display: block; width: 85%; height: 100%; background: var(--a1)"></span></span><b style="font-weight: 600">85%</b></span></td></tr>
+<tr><td class="m">OpenAI · gpt-5-mini</td><td class="m">12</td><td><span style="display: flex; align-items: center; gap: 8px"><span style="flex: 0 0 96px; height: 6px; border-radius: 999px; background: var(--s4); overflow: hidden"><span style="display: block; width: 41%; height: 100%; background: var(--a1)"></span></span><b style="font-weight: 600">41%</b></span></td></tr>
+</tbody></table>
+<div class="sv"><span style="flex: 1 1 auto"></span><button class="chip" style="height: 34px">Cancel</button><button class="key">Save</button></div>
+</section>
+<section aria-label="Memory" style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px">
+<div class="pgh"><h2>Memory</h2><span style="font-size: 12px; color: var(--t2)">12 chats · 9 likes · 2 projects</span></div>
+<div role="tablist" aria-label="Memory" style="display: flex; gap: 4px; padding: 3px; border-radius: 12px; background: var(--s3)"><button role="tab" aria-selected="false" style="flex: 1 1 0; height: 30px; border: 0; border-radius: 9px; font-size: 11px; font-weight: 600; background: transparent; color: var(--t2)">Likes</button><button role="tab" aria-selected="false" style="flex: 1 1 0; height: 30px; border: 0; border-radius: 9px; font-size: 11px; font-weight: 600; background: transparent; color: var(--t2)">Projects</button><button role="tab" aria-selected="false" style="flex: 1 1 0; height: 30px; border: 0; border-radius: 9px; font-size: 11px; font-weight: 600; background: transparent; color: var(--t2)">Worked</button><button role="tab" aria-selected="true" style="flex: 1 1 0; height: 30px; border: 0; border-radius: 9px; font-size: 11px; font-weight: 600; background: var(--s5); color: var(--t1)">Chats</button></div>
+<div style="border-radius: 14px; background: var(--s2); padding: 2px"><div class="mrow"><div><p class="clamp" style="margin: 0">Elderly widower film: five shots, Elias and Biscuit. Voice for Elias designed and saved. Shot 1 animated, 5 s; shot 2 waits on the window light.</p><small>Widower · shot 1 · today</small></div><button class="ib" aria-label="More for this item" aria-haspopup="menu" style="width: 28px; height: 28px; background: transparent; box-shadow: none"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></svg></button></div><div class="mrow"><div><p class="clamp" style="margin: 0">Neon rain: <span class="mn">@mara</span> rooftop and bus stills, blue hour look kept.</p><small>Rain still · 2 days ago</small></div><button class="ib" aria-label="More for this item" aria-haspopup="menu" style="width: 28px; height: 28px; background: transparent; box-shadow: none"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></svg></button></div><div class="mrow"><div><p class="clamp" style="margin: 0">Winter fox: dusk walk, 4 takes, take 2 animated.</p><small>Fox run · 21 Nov</small></div><button class="ib" aria-label="More for this item" aria-haspopup="menu" style="width: 28px; height: 28px; background: transparent; box-shadow: none"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></svg></button></div></div>
+<p class="fine">Only yours. Also in the drawer, under <svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"></path><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"></path><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"></path></svg> Memory.</p>
+</section>
+</div>
+</div>
+</main>
+<span class="lbl" style="top: auto; bottom: -1px; border-radius: 10px 10px 0 0">19 · The Assistant page, admin · its own item in the navigation; Chat (⌘J) opens the drawer · the switch turns it off for everyone (plan 32, draft)</span>
+</section>
+<!-- ============ 20 · The setup form (plan 32) ============ -->
+<section class="board" aria-label="The setup form" style="min-height: 960px">
+<div class="rail">
+<div class="rail-logo"><a class="brand" href="#" aria-label="helmstudio, home (Create)" title="helmstudio"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24"><path d="M8 16C8 12.4 10.4 10.6 13.3 10.6S18.4 12.6 18.4 16V21" style="fill:none;stroke:currentColor;stroke-width:3.2;stroke-linecap:round"/><path d="M8 7V21" style="stroke:currentColor;stroke-width:3.2;stroke-linecap:round"/><path d="M5.3 1.6H10.7A.9.9 0 0 1 11.6 2.5V5L8 8.4L4.4 5V2.5A.9.9 0 0 1 5.3 1.6Z" style="fill:currentColor"/></svg></a></div>
+<nav aria-label="Sections" style="flex: 0 0 64px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 0; border-right: 1px solid var(--s3)">
+<button aria-label="Create" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"></path><circle cx="12" cy="12" r="3"></circle></svg></button>
+<button aria-label="Pipelines" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="6" height="6" rx="1.5"></rect><rect x="15" y="14" width="6" height="6" rx="1.5"></rect><path d="M9 7h4a2 2 0 0 1 2 2v5"></path></svg></button>
+<button aria-label="Gallery" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="9" cy="10" r="2"></circle><path d="m21 16-5-5L5 20"></path></svg></button>
+<button aria-label="Timeline" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 17h18"></path><rect x="5" y="4" width="6" height="6" rx="1.5"></rect><rect x="12" y="14" width="7" height="6" rx="1.5"></rect></svg></button>
+<button aria-label="Models" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"></path><path d="m3 8 9 5 9-5M12 13v8"></path></svg></button>
+<button aria-label="Assistant" aria-current="page" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: var(--s2); color: var(--a1); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path><path d="M20 3v4M22 5h-4"></path></svg></button>
+<button aria-label="Admin" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.5 3.2 7.6 8 9 4.8-1.4 8-4.5 8-9V6l-8-3Z"></path><path d="m9 12 2 2 4-4"></path></svg></button>
+<span class="rsep" aria-hidden="true"></span>
+<button aria-label="Chat" aria-expanded="false" title="Chat (⌘J)" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"></path><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"></path></svg></button>
+<details style="position: relative; margin-top: 6px">
+<summary aria-label="Settings" style="list-style: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10px; font-weight: 500; color: var(--t2)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 36px; height: 36px; padding: 8px; box-sizing: border-box; border-radius: 12px; color: #fff; background: linear-gradient(155deg, #a7b0c2, #4b5468); box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg>Settings</summary>
+</details>
+</nav>
+</div>
+<main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 16px; padding: 16px 20px 64px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+<h1 class="pt"><i class="lgp"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path></svg></i>Assistant</h1><span class="stp" style="box-shadow: inset 0 0 0 1px #f2c14e; color: #f2c14e">Not set up</span>
+<div style="flex-grow: 1"></div>
+<button role="switch" aria-checked="false" aria-label="Assistant on" disabled aria-disabled="true" class="sw" style="background: var(--s1); justify-content: flex-start; opacity: 0.55; box-shadow: inset 0 0 0 1px var(--ln)!important"><span style="background: var(--t2)"></span></button>
+</div>
+<span style="font-size: 13px; color: var(--t2)">Pick who answers, then it is ready. You can change it later.</span>
+<div style="max-width: 860px; display: flex; flex-direction: column; gap: 16px">
+<section aria-label="Set up the Model" style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px">
+<div class="pgh"><h2>Model</h2></div>
+<span class="stp2"><b>1</b>Who answers</span>
+<div role="radiogroup" aria-label="Who answers" class="pks">
+<button class="pk" role="radio" aria-checked="false"><i class="lg" style="background: linear-gradient(155deg,#ffb98a,#c8553d)">C</i><span><b>Your Claude subscription</b><small>Your own Claude plan, through Claude Code on this Mac</small><span class="pst"><span class="dt" style="background: #f2c14e"></span>Not running</span></span></button>
+<button class="pk on" role="radio" aria-checked="true"><i class="lg" style="background: linear-gradient(155deg,#7aa8ff,#2f4fd0)">D</i><span><b>DeepSeek</b><small>Remote · needs a key</small></span></button>
+<button class="pk" role="radio" aria-checked="false"><i class="lg" style="background: linear-gradient(155deg,#e9c9a0,#8a6440)">A</i><span><b>Anthropic</b><small>Remote · needs a key</small></span></button>
+<button class="pk" role="radio" aria-checked="false"><i class="lg" style="background: linear-gradient(155deg,#9fe3c8,#1f8a66)">O</i><span><b>OpenAI</b><small>Remote · needs a key</small></span></button>
+<button class="pk" role="radio" aria-checked="false"><i class="lg" style="background: linear-gradient(155deg,#c9ced9,#5b6478)">L</i><span><b>Local server</b><small>Ollama or LM Studio · sends nothing out</small></span></button>
+</div>
+<span class="stp2"><b>2</b>Key</span>
+<div class="fl"><label for="f-key">DeepSeek API key</label><input id="f-key" class="in" type="password" autocomplete="off" placeholder="Paste the key" value="xxxxxxxxxxxxxxxxxxxx"></div>
+<span style="font-size: 12px; color: var(--a1)">✓ Checked with DeepSeek · 2 models</span>
+<span class="stp2"><b>3</b>Model</span>
+<div class="g2"><div class="fl"><label for="f-model">Model</label><select id="f-model" class="in"><option>deepseek-chat (default)</option><option>deepseek-reasoner</option></select></div><span></span></div>
+<span class="warn">Sends your messages, the screen summary and tool results to DeepSeek; never images.</span>
+<div class="sv"><p class="fine" style="flex: 1 1 auto">The key is saved on the server and never shown again.</p><button class="chip" style="height: 38px">Cancel</button><button class="key" style="height: 38px">Save</button></div>
+</section>
+<section aria-label="Tools, Skills, Auto mode, Context, Memory" style="display: flex; flex-direction: column; gap: 8px; opacity: 0.55">
+<div class="sum2">Tools<span>Web search · Media tools</span></div>
+<div class="sum2">Skills<span>Cinematic filmmaker</span></div>
+<div class="sum2">Auto mode<span>8 takes · 20 GPU minutes an hour</span></div>
+<div class="sum2">Context<span>60000 tokens</span></div>
+<div class="sum2">Memory<span>empty</span></div>
+</section>
+</div>
+</main>
+<span class="lbl" style="top: auto; bottom: -1px; border-radius: 10px 10px 0 0">20 · The setup form · Set up or Change opens it in place of Model · the key is checked before saving · Save turns the Assistant on and opens the drawer</span>
+</section>
+<section class="board" aria-label="The setup form, other picks" style="padding: 64px 40px 56px 96px; display: grid; grid-template-columns: repeat(2, 600px); gap: 32px 48px; align-items: start">
+<span class="lbl" style="top: auto; bottom: -1px; border-radius: 10px 10px 0 0">20 · The setup form, other picks · a: Your Claude subscription, no key, its plugin state and disclaimer (shown only to its owner) · b: remote models off, remote cards greyed with the reason</span>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<p class="note">a · Your Claude subscription, not running yet</p>
+<section aria-label="Set up, Your Claude subscription" style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px">
+<div class="pgh"><h2>Model</h2></div>
+<span class="stp2"><b>1</b>Who answers</span>
+<div role="radiogroup" aria-label="Who answers" class="pks">
+<button class="pk on" role="radio" aria-checked="true"><i class="lg" style="background: linear-gradient(155deg,#ffb98a,#c8553d)">C</i><span><b>Your Claude subscription</b><small>Your own Claude plan, through Claude Code on this Mac</small><span class="pst"><span class="dt" style="background: #f2c14e"></span>Not running</span></span></button>
+<button class="pk" role="radio" aria-checked="false"><i class="lg" style="background: linear-gradient(155deg,#7aa8ff,#2f4fd0)">D</i><span><b>DeepSeek</b><small>Remote · needs a key</small></span></button>
+<button class="pk" role="radio" aria-checked="false"><i class="lg" style="background: linear-gradient(155deg,#e9c9a0,#8a6440)">A</i><span><b>Anthropic</b><small>Remote · needs a key</small></span></button>
+<button class="pk" role="radio" aria-checked="false"><i class="lg" style="background: linear-gradient(155deg,#9fe3c8,#1f8a66)">O</i><span><b>OpenAI</b><small>Remote · needs a key</small></span></button>
+<button class="pk" role="radio" aria-checked="false"><i class="lg" style="background: linear-gradient(155deg,#c9ced9,#5b6478)">L</i><span><b>Local server</b><small>Ollama or LM Studio · sends nothing out</small></span></button>
+</div>
+<div class="bar2" style="align-items: flex-start; background: var(--s2)"><span class="dt" style="background: #f2c14e; margin-top: 5px"></span><span class="cap"><b style="font-size: 13px">Not running</b><span style="color: var(--t1b)">Install Claude Code and sign in, then Try again.</span></span><button class="chip" style="height: 30px; font-size: 12px; flex: 0 0 auto">Try again</button></div>
+<span style="font-size: 12px; color: var(--t2)">No key: it uses your own Claude login. Save turns the plugin on.</span>
+<span class="warn">Personal use only. Runs your own Claude login and plan, for you only. Never shared with other accounts. <a href="#" style="color: inherit">Terms</a></span>
+<span class="stp2"><b>2</b>Model</span>
+<div class="g2"><div class="fl"><label for="f-cm">Model</label><select id="f-cm" class="in" disabled><option>claude-sonnet (default)</option></select></div><span></span></div>
+<div class="sv"><span style="flex: 1 1 auto"></span><button class="chip" style="height: 38px">Cancel</button><button class="key" style="height: 38px; opacity: 0.55" disabled>Save</button></div>
+</section>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<p class="note">b · Remote models off: a local server</p>
+<section aria-label="Set up, remote off" style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px">
+<div class="pgh"><h2>Model</h2></div>
+<span class="stp2"><b>1</b>Who answers</span>
+<div role="radiogroup" aria-label="Who answers" class="pks">
+<button class="pk" role="radio" aria-checked="false"><i class="lg" style="background: linear-gradient(155deg,#ffb98a,#c8553d)">C</i><span><b>Your Claude subscription</b><small>Your own Claude plan, through Claude Code on this Mac</small><span class="pst"><span class="dt" style="background: #f2c14e"></span>Not running</span></span></button>
+<button class="pk fade" role="radio" aria-checked="false" aria-disabled="true"><i class="lg" style="background: linear-gradient(155deg,#7aa8ff,#2f4fd0)">D</i><span><b>DeepSeek</b><small>Remote · needs a key</small></span></button>
+<button class="pk fade" role="radio" aria-checked="false" aria-disabled="true"><i class="lg" style="background: linear-gradient(155deg,#e9c9a0,#8a6440)">A</i><span><b>Anthropic</b><small>Remote · needs a key</small></span></button>
+<button class="pk fade" role="radio" aria-checked="false" aria-disabled="true"><i class="lg" style="background: linear-gradient(155deg,#9fe3c8,#1f8a66)">O</i><span><b>OpenAI</b><small>Remote · needs a key</small></span></button>
+<button class="pk on" role="radio" aria-checked="true"><i class="lg" style="background: linear-gradient(155deg,#c9ced9,#5b6478)">L</i><span><b>Local server</b><small>Ollama or LM Studio · sends nothing out</small></span></button>
+</div>
+<span style="font-size: 12px; color: var(--t2)">Remote ones: remote models are off on this deployment.</span>
+<span style="font-size: 12px; color: var(--t2)">Server: Ollama on the Mac · http://host.docker.internal:11434/v1</span>
+<span class="stp2"><b>2</b>Model</span>
+<div class="g2"><div class="fl"><label for="f-lm">Model</label><select id="f-lm" class="in"><option>qwen3.8:27b (default)</option></select></div><span></span></div>
+<span style="font-size: 12px; color: var(--t2)">Runs on your GPU hosts. Sends nothing out.</span>
+<div class="sv"><span style="flex: 1 1 auto"></span><button class="chip" style="height: 38px">Cancel</button><button class="key" style="height: 38px">Save</button></div>
+</section>
+</div>
+</section>
+<!-- ============ 21 · The drawer's setup states (plan 32) ============ -->
+<section class="board" aria-label="The drawer's setup states" style="padding: 64px 40px 56px 96px; display: grid; grid-template-columns: repeat(3, 340px); gap: 32px 48px; align-items: start">
+<span class="lbl" style="top: auto; bottom: -1px; border-radius: 10px 10px 0 0">21 · The drawer's setup states · not set up or off: a message, not a chat · the gear opens the Assistant page · ⌘J works in every state</span>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<p class="note">a · Not set up, an admin</p>
+<div class="mini" aria-label="Assistant, not set up, admin">
+<div class="dh"><h2><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path></svg>Assistant</h2><button class="ib" aria-label="Settings" title="Settings"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg></button><button class="x" aria-label="Close (⌘J)" title="Close (⌘J)"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg></button></div>
+<div class="su"><p class="sut">Set up the Assistant</p><p class="note" style="font-size: 13px; line-height: 19px">Pick the model it talks to. It helps you plan shots, pick workflows and run them.</p><button class="go" style="align-self: flex-start">SET UP</button><p class="fine">Opens the Assistant page.</p></div>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<p class="note">b · Not set up, anyone else</p>
+<div class="mini" aria-label="Assistant, not set up">
+<div class="dh"><h2><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path></svg>Assistant</h2><button class="ib" aria-label="Settings" title="Settings"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg></button><button class="x" aria-label="Close (⌘J)" title="Close (⌘J)"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg></button></div>
+<div class="su"><p class="sut">The Assistant isn't set up yet</p><p class="note" style="font-size: 13px; line-height: 19px">Ask your admin to set it up.</p></div>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 32px">
+<div style="display: flex; flex-direction: column; gap: 10px">
+<p class="note">c · Turned off, an admin</p>
+<div class="mini" aria-label="Assistant, off, admin">
+<div class="dh"><h2><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path></svg>Assistant</h2><button class="ib" aria-label="Settings" title="Settings"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg></button><button class="x" aria-label="Close (⌘J)" title="Close (⌘J)"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg></button></div>
+<div class="su"><p class="sut">The Assistant is off</p><p class="note" style="font-size: 13px; line-height: 19px">Turn it on for everyone, or change it on the Assistant page.</p><button class="go" style="align-self: flex-start">TURN ON</button></div>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<p class="note">d · Turned off, anyone else</p>
+<div class="mini" aria-label="Assistant, off">
+<div class="dh"><h2><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path></svg>Assistant</h2><button class="ib" aria-label="Settings" title="Settings"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg></button><button class="x" aria-label="Close (⌘J)" title="Close (⌘J)"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg></button></div>
+<div class="su"><p class="sut">The Assistant is off</p><p class="note" style="font-size: 13px; line-height: 19px">Your admin turned it off.</p></div>
+</div>
+</div>
+</div>
+</section>
+<section class="board" aria-label="First launch" style="min-height: 960px; height: 960px">
+<div class="rail">
+<div class="rail-logo"><a class="brand" href="#" aria-label="helmstudio, home (Create)" title="helmstudio"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24"><path d="M8 16C8 12.4 10.4 10.6 13.3 10.6S18.4 12.6 18.4 16V21" style="fill:none;stroke:currentColor;stroke-width:3.2;stroke-linecap:round"/><path d="M8 7V21" style="stroke:currentColor;stroke-width:3.2;stroke-linecap:round"/><path d="M5.3 1.6H10.7A.9.9 0 0 1 11.6 2.5V5L8 8.4L4.4 5V2.5A.9.9 0 0 1 5.3 1.6Z" style="fill:currentColor"/></svg></a></div>
+<nav aria-label="Sections" style="flex: 0 0 64px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 0; border-right: 1px solid var(--s3)">
+<button aria-label="Create" aria-current="page" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: var(--s2); color: var(--a1); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"></path><circle cx="12" cy="12" r="3"></circle></svg></button>
+<button aria-label="Pipelines" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="6" height="6" rx="1.5"></rect><rect x="15" y="14" width="6" height="6" rx="1.5"></rect><path d="M9 7h4a2 2 0 0 1 2 2v5"></path></svg></button>
+<button aria-label="Gallery" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="9" cy="10" r="2"></circle><path d="m21 16-5-5L5 20"></path></svg></button>
+<button aria-label="Timeline" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 17h18"></path><rect x="5" y="4" width="6" height="6" rx="1.5"></rect><rect x="12" y="14" width="7" height="6" rx="1.5"></rect></svg></button>
+<button aria-label="Models" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"></path><path d="m3 8 9 5 9-5M12 13v8"></path></svg></button>
+<button aria-label="Assistant" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path><path d="M20 3v4M22 5h-4"></path></svg></button>
+<button aria-label="Admin" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.5 3.2 7.6 8 9 4.8-1.4 8-4.5 8-9V6l-8-3Z"></path><path d="m9 12 2 2 4-4"></path></svg></button>
+<span class="rsep" aria-hidden="true"></span>
+<button aria-label="Chat" aria-expanded="true" title="Chat (⌘J)" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"></path><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"></path></svg></button>
+<details style="position: relative; margin-top: 6px">
+<summary aria-label="Settings" style="list-style: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10px; font-weight: 500; color: var(--t2)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 36px; height: 36px; padding: 8px; box-sizing: border-box; border-radius: 12px; color: #fff; background: linear-gradient(155deg, #a7b0c2, #4b5468); box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg>Settings</summary>
+</details>
+</nav>
+</div>
+<main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 20px; padding: 16px 20px 24px">
+
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+<button style="height: 40px; padding: 0 12px; border-radius: 10px; border: 0; background: transparent; display: flex; align-items: center; gap: 8px; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 18px; font-weight: 700; letter-spacing: 0.02em">[YOUR PROJECT]<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></button>
+<span style="padding: 4px 10px; border-radius: 999px; background: var(--s2); color: var(--t2); font-size: 12px; font-weight: 500">New session</span>
+<div style="flex-grow: 1"></div>
+<div role="group" aria-label="View" style="display: flex; padding: 3px; border-radius: 10px; background: var(--s1); border: 1px solid var(--s3)">
+<button aria-pressed="true" style="height: 34px; padding: 0 16px; border-radius: 8px; border: 0; background: var(--s5); font-weight: 500">Studio</button>
+<button aria-pressed="false" style="height: 34px; padding: 0 16px; border-radius: 8px; border: 0; background: transparent; color: var(--t2); font-weight: 500">Graph</button>
+</div>
+<button aria-label="Memory: nothing loaded, 64 gigabytes available" style="height: 40px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--s3); background: var(--s1); font-family: 'JetBrains Mono', monospace; font-size: 12px">0 / 64 GB</button>
+</div>
+
+<div style="display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 20px 0 0; text-align: center">
+<h1 style="margin: 0; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 40px; line-height: 44px; font-weight: 700; letter-spacing: 0.01em">What will you <span style="color: var(--a1)">make?</span></h1>
+<p style="margin: 0; color: var(--t2); font-size: 15px">Describe an image or a clip. Pull in characters and places with @. Runs on this Mac.</p>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; align-items: stretch; gap: 10px; width: 100%; max-width: 980px; align-self: center">
+<div role="tablist" aria-label="Output kind" style="flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; padding: 6px; border-radius: 16px; background: var(--s1)">
+<button role="tab" aria-selected="true" style="flex: 1 1 0; min-height: 44px; width: 64px; border-radius: 12px; border: 0; background: var(--s5); font-size: 12px; font-weight: 600">Image</button>
+<button role="tab" aria-selected="false" style="flex: 1 1 0; min-height: 44px; width: 64px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); font-size: 12px; font-weight: 600">Video</button>
+<button role="tab" aria-selected="false" style="flex: 1 1 0; min-height: 44px; width: 64px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); font-size: 12px; font-weight: 600">Audio</button>
+</div>
+<div style="flex: 1 1 520px; min-width: 0; border-radius: 18px; background: var(--s2); border: 1px solid var(--s5); box-shadow: 0 16px 40px color-mix(in srgb, var(--shd) 50%, transparent); padding: 10px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px">
+<button class="tile"><i style="display: grid; place-items: center; color: var(--t2)"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 21a8 8 0 0 0-16 0"></path><circle cx="10" cy="8" r="5"></circle><path d="M22 20c0-3.37-2-6.5-4-8a5 5 0 0 0-.45-8.3"></path></svg></i><span><small>Elements</small><b>1 in prompt</b></span></button>
+<button class="tile"><i style="background: transparent; border: 1px dashed var(--dash); box-sizing: border-box; display: grid; place-items: center; color: var(--t2)"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M7 3v18M3 7.5h4M3 12h18M3 16.5h4M17 3v18M17 7.5h4M17 16.5h4"></path></svg></i><span><small>Film</small><b>Auto</b></span></button>
+<button class="tile"><i style="background: transparent; border: 1px dashed var(--dash); box-sizing: border-box; display: grid; place-items: center; color: var(--t2)"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z"></path><circle cx="12" cy="13" r="3"></circle></svg></i><span><small>Camera</small><b>Auto</b></span></button>
+<button class="tile"><i style="background: transparent; border: 1px dashed var(--dash); box-sizing: border-box; display: grid; place-items: center; color: var(--t2)"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"></path></svg></i><span><small>Colour</small><b>Auto</b></span></button>
+<button class="tile"><i style="display: grid; place-items: center; color: var(--t2)"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"></path><path d="M9 18h6M10 22h4"></path></svg></i><span><small>Lighting</small><b>Blue hour</b></span></button>
+</div>
+<label for="scene21" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%)">Scene prompt</label>
+<textarea id="scene21" rows="3" style="width: 100%; box-sizing: border-box; resize: none; border: 0; border-radius: 10px; outline: 0; background: transparent; color: var(--t1); font: inherit; font-size: 15px; line-height: 22px; padding: 4px 6px">@mara under a transparent umbrella on a rainy London street at evening, wet cobbles, red bus lights blurred behind, cinematic, 35 mm, shallow depth of field</textarea>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px">
+<button class="chip" aria-label="Add reference"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="display: block; margin: 0 auto"><path d="M5 12h14M12 5v14"></path></svg></button>
+<button class="chip" aria-label="Insert element"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="display: block; margin: 0 auto"><circle cx="12" cy="12" r="4"></circle><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"></path></svg></button>
+<button class="chip">Turbo · int8</button>
+<button class="chip" title="Run on: Auto picks a free machine (see Create · Run on)" style="display: inline-flex; align-items: center; gap: 6px"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 auto"><rect x="4" y="4" width="16" height="16" rx="2"></rect><rect x="9" y="9" width="6" height="6" rx="1"></rect><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"></path></svg>Auto</button>
+<button class="chip">16:9 · 4 MP</button>
+<div role="group" aria-label="Seeds to queue" style="display: flex; align-items: center; height: 36px; border-radius: 10px; background: var(--s4); font-size: 13px; font-weight: 500">
+<button aria-label="Fewer seeds" style="width: 36px; height: 36px; border: 0; background: transparent; color: var(--t2); box-shadow: none">−</button><span style="font-family: 'JetBrains Mono', monospace">4 / 4</span><button aria-label="More seeds" style="width: 36px; height: 36px; border: 0; background: transparent; color: var(--t2); box-shadow: none">+</button>
+</div>
+<div style="flex-grow: 1"></div>
+<button style="height: 56px; padding: 0 28px; border-radius: 14px; border: 0; background: var(--a1); color: var(--on1); background-image: linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 55%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), inset 0 -5px 0 color-mix(in srgb, var(--shd) 25%, transparent), 0 14px 26px -8px color-mix(in srgb, var(--shd) 75%, transparent); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px"><span style="font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.04em">GENERATE</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500">~1:20 · 24 GB</span></button>
+</div>
+</div>
+</div>
+
+<section aria-label="Lighting looks" style="width: 100%; max-width: 980px; align-self: center; box-sizing: border-box; border-radius: 18px; background: var(--s1); border: 1px solid var(--s3); padding: 16px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px">
+<h2 style="margin: 0; font-size: 16px; font-weight: 600">Lighting</h2>
+<div style="display: flex; gap: 8px"><button class="chip">Reset</button><button class="chip">Save current as look</button></div>
+</div>
+<div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px">
+<button class="look"><i>no look</i><b>Auto</b><small>nothing added</small></button>
+<button class="look"><i class="pic pnb" style="background-image: url(img/look-window.jpg)"></i><b>Window</b><small>prompt</small></button>
+<button class="look" aria-pressed="true"><i class="pic" style="border: 2px solid var(--a1); background-image: url(img/mara-umbrella.jpg)"></i><b>Blue hour</b><small>prompt</small></button>
+<button class="look"><i class="pic pnb" style="background-image: url(img/look-practicals.jpg)"></i><b>Practicals</b><small>prompt</small></button>
+<button class="look"><i class="pic pnb" style="background-image: url(img/neon-alley.jpg)"></i><b>Neon rain</b><small>prompt + LoRA</small></button>
+</div>
+</section>
+</main>
+<span class="lbl" style="top: auto; bottom: -1px; border-radius: 10px 10px 0 0">21 · First launch · an admin's first sign-in to a deployment never set up: the drawer opens by itself once over Create, with the setup message</span>
+<div class="drw" role="complementary" aria-label="Assistant">
+<div class="dh"><h2><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path></svg>Assistant</h2><button class="ib" aria-label="Settings" title="Settings"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg></button><button class="x" aria-label="Close (⌘J)" title="Close (⌘J)"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg></button></div>
+<div class="su"><p class="sut">Set up the Assistant</p><p class="note" style="font-size: 13px; line-height: 19px">Pick the model it talks to. It helps you plan shots, pick workflows and run them.</p><button class="go" style="align-self: flex-start">SET UP</button><p class="fine">Opens once, on your first sign-in. Closed, it stays closed; Chat or ⌘J opens it again.</p></div>
+</div>
+</section>
+<!-- ============ 22 · The Assistant page, not an admin (plan 32) ============ -->
+<section class="board" aria-label="The Assistant page, read-only" style="min-height: 960px">
+<div class="rail">
+<div class="rail-logo"><a class="brand" href="#" aria-label="helmstudio, home (Create)" title="helmstudio"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24"><path d="M8 16C8 12.4 10.4 10.6 13.3 10.6S18.4 12.6 18.4 16V21" style="fill:none;stroke:currentColor;stroke-width:3.2;stroke-linecap:round"/><path d="M8 7V21" style="stroke:currentColor;stroke-width:3.2;stroke-linecap:round"/><path d="M5.3 1.6H10.7A.9.9 0 0 1 11.6 2.5V5L8 8.4L4.4 5V2.5A.9.9 0 0 1 5.3 1.6Z" style="fill:currentColor"/></svg></a></div>
+<nav aria-label="Sections" style="flex: 0 0 64px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 0; border-right: 1px solid var(--s3)">
+<button aria-label="Create" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"></path><circle cx="12" cy="12" r="3"></circle></svg></button>
+<button aria-label="Pipelines" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="6" height="6" rx="1.5"></rect><rect x="15" y="14" width="6" height="6" rx="1.5"></rect><path d="M9 7h4a2 2 0 0 1 2 2v5"></path></svg></button>
+<button aria-label="Gallery" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="9" cy="10" r="2"></circle><path d="m21 16-5-5L5 20"></path></svg></button>
+<button aria-label="Timeline" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 17h18"></path><rect x="5" y="4" width="6" height="6" rx="1.5"></rect><rect x="12" y="14" width="7" height="6" rx="1.5"></rect></svg></button>
+<button aria-label="Models" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"></path><path d="m3 8 9 5 9-5M12 13v8"></path></svg></button>
+<button aria-label="Assistant" aria-current="page" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: var(--s2); color: var(--a1); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path><path d="M20 3v4M22 5h-4"></path></svg></button>
+<span class="rsep" aria-hidden="true"></span>
+<button aria-label="Chat" aria-expanded="false" title="Chat (⌘J)" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"></path><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"></path></svg></button>
+<details style="position: relative; margin-top: 6px">
+<summary aria-label="Settings" style="list-style: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10px; font-weight: 500; color: var(--t2)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 36px; height: 36px; padding: 8px; box-sizing: border-box; border-radius: 12px; color: #fff; background: linear-gradient(155deg, #a7b0c2, #4b5468); box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg>Settings</summary>
+</details>
+</nav>
+</div>
+<main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 16px; padding: 16px 20px 64px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+<h1 class="pt"><i class="lgp"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path></svg></i>Assistant</h1><span class="stp" style="box-shadow: inset 0 0 0 1px var(--a1); color: var(--a1)">On</span>
+<div style="flex-grow: 1"></div>
+
+</div>
+<span style="font-size: 13px; color: var(--t2)">What it talks to and what it can use, set by your admin. Memory is yours.</span>
+<div class="pgg">
+<div class="pgc">
+<section aria-label="Model" style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px">
+<div class="pgh"><h2>Model</h2><span class="byadm"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>Set by your admin</span></div>
+<div class="who"><i class="lg" style="background: linear-gradient(155deg,#7aa8ff,#2f4fd0)">D</i><div><b>DeepSeek</b><small>deepseek-chat · thinking off</small></div><span class="tag adm">remote</span></div>
+<span class="warn">Sends your messages, the screen summary and tool results to DeepSeek; never images.</span>
+</section>
+<section aria-label="Tools" style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px">
+<div class="pgh"><h2>Tools</h2><span class="byadm"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>Set by your admin</span></div>
+<div class="trow"><div><b>Web search</b><small>Free, no key. It asks before each search.</small></div><button role="switch" aria-checked="true" aria-label="Web search on" disabled aria-disabled="true" class="sw" style="background: var(--a1); justify-content: flex-end; opacity: 0.55"><span style="background: var(--on1)"></span></button></div>
+<div class="trow"><div><b>Media tools</b><small>Crop, resize, trim, join, pull frames. Each edit is a new take.</small></div><button role="switch" aria-checked="true" aria-label="Media tools on" disabled aria-disabled="true" class="sw" style="background: var(--a1); justify-content: flex-end; opacity: 0.55"><span style="background: var(--on1)"></span></button></div>
+</section>
+<section aria-label="Skills" style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px">
+<div class="pgh"><h2>Skills</h2><span class="byadm"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>Set by your admin</span></div>
+<div class="trow"><div><b>Cinematic filmmaker</b><small>A short live-action film, script to MP4.</small></div><button role="switch" aria-checked="true" aria-label="Cinematic filmmaker on" disabled aria-disabled="true" class="sw" style="background: var(--a1); justify-content: flex-end; opacity: 0.55"><span style="background: var(--on1)"></span></button></div>
+<div class="trow"><div><b>Animator</b><small>A cartoon film in one style, script to MP4.</small></div><button role="switch" aria-checked="false" aria-label="Animator on" disabled aria-disabled="true" class="sw" style="background: var(--s1); justify-content: flex-start; opacity: 0.55; box-shadow: inset 0 0 0 1px var(--ln)!important"><span style="background: var(--t2)"></span></button></div>
+<p class="fine">It reads a skill when an ask fits, or when you type @ and pick one.</p>
+</section>
+</div>
+<div class="pgc">
+<section aria-label="Memory" style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px">
+<div class="pgh"><h2>Memory</h2><span style="font-size: 12px; color: var(--t2)">12 chats · 9 likes · 2 projects</span></div>
+<div role="tablist" aria-label="Memory" style="display: flex; gap: 4px; padding: 3px; border-radius: 12px; background: var(--s3)"><button role="tab" aria-selected="false" style="flex: 1 1 0; height: 30px; border: 0; border-radius: 9px; font-size: 11px; font-weight: 600; background: transparent; color: var(--t2)">Likes</button><button role="tab" aria-selected="false" style="flex: 1 1 0; height: 30px; border: 0; border-radius: 9px; font-size: 11px; font-weight: 600; background: transparent; color: var(--t2)">Projects</button><button role="tab" aria-selected="false" style="flex: 1 1 0; height: 30px; border: 0; border-radius: 9px; font-size: 11px; font-weight: 600; background: transparent; color: var(--t2)">Worked</button><button role="tab" aria-selected="true" style="flex: 1 1 0; height: 30px; border: 0; border-radius: 9px; font-size: 11px; font-weight: 600; background: var(--s5); color: var(--t1)">Chats</button></div>
+<div style="border-radius: 14px; background: var(--s2); padding: 2px"><div class="mrow"><div><p class="clamp" style="margin: 0">Elderly widower film: five shots, Elias and Biscuit. Voice for Elias designed and saved. Shot 1 animated, 5 s; shot 2 waits on the window light.</p><small>Widower · shot 1 · today</small></div><button class="ib" aria-label="More for this item" aria-haspopup="menu" style="width: 28px; height: 28px; background: transparent; box-shadow: none"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></svg></button></div><div class="mrow"><div><p class="clamp" style="margin: 0">Neon rain: <span class="mn">@mara</span> rooftop and bus stills, blue hour look kept.</p><small>Rain still · 2 days ago</small></div><button class="ib" aria-label="More for this item" aria-haspopup="menu" style="width: 28px; height: 28px; background: transparent; box-shadow: none"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></svg></button></div><div class="mrow"><div><p class="clamp" style="margin: 0">Winter fox: dusk walk, 4 takes, take 2 animated.</p><small>Fox run · 21 Nov</small></div><button class="ib" aria-label="More for this item" aria-haspopup="menu" style="width: 28px; height: 28px; background: transparent; box-shadow: none"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></svg></button></div></div>
+<p class="fine">Only yours. Also in the drawer, under <svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"></path><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"></path><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"></path></svg> Memory.</p>
+</section>
+</div>
+</div>
+</main>
+<span class="lbl" style="top: auto; bottom: -1px; border-radius: 10px 10px 0 0">22 · The Assistant page, not an admin · Model, Tools and Skills read-only, Set by your admin · their own Memory · no on/off switch, no Auto mode or Context</span>
+</section>
+<!-- A4-END -->
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":21160}}'>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":26540}}'>
 class Component extends DCLogic {
 state = { theme: null };
 renderVals() {
