@@ -147,7 +147,8 @@ HELMSTUDIO_ADMIN_EMAIL=you@example.com HELMSTUDIO_ADMIN_PASSWORD='10 characters 
 ```
 
 Then open http://localhost:8300. (On Windows put the two values in a `.env` file beside `compose.yml` and run
-`docker compose up -d --wait`.) With an NVIDIA card add `--profile nvidia` to run the GPU runner too. Details:
+`docker compose up -d --wait`.) With an NVIDIA card, run the GPU runners on the machine itself:
+[docs/guides/nvidia-linux.md](docs/guides/nvidia-linux.md). Details:
 [deploy/release/README.md](deploy/release/README.md).
 
 ### From source

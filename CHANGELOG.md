@@ -16,15 +16,17 @@ The Assistant gets its own place, and helmstudio installs on Windows and Linux w
 - **Your Claude subscription, no key to paste.** Add as provider takes the bridge's key from the Mac by itself.
 - **Windows and Linux with Docker.** Each release has one `compose.yml`: `docker compose up -d --wait` with
   `HELMSTUDIO_ADMIN_EMAIL` and `HELMSTUDIO_ADMIN_PASSWORD` on the first start, then http://localhost:8300. The first
-  start makes the secrets and the admin; no install script. `--profile nvidia` adds the GPU runner. The images are
+  start makes the secrets and the admin; no install script. With an NVIDIA card the runners run on the machine itself on your own
+  driver (no CUDA image; `make runners-nvidia`, docs/guides/nvidia-linux.md). The images are
   built on GitHub for Intel/AMD and Apple Silicon (linux/amd64 and linux/arm64).
 - **The Mac app as before.** The `.dmg` is now built on GitHub too; from 0.1.0-alpha.2 it updates itself.
 
 ### Known limits
 
 - Windows is untested.
-- GPU generation on Windows and Linux needs `--profile nvidia`, an Intel/AMD machine with an NVIDIA card and, on
-  Linux, NVIDIA's Container Toolkit. ZONOS3 and MiniMax H3 on NVIDIA are not in the compose yet.
+- GPU generation on Windows and Linux needs an NVIDIA card with its driver, uv and ffmpeg on the machine (the runners
+  run there, from the source checkout); MiniMax H3 video needs SGLang installed by you; ZONOS3 on NVIDIA is not ready
+  yet. The Turbo LoRA does not run on MiniMax H3 Base fp8.
 - The Mac app needs Apple Silicon and is ad-hoc signed (no Developer ID): open it the first time with right-click ›
   Open. From 0.1.0-alpha.1 it is one manual `.dmg` replace.
 - No uninstall tool for the app; delete its folders by hand (docs/guides/mac-app.md).
