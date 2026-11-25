@@ -2,7 +2,7 @@
   "plugins": [
     {
       "name": "claude-code-bridge",
-      "title": "Claude Code bridge",
+      "title": "Your Claude subscription",
       "version": "0.1.0",
       "kind": "model-provider",
       "description": "Answers with your own logged-in claude CLI, as an OpenAI-compatible endpoint.",

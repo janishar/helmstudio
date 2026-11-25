@@ -1,31 +1,42 @@
-# claude-code-bridge
+# Your Claude subscription (claude-code-bridge)
 
-> **Disclaimer: personal use only.** This is not a supported helmstudio provider and not part of any helmstudio
-> release or deployment. It runs *your own* locally logged-in `claude` CLI with *your own* Claude subscription, for
-> yourself, on your own machine. Never host it for others, expose it on a network, or route other people's requests
-> through it. Each user is responsible for following Anthropic's terms:
+> **Disclaimer: personal use only.** It runs *your own* locally signed-in Claude Code (`claude`) with *your own* Claude
+> plan, for yourself, on your own machine. Never host it for others, expose it on a network, or route other people's
+> requests through it. Each user is responsible for following Anthropic's terms:
 > https://code.claude.com/docs/en/legal-and-compliance.md
 >
 > "Claude" and "Claude Code" are trademarks of Anthropic. This project is not affiliated with or endorsed by Anthropic.
 
-A small OpenAI-compatible endpoint (Python 3 stdlib only) that answers with `claude -p`, so a local dev stack can use
-it as a model provider.
+A small OpenAI-compatible endpoint (Python 3 stdlib only) that answers with `claude -p`, so helmstudio can use your own
+Claude plan as a model provider. It ships in the Mac app (from 0.1.0-alpha.3) and in the repo; the folder and name stay
+`claude-code-bridge`, so an existing install and its provider carry on.
 
-## Start it
+What helmstudio does and doesn't do (Anthropic's conditions for products that run Claude Code):
 
-    plugins/claude-code-bridge/run.sh
+- It runs the unmodified `claude` you installed yourself. You install Claude Code and sign in through Anthropic's own
+  flow (https://claude.com/claude-code); helmstudio never installs it and never signs you in.
+- It never reads, stores or passes on your Claude credentials: it only asks `claude auth status` whether you are signed
+  in. Its one secret is the bridge's own token, which run.sh makes.
+- It never pays for or resells usage: your plan's limits apply.
 
-Needs `claude` installed and logged in with your subscription (`claude auth status`). The first run writes its env
-file with a random `BRIDGE_TOKEN` (chmod 600) at `$BRIDGE_ENV`, by default `~/.helm/claude-code-bridge.env`: outside
-plugins/, because the studio mounts that folder (an env from an old place, `plugins/claude-code-bridge/.env` or
+## Turn it on
+
+1. Install Claude Code and sign in (`claude`, then follow its sign-in). `claude auth status` should say you are signed
+   in.
+2. Plugins: turn Your Claude subscription on. The Mac's runner starts `run.sh` (the Mac app, or `make runners` in dev);
+   with no `claude` or not signed in it shows Couldn't start · Install Claude Code and sign in, then Try again.
+3. Add as provider with the `BRIDGE_TOKEN` value from `~/.helm/claude-code-bridge.env`. The provider is Only you: no
+   other account sees or uses it.
+4. Admin › AI agents: pick it for the Assistant.
+
+To run it by hand instead: `plugins/claude-code-bridge/run.sh`.
+
+The first run writes its env file with a random `BRIDGE_TOKEN` (chmod 600) at `$BRIDGE_ENV`, by default
+`~/.helm/claude-code-bridge.env`: outside plugins/, because the studio mounts that folder and the Mac app's copy is
+inside the app (an env from an old place, `plugins/claude-code-bridge/.env` or
 `~/.config/helmstudio/claude-code-bridge.env`, is moved there, same token). It listens on 127.0.0.1:8420 only;
-OrbStack containers reach it as `http://host.docker.internal:8420`.
-
-## Add it in the dev stack's Admin
-
-1. Plugins: turn Claude Code bridge on, then Add as provider with the `BRIDGE_TOKEN` value from the env file. The
-   provider is Only you: no other account sees or uses it.
-2. Admin › AI agents: pick it for the Assistant.
+containers reach it as `http://host.docker.internal:8420` (OrbStack in dev; the Mac app's VM, whose DNS answers with
+the Mac's address). Its log, when the runner starts it: `~/.helm/logs/claude-code-bridge.log`.
 
 ## How it works
 
@@ -40,7 +51,7 @@ OrbStack containers reach it as `http://host.docker.internal:8420`.
   high per model (contracts/providers/presets.json `claude-code-bridge`), set in Admin › Model providers and AI agents.
   Test: `python3 plugins/claude-code-bridge/test_bridge.py`.
 - Locked down: `--safe-mode --tools "" --strict-mcp-config --mcp-config '{"mcpServers":{}}' --setting-sources ""
-  --disable-slash-commands --no-session-persistence --permission-prompts none`, run in an empty `work/` folder.
+  --disable-slash-commands --no-session-persistence --permission-prompts none`, run in an empty folder under the system's temp folder.
 - One call at a time, 180 s timeout (`BRIDGE_TIMEOUT` in the env file). One log line per call: time, tokens, cost.
 
 Up to 4 calls run at once (`BRIDGE_MAX_CONCURRENT` in the env file; about 250 MB each), the rest wait their turn. Claude

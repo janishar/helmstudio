@@ -198,7 +198,7 @@
     },
     {
       "id": "claude-code-bridge",
-      "title": "Claude Code bridge",
+      "title": "Your Claude subscription",
       "kind": "server",
       "base_url": "http://host.docker.internal:8420/v1",
       "models": ["claude-sonnet", "claude-opus", "claude-haiku"],

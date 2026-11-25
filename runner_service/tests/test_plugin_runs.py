@@ -3,6 +3,7 @@
 import asyncio
 import json
 import subprocess
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -200,3 +201,35 @@ async def test_a_new_retry_nonce_starts_a_failed_plugin_at_once(tmp_path):
     await s.offer(json.dumps(value | {"retry": {"crash": 2}}).encode())
     await until(lambda: s.states["crash"]["restarts"] == 1)
     await s.close()
+
+
+# the repo's plugins: Your Claude subscription (claude-code-bridge)
+BRIDGE = Path(__file__).resolve().parents[2] / "plugins"
+
+
+@pytest.mark.parametrize("claude", [None, '{"loggedIn": false, "authMethod": "none"}'])
+async def test_no_claude_or_not_signed_in_waits_for_try_again(sup, tmp_path, monkeypatch, claude):
+    """The bridge's run.sh with a fake PATH: no claude, or claude not signed in -> failed with the plain line, no
+    restarts until Try again (exit 78). Only `claude auth status` is asked; no token is made."""
+    bin_ = tmp_path / "bin"
+    bin_.mkdir()
+    if claude:
+        (bin_ / "claude").write_text(
+            f"#!/bin/sh\n[ \"$1 $2\" = 'auth status' ] && echo '{claude}'\n"
+        )
+        (bin_ / "claude").chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_}:/usr/bin:/bin")
+    monkeypatch.setenv("HOME", str(tmp_path))  # run.sh adds ~/.local/bin: never the real claude
+    sup.dirs = [BRIDGE]
+    await sup.want(["claude-code-bridge"])
+    await until(lambda: sup.states.get("claude-code-bridge", {}).get("state") == "failed")
+    assert (
+        sup.states["claude-code-bridge"]["detail"]
+        == "Install Claude Code and sign in, then Try again"
+    )
+    await asyncio.sleep(0.5)  # backoff 0.1: a plain crash would have restarted by now
+    assert sup.states["claude-code-bridge"]["restarts"] == 0
+    assert not (tmp_path / ".helm").exists()
+    await sup.retry({"claude-code-bridge": 1})
+    await until(lambda: sup.states["claude-code-bridge"]["restarts"] == 1)
+    await sup.close()

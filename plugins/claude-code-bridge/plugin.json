@@ -1,12 +1,12 @@
 {
   "name": "claude-code-bridge",
-  "title": "Claude Code bridge",
-  "version": "0.1.0",
+  "title": "Your Claude subscription",
+  "version": "0.2.0",
   "kind": "model-provider",
-  "description": "Answers with your own logged-in claude CLI, as an OpenAI-compatible endpoint.",
-  "author": "this repo",
+  "description": "Answers with your own Claude plan: it runs Claude Code on this Mac, which you install and sign in to yourself.",
+  "author": "helmstudio",
   "source": "plugins/claude-code-bridge",
-  "may_do": ["Add a model provider", "Reach host.docker.internal:8420", "Read your prompts (sent to your Claude plan)"],
+  "may_do": ["Add a model provider, only for you", "Run Claude Code on this Mac, signed in by you", "Send your prompts to Claude on your own plan", "Reach host.docker.internal:8420"],
   "personal": true,
   "disclaimer": {
     "text": "Personal use only. Runs your own Claude login and plan, for you only. Never shared with other accounts.",
@@ -15,6 +15,8 @@
   "url": "http://host.docker.internal:8420",
   "health": "/health",
   "start": "plugins/claude-code-bridge/run.sh",
+  "run": {"cmd": ["./run.sh"], "host": "mac"},
+  "needs": "Claude Code, installed and signed in by you (claude.com/claude-code)",
   "provider": {
     "path": "/v1",
     "models": ["claude-sonnet", "claude-opus", "claude-haiku"],

@@ -9,20 +9,20 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
 ENV_FILE = Path(os.environ.get("BRIDGE_ENV") or "~/.helm/claude-code-bridge.env").expanduser()
 ENV = dict(l.split("=", 1) for l in ENV_FILE.read_text().split() if "=" in l)
 TOKEN = ENV["BRIDGE_TOKEN"]
 HOST, PORT = ENV.get("BRIDGE_HOST", "127.0.0.1"), int(ENV.get("BRIDGE_PORT", "8420"))
 TIMEOUT = int(ENV.get("BRIDGE_TIMEOUT", "180"))
 MODELS = {"claude-sonnet": "sonnet", "claude-opus": "opus", "claude-haiku": "haiku"}
-WORK = HERE / "work"  # empty cwd: no project CLAUDE.md to find
+WORK = Path(tempfile.gettempdir()) / "helm-claude-bridge"  # empty cwd: no project CLAUDE.md; never in plugins/ (the app's copy is read-only)
 # every env var that would switch the CLI off the subscription login
 DROP = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "CLAUDE_CODE_OAUTH_TOKEN",
         "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY", "AWS_BEARER_TOKEN_BEDROCK")

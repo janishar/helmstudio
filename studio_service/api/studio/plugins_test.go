@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -51,5 +52,12 @@ func TestReadManifests(t *testing.T) {
 	}
 	if r := got["web-search"].M.Tools[0].Risk; r == nil || r.SendsOffMachine == nil || !*r.SendsOffMachine {
 		t.Fatal("web-search's search sends off the machine")
+	}
+	// alpha.3 item 1: Your Claude subscription is personal, starts itself on the Mac, and its name never says Claude
+	// Code or Anthropic
+	b := got["claude-code-bridge"].M
+	if title := strings.ToLower(b.Title); !b.Personal || b.Run == nil || b.Run.Host == nil || *b.Run.Host != "mac" ||
+		strings.Contains(title, "claude code") || strings.Contains(title, "anthropic") {
+		t.Fatalf("claude-code-bridge: %+v", b)
 	}
 }
