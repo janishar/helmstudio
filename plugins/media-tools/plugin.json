@@ -1,0 +1,118 @@
+{
+  "name": "media-tools",
+  "title": "Media tools",
+  "version": "0.1.0",
+  "kind": "assistant-tools",
+  "description": "Crop, resize, rotate, convert and extend images; trim, speed up and re-sound videos; trim, level and join audio; pull frames from a video for the Assistant to look at. Each edit is a new take; the original stays.",
+  "author": "helmstudio",
+  "source": "plugins/media-tools",
+  "may_do": ["Read your takes and make new takes from them (the original stays)", "Run ffmpeg and Pillow on this Mac (no network but the stack's own)", "Reach host.docker.internal:8422"],
+  "url": "http://host.docker.internal:8422",
+  "health": "/health",
+  "start": "plugins/media-tools/run.sh",
+  "run": {"cmd": ["./run.sh"], "host": "mac"},
+  "takes": true,
+  "tools": [
+    {
+      "name": "edit_image",
+      "description": "Make a new image take from an image take: crop, resize, rotate, flip, extend the canvas, convert (applied in that order). The original stays. Show the new take with its [[take:<id>]] alone on a line.",
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["take_id"],
+        "minProperties": 2,
+        "properties": {
+          "take_id": {"type": "string", "format": "uuid"},
+          "crop": {"type": "object", "additionalProperties": false, "required": ["x", "y", "width", "height"], "description": "pixels of the original, from its top left",
+            "properties": {"x": {"type": "integer", "minimum": 0}, "y": {"type": "integer", "minimum": 0}, "width": {"type": "integer", "minimum": 1}, "height": {"type": "integer", "minimum": 1}}},
+          "resize": {"type": "object", "additionalProperties": false, "minProperties": 1, "description": "one side alone keeps the aspect",
+            "properties": {"width": {"type": "integer", "minimum": 1, "maximum": 8192}, "height": {"type": "integer", "minimum": 1, "maximum": 8192}}},
+          "rotate": {"enum": [90, 180, 270], "description": "degrees clockwise"},
+          "flip": {"enum": ["horizontal", "vertical"]},
+          "extend": {"type": "object", "additionalProperties": false, "minProperties": 1, "description": "pixels added on each side",
+            "properties": {"top": {"type": "integer", "minimum": 0, "maximum": 4096}, "right": {"type": "integer", "minimum": 0, "maximum": 4096},
+              "bottom": {"type": "integer", "minimum": 0, "maximum": 4096}, "left": {"type": "integer", "minimum": 0, "maximum": 4096},
+              "color": {"type": "string", "pattern": "^(#[0-9a-fA-F]{6}|transparent)$", "description": "default #000000"}}},
+          "format": {"enum": ["png", "jpeg", "webp"], "description": "default: the original's"}
+        }
+      },
+      "risk": {"uses_gpu": false, "deletes": false, "sends_off_machine": false}
+    },
+    {
+      "name": "edit_video",
+      "description": "Make a new video take from a video take: trim, change speed (0.25-4x), mute, or replace its sound with an audio take. The original stays. Show the new take with its [[take:<id>]] alone on a line.",
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["take_id"],
+        "minProperties": 2,
+        "properties": {
+          "take_id": {"type": "string", "format": "uuid"},
+          "trim": {"type": "object", "additionalProperties": false, "required": ["start", "end"], "description": "seconds of the original",
+            "properties": {"start": {"type": "number", "minimum": 0}, "end": {"type": "number", "exclusiveMinimum": 0}}},
+          "speed": {"type": "number", "minimum": 0.25, "maximum": 4},
+          "mute": {"const": true},
+          "audio_take_id": {"type": "string", "format": "uuid", "description": "an audio take: the new sound (cut to the picture)"}
+        }
+      },
+      "risk": {"uses_gpu": false, "deletes": false, "sends_off_machine": false}
+    },
+    {
+      "name": "frame_image",
+      "description": "Make a new image take of one frame of a video take (frame as image). For looking at frames, use frames instead (no take).",
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["take_id", "at"],
+        "properties": {"take_id": {"type": "string", "format": "uuid"}, "at": {"type": "number", "minimum": 0, "description": "seconds"}}
+      },
+      "risk": {"uses_gpu": false, "deletes": false, "sends_off_machine": false}
+    },
+    {
+      "name": "edit_audio",
+      "description": "Make a new audio take (m4a) from an audio take or a video's sound: trim and change the volume. The original stays.",
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["take_id"],
+        "minProperties": 2,
+        "properties": {
+          "take_id": {"type": "string", "format": "uuid"},
+          "trim": {"type": "object", "additionalProperties": false, "required": ["start", "end"], "description": "seconds",
+            "properties": {"start": {"type": "number", "minimum": 0}, "end": {"type": "number", "exclusiveMinimum": 0}}},
+          "volume_db": {"type": "number", "minimum": -30, "maximum": 20}
+        }
+      },
+      "risk": {"uses_gpu": false, "deletes": false, "sends_off_machine": false}
+    },
+    {
+      "name": "join_audio",
+      "description": "Make a new audio take (m4a) of 2-8 audio takes one after another, in order. The originals stay.",
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["take_ids"],
+        "properties": {"take_ids": {"type": "array", "minItems": 2, "maxItems": 8, "items": {"type": "string", "format": "uuid"}}}
+      },
+      "risk": {"uses_gpu": false, "deletes": false, "sends_off_machine": false}
+    },
+    {
+      "name": "frames",
+      "description": "Look at frames of a video take (a Timeline export too): at given times, N evenly spaced, or at scene changes; at most 8, with timecodes. Makes no take: the frames come with your next prompt.",
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["take_id"],
+        "maxProperties": 3,
+        "properties": {
+          "take_id": {"type": "string", "format": "uuid"},
+          "at": {"type": "array", "minItems": 1, "maxItems": 8, "items": {"type": "number", "minimum": 0}, "description": "seconds"},
+          "count": {"type": "integer", "minimum": 1, "maximum": 8, "description": "evenly spaced"},
+          "scenes": {"const": true, "description": "at scene changes (the first 8)"},
+          "size": {"type": "integer", "minimum": 256, "maximum": 1024, "description": "long side in px, default 768"}
+        }
+      },
+      "risk": {"uses_gpu": false, "deletes": false, "sends_off_machine": false}
+    }
+  ]
+}
