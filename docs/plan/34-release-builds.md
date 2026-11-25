@@ -43,6 +43,7 @@ A release asset `helmstudio-server-<version>.tar.gz`, made by the same workflow:
 
 ### 38.4 Checks
 
-- The workflow runs on a branch push (build only) before it is trusted with a tag.
-- The pack is tried on a clean Linux machine (a GCP spot VM, the owner's rule) from download to first sign-in.
-- Windows through WSL2 is documented as untested until someone runs it.
+Owner, 2026-11-25: "then check at that only every build". On every push, pull request and tag, a smoke test on GitHub's
+Intel/AMD and ARM Linux runners starts the server pack with that run's images, waits until healthy, signs in once and
+reads one authenticated route, then uninstalls; a tag publishes only after both pass. Not covered yet: GPU generation
+on an NVIDIA machine, and Windows through WSL2 (documented as untested).
