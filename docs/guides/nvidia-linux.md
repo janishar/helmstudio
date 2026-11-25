@@ -19,6 +19,9 @@ source, on the card's own driver (like the Mac's `make runners`). On Windows do 
   export SGLANG_BIN=~/sglang/bin/sglang
   ```
 
+  A venv on the system's Python also needs its headers (`sudo apt install python3.12-dev`): SGLang's Triton
+  kernels compile against `Python.h` on the first run.
+
 ## 2. Run
 
 ```sh
