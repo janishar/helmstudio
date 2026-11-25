@@ -1,6 +1,7 @@
 package registry
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -47,11 +48,32 @@ func TestGuidesNewestPerFamilyAndCardsOfHeldFamiliesOnly(t *testing.T) {
 		}
 	}
 	_ = r.SetHost("gcp.torch", nil)
+	if all, _ := r.Guides(); all["qwen-image"].Card != "new qwen-image" {
+		t.Fatal("a heartbeat gap keeps gcp's guide for GuideGrace: the prompt's start stays the same")
+	}
+	defer func(g time.Duration) { GuideGrace = g }(GuideGrace)
+	GuideGrace = 0
 	if all, _ := r.Guides(); all["qwen-image"].Card != "old qwen-image" {
-		t.Fatal("gcp's guide lapses with its hosts key")
+		t.Fatal("gcp's guide lapses with its hosts key after the grace")
 	}
 	_ = r.SetRegistry("mac.torch.guides", nil)
 	if all, _ := r.Guides(); len(all) != 1 {
 		t.Fatal("a deleted key drops its guides")
+	}
+}
+
+// studio enforces the schema's limits on what it reads: an oversized card or guide is dropped, at most 32 kept.
+func TestGuidesOverLimitsAreDropped(t *testing.T) {
+	var r Registry
+	now := time.Now().UTC()
+	huge := strings.Repeat("x", 801)
+	_ = r.SetRegistry("mac.torch.guides", guidesKey(now, huge, "qwen-image"))
+	present(&r, "mac.torch")
+	if all, _ := r.Guides(); len(all) != 0 {
+		t.Fatalf("an 801-character card is dropped, got %v", all)
+	}
+	_ = r.SetRegistry("mac.torch.guides", guidesKey(now, "ok", "qwen-image"))
+	if all, _ := r.Guides(); len(all) != 1 {
+		t.Fatal("a card within 800 characters is kept")
 	}
 }

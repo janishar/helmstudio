@@ -7,6 +7,25 @@ import (
 	"time"
 )
 
+// GuideGrace keeps a host's cards for a while after its hosts key goes, so a heartbeat that drops out for a moment
+// does not change the prompt's start (and lose the provider's prompt cache) for a turn or two.
+var GuideGrace = 5 * time.Minute
+
+// recent is present now, or present within GuideGrace.
+func (r *Registry) recent(source string, now time.Time) bool {
+	r.seenMu.Lock()
+	defer r.seenMu.Unlock()
+	if r.present(source) {
+		if r.seenAt == nil {
+			r.seenAt = map[string]time.Time{}
+		}
+		r.seenAt[source] = now
+		return true
+	}
+	at, ok := r.seenAt[source]
+	return ok && now.Sub(at) < GuideGrace
+}
+
 // Guide is one entry of a registry guides value (API 1.71, contracts/README.md "Assistant: model guides"): a model
 // family's assistant guide, its card and its recipes, as its pack ships them.
 type Guide struct {
@@ -32,8 +51,9 @@ func (r *Registry) Guides() (map[string]Guide, map[string]bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	out, at, held := map[string]Guide{}, map[string]time.Time{}, map[string]bool{}
+	now := time.Now()
 	for _, source := range slices.Sorted(maps.Keys(r.guides)) {
-		if !r.present(source) {
+		if !r.recent(source, now) {
 			continue
 		}
 		for _, g := range r.guides[source] {
@@ -43,7 +63,7 @@ func (r *Registry) Guides() (map[string]Guide, map[string]bool) {
 		}
 	}
 	for source, models := range r.models {
-		if !r.present(source) {
+		if !r.recent(source, now) {
 			continue
 		}
 		for _, m := range models {

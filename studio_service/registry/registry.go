@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 	"unicode"
+	"unicode/utf8"
 )
 
 // Stale is how old a hosts key may be before its runner counts as offline.
@@ -683,6 +684,8 @@ func (h Host) Live(now time.Time) bool { return now.Sub(h.UpdatedAt) <= Stale }
 // Registry holds the latest value of every registry and hosts key. The zero value is empty and ready to use.
 type Registry struct {
 	mu        sync.RWMutex
+	seenMu    sync.Mutex                      // guards seenAt (Guides reads under mu.RLock)
+	seenAt    map[string]time.Time            // "<host>.<env>" → when it was last present, for guideGrace
 	nodes     map[string][]NodeSchema         // "<host>.<env>" → its node schemas
 	nodesAt   map[string]time.Time            // "<host>.<env>" → when its nodes were published
 	workflows map[string][]Workflow           // "<host>.<env>" → its workflows (without node schemas)
@@ -911,7 +914,19 @@ func (r *Registry) SetRegistry(key string, value []byte) error {
 		if err := json.Unmarshal(value, &parsed); err != nil {
 			return err
 		}
-		set(&r.guides, source, parsed.Guides)
+		// the schema's limits, enforced here too: a bad or old runner never puts a huge card into every prompt
+		kept := []Guide{}
+		for _, g := range parsed.Guides {
+			if len(kept) == 32 {
+				break
+			}
+			if g.Family == "" || utf8.RuneCountInString(g.Card) > 800 || utf8.RuneCountInString(g.Title) > 80 ||
+				utf8.RuneCountInString(g.Guide) > 24576 {
+				continue
+			}
+			kept = append(kept, g)
+		}
+		set(&r.guides, source, kept)
 		set(&r.guidesAt, source, received(parsed.PublishedAt))
 	case "custom":
 		if source != "pipelines.engine" {
