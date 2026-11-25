@@ -94,7 +94,9 @@ def test_run_output_is_a_take(api, anon, echo_done):
 def test_titles(gallery):
     titles = [t["title"] for t in gallery["takes"]]
     assert titles[0] == f"{TOKEN} zebra crossing"  # the first line
-    assert len(titles[2]) <= 80 and gallery["prompts"][2].startswith(titles[2])
+    # item 21: a long line ends with "…"; one long word is cut mid-word, keeping most of the room
+    assert len(titles[2]) <= 80 and titles[2].endswith("…") and len(titles[2]) >= 40
+    assert gallery["prompts"][2].startswith(titles[2].removesuffix("…"))
     assert [t["made_with"]["prompt"] for t in gallery["takes"]] == gallery["prompts"]
 
 

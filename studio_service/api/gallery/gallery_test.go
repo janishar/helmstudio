@@ -219,6 +219,11 @@ func TestBodies(t *testing.T) {
 		utf8.RuneCountInString(got) > 80 {
 		t.Fatal(got)
 	}
+	// a short word then one long word: cutting at the space would keep only "token…", so it cuts mid-word at 79
+	tokenWord := "98d507921f3f " + strings.Repeat("w", 100)
+	if got := Title(dto.MadeWith{Prompt: &tokenWord}); got != tokenWord[:79]+"…" {
+		t.Fatal(got)
+	}
 	exact := strings.Repeat("a", 80)
 	if got := Title(dto.MadeWith{Prompt: &exact}); got != exact {
 		t.Fatal(got)
