@@ -2174,7 +2174,7 @@ function SetupDrawer({ a, phone }: { a: AssistantApi; phone: boolean }) {
             </button>
             <p className="fine">
               {a.first
-                ? `Opens once, on your first sign-in. Closed, it stays closed; Chat or ${shortcut()} opens it again.`
+                ? `Close it now and set up the Assistant later from Agent or ${shortcut()}.`
                 : "Opens the Assistant page."}
             </p>
           </>

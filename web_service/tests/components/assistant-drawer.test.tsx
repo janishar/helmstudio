@@ -305,7 +305,7 @@ describe("the drawer", () => {
     const mark = answer("POST", { "/v1/studio/assistant/first-launch": () => ({ status: 204 }) });
     render(<AppShell user={admin}>x</AppShell>);
     expect(await screen.findByText("Set up the Assistant")).toBeTruthy();
-    expect(screen.getByText(/^Opens once, on your first sign-in/)).toBeTruthy();
+    expect(screen.getByText(/^Close it now and set up the Assistant later/)).toBeTruthy();
     expect(mark).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: "Chat" }).getAttribute("aria-expanded")).toBe("true");
     fireEvent.click(within(drawer()).getByRole("button", { name: /^Close/ }));
