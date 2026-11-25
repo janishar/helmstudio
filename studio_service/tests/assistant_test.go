@@ -68,7 +68,7 @@ func TestAssistantSettings(t *testing.T) {
 	e.call(userA, "PUT", path, map[string]any{"enabled": false}, 403)
 	got := e.call(admin, "GET", path, nil, 200)
 	if lim, _ := json.Marshal(got["limits"]); got["enabled"] != false || got["provider"] != nil || got["updated_at"] != nil ||
-		string(lim) != `{"look_at_per_hour":200,"messages_per_minute":30,"model_calls_per_day":2000,"tokens_per_day":20000000}` {
+		string(lim) != `{"auto_gpu_minutes_per_hour":30,"auto_takes_per_hour":8,"look_at_per_hour":200,"messages_per_minute":30,"model_calls_per_day":2000,"tokens_per_day":20000000}` {
 		t.Fatal("the defaults are Generous (owner 2026-11-24)", got)
 	}
 	// off: the list is served with status off, New chat is 409
@@ -770,6 +770,57 @@ func TestAssistantLimitsMigration(t *testing.T) {
 		if e.count(`SELECT count(*) FROM assistant_settings WHERE limits = $1::jsonb`, c.want) != 1 {
 			t.Fatal("after the migration the row holds", c.want)
 		}
+	}
+}
+
+// TestAssistantAuto: the chat's Auto switch (API 1.68) and the admin's Auto caps travel with every input.
+func TestAssistantAuto(t *testing.T) {
+	e := setup(t)
+	e.assistantOn()
+	threads := "/v1/studio/assistant/threads"
+	id := e.call(userA, "POST", threads, map[string]any{"client_id": tabA}, 201)["id"].(string)
+	if got := e.call(userA, "GET", threads+"/"+id, nil, 200); got["auto"] != false {
+		t.Fatal("Auto starts off", got)
+	}
+	e.call(userB, "PATCH", threads+"/"+id, map[string]any{"auto": true}, 404)
+	e.call(userA, "PATCH", threads+"/not-a-uuid", map[string]any{"auto": true}, 404)
+	for _, bad := range []map[string]any{{}, {"auto": "yes"}, {"auto": true, "title": "x"}} {
+		e.call(userA, "PATCH", threads+"/"+id, bad, 422)
+	}
+	if got := e.call(userA, "PATCH", threads+"/"+id, map[string]any{"auto": true}, 200); got["auto"] != true {
+		t.Fatal(got)
+	}
+	e.turns()
+	e.call(userA, "POST", threads+"/"+id+"/messages", map[string]any{"kind": "message", "client_id": tabA, "text": "go",
+		"screen": screen("/", "generate")}, 202)
+	sent := e.turns()
+	if len(sent) != 1 || !sent[0].Data.Settings.Auto {
+		t.Fatal("the switch travels with the turn", sent)
+	}
+	var lim map[string]any
+	_ = json.Unmarshal(sent[0].Data.Settings.Limits, &lim)
+	if lim["auto_takes_per_hour"] != float64(8) || lim["auto_gpu_minutes_per_hour"] != float64(30) {
+		t.Fatal("the default caps travel too", lim)
+	}
+	// the admin's caps: out of range is 422; a PUT without them keeps them
+	path := "/v1/studio/admin/assistant"
+	base := map[string]any{"model_calls_per_day": 10, "tokens_per_day": 1000, "look_at_per_hour": 1, "messages_per_minute": 9}
+	with := func(k string, v int) map[string]any {
+		m := map[string]any{k: v}
+		for bk, bv := range base {
+			m[bk] = bv
+		}
+		return map[string]any{"enabled": true, "provider": "ollama", "limits": m}
+	}
+	e.call(admin, "PUT", path, with("auto_takes_per_hour", 1001), 422)
+	e.call(admin, "PUT", path, with("auto_gpu_minutes_per_hour", -1), 422)
+	e.call(admin, "PUT", path, with("auto_takes_per_hour", 2), 200)
+	got := e.call(admin, "PUT", path, map[string]any{"enabled": true, "provider": "ollama", "limits": base}, 200)
+	if l := got["limits"].(map[string]any); l["auto_takes_per_hour"] != float64(2) || l["auto_gpu_minutes_per_hour"] != float64(30) {
+		t.Fatal(l)
+	}
+	if got := e.call(userA, "PATCH", threads+"/"+id, map[string]any{"auto": false}, 200); got["auto"] != false {
+		t.Fatal(got)
 	}
 }
 
