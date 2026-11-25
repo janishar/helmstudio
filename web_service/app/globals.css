@@ -1944,10 +1944,24 @@
     min-width: 44px;
     min-height: 44px;
   }
-  /* the rail's menu when the window is too short for it: a thin scrollbar, none while it all fits */
-  .rail-scroll {
-    scrollbar-width: thin;
-    scrollbar-color: var(--s4) transparent;
+  /* the rail on a window too short for it (owner, 2026-11-25): the whole rail scrolls. Only then, so a tall window
+     keeps the panels' shadows whole; the padding (taken back by the negative margins) leaves room for the shadows
+     inside the scroll box, which clips at its edges */
+  @media (min-width: 48rem) {
+    .rail-wrap {
+      margin: 14px 0 14px 14px;
+    }
+  }
+  @media (min-width: 48rem) and (max-height: 880px) {
+    .rail-wrap {
+      max-height: 100dvh;
+      margin: 0 -16px 0 0;
+      padding: 14px 16px 40px 14px;
+      overflow-x: hidden;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--s4) transparent;
+    }
   }
   .dock-item:not([aria-current]) .tile {
     filter: saturate(0.55) brightness(0.8);

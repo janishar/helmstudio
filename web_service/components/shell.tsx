@@ -154,7 +154,7 @@ export function AppShell({
           >
             {/* the rail (md+): the logo in its own panel, 14 px above the menu; a phone's bar has no logo. A window too short
                 for every item scrolls the whole rail, logo and menu (owner, 2026-11-25: "make it scoll insted") */}
-            <div className="contents md:z-10 md:m-3.5 md:mr-0 rail-scroll md:flex md:max-h-[calc(100dvh-28px)] md:shrink-0 md:flex-col md:gap-3.5 md:self-start md:overflow-y-auto md:overflow-x-hidden">
+            <div className="rail-wrap contents md:z-10 md:flex md:shrink-0 md:flex-col md:gap-3.5 md:self-start">
               <div className="rail-logo panel hidden w-[76px] justify-center rounded-[30px] px-1 py-3.5 md:flex">
                 <Link
                   href="/"
