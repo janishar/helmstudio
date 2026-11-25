@@ -111,9 +111,11 @@ test-down:        ## stop the test stack; its volumes stay
 RUN_DIR := runner_service/.run
 # runner_service pins uv 0.13.8; an older uv on PATH is stood in for by uvx (the command line still holds "uv run")
 UV ?= $(shell uv --version 2>/dev/null | grep -q '^uv 0.13.8' && echo uv || echo 'uvx --from uv==0.13.8 uv')
-# STACK=prod joins them to production (make prod) instead of the dev stack: its secrets and loopback ports
+# STACK=prod joins them to production (make prod) instead of the dev stack: its secrets and loopback ports.
+# STACK=release (runners-nvidia only): the Docker release stack (deploy/release/compose.yml), its runner credentials
+# copied out of its keys volume into deploy/secrets-release (git-ignored) on every start
 STACK ?= dev
-SECRETS := $(CURDIR)/deploy/$(if $(filter prod,$(STACK)),secrets-prod,secrets)
+SECRETS := $(CURDIR)/deploy/$(if $(filter prod,$(STACK)),secrets-prod,$(if $(filter release,$(STACK)),secrets-release,secrets))
 RUNNER_S3 := $(if $(filter prod,$(STACK)),8435,$${S3_HOST_PORT:-8433})
 UV_RUN_torch := run --extra torch
 UV_RUN_mlx := run --project envs/mlx --extra llm
@@ -167,10 +169,12 @@ runners-stop:     ## stops the native runners (each by its pid file; only a proc
 # (default: the first of GPU_HOSTS, else the one GPU host deploy/secrets has, else the short hostname) with the NATS user and S3 identity that
 # make up GPU_HOSTS=<h> made, over plain nats:// and http:// on 127.0.0.1 (this machine's stack: no tunnel, no TLS).
 # Logs and pid files as the Mac's: runner_service/.run/runner-<h>-<env>.{pid,log}; make runners-nvidia-stop.
-GPU_HOST ?= $(or $(firstword $(GPU_HOSTS)),$(shell ls $(SECRETS) 2>/dev/null | sed -n 's/^nats_runner_\([a-z0-9]*\)_torch_password$$/\1/p' | grep -vx mac | head -1),$(shell hostname -s | tr A-Z a-z | tr -cd a-z0-9))
+GPU_HOST ?= $(or $(firstword $(GPU_HOSTS)),$(if $(filter release,$(STACK)),$(or $(HELMSTUDIO_GPU_HOST),gpu)),$(shell ls $(SECRETS) 2>/dev/null | sed -n 's/^nats_runner_\([a-z0-9]*\)_torch_password$$/\1/p' | grep -vx mac | head -1),$(shell hostname -s | tr A-Z a-z | tr -cd a-z0-9))
 SGLANG_FOUND = $(or $(SGLANG_BIN),$(shell command -v sglang))
-runners-nvidia:   ## the NVIDIA host runners in the background (needs make up GPU_HOSTS=<h>); GPU_HOST=<h>, SGLANG_BIN, HELMSTUDIO_MODELS
-	@h=$(GPU_HOST); [ -f $(SECRETS)/nats_runner_$${h}_torch_password ] || { echo "no credentials for host $$h: make up GPU_HOSTS=$$h"; exit 2; }; \
+runners-nvidia:   ## the NVIDIA host runners in the background (needs make up GPU_HOSTS=<h>, or STACK=release); GPU_HOST=<h>, SGLANG_BIN, HELMSTUDIO_MODELS
+	@h=$(GPU_HOST); $(if $(filter release,$(STACK)),mkdir -p $(SECRETS) && chmod 700 $(SECRETS) && \
+	docker run --rm -v $${HELMSTUDIO_PROJECT:-helmstudio}_keys:/k:ro -v $(SECRETS):/o --entrypoint sh nats:2.15.3-alpine3.22 \
+	  -c "cp /k/nats_runner_$${h}_*_password /k/s3_runner_$${h}_* /o/ && chown $$(id -u):$$(id -g) /o/* && chmod 600 /o/*" || exit 2;) [ -f $(SECRETS)/nats_runner_$${h}_torch_password ] || { echo "no credentials for host $$h: make up GPU_HOSTS=$$h"; exit 2; }; \
 	mkdir -p $(RUN_DIR); for e in torch $(if $(SGLANG_FOUND),native); do \
 	pid=$$(cat $(RUN_DIR)/runner-$$h-$$e.pid 2>/dev/null); \
 	if [ -n "$$pid" ] && ps -p $$pid -o command= | grep -q 'uv run'; then echo "runner $$e already runs ($$pid)"; continue; fi; \

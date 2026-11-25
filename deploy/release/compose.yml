@@ -10,14 +10,15 @@
 # open http://localhost:8300 and sign in as that admin. The admin is read on the first start only; later starts need
 # nothing: docker compose up -d. A password changed in the app is kept.
 #
-#   With an NVIDIA card:  no image ships for it; the runners run on the host from source with the card's own driver
-#                         (docs/guides/nvidia-linux.md: make up GPU_HOSTS=<h> && make runners-nvidia).
+#   With an NVIDIA card:  no image ships for it; the runners run on the host from source with the card's own driver,
+#                         against this stack: make runners-nvidia STACK=release in a clone (docs/guides/nvidia-linux.md).
 #   Update:               download the new release's compose.yml over this one (or set HELMSTUDIO_VERSION in .env),
 #                         then docker compose pull && docker compose up -d --wait. The data and keys stay.
 #   Stop / remove:        docker compose down (keeps everything); docker compose down -v also deletes the data and keys.
 #   From source:          git clone https://github.com/janishar/helmstudio && make up (the repo's README).
 #
-# Settings (environment or .env): HELMSTUDIO_PORT (8300, on 127.0.0.1 only), PUBLIC_BASE_URL (the address people
+# Settings (environment or .env): HELMSTUDIO_PORT (8300, on 127.0.0.1 only; NATS_HOST_PORT 4322 and S3_HOST_PORT 8433
+# too, for host runners; HELMSTUDIO_GPU_HOST, gpu, their host name), PUBLIC_BASE_URL (the address people
 # open, e.g. behind a TLS proxy; then also WEB_COOKIE_SECURE=true), REMOTE_MODELS=on (remote model providers).
 #
 # How it runs without the source: the `secrets` step (the helmstudio-setup image) makes the stack's secrets once into
@@ -40,6 +41,7 @@ services:
     environment:
       HELMSTUDIO_ADMIN_EMAIL: ${HELMSTUDIO_ADMIN_EMAIL:-}
       HELMSTUDIO_ADMIN_PASSWORD: ${HELMSTUDIO_ADMIN_PASSWORD:-}
+      HELMSTUDIO_GPU_HOST: ${HELMSTUDIO_GPU_HOST:-gpu}  # the NVIDIA host runners' name (its NATS users, S3 identity)
     volumes: [keys:/stack/deploy/secrets, config:/config]
     logging: *log
 
@@ -71,7 +73,7 @@ services:
       KONG_DNS_NOT_FOUND_TTL: "1"
       KONG_DNS_STALE_TTL: "1"
     networks: {default: {ipv4_address: "${HELM_NET:-172.30.97}.10"}}
-    ports: ["127.0.0.1:${HELMSTUDIO_PORT:-8300}:8000"]   # the only published port
+    ports: ["127.0.0.1:${HELMSTUDIO_PORT:-8300}:8000"]   # the app; NATS and S3 also, on loopback, for host runners
     healthcheck: {test: [CMD, kong, health], interval: 5s, timeout: 5s, retries: 20}
     depends_on:
       auth: {condition: service_healthy}
@@ -209,6 +211,7 @@ services:
       - {type: volume, source: keys, target: /run/secrets, read_only: true, volume: {subpath: run/nats}}
       - {type: volume, source: config, target: /etc/nats, read_only: true, volume: {subpath: nats}}
       - natsdata:/data
+    ports: ["127.0.0.1:${NATS_HOST_PORT:-4322}:4222"]   # for the NVIDIA host runners (make runners-nvidia STACK=release)
     healthcheck:
       test: [CMD, wget, -qO-, "http://localhost:8222/healthz?js-enabled-only=true"]
       interval: 3s
@@ -253,6 +256,7 @@ services:
     volumes:
       - {type: volume, source: keys, target: /run/secrets, read_only: true, volume: {subpath: run/seaweedfs}}
       - seaweeddata:/data
+    ports: ["127.0.0.1:${S3_HOST_PORT:-8433}:8333"]     # the S3 API, for the host runners
     healthcheck: {test: [CMD, wget, -qO-, http://localhost:8333/healthz], interval: 3s, timeout: 3s, retries: 30}
     depends_on:
       secrets: {condition: service_completed_successfully}

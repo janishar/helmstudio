@@ -34,3 +34,14 @@ Then open http://localhost:8300. `make runners-nvidia` starts env torch, and env
 (`SGLANG_BIN`, else `sglang` on PATH). The host name is `GPU_HOST` (default: the first of `GPU_HOSTS`, else the one
 host `make up` made, else the machine's short name); it must be one `make up GPU_HOSTS=…` made. Logs:
 `runner_service/.run/runner-<host>-<env>.log`. Stop: `make runners-nvidia-stop`, then `make down`.
+
+**With the Docker release stack** (deploy/release/compose.yml, no build): start it as its README says, then in a
+clone run only the runners against it:
+
+```sh
+HELMSTUDIO_MODELS=/path/to/models make runners-nvidia STACK=release
+```
+
+The stack makes host `gpu`'s runner credentials on its first start (`HELMSTUDIO_GPU_HOST` in its `.env` names it
+otherwise) and publishes NATS (4322) and S3 (8433) on 127.0.0.1 only; `STACK=release` copies the credentials out of
+its `keys` volume into `deploy/secrets-release/`. Stop: `make runners-nvidia-stop STACK=release`.

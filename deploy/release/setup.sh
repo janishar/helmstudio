@@ -1,7 +1,8 @@
 #!/bin/sh
 # The release stack's first-start step (compose.yml, service `secrets`), on every `up`; safe to re-run.
 # - The secrets: .tools/make-secrets into the keys volume (/stack/deploy/secrets), as for a source install; it makes
-#   what is missing and never overwrites a secret. One GPU host, `gpu`: the NVIDIA runner of the `nvidia` profile.
+#   what is missing and never overwrites a secret. One GPU host, HELMSTUDIO_GPU_HOST (default
+#   `gpu`): its torch and native NATS users and S3 identity, for the host runners (make runners-nvidia STACK=release).
 # - The admin: HELMSTUDIO_ADMIN_EMAIL and HELMSTUDIO_ADMIN_PASSWORD are saved on the first start only (later values
 #   are ignored); auth reads them on every start (without them it would demote every admin) and the `admin` step
 #   creates the account with them.
@@ -11,7 +12,8 @@
 #   mounts.
 set -eu
 s=/stack/deploy/secrets
-GPU_HOSTS=gpu sh /stack/.tools/make-secrets
+h=${HELMSTUDIO_GPU_HOST:-gpu}
+GPU_HOSTS=$h sh /stack/.tools/make-secrets
 cd "$s"
 
 if ! [ -s admin_email ]; then
@@ -46,11 +48,6 @@ put nats nats_admin_password nats_auth_password nats_studio_password nats_runner
 put nats-setup nats_admin_url
 put postgres postgres_password auth_db_password studio_db_password pipelines_db_password
 put seaweedfs s3_access_key_id s3_secret_access_key s3_config.json=s3_config
-# the NVIDIA runner (profile nvidia): host gpu's own NATS user and S3 identity, on the stack's network (plain nats://
-# to the compose address, not the remote host's TLS tunnel)
-(umask 022 && printf 'nats://runner_gpu_torch:%s@nats:4222' "$(cat nats_runner_gpu_torch_password)" >.runner_nats_url)
-put runner .runner_nats_url=nats_url s3_runner_gpu_access_key_id s3_runner_gpu_secret_access_key
-rm -f .runner_nats_url
 
 mkdir -p /config/nats /config/postgres /config/tools /config/plugins
 for f in /stack/deploy/nats/*; do cat "$f" >"/config/nats/${f##*/}"; done

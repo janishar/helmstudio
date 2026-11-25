@@ -37,8 +37,17 @@ Open http://localhost:8300. Every port is on 127.0.0.1: from another machine use
 ## An NVIDIA card
 
 No NVIDIA image ships: a CUDA image would be many GB and tied to one driver. The GPU runners run on the machine
-itself, from source, on the card's own driver: [docs/guides/nvidia-linux.md](../../docs/guides/nvidia-linux.md)
-(Linux, or Windows through WSL2).
+itself, from source, on the card's own driver, against this stack: [docs/guides/nvidia-linux.md](../../docs/guides/nvidia-linux.md)
+(Linux, or Windows through WSL2). The stack already made host `gpu`'s runner credentials (`HELMSTUDIO_GPU_HOST` in
+`.env` names it otherwise, before the first start) and publishes NATS and S3 on 127.0.0.1 only (`NATS_HOST_PORT` 4322,
+`S3_HOST_PORT` 8433). In a clone of the repo:
+
+```sh
+SGLANG_BIN=~/sglang/bin/sglang HELMSTUDIO_MODELS=/path/to/models make runners-nvidia STACK=release
+```
+
+It copies the runner credentials out of the stack's `keys` volume into `deploy/secrets-release/` and starts the
+runners; the host shows under Admin › Hosts. Stop: `make runners-nvidia-stop STACK=release`.
 
 ## Update
 
