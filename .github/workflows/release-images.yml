@@ -1,16 +1,14 @@
 # Release builds (docs/plan/34-release-builds.md §38): the 9 images for linux/amd64 and linux/arm64 on native runners
 # (and the NVIDIA runner's for linux/amd64), the release compose.yml (deploy/release/compose.yml with the version
-# baked in), a smoke test of that compose.yml on each kind of machine, and the Mac app's .dmg. Every push and pull
-# request builds and tests everything and publishes nothing (the files are this run's artifacts). A pushed tag v*
-# also publishes, only after both smoke tests pass: one tag ghcr.io/janishar/helmstudio-<name>:<version> per image
+# baked in), a smoke test of that compose.yml on each kind of machine, and the Mac app's .dmg. It runs only for a
+# pushed tag v*; on a tag whose commit is not on main every job after the first is skipped (owner, 2026-11-25), and publishes only
+# after both smoke tests pass: one tag ghcr.io/janishar/helmstudio-<name>:<version> per image
 # (multi-arch), and the .dmg, compose.yml and SHA256SUMS attached to the GitHub release of that tag if it exists.
 name: release-builds
 
 on:
   push:
-    branches: ['**']
     tags: ['v*']
-  pull_request:
 
 permissions:
   contents: read
@@ -29,7 +27,17 @@ jobs:
     outputs:
       version: ${{ steps.v.outputs.version }}
       release: ${{ steps.v.outputs.release }}
+      on_main: ${{ steps.main.outputs.on_main }}
     steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - name: the tagged commit is on main (otherwise every other job is skipped)
+        id: main
+        run: |
+          git fetch origin main
+          if git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then m=true; else m=false
+            echo "::warning::$GITHUB_REF_NAME is not on main: nothing is built (merge into main first, then tag)"; fi
+          echo "on_main=$m" >>"$GITHUB_OUTPUT"
       - id: v
         run: |
           if [ "${GITHUB_REF_TYPE}" = tag ]; then v=${GITHUB_REF_NAME#v} r=true; else v=ci-${GITHUB_SHA::7} r=false; fi
@@ -37,6 +45,7 @@ jobs:
 
   images:
     needs: meta
+    if: needs.meta.outputs.on_main == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -79,6 +88,7 @@ jobs:
   # the release compose.yml: deploy/release/compose.yml with this run's version as the default
   compose:
     needs: meta
+    if: needs.meta.outputs.on_main == 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -97,6 +107,7 @@ jobs:
   # with no admin given (the secrets and the admin kept), the same checks; then `down -v`
   smoke:
     needs: [meta, images, compose]
+    if: needs.meta.outputs.on_main == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -153,6 +164,7 @@ jobs:
   # toolchains go first, and no GitHub cache.
   runner-cuda:
     needs: [meta, smoke]
+    if: needs.meta.outputs.on_main == 'true'
     runs-on: ubuntu-24.04
     permissions: {contents: read, packages: write}
     steps:
@@ -178,6 +190,7 @@ jobs:
 
   mac:
     needs: meta
+    if: needs.meta.outputs.on_main == 'true'
     runs-on: macos-15
     env:
       VERSION: ${{ needs.meta.outputs.version }}
@@ -209,7 +222,7 @@ jobs:
   # ---------- a tag only, after both smoke tests: push each image by digest (from this run's cache), then one tag
 
   push:
-    if: needs.meta.outputs.release == 'true'
+    if: needs.meta.outputs.release == 'true' && needs.meta.outputs.on_main == 'true'
     needs: [meta, smoke]
     permissions: {contents: read, packages: write}
     strategy:
@@ -254,6 +267,7 @@ jobs:
 
   publish:
     needs: [meta, push]
+    if: needs.meta.outputs.on_main == 'true'
     runs-on: ubuntu-24.04
     permissions: {contents: read, packages: write}
     strategy:
@@ -274,7 +288,7 @@ jobs:
   # the release files (the .dmg, compose.yml, SHA256SUMS): one artifact on every run; on a tag also attached to its GitHub release, if one exists
   release-files:
     needs: [meta, compose, smoke, mac, publish, runner-cuda]
-    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') }}
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && needs.meta.outputs.on_main == 'true' }}
     runs-on: ubuntu-24.04
     permissions: {contents: write}
     env:

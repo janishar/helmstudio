@@ -19,8 +19,12 @@ Release images are built on the owner's Mac by `.tools/push-images`: linux/arm64
   each kind (ubuntu-24.04 and ubuntu-24.04-arm, free for a public repo), then publish one multi-arch tag per image
   to `ghcr.io/janishar/helmstudio-<name>:<version>` (each machine pulls its own). Sign-in by the workflow's own
   `GITHUB_TOKEN` (packages: write); no personal token.
-- On a push to a branch or a pull request it builds the same images **without publishing**, so a change that breaks a
-  build shows before a release.
+- **Only on a tag, only from main** (owner, 2026-11-25: "i dont want this build-and-smoke-test, only on tag push on
+  main only"; "release only from main"): no run on branch pushes or pull requests. The first job checks the tagged
+  commit is on main (`git merge-base --is-ancestor "$GITHUB_SHA" origin/main`); if not, every other job is skipped
+  (owner: "can we not rather fail one job"), so nothing is built or published. The order of a release: merge
+  the alpha branch into main, push main, delete the merged branches, then tag the commit on main; the workflow runs
+  only for that tag. (v0.1.0-alpha.4 was the last tag built from a branch.)
 - `.tools/push-images` stays for a release by hand; the release checklist names the workflow first.
 - The Mac app needs no change: it pulls the same names, and gets the arm64 half.
 - **The Mac app too** (owner, 2026-11-25: "also build mac desktop binary on there only"): a job on a macOS Apple Silicon
@@ -52,7 +56,8 @@ docker file?", then "for mac wwe already have the app we dont need docker deskto
 
 ### 38.4 Checks
 
-Owner, 2026-11-25: "then check at that only every build". On every push, pull request and tag, a smoke test on GitHub's
+Owner, 2026-11-25: "then check at that only every build", then "only on tag push on main only". On every release
+tag (a commit on main), a smoke test on GitHub's
 Intel/AMD and ARM Linux runners runs the release `compose.yml` with that run's images: first `up`, healthy, sign in as
 the admin, read one authenticated route, `down -v`; a tag publishes only after both pass. GitHub's Windows and Mac
 machines cannot run the Linux VM, so Windows (Docker Desktop) and the Mac app are checked by hand once per release

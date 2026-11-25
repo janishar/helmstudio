@@ -48,7 +48,10 @@ own run of the platform). Tick each box in a copy of this list for the release (
 
 - [ ] Set the version in `web_service/package.json`, `desktop/package.json`, the `pyproject.toml` files and the CLI.
 - [ ] `CHANGELOG.md` at the root: the first entry lists what this release can do, then the known limits.
-- [ ] Commit, then tag: `git tag -a v0.1.0-alpha.1 -m "helmstudio 0.1.0-alpha.1"` and push the tag.
+- [ ] Commit on the alpha branch, then release only from main (owner, 2026-11-25): merge the alpha branch into
+  main, push main, delete the merged branches, then tag the commit on main:
+  `git tag -a v<version> -m "helmstudio <version>" origin/main` and push the tag. The workflow runs only for a tag on
+  main (on a tag off main every job after the first is skipped); branch pushes and pull requests start no run.
 
 ## 6. Artifacts (as decided in step 0)
 
