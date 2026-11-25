@@ -68,6 +68,18 @@ describe("plugins", () => {
     expect(failedAlert(search)).toEqual({
       lead: "Couldn't start · it stopped 3 times: ",
       why: "ModuleNotFoundError: ddgs",
+      retries: true,
+    });
+    // exit 78: the plugin's own line, no backoff, so no "Trying again"
+    expect(
+      failedAlert({
+        ...search,
+        problem: "Install Claude Code and sign in, then Try again",
+      }),
+    ).toEqual({
+      lead: "Couldn't start · Install Claude Code and sign in, then Try again",
+      why: "",
+      retries: false,
     });
     expect(failedAlert(bridge)).toBeNull();
     expect(problemAlert(search)).toBeNull();
