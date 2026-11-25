@@ -24,17 +24,19 @@ const PassTTL = 300 * time.Second
 
 // PassRequest is req.studio.plugins.pass's request.
 type PassRequest struct {
-	OwnerID string `json:"owner_id"`
-	Plugin  string `json:"plugin"`
-	CallID  string `json:"call_id"`
+	OwnerID string   `json:"owner_id"`
+	Plugin  string   `json:"plugin"`
+	CallID  string   `json:"call_id"`
+	TakeIDs []string `json:"take_ids,omitempty"` // after the call: which of these did it make (reply: made)
 }
 
-// PassReply is its reply: ok (pass, api) or error and code.
+// PassReply is its reply: ok (pass, api; no pass for a plugin without takes), made (take_ids) or error and code.
 type PassReply struct {
-	Pass  string `json:"pass,omitempty"`
-	API   string `json:"api,omitempty"`
-	Error string `json:"error,omitempty"`
-	Code  string `json:"code,omitempty"`
+	Pass    string    `json:"pass,omitempty"`
+	API     string    `json:"api,omitempty"`
+	TakeIDs *[]string `json:"take_ids,omitempty"`
+	Error   string    `json:"error,omitempty"`
+	Code    string    `json:"code,omitempty"`
 }
 
 // passBody is what a pass signs.
@@ -58,12 +60,23 @@ func (s *Service) pluginUsable(ctx context.Context, name string, takes bool) (bo
 	return ok, err
 }
 
-// PluginPass answers studio.plugins.pass: the call's pass, for a plugin that is on.
+// PluginPass answers studio.plugins.pass: the call's pass, for a plugin that is on (none for a plugin without takes);
+// with take_ids, the ones this plugin made under this call (made).
 func (s *Service) PluginPass(ctx context.Context, req *PassRequest) PassReply {
-	if !utility.IsUUID(req.OwnerID) || !pluginNameRe.MatchString(req.Plugin) || !callIDRe.MatchString(req.CallID) {
+	if !utility.IsUUID(req.OwnerID) || !pluginNameRe.MatchString(req.Plugin) || !callIDRe.MatchString(req.CallID) ||
+		len(req.TakeIDs) > 8 {
 		return PassReply{Error: "owner_id, plugin and call_id are required", Code: "invalid"}
 	}
+	if req.TakeIDs != nil {
+		return s.madeBy(ctx, req)
+	}
 	ok, err := s.pluginUsable(ctx, req.Plugin, false)
+	if err == nil && ok {
+		var takes bool
+		if takes, err = s.pluginUsable(ctx, req.Plugin, true); err == nil && !takes {
+			return PassReply{API: s.signer.BaseURL()} // ponytail: two reads of one row; one query if it ever matters
+		}
+	}
 	switch {
 	case err != nil:
 		log.Printf("studio.plugins.pass %s: %v", req.Plugin, err)
@@ -73,6 +86,33 @@ func (s *Service) PluginPass(ctx context.Context, req *PassRequest) PassReply {
 	}
 	body, _ := json.Marshal(passBody{Owner: req.OwnerID, Plugin: req.Plugin, Call: req.CallID, Exp: time.Now().Add(PassTTL).Unix()})
 	return PassReply{Pass: s.signer.Pass(body), API: s.signer.BaseURL()}
+}
+
+// madeBy is the made reply: those of req.TakeIDs that are the owner's live takes with source tool that req.Plugin made
+// under req.CallID (takes.tool's plugin and call, as CreatePluginTake records them from the pass).
+func (s *Service) madeBy(ctx context.Context, req *PassRequest) PassReply {
+	made := []string{}
+	err := common.WithUser(ctx, s.db, common.Caller{ID: req.OwnerID}, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `SELECT id::text FROM takes WHERE id::text = ANY($1) AND owner_id = $2 AND source = 'tool'
+			AND deleted_at IS NULL AND tool->>'plugin' = $3 AND tool->>'call' = $4`, req.TakeIDs, req.OwnerID, req.Plugin, req.CallID)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				return err
+			}
+			made = append(made, id)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		log.Printf("studio.plugins.pass %s made: %v", req.Plugin, err)
+		return PassReply{Error: "internal error", Code: "internal"}
+	}
+	return PassReply{TakeIDs: &made}
 }
 
 var errPass = errors.New("invalid or expired plugin pass")
@@ -92,7 +132,7 @@ func (s *Service) PluginCaller(ctx context.Context, pass string) (common.Caller,
 	if !usable {
 		return common.Caller{}, errPass
 	}
-	return common.Caller{ID: body.Owner, Plugin: body.Plugin, Via: "api"}, nil
+	return common.Caller{ID: body.Owner, Plugin: body.Plugin, Call: body.Call, Via: "api"}, nil
 }
 
 // IsPassError reports whether err is a refused pass (401), not an outage.

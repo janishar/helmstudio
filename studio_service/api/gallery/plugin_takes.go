@@ -65,7 +65,7 @@ func (s *Service) CreatePluginTake(ctx context.Context, caller common.Caller, bo
 	}
 	now := time.Now().UTC()
 	wait := importWait{CreatedAt: now, Width: body.Width, Height: body.Height, Video: body.Video}
-	tool, _ := json.Marshal(map[string]any{"plugin": caller.Plugin, "tool": body.Tool, "input": body.Input})
+	tool, _ := json.Marshal(map[string]any{"plugin": caller.Plugin, "tool": body.Tool, "input": body.Input, "call": caller.Call})
 	var audio any
 	if body.Kind == "audio" {
 		audio = dto.AudioInfo{DurationS: body.DurationS}

@@ -8083,6 +8083,8 @@ export interface components {
             tool: string;
             /** @description the tool's input as the plugin reported it (at most 4096 bytes as compact JSON) */
             input: Record<string, never>;
+            /** @description the assistant call whose pass made it (studio records it; a line's Undo deletes only takes of its own call) */
+            call?: string;
         };
         /** @description from 1.70: one of the pass's owner's takes as a `takes` plugin reads it (contracts/README.md, Plugins: takes) */
         PluginTake: {

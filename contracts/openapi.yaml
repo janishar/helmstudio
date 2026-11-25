@@ -7786,6 +7786,7 @@ components:
         plugin: {type: string, pattern: '^[a-z][a-z0-9-]{0,22}$', examples: [media-tools]}
         tool: {type: string, pattern: '^[a-z][a-z0-9_]{0,23}$', examples: [crop]}
         input: {type: object, description: 'the tool''s input as the plugin reported it (at most 4096 bytes as compact JSON)'}
+        call: {type: string, maxLength: 120, description: 'the assistant call whose pass made it (studio records it; a line''s Undo deletes only takes of its own call)'}
     PluginTake:
       type: object
       description: 'from 1.70: one of the pass''s owner''s takes as a `takes` plugin reads it (contracts/README.md, Plugins: takes)'

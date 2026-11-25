@@ -32,7 +32,7 @@ type Take struct {
 	Audio       json.RawMessage // kind audio: {duration_s} (API 1.19)
 	SourceMap   json.RawMessage // a video made from a media take: evt.run.output's source_map (API 1.19)
 	Thumb       json.RawMessage // API 1.48: its thumbnail {key, width, height, bytes}; null until made
-	Tool        json.RawMessage // API 1.70, source tool: {plugin, tool, input}; null otherwise
+	Tool        json.RawMessage // API 1.70, source tool: {plugin, tool, input, call}; null otherwise
 }
 
 // TakeCols are the columns Take scans, in order, from takes aliased t.

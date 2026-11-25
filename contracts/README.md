@@ -4142,7 +4142,9 @@ that reads one of your takes and makes a new one, with no user token and never a
   `base64url({owner, plugin, call, exp}).base64url(HMAC-SHA256)` with a key only it holds (derived from
   `FILE_URL_SECRET`, so a restart keeps passes valid; pipelines never sees it), valid 300 s, and answers its public
   base URL too. The call carries `Authorization: Bearer <pass>`, `X-Helm-Owner`, `X-Helm-Call` and `X-Helm-Api`
-  (that base URL). A plugin that is not a `takes` plugin may ignore all of it.
+  (that base URL). Only a plugin whose manifest says `takes` gets a pass: any other gets `X-Helm-Owner` and
+  `X-Helm-Call` alone. A pass's scope: for 300 s, while its plugin is on, it reads any of its owner's ready takes and
+  makes new takes from them; every take it makes records the pass's call id (`tool.call`).
 - **The plugin API** (`/v1/studio/plugin/*`): Kong lets it through without an API key (its route bypasses the key
   check, as `/files/`); studio checks the pass itself instead of a user token: the signature, `exp`, and that the
   plugin is on, unblocked, of kind assistant-tools and its manifest says `"takes": true`; else 401. It acts as the
@@ -4150,14 +4152,16 @@ that reads one of your takes and makes a new one, with no user token and never a
   - `GET /v1/studio/plugin/takes/{take_id}` → `PluginTake`: kind, title, type, size, pixel size, a video's length,
     rate and sound, an audio's length, and `url` signed for 10 minutes. A pending or deleted take is 404.
   - `POST /v1/studio/plugin/takes` `PluginTakeCreate` → 201 `PluginTakeUpload`: a pending take, `source: tool`,
-    `tool` {plugin (the pass's), tool, input}, `made_with` null, `parents` = the takes it was made from (each the
+    `tool` {plugin (the pass's), tool, input, call (the pass's)}, `made_with` null, `parents` = the takes it was made from (each the
     owner's, ready and live, else 404). Keys as an upload's (`u/<owner>/uploads/<id>.<png|jpg|webp|wav|mp3|m4a>`,
     at most 50 MB) or an import's video (`u/<owner>/imports/<id>.mp4` and its poster beside it, at most 2 GB), so
     files_service needs no new key shape. PUT links valid 15 minutes; not completed within an hour, it is discarded.
   - `POST /v1/studio/plugin/takes/{take_id}/complete` checks the objects as an import's (size, the header of the
     declared type and pixel size; a video's `ftyp` and poster; audio as an upload's) and shows the take; a failed
     check discards it (422). The thumbs job makes its thumbnail as for an upload.
-- **Lines.** A reply's `take_ids` (toolReply) go on the chat line (`AssistantLine.take_ids`); its Undo deletes them
+- **Lines.** A reply's `take_ids` (toolReply) go on the chat line (`AssistantLine.take_ids`) only as far as studio
+  vouches for them (`studio.plugins.pass` with `take_ids` → `made`: the owner's takes with source tool that this
+  plugin made under this call id; none from a plugin without `takes`); its Undo deletes them
   (`DELETE /v1/studio/takes/{take_id}`; no Redo: a deleted take is gone). The model shows a new take as media by
   writing its `[[take:<id>]]` alone on a line (Assistant: media and vision).
 - **Pictures.** A reply's `images` (base64 JPEG, at most 8) are for a model that sees: they join the next model

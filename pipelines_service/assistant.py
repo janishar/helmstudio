@@ -1031,10 +1031,10 @@ class Assistant:
         try:
             if not t:
                 raise providers.CallError("off", "the plugin is off")
-            # API 1.70: studio signs the pass (and checks it when a takes plugin calls back)
-            got = await self.passes(
-                {"owner_id": s["owner_id"], "plugin": t["plugin"], "call_id": c["id"]}
-            )
+            # API 1.70: studio signs the pass (and checks it when a takes plugin calls back); none for a plugin
+            # without takes
+            ask = {"owner_id": s["owner_id"], "plugin": t["plugin"], "call_id": c["id"]}
+            got = await self.passes(ask)
             if not got or "error" in got:
                 why = (
                     "the plugin is off"
@@ -1042,8 +1042,9 @@ class Assistant:
                     else "studio did not answer"
                 )
                 raise providers.CallError("off", why)
-            headers = {"Authorization": f"Bearer {got['pass']}", "X-Helm-Owner": s["owner_id"],
-                       "X-Helm-Call": c["id"], "X-Helm-Api": got["api"]}  # fmt: skip
+            headers = {"X-Helm-Owner": s["owner_id"], "X-Helm-Call": c["id"]}
+            if "pass" in got:
+                headers |= {"Authorization": f"Bearer {got['pass']}", "X-Helm-Api": got["api"]}
             reply = await providers.plugin_tool(t["title"], t["url"], t["tool"], c["args"], headers)
         except providers.CallError as e:
             return {"status": "failed", "error": str(e),
@@ -1052,8 +1053,11 @@ class Assistant:
         if reply.get("sources"):
             done["sources"] = reply["sources"][:5]
         out = {"status": "done", "result": reply["result"], "line": done}
-        if reply.get("take_ids"):  # API 1.70: new takes; the line's Undo deletes them
-            done |= {"take_ids": reply["take_ids"], "undo": True}
+        # API 1.70: new takes; the line's Undo deletes only those studio says this plugin made under this call
+        if reply.get("take_ids") and "pass" in got:
+            made = await self.passes(ask | {"take_ids": reply["take_ids"]})
+            if made and made.get("take_ids"):
+                done |= {"take_ids": made["take_ids"], "undo": True}
         # API 1.70: pictures for the next model call, as look_at's (never stored)
         if reply.get("images"):
             pid = str(uuid.uuid5(uuid.NAMESPACE_URL, c["id"]))

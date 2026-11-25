@@ -97,6 +97,11 @@ class Chat:
         self.passed = [*getattr(self, "passed", []), req]
         if not any(p["name"] == req["plugin"] for p in self.plugins):
             return {"error": "the plugin is off", "code": "not_found"}
+        if "take_ids" in req:  # made: only the takes studio recorded under this plugin and call
+            made = getattr(self, "made", set())
+            return {"take_ids": [t for t in req["take_ids"] if (req["call_id"], t) in made]}
+        if getattr(self, "no_takes", False):
+            return {"api": "http://localhost:8300"}
         return {"pass": "eyJvIjoxfQ.c2ln", "api": "http://localhost:8300"}
 
     def cmd(self, inp: dict, turn: int | None = None, owner: str | None = None) -> dict:
@@ -1081,16 +1086,21 @@ async def test_a_plugin_tools_new_takes_and_pictures(pool, fake, plugin):
     c = Chat(pool, fake)
     c.sees = True
     c.plugins = [plugin.manifest()]
-    made = str(uuid.uuid4())
-    plugin.script = [(200, {"result": {"take_id": made}, "line": "Cropped · Fox", "take_ids": [made]}, 0),
-                     (200, {"result": {"frames": [{"at": 0.5}]}, "line": "Frames · Fox", "images": [JPEG]}, 0)]  # fmt: skip
+    made, source = str(uuid.uuid4()), str(uuid.uuid4())
+    c.made = {(c.cid(1, 0), made)}
+    plugin.script = [(200, {"result": {"take_id": made}, "line": "Cropped · Fox", "take_ids": [made, source]}, 0),
+                     (200, {"result": {"frames": [{"at": 0.5}]}, "line": "Frames · Fox", "images": [JPEG]}, 0),
+                     (200, {"result": {}, "line": "Sneaky · Fox", "take_ids": [source]}, 0)]  # fmt: skip
     c.script(
         calls((SEARCH, {"query": "crop"})),
         calls((SEARCH, {"query": "frames"})),
+        calls((SEARCH, {"query": "sneaky"})),
         {"content": "Seen."},
     )
     step = await c.say("crop it, then look at its frames")
-    crop, frames, looked = step["lines"]
+    crop, frames, looked, sneaky = step["lines"]
+    # a take the call did not make (here its source) never gets an Undo
+    assert sneaky["undo"] is False and "take_ids" not in sneaky
     assert crop == {
         "id": c.cid(1, 0),
         "status": "done",
@@ -1105,6 +1115,23 @@ async def test_a_plugin_tools_new_takes_and_pictures(pool, fake, plugin):
     assert JPEG not in json.dumps(
         c.asked()[-1]["messages"][1]["content"][0]
     )  # the result text has no picture
+
+
+async def test_a_plugin_without_takes_gets_no_pass_and_no_undo(pool, fake, plugin):
+    """API 1.70: studio gives a plugin without `takes` no pass: no Authorization, and take_ids it answers are dropped."""
+    c = Chat(pool, fake)
+    c.plugins, c.no_takes = [plugin.manifest()], True
+    plugin.script = [(200, {"result": {}, "line": "Searched", "take_ids": [str(uuid.uuid4())]}, 0)]
+    c.script(calls((SEARCH, {"query": "ltx"})), {"content": "Done."})
+    line = (await c.say("search"))["lines"][0]
+    headers = plugin.requests[0]["headers"]
+    assert (
+        "Authorization" not in headers
+        and "X-Helm-Api" not in headers
+        and headers["X-Helm-Owner"] == OWNER
+    )
+    assert line["undo"] is False and "take_ids" not in line
+    assert all("take_ids" not in r for r in c.passed)  # nothing to vouch for
 
 
 async def test_a_plugin_whose_pass_studio_refuses_is_a_failed_line(pool, fake, plugin):

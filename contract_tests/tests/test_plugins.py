@@ -277,7 +277,8 @@ def test_a_plugin_pass_opens_only_its_owners_takes(admin, api, api_b, anon, assi
             and made["parents"] == [mine["id"]]
             and made["made_with"] is None
         )
-        assert made["tool"] == {"plugin": "fake-tools", "tool": "echo", "input": {"text": word}}
+        assert made["tool"] == {"plugin": "fake-tools", "tool": "echo", "input": {"text": word},
+                                "call": call["call"]}  # fmt: skip  # the pass's call: Undo vouches by it
         assert ok(api.get(f"{STUDIO}/takes/{made['id']}"))["tool"]["plugin"] == "fake-tools"
         assert api_b.get(f"{STUDIO}/takes/{made['id']}").status_code == 404
         ok(api.delete(f"{STUDIO}/takes/{made['id']}"), 204)  # the line's Undo
