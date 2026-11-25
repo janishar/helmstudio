@@ -12,7 +12,9 @@ from test_director import fake, fake_ctl  # noqa: F401
 
 GUIDES = f"{STUDIO}/model-guides"
 THREADS = f"{STUDIO}/assistant/threads"
-ECHO = (Path(__file__).parents[2] / "runner_service" / "packs" / "echo" / "assistant.md").read_text()
+ECHO = (
+    Path(__file__).parents[2] / "runner_service" / "packs" / "echo" / "assistant.md"
+).read_text()
 
 
 def test_every_user_reads_a_guide_and_an_unknown_family_is_404(api):
@@ -36,13 +38,19 @@ def test_a_turn_carries_the_held_families_cards_and_reads_a_guide(api, assistant
     got = wait_for(lambda: (g := ok(api.get(f"{THREADS}/{tid}")))["state"] == "idle" and g or None, timeout=60,
                    what="the answer")  # fmt: skip
     lines = [e["line"] for e in got["entries"] if e["kind"] == "line"]
-    assert {"status": "done", "text": "Read the Echo (fake) guide"}.items() <= lines[0].items(), lines
+    assert {"status": "done", "text": "Read the Echo (fake) guide"}.items() <= lines[0].items(), (
+        lines
+    )
     first, second = [r for r in fake("GET", "/__requests") if r["model"] == assistant][-2:]
     system = next(m["content"] for m in first["body"]["messages"] if m["role"] == "system")
     names = [t["function"]["name"] for t in first["body"].get("tools") or []]
     assert "read_model_guide" in names
     # the cards of held families only: echo's while one of its variants is present (no other pack publishes a guide)
     assert ("Echo (fake) (echo): Echo (fake) is the test model" in system) == held
-    assert ("The models this install holds" in system) == held and "## Settings that matter" not in system
-    assert "echo.fail" in json.dumps(second["body"]["messages"])  # the whole guide reached the model
+    assert (
+        "The models this install holds" in system
+    ) == held and "## Settings that matter" not in system
+    assert "echo.fail" in json.dumps(
+        second["body"]["messages"]
+    )  # the whole guide reached the model
     ok(api.delete(f"{THREADS}/{tid}"), 204)

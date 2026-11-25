@@ -109,20 +109,32 @@ def test_a_shot_list_saved_in_one_chat_is_read_in_the_next(api, api_b, assistant
         url = f"{THREADS}/{tid}"
         ok(api.post(f"{url}/messages", json={"kind": "message", "client_id": TAB, "text": text,
                                              "screen": screen()}), 202)  # fmt: skip
-        got = wait_for(lambda: (g := ok(api.get(url)))["state"] == "idle" and g, timeout=60, what="the answer")
+        got = wait_for(
+            lambda: (g := ok(api.get(url)))["state"] == "idle" and g, timeout=60, what="the answer"
+        )
         ok(api.delete(url), 204)
         return got
 
     before = len([r for r in fake("GET", "/__requests") if r["model"] == assistant])
     got = chat("Plan the diner film")
-    assert any(f"Shot list · {film}: 2 shots" in (e.get("line") or {}).get("text", "") for e in got["entries"]), got["entries"]
+    assert any(
+        f"Shot list · {film}: 2 shots" in (e.get("line") or {}).get("text", "")
+        for e in got["entries"]
+    ), got["entries"]
     item = next(i for i in ok(api.get(f"{STUDIO}/assistant/memory", params={"kind": "project"}))["items"]
                 if (i.get("shots") or {}).get("film") == film)  # fmt: skip
-    assert item["shots"]["shots"] == plan and item["text"].startswith(f"Shot list · {film}: 2 shots")
+    assert item["shots"]["shots"] == plan and item["text"].startswith(
+        f"Shot list · {film}: 2 shots"
+    )
     chat("For Shot 2, what was it?")
     calls = [r for r in fake("GET", "/__requests") if r["model"] == assistant][before:]
-    assert '2. @stranger pays · 3 s · "@stranger: Keep the change."' in calls[2]["body"]["messages"][0]["content"]
-    edited = ok(api.patch(f"{STUDIO}/assistant/memory/{item['id']}", json={"text": "The diner film"}))
+    assert (
+        '2. @stranger pays · 3 s · "@stranger: Keep the change."'
+        in calls[2]["body"]["messages"][0]["content"]
+    )
+    edited = ok(
+        api.patch(f"{STUDIO}/assistant/memory/{item['id']}", json={"text": "The diner film"})
+    )
     assert edited["text"] == "The diner film" and edited["shots"] == item["shots"]
     assert api_b.delete(f"{STUDIO}/assistant/memory/{item['id']}").status_code == 404
     ok(api.delete(f"{STUDIO}/assistant/memory/{item['id']}"), 204)
@@ -226,7 +238,10 @@ def test_attached_images_reach_a_model_that_sees(api, api_b, anon, admin, fake_c
                 "screen": screen(),
             }
             r = api.post(f"{url}/messages", json=body | {"takes": [theirs]})
-            assert r.status_code == 422 and r.json()["detail"] == f"takes: {theirs} is not one of your takes"
+            assert (
+                r.status_code == 422
+                and r.json()["detail"] == f"takes: {theirs} is not one of your takes"
+            )
             sent = ok(api.post(f"{url}/messages", json=body | {"takes": [mine]}), 202)
             assert (
                 sent["entry"]["takes"] == [mine] and sent["entry"]["text"] == "What light is this?"
@@ -256,7 +271,10 @@ def test_auto_mode_runs_a_generation_by_itself_and_asks_past_the_cap(api, api_b,
     assert api_b.patch(url, json={"auto": True}).status_code == 404
     assert api.patch(url, json={"auto": "on"}).status_code == 422
     assert ok(api.patch(url, json={"auto": True}))["auto"] is True
-    gen = screen("/") | {"actions": ["navigate", "await", "generate"], "fields": {"plan": {"runs": 1, "seconds": 5}}}
+    gen = screen("/") | {
+        "actions": ["navigate", "await", "generate"],
+        "fields": {"plan": {"runs": 1, "seconds": 5}},
+    }
 
     def parked():
         got = ok(api.get(url))
@@ -286,4 +304,3 @@ def test_auto_mode_runs_a_generation_by_itself_and_asks_past_the_cap(api, api_b,
     ok(admin.put(SETTINGS, json={"enabled": True, "provider": now["provider"],
                                  "limits": now["limits"] | {"auto_takes_per_hour": 8}}))  # fmt: skip
     ok(api.delete(url), 204)
-
