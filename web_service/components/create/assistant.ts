@@ -169,8 +169,10 @@ function change(c: CreateCtx, key: string, value: unknown): Outcome {
   }
   // a voice says what it takes and what it got (item 23), never only "a voice is required"
   if ("error" in read && f.param.type === "voice") {
-    const why = `${label(f)}: expected one of your voices; got ${JSON.stringify(value ?? null)}`;
-    return failed(why, `${why} (a voice is {"voice_id": "<id>"}: a voice's id in your library)`);
+    const why = `${label(f)}: expected one of your voices`;
+    const got = typeof value === "string" && value.length <= 40 ? `${why}; got "${value}"` : why;
+    const json = `${why}; got ${JSON.stringify(value ?? null)}`; // the JSON is for the model only
+    return failed(got, `${json} (a voice is {"voice_id": "<id>"}: a voice's id in your library)`);
   }
   if ("error" in read) return failed(`${label(f)}: ${read.error}`);
   const old = c.held[key];

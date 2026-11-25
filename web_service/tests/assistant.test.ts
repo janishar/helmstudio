@@ -419,6 +419,15 @@ describe("failed lines and provider errors in plain words (item 23)", () => {
     expect(plainError("timelineSave · The server had a problem (502). Try again.").plain).toBe(
       "The studio had a problem. Try again.",
     );
+    expect(plainError("generate · Load failed").plain).toBe(
+      "Lost the connection to the studio for a moment; try again",
+    );
+    // a job's own "download failed" or "load failed" is not a lost connection
+    for (const t of [
+      "Run failed · the download failed (ConnectionError)",
+      "Run failed · LoRA load failed",
+    ])
+      expect(plainError(t)).toEqual({ plain: t });
     // already plain: no Details
     expect(plainError("Search failed · Brave")).toEqual({ plain: "Search failed · Brave" });
     expect(plainError("Length: the longest is 13.4 s")).toEqual({

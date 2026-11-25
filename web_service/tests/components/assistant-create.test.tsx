@@ -445,6 +445,14 @@ describe("Create's actions", () => {
       text: 'Voice: expected one of your voices; got "narrator 2"',
       error: expect.stringContaining('{"voice_id": "<id>"}'),
     });
+    // a wrong shape stays out of the line: no JSON or ids, only in the model's error
+    expect(
+      out(await call("change", { key: "speak.voice", value: { id: "0b1c-uuid" } })),
+    ).toMatchObject({
+      status: "failed",
+      text: "Voice: expected one of your voices",
+      error: expect.stringContaining('{"id":"0b1c-uuid"}'),
+    });
   });
 
   it("another session never gets this session's script", async () => {

@@ -150,7 +150,8 @@ const LOST = "Lost the connection to the studio for a moment; try again";
 // raw error text → plain words (item 23, board frame 6): a provider's CallError ("<name>: …", pipelines
 // providers.py), Kong's or the browser's lost connection, studio's bare HTTP statuses
 const PLAIN: [RegExp, (m: RegExpExecArray) => string][] = [
-  [/name resolution failed|failed to fetch|networkerror|load failed|failure to get a peer|invalid response was received from the upstream/i, () => LOST], // prettier-ignore
+  [/^(load failed|failed to fetch|networkerror[^]*)$/i, () => LOST], // the browser's fetch errors, whole text only
+  [/name resolution failed|failure to get a peer|invalid response was received from the upstream/i, () => LOST], // prettier-ignore
   [/^(?:(.+?): )?the provider is busy or down \(HTTP \d+\)$/, (m) => `${m[1] ?? "The provider"} is busy. Try again in a minute.`], // prettier-ignore
   [/^(?:(.+?): |(.+?) )?(timed out|did not answer)$/, (m) => `${m[1] ?? m[2] ?? "It"} took too long to answer. Try again.`], // prettier-ignore
   [/^(?:(.+?): )?(could not connect|cannot resolve [\s\S]*)$/, (m) => `Could not reach ${m[1] ?? "it"}. Try again in a minute.`], // prettier-ignore
