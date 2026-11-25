@@ -23,7 +23,10 @@ Release images are built on the owner's Mac by `.tools/push-images`: linux/arm64
   build shows before a release.
 - `.tools/push-images` stays for a release by hand; the release checklist names the workflow first.
 - The Mac app needs no change: it pulls the same names, and gets the arm64 half.
-- Later, not now: the .dmg on a macOS runner; the contract suite on every push.
+- **The Mac app too** (owner, 2026-11-25: "also build mac desktop binary on there only"): a job on a macOS Apple Silicon
+  runner builds the .dmg (ad-hoc signed, as today) and a SHA256SUMS covering it and the server pack; on a tag they are
+  attached to the release. Releases no longer need the owner's Mac.
+- Later, not now: the contract suite on every push.
 
 ### 38.3 The server pack (Linux, and Windows through WSL2)
 
