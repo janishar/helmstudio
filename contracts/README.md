@@ -4028,20 +4028,26 @@ A per-chat switch: safe steps run without asking, up to the admin's caps; the re
     caps; a dialog that saves a new item: `saveAsLook`, `saveAsElement`, `designVoice` (its Hear it is a run: counted
     as one take).
   - asks: deletes (`Auto stops here: deleting needs you`), batches and judge tests (they send off the machine),
-    exports, downloads, stops and picks, `editItem` (an overwrite), `cloneVoice` (the voice rights tick is yours) and
-    every other dialog; a generation past the hour's room (`Auto paused · 8 of 8 takes this hour`, or GPU minutes),
+    exports, downloads, stops and picks, `editItem` (an overwrite), `cloneVoice` and Timeline's `saveAsVoice` (both
+    clone a voice: the voice rights tick is yours) and every other dialog; a generation with no size it can trust
+    (below); a generation past the hour's room (`Auto paused · 8 of 8 takes this hour`, or GPU minutes),
     or bigger than a whole cap (`Auto stops here: a big run needs you`).
   - Server cards (`look_at`, `web_search`, `forget`, plugin tools with a risk flag) and the remote model ask as
     before; actions with effect `line` or `undo` (star, rename, add to timeline) run as before.
 - **The caps** (`AssistantLimits`, Admin › AI agents): `auto_takes_per_hour` (default 8) and
   `auto_gpu_minutes_per_hour` (default 30) per user. A generation's size is the screen's `fields.plan` (`runs` and
-  `seconds` a run; else 1 run of 60 s). Pipelines reserves it in `assistant_spend` (kind `auto`, keyed by the call)
+  `seconds` a run, the workflow's last run time); with no plan or no `seconds` (a workflow never run, Timeline's
+  `shot` / `newLine`, Pipelines' `runStep`) it asks `Auto stops here: no time estimate for this run yet`, and so does
+  one after an earlier action of the same batch that may resize it (anything but `select`, `star`, `view`,
+  `pickTake`, `setPlayhead` or a `change` of a `prompt…` key: `Auto stops here: this run changed in the same
+  step`), since the plan is the screen before the batch. `hear` and Design a voice's Hear it count 1 run of 60 s. Pipelines reserves it in `assistant_spend` (kind `auto`, keyed by the call)
   as it marks the action, counts the last hour's rows, and gives a reservation back when the action's result is not
   `done` or `still_running`. Each step's `caps.auto_takes_hour` is the hour's takes (the chip "4 of 8 takes this
   hour" while the turn runs).
 - **The tab.** An `auto` card action runs its Yes without showing the card; an `auto` dialog opens prefilled and saves
   itself once ready (Design a voice: Hear it once, then Save as voice). Its line starts `Auto · ` and has Undo: a
-  generation's stops its runs still going and deletes their takes; a saved item's deletes it. An `asks` action shows
+  generation's cancels its runs (a 409, already ended, is fine), waits until each has ended and deletes all their
+  takes; a saved item's deletes it. An `asks` action shows
   its card with `asks` as the waiting line. Stop ends the turn as before.
 
 ### Assistant: tools

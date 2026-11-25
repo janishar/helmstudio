@@ -497,33 +497,45 @@ def _end(
 # --- Auto mode (API 1.68, contracts/README.md "Assistant: Auto mode")
 
 AUTO_TAKES, AUTO_GPU_MINUTES = 8, 30  # the caps an hour before the admin sets them
-RUN_S = 60  # a run's GPU seconds when the screen has no estimate
+RUN_S = 60  # a short voice run's GPU seconds (designVoice's Hear it, hear)
 # the dialogs that save a new item by themselves: (takes, GPU seconds); designVoice's Hear it is a run
 AUTO_DIALOGS = {"saveAsLook": (0, 0), "saveAsElement": (0, 0), "designVoice": (1, RUN_S)}
+# earlier actions in a batch that leave a generation's size as the screen showed it (the rest resize it: it asks)
+SAME_SIZE = {"select", "star", "view", "pickTake", "setPlayhead"}
 AUTO_ASKS = {
     "delete": "deleting needs you", "batch": "a batch sends off the machine",
     "judge_test": "a judge test sends off the machine", "export": "an export needs you",
     "download": "a download needs you", "stop": "stopping needs you", "pick": "a pick needs you",
     "editItem": "overwriting needs you", "cloneVoice": "the voice rights tick is yours",
+    "saveAsVoice": "the voice rights tick is yours",
 }  # fmt: skip
 
 
 def auto_plan(name: str, spec: dict | None, screen: dict | None) -> tuple[int, int] | str | None:
     """An action's size when Auto may run it by itself ((takes, GPU seconds)), the line when it still asks, or None
-    when it never asks (effect line or undo). A generation's size is the screen's plan: runs × seconds a run."""
+    when it never asks (effect line or undo). A generation's size is the screen's plan: runs × seconds a run; a
+    screen with no plan or no time yet (a workflow never run, Timeline, Pipelines) asks."""
     if not spec or spec["effect"] not in ("card", "dialog"):
         return None
     if name in AUTO_DIALOGS and spec["effect"] == "dialog":
         return AUTO_DIALOGS[name]
     card = spec.get("card")
-    if card in ("generate", "hear"):
+    if card == "hear":
+        return 1, RUN_S
+    if card == "generate":
         plan = ((screen or {}).get("fields") or {}).get("plan") or {}
         runs, secs = plan.get("runs"), plan.get("seconds")
-        runs = runs if isinstance(runs, int) and runs >= 1 else 1
-        secs = secs if isinstance(secs, int | float) and secs > 0 else RUN_S
+        if not (isinstance(runs, int) and runs >= 1 and isinstance(secs, int | float) and secs > 0):
+            return "Auto stops here: no time estimate for this run yet"
         return runs, int(runs * secs + 0.999)
     why = AUTO_ASKS.get(name) or AUTO_ASKS.get(card or "") or "this needs you"
     return f"Auto stops here: {why}"
+
+
+def same_size(a: dict) -> bool:
+    """An action that leaves a generation's size alone: a pick, a star, or a prompt's text."""
+    key = (a.get("args") or {}).get("key")
+    return a["name"] in SAME_SIZE or (a["name"] == "change" and str(key).startswith("prompt"))
 
 
 class Assistant:
@@ -1178,11 +1190,18 @@ class Assistant:
             )
             r = await cur.fetchone()
             took, gpu = int(r["t"]), int(r["g"])
+            resized = (
+                False  # an earlier action of the batch changed the screen the plan was read from
+            )
             for a in acts:
-                got = auto_plan(a["name"], action_spec(a["name"], route, roles), screen)
+                spec = action_spec(a["name"], route, roles)
+                got = auto_plan(a["name"], spec, screen)
                 if got is None:
+                    resized |= not same_size(a)
                     out.append(a)
                     continue
+                if resized and spec and spec.get("card") == "generate" and not isinstance(got, str):
+                    got = "Auto stops here: this run changed in the same step"
                 if isinstance(got, str):
                     out.append(a | {"asks": got})
                     continue

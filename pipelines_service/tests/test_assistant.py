@@ -427,10 +427,24 @@ def test_auto_runs_generations_and_new_saves_and_asks_for_the_rest():
     spec = lambda name: assistant.action_spec(name, "/?s=1", {"user"})
     plan = {"fields": {"plan": {"runs": 4, "seconds": 20}}}
     assert assistant.auto_plan("generate", spec("generate"), plan) == (4, 80)
-    assert assistant.auto_plan("generate", spec("generate"), None) == (
-        1,
-        60,
-    )  # no estimate: a minute a run
+    no_time = "Auto stops here: no time estimate for this run yet"
+    assert assistant.auto_plan("generate", spec("generate"), None) == no_time
+    unrun = {"fields": {"plan": {"runs": 4, "seconds": None}}}  # a workflow never run
+    assert assistant.auto_plan("generate", spec("generate"), unrun) == no_time
+    for name, route in (
+        ("shot", "/timeline"),
+        ("newLine", "/timeline"),
+        ("runStep", "/pipelines/p1"),
+    ):
+        got = assistant.auto_plan(name, assistant.action_spec(name, route, {"user"}), None)
+        assert got == no_time, (name, got)  # no plan on these screens yet: they ask
+    voice = assistant.action_spec("saveAsVoice", "/timeline", {"user"})
+    assert assistant.auto_plan("saveAsVoice", voice, None).endswith(
+        "the voice rights tick is yours"
+    )
+    assert assistant.same_size({"name": "change", "args": {"key": "prompt.text"}})
+    assert not assistant.same_size({"name": "change", "args": {"key": "duration"}})
+    assert not assistant.same_size({"name": "seeds", "args": {"n": 4}})
     assert assistant.auto_plan("designVoice", spec("designVoice"), None) == (1, 60)
     assert assistant.auto_plan("saveAsLook", spec("saveAsLook"), None) == (0, 0)
     assert assistant.auto_plan("change", spec("change"), None) is None  # undo: never asks
@@ -493,11 +507,21 @@ async def test_auto_runs_a_generation_under_the_hours_cap_then_asks(pool, fake):
     async with pool.connection() as conn:
         cur = await conn.execute("SELECT count(*) AS n FROM assistant_spend WHERE kind = 'auto'")
         assert (await cur.fetchone())["n"] == 0
+    # an earlier step of the batch that resizes the run (another workflow): the plan read before it is stale, it asks
+    c.script(
+        calls(("switchTo", {"workflow": "wan-video"}), ("generate", {})), {"content": "Asked."}
+    )
+    step = await c.say("Four", more={"plan": {"runs": 1, "seconds": 5}})
+    assert step["actions"][1]["asks"] == "Auto stops here: this run changed in the same step"
+    await c.results(
+        done(c.cid(9, 0), "Switched"),
+        {"id": c.cid(9, 1), "status": "cancelled", "line": {"text": "Not now", "undo": False}},
+    )
     # off: no marks at all
     c.auto = False
     c.script(calls(("generate", {})), {"content": "Asked."})
     step = await c.say("Again", more=plan)
-    assert step["actions"] == [{"id": c.cid(9, 0), "name": "generate", "args": {}}]
+    assert step["actions"] == [{"id": c.cid(11, 0), "name": "generate", "args": {}}]
     assert "auto_takes_hour" not in step["caps"]
 
 

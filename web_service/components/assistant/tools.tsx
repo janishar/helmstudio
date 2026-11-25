@@ -3,7 +3,7 @@
 // registers its actions and its summary once it has loaded (useScreenTools), always calling its own entry points; the
 // shell adds navigate and await. The drawer runs a turn's actions through it, in the tab that sent the message.
 import { createContext, use, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, message, ok } from "@/lib/api";
+import { api, message, ok, okOr } from "@/lib/api";
 import {
   SCREENS,
   argsError,
@@ -145,11 +145,16 @@ export class Registry {
 }
 
 /** An Auto generation's Undo (API 1.68): its runs still going stop, the takes they made are deleted. */
-export async function undoRuns(ids: string[]) {
+export async function undoRuns(ids: string[], wait = 1000) {
   for (const id of ids) {
-    const r = await ok(api.GET("/v1/studio/runs/{run_id}", { params: { path: { run_id: id } } }));
-    if (r.status === "queued" || r.status === "running")
-      await ok(api.POST("/v1/studio/runs/{run_id}/cancel", { params: { path: { run_id: id } } }));
+    const path = { params: { path: { run_id: id } } };
+    // cancel is async and keeps what is already stored (409: it already ended); wait for the end, then delete all
+    await okOr(api.POST("/v1/studio/runs/{run_id}/cancel", path), 409);
+    let r = await ok(api.GET("/v1/studio/runs/{run_id}", path));
+    while (r.status === "queued" || r.status === "running") {
+      await new Promise((go) => setTimeout(go, wait));
+      r = await ok(api.GET("/v1/studio/runs/{run_id}", path));
+    }
     for (const o of r.outputs)
       if (o.take_id)
         await api.DELETE("/v1/studio/takes/{take_id}", {
