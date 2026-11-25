@@ -134,3 +134,15 @@ VM and Apple Silicon. x86 (amd64) Linux servers, most NVIDIA machines, build fro
 Linux-focused release: build both platforms into one multi-arch image per service (buildx `--platform
 linux/arm64,linux/amd64`), including the media-tools image, and test a clean amd64 install.
 
+## alpha.3: the subscription bridge in the Mac app (owner, 2026-11-25)
+
+Owner: ship the Claude Code bridge in the public app ("its not signed app plus enthusiatic project with local use
+only"; "we are using their built in claude code"), in 0.1.0-alpha.3. Stay inside Anthropic's "Can customers offer
+Claude Code in their products?" conditions (code.claude.com/docs/en/legal-and-compliance): the unmodified binary, each
+user installs and signs in to Claude Code themselves through Anthropic's own flow, helmstudio never collects, stores or
+intermediates credentials and never pays for or resells usage. Build: rename the plugin (no "Claude Code" or
+"Anthropic" in its name, e.g. "Your Claude subscription"; plain text may say it runs Claude Code), off by default and
+only-you, keep the disclaimer, `run` on host mac (starts itself; Couldn't start · "install Claude Code and sign in"
+when missing), bundle it in the .dmg, check the app VM reaches it, docs page. Open for the owner: confirm Anthropic's
+Commercial Terms are accepted (the page says products running Claude Code fall under them).
+
