@@ -724,7 +724,9 @@ test("J10 the provider refuses or is down: the error is in plain words and I can
   const notes = drawer().getByRole("note");
   script(MODEL, { status: 401 });
   await say("hello?");
-  await expect(notes.last()).toHaveText(/the key was refused/, { timeout: 30_000 });
+  await expect(notes.last()).toHaveText(/refused its key\. Ask your admin to check it\./, {
+    timeout: 30_000,
+  });
   await expect(working()).toBeHidden();
   script(MODEL, { content: "Back." });
   await say("hello again");
@@ -732,7 +734,7 @@ test("J10 the provider refuses or is down: the error is in plain words and I can
 
   script(MODEL, { status: 503 }, { status: 503 }, { status: 503 }, { status: 503 });
   await say("are you there?");
-  await expect(notes.last()).toHaveText(/the provider is busy or down \(HTTP 503\)/, {
+  await expect(notes.last()).toHaveText(/is busy\. Try again in a minute\./, {
     timeout: 60_000,
   });
   await shot("j10-provider-down");
