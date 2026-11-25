@@ -227,9 +227,9 @@ nav button[aria-label="Assistant"][aria-expanded="true"] svg{filter:none;outline
 /* A4-CSS-START */
 /* plan 32: the Assistant page, the setup form, the drawer's setup states */
 nav button[aria-label="Admin"] svg{background:linear-gradient(155deg,#c9ced9,#5b6478)}
-nav button[aria-label="Chat"] svg{background:linear-gradient(155deg,#b9f0d0,#2f8f6a)}
-nav button[aria-label="Chat"][aria-expanded="true"]{color:var(--t1)!important}
-nav button[aria-label="Chat"][aria-expanded="true"] svg{filter:none;outline:2px solid rgba(255,255,255,.85);outline-offset:2px}
+nav button[aria-label="Agent"] svg{background:linear-gradient(155deg,#b9f0d0,#2f8f6a)}
+nav button[aria-label="Agent"][aria-expanded="true"]{color:var(--t1)!important}
+nav button[aria-label="Agent"][aria-expanded="true"] svg{filter:none;outline:2px solid rgba(255,255,255,.85);outline-offset:2px}
 .rsep{width:32px;height:1px;background:var(--s4);display:block}
 .in{width:100%;height:38px;box-sizing:border-box;border-radius:10px;border:0;background:var(--s4);color:var(--t1);font:inherit;font-size:13px;padding:0 12px}
 .in:disabled{opacity:.6}
@@ -282,6 +282,31 @@ nav button[aria-label="Chat"][aria-expanded="true"] svg{filter:none;outline:2px 
 .mini .su{padding:28px 4px 20px}
 .sut{margin:0;font-family:'Bricolage Grotesque',Inter,sans-serif;font-size:20px;line-height:26px;font-weight:700}
 /* A4-CSS-END */
+/* A5-CSS-START */
+/* plan 33: the Assistant page's tabs; moved Admin and Plugins screens keep their own table and list look */
+.board.a5{min-width:0}
+.a5 .rm td{white-space:normal}.a5 .rm .tag{white-space:nowrap}.a5 .rm td:last-child{width:34px}
+.a5 td,.a5 th{padding:10px;text-align:left;font-size:13px;border-bottom:1px solid var(--s3);white-space:nowrap;vertical-align:top}
+.a5 th{font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--t2)}
+.a5 tbody tr:last-child td{border-bottom:0}
+.a5 .tb td,.a5 .tb th{padding:8px 10px;border-bottom:0;vertical-align:middle}
+.a5 .tb th{border-bottom:1px solid var(--s3)}
+.a5 table:not(.tb) .tag{padding:2px 8px;background:var(--s4);color:var(--t1);font-size:11px;font-weight:500}
+.a5 table:not(.tb) .tag.adm{background:var(--a1);color:var(--on1)}
+.a5 .tag.kind{background:color-mix(in srgb,var(--a2) 22%,transparent);color:var(--t1)}
+.a5 .tag.me{padding:2px 8px;background:color-mix(in srgb,#f2c14e 22%,transparent);color:#f2c14e;font-size:11px;font-weight:500}
+.a5 .dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto;display:inline-block}
+.a5 .ok{color:#7fd88f}.a5 .okb{background:#7fd88f}
+.a5 .off{color:var(--t2)}.a5 .offb{background:var(--t2)}
+.a5 .ex{opacity:.62}
+.a5 .amb{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border-radius:10px;box-shadow:inset 0 0 0 1px #f2c14e;color:#f2c14e;font-size:12px;line-height:17px}
+.a5 .amb a{color:#f2c14e}
+.a5 .perm{margin:0;padding-left:16px;font-size:12px;line-height:18px;color:var(--t1b)}
+.a5 .h{margin:0;font-size:12px;font-weight:600;letter-spacing:.04em;color:var(--t2)}
+.a5 .row{display:flex;justify-content:space-between;gap:10px;font-size:13px}
+.a5 .row span:last-child{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t2);text-align:right}
+.a5 .sel{height:34px;border-radius:8px;border:1px solid var(--ln);background:var(--s1);color:var(--t1);font:inherit;font-size:13px;padding:0 8px}
+/* A5-CSS-END */
 </style>
 </helmet>
 <div data-theme="{{theme}}" style="display: flex; flex-wrap: wrap; background: var(--g); color: var(--t1); font-family: Inter, system-ui, sans-serif; font-size: 14px; line-height: 20px">
@@ -297,7 +322,7 @@ nav button[aria-label="Chat"][aria-expanded="true"] svg{filter:none;outline:2px 
 <button aria-label="Gallery" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="9" cy="10" r="2"></circle><path d="m21 16-5-5L5 20"></path></svg></button>
 <button aria-label="Timeline" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 17h18"></path><rect x="5" y="4" width="6" height="6" rx="1.5"></rect><rect x="12" y="14" width="7" height="6" rx="1.5"></rect></svg></button>
 <button aria-label="Models" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"></path><path d="m3 8 9 5 9-5M12 13v8"></path></svg></button>
-<button aria-label="Chat" aria-expanded="true" title="Chat (⌘J)" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"></path><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"></path></svg></button>
+<button aria-label="Agent" aria-expanded="true" title="Agent (⌘J)" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8" rx="2"></rect><path d="M2 14h2M20 14h2M15 13v2M9 13v2"></path></svg></button>
 <details style="position: relative; margin-top: 6px">
 <summary aria-label="Settings" style="list-style: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10px; font-weight: 500; color: var(--t2)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 36px; height: 36px; padding: 8px; box-sizing: border-box; border-radius: 12px; color: #fff; background: linear-gradient(155deg, #a7b0c2, #4b5468); box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg>Settings</summary>
 <div style="position: absolute; left: 70px; bottom: 0; z-index: 40; width: 220px; box-sizing: border-box; padding: 14px; border-radius: 18px 18px 18px 8px; background: var(--s2); box-shadow: 0 24px 40px -12px color-mix(in srgb, var(--shd) 80%, transparent); display: flex; flex-direction: column; gap: 8px">
@@ -448,7 +473,7 @@ nav button[aria-label="Chat"][aria-expanded="true"] svg{filter:none;outline:2px 
 <button aria-label="Gallery" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="9" cy="10" r="2"></circle><path d="m21 16-5-5L5 20"></path></svg></button>
 <button aria-label="Timeline" aria-current="page" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: var(--s2); color: var(--a1); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 17h18"></path><rect x="5" y="4" width="6" height="6" rx="1.5"></rect><rect x="12" y="14" width="7" height="6" rx="1.5"></rect></svg></button>
 <button aria-label="Models" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"></path><path d="m3 8 9 5 9-5M12 13v8"></path></svg></button>
-<button aria-label="Chat" aria-expanded="true" title="Chat (⌘J)" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"></path><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"></path></svg></button>
+<button aria-label="Agent" aria-expanded="true" title="Agent (⌘J)" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8" rx="2"></rect><path d="M2 14h2M20 14h2M15 13v2M9 13v2"></path></svg></button>
 <div style="margin-top: 6px; display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10px; font-weight: 500; color: var(--t2)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 36px; height: 36px; padding: 8px; box-sizing: border-box; border-radius: 12px; color: #fff; background: linear-gradient(155deg, #a7b0c2, #4b5468)"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg>Settings</div>
 </nav>
 </div>
@@ -710,7 +735,7 @@ nav button[aria-label="Chat"][aria-expanded="true"] svg{filter:none;outline:2px 
 <div class="mini" aria-label="Dock item" style="flex-direction: row; align-items: flex-start; gap: 18px; background: var(--g); background-image: none">
 <nav aria-label="Dock, bottom part" style="margin: 0; flex: 0 0 68px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 4px">
 <button aria-label="Models" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"></path><path d="m3 8 9 5 9-5M12 13v8"></path></svg></button>
-<button aria-label="Chat" style="position: relative; width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"></path><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"></path></svg><span aria-label="1 card waits for you" style="position: absolute; right: 6px; top: 2px; width: 10px; height: 10px; border-radius: 50%; background: #f2c14e; box-shadow: 0 0 0 2px var(--s1)"></span></button>
+<button aria-label="Agent" style="position: relative; width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8" rx="2"></rect><path d="M2 14h2M20 14h2M15 13v2M9 13v2"></path></svg><span aria-label="1 card waits for you" style="position: absolute; right: 6px; top: 2px; width: 10px; height: 10px; border-radius: 50%; background: #f2c14e; box-shadow: 0 0 0 2px var(--s1)"></span></button>
 <div style="display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10px; font-weight: 500; color: var(--t2)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 36px; height: 36px; padding: 8px; box-sizing: border-box; border-radius: 12px; color: #fff; background: linear-gradient(155deg, #a7b0c2, #4b5468)"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg>Settings</div>
 </nav>
 <div style="display: flex; flex-direction: column; gap: 10px; padding-top: 86px">
@@ -784,7 +809,7 @@ nav button[aria-label="Chat"][aria-expanded="true"] svg{filter:none;outline:2px 
 <button aria-label="Gallery" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="9" cy="10" r="2"></circle><path d="m21 16-5-5L5 20"></path></svg></button>
 <button aria-label="Timeline" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 17h18"></path><rect x="5" y="4" width="6" height="6" rx="1.5"></rect><rect x="12" y="14" width="7" height="6" rx="1.5"></rect></svg></button>
 <button aria-label="Models" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"></path><path d="m3 8 9 5 9-5M12 13v8"></path></svg></button>
-<button aria-label="Chat" aria-expanded="true" title="Chat (⌘J)" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"></path><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"></path></svg></button>
+<button aria-label="Agent" aria-expanded="true" title="Agent (⌘J)" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8" rx="2"></rect><path d="M2 14h2M20 14h2M15 13v2M9 13v2"></path></svg></button>
 <details style="position: relative; margin-top: 6px">
 <summary aria-label="Settings" style="list-style: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10px; font-weight: 500; color: var(--t2)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 36px; height: 36px; padding: 8px; box-sizing: border-box; border-radius: 12px; color: #fff; background: linear-gradient(155deg, #a7b0c2, #4b5468); box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg>Settings</summary>
 <div style="position: absolute; left: 70px; bottom: 0; z-index: 40; width: 220px; box-sizing: border-box; padding: 14px; border-radius: 18px 18px 18px 8px; background: var(--s2); box-shadow: 0 24px 40px -12px color-mix(in srgb, var(--shd) 80%, transparent); display: flex; flex-direction: column; gap: 8px">
@@ -1181,7 +1206,7 @@ nav button[aria-label="Chat"][aria-expanded="true"] svg{filter:none;outline:2px 
 <button aria-label="Gallery" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="9" cy="10" r="2"></circle><path d="m21 16-5-5L5 20"></path></svg></button>
 <button aria-label="Timeline" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 17h18"></path><rect x="5" y="4" width="6" height="6" rx="1.5"></rect><rect x="12" y="14" width="7" height="6" rx="1.5"></rect></svg></button>
 <button aria-label="Models" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"></path><path d="m3 8 9 5 9-5M12 13v8"></path></svg></button>
-<button aria-label="Chat" aria-expanded="true" title="Chat (⌘J)" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"></path><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"></path></svg></button>
+<button aria-label="Agent" aria-expanded="true" title="Agent (⌘J)" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8" rx="2"></rect><path d="M2 14h2M20 14h2M15 13v2M9 13v2"></path></svg></button>
 <details style="position: relative; margin-top: 6px">
 <summary aria-label="Settings" style="list-style: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10px; font-weight: 500; color: var(--t2)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 36px; height: 36px; padding: 8px; box-sizing: border-box; border-radius: 12px; color: #fff; background: linear-gradient(155deg, #a7b0c2, #4b5468); box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg>Settings</summary>
 <div style="position: absolute; left: 70px; bottom: 0; z-index: 40; width: 220px; box-sizing: border-box; padding: 14px; border-radius: 18px 18px 18px 8px; background: var(--s2); box-shadow: 0 24px 40px -12px color-mix(in srgb, var(--shd) 80%, transparent); display: flex; flex-direction: column; gap: 8px">
@@ -1593,7 +1618,7 @@ nav button[aria-label="Chat"][aria-expanded="true"] svg{filter:none;outline:2px 
 <button aria-label="Assistant" aria-current="page" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: var(--s2); color: var(--a1); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path><path d="M20 3v4M22 5h-4"></path></svg></button>
 <button aria-label="Admin" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.5 3.2 7.6 8 9 4.8-1.4 8-4.5 8-9V6l-8-3Z"></path><path d="m9 12 2 2 4-4"></path></svg></button>
 <span class="rsep" aria-hidden="true"></span>
-<button aria-label="Chat" aria-expanded="false" title="Chat (⌘J)" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"></path><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"></path></svg></button>
+<button aria-label="Agent" aria-expanded="false" title="Agent (⌘J)" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8" rx="2"></rect><path d="M2 14h2M20 14h2M15 13v2M9 13v2"></path></svg></button>
 <details style="position: relative; margin-top: 6px">
 <summary aria-label="Settings" style="list-style: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10px; font-weight: 500; color: var(--t2)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 36px; height: 36px; padding: 8px; box-sizing: border-box; border-radius: 12px; color: #fff; background: linear-gradient(155deg, #a7b0c2, #4b5468); box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg>Settings</summary>
 </details>
@@ -1655,7 +1680,7 @@ nav button[aria-label="Chat"][aria-expanded="true"] svg{filter:none;outline:2px 
 </div>
 </div>
 </main>
-<span class="lbl" style="top: auto; bottom: -1px; border-radius: 10px 10px 0 0">19 · The Assistant page, admin · its own item in the navigation; Chat (⌘J) opens the drawer · the switch turns it off for everyone (plan 32, draft)</span>
+<span class="lbl" style="top: auto; bottom: -1px; border-radius: 10px 10px 0 0">19 · The Assistant page, admin · its own item in the navigation; Agent (⌘J) opens the drawer · the switch turns it off for everyone (plan 32, draft)</span>
 </section>
 <!-- ============ 20 · The setup form (plan 32) ============ -->
 <section class="board" aria-label="The setup form" style="min-height: 960px">
@@ -1670,7 +1695,7 @@ nav button[aria-label="Chat"][aria-expanded="true"] svg{filter:none;outline:2px 
 <button aria-label="Assistant" aria-current="page" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: var(--s2); color: var(--a1); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path><path d="M20 3v4M22 5h-4"></path></svg></button>
 <button aria-label="Admin" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.5 3.2 7.6 8 9 4.8-1.4 8-4.5 8-9V6l-8-3Z"></path><path d="m9 12 2 2 4-4"></path></svg></button>
 <span class="rsep" aria-hidden="true"></span>
-<button aria-label="Chat" aria-expanded="false" title="Chat (⌘J)" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"></path><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"></path></svg></button>
+<button aria-label="Agent" aria-expanded="false" title="Agent (⌘J)" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8" rx="2"></rect><path d="M2 14h2M20 14h2M15 13v2M9 13v2"></path></svg></button>
 <details style="position: relative; margin-top: 6px">
 <summary aria-label="Settings" style="list-style: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10px; font-weight: 500; color: var(--t2)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 36px; height: 36px; padding: 8px; box-sizing: border-box; border-radius: 12px; color: #fff; background: linear-gradient(155deg, #a7b0c2, #4b5468); box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg>Settings</summary>
 </details>
@@ -1802,7 +1827,7 @@ nav button[aria-label="Chat"][aria-expanded="true"] svg{filter:none;outline:2px 
 <button aria-label="Assistant" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path><path d="M20 3v4M22 5h-4"></path></svg></button>
 <button aria-label="Admin" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.5 3.2 7.6 8 9 4.8-1.4 8-4.5 8-9V6l-8-3Z"></path><path d="m9 12 2 2 4-4"></path></svg></button>
 <span class="rsep" aria-hidden="true"></span>
-<button aria-label="Chat" aria-expanded="true" title="Chat (⌘J)" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"></path><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"></path></svg></button>
+<button aria-label="Agent" aria-expanded="true" title="Agent (⌘J)" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8" rx="2"></rect><path d="M2 14h2M20 14h2M15 13v2M9 13v2"></path></svg></button>
 <details style="position: relative; margin-top: 6px">
 <summary aria-label="Settings" style="list-style: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10px; font-weight: 500; color: var(--t2)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 36px; height: 36px; padding: 8px; box-sizing: border-box; border-radius: 12px; color: #fff; background: linear-gradient(155deg, #a7b0c2, #4b5468); box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg>Settings</summary>
 </details>
@@ -1874,7 +1899,7 @@ nav button[aria-label="Chat"][aria-expanded="true"] svg{filter:none;outline:2px 
 <span class="lbl" style="top: auto; bottom: -1px; border-radius: 10px 10px 0 0">21 · First launch · an admin's first sign-in to a deployment never set up: the drawer opens by itself once over Create, with the setup message</span>
 <div class="drw" role="complementary" aria-label="Assistant">
 <div class="dh"><h2><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path></svg>Assistant</h2><button class="ib" aria-label="Settings" title="Settings"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg></button><button class="x" aria-label="Close (⌘J)" title="Close (⌘J)"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg></button></div>
-<div class="su"><p class="sut">Set up the Assistant</p><p class="note" style="font-size: 13px; line-height: 19px">Pick the model it talks to. It helps you plan shots, pick workflows and run them.</p><button class="go" style="align-self: flex-start">SET UP</button><p class="fine">Opens once, on your first sign-in. Closed, it stays closed; Chat or ⌘J opens it again.</p></div>
+<div class="su"><p class="sut">Set up the Assistant</p><p class="note" style="font-size: 13px; line-height: 19px">Pick the model it talks to. It helps you plan shots, pick workflows and run them.</p><button class="go" style="align-self: flex-start">SET UP</button><p class="fine">Opens once, on your first sign-in. Closed, it stays closed; Agent or ⌘J opens it again.</p></div>
 </div>
 </section>
 <!-- ============ 22 · The Assistant page, not an admin (plan 32) ============ -->
@@ -1889,7 +1914,7 @@ nav button[aria-label="Chat"][aria-expanded="true"] svg{filter:none;outline:2px 
 <button aria-label="Models" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"></path><path d="m3 8 9 5 9-5M12 13v8"></path></svg></button>
 <button aria-label="Assistant" aria-current="page" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: var(--s2); color: var(--a1); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path><path d="M20 3v4M22 5h-4"></path></svg></button>
 <span class="rsep" aria-hidden="true"></span>
-<button aria-label="Chat" aria-expanded="false" title="Chat (⌘J)" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"></path><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"></path></svg></button>
+<button aria-label="Agent" aria-expanded="false" title="Agent (⌘J)" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8" rx="2"></rect><path d="M2 14h2M20 14h2M15 13v2M9 13v2"></path></svg></button>
 <details style="position: relative; margin-top: 6px">
 <summary aria-label="Settings" style="list-style: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10px; font-weight: 500; color: var(--t2)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 36px; height: 36px; padding: 8px; box-sizing: border-box; border-radius: 12px; color: #fff; background: linear-gradient(155deg, #a7b0c2, #4b5468); box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg>Settings</summary>
 </details>
@@ -1934,9 +1959,449 @@ nav button[aria-label="Chat"][aria-expanded="true"] svg{filter:none;outline:2px 
 <span class="lbl" style="top: auto; bottom: -1px; border-radius: 10px 10px 0 0">22 · The Assistant page, not an admin · Model, Tools and Skills read-only, Set by your admin · their own Memory · no on/off switch, no Auto mode or Context</span>
 </section>
 <!-- A4-END -->
+<!-- A5-START -->
+<!-- ============ 23 · The Assistant page, as tabs: Agent (plan 33) ============ -->
+<section class="board a5" aria-label="The Assistant page, Agent tab" style="min-height: 960px">
+<div class="rail">
+<div class="rail-logo"><a class="brand" href="#" aria-label="helmstudio, home (Create)" title="helmstudio"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24"><path d="M8 16C8 12.4 10.4 10.6 13.3 10.6S18.4 12.6 18.4 16V21" style="fill:none;stroke:currentColor;stroke-width:3.2;stroke-linecap:round"/><path d="M8 7V21" style="stroke:currentColor;stroke-width:3.2;stroke-linecap:round"/><path d="M5.3 1.6H10.7A.9.9 0 0 1 11.6 2.5V5L8 8.4L4.4 5V2.5A.9.9 0 0 1 5.3 1.6Z" style="fill:currentColor"/></svg></a></div>
+<nav aria-label="Sections" style="flex: 0 0 64px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 0; border-right: 1px solid var(--s3)">
+<button aria-label="Create" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"></path><circle cx="12" cy="12" r="3"></circle></svg></button>
+<button aria-label="Pipelines" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="6" height="6" rx="1.5"></rect><rect x="15" y="14" width="6" height="6" rx="1.5"></rect><path d="M9 7h4a2 2 0 0 1 2 2v5"></path></svg></button>
+<button aria-label="Gallery" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="9" cy="10" r="2"></circle><path d="m21 16-5-5L5 20"></path></svg></button>
+<button aria-label="Timeline" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 17h18"></path><rect x="5" y="4" width="6" height="6" rx="1.5"></rect><rect x="12" y="14" width="7" height="6" rx="1.5"></rect></svg></button>
+<button aria-label="Models" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"></path><path d="m3 8 9 5 9-5M12 13v8"></path></svg></button>
+<button aria-label="Assistant" aria-current="page" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: var(--s2); color: var(--a1); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path><path d="M20 3v4M22 5h-4"></path></svg></button>
+<button aria-label="Admin" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.5 3.2 7.6 8 9 4.8-1.4 8-4.5 8-9V6l-8-3Z"></path><path d="m9 12 2 2 4-4"></path></svg></button>
+<span class="rsep" aria-hidden="true"></span>
+<button aria-label="Agent" aria-expanded="false" title="Agent (⌘J)" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8" rx="2"></rect><path d="M2 14h2M20 14h2M15 13v2M9 13v2"></path></svg></button>
+<details style="position: relative; margin-top: 6px">
+<summary aria-label="Settings" style="list-style: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10px; font-weight: 500; color: var(--t2)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 36px; height: 36px; padding: 8px; box-sizing: border-box; border-radius: 12px; color: #fff; background: linear-gradient(155deg, #a7b0c2, #4b5468); box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg>Settings</summary>
+</details>
+</nav>
+</div>
+<main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 16px; padding: 16px 20px 64px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+<h1 class="pt"><i class="lgp"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path></svg></i>Assistant</h1><span class="stp" style="box-shadow: inset 0 0 0 1px var(--a1); color: var(--a1)">On</span>
+<div style="flex-grow: 1"></div>
+<button role="switch" aria-checked="true" aria-label="Assistant on" class="sw" style="background: var(--a1); justify-content: flex-end"><span style="background: var(--on1)"></span></button>
+</div>
+<div role="tablist" aria-label="Assistant sections" style="display: flex; flex-wrap: wrap; gap: 8px">
+<button role="tab" aria-selected="true" class="chip" style="background: var(--t1); color: var(--p0); font-weight: 600">Agent</button>
+<button role="tab" aria-selected="false" class="chip">In pipelines</button>
+<button role="tab" aria-selected="false" class="chip">Providers</button>
+<button role="tab" aria-selected="false" class="chip">Plugins</button>
+</div>
+<span style="font-size: 13px; color: var(--t2)">Who answers, what it can use and what it remembers. Set here for everyone; Memory is yours.</span>
+<div class="pgg">
+<div class="pgc">
+<section aria-label="Model" style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px">
+<div class="pgh"><h2>Model</h2><button class="chip" style="height: 30px">Change</button></div>
+<div class="who"><i class="lg" style="background: linear-gradient(155deg,#7aa8ff,#2f4fd0)">D</i><div><b>DeepSeek</b><small>deepseek-chat · thinking off</small></div><span class="tag adm">remote</span></div>
+<span style="font-size: 12px; color: var(--t2)">Thinking is set per model in <a href="#">Providers</a>.</span>
+<span class="warn">Sends your messages, the screen summary and tool results to DeepSeek; never images.</span>
+</section>
+<section aria-label="Tools" style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px">
+<div class="pgh"><h2>Tools</h2><a href="#" style="font-size: 12px">Plugins</a></div>
+<div class="trow"><div><b>Web search</b><small>Free, no key. It asks before each search.</small><div class="fl" style="margin: 8px 0 0"><label for="t-s">Search with</label><select id="t-s" class="in"><option>DuckDuckGo, then Bing, Google or Yahoo</option><option>Brave (key in Providers)</option></select></div></div><button role="switch" aria-checked="true" aria-label="Web search on" class="sw" style="background: var(--a1); justify-content: flex-end"><span style="background: var(--on1)"></span></button></div>
+<div class="trow"><div><b>Media tools</b><small>Crop, resize, trim, join, pull frames. Each edit is a new take.</small></div><button role="switch" aria-checked="true" aria-label="Media tools on" class="sw" style="background: var(--a1); justify-content: flex-end"><span style="background: var(--on1)"></span></button></div>
+<p class="fine">Same switches as in Plugins.</p>
+</section>
+<section aria-label="Skills" style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px">
+<div class="pgh"><h2>Skills</h2><a href="#" style="font-size: 12px">Plugins</a></div>
+<div class="trow"><div><b>Cinematic filmmaker</b><small>A short live-action film, script to MP4.</small></div><button role="switch" aria-checked="true" aria-label="Cinematic filmmaker on" class="sw" style="background: var(--a1); justify-content: flex-end"><span style="background: var(--on1)"></span></button></div>
+<div class="trow"><div><b>Animator</b><small>A cartoon film in one style, script to MP4.</small></div><button role="switch" aria-checked="false" aria-label="Animator on" class="sw" style="background: var(--s1); justify-content: flex-start; box-shadow: inset 0 0 0 1px var(--ln)!important"><span style="background: var(--t2)"></span></button></div>
+<p class="fine">It reads a skill when an ask fits, or when you type @ and pick one.</p>
+</section>
+</div>
+<div class="pgc">
+<section aria-label="Auto mode" style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px">
+<div class="pgh"><h2>Auto mode</h2></div>
+<div class="g4"><div class="fl"><label for="c-at">Auto takes, an hour</label><input id="c-at" class="in" value="8"></div><div class="fl"><label for="c-ag">Auto GPU minutes, an hour</label><input id="c-ag" class="in" value="20"></div></div>
+<span class="sub">Caps per user</span>
+<div class="g4"><div class="fl"><label for="c-mc">Model calls a day</label><input id="c-mc" class="in" value="200"></div><div class="fl"><label for="c-tk">Tokens a day</label><input id="c-tk" class="in" value="2000000"></div><div class="fl"><label for="c-la">Look at, an hour</label><input id="c-la" class="in" value="20"></div><div class="fl"><label for="c-mm">Messages a minute</label><input id="c-mm" class="in" value="6"></div></div>
+<div class="sv"><p class="fine" style="flex: 1 1 auto">Auto still asks for deletes, overwrites and anything sent off the machine.</p><button class="chip" style="height: 34px">Cancel</button><button class="key">Save</button></div>
+</section>
+<section aria-label="Context" style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px">
+<div class="pgh"><h2>Context</h2></div>
+<div class="g2" style="align-items: end"><div class="fl"><label for="c-win">Chat window, tokens</label><input id="c-win" class="in" value="60000"></div><span style="font-size: 12px; color: var(--t2); padding-bottom: 9px">for deepseek-chat · 60000 until set</span></div>
+<span style="font-size: 12px; color: var(--t2)">Each model keeps its own. Past 70% the oldest half folds into a summary.</span>
+<span class="sub">Prompt cache, last 30 days</span>
+<table class="tb"><thead><tr><th>Model</th><th>Calls</th><th>Cache hits</th></tr></thead><tbody>
+<tr><td class="m">DeepSeek · deepseek-chat</td><td class="m">1,284</td><td><span style="display: flex; align-items: center; gap: 8px"><span style="flex: 0 0 96px; height: 6px; border-radius: 999px; background: var(--s4); overflow: hidden"><span style="display: block; width: 85%; height: 100%; background: var(--a1)"></span></span><b style="font-weight: 600">85%</b></span></td></tr>
+<tr><td class="m">OpenAI · gpt-5-mini</td><td class="m">12</td><td><span style="display: flex; align-items: center; gap: 8px"><span style="flex: 0 0 96px; height: 6px; border-radius: 999px; background: var(--s4); overflow: hidden"><span style="display: block; width: 41%; height: 100%; background: var(--a1)"></span></span><b style="font-weight: 600">41%</b></span></td></tr>
+</tbody></table>
+<div class="sv"><span style="flex: 1 1 auto"></span><button class="chip" style="height: 34px">Cancel</button><button class="key">Save</button></div>
+</section>
+<section aria-label="Memory" style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px">
+<div class="pgh"><h2>Memory</h2><span style="font-size: 12px; color: var(--t2)">12 chats · 9 likes · 2 projects</span></div>
+<div role="tablist" aria-label="Memory" style="display: flex; gap: 4px; padding: 3px; border-radius: 12px; background: var(--s3)"><button role="tab" aria-selected="false" style="flex: 1 1 0; height: 30px; border: 0; border-radius: 9px; font-size: 11px; font-weight: 600; background: transparent; color: var(--t2)">Likes</button><button role="tab" aria-selected="false" style="flex: 1 1 0; height: 30px; border: 0; border-radius: 9px; font-size: 11px; font-weight: 600; background: transparent; color: var(--t2)">Projects</button><button role="tab" aria-selected="false" style="flex: 1 1 0; height: 30px; border: 0; border-radius: 9px; font-size: 11px; font-weight: 600; background: transparent; color: var(--t2)">Worked</button><button role="tab" aria-selected="true" style="flex: 1 1 0; height: 30px; border: 0; border-radius: 9px; font-size: 11px; font-weight: 600; background: var(--s5); color: var(--t1)">Chats</button></div>
+<div style="border-radius: 14px; background: var(--s2); padding: 2px"><div class="mrow"><div><p class="clamp" style="margin: 0">Elderly widower film: five shots, Elias and Biscuit. Voice for Elias designed and saved. Shot 1 animated, 5 s; shot 2 waits on the window light.</p><small>Widower · shot 1 · today</small></div><button class="ib" aria-label="More for this item" aria-haspopup="menu" style="width: 28px; height: 28px; background: transparent; box-shadow: none"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></svg></button></div><div class="mrow"><div><p class="clamp" style="margin: 0">Neon rain: <span class="mn">@mara</span> rooftop and bus stills, blue hour look kept.</p><small>Rain still · 2 days ago</small></div><button class="ib" aria-label="More for this item" aria-haspopup="menu" style="width: 28px; height: 28px; background: transparent; box-shadow: none"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></svg></button></div><div class="mrow"><div><p class="clamp" style="margin: 0">Winter fox: dusk walk, 4 takes, take 2 animated.</p><small>Fox run · 21 Nov</small></div><button class="ib" aria-label="More for this item" aria-haspopup="menu" style="width: 28px; height: 28px; background: transparent; box-shadow: none"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></svg></button></div></div>
+<p class="fine">Only yours. Also in the drawer, under <svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"></path><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"></path><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"></path></svg> Memory.</p>
+</section>
+</div>
+</div>
+</main>
+<span class="lbl" style="top: auto; bottom: -1px; border-radius: 10px 10px 0 0">23 · The Assistant page, as tabs · Agent · In pipelines · Providers · Plugins, like Admin's · Agent holds frame 19 as it is · the rail loses Plugins · Agent (⌘J) opens the drawer (plan 33, draft)</span>
+</section>
+<!-- ============ 24 · In pipelines, the silent assistant (plan 33) ============ -->
+<section class="board a5" aria-label="The Assistant page, In pipelines tab" style="min-height: 960px">
+<div class="rail">
+<div class="rail-logo"><a class="brand" href="#" aria-label="helmstudio, home (Create)" title="helmstudio"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24"><path d="M8 16C8 12.4 10.4 10.6 13.3 10.6S18.4 12.6 18.4 16V21" style="fill:none;stroke:currentColor;stroke-width:3.2;stroke-linecap:round"/><path d="M8 7V21" style="stroke:currentColor;stroke-width:3.2;stroke-linecap:round"/><path d="M5.3 1.6H10.7A.9.9 0 0 1 11.6 2.5V5L8 8.4L4.4 5V2.5A.9.9 0 0 1 5.3 1.6Z" style="fill:currentColor"/></svg></a></div>
+<nav aria-label="Sections" style="flex: 0 0 64px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 0; border-right: 1px solid var(--s3)">
+<button aria-label="Create" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"></path><circle cx="12" cy="12" r="3"></circle></svg></button>
+<button aria-label="Pipelines" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="6" height="6" rx="1.5"></rect><rect x="15" y="14" width="6" height="6" rx="1.5"></rect><path d="M9 7h4a2 2 0 0 1 2 2v5"></path></svg></button>
+<button aria-label="Gallery" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="9" cy="10" r="2"></circle><path d="m21 16-5-5L5 20"></path></svg></button>
+<button aria-label="Timeline" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 17h18"></path><rect x="5" y="4" width="6" height="6" rx="1.5"></rect><rect x="12" y="14" width="7" height="6" rx="1.5"></rect></svg></button>
+<button aria-label="Models" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"></path><path d="m3 8 9 5 9-5M12 13v8"></path></svg></button>
+<button aria-label="Assistant" aria-current="page" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: var(--s2); color: var(--a1); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path><path d="M20 3v4M22 5h-4"></path></svg></button>
+<button aria-label="Admin" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.5 3.2 7.6 8 9 4.8-1.4 8-4.5 8-9V6l-8-3Z"></path><path d="m9 12 2 2 4-4"></path></svg></button>
+<span class="rsep" aria-hidden="true"></span>
+<button aria-label="Agent" aria-expanded="false" title="Agent (⌘J)" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8" rx="2"></rect><path d="M2 14h2M20 14h2M15 13v2M9 13v2"></path></svg></button>
+<details style="position: relative; margin-top: 6px">
+<summary aria-label="Settings" style="list-style: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10px; font-weight: 500; color: var(--t2)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 36px; height: 36px; padding: 8px; box-sizing: border-box; border-radius: 12px; color: #fff; background: linear-gradient(155deg, #a7b0c2, #4b5468); box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg>Settings</summary>
+</details>
+</nav>
+</div>
+<main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 16px; padding: 16px 20px 64px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+<h1 class="pt"><i class="lgp"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path></svg></i>Assistant</h1><span class="stp" style="box-shadow: inset 0 0 0 1px var(--a1); color: var(--a1)">On</span>
+<div style="flex-grow: 1"></div>
+<button role="switch" aria-checked="true" aria-label="Assistant on" class="sw" style="background: var(--a1); justify-content: flex-end"><span style="background: var(--on1)"></span></button>
+</div>
+<div role="tablist" aria-label="Assistant sections" style="display: flex; flex-wrap: wrap; gap: 8px">
+<button role="tab" aria-selected="false" class="chip">Agent</button>
+<button role="tab" aria-selected="true" class="chip" style="background: var(--t1); color: var(--p0); font-weight: 600">In pipelines</button>
+<button role="tab" aria-selected="false" class="chip">Providers</button>
+<button role="tab" aria-selected="false" class="chip">Plugins</button>
+</div>
+<span style="font-size: 13px; color: var(--t2)">The silent assistant: AI work done without a chat, in pipelines and on sessions.<button class="i" aria-label="More information" title="Local runs on your own GPU hosts in the shared queue and sends nothing out. A provider model sends what the row says to that provider, and only while the deployment's remote switch (REMOTE_MODELS) is on.">i</button></span>
+<div style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 6px 8px; overflow-x: auto">
+<table style="border-collapse: collapse; width: 100%; min-width: 760px">
+<thead><tr><th>Job</th><th>Model</th><th>Sends</th><th>Status</th><th>Actions</th></tr></thead>
+<tbody>
+<tr aria-selected="true" style="background: var(--s3)"><td style="font-weight: 600; white-space: normal">Pipeline steps<br><span class="m" style="font-weight: 400">write, decide, agent and judge, on Runs on · Auto</span></td><td class="m">Local LLM · Qwen3.8 27B<br>judge: its family's vision model</td><td><span class="tag">local</span><br><span style="font-size: 12px; color: var(--t2)">nothing out</span></td><td>On<br><span style="font-size: 12px; color: var(--t2)">a step that names a model keeps it</span></td><td><button class="chip" style="height: 30px">Edit</button></td></tr>
+<tr><td style="font-weight: 600; white-space: normal">Session names<br><span class="m" style="font-weight: 400">names an untitled session after its first run</span></td><td class="m">DeepSeek · deepseek-chat</td><td><span class="tag adm">remote</span><br><span style="font-size: 12px; color: #f2c14e">the prompt to DeepSeek</span></td><td>On<br><span style="font-size: 12px; color: var(--t2)">never over your titles</span></td><td><button class="chip" style="height: 30px">Edit</button></td></tr>
+</tbody>
+</table>
+</div>
+<div class="pgg">
+<div class="pgc">
+<section aria-label="Default model" style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px">
+<div class="pgh"><h2>Default model</h2></div>
+<span style="font-size: 12px; color: var(--t2)">What Runs on · Auto means for write, decide, agent and judge steps.</span>
+<div role="radiogroup" aria-label="Default model" style="display: flex; flex-direction: column; gap: 8px">
+<label style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 12px; font-size: 13px; background: var(--s2); box-shadow: inset 0 0 0 2px var(--a1)"><input type="radio" name="pd" checked style="accent-color: var(--a1); margin-top: 3px"><span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><b style="font-weight: 600">Local LLM</b><span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--t2)">Qwen3.8 27B · mac</span><span style="font-size: 12px; color: var(--t2)">A judge uses its family's own vision model</span><span style="font-size: 12px; color: var(--t2)">Uses the GPU queue · sends nothing out</span></span></label>
+<label style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 12px; font-size: 13px; background: var(--s2)"><input type="radio" name="pd" style="accent-color: var(--a1); margin-top: 3px"><span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><b style="font-weight: 600">Provider model</b><span style="font-size: 12px; color: var(--t2)">Pick one from Providers</span></span></label>
+<label style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 12px; font-size: 13px; background: var(--s2)"><input type="radio" name="pd" style="accent-color: var(--a1); margin-top: 3px"><span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><b style="font-weight: 600">Same as Agent</b><span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--t2)">DeepSeek · deepseek-chat</span><span style="font-size: 12px; color: var(--t2)">Follows the Agent tab when it changes</span></span></label>
+</div>
+<div class="g2"><div class="fl"><label for="pd-prov">Provider</label><select id="pd-prov" class="in" disabled><option>DeepSeek</option><option>Ollama on the Mac</option></select></div><div class="fl"><label for="pd-model">Model</label><select id="pd-model" class="in" disabled><option>deepseek-chat</option></select></div></div>
+<span style="font-size: 12px; color: var(--t2)">Sends nothing out.</span>
+<p class="fine">Your Claude subscription is not offered here: it answers only for you.</p>
+<div class="sv"><span style="flex: 1 1 auto"></span><button class="chip" style="height: 34px">Cancel</button><button class="key">Save</button></div>
+</section>
+</div>
+<div class="pgc">
+<section aria-label="Session names" style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px">
+<div class="pgh"><h2>Session names<button class="i" aria-label="More information" title="When a session nobody titled finishes its first run, this model writes a 2-5 word title from that run's prompt. A title you typed is never replaced. Off until you turn it on.">i</button></h2></div>
+<span style="font-size: 12px; color: var(--t2)">Names an untitled session from its first prompt.</span>
+<div role="radiogroup" aria-label="Session names" style="display: flex; flex-direction: column; gap: 8px">
+<label style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 12px; font-size: 13px; background: var(--s2)"><input type="radio" name="sn" style="accent-color: var(--a1); margin-top: 3px"><span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><b style="font-weight: 600">Off</b><span style="font-size: 12px; color: var(--t2)">Titles stay as they are</span></span></label>
+<label aria-disabled="true" style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 12px; font-size: 13px; background: var(--s2); color: var(--t2)"><input type="radio" name="sn" disabled style="accent-color: var(--a1); margin-top: 3px"><span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><b style="font-weight: 600; opacity: 0.55">Local LLM</b><span style="font-size: 12px; color: var(--t2)">Qwen3.8 27B not downloaded · <a href="#">Models</a></span><span style="font-size: 12px; color: var(--t2)">Uses the GPU queue · sends nothing out</span></span></label>
+<label style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 12px; font-size: 13px; background: var(--s2); box-shadow: inset 0 0 0 2px var(--a1)"><input type="radio" name="sn" checked style="accent-color: var(--a1); margin-top: 3px"><span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><b style="font-weight: 600">Provider model</b><span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--t2)">DeepSeek · deepseek-chat</span></span></label>
+</div>
+<div class="g2"><div class="fl"><label for="sn-prov">Provider</label><select id="sn-prov" class="in"><option>DeepSeek</option></select></div><div class="fl"><label for="sn-model">Model</label><select id="sn-model" class="in"><option>deepseek-chat</option></select></div></div>
+<span style="padding: 8px 12px; border-radius: 10px; background: color-mix(in srgb, #f2c14e 14%, transparent); color: #f2c14e; font-size: 12px">Sends the prompt to DeepSeek. Never images or references.</span>
+<span style="font-size: 12px; color: var(--t2)">Users see "named by DeepSeek" once, and a line in the session menu.</span>
+<div class="sv"><span style="flex: 1 1 auto"></span><button class="chip" style="height: 34px">Cancel</button><button class="key">Save</button></div>
+</section>
+<section aria-label="Remote models off" style="display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 12px; background: var(--p0); border: 1px solid var(--s3)">
+<span style="font-size: 12px; color: var(--t2)">Remote models off on this deployment: remote providers greyed</span>
+<div role="radiogroup" aria-label="Default model, remote off" style="display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px; background: var(--s1)">
+<label style="display: flex; align-items: center; gap: 10px; font-size: 13px"><input type="radio" name="pd2" checked style="accent-color: var(--a1)">Local LLM<span class="m" style="font-size: 12px">Qwen3.8 27B · mac</span></label>
+<label style="display: flex; align-items: center; gap: 10px; font-size: 13px"><input type="radio" name="pd2" style="accent-color: var(--a1)">Provider model<span style="font-size: 12px; color: var(--t2)">local servers only</span></label>
+<label aria-disabled="true" style="display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--t2)"><input type="radio" name="pd2" disabled>Same as Agent<span style="font-size: 12px">the Agent is remote; remote models are off</span></label>
+</div>
+</section>
+</div>
+</div>
+</main>
+<span class="lbl" style="top: auto; bottom: -1px; border-radius: 10px 10px 0 0">24 · In pipelines · the silent assistant · Default model: what a step's Runs on · Auto means · Session names moved from Admin › AI agents · what leaves the machine per row</span>
+</section>
+<!-- ============ 25 · Providers (plan 33) ============ -->
+<section class="board a5" aria-label="The Assistant page, Providers tab" style="min-height: 960px">
+<div class="rail">
+<div class="rail-logo"><a class="brand" href="#" aria-label="helmstudio, home (Create)" title="helmstudio"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24"><path d="M8 16C8 12.4 10.4 10.6 13.3 10.6S18.4 12.6 18.4 16V21" style="fill:none;stroke:currentColor;stroke-width:3.2;stroke-linecap:round"/><path d="M8 7V21" style="stroke:currentColor;stroke-width:3.2;stroke-linecap:round"/><path d="M5.3 1.6H10.7A.9.9 0 0 1 11.6 2.5V5L8 8.4L4.4 5V2.5A.9.9 0 0 1 5.3 1.6Z" style="fill:currentColor"/></svg></a></div>
+<nav aria-label="Sections" style="flex: 0 0 64px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 0; border-right: 1px solid var(--s3)">
+<button aria-label="Create" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"></path><circle cx="12" cy="12" r="3"></circle></svg></button>
+<button aria-label="Pipelines" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="6" height="6" rx="1.5"></rect><rect x="15" y="14" width="6" height="6" rx="1.5"></rect><path d="M9 7h4a2 2 0 0 1 2 2v5"></path></svg></button>
+<button aria-label="Gallery" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="9" cy="10" r="2"></circle><path d="m21 16-5-5L5 20"></path></svg></button>
+<button aria-label="Timeline" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 17h18"></path><rect x="5" y="4" width="6" height="6" rx="1.5"></rect><rect x="12" y="14" width="7" height="6" rx="1.5"></rect></svg></button>
+<button aria-label="Models" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"></path><path d="m3 8 9 5 9-5M12 13v8"></path></svg></button>
+<button aria-label="Assistant" aria-current="page" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: var(--s2); color: var(--a1); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path><path d="M20 3v4M22 5h-4"></path></svg></button>
+<button aria-label="Admin" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.5 3.2 7.6 8 9 4.8-1.4 8-4.5 8-9V6l-8-3Z"></path><path d="m9 12 2 2 4-4"></path></svg></button>
+<span class="rsep" aria-hidden="true"></span>
+<button aria-label="Agent" aria-expanded="false" title="Agent (⌘J)" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8" rx="2"></rect><path d="M2 14h2M20 14h2M15 13v2M9 13v2"></path></svg></button>
+<details style="position: relative; margin-top: 6px">
+<summary aria-label="Settings" style="list-style: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10px; font-weight: 500; color: var(--t2)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 36px; height: 36px; padding: 8px; box-sizing: border-box; border-radius: 12px; color: #fff; background: linear-gradient(155deg, #a7b0c2, #4b5468); box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg>Settings</summary>
+</details>
+</nav>
+</div>
+<main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 16px; padding: 16px 20px 64px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+<h1 class="pt"><i class="lgp"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path></svg></i>Assistant</h1><span class="stp" style="box-shadow: inset 0 0 0 1px var(--a1); color: var(--a1)">On</span>
+<div style="flex-grow: 1"></div>
+<button role="switch" aria-checked="true" aria-label="Assistant on" class="sw" style="background: var(--a1); justify-content: flex-end"><span style="background: var(--on1)"></span></button>
+</div>
+<div role="tablist" aria-label="Assistant sections" style="display: flex; flex-wrap: wrap; gap: 8px">
+<button role="tab" aria-selected="false" class="chip">Agent</button>
+<button role="tab" aria-selected="false" class="chip">In pipelines</button>
+<button role="tab" aria-selected="true" class="chip" style="background: var(--t1); color: var(--p0); font-weight: 600">Providers</button>
+<button role="tab" aria-selected="false" class="chip">Plugins</button>
+</div>
+<span style="font-size: 13px; color: var(--t2)">Every AI job picks from here: the Agent, pipeline steps and session names.<button class="i" aria-label="More information" title="A local server is any OpenAI-compatible endpoint you run (Ollama, LM Studio, llama-server) on a loopback or private address. A remote provider is https and needs a key file; it is used only while the deployment's remote switch (REMOTE_MODELS) is on. A plugin's provider gets its key from the plugin.">i</button></span>
+<div style="display: flex; align-items: center; gap: 8px"><div style="flex-grow: 1"></div><button class="chip" style="background: var(--a1); color: var(--on1); font-weight: 600">Add provider</button></div>
+<div style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 6px 8px; overflow-x: auto">
+<table class="rm" style="border-collapse: collapse; width: 100%">
+<thead><tr><th>Name</th><th>Kind</th><th>Address</th><th>Models</th><th>Limits</th><th>Status</th><th><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%)">Actions</span></th></tr></thead>
+<tbody>
+<tr><td style="font-weight: 600">Your Claude subscription<br><span class="m" style="font-weight: 400">claude-code-bridge</span><br><span class="tag me" style="display: inline-block; margin-top: 4px">Personal use only</span></td><td><span class="tag kind">plugin</span></td><td class="m" style="max-width: 150px; overflow: hidden; text-overflow: ellipsis">http://host.docker.internal:8420/v1</td><td class="m">claude-sonnet (default)<br>claude-opus<br>claude-haiku</td><td class="m">key from the plugin<br>timeout 120 s</td><td>Enabled<br><span style="font-size: 12px; color: var(--a1)">answered · 1.2 s</span></td><td><button class="ib" aria-label="More for this provider" aria-haspopup="menu" style="width: 28px; height: 28px; background: transparent; box-shadow: none"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></svg></button></td></tr>
+<tr aria-selected="true" style="background: var(--s3)"><td style="font-weight: 600">DeepSeek<br><span class="m" style="font-weight: 400">deepseek</span></td><td><span class="tag adm">remote</span></td><td class="m" style="max-width: 150px; overflow: hidden; text-overflow: ellipsis">https://api.deepseek.com</td><td class="m">deepseek-flash (default)<br>deepseek-v4-pro<br>deepseek-chat</td><td class="m">key file deepseek<br>2 in flight · timeout 120 s</td><td>Enabled<br><span style="font-size: 12px; color: var(--a1)">answered · 0.8 s</span></td><td><button class="ib" aria-label="More for this provider" aria-haspopup="menu" style="width: 28px; height: 28px; background: transparent; box-shadow: none"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></svg></button></td></tr>
+<tr><td style="font-weight: 600">Ollama on the Mac<br><span class="m" style="font-weight: 400">ollama</span></td><td><span class="tag">local server</span></td><td class="m" style="max-width: 150px; overflow: hidden; text-overflow: ellipsis">http://host.docker.internal:11434/v1</td><td class="m">qwen2.5:7b (default)<br>llama3.2:3b</td><td class="m">mac · 6.5 GB reserved<br>timeout 120 s</td><td>Enabled<br><span style="font-size: 12px; color: var(--a1)">answered · 0.4 s</span></td><td><button class="ib" aria-label="More for this provider" aria-haspopup="menu" style="width: 28px; height: 28px; background: transparent; box-shadow: none"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></svg></button></td></tr>
+</tbody>
+</table>
+</div>
+<section aria-label="Other states" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; align-items: start">
+<div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 12px; background: var(--p0); border: 1px solid var(--s3)">
+<span style="font-size: 12px; color: var(--t2)">Edit · Your Claude subscription: no key field</span>
+<div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px"><span style="width: 8px; height: 8px; border-radius: 50%; background: var(--a1)"></span><span style="color: var(--a1); font-weight: 600">Key from the plugin</span><span style="color: var(--t2)">picked automatically</span><div style="flex-grow: 1"></div><button class="chip" style="height: 26px; font-size: 12px">Recheck</button></div>
+<span style="font-size: 12px; color: var(--t2)">The bridge's runner hands the key over. Never shown, never typed.</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 12px; background: var(--p0); border: 1px solid var(--s3)">
+<span style="font-size: 12px; color: var(--t2)">Plugin off</span>
+<div role="alert" style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, #f2c14e 14%, transparent); color: #f2c14e; font-size: 12px"><span style="flex: 1 1 auto">Your Claude subscription counts only while its plugin is on.</span><button class="chip" style="height: 26px; font-size: 12px">Plugins</button></div>
+</div>
+</section>
+</main>
+<aside aria-label="Edit DeepSeek" style="flex: 1 1 340px; box-sizing: border-box; padding: 16px 18px 24px; border-left: 1px solid var(--s3); background: var(--p0); display: flex; flex-direction: column; gap: 12px">
+<h2 style="margin: 0; display: flex; align-items: center; gap: 8px; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 16px; font-weight: 700">DeepSeek</h2>
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px">
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="e-name" style="font-size: 12px; color: var(--t2)">Name</label><input id="e-name" class="in" value="deepseek"></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="e-title" style="font-size: 12px; color: var(--t2)">Title users see</label><input id="e-title" class="in" value="DeepSeek"></div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="e-url" style="font-size: 12px; color: var(--t2)">Base URL</label><input id="e-url" class="in" value="https://api.deepseek.com"></div>
+<div style="display: flex; align-items: center; gap: 8px"><span style="font-size: 12px; color: var(--t2); flex: 1 1 auto">Models</span><span style="font-size: 12px; color: var(--t2)">3 found</span><button class="chip" style="height: 26px; font-size: 12px">Refresh</button></div>
+<div role="group" aria-label="Models" style="display: flex; flex-direction: column; gap: 2px; padding: 6px; border-radius: 12px; background: var(--s1); border: 1px solid var(--s3)">
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 6px 8px; border-radius: 8px; background: var(--s2)">
+<div style="display: flex; align-items: center; gap: 10px; font-size: 12px"><input type="checkbox" checked aria-label="Use deepseek-flash" style="accent-color: var(--a1)"><span style="font-family: 'JetBrains Mono', monospace; flex: 1 1 auto">deepseek-flash</span><label style="display: flex; align-items: center; gap: 6px"><input type="radio" name="defP" checked style="accent-color: var(--a1)">Default</label></div>
+<div style="display: flex; align-items: center; gap: 8px; padding-left: 26px; font-size: 12px"><span style="color: var(--t2)">Thinking</span><div role="radiogroup" aria-label="Thinking for deepseek-flash" style="display: flex; padding: 2px; border-radius: 8px; background: var(--s1)"><button role="radio" aria-checked="true" style="height: 24px; padding: 0 10px; border: 0; border-radius: 6px; background: var(--s5); font-size: 12px">Off</button><button role="radio" aria-checked="false" style="height: 24px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--t2); font-size: 12px">Low</button><button role="radio" aria-checked="false" style="height: 24px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--t2); font-size: 12px">High</button></div></div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 6px 8px; border-radius: 8px">
+<div style="display: flex; align-items: center; gap: 10px; font-size: 12px"><input type="checkbox" checked aria-label="Use deepseek-v4-pro" style="accent-color: var(--a1)"><span style="font-family: 'JetBrains Mono', monospace; flex: 1 1 auto">deepseek-v4-pro</span><label style="display: flex; align-items: center; gap: 6px; color: var(--t2)"><input type="radio" name="defP" style="accent-color: var(--a1)">Default</label></div>
+<div style="display: flex; align-items: center; gap: 8px; padding-left: 26px; font-size: 12px"><span style="color: var(--t2)">Thinking</span><div role="radiogroup" aria-label="Thinking for deepseek-v4-pro" style="display: flex; padding: 2px; border-radius: 8px; background: var(--s1)"><button role="radio" aria-checked="false" style="height: 24px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--t2); font-size: 12px">Off</button><button role="radio" aria-checked="false" style="height: 24px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--t2); font-size: 12px">Low</button><button role="radio" aria-checked="true" style="height: 24px; padding: 0 10px; border: 0; border-radius: 6px; background: var(--s5); font-size: 12px">High</button></div><span style="color: var(--t2)">provider default</span></div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px; padding: 6px 8px; border-radius: 8px">
+<div style="display: flex; align-items: center; gap: 10px; font-size: 12px"><input type="checkbox" checked aria-label="Use deepseek-chat" style="accent-color: var(--a1)"><span style="font-family: 'JetBrains Mono', monospace">deepseek-chat</span><span class="tag">custom</span><div style="flex-grow: 1"></div><label style="display: flex; align-items: center; gap: 6px; color: var(--t2)"><input type="radio" name="defP" style="accent-color: var(--a1)">Default</label><button aria-label="Remove deepseek-chat" style="width: 22px; height: 22px; border: 0; border-radius: 50%; background: var(--s4); font-size: 12px; padding: 0">×</button></div>
+<span style="padding-left: 26px; font-size: 12px; color: var(--t2)">No thinking setting</span>
+</div>
+</div>
+<div style="display: flex; gap: 8px"><input class="in" aria-label="Model id" placeholder="Model id" value="" style="flex: 1 1 auto; height: 32px; font-size: 12px"><button class="chip" style="height: 32px; font-size: 12px">Add</button></div>
+<div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px">
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="e-key" style="font-size: 12px; color: var(--t2)">Key file</label><input id="e-key" class="in" value="deepseek"></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="e-fl" style="font-size: 12px; color: var(--t2)">In flight</label><input id="e-fl" class="in" placeholder="2"></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="e-to" style="font-size: 12px; color: var(--t2)">Timeout, s</label><input id="e-to" class="in" placeholder="120"></div>
+</div>
+<div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px"><span style="width: 8px; height: 8px; border-radius: 50%; background: var(--a1)"></span><span style="color: var(--a1); font-weight: 600">Found</span><span style="font-family: 'JetBrains Mono', monospace; color: var(--t2)">deploy/secrets/providers/deepseek</span><div style="flex-grow: 1"></div><button class="chip" style="height: 26px; font-size: 12px">Recheck</button></div>
+<div style="display: flex; gap: 8px"><button class="chip" style="height: 30px; font-size: 12px">Replace key</button><button class="chip" style="height: 30px; font-size: 12px">Remove key</button></div>
+<label style="display: flex; align-items: center; gap: 10px; min-height: 32px; font-size: 13px"><input type="checkbox" checked style="accent-color: var(--a1)">Enabled</label>
+<button style="height: 48px; border-radius: 14px; border: 0; background: var(--a1); color: var(--on1); background-image: linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 55%); font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.04em">Save provider</button>
+</aside>
+<span class="lbl" style="top: auto; bottom: -1px; border-radius: 10px 10px 0 0">25 · Providers · Admin › Model providers moved as it is (row menu ⋯ at this width, models as A · Rows) · Your Claude subscription is a row: its key comes from the plugin, no Key field</span>
+</section>
+<!-- ============ 26 · Plugins (plan 33) ============ -->
+<section class="board a5" aria-label="The Assistant page, Plugins tab" style="min-height: 960px">
+<div class="rail">
+<div class="rail-logo"><a class="brand" href="#" aria-label="helmstudio, home (Create)" title="helmstudio"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24"><path d="M8 16C8 12.4 10.4 10.6 13.3 10.6S18.4 12.6 18.4 16V21" style="fill:none;stroke:currentColor;stroke-width:3.2;stroke-linecap:round"/><path d="M8 7V21" style="stroke:currentColor;stroke-width:3.2;stroke-linecap:round"/><path d="M5.3 1.6H10.7A.9.9 0 0 1 11.6 2.5V5L8 8.4L4.4 5V2.5A.9.9 0 0 1 5.3 1.6Z" style="fill:currentColor"/></svg></a></div>
+<nav aria-label="Sections" style="flex: 0 0 64px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 0; border-right: 1px solid var(--s3)">
+<button aria-label="Create" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"></path><circle cx="12" cy="12" r="3"></circle></svg></button>
+<button aria-label="Pipelines" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="6" height="6" rx="1.5"></rect><rect x="15" y="14" width="6" height="6" rx="1.5"></rect><path d="M9 7h4a2 2 0 0 1 2 2v5"></path></svg></button>
+<button aria-label="Gallery" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="9" cy="10" r="2"></circle><path d="m21 16-5-5L5 20"></path></svg></button>
+<button aria-label="Timeline" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 17h18"></path><rect x="5" y="4" width="6" height="6" rx="1.5"></rect><rect x="12" y="14" width="7" height="6" rx="1.5"></rect></svg></button>
+<button aria-label="Models" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"></path><path d="m3 8 9 5 9-5M12 13v8"></path></svg></button>
+<button aria-label="Assistant" aria-current="page" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: var(--s2); color: var(--a1); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path><path d="M20 3v4M22 5h-4"></path></svg></button>
+<button aria-label="Admin" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.5 3.2 7.6 8 9 4.8-1.4 8-4.5 8-9V6l-8-3Z"></path><path d="m9 12 2 2 4-4"></path></svg></button>
+<span class="rsep" aria-hidden="true"></span>
+<button aria-label="Agent" aria-expanded="false" title="Agent (⌘J)" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8" rx="2"></rect><path d="M2 14h2M20 14h2M15 13v2M9 13v2"></path></svg></button>
+<details style="position: relative; margin-top: 6px">
+<summary aria-label="Settings" style="list-style: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10px; font-weight: 500; color: var(--t2)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 36px; height: 36px; padding: 8px; box-sizing: border-box; border-radius: 12px; color: #fff; background: linear-gradient(155deg, #a7b0c2, #4b5468); box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"></path></svg>Settings</summary>
+</details>
+</nav>
+</div>
+<main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 16px; padding: 16px 20px 64px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+<h1 class="pt"><i class="lgp"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0L14.06 8.5a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96L15.5 14.06a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"></path></svg></i>Assistant</h1><span class="stp" style="box-shadow: inset 0 0 0 1px var(--a1); color: var(--a1)">On</span>
+<div style="flex-grow: 1"></div>
+<button role="switch" aria-checked="true" aria-label="Assistant on" class="sw" style="background: var(--a1); justify-content: flex-end"><span style="background: var(--on1)"></span></button>
+</div>
+<div role="tablist" aria-label="Assistant sections" style="display: flex; flex-wrap: wrap; gap: 8px">
+<button role="tab" aria-selected="false" class="chip">Agent</button>
+<button role="tab" aria-selected="false" class="chip">In pipelines</button>
+<button role="tab" aria-selected="false" class="chip">Providers</button>
+<button role="tab" aria-selected="true" class="chip" style="background: var(--t1); color: var(--p0); font-weight: 600">Plugins</button>
+</div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+<span style="flex: 1 1 auto; font-size: 13px; color: var(--t2)">Add-ons that plug new features in. Found in plugins/ on start; off until you turn them on.<button class="i" aria-label="More information" title="A plugin is a folder in plugins/ with a manifest: name, kind, version, source, what it may do. The studio lists it on start and never runs it until an admin turns it on. Kinds: Model provider, Assistant tools, Media tools, Skill.">i</button></span>
+<button class="chip">Rescan</button>
+<button class="chip" style="background: var(--a1); color: var(--on1); font-weight: 600">Add plugin</button>
+</div>
+<div style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 6px 8px; overflow-x: auto">
+<table style="border-collapse: collapse; width: 100%; min-width: 760px">
+<thead><tr><th>Plugin</th><th>Kind</th><th>May do</th><th>Status</th><th>Actions</th></tr></thead>
+<tbody>
+<tr aria-selected="true" style="background: var(--s3)">
+<td style="font-weight: 600; white-space: normal">Claude Code bridge<br><span class="m" style="font-weight: 400">0.1.0 · plugins/claude-code-bridge</span><br><span class="tag me" style="display: inline-block; margin-top: 4px">Personal use only</span></td>
+<td><span class="tag kind">Model provider</span></td>
+<td style="white-space: normal; font-size: 12px; color: var(--t1b); max-width: 260px">Adds a model provider · reaches host.docker.internal:8420</td>
+<td><span class="dot okb"></span> <span class="ok" style="font-weight: 600">Running</span><br><span class="m" style="font-size: 11px">host.docker.internal:8420</span></td>
+<td><button class="chip" style="height: 30px">Add as provider</button> <button class="chip" style="height: 30px">Disable</button> <button class="chip" style="height: 30px">Remove</button></td>
+</tr>
+<tr>
+<td style="font-weight: 600; white-space: normal">Media tools<br><span class="m" style="font-weight: 400">0.1.0 · helmstudio · plugins/media-tools</span></td>
+<td><span class="tag kind">Assistant tools</span></td>
+<td style="white-space: normal; font-size: 12px; color: var(--t1b); max-width: 260px">Adds crop, resize, trim and frames · reads your takes, saves new ones · runs in its own container</td>
+<td><span class="dot okb"></span> <span class="ok" style="font-weight: 600">Running</span><br><span class="m" style="font-size: 11px">media-tools:8422</span></td>
+<td><button class="chip" style="height: 30px">Disable</button> <button class="chip" style="height: 30px">Remove</button></td>
+</tr>
+<tr>
+<td style="font-weight: 600; white-space: normal">Web search<br><span class="m" style="font-weight: 400">0.1.0 · helmstudio · plugins/web-search</span></td>
+<td><span class="tag kind">Assistant tools</span></td>
+<td style="white-space: normal; font-size: 12px; color: var(--t1b); max-width: 260px">Adds web search for the Assistant · sends searches off the machine (DuckDuckGo, free, no key), asks first</td>
+<td><span class="dot offb"></span> <span class="off" style="font-weight: 600">Off</span></td>
+<td><button class="chip" style="height: 30px">Enable</button> <button class="chip" style="height: 30px">Remove</button></td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<section aria-label="Skills" style="display: flex; flex-direction: column; gap: 8px">
+<div style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 6px 8px; overflow-x: auto">
+<table style="border-collapse: collapse; width: 100%; min-width: 760px">
+<thead><tr><th>Plugin</th><th>Kind</th><th>May do</th><th>Status</th><th>Actions</th></tr></thead>
+<tbody>
+<tr aria-selected="true" style="background: var(--s3)">
+<td style="font-weight: 600; white-space: normal">Animator<br><span class="m" style="font-weight: 400">0.1.0 · built in · plugins/animator</span></td>
+<td><span class="tag kind">Skill</span></td>
+<td style="white-space: normal; font-size: 12px; color: var(--t1b); max-width: 260px">Teaches the Assistant shot planning, timing, motion and camera moves · text only</td>
+<td><span class="dot offb"></span> <span class="off" style="font-weight: 600">Off</span></td>
+<td><button class="chip" style="height: 30px">Enable</button></td>
+</tr>
+<tr>
+<td style="font-weight: 600; white-space: normal">Cinematographer<br><span class="m" style="font-weight: 400">0.2.0 · yours · ~/.helm/plugins/cinematographer.zip</span></td>
+<td><span class="tag kind">Skill</span></td>
+<td style="white-space: normal; font-size: 12px; color: var(--t1b); max-width: 260px">Teaches lighting, lenses and framing · text only</td>
+<td><span class="dot okb"></span> <span class="ok" style="font-weight: 600">On</span></td>
+<td><button class="chip" style="height: 30px">Disable</button> <button class="chip" style="height: 30px">Remove</button></td>
+</tr>
+<tr>
+<td style="font-weight: 600; white-space: normal">Voice director<br><span class="m" style="font-weight: 400">0.3.0 · yours · ~/.helm/plugins/voice-director</span><br><span class="tag me" style="display: inline-block; margin-top: 4px">Replaces built-in 0.2.0</span></td>
+<td><span class="tag kind">Skill</span></td>
+<td style="white-space: normal; font-size: 12px; color: var(--t1b); max-width: 260px">Your copy of the same name wins; remove it to get the built-in back</td>
+<td><span class="dot offb"></span> <span class="off" style="font-weight: 600">Off</span></td>
+<td><button class="chip" style="height: 30px">Enable</button> <button class="chip" style="height: 30px">Remove</button></td>
+</tr>
+<tr class="ex">
+<td style="font-weight: 600; white-space: normal">Storyboard artist<br><span class="m" style="font-weight: 400">1.0.0 · yours · ~/.helm/plugins/storyboard.zip</span></td>
+<td><span class="tag kind">Skill</span></td>
+<td style="white-space: normal; font-size: 12px; color: var(--t1b); max-width: 260px">Made for a newer helmstudio (format 2)</td>
+<td><span class="dot offb"></span> <span class="off" style="font-weight: 600">Needs a newer helmstudio</span></td>
+<td><button class="chip" style="height: 30px">Remove</button></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+</main>
+<aside aria-label="Plugin: Claude Code bridge" style="flex: 1 1 340px; box-sizing: border-box; padding: 16px 18px 24px; border-left: 1px solid var(--s3); background: var(--p0); display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; align-items: center; gap: 8px">
+<h2 style="margin: 0; flex: 1 1 auto; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 16px; font-weight: 700">Claude Code bridge</h2>
+<button role="switch" aria-checked="true" aria-label="Enabled" class="sw" style="background: var(--a1); justify-content: flex-end"><span style="background: var(--on1)"></span></button>
+</div>
+<span style="font-size: 13px; color: var(--t1b)">Answers with your own logged-in claude CLI, as an OpenAI-compatible endpoint.</span>
+<div style="display: flex; flex-direction: column; gap: 4px">
+<div class="row"><span>Kind</span><span>Model provider</span></div>
+<div class="row"><span>Version</span><span>0.1.0</span></div>
+<div class="row"><span>Source</span><span>plugins/claude-code-bridge</span></div>
+<div class="row"><span>Author</span><span>this repo</span></div>
+<div class="row"><span>Status</span><span style="color: #7fd88f">Running · host.docker.internal:8420</span></div>
+<div class="row"><span>Models</span><span>claude-sonnet · claude-opus · claude-haiku</span></div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px">
+<span class="h">MAY DO</span>
+<ul class="perm"><li>Add a model provider</li><li>Reach host.docker.internal:8420</li><li>Read your prompts (sent to your Claude plan)</li></ul>
+</div>
+<div class="amb"><span><b>Personal use only.</b> Runs your own Claude login and plan, for you only. Never shared with other accounts. <a href="https://code.claude.com/docs/en/legal-and-compliance.md">Anthropic's terms</a></span></div>
+<div style="height: 1px; background: var(--s3)"></div>
+<h3 style="margin: 0; display: flex; align-items: center; font-size: 14px; font-weight: 700">Add as provider</h3>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="pl-name5" style="font-size: 12px; color: var(--t2)">Name</label><input id="pl-name5" class="in" value="Your Claude subscription"></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><label for="pl-model5" style="font-size: 12px; color: var(--t2)">Default model</label><select id="pl-model5" class="in"><option>claude-sonnet</option><option>claude-opus</option><option>claude-haiku</option></select></div>
+<span style="font-size: 12px; color: var(--t2)">No key to paste: the plugin hands it over.</span>
+<button style="height: 48px; border-radius: 14px; border: 0; background: var(--a1); color: var(--on1); background-image: linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 55%); font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.04em">Add</button>
+<span style="font-size: 12px; color: var(--t2)">Added, it shows in <a href="#">Providers</a>.</span>
+</aside>
+<span class="lbl" style="top: auto; bottom: -1px; border-radius: 10px 10px 0 0">26 · Plugins · the Plugins page moved here as it is: model-provider, Assistant tools and skill plugins · the Plugins rail item goes · Add as provider needs no key and opens in Providers</span>
+</section>
+<!-- ============ 27 · Small pieces (plan 33) ============ -->
+<section class="board a5" aria-label="Small pieces, plan 33" style="padding: 64px 40px 56px 96px; display: grid; grid-template-columns: repeat(2, 600px); gap: 32px 48px; align-items: start">
+<span class="lbl" style="top: auto; bottom: -1px; border-radius: 10px 10px 0 0">27 · Small pieces · a: Admin keeps Users, Hosts, API keys; old links open the Assistant tabs · b, c: a step's Runs on says where Auto is set · not an admin: no tab row, frame 22 as it is</span>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<p class="note">a · Admin keeps three tabs</p>
+<div style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
+<h1 style="margin: 0; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 22px; font-weight: 700; letter-spacing: 0.01em">Admin</h1>
+<div style="flex-grow: 1"></div>
+<span class="tag adm">Signed in as root admin</span>
+</div>
+<div role="tablist" aria-label="Admin sections" style="display: flex; flex-wrap: wrap; gap: 8px">
+<button role="tab" aria-selected="true" class="chip" style="background: var(--t1); color: var(--p0); font-weight: 600">Users</button>
+<button role="tab" aria-selected="false" class="chip">Hosts</button>
+<button role="tab" aria-selected="false" class="chip">API keys</button>
+</div>
+<span style="font-size: 12px; color: var(--t2)">Old links open the Assistant: <span class="m">?tab=providers</span> Providers, <span class="m">?tab=agents</span> In pipelines, <span class="m">/plugins</span> Plugins.</span>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<p class="note">b · A pipeline step's Runs on, Auto</p>
+<div aria-label="Agent settings" style="box-sizing: border-box; padding: 16px 18px 24px; border-radius: 34px 34px 34px 14px; background: var(--p0); display: flex; flex-direction: column; gap: 14px">
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 16px; font-weight: 700">Agent</h2>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 8px"><label for="r-src">Runs on</label><select id="r-src" class="sel"><optgroup label="Auto"><option>Auto · Local LLM</option></optgroup><optgroup label="Local server"><option>ollama · qwen2.5:7b</option></optgroup><optgroup label="Remote"><option>DeepSeek · deepseek-chat</option></optgroup></select></div>
+<span style="font-size: 12px; color: var(--t2); text-align: right">Auto · set in <a href="#">Assistant › In pipelines</a></span>
+</div>
+<div role="listbox" aria-label="Runs on" style="display: flex; flex-direction: column; gap: 2px; padding: 6px; border-radius: 12px; background: var(--s2); font-size: 13px">
+<div role="option" aria-selected="true" style="display: flex; gap: 8px; padding: 5px 8px; border-radius: 8px; background: var(--s4)"><span style="flex: 1 1 auto">Auto</span><span class="m">Local LLM · Qwen3.8 27B</span></div>
+<span style="padding: 4px 8px 0; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; color: var(--t2)">Local server</span>
+<div role="option" style="padding: 5px 8px; border-radius: 8px">ollama · qwen2.5:7b</div>
+<span style="padding: 4px 8px 0; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; color: var(--t2)">Remote</span>
+<div role="option" style="padding: 5px 8px; border-radius: 8px">DeepSeek · deepseek-chat</div>
+</div>
+<span style="font-size: 12px; color: var(--t2)">Sends nothing out.</span>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<p class="note">c · Runs on, Auto, when the default is a provider model</p>
+<div aria-label="Agent settings, remote default" style="box-sizing: border-box; padding: 16px 18px 24px; border-radius: 34px 34px 34px 14px; background: var(--p0); display: flex; flex-direction: column; gap: 14px">
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 16px; font-weight: 700">Judge</h2>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 8px"><label for="r-src2">Runs on</label><select id="r-src2" class="sel"><option>Auto · DeepSeek · deepseek-chat</option></select></div>
+<span style="font-size: 12px; color: var(--t2); text-align: right">Auto · set in <a href="#">Assistant › In pipelines</a></span>
+</div>
+<span class="warn">Sends the step's prompt and text to DeepSeek; never images. Submit lists it.</span>
+</div>
+</div>
+</section>
+<!-- A5-END -->
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":26540}}'>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":31620}}'>
 class Component extends DCLogic {
 state = { theme: null };
 renderVals() {
