@@ -2097,14 +2097,15 @@ function SetupDrawer({ a, phone }: { a: AssistantApi; phone: boolean }) {
     setError("");
     try {
       const s = await ok(api.GET("/v1/studio/admin/assistant"));
+      const web = s.web_search && s.remote_enabled;
       await ok(
         api.PUT("/v1/studio/admin/assistant", {
           body: {
             enabled: true,
             provider: s.provider,
             model: s.model,
-            web_search: s.web_search,
-            search_provider: s.search_provider,
+            web_search: web,
+            search_provider: web ? s.search_provider : null,
           },
         }),
       );

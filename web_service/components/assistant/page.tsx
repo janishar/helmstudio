@@ -406,21 +406,28 @@ function AdminPage({ setup }: { setup: boolean }) {
     );
   const remoteOn = settings.remote_enabled;
   const providers = list.providers;
-  const live = pickable(providers, remoteOn).find((p) => p.name === settings.provider);
+  // a plugin-made provider (Your Claude subscription) counts only while its plugin is on, as the server reads it
+  const live = pickable(providers, remoteOn).find(
+    (p) =>
+      p.name === settings.provider &&
+      (!p.plugin || !plugins || plugins.some((g) => g.name === p.plugin && g.enabled)),
+  );
   const model = live && (settings.model ?? live.default_model);
   const setUp = !!live && live.models.includes(model!);
   const on = setUp && settings.enabled;
 
   /** PUT /admin/assistant with the saved settings and `over`. */
   async function put(over: Partial<Put>) {
+    // web search only while remote is on: the server refuses (409) a saved one after REMOTE_MODELS went off
+    const web = settings!.web_search && remoteOn;
     const s = await ok(
       api.PUT("/v1/studio/admin/assistant", {
         body: {
           enabled: settings!.enabled,
           provider: settings!.provider,
           model: settings!.model,
-          web_search: settings!.web_search,
-          search_provider: settings!.search_provider,
+          web_search: web,
+          search_provider: web ? settings!.search_provider : null,
           ...over,
         },
       }),
@@ -955,7 +962,7 @@ function SetupForm({
   const saved = providers.find((p) => p.name === settings.provider);
   const card =
     cards.find((c) => c.id === pick) ??
-    cardOfProvider(cards, saved) ??
+    [cardOfProvider(cards, saved)].find((c) => c && usable(c)) ??
     cards.find((c) => c.kind === "preset" && usable(c)) ??
     cards.find((c) => c.kind === "local")!;
   const radios = useRef<HTMLDivElement>(null);

@@ -8,6 +8,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import assistantOn from "../../../contracts/fixtures/http/AssistantSettings.valid.1.json";
 import remote from "../../../contracts/fixtures/http/Provider.valid.2.json";
+import server from "../../../contracts/fixtures/http/Provider.valid.1.json";
 import cacheStats from "../../../contracts/fixtures/http/AssistantCacheStats.valid.json";
 import type { S } from "@/lib/api";
 import { answer } from "./helpers";
@@ -269,6 +270,62 @@ describe("the admin's page", () => {
     expect(
       screen.getByRole("region", { name: "Tools, Skills, Auto mode, Context, Memory" }),
     ).toBeTruthy();
+  });
+
+  it("remote models turned off after setup: saves drop web search; a saved remote opens the form on a usable card", async () => {
+    const ollama = { ...remote, ...server, enabled: true } as S<"Provider">;
+    serve(
+      settings({
+        provider: "ollama",
+        web_search: true,
+        search_provider: "brave",
+        remote_enabled: false,
+      }),
+      [ollama, brave],
+    );
+    render(<AssistantScreen setup={false} />);
+    await screen.findByText("On");
+    const put = echo();
+    fireEvent.click(screen.getByRole("switch", { name: "Assistant on" }));
+    await waitFor(() => expect(put).toHaveBeenCalled());
+    expect(put.mock.calls[0][1]).toMatchObject({
+      body: { web_search: false, search_provider: null },
+    });
+    cleanup();
+    serve(settings({ remote_enabled: false }), [deepseek, brave]);
+    render(<AssistantScreen setup={false} />);
+    const form = await screen.findByRole("region", { name: "Set up the Model" });
+    const checked = within(form)
+      .getAllByRole("radio")
+      .find((c) => c.getAttribute("aria-checked") === "true");
+    expect(checked?.getAttribute("aria-disabled")).not.toBe("true");
+  });
+
+  it("a plugin-made provider counts only while its plugin is on", async () => {
+    plugins.push(
+      plugin({
+        name: "claude-code-bridge",
+        title: "Claude",
+        kind: "model-provider",
+        enabled: false,
+        status: "off",
+      }),
+    );
+    try {
+      const claude = {
+        ...remote,
+        ...server,
+        name: "claude",
+        plugin: "claude-code-bridge",
+        models: ["sonnet"],
+        default_model: "sonnet",
+      } as S<"Provider">;
+      serve(settings({ provider: "claude", web_search: false }), [claude]);
+      render(<AssistantScreen setup={false} />);
+      expect(await screen.findByText("Not set up")).toBeTruthy();
+    } finally {
+      plugins.pop();
+    }
   });
 
   it("setup with DeepSeek: the key found, the models fetched by themselves, Save creates it, saves it on and opens the drawer", async () => {
