@@ -758,9 +758,13 @@ export function KeyArea({
     setNote(null);
   };
   const field = status.writable && (!status.found || mode === "replace");
+  // the Assistant page's form (board frame 20): only the field until a key is found; its foot says where it goes
+  const bare = !!label;
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-2 text-[12px]">
+      <div
+        className={`flex flex-wrap items-center gap-2 text-[12px] ${bare && !status.found && status.writable ? "hidden" : ""}`}
+      >
         <span className="size-2 rounded-full" style={{ background: colour }} />
         <span className="font-semibold" style={{ color: colour }}>
           {status.found ? "Found" : "Missing"}
@@ -895,7 +899,7 @@ export function KeyArea({
       )}
       {note?.kind === "error" && <ErrorNote>{note.text}</ErrorNote>}
       {field && bad && <ErrorNote>{KEY_CHARS_TEXT}</ErrorNote>}
-      {field && !note && !bad && (
+      {field && !note && !bad && !bare && (
         <span className="text-[12px] text-t2">
           {status.found
             ? "The old key stays until the new one is saved."

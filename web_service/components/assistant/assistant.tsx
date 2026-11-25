@@ -2461,10 +2461,12 @@ function Drawer({ a }: { a: AssistantApi }) {
       ) : (
         <>
           <div className="dh">
-            {/* while a chip shows (Working, Waiting) it takes the title's place, so every button fits */}
+            {/* while a chip shows (Working, Waiting) it takes the title's place, so every button fits; in the 340 px
+                drawer the Settings gear (plan 32) leaves room for the mark only, the word shows full screen and on a
+                phone */}
             <h2 aria-label="Assistant" className={chip ? "shrink-0 grow-0" : ""}>
               <Sparkles aria-hidden strokeWidth={2} />
-              {!chip && <span className="truncate">Assistant</span>}
+              {!chip && (full || phone) && <span className="truncate">Assistant</span>}
             </h2>
             {chip}
             {chip && <span className="flex-1" />}

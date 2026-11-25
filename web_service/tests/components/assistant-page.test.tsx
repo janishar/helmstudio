@@ -99,13 +99,16 @@ const presets = [
   },
 ];
 
+/** The settings GET answers: the last PUT's (the page reads them again after each save). */
+let saved: S<"AssistantSettings">;
 function serve(
   s: S<"AssistantSettings">,
   providers: unknown[],
   more: Record<string, () => unknown> = {},
 ) {
+  saved = s;
   answer("GET", {
-    "/v1/studio/admin/assistant": () => ({ data: s }),
+    "/v1/studio/admin/assistant": () => ({ data: saved }),
     "/v1/studio/admin/providers": () => ({ data: { providers, remote_enabled: s.remote_enabled } }),
     "/v1/studio/admin/plugins": () => ({ data: { plugins } }),
     "/v1/studio/admin/provider-presets": () => ({
@@ -119,7 +122,11 @@ function serve(
 const echo = () =>
   answer("PUT", {
     "/v1/studio/admin/assistant": (init) => ({
-      data: { ...settings(), ...(init.body as object), updated_at: "2026-11-25T11:00:00Z" },
+      data: (saved = {
+        ...settings(),
+        ...(init.body as object),
+        updated_at: "2026-11-25T11:00:00Z",
+      }),
     }),
     "/v1/studio/admin/plugins/{plugin}": (init) => ({
       data: plugin({

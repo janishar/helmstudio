@@ -16,6 +16,12 @@ export async function signIn(page: Page, c: Creds) {
   await page.getByLabel("Password").fill(c.password);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).not.toHaveURL(/\/signin/);
+  // plan 32: an admin's first sign-in to a stack never set up opens the drawer once; the journeys start without it
+  await page.request.post("/api/v1/studio/assistant/first-launch");
+  if ((await page.evaluate(() => sessionStorage.getItem("hs.assistant.open"))) === "1") {
+    await page.evaluate(() => sessionStorage.setItem("hs.assistant.open", "0"));
+    await page.reload();
+  }
 }
 
 /** A new account with the user role, made by the admin in its own browser context. */

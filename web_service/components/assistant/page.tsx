@@ -63,7 +63,7 @@ const LOCAL_PRESETS = ["ollama", "lmstudio"];
 const tileOf = (id: string) => TILE[id] ?? TILE.local;
 const Tile = ({ id, title }: { id: string; title: string }) => (
   <i className="lg" style={{ background: tileOf(id) }}>
-    {title[0]?.toUpperCase()}
+    {id === BRIDGE ? "C" : title[0]?.toUpperCase()}
   </i>
 );
 
@@ -382,6 +382,15 @@ function AdminPage({ setup }: { setup: boolean }) {
   useEffect(() => {
     load();
   }, [load]);
+  // the drawer's Turn on: the switch follows
+  useEffect(() => {
+    const again = () =>
+      void ok(api.GET("/v1/studio/admin/assistant"))
+        .then(setSettings)
+        .catch(() => undefined);
+    window.addEventListener(ASSISTANT_CHANGED, again);
+    return () => window.removeEventListener(ASSISTANT_CHANGED, again);
+  }, []);
   // the drawer's Set up while this page is open: the form opens
   const [asked, setAsked] = useState(setup);
   if (asked !== setup) {
