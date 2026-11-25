@@ -70,18 +70,21 @@ export function AgentsAdmin() {
       ok(api.GET("/v1/studio/admin/session-names")),
       ok(api.GET("/v1/studio/admin/providers")),
       ok(api.GET("/v1/studio/admin/assistant")),
-      ok(api.GET("/v1/studio/admin/plugins")).catch(() => null),
-      ok(api.GET("/v1/studio/admin/assistant/cache")).catch(() => null),
     ])
-      .then(([n, p, a, pl, c]) => {
+      .then(([n, p, a]) => {
         setNames(n);
         setAssistant(a);
         setProviders(p.providers);
-        setTools((pl?.plugins ?? []).filter((x) => x.kind === "assistant-tools" && x.enabled));
-        setCache(c);
         setError("");
       })
       .catch((e) => setError(message(e)));
+    // after the table, not with it: the plugins list health-checks each plugin (up to 2 s each)
+    ok(api.GET("/v1/studio/admin/plugins"))
+      .then((pl) => setTools(pl.plugins.filter((x) => x.kind === "assistant-tools" && x.enabled)))
+      .catch(() => {});
+    ok(api.GET("/v1/studio/admin/assistant/cache"))
+      .then(setCache)
+      .catch(() => {});
   }, []);
   useEffect(() => {
     load();
@@ -94,7 +97,15 @@ export function AgentsAdmin() {
       </main>
     );
   const provider = providers.find((p) => p.name === names?.provider);
+  // a saved provider that was turned off (or is remote while the switch is off) is shown as off, not as in use
+  const live = (p: Provider | undefined, remoteOn = false) =>
+    !!p && pickable([p], remoteOn).length > 0;
+  const offNote = (title: string) => (
+    <span className="text-[#f2c14e]">{title} is off · Edit to pick another</span>
+  );
   const aProvider = providers.find((p) => p.name === assistant?.provider);
+  const aLive = live(aProvider, assistant?.remote_enabled);
+  const nLive = live(provider, names?.remote_enabled);
   const aSearch = providers.find((p) => p.name === assistant?.search_provider);
   const cell = "border-b border-s3 p-2.5 align-top";
   return (
@@ -139,9 +150,11 @@ export function AgentsAdmin() {
                     <span className="mono text-[12px] text-t2">the in-app assistant</span>
                   </td>
                   <td className={`${cell} mono text-[12px] text-t2`}>
-                    {aProvider
+                    {aProvider && aLive
                       ? `${titleOf(aProvider)} · ${assistant.model ?? aProvider.default_model}`
-                      : "—"}
+                      : assistant.provider
+                        ? offNote(aProvider ? titleOf(aProvider) : assistant.provider)
+                        : "—"}
                     {assistant.web_search && (
                       <>
                         <br />
@@ -150,7 +163,7 @@ export function AgentsAdmin() {
                     )}
                   </td>
                   <td className={cell}>
-                    {aProvider ? (
+                    {aProvider && aLive ? (
                       <>
                         <span className={`tag ${aProvider.kind === "remote" ? "tag-accent" : ""}`}>
                           {aProvider.kind === "remote" ? "remote" : "on this network"}
@@ -204,10 +217,12 @@ export function AgentsAdmin() {
                       ? "Off"
                       : names.mode === "local"
                         ? LOCAL
-                        : `${provider ? titleOf(provider) : names.provider} · ${names.model}`}
+                        : nLive
+                          ? `${titleOf(provider!)} · ${names.model}`
+                          : offNote(provider ? titleOf(provider) : (names.provider ?? "Provider"))}
                   </td>
                   <td className={cell}>
-                    {names.mode === "remote" && provider ? (
+                    {names.mode === "remote" && provider && nLive ? (
                       <>
                         <span className={`tag ${provider.kind === "remote" ? "tag-accent" : ""}`}>
                           {provider.kind === "remote" ? "remote" : "on this network"}
