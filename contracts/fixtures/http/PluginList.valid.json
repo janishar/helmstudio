@@ -114,6 +114,97 @@
       "status": "needs_newer",
       "provider": null,
       "updated_at": "2026-11-25T10:00:00Z"
+    },
+    {
+      "name": "media-tools",
+      "title": "Media tools",
+      "version": "0.1.0",
+      "kind": "assistant-tools",
+      "description": "Crop, resize, rotate, convert and extend images; trim, speed up and re-sound videos; trim, level and join audio; pull frames from a video for the Assistant to look at. Each edit is a new take; the original stays.",
+      "author": "helmstudio",
+      "origin": "built_in",
+      "source": "plugins/media-tools",
+      "may_do": [
+        "Crops, resizes, trims and pulls frames",
+        "Reads your takes, saves new ones",
+        "Runs ffmpeg and Pillow in its own container",
+        "Reaches media-tools:8422 inside the stack"
+      ],
+      "personal": false,
+      "url": "http://media-tools:8422",
+      "tools": [
+        {
+          "name": "edit_image",
+          "description": "Make a new image take from an image take: crop, resize, rotate, flip, extend the canvas, convert (applied in that order)",
+          "risk": {
+            "uses_gpu": false,
+            "deletes": false,
+            "sends_off_machine": false
+          },
+          "title": "Edit image",
+          "summary": "Crop, resize, rotate, flip, extend, convert"
+        },
+        {
+          "name": "edit_video",
+          "description": "Make a new video take from a video take: trim, change speed (0.25-4x), mute, or replace its sound with an audio take. Th",
+          "risk": {
+            "uses_gpu": false,
+            "deletes": false,
+            "sends_off_machine": false
+          },
+          "title": "Edit video",
+          "summary": "Trim, speed, mute, new sound"
+        },
+        {
+          "name": "frame_image",
+          "description": "Make a new image take of one frame of a video take (frame as image). For looking at frames, use frames instead (no take)",
+          "risk": {
+            "uses_gpu": false,
+            "deletes": false,
+            "sends_off_machine": false
+          },
+          "title": "Frame as image",
+          "summary": "One frame → a new image"
+        },
+        {
+          "name": "edit_audio",
+          "description": "Make a new audio take (m4a) from an audio take or a video's sound: trim and change the volume. The original stays.",
+          "risk": {
+            "uses_gpu": false,
+            "deletes": false,
+            "sends_off_machine": false
+          },
+          "title": "Edit audio",
+          "summary": "Trim, volume"
+        },
+        {
+          "name": "join_audio",
+          "description": "Make a new audio take (m4a) of 2-8 audio takes one after another, in order. The originals stay.",
+          "risk": {
+            "uses_gpu": false,
+            "deletes": false,
+            "sends_off_machine": false
+          },
+          "title": "Join audio",
+          "summary": "2–8 sounds in order"
+        },
+        {
+          "name": "frames",
+          "description": "Look at frames of a video take (a Timeline export too): at given times, N evenly spaced, or at scene changes; at most 8,",
+          "risk": {
+            "uses_gpu": false,
+            "deletes": false,
+            "sends_off_machine": false
+          },
+          "title": "Frames",
+          "summary": "For the Assistant to look at · no take"
+        }
+      ],
+      "enabled": true,
+      "status": "running",
+      "provider": null,
+      "takes": true,
+      "updated_at": "2026-11-25T10:00:00Z"
     }
   ]
 }

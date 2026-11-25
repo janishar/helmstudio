@@ -24,12 +24,15 @@ import json
 import os
 import re
 import ssl
+import struct
 import subprocess
 import sys
 import threading
 import time
+import urllib.error
 import urllib.request
 import uuid
+import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("PORT", "8000"))
@@ -168,10 +171,21 @@ class Handler(BaseHTTPRequestHandler):
             with lock:
                 requests.append({"model": f"tool:{name}", "body": body, "authorization": self.headers.get("Authorization"),
                                  "owner": self.headers.get("X-Helm-Owner"), "call": self.headers.get("X-Helm-Call"),
+                                 "api": self.headers.get("X-Helm-Api"),
                                  "t0": time.time(), "status": 200})  # fmt: skip
             text = str((body.get("input") or {}).get("text", ""))
             if text.startswith("fail"):
                 return self.reply(500, {"detail": f"scripted failure: {text}"})
+            if text.startswith(
+                "make:"
+            ):  # API 1.70: a takes plugin's new take, made with the call's pass
+                try:
+                    made = make_take(self.headers, name, body["input"], text.removeprefix("make:"))
+                except urllib.error.HTTPError as e:
+                    return self.reply(e.code, {"detail": f"studio: HTTP {e.code}"})
+                return self.reply(
+                    200, {"result": {"made": made}, "line": "Made a copy", "take_ids": [made]}
+                )
             return self.reply(
                 200, {"result": {"echo": body.get("input")}, "line": f"Echoed {text}"[:300]}
             )
@@ -199,6 +213,39 @@ class Handler(BaseHTTPRequestHandler):
             resp = from_prompt(body) | {k: v for k, v in resp.items() if k == "usage"}
         rec |= {"t1": time.time(), "status": 200}
         self.reply(200, completion(model, resp, body))
+
+
+def png() -> bytes:
+    """A 1 x 1 PNG."""
+    chunk = lambda kind, data: (struct.pack(">I", len(data)) + kind + data
+                                + struct.pack(">I", zlib.crc32(kind + data)))  # fmt: skip
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(b"\x00\xc8\x28\x28")) + chunk(b"IEND", b""))  # fmt: skip
+
+
+def make_take(headers, tool: str, inp: dict, parent: str) -> str:
+    """As a takes plugin (API 1.70): one new 1 x 1 PNG take from `parent` through /v1/studio/plugin/takes with the
+    call's pass; the stack's public URL (X-Helm-Api, a host port) is reached as kong:8000 from this container."""
+    kong = lambda url: re.sub(r"^https?://[^/]+", "http://kong:8000", url)
+
+    def ask(
+        method: str, url: str, data: bytes | None = None, ctype: str = "application/json"
+    ) -> dict:
+        req = urllib.request.Request(
+            kong(url), data=data, method=method, headers={"Content-Type": ctype}
+        )
+        if "/files/" not in url:
+            req.add_header("Authorization", headers.get("Authorization") or "")
+        with urllib.request.urlopen(req, timeout=10) as r:
+            raw = r.read()
+        return json.loads(raw) if raw else {}
+
+    data, api = png(), headers.get("X-Helm-Api") or ""
+    up = ask("POST", f"{api}/v1/studio/plugin/takes", json.dumps({
+        "parents": [parent], "tool": tool, "input": inp, "title": "copy", "kind": "image",
+        "content_type": "image/png", "bytes": len(data), "width": 1, "height": 1}).encode())  # fmt: skip
+    ask("PUT", up["upload_url"], data, "image/png")
+    return ask("POST", f"{api}/v1/studio/plugin/takes/{up['take_id']}/complete", b"")["id"]
 
 
 def cert() -> ssl.SSLContext:

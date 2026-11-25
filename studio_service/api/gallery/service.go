@@ -783,7 +783,7 @@ func TakeDTO(signer *common.Signer, row model.Take) dto.Take {
 		to   *json.RawMessage
 		from json.RawMessage
 	}{{&out.Legacy, row.Legacy},
-		{&out.FrameOf, row.FrameOf}, {&out.Export, row.Export}} {
+		{&out.FrameOf, row.FrameOf}, {&out.Export, row.Export}, {&out.Tool, row.Tool}} {
 		if len(raw.from) > 0 && string(raw.from) != "null" {
 			*raw.to = raw.from
 		}

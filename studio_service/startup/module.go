@@ -2,7 +2,10 @@ package startup
 
 import (
 	"context"
+	"net/http"
+	"strings"
 
+	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/helmstudio/helmgo/micro"
@@ -55,7 +58,27 @@ func (m *Module) RootMiddlewares() []network.RootMiddleware {
 		middleware.NewErrorCatcher(), // must be first
 		middleware.NewNotFound(),
 		middleware.NewBodyLimit(func(string) int64 { return m.maxBody }),
-		middleware.NewPrefixGuard("/v1/", m.authentication.Middleware()),
+		middleware.NewPrefixGuard("/v1/", m.guard(m.authentication.Middleware())),
+	}
+}
+
+// guard is the /v1/ guard: a user's token, except under /v1/studio/plugin/ (API 1.70), where only a plugin call's pass
+// is taken (contracts/README.md, Plugins: takes). Neither opens the other's routes.
+func (m *Module) guard(user gin.HandlerFunc) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		if !strings.HasPrefix(ctx.Request.URL.Path, "/v1/studio/plugin/") {
+			user(ctx)
+			return
+		}
+		caller, err := m.settings.PluginCaller(ctx.Request.Context(), network.BearerToken(ctx))
+		switch {
+		case studio.IsPassError(err):
+			network.SendError(ctx, http.StatusUnauthorized, "invalid or expired plugin pass")
+		case err != nil:
+			network.SendError(ctx, http.StatusServiceUnavailable, "could not check the pass; try again")
+		default:
+			common.SetCaller(ctx, caller)
+		}
 	}
 }
 

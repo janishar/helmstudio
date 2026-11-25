@@ -74,9 +74,11 @@ export const subLine = (t: Take) =>
     ? t.audio
       ? `Upload · ${audioFormat(t.content_type)} · ${secondsText(t.audio.duration_s)}`
       : "Upload"
-    : [t.made_with?.workflow_title, t.source === "pipeline" ? "Pipeline" : "Create"]
-        .filter(Boolean)
-        .join(" · ");
+    : t.source === "tool"
+      ? "Edited" // API 1.70: made by a plugin tool (Media tools)
+      : [t.made_with?.workflow_title, t.source === "pipeline" ? "Pipeline" : "Create"]
+          .filter(Boolean)
+          .join(" · ");
 
 /** "Qwen Image · Base · int8": the workflow and the weights it used. */
 export const templateLine = (m: S<"MadeWith">) =>

@@ -138,7 +138,7 @@ test('images: the released ones, pulled into the VM when missing', async () => {
   assert.ok(calls.every((c) => c.vm));
   assert.equal(pipes.length, 0);
   assert.deepEqual(seen.slice(0, 5), [0, 0, 0.25, 0.5, 0.5]); // per image, then per layer done
-  assert.equal(runner.snapshot().steps[0].detail, '5.0 GB on disk'); // first open: all ten images' own sizes
+  assert.equal(runner.snapshot().steps[0].detail, '5.5 GB on disk'); // first open: all eleven images' own sizes
   assert.match(fs.readFileSync(runner.logFile, 'utf8'), /Pull complete/);
 });
 
@@ -146,7 +146,7 @@ test('images: the released names carry the app version', () => {
   const { version } = require('../package.json');
   assert.equal(cfg.composeEnv.IMAGE_TAG, version);
   const ours = cfg.images.filter((i) => i.startsWith(cfg.composeEnv.IMAGE_PREFIX));
-  assert.equal(ours.length, 7);
+  assert.equal(ours.length, 8); // media-tools too (owner, 2026-11-25)
   assert.ok(ours.every((i) => i.endsWith(`:${version}`)));
 });
 
@@ -172,5 +172,5 @@ test('images: byte progress from the registry\'s layer sizes', async () => {
     ['0.33', `0.2 of 0.6 GB download · ${cfg.imagesDiskGB} GB on disk`],
     ['1.00', `0.6 of 0.6 GB download · ${cfg.imagesDiskGB} GB on disk`],
   ]);
-  assert.equal(runner.snapshot().steps[0].detail, '0.6 GB download · 5.0 GB on disk');
+  assert.equal(runner.snapshot().steps[0].detail, '0.6 GB download · 5.5 GB on disk');
 });

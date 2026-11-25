@@ -12,6 +12,7 @@ include:
   - {path: compose/files.yml, project_directory: .}
   - {path: compose/web.yml, project_directory: .}
   - {path: compose/pipelines.yml, project_directory: .}
+  - {path: compose/media-tools.yml, project_directory: .}
 
 # Secrets (DB passwords and URLs, NATS users, S3 keys, the JWT key, the web app's API key, the /files signing key) are
 # files made by .tools/make-secrets; services read them through <VAR>_FILE (mounted at /run/secrets/<name>).

@@ -28,6 +28,13 @@ import { useLibraryDialog } from "@/components/assistant/library";
 import { ORDERS, galleryTools } from "@/components/gallery/assistant";
 import { sliceFrom, useGridWindow } from "@/components/gallery/window";
 import {
+  EditPanel,
+  SavedToast,
+  canEdit,
+  saveAsNew,
+  useMediaTools,
+} from "@/components/gallery/edit";
+import {
   AUDIO_ACCEPT,
   UPLOAD_START,
   UPLOAD_TYPES,
@@ -261,6 +268,18 @@ export function Gallery({
   const [making, setMaking] = useState<Take[] | null>(null);
   const [lookOf, setLookOf] = useState<Take | null>(null);
   const [full, setFull] = useState(false);
+  // Edit (alpha.2 item 11): the take being edited, Save as new's toast and why it failed
+  const tools = useMediaTools();
+  const [editing, setEditing] = useState<string | null>(null);
+  const [saved, setSaved] = useState<
+    { saving: true } | { saving: false; take: Take; from: string } | null
+  >(null);
+  const [editError, setEditError] = useState("");
+  useEffect(() => {
+    if (!saved || saved.saving) return;
+    const t = setTimeout(() => setSaved(null), 8000);
+    return () => clearTimeout(t);
+  }, [saved]);
   const fileInput = useRef<HTMLInputElement>(null);
   const uploadSeq = useRef(0);
   // only the rows near the screen are drawn (item 32): uploads first, then the takes, as the grid holds them
@@ -279,6 +298,28 @@ export function Gallery({
   const replace = (t: Take) => setTakes((list) => list && list.map((x) => (x.id === t.id ? t : x)));
   const remove = (ids: string[]) =>
     setTakes((list) => list && list.filter((x) => !ids.includes(x.id)));
+
+  /** Save as new: the new take goes next to the original and is selected, with the toast. */
+  async function saveNew(from: Take, tool: string, input: Record<string, unknown>) {
+    setSaved({ saving: true });
+    setEditError("");
+    try {
+      const t = await saveAsNew(tool, input);
+      remember([t]);
+      setTakes((list) => {
+        if (!list) return list;
+        const rest = list.filter((x) => x.id !== t.id);
+        const i = rest.findIndex((x) => x.id === from.id) + 1;
+        return [...rest.slice(0, i), t, ...rest.slice(i)];
+      });
+      setEditing(null);
+      setCurrentId(t.id);
+      setSaved({ saving: false, take: t, from: from.id });
+    } catch (e) {
+      setSaved(null);
+      setEditError(message(e));
+    }
+  }
 
   async function act(f: () => Promise<unknown>) {
     setActionError("");
@@ -631,7 +672,16 @@ export function Gallery({
         aria-label="Selected take"
         className="aside m-3.5 flex flex-[1_1_340px] flex-col gap-[18px] px-[18px] pt-4 pb-6 md:ml-0"
       >
-        {current ? (
+        {current && editing === current.id && canEdit(tools, current) ? (
+          <EditPanel
+            key={current.id}
+            take={current}
+            saving={!!saved?.saving}
+            error={editError}
+            onCancel={() => setEditing(null)}
+            onSave={(tool, input) => void saveNew(current, tool, input)}
+          />
+        ) : current ? (
           <TakePanel
             take={current}
             onStar={() =>
@@ -642,6 +692,14 @@ export function Gallery({
             onFull={() => setFull(true)}
             onMakeElement={() => setMaking([current])}
             onSaveLook={() => setLookOf(current)}
+            onEdit={
+              canEdit(tools, current)
+                ? () => {
+                    setEditError("");
+                    setEditing(current.id);
+                  }
+                : undefined
+            }
             onPick={(t) => {
               if ("url" in t) remember([t]);
               setCurrentId(t.id);
@@ -655,6 +713,20 @@ export function Gallery({
           </p>
         )}
       </aside>
+      {saved && (
+        <SavedToast
+          state={saved.saving ? saved : { saving: false, title: saved.take.title }}
+          onUndo={() => {
+            if (saved.saving) return;
+            setSaved(null);
+            void act(async () => {
+              await del(saved.take.id);
+              remove([saved.take.id]);
+              setCurrentId(saved.from);
+            });
+          }}
+        />
+      )}
       {full && current && takes && (
         <FullScreen
           take={current}
@@ -732,6 +804,7 @@ function TakePanel({
   onFull,
   onMakeElement,
   onSaveLook,
+  onEdit,
   onPick,
 }: {
   take: Take;
@@ -743,6 +816,8 @@ function TakePanel({
   onMakeElement: () => void;
   /** opens Save as look with this take */
   onSaveLook: () => void;
+  /** opens Edit (Media tools on and running), else undefined */
+  onEdit?: () => void;
   /** selects a take of its lineage */
   onPick: (t: Take | S<"TakeRef">) => void;
 }) {
@@ -804,7 +879,7 @@ function TakePanel({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <h2 className="heading">{m ? "Made with" : "Uploaded"}</h2>
+        <h2 className="heading">{m ? "Made with" : t.source === "tool" ? "Edited" : "Uploaded"}</h2>
         {m?.prompt && <p className="m-0 text-[13px] break-words">{m.prompt}</p>}
         {m && <Row label="Template" value={templateLine(m)} />}
         {m?.host && <Row label="Host" value={m.host} />}
@@ -891,6 +966,13 @@ function TakePanel({
             </Link>
           ))}
         </div>
+      )}
+
+      {onEdit && (
+        // alpha.2 item 11 (docs/mock/TakeActions.dc.html): Edit under Use in…, while Media tools runs
+        <button type="button" className="act" onClick={onEdit}>
+          Edit
+        </button>
       )}
 
       {t.kind === "video" && (

@@ -115,6 +115,8 @@ func (c *controller) MountRoutes(group *gin.RouterGroup) {
 	group.GET("/skills", c.listSkillsHandler)                                    // API 1.64
 	group.GET("/skills/:skill", c.getSkillHandler)                               // API 1.64
 	group.GET("/skills/:skill/files/:file", c.getSkillFileHandler)               // API 1.64
+	group.GET("/plugins/:plugin", c.getPluginUseHandler)                         // API 1.70
+	group.POST("/plugins/:plugin/tools/:tool", c.runPluginToolHandler)           // API 1.70
 	group.GET("/admin/plugins", c.listPluginsHandler)                            // API 1.61
 	group.POST("/admin/plugins/rescan", c.rescanPluginsHandler)                  // API 1.61
 	group.PUT("/admin/plugins/:plugin", c.putPluginHandler)                      // API 1.61
@@ -151,6 +153,9 @@ func (c *controller) MountNats(group micro.NatsGroup) error {
 	if err := group.AddEndpoint("see", micro.NatsHandlerFunc(c.seeHandler)); err != nil { // API 1.65
 		return err
 	}
+	if err := group.AddGroup("plugins").AddEndpoint("pass", micro.NatsHandlerFunc(c.passHandler)); err != nil { // API 1.70
+		return err
+	}
 	return group.AddEndpoint("tools", micro.NatsHandlerFunc(c.toolsHandler))
 }
 
@@ -164,6 +169,19 @@ func (c *controller) seeHandler(request micro.NatsRequest) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	out := c.service.See(ctx, body)
+	micro.RespondNatsMessage(request, &out)
+}
+
+// passHandler answers studio.plugins.pass (API 1.70) with a plugin call's pass, or {error, code}.
+func (c *controller) passHandler(request micro.NatsRequest) {
+	body := new(PassRequest)
+	if err := json.Unmarshal(request.Data(), body); err != nil {
+		micro.RespondNatsMessage(request, &PassReply{Error: "bad request: invalid JSON", Code: "invalid"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out := c.service.PluginPass(ctx, body)
 	micro.RespondNatsMessage(request, &out)
 }
 
@@ -1050,6 +1068,22 @@ func (c *controller) getSkillHandler(ctx *gin.Context) {
 // getSkillFileHandler: GET /skills/{skill}/files/{file} (API 1.64).
 func (c *controller) getSkillFileHandler(ctx *gin.Context) {
 	out, err := c.service.GetSkillFile(ctx.Request.Context(), ctx.Param("skill"), ctx.Param("file"))
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// getPluginUseHandler: GET /plugins/{plugin} (API 1.70).
+func (c *controller) getPluginUseHandler(ctx *gin.Context) {
+	out, err := c.service.GetPluginUse(ctx.Request.Context(), ctx.Param("plugin"))
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// runPluginToolHandler: POST /plugins/{plugin}/tools/{tool} (API 1.70).
+func (c *controller) runPluginToolHandler(ctx *gin.Context) {
+	body, err := strictBody[dto.PluginToolRun](ctx, false)
+	var out dto.PluginToolDone
+	if err == nil {
+		out, err = c.service.RunPluginTool(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("plugin"), ctx.Param("tool"), body)
+	}
 	reply(ctx, http.StatusOK, out, err)
 }
 

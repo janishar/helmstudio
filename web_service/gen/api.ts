@@ -1131,6 +1131,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/studio/plugin/takes/{take_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One of the pass's owner's takes, as a plugin reads it
+         * @description For a `takes` plugin (its manifest's `takes`, the plugin on) with its call's pass; no API key (Kong lets
+         *     `/v1/studio/plugin/` through: the pass is the auth). Another user's take, a pending or deleted one is 404.
+         *     `url` is signed for 10 minutes.
+         */
+        get: operations["studioPluginGetTake"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/plugin/takes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a new take a plugin tool made; answers signed PUT links
+         * @description A pending take (source `tool`, `tool` {plugin, tool, input}, `parents`) of the pass's owner, invisible until
+         *     completed; the key `u/<owner>/uploads/<take_id>.<ext>` (an image or audio) or `u/<owner>/imports/<take_id>.mp4`
+         *     with its poster beside it (a video), PUT links valid 15 minutes. A parent that is not the owner's ready, live
+         *     take is 404. 422 for a kind and type that do not match ("kind and content_type differ"), a missing size
+         *     ("an image or a video needs width and height", "a video needs video", "an audio take needs duration_s"), an
+         *     image or audio over 50 MB, an input over 4096 bytes. A pending one not completed within an hour is discarded.
+         */
+        post: operations["studioPluginCreateTake"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/plugin/takes/{take_id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check the uploaded objects and show the new take
+         * @description As an import's complete (the size, the header of the declared type and pixel size; a video's `ftyp` box and
+         *     its poster; an audio's header as an upload's): 409 "upload not received" before the PUT, 422 when a check fails
+         *     (the take is discarded, 404 from then on). Calling it again after success answers the same take.
+         */
+        post: operations["studioPluginCompleteTake"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/studio/batches": {
         parameters: {
             query?: never;
@@ -1915,6 +1984,52 @@ export interface paths {
         get: operations["studioGetSkillFile"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/plugins/{plugin}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * From 1.70: a takes plugin as every user may use it (the Gallery's Edit)
+         * @description Every user. A plugin that is on, usable, of kind assistant-tools and whose manifest says `takes`; `running` when its health path answers 2xx now (2 s): the Gallery shows Edit only then. 404 otherwise (unknown, off, not a takes plugin).
+         */
+        get: operations["studioGetPluginUse"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/plugins/{plugin}/tools/{tool}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * From 1.70: run a takes plugin's tool for you (the Gallery's Save as new)
+         * @description Every user, on their own takes (contracts/README.md, Plugins: takes, Save as new). The plugin as GET
+         *     /plugins/{plugin} has it, and a tool of its manifest with no risk flag; else 404. Studio signs a pass for the
+         *     caller and a new call id, as studio.plugins.pass does, and POSTs `<url>/tools/<tool>` {input} with the call's
+         *     headers (30 s, no redirects). 200: `take_ids` only those studio vouches for (the caller's takes with source tool
+         *     this plugin made under this call id, as a chat line's), `line` the plugin's. The plugin's 422 is a 422 with its
+         *     detail; any other failure (no answer, too slow, a non-2xx) is a 502 with a plain detail (its detail, else
+         *     `<title> did not answer`).
+         */
+        post: operations["studioRunPluginTool"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4653,10 +4768,10 @@ export interface components {
         /** @enum {string} */
         TakeKind: "image" | "video" | "audio";
         /**
-         * @description create: an output of a Create run; upload: a file the user uploaded; pipeline: an output of a batch run (every batch runs on the pipeline engine, plan 9.1); import (from 1.16): an item of the old helmstudio gallery, brought in by `helm import` (`legacy`); export (from 1.17): a sequence's export (`export`); frame (from 1.17): a video take's first or last frame (`frame_of`)
+         * @description create: an output of a Create run; upload: a file the user uploaded; pipeline: an output of a batch run (every batch runs on the pipeline engine, plan 9.1); import (from 1.16): an item of the old helmstudio gallery, brought in by `helm import` (`legacy`); export (from 1.17): a sequence's export (`export`); frame (from 1.17): a video take's first or last frame (`frame_of`); tool (from 1.70): made by a plugin tool from takes of yours (`tool`, `parents` = those takes; contracts/README.md, Plugins: takes)
          * @enum {string}
          */
-        TakeSource: "create" | "upload" | "pipeline" | "import" | "export" | "frame";
+        TakeSource: "create" | "upload" | "pipeline" | "import" | "export" | "frame" | "tool";
         /**
          * @description One item of the caller's gallery: a run output or an upload, pointing at an immutable object (its key is never
          *     shown). `title` starts as the first line of the prompt (at most 80 characters; the workflow title when the
@@ -4717,6 +4832,8 @@ export interface components {
             audio?: components["schemas"]["AudioInfo"];
             /** @description from 1.19, a video made from a media take (retake, extend, audio to video; absent otherwise): how its time lines up with that take */
             source_map?: components["schemas"]["SourceMap"];
+            /** @description from 1.70, source tool only (absent otherwise; `made_with` null): the plugin tool that made it */
+            tool?: components["schemas"]["TakeTool"];
             /** @description from 1.14, only in `GET /v1/studio/takes/{take_id}`: the judge decisions that weighed it, newest first (full records: GET …/takes/{take_id}/decisions) */
             decisions?: components["schemas"]["TakeDecision"][];
         } & (unknown & unknown);
@@ -6377,6 +6494,10 @@ export interface components {
             name: string;
             description: string;
             risk: components["schemas"]["PluginRisk"];
+            /** @description from 1.70: its name for people (the aside's tools: `Edit image`) */
+            title?: string;
+            /** @description from 1.70: what it does, in a few words (`Crop, resize, rotate, flip, extend, convert`) */
+            summary?: string;
         };
         /** @description from 1.61: one plugin as the admin sees it: its manifest (plugins/manifest.schema.json) and its state */
         Plugin: {
@@ -6450,8 +6571,33 @@ export interface components {
                 /** Format: date-time */
                 since?: string;
             };
+            /** @description from 1.70: its manifest's `takes` (reads your takes, saves new ones); absent = false */
+            takes?: boolean;
+            /** @description from 1.70: what it needs on its host, as its manifest says (`ffmpeg (brew install ffmpeg)`) */
+            needs?: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        /** @description from 1.70: a takes plugin that is on, as every user sees it (GET /plugins/{plugin}) */
+        PluginUse: {
+            name: string;
+            title: string;
+            /** @description its health path answered 2xx now (2 s) */
+            running: boolean;
+            /** @description its tools with no risk flag (the ones POST …/tools/{tool} runs) */
+            tools: string[];
+        };
+        /** @description from 1.70: a tool's input, as its manifest's input schema has it (the plugin checks it: 422) */
+        PluginToolRun: {
+            input: {
+                [key: string]: unknown;
+            };
+        };
+        PluginToolDone: {
+            /** @description the new takes studio vouches for (Undo deletes them) */
+            take_ids: string[];
+            /** @description the plugin's line (`Trimmed · Shot 3`), else `<title> · <tool>` */
+            line: string;
         };
         /** @description from 1.64: a skill that is on, as every user sees it (the @ picker) */
         SkillSummary: {
@@ -6612,6 +6758,8 @@ export interface components {
             memory_id?: string;
             /** @description from 1.64: a Using skill line: the skill read (tap to see: GET /v1/studio/skills/{skill}) */
             skill?: string;
+            /** @description from 1.70: a plugin tool's line (media tools): the takes it made; its Undo deletes them (DELETE /v1/studio/takes/{take_id}), no Redo */
+            take_ids?: string[];
             sources?: {
                 title: string;
                 url: string;
@@ -8052,6 +8200,78 @@ export interface components {
             take?: components["schemas"]["Take"];
             job?: components["schemas"]["MediaJob"];
         } & (unknown | unknown);
+        TakeTool: {
+            /** @example media-tools */
+            plugin: string;
+            /** @example crop */
+            tool: string;
+            /** @description the tool's input as the plugin reported it (at most 4096 bytes as compact JSON) */
+            input: Record<string, never>;
+            /** @description the assistant call whose pass made it (studio records it; a line's Undo deletes only takes of its own call) */
+            call?: string;
+        };
+        /** @description from 1.70: one of the pass's owner's takes as a `takes` plugin reads it (contracts/README.md, Plugins: takes) */
+        PluginTake: {
+            /** Format: uuid */
+            id: string;
+            kind: components["schemas"]["TakeKind"];
+            title: string;
+            content_type: string;
+            bytes: number;
+            width: number | null;
+            height: number | null;
+            /** @description the file, signed for 10 minutes */
+            url: components["schemas"]["SignedUrl"];
+            /** @description a video's or an audio take's length */
+            duration_s?: number;
+            /** @description a video's */
+            fps?: number;
+            /** @description a video's */
+            has_audio?: boolean;
+        };
+        /** @description from 1.70: a new take a `takes` plugin made from takes of the pass's owner */
+        PluginTakeCreate: {
+            /** @description the takes it was made from (each the owner's, ready, live: else 404) */
+            parents: string[];
+            tool: string;
+            /** @description at most 4096 bytes as compact JSON */
+            input: Record<string, never>;
+            title: string;
+            kind: components["schemas"]["TakeKind"];
+            /** @enum {string} */
+            content_type: "image/png" | "image/jpeg" | "image/webp" | "audio/wav" | "audio/mpeg" | "audio/mp4" | "video/mp4";
+            /** @description an image or audio at most 52428800 (50 MB); a video at most 2 GB */
+            bytes: number;
+            /** @description an image's or a video's */
+            width?: number;
+            height?: number;
+            /** @description an audio take's */
+            duration_s?: number;
+            /** @description a video's length, frames, rate, sound and poster (as an import's) */
+            video?: {
+                duration_s: number;
+                fps: number;
+                frames: number;
+                has_audio: boolean;
+                poster: {
+                    /** @enum {string} */
+                    content_type: "image/png" | "image/jpeg" | "image/webp";
+                    bytes: number;
+                    width: number;
+                    height: number;
+                };
+            };
+        };
+        PluginTakeUpload: {
+            /** Format: uuid */
+            take_id: string;
+            /** @description PUT the bytes (exactly `bytes`, `content_type`) */
+            upload_url: components["schemas"]["SignedUrl"];
+            /** @description a video's: PUT its poster */
+            poster_upload_url?: components["schemas"]["SignedUrl"];
+            /** Format: date-time */
+            expires_at: string;
+        };
         TakeFrameOf: {
             /**
              * Format: uuid
@@ -10076,6 +10296,86 @@ export interface operations {
             503: components["responses"]["Unavailable"];
         };
     };
+    studioPluginGetTake: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description take UUID (malformed = 404) */
+                take_id: components["parameters"]["TakeId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the take */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginTake"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    studioPluginCreateTake: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PluginTakeCreate"];
+            };
+        };
+        responses: {
+            /** @description the links */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginTakeUpload"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
+        };
+    };
+    studioPluginCompleteTake: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description take UUID (malformed = 404) */
+                take_id: components["parameters"]["TakeId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the take */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Take"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
     studioListBatches: {
         parameters: {
             query?: {
@@ -11170,6 +11470,71 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    studioGetPluginUse: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description from 1.61: a plugin's name (its folder; unknown or malformed = 404) */
+                plugin: components["parameters"]["PluginName"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the plugin */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginUse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    studioRunPluginTool: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description from 1.61: a plugin's name (its folder; unknown or malformed = 404) */
+                plugin: components["parameters"]["PluginName"];
+                tool: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PluginToolRun"];
+            };
+        };
+        responses: {
+            /** @description what it made */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginToolDone"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
+            /** @description the plugin failed: `{"detail"}` in plain words */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     studioAdminGetSessionNames: {

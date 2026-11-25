@@ -18,6 +18,12 @@ export function remember(takes: Take[]) {
   notify();
 }
 
+/** Takes deleted here (a plugin line's Undo): shown as gone from now on. */
+export function forget(ids: string[]) {
+  ids.forEach((id) => cache.set(id, null));
+  notify();
+}
+
 /** Looks up takes by id, fetching the ones not known yet: a take, undefined while loading, null when it is gone
  * (deleted, or not the caller's). */
 export function useTakes(ids: string[]): (id: string) => Take | null | undefined {

@@ -425,15 +425,20 @@ function PluginPanel({
           </span>,
         ],
       ];
-  if (p.starts) {
-    rows.push(["Starts", `On its own, ${onHost(p.starts.host)}`]);
-    if (p.starts.log) rows.push(["Log", p.starts.log]);
-  }
+  if (p.starts) rows.push(["Starts", `On its own, ${onHost(p.starts.host)}`]);
+  // API 1.70 (board MEDIA TOOLS): takes, never asks first, what it needs on its host
+  if (p.takes) rows.push(["Takes", "Reads yours, saves new ones"]);
+  if (p.kind === "assistant-tools" && p.tools?.every((t) => !Object.values(t.risk).some(Boolean)))
+    rows.push(["Asks first", "Never (stays on this Mac)"]);
+  if (p.needs) rows.push(["Needs", p.needs]);
+  if (p.starts?.log) rows.push(["Log", p.starts.log]);
   const failed = failedAlert(p);
   if (p.files?.length) rows.push(["Files", p.files.join(" · ")]);
   if (p.recipes) rows.push(["Recipes", recipesRow(p.recipes)]);
   if (p.models?.length) rows.push(["Models", p.models.join(" · ")]);
-  if (p.tools?.length) rows.push(["Tools", p.tools.map((t) => t.name).join(" · ")]);
+  // tools with names for people get a row each (title, what it does); others one row of names
+  const named = p.tools?.every((t) => t.title) ? p.tools : undefined;
+  if (p.tools?.length && !named) rows.push(["Tools", p.tools.map((t) => t.name).join(" · ")]);
   return (
     <aside
       aria-label={`Plugin: ${p.title}`}
@@ -501,6 +506,16 @@ function PluginPanel({
           </div>
         ))}
       </div>
+      {named && (
+        <div className="flex flex-col gap-1 text-[12px]" aria-label="Tools">
+          {named.map((t) => (
+            <div key={t.name} className="flex justify-between gap-3">
+              <span className="text-t2">{t.title}</span>
+              <span className="min-w-0 text-right break-words">{t.summary}</span>
+            </div>
+          ))}
+        </div>
+      )}
       {p.may_do.length > 0 && (
         <div className="flex flex-col gap-1">
           <span className="heading">MAY DO</span>

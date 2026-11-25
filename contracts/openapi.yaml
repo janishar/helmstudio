@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.69.0
+  version: 1.70.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -27,7 +27,7 @@ servers:
 security:
   - {ApiKey: [], BearerJWT: []}
 tags:
-  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media); from 1.23 LoRA strengths 0..2 (looks saved before are clamped when read; contracts/README.md, Looks); from 1.24 the model component a node loads (NodeSchema.component); from 1.25 an inspector section''s help, the presets'' order (StudioLayout.preset_order) and a run''s planned peak before it is sent (POST /v1/studio/runs/plan); from 1.26 an inspector section''s choice tiles (LTX''s Recipe: two-stage or one-stage); from 1.28 a judge''s branch without `then` (Ask me) and a judge test on picked takes (POST /v1/studio/pipelines/{pipeline_id}/judge-tests); from 1.29 a V1 clip''s shot number (TimelineClip.number: "Shot 4"); from 1.30 voices: audio takes made by runs (the `Audio` port, `Workflow.media` audio), the `voice` param, saved voices in the library (designed voices and the packs'' starter voices; contracts/README.md, Voices); from 1.31 cloned voices (a 3–30 s clip of an audio take or a video''s sound, with consent), designed voices that keep a clip, Save as voice (`from_take` with `kind: voice`) and the zonos3 family (contracts/README.md, Voices: cloned voices); from 1.32 dialogue and Timeline audio: dialogue scripts (`script` text params expanded into `lines` rows whose items carry a voice), an element''s `voice_id`, cues on a dialogue''s take, audio takes on the audio tracks, New line (POST /v1/studio/timelines/{timeline_id}/lines), Make shot (a slot `exact` at an audio clip''s time), an export plan''s `sounds`, offers and pipeline binds into rows of one media field, `library.read` voices and the write node''s `form: script` (contracts/README.md, Dialogue and Timeline audio); from 1.44 the in-app assistant: chats, their events and memory, the admin''s assistant settings, search providers (kind `search`) and the Gallery''s `order` (contracts/README.md, Assistant); from 1.47 rules (refusals as data, ParamSchema.rules), option help (ParamSchema.option_help), a native node''s peak formula and sound limits (NodeSchema.peak_gb, sounds: the planned peak per run) and the Preset heading''s help (StudioLayout.preset_help); from 1.48 thumbnails: every list''s `thumb_url` is a small WebP of the image or the poster once made, `RunOutput.thumb_url` (contracts/README.md, Thumbnails); from 1.49 timeline edits by named ops (POST …/timelines/{timeline_id}/edits: a dry run, a diff, studio-made clip ids), the revision history and restore to any kept revision, the agent view (`view=agent`) and a stored frame at a sequence time (contracts/README.md, Timeline: edits by ops); from 1.50 the Timeline tools'' ops (roll, slip, slide, overwrite, split_all, remove_range, lift_range, an audio track''s ripple remove), linked sound clips (`TimelineClip.link`) and markers (`TimelineDoc.markers`, the marker ops; contracts/README.md, Timeline rules: tools, linked clips, markers); from 1.51 provider presets (GET /v1/studio/admin/provider-presets, a preset''s Fetch, a key file''s status, `Provider.compat` and `preset`; contracts/README.md, Model sources: presets); from 1.52 saving a provider key (PUT and DELETE /v1/studio/admin/provider-keys/{key_secret}, `ProviderKey.writable`; contracts/README.md, Model sources: Keys); from 1.53 thinking per model (`Provider.thinking`, `thinking_levels`, `ProviderPut.thinking`, `ProviderTest.thinking`, `ProviderPreset.thinking`, a model source''s `thinking`; contracts/README.md, Model sources: thinking); from 1.55 a provider''s fixed extra headers (`ProviderCompat.headers`: Anthropic''s anthropic-version; contracts/README.md, Model sources: compat); from 1.56 generous assistant defaults (AssistantLimits defaults 2000 model calls and 20000000 tokens a day, 200 look_at an hour, 30 messages a minute; AssistantCaps per message up to 40 model calls, 100 tool calls, 8 memory writes; a call''s n up to 99; contracts/README.md, Assistant); from 1.59 steering an answer (a message while a turn works joins it: `AssistantAccepted.steer`, `AssistantEntry.steer`; Stop: kind `stop`; contracts/README.md, Assistant: steer); from 1.59.1 steer fixes: waiting steers go first in a new turn, a stopped turn takes them as read, one message id per Stop (contracts/README.md, Assistant: steer); from 1.60 a take''s render time (`MadeWith.render_s`: the Create take, the Gallery''s Made with, the Timeline clip inspector and the sequence total); from 1.61 plugins: the admin''s Plugins page (GET /v1/studio/admin/plugins, Rescan, on and off, Remove, Add as provider), Only-you providers (`Provider.owner_id`, `plugin`; `AssistantSettings.personal`) and plugin tools in the assistant (a `plugin` card; contracts/README.md, Plugins); from 1.62 Stop cancels the model call in flight, and the assistant''s plain-words memory and voice-line checks (contracts/README.md, Assistant: steer; Assistant: tools); from 1.64 skills: plugins of kind `skill` (built in and from ~/.helm/plugins, folders and .zip files), GET /v1/studio/skills, a skill''s guide and files, the assistant''s use_skill and read_skill_file and its "Using skill" line (`AssistantLine.skill`; contracts/README.md, Skills); from 1.65 media in the assistant chat: a message''s attached images (`AssistantPost.takes`, `AssistantEntry.takes`), @-picked takes as [[take:<id>]] refs in your text, a model that sees images (`AssistantStatus.sees`, a preset''s `vision`) and takes shown as media in answers (contracts/README.md, Assistant: media and vision); from 1.66 the assistant''s context window per model (`AssistantSettings.window_tokens`) and its prompt cache hit rate per model (GET /v1/studio/admin/assistant/cache; contracts/README.md, Assistant: context and cache); from 1.67 plugins that start themselves: a manifest''s `run`, the host''s runner starts and keeps its service up while it is on (`Plugin.starts`, statuses starting and failed; contracts/README.md, Plugins: starts itself); from 1.68 the assistant''s Auto mode: a per-chat switch (`AssistantThread.auto`, PATCH …/assistant/threads/{thread_id}), screen actions pipelines lets run without their card (`AssistantAction.auto`) or still asks for (`asks`), the admin''s Auto caps (`AssistantLimits.auto_takes_per_hour`, `auto_gpu_minutes_per_hour`) and the hour''s use (`AssistantCaps.auto_takes_hour`; contracts/README.md, Assistant: Auto mode); from 1.69 the film''s shot list: a Projects item with `shots` (AssistantMemoryItem.shots), the assistant''s save_shots and shot_list, and it asks when the next shot is not planned (contracts/README.md, Assistant: shot list)'}
+  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media); from 1.23 LoRA strengths 0..2 (looks saved before are clamped when read; contracts/README.md, Looks); from 1.24 the model component a node loads (NodeSchema.component); from 1.25 an inspector section''s help, the presets'' order (StudioLayout.preset_order) and a run''s planned peak before it is sent (POST /v1/studio/runs/plan); from 1.26 an inspector section''s choice tiles (LTX''s Recipe: two-stage or one-stage); from 1.28 a judge''s branch without `then` (Ask me) and a judge test on picked takes (POST /v1/studio/pipelines/{pipeline_id}/judge-tests); from 1.29 a V1 clip''s shot number (TimelineClip.number: "Shot 4"); from 1.30 voices: audio takes made by runs (the `Audio` port, `Workflow.media` audio), the `voice` param, saved voices in the library (designed voices and the packs'' starter voices; contracts/README.md, Voices); from 1.31 cloned voices (a 3–30 s clip of an audio take or a video''s sound, with consent), designed voices that keep a clip, Save as voice (`from_take` with `kind: voice`) and the zonos3 family (contracts/README.md, Voices: cloned voices); from 1.32 dialogue and Timeline audio: dialogue scripts (`script` text params expanded into `lines` rows whose items carry a voice), an element''s `voice_id`, cues on a dialogue''s take, audio takes on the audio tracks, New line (POST /v1/studio/timelines/{timeline_id}/lines), Make shot (a slot `exact` at an audio clip''s time), an export plan''s `sounds`, offers and pipeline binds into rows of one media field, `library.read` voices and the write node''s `form: script` (contracts/README.md, Dialogue and Timeline audio); from 1.44 the in-app assistant: chats, their events and memory, the admin''s assistant settings, search providers (kind `search`) and the Gallery''s `order` (contracts/README.md, Assistant); from 1.47 rules (refusals as data, ParamSchema.rules), option help (ParamSchema.option_help), a native node''s peak formula and sound limits (NodeSchema.peak_gb, sounds: the planned peak per run) and the Preset heading''s help (StudioLayout.preset_help); from 1.48 thumbnails: every list''s `thumb_url` is a small WebP of the image or the poster once made, `RunOutput.thumb_url` (contracts/README.md, Thumbnails); from 1.49 timeline edits by named ops (POST …/timelines/{timeline_id}/edits: a dry run, a diff, studio-made clip ids), the revision history and restore to any kept revision, the agent view (`view=agent`) and a stored frame at a sequence time (contracts/README.md, Timeline: edits by ops); from 1.50 the Timeline tools'' ops (roll, slip, slide, overwrite, split_all, remove_range, lift_range, an audio track''s ripple remove), linked sound clips (`TimelineClip.link`) and markers (`TimelineDoc.markers`, the marker ops; contracts/README.md, Timeline rules: tools, linked clips, markers); from 1.51 provider presets (GET /v1/studio/admin/provider-presets, a preset''s Fetch, a key file''s status, `Provider.compat` and `preset`; contracts/README.md, Model sources: presets); from 1.52 saving a provider key (PUT and DELETE /v1/studio/admin/provider-keys/{key_secret}, `ProviderKey.writable`; contracts/README.md, Model sources: Keys); from 1.53 thinking per model (`Provider.thinking`, `thinking_levels`, `ProviderPut.thinking`, `ProviderTest.thinking`, `ProviderPreset.thinking`, a model source''s `thinking`; contracts/README.md, Model sources: thinking); from 1.55 a provider''s fixed extra headers (`ProviderCompat.headers`: Anthropic''s anthropic-version; contracts/README.md, Model sources: compat); from 1.56 generous assistant defaults (AssistantLimits defaults 2000 model calls and 20000000 tokens a day, 200 look_at an hour, 30 messages a minute; AssistantCaps per message up to 40 model calls, 100 tool calls, 8 memory writes; a call''s n up to 99; contracts/README.md, Assistant); from 1.59 steering an answer (a message while a turn works joins it: `AssistantAccepted.steer`, `AssistantEntry.steer`; Stop: kind `stop`; contracts/README.md, Assistant: steer); from 1.59.1 steer fixes: waiting steers go first in a new turn, a stopped turn takes them as read, one message id per Stop (contracts/README.md, Assistant: steer); from 1.60 a take''s render time (`MadeWith.render_s`: the Create take, the Gallery''s Made with, the Timeline clip inspector and the sequence total); from 1.61 plugins: the admin''s Plugins page (GET /v1/studio/admin/plugins, Rescan, on and off, Remove, Add as provider), Only-you providers (`Provider.owner_id`, `plugin`; `AssistantSettings.personal`) and plugin tools in the assistant (a `plugin` card; contracts/README.md, Plugins); from 1.62 Stop cancels the model call in flight, and the assistant''s plain-words memory and voice-line checks (contracts/README.md, Assistant: steer; Assistant: tools); from 1.64 skills: plugins of kind `skill` (built in and from ~/.helm/plugins, folders and .zip files), GET /v1/studio/skills, a skill''s guide and files, the assistant''s use_skill and read_skill_file and its "Using skill" line (`AssistantLine.skill`; contracts/README.md, Skills); from 1.65 media in the assistant chat: a message''s attached images (`AssistantPost.takes`, `AssistantEntry.takes`), @-picked takes as [[take:<id>]] refs in your text, a model that sees images (`AssistantStatus.sees`, a preset''s `vision`) and takes shown as media in answers (contracts/README.md, Assistant: media and vision); from 1.66 the assistant''s context window per model (`AssistantSettings.window_tokens`) and its prompt cache hit rate per model (GET /v1/studio/admin/assistant/cache; contracts/README.md, Assistant: context and cache); from 1.67 plugins that start themselves: a manifest''s `run`, the host''s runner starts and keeps its service up while it is on (`Plugin.starts`, statuses starting and failed; contracts/README.md, Plugins: starts itself); from 1.70 plugins that read and make takes: a manifest''s `takes`, the call''s pass signed and checked by studio, /v1/studio/plugin/takes (read one of yours, make a new take from yours: source `tool`, `Take.tool`), a plugin line''s `take_ids` (Undo deletes them), the media-tools plugin and the Gallery''s Edit (GET /v1/studio/plugins/{plugin}, POST …/tools/{tool}: a takes plugin''s tool run for you; `Plugin.takes`, `needs`, a tool''s `title` and `summary`) (contracts/README.md, Plugins: takes)'}
   - {name: files, description: signed file downloads and uploads}
   - name: auth
     description: 'auth_service: users, sessions (JWT access + rotating refresh tokens), roles, client API keys'
@@ -1263,6 +1263,62 @@ paths:
         '422': {$ref: '#/components/responses/Unprocessable'}
         '503': {$ref: '#/components/responses/Unavailable'}
 
+  # ------------------------------------------------------------------ studio: a plugin's takes (API 1.70, contracts/README.md, Plugins: takes)
+  /v1/studio/plugin/takes/{take_id}:
+    get:
+      tags: [studio]
+      operationId: studioPluginGetTake
+      summary: One of the pass's owner's takes, as a plugin reads it
+      description: |
+        For a `takes` plugin (its manifest's `takes`, the plugin on) with its call's pass; no API key (Kong lets
+        `/v1/studio/plugin/` through: the pass is the auth). Another user's take, a pending or deleted one is 404.
+        `url` is signed for 10 minutes.
+      security: [{PluginPass: []}]
+      parameters: [{$ref: '#/components/parameters/TakeId'}]
+      responses:
+        '200': {description: the take, content: {application/json: {schema: {$ref: '#/components/schemas/PluginTake'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /v1/studio/plugin/takes:
+    post:
+      tags: [studio]
+      operationId: studioPluginCreateTake
+      summary: Start a new take a plugin tool made; answers signed PUT links
+      description: |
+        A pending take (source `tool`, `tool` {plugin, tool, input}, `parents`) of the pass's owner, invisible until
+        completed; the key `u/<owner>/uploads/<take_id>.<ext>` (an image or audio) or `u/<owner>/imports/<take_id>.mp4`
+        with its poster beside it (a video), PUT links valid 15 minutes. A parent that is not the owner's ready, live
+        take is 404. 422 for a kind and type that do not match ("kind and content_type differ"), a missing size
+        ("an image or a video needs width and height", "a video needs video", "an audio take needs duration_s"), an
+        image or audio over 50 MB, an input over 4096 bytes. A pending one not completed within an hour is discarded.
+      security: [{PluginPass: []}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/PluginTakeCreate'}}}
+      responses:
+        '201': {description: the links, content: {application/json: {schema: {$ref: '#/components/schemas/PluginTakeUpload'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+  /v1/studio/plugin/takes/{take_id}/complete:
+    post:
+      tags: [studio]
+      operationId: studioPluginCompleteTake
+      summary: Check the uploaded objects and show the new take
+      description: |
+        As an import's complete (the size, the header of the declared type and pixel size; a video's `ftyp` box and
+        its poster; an audio's header as an upload's): 409 "upload not received" before the PUT, 422 when a check fails
+        (the take is discarded, 404 from then on). Calling it again after success answers the same take.
+      security: [{PluginPass: []}]
+      parameters: [{$ref: '#/components/parameters/TakeId'}]
+      responses:
+        '200': {description: the take, content: {application/json: {schema: {$ref: '#/components/schemas/Take'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
   # ------------------------------------------------------------------ studio: batches (pipelines_service runs them)
   /v1/studio/batches:
     get:
@@ -1996,6 +2052,43 @@ paths:
         '200': {description: the file, content: {application/json: {schema: {$ref: '#/components/schemas/SkillFile'}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
+
+  /v1/studio/plugins/{plugin}:
+    get:
+      tags: [studio]
+      operationId: studioGetPluginUse
+      summary: 'From 1.70: a takes plugin as every user may use it (the Gallery''s Edit)'
+      description: 'Every user. A plugin that is on, usable, of kind assistant-tools and whose manifest says `takes`; `running` when its health path answers 2xx now (2 s): the Gallery shows Edit only then. 404 otherwise (unknown, off, not a takes plugin).'
+      parameters: [{$ref: '#/components/parameters/PluginName'}]
+      responses:
+        '200': {description: the plugin, content: {application/json: {schema: {$ref: '#/components/schemas/PluginUse'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /v1/studio/plugins/{plugin}/tools/{tool}:
+    post:
+      tags: [studio]
+      operationId: studioRunPluginTool
+      summary: 'From 1.70: run a takes plugin''s tool for you (the Gallery''s Save as new)'
+      description: |
+        Every user, on their own takes (contracts/README.md, Plugins: takes, Save as new). The plugin as GET
+        /plugins/{plugin} has it, and a tool of its manifest with no risk flag; else 404. Studio signs a pass for the
+        caller and a new call id, as studio.plugins.pass does, and POSTs `<url>/tools/<tool>` {input} with the call's
+        headers (30 s, no redirects). 200: `take_ids` only those studio vouches for (the caller's takes with source tool
+        this plugin made under this call id, as a chat line's), `line` the plugin's. The plugin's 422 is a 422 with its
+        detail; any other failure (no answer, too slow, a non-2xx) is a 502 with a plain detail (its detail, else
+        `<title> did not answer`).
+      parameters:
+        - {$ref: '#/components/parameters/PluginName'}
+        - {name: tool, in: path, required: true, schema: {type: string, pattern: '^[a-z][a-z0-9_]{0,23}$'}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/PluginToolRun'}}}
+      responses:
+        '200': {description: what it made, content: {application/json: {schema: {$ref: '#/components/schemas/PluginToolDone'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '502': {description: 'the plugin failed: `{"detail"}` in plain words', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
 
   /v1/studio/admin/session-names:
     get:
@@ -3323,6 +3416,10 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: "the user's RS256 access token from a Session (verify with /auth/.well-known/jwks.json)"
+    PluginPass:
+      type: http
+      scheme: bearer
+      description: "from 1.70: a plugin tool call's pass (req.studio.plugins.pass): only /v1/studio/plugin/*, no API key (contracts/README.md, Plugins: takes)"
 
   parameters:
     SessionId: {name: session_id, in: path, required: true, schema: {type: string}, description: session UUID (malformed = 404)}
@@ -4715,8 +4812,8 @@ components:
     TakeKind: {type: string, enum: [image, video, audio]}
     TakeSource:
       type: string
-      enum: [create, upload, pipeline, import, export, frame]
-      description: 'create: an output of a Create run; upload: a file the user uploaded; pipeline: an output of a batch run (every batch runs on the pipeline engine, plan 9.1); import (from 1.16): an item of the old helmstudio gallery, brought in by `helm import` (`legacy`); export (from 1.17): a sequence''s export (`export`); frame (from 1.17): a video take''s first or last frame (`frame_of`)'
+      enum: [create, upload, pipeline, import, export, frame, tool]
+      description: 'create: an output of a Create run; upload: a file the user uploaded; pipeline: an output of a batch run (every batch runs on the pipeline engine, plan 9.1); import (from 1.16): an item of the old helmstudio gallery, brought in by `helm import` (`legacy`); export (from 1.17): a sequence''s export (`export`); frame (from 1.17): a video take''s first or last frame (`frame_of`); tool (from 1.70): made by a plugin tool from takes of yours (`tool`, `parents` = those takes; contracts/README.md, Plugins: takes)'
     Take:
       type: object
       description: |
@@ -4756,6 +4853,7 @@ components:
         video: {$ref: '#/components/schemas/VideoInfo', description: 'kind video only (absent for an image): length, frame rate, audio and the poster'}
         audio: {$ref: '#/components/schemas/AudioInfo', description: 'from 1.19, kind audio only: its length (from 1.30 a run''s audio take also its sample rate)'}
         source_map: {$ref: '#/components/schemas/SourceMap', description: 'from 1.19, a video made from a media take (retake, extend, audio to video; absent otherwise): how its time lines up with that take'}
+        tool: {$ref: '#/components/schemas/TakeTool', description: 'from 1.70, source tool only (absent otherwise; `made_with` null): the plugin tool that made it'}
         decisions:
           type: array
           maxItems: 16
@@ -6207,6 +6305,8 @@ components:
         name: {type: string, pattern: '^[a-z][a-z0-9_]{0,23}$', description: 'the model sees `<plugin>__<name>`'}
         description: {type: string, maxLength: 500}
         risk: {$ref: '#/components/schemas/PluginRisk'}
+        title: {type: string, maxLength: 40, description: 'from 1.70: its name for people (the aside''s tools: `Edit image`)'}
+        summary: {type: string, maxLength: 120, description: 'from 1.70: what it does, in a few words (`Crop, resize, rotate, flip, extend, convert`)'}
     Plugin:
       type: object
       required: [name, title, version, kind, description, author, may_do, personal, enabled, status, provider, updated_at]
@@ -6261,7 +6361,33 @@ components:
             log: {type: string, maxLength: 300, examples: ['~/.helm/logs/web-search.log']}
             restarts: {type: integer, minimum: 0}
             since: {type: string, format: date-time}
+        takes: {type: boolean, description: 'from 1.70: its manifest''s `takes` (reads your takes, saves new ones); absent = false'}
+        needs: {type: string, maxLength: 120, description: 'from 1.70: what it needs on its host, as its manifest says (`ffmpeg (brew install ffmpeg)`)'}
         updated_at: {type: string, format: date-time}
+    PluginUse:
+      type: object
+      required: [name, title, running, tools]
+      additionalProperties: false
+      description: 'from 1.70: a takes plugin that is on, as every user sees it (GET /plugins/{plugin})'
+      properties:
+        name: {type: string, pattern: '^[a-z][a-z0-9-]{0,22}$'}
+        title: {type: string, maxLength: 60}
+        running: {type: boolean, description: 'its health path answered 2xx now (2 s)'}
+        tools: {type: array, maxItems: 8, items: {type: string, pattern: '^[a-z][a-z0-9_]{0,23}$'}, description: 'its tools with no risk flag (the ones POST …/tools/{tool} runs)'}
+    PluginToolRun:
+      type: object
+      required: [input]
+      additionalProperties: false
+      description: 'from 1.70: a tool''s input, as its manifest''s input schema has it (the plugin checks it: 422)'
+      properties:
+        input: {type: object, maxProperties: 16, additionalProperties: true}
+    PluginToolDone:
+      type: object
+      required: [take_ids, line]
+      additionalProperties: false
+      properties:
+        take_ids: {type: array, maxItems: 8, uniqueItems: true, items: {type: string, format: uuid}, description: 'the new takes studio vouches for (Undo deletes them)'}
+        line: {type: string, maxLength: 300, description: 'the plugin''s line (`Trimmed · Shot 3`), else `<title> · <tool>`'}
     SkillSummary:
       type: object
       required: [name, title, when, version]
@@ -6436,6 +6562,7 @@ components:
         undo: {type: boolean}
         memory_id: {type: string, format: uuid}
         skill: {type: string, pattern: '^[a-z][a-z0-9-]{0,22}$', description: 'from 1.64: a Using skill line: the skill read (tap to see: GET /v1/studio/skills/{skill})'}
+        take_ids: {type: array, minItems: 1, maxItems: 8, uniqueItems: true, items: {type: string, format: uuid}, description: 'from 1.70: a plugin tool''s line (media tools): the takes it made; its Undo deletes them (DELETE /v1/studio/takes/{take_id}), no Redo'}
         sources:
           type: array
           maxItems: 5
@@ -7769,6 +7896,76 @@ components:
       properties:
         take: {$ref: '#/components/schemas/Take'}
         job: {$ref: '#/components/schemas/MediaJob'}
+    TakeTool:
+      type: object
+      required: [plugin, tool, input]
+      additionalProperties: false
+      properties:
+        plugin: {type: string, pattern: '^[a-z][a-z0-9-]{0,22}$', examples: [media-tools]}
+        tool: {type: string, pattern: '^[a-z][a-z0-9_]{0,23}$', examples: [crop]}
+        input: {type: object, description: 'the tool''s input as the plugin reported it (at most 4096 bytes as compact JSON)'}
+        call: {type: string, maxLength: 120, description: 'the assistant call whose pass made it (studio records it; a line''s Undo deletes only takes of its own call)'}
+    PluginTake:
+      type: object
+      description: 'from 1.70: one of the pass''s owner''s takes as a `takes` plugin reads it (contracts/README.md, Plugins: takes)'
+      required: [id, kind, title, content_type, bytes, width, height, url]
+      additionalProperties: false
+      properties:
+        id: {type: string, format: uuid}
+        kind: {$ref: '#/components/schemas/TakeKind'}
+        title: {type: string, maxLength: 200}
+        content_type: {type: string}
+        bytes: {type: integer, minimum: 0}
+        width: {type: [integer, 'null']}
+        height: {type: [integer, 'null']}
+        url: {$ref: '#/components/schemas/SignedUrl', description: 'the file, signed for 10 minutes'}
+        duration_s: {type: number, description: 'a video''s or an audio take''s length'}
+        fps: {type: number, description: 'a video''s'}
+        has_audio: {type: boolean, description: 'a video''s'}
+    PluginTakeCreate:
+      type: object
+      description: 'from 1.70: a new take a `takes` plugin made from takes of the pass''s owner'
+      required: [parents, tool, input, title, kind, content_type, bytes]
+      additionalProperties: false
+      properties:
+        parents: {type: array, minItems: 1, maxItems: 8, uniqueItems: true, items: {type: string, format: uuid}, description: 'the takes it was made from (each the owner''s, ready, live: else 404)'}
+        tool: {type: string, pattern: '^[a-z][a-z0-9_]{0,23}$'}
+        input: {type: object, description: 'at most 4096 bytes as compact JSON'}
+        title: {type: string, minLength: 1, maxLength: 200}
+        kind: {$ref: '#/components/schemas/TakeKind'}
+        content_type: {type: string, enum: [image/png, image/jpeg, image/webp, audio/wav, audio/mpeg, audio/mp4, video/mp4]}
+        bytes: {type: integer, minimum: 1, maximum: 2147483648, description: 'an image or audio at most 52428800 (50 MB); a video at most 2 GB'}
+        width: {type: integer, minimum: 1, maximum: 16384, description: 'an image''s or a video''s'}
+        height: {type: integer, minimum: 1, maximum: 16384}
+        duration_s: {type: number, exclusiveMinimum: 0, maximum: 21600, description: 'an audio take''s'}
+        video:
+          type: object
+          description: 'a video''s length, frames, rate, sound and poster (as an import''s)'
+          required: [duration_s, fps, frames, has_audio, poster]
+          additionalProperties: false
+          properties:
+            duration_s: {type: number, exclusiveMinimum: 0, maximum: 21600}
+            fps: {type: number, exclusiveMinimum: 0, maximum: 240}
+            frames: {type: integer, minimum: 1}
+            has_audio: {type: boolean}
+            poster:
+              type: object
+              required: [content_type, bytes, width, height]
+              additionalProperties: false
+              properties:
+                content_type: {type: string, enum: [image/png, image/jpeg, image/webp]}
+                bytes: {type: integer, minimum: 1, maximum: 52428800}
+                width: {type: integer, minimum: 1}
+                height: {type: integer, minimum: 1}
+    PluginTakeUpload:
+      type: object
+      required: [take_id, upload_url, expires_at]
+      additionalProperties: false
+      properties:
+        take_id: {type: string, format: uuid}
+        upload_url: {$ref: '#/components/schemas/SignedUrl', description: 'PUT the bytes (exactly `bytes`, `content_type`)'}
+        poster_upload_url: {$ref: '#/components/schemas/SignedUrl', description: 'a video''s: PUT its poster'}
+        expires_at: {type: string, format: date-time}
     TakeFrameOf:
       type: object
       required: [take_id, at]
