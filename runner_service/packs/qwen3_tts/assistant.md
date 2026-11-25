@@ -107,21 +107,12 @@ voice, many languages, fine delivery sliders or speed.
   [pack]
 - Over 900 characters (about 60 s) fails: split long narration into several takes. [pack]
 
-## Recipes (draft)
-- **steady-narration**: Qwen3-TTS Voice-over; `speak.voice` = a preset in the text's language, `speak.style` = "",
-  `speak.temperature` = 0.3, `speak.language` = the text's language, `seed.seed` = -1. [pack]
-- **acted-line**: Qwen3-TTS Voice-over; `speak.style` = the emotion in a few words ("very angry", "whispering,
-  scared"), `speak.temperature` = 0.3 (higher is untested); keep the seed and change only the style to compare reads. [pack] [card]
-- **lively-promo**: Qwen3-TTS Voice-over; `speak.voice` = Ryan or Aiden, `speak.style` = "energetic, upbeat",
-  `speak.temperature` = 0.9 (the Lively preset). [pack] [card]
-- **new-character-voice**: Qwen3-TTS Voice design; a voice described in one sentence (age, gender, pitch, pace,
-  texture), `speak.temperature` = 0.3, a short test line; the user hears it, then saves it. [pack] [card]
-- **preset-dialogue**: Qwen3-TTS Dialogue; every Cast member a preset, `dialogue.temperature` = 0.3,
-  `dialogue.pause` = 0.35, styles per line in `(style)`. [pack]
-- **dramatic-pause-dialogue**: as preset-dialogue with `dialogue.pause` = 0.6 and an empty script line before the
-  turn that should land. [pack]
-- **chinese-dialect**: Qwen3-TTS Voice-over; `speak.voice` = Dylan (Beijing) or Eric (Sichuan), `speak.language` =
-  zh. [card] [pack]
+## Recipes
+
+The exact values are the recipes sent with this guide (model.yaml `recipes`); set each param with change. When to use each:
+
+- steady-narration, acted-line (a style in words), lively-promo, chinese-dialect: Voice-over.
+- new-character-voice: Voice design. preset-dialogue, dramatic-pause-dialogue: Dialogue.
 
 ## Sources
 - Maker: https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice (revision

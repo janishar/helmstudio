@@ -1,14 +1,17 @@
-"""This runner's part of KV `registry`: keys <host>.<env>.nodes, .workflows, .models, .voices, .loras and .looks, written once
-at start (`loras`: the shared LoRAs core.lora.Library indexed, `looks`: the packs' starter looks with their LoRAs
-looked up in that index; main adds both with `scanned_value`).
+"""This runner's part of KV `registry`: keys <host>.<env>.nodes, .workflows, .models, .voices, .guides, .loras and
+.looks, written once at start (`loras`: the shared LoRAs core.lora.Library indexed, `looks`: the packs' starter looks
+with their LoRAs looked up in that index; main adds both with `scanned_value`; `guides`, API 1.71: each pack's
+assistant.md and model.yaml `recipes`).
 
 The values are built from the packs whose runtime env is RUNNER_ENV (core.pack) plus the core nodes their
 workflows use or their model.yaml lists in `publish`, with this runner's published_at and published_by. Each is checked against registry.schema.json,
 and every workflow against the node schemas, so a bad pack stops the runner instead of reaching studio."""
 
+import copy
 import json
 import logging
 import math
+import re
 
 from config import ENV, HOST, PUBLISHED_BY
 from core import graph, models, voices
@@ -19,7 +22,8 @@ from messaging.publisher import now
 log = logging.getLogger(__name__)
 
 MODELS_BUDGET = 768 * 1024  # bytes of the models value (NATS max_payload 1 MB)
-KINDS = ("nodes", "workflows", "models", "voices", "loras", "looks")
+KINDS = ("nodes", "workflows", "models", "voices", "loras", "looks", "guides")
+CARD_MAX, GUIDE_MAX = 800, 24576  # characters of a guide's card and of the whole guide (API 1.71)
 
 
 def build(env: str = ENV) -> tuple[dict[str, dict], dict, list]:
@@ -74,7 +78,67 @@ def build(env: str = ENV) -> tuple[dict[str, dict], dict, list]:
             )
         if errs := graph.validate(w["nodes"], node_schemas, run=False):
             raise ValueError(f"workflow {w['id']} does not fit its nodes: {'; '.join(errs[:3])}")
+    values["guides"] = (
+        {"schema_version": 1}
+        | meta
+        | {"guides": guides([p for p, _ in loaded], workflows, node_schemas)}
+    )
+    if errs := schemas.registry_errors("guides", values["guides"]):
+        raise ValueError(f"registry guides is off-contract: {'; '.join(errs[:3])}")
     return values, impls, [p for p, _ in loaded]
+
+
+def card(text: str) -> str | None:
+    """A guide's `## Card` section without its heading (API 1.71), or None."""
+    m = re.search(r"^## Card\n(.*?)(?=^## |\Z)", text, re.DOTALL | re.MULTILINE)
+    return m.group(1).strip() if m else None
+
+
+def recipe_errors(recipe: dict, workflow: dict, node_schemas: dict) -> list[str]:
+    """Why a recipe does not fit its workflow: a node not in it, a param not in the node's schema, a value the graph
+    rules refuse (graph.validate on the workflow with the recipe's values set); `<node>.bypass` sets the bypass."""
+    nodes, errs = copy.deepcopy(workflow["nodes"]), []
+    for key, value in recipe["params"].items():
+        nid, param = key.split(".", 1)
+        if (node := nodes.get(nid)) is None:
+            errs.append(f"{key}: no node {nid}")
+        elif param == "bypass":
+            if not isinstance(value, bool):
+                errs.append(f"{key}: not true or false")
+            node["bypass"] = value
+        elif param not in {x["name"] for x in node_schemas[node["kind"]]["params"]}:
+            errs.append(f"{key}: {node['kind']} has no param {param}")
+        else:
+            node.setdefault("params", {})[param] = value
+    return errs or graph.validate(nodes, node_schemas, run=False)
+
+
+def guides(loaded, workflows: list, node_schemas: dict) -> list[dict]:
+    """The registry guides (API 1.71): per pack with an assistant.md, its card, the guide and model.yaml `recipes`.
+    A recipe of a workflow published here is checked against its node schemas; one of the pack's other runtime
+    passes as written (the pack tests check every one), so every runner of a family publishes the same guide.
+    ValueError when a guide or a recipe is off."""
+    here, out = {w["id"]: w for w in workflows}, []
+    for p in loaded:
+        if not (f := p.dir / "assistant.md").is_file():
+            continue
+        text = f.read_text()
+        if not (c := card(text)) or len(c) > CARD_MAX or len(text) > GUIDE_MAX:
+            raise ValueError(
+                f"packs/{p.name}/assistant.md: needs a ## Card of 1-{CARD_MAX} characters, {GUIDE_MAX} in all"
+            )
+        for r in p.spec.get("recipes", []):
+            if r["workflow"] not in {w["id"] for w in p.workflows}:
+                raise ValueError(
+                    f"{p.name} recipe {r['name']}: no workflow {r['workflow']} in the pack"
+                )
+            if r["workflow"] in here and (
+                errs := recipe_errors(r, here[r["workflow"]], node_schemas)
+            ):
+                raise ValueError(f"{p.name} recipe {r['name']}: {'; '.join(errs[:3])}")
+        out.append({"family": p.family, "title": p.spec["title"], "card": c, "guide": text,
+                    "recipes": p.spec.get("recipes", [])})  # fmt: skip
+    return out
 
 
 def models_value(loaded, impls: dict, node_schemas: dict, env: str = ENV) -> dict:

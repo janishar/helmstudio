@@ -146,29 +146,17 @@ NVIDIA (distilled-fp8, dev-int8): times and peaks not known yet. [pack]
 - The weights are gated (a Hub token and the LTX-2 Community licence). Free for commercial use under $10M yearly
   revenue; above that a paid licence. [pack] [card]
 
-## Recipes (draft)
+## Recipes
 
-- Quick look (t2v / i2v): Recipe One-stage (`upscale.bypass` true, `sample2.bypass` true), final's canvas and
-  `duration.frames`, `model.compute` float16. [pack]
-- Normal shot: Two-stage, `canvas` 704 x 448, `duration.frames` 49 or 97, `model.precision` int8, `model.compute`
-  float32. [pack]
-- Final close-up: Recipe Detail (`detail.bypass` false, `sample1.detail` true, `sample2.detail` true,
-  `detail.strength` 0.5), same seed and prompt as the draft. [pack]
-- Quality preset (t2v / i2v only): `model.precision` bf16, `model.compute` float32 (large memory). [pack]
-- Low memory: `model.precision` int4, `model.compute` float32, smaller canvas. [pack]
-- Animate a keyframe: `keyframes.images` [{image, seconds 0, strength 1, binding auto}], 896 x 512, 49 or 97
-  frames (animator `ltx-animate-2s` / `-4s`). [pack]
-- Land a pose: a second keyframe row at the end time, strength 1, binding guide (or replace on a grid frame). [pack]
-- Timed action: `encode.beats` e.g. 0.5 s "holds still", 0.5 s "crouches", 0.8 s "jumps", 0 s "lands and holds".
-  [pack]
-- Talking shot: `ltx-audio-to-video`, the voice line as `audio.source`, `keyframes.bypass` false with the keyframe
-  at 0 s, Distilled, Two-stage. [pack]
-- Fix a span: `ltx-retake`, Distilled, `retake.span` around the bad part, `retake.audio` false to keep the sound.
-  [pack]
-- Longer shot: `ltx-extend`, Distilled, `extend.seconds` 2-4, `extend.direction` after. [pack]
-- Prepend: `ltx-extend`, `model.variant` dev, `extend.direction` before, `extend.steps` 30, `extend.cfg` 3,
-  `extend.stg` 1. [pack]
-- Under a voice line: `decode.audio` false. [pack]
+The exact values are the recipes sent with this guide (model.yaml `recipes`); set each param with change. When to use each:
+
+- quick-look (One-stage), normal-shot (Two-stage), final-close-up (Detail, Mac only), quality (bf16), low-memory
+  (int4), under-a-voice-line (no sound of its own).
+- animate-keyframe (Image to video), talking-shot (Audio to video), fix-a-span (Retake), longer-shot and prepend
+  (Extend).
+- Not settings: land a pose with a second keyframe row at the end time, strength 1, binding guide (or replace on a
+  grid frame); a timed action with `encode.beats`, e.g. 0.5 s "holds still", 0.5 s "crouches", 0.8 s "jumps", 0 s
+  "lands and holds" [pack].
 
 ## Sources
 

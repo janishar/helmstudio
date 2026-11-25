@@ -203,3 +203,38 @@ stages:
     # above it 2.3 GB judging 4 x 512 px (1427 tokens, 7.7 s), 3.51 at 4 x 1024 px (4499 tokens, 12.8 s); greedy,
     # identical across two processes, JSON valid on the first try. A bound over both, extrapolated beyond 4.
     peak_gb: "2.2 + 0.35 * images"
+
+# The assistant's recipes (API 1.71, contracts/README.md "Assistant: model guides"): named settings as data, values by
+# <node>.<param> (<node>.bypass: the node's bypass), each checked against its workflow's node schemas (tests/test_guides.py
+# against the canonical fixtures; the runner, the ones it publishes). assistant.md says when to use each.
+recipes:
+  - {name: fast-draft, title: Fast draft, workflow: qwen-image,
+     params: {model.variant: turbo, enhance.bypass: true, canvas.mode: fixed, canvas.width: 1024, canvas.height: 1024},
+     note: "Turbo, 8 fixed steps: make 2 to 4 seeds, then finish the one the user likes with final."}
+  - {name: final, title: Final, workflow: qwen-image, params: {model.variant: base, sample.steps: 40},
+     note: "Keep the draft's seed, prompt and size."}
+  - {name: final-enhanced, title: "Final, enhanced", workflow: qwen-image,
+     params: {model.variant: base, sample.steps: 40, enhance.bypass: false, enhance.think: true},
+     note: "For a short or rough prompt; minutes slower. Needs both enhancer add-ons."}
+  - {name: native-2k, title: Native 2K, workflow: qwen-image,
+     params: {model.variant: base, sample.steps: 40, canvas.mode: fixed, canvas.width: 2048, canvas.height: 2048,
+              decode.tiled: auto},
+     note: "The makers' native size; much more memory and time than 1 MP."}
+  - {name: portrait, title: Portrait 3:4, workflow: qwen-image,
+     params: {canvas.mode: fixed, canvas.width: 896, canvas.height: 1184},
+     note: "About 3:4 at 1 MP; 1792 x 2400 for a large one."}
+  - {name: wide-keyframe, title: Wide keyframe, workflow: qwen-image,
+     params: {canvas.mode: fixed, canvas.width: 1344, canvas.height: 768},
+     note: "A video keyframe: Turbo to frame it, Base 40 steps to finish."}
+  - {name: character-sheet, title: Character sheet, workflow: qwen-image,
+     params: {canvas.mode: fixed, canvas.width: 1536, canvas.height: 864, model.variant: base, sample.steps: 40}}
+  - {name: product-cutout, title: Product cut-out, workflow: qwen-image,
+     params: {encode.transparent: true, model.variant: base, sample.steps: 40, canvas.mode: fixed, canvas.width: 1024,
+              canvas.height: 1024},
+     note: "A transparent (RGBA) image; do not write the transparency words yourself."}
+  - {name: edit-draft, title: Edit draft, workflow: qwen-image, params: {canvas.mode: auto, model.variant: turbo},
+     note: "Put the references in first; the output takes the last reference's aspect."}
+  - {name: edit-final, title: Edit final, workflow: qwen-image,
+     params: {canvas.mode: auto, model.variant: base, sample.steps: 40}}
+  - {name: judge-takes, title: Judge takes, workflow: qwen-image-ask, params: {ask.max_tokens: 800},
+     note: "Up to 8 takes in ask.media."}

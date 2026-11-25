@@ -442,3 +442,36 @@ stages:
     addons: [distilled_lora]   # API 1.40: needed, not loaded through residency (the bake reads it): no memory plan counts it
     inputs: {model: Model}
     outputs: {model: Model}
+
+# The assistant's recipes (API 1.71, contracts/README.md "Assistant: model guides"): named settings as data, values by
+# <node>.<param> (<node>.bypass: the node's bypass), each checked against its workflow's node schemas (tests/test_guides.py
+# against the canonical fixtures; the runner, the ones it publishes). assistant.md says when to use each.
+recipes:
+  - {name: quick-look, title: Quick look, workflow: ltx-text-to-video,
+     params: {upscale.bypass: true, sample2.bypass: true, model.compute: float16},
+     note: "One-stage: the final's canvas and length, faster and softer (the clip is half the canvas)."}
+  - {name: normal-shot, title: Normal shot, workflow: ltx-text-to-video,
+     params: {canvas.width: 704, canvas.height: 448, duration.frames: 49, model.precision: int8, model.compute: float32},
+     note: "Two-stage; 97 frames for about 4 s."}
+  - {name: final-close-up, title: Final close-up, workflow: ltx-text-to-video,
+     params: {detail.bypass: false, sample1.detail: true, sample2.detail: true, detail.strength: 0.5},
+     note: "Recipe Detail: same seed and prompt as the draft; Mac only, needs the Detailer add-on."}
+  - {name: quality, title: Quality, workflow: ltx-text-to-video,
+     params: {model.precision: bf16, model.compute: float32}, note: "Large memory (about 38 GB transformer)."}
+  - {name: low-memory, title: Low memory, workflow: ltx-text-to-video,
+     params: {model.precision: int4, model.compute: float32}, note: "Also lower the canvas."}
+  - {name: animate-keyframe, title: Animate a keyframe, workflow: ltx-image-to-video,
+     params: {canvas.width: 896, canvas.height: 512, duration.frames: 49},
+     note: "The image as a keyframe row at 0 s, strength 1, binding auto; 97 frames for 4 s."}
+  - {name: talking-shot, title: Talking shot, workflow: ltx-audio-to-video,
+     params: {keyframes.bypass: false, model.variant: distilled},
+     note: "The voice line as audio.source, the keyframe at 0 s; Two-stage."}
+  - {name: fix-a-span, title: Fix a span, workflow: ltx-retake, params: {model.variant: distilled, retake.audio: false},
+     note: "Set retake.span around the bad part; audio false keeps the sound."}
+  - {name: longer-shot, title: Longer shot, workflow: ltx-extend,
+     params: {model.variant: distilled, extend.seconds: 2, extend.direction: after}, note: "2 to 4 s at a time."}
+  - {name: prepend, title: Prepend, workflow: ltx-extend,
+     params: {model.variant: dev, extend.direction: before, extend.steps: 30, extend.cfg: 3, extend.stg: 1},
+     note: "Before needs Dev."}
+  - {name: under-a-voice-line, title: Under a voice line, workflow: ltx-text-to-video, params: {decode.audio: false},
+     note: "No sound of its own: the voice line goes on the Timeline."}

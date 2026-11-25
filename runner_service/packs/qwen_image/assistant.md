@@ -8,9 +8,9 @@ steps, much faster: drafts), Base fp8 / Turbo fp8 (NVIDIA only). It can make a t
 and looks, and has an optional prompt enhancer. Pick it for most stills, edits, cut-outs and fast drafts; pick
 MiniMax H3 Image only for very large, detailed stills or edits with more than 10 references.
 
-Tags: [pack] = this pack's files and tests, [card] = the makers' pages (Sources), [takes] = the owner's own takes.
-
 ## Good at
+
+Tags: [pack] = this pack's files and tests, [card] = the makers' pages (Sources), [takes] = the owner's own takes.
 
 - Text to image and image edit in one model; the mode follows the references [card] [pack].
 - Edits with up to 10 references: combine, restyle, change a part; keeps identity of people and products [card].
@@ -123,25 +123,15 @@ Tags: [pack] = this pack's files and tests, [card] = the makers' pages (Sources)
 - Reference transparency: the vision encoder sees references over white; the VAE keeps their alpha [pack].
 - Large sizes cost memory fast; if a run does not fit, lower the size, use int8, or another host [pack].
 
-## Recipes (draft)
+## Recipes
 
-- fast-draft: `model.variant=turbo`, `enhance.bypass=true`, `canvas.mode=fixed`, `canvas.width=1024`,
-  `canvas.height=1024`. Make 2 to 4 seeds [pack].
-- final: `model.variant=base`, `sample.steps=40`, the draft's seed, prompt and size [pack] [card].
-- final-enhanced: `model.variant=base`, `sample.steps=40`, `enhance.bypass=false`, `enhance.think=true` [pack] [card].
-- native-2k: `model.variant=base`, `sample.steps=40`, `canvas.mode=fixed`, `canvas.width=2048`, `canvas.height=2048`,
-  `decode.tiled=auto` [card] [pack].
-- portrait: `canvas.mode=fixed`, `canvas.width=896`, `canvas.height=1184` (about 3:4 at 1 MP, a derived size
-  valid in the pack [pack]); large: 1792 x 2400 (3:4) [card].
-- wide-keyframe: `canvas.mode=fixed`, `canvas.width=1344`, `canvas.height=768`; Turbo to frame, Base 40 steps to
-  finish (the Cinematic filmmaker's keyframe-draft / keyframe-still) [pack].
-- character-sheet: `canvas.mode=fixed`, `canvas.width=1536`, `canvas.height=864`, `model.variant=base`,
-  `sample.steps=40` (the Cinematic filmmaker's recipe) [pack].
-- product-cutout: `encode.transparent=true`, `model.variant=base`, `sample.steps=40`, square canvas [pack] [card].
-- edit-draft: `encode.refs=[...]`, `canvas.mode=auto`, `model.variant=turbo`; edit-final the same with `base`,
-  `sample.steps=40` [pack].
-- multi-reference: up to 10 `encode.refs`, the prompt names each `<imageN>`, the frame-setting one last [pack].
-- judge-takes: workflow `qwen-image-ask`, `ask.max_tokens=800` (16 to 4096), up to 8 takes in `ask.media` [pack].
+The exact values are the recipes sent with this guide (model.yaml `recipes`); set each param with change. When to use each:
+
+- fast-draft (2 to 4 seeds), then final or final-enhanced with the liked seed; native-2k for the makers' size.
+- portrait, wide-keyframe (a video keyframe), character-sheet, product-cutout (transparent).
+- edit-draft, then edit-final; the references go in first, the frame-setting one last.
+- judge-takes: the Ask workflow, up to 8 takes.
+- Not settings: multi-reference work names each `<imageN>` in the prompt, up to 10 references [pack].
 
 ## Sources
 

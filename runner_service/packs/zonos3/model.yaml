@@ -92,3 +92,23 @@ stages:
       guidance: *guidance
     peak_gb: "2.0"
     max_seconds: 60
+
+# The assistant's recipes (API 1.71, contracts/README.md "Assistant: model guides"): named settings as data, values by
+# <node>.<param> (<node>.bypass: the node's bypass), each checked against its workflow's node schemas (tests/test_guides.py
+# against the canonical fixtures; the runner, the ones it publishes). assistant.md says when to use each.
+recipes:
+  - {name: voice-line, title: Voice line (neutral), workflow: zonos3-voice-over,
+     params: {speak.emotion: 0.5, speak.energy: 0.5, speak.whisper: 0, speak.speaking_rate: 1, speak.guidance: 2}}
+  - {name: warm-narration, title: Warm narration, workflow: zonos3-voice-over,
+     params: {speak.emotion: 0.7, speak.energy: 0.45, speak.whisper: 0, speak.speaking_rate: 0.95, speak.guidance: 2}}
+  - {name: tense-line, title: Tense line, workflow: zonos3-voice-over,
+     params: {speak.emotion: 0.3, speak.energy: 0.75, speak.whisper: 0, speak.speaking_rate: 1.1, speak.guidance: 2.5}}
+  - {name: whisper, title: Whisper, workflow: zonos3-voice-over,
+     params: {speak.emotion: 0.5, speak.energy: 0.25, speak.whisper: 0.9, speak.speaking_rate: 0.9, speak.guidance: 2}}
+  - {name: cloned-character, title: Cloned character, workflow: zonos3-voice-over,
+     params: {speak.emotion: 0.5, speak.energy: 0.5, speak.whisper: 0, speak.speaking_rate: 1, speak.guidance: 2.5},
+     note: "A voice with a clip; guidance 2.5 if it wanders from its clip (untested)."}
+  - {name: dialogue-scene, title: Dialogue scene, workflow: zonos3-dialogue,
+     params: {dialogue.emotion: 0.5, dialogue.energy: 0.5, dialogue.whisper: 0, dialogue.speaking_rate: 1,
+              dialogue.guidance: 2, dialogue.pause: 0.5},
+     note: "(style) words per line; every @name in the Cast."}

@@ -84,3 +84,25 @@ stages:
     peak_gb: "1.3 + 0.01 * speech_seconds"
     max_seconds: 60
     stall_s: 120
+
+# The assistant's recipes (API 1.71, contracts/README.md "Assistant: model guides"): named settings as data, values by
+# <node>.<param> (<node>.bypass: the node's bypass), each checked against its workflow's node schemas (tests/test_guides.py
+# against the canonical fixtures; the runner, the ones it publishes). assistant.md says when to use each.
+recipes:
+  - {name: steady-narration, title: Steady narration, workflow: qwen3-tts-voice-over,
+     params: {speak.style: "", speak.temperature: 0.3, seed.seed: -1},
+     note: "A preset voice and speak.language in the text's language."}
+  - {name: acted-line, title: Acted line, workflow: qwen3-tts-voice-over, params: {speak.temperature: 0.3},
+     note: "speak.style = the emotion in a few words; keep the seed, change only the style to compare reads."}
+  - {name: lively-promo, title: Lively promo, workflow: qwen3-tts-voice-over,
+     params: {speak.style: "energetic, upbeat", speak.temperature: 0.9}, note: "Voice Ryan or Aiden."}
+  - {name: new-character-voice, title: New character voice, workflow: qwen3-tts-design-voice,
+     params: {speak.temperature: 0.3},
+     note: "Describe the voice in one sentence (age, gender, pitch, pace, texture), a short test line; the user saves it."}
+  - {name: preset-dialogue, title: Preset dialogue, workflow: qwen3-tts-dialogue,
+     params: {dialogue.temperature: 0.3, dialogue.pause: 0.35}, note: "Every Cast member a preset; (style) per line."}
+  - {name: dramatic-pause-dialogue, title: Dramatic pause dialogue, workflow: qwen3-tts-dialogue,
+     params: {dialogue.temperature: 0.3, dialogue.pause: 0.6},
+     note: "An empty script line before the turn that should land."}
+  - {name: chinese-dialect, title: Chinese dialect, workflow: qwen3-tts-voice-over, params: {speak.language: zh},
+     note: "Voice Dylan (Beijing) or Eric (Sichuan)."}

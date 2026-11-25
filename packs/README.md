@@ -566,6 +566,18 @@ voices in file order.
   time: a run's voice param arrives resolved (defs `voice`).
 - The echo pack's voices are `contracts/fixtures/registry/voices.valid.json` exactly (`tests/test_registry.py`).
 
+## assistant.md and recipes (API 1.71; contracts/README.md "Assistant: model guides")
+
+- `assistant.md` is the pack's guide for the in-app assistant: it starts with a `## Card` section (at most 800
+  characters: what the model does, its modes, when to pick it over its neighbours), then good / weak at, settings,
+  prompt style, speed and memory, pitfalls, recipes and sources; at most 24576 characters in all. The card is in the
+  assistant's prompt while a host holds the family; the whole guide is read with read_model_guide.
+- model.yaml `recipes`: named settings, `{name, title, workflow, params: {<node>.<param>: value}, note}`
+  (`<node>.bypass` sets a node's bypass). A recipe of a workflow the runner publishes is checked against its node
+  schemas at start (a bad one stops the runner); `tests/test_guides.py` checks every one against the canonical node
+  fixtures. Quote YAML values that look like numbers or hold commas (`note: "16:9."`, `title: "Final, enhanced"`).
+- The runner publishes `<host>.<env>.guides`; the echo pack's is `contracts/fixtures/registry/guides.valid.json`.
+
 ## MLX packs (`mlx.py`)
 
 The same contract as `torch.py`, on `core/loaders_mlx.py`: `build(component, model)` returns the `mlx.nn` module

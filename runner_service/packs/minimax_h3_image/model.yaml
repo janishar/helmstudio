@@ -141,3 +141,27 @@ stages:
     inputs: {model: Model, latent: Latent}
     outputs: {image: Image}
     peak_gb: "4.5 + 0.1 * max(mp, 4.2)"   # measured 4.23 GB above transformer + VAE (256 px tiles, one at a time)
+
+# The assistant's recipes (API 1.71, contracts/README.md "Assistant: model guides"): named settings as data, values by
+# <node>.<param> (<node>.bypass: the node's bypass), each checked against its workflow's node schemas (tests/test_guides.py
+# against the canonical fixtures; the runner, the ones it publishes). assistant.md says when to use each.
+recipes:
+  - {name: standard, title: Standard 4 MP, workflow: minimax-h3-image,
+     params: {canvas.mode: fixed, canvas.width: 2048, canvas.height: 2048, sample.sampler: euler, enhance.bypass: true}}
+  - {name: enhanced, title: Enhanced, workflow: minimax-h3-image,
+     params: {canvas.mode: fixed, canvas.width: 2048, canvas.height: 2048, sample.sampler: euler, enhance.bypass: false,
+              enhance.think: false},
+     note: "For a short prompt; needs the Enhancer add-on."}
+  - {name: hero-16mp, title: Hero 16 MP, workflow: minimax-h3-image,
+     params: {canvas.mode: fixed, canvas.width: 4096, canvas.height: 4096},
+     note: "About 7 min and 42 GB on a Mac."}
+  - {name: wide-16mp, title: Wide 16 MP, workflow: minimax-h3-image,
+     params: {canvas.mode: fixed, canvas.width: 5472, canvas.height: 3072}, note: "16:9."}
+  - {name: portrait-16mp, title: Portrait 16 MP, workflow: minimax-h3-image,
+     params: {canvas.mode: fixed, canvas.width: 3552, canvas.height: 4736}, note: "3:4."}
+  - {name: wide-4mp, title: Wide 4 MP, workflow: minimax-h3-image,
+     params: {canvas.mode: fixed, canvas.width: 2688, canvas.height: 1536},
+     note: "A wide sheet (2560 x 1440 also fits)."}
+  - {name: edit, title: Edit, workflow: minimax-h3-image,
+     params: {canvas.mode: auto, canvas.width: 2048, canvas.height: 2048},
+     note: "Put the references in first; the first one sets the frame."}

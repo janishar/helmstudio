@@ -239,3 +239,10 @@ lora:
             "transformer_blocks.7.attn.to_out.0", "transformer_blocks.7.attn.to_q"]
   renames: []
   ignore: []
+
+# The assistant's recipes (API 1.71, contracts/README.md "Assistant: model guides"): named settings as data, values by
+# <node>.<param> (<node>.bypass: the node's bypass), each checked against its workflow's node schemas (tests/test_guides.py
+# against the canonical fixtures; the runner, the ones it publishes). assistant.md says when to use each.
+recipes:
+  - {name: quick, title: Quick, workflow: echo, params: {echo.steps: 2, echo.delay_ms: 0},
+     note: "A fake run that ends at once (tests)."}

@@ -105,20 +105,14 @@ All Delivery settings exist on both workflows: `speak.<name>` in Voice-over, `di
 - Over 900 characters fails: split long narration into takes. [pack]
 - Cloning only from voices the user has the right to use. [pack]
 
-## Recipes (draft)
-- **voice-line** (neutral): ZONOS3 Voice-over; `speak.emotion` 0.5, `speak.energy` 0.5, `speak.whisper` 0,
-  `speak.speaking_rate` 1, `speak.guidance` 2 (the Neutral preset). [pack]
-- **warm-narration**: Voice-over; emotion 0.7, energy 0.45, whisper 0, speaking_rate 0.95, guidance 2 (Warm).
-  [pack]
-- **tense-line**: Voice-over; emotion 0.3, energy 0.75, whisper 0, speaking_rate 1.1, guidance 2.5 (Tense). [pack]
-- **whisper**: Voice-over; emotion 0.5, energy 0.25, whisper 0.9, speaking_rate 0.9, guidance 2 (Whisper). [pack]
-- **cloned-character**: Voice-over or Dialogue with a clip voice; Neutral values; `guidance` 2.5 to try if the voice
-  wanders from its clip (untested). [pack]
-- **dialogue-scene**: ZONOS3 Dialogue; Neutral values, `dialogue.pause` 0.5, `(style)` words per line; every
-  @name in the Cast. [pack]
-- **announcer**: Voice-over; `speak.voice` Thaddeus (the announcer preset), Neutral values; the slider values for
-  more punch are not known yet. [pack]
-- **asmr**: Voice-over; `speak.voice` Willow (ASMR, soft and close), Neutral values or the Whisper preset. [pack]
+## Recipes
+
+The exact values are the recipes sent with this guide (model.yaml `recipes`); set each param with change. When to use each:
+
+- voice-line (Neutral), warm-narration, tense-line, whisper: the presets; cloned-character (a clip voice);
+  dialogue-scene (Dialogue).
+- Not settings: announcer is the voice Thaddeus with Neutral values; asmr is Willow (soft and close) with Neutral
+  values or whisper [pack].
 
 ## Sources
 - Maker: https://huggingface.co/Zyphra/ZONOS3-Mini (revision d2d142a86b1e6aeb4252679673c86ecd86177bf8).

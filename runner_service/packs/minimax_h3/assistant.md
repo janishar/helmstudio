@@ -144,22 +144,14 @@ without the LoRA. Host RAM peak and per-step times: not known yet.
   and saves little time there. [pack]
 - Licence: MiniMax H3 Community License; users in the USA, EU, UK and South Korea must apply through a form. [card]
 
-## Recipes (draft)
+## Recipes
 
-- Draft: `generate.steps` 4, `generate.layers` 50, `generate.reuse` 1, `generate.core_reuse` 1,
-  `generate.token_reduction` false, `generate.lora` none; the final's canvas and frames so timing carries. [pack]
-- Fast: steps 20, layers 45, reuse 2, token_reduction true, core_reuse 1, lora none. [pack]
-- Turbo: steps 8, layers 50, reuse 1, token_reduction false, core_reuse 1, lora turbo (add-on). [pack]
-- Default: steps 20, layers 45, reuse 2, token_reduction false, core_reuse 1, lora none. [pack]
-- Reference (hero shot): steps 50, layers 50, reuse 1, token_reduction false, core_reuse 1, lora none. [pack]
-- Quick preview: Draft with `generate.render` 62.5% on 864 x 480. [pack]
-- Film shot: canvas 1344 x 768, `duration.frames` 124, steps 20 (filmmaker `h3-references-shot`,
-  `h3-first-last-shot`); draft at 4 steps with the same seed. [pack]
-- Cartoon shot: canvas 896 x 512, frames 124, steps 20 (animator `h3-first-last-5s`, `h3-references-5s`). [pack]
-- Portrait / vertical: canvas 480 x 864 (9:16), frames 124. [pack] [card]
-- Long clip: `duration.frames` 362 (about 15 s) at 864 x 480 with the Fast preset; expect a long run. [pack]
-- Talking character: References with the character's image as `<Picture 1>` and the voice line as `<Audio 1>`
-  (2-15 s), dialogue in `<d>[English] ...</d>`. [pack] [card]
+The exact values are the recipes sent with this guide (model.yaml `recipes`); set each param with change. When to use each:
+
+- draft, fast, turbo (the Turbo LoRA add-on), default, reference: the presets; quick-preview (62.5% render).
+- film-shot (References or first-last), cartoon-shot, portrait (9:16), long-clip (about 15 s).
+- Not settings: a talking character is References with the character's image as `<Picture 1>` and the voice line as
+  `<Audio 1>` (2-15 s), dialogue in `<d>[English] ...</d>` [pack] [card].
 
 ## Sources
 

@@ -50,3 +50,17 @@ stages:
     # peak above the 14.95 GB component: 4.43 at 4 x 512 px, 5.89 at 4 x 1024 px (~1024 tokens per thumbnail);
     # a bound over both, extrapolated beyond 4 thumbnails (a video counts 3)
     peak_gb: "4 + 0.5 * images"
+
+# The assistant's recipes (API 1.71, contracts/README.md "Assistant: model guides"): named settings as data, values by
+# <node>.<param> (<node>.bypass: the node's bypass), each checked against its workflow's node schemas (tests/test_guides.py
+# against the canonical fixtures; the runner, the ones it publishes). assistant.md says when to use each.
+recipes:
+  - {name: judge-takes, title: Judge takes, workflow: llm-ask, params: {ask.max_tokens: 800},
+     note: "A schema with per-take checks, reason and ranking; up to 4 stills."}
+  - {name: quick-yes-no, title: Quick yes or no, workflow: llm-ask,
+     params: {ask.max_tokens: 64, ask.schema: '{"type": "object", "properties": {"answer": {"type": "boolean"}, "reason": {"type": "string"}}, "required": ["answer", "reason"]}'},
+     note: "One take."}
+  - {name: write-prompt, title: Write a prompt, workflow: llm-ask, params: {ask.max_tokens: 400},
+     note: "No takes, plain text."}
+  - {name: many-takes, title: Many takes, workflow: llm-ask, params: {ask.max_tokens: 1200},
+     note: "8 stills or 2 videos plus 2 stills; about 23 GB peak."}

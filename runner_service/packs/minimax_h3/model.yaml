@@ -234,3 +234,40 @@ stages:
     # with its own 33 GB FP8 DiT, so this 21 GB pruned one fits the 96 GB card at every size (GOTCHAS.md)
     # the child is watched by its own idle limit (native.py IDLE_S); this stage passes a cancel point every 0.5 s
     stall_s: 900
+
+# The assistant's recipes (API 1.71, contracts/README.md "Assistant: model guides"): named settings as data, values by
+# <node>.<param> (<node>.bypass: the node's bypass), each checked against its workflow's node schemas (tests/test_guides.py
+# against the canonical fixtures; the runner, the ones it publishes). assistant.md says when to use each.
+recipes:
+  - {name: draft, title: Draft, workflow: minimax-h3-text-to-video,
+     params: {generate.steps: 4, generate.layers: 50, generate.reuse: 1, generate.core_reuse: 1,
+              generate.token_reduction: false, generate.lora: none},
+     note: "Keep the final's canvas and frames so the timing carries."}
+  - {name: fast, title: Fast, workflow: minimax-h3-text-to-video,
+     params: {generate.steps: 20, generate.layers: 45, generate.reuse: 2, generate.token_reduction: true,
+              generate.core_reuse: 1, generate.lora: none}}
+  - {name: turbo, title: Turbo, workflow: minimax-h3-text-to-video,
+     params: {generate.steps: 8, generate.layers: 50, generate.reuse: 1, generate.token_reduction: false,
+              generate.core_reuse: 1, generate.lora: turbo},
+     note: "Needs the Turbo LoRA add-on."}
+  - {name: default, title: Default, workflow: minimax-h3-text-to-video,
+     params: {generate.steps: 20, generate.layers: 45, generate.reuse: 2, generate.token_reduction: false,
+              generate.core_reuse: 1, generate.lora: none}}
+  - {name: reference, title: Reference (hero shot), workflow: minimax-h3-text-to-video,
+     params: {generate.steps: 50, generate.layers: 50, generate.reuse: 1, generate.token_reduction: false,
+              generate.core_reuse: 1, generate.lora: none}}
+  - {name: quick-preview, title: Quick preview, workflow: minimax-h3-text-to-video,
+     params: {generate.steps: 4, generate.layers: 50, generate.reuse: 1, generate.core_reuse: 1,
+              generate.token_reduction: false, generate.lora: none, generate.render: "62.5%", canvas.width: 864,
+              canvas.height: 480}}
+  - {name: film-shot, title: Film shot, workflow: minimax-h3-references,
+     params: {canvas.width: 1344, canvas.height: 768, duration.frames: 124, generate.steps: 20},
+     note: "Also for first-last frames; draft at 4 steps with the same seed."}
+  - {name: cartoon-shot, title: Cartoon shot, workflow: minimax-h3-image-to-video,
+     params: {canvas.width: 896, canvas.height: 512, duration.frames: 124, generate.steps: 20}}
+  - {name: portrait, title: Portrait 9:16, workflow: minimax-h3-text-to-video,
+     params: {canvas.width: 480, canvas.height: 864, duration.frames: 124}}
+  - {name: long-clip, title: Long clip, workflow: minimax-h3-text-to-video,
+     params: {duration.frames: 362, canvas.width: 864, canvas.height: 480, generate.steps: 20, generate.layers: 45,
+              generate.reuse: 2, generate.token_reduction: true, generate.core_reuse: 1, generate.lora: none},
+     note: "About 15 s with Fast; expect a long run."}

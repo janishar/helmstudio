@@ -8,9 +8,9 @@ negative prompt. Variants: Base (int8 at load) and Base fp8 (NVIDIA only). Heavy
 run on a 64 GB Mac. Pick it over Qwen Image for big final stills (4 to 16 MP) or edits with more than 10
 references; use Qwen Image for drafts, transparency and LoRAs.
 
-Tags: [pack] = this pack's files and tests, [card] = the makers' pages (Sources), [takes] = the owner's own takes.
-
 ## Good at
+
+Tags: [pack] = this pack's files and tests, [card] = the makers' pages (Sources), [takes] = the owner's own takes.
 
 - Very large stills without an upscaler: about 16 MP at every aspect, 4096 x 4096 up to 6272 x 2688 (21:9) [card].
 - Best results near 16 MP; it works from about 4 MP to 20 MP [card].
@@ -105,19 +105,12 @@ All Mac numbers: 64 GB M-series, torch 2.15 MPS, int8 [pack].
   MiniMax's written authorization (section IV) [card]. Point the user to the licence; do not judge it for them.
 - The enhancer is under the same licence [card].
 
-## Recipes (draft)
+## Recipes
 
-- standard: `canvas.mode=fixed`, `canvas.width=2048`, `canvas.height=2048`, `sample.sampler=euler`,
-  `enhance.bypass=true` [pack].
-- enhanced: as standard with `enhance.bypass=false`, `enhance.think=false`; for a short prompt [pack].
-- hero-16mp: `canvas.mode=fixed`, `canvas.width=4096`, `canvas.height=4096` (about 7 min, 42 GB on a Mac) [card] [pack].
-- wide-16mp: `canvas.width=5472`, `canvas.height=3072` (16:9) [card].
-- portrait-16mp: `canvas.width=3552`, `canvas.height=4736` (3:4) [card].
-- wide-4mp: `canvas.mode=fixed`, `canvas.width=2688`, `canvas.height=1536` (the Animator's cartoon-sheet-h3) or
-  2560 x 1440 (the Cinematic filmmaker's character-sheet-h3) [pack].
-- edit: `encode.refs=[...]`, `canvas.mode=auto`, `canvas.width=2048`, `canvas.height=2048`; frame-setting
-  reference first [pack].
-- many-references: up to 16 `encode.refs` named `<Picture N>`; on a 64 GB Mac keep it under about 10 small ones [pack].
+The exact values are the recipes sent with this guide (model.yaml `recipes`); set each param with change. When to use each:
+
+- standard (4 MP), enhanced (a short prompt), hero-16mp, wide-16mp, portrait-16mp, wide-4mp (a sheet), edit.
+- Not settings: up to 16 references named `<Picture N>`; on a 64 GB Mac keep it under about 10 small ones [pack].
 
 ## Sources
 

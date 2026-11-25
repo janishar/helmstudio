@@ -88,13 +88,13 @@ meant for people.
 - More than 8 takes in one ask is refused; split a big batch. [pack]
 - A too-small Max tokens cuts the JSON and fails the run ("answer did not match the schema"). [pack]
 
-## Recipes (draft)
-- **judge-takes**: `llm-ask`; `ask.max_tokens` 800, a schema with per-take checks, reason and ranking, up to 4
-  stills. [pack]
-- **quick-yes-no**: `llm-ask`; `ask.max_tokens` 64, schema `{"answer": boolean, "reason": string}`, 1 take. [pack]
-- **write-prompt**: `llm-ask`; no takes, `ask.max_tokens` 400, plain text. [pack]
-- **many-takes**: `llm-ask`; 8 stills or 2 videos plus 2 stills, `ask.max_tokens` 1200 (about 23 GB peak by the pack's estimate; 20.8 GB measured with 4 pictures). [pack]
-- **fast-pick-qwen-image**: `qwen-image-ask` when Qwen Image is loaded and only the best take is wanted. [pack]
+## Recipes
+
+The exact values are the recipes sent with this guide (model.yaml `recipes`); set each param with change. When to use each:
+
+- judge-takes (a schema with per-take checks, reason and ranking; up to 4 stills), quick-yes-no (1 take),
+  write-prompt (no takes), many-takes (8 stills or 2 videos plus 2 stills).
+- Not settings: use `qwen-image-ask` when Qwen Image is loaded and only the best take is wanted [pack].
 
 ## Sources
 - Maker: https://huggingface.co/mlx-community/Qwen3.8-27B-4bit (revision b935172e4bb5dcd0543774a34748fb92422e3027),
