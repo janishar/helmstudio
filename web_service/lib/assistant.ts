@@ -117,6 +117,29 @@ export function rememberOpen(open: boolean) {
   }
 }
 
+/** Where the drawer floats, as fractions of the window (so it survives a resize), or null when docked; kept per user
+ * in this browser (plan 36 §40). */
+export type Place = { x: number; y: number } | null;
+const placeKey = (uid: string) => `helm-assistant-place:${uid}`;
+
+export function storedPlace(uid: string): Place {
+  try {
+    const p = JSON.parse(globalThis.localStorage?.getItem(placeKey(uid)) ?? "null");
+    return Number.isFinite(p?.x) && Number.isFinite(p?.y) ? { x: p.x, y: p.y } : null;
+  } catch {
+    return null;
+  }
+}
+
+export function rememberPlace(uid: string, p: Place) {
+  try {
+    if (p) globalThis.localStorage?.setItem(placeKey(uid), JSON.stringify(p));
+    else globalThis.localStorage?.removeItem(placeKey(uid));
+  } catch {
+    /* no storage: it docks after a reload */
+  }
+}
+
 /** A chat's events folded: an entry with a known id replaces it (a line going from running to done), a thread
  * event replaces the chat's state. */
 export function applyEvent(v: ThreadView, e: S<"AssistantEvent">): ThreadView {

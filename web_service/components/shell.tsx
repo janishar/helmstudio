@@ -150,7 +150,8 @@ export function AppShell({
         <ToolsContext value={reg}>
           <div
             className="flex min-h-dvh flex-col md:h-dvh md:flex-row md:overflow-clip"
-            data-drawer={(a.ready && a.open) || undefined}
+            // only while docked: a floating drawer leaves the page its full width (plan 36 §40)
+            data-drawer={(a.ready && a.open && !a.floating) || undefined}
           >
             {/* the rail (md+): the logo in its own panel, 14 px above the menu; a phone's bar has no logo. A window too short
                 for every item scrolls the whole rail, logo and menu (owner, 2026-11-25: "make it scoll insted") */}

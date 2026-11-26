@@ -43,6 +43,7 @@ import {
   Minimize2,
   Minus,
   Monitor,
+  PanelRight,
   Paperclip,
   Pencil,
   Plus,
@@ -80,7 +81,9 @@ import {
   tabOpen,
   timecode,
   rememberOpen,
+  rememberPlace,
   sourceText,
+  storedPlace,
   toResult,
   undoName,
   waitingText,
@@ -88,6 +91,7 @@ import {
   type Asked,
   type Entry,
   type Outcome,
+  type Place,
   type ScreenCard,
   type Thread,
   type ThreadView,
@@ -135,6 +139,25 @@ const usePhone = () =>
     () => typeof matchMedia === "function" && matchMedia(PHONE).matches,
     () => false,
   );
+
+/** The window's size, again on every resize (the floating drawer is clamped to it). */
+const useWin = () =>
+  useSyncExternalStore(
+    (f) => {
+      addEventListener("resize", f);
+      return () => removeEventListener("resize", f);
+    },
+    () => `${innerWidth} ${innerHeight}`,
+    () => "0 0",
+  );
+/** The floating drawer (plan 36 §40): 340 × 500 capped to the window, 14 px from its edges; under 1024 px it docks. */
+const FW = 340;
+const EDGE = 14;
+const WIDE = 1024;
+const clampTo = (w: number, h: number, left: number, top: number) => ({
+  left: Math.round(Math.min(Math.max(left, EDGE), w - FW - EDGE)),
+  top: Math.round(Math.min(Math.max(top, EDGE), h - Math.min(500, h - 2 * EDGE) - EDGE)),
+});
 
 const words = (name: string) =>
   name.replace(/[A-Z]/g, (c) => ` ${c.toLowerCase()}`).replace(/^./, (c) => c.toUpperCase());
@@ -612,6 +635,22 @@ export function useAssistant(me: S<"User"> | null) {
     if (text.trim()) void send(text);
   }, [view, send]);
 
+  // docked or floating, remembered per user in this browser (plan 36 §40); read again when the user changes
+  const [ww, wh] = useWin().split(" ").map(Number);
+  const uid = me?.id;
+  const [placed, setPlaced] = useState<{ uid?: string; p: Place }>({ p: null });
+  if (placed.uid !== uid) setPlaced({ uid, p: uid ? storedPlace(uid) : null });
+  const setPlace = useCallback(
+    (p: Place) => {
+      setPlaced({ uid, p });
+      if (uid) rememberPlace(uid, p);
+    },
+    [uid],
+  );
+  const wide = ww >= WIDE;
+  const floating = !!placed.p && wide && enabled && !full;
+  const pos = floating ? clampTo(ww, wh, placed.p!.x * ww, placed.p!.y * wh) : null;
+
   const readOnly = elsewhere(view?.thread, cid);
   const serverCardWaits =
     !readOnly && !!view?.entries.some((e) => e.kind === "card" && e.card?.state === "waiting");
@@ -631,6 +670,12 @@ export function useAssistant(me: S<"User"> | null) {
     close,
     full,
     setFull,
+    /** the window, whether it is wide enough to float in, and where it floats (px, clamped) or null docked */
+    win: { w: ww, h: wh },
+    wide,
+    floating,
+    pos,
+    setPlace,
     min,
     minimize,
     newAnswer: !open && !!lastId && lastId !== seen ? (lastAnswer?.text ?? "") : null,
@@ -2235,6 +2280,7 @@ function Drawer({ a }: { a: AssistantApi }) {
   const hold = useRef<ReturnType<typeof setTimeout> | null>(null);
   const file = useRef<HTMLInputElement>(null);
   const [top, setTop] = useState<number | null>(null);
+  const [moving, setMoving] = useState<{ left: number; top: number; near: boolean } | null>(null);
   const [memory, setMemory] = useState(false);
   const [chats, setChats] = useState(false);
   const chatsBtn = useRef<HTMLButtonElement>(null);
@@ -2456,460 +2502,555 @@ function Drawer({ a }: { a: AssistantApi }) {
     el.addEventListener("pointerup", up);
   };
 
+  // moving it (plan 36 §40, board frames 29 and 30): the pill and the header's empty parts drag it; within 48 px of
+  // the right edge the docked place lights up and letting go docks; a double-click, Dock or Enter on the pill dock it
+  const movable = a.wide && !phone && !full;
+  const spot = () => a.pos ?? { left: a.win.w - FW - EDGE, top: EDGE };
+  const floatAt = (left: number, top: number) => {
+    const r = clampTo(a.win.w, a.win.h, left, top);
+    a.setPlace({ x: r.left / a.win.w, y: r.top / a.win.h });
+  };
+  const dock = () => a.setPlace(null);
+  const grab = (e: React.PointerEvent) => {
+    if (!movable || e.button !== 0 || (e.target as Element).closest("button")) return;
+    e.preventDefault(); // no text selection while dragging
+    const s = spot();
+    const dx = e.clientX - s.left;
+    const dy = e.clientY - s.top;
+    let last: { left: number; top: number; near: boolean } | null = null;
+    const move = (m: PointerEvent) => {
+      if (!last && Math.hypot(m.clientX - e.clientX, m.clientY - e.clientY) < 4) return;
+      const r = clampTo(innerWidth, innerHeight, m.clientX - dx, m.clientY - dy);
+      last = { ...r, near: innerWidth - (r.left + FW) <= 48 };
+      setMoving(last);
+    };
+    const up = () => {
+      removeEventListener("pointermove", move);
+      removeEventListener("pointerup", up);
+      removeEventListener("pointercancel", up);
+      setMoving(null);
+      if (last?.near) dock();
+      else if (last) floatAt(last.left, last.top);
+    };
+    addEventListener("pointermove", move);
+    addEventListener("pointerup", up);
+    addEventListener("pointercancel", up);
+  };
+  const handle = movable
+    ? {
+        onPointerDown: grab,
+        onDoubleClick: (e: React.MouseEvent) => {
+          if (!(e.target as Element).closest("button")) dock();
+        },
+      }
+    : {};
+  const keyMove = (e: React.KeyboardEvent) => {
+    const d = (
+      { ArrowLeft: [-16, 0], ArrowRight: [16, 0], ArrowUp: [0, -16], ArrowDown: [0, 16] } as Record<
+        string,
+        number[]
+      >
+    )[e.key];
+    if (e.key !== "Enter" && !d) return;
+    e.preventDefault();
+    if (!d) return dock();
+    const s = spot();
+    floatAt(s.left + d[0], s.top + d[1]);
+  };
+  const box = moving ?? a.pos;
+
   return (
-    <div
-      className={`ast ${phone ? "sheet" : "drw"} ${full ? "full" : ""}`}
-      role="complementary"
-      aria-label="Assistant"
-      style={phone && top !== null ? { top } : undefined}
-      // Escape closes it (owner, 2026-11-25) unless a dialog, menu or card is open; the work keeps going. Full screen
-      // goes back to the drawer; opened from the minimized bar, it goes back to the bar
-      onKeyDown={(e) => {
-        if (
-          e.key === "Escape" &&
-          !e.defaultPrevented &&
-          !memory &&
-          !a.cardWaits &&
-          !overlayOpen()
-        ) {
-          if (full) a.setFull(false);
-          else a.setOpen(false);
-        }
-      }}
-    >
-      {phone && <span className="grab" aria-hidden onPointerDown={drag} />}
-      {memory ? (
-        <>
-          <div className="dh">
-            <h2>
-              <Sparkles aria-hidden strokeWidth={2} />
-              Memory
-            </h2>
-            <button
-              type="button"
-              className="x"
-              aria-label="Close Memory"
-              title="Close Memory"
-              onClick={() => setMemory(false)}
-            >
-              <X size={16} strokeWidth={1.75} aria-hidden />
-            </button>
+    <>
+      {moving?.near && (
+        <span className="ast-ghost" aria-hidden>
+          Dock
+        </span>
+      )}
+      <div
+        className={`ast ${phone ? "sheet" : "drw"} ${full ? "full" : ""} ${box ? "float" : ""} ${movable ? "mv" : ""}`}
+        role="complementary"
+        aria-label="Assistant"
+        style={phone && top !== null ? { top } : box ? { left: box.left, top: box.top } : undefined}
+        // Escape closes it (owner, 2026-11-25) unless a dialog, menu or card is open; the work keeps going. Full screen
+        // goes back to the drawer; opened from the minimized bar, it goes back to the bar
+        onKeyDown={(e) => {
+          if (
+            e.key === "Escape" &&
+            !e.defaultPrevented &&
+            !memory &&
+            !a.cardWaits &&
+            !overlayOpen()
+          ) {
+            if (full) a.setFull(false);
+            else a.setOpen(false);
+          }
+        }}
+      >
+        {phone && <span className="grab" aria-hidden onPointerDown={drag} />}
+        {movable && (
+          <div className="gr" title="Drag to move · double-click to dock" {...handle}>
+            <span
+              className="grab"
+              role="button"
+              tabIndex={0}
+              aria-label="Move the Assistant (arrow keys; Enter docks)"
+              onKeyDown={keyMove}
+            />
+            {a.floating && (
+              <button
+                type="button"
+                className="dock"
+                aria-label="Dock"
+                title="Dock (or double-click the header)"
+                onClick={dock}
+              >
+                <PanelRight size={12} strokeWidth={2} aria-hidden />
+                Dock
+              </button>
+            )}
           </div>
-          <MemoryList />
-        </>
-      ) : (
-        <>
-          <div className="dh">
-            {/* while a chip shows (Working, Waiting) it takes the title's place, so every button fits; in the 340 px
+        )}
+        {memory ? (
+          <>
+            <div className="dh" {...handle}>
+              <h2>
+                <Sparkles aria-hidden strokeWidth={2} />
+                Memory
+              </h2>
+              <button
+                type="button"
+                className="x"
+                aria-label="Close Memory"
+                title="Close Memory"
+                onClick={() => setMemory(false)}
+              >
+                <X size={16} strokeWidth={1.75} aria-hidden />
+              </button>
+            </div>
+            <MemoryList />
+          </>
+        ) : (
+          <>
+            <div className="dh" {...handle}>
+              {/* while a chip shows (Working, Waiting) it takes the title's place, so every button fits; in the 340 px
                 drawer the Settings gear (plan 32) leaves room for the mark only, the word shows full screen and on a
                 phone */}
-            <h2
-              aria-label="Assistant"
-              className={chip ? (full || phone ? "shrink-0 grow-0" : "sr-only") : ""}
-            >
-              <Bot aria-hidden strokeWidth={2} />
-              {!chip && (full || phone) && <span className="truncate">Assistant</span>}
-            </h2>
-            {chip}
-            {chip && <span className="flex-1" />}
-            <button
-              type="button"
-              className="ib"
-              aria-label="Memory"
-              title="Memory"
-              onClick={() => setMemory(true)}
-            >
-              <Brain size={15} strokeWidth={1.75} aria-hidden />
-            </button>
-            <button
-              ref={chatsBtn}
-              type="button"
-              className="ib"
-              aria-label="Chats"
-              title="Chats"
-              aria-haspopup="menu"
-              aria-expanded={chats}
-              onClick={() => (chats ? setChats(false) : openChats())}
-            >
-              <MessagesSquare size={15} strokeWidth={1.75} aria-hidden />
-            </button>
-            <HubButton a={a} />
-            {phone ? (
+              <h2
+                aria-label="Assistant"
+                className={chip ? (full || phone ? "shrink-0 grow-0" : "sr-only") : ""}
+              >
+                <Bot aria-hidden strokeWidth={2} />
+                {!chip && (full || phone) && <span className="truncate">Assistant</span>}
+              </h2>
+              {chip}
+              {chip && <span className="flex-1" />}
               <button
                 type="button"
                 className="ib"
-                aria-label="Shrink"
-                onClick={() => a.setShrunk(true)}
+                aria-label="Memory"
+                title="Memory"
+                onClick={() => setMemory(true)}
               >
-                <ChevronDown size={15} strokeWidth={2} aria-hidden />
+                <Brain size={15} strokeWidth={1.75} aria-hidden />
               </button>
-            ) : (
               <button
+                ref={chatsBtn}
                 type="button"
                 className="ib"
-                aria-label={`${full ? "Back to the drawer" : "Full screen"} (${fullKey()})`}
-                title={`${full ? "Back to the drawer" : "Full screen"} (${fullKey()})`}
-                onClick={() => a.setFull(!full)}
+                aria-label="Chats"
+                title="Chats"
+                aria-haspopup="menu"
+                aria-expanded={chats}
+                onClick={() => (chats ? setChats(false) : openChats())}
               >
-                {full ? (
-                  <Minimize2 size={15} strokeWidth={1.75} aria-hidden />
-                ) : (
-                  <Maximize2 size={15} strokeWidth={1.75} aria-hidden />
-                )}
+                <MessagesSquare size={15} strokeWidth={1.75} aria-hidden />
               </button>
-            )}
-            <button
-              type="button"
-              className="ib"
-              aria-label="Minimize"
-              title="Minimize"
-              onClick={a.minimize}
-            >
-              <Minus size={15} strokeWidth={2} aria-hidden />
-            </button>
-            <button
-              type="button"
-              className="x"
-              aria-label={`Close (${shortcut()})`}
-              title={`Close (${shortcut()})`}
-              onClick={a.close}
-            >
-              <X size={16} strokeWidth={1.75} aria-hidden />
-            </button>
-          </div>
-          {chats && (
-            <ChatsList
-              a={a}
-              btn={chatsBtn}
-              close={closeChats}
-              pick={(id) => {
-                setChats(false);
-                if (id === null) void a.newChat();
-                else if (id !== a.view?.thread.id) void a.openChat(id);
-              }}
-            />
-          )}
-          {!phone && sees.length > 0 && (
-            <div className="where">
-              Sees
-              {sees.map((s) => (
-                <span key={s}>{s}</span>
-              ))}
-            </div>
-          )}
-          {onMachine && (
-            <div className="rem local">
-              <Globe size={13} strokeWidth={1.75} aria-hidden />
-              Runs on this machine
-            </div>
-          )}
-
-          <div
-            ref={thr}
-            className={`thr ${a.readOnly ? "ro" : ""}`}
-            onScroll={(e) => {
-              const el = e.currentTarget;
-              atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
-            }}
-          >
-            {entries.length === 0 && !a.asking ? (
-              <div className="flex flex-col gap-2.5">
-                <p className="m-0 font-display text-lg font-bold">Hi. What should we make?</p>
-                <p className="note">
-                  I can fill this screen for you. Anything that uses the GPU waits for your OK.
-                </p>
-                {(screen?.examples ?? EXAMPLES).map((x) => (
-                  <button
-                    key={x.text}
-                    type="button"
-                    className="ex"
-                    disabled={sending || !!limit}
-                    onClick={() => void sendExample(x.text)}
-                  >
-                    <Text text={x.text} />
-                    <small>{x.sub}</small>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <Thread a={a} entries={entries} />
-            )}
-            {a.stopping ? (
-              <div className="msg think" role="status">
-                <LoaderCircle size={12} strokeWidth={3} aria-hidden className="run" />
-                Stopping…
-              </div>
-            ) : (
-              since && thinking && <Thinking since={since.at} thinks={!!a.status?.thinks} />
-            )}
-            <div ref={end} />
-          </div>
-
-          {a.readOnly && (
-            <>
-              <div className="bar2 bg-s2">
-                <Monitor size={18} strokeWidth={1.75} aria-hidden className="shrink-0 text-t2" />
-                <span className="flex-1">
-                  This chat is working in another tab. Its actions run there.
-                </span>
-              </div>
-              <button
-                type="button"
-                className="go normal-case tracking-normal"
-                onClick={a.continueHere}
-              >
-                Continue here
-              </button>
-              <p className="fine">
-                Continue here moves the chat to this tab. The other tab turns read-only.
-              </p>
-            </>
-          )}
-          {limit && (
-            <>
-              <div role="alert" className="bar2 limit">
-                <CircleAlert size={18} strokeWidth={1.75} aria-hidden className="shrink-0" />
-                <span className="cap">
-                  <b>{limit.title}</b>
-                  <span>{limit.text}</span>
-                </span>
-              </div>
-              <p className="fine">Your message is kept. The screen still works as usual.</p>
-            </>
-          )}
-          {a.error && (
-            <p role="alert" className="fine text-bad">
-              {a.error}
-            </p>
-          )}
-          {!a.readOnly && atts.length > 0 && !told && st && !st.sees && (
-            <div className="bar2 bg-s2">
-              <EyeOff size={18} strokeWidth={1.75} aria-hidden className="shrink-0 text-t2" />
-              <span className="flex-1">This model can&apos;t see images; it will use Look at.</span>
-            </div>
-          )}
-          {!a.readOnly && t?.auto && a.steering && typeof t.caps.auto_takes_hour === "number" && (
-            <div className="est">
-              <Zap size={12} strokeWidth={2} aria-hidden />
-              <span>
-                {t.caps.auto_takes_hour} of {st?.limits.auto_takes_per_hour ?? 8} takes this hour
-              </span>
-            </div>
-          )}
-          {!a.readOnly && autoTip && (
-            <div className="tip" role="tooltip" id="auto-tip">
-              <b>Auto</b>
-              Runs safe steps without asking: generations on your machines, Hear it, saves you can
-              undo. Up to the cap. Deletes, anything off the machine and big runs still ask.
-            </div>
-          )}
-          {!a.readOnly && dropping && (
-            <div className="drop" aria-hidden>
-              <ImagePlus size={18} strokeWidth={1.75} />
-              Drop to attach
-            </div>
-          )}
-          {!a.readOnly && (
-            <form
-              className={`cmp relative ${limit ? "opacity-50" : ""}`}
-              onSubmit={(e) => void submit(e)}
-              onDragOver={(e) => {
-                if (!limit && e.dataTransfer.types.includes("Files")) {
-                  e.preventDefault();
-                  setDropping(true);
-                }
-              }}
-              onDragLeave={() => setDropping(false)}
-              onDrop={(e) => {
-                setDropping(false);
-                if (limit || !e.dataTransfer.files.length) return;
-                e.preventDefault();
-                attach([...e.dataTransfer.files]);
-              }}
-            >
-              {atOpen && <AtPicker q={at.q} keysRef={atKeys} onPick={pick} onActive={setAtCur} />}
-              {atts.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {atts.map((x) => (
-                    <AttChip
-                      key={x.key}
-                      name={x.name}
-                      url={x.url}
-                      busy={!x.id}
-                      onRemove={() => {
-                        URL.revokeObjectURL(x.url);
-                        setAtts((l) => l.filter((y) => y.key !== x.key));
-                      }}
-                    />
-                  ))}
-                </div>
+              <HubButton a={a} />
+              {phone ? (
+                <button
+                  type="button"
+                  className="ib"
+                  aria-label="Shrink"
+                  onClick={() => a.setShrunk(true)}
+                >
+                  <ChevronDown size={15} strokeWidth={2} aria-hidden />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="ib"
+                  aria-label={`${full ? "Back to the drawer" : "Full screen"} (${fullKey()})`}
+                  title={`${full ? "Back to the drawer" : "Full screen"} (${fullKey()})`}
+                  onClick={() => a.setFull(!full)}
+                >
+                  {full ? (
+                    <Minimize2 size={15} strokeWidth={1.75} aria-hidden />
+                  ) : (
+                    <Maximize2 size={15} strokeWidth={1.75} aria-hidden />
+                  )}
+                </button>
               )}
-              <label htmlFor="assistant-in" className="sr-only">
-                Message the assistant
-              </label>
-              <TextArea
-                id="assistant-in"
-                expand="Message"
-                ref={input}
-                rows={phone ? 1 : 2}
-                maxLength={4000}
-                disabled={!!limit}
-                placeholder={
-                  limit ? limit.until : a.steering ? "Steer the answer…" : "Ask, or say what to do"
-                }
-                value={text}
-                aria-autocomplete="list"
-                aria-expanded={atOpen}
-                aria-haspopup="listbox"
-                aria-controls={atOpen ? "at-list" : undefined}
-                aria-activedescendant={atOpen && atCur ? atCur : undefined}
-                onChange={(e) => {
-                  setText(e.target.value);
-                  setCaret(e.target.selectionStart);
-                }}
-                onSelect={(e) => setCaret(e.currentTarget.selectionStart)}
-                onPaste={(e) => {
-                  const files = [...e.clipboardData.files];
-                  if (files.length && !limit) {
-                    e.preventDefault();
-                    attach(files);
-                  }
-                }}
-                onKeyDown={(e) => {
-                  if (atOpen && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
-                    e.preventDefault();
-                    atKeys.current?.(e.key === "ArrowDown" ? "down" : "up");
-                    return;
-                  }
-                  if (atOpen && ((e.key === "Enter" && !e.shiftKey) || e.key === "Tab")) {
-                    e.preventDefault();
-                    atKeys.current?.("enter");
-                    return;
-                  }
-                  if (atOpen && e.key === "Escape") {
-                    e.preventDefault(); // the drawer stays open
-                    setAtOff(at.start);
-                    return;
-                  }
-                  const n = Number(e.key);
-                  if (
-                    picks &&
-                    !text &&
-                    n >= 1 &&
-                    n <= picks.length &&
-                    !e.metaKey &&
-                    !e.ctrlKey &&
-                    !e.altKey
-                  ) {
-                    e.preventDefault();
-                    void sendExample(picks[n - 1].title);
-                  } else if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-                    e.preventDefault();
-                    void submit();
-                  }
+              <button
+                type="button"
+                className="ib"
+                aria-label="Minimize"
+                title="Minimize"
+                onClick={a.minimize}
+              >
+                <Minus size={15} strokeWidth={2} aria-hidden />
+              </button>
+              <button
+                type="button"
+                className="x"
+                aria-label={`Close (${shortcut()})`}
+                title={`Close (${shortcut()})`}
+                onClick={a.close}
+              >
+                <X size={16} strokeWidth={1.75} aria-hidden />
+              </button>
+            </div>
+            {chats && (
+              <ChatsList
+                a={a}
+                btn={chatsBtn}
+                close={closeChats}
+                pick={(id) => {
+                  setChats(false);
+                  if (id === null) void a.newChat();
+                  else if (id !== a.view?.thread.id) void a.openChat(id);
                 }}
               />
-              <div className="cmpb">
+            )}
+            {!phone && sees.length > 0 && (
+              <div className="where">
+                Sees
+                {sees.map((s) => (
+                  <span key={s}>{s}</span>
+                ))}
+              </div>
+            )}
+            {onMachine && (
+              <div className="rem local">
+                <Globe size={13} strokeWidth={1.75} aria-hidden />
+                Runs on this machine
+              </div>
+            )}
+
+            <div
+              ref={thr}
+              className={`thr ${a.readOnly ? "ro" : ""}`}
+              onScroll={(e) => {
+                const el = e.currentTarget;
+                atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+              }}
+            >
+              {entries.length === 0 && !a.asking ? (
+                <div className="flex flex-col gap-2.5">
+                  <p className="m-0 font-display text-lg font-bold">Hi. What should we make?</p>
+                  <p className="note">
+                    I can fill this screen for you. Anything that uses the GPU waits for your OK.
+                  </p>
+                  {(screen?.examples ?? EXAMPLES).map((x) => (
+                    <button
+                      key={x.text}
+                      type="button"
+                      className="ex"
+                      disabled={sending || !!limit}
+                      onClick={() => void sendExample(x.text)}
+                    >
+                      <Text text={x.text} />
+                      <small>{x.sub}</small>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <Thread a={a} entries={entries} />
+              )}
+              {a.stopping ? (
+                <div className="msg think" role="status">
+                  <LoaderCircle size={12} strokeWidth={3} aria-hidden className="run" />
+                  Stopping…
+                </div>
+              ) : (
+                since && thinking && <Thinking since={since.at} thinks={!!a.status?.thinks} />
+              )}
+              <div ref={end} />
+            </div>
+
+            {a.readOnly && (
+              <>
+                <div className="bar2 bg-s2">
+                  <Monitor size={18} strokeWidth={1.75} aria-hidden className="shrink-0 text-t2" />
+                  <span className="flex-1">
+                    This chat is working in another tab. Its actions run there.
+                  </span>
+                </div>
                 <button
                   type="button"
-                  className="att"
-                  aria-label="Attach an image"
-                  title="Attach an image"
-                  disabled={!!limit}
-                  style={atts.length ? { background: "var(--s4)", color: "var(--t1)" } : undefined}
-                  onClick={() => file.current?.click()}
+                  className="go normal-case tracking-normal"
+                  onClick={a.continueHere}
                 >
-                  <Paperclip size={16} strokeWidth={1.75} aria-hidden />
+                  Continue here
                 </button>
-                <input
-                  ref={file}
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp"
-                  multiple
-                  hidden
+                <p className="fine">
+                  Continue here moves the chat to this tab. The other tab turns read-only.
+                </p>
+              </>
+            )}
+            {limit && (
+              <>
+                <div role="alert" className="bar2 limit">
+                  <CircleAlert size={18} strokeWidth={1.75} aria-hidden className="shrink-0" />
+                  <span className="cap">
+                    <b>{limit.title}</b>
+                    <span>{limit.text}</span>
+                  </span>
+                </div>
+                <p className="fine">Your message is kept. The screen still works as usual.</p>
+              </>
+            )}
+            {a.error && (
+              <p role="alert" className="fine text-bad">
+                {a.error}
+              </p>
+            )}
+            {!a.readOnly && atts.length > 0 && !told && st && !st.sees && (
+              <div className="bar2 bg-s2">
+                <EyeOff size={18} strokeWidth={1.75} aria-hidden className="shrink-0 text-t2" />
+                <span className="flex-1">
+                  This model can&apos;t see images; it will use Look at.
+                </span>
+              </div>
+            )}
+            {!a.readOnly && t?.auto && a.steering && typeof t.caps.auto_takes_hour === "number" && (
+              <div className="est">
+                <Zap size={12} strokeWidth={2} aria-hidden />
+                <span>
+                  {t.caps.auto_takes_hour} of {st?.limits.auto_takes_per_hour ?? 8} takes this hour
+                </span>
+              </div>
+            )}
+            {!a.readOnly && autoTip && (
+              <div className="tip" role="tooltip" id="auto-tip">
+                <b>Auto</b>
+                Runs safe steps without asking: generations on your machines, Hear it, saves you can
+                undo. Up to the cap. Deletes, anything off the machine and big runs still ask.
+              </div>
+            )}
+            {!a.readOnly && dropping && (
+              <div className="drop" aria-hidden>
+                <ImagePlus size={18} strokeWidth={1.75} />
+                Drop to attach
+              </div>
+            )}
+            {!a.readOnly && (
+              <form
+                className={`cmp relative ${limit ? "opacity-50" : ""}`}
+                onSubmit={(e) => void submit(e)}
+                onDragOver={(e) => {
+                  if (!limit && e.dataTransfer.types.includes("Files")) {
+                    e.preventDefault();
+                    setDropping(true);
+                  }
+                }}
+                onDragLeave={() => setDropping(false)}
+                onDrop={(e) => {
+                  setDropping(false);
+                  if (limit || !e.dataTransfer.files.length) return;
+                  e.preventDefault();
+                  attach([...e.dataTransfer.files]);
+                }}
+              >
+                {atOpen && <AtPicker q={at.q} keysRef={atKeys} onPick={pick} onActive={setAtCur} />}
+                {atts.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {atts.map((x) => (
+                      <AttChip
+                        key={x.key}
+                        name={x.name}
+                        url={x.url}
+                        busy={!x.id}
+                        onRemove={() => {
+                          URL.revokeObjectURL(x.url);
+                          setAtts((l) => l.filter((y) => y.key !== x.key));
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+                <label htmlFor="assistant-in" className="sr-only">
+                  Message the assistant
+                </label>
+                <TextArea
+                  id="assistant-in"
+                  expand="Message"
+                  ref={input}
+                  rows={phone ? 1 : 2}
+                  maxLength={4000}
+                  disabled={!!limit}
+                  placeholder={
+                    limit
+                      ? limit.until
+                      : a.steering
+                        ? "Steer the answer…"
+                        : "Ask, or say what to do"
+                  }
+                  value={text}
+                  aria-autocomplete="list"
+                  aria-expanded={atOpen}
+                  aria-haspopup="listbox"
+                  aria-controls={atOpen ? "at-list" : undefined}
+                  aria-activedescendant={atOpen && atCur ? atCur : undefined}
                   onChange={(e) => {
-                    attach([...(e.target.files ?? [])]);
-                    e.target.value = "";
+                    setText(e.target.value);
+                    setCaret(e.target.selectionStart);
+                  }}
+                  onSelect={(e) => setCaret(e.currentTarget.selectionStart)}
+                  onPaste={(e) => {
+                    const files = [...e.clipboardData.files];
+                    if (files.length && !limit) {
+                      e.preventDefault();
+                      attach(files);
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (atOpen && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+                      e.preventDefault();
+                      atKeys.current?.(e.key === "ArrowDown" ? "down" : "up");
+                      return;
+                    }
+                    if (atOpen && ((e.key === "Enter" && !e.shiftKey) || e.key === "Tab")) {
+                      e.preventDefault();
+                      atKeys.current?.("enter");
+                      return;
+                    }
+                    if (atOpen && e.key === "Escape") {
+                      e.preventDefault(); // the drawer stays open
+                      setAtOff(at.start);
+                      return;
+                    }
+                    const n = Number(e.key);
+                    if (
+                      picks &&
+                      !text &&
+                      n >= 1 &&
+                      n <= picks.length &&
+                      !e.metaKey &&
+                      !e.ctrlKey &&
+                      !e.altKey
+                    ) {
+                      e.preventDefault();
+                      void sendExample(picks[n - 1].title);
+                    } else if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                      e.preventDefault();
+                      void submit();
+                    }
                   }}
                 />
-                <button
-                  type="button"
-                  className="aut"
-                  role="switch"
-                  aria-checked={!!t?.auto}
-                  aria-describedby={autoTip ? "auto-tip" : undefined}
-                  title="Auto: safe steps run without asking"
-                  onClick={() => void a.setAuto(!t?.auto)}
-                  onMouseEnter={() => setAutoTip(true)}
-                  onMouseLeave={() => setAutoTip(false)}
-                  onFocus={() => setAutoTip(true)}
-                  onBlur={() => setAutoTip(false)}
-                  onPointerDown={(e) => {
-                    if (e.pointerType === "touch")
-                      hold.current = setTimeout(() => setAutoTip(true), 500);
-                  }}
-                  onPointerUp={() => {
-                    if (hold.current) clearTimeout(hold.current);
-                  }}
-                >
-                  <Zap size={11} strokeWidth={2} aria-hidden />
-                  Auto
-                </button>
-                <small>
-                  {a.stopping ? null : atOpen ? (
-                    <>
-                      <span className="kbd">↑↓</span> pick · <span className="kbd">Enter</span>
-                    </>
-                  ) : a.steering ? (
-                    <>
-                      <span className="kbd">Enter</span> steers
-                    </>
-                  ) : picks ? (
-                    !phone && (
-                      <>
-                        <span className="kbd">1</span>–<span className="kbd">{picks.length}</span>{" "}
-                        picks
-                      </>
-                    )
-                  ) : (
-                    !phone && (
-                      <>
-                        {atts.length > 0 ? (
-                          "or paste, or drop"
-                        ) : (
-                          <>
-                            <span className="kbd">{shortcut()}</span> open or close ·{" "}
-                            <span className="kbd">@</span> takes
-                          </>
-                        )}
-                      </>
-                    )
-                  )}
-                </small>
-                {a.steering && (
+                <div className="cmpb">
                   <button
                     type="button"
-                    className="no h-[34px] px-3 text-xs"
-                    disabled={a.stopping}
-                    onClick={a.stopAll}
+                    className="att"
+                    aria-label="Attach an image"
+                    title="Attach an image"
+                    disabled={!!limit}
+                    style={
+                      atts.length ? { background: "var(--s4)", color: "var(--t1)" } : undefined
+                    }
+                    onClick={() => file.current?.click()}
                   >
-                    {a.stopping ? "Stopping…" : "Stop"}
+                    <Paperclip size={16} strokeWidth={1.75} aria-hidden />
                   </button>
-                )}
-                <button
-                  type="submit"
-                  className="snd"
-                  aria-label="Send"
-                  disabled={!!limit || sending || uploading || !text.trim()}
-                >
-                  <ArrowUp size={16} strokeWidth={2} aria-hidden />
-                </button>
-              </div>
-            </form>
-          )}
-        </>
-      )}
-    </div>
+                  <input
+                    ref={file}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    multiple
+                    hidden
+                    onChange={(e) => {
+                      attach([...(e.target.files ?? [])]);
+                      e.target.value = "";
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="aut"
+                    role="switch"
+                    aria-checked={!!t?.auto}
+                    aria-describedby={autoTip ? "auto-tip" : undefined}
+                    title="Auto: safe steps run without asking"
+                    onClick={() => void a.setAuto(!t?.auto)}
+                    onMouseEnter={() => setAutoTip(true)}
+                    onMouseLeave={() => setAutoTip(false)}
+                    onFocus={() => setAutoTip(true)}
+                    onBlur={() => setAutoTip(false)}
+                    onPointerDown={(e) => {
+                      if (e.pointerType === "touch")
+                        hold.current = setTimeout(() => setAutoTip(true), 500);
+                    }}
+                    onPointerUp={() => {
+                      if (hold.current) clearTimeout(hold.current);
+                    }}
+                  >
+                    <Zap size={11} strokeWidth={2} aria-hidden />
+                    Auto
+                  </button>
+                  <small>
+                    {a.stopping ? null : atOpen ? (
+                      <>
+                        <span className="kbd">↑↓</span> pick · <span className="kbd">Enter</span>
+                      </>
+                    ) : a.steering ? (
+                      <>
+                        <span className="kbd">Enter</span> steers
+                      </>
+                    ) : picks ? (
+                      !phone && (
+                        <>
+                          <span className="kbd">1</span>–<span className="kbd">{picks.length}</span>{" "}
+                          picks
+                        </>
+                      )
+                    ) : (
+                      !phone && (
+                        <>
+                          {atts.length > 0 ? (
+                            "or paste, or drop"
+                          ) : (
+                            <>
+                              <span className="kbd">{shortcut()}</span> open or close ·{" "}
+                              <span className="kbd">@</span> takes
+                            </>
+                          )}
+                        </>
+                      )
+                    )}
+                  </small>
+                  {a.steering && (
+                    <button
+                      type="button"
+                      className="no h-[34px] px-3 text-xs"
+                      disabled={a.stopping}
+                      onClick={a.stopAll}
+                    >
+                      {a.stopping ? "Stopping…" : "Stop"}
+                    </button>
+                  )}
+                  <button
+                    type="submit"
+                    className="snd"
+                    aria-label="Send"
+                    disabled={!!limit || sending || uploading || !text.trim()}
+                  >
+                    <ArrowUp size={16} strokeWidth={2} aria-hidden />
+                  </button>
+                </div>
+              </form>
+            )}
+          </>
+        )}
+      </div>
+    </>
   );
 }
 

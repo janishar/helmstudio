@@ -1197,3 +1197,57 @@ test("J18 Auto mode: the switch and a generation that runs by itself with Undo (
   await sw.click(); // off again: the next generation asks
   await expect(sw).toHaveAttribute("aria-checked", "false");
 });
+
+test("J19 I move the drawer off the prompt, it stays there after a reload, and I dock it again (alpha.5 item 3)", async () => {
+  const p = await ctx.newPage();
+  try {
+    await p.setViewportSize({ width: 1280, height: 800 });
+    await p.goto("/");
+    await open(p);
+    const pill = drawer(p).getByRole("button", { name: /^Move the Assistant/ });
+    const shell = p.locator("[data-drawer]");
+    await expect(shell).toHaveCount(1);
+    // a · drag the pill down and left: it floats there, 340 × 500, and the page takes its full width
+    const b = (await pill.boundingBox())!;
+    await p.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+    await p.mouse.down();
+    await p.mouse.move(600, 300, { steps: 8 });
+    await p.mouse.up();
+    await expect(drawer(p)).toHaveClass(/float/);
+    await expect(shell).toHaveCount(0);
+    const f = (await drawer(p).boundingBox())!;
+    expect(Math.round(f.width)).toBe(340);
+    expect(Math.round(f.height)).toBe(500);
+    await shot("j19-floating", p);
+    // b · arrow keys on the pill move it 16 px
+    await pill.focus();
+    await p.keyboard.press("ArrowLeft");
+    await expect
+      .poll(async () => Math.round((await drawer(p).boundingBox())!.x))
+      .toBe(Math.round(f.x) - 16);
+    // c · remembered after a reload
+    await p.reload();
+    await expect(drawer(p)).toHaveClass(/float/);
+    // d · dragged back near the right edge, the docked place lights up and letting go docks
+    const g = (await pill.boundingBox())!;
+    await p.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
+    await p.mouse.down();
+    await p.mouse.move(1270, 300, { steps: 8 });
+    await expect(p.locator(".ast-ghost")).toBeVisible();
+    await shot("j19-dock-target", p);
+    await p.mouse.up();
+    await expect(drawer(p)).not.toHaveClass(/float/);
+    await expect(shell).toHaveCount(1);
+    // e · Dock and a double-click on the header dock it too
+    await pill.press("ArrowDown");
+    await drawer(p).getByRole("button", { name: "Dock" }).click();
+    await expect(drawer(p)).not.toHaveClass(/float/);
+    await pill.press("ArrowDown");
+    await drawer(p)
+      .locator(".dh")
+      .dblclick({ position: { x: 4, y: 4 } });
+    await expect(drawer(p)).not.toHaveClass(/float/);
+  } finally {
+    await p.close();
+  }
+});

@@ -1864,3 +1864,119 @@ describe("Auto mode (API 1.68, board frame 13)", () => {
     expect(await screen.findByText("4 of 8 takes this hour")).toBeTruthy();
   });
 });
+
+describe("alpha.5: move the drawer (plan 36 §40, board frames 29 and 30)", () => {
+  const drawer = () => screen.getByRole("complementary", { name: "Assistant" }) as HTMLElement;
+  const pill = () => screen.getByRole("button", { name: /^Move the Assistant/ });
+  const docked = () => !!document.querySelector("[data-drawer]");
+  const at = () => [drawer().style.left, drawer().style.top];
+  const size = (w: number, h = 768) =>
+    act(() => {
+      Object.assign(window, { innerWidth: w, innerHeight: h });
+      dispatchEvent(new Event("resize"));
+    });
+  const drag = (el: Element, from: [number, number], to: [number, number], up = true) => {
+    fireEvent.pointerDown(el, { clientX: from[0], clientY: from[1], button: 0 });
+    fireEvent.pointerMove(window, { clientX: to[0], clientY: to[1] });
+    if (up) fireEvent.pointerUp(window, { clientX: to[0], clientY: to[1] });
+  };
+  const media = window.matchMedia;
+  afterEach(() => {
+    size(1024, 768);
+    window.matchMedia = media;
+  });
+
+  it("dragging the pill floats it there; near the right edge the docked place lights and letting go docks", async () => {
+    serve();
+    await openDrawer();
+    expect(docked()).toBe(true);
+    expect(screen.queryByRole("button", { name: "Dock" })).toBeNull();
+    // docked at 670, 14 (1024 wide): grabbed 170, 6 into it
+    drag(pill(), [840, 20], [400, 200]);
+    expect(drawer().className).toContain("float");
+    expect(at()).toEqual(["230px", "194px"]);
+    expect(docked()).toBe(false); // the page takes its full width
+    // the header's empty parts drag too; its buttons still click
+    drag(drawer().querySelector(".dh")!, [300, 210], [1020, 210], false);
+    expect(document.querySelector(".ast-ghost")).not.toBeNull();
+    fireEvent.pointerUp(window);
+    expect(document.querySelector(".ast-ghost")).toBeNull();
+    expect(drawer().className).not.toContain("float");
+    expect(docked()).toBe(true);
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Memory" }), { button: 0 });
+    fireEvent.pointerMove(window, { clientX: 100, clientY: 100 });
+    fireEvent.pointerUp(window);
+    expect(drawer().className).not.toContain("float");
+  });
+
+  it("Dock and a double-click on the header dock it; the pill's arrows move it 16 px and Enter docks", async () => {
+    serve();
+    await openDrawer();
+    fireEvent.keyDown(pill(), { key: "ArrowLeft" });
+    expect(at()).toEqual(["654px", "14px"]);
+    fireEvent.keyDown(pill(), { key: "ArrowDown" });
+    expect(at()).toEqual(["654px", "30px"]);
+    fireEvent.click(screen.getByRole("button", { name: "Dock" }));
+    expect(drawer().className).not.toContain("float");
+    fireEvent.keyDown(pill(), { key: "ArrowLeft" });
+    fireEvent.doubleClick(screen.getByRole("button", { name: "Memory" }));
+    expect(drawer().className).toContain("float");
+    fireEvent.doubleClick(drawer().querySelector(".dh")!);
+    expect(drawer().className).not.toContain("float");
+    fireEvent.keyDown(pill(), { key: "ArrowUp" });
+    expect(drawer().className).toContain("float");
+    fireEvent.keyDown(pill(), { key: "Enter" });
+    expect(drawer().className).not.toContain("float");
+  });
+
+  it("where it floats is remembered for the user: after ⌘J and a reload it comes back there", async () => {
+    serve();
+    await openDrawer();
+    drag(pill(), [840, 20], [400, 200]);
+    fireEvent.keyDown(window, { key: "j", ctrlKey: true });
+    fireEvent.keyDown(window, { key: "j", ctrlKey: true });
+    expect(at()).toEqual(["230px", "194px"]);
+    expect(JSON.parse(localStorage.getItem("helm-assistant-place:u1")!)).toMatchObject({
+      x: 230 / 1024,
+    });
+    cleanup();
+    sessionStorage.clear(); // a new tab: only this browser's localStorage carries it
+    await openDrawer();
+    expect(at()).toEqual(["230px", "194px"]);
+    // Full screen and back keep the place
+    fireEvent.click(screen.getByRole("button", { name: /^Full screen/ }));
+    expect(drawer().className).toContain("full");
+    expect(drawer().className).not.toContain("float");
+    fireEvent.click(screen.getByRole("button", { name: /^Back to the drawer/ }));
+    expect(at()).toEqual(["230px", "194px"]);
+  });
+
+  it("a smaller window pulls it back on screen; under 1024 px it docks, and floats again when wider", async () => {
+    serve();
+    await openDrawer();
+    drag(pill(), [840, 20], [400, 200]);
+    size(1100, 600);
+    expect(at()).toEqual([`${Math.round((230 / 1024) * 1100)}px`, "86px"]); // 600 - 500 - 14
+    size(1000);
+    expect(drawer().className).not.toContain("float");
+    expect(docked()).toBe(true);
+    expect(screen.queryByRole("button", { name: /^Move the Assistant/ })).toBeNull();
+    size(1024);
+    expect(at()).toEqual(["230px", "194px"]);
+  });
+
+  it("a phone's sheet has no moving, even with a place remembered", async () => {
+    localStorage.setItem("helm-assistant-place:u1", JSON.stringify({ x: 0.2, y: 0.2 }));
+    window.matchMedia = ((q: string) => ({
+      matches: q.includes("max-width: 767px"),
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    })) as unknown as typeof matchMedia;
+    size(375, 812);
+    serve();
+    await openDrawer();
+    expect(drawer().className).toContain("sheet");
+    expect(drawer().className).not.toContain("float");
+    expect(screen.queryByRole("button", { name: /^Move the Assistant/ })).toBeNull();
+  });
+});

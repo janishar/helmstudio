@@ -1538,6 +1538,72 @@
     line-height: 16px;
     color: var(--t1b);
   }
+  /* alpha.5 item 3 (board frames 29, 30): move the drawer. The pill and the header's empty parts are the handle;
+     floating it is 340 × 500 (capped to the window) with a deeper shadow and a 1 px ring */
+  .ast .gr {
+    position: relative;
+    display: flex;
+    flex: 0 0 auto;
+    justify-content: center;
+    align-items: center;
+    height: 12px;
+    margin: -8px 0 -4px;
+    cursor: move;
+  }
+  .ast .gr .grab {
+    cursor: move;
+  }
+  .ast.mv .dh {
+    cursor: move;
+  }
+  .ast.mv .dh button {
+    cursor: pointer;
+  }
+  .ast .gr .dock {
+    position: absolute;
+    right: 0;
+    top: -6px;
+    height: 22px;
+    padding: 0 8px 0 6px;
+    border-radius: 999px;
+    border: 0;
+    background: var(--s3);
+    color: var(--t1b);
+    font-size: 11px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    box-shadow: none;
+  }
+  .ast.drw.float {
+    right: auto;
+    bottom: auto;
+    height: min(500px, calc(100dvh - 28px));
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      0 0 0 1px var(--s4),
+      0 60px 100px -24px color-mix(in srgb, var(--shd) 95%, transparent),
+      0 18px 36px -12px color-mix(in srgb, var(--shd) 80%, transparent);
+  }
+  /* the docked place, lit while a drag is within 48 px of the right edge */
+  .ast-ghost {
+    position: fixed;
+    z-index: 39;
+    top: 14px;
+    right: 14px;
+    bottom: 14px;
+    width: 340px;
+    box-sizing: border-box;
+    display: grid;
+    place-items: center;
+    border: 2px dashed var(--a1);
+    border-radius: 34px 34px 34px 14px;
+    background: color-mix(in srgb, var(--a1) 10%, transparent);
+    color: var(--t1);
+    font-size: 13px;
+    pointer-events: none;
+  }
   /* alpha.2 (board frames 9, 10, 14): full screen, the minimized bar, answers that read well, memory rows */
   .ast.drw.full {
     left: 104px; /* right of the rail: 14 + 76 + 14 */
