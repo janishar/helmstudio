@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { Media, Thumb } from "@/components/media";
 import { Compare } from "@/components/create/compare";
-import { take, video } from "./helpers";
+import { audio, take, video } from "./helpers";
 
 afterEach(cleanup);
 
@@ -43,5 +43,34 @@ describe("thumbnails", () => {
     const posters = [...container.querySelectorAll("video")].map((x) => x.getAttribute("poster"));
     expect(posters.length).toBeGreaterThan(0);
     expect(posters.every((p) => p === "/files/u/x/p.png")).toBe(true);
+  });
+
+  it("music is an album cover with its title, badge and length; sound and voice an orb (CreateMusicSound 7a)", () => {
+    const song = audio(130, { sound: "music", title: "Rain on the window" });
+    const { container, rerender } = render(<Thumb take={song} />);
+    const look = container.querySelector('[data-sound="music"]')!;
+    expect(look.textContent).toBe("Rain on the windowMusic2:10");
+    expect((look.firstElementChild as HTMLElement).style.background).toContain("linear-gradient");
+    rerender(<Thumb take={audio(6, { sound: "sound" })} />);
+    expect(container.querySelector('[data-sound="sound"]')!.textContent).toBe("Sound0:06");
+    rerender(<Thumb take={audio(8)} />);
+    expect(container.querySelector('[data-sound="voice"]')!.textContent).toBe("Voice0:08");
+    // a strip tile (no badge): the look alone
+    rerender(<Thumb take={song} badge={false} />);
+    expect(container.querySelector('[data-sound="music"]')!.textContent).toBe("");
+  });
+
+  it("a run output's audio keeps the wave (it carries no class)", () => {
+    const out = {
+      index: 0,
+      key: "k",
+      kind: "audio",
+      url: "/f",
+      width: null,
+      height: null,
+    } as never;
+    const { container } = render(<Thumb take={out} />);
+    expect(container.querySelector(".wave")).toBeTruthy();
+    expect(container.querySelector("[data-sound]")).toBeNull();
   });
 });

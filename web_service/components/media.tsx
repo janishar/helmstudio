@@ -3,9 +3,11 @@
 // through the list it was opened from, video plays with the native controls.
 
 import { useEffect, useRef, useState } from "react";
-import { ImageOff, Play, X } from "lucide-react";
+import { AudioLines, ImageOff, Mic, Play, X } from "lucide-react";
 import { safeUrl } from "@/lib/format";
 import { thumbOf } from "@/lib/media";
+import { clock } from "@/lib/runs";
+import { coverOf, soundOf } from "@/lib/takes";
 import type { S } from "@/lib/api";
 
 type Take = S<"Take">;
@@ -77,8 +79,112 @@ export function Media({
   return <audio src={url} controls className="w-full" />;
 }
 
+/** The badge's fill and text by class (styles/tokens.css kind-*). */
+const KIND_LOOK = {
+  music: { label: "Music", k: "var(--kind-music)", on: "var(--on-kind-music)" },
+  sound: { label: "Sound", k: "var(--kind-sound)", on: "var(--on-kind-sound)" },
+  voice: { label: "Voice", k: "var(--kind-voice)", on: "var(--on-kind-voice)" },
+} as const;
+
+/** The vinyl disc that peeks out of a music cover (the board's .disc). */
+const DISC: React.CSSProperties = {
+  background:
+    "radial-gradient(circle, #e9e2f0 0 14%, #0d0b10 14% 16%, transparent 16%), repeating-radial-gradient(circle, #141018 0 2px, #262030 2px 3px)",
+  boxShadow: "-6px 0 14px rgba(0,0,0,.45)",
+};
+
+/** An audio take's look (docs/mock/CreateMusicSound.dc.html frame 7, owner 2026-11-27): music an album cover (its
+ * gradient from the prompt, a vinyl disc, the title), sound and voice one glowing orb (sky, amber); with `badge` the
+ * kind badge, the length and the play mark on the card's hover (`group`). */
+function SoundLook({
+  take: t,
+  sound,
+  className,
+  imgClassName,
+  badge,
+}: {
+  take: Take;
+  sound: S<"SoundClass">;
+  className?: string;
+  imgClassName: string;
+  badge: boolean;
+}) {
+  const look = KIND_LOOK[sound];
+  const length = t.audio ? clock(t.audio.duration_s) : "";
+  const tag = (
+    <span
+      className={`absolute rounded-md px-1.5 text-[10px] leading-4 font-semibold ${sound === "music" ? "bottom-[22px] left-2" : "top-1.5 right-1.5"}`}
+      style={{ background: look.k, color: look.on }}
+    >
+      {look.label}
+    </span>
+  );
+  return (
+    <span className={`relative block ${className ?? ""}`} data-sound={sound}>
+      {sound === "music" ? (
+        <span
+          aria-hidden
+          className={`relative block overflow-hidden ${imgClassName}`}
+          style={{ background: coverOf(t) }}
+        >
+          <span
+            className={`absolute top-1/2 aspect-square h-[74%] -translate-y-1/2 rounded-full ${badge ? "-right-[15%]" : "-left-[14%]"}`}
+            style={DISC}
+          />
+          {badge && (
+            <span className="absolute top-2.5 right-[35%] left-2.5 line-clamp-2 font-display text-[16px] leading-[18px] font-bold text-white [text-shadow:0_1px_3px_rgba(0,0,0,.45)]">
+              {t.title}
+            </span>
+          )}
+        </span>
+      ) : (
+        <span
+          aria-hidden
+          className={`relative block overflow-hidden ${imgClassName}`}
+          style={{
+            background: `radial-gradient(55% 75% at 50% 40%, color-mix(in srgb, ${look.k} 22%, transparent), transparent 72%), var(--s1)`,
+          }}
+        >
+          <span
+            className="absolute top-[40%] left-1/2 grid aspect-square h-[42%] max-h-[50px] -translate-1/2 place-items-center rounded-full"
+            style={{
+              color: look.on,
+              background: `radial-gradient(circle at 34% 30%, color-mix(in srgb, ${look.k} 30%, #fff) 0, ${look.k} 42%, color-mix(in srgb, ${look.k} 45%, #000) 100%)`,
+              boxShadow: `0 0 0 6px color-mix(in srgb, ${look.k} 16%, transparent), 0 0 30px 4px color-mix(in srgb, ${look.k} 45%, transparent)`,
+            }}
+          >
+            {sound === "sound" ? (
+              <AudioLines strokeWidth={2.2} className="size-2/5" />
+            ) : (
+              <Mic strokeWidth={2.2} className="size-2/5" />
+            )}
+          </span>
+        </span>
+      )}
+      {badge && (
+        <>
+          {tag}
+          {length && (
+            <span
+              className={`mono absolute text-[10px] leading-4 ${sound === "music" ? "bottom-1.5 left-2 text-white/85" : "right-0 bottom-2.5 left-0 text-center text-[11px] text-[var(--t1b)]"}`}
+            >
+              {length}
+            </span>
+          )}
+          <span
+            aria-hidden
+            className="absolute top-1/2 left-1/2 z-[3] hidden size-9 -translate-1/2 place-items-center rounded-full bg-t1 text-ground shadow-[0_6px_14px_-4px_rgba(0,0,0,.6)] group-hover:grid"
+          >
+            <Play size={16} className="fill-current" />
+          </span>
+        </>
+      )}
+    </span>
+  );
+}
+
 /** A take's or run output's picture in a list: an image's thumbnail, a video's poster with its length and a play
- * mark (the video itself is never fetched here), else its kind. */
+ * mark (the video itself is never fetched here), an audio take's cover or orb by its class, else its kind. */
 export function Thumb({
   take: t,
   className,
@@ -92,7 +198,18 @@ export function Thumb({
   badge?: boolean;
 }) {
   const { src, length } = thumbOf(t);
-  // a sound tile with its length (docs/mock/VideoSource.dc.html: an uploaded audio take)
+  const sound = soundOf(t);
+  if (sound)
+    return (
+      <SoundLook
+        take={t as Take}
+        sound={sound}
+        className={className}
+        imgClassName={imgClassName}
+        badge={badge}
+      />
+    );
+  // a run output's sound tile with its length (docs/mock/VideoSource.dc.html: an uploaded audio take)
   if (t.kind === "audio")
     return (
       <span className={`relative block ${className ?? ""}`}>
