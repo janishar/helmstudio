@@ -30,6 +30,8 @@ export type Field = {
   optional?: boolean;
   /** API 1.47: the node's limits on its references' sound together (MiniMax H3: 15 s, 3 inputs) */
   sounds?: NonNullable<S<"NodeSchema">["sounds"]>;
+  /** a variant field narrowed to the variants present on a live host (`precisionPins`), not by the workflow */
+  present?: boolean;
 };
 
 /** What a form control holds: a switch's boolean, the text typed ("" in a seed field is random), an image param's

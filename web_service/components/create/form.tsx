@@ -1550,8 +1550,11 @@ export function Chips({
           className={`${chip} inline-flex items-center`}
           title={
             // a workflow that allows one variant (its `only`, docs/mock/VideoSource.dc.html)
+            // (alpha.5 item 4) one left because only it is downloaded: the workflow allows the others
             first.param.name === "variant" && first.param.enum?.length === 1
-              ? `This workflow runs on ${named[0]} only`
+              ? first.present
+                ? `Only ${named[0]} is downloaded`
+                : `This workflow runs on ${named[0]} only`
               : modelTitle
           }
         >

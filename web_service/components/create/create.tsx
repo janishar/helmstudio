@@ -572,7 +572,15 @@ export function Create({
   );
   const all = useMemo(
     () =>
-      unpinned.map((f) => (enums[f.key] ? { ...f, param: { ...f.param, enum: enums[f.key] } } : f)),
+      unpinned.map((f) =>
+        enums[f.key]
+          ? {
+              ...f,
+              param: { ...f.param, enum: enums[f.key] },
+              ...(f.param.name === "variant" && { present: true }),
+            }
+          : f,
+      ),
     [unpinned, enums],
   );
   const machineList = useMemo(() => machines(hosts), [hosts]);
