@@ -1,9 +1,9 @@
-# helmstudio plan — Move the Assistant drawer; Create settings in popups
+# helmstudio plan — Move the Assistant drawer; Create settings in popups; right-click menus
 
 [← Plan index](../README.md)
 
 Status: **asked by the owner (2026-11-26)**, release list
-[0.1.0-alpha.5](../release/0.1.0-alpha.5.md) items 3 and 10. Boards drawn; no code yet. Web only: no contract,
+[0.1.0-alpha.5](../release/0.1.0-alpha.5.md) items 3, 10 and 17. Boards drawn; no code yet. Web only: no contract,
 message or service change.
 
 ## 40. Move the Assistant drawer (item 3)
@@ -105,3 +105,29 @@ always open on the right, or the Elements panel in its place.
    or only the @ menu in the prompt?
 3. Phone and narrow windows: the drawer as a bottom sheet, and popups as small sheets?
 4. A popup for Preset as well (a chip `Fast`), or Preset only in the drawer (drawn)?
+
+## 43. Right-click menus (item 17)
+
+Owner, 2026-11-26: "is it possible to have our own double click menu", then "right click in mean", then "App-wide".
+
+Board: [Right-click menus](../mock/ContextMenus.dc.html), frames 0–6. Board drawn; no code yet. Web only: no contract,
+message or service change.
+
+- **Where.** Our menu replaces the browser's on media and editing surfaces: the Timeline's lanes, ruler, track headers
+  and selections; Gallery take cards and a Select several selection; Create's stage, strip tiles and session menu.
+  Text fields, selected text and Shift + right-click keep the browser's menu (copy, paste, spelling, Inspect).
+- **One shared component** in the app's menu look (the Create chip popups and Run on): a header naming what it acts
+  on; icon, label and shortcut key per item; groups with separators; the danger item last in red; greyed items keep
+  their place with the reason on hover; submenus only for lists (Use in ›, Replace with another take ›, Move to
+  track ›). Opens at the pointer and stays on screen; Esc or a click outside closes; arrows, Enter and a typed letter
+  move and pick; ⇧F10 or the context-menu key opens it on the focused item. The ⋯ buttons stay and open the same menu.
+- **Right-click selects first**: on an item outside the selection it selects that item alone; on the selection it
+  acts on all of it. Time actions (New shot, Add marker, Mark in / out) act at the pointer's time.
+- **Only existing actions**, the same calls the inspector, shortcut sheet, Gallery panel and Create stage make. New
+  on the board: **Close gap** on an empty audio-track gap (no op closes a gap today). Magic's menus (frame 6) wait for
+  Magic (plan 37) and add Delete block and Add and run….
+
+### 43.1 Open
+
+1. Close gap: worth a new op now, or drop it from the gap menu for alpha.5?
+2. Right-click on lanes: keep the playhead where it is (drawn), or move it to the pointer first, as some editors do?

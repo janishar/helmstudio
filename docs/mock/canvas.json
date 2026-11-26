@@ -551,6 +551,16 @@
       "x": 0,
       "y": 7440,
       "page": "timeline"
+    },
+    "ContextMenus.dc.html": {
+      "expand": "fill",
+      "h": 5320,
+      "is_interactive": true,
+      "title": "Right-click menus \u00b7 the rules, Timeline clip / gap / track / ruler / selection, Gallery, Create, Magic later",
+      "w": 1440,
+      "x": 1520,
+      "y": 7440,
+      "page": "timeline"
     }
   },
   "createdOnFiles": {
@@ -671,6 +681,7 @@
     "TimelineAudioZonos3.dc.html",
     "TimelineTools.dc.html",
     "Magic.dc.html",
+    "ContextMenus.dc.html",
     "Pipelines.dc.html",
     "Pipeline.dc.html",
     "PipelineGraph.dc.html",
