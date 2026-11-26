@@ -241,3 +241,10 @@ and Sound lanes take placed audio takes (an upload or a gallery take) and their 
 4. A board's target: from its first shot (default), editable in the board's settings.
 5. The board's session: hidden from Create's session list (default), or listed as `Magic · <board>`.
 6. Free lanes: any kind on any lane (decision 5); the role only picks the default kind in Add (default).
+
+## Changed by the owner (2026-11-27, on the lane board)
+
+- Transitions use the bowtie set: Dissolve a bowtie chip, Cut a line chip, Fade a half bowtie (picked "B · Bowtie" from six options).
+- The Add dialog shows an icon on every kind ("icons here as well").
+- Zoom is one group on the right of the board tools, as on the Timeline: zoom out, a slider, zoom in, the span in view, Fit (the whole board across). ⌘ + mouse wheel or a trackpad pinch zooms at the pointer; Shift + wheel scrolls across; ⌘− / ⌘= / ⇧Z ("zoom in / zoom out / fit option of the whole timelime horizontally", "also works with mouse wheel").
+- The side panel has the same sliders toggle as Create and the Timeline, open by default and remembered ("option to show hide this like other palces").
