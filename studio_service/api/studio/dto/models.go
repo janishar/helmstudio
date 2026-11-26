@@ -242,6 +242,7 @@ type HostSettingsPut struct {
 	AfterRun      string   `json:"after_run"`
 	IdleUnloadMin *int     `json:"idle_unload_min"`
 	ReserveGB     *float64 `json:"reserve_gb"`
+	ReserveMode   string   `json:"reserve_mode"` // API 1.75: auto | custom; empty = unchanged
 }
 
 // Validate checks the ranges.
@@ -253,6 +254,8 @@ func (b *HostSettingsPut) Validate() string {
 		return "idle_unload_min must be 0 to 1440"
 	case b.ReserveGB == nil || *b.ReserveGB < 0 || *b.ReserveGB > 1024 || math.Mod(*b.ReserveGB, 0.5) != 0:
 		return "reserve_gb must be 0 to 1024 in steps of 0.5"
+	case b.ReserveMode != "" && b.ReserveMode != "auto" && b.ReserveMode != "custom":
+		return "reserve_mode must be auto or custom"
 	}
 	return ""
 }
@@ -285,6 +288,7 @@ type HostSettings struct {
 	AfterRun      string    `json:"after_run"`
 	IdleUnloadMin int       `json:"idle_unload_min"`
 	ReserveGB     float64   `json:"reserve_gb"`
+	ReserveMode   string    `json:"reserve_mode"`
 	Pins          []PinRef  `json:"pins"`
 	Applied       bool      `json:"applied"`
 	UpdatedAt     time.Time `json:"updated_at"`

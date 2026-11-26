@@ -268,6 +268,33 @@ func TestCudaReserveIsCheckedAgainstVRAM(t *testing.T) {
 	e.call(admin, "PUT", settings, map[string]any{"after_run": "keep_warm", "idle_unload_min": 0, "reserve_gb": 32}, 200)
 }
 
+// API 1.75 (plan 35): reserve_mode auto skips the reserve check, keeps reserve_gb and reaches the KV; absent on a PUT
+// keeps the stored mode; custom is written as no reserve_mode (an older runner keeps taking it).
+func TestAutoReserveMode(t *testing.T) {
+	e := setup(t)
+	var kv map[string]any
+	e.service.SetModelOps(nil, func(_ context.Context, _ string, value []byte) error {
+		kv = nil
+		return json.Unmarshal(value, &kv)
+	})
+	e.gcp(time.Now(), nil, map[string]any{"machine": map[string]any{"os": "linux", "accel": "cuda", "packaging": "container", "ram_gb": 176}})
+	settings := "/v1/studio/admin/hosts/gcp/settings"
+	got := e.call(admin, "PUT", settings, map[string]any{"after_run": "keep_warm", "idle_unload_min": 0, "reserve_gb": 96, "reserve_mode": "auto"}, 200)
+	if got["reserve_mode"] != "auto" || got["reserve_gb"] != 96.0 || kv["reserve_mode"] != "auto" {
+		t.Fatal(got, kv)
+	}
+	got = e.call(admin, "PUT", settings, map[string]any{"after_run": "unload", "idle_unload_min": 0, "reserve_gb": 96}, 200)
+	if got["reserve_mode"] != "auto" || got["after_run"] != "unload" {
+		t.Fatal("an old client's PUT changed the mode", got)
+	}
+	e.call(admin, "PUT", settings, map[string]any{"after_run": "keep_warm", "idle_unload_min": 0, "reserve_gb": 96, "reserve_mode": "custom"}, 422)
+	e.call(admin, "PUT", settings, map[string]any{"after_run": "keep_warm", "idle_unload_min": 0, "reserve_gb": 8, "reserve_mode": "sometimes"}, 422)
+	got = e.call(admin, "PUT", settings, map[string]any{"after_run": "keep_warm", "idle_unload_min": 0, "reserve_gb": 8, "reserve_mode": "custom"}, 200)
+	if _, has := kv["reserve_mode"]; got["reserve_mode"] != "custom" || has {
+		t.Fatal(got, kv)
+	}
+}
+
 // A host waiting for its pick's unload is busy for the rest of the pass: another run lined up there (resident on it
 // too) is lined up again on a free host that takes it at once, not held for up to GateTimeout.
 func TestWaitingHostLetsAFreeHostTakeItsOtherRuns(t *testing.T) {

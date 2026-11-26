@@ -388,6 +388,8 @@ type Machine struct {
 	Accel     string  `json:"accel"`
 	Packaging string  `json:"packaging"`
 	RAMGB     float64 `json:"ram_gb"`
+	// API 1.75: the macOS GPU limit; null when unset, on other hosts and from older runners
+	GPULimitGB *float64 `json:"gpu_limit_gb"`
 }
 
 // Policy is the residency settings a runner applies now (API 1.16): host_settings, else its env defaults.
@@ -395,6 +397,7 @@ type Policy struct {
 	AfterRun        string  `json:"after_run"`
 	IdleUnloadMin   int     `json:"idle_unload_min"`
 	ReserveGB       float64 `json:"reserve_gb"`
+	ReserveMode     string  `json:"reserve_mode,omitempty"` // API 1.75; absent (older runners) = custom
 	SettingsVersion *int    `json:"settings_version"`
 }
 

@@ -445,7 +445,7 @@ func TestHostsAdmin(t *testing.T) {
 	e.call(admin, "PUT", settings, map[string]any{"after_run": "unload", "idle_unload_min": 0, "reserve_gb": 8.25}, 422)
 	e.call(admin, "PUT", settings, map[string]any{"after_run": "never", "idle_unload_min": 0, "reserve_gb": 8}, 422)
 	got := e.call(admin, "PUT", settings, map[string]any{"after_run": "keep_pinned", "idle_unload_min": 30, "reserve_gb": 12.5}, 200)
-	if got["version"] != 1.0 || got["applied"] != false || len(got["pins"].([]any)) != 0 {
+	if got["version"] != 1.0 || got["applied"] != false || len(got["pins"].([]any)) != 0 || got["reserve_mode"] != "custom" {
 		t.Fatal(got)
 	}
 	var kv map[string]any

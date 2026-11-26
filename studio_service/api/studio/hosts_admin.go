@@ -32,16 +32,17 @@ type settingsRow struct {
 	AfterRun      string
 	IdleUnloadMin int
 	ReserveGB     float64
+	ReserveMode   string
 	Pins          json.RawMessage
 	UpdatedAt     time.Time
 }
 
-const settingsCols = `host, version, after_run, idle_unload_min, reserve_gb, pins, updated_at`
+const settingsCols = `host, version, after_run, idle_unload_min, reserve_gb, reserve_mode, pins, updated_at`
 
 // dto is the row with applied: every fresh key of the host reports this version in effect.
 func (r settingsRow) dto(values []registry.Host, now time.Time) dto.HostSettings {
 	out := dto.HostSettings{Host: r.Host, Version: r.Version, AfterRun: r.AfterRun, IdleUnloadMin: r.IdleUnloadMin,
-		ReserveGB: r.ReserveGB, Pins: []dto.PinRef{}, UpdatedAt: r.UpdatedAt, Applied: true}
+		ReserveGB: r.ReserveGB, ReserveMode: r.ReserveMode, Pins: []dto.PinRef{}, UpdatedAt: r.UpdatedAt, Applied: true}
 	_ = json.Unmarshal(r.Pins, &out.Pins)
 	if out.Pins == nil {
 		out.Pins = []dto.PinRef{}
@@ -56,9 +57,13 @@ func (r settingsRow) dto(values []registry.Host, now time.Time) dto.HostSettings
 
 // kv is the row as registry.schema.json $defs/settings.
 func (r settingsRow) kv() []byte {
-	value, _ := json.Marshal(map[string]any{"schema_version": 1, "host": r.Host, "version": r.Version,
+	v := map[string]any{"schema_version": 1, "host": r.Host, "version": r.Version,
 		"after_run": r.AfterRun, "idle_unload_min": r.IdleUnloadMin, "reserve_gb": r.ReserveGB, "pins": r.Pins,
-		"updated_at": r.UpdatedAt.UTC()})
+		"updated_at": r.UpdatedAt.UTC()}
+	if r.ReserveMode == "auto" { // absent = custom: a runner older than 1.75 keeps taking custom values
+		v["reserve_mode"] = "auto"
+	}
+	value, _ := json.Marshal(v)
 	return value
 }
 
@@ -136,11 +141,15 @@ func (s *Service) PutHostSettings(ctx context.Context, caller common.Caller, hos
 			ram = total
 		}
 	}
-	if ram >= 0 && *body.ReserveGB >= ram {
-		return dto.HostSettings{}, network.NewUnprocessableError("reserve_gb leaves no memory on "+host, nil)
-	}
-	return s.storeSettings(ctx, host, func(row *settingsRow) {
+	return s.storeSettings(ctx, host, func(row *settingsRow) error {
 		row.AfterRun, row.IdleUnloadMin, row.ReserveGB = body.AfterRun, *body.IdleUnloadMin, *body.ReserveGB
+		if body.ReserveMode != "" { // absent: unchanged
+			row.ReserveMode = body.ReserveMode
+		}
+		if ram >= 0 && row.ReserveGB >= ram && row.ReserveMode != "auto" { // auto does not use reserve_gb
+			return network.NewUnprocessableError("reserve_gb leaves no memory on "+host, nil)
+		}
+		return nil
 	}, keys)
 }
 
@@ -168,12 +177,12 @@ func (s *Service) PutHostPins(ctx context.Context, caller common.Caller, host st
 		}
 	}
 	raw, _ := json.Marshal(pins)
-	return s.storeSettings(ctx, host, func(row *settingsRow) { row.Pins = raw }, keys)
+	return s.storeSettings(ctx, host, func(row *settingsRow) error { row.Pins = raw; return nil }, keys)
 }
 
 // storeSettings applies change to the host's row (a new row starts from the freshest key's policy, no pins),
 // version + 1, and publishes it before the commit.
-func (s *Service) storeSettings(ctx context.Context, host string, change func(row *settingsRow), keys []registry.Host) (dto.HostSettings, error) {
+func (s *Service) storeSettings(ctx context.Context, host string, change func(row *settingsRow) error, keys []registry.Host) (dto.HostSettings, error) {
 	var row settingsRow
 	err := common.System(ctx, s.db, func(tx pgx.Tx) error {
 		if err := lockHost(ctx, tx, host); err != nil {
@@ -188,12 +197,14 @@ func (s *Service) storeSettings(ctx context.Context, host string, change func(ro
 		default:
 			row = found
 		}
-		change(&row)
-		row, err = one[settingsRow](ctx, tx, `INSERT INTO host_settings (host, version, after_run, idle_unload_min, reserve_gb, pins)
-			VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (host) DO UPDATE SET version = excluded.version,
+		if err := change(&row); err != nil {
+			return err
+		}
+		row, err = one[settingsRow](ctx, tx, `INSERT INTO host_settings (host, version, after_run, idle_unload_min, reserve_gb, reserve_mode, pins)
+			VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (host) DO UPDATE SET version = excluded.version,
 			after_run = excluded.after_run, idle_unload_min = excluded.idle_unload_min, reserve_gb = excluded.reserve_gb,
-			pins = excluded.pins, updated_at = clock_timestamp() RETURNING `+settingsCols,
-			host, row.Version+1, row.AfterRun, row.IdleUnloadMin, row.ReserveGB, row.Pins)
+			reserve_mode = excluded.reserve_mode, pins = excluded.pins, updated_at = clock_timestamp() RETURNING `+settingsCols,
+			host, row.Version+1, row.AfterRun, row.IdleUnloadMin, row.ReserveGB, row.ReserveMode, row.Pins)
 		if err != nil {
 			return err
 		}
@@ -208,7 +219,7 @@ func (s *Service) storeSettings(ctx context.Context, host string, change func(ro
 // defaults is a new host's row: the freshest key's policy (else keep_warm, never idle-unload, the reserve its memory
 // implies), no pins, version 0.
 func defaults(host string, keys []registry.Host) settingsRow {
-	row := settingsRow{Host: host, AfterRun: "keep_warm", Pins: json.RawMessage(`[]`)}
+	row := settingsRow{Host: host, AfterRun: "keep_warm", ReserveMode: "custom", Pins: json.RawMessage(`[]`)}
 	var freshest *registry.Host
 	for i, k := range keys {
 		if freshest == nil || k.UpdatedAt.After(freshest.UpdatedAt) {
