@@ -1240,7 +1240,7 @@ test("J19 I move the drawer off the prompt, it stays there after a reload, and I
     await expect(shell).toHaveCount(1);
     // e · Dock and a double-click on the header dock it too
     await pill.press("ArrowDown");
-    await drawer(p).getByRole("button", { name: "Dock" }).click();
+    await drawer(p).getByRole("button", { name: "Dock", exact: true }).click();
     await expect(drawer(p)).not.toHaveClass(/float/);
     await pill.press("ArrowDown");
     await drawer(p)
