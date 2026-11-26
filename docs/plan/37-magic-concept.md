@@ -45,12 +45,13 @@ scheduled: not alpha.5; a release is picked when the concept is done. The wirefr
    "Yes, exactly"): Magic is its own page in the left rail. The Timeline is unchanged: no mode switch, no link back. The only
    bridge is **Send to Timeline**, which makes a new sequence every time and never touches an existing one, so there is nothing
    to merge.
+10. **The Assistant runs small things by itself** (owner: "free for small things, ask above the limit"): storyboard frames
+    and short drafts run without asking; anything over a GPU-time limit the user sets asks first, showing the estimate
+    ("3 shots, about 6 min").
 
 ## Open
 
 - Voice and music lined up with shots (owner: "handle the voice and music to align with a shot"): lanes in time may cover it;
   open whether a line moves with its shot.
-- The Assistant: run generation by itself, or always ask first (suggested: free for small things under a GPU-time limit
-  you set, ask above it).
 - Which n8n ideas go in the first version.
 - Where the standard request lives (contract, adapters in the runner) and the first models it covers.
