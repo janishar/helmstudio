@@ -1,0 +1,302 @@
+{
+  "hosts": [
+    {
+      "host": "gpu1",
+      "live": true,
+      "envs": [
+        "torch"
+      ],
+      "models_root": "~/models",
+      "free_bytes": 120000000000,
+      "total_bytes": 1000000000000,
+      "hub_token": true
+    },
+    {
+      "host": "mac",
+      "live": true,
+      "envs": [
+        "mlx",
+        "torch"
+      ],
+      "models_root": "~/GenAI/models",
+      "free_bytes": 812345678848,
+      "total_bytes": 1995218165760,
+      "hub_token": false,
+      "folders": [
+        {
+          "id": "3f2a9c1e7b04",
+          "name": "Mac",
+          "root": "~/GenAI/models",
+          "connected": true,
+          "free_bytes": 812345678848,
+          "total_bytes": 1995218165760,
+          "writable": true,
+          "downloads": true
+        },
+        {
+          "id": "a81d0e5c22f9",
+          "name": "ALI T9",
+          "root": "/Volumes/ALI T9/models",
+          "connected": false,
+          "free_bytes": null,
+          "total_bytes": null,
+          "writable": false,
+          "downloads": false
+        }
+      ]
+    }
+  ],
+  "licences": [
+    {
+      "id": "apache-2.0",
+      "title": "Apache License 2.0",
+      "url": "https://www.apache.org/licenses/LICENSE-2.0",
+      "text": "Apache License, Version 2.0 …"
+    },
+    {
+      "id": "qwen-research",
+      "title": "Qwen Research License",
+      "url": null,
+      "text": "Qwen Research License …"
+    }
+  ],
+  "models": [
+    {
+      "id": "qwen-image-2.1",
+      "family": "qwen-image",
+      "title": "Qwen Image 2.1",
+      "media": [
+        "image"
+      ],
+      "runtimes": [
+        {
+          "runtime": "torch",
+          "env": "torch"
+        }
+      ],
+      "variants": [
+        {
+          "id": "base",
+          "title": "Base",
+          "precisions": [
+            "bf16",
+            "int8"
+          ],
+          "dir": "Qwen-Image-2.1",
+          "licence": {
+            "id": "apache-2.0",
+            "must_accept": false
+          },
+          "gated": false,
+          "download_bytes": 57800000000,
+          "components": [
+            {
+              "component": "transformer",
+              "from_variant": "base",
+              "precisions": [
+                "bf16",
+                "int8"
+              ],
+              "bytes": 40900000000
+            },
+            {
+              "component": "text_encoder",
+              "from_variant": "base",
+              "precisions": [
+                "bf16",
+                "int8"
+              ],
+              "bytes": 16600000000
+            },
+            {
+              "component": "vae",
+              "from_variant": "base",
+              "precisions": [
+                "bf16"
+              ],
+              "bytes": 300000000
+            }
+          ],
+          "hosts": [
+            {
+              "host": "gpu1",
+              "state": "mismatch",
+              "bytes": 57800000000,
+              "mismatch": [
+                "vae/diffusion_pytorch_model.safetensors"
+              ],
+              "job": null
+            },
+            {
+              "host": "mac",
+              "state": "present",
+              "bytes": 57800000000,
+              "job": null,
+              "folder": "3f2a9c1e7b04",
+              "copies": [
+                {
+                  "folder": "T9",
+                  "state": "present",
+                  "bytes": 57800000000,
+                  "freed_bytes": 41200000000
+                },
+                {
+                  "folder": "a81d0e5c22f9",
+                  "state": "unplugged",
+                  "bytes": null,
+                  "freed_bytes": null
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "turbo",
+          "title": "Turbo",
+          "precisions": [
+            "bf16",
+            "int8"
+          ],
+          "dir": "Qwen-Image-2.1-Turbo",
+          "licence": {
+            "id": "qwen-research",
+            "must_accept": true
+          },
+          "gated": true,
+          "download_bytes": 40900000000,
+          "components": [
+            {
+              "component": "transformer",
+              "from_variant": "turbo",
+              "precisions": [
+                "bf16",
+                "int8"
+              ],
+              "bytes": 40900000000
+            },
+            {
+              "component": "text_encoder",
+              "from_variant": "base",
+              "precisions": [
+                "bf16",
+                "int8"
+              ],
+              "bytes": 16600000000
+            },
+            {
+              "component": "vae",
+              "from_variant": "base",
+              "precisions": [
+                "bf16"
+              ],
+              "bytes": 300000000
+            }
+          ],
+          "hosts": [
+            {
+              "host": "gpu1",
+              "state": "missing",
+              "bytes": null,
+              "job": null
+            },
+            {
+              "host": "mac",
+              "state": "downloading",
+              "bytes": 25360000000,
+              "job": {
+                "id": "5b2e8c41-7a3d-4f9e-b6c0-1d2e3f4a5b6c",
+                "state": "running",
+                "done_bytes": 25360000000,
+                "total_bytes": 40900000000
+              }
+            }
+          ]
+        }
+      ],
+      "addons": [
+        {
+          "component": "enhancer_t2i",
+          "title": "Text enhancer",
+          "help": "Enhance prompt without references.",
+          "dir": "Qwen-Image-2.1-PE-T2I",
+          "licence": {
+            "id": "apache-2.0",
+            "must_accept": false
+          },
+          "gated": false,
+          "download_bytes": 16000000000,
+          "hosts": [
+            {
+              "host": "gpu1",
+              "state": "missing",
+              "bytes": null,
+              "job": null
+            },
+            {
+              "host": "mac",
+              "state": "downloading",
+              "bytes": null,
+              "job": {
+                "id": "5b2e8c41-7a3d-4f9e-b6c0-1d2e3f4a5b6d",
+                "state": "running",
+                "done_bytes": 1000,
+                "total_bytes": 16000000000
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ltx-2.5",
+      "family": "ltx",
+      "title": "LTX-2.5",
+      "media": [
+        "video",
+        "audio"
+      ],
+      "runtimes": [
+        {
+          "runtime": "mlx",
+          "env": "mlx"
+        }
+      ],
+      "variants": [
+        {
+          "id": "distilled",
+          "title": "Distilled",
+          "precisions": [
+            "bf16",
+            "int8",
+            "int4"
+          ],
+          "dir": "LTX-2.5",
+          "licence": null,
+          "gated": false,
+          "download_bytes": null,
+          "components": [
+            {
+              "component": "transformer",
+              "from_variant": "distilled",
+              "precisions": [
+                "bf16",
+                "int8",
+                "int4"
+              ],
+              "bytes": null
+            }
+          ],
+          "hosts": [
+            {
+              "host": "mac",
+              "state": "partial",
+              "bytes": 1200000000,
+              "job": null
+            }
+          ]
+        }
+      ],
+      "addons": []
+    }
+  ]
+}

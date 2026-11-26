@@ -1713,9 +1713,10 @@
                             "present",
                             "partial",
                             "missing",
-                            "mismatch"
+                            "mismatch",
+                            "unplugged"
                           ],
-                          "description": "present: every file of the variant (its own and the shared ones it loads) is on disk and no recorded hash differs; partial: some are (an interrupted or cancelled download: resume it); missing: none of its own; mismatch (API 1.16): a file's SHA-256 differs from the one recorded at download (`mismatch` names them; the variant does not load until it is downloaded again). partial and mismatch are from API 1.16; the dispatcher treats every value but present as not runnable"
+                          "description": "present: every file of the variant (its own and the shared ones it loads) is on disk and no recorded hash differs; partial: some are (an interrupted or cancelled download: resume it); missing: none of its own; mismatch (API 1.16): a file's SHA-256 differs from the one recorded at download (`mismatch` names them; the variant does not load until it is downloaded again). partial and mismatch are from API 1.16; the dispatcher treats every value but present as not runnable; from API 1.78 unplugged: its only copies are in folders of the list not connected now (not runnable)"
                         },
                         "bytes": {
                           "type": "integer",
@@ -2058,6 +2059,47 @@
                           "minLength": 1,
                           "maxLength": 120,
                           "description": "from API 1.39: the variant's line under its title in the model chip's menu (model.yaml `variants.<id>.help`; LTX's Distilled `8 steps, about 10× faster`)"
+                        },
+                        "folder": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{12}$",
+                          "description": "from API 1.78: the id of the folder it loads from (the first connected folder of the list with a complete copy, else the first with some files); absent when missing or unplugged"
+                        },
+                        "copies": {
+                          "type": "array",
+                          "maxItems": 8,
+                          "description": "from API 1.78 (contracts/README.md, Model folders): every folder of the host's list with files of it, in priority order: state as presence over that folder's files (unplugged: a folder not connected now that held it when last seen, CACHE/folders-seen.json); bytes its own files there, freed_bytes what deleting that copy gives back (shared parts another variant there loads not counted); bytes and freed_bytes absent when unplugged. Absent = one folder (older runners)",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "folder",
+                              "state"
+                            ],
+                            "additionalProperties": false,
+                            "properties": {
+                              "folder": {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{12}$",
+                                "description": "the folder's id"
+                              },
+                              "state": {
+                                "enum": [
+                                  "present",
+                                  "partial",
+                                  "mismatch",
+                                  "unplugged"
+                                ]
+                              },
+                              "bytes": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "freed_bytes": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            }
+                          }
                         }
                       }
                     }
@@ -2177,9 +2219,10 @@
                             "present",
                             "partial",
                             "missing",
-                            "mismatch"
+                            "mismatch",
+                            "unplugged"
                           ],
-                          "description": "as a variant's, over the add-on's own files only: present = its globs match and no download of it is unfinished and no recorded hash differs"
+                          "description": "as a variant's, over the add-on's own files only: present = its globs match and no download of it is unfinished and no recorded hash differs; from API 1.78 unplugged: its only copies are in folders of the list not connected now (not runnable)"
                         },
                         "bytes": {
                           "type": "integer",
@@ -2215,6 +2258,47 @@
                             }
                           },
                           "description": "presence mismatch only: its files (relative to `dir`) whose SHA-256 on disk differs from the recorded one, sorted"
+                        },
+                        "folder": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{12}$",
+                          "description": "from API 1.78: the id of the folder it loads from (the first connected folder of the list with a complete copy, else the first with some files); absent when missing or unplugged"
+                        },
+                        "copies": {
+                          "type": "array",
+                          "maxItems": 8,
+                          "description": "from API 1.78 (contracts/README.md, Model folders): every folder of the host's list with files of it, in priority order: state as presence over that folder's files (unplugged: a folder not connected now that held it when last seen, CACHE/folders-seen.json); bytes its own files there, freed_bytes what deleting that copy gives back (shared parts another variant there loads not counted); bytes and freed_bytes absent when unplugged. Absent = one folder (older runners)",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "folder",
+                              "state"
+                            ],
+                            "additionalProperties": false,
+                            "properties": {
+                              "folder": {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{12}$",
+                                "description": "the folder's id"
+                              },
+                              "state": {
+                                "enum": [
+                                  "present",
+                                  "partial",
+                                  "mismatch",
+                                  "unplugged"
+                                ]
+                              },
+                              "bytes": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "freed_bytes": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            }
+                          }
                         }
                       }
                     }
@@ -2614,7 +2698,7 @@
             "total_bytes"
           ],
           "additionalProperties": false,
-          "description": "from API 1.16: the volume holding the models root, measured at every write",
+          "description": "from API 1.16: the volume holding the models root, measured at every write; from API 1.78 the downloads folder's (models_disks)",
           "properties": {
             "root": {
               "type": "string",
@@ -2633,6 +2717,63 @@
             "writable": {
               "type": "boolean",
               "description": "from API 1.18: the runner can write its models root (a container whose models root is bind-mounted read-only reports false: studio refuses its model jobs, 409). Absent = true"
+            }
+          }
+        },
+        "models_disks": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "description": "from API 1.78 (contracts/README.md, Model folders): the runner's model folders in priority order (the host_settings `folders`, else the one HELMSTUDIO_MODELS), measured at every write. Absent from older runners",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "name",
+              "root",
+              "connected",
+              "writable",
+              "downloads"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{12}$",
+                "description": "the first 12 hex of the SHA-256 of the path as stored"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "description": "/Volumes/<X>/… → X, else Mac on macOS, else the host name"
+              },
+              "root": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 400,
+                "description": "the path with the home directory written ~"
+              },
+              "connected": {
+                "type": "boolean",
+                "description": "the path is a folder now; a missing one is never created"
+              },
+              "free_bytes": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "absent when not connected"
+              },
+              "total_bytes": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "writable": {
+                "type": "boolean"
+              },
+              "downloads": {
+                "type": "boolean",
+                "description": "downloads go here: exactly one is true"
+              }
             }
           }
         },
@@ -3482,6 +3623,24 @@
             "$ref": "#/$defs/pin"
           },
           "description": "replaces RUNNER_PIN: these entries are marked pinned (pinned_why pin) whenever resident, kept by keep_pinned and the idle unload, a hand-over victim only as the last resort; an admin unload still unloads them"
+        },
+        "folders": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 400,
+            "pattern": "^(/|~/)"
+          },
+          "description": "from API 1.78 (contracts/README.md, Model folders): the model folders in priority order (absolute or ~/…); absent = the runner's HELMSTUDIO_MODELS. Studio writes it only when set, so an older runner keeps working"
+        },
+        "downloads": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7,
+          "description": "from API 1.78: the index in folders of the downloads folder; only with folders"
         },
         "updated_at": {
           "type": "string",

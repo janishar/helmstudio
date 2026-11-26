@@ -2397,7 +2397,9 @@ export interface paths {
          *     runner's hosts key reports `models_disk.writable: false`). From 1.36 a body with `addon` downloads that optional
          *     add-on instead (contracts/README.md, Optional add-ons): 422 `<model> has no add-on <addon>`, `give a variant or
          *     an add-on, not both`, `<title> <add-on title> has no download source`; 409 `<title> <add-on title> is already
-         *     on <host>`.
+         *     on <host>`. From 1.78 `folder` (contracts/README.md, Model folders): the files go into that folder of the host;
+         *     absent = its downloads folder, else the next connected one. 422 `<folder> is not a folder of <host>`; 409
+         *     `<folder name> is not connected on <host>`, `<folder name> on <host> is read-only` (the folder's `writable`).
          */
         post: operations["studioAdminDownloadModel"];
         delete?: never;
@@ -2431,7 +2433,11 @@ export interface paths {
          *     runner deletes only inside `<models root>/<dir>/` (never through a symlink out of it). From 1.36 `addon`
          *     deletes only that optional add-on's files (a variant's delete keeps them): 409 `<title> <add-on title> is not on
          *     <host>`, `<addon> of <title> is loaded on <host>; unload it first`, and the in-use and unfinished-download texts
-         *     above; 422 `<model> has no add-on <addon>`, `give a variant or an add-on, not both`.
+         *     above; 422 `<model> has no add-on <addon>`, `give a variant or an add-on, not both`. From 1.78 `folder`
+         *     (repeatable; contracts/README.md, Model folders) names the copies to delete: absent with one copy = that copy;
+         *     absent with two or more: 409 `<title> is in <n> folders on <host>; pick one`; 409 `<folder name> is not
+         *     connected on <host>`; 422 `<folder> is not a folder of <host>`. The loaded and in-use checks apply only when the
+         *     copy a run loads (the variant host's `folder`) is in the delete.
          */
         delete: operations["studioAdminDeleteModel"];
         options?: never;
@@ -2605,6 +2611,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/studio/admin/hosts/{host}/folders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace the host's model folders (priority order) and the folder downloads go to
+         * @description From 1.78 (contracts/README.md, Model folders). Admin only (403). Replaces the list, `version` + 1, published
+         *     like the settings (the KV value carries `folders` and `downloads`). A model folder is loaded from the first
+         *     connected folder of the list that has a complete copy. Paths are absolute or `~/…`, no `..`, no duplicates.
+         *     Studio first asks the host's supervising runner (`req.runner.folders.check`, 5 s): 422 `<path> is not a folder
+         *     on <host>` (not a directory now and not under /Volumes: a drive's folder may be listed while unplugged),
+         *     `<path> is not writable on <host>` (the downloads folder only; a read-only folder may be listed), `downloads
+         *     must be a connected folder`; 422 `paths must be absolute or start with ~/`, `<path> is listed twice`,
+         *     `downloads must be an index of folders`; 503 `<host> is offline` (no runner answered). A first PUT creates
+         *     the row with the other settings copied from the freshest key's `policy`. 404 for a host with no present hosts
+         *     key.
+         */
+        put: operations["studioAdminPutHostFolders"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/studio/admin/imports/takes": {
         parameters: {
             query?: never;
@@ -2718,7 +2753,7 @@ export interface paths {
         head?: never;
         /**
          * Rename, or set the defaults for new shots (no revision; not undone)
-         * @description From 1.76 a rename makes `title_source` user (`named_by` null): the namer never replaces it.
+         * @description From 1.76 a rename makes `title_source` user (`named_by` null), its session's too: the namer never replaces it.
          */
         patch: operations["studioPatchTimeline"];
         trace?: never;
@@ -7268,6 +7303,43 @@ export interface components {
             total_bytes: number | null;
             /** @description admins only: a Hub token file is present on the host (needed for a gated source); never the token */
             hub_token?: boolean;
+            /** @description from 1.78: its model folders in priority order, from the freshest key's `models_disks` (absent from older runners: empty). `models_root`, `free_bytes` and `total_bytes` above are the downloads folder's */
+            folders?: components["schemas"]["ModelFolder"][];
+        };
+        /** @description from 1.78: a model folder's id, the first 12 hex of the SHA-256 of its path as stored (contracts/README.md, Model folders) */
+        FolderId: string;
+        /** @description from 1.78: one model folder of a host (the Models page's Folders strip) */
+        ModelFolder: {
+            id: components["schemas"]["FolderId"];
+            /**
+             * @description `/Volumes/<X>/…` → `X`, else `Mac` on macOS, else the host name
+             * @example Mac
+             * @example ALI T9
+             */
+            name: string;
+            /** @description its path with the home directory written `~` */
+            root: string;
+            /** @description the path is a folder now; false = a drive unplugged (or a path not mounted) */
+            connected: boolean;
+            /** @description null when not connected */
+            free_bytes: number | null;
+            total_bytes: number | null;
+            writable: boolean;
+            /** @description downloads go here (exactly one folder of the list) */
+            downloads: boolean;
+        };
+        /** @description from 1.78: the files of a variant (or add-on) in one folder of the host */
+        ModelCopy: {
+            folder: components["schemas"]["FolderId"];
+            /**
+             * @description unplugged: in a folder not connected now (what it held when last seen)
+             * @enum {string}
+             */
+            state: "present" | "partial" | "mismatch" | "unplugged";
+            /** @description its own files there; null when unplugged */
+            bytes: number | null;
+            /** @description what deleting this copy gives back: shared parts another variant there loads are not counted; null when unplugged */
+            freed_bytes: number | null;
         };
         Licence: {
             /** @example apache-2.0 */
@@ -7372,10 +7444,10 @@ export interface components {
             hosts: components["schemas"]["ModelVariantHost"][];
         };
         /**
-         * @description present: every file on disk, hashes as recorded; partial: some (resume with a download); missing: none of its own; downloading: a download job is queued or running (`job`); mismatch: files whose hash differs from the recorded one (`mismatch`; download again)
+         * @description present: every file on disk, hashes as recorded; partial: some (resume with a download); missing: none of its own; downloading: a download job is queued or running (`job`); mismatch: files whose hash differs from the recorded one (`mismatch`; download again); from 1.78 unplugged: its only copies are in folders not connected now (not runnable; the board's `T9 not connected`)
          * @enum {string}
          */
-        ModelVariantState: "present" | "partial" | "missing" | "downloading" | "mismatch";
+        ModelVariantState: "present" | "partial" | "missing" | "downloading" | "mismatch" | "unplugged";
         ModelVariantHost: {
             host: string;
             state: components["schemas"]["ModelVariantState"];
@@ -7385,6 +7457,10 @@ export interface components {
             mismatch?: string[];
             /** @description shared components this host keeps as the variant's own copy because their hashes differ from the owner's */
             separate?: string[];
+            /** @description from 1.78: the folder a run loads it from (the first connected one with a complete copy, else one with some files); null when missing or unplugged, and from older runners */
+            folder?: components["schemas"]["FolderId"] | null;
+            /** @description from 1.78: every folder of the host with files of it, in priority order (the Copies section; Delete's which copy); absent from older runners */
+            copies?: components["schemas"]["ModelCopy"][];
             /** @description state downloading: its download job (the board's `downloading · 62%` = done / total); null otherwise */
             job: {
                 /** Format: uuid */
@@ -7404,6 +7480,8 @@ export interface components {
             addon?: string;
             /** @description true: the admin accepted the variant's licence text as GET /v1/studio/models showed it; required when its must_accept is true */
             accept_licence?: boolean;
+            /** @description from 1.78: the folder to download into; absent = the downloads folder, else the next connected one */
+            folder?: components["schemas"]["FolderId"];
         };
         /** @enum {string} */
         ModelJobKind: "download" | "delete" | "lora_delete";
@@ -7534,10 +7612,29 @@ export interface components {
             reserve_gb: number;
             reserve_mode: components["schemas"]["ReserveMode"];
             pins: components["schemas"]["PinRef"][];
+            /** @description from 1.78: the model folders in priority order as set; null = never set (each runner's HELMSTUDIO_MODELS) */
+            folders: {
+                id: components["schemas"]["FolderId"];
+                path: string;
+            }[] | null;
+            /** @description from 1.78: the folder downloads go to; null with `folders` null */
+            downloads: components["schemas"]["FolderId"] | null;
             /** @description every fresh hosts key of the host (but a local server's `server` env, which holds no weights) reports `policy.settings_version` = version */
             applied: boolean;
             /** Format: date-time */
             updated_at: string;
+        };
+        /** @description from 1.78: the whole list, first = loaded first */
+        ModelFoldersPut: {
+            folders: {
+                /**
+                 * @example ~/GenAI/models
+                 * @example /Volumes/ALI T9/models
+                 */
+                path: string;
+            }[];
+            /** @description the index in `folders` of the folder downloads go to */
+            downloads: number;
         };
         /** @description exactly one of: `all` (the board's Unload all), `entries` (a component's ×), `cached_env` (Cached handles ×) */
         HostUnload: {
@@ -12302,6 +12399,8 @@ export interface operations {
                 variant?: string;
                 /** @description from 1.36: an optional add-on of the model (Model.addons[].component) instead of a variant */
                 addon?: string;
+                /** @description from 1.78: the copies to delete, by folder id (repeatable); absent = the only copy */
+                folder?: components["schemas"]["FolderId"][];
             };
             header?: never;
             path: {
@@ -12537,6 +12636,38 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["HostPins"];
+            };
+        };
+        responses: {
+            /** @description the settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostSettings"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["AdminRequired"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioAdminPutHostFolders: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description a host name of the KV hosts (`mac`; unknown or malformed = 404) */
+                host: components["parameters"]["HostName"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModelFoldersPut"];
             };
         };
         responses: {

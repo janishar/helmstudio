@@ -1,0 +1,18 @@
+{
+  "folders": [
+    {
+      "path": "~/GenAI/models",
+      "connected": true,
+      "writable": true,
+      "drive": false,
+      "free_bytes": 412000000000,
+      "total_bytes": 994000000000
+    },
+    {
+      "path": "/Volumes/ALI T9/models",
+      "connected": false,
+      "writable": false,
+      "drive": true
+    }
+  ]
+}

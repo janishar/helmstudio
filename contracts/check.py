@@ -94,7 +94,7 @@ HTTP_SCHEMAS = [
     "ProviderPreset", "ProviderPresetList", "ProviderFetch", "ProviderKey",  # 1.51
     "ProviderKeySave", "ProviderKeySaved",  # 1.52
     "CustomNodeList",
-    "ModelList", "ModelDownload", "ModelJob", "ModelJobList", "HostSettings", "HostSettingsPut", "HostPins", "HostUnload",
+    "ModelList", "ModelDownload", "ModelJob", "ModelJobList", "HostSettings", "HostSettingsPut", "ModelFoldersPut", "HostPins", "HostUnload",
     "HostUnloadAccepted", "ImportTakeCreate", "ImportTake",
     "Timeline", "TimelineList", "TimelineCreate", "TimelineUpdate", "TimelineAddClips", "TimelineShotCreate",
     "TimelineRerender", "ExportPlan", "MediaJob", "TakeFrame", "TakeUses", "ClipActions", "TimelineLineCreate",

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.76.0
+  version: 1.78.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -27,7 +27,7 @@ servers:
 security:
   - {ApiKey: [], BearerJWT: []}
 tags:
-  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media); from 1.23 LoRA strengths 0..2 (looks saved before are clamped when read; contracts/README.md, Looks); from 1.24 the model component a node loads (NodeSchema.component); from 1.25 an inspector section''s help, the presets'' order (StudioLayout.preset_order) and a run''s planned peak before it is sent (POST /v1/studio/runs/plan); from 1.26 an inspector section''s choice tiles (LTX''s Recipe: two-stage or one-stage); from 1.28 a judge''s branch without `then` (Ask me) and a judge test on picked takes (POST /v1/studio/pipelines/{pipeline_id}/judge-tests); from 1.29 a V1 clip''s shot number (TimelineClip.number: "Shot 4"); from 1.30 voices: audio takes made by runs (the `Audio` port, `Workflow.media` audio), the `voice` param, saved voices in the library (designed voices and the packs'' starter voices; contracts/README.md, Voices); from 1.31 cloned voices (a 3–30 s clip of an audio take or a video''s sound, with consent), designed voices that keep a clip, Save as voice (`from_take` with `kind: voice`) and the zonos3 family (contracts/README.md, Voices: cloned voices); from 1.32 dialogue and Timeline audio: dialogue scripts (`script` text params expanded into `lines` rows whose items carry a voice), an element''s `voice_id`, cues on a dialogue''s take, audio takes on the audio tracks, New line (POST /v1/studio/timelines/{timeline_id}/lines), Make shot (a slot `exact` at an audio clip''s time), an export plan''s `sounds`, offers and pipeline binds into rows of one media field, `library.read` voices and the write node''s `form: script` (contracts/README.md, Dialogue and Timeline audio); from 1.44 the in-app assistant: chats, their events and memory, the admin''s assistant settings, search providers (kind `search`) and the Gallery''s `order` (contracts/README.md, Assistant); from 1.47 rules (refusals as data, ParamSchema.rules), option help (ParamSchema.option_help), a native node''s peak formula and sound limits (NodeSchema.peak_gb, sounds: the planned peak per run) and the Preset heading''s help (StudioLayout.preset_help); from 1.48 thumbnails: every list''s `thumb_url` is a small WebP of the image or the poster once made, `RunOutput.thumb_url` (contracts/README.md, Thumbnails); from 1.49 timeline edits by named ops (POST …/timelines/{timeline_id}/edits: a dry run, a diff, studio-made clip ids), the revision history and restore to any kept revision, the agent view (`view=agent`) and a stored frame at a sequence time (contracts/README.md, Timeline: edits by ops); from 1.50 the Timeline tools'' ops (roll, slip, slide, overwrite, split_all, remove_range, lift_range, an audio track''s ripple remove), linked sound clips (`TimelineClip.link`) and markers (`TimelineDoc.markers`, the marker ops; contracts/README.md, Timeline rules: tools, linked clips, markers); from 1.51 provider presets (GET /v1/studio/admin/provider-presets, a preset''s Fetch, a key file''s status, `Provider.compat` and `preset`; contracts/README.md, Model sources: presets); from 1.52 saving a provider key (PUT and DELETE /v1/studio/admin/provider-keys/{key_secret}, `ProviderKey.writable`; contracts/README.md, Model sources: Keys); from 1.53 thinking per model (`Provider.thinking`, `thinking_levels`, `ProviderPut.thinking`, `ProviderTest.thinking`, `ProviderPreset.thinking`, a model source''s `thinking`; contracts/README.md, Model sources: thinking); from 1.55 a provider''s fixed extra headers (`ProviderCompat.headers`: Anthropic''s anthropic-version; contracts/README.md, Model sources: compat); from 1.56 generous assistant defaults (AssistantLimits defaults 2000 model calls and 20000000 tokens a day, 200 look_at an hour, 30 messages a minute; AssistantCaps per message up to 40 model calls, 100 tool calls, 8 memory writes; a call''s n up to 99; contracts/README.md, Assistant); from 1.59 steering an answer (a message while a turn works joins it: `AssistantAccepted.steer`, `AssistantEntry.steer`; Stop: kind `stop`; contracts/README.md, Assistant: steer); from 1.59.1 steer fixes: waiting steers go first in a new turn, a stopped turn takes them as read, one message id per Stop (contracts/README.md, Assistant: steer); from 1.60 a take''s render time (`MadeWith.render_s`: the Create take, the Gallery''s Made with, the Timeline clip inspector and the sequence total); from 1.61 plugins: the admin''s Plugins page (GET /v1/studio/admin/plugins, Rescan, on and off, Remove, Add as provider), Only-you providers (`Provider.owner_id`, `plugin`; `AssistantSettings.personal`) and plugin tools in the assistant (a `plugin` card; contracts/README.md, Plugins); from 1.62 Stop cancels the model call in flight, and the assistant''s plain-words memory and voice-line checks (contracts/README.md, Assistant: steer; Assistant: tools); from 1.64 skills: plugins of kind `skill` (built in and from ~/.helm/plugins, folders and .zip files), GET /v1/studio/skills, a skill''s guide and files, the assistant''s use_skill and read_skill_file and its "Using skill" line (`AssistantLine.skill`; contracts/README.md, Skills); from 1.65 media in the assistant chat: a message''s attached images (`AssistantPost.takes`, `AssistantEntry.takes`), @-picked takes as [[take:<id>]] refs in your text, a model that sees images (`AssistantStatus.sees`, a preset''s `vision`) and takes shown as media in answers (contracts/README.md, Assistant: media and vision); from 1.66 the assistant''s context window per model (`AssistantSettings.window_tokens`) and its prompt cache hit rate per model (GET /v1/studio/admin/assistant/cache; contracts/README.md, Assistant: context and cache); from 1.67 plugins that start themselves: a manifest''s `run`, the host''s runner starts and keeps its service up while it is on (`Plugin.starts`, statuses starting and failed; contracts/README.md, Plugins: starts itself); from 1.70 plugins that read and make takes: a manifest''s `takes`, the call''s pass signed and checked by studio, /v1/studio/plugin/takes (read one of yours, make a new take from yours: source `tool`, `Take.tool`), a plugin line''s `take_ids` (Undo deletes them), the media-tools plugin and the Gallery''s Edit (GET /v1/studio/plugins/{plugin}, POST …/tools/{tool}: a takes plugin''s tool run for you; `Plugin.takes`, `needs`, a tool''s `title` and `summary`) (contracts/README.md, Plugins: takes); from 1.71 model guides: each model pack''s assistant guide and recipes (GET /v1/studio/model-guides/{family}), a card per downloaded family in the assistant''s prompt and its read_model_guide (contracts/README.md, Assistant: model guides); from 1.72 the Assistant as a first-class feature: `AssistantStatus.set_up`, `can_set_up`, `first_launch`, `tools` and `provider.model`, and POST /v1/studio/assistant/first-launch (contracts/README.md, Assistant: setup and first launch)'}
+  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media); from 1.23 LoRA strengths 0..2 (looks saved before are clamped when read; contracts/README.md, Looks); from 1.24 the model component a node loads (NodeSchema.component); from 1.25 an inspector section''s help, the presets'' order (StudioLayout.preset_order) and a run''s planned peak before it is sent (POST /v1/studio/runs/plan); from 1.26 an inspector section''s choice tiles (LTX''s Recipe: two-stage or one-stage); from 1.28 a judge''s branch without `then` (Ask me) and a judge test on picked takes (POST /v1/studio/pipelines/{pipeline_id}/judge-tests); from 1.29 a V1 clip''s shot number (TimelineClip.number: "Shot 4"); from 1.30 voices: audio takes made by runs (the `Audio` port, `Workflow.media` audio), the `voice` param, saved voices in the library (designed voices and the packs'' starter voices; contracts/README.md, Voices); from 1.31 cloned voices (a 3–30 s clip of an audio take or a video''s sound, with consent), designed voices that keep a clip, Save as voice (`from_take` with `kind: voice`) and the zonos3 family (contracts/README.md, Voices: cloned voices); from 1.32 dialogue and Timeline audio: dialogue scripts (`script` text params expanded into `lines` rows whose items carry a voice), an element''s `voice_id`, cues on a dialogue''s take, audio takes on the audio tracks, New line (POST /v1/studio/timelines/{timeline_id}/lines), Make shot (a slot `exact` at an audio clip''s time), an export plan''s `sounds`, offers and pipeline binds into rows of one media field, `library.read` voices and the write node''s `form: script` (contracts/README.md, Dialogue and Timeline audio); from 1.44 the in-app assistant: chats, their events and memory, the admin''s assistant settings, search providers (kind `search`) and the Gallery''s `order` (contracts/README.md, Assistant); from 1.47 rules (refusals as data, ParamSchema.rules), option help (ParamSchema.option_help), a native node''s peak formula and sound limits (NodeSchema.peak_gb, sounds: the planned peak per run) and the Preset heading''s help (StudioLayout.preset_help); from 1.48 thumbnails: every list''s `thumb_url` is a small WebP of the image or the poster once made, `RunOutput.thumb_url` (contracts/README.md, Thumbnails); from 1.49 timeline edits by named ops (POST …/timelines/{timeline_id}/edits: a dry run, a diff, studio-made clip ids), the revision history and restore to any kept revision, the agent view (`view=agent`) and a stored frame at a sequence time (contracts/README.md, Timeline: edits by ops); from 1.50 the Timeline tools'' ops (roll, slip, slide, overwrite, split_all, remove_range, lift_range, an audio track''s ripple remove), linked sound clips (`TimelineClip.link`) and markers (`TimelineDoc.markers`, the marker ops; contracts/README.md, Timeline rules: tools, linked clips, markers); from 1.51 provider presets (GET /v1/studio/admin/provider-presets, a preset''s Fetch, a key file''s status, `Provider.compat` and `preset`; contracts/README.md, Model sources: presets); from 1.52 saving a provider key (PUT and DELETE /v1/studio/admin/provider-keys/{key_secret}, `ProviderKey.writable`; contracts/README.md, Model sources: Keys); from 1.53 thinking per model (`Provider.thinking`, `thinking_levels`, `ProviderPut.thinking`, `ProviderTest.thinking`, `ProviderPreset.thinking`, a model source''s `thinking`; contracts/README.md, Model sources: thinking); from 1.55 a provider''s fixed extra headers (`ProviderCompat.headers`: Anthropic''s anthropic-version; contracts/README.md, Model sources: compat); from 1.56 generous assistant defaults (AssistantLimits defaults 2000 model calls and 20000000 tokens a day, 200 look_at an hour, 30 messages a minute; AssistantCaps per message up to 40 model calls, 100 tool calls, 8 memory writes; a call''s n up to 99; contracts/README.md, Assistant); from 1.59 steering an answer (a message while a turn works joins it: `AssistantAccepted.steer`, `AssistantEntry.steer`; Stop: kind `stop`; contracts/README.md, Assistant: steer); from 1.59.1 steer fixes: waiting steers go first in a new turn, a stopped turn takes them as read, one message id per Stop (contracts/README.md, Assistant: steer); from 1.60 a take''s render time (`MadeWith.render_s`: the Create take, the Gallery''s Made with, the Timeline clip inspector and the sequence total); from 1.61 plugins: the admin''s Plugins page (GET /v1/studio/admin/plugins, Rescan, on and off, Remove, Add as provider), Only-you providers (`Provider.owner_id`, `plugin`; `AssistantSettings.personal`) and plugin tools in the assistant (a `plugin` card; contracts/README.md, Plugins); from 1.62 Stop cancels the model call in flight, and the assistant''s plain-words memory and voice-line checks (contracts/README.md, Assistant: steer; Assistant: tools); from 1.64 skills: plugins of kind `skill` (built in and from ~/.helm/plugins, folders and .zip files), GET /v1/studio/skills, a skill''s guide and files, the assistant''s use_skill and read_skill_file and its "Using skill" line (`AssistantLine.skill`; contracts/README.md, Skills); from 1.65 media in the assistant chat: a message''s attached images (`AssistantPost.takes`, `AssistantEntry.takes`), @-picked takes as [[take:<id>]] refs in your text, a model that sees images (`AssistantStatus.sees`, a preset''s `vision`) and takes shown as media in answers (contracts/README.md, Assistant: media and vision); from 1.66 the assistant''s context window per model (`AssistantSettings.window_tokens`) and its prompt cache hit rate per model (GET /v1/studio/admin/assistant/cache; contracts/README.md, Assistant: context and cache); from 1.67 plugins that start themselves: a manifest''s `run`, the host''s runner starts and keeps its service up while it is on (`Plugin.starts`, statuses starting and failed; contracts/README.md, Plugins: starts itself); from 1.70 plugins that read and make takes: a manifest''s `takes`, the call''s pass signed and checked by studio, /v1/studio/plugin/takes (read one of yours, make a new take from yours: source `tool`, `Take.tool`), a plugin line''s `take_ids` (Undo deletes them), the media-tools plugin and the Gallery''s Edit (GET /v1/studio/plugins/{plugin}, POST …/tools/{tool}: a takes plugin''s tool run for you; `Plugin.takes`, `needs`, a tool''s `title` and `summary`) (contracts/README.md, Plugins: takes); from 1.71 model guides: each model pack''s assistant guide and recipes (GET /v1/studio/model-guides/{family}), a card per downloaded family in the assistant''s prompt and its read_model_guide (contracts/README.md, Assistant: model guides); from 1.72 the Assistant as a first-class feature: `AssistantStatus.set_up`, `can_set_up`, `first_launch`, `tools` and `provider.model`, and POST /v1/studio/assistant/first-launch (contracts/README.md, Assistant: setup and first launch); from 1.78 model folders: several folders per host in priority order (PUT /v1/studio/admin/hosts/{host}/folders, `HostSettings.folders`, `ModelHost.folders`, a variant host''s `folder` and `copies`, state `unplugged`, a download''s `folder`, a delete''s `folder`; contracts/README.md, Model folders)'}
   - {name: files, description: signed file downloads and uploads}
   - name: auth
     description: 'auth_service: users, sessions (JWT access + rotating refresh tokens), roles, client API keys'
@@ -2455,7 +2455,9 @@ paths:
         runner's hosts key reports `models_disk.writable: false`). From 1.36 a body with `addon` downloads that optional
         add-on instead (contracts/README.md, Optional add-ons): 422 `<model> has no add-on <addon>`, `give a variant or
         an add-on, not both`, `<title> <add-on title> has no download source`; 409 `<title> <add-on title> is already
-        on <host>`.
+        on <host>`. From 1.78 `folder` (contracts/README.md, Model folders): the files go into that folder of the host;
+        absent = its downloads folder, else the next connected one. 422 `<folder> is not a folder of <host>`; 409
+        `<folder name> is not connected on <host>`, `<folder name> on <host> is read-only` (the folder's `writable`).
       parameters: [{$ref: '#/components/parameters/ModelId'}]
       requestBody:
         required: true
@@ -2489,12 +2491,17 @@ paths:
         runner deletes only inside `<models root>/<dir>/` (never through a symlink out of it). From 1.36 `addon`
         deletes only that optional add-on's files (a variant's delete keeps them): 409 `<title> <add-on title> is not on
         <host>`, `<addon> of <title> is loaded on <host>; unload it first`, and the in-use and unfinished-download texts
-        above; 422 `<model> has no add-on <addon>`, `give a variant or an add-on, not both`.
+        above; 422 `<model> has no add-on <addon>`, `give a variant or an add-on, not both`. From 1.78 `folder`
+        (repeatable; contracts/README.md, Model folders) names the copies to delete: absent with one copy = that copy;
+        absent with two or more: 409 `<title> is in <n> folders on <host>; pick one`; 409 `<folder name> is not
+        connected on <host>`; 422 `<folder> is not a folder of <host>`. The loaded and in-use checks apply only when the
+        copy a run loads (the variant host's `folder`) is in the delete.
       parameters:
         - {$ref: '#/components/parameters/ModelId'}
         - {name: host, in: query, required: true, schema: {type: string, pattern: '^[a-z0-9]{1,32}$'}}
         - {name: variant, in: query, required: false, schema: {type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,63}$'}}
         - {name: addon, in: query, required: false, schema: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$'}, description: 'from 1.36: an optional add-on of the model (Model.addons[].component) instead of a variant'}
+        - {name: folder, in: query, required: false, style: form, explode: true, schema: {type: array, maxItems: 8, items: {$ref: '#/components/schemas/FolderId'}}, description: 'from 1.78: the copies to delete, by folder id (repeatable); absent = the only copy'}
       responses:
         '200': {description: 'the same delete, already queued or running', content: {application/json: {schema: {$ref: '#/components/schemas/ModelJob'}}}}
         '202': {description: 'the job, queued', content: {application/json: {schema: {$ref: '#/components/schemas/ModelJob'}}}}
@@ -2649,6 +2656,34 @@ paths:
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/HostPins'}}}
+      responses:
+        '200': {description: the settings, content: {application/json: {schema: {$ref: '#/components/schemas/HostSettings'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/AdminRequired'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/admin/hosts/{host}/folders:
+    put:
+      tags: [studio]
+      operationId: studioAdminPutHostFolders
+      summary: Replace the host's model folders (priority order) and the folder downloads go to
+      description: |
+        From 1.78 (contracts/README.md, Model folders). Admin only (403). Replaces the list, `version` + 1, published
+        like the settings (the KV value carries `folders` and `downloads`). A model folder is loaded from the first
+        connected folder of the list that has a complete copy. Paths are absolute or `~/…`, no `..`, no duplicates.
+        Studio first asks the host's supervising runner (`req.runner.folders.check`, 5 s): 422 `<path> is not a folder
+        on <host>` (not a directory now and not under /Volumes: a drive's folder may be listed while unplugged),
+        `<path> is not writable on <host>` (the downloads folder only; a read-only folder may be listed), `downloads
+        must be a connected folder`; 422 `paths must be absolute or start with ~/`, `<path> is listed twice`,
+        `downloads must be an index of folders`; 503 `<host> is offline` (no runner answered). A first PUT creates
+        the row with the other settings copied from the freshest key's `policy`. 404 for a host with no present hosts
+        key.
+      parameters: [{$ref: '#/components/parameters/HostName'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ModelFoldersPut'}}}
       responses:
         '200': {description: the settings, content: {application/json: {schema: {$ref: '#/components/schemas/HostSettings'}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -7044,6 +7079,30 @@ components:
         free_bytes: {type: [integer, 'null'], minimum: 0, description: 'free space on the models root''s volume, from the same key'}
         total_bytes: {type: [integer, 'null'], minimum: 0}
         hub_token: {type: boolean, description: 'admins only: a Hub token file is present on the host (needed for a gated source); never the token'}
+        folders: {type: array, maxItems: 8, items: {$ref: '#/components/schemas/ModelFolder'}, description: 'from 1.78: its model folders in priority order, from the freshest key''s `models_disks` (absent from older runners: empty). `models_root`, `free_bytes` and `total_bytes` above are the downloads folder''s'}
+    FolderId: {type: string, pattern: '^[0-9a-f]{12}$', description: 'from 1.78: a model folder''s id, the first 12 hex of the SHA-256 of its path as stored (contracts/README.md, Model folders)'}
+    ModelFolder:
+      type: object
+      required: [id, name, root, connected, free_bytes, total_bytes, writable, downloads]
+      description: 'from 1.78: one model folder of a host (the Models page''s Folders strip)'
+      properties:
+        id: {$ref: '#/components/schemas/FolderId'}
+        name: {type: string, maxLength: 80, description: '`/Volumes/<X>/…` → `X`, else `Mac` on macOS, else the host name', examples: [Mac, ALI T9]}
+        root: {type: string, maxLength: 400, description: 'its path with the home directory written `~`'}
+        connected: {type: boolean, description: 'the path is a folder now; false = a drive unplugged (or a path not mounted)'}
+        free_bytes: {type: [integer, 'null'], minimum: 0, description: 'null when not connected'}
+        total_bytes: {type: [integer, 'null'], minimum: 0}
+        writable: {type: boolean}
+        downloads: {type: boolean, description: 'downloads go here (exactly one folder of the list)'}
+    ModelCopy:
+      type: object
+      required: [folder, state, bytes, freed_bytes]
+      description: 'from 1.78: the files of a variant (or add-on) in one folder of the host'
+      properties:
+        folder: {$ref: '#/components/schemas/FolderId'}
+        state: {type: string, enum: [present, partial, mismatch, unplugged], description: 'unplugged: in a folder not connected now (what it held when last seen)'}
+        bytes: {type: [integer, 'null'], minimum: 0, description: 'its own files there; null when unplugged'}
+        freed_bytes: {type: [integer, 'null'], minimum: 0, description: 'what deleting this copy gives back: shared parts another variant there loads are not counted; null when unplugged'}
     Licence:
       type: object
       required: [id, title, url, text]
@@ -7119,8 +7178,8 @@ components:
         hosts: {type: array, items: {$ref: '#/components/schemas/ModelVariantHost'}}
     ModelVariantState:
       type: string
-      enum: [present, partial, missing, downloading, mismatch]
-      description: 'present: every file on disk, hashes as recorded; partial: some (resume with a download); missing: none of its own; downloading: a download job is queued or running (`job`); mismatch: files whose hash differs from the recorded one (`mismatch`; download again)'
+      enum: [present, partial, missing, downloading, mismatch, unplugged]
+      description: 'present: every file on disk, hashes as recorded; partial: some (resume with a download); missing: none of its own; downloading: a download job is queued or running (`job`); mismatch: files whose hash differs from the recorded one (`mismatch`; download again); from 1.78 unplugged: its only copies are in folders not connected now (not runnable; the board''s `T9 not connected`)'
     ModelVariantHost:
       type: object
       required: [host, state, bytes, job]
@@ -7130,6 +7189,8 @@ components:
         bytes: {type: [integer, 'null'], minimum: 0, description: 'its own files on that host''s disk (the board''s `On disk for this variant`); null when missing'}
         mismatch: {type: array, items: {type: string}, description: 'state mismatch: the files, relative to `dir`'}
         separate: {type: array, items: {type: string}, description: 'shared components this host keeps as the variant''s own copy because their hashes differ from the owner''s'}
+        folder: {oneOf: [{$ref: '#/components/schemas/FolderId'}, {type: 'null'}], description: 'from 1.78: the folder a run loads it from (the first connected one with a complete copy, else one with some files); null when missing or unplugged, and from older runners'}
+        copies: {type: array, maxItems: 8, items: {$ref: '#/components/schemas/ModelCopy'}, description: 'from 1.78: every folder of the host with files of it, in priority order (the Copies section; Delete''s which copy); absent from older runners'}
         job:
           oneOf:
             - type: object
@@ -7150,6 +7211,7 @@ components:
         variant: {type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,63}$', description: 'absent = the model''s first variant'}
         addon: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$', description: 'from 1.36: download this optional add-on (Model.addons[].component) instead of a variant; never with `variant`'}
         accept_licence: {type: boolean, description: 'true: the admin accepted the variant''s licence text as GET /v1/studio/models showed it; required when its must_accept is true'}
+        folder: {$ref: '#/components/schemas/FolderId', description: 'from 1.78: the folder to download into; absent = the downloads folder, else the next connected one'}
     ModelJobKind: {type: string, enum: [download, delete, lora_delete]}
     ModelJobState: {type: string, enum: [queued, running, succeeded, failed, cancelled]}
     ModelJob:
@@ -7274,7 +7336,7 @@ components:
       properties: {pins: {type: array, maxItems: 64, items: {$ref: '#/components/schemas/PinRef'}}}
     HostSettings:
       type: object
-      required: [host, version, after_run, idle_unload_min, reserve_gb, reserve_mode, pins, applied, updated_at]
+      required: [host, version, after_run, idle_unload_min, reserve_gb, reserve_mode, pins, folders, downloads, applied, updated_at]
       properties:
         host: {type: string}
         version: {type: integer, minimum: 1}
@@ -7283,8 +7345,34 @@ components:
         reserve_gb: {type: number, minimum: 0}
         reserve_mode: {$ref: '#/components/schemas/ReserveMode'}
         pins: {type: array, items: {$ref: '#/components/schemas/PinRef'}}
+        folders:
+          oneOf:
+            - type: array
+              minItems: 1
+              maxItems: 8
+              items: {type: object, required: [id, path], properties: {id: {$ref: '#/components/schemas/FolderId'}, path: {type: string}}}
+            - type: 'null'
+          description: 'from 1.78: the model folders in priority order as set; null = never set (each runner''s HELMSTUDIO_MODELS)'
+        downloads: {oneOf: [{$ref: '#/components/schemas/FolderId'}, {type: 'null'}], description: 'from 1.78: the folder downloads go to; null with `folders` null'}
         applied: {type: boolean, description: 'every fresh hosts key of the host (but a local server''s `server` env, which holds no weights) reports `policy.settings_version` = version'}
         updated_at: {type: string, format: date-time}
+    ModelFoldersPut:
+      type: object
+      required: [folders, downloads]
+      additionalProperties: false
+      description: 'from 1.78: the whole list, first = loaded first'
+      properties:
+        folders:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items:
+            type: object
+            required: [path]
+            additionalProperties: false
+            properties:
+              path: {type: string, minLength: 1, maxLength: 400, pattern: '^(/|~/)', examples: [~/GenAI/models, /Volumes/ALI T9/models]}
+        downloads: {type: integer, minimum: 0, maximum: 7, description: 'the index in `folders` of the folder downloads go to'}
     HostUnload:
       type: object
       additionalProperties: false

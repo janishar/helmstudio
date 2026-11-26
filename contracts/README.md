@@ -39,6 +39,7 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `messages/evt.auth.revoked.schema.json` | auth_service → studio: drop cached token validations |
 | `messages/req.runner.unload.schema.json` | NATS request/reply studio's dispatcher → a runner (not enveloped): unload the named components now, reply what was freed and what remains (Two envs on one host: the hand-over) |
 | `messages/req.runner.plugins.key.schema.json` | (API 1.73) NATS request/reply studio → a host's supervising runner (not enveloped): a plugin's key from its file in `~/.helm` (Plugins: a key from its host) |
+| `messages/req.runner.folders.check.schema.json` | (API 1.78) NATS request/reply studio → a host's supervising runner (not enveloped): what each model folder path is on that host now (Model folders) |
 | `messages/defs.schema.json` | shared definitions (uuid, object keys, seq, host/env names, the workflow graph, param values: `inputValue` with `imageRef` / `loraRef`, `resolvedValue` with `image` / `lora`) |
 | `registry.schema.json` | KV values: `$defs/nodes`, `$defs/workflows`, `$defs/models` (with a family's `loraBlock`), `$defs/loras`, `$defs/looks`, (API 1.30) `$defs/voices` (bucket `registry`), `$defs/host` (bucket `hosts`), (API 1.16) `$defs/settings` (bucket `host_settings`, key `<host>`: Hosts admin) and `$defs/pin`, (API 1.15) `$defs/custom` (key `pipelines.engine.custom`: the registered custom nodes) |
 | `fixtures/{messages,registry}/` | `<name>.valid[.N].json` must pass, `<name>.invalid[.N].json` must fail (request/reply: `<type>.{request,reply}.…`) |
@@ -3143,6 +3144,43 @@ hashes, `HEAD` / `GET /<repo>/resolve/<rev>/<path>` with `ETag`, `X-Repo-Commit`
 `Range` → 206; a gated repo answering 401 without its test token, a licence, small files) is selected with
 `HF_ENDPOINT` in runner tests and the fake compose overlay. Deletes run on a throwaway folder under a scratch models
 root, never `~/GenAI/models`.
+
+### Model folders (API 1.78; alpha.6 item 7, plan 40, board docs/mock/ModelFolders.dc.html; normative)
+
+A host may keep its weights in several folders (the Mac's `~/GenAI/models` and an external drive's
+`/Volumes/ALI T9/models`), in a priority order the admin sets (`PUT /v1/studio/admin/hosts/{host}/folders`).
+
+- **The list** is host settings (Hosts admin): studio's `host_settings.folders` and `downloads` are the truth, written to
+  the KV `host_settings` value as `folders: [path]` and `downloads: <index>` **only when set** (an older runner keeps its
+  one `HELMSTUDIO_MODELS`). Never set: the runner's one folder, `HELMSTUDIO_MODELS` (`HostSettings.folders` null).
+- **A folder's id** is the first 12 hex of the SHA-256 of its path as stored (`~/GenAI/models`, not expanded); studio
+  and the runner compute it alike. With no list, the id is that of `HELMSTUDIO_MODELS` with the home written `~`.
+  **Its name**: `/Volumes/<X>/…` → `X`, else `Mac` on macOS, else the host name. Messages never carry a path: a job
+  names folders by id (cmd.model.job `folder`, `folders`).
+- **Connected** = the path is a directory now. A folder not connected is skipped and **never created** (an unplugged
+  drive's `/Volumes/ALI T9` would otherwise appear on the system disk); downloads and deletes never `mkdir` a root.
+- **The resolver** (per model folder, the `dir` of a variant, add-on or component): the first connected folder of the
+  list holding a complete copy (files and no unfinished download marker), else the first connected one holding some
+  of it (partial), else the downloads folder. So a variant in T9 still loads the parts it shares from the Mac folder.
+- **Downloads** go to the job's `folder`, else the downloads folder, else the next connected one; shared components
+  complete in any connected folder are reused, not fetched again.
+- **Delete** removes only the copies in its `folders` (absent: the copy a run loads); the guards of Models and model
+  jobs apply per folder (inside that folder, never through a link). Studio answers 409 `<title> is in <n> folders on
+  <host>; pick one` when a variant has two or more copies and no folder is named.
+- **Copies and unplugged**: the models key's variants and add-ons carry `folder` (the copy a run loads) and `copies`
+  (every folder of the list with files of it: state, bytes, freed_bytes). The runner keeps `CACHE/folders-seen.json`
+  (folder id → the model folders it held when last connected); a variant whose only copies are in folders not
+  connected now has presence `unplugged`, not `missing`, and such folders show as copies with state `unplugged`. The
+  60 s rescan notices a drive plugged in or out.
+- **The hosts key's `models_disks`**: each folder in order (id, name, root, connected, free and total bytes when
+  connected, writable, downloads); `models_disk` stays and is the downloads folder's. Studio's `ModelHost.folders`
+  copies the freshest key's.
+- **The check**: before a PUT stores a list, studio asks the host's supervising runner `req.runner.folders.check`
+  (`runner.folders.check.<host>`, the runner with RUNNER_PLUGINS on, as `req.runner.plugins.key`). A path neither a
+  folder now nor under `/Volumes/` is refused; the downloads folder must be connected and writable. No answer in 5 s:
+  503 `<host> is offline`. Remote GPU hosts do not export this subject yet (their PUT answers 503).
+- **LoRAs and looks** scan the `loras/` folder of every connected folder.
+- A runner in a container sees only its mounted paths: a folder not mounted there shows not connected.
 
 ### Quantized variants for NVIDIA hosts (API 1.33, M9; plan 17-nvidia-quantized 21; normative)
 
