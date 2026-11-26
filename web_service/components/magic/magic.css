@@ -705,6 +705,16 @@
   box-shadow: inset 0 0 0 1px #e8c468;
   font-size: 12px;
 }
+:is(.mg, .mg-side) .warn.bad {
+  background: color-mix(in srgb, #ff8a80 16%, var(--s2));
+  box-shadow: inset 0 0 0 1px #ff8a80;
+}
+:is(.mg, .mg-side) .warn b {
+  color: #e8c468;
+}
+:is(.mg, .mg-side) .warn.bad b {
+  color: #ff8a80;
+}
 :is(.mg, .mg-side) .warn .chip {
   height: 28px;
   padding: 0 10px;
@@ -1106,6 +1116,7 @@
   .mg .fp .vid {
     aspect-ratio: 16 / 9;
   }
+  .mg .fp .ctl,
   .mg .fp .bar,
   .mg .fp .rz,
   .mg .shelf {

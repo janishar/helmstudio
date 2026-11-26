@@ -3,7 +3,16 @@
 // row, the lanes, the floating player and the side panel. Phase B keeps boards in this browser (localStorage) with
 // fake takes; every edit is a named op (lib/magic.ts), so phase C sends the same ops to studio.
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { ChevronDown, Clock3, Lock, Plus, SlidersHorizontal, Trash2 } from "lucide-react";
+import {
+  Camera,
+  ChevronDown,
+  Clock3,
+  Lock,
+  X,
+  Plus,
+  SlidersHorizontal,
+  Trash2,
+} from "lucide-react";
 import { mod, openMenu, type Item } from "@/components/context-menu";
 import { ErrorNote } from "@/components/kit";
 import { AddDialog, type AddAt } from "@/components/magic/add";
@@ -48,7 +57,7 @@ import "./magic.css";
 
 // ------------------------------------------------------------------------------------------------ this browser's boards
 
-type Snapshot = { id: string; name: string; doc: Doc; at: string };
+type Snapshot = { id: string; name: string; doc: Doc; at: string; rev?: number };
 type Saved = { id: string; name: string; doc: Doc; takes: Takes; snapshots: Snapshot[] };
 type Store = { current: string; boards: Saved[] };
 const KEY = "helm.magic.boards";
@@ -129,7 +138,9 @@ export function MagicBoard({ initial }: { initial?: Store }) {
   };
 
   // frame 1 opens with Shot 2 selected, its details in the side panel
-  const [sel, setSel] = useState<string[]>(() => (!initial && doc.blocks.some((b) => b.id === "s2") ? ["s2"] : []));
+  const [sel, setSel] = useState<string[]>(() =>
+    !initial && doc.blocks.some((b) => b.id === "s2") ? ["s2"] : [],
+  );
   const [mode, setMode] = useState<Mode>("insert");
   const [snapOn, setSnapOn] = useState(true);
   const [pps, setPps] = useState(26);
@@ -763,6 +774,48 @@ export function MagicBoard({ initial }: { initial?: Store }) {
               onPlaying={setPlaying}
               apiRef={player}
             />
+            <div className="flex items-center gap-2 md:hidden" style={{ order: -1 }}>
+              <button
+                type="button"
+                className="chip bevel rounded-[10px] bg-s4"
+                aria-label={playing ? "Pause" : "Play"}
+                onClick={() => (playing ? player.current?.pause() : player.current?.play())}
+              >
+                <Play10 />
+                {playing ? "Pause" : "Play"}
+              </button>
+              <span className="mono text-[12px]">
+                {clock(frame, fps)}
+                <span className="text-t2"> / {clock(total, fps)}</span>
+              </span>
+              <span className="grow" />
+              <button
+                type="button"
+                className="chip bevel rounded-[10px] bg-s4"
+                onClick={() =>
+                  setAdding({ lane: (one ?? doc.blocks[0])?.lane ?? doc.lanes[0].id, at: frame })
+                }
+              >
+                <Plus size={13} aria-hidden />
+                Add
+              </button>
+            </div>
+            <StateBars doc={doc} takes={takes} act={act} />
+            {one && phone && (
+              <div className="flex items-center gap-2 rounded-xl bg-s2 px-3 py-2.5 text-[13px]">
+                <span className={`kb k-${one.kind}`}>{KIND_NAME[one.kind]}</span>
+                <b className="min-w-0 truncate">{one.name}</b>
+                <StatusChip d={doc} b={one} takes={takes} />
+                <span className="grow" />
+                <button
+                  type="button"
+                  className="text-[12px] text-t2"
+                  onClick={() => act.open(one.id)}
+                >
+                  Open
+                </button>
+              </div>
+            )}
           </div>
         )}
         <p role="status" className="m-0 -mt-2 min-h-4 px-1 text-[12px] text-t2">
@@ -789,7 +842,7 @@ export function MagicBoard({ initial }: { initial?: Store }) {
         <aside
           id="magic-side"
           aria-label="Block details"
-          className="mg-side aside m-3.5 flex flex-[1_1_320px] flex-col gap-3.5 px-[18px] pt-4 pb-6 md:ml-0"
+          className="mg-side aside m-3.5 flex flex-[1_1_320px] flex-col gap-3.5 px-[18px] pt-4 pb-6 max-md:hidden md:ml-0"
         >
           {one ? (
             <BlockPanel key={one.id} d={doc} b={one} takes={takes} act={act} />
@@ -824,10 +877,17 @@ export function MagicBoard({ initial }: { initial?: Store }) {
               d={doc}
               takes={takes}
               snapshots={snapshots}
+              onClose={() => setPanel(false)}
               onSave={() => {
                 const name = `Snapshot ${snapshots.length + 1}`;
                 setSnapshots((s) => [
-                  { id: newId(), name, doc: h.now, at: new Date().toISOString() },
+                  {
+                    id: newId(),
+                    name,
+                    doc: h.now,
+                    at: new Date().toISOString(),
+                    rev: h.past.length,
+                  },
                   ...s,
                 ]);
                 setSaid(`Saved ${name}`);
@@ -933,10 +993,53 @@ function EmptyBoard({ onLane }: { onLane: () => void }) {
 
 // ------------------------------------------------------------------------------------------------ the side panel
 
+/** What to do about a failed or out-of-date block (frame 11): a bar under the lanes, up to three. */
+function StateBars({ doc, takes, act }: { doc: Doc; takes: Takes; act: Act }) {
+  const rows = doc.blocks
+    .map((b) => ({ b, st: statusOf(doc, b, takes) }))
+    .filter((x) => x.st.s === "failed" || x.st.s === "old")
+    .sort((x, y) => Number(y.st.s === "failed") - Number(x.st.s === "failed"))
+    .slice(0, 3);
+  return rows.map(({ b, st }) => {
+    const take = shown(b, takes);
+    const name = b.name.split(" · ")[0];
+    return (
+      <div
+        key={b.id}
+        className={`warn ${st.s === "failed" ? "bad" : ""}`}
+        role="alert"
+        style={{ order: 1 }}
+      >
+        <b>{st.s === "failed" ? `${name} failed` : `${name} out of date`}</b>
+        {st.s === "failed" && <span>{st.error}</span>}
+        <span className="grow" />
+        <button type="button" className="chip" onClick={() => act.run([b.id])}>
+          {st.s === "failed" ? "Retry" : "Run"}
+        </button>
+        {st.s === "failed" ? (
+          <button type="button" className="chip" onClick={() => act.open(b.id)}>
+            Open
+          </button>
+        ) : (
+          take &&
+          b.pinned !== take.id && (
+            <button
+              type="button"
+              className="chip"
+              onClick={() => act.edit({ op: "block", id: b.id, set: { pinned: take.id } })}
+            >
+              Pin take
+            </button>
+          )
+        )}
+      </div>
+    );
+  });
+}
+
 /** One block's details (frame 1's side panel), with what to do when it failed or is out of date (frame 11). */
 function BlockPanel({ d, b, takes, act }: { d: Doc; b: Block; takes: Takes; act: Act }) {
   const fps = d.target.fps;
-  const st = statusOf(d, b, takes);
   const take = shown(b, takes);
   const lane = d.lanes.find((l) => l.id === b.lane);
   const nth = (id?: string) => (id ? b.takes.indexOf(id) + 1 : 0);
@@ -978,35 +1081,6 @@ function BlockPanel({ d, b, takes, act }: { d: Doc; b: Block; takes: Takes; act:
           <span className="text-[12px] text-t2">No take yet</span>
         )}
       </div>
-      {st.s === "failed" && (
-        <div className="warn" role="alert" style={{ boxShadow: "inset 0 0 0 1px #ff8a80" }}>
-          <span>
-            {b.name.split(" · ")[0]} failed · {st.error}
-          </span>
-          <span className="grow" />
-          <button type="button" className="chip" onClick={() => act.run([b.id])}>
-            Retry
-          </button>
-        </div>
-      )}
-      {st.s === "old" && (
-        <div className="warn" role="alert">
-          <span>{b.name.split(" · ")[0]} is out of date</span>
-          <span className="grow" />
-          <button type="button" className="chip" onClick={() => act.run([b.id])}>
-            Run
-          </button>
-          {take && b.pinned !== take.id && (
-            <button
-              type="button"
-              className="chip"
-              onClick={() => act.edit({ op: "block", id: b.id, set: { pinned: take.id } })}
-            >
-              Pin take
-            </button>
-          )}
-        </div>
-      )}
       {(b.request.refs?.length ?? 0) > 0 && (
         <div className="flex flex-col gap-1.5">
           <h3>Inputs</h3>
@@ -1163,6 +1237,7 @@ function BoardPanel({
   d,
   takes,
   snapshots,
+  onClose,
   onSave,
   onRestore,
   onRename,
@@ -1171,6 +1246,7 @@ function BoardPanel({
   d: Doc;
   takes: Takes;
   snapshots: Snapshot[];
+  onClose: () => void;
   onSave: () => void;
   onRestore: (s: Snapshot) => void;
   onRename: (s: Snapshot) => void;
@@ -1201,16 +1277,26 @@ function BoardPanel({
       </div>
       <p className="m-0 text-[12px] text-t2">Select a block to see its details.</p>
       <div className="flex items-center gap-2">
-        <h3 className="mr-auto">Snapshots · {snapshots.length}</h3>
+        <h3 className="mr-auto">
+          Snapshots <small className="mono text-t2">{snapshots.length}</small>
+        </h3>
         <button
           type="button"
-          className="chip bevel h-[30px] rounded-[10px] bg-s4 px-2.5 text-[12px]"
-          onClick={onSave}
+          className="chip h-7 w-7 justify-center rounded-[9px] bg-s4 p-0"
+          aria-label="Close"
+          onClick={onClose}
         >
-          <Plus size={13} aria-hidden />
-          Save snapshot
+          <X size={13} aria-hidden />
         </button>
       </div>
+      <button
+        type="button"
+        className="chip bevel h-[30px] self-start rounded-[10px] bg-s4 px-2.5 text-[12px]"
+        onClick={onSave}
+      >
+        <Camera size={13} aria-hidden />
+        Save snapshot
+      </button>
       {snapshots.map((s) => (
         <div
           key={s.id}
@@ -1226,9 +1312,12 @@ function BoardPanel({
             )
           }
         >
-          <span className="min-w-0 grow truncate">{s.name}</span>
+          <b className="min-w-0 grow truncate">{s.name}</b>
           <span className="mono">
-            {new Date(s.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            {s.rev !== undefined && `rev ${s.rev} · `}
+            {new Date(s.at).toDateString() === new Date().toDateString()
+              ? new Date(s.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+              : new Date(s.at).toLocaleDateString([], { month: "short", day: "numeric" })}
           </span>
           <button
             type="button"
@@ -1240,9 +1329,7 @@ function BoardPanel({
         </div>
       ))}
       {snapshots.length > 0 && (
-        <p className="m-0 text-[11px] text-t2">
-          Restore makes a new step you can undo; nothing is lost.
-        </p>
+        <p className="m-0 text-[11px] text-t2">Restore makes a new revision; nothing is lost.</p>
       )}
     </>
   );

@@ -105,10 +105,10 @@ describe("the board", () => {
     const b = s.boards[0];
     b.doc.blocks.find((x) => x.id === "s1")!.length = 4 * 24;
     render(<MagicBoard initial={s} />);
-    const warn = screen.getByRole("alert");
+    const warn = screen.getByText("Doesn't fit").closest('[role="alert"]') as HTMLElement;
     expect(warn.textContent).toContain("Line 1 runs 3.1 s past Shot 1");
     fireEvent.click(within(warn).getByRole("button", { name: "Trim" }));
-    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText("Doesn't fit")).toBeNull();
     expect(blockEl(/Voice block Line 1, 3.4 s/)).toBeTruthy();
   });
 

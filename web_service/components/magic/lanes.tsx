@@ -20,6 +20,7 @@ import {
 import {
   apply,
   clock,
+  type Role,
   end,
   inLane,
   joins,
@@ -41,6 +42,8 @@ import { wheelZoom, zoomAbout } from "@/lib/timeline-tools";
 
 const LH_PX = 120;
 const LH_PHONE = 64;
+/** Lane names that fit a phone's narrow head. */
+const PHONE_NAME: Partial<Record<Role, string>> = { storyboard: "Board", voice: "Lines" };
 const DRAG_PX = 3;
 const SNAP_PX = 8;
 /** A lane's height by what it holds (the board's). */
@@ -383,7 +386,7 @@ export function Lanes({
                     onContextMenu={(e) => openMenu(e, laneMenu(act, lane))}
                     onDoubleClick={() => act.rename(lane.id)}
                   >
-                    <b>{lane.name}</b>
+                    <b>{(phone && PHONE_NAME[lane.role]) || lane.name}</b>
                     <small>{count}</small>
                   </button>
                 )}
@@ -602,7 +605,7 @@ function BlockView({
       {e.name}
     </button>
   ));
-  const chips = refs.slice(0, 2).map(({ r, text }, i) => (
+  const chips = refs.slice(0, 1).map(({ r, text }, i) => (
     <span
       key={i}
       className={`rc ${"asset" in r ? (d.assets.find((a) => a.id === r.asset)?.kind === "character" ? "ch" : "") : "lk"}`}
@@ -610,6 +613,19 @@ function BlockView({
       {text}
     </span>
   ));
+  if (refs.length > 1)
+    chips.push(
+      <span
+        key="more"
+        className="rc"
+        title={refs
+          .slice(1)
+          .map((x) => x.text)
+          .join(", ")}
+      >
+        +{refs.length - 1}
+      </span>,
+    );
   const status = <StatusChip d={d} b={b} takes={takes} />;
   const art = take?.art;
   const audioRow = (orb: React.ReactNode, color: string) => (
