@@ -1,0 +1,20 @@
+<!-- @dsCard group="Create" height=420 -->
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>TempoKey · preview</title></head>
+<body>
+<div class="hs-col" style="align-items:flex-start;gap:6px">
+  <div class="hs-row" style="padding:0"><button class="chip sq bevel" type="button">MiniMax Music 3</button><button class="chip sq bevel" type="button">2:10</button><button class="chip sq bevel" type="button" aria-haspopup="dialog" aria-expanded="true">90 BPM · A minor</button><button class="chip sq bevel" type="button">English</button></div>
+  <div class="pop" role="dialog" aria-label="Tempo and key" style="width:320px;box-sizing:border-box">
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <label style="display:flex;justify-content:space-between;gap:8px"><span>BPM</span><span class="mono" style="font-size:12px;color:var(--t2)">90</span></label>
+      <input type="range" aria-label="BPM" min="30" max="300" value="90" style="width:100%;accent-color:var(--a2)">
+      <div style="display:flex;flex-direction:column;gap:6px"><span class="heading">Key</span><div style="display:flex;flex-wrap:wrap;gap:6px"><button class="opt a2" type="button" aria-pressed="false">Auto</button><button class="opt a2" type="button" aria-pressed="true">A minor</button><button class="opt a2" type="button" aria-pressed="false">C major</button><button class="opt a2" type="button" aria-pressed="false">E minor</button><button class="opt a2" type="button" aria-pressed="false">More…</button></div></div>
+      <div style="display:flex;flex-direction:column;gap:6px"><span class="heading">Time</span><div style="display:flex;flex-wrap:wrap;gap:6px"><button class="opt a2" type="button" aria-pressed="false">3/4</button><button class="opt a2" type="button" aria-pressed="true">4/4</button><button class="opt a2" type="button" aria-pressed="false">6/8</button></div></div>
+      <div class="sw-row"><span>Auto<small>The plan picks all three</small></span><button class="sw a2" type="button" role="switch" aria-checked="false" aria-label="Auto"><span></span></button></div>
+      <button class="hs-link" type="button">All settings</button>
+    </div>
+  </div>
+</div>
+</body>
+</html>

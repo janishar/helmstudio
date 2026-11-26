@@ -12,6 +12,22 @@ body {
   color: var(--t1);
   -webkit-font-smoothing: antialiased;
 }
+/* the app's ground under every preview and the cover: the page frame may clear html and body, so the ground is a
+   fixed layer of its own. Forest (the first theme) is the default, with the app's 7% a1 glow bottom right and its fine
+   118deg lines (globals.css); the warm light top left is left out, so small cards read green. */
+html { color-scheme: dark; }
+[data-theme="parchment"] { color-scheme: light; }
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-color: var(--g);
+  background-image:
+    radial-gradient(900px 640px at 108% 112%, color-mix(in srgb, var(--a1) 7%, transparent), transparent 60%),
+    repeating-linear-gradient(118deg, rgba(255, 255, 255, 0.014) 0 1px, transparent 1px 4px);
+}
 button { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--a1); outline-offset: 2px; }
 .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
@@ -209,7 +225,7 @@ button { font: inherit; color: inherit; }
 .hs-card small { font-family: var(--font-mono); font-size: 10px; color: var(--t2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hs-star { position: absolute; top: 8px; right: 8px; width: 14px; height: 14px; color: var(--a1); fill: var(--a1); }
 .hs-len { position: absolute; top: 4px; left: 4px; display: flex; align-items: center; gap: 2px; border-radius: var(--radius-label); background: color-mix(in srgb, var(--s2) 90%, transparent); padding: 0 4px; font-family: var(--font-mono); font-size: 10px; line-height: 16px; color: var(--t1); }
-/* a picture stand-in for previews: a neutral two-tone fill, no image */
+/* a picture stand-in for previews: a two-tone fill in the theme's surfaces, no image */
 .hs-pic { background: linear-gradient(160deg, var(--s4), var(--s2)); }
 /* TakeTile (create.tsx) */
 .hs-tile { position: relative; display: grid; place-items: center; box-sizing: border-box; width: 112px; height: 63px; overflow: hidden; border: 1px solid var(--s5); border-radius: var(--radius-small); background: var(--s1); font-family: var(--font-mono); font-size: 11px; color: var(--t2); box-shadow: var(--shadow-bevel); padding: 0; }
@@ -2905,3 +2921,54 @@ outline-offset: 2px;
 .hs-dock .dock-item { flex: 0 0 auto; }
 .hs-dock .hs-admin { flex-direction: row; gap: 8px; padding: 0 4px; }
 .hs-dock .hs-sep { width: 1px; height: 32px; flex: 0 0 auto; }
+
+/* board only, not built: Create's Music and Sound parts (docs/mock/CreateMusicSound.dc.html, plan 38 P0) */
+/* a composer chip that this model cannot use: greyed in place, the reason on hover ("Not on MiniMax Music 3") */
+.chip[aria-disabled="true"], .hs-src[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
+/* a source tile in the composer (Reference, From a sound, Match a video); dashed while empty */
+.hs-src { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 6px 12px; border: 0; border-radius: var(--radius-pop) var(--radius-pop) var(--radius-pop) var(--radius-pop-tail); background-color: var(--s3); color: var(--t1); text-align: left; box-shadow: var(--shadow-bevel); }
+.hs-src small { display: block; font-family: var(--font-mono); font-size: 10px; color: var(--t2); }
+.hs-src b { display: block; font-size: 13px; font-weight: 600; }
+.hs-src.drop { border: 1px dashed var(--dash); background: transparent; box-shadow: none; }
+/* the smaller key in a popup or a range bar (Repaint, Cover, Extend): 48px, with its time estimate under the word */
+.hs-key.sm { height: 48px; padding: 0 18px; }
+.hs-key.sm > span:first-child { font-size: 13px; }
+.hs-key.sm > .mono { font-size: 10px; }
+/* lyrics: the box, its section tag chips (insert at the caret) and the tags in the text */
+.lyr { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border: 1px solid var(--s4); border-radius: var(--radius-field); background: var(--s1); }
+.lyr-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.lyr-text { display: flex; flex-direction: column; font-size: 14px; line-height: 21px; color: var(--t1); }
+.lyr-tag { font-family: var(--font-mono); font-size: 12px; color: var(--a2); }
+.tg { height: 26px; padding: 0 8px; border: 1px dashed var(--dash); border-radius: 7px; background: transparent; color: var(--t2); font: 500 11px/24px var(--font-mono); }
+/* a switch for audio work: on is an a2 ring and knob on s1 (the board's Instrumental, Auto, Let it rewrite) */
+.sw.a2[aria-checked="true"] { background: var(--s1); box-shadow: inset 0 0 0 1px var(--a2); }
+.sw.a2[aria-checked="true"] span { background: var(--a2); }
+.sw-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sw-row > span { display: flex; flex-direction: column; gap: 2px; }
+.sw-row small { font-size: 12px; color: var(--t2); }
+/* choices for audio work: the pressed one rings in a2 */
+.opt.a2[aria-pressed="true"] { border-color: var(--a2); }
+/* the stage waveform: bars, section markers above it and the repaint range on it */
+.wb { position: relative; display: flex; align-items: center; gap: 2px; padding: 0 2px; border-radius: 12px; background: var(--s1); }
+.wb > span:not(.rng) { flex: 1 1 0; min-width: 2px; border-radius: 2px; background: var(--a2); }
+.cues { position: relative; height: 28px; }
+.cue { position: absolute; top: 0; height: 28px; box-sizing: border-box; padding: 0 6px; border: 0; border-top: 3px solid var(--a1); border-radius: 4px; background: color-mix(in srgb, var(--s2) 85%, transparent); color: var(--t1); font-family: var(--font-mono); font-size: 11px; text-align: left; overflow: hidden; white-space: nowrap; }
+.cue.c-chorus { border-top-color: var(--a2); }
+.cue.c-edge { border-top-color: var(--kind-sound); }
+.cue.c-bridge { border-top-color: var(--kind-music); }
+.rng { position: absolute; top: 0; bottom: 0; box-sizing: border-box; border: 2px solid var(--a2); border-radius: 8px; background: color-mix(in srgb, var(--a2) 16%, transparent); }
+.rng i { position: absolute; top: 50%; width: 8px; height: 28px; margin-top: -14px; border-radius: 4px; background: var(--a2); }
+.rng i:first-child { left: -5px; }
+.rng i:last-child { right: -5px; }
+.hs-abar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px; border: 1px solid var(--s5); border-radius: var(--radius-pop) var(--radius-pop) var(--radius-pop) var(--radius-pop-tail); background: var(--s2); }
+.hs-inl { box-sizing: border-box; height: 36px; min-width: 0; padding: 0 10px; border: 1px solid var(--s4); border-radius: var(--radius-field); background: var(--s1); color: var(--t1); font: inherit; font-size: 13px; }
+/* sound variations: a grid of cards, each plays on its own; a click keeps one */
+.vars { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.var { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 2px solid transparent; border-radius: 14px 14px 14px 6px; background: var(--s1); }
+.var[aria-pressed="true"] { border-color: var(--a2); }
+.var .row1 { display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11px; color: var(--t2); }
+.var .row1 > :last-child { margin-left: auto; }
+.pb { display: flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 32px; height: 32px; padding: 0; border: 0; border-radius: var(--radius-pill); background: var(--t1); color: var(--g); }
+/* a video take made with its sound, paired in the strip */
+.tt.pair { justify-content: flex-end; border-color: var(--s5); background: linear-gradient(160deg, var(--s4), var(--s2)); color: var(--t1); }
+.tt.pair[aria-pressed="true"] { border: 2px solid var(--a2); }
