@@ -82,6 +82,12 @@ Notes from the owner while using the app. Not scheduled; each is picked up when 
   "Film noir looks" pack. A new plugin kind after v1 (model providers and Assistant tools, alpha.2 item 33). Other
   kinds discussed and not taken for now: model packs, a dev and test pack (Echo and the fakes), pipeline nodes,
   provider presets, UI plugins.
+- **Effects packs** (owner, 2026-11-27: "note future feature: effects pack (plugins) on a video generated/uploaded,
+  effects like depth map, background change, cloth change, character swap, etc"): installable effects that act on a
+  video take, made or uploaded: a depth map, background change, clothing change, character swap and more. Each effect
+  makes a new take (the source stays), offered from the take's Use in and right-click menu, in Create, the Gallery,
+  the Timeline and Magic (effects are already badges on Magic blocks, plan 37 decision 6). Not scheduled; needs its
+  own plan, models and board.
 
 ## Product
 
