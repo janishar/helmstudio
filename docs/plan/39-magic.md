@@ -257,3 +257,7 @@ and Sound lanes take placed audio takes (an upload or a gallery take) and their 
 - Zoom is one group on the right of the board tools, as on the Timeline: zoom out, a slider, zoom in, the span in view, Fit (the whole board across). ⌘ + mouse wheel or a trackpad pinch zooms at the pointer; Shift + wheel scrolls across; ⌘− / ⌘= / ⇧Z ("zoom in / zoom out / fit option of the whole timelime horizontally", "also works with mouse wheel").
 - The side panel has the same sliders toggle as Create and the Timeline, open by default and remembered ("option to show hide this like other palces").
 - MagicBoard (the app look) carries all four (review, 2026-11-27).
+
+## Decided by the owner (2026-11-27)
+
+Owner: "approved magic, build it": MagicBoard (11 frames) is approved, and the seven open points in 45.14 take their recommended defaults (bake fade and wipe; ask above 5 GPU minutes, set in Magic's settings; unlimited named snapshots; target from the first shot; the board's session hidden from Create's list; any kind on any lane; Dialogue as a Voice block with turns). Contract numbers: plan 40 (model folders) took 1.78.0 and plan 38 takes 1.79.0, so Magic starts at 1.80.0.
