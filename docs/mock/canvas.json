@@ -314,9 +314,9 @@
     },
     "TextToVideo.dc.html": {
       "expand": "fill",
-      "h": 1040,
+      "h": 2258,
       "is_interactive": true,
-      "title": "Create \u00b7 LTX text to video",
+      "title": "Create \u00b7 LTX text to video \u00b7 settings in popups (alpha.5)",
       "w": 1440,
       "x": 0,
       "y": 0,
@@ -414,9 +414,9 @@
     },
     "Assistant.dc.html": {
       "expand": "fill",
-      "h": 31520,
+      "h": 32912,
       "is_interactive": true,
-      "title": "Assistant \u00b7 the drawer on Create, Graph and Timeline, phone, cards, chains, memory, web search \u00b7 Hub (admin): setup, tabs Assistant, In pipelines, Providers, Plugins \u00b7 System (alpha.4)",
+      "title": "Assistant \u00b7 the drawer on Create, Graph and Timeline, phone, cards, chains, memory, web search \u00b7 Hub (admin): setup, tabs Assistant, In pipelines, Providers, Plugins \u00b7 System (alpha.4) \u00b7 move the drawer (alpha.5)",
       "w": 1440,
       "x": 0,
       "y": 0,
