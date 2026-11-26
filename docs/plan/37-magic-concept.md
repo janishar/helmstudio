@@ -1,4 +1,4 @@
-# 37. Magic: concept (parked for version 2)
+# 37. Magic: concept (alpha.6)
 
 Owner, 2026-11-26: "plan an switch ui for this timeline which opens a node editor … this will be a real playground for the
 assistant", then "first lets have a concept discussion with me". This file keeps what was decided in that discussion. Not
@@ -71,10 +71,11 @@ e227a7ee) is replaced.
   terms.
 - Where the standard request lives (contract, adapters in the runner) and the first models it covers.
 
-## Parked for version 2
+## Release
 
-Owner, 2026-11-26: "we will revisit then in version 2". Nothing is built for alpha.5 or the alphas after it. Suggestions to
-weigh then:
+Owner, 2026-11-26: "we will revisit then in version 2", then "move magic in next alpha release": Magic is planned for
+**0.1.0-alpha.6** ([list](../release/0.1.0-alpha.6.md)). The concept is finished first, then a plan with phases. Suggestions to
+weigh:
 
 1. Play the storyboard as a rough cut (frames in order with their lines and music) before making any video.
 2. Say plainly which models keep a character the same (today: an asset feeds the storyboard frame, which becomes the shot's
