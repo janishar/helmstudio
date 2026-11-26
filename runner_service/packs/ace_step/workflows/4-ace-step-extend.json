@@ -1,0 +1,93 @@
+{
+  "id": "ace-step-extend",
+  "title": "ACE-Step Extend",
+  "action": "Extend",
+  "family": "ace-step",
+  "env": "torch",
+  "media": "audio",
+  "nodes": {
+    "prompt": {
+      "kind": "prompt",
+      "params": {
+        "text": ""
+      }
+    },
+    "seed": {
+      "kind": "seed",
+      "params": {
+        "seed": -1
+      }
+    },
+    "model": {
+      "kind": "ace-step/model",
+      "params": {
+        "variant": "turbo-2b",
+        "precision": "bf16"
+      }
+    },
+    "song": {
+      "kind": "ace-step/song",
+      "params": {
+        "lyrics": "",
+        "instrumental": false,
+        "seconds": 0,
+        "bpm": 0,
+        "key": "auto",
+        "time": "auto",
+        "language": "auto"
+      }
+    },
+    "extend": {
+      "kind": "ace-step/extend",
+      "in": {
+        "model": "model.model",
+        "song": "song.song",
+        "text": "prompt.text",
+        "seed": "seed.seed"
+      },
+      "params": {
+        "source": null,
+        "seconds": 30,
+        "where": "end",
+        "steps": 8
+      }
+    },
+    "decode": {
+      "kind": "ace-step/decode",
+      "in": {
+        "model": "model.model",
+        "latent": "extend.latent"
+      },
+      "params": {}
+    },
+    "output": {
+      "kind": "output",
+      "in": {
+        "media": "decode.audio"
+      }
+    }
+  },
+  "studio": {
+    "composer": [
+      "prompt.text",
+      "song.lyrics",
+      "extend.source"
+    ],
+    "quick": [
+      "model.variant",
+      "extend.seconds",
+      "extend.where",
+      "song.instrumental",
+      "song.language"
+    ],
+    "inspector": [
+      {
+        "title": "Advanced",
+        "items": [
+          "seed.seed",
+          "extend.steps"
+        ]
+      }
+    ]
+  }
+}
