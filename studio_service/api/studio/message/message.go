@@ -472,6 +472,25 @@ type ProviderKeyWriteRequest struct {
 // answers a plugin's key from its file in HELM_HOME. Core request/reply only; the reply is never printed or logged.
 const SubjectPluginKey = "runner.plugins.key."
 
+// SubjectFoldersCheck is a host's supervising runner's request/reply subject prefix (API 1.78):
+// runner.folders.check.<host> answers what each model folder path is there now.
+const SubjectFoldersCheck = "runner.folders.check."
+
+// FoldersCheckRequest is req.runner.folders.check's request.
+type FoldersCheckRequest struct {
+	Paths []string `json:"paths"`
+}
+
+// FoldersCheckReply is its reply, per path in the request's order.
+type FoldersCheckReply struct {
+	Folders []struct {
+		Path      string `json:"path"`
+		Connected bool   `json:"connected"`
+		Writable  bool   `json:"writable"`
+		Drive     bool   `json:"drive"`
+	} `json:"folders"`
+}
+
 // PluginKeyRequest is req.runner.plugins.key's request.
 type PluginKeyRequest struct {
 	Plugin string `json:"plugin"`
@@ -567,6 +586,8 @@ type ModelJob struct {
 	Addon   *string     `json:"addon,omitempty"` // API 1.36: an optional add-on instead of a variant
 	Licence *JobLicence `json:"licence,omitempty"`
 	LoraID  *string     `json:"lora_id,omitempty"`
+	Folder  *string     `json:"folder,omitempty"`  // API 1.78, download: the folder to download into
+	Folders []string    `json:"folders,omitempty"` // API 1.78, delete: the copies removed
 	Host    string      `json:"-"`
 	Env     string      `json:"-"`
 }

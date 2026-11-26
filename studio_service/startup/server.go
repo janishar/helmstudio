@@ -206,6 +206,18 @@ func Run() error {
 			}
 			return reply, err
 		},
+		// what each model folder path is on its host (API 1.78): 5 s
+		foldersCheck: func(ctx context.Context, host string, req message.FoldersCheckRequest) (message.FoldersCheckReply, error) {
+			var reply message.FoldersCheckReply
+			body, _ := json.Marshal(req)
+			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+			answer, err := natsConn.RequestWithContext(ctx, message.SubjectFoldersCheck+host, body)
+			if err == nil {
+				err = json.Unmarshal(answer.Data, &reply)
+			}
+			return reply, err
+		},
 	}
 	module.purge, module.putSettings = messaging.NatsPurge(client), messaging.NatsKVPut(client, "host_settings")
 	if module.store, err = objectStore(ctx, env); err != nil {

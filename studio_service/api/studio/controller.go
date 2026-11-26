@@ -135,6 +135,7 @@ func (c *controller) MountRoutes(group *gin.RouterGroup) {
 	group.POST("/admin/hosts/:host/unload", c.adminUnloadHandler)
 	group.PUT("/admin/hosts/:host/settings", c.putHostSettingsHandler)
 	group.PUT("/admin/hosts/:host/pins", c.putHostPinsHandler)
+	group.PUT("/admin/hosts/:host/folders", c.putHostFoldersHandler)
 	group.GET("/library", c.listLibraryHandler)
 	group.POST("/library", c.createLibraryItemHandler)
 	group.GET("/library/:id", c.getLibraryItemHandler)
@@ -1209,7 +1210,8 @@ func (c *controller) deleteModelHandler(ctx *gin.Context) {
 	if v, ok := ctx.GetQuery("addon"); ok {
 		addon = &v
 	}
-	out, created, err := c.service.DeleteModel(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("model"), ctx.Query("host"), variant, addon)
+	out, created, err := c.service.DeleteModel(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("model"), ctx.Query("host"), variant, addon,
+		ctx.QueryArray("folder"))
 	reply(ctx, accepted(created), out, err)
 }
 
@@ -1253,6 +1255,16 @@ func (c *controller) putHostSettingsHandler(ctx *gin.Context) {
 	var out dto.HostSettings
 	if err == nil {
 		out, err = c.service.PutHostSettings(ctx.Request.Context(), caller, ctx.Param("host"), body)
+	}
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// putHostFoldersHandler: PUT /admin/hosts/{host}/folders (API 1.78).
+func (c *controller) putHostFoldersHandler(ctx *gin.Context) {
+	caller, body, err := adminBody[dto.ModelFoldersPut](ctx)
+	var out dto.HostSettings
+	if err == nil {
+		out, err = c.service.PutHostFolders(ctx.Request.Context(), caller, ctx.Param("host"), body)
 	}
 	reply(ctx, http.StatusOK, out, err)
 }

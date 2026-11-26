@@ -66,15 +66,18 @@ func buildModels(values []registry.Host, published map[string]registry.Published
 	hostNames := slices.Sorted(maps.Keys(byHost))
 	for _, name := range hostNames {
 		slices.SortFunc(byHost[name], func(a, b registry.Host) int { return strings.Compare(a.Env, b.Env) })
-		host := dto.ModelHost{Host: name, Envs: []string{}}
+		host := dto.ModelHost{Host: name, Envs: []string{}, Folders: []dto.ModelFolder{}}
 		var disk *registry.ModelsDisk
-		var diskAt time.Time
+		var diskAt, foldersAt time.Time
 		token := false
 		for _, k := range byHost[name] {
 			host.Live = host.Live || k.Live(now)
 			host.Envs = append(host.Envs, k.Env)
 			if k.ModelsDisk != nil && (disk == nil || k.UpdatedAt.After(diskAt)) {
 				disk, diskAt = k.ModelsDisk, k.UpdatedAt
+			}
+			if len(k.ModelsDisks) > 0 && (len(host.Folders) == 0 || k.UpdatedAt.After(foldersAt)) { // API 1.78
+				host.Folders, foldersAt = modelFolders(k.ModelsDisks), k.UpdatedAt
 			}
 			token = token || k.HubToken
 		}
@@ -194,6 +197,7 @@ func buildModels(values []registry.Host, published map[string]registry.Published
 						state.Separate = append(state.Separate, c.Component)
 					}
 				}
+				state.Folder, state.Copies = copiesOf(on.Folder, on.Copies)
 				if job, ok := downloading[name+" "+id+" "+vid]; ok {
 					state.State, state.Job = "downloading", &job
 				}
@@ -263,6 +267,7 @@ func buildAddons(id string, sources []string, published map[string]registry.Publ
 				if state.State == "mismatch" {
 					state.Mismatch = on.Mismatch
 				}
+				state.Folder, state.Copies = copiesOf(on.Folder, on.Copies)
 				if job, ok := downloading[name+" "+id+" +"+a.Component]; ok {
 					state.State, state.Job = "downloading", &job
 				}
@@ -272,6 +277,29 @@ func buildAddons(id string, sources []string, published map[string]registry.Publ
 		}
 	}
 	return out
+}
+
+// modelFolders is a hosts key's models_disks as the Models screen shows them (API 1.78).
+func modelFolders(disks []registry.ModelFolder) []dto.ModelFolder {
+	out := make([]dto.ModelFolder, len(disks))
+	for i, d := range disks {
+		out[i] = dto.ModelFolder{ID: d.ID, Name: d.Name, Root: d.Root, Connected: d.Connected, FreeBytes: d.FreeBytes,
+			TotalBytes: d.TotalBytes, Writable: d.Writable, Downloads: d.Downloads}
+	}
+	return out
+}
+
+// copiesOf is a variant host's folder and copies from its models key entry (API 1.78; absent from older runners).
+func copiesOf(folder string, copies []registry.Copy) (*string, []dto.ModelCopy) {
+	var used *string
+	if folder != "" {
+		used = &folder
+	}
+	var out []dto.ModelCopy
+	for _, c := range copies {
+		out = append(out, dto.ModelCopy{Folder: c.Folder, State: c.State, Bytes: c.Bytes, FreedBytes: c.FreedBytes})
+	}
+	return used, out
 }
 
 // ------------------------------------------------------------------ what a model job may do
@@ -331,6 +359,28 @@ func (w weights) writable(host, env string) error {
 	return nil
 }
 
+// folder is host.env's model folder `id` (API 1.78): 422 not a folder of the host, 409 not connected.
+func (w weights) folder(host, env, id string) (registry.ModelFolder, error) {
+	key, _ := w.key(host, env)
+	i := slices.IndexFunc(key.ModelsDisks, func(f registry.ModelFolder) bool { return f.ID == id })
+	if i < 0 {
+		return registry.ModelFolder{}, network.NewUnprocessableError(fmt.Sprintf("%s is not a folder of %s", id, host), nil)
+	}
+	if f := key.ModelsDisks[i]; !f.Connected {
+		return f, network.NewConflictError(f.Name+" is not connected on "+host, nil)
+	}
+	return key.ModelsDisks[i], nil
+}
+
+// alreadyThere reports whether a variant (or add-on) is already there: in `folder` when one is named (API 1.78: a second
+// copy elsewhere may be downloaded), else anywhere.
+func alreadyThere(presence string, copies []registry.Copy, folder *string) bool {
+	if folder == nil {
+		return presence == "present"
+	}
+	return slices.ContainsFunc(copies, func(c registry.Copy) bool { return c.Folder == *folder && c.State == "present" })
+}
+
 // variantTitle is `<model title> <variant title>`.
 func variantTitle(m registry.Model, v registry.Variant) string {
 	return m.Title + " " + cmp.Or(v.Title, v.ID)
@@ -343,10 +393,11 @@ type download struct {
 	variant registry.Variant
 	addon   *registry.Addon
 	licence *dto.JobLicence
+	folder  *string // API 1.78: the folder it goes into; nil = the downloads folder
 }
 
 // checkDownload applies POST …/download's registry refusals (404, 422, 409 already on the host).
-func (w weights) checkDownload(host, model string, variant, addon *string, accept bool) (download, error) {
+func (w weights) checkDownload(host, model string, variant, addon *string, accept bool, folder *string) (download, error) {
 	if !w.known(model) {
 		return download{}, errNotFound
 	}
@@ -354,9 +405,15 @@ func (w weights) checkDownload(host, model string, variant, addon *string, accep
 	if !ok {
 		return download{}, network.NewUnprocessableError(fmt.Sprintf("host %s has no env for %s", host, model), nil)
 	}
-	out := download{env: env, model: m}
-	if err := w.writable(host, env); err != nil {
+	out := download{env: env, model: m, folder: folder}
+	if folder == nil {
+		if err := w.writable(host, env); err != nil {
+			return out, err
+		}
+	} else if f, err := w.folder(host, env, *folder); err != nil {
 		return out, err
+	} else if !f.Writable {
+		return out, network.NewConflictError(f.Name+" on "+host+" is read-only", nil)
 	}
 	if addon != nil {
 		return w.checkAddonDownload(host, out, *addon, accept)
@@ -379,7 +436,7 @@ func (w weights) checkDownload(host, model string, variant, addon *string, accep
 		return out, network.NewUnprocessableError(variantTitle(m, out.variant)+" has no download source", nil)
 	case src.MustAccept && !accept:
 		return out, network.NewUnprocessableError("licence "+src.Licence+" must be accepted", nil)
-	case out.variant.Presence == "present":
+	case alreadyThere(out.variant.Presence, out.variant.Copies, folder):
 		return out, network.NewConflictError(fmt.Sprintf("%s is already on %s", variantTitle(m, out.variant), host), nil)
 	}
 	out.licence = w.accepted(host, env, src)
@@ -399,7 +456,7 @@ func (w weights) checkAddonDownload(host string, out download, component string,
 		return out, network.NewUnprocessableError(m.Title+" "+a.Title+" has no download source", nil)
 	case src.MustAccept && !accept:
 		return out, network.NewUnprocessableError("licence "+src.Licence+" must be accepted", nil)
-	case a.Presence == "present":
+	case alreadyThere(a.Presence, a.Copies, out.folder):
 		return out, network.NewConflictError(fmt.Sprintf("%s %s is already on %s", m.Title, a.Title, host), nil)
 	}
 	out.licence = w.accepted(host, out.env, a.Source)
@@ -428,10 +485,39 @@ type removal struct {
 	keeps    []dto.Keep
 	removed  map[string]bool // "<component> <from_variant>"
 	title    string
+	checks   bool // API 1.78: the copy a run loads is among those removed (the loaded and in-use refusals apply)
+}
+
+// copies applies a delete's folder refusals (API 1.78) to one variant or add-on: each named folder of the host and
+// connected; none named with two or more copies: 409 pick one; none named and its only copy unplugged: 409. It
+// reports whether the copy a run loads goes.
+func (w weights) copies(host, env, title, used, presence string, copies []registry.Copy, folders []string) (bool, error) {
+	for _, id := range folders {
+		if f, err := w.folder(host, env, id); err != nil {
+			return false, err
+		} else if !f.Writable {
+			return false, network.NewConflictError(f.Name+" on "+host+" is read-only", nil)
+		}
+	}
+	if len(folders) > 0 {
+		return used != "" && slices.Contains(folders, used), nil
+	}
+	if len(copies) >= 2 {
+		return false, network.NewConflictError(fmt.Sprintf("%s is in %d folders on %s; pick one", title, len(copies), host), nil)
+	}
+	if presence == "unplugged" && len(copies) == 1 {
+		key, _ := w.key(host, env)
+		name := copies[0].Folder
+		if i := slices.IndexFunc(key.ModelsDisks, func(f registry.ModelFolder) bool { return f.ID == name }); i >= 0 {
+			name = key.ModelsDisks[i].Name
+		}
+		return false, network.NewConflictError(name+" is not connected on "+host, nil)
+	}
+	return true, nil
 }
 
 // checkDelete applies DELETE …/models/{model}'s registry refusals: 404, 422, 409 not on the host, 409 loaded.
-func (w weights) checkDelete(host, model string, variant, addon *string) (removal, error) {
+func (w weights) checkDelete(host, model string, variant, addon *string, folders []string) (removal, error) {
 	if !w.known(model) {
 		return removal{}, errNotFound
 	}
@@ -440,7 +526,7 @@ func (w weights) checkDelete(host, model string, variant, addon *string) (remova
 		return removal{}, network.NewUnprocessableError(fmt.Sprintf("host %s has no env for %s", host, model), nil)
 	}
 	out := removal{env: env, model: m, removed: map[string]bool{}, keeps: []dto.Keep{}, title: m.Title}
-	if err := w.writable(host, env); err != nil {
+	if err := w.writable(host, env); err != nil && len(folders) == 0 {
 		return out, err
 	}
 	on := func(v registry.Variant) bool { return v.Presence != "missing" && v.Presence != "" }
@@ -453,6 +539,10 @@ func (w weights) checkDelete(host, model string, variant, addon *string) (remova
 			return out, network.NewConflictError(fmt.Sprintf("%s %s is not on %s", m.Title, a.Title, host), nil)
 		}
 		out.title = m.Title + " · " + a.Title
+		var err error
+		if out.checks, err = w.copies(host, env, m.Title+" "+a.Title, a.Folder, a.Presence, a.Copies, folders); err != nil || !out.checks {
+			return out, err
+		}
 		for _, v := range w.values {
 			if v.Host == host && slices.ContainsFunc(v.Resident, func(r registry.Resident) bool { return r.Model == model && r.Component == *addon }) {
 				return out, network.NewConflictError(fmt.Sprintf("%s of %s is loaded on %s; unload it first", *addon, m.Title, host), nil)
@@ -481,6 +571,11 @@ func (w weights) checkDelete(host, model string, variant, addon *string) (remova
 	}
 	for _, v := range m.Variants {
 		if slices.Contains(out.variants, v.ID) {
+			used, err := w.copies(host, env, variantTitle(m, v), v.Folder, v.Presence, v.Copies, folders)
+			if err != nil {
+				return out, err
+			}
+			out.checks = out.checks || used
 			for _, c := range v.Components {
 				if c.FromVariant == v.ID {
 					out.removed[c.Component+" "+v.ID] = true
@@ -504,7 +599,7 @@ func (w weights) checkDelete(host, model string, variant, addon *string) (remova
 		}
 	}
 	for _, v := range w.values {
-		if v.Host != host {
+		if v.Host != host || !out.checks {
 			continue
 		}
 		for _, r := range v.Resident {

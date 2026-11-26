@@ -341,9 +341,11 @@ type Host struct {
 	Resident  []Resident `json:"resident,omitempty"`
 	// API 1.16: the models root's volume, the machine, whether a Hub token file exists, the residency settings in effect
 	ModelsDisk *ModelsDisk `json:"models_disk,omitempty"`
-	Machine    *Machine    `json:"machine,omitempty"`
-	HubToken   bool        `json:"hub_token,omitempty"`
-	Policy     *Policy     `json:"policy,omitempty"`
+	// API 1.78: every model folder in priority order (absent from older runners)
+	ModelsDisks []ModelFolder `json:"models_disks,omitempty"`
+	Machine     *Machine      `json:"machine,omitempty"`
+	HubToken    bool          `json:"hub_token,omitempty"`
+	Policy      *Policy       `json:"policy,omitempty"`
 	// API 1.17: this env runs media jobs (exports and frames) with these H.264 encoders, preferred first
 	Media *Media `json:"media,omitempty"`
 	// API 1.18: the device it runs on, and on cuda the host-RAM limit (RAM − RUNNER_RAM_RESERVE_GB, RSS used)
@@ -380,6 +382,26 @@ type ModelsDisk struct {
 	FreeBytes  int64  `json:"free_bytes"`
 	TotalBytes int64  `json:"total_bytes"`
 	Writable   *bool  `json:"writable,omitempty"` // API 1.18: false when bind-mounted read-only; absent = true
+}
+
+// ModelFolder is one model folder of a host (API 1.78, contracts/README.md "Model folders").
+type ModelFolder struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	Root       string `json:"root"`
+	Connected  bool   `json:"connected"`
+	FreeBytes  *int64 `json:"free_bytes,omitempty"`
+	TotalBytes *int64 `json:"total_bytes,omitempty"`
+	Writable   bool   `json:"writable"`
+	Downloads  bool   `json:"downloads"`
+}
+
+// Copy is a variant's or add-on's files in one model folder (API 1.78).
+type Copy struct {
+	Folder     string `json:"folder"`
+	State      string `json:"state"` // present | partial | mismatch | unplugged
+	Bytes      *int64 `json:"bytes,omitempty"`
+	FreedBytes *int64 `json:"freed_bytes,omitempty"`
 }
 
 // Machine is what a runner runs on (API 1.16).
@@ -511,7 +533,7 @@ type Runtime struct {
 // Variant is one variant of a model on a host.
 type Variant struct {
 	ID       string       `json:"id"`
-	Presence string       `json:"presence"`         // present | partial | missing | mismatch
+	Presence string       `json:"presence"`         // present | partial | missing | mismatch | unplugged (1.78)
 	Memory   []MemoryPlan `json:"memory,omitempty"` // per precision: what a run holds (the hand-over)
 	// API 1.16 (the Models screen and model jobs)
 	Title      string      `json:"title,omitempty"`
@@ -525,6 +547,9 @@ type Variant struct {
 	// M9: the variant whose weights are this one's distilled model (ltx dev-int8: distilled-fp8), used by <family>/distill
 	DistillFrom string `json:"distill_from,omitempty"`
 	Help        string `json:"help,omitempty"` // API 1.39: its line in the model chip's menu
+	// API 1.78: the folder a run loads it from, and every folder with files of it
+	Folder string `json:"folder,omitempty"`
+	Copies []Copy `json:"copies,omitempty"`
 }
 
 // Addon is one optional add-on of a model on a host (API 1.36): a component a few nodes load and no variant needs.
@@ -533,10 +558,12 @@ type Addon struct {
 	Title     string   `json:"title"`
 	Help      string   `json:"help,omitempty"`
 	Dir       string   `json:"dir"`
-	Presence  string   `json:"presence"` // present | partial | missing | mismatch
+	Presence  string   `json:"presence"` // present | partial | missing | mismatch | unplugged (1.78)
 	Bytes     *int64   `json:"bytes,omitempty"`
 	Source    *Source  `json:"source,omitempty"`
 	Mismatch  []string `json:"mismatch,omitempty"`
+	Folder    string   `json:"folder,omitempty"` // API 1.78, as a variant's
+	Copies    []Copy   `json:"copies,omitempty"`
 	// API 1.40: the variants whose runs need it; absent = every variant
 	Variants []string `json:"variants,omitempty"`
 	// API 1.40: the task whose runs need it (true: a run with references, false: one without); absent = both

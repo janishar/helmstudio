@@ -52,6 +52,7 @@ type Service struct {
 	providerKey      ProviderKeyAsk      // pipelines.providers.key (API 1.51); nil answers 503
 	providerKeyWrite ProviderKeyWriteAsk // pipelines.providers.key.write (API 1.52); nil answers 503
 	pluginKey        PluginKeyAsk        // runner.plugins.key.<host> (API 1.73); nil answers 503
+	foldersCheck     FoldersCheckAsk     // runner.folders.check.<host> (API 1.78); nil answers 503
 	judgeTest        JudgeTestAsk        // pipelines.judge.test (API 1.28); nil answers 503
 	remoteOn         bool                // the deployment's remote switch (STUDIO_REMOTE_MODELS, off by default; API 1.15)
 	// the dispatcher whose skip counts positions use; nil: none

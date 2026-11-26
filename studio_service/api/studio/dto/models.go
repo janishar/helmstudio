@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/helmstudio/studio_service/registry"
@@ -41,6 +43,28 @@ type ModelHost struct {
 	FreeBytes  *int64   `json:"free_bytes"`
 	TotalBytes *int64   `json:"total_bytes"`
 	HubToken   *bool    `json:"hub_token,omitempty"` // admins only
+	// API 1.78: its model folders in priority order, from the freshest key's models_disks
+	Folders []ModelFolder `json:"folders"`
+}
+
+// ModelFolder is one model folder of a host (API 1.78).
+type ModelFolder struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	Root       string `json:"root"`
+	Connected  bool   `json:"connected"`
+	FreeBytes  *int64 `json:"free_bytes"`
+	TotalBytes *int64 `json:"total_bytes"`
+	Writable   bool   `json:"writable"`
+	Downloads  bool   `json:"downloads"`
+}
+
+// ModelCopy is a variant's (or add-on's) files in one folder of a host (API 1.78).
+type ModelCopy struct {
+	Folder     string `json:"folder"`
+	State      string `json:"state"`
+	Bytes      *int64 `json:"bytes"`
+	FreedBytes *int64 `json:"freed_bytes"`
 }
 
 // Model is one model and its variants over every host.
@@ -108,6 +132,8 @@ type ModelVariantHost struct {
 	Mismatch []string    `json:"mismatch,omitempty"`
 	Separate []string    `json:"separate,omitempty"`
 	Job      *VariantJob `json:"job"`
+	Folder   *string     `json:"folder"`           // API 1.78: the copy a run loads; null when missing or unplugged
+	Copies   []ModelCopy `json:"copies,omitempty"` // API 1.78; absent from older runners
 }
 
 // VariantJob is the download job of a downloading variant.
@@ -124,6 +150,7 @@ type ModelDownload struct {
 	Variant       *string `json:"variant"`
 	Addon         *string `json:"addon"` // API 1.36: an optional add-on instead of a variant
 	AcceptLicence bool    `json:"accept_licence"`
+	Folder        *string `json:"folder"` // API 1.78: the folder to download into; absent = the downloads folder
 }
 
 // Validate checks the names.
@@ -137,8 +164,51 @@ func (b *ModelDownload) Validate() string {
 		return "addon must be a component name"
 	case b.Addon != nil && b.Variant != nil:
 		return "give a variant or an add-on, not both"
+	case b.Folder != nil && !FolderID.MatchString(*b.Folder):
+		return "folder must be a folder id"
 	}
 	return ""
+}
+
+// FolderID is a model folder's id (API 1.78): the first 12 hex of the SHA-256 of its path.
+var FolderID = regexp.MustCompile(`^[0-9a-f]{12}$`)
+
+// ModelFoldersPut is PUT /admin/hosts/{host}/folders (API 1.78): the whole list, first = loaded first.
+type ModelFoldersPut struct {
+	Folders []struct {
+		Path string `json:"path"`
+	} `json:"folders"`
+	Downloads *int `json:"downloads"`
+}
+
+// Validate checks the paths and the downloads index.
+func (b *ModelFoldersPut) Validate() string {
+	if len(b.Folders) < 1 || len(b.Folders) > 8 {
+		return "folders must list 1 to 8 paths"
+	}
+	if b.Downloads == nil || *b.Downloads < 0 || *b.Downloads >= len(b.Folders) {
+		return "downloads must be an index of folders"
+	}
+	seen := map[string]bool{}
+	for _, f := range b.Folders {
+		p := strings.TrimRight(f.Path, "/")
+		switch {
+		case p == "" || len(f.Path) > 400 || !(strings.HasPrefix(f.Path, "/") || strings.HasPrefix(f.Path, "~/")):
+			return "paths must be absolute or start with ~/"
+		case slices.Contains(strings.Split(p, "/"), "..") || strings.ContainsAny(p, "\x00\n\r"):
+			return f.Path + " is not a plain path"
+		case seen[p]:
+			return f.Path + " is listed twice"
+		}
+		seen[p] = true
+	}
+	return ""
+}
+
+// HostFolder is one folder of HostSettings.folders (API 1.78).
+type HostFolder struct {
+	ID   string `json:"id"`
+	Path string `json:"path"`
 }
 
 // ModelJob is one model job.
@@ -283,15 +353,17 @@ func (b *HostPins) Validate() string {
 
 // HostSettings is a host's stored settings.
 type HostSettings struct {
-	Host          string    `json:"host"`
-	Version       int       `json:"version"`
-	AfterRun      string    `json:"after_run"`
-	IdleUnloadMin int       `json:"idle_unload_min"`
-	ReserveGB     float64   `json:"reserve_gb"`
-	ReserveMode   string    `json:"reserve_mode"`
-	Pins          []PinRef  `json:"pins"`
-	Applied       bool      `json:"applied"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	Host          string       `json:"host"`
+	Version       int          `json:"version"`
+	AfterRun      string       `json:"after_run"`
+	IdleUnloadMin int          `json:"idle_unload_min"`
+	ReserveGB     float64      `json:"reserve_gb"`
+	ReserveMode   string       `json:"reserve_mode"`
+	Pins          []PinRef     `json:"pins"`
+	Folders       []HostFolder `json:"folders"`   // API 1.78: null = never set (HELMSTUDIO_MODELS)
+	Downloads     *string      `json:"downloads"` // API 1.78: the downloads folder's id; null with folders null
+	Applied       bool         `json:"applied"`
+	UpdatedAt     time.Time    `json:"updated_at"`
 }
 
 // HostUnload is POST /admin/hosts/{host}/unload: exactly one of the three.
