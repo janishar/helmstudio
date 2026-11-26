@@ -3049,3 +3049,41 @@
 .ast .sb:disabled {
   opacity: 0.6;
 }
+
+/* Create's kind tabs: the kind's glowing orb above the label (docs/mock/TextToVideo.dc.html .ktab, Magic.dc.html .ki) */
+.ktab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+.ki {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  background: radial-gradient(
+    circle at 34% 30%,
+    color-mix(in srgb, var(--k) 30%, #fff) 0,
+    var(--k) 42%,
+    color-mix(in srgb, var(--k) 45%, #000) 100%
+  );
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--k) 16%, transparent),
+    0 0 14px 2px color-mix(in srgb, var(--k) 40%, transparent);
+}
+.ki.k-video {
+  --k: #ff9a6e;
+}
+.ki.k-image {
+  --k: #b8abff;
+}
+.ki.k-board {
+  --k: #e8d88a;
+}
+.ki.k-voice {
+  --k: #f2b84b;
+}

@@ -8,11 +8,15 @@ import {
   ArrowRight,
   AtSign,
   Check,
+  Clapperboard,
   Columns2,
   Eye,
+  Image as ImageIcon,
   Info as InfoIcon,
   Maximize,
   MessageCircleQuestion,
+  Mic,
+  Pencil,
   Trash2,
   StepForward,
   Minus,
@@ -2934,6 +2938,24 @@ function RunTile({
   );
 }
 
+/** A kind's glowing orb (docs/mock/Magic.dc.html Add dialog, CSS .ki in globals.css): Audio is the voice orb (mic)
+ * until plan 38 splits it into Voice, Music and Sound. */
+const KIND_ORB: Record<MediaKind, [string, typeof Mic]> = {
+  image: ["k-image", ImageIcon],
+  video: ["k-video", Clapperboard],
+  audio: ["k-voice", Mic],
+  text: ["k-board", Pencil],
+};
+
+function KindOrb({ kind }: { kind: MediaKind }) {
+  const [cls, Icon] = KIND_ORB[kind];
+  return (
+    <i className={`ki ${cls}`} aria-hidden="true">
+      <Icon size={14} stroke="#14201a" strokeWidth={2} />
+    </i>
+  );
+}
+
 /** The Image / Video / Audio switch beside the composer (docs/mock/TextToVideo.dc.html "Output kind"): which media's
  * workflows the model chip offers. One fixed size (the owner, 2026-11-25: the Image composer's), so switching kinds
  * never resizes it. */
@@ -2959,8 +2981,9 @@ function MediaSwitch({
           role="tab"
           aria-selected={m === media}
           onClick={() => m !== media && onPick(m)}
-          className="bevel h-[63px] w-16 rounded-xl text-[12px] font-semibold text-t2 aria-selected:bg-s5 aria-selected:text-t1"
+          className="bevel ktab h-[63px] w-16 rounded-xl text-[12px] font-semibold text-t2 aria-selected:bg-s5 aria-selected:text-t1"
         >
+          <KindOrb kind={m} />
           {{ image: "Image", video: "Video", audio: "Audio", text: "Text" }[m]}
         </button>
       ))}

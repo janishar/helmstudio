@@ -150,6 +150,18 @@ describe("Create on an audio workflow", () => {
         .getAllByRole("tab")
         .map((t) => t.textContent),
     ).toEqual(["Image", "Audio"]);
+    // each tab shows its kind's orb above the label, hidden from screen readers (Audio: the voice orb)
+    expect(
+      within(tabs)
+        .getAllByRole("tab")
+        .map((t) => {
+          const orb = t.querySelector(".ki")!;
+          return [orb.className, orb.getAttribute("aria-hidden"), !!orb.querySelector("svg")];
+        }),
+    ).toEqual([
+      ["ki k-image", "true", true],
+      ["ki k-voice", "true", true],
+    ]);
     fireEvent.click(within(tabs).getByRole("tab", { name: "Audio" }));
     const composer = screen.getByRole("form", { name: "Composer" });
     const tile = await within(composer).findByRole("button", { name: "Voice: Pick a voice" });
