@@ -5,10 +5,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
 import {
+  ArrowRight,
   AtSign,
   Check,
+  Columns2,
+  Eye,
   Info as InfoIcon,
   Maximize,
+  MessageCircleQuestion,
+  Trash2,
+  StepForward,
   Minus,
   Pause,
   Play,
@@ -43,17 +49,12 @@ import { mediaItem, offerLabel } from "@/lib/source";
 import { useTakes, useUses } from "@/lib/take-cache";
 import { clipOf, placeRows, positionOf } from "@/lib/video";
 import { WorkflowPicker } from "@/components/create/workflows";
-import {
-  DeleteCard,
-  SessionMenu,
-  TileMenu,
-  firstHint,
-  openTileMenu,
-} from "@/components/create/sessions";
+import { DeleteCard, SessionMenu, TileMenu, firstHint } from "@/components/create/sessions";
+import { openMenu, type Item } from "@/components/context-menu";
 import { FrameIn } from "@/components/create/frame-in";
 import { Compare, ExplainDrawer } from "@/components/create/compare";
 import { ElementsPicker } from "@/components/create/elements";
-import { AddToTimeline } from "@/components/timeline/add";
+import { AddToTimeline, AddedNote, addToTimeline } from "@/components/timeline/add";
 import { LooksPicker, LooksSection, QuickTiles } from "@/components/create/looks";
 import { MentionChips, insertAtCaret } from "@/components/create/prompt";
 import { WavePlayer } from "@/components/create/audio";
@@ -1302,6 +1303,86 @@ export function Create({
   const shown = picked?.run ?? runs?.find((r) => r.id === shownTake?.run_id);
   // the session's pictures Compare offers: image and video takes, newest first
   const pictures = takes.filter((t) => t.kind === "image" || t.kind === "video");
+  // Add to timeline from a menu: its note under the strip
+  const [added, setAdded] = useState<{ id: string; name: string; n: number } | null>(null);
+  /** A take's right-click menu (ContextMenus frame 5): on the stage, its buttons and the row under it; on a strip
+   * tile (`tile`), Show first and the take's actions for that tile's take. A text answer's tile: Show, Delete. */
+  function takeMenu(
+    e: React.MouseEvent,
+    it: { take?: Take; run?: Run },
+    title: string,
+    tile: boolean,
+  ) {
+    const t = it.take;
+    const id = (t ?? it.run)!.id;
+    const del: Item = {
+      label: "Delete",
+      icon: Trash2,
+      danger: true,
+      onPick: () => setDeleting(t ? { take: t } : { run: it.run! }),
+    };
+    const stage = !tile && t?.id === shownTake?.id;
+    const items = (uses: S<"TakeOffer">[] | null): Item[] => [
+      tile && { label: "Show", icon: Eye, onPick: () => (setSelected(id), setSourceView(false)) },
+      t && {
+        label: "Full screen",
+        icon: Maximize,
+        keys: "F",
+        onPick: () => (setSelected(t.id), setFull(true)),
+      },
+      stage &&
+        pictures.length > 1 &&
+        pictures.includes(t!) && {
+          label: "Compare",
+          icon: Columns2,
+          onPick: () => setComparing((c) => !c),
+        },
+      stage &&
+        shownWorkflow &&
+        (t?.made_with || shown) && {
+          label: "Explain run",
+          icon: MessageCircleQuestion,
+          onPick: () => setExplaining(true),
+        },
+      t &&
+        t.kind !== "audio" && {
+          label: t.starred ? "Starred" : "Star",
+          icon: Star,
+          checked: t.starred,
+          onPick: () => void star(t),
+        },
+      "-",
+      stage &&
+        extendOffer && {
+          label: "Extend",
+          icon: StepForward,
+          onPick: () => applyOffer(extendOffer),
+        },
+      t && {
+        label: "Add to timeline",
+        icon: Plus,
+        onPick: () =>
+          void addToTimeline([t.id], t.kind === "audio")
+            .then((r) => setAdded({ ...r, n: 1 }))
+            .catch((err) => setError(message(err))),
+      },
+      t &&
+        (uses === null
+          ? { label: "Use in", icon: ArrowRight, off: "Reading what it fits" }
+          : uses.length > 0 && {
+              label: "Use in",
+              icon: ArrowRight,
+              items: uses.map((o) => ({ label: offerLabel(o), onPick: () => applyOffer(o) })),
+            }),
+      "-",
+      del,
+    ];
+    const h = openMenu(e, { title, items: items(t ? (stage ? offers : null) : []) });
+    if (!h || !t || (stage && offers)) return;
+    ok(api.GET("/v1/studio/takes/{take_id}/uses", { params: { path: { take_id: t.id } } }))
+      .then((r) => h.update({ title, items: items(r.uses) }))
+      .catch(() => h.update({ title, items: items([]) }));
+  }
   // no run and no take yet: the title and the composer under it with the open look group's looks
   // (docs/mock/Direct.dc.html); the first run brings the Stage
   const empty = !runs?.length && !takes.length;
@@ -1654,6 +1735,7 @@ export function Create({
         {workflows?.length === 0 && (
           <ErrorNote onRetry={load}>No workflows yet: no runner has published any.</ErrorNote>
         )}
+        {added && <AddedNote {...added} />}
 
         {spanField && sourceSet && sourceView ? (
           <SourceStage span={spanField} fields={fields} raws={raws} onChange={change} grid={grid} />
@@ -1673,6 +1755,18 @@ export function Create({
             workflow={shownWorkflow}
             onStar={shownTake && (() => void star(shownTake))}
             onFull={() => setFull(true)}
+            onMenu={
+              shownTake &&
+              ((e) => {
+                const seed = shownTake.made_with?.seed;
+                takeMenu(
+                  e,
+                  { take: shownTake },
+                  seed != null ? `Seed ${seed}` : shownTake.title,
+                  false,
+                );
+              })
+            }
             onDrop={refField && intoRefs}
             compare={
               comparing &&
@@ -1747,10 +1841,13 @@ export function Create({
                   className="group relative shrink-0"
                   onContextMenu={
                     menu
-                      ? (e) => {
-                          e.preventDefault();
-                          openTileMenu(id);
-                        }
+                      ? (e) =>
+                          takeMenu(
+                            e,
+                            it,
+                            `${it.take ? "Take" : "Answer"} ${seed != null ? name : items.length - i}`,
+                            true,
+                          )
                       : undefined
                   }
                 >
@@ -1778,10 +1875,16 @@ export function Create({
                   )}
                   {menu && (
                     <TileMenu
-                      id={id}
                       label={`${it.take ? "Take" : "Answer"} ${seed != null ? name : items.length - i}`}
                       current={it === picked}
-                      onDelete={() => setDeleting(it.take ? { take: it.take } : { run: it.run })}
+                      onMenu={(e) =>
+                        takeMenu(
+                          e,
+                          it,
+                          `${it.take ? "Take" : "Answer"} ${seed != null ? name : items.length - i}`,
+                          true,
+                        )
+                      }
                     />
                   )}
                   {!it.take && removable(it.run) && (
@@ -2338,7 +2441,10 @@ function Stage({
   compare,
   onCompare,
   onExplain,
+  onMenu,
 }: {
+  /** a right-click on the take: its menu */
+  onMenu?: (e: React.MouseEvent) => void;
   run?: Run;
   take?: Take;
   workflow?: S<"Workflow">;
@@ -2405,6 +2511,7 @@ function Stage({
   return (
     <div
       className={`panel relative min-h-[400px] grow bg-inset ${over ? "outline-2 -outline-offset-4 outline-a1 outline-dashed" : ""}`}
+      onContextMenu={onMenu}
       onDragOver={(e) => {
         if (!onDrop || !carriesImage(e.dataTransfer)) return;
         e.preventDefault();

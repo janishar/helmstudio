@@ -10,7 +10,19 @@ import {
   useState,
   type TextareaHTMLAttributes,
 } from "react";
-import { MapPin, Package, UserRound } from "lucide-react";
+import {
+  ArrowLeftRight,
+  AtSign,
+  MapPin,
+  Package,
+  Pencil,
+  Plus,
+  Trash2,
+  Type,
+  UserRound,
+} from "lucide-react";
+import { openMenu } from "@/components/context-menu";
+import { ElementEditor } from "@/components/create/elements";
 import { Expand } from "@/components/expand-text";
 import { api, ok, type S } from "@/lib/api";
 import { safeUrl } from "@/lib/format";
@@ -46,6 +58,9 @@ export function PromptArea({
   ...rest
 }: Props) {
   const known = useKnown();
+  const lib = useLibrary();
+  // an @ chip's Edit @x or New element @x (ContextMenus frame 7)
+  const [editing, setEditing] = useState<{ item?: Item; handle?: string } | null>(null);
   const ta = useRef<HTMLTextAreaElement>(null);
   const back = useRef<HTMLDivElement>(null);
   const menu = useRef<HTMLDivElement>(null);
@@ -94,6 +109,73 @@ export function PromptArea({
     setCaret(typeMention(ta.current, value, at.start, at.end, it.handle, onChange));
   }
 
+  /** Puts `text` over [start, end) as typing would (⌘Z takes it back). */
+  function typeOver(start: number, end: number, text: string) {
+    const el = ta.current;
+    el?.focus();
+    el?.setSelectionRange(start, end);
+    const done = (() => {
+      try {
+        return (
+          !!el &&
+          el.value === value &&
+          document.execCommand(text ? "insertText" : "delete", false, text)
+        );
+      } catch {
+        return false;
+      }
+    })();
+    if (!done) onChange(value.slice(0, start) + text + value.slice(end));
+  }
+  /** A right-click on an @ chip (drawn under the textarea): the chip's menu; elsewhere the text field's. */
+  function chipMenu(e: React.MouseEvent) {
+    const hit = [...(back.current?.querySelectorAll<HTMLElement>("[data-start]") ?? [])].find(
+      (el) =>
+        [...el.getClientRects()].some(
+          (r) =>
+            e.clientX >= r.left &&
+            e.clientX <= r.right &&
+            e.clientY >= r.top &&
+            e.clientY <= r.bottom,
+        ),
+    );
+    const r = hit && ranges.find((x) => x.start === Number(hit.dataset.start));
+    if (!r) return;
+    const item = lib?.find((x) => x.handle === r.handle);
+    const others = (lib ?? []).filter((x) => x.handle && x.handle !== r.handle);
+    openMenu(e, {
+      title: item ? `@${r.handle} · ${item.name}` : `@${r.handle} · no element`,
+      items: [
+        item
+          ? { label: `Edit @${r.handle}`, icon: Pencil, onPick: () => setEditing({ item }) }
+          : {
+              label: `New element @${r.handle}`,
+              icon: Plus,
+              onPick: () => setEditing({ handle: r.handle }),
+            },
+        {
+          label: "Replace with",
+          icon: ArrowLeftRight,
+          off: others.length ? undefined : "No other elements yet",
+          items: others.map((x) => ({
+            label: `@${x.handle}`,
+            icon: AtSign,
+            onPick: () =>
+              setCaret(typeMention(ta.current, value, r.start, r.end, x.handle!, onChange)),
+          })),
+        },
+        { label: "Write as text", icon: Type, onPick: () => typeOver(r.start, r.start, "@") },
+        "-",
+        {
+          label: "Remove from prompt",
+          icon: Trash2,
+          danger: true,
+          onPick: () => typeOver(r.start, r.end, ""),
+        },
+      ],
+    });
+  }
+
   // the highlight layer: the text cut at each mention and at the open token's @ (the menu's anchor)
   const ranges = mentionRanges(value);
   const cuts = [
@@ -106,7 +188,8 @@ export function PromptArea({
   ].sort((a, b) => a - b);
   const opt = (i: number) => `${uid}-${i}`;
   return (
-    <div className={`group relative ${wrapClassName ?? ""}`}>
+    // data-mentions: the text field's menu has Insert @… (components/context-menu.tsx)
+    <div className={`group relative ${wrapClassName ?? ""}`} data-mentions>
       <div
         ref={back}
         aria-hidden
@@ -132,6 +215,7 @@ export function PromptArea({
           return (
             <span
               key={a}
+              data-start={r?.start}
               className={r ? (bad ? "mention-chip mention-unknown" : "mention-chip") : undefined}
               style={
                 open && at?.start === a
@@ -170,6 +254,7 @@ export function PromptArea({
             setDismissed(null);
         }}
         onSelect={(e) => setCaret(e.currentTarget.selectionStart)}
+        onContextMenu={chipMenu}
         onFocus={(e) => setCaret(e.currentTarget.selectionStart)}
         onBlur={(e) => {
           setCaret(null);
@@ -272,6 +357,15 @@ export function PromptArea({
           ↑↓ choose · Enter or Tab inserts · Esc closes · @@ types a literal @
         </span>
       </div>
+      {editing && (
+        <ElementEditor
+          open
+          onClose={() => setEditing(null)}
+          item={editing.item}
+          handle={editing.handle}
+          onSaved={() => void reloadLibrary()}
+        />
+      )}
       {expand && (
         <Expand
           title={expand}

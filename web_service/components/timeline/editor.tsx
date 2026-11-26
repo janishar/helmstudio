@@ -7,7 +7,39 @@
 // edit to the new revision once.
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
+import {
+  ArrowRight,
+  ArrowUpDown,
+  Brackets,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  Clapperboard,
+  Film,
+  Flag,
+  FoldHorizontal,
+  ListPlus,
+  Magnet,
+  Maximize2,
+  Mic,
+  MousePointer2,
+  Pause,
+  Pencil,
+  Play,
+  Plus,
+  Repeat,
+  RotateCcw,
+  Scissors,
+  Space,
+  Sparkles,
+  Trash2,
+  VolumeX,
+  X,
+  ZoomIn,
+  ZoomOut,
+} from "lucide-react";
+import { mod, openMenu, type Item } from "@/components/context-menu";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { ActionsNote, ClipActions } from "@/components/timeline/actions";
 import { say, timelineTools, type FormSlot, type Want } from "@/components/timeline/assistant";
@@ -17,7 +49,7 @@ import { markRange, rangeInTake, removeTrack } from "@/lib/source";
 import { ElementsPicker } from "@/components/create/elements";
 import { LooksPicker } from "@/components/create/looks";
 import { GalleryPicker } from "@/components/gallery/picker";
-import { Lanes, MARKER_COLORS, clipText, shotName } from "@/components/timeline/lanes";
+import { Lanes, MARKER_COLORS, clipText, shotName, type LaneAt } from "@/components/timeline/lanes";
 import { ShortcutSheet, SlipSource, ToolRow } from "@/components/timeline/tools";
 import { ShotComposer, type ShotSlot } from "@/components/timeline/shot";
 import { FrameIn } from "@/components/create/frame-in";
@@ -118,6 +150,10 @@ const readPanel = () => {
     return true;
   }
 };
+/** What a menu opened in the clip inspector: Make shot, Use in…, a frame's Use in (first, last), an offer's form
+ * (`offer:<workflow> <param>`). */
+type Opened = string | null;
+
 /** The editor; `id` is the sequence to open (else the one opened last, else the newest). */
 export function TimelineEditor({ id }: { id?: string }) {
   const router = useRouter();
@@ -163,10 +199,11 @@ export function TimelineEditor({ id }: { id?: string }) {
   >(null);
   const [picker, setPicker] = useState<{ track: string } | null>(null);
   const [shot, setShot] = useState<ShotSlot | null>(null);
-  // New line docked at the playhead (API 1.32); an audio clip's ⋯ menu; what its menu opened in the inspector
+  // New line docked at the playhead (API 1.32); what a clip's menu opened in the inspector
   const [line, setLine] = useState(false);
-  const [menuFor, setMenuFor] = useState<string | null>(null);
-  const [opened, setOpened] = useState<"make" | "use" | null>(null);
+  const [opened, setOpened] = useState<Opened>(null);
+  // New line opened from a menu: at the pointer's time, on its track (null: the playhead, lineTrack)
+  const [lineAt, setLineAt] = useState<{ at: number; track: string } | null>(null);
   const [voiceTake, setVoiceTake] = useState<string | null>(null);
   const [replacing, setReplacing] = useState(false);
   const [workflows, setWorkflows] = useState<S<"Workflow">[]>([]);
@@ -475,7 +512,6 @@ export function TimelineEditor({ id }: { id?: string }) {
   const one = selected.length === 1 ? selected[0] : (linkedSel ?? null);
   const v1 = doc?.tracks[0].clips ?? [];
   const at = g ? g.s(frame) : 0;
-  const menuClip = all.find((x) => x.c.id === menuFor && x.ti > 0)?.c;
   // New line's track: the selected audio track, else the first with nothing under the playhead
   const lineTrack = (() => {
     if (!doc || !g) return null;
@@ -508,9 +544,9 @@ export function TimelineEditor({ id }: { id?: string }) {
   }
   /** Delete: ripple delete (V1 closes the gap; an audio track's later clips move left); `lift`: ⇧Delete, V1 leaves
    * an empty slot, an audio clip a gap. A linked sound clip goes with its V1 clip. */
-  function remove(lift = false) {
-    const v1Ids = new Set(selected.filter((x) => x.ti === 0).map((x) => x.c.id));
-    for (const x of selected) {
+  function remove(lift = false, list = selected) {
+    const v1Ids = new Set(list.filter((x) => x.ti === 0).map((x) => x.c.id));
+    for (const x of list) {
       if (shotBusy(x.c) || (x.ti > 0 && x.c.link && v1Ids.has(x.c.link))) continue;
       if (x.ti === 0) commit({ op: lift ? "lift" : "remove", clip: x.c.id });
       else commit({ op: "remove", clip: x.c.id, ...(!lift && { ripple: true }) });
@@ -779,6 +815,362 @@ export function TimelineEditor({ id }: { id?: string }) {
       window.removeEventListener("keyup", u);
     };
   }, []);
+
+  // ------------------------------------------------------------------ right-click menus (alpha.5 item 17, ContextMenus frames 1-3)
+  /** Several ops as one edit (one revision, one ⌘Z): Close gap, a move onto a new track. */
+  const edits = (ops: Op[]) => server((t) => editTimeline(t, ops));
+  function laneMenu(e: React.MouseEvent, on: LaneAt) {
+    if (!doc || !g || !tl) return;
+    const busyWhy = "The shot is still running";
+    const audioTracks = doc.tracks.slice(1);
+    const zoomItems: Item[] = [
+      { label: "Zoom in", icon: ZoomIn, keys: mod("="), onPick: () => zoomTo(pps * 1.25) },
+      { label: "Zoom out", icon: ZoomOut, keys: mod("−"), onPick: () => zoomTo(pps * 0.8) },
+      { label: "Fit", icon: Maximize2, keys: "⇧Z", checked: atFit, onPick: () => void fit() },
+    ];
+    const markerAt = (t: number) =>
+      commit({ op: "marker", id: "", at: Math.min(t, doc.duration_s) });
+    if (on.kind === "ruler")
+      return openMenu(e, {
+        title: `Ruler at ${shortTime(on.t)}`,
+        items: [
+          { label: "Add marker", icon: Flag, keys: "M", onPick: () => markerAt(on.t) },
+          {
+            label: "Mark in",
+            icon: ChevronsRight,
+            keys: "I",
+            onPick: () => setRange((r) => markRange(r, "in", on.t, doc.duration_s)),
+          },
+          {
+            label: "Mark out",
+            icon: ChevronsLeft,
+            keys: "O",
+            onPick: () => setRange((r) => markRange(r, "out", on.t, doc.duration_s)),
+          },
+          {
+            label: "Clear range",
+            icon: X,
+            keys: "⌥X",
+            off: range ? undefined : "No range set",
+            onPick: () => setRange(null),
+          },
+          "-",
+          ...zoomItems,
+          "-",
+          {
+            label: "Snapping",
+            icon: Magnet,
+            keys: "N",
+            checked: snap,
+            onPick: () => setSnap((x) => !x),
+          },
+          {
+            label: "Hover scrub",
+            icon: MousePointer2,
+            keys: "⇧S",
+            checked: scrub,
+            onPick: () => setScrub((x) => !x),
+          },
+        ],
+      });
+    if (on.kind === "marker") {
+      const m = doc.markers?.find((x) => x.id === on.id);
+      return openMenu(e, {
+        title: m?.name || `Marker at ${shortTime(m?.at ?? 0)}`,
+        items: [
+          {
+            label: "Rename",
+            icon: Pencil,
+            onPick: () => (setSel([]), setTrack(null), setMarker(on.id)),
+          },
+          "-",
+          {
+            label: "Remove marker",
+            icon: Trash2,
+            keys: "Delete",
+            danger: true,
+            onPick: () => commit({ op: "remove_marker", id: on.id }),
+          },
+        ],
+      });
+    }
+    if (on.kind === "track") {
+      const t = audioTracks.find((x) => x.name === on.track);
+      if (!t) return;
+      return openMenu(e, {
+        title: on.track,
+        items: [
+          {
+            label: "Mute",
+            icon: VolumeX,
+            checked: !!t.mute,
+            onPick: () => commit({ op: "track", track: on.track, mute: !t.mute }),
+          },
+          {
+            label: `Add clips to ${on.track}`,
+            icon: ListPlus,
+            onPick: () => setPicker({ track: on.track }),
+          },
+          { label: "New line", icon: Mic, onPick: () => openLine(at, on.track) },
+          {
+            label: "Add audio track",
+            icon: Plus,
+            off: doc.tracks.length >= 9 ? "Eight audio tracks at most" : undefined,
+            onPick: () => commit({ op: "add_track" }),
+          },
+          "-",
+          { label: "Remove track", icon: Trash2, danger: true, onPick: () => askRemove(on.track) },
+        ],
+      });
+    }
+    if (on.kind === "gap") {
+      const t = audioTracks.find((x) => x.name === on.track);
+      if (!t) return;
+      const spans = t.clips.map((c) => ({ c, s: span(c, 1, facts, g) }));
+      const before = Math.max(0, ...spans.filter((x) => x.s[1] <= on.t).map((x) => x.s[1]));
+      const after = spans.filter((x) => x.s[0] >= on.t).sort((a, b) => a.s[0] - b.s[0]);
+      const gap = after.length ? after[0].s[0] - before : 0;
+      return openMenu(e, {
+        title: `${on.track} at ${shortTime(on.t)}`,
+        items: [
+          {
+            label: "New shot",
+            icon: Clapperboard,
+            onPick: () => (setLine(false), setShot({ at: on.t })),
+          },
+          { label: "New line", icon: Mic, onPick: () => openLine(on.t, on.track) },
+          {
+            label: `Add clips to ${on.track}`,
+            icon: ListPlus,
+            onPick: () => setPicker({ track: on.track }),
+          },
+          { label: "Add marker", icon: Flag, keys: "M", onPick: () => markerAt(on.t) },
+          "-",
+          {
+            label: "Close gap",
+            icon: FoldHorizontal,
+            off: gap > 0 ? undefined : "Nothing after it to move",
+            onPick: () =>
+              edits(after.map((x) => ({ op: "move", clip: x.c.id, at: x.c.at! - gap }))),
+          },
+        ],
+      });
+    }
+    // a clip: on the selection it acts on all of it, else it selects that clip (and its linked one; ⌥ the one) first
+    const hit = all.find((x) => x.c.id === on.id);
+    if (!hit) return;
+    const ids = e.altKey ? [on.id] : linkedTo(doc, on.id);
+    const inSel = sel.includes(on.id);
+    const group = inSel ? selected : all.filter((x) => ids.includes(x.c.id));
+    const many = inSel && !sameSet(sel, linkedTo(doc, sel[0])) && selected.length > 1;
+    const choose = () => {
+      setAsk(null);
+      setTrack(null);
+      setMarker(null);
+      setReplacing(false);
+      if (!inSel) setSel(ids);
+    };
+    if (many) {
+      const shots = selected.every((x) => x.ti === 0);
+      return openMenu(e, {
+        title: `${selected.length} clips`,
+        items: [
+          { label: "Replace with another take", icon: Repeat, off: "One clip at a time" },
+          {
+            label: "Re-render…",
+            icon: RotateCcw,
+            off: shots ? undefined : "Shots on V1 only",
+            onPick: () => setDialog("rerender"),
+          },
+          {
+            label: "Leave gaps",
+            icon: Space,
+            keys: "⇧Delete",
+            onPick: () => remove(true, selected),
+          },
+          { label: "Deselect", icon: X, keys: "Esc", onPick: () => setSel([]) },
+          "-",
+          {
+            label: `Remove ${selected.length} clips`,
+            icon: Trash2,
+            keys: "Delete",
+            danger: true,
+            onPick: () => remove(false, selected),
+          },
+        ],
+      });
+    }
+    const { c, ti } = hit;
+    const busy = shotBusy(c);
+    const off = busy ? busyWhy : undefined;
+    const take = c.take_id ? tl.takes[c.take_id] : undefined;
+    const kind = kindOf(c, facts);
+    const alts = (c.alternatives ?? []).filter((a) => tl.takes[a]);
+    const [a, b] = span(c, ti, facts, g);
+    const title = clipText(c, ti > 0, tl.takes, facts, g).title;
+    const replaceItem: Item = alts.some((x) => x !== c.take_id) && {
+      label: "Replace with another take",
+      icon: Repeat,
+      off,
+      items: alts.map((x) => {
+        const t = tl.takes[x];
+        return {
+          label: t.seed != null ? `seed ${t.seed}` : t.title,
+          checked: x === c.take_id,
+          onPick: () => x !== c.take_id && commit({ op: "replace", clip: c.id, take_id: x }),
+        };
+      }),
+    };
+    const inspect = (o: Opened) => () => (choose(), setOpened(o));
+    const edit: Item[] = [
+      {
+        label: "Split at playhead",
+        icon: Scissors,
+        keys: "S",
+        off: off ?? (at > a && at < b ? undefined : "The playhead is not on this clip"),
+        onPick: () =>
+          commit({ op: "split", track: ti ? doc.tracks[ti].name! : "V1", at, id: newId(doc) }),
+      },
+      ti === 0 && {
+        label: "Mark clip as range",
+        icon: Brackets,
+        keys: "X",
+        onPick: () => setRange([a, b]),
+      },
+      {
+        label: "Leave a gap",
+        icon: Space,
+        keys: "⇧Delete",
+        off,
+        onPick: () => remove(true, group),
+      },
+      "-",
+      {
+        label: "Remove clip",
+        icon: Trash2,
+        keys: "Delete",
+        danger: true,
+        off,
+        onPick: () => remove(false, group),
+      },
+    ];
+    let items: Item[];
+    if (ti > 0) {
+      const others = audioTracks.filter((t) => t.name !== doc.tracks[ti].name);
+      const newName = `A${doc.tracks.length + 1}`;
+      items = [
+        take &&
+          !c.offline && { label: "Make shot", icon: Clapperboard, off, onPick: inspect("make") },
+        replaceItem,
+        take && !c.offline && { label: "Use in…", icon: ArrowRight, off, onPick: inspect("use") },
+        take?.kind === "audio" && {
+          label: "Save as voice…",
+          icon: Mic,
+          onPick: () => setVoiceTake(c.take_id!),
+        },
+        {
+          label: "Move to track",
+          icon: ArrowUpDown,
+          off,
+          items: [
+            ...others.map((t) => ({
+              label: t.name!,
+              onPick: () => commit({ op: "move", clip: c.id, at: c.at!, track: t.name! }),
+            })),
+            doc.tracks.length < 9 && {
+              label: "New audio track",
+              icon: Plus,
+              onPick: () =>
+                edits([{ op: "add_track" }, { op: "move", clip: c.id, at: c.at!, track: newName }]),
+            },
+          ],
+        },
+        {
+          label: "Mute",
+          icon: VolumeX,
+          checked: !!c.mute,
+          onPick: () => commit({ op: "set", clip: c.id, mute: !c.mute }),
+        },
+        "-",
+        ...edit,
+      ];
+    } else if (!c.take_id) {
+      items = [
+        {
+          label: c.shot?.status === "failed" ? "Try this shot again" : "New shot here",
+          icon: Clapperboard,
+          off,
+          onPick: () => setShot({ clip: c.id }),
+        },
+        "-",
+        {
+          label: "Remove clip",
+          icon: Trash2,
+          keys: "Delete",
+          danger: true,
+          off,
+          onPick: () => remove(false, group),
+        },
+      ];
+    } else {
+      const made = !!take?.workflow_id && !c.offline;
+      const offerKey = (o: S<"TakeOffer">) => `${o.workflow_id} ${o.param}`;
+      const build = (offers: S<"TakeOffer">[] | null): Item[] => [
+        ...(c.offline
+          ? []
+          : offers === null
+            ? [{ label: "Reading the clip's actions…", off: "Reading the clip's actions" }]
+            : offers.map((o) => ({
+                label: o.action ?? o.title,
+                icon: Sparkles,
+                off,
+                onPick: inspect(`offer:${offerKey(o)}`),
+              }))),
+        replaceItem,
+        made && {
+          label: "Redo this shot",
+          icon: RotateCcw,
+          off,
+          onPick: () => setShot({ clip: c.id, redo: true }),
+        },
+        kind === "video" &&
+          !c.offline && {
+            label: "Use in",
+            icon: ArrowRight,
+            items: [
+              { label: "Last frame in…", icon: Film, onPick: inspect("last") },
+              { label: "First frame in…", icon: Film, onPick: inspect("first") },
+            ],
+          },
+        made && {
+          label: "Re-render…",
+          icon: RotateCcw,
+          off,
+          onPick: () => (choose(), setDialog("rerender")),
+        },
+        "-",
+        ...edit,
+      ];
+      const h = openMenu(e, { title, items: build(null) });
+      if (!h) return;
+      choose();
+      if (c.offline) return;
+      ok(
+        api.GET("/v1/studio/timelines/{timeline_id}/clips/{clip_id}/actions", {
+          params: { path: { timeline_id: tl.id, clip_id: c.id } },
+        }),
+      )
+        .then((r) => h.update({ title, items: build(r.actions.filter((o) => !o.slot)) }))
+        .catch(() => h.update({ title, items: build([]) }));
+      return;
+    }
+    if (openMenu(e, { title, items })) choose();
+  }
+  const openLine = (t: number, name: string) => {
+    setShot(null);
+    setLineAt({ at: t, track: name });
+    setLine(true);
+  };
 
   // ------------------------------------------------------------------ the assistant (plan 18 §22.5)
   const stored = useCallback((t: Timeline) => {
@@ -1098,6 +1490,7 @@ export function TimelineEditor({ id }: { id?: string }) {
               aria-expanded={line}
               onClick={() => {
                 setShot(null);
+                setLineAt(null);
                 setLine((x) => !x);
               }}
             >
@@ -1146,13 +1539,14 @@ export function TimelineEditor({ id }: { id?: string }) {
             key={JSON.stringify(ask)}
             tl={tl}
             doc={doc}
-            at={at}
-            track={lineTrack}
+            at={lineAt?.at ?? at}
+            track={lineAt?.track ?? lineTrack}
             workflows={workflows}
             ask={ask ?? undefined}
             onForm={ask ? setForm : undefined}
             onClose={() => {
               setLine(false);
+              setLineAt(null);
               setAsk(null);
             }}
             onDone={(nt) => {
@@ -1208,6 +1602,7 @@ export function TimelineEditor({ id }: { id?: string }) {
           progress={progress}
           onSelect={(cid, add, alone) => {
             setAsk(null);
+            setOpened(null);
             setTrack(null);
             setMarker(null);
             setReplacing(false);
@@ -1233,7 +1628,7 @@ export function TimelineEditor({ id }: { id?: string }) {
           onAddTrack={() => commit({ op: "add_track" })}
           onRemoveTrack={askRemove}
           range={range}
-          onMenu={setMenuFor}
+          onContext={laneMenu}
           nameOf={(v) => speakerOf(library, v)}
           tool={tool}
           snap={snap}
@@ -1270,21 +1665,6 @@ export function TimelineEditor({ id }: { id?: string }) {
           {said}
         </p>
         <ShortcutSheet open={sheet} onClose={() => setSheet(false)} />
-        <ClipMenu
-          clip={menuClip}
-          title={menuClip ? clipText(menuClip, true, tl.takes, facts, g!).title : ""}
-          onPick={(what) => {
-            const c = menuClip;
-            document.getElementById("clip-menu")?.hidePopover?.();
-            if (!c) return;
-            if (what === "remove") return commit({ op: "remove", clip: c.id });
-            if (what === "voice") return setVoiceTake(c.take_id);
-            setTrack(null);
-            setSel([c.id]);
-            setReplacing(what === "replace");
-            setOpened(what === "make" ? "make" : what === "use" ? "use" : null);
-          }}
-        />
       </main>
 
       {panel && (
@@ -1569,8 +1949,8 @@ function ClipPanel({
   onRerender: () => void;
   onDeselect: () => void;
   /** what an audio clip's menu opened: its Make shot form, or Use in… */
-  opened: "make" | "use" | null;
-  onOpened: (o: "make" | "use" | null) => void;
+  opened: Opened;
+  onOpened: (o: Opened) => void;
   onSaveVoice: (takeId: string) => void;
 }) {
   const facts = factsOf(tl.takes);
@@ -1808,6 +2188,7 @@ function ClipPanel({
               workflows={workflows}
               disabled={busy}
               onDone={onShotStarted}
+              openId={opened?.startsWith("offer:") ? opened.slice(6) : undefined}
               ask={ask}
               onForm={onForm}
             />
@@ -1847,6 +2228,7 @@ function ClipPanel({
             // API 1.37 (docs/mock/H3Options.dc.html frame 7): the clip's frame as another workflow's input
             <FrameIn
               takeId={c.take_id}
+              start={opened === "first" || opened === "last" ? opened : undefined}
               href={(id, o) =>
                 `/?${tl.session_id ? `s=${encodeURIComponent(tl.session_id)}&` : ""}use=${encodeURIComponent(id)}&w=${encodeURIComponent(o.workflow_id)}`
               }
@@ -1946,62 +2328,6 @@ function SaveVoice({ takeId, onClose }: { takeId: string | null; onClose: () => 
   );
 }
 
-/** An audio clip's ⋯ menu (docs/mock/TimelineAudio.dc.html): Make shot, Replace with another take, Use in…, Save as
- * voice…, Remove clip. */
-function ClipMenu({
-  clip,
-  title,
-  onPick,
-}: {
-  clip?: Clip;
-  title: string;
-  onPick: (what: "make" | "replace" | "use" | "voice" | "remove") => void;
-}) {
-  const item = "act h-8 bg-transparent text-left";
-  return (
-    <div
-      id="clip-menu"
-      popover="auto"
-      role="menu"
-      aria-label={title || "Clip"}
-      className="pop w-[210px] p-1.5"
-      style={
-        {
-          positionAnchor: clip ? `--menu-${clip.id}` : undefined,
-          positionArea: "bottom span-left",
-          marginTop: 4,
-        } as React.CSSProperties
-      }
-    >
-      <div className="flex flex-col gap-0.5">
-        <span className="truncate px-3 pb-0.5 text-[12px] font-semibold text-t2">{title}</span>
-        <button type="button" role="menuitem" className={item} onClick={() => onPick("make")}>
-          Make shot
-        </button>
-        {(clip?.alternatives?.length ?? 0) > 1 && (
-          <button type="button" role="menuitem" className={item} onClick={() => onPick("replace")}>
-            Replace with another take
-          </button>
-        )}
-        <button type="button" role="menuitem" className={item} onClick={() => onPick("use")}>
-          Use in…
-        </button>
-        <button type="button" role="menuitem" className={item} onClick={() => onPick("voice")}>
-          Save as voice…
-        </button>
-        <button
-          type="button"
-          role="menuitem"
-          className={`${item} text-bad`}
-          onClick={() => onPick("remove")}
-        >
-          Remove clip
-        </button>
-      </div>
-    </div>
-  );
-}
-
 /** An audio-track clip's own parts of the inspector (API 1.32): a dialogue's lines on the sequence, a line's
  * placeholder (Retry, Remove), and Generate from this clip (Make shot, Replace, Use in…, Save as voice…). */
 function AudioClip({
@@ -2030,8 +2356,8 @@ function AudioClip({
   replacing: boolean;
   onReplacing: (on: boolean) => void;
   workflows: S<"Workflow">[];
-  opened: "make" | "use" | null;
-  onOpened: (o: "make" | "use" | null) => void;
+  opened: Opened;
+  onOpened: (o: Opened) => void;
   onShotStarted: (t: Timeline) => void;
   onSaveVoice: (takeId: string) => void;
   onCommit: (op: Op) => void;

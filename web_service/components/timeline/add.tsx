@@ -94,19 +94,24 @@ export function AddToTimeline({
       >
         Add to timeline
       </button>
-      {state && "id" in state && (
-        <p role="status" className="col-span-full m-0 text-[13px]">
-          Added {state.n === 1 ? "1 clip" : `${state.n} clips`} to {state.name} ·{" "}
-          <Link href={`/timeline?t=${encodeURIComponent(state.id)}`} className="underline">
-            Open
-          </Link>
-        </p>
-      )}
+      {state && "id" in state && <AddedNote {...state} />}
       {state && "error" in state && (
         <p role="alert" className="col-span-full m-0 text-[13px] text-bad">
           {state.error}
         </p>
       )}
     </>
+  );
+}
+
+/** "Added N clips to <name> · Open" (a menu's Add to timeline shows it too). */
+export function AddedNote({ id, name, n }: { id: string; name: string; n: number }) {
+  return (
+    <p role="status" className="col-span-full m-0 text-[13px]">
+      Added {n === 1 ? "1 clip" : `${n} clips`} to {name} ·{" "}
+      <Link href={`/timeline?t=${encodeURIComponent(id)}`} className="underline">
+        Open
+      </Link>
+    </p>
   );
 }

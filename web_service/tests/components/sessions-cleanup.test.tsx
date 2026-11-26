@@ -3,6 +3,7 @@
 // Delete, ✕ on failed and stopped run tiles (none on a running or a batch's), "N failed · Clear" (no card), the
 // session menu's Rename (Enter, Esc, blank) and Delete (greyed while running), the remote-naming line, and the
 // `session` event swapping the title with the "named by" hint once.
+import { closeMenu } from "@/components/context-menu";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import coreNodes from "../../../contracts/fixtures/registry/nodes.valid.json";
@@ -35,6 +36,7 @@ beforeAll(() => {
 });
 beforeEach(() => localStorage.clear());
 afterEach(() => {
+  act(closeMenu);
   cleanup();
   vi.restoreAllMocks();
 });
@@ -119,10 +121,15 @@ describe("Create: deleting from the strip", () => {
     const t = take({ run_id: "r1", made_with: { seed: 43 } as S<"MadeWith"> });
     const { del } = start({ runs: [run("r1", "succeeded")], takes: [t] });
     const tiles = within(strip());
+    // the ⋯ opens the tile's menu (alpha.5 item 17), its right-click the same
+    fireEvent.click(tiles.getByRole("button", { name: "Take seed 43: more" }));
+    const menu = screen.getByRole("menu", { name: "Take seed 43" });
     expect(
-      tiles.getByRole("button", { name: "Take seed 43: more" }).getAttribute("popovertarget"),
-    ).toBe(`tile-${t.id}`);
-    fireEvent.click(within(document.getElementById(`tile-${t.id}`)!).getByText("Delete"));
+      within(menu)
+        .getAllByRole("menuitem")
+        .map((b) => b.querySelector(".lb")!.textContent),
+    ).toEqual(expect.arrayContaining(["Show", "Full screen", "Add to timeline", "Delete"]));
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Delete" }));
     const card = await screen.findByRole("dialog", { name: "Delete this take?" });
     expect(card.textContent).toContain("It leaves the gallery and Create. This can't be undone.");
     fireEvent.click(within(card).getByRole("button", { name: "Delete" }));
@@ -138,8 +145,16 @@ describe("Create: deleting from the strip", () => {
     const { del } = start({
       runs: [run("r2", "succeeded", { outputs: [out] as S<"Run">["outputs"] })],
     });
-    expect(within(strip()).getByRole("button", { name: "Answer 1: more" })).toBeTruthy();
-    fireEvent.click(within(document.getElementById("tile-r2")!).getByText("Delete"));
+    fireEvent.contextMenu(within(strip()).getByRole("button", { name: "Answer 1: more" }), {
+      button: 2,
+    });
+    const menu = screen.getByRole("menu", { name: "Answer 1" });
+    expect(
+      within(menu)
+        .getAllByRole("menuitem")
+        .map((b) => b.querySelector(".lb")!.textContent),
+    ).toEqual(["Show", "Delete"]);
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Delete" }));
     const card = await screen.findByRole("dialog", { name: "Delete this answer?" });
     fireEvent.click(within(card).getByRole("button", { name: "Delete" }));
     await waitFor(() =>

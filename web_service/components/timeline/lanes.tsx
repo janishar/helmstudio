@@ -185,6 +185,28 @@ const ZONE_CURSOR = {
   body: "grab",
 };
 
+/** What a right-click in the lanes is on (alpha.5 item 17). */
+export type LaneAt =
+  | { kind: "clip"; id: string }
+  | { kind: "gap"; track: string; t: number }
+  | { kind: "track"; track: string }
+  | { kind: "ruler"; t: number }
+  | { kind: "marker"; id: string };
+
+/** The thing under a right-click: a clip, a marker, the ruler, an audio track's header or an empty spot on it. */
+export function menuTarget(el: Element, t: number): LaneAt | null {
+  const x = el.closest<HTMLElement>(
+    "[data-clip], [data-marker], [data-ruler], [data-head], [data-track]",
+  );
+  const d = x?.dataset;
+  if (!d) return null;
+  if (d.clip) return { kind: "clip", id: d.clip };
+  if (d.marker) return { kind: "marker", id: d.marker };
+  if (d.ruler !== undefined) return { kind: "ruler", t };
+  if (d.head) return { kind: "track", track: d.head };
+  return { kind: "gap", track: d.track!, t };
+}
+
 export function Lanes({
   doc,
   takes,
@@ -203,7 +225,7 @@ export function Lanes({
   onAddTrack,
   onRemoveTrack,
   range,
-  onMenu,
+  onContext,
   nameOf,
   tool = "select",
   snap = true,
@@ -239,8 +261,9 @@ export function Lanes({
   onRemoveTrack?: (name: string) => void;
   /** the marked range (sequence seconds), drawn as a band with its I / O flags */
   range?: [number, number] | null;
-  /** an audio clip's ⋯ (API 1.32): opens its menu (`menu-<id>` anchors it) */
-  onMenu?: (id: string) => void;
+  /** a right-click (or an audio clip's ⋯, API 1.32) on a clip, a gap (an audio lane's empty spot, at its time), a
+   * track header, the ruler (at its time) or a marker: its menu (alpha.5 item 17) */
+  onContext?: (e: React.MouseEvent, at: LaneAt) => void;
   /** a cue's speaker ("Mara"), from its voice */
   nameOf?: (voiceId: string) => string;
   /** the active tool (plan 23) */
@@ -634,7 +657,7 @@ export function Lanes({
     // an audio take's clip: a waveform strip, its dialogue's cue ticks and the ⋯ menu (docs/mock/TimelineAudio.dc.html)
     const wave = audio && t?.kind === "audio" && !c.offline;
     const ticks = wave && height > 40 && !tiny ? cueTicks(c, t) : [];
-    const menu = audio && !!c.take_id && !c.offline && !!onMenu && !tiny;
+    const menu = audio && !!c.take_id && !c.offline && !!onContext && !tiny;
     const failedLine = audio && !c.take_id && c.shot?.status === "failed";
     const linked = audio && c.link !== undefined;
     const button = (
@@ -770,8 +793,7 @@ export function Lanes({
           type="button"
           aria-label="Clip menu"
           aria-haspopup="menu"
-          popoverTarget="clip-menu"
-          onClick={() => onMenu(c.id)}
+          onClick={(e) => onContext(e, { kind: "clip", id: c.id })}
           className="absolute top-0.5 z-10 grid size-[22px] place-items-center rounded-lg bg-s3 text-t2"
           style={
             {
@@ -873,6 +895,10 @@ export function Lanes({
           className="relative flex flex-col gap-1.5"
           style={{ width: width + HEAD, cursor: CURSOR[tool] }}
           onPointerDown={rangeDown}
+          onContextMenu={(e) => {
+            const at = menuTarget(e.target as Element, timeAt(e.clientX));
+            if (at) onContext?.(e, at);
+          }}
           onPointerMove={move}
           onPointerUp={up}
           onPointerCancel={cancel}
@@ -887,6 +913,7 @@ export function Lanes({
             <span aria-hidden className="sticky left-0 z-30 w-[72px] shrink-0 bg-s1" />
             <div
               role="slider"
+              data-ruler
               tabIndex={-1}
               aria-label="Time ruler: click to move the playhead"
               aria-valuemin={0}
@@ -907,6 +934,7 @@ export function Lanes({
                   key={m.id}
                   type="button"
                   aria-pressed={marker === m.id}
+                  data-marker={m.id}
                   aria-label={`Marker${m.name ? ` ${m.name}` : ""} at ${timecode(m.at)}`}
                   title={`${m.name ?? "Marker"} · ${timecode(m.at)}`}
                   onPointerDown={(e) => {
@@ -977,6 +1005,7 @@ export function Lanes({
                     type="button"
                     tabIndex={-1}
                     aria-hidden
+                    data-clip={c.id}
                     onClick={(e) =>
                       tool === "blade" ? blade(e, "V1") : onSelect(c.id, false, e.altKey)
                     }
@@ -1008,7 +1037,10 @@ export function Lanes({
 
           {doc.tracks.slice(1).map((t, i) => (
             <div key={t.name} className="flex h-14 items-stretch" data-lane={i + 1}>
-              <span className="sticky left-0 z-30 bg-s1 flex w-[72px] shrink-0 items-center gap-1.5">
+              <span
+                className="sticky left-0 z-30 bg-s1 flex w-[72px] shrink-0 items-center gap-1.5"
+                data-head={t.name}
+              >
                 <button
                   type="button"
                   aria-pressed={track === t.name}
@@ -1030,7 +1062,12 @@ export function Lanes({
                   </button>
                 )}
               </span>
-              <div className="relative flex-1" role="group" aria-label={`${t.name}: sound`}>
+              <div
+                className="relative flex-1"
+                role="group"
+                aria-label={`${t.name}: sound`}
+                data-track={t.name}
+              >
                 {t.clips.map((c) => clipButton(c, i + 1, 56))}
               </div>
             </div>

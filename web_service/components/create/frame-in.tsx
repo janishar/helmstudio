@@ -4,7 +4,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, message, ok, type S } from "@/lib/api";
 import { offerLabel } from "@/lib/source";
 
@@ -38,15 +38,22 @@ export function FrameIn({
   href,
   onUse,
   className = "act",
+  start,
 }: {
   takeId: string;
+  /** opens this one at once (a clip's right-click menu: Last frame in…) */
+  start?: "first" | "last";
   href?: (frameId: string, o: S<"TakeOffer">) => string;
   onUse?: (o: S<"TakeOffer">) => void;
   className?: string;
 }) {
   const [got, setGot] = useState<Got | null>(null);
-  async function open(at: "first" | "last") {
-    if (got?.at === at) return setGot(null);
+  useEffect(() => {
+    if (start) void Promise.resolve().then(() => open(start, true));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only a new start opens it
+  }, [start]);
+  async function open(at: "first" | "last", keep = false) {
+    if (got?.at === at && !keep) return setGot(null);
     setGot({ at });
     try {
       const frame = await frameTake(takeId, at);

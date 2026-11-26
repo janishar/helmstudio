@@ -72,6 +72,7 @@ export function ClipActions({
   disabled,
   onDone,
   openFirst,
+  openId,
   ask,
   onForm,
 }: {
@@ -84,6 +85,8 @@ export function ClipActions({
   onDone: (t: Timeline) => void;
   /** opens the first action's form once they are read (an audio clip's menu: Make shot) */
   openFirst?: boolean;
+  /** opens this offer's form once read (`<workflow> <param>`: a clip's right-click menu) */
+  openId?: string;
   /** the take action the assistant asked for (extend, retake, insert, replace), prefilled */
   ask?: Want;
   /** its form once open, for the assistant's card; "none" when the clip offers no such action */
@@ -133,7 +136,15 @@ export function ClipActions({
   useEffect(() => {
     if (ask?.kind && loaded && !asked) onForm?.("none");
   }, [ask, loaded, asked, onForm]);
-  const open = chosen ?? (asked ? idOf(asked) : openFirst && actions[0] ? idOf(actions[0]) : null);
+  const open =
+    chosen ??
+    (asked
+      ? idOf(asked)
+      : openId && actions.some((o) => idOf(o) === openId)
+        ? openId
+        : openFirst && actions[0]
+          ? idOf(actions[0])
+          : null);
   // an audio clip's offers are Make shot (API 1.32): one per family, named by it when there are several
   const makes = actions.filter((o) => o.slot).length;
   return actions.map((o) => {

@@ -5,14 +5,31 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Check, FileText, Maximize, Star, X } from "lucide-react";
+import {
+  ArrowRight,
+  Check,
+  Download,
+  FileText,
+  Film,
+  Maximize,
+  Palette,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Star,
+  Trash2,
+  UserRound,
+  Workflow,
+  X,
+} from "lucide-react";
+import { openMenu, type Item } from "@/components/context-menu";
 import { FullScreen, Media, Thumb, useFullScreenKey } from "@/components/media";
 import { videoLine } from "@/lib/media";
 import { renderTime } from "@/lib/runs";
 import { ErrorNote, Info, Modal, UploadStatus } from "@/components/kit";
 import { RefThumbs } from "@/components/create/refs";
 import { ElementEditor } from "@/components/create/elements";
-import { AddToTimeline } from "@/components/timeline/add";
+import { AddToTimeline, AddedNote, addToTimeline } from "@/components/timeline/add";
 import { SaveAsLook } from "@/components/create/looks";
 import { lookGroupLabel } from "@/lib/looks";
 import { useLooks } from "@/lib/library";
@@ -101,6 +118,19 @@ export function Chip({
     </button>
   );
 }
+
+/** Save as pipeline: the take's lineage as a chain of steps (the new pipeline, or the 422 says why not). */
+const pipelineOf = (id: string) =>
+  ok(
+    api.POST("/v1/studio/takes/{take_id}/pipeline", {
+      params: { path: { take_id: id } },
+      body: {},
+    }),
+  );
+const usesOf = (id: string) =>
+  ok(api.GET("/v1/studio/takes/{take_id}/uses", { params: { path: { take_id: id } } })).then(
+    (r) => r.uses,
+  );
 
 const del = (id: string) =>
   ok(api.DELETE("/v1/studio/takes/{take_id}", { params: { path: { take_id: id } } }));
@@ -348,8 +378,11 @@ export function Gallery({
     }
   }
 
-  async function bulk(f: (id: string) => Promise<unknown>, after: (ids: string[]) => void) {
-    const ids = [...picked];
+  async function bulk(
+    f: (id: string) => Promise<unknown>,
+    after: (ids: string[]) => void,
+    ids = [...picked],
+  ) {
     const results = await Promise.allSettled(ids.map(f));
     const done = ids.filter((_, i) => results[i].status === "fulfilled");
     after(done);
@@ -359,6 +392,145 @@ export function Gallery({
         ? `${ids.length - done.length} of ${ids.length} failed: ${message(failed.reason)}`
         : "",
     );
+  }
+
+  // Add to timeline from a menu: its note under the selection bar
+  const [added, setAdded] = useState<{ id: string; name: string; n: number } | null>(null);
+  const addTo = (ids: string[], audio = false) =>
+    void act(async () => setAdded({ ...(await addToTimeline(ids, audio)), n: ids.length }));
+  const [frameAt, setFrameAt] = useState<{ id: string; at: "first" | "last" } | null>(null);
+  const starAll = (ids: string[]) =>
+    void bulk(
+      (id) => patch(id, { starred: true }),
+      (done) =>
+        setTakes(
+          (list) => list && list.map((t) => (done.includes(t.id) ? { ...t, starred: true } : t)),
+        ),
+      ids,
+    );
+
+  /** A take's right-click menu (ContextMenus frame 4): the side panel's actions; with Select several on, the
+   * selection bar's (a card outside the picked ones is picked alone first). */
+  function takeMenu(e: React.MouseEvent, t: Take) {
+    if (selecting) {
+      const ids = picked.has(t.id) ? [...picked] : [t.id];
+      const list = (takes ?? []).filter((x) => ids.includes(x.id));
+      const images = list.every((x) => x.kind === "image") && ids.length <= 4;
+      const n = ids.length;
+      const h = openMenu(e, {
+        title: n === 1 ? "1 take" : `${n} takes`,
+        items: [
+          { label: "Star", icon: Star, onPick: () => starAll(ids) },
+          { label: "Add to timeline", icon: Plus, onPick: () => addTo(ids) },
+          {
+            label: "Save as element",
+            icon: UserRound,
+            off: images ? undefined : "An element takes 1 to 4 images",
+            onPick: () => setMaking(list),
+          },
+          { label: "Done", icon: Check, onPick: () => (setSelecting(false), setPicked(new Set())) },
+          "-",
+          {
+            label: n === 1 ? "Delete 1 take" : `Delete ${n} takes`,
+            icon: Trash2,
+            danger: true,
+            onPick: () => setModal("bulk-delete"),
+          },
+        ],
+      });
+      if (h && !picked.has(t.id)) setPicked(new Set([t.id]));
+      return;
+    }
+    const m = t.made_with;
+    const session = t.session_id ? `s=${encodeURIComponent(t.session_id)}&` : "";
+    const url = safeUrl(t.url);
+    const inItem = (offers: S<"TakeOffer">[] | null): Item => {
+      const frames: Item[] =
+        t.kind === "video"
+          ? [
+              {
+                label: "Last frame in…",
+                icon: Film,
+                onPick: () => setFrameAt({ id: t.id, at: "last" }),
+              },
+              {
+                label: "First frame in…",
+                icon: Film,
+                onPick: () => setFrameAt({ id: t.id, at: "first" }),
+              },
+            ]
+          : [];
+      const list: Item[] = (offers ?? []).map((o) => ({
+        label: offerLabel(o),
+        onPick: () =>
+          router.push(
+            `/?${session}use=${encodeURIComponent(t.id)}&w=${encodeURIComponent(o.workflow_id)}`,
+          ),
+      }));
+      if (!offers && !frames.length)
+        return { label: "Use in", icon: ArrowRight, off: "Reading what it fits" };
+      if (!list.length && !frames.length) return null;
+      return {
+        label: "Use in",
+        icon: ArrowRight,
+        items: [...list, ...(list.length && frames.length ? ["-" as const] : []), ...frames],
+      };
+    };
+    const menu = (offers: S<"TakeOffer">[] | null) => ({
+      title: t.title,
+      items: [
+        inItem(offers),
+        canEdit(tools, t) && {
+          label: "Edit",
+          icon: Pencil,
+          onPick: () => (setEditError(""), setEditing(t.id)),
+        },
+        { label: "Add to timeline", icon: Plus, onPick: () => addTo([t.id], t.kind === "audio") },
+        m && {
+          label: "Reuse settings",
+          icon: RotateCcw,
+          onPick: () => router.push(`/?${session}reuse=${encodeURIComponent(t.id)}`),
+        },
+        "-",
+        {
+          label: t.starred ? "Unstar" : "Star",
+          icon: Star,
+          onPick: () => void act(async () => replace(await patch(t.id, { starred: !t.starred }))),
+        },
+        { label: "Rename", icon: Pencil, onPick: () => setModal("rename") },
+        { label: "Full screen", icon: Maximize, keys: "F", onPick: () => setFull(true) },
+        t.kind === "image" && {
+          label: "Save as element",
+          icon: UserRound,
+          onPick: () => setMaking([t]),
+        },
+        m && { label: "Save as look", icon: Palette, onPick: () => setLookOf(t) },
+        m && {
+          label: "Save as pipeline",
+          icon: Workflow,
+          onPick: () =>
+            void act(async () => router.push(`/pipelines/${(await pipelineOf(t.id)).id}`)),
+        },
+        url && {
+          label: "Export file",
+          icon: Download,
+          onPick: () => {
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = t.title;
+            a.click();
+          },
+        },
+        "-",
+        { label: "Delete", icon: Trash2, danger: true, onPick: () => setModal("delete") },
+      ] as Item[],
+    });
+    const h = openMenu(e, menu(null));
+    if (!h) return;
+    setCurrentId(t.id);
+    usesOf(t.id)
+      .then((o) => h.update(menu(o)))
+      .catch(() => h.update(menu([])));
   }
 
   const toggle = (id: string) =>
@@ -583,6 +755,7 @@ export function Gallery({
           </div>
         )}
 
+        {added && <AddedNote {...added} />}
         {actionError && <ErrorNote>{actionError}</ErrorNote>}
         {error && (
           <ErrorNote onRetry={() => fetchPage(takes?.length ? next : null)}>{error}</ErrorNote>
@@ -627,7 +800,12 @@ export function Gallery({
           {takes?.slice(...sliceFrom(win, uploads.length)).map((t) => {
             const on = selecting ? picked.has(t.id) : t.id === current?.id;
             return (
-              <div key={t.id} role="listitem" className="min-w-0">
+              <div
+                key={t.id}
+                role="listitem"
+                className="min-w-0"
+                onContextMenu={(e) => takeMenu(e, t)}
+              >
                 <TakeCard
                   take={t}
                   on={on}
@@ -691,6 +869,7 @@ export function Gallery({
             onDelete={() => setModal("delete")}
             onFull={() => setFull(true)}
             onMakeElement={() => setMaking([current])}
+            frameStart={frameAt?.id === current.id ? frameAt.at : undefined}
             onSaveLook={() => setLookOf(current)}
             onEdit={
               canEdit(tools, current)
@@ -806,7 +985,10 @@ function TakePanel({
   onSaveLook,
   onEdit,
   onPick,
+  frameStart,
 }: {
+  /** a menu's Last / First frame in…: opens it */
+  frameStart?: "first" | "last";
   take: Take;
   onStar: () => void;
   onRename: () => void;
@@ -845,12 +1027,7 @@ function TakePanel({
   async function saveAsPipeline() {
     setSaving({ id: t.id, error: "" });
     try {
-      const p = await ok(
-        api.POST("/v1/studio/takes/{take_id}/pipeline", {
-          params: { path: { take_id: t.id } },
-          body: {},
-        }),
-      );
+      const p = await pipelineOf(t.id);
       router.push(`/pipelines/${p.id}`);
     } catch (e) {
       setSaving({ id: t.id, error: message(e) });
@@ -980,6 +1157,7 @@ function TakePanel({
         <div className="flex flex-col gap-2">
           <FrameIn
             takeId={t.id}
+            start={frameStart}
             href={(id, o) =>
               `/?${session}use=${encodeURIComponent(id)}&w=${encodeURIComponent(o.workflow_id)}`
             }

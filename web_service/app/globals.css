@@ -237,6 +237,132 @@
   .mi[aria-disabled="true"]:hover {
     background: transparent;
   }
+  /* our right-click menu (alpha.5 item 17, docs/mock/ContextMenus.dc.html .cm): a header, icon · label · key rows,
+     separators, a red danger item last, greyed rows with the reason on hover, submenus beside their row */
+  .cm {
+    position: fixed;
+    inset: auto;
+    z-index: 60;
+    margin: 0;
+    overflow: visible;
+    width: 268px;
+    max-width: calc(100vw - 8px);
+    box-sizing: border-box;
+    padding: 6px;
+    border: 1px solid var(--s5);
+    border-radius: 16px 16px 16px 6px;
+    background: var(--s2);
+    color: var(--t1);
+    box-shadow:
+      0 24px 40px -12px color-mix(in srgb, var(--shd) 85%, transparent),
+      0 6px 14px -6px color-mix(in srgb, var(--shd) 70%, transparent);
+    text-align: left;
+  }
+  .cm-in,
+  .cm.sub {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    outline: none;
+  }
+  .cm.sub {
+    position: absolute;
+    top: -7px;
+    left: calc(100% + 4px);
+    width: 220px;
+  }
+  .cm.sub.left {
+    left: auto;
+    right: calc(100% + 4px);
+  }
+  .cm .hd {
+    padding: 5px 10px 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--t2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .cm .sep {
+    display: block;
+    height: 1px;
+    margin: 4px 6px;
+    background: var(--s5);
+  }
+  .cm .mi {
+    width: 100%;
+    justify-content: flex-start;
+    gap: 9px;
+    height: 30px;
+    padding: 0 8px 0 9px;
+    border-radius: 9px;
+    line-height: 16px;
+    color: var(--t1);
+    white-space: nowrap;
+    cursor: default;
+    outline: none;
+  }
+  .cm .mi .ic {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 16px;
+    color: var(--t2);
+  }
+  .cm .mi .lb {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .cm .mi kbd {
+    flex: 0 0 auto;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--t2);
+  }
+  .cm .mi .chev {
+    flex: 0 0 auto;
+    margin-left: 2px;
+    font-size: 15px;
+    color: var(--t2);
+  }
+  .cm .mi .tick {
+    width: 14px;
+    flex: 0 0 14px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--a1);
+    text-align: center;
+  }
+  .cm .mi:hover,
+  .cm .mi:focus,
+  .cm .mi.on {
+    background: var(--s4);
+  }
+  .cm .mi:focus .ic,
+  .cm .mi.on .ic {
+    color: var(--t1);
+  }
+  .cm .mi.danger,
+  .cm .mi.danger .ic {
+    color: var(--bad);
+  }
+  .cm .mi.danger:focus {
+    background: color-mix(in srgb, var(--bad) 14%, var(--s3));
+  }
+  .cm .mi[aria-disabled="true"] {
+    color: var(--t2);
+    opacity: 0.55;
+    cursor: default;
+  }
+  .cm .mi[aria-disabled="true"]:hover {
+    background: transparent;
+  }
+  .cm .mi[aria-disabled="true"] > span {
+    opacity: 1;
+  }
   /* a chip whose choice cannot run now (Run on a machine that went offline) */
   .chip.warn {
     background: color-mix(in srgb, var(--bad) 10%, var(--s4));

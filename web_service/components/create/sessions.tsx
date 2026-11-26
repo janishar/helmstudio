@@ -1,9 +1,10 @@
 "use client";
 // Plan 21 25.3-25.5 (docs/mock/Main.dc.html "Other states"): the session menu (the title chip's ⌄) with Rename in
-// place and Delete behind its card, the "named by …" hint under the chip, a strip tile's ⋯ menu, and the delete card
+// place and Delete behind its card, the "named by …" hint under the chip, a strip tile's ⋯, and the delete card
 // a take, a text answer and a session share.
 import { useState } from "react";
-import { ChevronDown, Plus } from "lucide-react";
+import { ChevronDown, FolderOpen, Pencil, Plus, Trash2 } from "lucide-react";
+import { openMenu } from "@/components/context-menu";
 import { Modal } from "@/components/kit";
 import { api, message, ok, type S } from "@/lib/api";
 
@@ -42,62 +43,27 @@ export function DeleteCard({
   );
 }
 
-const popId = (id: string) => `tile-${id}`;
-/** Opens a tile's ⋯ menu (its context menu does). */
-export const openTileMenu = (id: string) => document.getElementById(popId(id))?.showPopover?.();
-
-/** A strip tile's ⋯ (on hover and on the current tile) and its menu: Delete. */
+/** A strip tile's ⋯ (on hover and on the current tile): opens the tile's menu, as its right-click does. */
 export function TileMenu({
-  id,
   label,
   current,
-  onDelete,
+  onMenu,
 }: {
-  id: string;
   /** "Take seed 43" */
   label: string;
   current: boolean;
-  onDelete: () => void;
+  onMenu: (e: React.MouseEvent) => void;
 }) {
-  const pop = popId(id);
   return (
-    <>
-      <button
-        type="button"
-        popoverTarget={pop}
-        aria-label={`${label}: more`}
-        className={`absolute top-[3px] right-[3px] h-[18px] w-[22px] rounded-md bg-s2/90 p-0 text-[12px] leading-[18px] text-t1 group-hover:opacity-100 focus-visible:opacity-100 ${current ? "" : "opacity-0"}`}
-        style={{ anchorName: `--${pop}` } as React.CSSProperties}
-      >
-        ⋯
-      </button>
-      <div
-        id={pop}
-        popover="auto"
-        role="menu"
-        aria-label={label}
-        className="pop w-[140px] p-1.5"
-        style={
-          {
-            positionAnchor: `--${pop}`,
-            positionArea: "bottom span-right",
-            marginTop: 4,
-          } as React.CSSProperties
-        }
-      >
-        <button
-          type="button"
-          role="menuitem"
-          className="w-full rounded-lg px-2.5 py-2 text-left text-[13px] text-bad hover:bg-s4"
-          onClick={() => {
-            document.getElementById(pop)?.hidePopover?.();
-            onDelete();
-          }}
-        >
-          Delete
-        </button>
-      </div>
-    </>
+    <button
+      type="button"
+      aria-haspopup="menu"
+      aria-label={`${label}: more`}
+      onClick={onMenu}
+      className={`absolute top-[3px] right-[3px] h-[18px] w-[22px] rounded-md bg-s2/90 p-0 text-[12px] leading-[18px] text-t1 group-hover:opacity-100 focus-visible:opacity-100 ${current ? "" : "opacity-0"}`}
+    >
+      ⋯
+    </button>
   );
 }
 
@@ -271,7 +237,36 @@ export function SessionMenu({
                 </form>
               );
             return (
-              <div key={s.id} className="group flex items-center gap-1">
+              <div
+                key={s.id}
+                className="group flex items-center gap-1"
+                // its row's buttons as a menu (ContextMenus frame 5)
+                onContextMenu={(e) =>
+                  openMenu(e, {
+                    title: s.title,
+                    items: [
+                      {
+                        label: "Open",
+                        icon: FolderOpen,
+                        onPick: () => (hide(), !here && onOpen(s.id)),
+                      },
+                      {
+                        label: "Rename",
+                        icon: Pencil,
+                        onPick: () => (setDraft(s.title), setRenaming(s.id)),
+                      },
+                      "-",
+                      {
+                        label: "Delete",
+                        icon: Trash2,
+                        danger: true,
+                        off: going ? "A run is going: stop it first to delete" : undefined,
+                        onPick: () => (hide(), setDeleting(s)),
+                      },
+                    ],
+                  })
+                }
+              >
                 <button
                   type="button"
                   aria-current={here || undefined}

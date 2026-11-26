@@ -75,7 +75,7 @@ it("draws a dialogue's clip with its cues and menu, and a line's placeholder", (
     onPreview: noop,
     onCommit: noop,
     onZoom: noop,
-    onMenu: noop,
+    onContext: noop,
     nameOf: (v: string) => (v === "echo/ada" ? "Mara" : "Jon"),
   };
   const { rerender } = render(<Lanes doc={doc({ run_id: "r1", status: "running" })} {...props} />);

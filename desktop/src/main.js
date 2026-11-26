@@ -10,6 +10,7 @@ const { app, BrowserWindow, Tray, Menu, nativeImage, shell, dialog, ipcMain, pow
 const { StepRunner, exec, pipe } = require('./steps');
 const { layout, loadSettings, stackSteps, Runners, openMode } = require('./stack');
 const updates = require('./update');
+const { spellingOf, isWord } = require('./spelling');
 const cfg = require('../stack.json');
 
 const home = process.env.HELMSTUDIO_HOME || path.join(app.getPath('appData'), 'helmstudio');
@@ -189,10 +190,22 @@ function studioWindow() {
     title: 'helmstudio',
     backgroundColor: '#0e1512',
     show: false,
-    // the page is the web app as is: no Node, no preload, its own persistent session
-    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, partition: 'persist:studio' },
+    // the page is the web app as is: no Node, its own persistent session; the preload only passes the spelling of a
+    // right-clicked word to the page's own menu (alpha.5 item 17)
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      partition: 'persist:studio',
+      preload: path.join(__dirname, 'ui', 'studio-preload.js'),
+    },
   });
   const wc = studioWin.webContents;
+  // a right-click in a text field: the word under it and up to three suggestions, for the page's menu (it draws its
+  // own; Electron shows none)
+  wc.on('context-menu', (_e, p) => {
+    if (p.isEditable) wc.send('spelling', spellingOf(p));
+  });
   wc.on('will-navigate', (e, url) => {
     if (new URL(url).origin !== studioOrigin) (e.preventDefault(), openExternal(url));
   });
@@ -408,6 +421,10 @@ ipcMain.on('upd', (_e, action) => {
 // ---------- the app
 
 ipcMain.handle('hello', () => snapshot());
+// the studio page's spelling items: only from the studio window, only a word
+const fromStudio = (e, word) => studioWin && !studioWin.isDestroyed() && e.sender === studioWin.webContents && isWord(word);
+ipcMain.on('replace-misspelling', (e, word) => fromStudio(e, word) && e.sender.replaceMisspelling(word));
+ipcMain.on('add-to-dictionary', (e, word) => fromStudio(e, word) && e.sender.session.addWordToSpellCheckerDictionary(word));
 ipcMain.on('answer', (_e, kind, value) => runner?.answer(kind, value));
 ipcMain.on('retry', () => phase === 'failed' && startUp());
 ipcMain.on('show-log', () => (fs.mkdirSync(p.logs, { recursive: true }), fs.appendFileSync(logFile, ''), shell.openPath(logFile)));
