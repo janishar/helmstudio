@@ -27,7 +27,7 @@ A move-anywhere Assistant, Create settings in popups, Timeline clones and our ow
 
 - Windows is untested.
 - NVIDIA: ZONOS3 on NVIDIA is not ready yet, and MiniMax H3 video needs SGLang you install by hand; both move to
-  0.1.0-alpha.6.
+  0.1.0-alpha.6. The Turbo LoRA does not run on MiniMax H3 Base fp8.
 - Create's "Use in ›" menu on a take has no "Last / First frame in…" yet.
 - Shift+F10 in a text field opens the menu at the field's corner, not at the cursor.
 - The Mac app needs Apple Silicon and is ad-hoc signed (no Developer ID): open it the first time with right-click ›
