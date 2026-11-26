@@ -34,12 +34,8 @@ CLASSES = {"rvq_depth_decoder": "MiniMaxMusic3RVQDepthDecoder", "condition_encod
 
 @dataclass
 class Frames:
-    hiddens: (
-        torch.Tensor
-    )  # [1, frames, codebooks * hidden] on the device: the flow stage's conditioning
-    generator: (
-        torch.Tensor
-    )  # the run's generator state after the language model (Generator.get_state())
+    hiddens: torch.Tensor  # [1, frames, codebooks * hidden] on the device: flow's conditioning
+    generator: torch.Tensor  # the run's generator state after the language model (get_state())
 
 
 @dataclass
@@ -149,12 +145,9 @@ def flow(ctx, params: dict, inputs: dict) -> dict:
     generator = torch.Generator(ctx.device)
     generator.set_state(cond.generator)
     frames = cond.hiddens.shape[1]
-    windows = (
-        1 if frames <= 200 else len(range(0, frames - 100, 100))
-    )  # before_denoise's chunk_starts
-    hooks = _passes(
-        ctx, transformer, windows * 30 * 2, "flow matching"
-    )  # 30 steps, cond + uncond passes
+    # before_denoise's chunk_starts
+    windows = 1 if frames <= 200 else len(range(0, frames - 100, 100))
+    hooks = _passes(ctx, transformer, windows * 30 * 2, "flow matching")  # 30 steps, cond + uncond
     try:
         state = pipe(frame_hiddens=cond.hiddens, generator=generator)
     finally:
