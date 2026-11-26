@@ -412,7 +412,7 @@ describe("Create's actions", () => {
     const box = () => document.getElementById(idOf("prompt.text")) as HTMLTextAreaElement;
     const { call } = start({ workflows: [workflow, voice] });
     await call("change", { key: "prompt.text", value: "@elias @biscuit at the door" });
-    await tab("Audio");
+    await tab("Voice");
     await waitFor(() => expect(box().value).toBe(""));
     await call("change", { key: "prompt.text", value: "Hello there." });
     await waitFor(() =>
@@ -425,7 +425,7 @@ describe("Create's actions", () => {
     leftForm.current = null; // a reload: the session opens on its picture workflow
     start({ workflows: [workflow, voice] });
     await waitFor(() => expect(box().value).toBe("@elias @biscuit at the door"));
-    await tab("Audio");
+    await tab("Voice");
     await waitFor(() => expect(box().value).toBe("Hello there."));
   });
 
@@ -438,7 +438,7 @@ describe("Create's actions", () => {
       source: "template",
     } as unknown as S<"Workflow">;
     const { call } = start({ workflows: [workflow, tts] });
-    await tab("Audio");
+    await tab("Voice");
     await waitFor(() => expect(document.getElementById(idOf("prompt.text"))).toBeTruthy());
     expect(out(await call("change", { key: "speak.voice", value: "narrator 2" }))).toMatchObject({
       status: "failed",
@@ -458,12 +458,12 @@ describe("Create's actions", () => {
   it("another session never gets this session's script", async () => {
     const box = () => document.getElementById(idOf("prompt.text")) as HTMLTextAreaElement;
     const { call } = start({ workflows: [workflow, voice] });
-    await tab("Audio");
+    await tab("Voice");
     await call("change", { key: "prompt.text", value: "s1 script" });
     await tab("Video");
     await call("newSession");
     await waitFor(() => expect(box().value).toBe(""));
-    await tab("Audio");
+    await tab("Voice");
     await waitFor(() => expect(box()).toBeTruthy());
     expect(box().value).toBe("");
   });

@@ -3,12 +3,18 @@ import ltxNodes from "../../contracts/fixtures/registry/ltx.nodes.valid.json";
 import ltxWorkflows from "../../contracts/fixtures/registry/ltx.workflows.valid.json";
 import qwenNodes from "../../contracts/fixtures/registry/qwen-image.nodes.valid.json";
 import qwenWorkflows from "../../contracts/fixtures/registry/qwen-image.workflows.valid.json";
+import echoNodes from "../../contracts/fixtures/registry/nodes.valid.json";
+import echoWorkflows from "../../contracts/fixtures/registry/workflows.valid.json";
 import type { S } from "@/lib/api";
 import {
   durationText,
   frameError,
   framesFor,
-  mediaKinds,
+  createKinds,
+  kindOf,
+  kindTemplates,
+  sideOf,
+  soundText,
   mediaOf,
   secondsText,
   snapFrames,
@@ -44,9 +50,9 @@ describe("media of workflows and the Image / Video switch", () => {
   it("reads media, absent as image, and offers only the media present", () => {
     expect(mediaOf(ltx)).toBe("video");
     expect(mediaOf(qwen)).toBe("image");
-    expect(mediaKinds([qwen])).toEqual(["image"]);
-    expect(mediaKinds([ltx, qwen])).toEqual(["image", "video"]);
-    expect(mediaKinds([{ media: "audio" }, ltx, qwen])).toEqual(["image", "video", "audio"]);
+    expect(createKinds([qwen])).toEqual(["image"]);
+    expect(createKinds([ltx, qwen])).toEqual(["image", "video"]);
+    expect(createKinds([{ media: "audio" }, ltx, qwen])).toEqual(["image", "video", "voice"]);
   });
 
   it("opens the open workflow, else the session's newest of that media, else the first template", () => {
@@ -66,7 +72,7 @@ describe("media of workflows and the Image / Video switch", () => {
         source: "template",
         nodes: { speak: { kind: "q/speak", only: { voice } } },
       }) as never;
-    expect(workflowFor([tts("design", ["design"]), tts("over", ["preset"])], [], "audio")).toBe(
+    expect(workflowFor([tts("design", ["design"]), tts("over", ["preset"])], [], "voice")).toBe(
       "over",
     );
   });
@@ -248,5 +254,65 @@ describe("video takes and the run strip", () => {
       ["Decode", "pending", undefined],
       ["Saving", "pending", undefined],
     ]);
+  });
+});
+
+describe("the sound classes as kinds (plan 38, docs/mock/CreateMusicSound.dc.html)", () => {
+  const w = (id: string, sound?: string, family = "echo", action?: string) =>
+    ({ id, media: "audio", sound, family, source: "template", action, nodes: {} }) as never;
+  const ws = [
+    w("tts"),
+    w("ace", "music", "ace-step"),
+    w("repaint", "music", "ace-step", "Repaint"),
+    w("minimax", "music", "minimax-music3"),
+    w("sfx", "sound", "stable-audio-3"),
+    w("foley", "sound", "mmaudio", "Add sound"),
+  ];
+  it("tabs Voice, Music and Sound by class, in the board's order; no class is voice", () => {
+    expect(createKinds([...ws, qwen, ltx])).toEqual(["image", "video", "voice", "music", "sound"]);
+    expect(kindOf(ws[0])).toBe("voice");
+    expect(kindOf(ws[1])).toBe("music");
+    expect(kindOf({ media: "text" })).toBeUndefined();
+    expect(sideOf(ws[0])).toBe("sound"); // voice keeps the old draft key
+    expect(sideOf(ws[1])).toBe("music");
+    expect(sideOf(ws[4])).toBe("effects");
+    expect(sideOf(qwen)).toBe("picture");
+  });
+  it("opens Music on MiniMax (owner, 2026-11-27) and never on a take action", () => {
+    expect(workflowFor(ws, [], "music")).toBe("minimax");
+    expect(kindTemplates(ws, "music").map((x) => (x as { id: string }).id)).toEqual([
+      "minimax",
+      "ace",
+    ]);
+    expect(workflowFor(ws, [{ workflow_id: "ace" }], "music")).toBe("ace");
+    expect(workflowFor(ws, [], "sound")).toBe("sfx");
+    expect(workflowFor(ws, [], "sound", "foley")).toBe("foley");
+  });
+  it("reads a sound's line: rate and channels", () => {
+    expect(soundText({ sample_rate: 44100, channels: 2 })).toBe("44.1 kHz stereo");
+    expect(soundText({ sample_rate: 24000 })).toBe("24 kHz mono");
+    expect(soundText(undefined)).toBe("");
+  });
+});
+
+describe("the run strip of music and sound (docs/mock/CreateMusicSound.dc.html frame 1)", () => {
+  const echo = (id: string, sound?: string) =>
+    ({
+      ...wf(
+        echoWorkflows.workflows.find((x) => x.id === id),
+        echoNodes.nodes,
+      ),
+      sound,
+    }) as S<"Workflow">;
+  const done = { id: "r", inputs: {}, status: "succeeded", outputs: [] } as unknown as S<"Run">;
+  it("ends a song's and a sound's with Saving, as a picture's; a voice's has none", () => {
+    expect(segments(echo("echo-music", "music"), done).map((x) => x.title)).toEqual([
+      "Echo music",
+      "Saving",
+    ]);
+    expect(segments(echo("echo-sound", "sound"), done).at(-1)?.title).toBe("Saving");
+    expect(segments(echo("echo-voice-over", "voice"), done).map((x) => x.title)).not.toContain(
+      "Saving",
+    );
   });
 });

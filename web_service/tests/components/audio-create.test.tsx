@@ -8,7 +8,7 @@ import workflows from "../../../contracts/fixtures/registry/workflows.valid.json
 import coreNodes from "../../../contracts/fixtures/registry/nodes.valid.json";
 import { Create } from "@/components/create/create";
 import { api, type S } from "@/lib/api";
-import { answer, audio } from "./helpers";
+import { answer, audio, video } from "./helpers";
 
 vi.mock("@/lib/runs", async (orig) => ({
   ...(await orig<typeof import("@/lib/runs")>()),
@@ -149,7 +149,7 @@ describe("Create on an audio workflow", () => {
       within(tabs)
         .getAllByRole("tab")
         .map((t) => t.textContent),
-    ).toEqual(["Image", "Audio"]);
+    ).toEqual(["Image", "Voice"]);
     // each tab shows its kind's orb above the label, hidden from screen readers (Audio: the voice orb)
     expect(
       within(tabs)
@@ -162,7 +162,7 @@ describe("Create on an audio workflow", () => {
       ["ki k-image", "true", true],
       ["ki k-voice", "true", true],
     ]);
-    fireEvent.click(within(tabs).getByRole("tab", { name: "Audio" }));
+    fireEvent.click(within(tabs).getByRole("tab", { name: "Voice" }));
     const composer = screen.getByRole("form", { name: "Composer" });
     const tile = await within(composer).findByRole("button", { name: "Voice: Pick a voice" });
     expect(within(composer).getByRole("button", { name: /^Seed/ }).textContent).toBe("SeedRandom");
@@ -440,7 +440,7 @@ describe("Design a voice: closing and tries", () => {
   const openDesigner = async () => {
     fireEvent.click(
       within(screen.getByRole("tablist", { name: "Output kind" })).getByRole("tab", {
-        name: "Audio",
+        name: "Voice",
       }),
     );
     fireEvent.click(await screen.findByRole("button", { name: "Voice: Pick a voice" }));
@@ -549,7 +549,7 @@ describe("Design a voice: closing and tries", () => {
     start();
     fireEvent.click(
       within(screen.getByRole("tablist", { name: "Output kind" })).getByRole("tab", {
-        name: "Audio",
+        name: "Voice",
       }),
     );
     fireEvent.click(await screen.findByRole("button", { name: "Voice: Pick a voice" }));
@@ -572,5 +572,364 @@ describe("WavePlayer", () => {
     expect(screen.queryByRole("alert")).toBeNull();
     fireEvent.error(container.querySelector("audio")!);
     expect(screen.getByRole("alert").textContent).toContain("could not be played");
+  });
+});
+
+// ---------------------------------------------------------------- Music and Sound (plan 38 P4, docs/mock/CreateMusicSound.dc.html)
+describe("Create's Music and Sound (frames 1-5)", () => {
+  // the echo fakes as studio serves them (Workflow.sound is computed by studio; the fixtures leave it out)
+  const SOUND: Record<string, S<"SoundClass">> = {
+    "echo-music": "music",
+    "echo-repaint": "music",
+    "echo-music-extend": "music",
+    "echo-sound": "sound",
+    "echo-vary": "sound",
+    "echo-sound-video": "sound",
+  };
+  const cls = (id: string) => ({ ...wf(id), sound: SOUND[id] }) as S<"Workflow">;
+  const all = () => [wf("echo"), wf("echo-voice-over"), ...Object.keys(SOUND).map(cls)];
+  const offer = (workflow_id: string, action: string, param: string, inputs = {}) =>
+    ({
+      workflow_id,
+      title: workflow_id,
+      action,
+      family: "echo",
+      media: "audio",
+      param,
+      inputs,
+    }) as S<"TakeOffer">;
+  const song = audio(10, {
+    run_id: "m1",
+    sound: "music",
+    title: "Rain on the window",
+    url: "/files/u/x/song.wav",
+    audio: {
+      duration_s: 10,
+      sample_rate: 48000,
+      channels: 2,
+      sections: [
+        { label: "Intro", start_s: 0, end_s: 2.5 },
+        { label: "Verse 1", start_s: 2.5, end_s: 5 },
+        { label: "Chorus", start_s: 5, end_s: 7.5 },
+        { label: "Outro", start_s: 7.5, end_s: 10 },
+      ],
+    },
+    made_with: {
+      seed: 31,
+      prompt: "Warm lo-fi pop",
+      workflow_id: "echo-music",
+      inputs: {},
+    } as unknown as S<"Take">["made_with"],
+  });
+  function serveMusic(uses: S<"TakeOffer">[] = [], extra: Record<string, () => unknown> = {}) {
+    answer("GET", {
+      "/v1/studio/sessions/{session_id}/runs": () => ({ data: { runs: [] } }),
+      "/v1/studio/sessions/{session_id}/takes": () => ({ data: { takes: [] } }),
+      "/v1/studio/library": () => ({ data: { items: [] } }),
+      "/v1/studio/hosts": () => ({ data: { hosts: [] } }),
+      "/v1/studio/loras": () => ({ data: { loras: [] } }),
+      "/v1/studio/takes/{take_id}/uses": () => ({ data: { uses } }),
+      "/v1/studio/takes/{take_id}": () => ({ data: song }),
+      ...Object.fromEntries(Object.entries(extra).map(([k, f]) => [k, () => ({ data: f() })])),
+    });
+  }
+  // a popup by its label (popovers are not shown in jsdom, so role queries skip them)
+  const popOf = (label: string) => {
+    const d = [...document.querySelectorAll<HTMLElement>("[role=dialog]")].find(
+      (x) => x.getAttribute("aria-label") === label,
+    );
+    if (!d) throw new Error(`no popup ${label}`);
+    return d;
+  };
+  const open = (takes: S<"Take">[], runs: S<"Run">[]) =>
+    render(<Create initial={{ sessions: [], workflows: all(), sessionId: "s1", runs, takes }} />);
+
+  it("tabs Image, Voice, Music, Sound with their orbs; Music: style, lyrics with tags, Instrumental, the group chip", async () => {
+    serveMusic();
+    const bodies: { workflow_id: string; inputs: Record<string, unknown> }[] = [];
+    answer("POST", {
+      "/v1/studio/sessions/{session_id}/runs": ({ body }) => {
+        bodies.push(body as (typeof bodies)[number]);
+        return {
+          status: 202,
+          data: run({ id: `q${bodies.length}`, workflow_id: "echo-music", status: "queued" }),
+        };
+      },
+    });
+    open([], [run({ status: "queued" })]);
+    const tabs = screen.getByRole("tablist", { name: "Output kind" });
+    expect(
+      within(tabs)
+        .getAllByRole("tab")
+        .map((t) => t.textContent),
+    ).toEqual(["Image", "Voice", "Music", "Sound"]);
+    // Music is a small black record (no glyph), Sound the sky orb with wave bars
+    const orb = (name: string) => within(tabs).getByRole("tab", { name }).querySelector(".ki")!;
+    expect(orb("Music").querySelector("svg")).toBeNull();
+    expect(orb("Sound").querySelector("svg")).toBeTruthy();
+    fireEvent.click(within(tabs).getByRole("tab", { name: "Music" }));
+    const composer = screen.getByRole("form", { name: "Composer" });
+    const style = await within(composer).findByPlaceholderText(
+      "Style: genre, instruments, voice, mood",
+    );
+    fireEvent.change(style, { target: { value: "Warm lo-fi pop" } });
+    // a tag goes in at the caret, on its own line
+    const lyrics = within(composer).getByRole("textbox", { name: "Lyrics" }) as HTMLTextAreaElement;
+    fireEvent.change(lyrics, { target: { value: "first line" } });
+    lyrics.setSelectionRange(10, 10);
+    fireEvent.click(within(composer).getByRole("button", { name: "[chorus]" }));
+    expect(lyrics.value).toBe("first line\n[chorus]\n");
+    // Auto length and BPM share one chip ("Length · BPM"), its popup has one Auto for both
+    const chip = within(composer).getByRole("button", { name: "Length · BPM" });
+    fireEvent.click(chip);
+    const pop = await waitFor(() => popOf("Length · BPM"));
+    const auto = within(pop).getByRole("switch", { name: "Auto", hidden: true });
+    expect(auto.getAttribute("aria-checked")).toBe("true");
+    expect(within(pop).getByText("The plan picks both")).toBeTruthy();
+    fireEvent.click(auto);
+    await waitFor(() => expect(chip.textContent).toBe("0:01 · 30 BPM"));
+    fireEvent.click(within(pop).getByRole("switch", { name: "Auto", hidden: true }));
+    await waitFor(() => expect(chip.textContent).toBe("Length · BPM"));
+    fireEvent.keyDown(document, { key: "Escape" });
+    // Instrumental hides the lyrics; the run sends no lyrics then
+    fireEvent.click(within(composer).getByRole("switch", { name: "Instrumental" }));
+    expect(within(composer).queryByRole("textbox", { name: "Lyrics" })).toBeNull();
+    // one take a Generate (Music has no count of its own)
+    expect(within(composer).getByRole("group", { name: "Seeds to queue" }).textContent).toContain(
+      "1 / 4",
+    );
+    fireEvent.click(composer.querySelector<HTMLButtonElement>('button[type="submit"]')!);
+    await waitFor(() => expect(bodies).toHaveLength(1));
+    expect(bodies[0].workflow_id).toBe("echo-music");
+    expect(bodies[0].inputs).toMatchObject({
+      "prompt.text": "Warm lo-fi pop",
+      "music.instrumental": true,
+    });
+    expect(bodies[0].inputs).not.toHaveProperty("music.lyrics");
+  });
+
+  it("a song on the stage: its badge, sections, the cover tile; Repaint picks a range, Extend runs from its popup", async () => {
+    const uses = [
+      offer("echo-repaint", "Repaint", "repaint.source", {
+        "repaint.source": { take_id: song.id },
+        "repaint.span": { start: 0, end: 10 },
+      }),
+      offer("echo-music-extend", "Extend", "lengthen.source", {
+        "lengthen.source": { take_id: song.id },
+      }),
+    ];
+    serveMusic(uses);
+    const bodies: { workflow_id: string; inputs: Record<string, unknown> }[] = [];
+    answer("POST", {
+      "/v1/studio/sessions/{session_id}/runs": ({ body }) => {
+        bodies.push(body as (typeof bodies)[number]);
+        return { status: 202, data: run({ id: `q${bodies.length}`, status: "queued" }) };
+      },
+    });
+    open([song], [run({ id: "m1", workflow_id: "echo-music" })]);
+    expect((await screen.findAllByText("seed 31 · 0:10 · 48 kHz stereo")).length).toBeGreaterThan(
+      0,
+    );
+    const sections = screen.getByRole("group", { name: "Sections" });
+    expect(
+      within(sections)
+        .getAllByRole("button")
+        .map((b) => b.textContent),
+    ).toEqual(["Intro", "Verse 1", "Chorus", "Outro"]);
+    // the strip: the cover tile, then Repaint · Cover · Extend (Cover not offered: greyed, why on hover)
+    const strip = screen.getByRole("group", { name: "Takes" });
+    expect(
+      within(strip)
+        .getByRole("button", { name: "Take, seed 31, 0:10" })
+        .querySelector('[data-sound="music"]'),
+    ).toBeTruthy();
+    const cover = await within(strip).findByRole("button", { name: "Cover" });
+    expect(cover.getAttribute("aria-disabled")).toBe("true");
+    expect(cover.getAttribute("title")).toBe("Not on Echo music");
+    // Extend: its popup with Add and Where, the run beside the take
+    fireEvent.click(within(strip).getByRole("button", { name: "Extend" }));
+    const ext = popOf("Extend · seed 31");
+    expect(within(ext).getByText("Add")).toBeTruthy();
+    fireEvent.click(within(ext).getByRole("button", { name: "Start", hidden: true }));
+    fireEvent.click(
+      within(ext)
+        .getAllByRole("button", { name: /^Extend/, hidden: true })
+        .at(-1)!,
+    );
+    await waitFor(() => expect(bodies).toHaveLength(1));
+    expect(bodies[0]).toMatchObject({
+      workflow_id: "echo-music-extend",
+      inputs: { "lengthen.source": { take_id: song.id }, "lengthen.where": "start" },
+    });
+    // Repaint (the song picked again: the new run is shown after Extend): the stage turns into the range picker; a
+    // section takes its range
+    fireEvent.click(within(strip).getByRole("button", { name: "Take, seed 31, 0:10" }));
+    fireEvent.click(await within(strip).findByRole("button", { name: "Repaint" }));
+    const range = await screen.findByRole("group", { name: /^Repaint range on the song/ });
+    expect(range).toBeTruthy();
+    fireEvent.click(
+      within(screen.getByRole("group", { name: "Sections" })).getByRole("button", {
+        name: /^Chorus/,
+      }),
+    );
+    // the stage's readout, and the drawer's Repaint section
+    expect((await screen.findAllByText("0:05 – 0:08 · 3 s")).length).toBe(2);
+    fireEvent.click(
+      screen.getAllByRole("button", { name: /^Repaint/ }).find((b) => b.classList.contains("key"))!,
+    );
+    await waitFor(() => expect(bodies).toHaveLength(2));
+    expect(bodies[1]).toMatchObject({
+      workflow_id: "echo-repaint",
+      inputs: { "repaint.source": { take_id: song.id }, "repaint.span": { start: 5, end: 7.5 } },
+    });
+  });
+
+  it("Sound: 4 of 8 variations a Generate, a grid on the stage; a click keeps one in the strip, Keep all the rest", async () => {
+    serveMusic();
+    const bodies: { workflow_id: string; inputs: Record<string, unknown> }[] = [];
+    answer("POST", {
+      "/v1/studio/sessions/{session_id}/runs": ({ body }) => {
+        bodies.push(body as (typeof bodies)[number]);
+        return {
+          status: 202,
+          data: run({ id: `v${bodies.length}`, workflow_id: "echo-sound", status: "queued" }),
+        };
+      },
+    });
+    open([], [run({ status: "queued" })]);
+    fireEvent.click(
+      within(screen.getByRole("tablist", { name: "Output kind" })).getByRole("tab", {
+        name: "Sound",
+      }),
+    );
+    const composer = screen.getByRole("form", { name: "Composer" });
+    expect(
+      (await within(composer).findByRole("group", { name: "How many variations" })).textContent,
+    ).toContain("4 / 8");
+    // Avoid is a line on the composer; Match a video is a tile
+    expect(within(composer).getByRole("textbox", { name: "Avoid" })).toBeTruthy();
+    expect(within(composer).getByRole("button", { name: /Match a video/ })).toBeTruthy();
+    fireEvent.change(within(composer).getByPlaceholderText("Describe the sound"), {
+      target: { value: "A door creaks" },
+    });
+    fireEvent.click(composer.querySelector<HTMLButtonElement>('button[type="submit"]')!);
+    await waitFor(() => expect(bodies).toHaveLength(4));
+    expect(new Set(bodies.map((b) => b.workflow_id))).toEqual(new Set(["echo-sound"]));
+  });
+
+  it("the grid of variations: plays each, keeps one, Keep all", async () => {
+    serveMusic();
+    localStorage.setItem("create-variations:s1", JSON.stringify({ runs: ["v1", "v2"], kept: [] }));
+    const fx = (n: number) =>
+      audio(2, {
+        run_id: `v${n}`,
+        sound: "sound",
+        created_at: `2026-11-27T00:00:0${n}Z`,
+        audio: { duration_s: 2, sample_rate: 44100, channels: 2 },
+        made_with: {
+          seed: 40 + n,
+          workflow_id: "echo-sound",
+          inputs: {},
+        } as unknown as S<"Take">["made_with"],
+      });
+    const [a, b] = [fx(1), fx(2)];
+    open(
+      [b, a],
+      [run({ id: "v2", workflow_id: "echo-sound" }), run({ id: "v1", workflow_id: "echo-sound" })],
+    );
+    const grid = await screen.findByRole("group", { name: "Variations" });
+    expect(screen.getByText("2 variations · 0:02 · 44.1 kHz stereo")).toBeTruthy();
+    const strip = () => screen.queryByRole("group", { name: "Takes" });
+    // none kept yet: none in the strip
+    expect(
+      strip() && within(strip()!).queryByRole("button", { name: /^Take, seed 41/ }),
+    ).toBeFalsy();
+    fireEvent.click(within(grid).getByRole("button", { name: "Variation, seed 41 · 0:02" }));
+    expect(
+      within(grid).getByRole("button", { name: "Variation, seed 41 · 0:02, kept" }),
+    ).toBeTruthy();
+    expect(within(strip()!).getByRole("button", { name: /^Take, seed 41/ })).toBeTruthy();
+    expect(JSON.parse(localStorage.getItem("create-variations:s1")!).kept).toEqual([a.id]);
+    fireEvent.click(screen.getByRole("button", { name: "Keep all" }));
+    expect(within(strip()!).getByRole("button", { name: /^Take, seed 42/ })).toBeTruthy();
+    localStorage.removeItem("create-variations:s1");
+  });
+
+  it("a sound from a video: the stage switches Sound / Video with sound; the video's tile reads ▶ with sound", async () => {
+    serveMusic();
+    const fx = audio(1, {
+      run_id: "f1",
+      sound: "sound",
+      audio: { duration_s: 1, sample_rate: 44100, channels: 2 },
+      made_with: {
+        seed: 7,
+        workflow_id: "echo-sound-video",
+        inputs: {},
+      } as unknown as S<"Take">["made_with"],
+    });
+    const vid = video(1, 25, { run_id: "f1", title: "Fox trots in · with sound" });
+    open([vid, fx], [run({ id: "f1", workflow_id: "echo-sound-video" })]);
+    const show = await screen.findByRole("group", { name: "Show" });
+    expect(
+      within(show)
+        .getAllByRole("button")
+        .map((b) => b.textContent),
+    ).toEqual(["Sound", "Video with sound"]);
+    const strip = screen.getByRole("group", { name: "Takes" });
+    expect(within(strip).getByRole("button", { name: /with sound/ }).textContent).toBe(
+      "▶ with sound",
+    );
+    fireEvent.click(within(show).getByRole("button", { name: "Sound" }));
+    expect(await screen.findByRole("group", { name: "Waveform of the take" })).toBeTruthy();
+    expect(
+      within(screen.getByRole("group", { name: "Show" }))
+        .getByRole("button", { name: "Sound" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+  });
+
+  it("the model chip lists the kind's models, MiniMax Music 3 first; what this one lacks stays greyed", async () => {
+    serveMusic();
+    const minimax = {
+      ...cls("echo-music"),
+      id: "minimax-music3",
+      title: "MiniMax Music 3",
+      family: "minimax-music3",
+      studio: {
+        composer: ["prompt.text", "music.lyrics"],
+        quick: ["music.instrumental", "music.seconds"],
+      },
+    } as S<"Workflow">;
+    render(
+      <Create
+        initial={{
+          sessions: [],
+          workflows: [...all(), minimax],
+          sessionId: "s1",
+          runs: [run({ status: "queued" })],
+          takes: [],
+        }}
+      />,
+    );
+    fireEvent.click(
+      within(screen.getByRole("tablist", { name: "Output kind" })).getByRole("tab", {
+        name: "Music",
+      }),
+    );
+    const composer = screen.getByRole("form", { name: "Composer" });
+    // Music opens on MiniMax (owner, 2026-11-27); Echo music's BPM grouped with Length is not on it
+    const greyed = await within(composer).findByText("Length · BPM");
+    expect(greyed.getAttribute("aria-disabled")).toBe("true");
+    expect(greyed.getAttribute("title")).toBe("Not on MiniMax Music 3");
+    fireEvent.click(within(composer).getByRole("button", { name: "MiniMax Music 3" }));
+    const pop = await waitFor(() => popOf("Model"));
+    const rows = within(pop).getAllByRole("menuitemradio", { hidden: true });
+    expect(rows.map((r) => r.firstChild?.firstChild?.textContent)).toEqual([
+      "MiniMax Music 3",
+      "Echo music",
+    ]);
+    expect(rows[0].getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(rows[1]);
+    expect(await within(composer).findByRole("button", { name: "Length · BPM" })).toBeTruthy();
   });
 });
