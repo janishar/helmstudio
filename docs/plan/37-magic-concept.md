@@ -3,7 +3,9 @@
 Owner, 2026-11-26: "plan an switch ui for this timeline which opens a node editor … this will be a real playground for the
 assistant", then "first lets have a concept discussion with me". This file keeps what was decided in that discussion. Not
 scheduled: not alpha.5; a release is picked when the concept is done. The wireframe board
-[Magic](../mock/Magic.dc.html) (44a93115, e227a7ee) shows the first idea (a node canvas) and is now partly superseded.
+[Magic](../mock/Magic.dc.html) now shows the lane concept (owner, 2026-11-26: "yes redraw the wireframe"): the Magic page,
+Add, a block opened, move and join, the Assistant's proposal, Send to Timeline. The first node-canvas board (44a93115,
+e227a7ee) is replaced.
 
 ## Decided
 
