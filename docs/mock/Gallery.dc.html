@@ -79,6 +79,47 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 .rail-logo{display:flex;justify-content:center;padding:14px 4px}
 .brand{width:36px;height:36px;border-radius:12px 12px 12px 5px;display:flex;align-items:center;justify-content:center;color:var(--on1);background:linear-gradient(155deg,var(--a1),var(--a2));box-shadow:inset 0 1px 0 rgba(255,255,255,.5),inset 0 -4px 6px color-mix(in srgb, var(--shd) 35%, transparent),0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)}
 </style>
+<style>
+/* take looks (owner, 2026-11-27): music is an album cover (CreateMusicSound 7b), sound and voice one orb (8c: sound sky, voice amber) */
+.cov,.o8{position:relative;overflow:hidden}
+.k8s{--k:#7cc7f2;--kd:#06202e}
+.k8v{--k:#f2b84b;--kd:#2a1c00}
+:is(.take,.pk) i.cov{border:0}
+:is(.take,.pk) i.t8{border:0;isolation:isolate}
+:is(.take,.pk)[aria-pressed="true"] i:is(.cov,.t8){box-shadow:0 0 0 2px var(--a1)}
+:is(.take,.pk) i:is(.cov,.t8) u{position:absolute;right:6px;top:6px;text-decoration:none;padding:1px 6px;border-radius:6px;font:600 10px/16px Inter,sans-serif}
+:is(.take,.pk) i:is(.cov,.t8) em{position:absolute;left:8px;bottom:6px;font-style:normal;font-family:'JetBrains Mono',monospace;font-size:10px}
+:is(.take,.pk) i u.bmu{background:#d59bf6;color:#230a33}
+:is(.take,.pk) i u.bsn{background:#7cc7f2;color:#06202e}
+:is(.take,.pk) i u.bvo{background:#f2b84b;color:#2a1c00}
+.take i .pl{position:absolute;left:50%;top:50%;z-index:3;width:36px;height:36px;margin:-18px 0 0 -18px;border-radius:999px;background:var(--t1);color:var(--g);display:none;align-items:center;justify-content:center;box-shadow:0 6px 14px -4px rgba(0,0,0,.6)}
+.take:hover i .pl,.take.hv i .pl{display:flex}
+.cov .disc{position:absolute;right:-28px;top:50%;width:88px;height:88px;margin-top:-44px;border-radius:50%;background:radial-gradient(circle,var(--dl,#e9e2f0) 0 9px,#0d0b10 9px 10px,transparent 10px),repeating-radial-gradient(circle,#141018 0 2px,#262030 2px 3px);box-shadow:-6px 0 14px rgba(0,0,0,.45)}
+.cov .ct{position:absolute;left:10px;top:10px;right:66px;font:700 16px/18px 'Bricolage Grotesque',Inter,sans-serif;color:#fff;text-align:left;text-shadow:0 1px 3px rgba(0,0,0,.45)}
+/* picker cards are narrower than a Gallery card: a one-line title, a smaller orb */
+.pk i.cov .ct{right:44px;font-size:13px;line-height:15px;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+.pk .orb{width:36px;height:36px;margin-top:-12px}.pk .orb svg{width:16px;height:16px}
+:is(.take,.pk) i.cov em{color:rgba(255,255,255,.85)}
+:is(.take,.pk) i.cov u{right:auto;left:8px;top:auto;bottom:22px}
+:is(.take,.pk) i.t8 em{color:rgba(255,255,255,.85)}
+:is(.take,.pk) i.o8,.tt.o8,.sm.o8{background:radial-gradient(55% 75% at 50% 40%,color-mix(in srgb,var(--k) 22%,transparent),transparent 72%),var(--s1)}
+.orb{width:50px;height:50px;margin-top:-16px;border-radius:50%;background:radial-gradient(circle at 34% 30%,color-mix(in srgb,var(--k) 30%,#fff) 0,var(--k) 42%,color-mix(in srgb,var(--k) 45%,#000) 100%);box-shadow:0 0 0 6px color-mix(in srgb,var(--k) 16%,transparent),0 0 30px 4px color-mix(in srgb,var(--k) 45%,transparent);display:flex;align-items:center;justify-content:center;color:var(--kd)}
+.orb svg{width:20px;height:20px}
+.o8 .ln{position:absolute;left:0;right:0;bottom:10px;text-align:center;font:500 11px/14px 'JetBrains Mono',monospace;color:var(--t1b)}
+.tt{position:relative;width:112px;height:72px;box-sizing:border-box;padding:6px 8px;border-radius:8px;border:1px solid var(--s5);color:var(--t2);font:11px 'JetBrains Mono',monospace;display:flex;flex-direction:column;justify-content:space-between;text-align:left;overflow:hidden}
+.tt[aria-pressed="true"]{border:2px solid var(--a2)}
+.tt .tv{position:relative;display:block;height:36px}
+.tt.t8{border-color:transparent;color:rgba(255,255,255,.88)}
+.tt.t8[aria-pressed="true"]{border-color:var(--a2)}
+.tt.t8.o8{color:var(--t2)}
+.tt.t8 .tv{display:flex;align-items:center}
+.tt .orb{width:26px;height:26px;margin:0 0 0 4px;box-shadow:0 0 0 3px color-mix(in srgb,var(--k) 16%,transparent),0 0 14px 2px color-mix(in srgb,var(--k) 45%,transparent)}.tt .orb svg{width:13px;height:13px}
+/* small thumbs (rows, chips, tiles): the same looks, scaled */
+.sm.cov,.sm.o8{border:0}
+.sm.o8{display:flex;align-items:center;justify-content:center}
+.sm .orb{width:18px;height:18px;margin:0;box-shadow:0 0 0 2px color-mix(in srgb,var(--k) 16%,transparent),0 0 8px 1px color-mix(in srgb,var(--k) 45%,transparent)}.sm .orb svg{width:10px;height:10px}
+.sm .disc{width:30px;height:30px;margin-top:-15px;right:-10px;box-shadow:-3px 0 6px rgba(0,0,0,.45)}
+</style>
 </helmet>
 <div data-theme="{{theme}}" style="display: flex; flex-wrap: wrap; min-height: 960px; background: var(--g); color: var(--t1); font-family: Inter, system-ui, sans-serif; font-size: 14px; line-height: 20px">
 
@@ -125,7 +166,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <button class="chip" aria-pressed="true" style="background: var(--t1); color: var(--p0); font-weight: 600">All</button>
 <button class="chip">Images</button>
 <button class="chip">Video</button>
-<button class="chip">Audio</button>
+<button class="chip">Music</button> <button class="chip">Sound</button> <button class="chip">Voice</button>
 <button class="chip">Starred</button>
 <span aria-hidden="true" style="width: 1px; background: var(--s5); margin: 4px 4px"></span>
 <button class="chip">From Create</button>
@@ -146,7 +187,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <button class="take"><i class="pic pnb" style="background-image: url(img/mara-portrait.jpg)"></i><b>mara reference 1</b><small>Upload</small></button>
 <button class="take"><i class="pic pnb" style="background-image: url(img/mara-umbrella.jpg)"></i><b>mara reference 2</b><small>Upload</small></button>
 <button class="take"><i class="pic pnb" style="background-image: url(img/neon-alley.jpg)"></i><b>alley reference</b><small>Upload</small></button>
-<button class="take"><i>audio</i><b>[YOUR MUSIC]</b><small>Upload</small></button>
+<button class="take"><i class="cov" style="background: linear-gradient(150deg,#3b4f7a,#6a4c93 55%,#1f2340)"><span class="disc" style="--dl: #c9b8f0"></span><span class="ct">[YOUR MUSIC]</span><u class="bmu">Music</u><em>0:20</em><span class="pl" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="7 4 20 12 7 20 7 4"></polygon></svg></span></i><b>[YOUR MUSIC]</b><small>Upload</small></button>
 <button class="take"><i class="pic pnb" style="background-image: url(img/fox-dusk-44.jpg)">▶</i><b>Fox crossing · seed 11</b><small>LTX · Create</small></button>
 </div>
 </main>

@@ -133,6 +133,47 @@ button:disabled{cursor:not-allowed}
 .rail-logo{display:flex;justify-content:center;padding:14px 4px}
 .brand{width:36px;height:36px;border-radius:12px 12px 12px 5px;display:flex;align-items:center;justify-content:center;color:var(--on1);background:linear-gradient(155deg,var(--a1),var(--a2));box-shadow:inset 0 1px 0 rgba(255,255,255,.5),inset 0 -4px 6px color-mix(in srgb, var(--shd) 35%, transparent),0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)}
 </style>
+<style>
+/* take looks (owner, 2026-11-27): music is an album cover (CreateMusicSound 7b), sound and voice one orb (8c: sound sky, voice amber) */
+.cov,.o8{position:relative;overflow:hidden}
+.k8s{--k:#7cc7f2;--kd:#06202e}
+.k8v{--k:#f2b84b;--kd:#2a1c00}
+:is(.take,.pk) i.cov{border:0}
+:is(.take,.pk) i.t8{border:0;isolation:isolate}
+:is(.take,.pk)[aria-pressed="true"] i:is(.cov,.t8){box-shadow:0 0 0 2px var(--a1)}
+:is(.take,.pk) i:is(.cov,.t8) u{position:absolute;right:6px;top:6px;text-decoration:none;padding:1px 6px;border-radius:6px;font:600 10px/16px Inter,sans-serif}
+:is(.take,.pk) i:is(.cov,.t8) em{position:absolute;left:8px;bottom:6px;font-style:normal;font-family:'JetBrains Mono',monospace;font-size:10px}
+:is(.take,.pk) i u.bmu{background:#d59bf6;color:#230a33}
+:is(.take,.pk) i u.bsn{background:#7cc7f2;color:#06202e}
+:is(.take,.pk) i u.bvo{background:#f2b84b;color:#2a1c00}
+.take i .pl{position:absolute;left:50%;top:50%;z-index:3;width:36px;height:36px;margin:-18px 0 0 -18px;border-radius:999px;background:var(--t1);color:var(--g);display:none;align-items:center;justify-content:center;box-shadow:0 6px 14px -4px rgba(0,0,0,.6)}
+.take:hover i .pl,.take.hv i .pl{display:flex}
+.cov .disc{position:absolute;right:-28px;top:50%;width:88px;height:88px;margin-top:-44px;border-radius:50%;background:radial-gradient(circle,var(--dl,#e9e2f0) 0 9px,#0d0b10 9px 10px,transparent 10px),repeating-radial-gradient(circle,#141018 0 2px,#262030 2px 3px);box-shadow:-6px 0 14px rgba(0,0,0,.45)}
+.cov .ct{position:absolute;left:10px;top:10px;right:66px;font:700 16px/18px 'Bricolage Grotesque',Inter,sans-serif;color:#fff;text-align:left;text-shadow:0 1px 3px rgba(0,0,0,.45)}
+/* picker cards are narrower than a Gallery card: a one-line title, a smaller orb */
+.pk i.cov .ct{right:44px;font-size:13px;line-height:15px;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+.pk .orb{width:36px;height:36px;margin-top:-12px}.pk .orb svg{width:16px;height:16px}
+:is(.take,.pk) i.cov em{color:rgba(255,255,255,.85)}
+:is(.take,.pk) i.cov u{right:auto;left:8px;top:auto;bottom:22px}
+:is(.take,.pk) i.t8 em{color:rgba(255,255,255,.85)}
+:is(.take,.pk) i.o8,.tt.o8,.sm.o8{background:radial-gradient(55% 75% at 50% 40%,color-mix(in srgb,var(--k) 22%,transparent),transparent 72%),var(--s1)}
+.orb{width:50px;height:50px;margin-top:-16px;border-radius:50%;background:radial-gradient(circle at 34% 30%,color-mix(in srgb,var(--k) 30%,#fff) 0,var(--k) 42%,color-mix(in srgb,var(--k) 45%,#000) 100%);box-shadow:0 0 0 6px color-mix(in srgb,var(--k) 16%,transparent),0 0 30px 4px color-mix(in srgb,var(--k) 45%,transparent);display:flex;align-items:center;justify-content:center;color:var(--kd)}
+.orb svg{width:20px;height:20px}
+.o8 .ln{position:absolute;left:0;right:0;bottom:10px;text-align:center;font:500 11px/14px 'JetBrains Mono',monospace;color:var(--t1b)}
+.tt{position:relative;width:112px;height:72px;box-sizing:border-box;padding:6px 8px;border-radius:8px;border:1px solid var(--s5);color:var(--t2);font:11px 'JetBrains Mono',monospace;display:flex;flex-direction:column;justify-content:space-between;text-align:left;overflow:hidden}
+.tt[aria-pressed="true"]{border:2px solid var(--a2)}
+.tt .tv{position:relative;display:block;height:36px}
+.tt.t8{border-color:transparent;color:rgba(255,255,255,.88)}
+.tt.t8[aria-pressed="true"]{border-color:var(--a2)}
+.tt.t8.o8{color:var(--t2)}
+.tt.t8 .tv{display:flex;align-items:center}
+.tt .orb{width:26px;height:26px;margin:0 0 0 4px;box-shadow:0 0 0 3px color-mix(in srgb,var(--k) 16%,transparent),0 0 14px 2px color-mix(in srgb,var(--k) 45%,transparent)}.tt .orb svg{width:13px;height:13px}
+/* small thumbs (rows, chips, tiles): the same looks, scaled */
+.sm.cov,.sm.o8{border:0}
+.sm.o8{display:flex;align-items:center;justify-content:center}
+.sm .orb{width:18px;height:18px;margin:0;box-shadow:0 0 0 2px color-mix(in srgb,var(--k) 16%,transparent),0 0 8px 1px color-mix(in srgb,var(--k) 45%,transparent)}.sm .orb svg{width:10px;height:10px}
+.sm .disc{width:30px;height:30px;margin-top:-15px;right:-10px;box-shadow:-3px 0 6px rgba(0,0,0,.45)}
+</style>
 </helmet>
 <div data-theme="{{theme}}" style="position: relative; display: flex; flex-wrap: wrap; min-height: 960px; background: var(--g); color: var(--t1); font-family: Inter, system-ui, sans-serif; font-size: 14px; line-height: 20px">
 
@@ -187,7 +228,7 @@ button:disabled{cursor:not-allowed}
 <div role="tablist" aria-label="Output kind" style="flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; padding: 6px; border-radius: 16px; background: var(--s1)">
 <button role="tab" aria-selected="false" style="flex: 1 1 0; min-height: 44px; width: 64px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); font-size: 12px; font-weight: 600">Image</button>
 <button role="tab" aria-selected="false" style="flex: 1 1 0; min-height: 44px; width: 64px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); font-size: 12px; font-weight: 600">Video</button>
-<button role="tab" aria-selected="true" style="flex: 1 1 0; min-height: 44px; width: 64px; border-radius: 12px; border: 0; background: var(--s5); font-size: 12px; font-weight: 600">Audio</button>
+<button role="tab" aria-selected="true" style="flex: 1 1 0; min-height: 44px; width: 64px; border-radius: 12px; border: 0; background: var(--s5); font-size: 12px; font-weight: 600">Voice</button>
 </div>
 <div style="flex: 1 1 520px; min-width: 0; border-radius: 18px; background: var(--s2); border: 1px solid var(--s5); padding: 10px; display: flex; flex-direction: column; gap: 8px">
 <div style="display: flex; flex-wrap: wrap; gap: 8px">
@@ -289,7 +330,7 @@ button:disabled{cursor:not-allowed}
 <div class="fl">An audio take, or a video's sound
 <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px">
 <sc-for list="{{takes}}" as="t" hint-placeholder-count="4">
-<button class="pk" aria-pressed="{{t.on}}" onClick="{{t.pick}}" style="color: var(--t1)"><i style="aspect-ratio: auto; height: 64px"><span class="wave" aria-hidden="true" style="width: 78%; height: 30px; box-sizing: border-box"></span></i><b>{{t.name}}</b><small>{{t.sub}}</small></button>
+<button class="pk" aria-pressed="{{t.on}}" onClick="{{t.pick}}" style="color: var(--t1)"><i class="{{t.cls}}" style="aspect-ratio: auto; height: 64px"><span class="orb"><sc-if value="{{t.voice}}" hint-placeholder-val="{{ true }}"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19v3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><rect x="9" y="2" width="6" height="13" rx="3"/></svg></sc-if><sc-if value="{{t.sound}}" hint-placeholder-val="{{ false }}"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/></svg></sc-if></span><u class="{{t.badge}}">{{t.kl}}</u><span class="ln">{{t.len}}</span></i><b>{{t.name}}</b><small>{{t.sub}}</small></button>
 </sc-for>
 </div>
 </div>
@@ -391,10 +432,10 @@ const MINE = [
 { id: 'teen', name: 'Nervous teen', kind: 'Designed', detail: 'Male, 17, tenor, nervous' }
 ];
 const TAKES = [
-{ id: 'letter', name: 'Letter, read aloud', kind: 'audio · wav', dur: 28, def: [4, 16] },
-{ id: 'interview', name: 'Interview · take 2', kind: 'audio · wav', dur: 41.5, def: [4, 16] },
+{ id: 'letter', name: 'Letter, read aloud', kind: 'voice · wav', dur: 28, def: [4, 16] },
+{ id: 'interview', name: 'Interview · take 2', kind: 'voice · wav', dur: 41.5, def: [4, 16] },
 { id: 'shot3', name: 'Shot 3 · tree line', kind: 'video sound', dur: 5, def: [0, 5] },
-{ id: 'upload', name: 'Voicemail.mp3', kind: 'audio · mp3', dur: 22, def: [0, 12] }
+{ id: 'upload', name: 'Voicemail.mp3', kind: 'voice · mp3', dur: 22, def: [0, 12] }
 ];
 const fmt = (t) => { const m = Math.floor(t / 60); const x = (t - m * 60).toFixed(1); return m + ':' + (t - m * 60 < 10 ? '0' : '') + x; };
 const fmtS = (t) => { const m = Math.floor(t / 60); const x = Math.floor(t - m * 60); return m + ':' + (x < 10 ? '0' : '') + x; };
@@ -437,7 +478,7 @@ qwen: QWEN.map(card), qwenOpen: s.qwenOpen, qwenOpenStr: s.qwenOpen ? 'true' : '
 toggleQwen: () => this.setState({ qwenOpen: !this.state.qwenOpen }),
 mine, mineCount: mine.length,
 pickedLabel: pv ? pv.name + ' picked' : 'Nothing picked', useOff: !pv, useOpacity: pv ? '1' : '0.5',
-takes: TAKES.map((t) => ({ name: t.name, sub: t.kind + ' · ' + t.dur.toFixed(1) + ' s', on: t.id === take.id ? 'true' : 'false',
+takes: TAKES.map((t) => ({ name: t.name, voice: t.kind !== 'video sound', sound: t.kind === 'video sound', cls: t.kind === 'video sound' ? 't8 o8 k8s' : 't8 o8 k8v', badge: t.kind === 'video sound' ? 'bsn' : 'bvo', kl: t.kind === 'video sound' ? 'Sound' : 'Voice', len: Math.floor(t.dur / 60) + ':' + String(Math.round(t.dur % 60)).padStart(2, '0'), sub: t.kind + ' · ' + t.dur.toFixed(1) + ' s', on: t.id === take.id ? 'true' : 'false',
 pick: () => this.setState({ take: t.id, inS: t.def[0], outS: t.def[1] }) })),
 take: { dur: take.dur, sub: take.kind + ' · ' + take.dur.toFixed(1) + ' s' },
 inS: s.inS, outS: s.outS, inLabel: fmt(s.inS), outLabel: fmt(s.outS), durLabel: fmt(take.dur),

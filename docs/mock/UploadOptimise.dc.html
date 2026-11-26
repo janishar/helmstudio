@@ -157,6 +157,47 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 .rail-logo{display:flex;justify-content:center;padding:14px 4px}
 .brand{width:36px;height:36px;border-radius:12px 12px 12px 5px;display:flex;align-items:center;justify-content:center;color:var(--on1);background:linear-gradient(155deg,var(--a1),var(--a2));box-shadow:inset 0 1px 0 rgba(255,255,255,.5),inset 0 -4px 6px color-mix(in srgb, var(--shd) 35%, transparent),0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)}
 </style>
+<style>
+/* take looks (owner, 2026-11-27): music is an album cover (CreateMusicSound 7b), sound and voice one orb (8c: sound sky, voice amber) */
+.cov,.o8{position:relative;overflow:hidden}
+.k8s{--k:#7cc7f2;--kd:#06202e}
+.k8v{--k:#f2b84b;--kd:#2a1c00}
+:is(.take,.pk) i.cov{border:0}
+:is(.take,.pk) i.t8{border:0;isolation:isolate}
+:is(.take,.pk)[aria-pressed="true"] i:is(.cov,.t8){box-shadow:0 0 0 2px var(--a1)}
+:is(.take,.pk) i:is(.cov,.t8) u{position:absolute;right:6px;top:6px;text-decoration:none;padding:1px 6px;border-radius:6px;font:600 10px/16px Inter,sans-serif}
+:is(.take,.pk) i:is(.cov,.t8) em{position:absolute;left:8px;bottom:6px;font-style:normal;font-family:'JetBrains Mono',monospace;font-size:10px}
+:is(.take,.pk) i u.bmu{background:#d59bf6;color:#230a33}
+:is(.take,.pk) i u.bsn{background:#7cc7f2;color:#06202e}
+:is(.take,.pk) i u.bvo{background:#f2b84b;color:#2a1c00}
+.take i .pl{position:absolute;left:50%;top:50%;z-index:3;width:36px;height:36px;margin:-18px 0 0 -18px;border-radius:999px;background:var(--t1);color:var(--g);display:none;align-items:center;justify-content:center;box-shadow:0 6px 14px -4px rgba(0,0,0,.6)}
+.take:hover i .pl,.take.hv i .pl{display:flex}
+.cov .disc{position:absolute;right:-28px;top:50%;width:88px;height:88px;margin-top:-44px;border-radius:50%;background:radial-gradient(circle,var(--dl,#e9e2f0) 0 9px,#0d0b10 9px 10px,transparent 10px),repeating-radial-gradient(circle,#141018 0 2px,#262030 2px 3px);box-shadow:-6px 0 14px rgba(0,0,0,.45)}
+.cov .ct{position:absolute;left:10px;top:10px;right:66px;font:700 16px/18px 'Bricolage Grotesque',Inter,sans-serif;color:#fff;text-align:left;text-shadow:0 1px 3px rgba(0,0,0,.45)}
+/* picker cards are narrower than a Gallery card: a one-line title, a smaller orb */
+.pk i.cov .ct{right:44px;font-size:13px;line-height:15px;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+.pk .orb{width:36px;height:36px;margin-top:-12px}.pk .orb svg{width:16px;height:16px}
+:is(.take,.pk) i.cov em{color:rgba(255,255,255,.85)}
+:is(.take,.pk) i.cov u{right:auto;left:8px;top:auto;bottom:22px}
+:is(.take,.pk) i.t8 em{color:rgba(255,255,255,.85)}
+:is(.take,.pk) i.o8,.tt.o8,.sm.o8{background:radial-gradient(55% 75% at 50% 40%,color-mix(in srgb,var(--k) 22%,transparent),transparent 72%),var(--s1)}
+.orb{width:50px;height:50px;margin-top:-16px;border-radius:50%;background:radial-gradient(circle at 34% 30%,color-mix(in srgb,var(--k) 30%,#fff) 0,var(--k) 42%,color-mix(in srgb,var(--k) 45%,#000) 100%);box-shadow:0 0 0 6px color-mix(in srgb,var(--k) 16%,transparent),0 0 30px 4px color-mix(in srgb,var(--k) 45%,transparent);display:flex;align-items:center;justify-content:center;color:var(--kd)}
+.orb svg{width:20px;height:20px}
+.o8 .ln{position:absolute;left:0;right:0;bottom:10px;text-align:center;font:500 11px/14px 'JetBrains Mono',monospace;color:var(--t1b)}
+.tt{position:relative;width:112px;height:72px;box-sizing:border-box;padding:6px 8px;border-radius:8px;border:1px solid var(--s5);color:var(--t2);font:11px 'JetBrains Mono',monospace;display:flex;flex-direction:column;justify-content:space-between;text-align:left;overflow:hidden}
+.tt[aria-pressed="true"]{border:2px solid var(--a2)}
+.tt .tv{position:relative;display:block;height:36px}
+.tt.t8{border-color:transparent;color:rgba(255,255,255,.88)}
+.tt.t8[aria-pressed="true"]{border-color:var(--a2)}
+.tt.t8.o8{color:var(--t2)}
+.tt.t8 .tv{display:flex;align-items:center}
+.tt .orb{width:26px;height:26px;margin:0 0 0 4px;box-shadow:0 0 0 3px color-mix(in srgb,var(--k) 16%,transparent),0 0 14px 2px color-mix(in srgb,var(--k) 45%,transparent)}.tt .orb svg{width:13px;height:13px}
+/* small thumbs (rows, chips, tiles): the same looks, scaled */
+.sm.cov,.sm.o8{border:0}
+.sm.o8{display:flex;align-items:center;justify-content:center}
+.sm .orb{width:18px;height:18px;margin:0;box-shadow:0 0 0 2px color-mix(in srgb,var(--k) 16%,transparent),0 0 8px 1px color-mix(in srgb,var(--k) 45%,transparent)}.sm .orb svg{width:10px;height:10px}
+.sm .disc{width:30px;height:30px;margin-top:-15px;right:-10px;box-shadow:-3px 0 6px rgba(0,0,0,.45)}
+</style>
 </helmet>
 <div data-theme="{{theme}}" style="display: flex; flex-wrap: wrap; min-height: 960px; background: var(--g); color: var(--t1); font-family: Inter, system-ui, sans-serif; font-size: 14px; line-height: 20px">
 
@@ -231,12 +272,12 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <div>
 <h2 class="h" style="display: flex; align-items: center">Audio references<span style="flex-grow: 1"></span><span class="mono" style="font-weight: 400">1 / 3</span></h2>
 <div class="kf">
-<div style="display: flex; align-items: center; gap: 8px"><span class="thumb wave" aria-hidden="true" style="height: 28px"></span><span style="flex-grow: 1; min-width: 0"><b style="display: block; font-size: 13px">[YOUR SOUND]</b><span class="mono" style="font-size: 11px">wav · 4:12 · 48.2 MB</span></span><button class="x" aria-label="Cancel the upload">×</button></div>
+<div style="display: flex; align-items: center; gap: 8px"><span class="thumb o8 k8s sm" aria-hidden="true"><span class="orb"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/></svg></span></span><span style="flex-grow: 1; min-width: 0"><b style="display: block; font-size: 13px">[YOUR SOUND]</b><span class="mono" style="font-size: 11px">wav · 4:12 · 48.2 MB</span></span><button class="x" aria-label="Cancel the upload">×</button></div>
 <div class="lbl"><span aria-live="polite" style="color: var(--t1)">Optimising 62%</span><span class="m">48.2 → 7.9 MB · m4a</span></div>
 <span role="progressbar" aria-label="Optimising [YOUR SOUND]" aria-valuenow="62" aria-valuemin="0" aria-valuemax="100" style="display: block; width: 100%; height: 4px; border-radius: 2px; background: var(--in); overflow: hidden"><span style="display: block; width: 62%; height: 100%; background: var(--a2)"></span></span>
 </div>
 <div class="kf">
-<div style="display: flex; align-items: center; gap: 8px"><span class="thumb wave" aria-hidden="true" style="height: 28px"></span><span style="flex-grow: 1; min-width: 0"><b style="display: block; font-size: 13px">[YOUR VOICE]</b><span class="mono" style="font-size: 11px">wav · 0:18 · 3.4 MB</span></span><button class="x" aria-label="Cancel the upload">×</button></div>
+<div style="display: flex; align-items: center; gap: 8px"><span class="thumb o8 k8v sm" aria-hidden="true"><span class="orb"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19v3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><rect x="9" y="2" width="6" height="13" rx="3"/></svg></span></span><span style="flex-grow: 1; min-width: 0"><b style="display: block; font-size: 13px">[YOUR VOICE]</b><span class="mono" style="font-size: 11px">wav · 0:18 · 3.4 MB</span></span><button class="x" aria-label="Cancel the upload">×</button></div>
 <div class="lbl"><span aria-live="polite" style="color: var(--t1)">Uploading 30%</span><span class="m">as is · this browser can't make m4a</span></div>
 <span role="progressbar" aria-label="Uploading [YOUR VOICE]" aria-valuenow="30" aria-valuemin="0" aria-valuemax="100" style="display: block; width: 100%; height: 4px; border-radius: 2px; background: var(--in); overflow: hidden"><span style="display: block; width: 30%; height: 100%; background: var(--a2)"></span></span>
 </div>
@@ -255,9 +296,9 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <h2 class="h" style="display: flex; align-items: center">Clone from a clip<button class="i" aria-label="More information" title="An audio take, or a video's sound. Voice clips are never converted: the clone reads the WAV.">i</button></h2>
 <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px">
 <div class="pk"><i style="flex-direction: column; gap: 6px; padding: 0 10px"><span aria-live="polite" style="color: var(--t1)">Uploading 40%</span><span role="progressbar" aria-label="Uploading [YOUR VOICE]" aria-valuenow="40" aria-valuemin="0" aria-valuemax="100" style="display: block; width: 100%; height: 4px; border-radius: 2px; background: var(--in); overflow: hidden"><span style="display: block; width: 40%; height: 100%; background: var(--a2)"></span></span></i><b>[YOUR VOICE]</b><small>voice clip · kept as WAV</small></div>
-<div class="pk"><i><span class="wave" aria-hidden="true" style="width: 78%; height: 30px; box-sizing: border-box"></span></i><b>Letter reader</b><small>audio · 0:24</small></div>
-<div class="pk"><i><span class="wave" aria-hidden="true" style="width: 78%; height: 30px; box-sizing: border-box"></span></i><b>Fox trots in</b><small>video's sound · 5.2 s</small></div>
-<div class="pk"><i><span class="wave" aria-hidden="true" style="width: 78%; height: 30px; box-sizing: border-box"></span></i><b>[YOUR SONG]</b><small>audio · 3:05</small></div>
+<div class="pk"><i class="t8 o8 k8v"><span class="orb"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19v3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><rect x="9" y="2" width="6" height="13" rx="3"/></svg></span><u class="bvo">Voice</u><span class="ln">0:24</span></i><b>Letter reader</b><small>voice · 0:24</small></div>
+<div class="pk"><i class="t8 o8 k8s"><span class="orb"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/></svg></span><u class="bsn">Sound</u><span class="ln">0:05</span></i><b>Fox trots in</b><small>video's sound · 5.2 s</small></div>
+<div class="pk"><i class="cov" style="background: linear-gradient(150deg,#3b4f7a,#6a4c93 55%,#1f2340)"><span class="disc" style="--dl: #c9b8f0"></span><span class="ct">[YOUR SONG]</span><u class="bmu">Music</u><em>3:05</em></i><b>[YOUR SONG]</b><small>music · 3:05</small></div>
 </div>
 <button class="dash">Upload a clip</button>
 <span style="font-size: 12px; color: var(--t2)">wav · 0:18 · 3.4 MB, uploaded as it is.</span>
@@ -290,7 +331,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <div class="pk"><i class="pic pnb" style="background-image: url(img/fox-trots-in.jpg)">▶</i><b>Fox trots in</b><small>LTX · pipeline step 2</small></div>
 <div class="pk"><i>image</i><b>fox reference 1</b><small>Upload</small></div>
 <div class="pk"><i class="pic pnb" style="background-image: url(img/fox-dusk-43.jpg)"></i><b>Fox at dusk · seed 43</b><small>Qwen Image · Create</small></div>
-<div class="pk"><i>audio</i><b>[YOUR SONG]</b><small>Upload</small></div>
+<div class="pk"><i class="cov" style="background: linear-gradient(150deg,#e0a44a,#a5582c 55%,#3d2414)"><span class="disc" style="--dl: #f5ddb0"></span><span class="ct">[YOUR SONG]</span><u class="bmu">Music</u><em>3:05</em></i><b>[YOUR SONG]</b><small>Upload</small></div>
 </div>
 </div>
 <p class="note" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px"><span class="bl">Not now · backlog</span><span class="later-x">A video is capped at the video models' largest size and frame rate (1920 px, 60 fps today) and its sides are cropped to the 32 px grid every video input needs. Where the browser cannot convert, an MP4 that is already H.264 within the caps uploads as is; anything else is refused on its tile. The tab must stay open while it converts, as for any upload.</span></p>
