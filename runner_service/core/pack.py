@@ -429,7 +429,8 @@ _sizes: dict = {}
 
 
 def size_gb(pack: Pack, key: tuple, files: tuple[Path, ...]) -> tuple[float, float]:
-    """Resident GB at the target dtype and the transient: the largest tensor in fp32. Only the keys the pack's
+    """Resident GB at the target dtype and the transient: the largest tensor in fp32 (a .pth/.bin/.pt file: its bytes
+    as fp32 at the dtype, no transient). Only the keys the pack's
     `rename(component, key)` keeps count, under their new names; `dtype: stored` counts each tensor's own dtype. A
     quantized weight: torch int8 is 1 byte + a bf16 scale per row; MLX is bits / 8 per value + a bf16 scale and
     bias per group of 64. An F8 weight of a module the pack's `DENSE` prefixes name loads bf16 (its tensor_hook
@@ -441,6 +442,13 @@ def size_gb(pack: Pack, key: tuple, files: tuple[Path, ...]) -> tuple[float, flo
         dtype = spec.get("dtype", "bf16")
         total = largest = 0
         for p in files:
+            if (
+                p.suffix != ".safetensors"
+            ):  # a torch.save checkpoint (plan 38): its bytes, stored fp32, at the dtype;
+                # no transient: memory-mapped, read from the file as it is cast (core.loaders_torch.state_dict)
+                size = p.stat().st_size
+                total += size if dtype == "stored" else size // 4 * BYTES[dtype]
+                continue
             for raw, t in header(p).items():
                 name = rename(component, raw) if rename else raw
                 if name is None:

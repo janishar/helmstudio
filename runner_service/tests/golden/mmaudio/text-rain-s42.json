@@ -1,0 +1,25 @@
+{
+  "workflow": "mmaudio-sound",
+  "text": "heavy rain on a window, distant thunder",
+  "seconds": 2.0,
+  "seed": 42,
+  "guidance": 4.5,
+  "steps": 25,
+  "avoid": "",
+  "name": "text-rain-s42",
+  "metrics": {
+    "sample_rate": 44100,
+    "channels": 1,
+    "samples": 89088,
+    "duration_s": 2.0201,
+    "rms": 0.09705,
+    "peak": 0.77341
+  },
+  "wav_sha256": "810b3b322cad28ae40f60f33a70f38621f5ee91472b66e1d7e8287080687ff1f",
+  "generate_s": 3.99,
+  "load_s": 13.3,
+  "load_footprint_gb": 7.79,
+  "footprint_gb": 8.0,
+  "device": "mps",
+  "torch": "2.15.0"
+}

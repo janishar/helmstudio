@@ -1,0 +1,196 @@
+{
+  "schema_version": 1,
+  "host": "mac",
+  "env": "torch",
+  "published_at": "2026-11-27T10:00:00Z",
+  "published_by": "runner torch 0.3.0",
+  "models": [
+    {
+      "id": "mmaudio-large-44k-v2",
+      "family": "mmaudio",
+      "title": "MMAudio",
+      "media": [
+        "audio"
+      ],
+      "runtimes": [
+        {
+          "runtime": "torch",
+          "env": "torch",
+          "devices": [
+            "mps",
+            "cuda"
+          ]
+        }
+      ],
+      "variants": [
+        {
+          "id": "large_44k_v2",
+          "presence": "present",
+          "bytes": 6294475884,
+          "precisions": [
+            "bf16"
+          ],
+          "title": "Large 44k v2",
+          "dir": "MMAudio",
+          "source": {
+            "repo": "hkchengrex/MMAudio",
+            "revision": "eb13a1a98fdbec91753775c57b074ccdfc60587c",
+            "allow_patterns": [
+              "weights/mmaudio_large_44k_v2.pth",
+              "ext_weights/v1-44.pth",
+              "ext_weights/synchformer_state_dict.pth"
+            ],
+            "licence": "mmaudio-weights",
+            "must_accept": true,
+            "gated": false,
+            "bytes": 10730600950
+          },
+          "sources": [
+            {
+              "repo": "apple/DFN5B-CLIP-ViT-H-14-384",
+              "revision": "01b771ed0d1395ca5ffdd279897d665ebe00dfd2",
+              "dir": "DFN5B-CLIP-ViT-H-14-384",
+              "allow_patterns": [
+                "open_clip_config.json",
+                "open_clip_pytorch_model.bin"
+              ],
+              "gated": false,
+              "bytes": 3947082372
+            },
+            {
+              "repo": "nvidia/bigvgan_v2_44khz_128band_512x",
+              "revision": "95a9d1dcb12906c03edd938d77b9333d6ded7dfb",
+              "dir": "bigvgan_v2_44khz_128band_512x",
+              "allow_patterns": [
+                "config.json",
+                "bigvgan_generator.pt"
+              ],
+              "gated": false,
+              "bytes": 489042694
+            }
+          ],
+          "components": [
+            {
+              "component": "net",
+              "from_variant": "large_44k_v2",
+              "precisions": [
+                "bf16"
+              ],
+              "bytes": 4122474715
+            },
+            {
+              "component": "autoencoder",
+              "from_variant": "large_44k_v2",
+              "precisions": [
+                "bf16"
+              ],
+              "bytes": 1221942998
+            },
+            {
+              "component": "synchformer",
+              "from_variant": "large_44k_v2",
+              "precisions": [
+                "bf16"
+              ],
+              "bytes": 950058171
+            },
+            {
+              "component": "clip",
+              "from_variant": "large_44k_v2",
+              "precisions": [
+                "bf16"
+              ],
+              "bytes": 3947081637
+            },
+            {
+              "component": "bigvgan",
+              "from_variant": "large_44k_v2",
+              "precisions": [
+                "bf16"
+              ],
+              "bytes": 489041291
+            }
+          ],
+          "memory": [
+            {
+              "precision": "bf16",
+              "peak_gb": 6.59,
+              "components": [
+                {
+                  "component": "net",
+                  "variant": "large_44k_v2",
+                  "precision": "bf16",
+                  "gb": 1.92
+                },
+                {
+                  "component": "clip",
+                  "variant": "large_44k_v2",
+                  "precision": "bf16",
+                  "gb": 1.84
+                },
+                {
+                  "component": "autoencoder",
+                  "variant": "large_44k_v2",
+                  "precision": "bf16",
+                  "gb": 0.57
+                },
+                {
+                  "component": "bigvgan",
+                  "variant": "large_44k_v2",
+                  "precision": "bf16",
+                  "gb": 0.23
+                }
+              ],
+              "planned_at": {
+                "mp": 0.0,
+                "frames": 0
+              }
+            },
+            {
+              "precision": "bf16",
+              "peak_gb": 10.4,
+              "components": [
+                {
+                  "component": "net",
+                  "variant": "large_44k_v2",
+                  "precision": "bf16",
+                  "gb": 1.92
+                },
+                {
+                  "component": "clip",
+                  "variant": "large_44k_v2",
+                  "precision": "bf16",
+                  "gb": 1.84
+                },
+                {
+                  "component": "synchformer",
+                  "variant": "large_44k_v2",
+                  "precision": "bf16",
+                  "gb": 0.44
+                },
+                {
+                  "component": "autoencoder",
+                  "variant": "large_44k_v2",
+                  "precision": "bf16",
+                  "gb": 0.57
+                },
+                {
+                  "component": "bigvgan",
+                  "variant": "large_44k_v2",
+                  "precision": "bf16",
+                  "gb": 0.23
+                }
+              ],
+              "planned_at": {
+                "mp": 2.0736,
+                "frames": 192
+              },
+              "workflow": "mmaudio-video"
+            }
+          ]
+        }
+      ],
+      "sound": "sound"
+    }
+  ]
+}

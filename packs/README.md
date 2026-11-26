@@ -494,6 +494,11 @@ encoder has no vision blocks. Name text workflow files `text-<id>.json` (they so
 - **A pack whose library loads its own checkpoint format** (mlx-vlm) defines `load_component(component, model,
   ctx)` in its module: `core.loaders_mlx` calls it instead of build/rename/quantize (the residency manager, the
   phase `loading <component>` and the size from the headers stay the core's; packed `U32` weights count 4 bytes).
+  `core.loaders_torch` takes the same hook (plan 38: MMAudio's torch.save checkpoints): a component's `files` may then
+  be `.pth`, `.bin` or `.pt` as well as safetensors; the pack builds, fills and places the module on `ctx.device`
+  itself, reading a checkpoint through `core.loaders_torch.state_dict(path)` (memory-mapped, `weights_only`). Such a
+  file's size is its bytes as fp32 at the component's `dtype`, with no load transient; without the hook a non-safetensors
+  file fails the load.
 - The fake `echo/ask` answers the first JSON value after the last `ECHO-ANSWER:` in its prompt (a JSON string: its
   text), else `{}` with a schema and `echo` without; its retry answers the one after `ECHO-RETRY:` when present.
   An agent turn (API 1.15): when the prompt's last `This is turn <n> of` line has a matching `ECHO-TURN <n>:`, it
