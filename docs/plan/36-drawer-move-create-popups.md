@@ -92,6 +92,10 @@ always open on the right, or the Elements panel in its place.
   the Elements panel is asked for.
 - Tests: a chip opens only its popup; a change updates the chip; Esc closes; the button toggles the drawer; closed
   on first load.
+- Follow-up (owner, 2026-11-26): the empty screen follows the drawer (the Inspector if it was left open, else no
+  aside; the Elements panel left the aside, Elements open from the Elements tile or Insert element, as after a run).
+  Size and Length use their popups on narrow windows and phones too (board frame 7b); a popup stays on screen
+  (flips, else centred under the chip's row; width and height capped to the window, scrolling inside).
 
 ### 41.4 Open questions
 

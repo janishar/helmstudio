@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 // The empty Create screen (docs/mock/Direct.dc.html): with no run and no take, the title, the composer under it, the
-// open look tile's group of looks inline, and the Elements panel in the aside; after a run, the Stage and Inspector.
+// open look tile's group of looks inline, and the settings drawer only if it was left open (Elements open from Insert
+// element, as elsewhere: owner, 2026-11-26); after a run, the Stage and Inspector.
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import workflowsFixture from "../../../contracts/fixtures/registry/workflows.valid.json";
@@ -106,13 +107,13 @@ const start = (runs: S<"Run">[] = [], w = echo) =>
   );
 
 describe("Create: the empty screen", () => {
-  it("shows the title, the composer, the open group's looks and the Elements aside", async () => {
+  it("shows the title, the composer and the open group's looks; no aside with the drawer closed", async () => {
+    localStorage.removeItem("create-settings-drawer");
     serve();
     start();
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("What will you make?");
     expect(screen.getByRole("form", { name: "Composer" })).toBeTruthy();
-    expect(screen.queryByRole("complementary", { name: "Inspector" })).toBeNull();
-    const aside = screen.getByRole("complementary", { name: "Elements" });
+    expect(screen.queryByRole("complementary")).toBeNull();
     // the first look tile's group is open by default
     const looks = await screen.findByRole("region", { name: "Lighting looks" });
     expect(
@@ -128,18 +129,27 @@ describe("Create: the empty screen", () => {
     expect(screen.getByRole("button", { name: "Lighting: Window" })).toBeTruthy();
     fireEvent.click(within(looks).getByRole("button", { name: "Reset" }));
     expect(screen.getByRole("button", { name: "Lighting: Auto" })).toBeTruthy();
-    // a card puts its @handle in the prompt
-    const card = await within(aside).findByTitle("Put @fox in the prompt");
-    fireEvent.click(card);
+    // the Elements tile opens the Elements dialog, as after a run; a card puts its @handle in the prompt
+    fireEvent.click(screen.getByRole("button", { name: /Elements/ }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(await within(dialog).findByTitle("Put @fox in the prompt"));
     const prompt = screen.getByLabelText("Prompt") as HTMLTextAreaElement;
     await waitFor(() => expect(prompt.value).toContain("@fox"));
-    await waitFor(() => expect(within(aside).getByText(/in this prompt/)).toBeTruthy());
+    expect(screen.queryByRole("complementary")).toBeNull();
+  });
+
+  it("the drawer left open shows the Inspector on the empty screen", async () => {
+    serve();
+    start();
+    expect(screen.getByRole("complementary", { name: "Inspector" })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1 })).toBeTruthy();
   });
 
   it("a settings chip brings the Inspector into the aside", async () => {
+    localStorage.removeItem("create-settings-drawer");
     serve();
     start([], qwen);
-    expect(screen.getByRole("complementary", { name: "Elements" })).toBeTruthy();
+    expect(screen.queryByRole("complementary")).toBeNull();
     // the size chip's popup (alpha.5 item 10): its All settings opens the Inspector at the Canvas
     fireEvent.click(screen.getByRole("button", { name: "1:1 · 1 MP" }));
     fireEvent.click(within(document.getElementById("canvas-pop")!).getByText("All settings"));
@@ -152,7 +162,6 @@ describe("Create: the empty screen", () => {
     serve();
     start([run]);
     expect(screen.getByRole("complementary", { name: "Inspector" })).toBeTruthy();
-    expect(screen.queryByRole("complementary", { name: "Elements" })).toBeNull();
     expect(screen.queryByRole("heading", { level: 1 })).toBeNull();
     // let the looks load: still no inline section, and the tile opens the picker
     await screen.findByRole("button", { name: "Lighting: Auto" });
@@ -183,14 +192,16 @@ describe("Create: the empty screen", () => {
     ).toBe("dialog");
   });
 
-  it("a new session after the Inspector was opened shows the Elements aside again", async () => {
+  it("a new session keeps the drawer as it was left", async () => {
+    localStorage.removeItem("create-settings-drawer");
     serve();
     answer("POST", { "/v1/studio/sessions": () => ({ data: { id: "s2", title: null } }) });
     start([], qwen);
     fireEvent.click(screen.getByRole("button", { name: "All settings", expanded: false }));
     expect(screen.getByRole("complementary", { name: "Inspector" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /New session/, hidden: true }));
-    expect(await screen.findByRole("complementary", { name: "Elements" })).toBeTruthy();
+    await waitFor(() => expect(screen.getByRole("heading", { level: 1 })).toBeTruthy());
+    expect(screen.getByRole("complementary", { name: "Inspector" })).toBeTruthy();
   });
 
   it("the Elements dialog in the Stage layout keeps its (i) and New element", async () => {

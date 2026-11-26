@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // Create settings in popups (alpha.5 item 10, plan 36 section 41, docs/mock/TextToVideo.dc.html frames 1-6): the
 // settings drawer is closed by default and remembered; each chip opens a popup with only its setting, one at a time,
-// closed by Esc or a click outside; All settings opens the drawer at the section; narrow windows open the drawer.
+// closed by Esc or a click outside; All settings opens the drawer at the section; narrow windows use the popups too.
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import ltxWorkflows from "../../../contracts/fixtures/registry/ltx.workflows.valid.json";
@@ -174,7 +174,7 @@ describe("Create: settings in popups", () => {
     expect(within(composer).getByRole("button", { name: "Audio off" })).toBeTruthy();
   });
 
-  it("on a narrow window a chip opens the drawer at its section instead of a popup", async () => {
+  it("on a narrow window the Size and Length chips still open their popups, kept on screen", async () => {
     globalThis.matchMedia = ((q: string) => ({
       matches: q.includes("max-width"),
       addEventListener: () => undefined,
@@ -183,8 +183,15 @@ describe("Create: settings in popups", () => {
     const composer = start();
     await within(composer).findByRole("button", { name: "Distilled · int8" });
     const size = within(composer).getByRole("button", { name: "704 × 448" });
-    expect(size.getAttribute("aria-haspopup")).toBeNull();
+    expect(size.getAttribute("aria-haspopup")).toBe("dialog");
     fireEvent.click(size);
-    expect(inspector()).toBeTruthy();
+    const canvas = pop("canvas-pop");
+    expect(isOpen("canvas-pop")).toBe(true);
+    expect(canvas.style.maxWidth).toBe("calc(100vw - 16px)");
+    expect(canvas.style.overflowY).toBe("auto");
+    expect(inspector()).toBeNull();
+    fireEvent.click(chipOf(lengthId()));
+    expect(isOpen(lengthId())).toBe(true);
+    expect(inspector()).toBeNull();
   });
 });

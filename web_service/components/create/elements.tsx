@@ -77,18 +77,6 @@ export function ElementsButton({
   );
 }
 
-/** The Elements panel in the aside of the empty Create screen (docs/mock/Direct.dc.html): the picker's cards by
- * group, without search; a click puts the @handle in the prompt. */
-export function ElementsPanel({
-  onInsert,
-  inPrompt,
-}: {
-  onInsert: (handle: string) => void;
-  inPrompt: string[];
-}) {
-  return <Picker onClose={() => undefined} onInsert={onInsert} inPrompt={inPrompt} inline />;
-}
-
 /** The Elements picker; `onInsert` puts a handle in the prompt (the dialog closes); `inPrompt` marks the cards. */
 export function ElementsPicker({
   open,
@@ -112,12 +100,10 @@ function Picker({
   onClose,
   onInsert,
   inPrompt,
-  inline = false,
 }: {
   onClose: () => void;
   onInsert: (handle: string) => void;
   inPrompt: string[];
-  inline?: boolean;
 }) {
   const lib = useLibrary();
   // elements and own looks share the 200 library items
@@ -160,16 +146,6 @@ function Picker({
   );
   return (
     <VisualPicker
-      head={
-        inline ? (
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="m-0 font-display text-base font-bold tracking-[0.03em]">Elements</h2>
-            <button type="button" className="chip bevel" onClick={() => setEditing("new")}>
-              New element
-            </button>
-          </div>
-        ) : undefined
-      }
       info={info}
       action={
         <button
@@ -180,18 +156,14 @@ function Picker({
           New element
         </button>
       }
-      search={
-        inline
-          ? undefined
-          : {
-              id: "el-q",
-              label: "Search names and handles",
-              placeholder: "Search names and @handles",
-              value: q,
-              onChange: setQ,
-              className: "flex-[1_1_220px]",
-            }
-      }
+      search={{
+        id: "el-q",
+        label: "Search names and handles",
+        placeholder: "Search names and @handles",
+        value: q,
+        onChange: setQ,
+        className: "flex-[1_1_220px]",
+      }}
       filters={[
         {
           label: "Group",
@@ -223,22 +195,15 @@ function Picker({
         </>
       }
       listLabel="Elements"
-      grid={inline ? "grid-cols-1 gap-2.5" : "grid-cols-1 gap-2.5 sm:grid-cols-2"}
+      grid="grid-cols-1 gap-2.5 sm:grid-cols-2"
       footer={
-        inline ? (
-          <span>
-            <Info>{info}</Info>
-            {editor}
-          </span>
-        ) : (
-          <>
-            <p className="m-0 text-[12px] text-t2">
-              Click an element to put its @handle in the prompt at the caret.
-              {lib ? ` ${lib.length + ownLooks} of 200.` : ""}
-            </p>
-            {editor}
-          </>
-        )
+        <>
+          <p className="m-0 text-[12px] text-t2">
+            Click an element to put its @handle in the prompt at the caret.
+            {lib ? ` ${lib.length + ownLooks} of 200.` : ""}
+          </p>
+          {editor}
+        </>
       }
     >
       {shown.map((e) => {
@@ -274,10 +239,10 @@ function Picker({
               )}
               <span className="flex min-w-0 flex-col gap-0.5">
                 <b className={`mono truncate font-medium ${on ? "text-a1" : ""}`}>@{e.handle}</b>
-                <small className={`text-[12px] text-t2 ${inline ? "" : "truncate"}`}>
+                <small className="truncate text-[12px] text-t2">
                   {deleting === e.id
                     ? `Delete @${e.handle}? Takes made with it keep it.`
-                    : `${inline ? "" : `${e.name} · `}${groupLabel(e.group)}${on ? " · in this prompt" : ""}${n ? "" : " · its images were deleted"}`}
+                    : `${e.name} · ${groupLabel(e.group)}${on ? " · in this prompt" : ""}${n ? "" : " · its images were deleted"}`}
                 </small>
               </span>
             </button>

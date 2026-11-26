@@ -52,7 +52,7 @@ import {
 } from "@/components/create/sessions";
 import { FrameIn } from "@/components/create/frame-in";
 import { Compare, ExplainDrawer } from "@/components/create/compare";
-import { ElementsPanel, ElementsPicker } from "@/components/create/elements";
+import { ElementsPicker } from "@/components/create/elements";
 import { AddToTimeline } from "@/components/timeline/add";
 import { LooksPicker, LooksSection, QuickTiles } from "@/components/create/looks";
 import { MentionChips, insertAtCaret } from "@/components/create/prompt";
@@ -328,10 +328,8 @@ export function Create({
   // the chosen looks per group (the composer's look tiles), and the group whose picker is open
   const [looksPicked, setLooksChosen] = useState<Chosen>((back?.looks as Chosen) ?? {});
   const [lookGroup, setLookGroup] = useState<S<"LibraryGroup"> | null>(null);
-  // the empty screen (no run, no take: docs/mock/Direct.dc.html): the look group shown under the composer, and
-  // whether a chip opened the Inspector in the aside in place of the Elements panel
+  // the empty screen (no run, no take: docs/mock/Direct.dc.html): the look group shown under the composer
   const [inlineGroup, setInlineGroup] = useState<S<"LibraryGroup"> | null>(null);
-  const [inspect, setInspect] = useState(false);
   // the settings drawer (alpha.5 item 10, docs/mock/TextToVideo.dc.html): closed by default, remembered in this browser
   const stored = useSyncExternalStore(noSub, storedDrawer, () => false);
   const [drawerSet, setDrawerState] = useState<boolean | null>(null);
@@ -392,7 +390,6 @@ export function Create({
     setTracks({});
     setTakes([]);
     setComparing(false);
-    setInspect(false);
     setInlineGroup(null);
     if (!keep) setChosen("");
     // another session's form and texts never carry over (item 14)
@@ -1053,7 +1050,6 @@ export function Create({
       : null;
   /** Opens a field's inspector control (or the canvas picker) and moves focus to it. */
   const show = (key: string) => {
-    setInspect(true);
     setDrawer(true);
     if (key !== "canvas") setOpenKey(key);
     requestAnimationFrame(() => {
@@ -1306,8 +1302,8 @@ export function Create({
   const shown = picked?.run ?? runs?.find((r) => r.id === shownTake?.run_id);
   // the session's pictures Compare offers: image and video takes, newest first
   const pictures = takes.filter((t) => t.kind === "image" || t.kind === "video");
-  // no run and no take yet: the title, the composer under it with the open look group's looks, and the Elements
-  // panel in the aside (docs/mock/Direct.dc.html); the first run brings the Stage and the Inspector
+  // no run and no take yet: the title and the composer under it with the open look group's looks
+  // (docs/mock/Direct.dc.html); the first run brings the Stage
   const empty = !runs?.length && !takes.length;
   const lookTiles = tiles.flatMap((t) => tileGroup(t) ?? []);
   // the tile opened last, else the first look tile
@@ -1318,10 +1314,9 @@ export function Create({
   const stage1 =
     video && upscale ? { by: 2, clip: (raws[`${upscale}.bypass`] ?? false) === true } : undefined;
   const settingErrors = fields.some((f) => f.param.type !== "text" && errors[f.key]);
-  const elementsAside = empty && !audio && !!textFields[0] && !inspect && !settingErrors;
-  // the Inspector shows while the drawer is open (a setting's error opens it too); the empty screen's Elements panel
-  // keeps the aside until a chip or the sliders button asks for the Inspector
-  const inspector = !elementsAside && (drawer || inspect || settingErrors);
+  // the Inspector shows while the drawer is open (a setting's error opens it too), the empty screen too; else the
+  // stage and composer take the page width (owner, 2026-11-26). Elements open from Insert element, as elsewhere
+  const inspector = drawer || settingErrors;
   const insert = (h: string) =>
     scriptField
       ? // a new line for the element at the script's end (the board's @ chip by the model chip)
@@ -2156,10 +2151,7 @@ export function Create({
                 title="All settings"
                 aria-expanded={inspector}
                 aria-controls="create-settings"
-                onClick={() => {
-                  setDrawer(!inspector);
-                  setInspect(!inspector);
-                }}
+                onClick={() => setDrawer(!inspector)}
               >
                 <SlidersHorizontal size={16} strokeWidth={1.75} aria-hidden />
               </button>
@@ -2274,43 +2266,39 @@ export function Create({
         )}
       </main>
 
-      {(elementsAside || inspector) && (
+      {inspector && (
         <aside
           id="create-settings"
-          aria-label={elementsAside ? "Elements" : "Inspector"}
+          aria-label="Inspector"
           className="aside m-3.5 flex flex-[1_1_320px] flex-col gap-[22px] px-[18px] pt-4 pb-6 md:ml-0"
         >
-          {elementsAside ? (
-            <ElementsPanel inPrompt={handles} onInsert={insert} />
-          ) : (
-            <Inspector
-              groups={groups}
-              resolved={shown?.workflow_id === workflow?.id ? shown?.resolved?.params : undefined}
-              presets={workflow?.studio?.presets}
-              presetOrder={presetNames(workflow?.studio)}
-              presetHelp={presetHelp(workflow?.studio, all, raws)}
-              presetScope={all}
-              fields={fields}
-              raws={raws}
-              errors={errors}
-              onChange={change}
-              open={openKey}
-              setOpen={setOpenKey}
-              uploads={uploads}
-              compact={video}
-              grid={grid}
-              stage1={stage1}
-              familyTitle={
-                palette?.groups.find((g) => g.family === workflow?.family)?.title ??
-                (workflow?.source === "mine" ? undefined : workflow?.title)
-              }
-              voice={audio ? voiceCtx : undefined}
-              blocks={blocks}
-              valueBlocks={valueBlocks}
-              addonOwner={modelList?.models.find((m) => m.family === workflow?.family)?.title}
-            />
-          )}
-          {audio && !elementsAside && <SpeechOutput take={rateTake} text={texts[0] ?? ""} />}
+          <Inspector
+            groups={groups}
+            resolved={shown?.workflow_id === workflow?.id ? shown?.resolved?.params : undefined}
+            presets={workflow?.studio?.presets}
+            presetOrder={presetNames(workflow?.studio)}
+            presetHelp={presetHelp(workflow?.studio, all, raws)}
+            presetScope={all}
+            fields={fields}
+            raws={raws}
+            errors={errors}
+            onChange={change}
+            open={openKey}
+            setOpen={setOpenKey}
+            uploads={uploads}
+            compact={video}
+            grid={grid}
+            stage1={stage1}
+            familyTitle={
+              palette?.groups.find((g) => g.family === workflow?.family)?.title ??
+              (workflow?.source === "mine" ? undefined : workflow?.title)
+            }
+            voice={audio ? voiceCtx : undefined}
+            blocks={blocks}
+            valueBlocks={valueBlocks}
+            addonOwner={modelList?.models.find((m) => m.family === workflow?.family)?.title}
+          />
+          {audio && <SpeechOutput take={rateTake} text={texts[0] ?? ""} />}
         </aside>
       )}
       {lib.node}

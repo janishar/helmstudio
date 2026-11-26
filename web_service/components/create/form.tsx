@@ -1,7 +1,7 @@
 "use client";
 // Form controls rendered from node schemas: text params go in the composer, the rest in the inspector, grouped
 // generically (the canvas node, label-over-value tiles, switches, the rest); the composer's chips summarise them.
-import { Fragment, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { ChevronRight, Dices } from "lucide-react";
 import { Info } from "@/components/kit";
 import { PromptArea } from "@/components/create/prompt";
@@ -1451,19 +1451,6 @@ function Line({
   );
 }
 
-/** Narrow windows and phones: the side panel sits under the page, not beside it (Tailwind's md). */
-const NARROW = "(max-width: 767px)";
-export const useNarrow = () =>
-  useSyncExternalStore(
-    (f) => {
-      const m = typeof matchMedia === "function" ? matchMedia(NARROW) : null;
-      m?.addEventListener("change", f);
-      return () => m?.removeEventListener("change", f);
-    },
-    () => typeof matchMedia === "function" && matchMedia(NARROW).matches,
-    () => false,
-  );
-
 /** A chip and its popup, anchored under it (alpha.5 item 10, docs/mock/TextToVideo.dc.html frames 2-5): one open at
  * a time (`open` is the parent's), Esc or a click outside closes it and focus goes back to the chip; `all` adds the
  * All settings link at its foot. */
@@ -1549,6 +1536,11 @@ function ChipPop({
             positionAnchor: `--${id}`,
             positionArea: "bottom span-right",
             marginTop: 6,
+            // a phone: it stays on screen (under the chip, centred when neither side fits), scrolling if tall
+            positionTryFallbacks: "flip-inline, bottom span-all, flip-block, top span-all",
+            maxWidth: "calc(100vw - 16px)",
+            maxHeight: "calc(100dvh - 16px)",
+            overflowY: "auto",
           } as React.CSSProperties
         }
       >
@@ -1577,8 +1569,8 @@ function ChipPop({
 const CHIP = "chip bevel rounded-[10px] bg-s4";
 
 /** The composer's quick chips: the model node's choices (the node that outputs a Model), the canvas, the length, the
- * seed (with Random). Each opens a popup with its setting (alpha.5 item 10); on narrow windows, and from a popup's
- * All settings, `show` opens the drawer at its section (a field key, or "canvas"). */
+ * seed (with Random). Each opens a popup with its setting (alpha.5 item 10), on narrow windows too (owner,
+ * 2026-11-26); a popup's All settings `show`s the drawer at its section (a field key, or "canvas"). */
 export function Chips({
   fields,
   raws,
@@ -1632,7 +1624,6 @@ export function Chips({
   } | null;
 }) {
   const [pop, setPop] = useState<string | null>(null);
-  const narrow = useNarrow();
   const s = sections(fields);
   const model = (models ?? s.tiles).filter((f) => f.model && f.param.type === "enum");
   const first = model[0];
@@ -1756,30 +1747,25 @@ export function Chips({
         </span>
       )}
       {runOn}
-      {c &&
-        (narrow ? (
-          <button type="button" className={chip} onClick={() => show("canvas")}>
-            {sizeLabel}
-          </button>
-        ) : (
-          <ChipPop
-            id="canvas-pop"
-            label="Canvas"
-            text={sizeLabel}
-            open={pop === "canvas-pop"}
-            setOpen={setPop}
-            all={() => show("canvas")}
-          >
-            <CanvasPicker
-              c={c}
-              errors={{}}
-              onChange={onChange}
-              compact={compact}
-              stage1={stage1}
-              popup
-            />
-          </ChipPop>
-        ))}
+      {c && (
+        <ChipPop
+          id="canvas-pop"
+          label="Canvas"
+          text={sizeLabel}
+          open={pop === "canvas-pop"}
+          setOpen={setPop}
+          all={() => show("canvas")}
+        >
+          <CanvasPicker
+            c={c}
+            errors={{}}
+            onChange={onChange}
+            compact={compact}
+            stage1={stage1}
+            popup
+          />
+        </ChipPop>
+      )}
       {frames.map((f) => {
         const fps = fpsOf(f, fields, raws);
         const text = [
@@ -1789,18 +1775,6 @@ export function Chips({
           .filter(Boolean)
           .join(" · ");
         const title = f.param.label ?? f.param.name;
-        if (narrow)
-          return (
-            <button
-              key={f.key}
-              type="button"
-              className={chip}
-              title={title}
-              onClick={() => show(f.key)}
-            >
-              {text}
-            </button>
-          );
         // Frame rate only when the workflow has an fps setting; else the chip just reads it
         const rate = fields.find((x) => x.key === fpsKey(f));
         const rates = rate && (allowedInts(rate, raws)?.map(String) ?? rate.param.enum);

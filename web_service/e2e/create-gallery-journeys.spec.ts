@@ -359,15 +359,32 @@ test("j14 settings in popups: a chip's popup edits its setting, Esc closes it, A
   await canvas.getByRole("button", { name: "All settings" }).click();
   await expect(page.getByRole("complementary", { name: "Inspector" })).toBeVisible();
   await expect(sliders).toHaveAttribute("aria-expanded", "true");
-  // the reload keeps it open; a new user's empty screen still shows its Elements panel there until the sliders button
-  // asks for the settings, which it closes again
+  // the reload keeps it open, the empty screen too (it follows the drawer: owner, 2026-11-26); the sliders button
+  // closes it, and then the empty screen has no aside at all
   await page.reload();
   await echoVideo();
   expect(await page.evaluate(() => localStorage.getItem("create-settings-drawer"))).toBe("1");
-  await expect(page.getByRole("complementary", { name: "Elements" })).toBeVisible();
-  await sliders.click();
   await expect(page.getByRole("complementary", { name: "Inspector" })).toBeVisible();
   await sliders.click();
-  await expect(page.getByRole("complementary", { name: "Inspector" })).toHaveCount(0);
+  await expect(page.getByRole("complementary")).toHaveCount(0);
   expect(await page.evaluate(() => localStorage.getItem("create-settings-drawer"))).toBeNull();
+  // a phone-width window: the size and length chips still open their popups, fully on screen (frame 7b)
+  const wide = page.viewportSize()!;
+  await page.setViewportSize({ width: 375, height: 760 });
+  try {
+    for (const chip of [size, composer.locator("[aria-controls^=len-pop-]").first()]) {
+      await chip.click();
+      const pop = page.locator(`#${await chip.getAttribute("aria-controls")}`);
+      await expect(pop).toBeVisible();
+      const box = (await pop.boundingBox())!;
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(375);
+      await expect(page.getByRole("complementary")).toHaveCount(0);
+      await page.keyboard.press("Escape");
+      await expect(pop).toBeHidden();
+    }
+    await shot("j14-phone");
+  } finally {
+    await page.setViewportSize(wide);
+  }
 });
