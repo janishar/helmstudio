@@ -231,8 +231,14 @@ def wait(ctx, port: int, job: str) -> None:
             return
         if v["status"] == "failed":
             why = (v.get("error") or {}).get("message") or "no reason given"
-            log.error("sglang job %s failed: %s", job, why)  # the whole message: its last line can be only "stderr:"
-            text = " ".join(line.strip() for line in why.splitlines() if line.strip() and line.strip() != "stderr:")
+            log.error(
+                "sglang job %s failed: %s", job, why
+            )  # the whole message: its last line can be only "stderr:"
+            text = " ".join(
+                line.strip()
+                for line in why.splitlines()
+                if line.strip() and line.strip() != "stderr:"
+            )
             raise RunError(f"{ctx.node}: SGLang failed: {text[-400:] or why}")
         if (p := int(v.get("progress") or 0)) > sent:
             ctx.progress(p, 100, "sampling", "sample")
