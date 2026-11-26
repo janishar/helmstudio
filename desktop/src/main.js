@@ -11,6 +11,7 @@ const { StepRunner, exec, pipe } = require('./steps');
 const { layout, loadSettings, stackSteps, Runners, openMode } = require('./stack');
 const updates = require('./update');
 const { spellingOf, isWord } = require('./spelling');
+const { localPath, tilde } = require('./folders');
 const cfg = require('../stack.json');
 
 const home = process.env.HELMSTUDIO_HOME || path.join(app.getPath('appData'), 'helmstudio');
@@ -435,6 +436,26 @@ ipcMain.handle('choose-folder', async (_e, current) => {
     buttonLabel: 'Choose',
   });
   return r.canceled ? null : r.filePaths[0];
+});
+// the studio page's model folders (plan 40 P5): its Browse… (a folder for a path field, written ~/…) and Show / Open in
+// Finder (shown, never opened or run), only from the studio window, only a checked path that exists
+const isStudio = (e) => studioWin && !studioWin.isDestroyed() && e.sender === studioWin.webContents;
+ipcMain.handle('studio-choose-folder', async (e, current) => {
+  if (!isStudio(e)) return null;
+  const home = app.getPath('home');
+  const r = await dialog.showOpenDialog(studioWin, {
+    defaultPath: localPath(current, home) ?? undefined,
+    properties: ['openDirectory', 'createDirectory'],
+    buttonLabel: 'Choose',
+  });
+  return r.canceled ? null : tilde(r.filePaths[0], home);
+});
+// ponytail: any existing local path the page names is shown; the host's folder list lives in studio, not here
+ipcMain.handle('studio-reveal', (e, p) => {
+  const abs = isStudio(e) && localPath(p, app.getPath('home'));
+  if (!abs || !fs.existsSync(abs)) return false;
+  shell.showItemInFolder(abs);
+  return true;
 });
 
 app.on('second-instance', showApp);
