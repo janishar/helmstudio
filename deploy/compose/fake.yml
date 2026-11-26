@@ -35,13 +35,14 @@ services:
     image: ${IMAGE_PREFIX:-helmstudio/}fake-hub:${IMAGE_TAG:-dev}
     volumes: [hubsecrets:/hubsecrets]
 
-  # once: the fake runners' scratch models roots (volumes fake-models, fake-models-b) belong to the runner user (10001)
+  # once: the fake runners' scratch models roots (volumes fake-models, fake-models-b; API 1.78 fake-models-2, the fake
+  # host's second model folder at /models2) belong to the runner user (10001)
   fake-models:
     build: ../contract_tests/fake_hub
     image: ${IMAGE_PREFIX:-helmstudio/}fake-hub:${IMAGE_TAG:-dev}
     user: root
-    entrypoint: [sh, -c, "chown 10001 /models /models-b"]
-    volumes: [fake-models:/models, fake-models-b:/models-b]
+    entrypoint: [sh, -c, "chown 10001 /models /models-b /models2"]
+    volumes: [fake-models:/models, fake-models-b:/models-b, fake-models-2:/models2]
 
   # The fake runner (host fake, env fake: the echo family). It talks only to NATS and the object store, never to
   # Postgres; real runners run natively on GPU hosts (M1). It downloads the echo pack's tiny model
@@ -64,7 +65,7 @@ services:
       RUNNER_HF_TOKEN_FILE: /hubsecrets/hf_token
       RUNNER_RESERVE_GB: "1"
     secrets: [nats_runner_url, s3_access_key_id, s3_secret_access_key]
-    volumes: [fake-models:/models, hubsecrets:/hubsecrets:ro]
+    volumes: [fake-models:/models, fake-models-2:/models2, hubsecrets:/hubsecrets:ro]
     healthcheck: {test: [CMD, python, health.py], interval: 5s, timeout: 5s, retries: 20}   # GET /health: NATS connected
     depends_on:
       nats-setup: {condition: service_completed_successfully}
@@ -115,3 +116,4 @@ volumes:
   hubsecrets:
   fake-models:
   fake-models-b:
+  fake-models-2:
