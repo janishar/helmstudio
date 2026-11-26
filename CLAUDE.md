@@ -26,4 +26,8 @@
 - **Right-click menus.** Every new feature that adds something you act on (a card, a row, a block, a clip, a node) ships
   with its right-click menu in the shared menu, and its board shows that menu (owner, 2026-11-26: "new features will come
   with menu as well in future"; docs/mock/ContextMenus.dc.html).
+- **Design system.** The [helmstudio Design System](https://claude.ai/artifact/ACz7ZcQyjdZ6NVFZc95Rk9) (tokens, type,
+  components, card looks, right-click menu) is the reference for every UI element: boards and code use it, and every new
+  or changed UI element updates it in the same piece of work (owner, 2026-11-27: "we will always refer to that system for
+  ui element and keep it uptodate to new additoin or changes").
 - **Docs live under docs/**, organised by topic; never a loose plan or spec file at the root.
