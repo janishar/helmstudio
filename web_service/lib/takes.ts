@@ -159,7 +159,8 @@ const EDITS = ["Repaint", "Cover", "Vary", "Extend"];
 export function splitOffers(t: Take, offers: S<"TakeOffer">[]) {
   if (t.kind !== "audio") return { edits: [], rest: offers };
   const edits = EDITS.flatMap((a) => offers.find((o) => o.action === a) ?? []);
-  return { edits, rest: offers.filter((o) => !edits.includes(o)) };
+  // every edit offer stays out of Use in (a second family's Repaint too), as on Create's menu
+  return { edits, rest: offers.filter((o) => !o.action || !EDITS.includes(o.action)) };
 }
 
 /** The sound take a video was made with (MMAudio: the other take of its run; Save with the video: its audio parent),

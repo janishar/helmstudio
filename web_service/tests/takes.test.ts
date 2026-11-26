@@ -420,6 +420,9 @@ describe("music and sound (API 1.79, docs/mock/CreateMusicSound.dc.html frames 6
     expect(edits.map((x) => x.action)).toEqual(["Repaint", "Cover", "Extend"]);
     expect(rest.map((x) => x.action)).toEqual(["Audio to video"]);
     expect(splitOffers(take({ kind: "video" }), offers).rest).toEqual(offers);
+    // a second family's Repaint is not put under Use in either
+    const two = splitOffers(song, [...offers, { ...o("Repaint"), workflow_id: "other" }]);
+    expect(two.rest.map((x) => x.action)).toEqual(["Audio to video"]);
   });
 
   it("finds the sound a video was made with: its run's audio take, or its audio parent", () => {

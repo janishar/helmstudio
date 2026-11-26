@@ -1687,10 +1687,14 @@ export function Create({
                 onPick: () => {
                   if (a === "Repaint") return startRepaint(o);
                   setSelected(t.id);
-                  // the popup over its strip button, once the take is the shown one
-                  requestAnimationFrame(() =>
-                    document.getElementById(`offer-${a.toLowerCase()}`)?.showPopover?.(),
-                  );
+                  // the popup over its strip button, once the take is the shown one and its offers are read (a
+                  // strip tile's take is not shown yet: its button comes with them; given up after about 2 s)
+                  const open = (n: number) => {
+                    const el = document.getElementById(`offer-${a.toLowerCase()}`);
+                    if (el?.showPopover) el.showPopover();
+                    else if (n > 0) requestAnimationFrame(() => open(n - 1));
+                  };
+                  requestAnimationFrame(() => open(120));
                 },
               }
             : {
