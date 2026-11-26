@@ -495,12 +495,23 @@ export function LyricsBox({
   const put = (tag: string) => {
     const el = ta.current;
     const s = el?.selectionStart ?? value.length;
-    const r = withTag(value, s, el?.selectionEnd ?? s, tag);
-    onChange(r.text);
-    requestAnimationFrame(() => {
-      el?.focus();
-      el?.setSelectionRange(r.caret, r.caret);
-    });
+    const e = el?.selectionEnd ?? s;
+    const r = withTag(value, s, e, tag);
+    // typed into the textarea itself (the native undo keeps it, and the caret is right at once, so keys pressed
+    // straight after land after the tag); the state follows from its input event
+    el?.focus();
+    el?.setSelectionRange(s, Math.min(value.length, e + (value.slice(e).startsWith("\n") ? 1 : 0)));
+    const inserted = r.text.slice(s, r.caret);
+    let done = false;
+    try {
+      done = !!el && el.value === value && document.execCommand("insertText", false, inserted);
+    } catch {
+      done = false;
+    }
+    if (!done) {
+      onChange(r.text);
+      requestAnimationFrame(() => el?.setSelectionRange(r.caret, r.caret));
+    }
   };
   const text = "text-[14px] leading-[21px] whitespace-pre-wrap break-words";
   return (
