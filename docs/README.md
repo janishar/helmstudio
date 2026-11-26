@@ -11,6 +11,10 @@ described by config, including what LoRAs they accept. Apple Silicon (MLX and
 PyTorch MPS) and CUDA are both first class. It is a multi-user, self-hosted
 system of Go and Python services (section 17).
 
+## Design system
+
+[design-system/](design-system/README.md) is the reference for every UI element: tokens in all seven themes, type, spacing, radius, components with previews, the card looks and the right-click menu. It is a copy of the [helmstudio Design System](https://claude.ai/artifact/ACz7ZcQyjdZ6NVFZc95Rk9); change both together (owner, 2026-11-27).
+
 ## Framework plan
 
 Section numbers (§) are stable across files. Each topic has one owning section;
