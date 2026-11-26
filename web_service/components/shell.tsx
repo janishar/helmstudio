@@ -12,6 +12,7 @@ import {
   Settings,
   ShieldCheck,
   Sparkles,
+  WandSparkles,
   Workflow,
 } from "lucide-react";
 import {
@@ -52,6 +53,13 @@ const ITEMS = [
     label: "Timeline",
     Icon: Clapperboard,
     tile: "linear-gradient(155deg,#ffe07a,#f08a1c)",
+  },
+  // plan 39: lanes in time, between Timeline and Models (MagicBoard)
+  {
+    href: "/magic",
+    label: "Magic",
+    Icon: WandSparkles,
+    tile: "linear-gradient(155deg,#f2a8ff,#8a3fd6)",
   },
   {
     href: "/models",

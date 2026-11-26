@@ -1,0 +1,1114 @@
+/* Magic's board (docs/mock/MagicBoard.dc.html, its own rules ported as drawn): lanes in time, blocks, joins, ties,
+   the floating player, the Add dialog. Scoped under .mg; loaded only with the page. Names that the global sheet uses
+   for something else are renamed (.st → .mst, .ast → .mast, .ki → .kio). */
+.mg {
+  --lh: 120px;
+}
+:is(.mg, .mg-side) .mb {
+  position: relative;
+  box-sizing: border-box;
+  border-radius: 28px 28px 28px 12px;
+  background: var(--in);
+  padding: 10px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+:is(.mg, .mg-side) .btools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  flex-wrap: wrap;
+}
+:is(.mg, .mg-side) .btools .chip {
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+  border-radius: 10px;
+  background: var(--s4);
+}
+:is(.mg, .mg-side) .chip.on {
+  background: var(--s5);
+  box-shadow: inset 0 0 0 1px var(--a1);
+}
+:is(.mg, .mg-side) .btools .seg {
+  padding: 3px;
+  border: 0;
+  border-radius: 11px;
+  background: var(--s2);
+}
+:is(.mg, .mg-side) .btools .seg button {
+  height: 28px;
+  font-size: 12px;
+}
+:is(.mg, .mg-side) .bsep {
+  width: 1px;
+  height: 20px;
+  background: var(--s5);
+}
+:is(.mg, .mg-side) .est {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--t2);
+  white-space: nowrap;
+}
+:is(.mg, .mg-side) .est b {
+  color: var(--t1);
+  font-weight: 500;
+}
+:is(.mg, .mg-side) .pill {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--s2);
+  color: var(--t2);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: nowrap;
+}
+/* zoom: the Timeline's group with the board's slider */
+:is(.mg, .mg-side) .zr {
+  position: relative;
+  width: 96px;
+  height: 16px;
+  margin: 0 4px;
+  appearance: none;
+  background: transparent;
+}
+:is(.mg, .mg-side) .zr::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--t2) var(--z, 0%), var(--s5) var(--z, 0%));
+}
+:is(.mg, .mg-side) .zr::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--t2) var(--z, 0%), var(--s5) var(--z, 0%));
+}
+:is(.mg, .mg-side) .zr::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  margin-top: -4px;
+  border-radius: 50%;
+  background: var(--t1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+:is(.mg, .mg-side) .zr::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--t1);
+}
+:is(.mg, .mg-side) .zv {
+  min-width: 84px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--t2);
+}
+
+/* the scroller: the Assets row, the ruler and the lanes scroll sideways together */
+:is(.mg, .mg-side) .scroller {
+  position: relative;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--s4) transparent;
+}
+:is(.mg, .mg-side) .lh {
+  position: sticky;
+  left: 0;
+  z-index: 7;
+  flex: 0 0 var(--lh);
+  box-sizing: border-box;
+  padding: 6px 10px 6px 2px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  background: var(--in);
+  text-align: left;
+  border: 0;
+  color: inherit;
+}
+:is(.mg, .mg-side) .lh b {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+:is(.mg, .mg-side) .lh small {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--t2);
+  white-space: nowrap;
+}
+:is(.mg, .mg-side) .lh input {
+  width: 100%;
+  height: 26px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--s4);
+  color: var(--t1);
+  font: 600 13px var(--font-sans);
+}
+:is(.mg, .mg-side) .rul {
+  position: relative;
+  height: 26px;
+  margin-left: var(--lh);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--t2);
+  cursor: pointer;
+}
+:is(.mg, .mg-side) .rul > span {
+  position: absolute;
+  top: 0;
+  transform: translateX(-1px);
+  padding-left: 4px;
+  border-left: 1px solid var(--ln);
+  height: 14px;
+  line-height: 12px;
+  pointer-events: none;
+}
+:is(.mg, .mg-side) .rul::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 2px;
+  height: 6px;
+  background: repeating-linear-gradient(90deg, var(--ln) 0 1px, transparent 1px var(--px));
+}
+:is(.mg, .mg-side) .ln {
+  display: flex;
+  align-items: stretch;
+}
+:is(.mg, .mg-side) .lt {
+  position: relative;
+  flex: 0 0 auto;
+  border-radius: 12px 12px 12px 5px;
+  background-color: var(--s1);
+  background-image: repeating-linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--s4) 70%, transparent) 0 1px,
+    transparent 1px var(--px4)
+  );
+}
+:is(.mg, .mg-side) .lt.empty {
+  background-color: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--s4);
+  background-image: none;
+  display: flex;
+  align-items: center;
+  padding-left: 14px;
+  font-size: 12px;
+  color: var(--t2);
+}
+:is(.mg, .mg-side) .lt.drop {
+  box-shadow: inset 0 0 0 1.5px var(--a1);
+}
+:is(.mg, .mg-side) .ph {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--t1);
+  z-index: 8;
+  pointer-events: none;
+}
+:is(.mg, .mg-side) .ph > span {
+  position: absolute;
+  top: 0;
+  left: -26px;
+  width: 54px;
+  height: 18px;
+  border-radius: 6px;
+  background: var(--t1);
+  color: var(--g);
+  font: 500 10px/18px var(--font-mono);
+  text-align: center;
+}
+
+/* blocks */
+:is(.mg, .mg-side) .blk {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  box-sizing: border-box;
+  padding: 5px 7px 6px;
+  border: 0;
+  border-radius: 11px 11px 11px 4px;
+  background: linear-gradient(180deg, var(--s4), var(--s3));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    0 10px 18px -10px color-mix(in srgb, var(--shd) 90%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  line-height: 14px;
+  overflow: hidden;
+  z-index: 2;
+  min-width: 0;
+  color: var(--t1);
+  text-align: left;
+  touch-action: none;
+  cursor: grab;
+}
+:is(.mg, .mg-side) .blk:focus-visible {
+  outline: 2px solid var(--a1);
+}
+:is(.mg, .mg-side) .blk.sel {
+  outline: 2px solid var(--t1);
+  outline-offset: 1px;
+}
+:is(.mg, .mg-side) .blk.old {
+  box-shadow:
+    inset 0 0 0 1.5px #e8c468,
+    0 10px 18px -10px color-mix(in srgb, var(--shd) 90%, transparent);
+}
+:is(.mg, .mg-side) .blk.fl {
+  box-shadow:
+    inset 0 0 0 1.5px #ff8a80,
+    0 10px 18px -10px #000;
+}
+:is(.mg, .mg-side) .blk.tied {
+  box-shadow:
+    inset 0 0 0 2px #86cdea,
+    0 10px 18px -10px color-mix(in srgb, var(--shd) 90%, transparent);
+}
+:is(.mg, .mg-side) .blk.lift {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 26px 34px -10px #000;
+  transform: rotate(-0.6deg);
+  z-index: 9;
+  cursor: grabbing;
+}
+:is(.mg, .mg-side) .blk.ghostb {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--dash);
+  opacity: 0.8;
+  pointer-events: none;
+  z-index: 1;
+}
+:is(.mg, .mg-side) .blk.use {
+  box-shadow:
+    inset 0 0 0 2px var(--a1),
+    0 10px 18px -10px color-mix(in srgb, var(--shd) 90%, transparent);
+}
+:is(.mg, .mg-side) .blk.use .bh b {
+  color: var(--a1);
+}
+:is(.mg, .mg-side) .dimb .blk:not(.use) {
+  opacity: 0.5;
+}
+:is(.mg, .mg-side) .redge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 7px;
+  cursor: ew-resize;
+  z-index: 3;
+}
+:is(.mg, .mg-side) .bh {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  white-space: nowrap;
+}
+:is(.mg, .mg-side) .bh b {
+  font-size: 12px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+:is(.mg, .mg-side) .bh .len {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--t2);
+  flex: 0 0 auto;
+}
+:is(.mg, .mg-side) .kb {
+  flex: 0 0 auto;
+  padding: 0 5px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 15px;
+  color: #111;
+}
+:is(.mg, .mg-side) .k-video {
+  background: #ff9a6e;
+}
+:is(.mg, .mg-side) .k-image {
+  background: #b8abff;
+}
+:is(.mg, .mg-side) .k-frame {
+  background: #e8d88a;
+}
+:is(.mg, .mg-side) .k-voice {
+  background: #f2b84b;
+}
+:is(.mg, .mg-side) .k-music {
+  background: #d59bf6;
+}
+:is(.mg, .mg-side) .k-sound {
+  background: #7cc7f2;
+}
+:is(.mg, .mg-side) .k-char {
+  background: #f2a8ff;
+}
+:is(.mg, .mg-side) .k-prop {
+  background: #ffd27a;
+}
+:is(.mg, .mg-side) .k-place {
+  background: #9fe0a8;
+}
+:is(.mg, .mg-side) .bf {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+}
+:is(.mg, .mg-side) .rc {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 1 auto;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--a2) 22%, var(--s5));
+  font-size: 10px;
+  line-height: 16px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--t1);
+}
+:is(.mg, .mg-side) .rc.ch {
+  background: color-mix(in srgb, var(--a1) 22%, var(--s5));
+}
+:is(.mg, .mg-side) .rc.lk {
+  background: color-mix(in srgb, #86cdea 24%, var(--s5));
+}
+:is(.mg, .mg-side) .rc.big {
+  font-size: 12px;
+  line-height: 22px;
+  padding: 0 9px;
+}
+:is(.mg, .mg-side) .mst {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+:is(.mg, .mg-side) .mst::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  display: block;
+}
+:is(.mg, .mg-side) .mst.done {
+  color: var(--a1);
+}
+:is(.mg, .mg-side) .mst.run {
+  color: var(--a2);
+}
+:is(.mg, .mg-side) .mst.old {
+  color: #e8c468;
+}
+:is(.mg, .mg-side) .mst.dr {
+  color: var(--t2);
+}
+:is(.mg, .mg-side) .mst.fail {
+  color: #ff8a80;
+}
+:is(.mg, .mg-side) .mst.old::before,
+:is(.mg, .mg-side) .mst.dr::before {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px currentColor;
+}
+:is(.mg, .mg-side) .fx {
+  flex: 0 0 auto;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, #ff9ad0 30%, var(--s5));
+  font-size: 10px;
+  line-height: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--t1);
+}
+:is(.mg, .mg-side) .fx.off {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+:is(.mg, .mg-side) .pin,
+:is(.mg, .mg-side) .lkm {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+:is(.mg, .mg-side) .pin {
+  background: var(--a1);
+  color: var(--on1);
+}
+:is(.mg, .mg-side) .lkm {
+  background: #86cdea;
+  color: #10222b;
+}
+:is(.mg, .mg-side) .art {
+  flex: 1 1 auto;
+  min-height: 0;
+  border-radius: 6px;
+  background-size: cover;
+  background-position: center;
+}
+:is(.mg, .mg-side) .fs {
+  position: relative;
+  box-shadow:
+    inset 0 4px 0 #000,
+    inset 0 -4px 0 #000;
+}
+:is(.mg, .mg-side) .fs::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 4px;
+  background: repeating-linear-gradient(90deg, transparent 0 3px, #555 3px 6px);
+}
+:is(.mg, .mg-side) .sk {
+  filter: grayscale(1) contrast(1.9) brightness(1.25);
+  opacity: 0.9;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+}
+:is(.mg, .mg-side) .sk.rough {
+  filter: grayscale(0.5) contrast(1.2);
+  opacity: 1;
+}
+:is(.mg, .mg-side) .art.none {
+  background: repeating-linear-gradient(135deg, var(--s3) 0 6px, var(--s2) 6px 12px);
+}
+:is(.mg, .mg-side) .wvf {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: block;
+  width: 100%;
+}
+:is(.mg, .mg-side) .arow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+:is(.mg, .mg-side) .scr {
+  flex: 0 0 auto;
+  font-size: 11px;
+  line-height: 14px;
+  font-style: italic;
+  color: var(--t1b);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+:is(.mg, .mg-side) .k8s {
+  --k: #7cc7f2;
+  --kd: #06202e;
+}
+:is(.mg, .mg-side) .k8v {
+  --k: #f2b84b;
+  --kd: #2a1c00;
+}
+:is(.mg, .mg-side) .mo {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 34% 30%,
+    color-mix(in srgb, var(--k) 30%, #fff) 0,
+    var(--k) 42%,
+    color-mix(in srgb, var(--k) 45%, #000) 100%
+  );
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--k) 16%, transparent),
+    0 0 14px 2px color-mix(in srgb, var(--k) 45%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--kd);
+}
+:is(.mg, .mg-side) .mcv {
+  position: relative;
+  overflow: hidden;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  border-radius: 7px;
+  box-shadow: 0 4px 10px -4px #000;
+}
+:is(.mg, .mg-side) .mcv .disc {
+  position: absolute;
+  top: 50%;
+  right: -14px;
+  width: 32px;
+  height: 32px;
+  margin-top: -16px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, #c9b8f0 0 18%, #0d0b10 18% 21%, transparent 21%),
+    repeating-radial-gradient(circle, #141018 0 2px, #262030 2px 3px);
+  box-shadow: -4px 0 10px rgba(0, 0, 0, 0.45);
+}
+
+/* joins: one chip look, an icon per kind (the owner's bowtie set) */
+:is(.mg, .mg-side) .tj {
+  position: absolute;
+  top: 50%;
+  height: 26px;
+  min-width: 26px;
+  margin-top: -13px;
+  transform: translateX(-50%);
+  box-sizing: border-box;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--s2);
+  border: 1.5px solid var(--k, #d59bf6);
+  box-shadow:
+    0 0 0 3px var(--s1),
+    0 4px 10px rgba(0, 0, 0, 0.6);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+  z-index: 5;
+  color: var(--t1);
+}
+:is(.mg, .mg-side) .tj svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+:is(.mg, .mg-side) .tj.cut {
+  --k: var(--t2);
+  padding: 0;
+  width: 26px;
+}
+:is(.mg, .mg-side) .tj.dissolve {
+  --k: #d59bf6;
+}
+:is(.mg, .mg-side) .tj.fade {
+  --k: #ffe07a;
+}
+:is(.mg, .mg-side) .tj.wipe {
+  --k: #7cc7f2;
+}
+:is(.mg, .mg-side) .tj.morph {
+  --k: #ff9ad0;
+}
+:is(.mg, .mg-side) .tj:hover,
+:is(.mg, .mg-side) .tj:focus-visible {
+  box-shadow:
+    0 0 0 3px var(--s1),
+    0 0 0 5px var(--t1),
+    0 4px 10px rgba(0, 0, 0, 0.6);
+  outline: none;
+}
+:is(.mg, .mg-side) .tie {
+  position: absolute;
+  width: 0;
+  border-left: 1.5px dashed #86cdea;
+  z-index: 3;
+  pointer-events: none;
+}
+:is(.mg, .mg-side) .snapl {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 2px solid #ffe07a;
+  z-index: 10;
+  pointer-events: none;
+}
+:is(.mg, .mg-side) .snapl > span {
+  position: absolute;
+  top: -2px;
+  left: 6px;
+  padding: 0 7px;
+  border-radius: 6px;
+  background: #ffe07a;
+  color: #2a2000;
+  font-size: 10px;
+  line-height: 17px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+:is(.mg, .mg-side) .tip {
+  position: absolute;
+  z-index: 11;
+  padding: 5px 9px;
+  border-radius: 9px;
+  background: var(--t1);
+  color: var(--g);
+  font-size: 11px;
+  line-height: 15px;
+  font-weight: 500;
+  white-space: nowrap;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+:is(.mg, .mg-side) .warn {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 12px;
+  background: color-mix(in srgb, #e8c468 18%, var(--s2));
+  box-shadow: inset 0 0 0 1px #e8c468;
+  font-size: 12px;
+}
+:is(.mg, .mg-side) .warn .chip {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+  border-radius: 9px;
+  background: var(--s4);
+}
+
+/* assets: off the ruler */
+:is(.mg, .mg-side) .shelf {
+  display: flex;
+  align-items: stretch;
+  margin-bottom: 4px;
+}
+:is(.mg, .mg-side) .shb {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px;
+  border-radius: 14px 14px 14px 6px;
+  background: color-mix(in srgb, var(--s2) 60%, transparent);
+  box-shadow: inset 0 0 0 1.5px var(--dash);
+  min-width: 0;
+}
+:is(.mg, .mg-side) .mast {
+  box-sizing: border-box;
+  width: 206px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border: 0;
+  border-radius: 12px 12px 12px 5px;
+  background: var(--s3);
+  min-width: 0;
+  color: inherit;
+  text-align: left;
+}
+:is(.mg, .mg-side) .mast.hov {
+  background: var(--s5);
+  box-shadow:
+    inset 0 0 0 2px var(--a1),
+    0 12px 22px -10px #000;
+}
+:is(.mg, .mg-side) .mast > span {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+:is(.mg, .mg-side) .mast .nm {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+:is(.mg, .mg-side) .mast small {
+  font-size: 10px;
+  line-height: 13px;
+  color: var(--t2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+:is(.mg, .mg-side) .mast small.u {
+  color: var(--t1b);
+}
+:is(.mg, .mg-side) .mast.hov small.u {
+  color: var(--a1);
+  font-weight: 600;
+}
+:is(.mg, .mg-side) .ath {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  border-radius: 8px;
+  background-size: cover;
+  background-position: center;
+}
+:is(.mg, .mg-side) .astb {
+  box-sizing: border-box;
+  height: 60px;
+  flex: 0 0 auto;
+  padding: 0 12px;
+  border-radius: 12px 12px 12px 5px;
+  border: 0;
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--dash);
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--t1);
+}
+:is(.mg, .mg-side) .astb:disabled {
+  color: var(--t2);
+}
+
+/* the floating player */
+:is(.mg, .mg-side) .fp {
+  position: absolute;
+  box-sizing: border-box;
+  border-radius: 16px 16px 16px 7px;
+  background: var(--s2);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 26px 44px -14px #000,
+    0 0 0 1px var(--s5);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  z-index: 12;
+}
+:is(.mg, .mg-side) .fp .bar {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  flex: 0 0 auto;
+  padding: 0 5px 0 9px;
+  font-size: 11px;
+  color: var(--t2);
+  cursor: grab;
+  touch-action: none;
+}
+:is(.mg, .mg-side) .fp .bar button {
+  height: 20px;
+  min-width: 20px;
+  padding: 0 5px;
+  border-radius: 6px;
+  border: 0;
+  background: var(--s4);
+  font-size: 10px;
+  line-height: 20px;
+  color: var(--t1);
+}
+:is(.mg, .mg-side) .fp .vid {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  background: #000 center / cover no-repeat;
+}
+:is(.mg, .mg-side) .fp .ctl {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  flex: 0 0 auto;
+  padding: 0 9px;
+  font-size: 10px;
+}
+:is(.mg, .mg-side) .fp .scrub {
+  flex-grow: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--s5);
+  position: relative;
+  cursor: pointer;
+}
+:is(.mg, .mg-side) .fp .scrub > span {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--t1);
+}
+:is(.mg, .mg-side) .fp .pb {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 0;
+  padding: 0;
+  background: var(--t1);
+  color: var(--g);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+:is(.mg, .mg-side) .fp .rz {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 11px;
+  height: 11px;
+  cursor: nwse-resize;
+  touch-action: none;
+  background: linear-gradient(
+    135deg,
+    transparent 45%,
+    var(--t2) 45% 55%,
+    transparent 55% 70%,
+    var(--t2) 70% 80%,
+    transparent 80%
+  );
+}
+
+/* the side panel */
+.mg-side h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.mg-side h3 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--t2);
+}
+.mg-side .kv {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.mg-side .kv > div {
+  padding: 7px 10px;
+  border-radius: 12px;
+  background: var(--s2);
+  min-width: 0;
+}
+.mg-side .kv span {
+  display: block;
+  font-size: 11px;
+  color: var(--t2);
+}
+.mg-side .kv b {
+  font-weight: 600;
+  font-size: 13px;
+}
+.mg-side .nr {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 12px;
+  background: var(--s2);
+  font-size: 12px;
+  min-width: 0;
+}
+.mg-side .nr .mono {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--t2);
+  white-space: nowrap;
+}
+.mg-side .wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.mg-side .pic {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: flex-end;
+  padding: 8px;
+  box-sizing: border-box;
+}
+
+/* the Add dialog: the kind with its orb */
+.mg-add .kg {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.mg-add .kt {
+  box-sizing: border-box;
+  height: 84px;
+  padding: 10px;
+  border-radius: 14px 14px 14px 6px;
+  border: 0;
+  background: var(--s3);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--t1);
+}
+.mg-add .kt[aria-pressed="true"] {
+  background: var(--s5);
+  box-shadow: inset 0 0 0 2px var(--a1);
+}
+.mg-add .kt:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.mg-add .kt .kn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mg-add .kt small {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--t2);
+  line-height: 14px;
+}
+.mg-add .kio {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: #14201a;
+  background: radial-gradient(
+    circle at 34% 30%,
+    color-mix(in srgb, var(--k) 30%, #fff) 0,
+    var(--k) 42%,
+    color-mix(in srgb, var(--k) 45%, #000) 100%
+  );
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--k) 16%, transparent),
+    0 0 14px 2px color-mix(in srgb, var(--k) 40%, transparent);
+}
+.mg-add .kio.k-video {
+  --k: #ff9a6e;
+}
+.mg-add .kio.k-image {
+  --k: #b8abff;
+}
+.mg-add .kio.k-frame {
+  --k: #e8d88a;
+}
+.mg-add .kio.k-voice,
+.mg-add .kio.k-dialogue {
+  --k: #f2b84b;
+}
+.mg-add .kio.k-sound {
+  --k: #7cc7f2;
+}
+.mg-add .kio.k-music {
+  --k: #d59bf6;
+  background:
+    radial-gradient(circle, #e9e2f0 0 3px, #0d0b10 3px 4px, transparent 4px),
+    repeating-radial-gradient(circle, #141018 0 1.5px, #2a2236 1.5px 2.5px);
+  box-shadow:
+    0 0 0 3px #d59bf633,
+    0 0 14px 2px #d59bf666;
+}
+.mg-add .kio.k-music svg {
+  display: none;
+}
+.mg-add .fld {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.mg-add .fld > .lb {
+  font-size: 12px;
+  color: var(--t2);
+}
+.mg-add .seg {
+  align-self: flex-start;
+}
+
+/* loading */
+:is(.mg, .mg-side) .sk-ln {
+  height: var(--h, 56px);
+  border-radius: 12px 12px 12px 5px;
+  background: linear-gradient(90deg, var(--s2) 0, var(--s3) 40%, var(--s2) 80%);
+  background-size: 300% 100%;
+  animation: mg-shine 1.6s linear infinite;
+}
+@keyframes mg-shine {
+  to {
+    background-position: -300% 0;
+  }
+}
+
+/* a phone: the player sits on top, the lanes scroll sideways */
+@media (max-width: 47.99rem) {
+  .mg {
+    --lh: 64px;
+  }
+  .mg .fp {
+    position: relative;
+    inset: auto !important;
+    width: auto !important;
+    height: auto !important;
+    order: -1;
+  }
+  .mg .fp .vid {
+    aspect-ratio: 16 / 9;
+  }
+  .mg .fp .bar,
+  .mg .fp .rz,
+  .mg .shelf {
+    display: none;
+  }
+}

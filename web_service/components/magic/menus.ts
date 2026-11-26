@@ -1,0 +1,805 @@
+// Magic's right-click menus (MagicBoard frame 10), in the shared menu (components/context-menu.tsx): a block of each
+// kind, several blocks, a lane header, the empty lane at a time, an asset, a join, a tie mark, an effect badge, a
+// snapshot. Pure builders over the board's actions, so tests can read the items. What phase B can't do yet is greyed
+// with the reason (plan 39 §45.11: the block and asset dialogs and Import come later, Music and Sound with plan 38).
+import {
+  ArrowDown,
+  ArrowDownUp,
+  ArrowUp,
+  AtSign,
+  AudioLines,
+  Blend,
+  Brush,
+  Clapperboard,
+  ClipboardPaste,
+  Columns2,
+  Copy,
+  Cpu,
+  Eye,
+  EyeOff,
+  FastForward,
+  Film,
+  GitCompare,
+  ImagePlus,
+  ImageUp,
+  Images,
+  Link2,
+  ListPlus,
+  LocateFixed,
+  Maximize2,
+  Mic,
+  MoveHorizontal,
+  PencilLine,
+  Pin,
+  PinOff,
+  Play,
+  Plus,
+  Power,
+  RefreshCw,
+  RotateCcw,
+  Scissors,
+  Shapes,
+  Timer,
+  Trash2,
+  Unlink,
+  WandSparkles,
+  type LucideIcon,
+} from "lucide-react";
+import type { Item, MenuItem } from "@/components/context-menu";
+import { mod } from "@/components/context-menu";
+import {
+  CutIcon,
+  DissolveIcon,
+  FadeIcon,
+  KIND_ICON,
+  MorphIcon,
+  WipeIcon,
+} from "@/components/magic/icons";
+import {
+  clock,
+  end,
+  inLane,
+  secs,
+  shown,
+  usedIn,
+  type Asset,
+  type Block,
+  type Doc,
+  type Effect,
+  type Join,
+  type Kind,
+  type Lane,
+  type Link,
+  type Mode,
+  type Op,
+  type Takes,
+  type TransitionKind,
+} from "@/lib/magic";
+import { EST_S, estText } from "@/lib/magic-fixture";
+
+/** Why a kind can't run or be added yet (plan 39 §45.11 phase H). */
+export const NOT_YET = "Comes with Create's Music and Sound";
+export const SOON = {
+  dialog: "Comes with the block dialog",
+  asset: "Comes with the asset dialog",
+  import: "Comes with Import",
+  rough: "Comes with the rough cut",
+  compare: "Comes with saved boards",
+};
+/** The effects a block can take as badges (MagicBoard frame 4c). */
+export const EFFECTS: Effect[] = [
+  { name: "Grade · warm", params: { temperature: 12, contrast: 4 } },
+  { name: "Slow · 0.5×", params: { rate: 0.5 } },
+  { name: "Stabilize" },
+];
+export const LENGTHS = [0.5, 1, 2];
+const MUSIC_MODELS = ["ACE-Step 1.5 XL", "ACE-Step 1.5 2B", "MiniMax Music 3"];
+const STYLES = ["sketch", "rough", "full"] as const;
+
+/** What the menus act through: the board's own actions. */
+export type Act = {
+  doc: Doc;
+  takes: Takes;
+  mode: Mode;
+  playhead: number;
+  sel: string[];
+  edit: (op: Op | Op[]) => unknown;
+  run: (ids: string[]) => void;
+  select: (ids: string[]) => void;
+  /** select it and show its details in the side panel */
+  open: (id: string) => void;
+  /** the Add dialog at a lane and time, a kind picked */
+  add: (lane: string, at: number, kind?: Kind) => void;
+  play: (from: number) => void;
+  seek: (f: number) => void;
+  rename: (lane: string) => void;
+  used: (asset: string | null) => void;
+  paste: ((lane: string, at: number) => void) | null;
+  copyText: (s: string) => void;
+};
+
+const icon = (C: (p: { className?: string }) => React.ReactNode) => C as unknown as LucideIcon;
+const kindIcon = (k: Kind) => KIND_ICON[k];
+const blockById = (d: Doc, id: string) => d.blocks.find((b) => b.id === id);
+const laneOf = (d: Doc, id: string) => d.lanes.find((l) => l.id === id);
+const audio = (k: Kind) => k === "music" || k === "sound";
+/** a block's run estimate, as the menu shows it ("≈ 1:50", "≈ 12 s") */
+const est = (k: Kind) => estText(EST_S[k], true);
+/** the shots on the board (its Shots lanes), in time */
+const shotsOf = (d: Doc) =>
+  d.lanes.filter((l) => l.role === "shots").flatMap((l) => inLane(d, l.id));
+const linkOf = (d: Doc, id: string) => d.links.find((l) => l.block === id);
+
+/** "Tie to ›": each shot; music also the run of every shot. */
+function tieItems(a: Act, b: Block): Item[] {
+  const shots = shotsOf(a.doc).filter((s) => s.id !== b.id);
+  const tied = linkOf(a.doc, b.id)?.to.join();
+  return [
+    ...shots.map((s) => ({
+      label: s.name,
+      checked: tied === s.id,
+      onPick: () => a.edit({ op: "link", block: b.id, to: [s.id] }),
+    })),
+    b.kind === "music" &&
+      shots.length > 1 && {
+        label: `Shots 1–${shots.length}`,
+        checked: tied === shots.map((s) => s.id).join(),
+        onPick: () => a.edit({ op: "link", block: b.id, to: shots.map((s) => s.id) }),
+      },
+  ];
+}
+
+/** "Move to lane ›": every other lane. */
+const laneItems = (a: Act, ids: string[], from?: string): Item[] =>
+  a.doc.lanes
+    .filter((l) => l.id !== from)
+    .map((l) => ({
+      label: l.name,
+      onPick: () => a.edit({ op: "move", ids, dt: 0, lane: l.id, mode: a.mode }),
+    }));
+
+const effectItems = (a: Act, ids: string[]): Item[] =>
+  EFFECTS.map((e) => ({ label: e.name, onPick: () => a.edit({ op: "effect", ids, effect: e }) }));
+
+/** Fits a tied block to what it is tied to: a line to its shot's end, music to the run. */
+function fit(a: Act, b: Block) {
+  const l = linkOf(a.doc, b.id);
+  const to = l?.to.map((id) => blockById(a.doc, id)).filter((x): x is Block => !!x) ?? [];
+  if (!to.length) return;
+  const at = l!.to.length > 1 ? Math.min(...to.map((x) => x.at)) : b.at;
+  const stop = Math.max(...to.map(end));
+  if (stop > at) a.edit({ op: "trim", id: b.id, at, length: stop - at });
+}
+
+/** A block's menu, by its kind; several selected blocks get the several menu. */
+export function blockMenu(a: Act, b: Block): { title: string; items: Item[] } {
+  if (a.sel.length > 1 && a.sel.includes(b.id)) return multiMenu(a, a.sel);
+  const d = a.doc;
+  const link = linkOf(d, b.id);
+  const tiedTo = link && blockById(d, link.to[0]);
+  const lane = laneOf(d, b.lane);
+  const open: MenuItem = { label: "Open", icon: Maximize2, keys: "↵", onPick: () => a.open(b.id) };
+  const run: MenuItem = {
+    label: "Run",
+    icon: WandSparkles,
+    keys: est(b.kind),
+    off: audio(b.kind) ? NOT_YET : undefined,
+    onPick: () => a.run([b.id]),
+  };
+  const play: MenuItem = { label: "Play", icon: Play, keys: "Space", onPick: () => a.play(b.at) };
+  const dup: MenuItem = {
+    label: "Duplicate",
+    icon: Copy,
+    keys: mod("D"),
+    onPick: () => a.edit({ op: "duplicate", ids: [b.id] }),
+  };
+  const move: MenuItem = {
+    label: "Move to lane",
+    icon: ArrowDownUp,
+    items: laneItems(a, [b.id], b.lane),
+  };
+  const del: MenuItem = {
+    label: "Delete",
+    icon: Trash2,
+    keys: "⌫",
+    danger: true,
+    onPick: () => a.edit({ op: "delete", ids: [b.id], mode: a.mode }),
+  };
+  const tie: MenuItem = { label: "Tie to", icon: Link2, items: tieItems(a, b) };
+  const unlink: MenuItem | false = !!link && {
+    label: "Unlink",
+    icon: Unlink,
+    onPick: () => a.edit({ op: "unlink", block: b.id }),
+  };
+  const title = b.name;
+  if (b.kind === "voice")
+    return {
+      title,
+      items: [
+        open,
+        run,
+        play,
+        {
+          label: "Voice",
+          icon: Mic,
+          items: d.assets
+            .filter((x) => x.voice_id)
+            .map((x) => ({
+              label: `@${x.handle}`,
+              checked: b.request.voice === x.id,
+              onPick: () =>
+                a.edit({ op: "block", id: b.id, set: { request: { ...b.request, voice: x.id } } }),
+            })),
+          off: d.assets.some((x) => x.voice_id) ? undefined : "No asset has a voice yet",
+        },
+        "-",
+        tiedTo
+          ? {
+              label: `Go to ${tiedTo.name.split(" · ")[0]}`,
+              icon: LocateFixed,
+              onPick: () => a.open(tiedTo.id),
+            }
+          : tie,
+        !!tiedTo && { label: "Fit to shot", icon: MoveHorizontal, onPick: () => fit(a, b) },
+        unlink,
+        "-",
+        dup,
+        move,
+        "-",
+        del,
+      ],
+    };
+  if (b.kind === "music")
+    return {
+      title,
+      items: [
+        open,
+        run,
+        play,
+        {
+          label: "Model",
+          icon: Cpu,
+          items: MUSIC_MODELS.map((m) => ({
+            label: m,
+            checked: b.request.model === m,
+            onPick: () =>
+              a.edit({ op: "block", id: b.id, set: { request: { ...b.request, model: m } } }),
+          })),
+        },
+        "-",
+        tie,
+        !!link && { label: "Fit to shots", icon: MoveHorizontal, onPick: () => fit(a, b) },
+        unlink,
+        "-",
+        dup,
+        move,
+        "-",
+        del,
+      ],
+    };
+  if (b.kind === "sound") {
+    const shot = (b.request.from && blockById(d, b.request.from)) || tiedTo;
+    return {
+      title,
+      items: [
+        open,
+        run,
+        play,
+        {
+          label: shot ? `Make from ${shot.name.split(" · ")[0]} video` : "Make from a shot's video",
+          icon: Film,
+          off: shot ? NOT_YET : "Tie it to a shot first",
+          onPick: () => undefined,
+        },
+        "-",
+        tie,
+        unlink,
+        "-",
+        dup,
+        move,
+        "-",
+        del,
+      ],
+    };
+  }
+  if (b.kind === "frame") {
+    const made = d.blocks.find((x) => x.from_frame === b.id);
+    const shots = d.lanes.find((l) => l.role === "shots");
+    return {
+      title,
+      items: [
+        open,
+        { label: "Redraw", icon: RefreshCw, keys: est("frame"), onPick: () => a.run([b.id]) },
+        {
+          label: "Style",
+          icon: Brush,
+          items: STYLES.map((s) => ({
+            label: s[0].toUpperCase() + s.slice(1),
+            checked: (b.request.style ?? "sketch") === s,
+            onPick: () =>
+              a.edit({ op: "block", id: b.id, set: { request: { ...b.request, style: s } } }),
+          })),
+        },
+        { label: "Replace with an image", icon: ImageUp, off: SOON.import },
+        "-",
+        {
+          label: "Generate from board",
+          icon: Clapperboard,
+          keys: est("video"),
+          off: made ? `${made.name} is made from it` : shots ? undefined : "Add a Shots lane first",
+          onPick: () =>
+            shots &&
+            a.edit({
+              op: "add",
+              mode: "overwrite",
+              block: {
+                lane: shots.id,
+                at: b.at,
+                length: b.length,
+                kind: "video",
+                name: `Shot from ${b.name}`,
+                from_frame: b.id,
+                request: { kind: "video", prompt: b.request.prompt, refs: b.request.refs ?? [] },
+                takes: [],
+                effects: [],
+              },
+            }),
+        },
+        { label: "Rough cut from here", icon: Film, off: SOON.rough },
+        "-",
+        dup,
+        "-",
+        del,
+      ],
+    };
+  }
+  // a shot (video) or a still (image)
+  const pinned = !!b.pinned;
+  const take = shown(b, a.takes);
+  const split = a.playhead > b.at && a.playhead < end(b);
+  const sounds = d.lanes.find((l) => l.role === "sound");
+  return {
+    title,
+    items: [
+      open,
+      run,
+      {
+        label: "Run up to here",
+        icon: FastForward,
+        onPick: () =>
+          a.run(
+            inLane(d, b.lane)
+              .filter((x) => x.at <= b.at)
+              .map((x) => x.id),
+          ),
+      },
+      { label: "Compare takes", icon: Columns2, off: SOON.dialog },
+      pinned
+        ? {
+            label: "Unpin take",
+            icon: PinOff,
+            onPick: () => a.edit({ op: "block", id: b.id, set: { pinned: undefined } }),
+          }
+        : {
+            label: "Pin take",
+            icon: Pin,
+            off: take ? undefined : "No take yet",
+            onPick: () => take && a.edit({ op: "block", id: b.id, set: { pinned: take.id } }),
+          },
+      "-",
+      {
+        label: "Split at playhead",
+        icon: Scissors,
+        keys: "S",
+        off: split ? undefined : "Put the playhead on it",
+        onPick: () => a.edit({ op: "split", id: b.id, at: a.playhead }),
+      },
+      dup,
+      { label: "Add effect", icon: Blend, items: effectItems(a, [b.id]) },
+      {
+        // a shot ties a line, a cue or a sound to itself
+        label: "Tie to",
+        icon: Link2,
+        items: d.blocks
+          .filter((x) => x.kind === "voice" || x.kind === "music" || x.kind === "sound")
+          .map((x) => ({
+            label: x.name,
+            checked: linkOf(d, x.id)?.to.join() === b.id,
+            onPick: () => a.edit({ op: "link", block: x.id, to: [b.id] }),
+          })),
+        off: d.blocks.some((x) => x.kind === "voice" || x.kind === "music" || x.kind === "sound")
+          ? undefined
+          : "No line, cue or sound to tie yet",
+      },
+      lane?.role !== "shots" && lane && move,
+      b.kind === "video" && {
+        label: "Make sound from video",
+        icon: AudioLines,
+        off: NOT_YET,
+        onPick: () =>
+          sounds &&
+          a.edit({
+            op: "add",
+            mode: "overwrite",
+            block: {
+              lane: sounds.id,
+              at: b.at,
+              length: b.length,
+              kind: "sound",
+              name: `Sound of ${b.name.split(" · ")[0]}`,
+              request: { kind: "sound", model: "MMAudio", from: b.id },
+              takes: [],
+              effects: [],
+            },
+          }),
+      },
+      b.kind === "video" && {
+        label: "Use last frame in a new shot",
+        icon: ImagePlus,
+        onPick: () =>
+          a.edit({
+            op: "add",
+            mode: "insert",
+            block: {
+              lane: b.lane,
+              at: end(b),
+              length: b.length,
+              kind: "video",
+              name: `After ${b.name.split(" · ")[0]}`,
+              request: {
+                kind: "video",
+                model: b.request.model,
+                refs: [{ block: b.id, part: "last" }],
+              },
+              takes: [],
+              effects: [],
+            },
+          }),
+      },
+      "-",
+      del,
+    ],
+  };
+}
+
+/** Several blocks: run them, move, effects, duplicate, delete. */
+export function multiMenu(a: Act, ids: string[]): { title: string; items: Item[] } {
+  const bs = ids.map((id) => blockById(a.doc, id)).filter((b): b is Block => !!b);
+  const runnable = bs.filter((b) => !audio(b.kind));
+  const lanes = new Set(bs.map((b) => b.lane));
+  return {
+    title: `${bs.length} blocks`,
+    items: [
+      {
+        label: `Run ${runnable.length}`,
+        icon: WandSparkles,
+        keys: estText(
+          runnable.reduce((n, b) => n + EST_S[b.kind], 0),
+          true,
+        ),
+        off: runnable.length ? undefined : NOT_YET,
+        onPick: () => a.run(runnable.map((b) => b.id)),
+      },
+      {
+        label: "Move to lane",
+        icon: ArrowDownUp,
+        off: lanes.size > 1 ? "Pick blocks from one lane" : undefined,
+        items: laneItems(a, ids, [...lanes][0]),
+      },
+      { label: "Add effect", icon: Blend, items: effectItems(a, ids) },
+      {
+        label: "Duplicate",
+        icon: Copy,
+        keys: mod("D"),
+        onPick: () => a.edit({ op: "duplicate", ids }),
+      },
+      "-",
+      {
+        label: `Delete ${bs.length}`,
+        icon: Trash2,
+        keys: "⌫",
+        danger: true,
+        onPick: () => a.edit({ op: "delete", ids, mode: a.mode }),
+      },
+    ],
+  };
+}
+
+const KINDS: Kind[] = ["video", "image", "voice", "music", "sound", "frame"];
+const KIND_LABEL: Record<Kind, string> = {
+  video: "Video",
+  image: "Image",
+  voice: "Voice",
+  music: "Music",
+  sound: "Sound",
+  frame: "Board frame",
+};
+
+/** A lane header's menu. */
+export function laneMenu(a: Act, lane: Lane): { title: string; items: Item[] } {
+  const d = a.doc;
+  const bs = inLane(d, lane.id);
+  const i = d.lanes.indexOf(lane);
+  const runnable = bs.filter((b) => !audio(b.kind));
+  return {
+    title: `Lane · ${lane.name}`,
+    items: [
+      { label: "Rename", icon: PencilLine, onPick: () => a.rename(lane.id) },
+      {
+        label: "Add here",
+        icon: Plus,
+        items: KINDS.map((k) => ({
+          label: KIND_LABEL[k],
+          icon: kindIcon(k),
+          off: audio(k) ? NOT_YET : undefined,
+          onPick: () => a.add(lane.id, a.playhead, k),
+        })),
+      },
+      {
+        label: "Run lane",
+        icon: WandSparkles,
+        keys: runnable.length
+          ? estText(
+              runnable.reduce((n, b) => n + EST_S[b.kind], 0),
+              true,
+            )
+          : undefined,
+        off: !bs.length ? "Nothing on it" : runnable.length ? undefined : NOT_YET,
+        onPick: () => a.run(runnable.map((b) => b.id)),
+      },
+      {
+        label: "Default kind",
+        icon: Shapes,
+        items: KINDS.map((k) => ({
+          label: KIND_LABEL[k],
+          checked: (lane.kind ?? defaultKind(lane)) === k,
+          onPick: () => a.edit({ op: "lane", id: lane.id, set: { kind: k } }),
+        })),
+      },
+      "-",
+      {
+        label: "Move up",
+        icon: ArrowUp,
+        off: i > 0 ? undefined : "It's the first lane",
+        onPick: () => a.edit({ op: "lane_move", id: lane.id, by: -1 }),
+      },
+      {
+        label: "Move down",
+        icon: ArrowDown,
+        off: i < d.lanes.length - 1 ? undefined : "It's the last lane",
+        onPick: () => a.edit({ op: "lane_move", id: lane.id, by: 1 }),
+      },
+      {
+        label: "Hide",
+        icon: EyeOff,
+        onPick: () => a.edit({ op: "lane", id: lane.id, set: { hidden: true } }),
+      },
+      {
+        label: "New lane below",
+        icon: ListPlus,
+        onPick: () =>
+          a.edit({ op: "lane_add", after: lane.id, lane: { name: nextLaneName(d), role: "free" } }),
+      },
+      "-",
+      {
+        label: "Delete lane",
+        icon: Trash2,
+        keys: bs.length ? `${bs.length} block${bs.length === 1 ? "" : "s"}` : undefined,
+        danger: true,
+        onPick: () => a.edit({ op: "lane_delete", id: lane.id }),
+      },
+    ],
+  };
+}
+
+/** The kind Add picks first on a lane (plan 39 45.14 point 6: the role only picks the default). */
+export function defaultKind(lane: Lane): Kind {
+  if (lane.kind) return lane.kind;
+  return (
+    {
+      storyboard: "frame",
+      shots: "video",
+      voice: "voice",
+      music: "music",
+      sound: "sound",
+      free: "video",
+    } as const
+  )[lane.role];
+}
+
+/** "Lane 8": the next free lane's name. */
+export function nextLaneName(d: Doc): string {
+  let n = d.lanes.length + 1;
+  while (d.lanes.some((l) => l.name === `Lane ${n}`)) n++;
+  return `Lane ${n}`;
+}
+
+/** The empty lane at a time. */
+export function emptyMenu(a: Act, lane: Lane, at: number): { title: string; items: Item[] } {
+  return {
+    title: `${lane.name} · at ${clock(at, a.doc.target.fps, true)}`,
+    items: [
+      ...KINDS.map((k) => ({
+        label: `Add ${KIND_LABEL[k]}`,
+        icon: kindIcon(k),
+        off: audio(k) ? NOT_YET : undefined,
+        onPick: () => a.add(lane.id, at, k),
+      })),
+      "-",
+      {
+        label: "Paste",
+        icon: ClipboardPaste,
+        keys: mod("V"),
+        off: a.paste ? undefined : "Copy a block first",
+        onPick: () => a.paste?.(lane.id, at),
+      },
+      { label: "From Gallery", icon: Images, off: SOON.import },
+      { label: "Playhead here", icon: LocateFixed, onPick: () => a.seek(at) },
+    ],
+  };
+}
+
+/** An asset in the Assets row. */
+export function assetMenu(a: Act, x: Asset): { title: string; items: Item[] } {
+  const n = usedIn(a.doc, x.id).length;
+  return {
+    title: `@${x.handle}`,
+    items: [
+      { label: "Open", icon: Maximize2, keys: "↵", off: SOON.asset },
+      {
+        label: "Show where used",
+        icon: Eye,
+        keys: String(n),
+        off: n ? undefined : "Not used yet",
+        onPick: () => a.used(x.id),
+      },
+      { label: `Copy @${x.handle}`, icon: AtSign, onPick: () => a.copyText(`@${x.handle}`) },
+      { label: "Make views", icon: Images, off: SOON.asset },
+      { label: "Voice", icon: Mic, off: SOON.asset },
+      { label: "Import a view", icon: ImageUp, off: SOON.import },
+      { label: "Rename", icon: PencilLine, off: SOON.asset },
+      "-",
+      {
+        label: "Delete",
+        icon: Trash2,
+        keys: n ? `used in ${n}` : undefined,
+        danger: true,
+        onPick: () => a.edit({ op: "asset_delete", id: x.id }),
+      },
+    ],
+  };
+}
+
+const JOIN_KINDS: { kind: TransitionKind; label: string; icon: LucideIcon; note?: string }[] = [
+  { kind: "cut", label: "Cut", icon: icon(CutIcon) },
+  { kind: "dissolve", label: "Dissolve", icon: icon(DissolveIcon) },
+  { kind: "fade", label: "Fade", icon: icon(FadeIcon) },
+  { kind: "wipe", label: "Wipe", icon: icon(WipeIcon) },
+  { kind: "morph", label: "Morph", icon: icon(MorphIcon), note: "generated" },
+];
+const DEFAULT_S: Record<TransitionKind, number> = {
+  cut: 0,
+  dissolve: 0.5,
+  fade: 1,
+  wipe: 0.5,
+  morph: 1,
+};
+
+/** A join's name: "Join · Shot 2 → Shot 3", "Start · Shots". */
+export function joinTitle(d: Doc, j: Join): string {
+  const short = (id: string) => blockById(d, id)?.name.split(" · ")[0] ?? "?";
+  if (j.between) return `Join · ${short(j.between[0])} → ${short(j.between[1])}`;
+  return `${j.start ? "Start" : "End"} · ${laneOf(d, j.lane)?.name}`;
+}
+
+/** A join (a transition point): its kind, its length, Remove (a cut). A lane's start or end: Fade or none. */
+export function joinMenu(a: Act, j: Join): { title: string; items: Item[] } {
+  const fps = a.doc.target.fps;
+  const where = j.between ? { between: j.between } : j.start ? { start: j.start } : { end: j.end };
+  const set = (kind: TransitionKind, length?: number) =>
+    a.edit({ op: "transition", ...where, kind, ...(length ? { length } : {}) });
+  const kinds = j.between ? JOIN_KINDS : JOIN_KINDS.filter((k) => k.kind === "fade");
+  return {
+    title: joinTitle(a.doc, j),
+    items: [
+      ...kinds.map((k) => ({
+        label: k.label,
+        icon: k.icon,
+        checked: j.kind === k.kind,
+        keys:
+          k.kind === "cut"
+            ? undefined
+            : (k.note ?? secs(j.kind === k.kind ? j.length : DEFAULT_S[k.kind] * fps, fps)),
+        onPick: () => set(k.kind),
+      })),
+      "-",
+      {
+        label: "Length",
+        icon: Timer,
+        off: j.kind === "cut" ? "A cut has no length" : undefined,
+        items: LENGTHS.map((s) => ({
+          label: `${s} s`,
+          checked: j.length === Math.round(s * fps),
+          onPick: () => set(j.kind, Math.round(s * fps)),
+        })),
+      },
+      {
+        label: "Remove",
+        icon: Trash2,
+        keys: j.between ? "makes a Cut" : undefined,
+        off: j.kind === "cut" ? "It's a cut" : undefined,
+        onPick: () => set("cut"),
+      },
+    ],
+  };
+}
+
+/** A tie mark on a voice, music or sound block. */
+export function tieMenu(a: Act, link: Link): { title: string; items: Item[] } {
+  const b = blockById(a.doc, link.block)!;
+  const to = link.to.map((id) => blockById(a.doc, id)).filter((x): x is Block => !!x);
+  const short = (x: Block) => x.name.split(" · ")[0];
+  const target =
+    to.length > 1 ? `${short(to[0])}–${short(to.at(-1)!).replace(/^\D+/, "")}` : short(to[0]);
+  return {
+    title: `Tie · ${short(b)} → ${target}`,
+    items: [
+      { label: `Go to ${short(to[0])}`, icon: LocateFixed, onPick: () => a.open(to[0].id) },
+      { label: "Tie to", icon: Link2, items: tieItems(a, b) },
+      {
+        label: to.length > 1 ? "Fit to shots" : "Fit to shot",
+        icon: MoveHorizontal,
+        onPick: () => fit(a, b),
+      },
+      "-",
+      { label: "Unlink", icon: Unlink, onPick: () => a.edit({ op: "unlink", block: b.id }) },
+    ],
+  };
+}
+
+/** An effect badge. Edit shows the block's effects in the side panel. */
+export function effectMenu(a: Act, b: Block, index: number): { title: string; items: Item[] } {
+  const e = b.effects[index];
+  const others = a.sel.filter((id) => id !== b.id);
+  return {
+    title: e.name,
+    items: [
+      { label: "Edit", icon: PencilLine, onPick: () => a.open(b.id) },
+      {
+        label: e.off ? "Turn on" : "Turn off",
+        icon: Power,
+        onPick: () => a.edit({ op: "effect_set", id: b.id, index, effect: { ...e, off: !e.off } }),
+      },
+      {
+        label: "Copy to selected",
+        icon: Copy,
+        off: others.length ? undefined : "Select other blocks first",
+        onPick: () => a.edit({ op: "effect", ids: others, effect: e }),
+      },
+      "-",
+      {
+        label: "Remove",
+        icon: Trash2,
+        danger: true,
+        onPick: () => a.edit({ op: "effect_set", id: b.id, index, effect: null }),
+      },
+    ],
+  };
+}
+
+/** A snapshot: a named copy of the board to come back to (kept in this browser until phase C keeps revisions). */
+export function snapshotMenu(
+  name: string,
+  on: { restore: () => void; rename: () => void; remove: () => void },
+): { title: string; items: Item[] } {
+  return {
+    title: name,
+    items: [
+      { label: "Restore", icon: RotateCcw, onPick: on.restore },
+      { label: "Compare with now", icon: GitCompare, off: SOON.compare },
+      { label: "Rename", icon: PencilLine, onPick: on.rename },
+      "-",
+      { label: "Delete", icon: Trash2, danger: true, onPick: on.remove },
+    ],
+  };
+}

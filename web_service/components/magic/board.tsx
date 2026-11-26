@@ -1,0 +1,1245 @@
+"use client";
+// The Magic page (plan 39 phase B, MagicBoard frames 1, 2, 4, 5, 10, 11): the board name and its tools, the Assets
+// row, the lanes, the floating player and the side panel. Phase B keeps boards in this browser (localStorage) with
+// fake takes; every edit is a named op (lib/magic.ts), so phase C sends the same ops to studio.
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { ChevronDown, Clock3, Lock, Plus, SlidersHorizontal, Trash2 } from "lucide-react";
+import { mod, openMenu, type Item } from "@/components/context-menu";
+import { ErrorNote } from "@/components/kit";
+import { AddDialog, type AddAt } from "@/components/magic/add";
+import { KIND_NAME, LinkGlyph } from "@/components/magic/icons";
+import { AssetsRow, Lanes, StatusChip, refText } from "@/components/magic/lanes";
+import {
+  EFFECTS,
+  NOT_YET,
+  blockMenu,
+  effectMenu,
+  nextLaneName,
+  snapshotMenu,
+  type Act,
+} from "@/components/magic/menus";
+import { Player, type PlayerApi } from "@/components/magic/player";
+import {
+  apply,
+  clock,
+  commit,
+  duration,
+  end,
+  everywhere,
+  history,
+  inLane,
+  inputsOf,
+  overruns,
+  redo,
+  secs,
+  shown,
+  statusOf,
+  undo,
+  type Block,
+  type Doc,
+  type History,
+  type Kind,
+  type Mode,
+  type Op,
+  type Takes,
+} from "@/lib/magic";
+import { EST_HOST, EST_S, artFor, emptyDoc, estText, sampleBoard } from "@/lib/magic-fixture";
+import "./magic.css";
+
+// ------------------------------------------------------------------------------------------------ this browser's boards
+
+type Snapshot = { id: string; name: string; doc: Doc; at: string };
+type Saved = { id: string; name: string; doc: Doc; takes: Takes; snapshots: Snapshot[] };
+type Store = { current: string; boards: Saved[] };
+const KEY = "helm.magic.boards";
+const PANEL = "magic-side-panel";
+
+/** The store with the open board's document and takes written in. */
+const withBoard = (s: Store, doc: Doc, takes: Takes): Store => ({
+  ...s,
+  boards: s.boards.map((b) => (b.id === s.current ? { ...b, doc, takes } : b)),
+});
+const newId = () => Math.random().toString(36).slice(2, 10);
+function sample(): Saved {
+  const s = sampleBoard();
+  return { id: newId(), name: s.name, doc: s.doc, takes: s.takes, snapshots: [] };
+}
+/** The boards kept in this browser; the first visit gets the sample board. */
+export function loadStore(): Store {
+  try {
+    const raw = localStorage.getItem(KEY);
+    const s = raw ? (JSON.parse(raw) as Store) : null;
+    if (s?.boards?.length) return s;
+  } catch {
+    /* unreadable: start again */
+  }
+  const b = sample();
+  return { current: b.id, boards: [b] };
+}
+function saveStore(s: Store) {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(s));
+  } catch {
+    /* full or blocked: the board still works for this visit */
+  }
+}
+const noSub = () => () => undefined;
+const readPanel = () => {
+  try {
+    return localStorage.getItem(PANEL) !== "0";
+  } catch {
+    return true;
+  }
+};
+/** The board's phone layout (the dock's own breakpoint). */
+const phoneQuery = "(max-width: 47.99rem)";
+const subPhone = (cb: () => void) => {
+  const m = matchMedia(phoneQuery);
+  m.addEventListener("change", cb);
+  return () => m.removeEventListener("change", cb);
+};
+
+/** Runs (fake in phase B) move on every tick; a take is done at 100. */
+const TICK_MS = 400;
+const STEP = 9;
+
+// ------------------------------------------------------------------------------------------------ the page
+
+export function MagicBoard({ initial }: { initial?: Store }) {
+  const [store, setStore] = useState<Store>(() => initial ?? loadStore());
+  const saved = store.boards.find((b) => b.id === store.current) ?? store.boards[0];
+  const [h, setH] = useState<History>(() => history(saved.doc));
+  const [takes, setTakes] = useState<Takes>(saved.takes);
+  const doc = h.now;
+  const fps = doc.target.fps;
+
+  // persist: the board's document and takes are written back as they change
+  useEffect(() => {
+    saveStore(withBoard(store, h.now, takes));
+  }, [store, h.now, takes]);
+  const switchTo = (id: string, next?: Store) => {
+    const s = withBoard(next ?? store, h.now, takes);
+    const b = s.boards.find((x) => x.id === id)!;
+    const n = { ...s, current: id };
+    setStore(n);
+    saveStore(n);
+    setH(history(b.doc));
+    setTakes(b.takes);
+    setSel([]);
+  };
+
+  const [sel, setSel] = useState<string[]>([]);
+  const [mode, setMode] = useState<Mode>("insert");
+  const [snapOn, setSnapOn] = useState(true);
+  const [pps, setPps] = useState(26);
+  const [viewW, setViewW] = useState(0);
+  const [frame, setFrame] = useState(Math.round(10.5 * 24));
+  const [adding, setAdding] = useState<AddAt | null>(null);
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [usedAsset, setUsedAsset] = useState<string | null>(null);
+  const [kept, setKept] = useState<string[]>([]);
+  const [said, setSaid] = useState("");
+  const [error, setError] = useState("");
+  const [clip, setClip] = useState<Block[] | null>(null);
+  const player = useRef<PlayerApi | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const phone = useSyncExternalStore(
+    subPhone,
+    () => matchMedia(phoneQuery).matches,
+    () => false,
+  );
+  // the side panel: open by default, a closed one remembered in this browser ("0"), as on Create and the Timeline
+  const storedPanel = useSyncExternalStore(noSub, readPanel, () => true);
+  const [panelSet, setPanelSet] = useState<boolean | null>(null);
+  const panel = panelSet ?? storedPanel;
+  const setPanel = (on: boolean) => {
+    setPanelSet(on);
+    try {
+      localStorage.setItem(PANEL, on ? "1" : "0");
+    } catch {}
+  };
+
+  /** One edit (one op, or several in order): applied all or nothing, one step of undo; a refusal says why. */
+  const edit = useCallback(
+    (ops: Op | Op[]) => {
+      const list = Array.isArray(ops) ? ops : [ops];
+      let d = h.now;
+      for (const op of list) {
+        const r = apply(d, op);
+        if ("error" in r) {
+          setError(r.error);
+          return false;
+        }
+        d = r.doc;
+      }
+      setError("");
+      setH(commit(h, d));
+      setSaid(describe(list[0], h.now));
+      // what the op removed leaves the selection
+      setSel((s) => s.filter((id) => d.blocks.some((b) => b.id === id)));
+      return true;
+    },
+    [h],
+  );
+
+  /** A run (fake in phase B): a take per block, running, made from the block's inputs now. A studio write: it reaches
+   * every document in the history, so Undo never takes a take back. */
+  const run = useCallback(
+    (ids: string[]) => {
+      const fresh: Takes = {};
+      for (const id of ids) {
+        const b = h.now.blocks.find((x) => x.id === id);
+        if (!b || b.kind === "music" || b.kind === "sound") continue;
+        const tid = `${b.id}-t${newId()}`;
+        fresh[tid] = {
+          id: tid,
+          block: b.id,
+          status: "running",
+          progress: 0,
+          inputs: inputsOf(h.now, b, takes),
+          seed: 40 + b.takes.length + 2,
+          art: artFor(`${b.name}${b.takes.length}`, b.kind),
+        };
+      }
+      const byBlock = Object.values(fresh);
+      if (!byBlock.length) return;
+      setTakes((t) => ({ ...t, ...fresh }));
+      setH((x) =>
+        everywhere(x, (d) => ({
+          ...d,
+          blocks: d.blocks.map((b) => {
+            const add = byBlock.filter((t) => t.block === b.id).map((t) => t.id);
+            return add.length ? { ...b, takes: [...b.takes, ...add] } : b;
+          }),
+        })),
+      );
+      setSaid(`Running ${byBlock.length} block${byBlock.length > 1 ? "s" : ""}`);
+    },
+    [h.now, takes],
+  );
+  // fake runs move along, and finish
+  const running = Object.values(takes).some((t) => t.status === "running");
+  useEffect(() => {
+    if (!running) return;
+    const t = setInterval(
+      () =>
+        setTakes((all) =>
+          Object.fromEntries(
+            Object.entries(all).map(([id, t]) => {
+              if (t.status !== "running") return [id, t];
+              const p = (t.progress ?? 0) + STEP;
+              return [
+                id,
+                p >= 100 ? { ...t, status: "done", progress: 100 } : { ...t, progress: p },
+              ];
+            }),
+          ),
+        ),
+      TICK_MS,
+    );
+    return () => clearInterval(t);
+  }, [running]);
+
+  const seek = useCallback((f: number) => {
+    player.current?.seek(Math.max(0, f));
+  }, []);
+  const open = useCallback((id: string) => {
+    setSel([id]);
+    setPanel(true);
+    document.getElementById(`magic-side`)?.scrollTo?.({ top: 0 });
+  }, []);
+
+  const act: Act = useMemo(
+    () => ({
+      doc,
+      takes,
+      mode,
+      playhead: frame,
+      sel,
+      edit,
+      run,
+      select: setSel,
+      open,
+      add: (lane, at, kind) => setAdding({ lane, at, kind }),
+      play: (from) => player.current?.play(from),
+      seek,
+      rename: setRenaming,
+      used: setUsedAsset,
+      paste: clip
+        ? (lane, at) => {
+            const lo = Math.min(...clip.map((b) => b.at));
+            edit(
+              clip.map((b) => ({
+                op: "add",
+                mode,
+                block: { ...b, id: undefined, lane, at: at + b.at - lo },
+              })),
+            );
+          }
+        : null,
+      copyText: (s) => void navigator.clipboard?.writeText(s).catch(() => undefined),
+    }),
+    [doc, takes, mode, frame, sel, edit, run, open, seek, clip],
+  );
+
+  // zoom: fit (the whole board across) up to 240 px a second, ×1.25 a step
+  const total = duration(doc);
+  const fitPps = viewW ? Math.max(2, (viewW - 24) / Math.max(5, (total + fps) / fps)) : 26;
+  const MAX_PPS = 240;
+  const lo = Math.min(fitPps, 26);
+  const clampZ = (p: number) => Math.min(MAX_PPS, Math.max(lo, p));
+  const zoomIn = (p: number) => clampZ(p * 1.25);
+  const zoomOut = (p: number) => clampZ(p * 0.8);
+  const fit = () => setPps(clampZ(fitPps));
+  // the keys (frame 1; the Timeline's where they mean the same)
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      const t = e.target instanceof Element ? e.target : null;
+      if (t?.closest("input, textarea, select, [contenteditable], dialog[open]")) return;
+      const cmd = e.metaKey || e.ctrlKey;
+      const k = e.key.toLowerCase();
+      let done = true;
+      if (cmd && k === "z") setH((x) => (e.shiftKey ? redo(x) : undo(x)));
+      else if (cmd && k === "y") setH(redo);
+      else if (cmd && k === "d" && sel.length) edit({ op: "duplicate", ids: sel });
+      else if (cmd && (k === "=" || k === "+")) setPps((p) => zoomIn(p));
+      else if (cmd && k === "-") setPps((p) => zoomOut(p));
+      else if (cmd && k === "c" && sel.length && !getSelection()?.toString())
+        setClip(doc.blocks.filter((b) => sel.includes(b.id)));
+      else if (cmd && k === "v" && clip) {
+        const lane = doc.blocks.find((b) => b.id === sel[0])?.lane ?? clip[0].lane;
+        act.paste?.(lane, frame);
+      } else if (cmd) done = false;
+      else if (e.shiftKey && k === "z") fit();
+      else if ((k === "delete" || k === "backspace") && sel.length)
+        edit({ op: "delete", ids: sel, mode });
+      else if (k === "s" && sel.length === 1) edit({ op: "split", id: sel[0], at: frame });
+      else if (k === " " && !t?.closest("button, [role=button]")) {
+        if (playing) player.current?.pause();
+        else player.current?.play();
+      } else if (k === "escape") {
+        setSel([]);
+        setUsedAsset(null);
+      } else done = false;
+      if (done) e.preventDefault();
+    };
+    addEventListener("keydown", key);
+    return () => removeEventListener("keydown", key);
+  });
+
+  const zPct = Math.round((Math.log(pps / lo) / Math.log(MAX_PPS / lo)) * 100) || 0;
+
+  const runnable = doc.blocks.filter((b) => b.kind !== "music" && b.kind !== "sound");
+  const boardEst = runnable.reduce((n, b) => n + EST_S[b.kind], 0);
+  const hiddenLanes = doc.lanes.filter((l) => l.hidden);
+  const over = overruns(doc).filter((o) => !kept.includes(o.block));
+  const one = sel.length === 1 ? doc.blocks.find((b) => b.id === sel[0]) : undefined;
+
+  const boardsMenu = (e: React.MouseEvent) =>
+    openMenu(e, {
+      title: "Boards",
+      items: [
+        ...store.boards.map((b) => ({
+          label: b.name,
+          checked: b.id === saved.id,
+          onPick: () => switchTo(b.id),
+        })),
+        "-",
+        {
+          label: "New board",
+          icon: Plus,
+          onPick: () => {
+            const b: Saved = {
+              id: newId(),
+              name: "Untitled board",
+              doc: emptyDoc(),
+              takes: {},
+              snapshots: [],
+            };
+            switchTo(b.id, { ...store, boards: [...store.boards, b] });
+          },
+        },
+        {
+          label: "Sample board",
+          onPick: () => {
+            const b = sample();
+            switchTo(b.id, { ...store, boards: [...store.boards, b] });
+          },
+        },
+        {
+          label: "Rename",
+          onPick: () => {
+            const name = prompt("Board name", saved.name)?.trim();
+            if (name)
+              setStore((s) => ({
+                ...s,
+                boards: s.boards.map((b) => (b.id === saved.id ? { ...b, name } : b)),
+              }));
+          },
+        },
+        "-",
+        {
+          label: "Delete board",
+          icon: Trash2,
+          danger: true,
+          off: store.boards.length > 1 ? undefined : "It's the only board",
+          onPick: () => {
+            const rest = store.boards.filter((b) => b.id !== saved.id);
+            switchTo(rest[0].id, { ...store, boards: rest });
+          },
+        },
+      ] as Item[],
+    });
+
+  const snapshots = saved.snapshots;
+  const setSnapshots = (f: (s: Snapshot[]) => Snapshot[]) =>
+    setStore((s) => {
+      const next = {
+        ...s,
+        boards: s.boards.map((b) => (b.id === saved.id ? { ...b, snapshots: f(b.snapshots) } : b)),
+      };
+      saveStore(next);
+      return next;
+    });
+
+  const addLane = () =>
+    edit({
+      op: "lane_add",
+      lane: {
+        name: doc.lanes.length ? nextLaneName(doc) : "Shots",
+        role: doc.lanes.length ? "free" : "shots",
+      },
+    });
+
+  return (
+    <>
+      <main
+        id="main"
+        className="mg relative flex min-w-0 flex-[999_1_560px] flex-col gap-3.5 px-3.5 pt-4 pb-5 md:px-5"
+      >
+        <h1 className="sr-only">Magic: {saved.name}</h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            aria-haspopup="menu"
+            onClick={boardsMenu}
+            className="flex h-10 items-center gap-2 rounded-[10px] bg-transparent px-3 font-display text-lg font-bold tracking-[0.02em]"
+          >
+            {saved.name}
+            <ChevronDown size={16} aria-hidden />
+          </button>
+          <span className="pill max-md:hidden">
+            {doc.target.width} × {doc.target.height} · {fps} fps · {clock(total, fps, true)}
+          </span>
+          <span className="grow" />
+          <button
+            type="button"
+            className="chip bevel rounded-[10px] bg-s4 max-md:hidden"
+            onClick={() => {
+              setSel([]);
+              setPanel(true);
+            }}
+          >
+            <Clock3 size={13} aria-hidden />
+            Snapshots{snapshots.length ? ` · ${snapshots.length}` : ""}
+          </button>
+          <button
+            type="button"
+            className="chip bevel rounded-[10px] bg-s4 max-md:hidden"
+            disabled
+            title="Comes with Send to Timeline"
+          >
+            Sends · 0
+          </button>
+          <button
+            type="button"
+            className="chip bevel rounded-[10px] bg-s4 max-md:hidden"
+            disabled={!h.past.length}
+            aria-keyshortcuts="Meta+Z Control+Z"
+            onClick={() => setH(undo)}
+          >
+            Undo
+          </button>
+          <button
+            type="button"
+            className="chip bevel rounded-[10px] bg-s4 max-md:hidden"
+            disabled={!h.future.length}
+            aria-keyshortcuts="Meta+Shift+Z Control+Shift+Z"
+            onClick={() => setH(redo)}
+          >
+            Redo
+          </button>
+          <button
+            type="button"
+            className="key flex h-12 flex-col items-center justify-center gap-px rounded-xl px-5 text-sm"
+            disabled
+            title="Comes once boards are kept in studio"
+          >
+            Send to Timeline
+            <small className="mono text-[11px] font-medium tracking-normal">new sequence</small>
+          </button>
+        </div>
+
+        {!doc.lanes.length ? (
+          <EmptyBoard onLane={addLane} />
+        ) : (
+          <div className="mb">
+            <div className="btools" role="toolbar" aria-label="Board tools">
+              <button
+                type="button"
+                className={`chip bevel ${snapOn ? "on" : ""}`}
+                aria-pressed={snapOn}
+                title="Snap to edges, the playhead and the ruler"
+                onClick={() => setSnapOn((x) => !x)}
+              >
+                <MagnetGlyph />
+                Snap
+              </button>
+              <div className="seg" role="group" aria-label="Place">
+                {(["insert", "overwrite"] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    aria-pressed={mode === m}
+                    title={
+                      m === "insert"
+                        ? "Insert pushes what's after along"
+                        : "Overwrite covers what's there (or hold Alt while dragging)"
+                    }
+                    onClick={() => setMode(m)}
+                  >
+                    {m === "insert" ? "Insert" : "Overwrite"}
+                  </button>
+                ))}
+              </div>
+              <button type="button" className="chip bevel" onClick={addLane}>
+                <Plus size={13} aria-hidden />
+                Lane
+              </button>
+              {hiddenLanes.length > 0 && (
+                <button
+                  type="button"
+                  className="chip bevel"
+                  onClick={(e) =>
+                    openMenu(e, {
+                      title: "Hidden lanes",
+                      items: hiddenLanes.map((l) => ({
+                        label: `Show ${l.name}`,
+                        onPick: () => edit({ op: "lane", id: l.id, set: { hidden: false } }),
+                      })),
+                    })
+                  }
+                >
+                  {hiddenLanes.length} hidden
+                </button>
+              )}
+              <button
+                type="button"
+                className="grid h-[30px] w-9 place-items-center rounded-[10px] bg-s4 aria-expanded:bg-s5 aria-expanded:shadow-[inset_0_0_0_1px_var(--a2)]"
+                aria-label="Side panel"
+                title="Side panel"
+                aria-expanded={panel}
+                aria-controls="magic-side"
+                onClick={() => setPanel(!panel)}
+              >
+                <SlidersHorizontal size={16} strokeWidth={1.75} aria-hidden />
+              </button>
+              <span className="bsep" />
+              <button
+                type="button"
+                className="chip bevel"
+                disabled={!runnable.length}
+                onClick={() =>
+                  run(runnable.filter((b) => statusOf(doc, b, takes).s !== "done").map((b) => b.id))
+                }
+                title="Runs every block that isn't done"
+              >
+                <Play10 />
+                Run board
+              </button>
+              {runnable.length > 0 && (
+                <span className="est" title="From your own recent runs of these models">
+                  <Clock3 size={13} aria-hidden />
+                  <b>{estText(boardEst)}</b> · {EST_HOST}
+                </span>
+              )}
+              <span className="grow" />
+              <div
+                role="group"
+                aria-label="Zoom"
+                className="tl-zf h-[34px]"
+                title="Zoom: ⌘ + mouse wheel or pinch zooms at the pointer · Shift + wheel scrolls across · ⇧Z fits the whole board"
+              >
+                <button
+                  type="button"
+                  aria-label="Zoom out"
+                  title="Zoom out (⌘−)"
+                  onClick={() => setPps(zoomOut)}
+                >
+                  <svg
+                    width="15"
+                    height="15"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    aria-hidden
+                  >
+                    <path d="M5 12h14" />
+                  </svg>
+                </button>
+                <input
+                  type="range"
+                  className="zr"
+                  aria-label="Zoom"
+                  min={0}
+                  max={100}
+                  value={zPct}
+                  style={{ "--z": `${zPct}%` } as React.CSSProperties}
+                  onChange={(e) => setPps(clampZ(lo * (MAX_PPS / lo) ** (+e.target.value / 100)))}
+                />
+                <button
+                  type="button"
+                  aria-label="Zoom in"
+                  title="Zoom in (⌘=)"
+                  onClick={() => setPps(zoomIn)}
+                >
+                  <svg
+                    width="15"
+                    height="15"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    aria-hidden
+                  >
+                    <path d="M5 12h14M12 5v14" />
+                  </svg>
+                </button>
+                <span className="zv" aria-live="polite">
+                  {clock(Math.round((viewW / pps) * fps), fps, true)} in view
+                </span>
+                <button
+                  type="button"
+                  className="fit"
+                  aria-label="Zoom to fit"
+                  title="Fit the whole board (⇧Z)"
+                  onClick={fit}
+                >
+                  <svg
+                    width="15"
+                    height="15"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    aria-hidden
+                  >
+                    <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
+                  </svg>
+                  Fit
+                </button>
+              </div>
+            </div>
+            {over.slice(0, 1).map((o) => {
+              const b = doc.blocks.find((x) => x.id === o.block)!;
+              const shot = doc.blocks.find((x) => x.id === o.shot)!;
+              const fitLen = end(shot) - b.at;
+              return (
+                <div key={o.block} className="warn" role="alert">
+                  <b>Doesn&apos;t fit</b>
+                  <span>
+                    {b.name} runs {secs(o.by, fps)} past {shot.name.split(" · ")[0]}
+                  </span>
+                  <span className="grow" />
+                  <button
+                    type="button"
+                    className="chip"
+                    disabled={fitLen < 1}
+                    onClick={() =>
+                      edit([
+                        { op: "trim", id: b.id, length: fitLen },
+                        {
+                          op: "effect",
+                          ids: [b.id],
+                          effect: {
+                            name: `Speed · ${+(b.length / fitLen).toFixed(2)}×`,
+                            params: { rate: +(b.length / fitLen).toFixed(2) },
+                          },
+                        },
+                      ])
+                    }
+                  >
+                    Speed up
+                  </button>
+                  <button
+                    type="button"
+                    className="chip"
+                    disabled={fitLen < 1}
+                    onClick={() => edit({ op: "trim", id: b.id, length: fitLen })}
+                  >
+                    Trim
+                  </button>
+                  <button
+                    type="button"
+                    className="chip"
+                    onClick={() => edit({ op: "unlink", block: b.id })}
+                  >
+                    Unlink
+                  </button>
+                  <button
+                    type="button"
+                    className="chip"
+                    onClick={() => setKept((k) => [...k, b.id])}
+                  >
+                    Keep
+                  </button>
+                </div>
+              );
+            })}
+            {error && <ErrorNote>{error}</ErrorNote>}
+            {doc.assets.length > 0 && <AssetsRow doc={doc} act={act} usedAsset={usedAsset} />}
+            <Lanes
+              doc={doc}
+              takes={takes}
+              act={act}
+              pps={pps}
+              frame={frame}
+              sel={sel}
+              snapOn={snapOn}
+              phone={phone}
+              renaming={renaming}
+              usedAsset={usedAsset}
+              onSelect={(id, addTo) =>
+                setSel((s) =>
+                  !id
+                    ? []
+                    : addTo
+                      ? s.includes(id)
+                        ? s.filter((x) => x !== id)
+                        : [...s, id]
+                      : [id],
+                )
+              }
+              onCommit={edit}
+              onSeek={seek}
+              onZoom={(p) => setPps(clampZ(p))}
+              onView={setViewW}
+              onRename={(lane, name) => {
+                setRenaming(null);
+                if (
+                  name !== null &&
+                  name.trim() &&
+                  name !== doc.lanes.find((l) => l.id === lane)?.name
+                )
+                  edit({ op: "lane", id: lane, set: { name: name.trim() } });
+              }}
+              onLaneClick={(lane, at) => {
+                setSel([]);
+                setAdding({ lane, at });
+              }}
+            />
+            <button
+              type="button"
+              className="chip bevel self-start"
+              style={{ marginLeft: phone ? 64 : 120 }}
+              onClick={addLane}
+            >
+              <Plus size={13} aria-hidden />
+              Lane
+            </button>
+            <Player
+              doc={doc}
+              takes={takes}
+              frame={frame}
+              onFrame={setFrame}
+              onPlaying={setPlaying}
+              apiRef={player}
+            />
+          </div>
+        )}
+        <p role="status" className="m-0 -mt-2 min-h-4 px-1 text-[12px] text-t2">
+          {said}
+        </p>
+        <AddDialog
+          doc={doc}
+          where={adding}
+          mode={mode}
+          onClose={() => setAdding(null)}
+          onAdd={(block, m) => {
+            const before = new Set(doc.blocks.map((b) => b.id));
+            const r = apply(doc, { op: "add", block, mode: m });
+            if ("doc" in r) {
+              edit({ op: "add", block, mode: m });
+              setSel(r.doc.blocks.filter((b) => !before.has(b.id)).map((b) => b.id));
+            } else setError(r.error);
+            setAdding(null);
+          }}
+        />
+      </main>
+
+      {panel && (
+        <aside
+          id="magic-side"
+          aria-label="Block details"
+          className="mg-side aside m-3.5 flex flex-[1_1_320px] flex-col gap-3.5 px-[18px] pt-4 pb-6 md:ml-0"
+        >
+          {one ? (
+            <BlockPanel key={one.id} d={doc} b={one} takes={takes} act={act} />
+          ) : sel.length > 1 ? (
+            <div className="flex flex-col gap-2">
+              <h2>{sel.length} blocks</h2>
+              <button
+                type="button"
+                className="act"
+                onClick={(e) =>
+                  openMenu(
+                    e,
+                    blockMenu(
+                      act,
+                      doc.blocks.find((b) => b.id === sel[0])!,
+                    ),
+                  )
+                }
+              >
+                Actions…
+              </button>
+              <button
+                type="button"
+                className="act text-bad"
+                onClick={() => edit({ op: "delete", ids: sel, mode })}
+              >
+                Delete {sel.length}
+              </button>
+            </div>
+          ) : (
+            <BoardPanel
+              d={doc}
+              takes={takes}
+              snapshots={snapshots}
+              onSave={() => {
+                const name = `Snapshot ${snapshots.length + 1}`;
+                setSnapshots((s) => [
+                  { id: newId(), name, doc: h.now, at: new Date().toISOString() },
+                  ...s,
+                ]);
+                setSaid(`Saved ${name}`);
+              }}
+              onRestore={(s) => {
+                setH((x) => commit(x, s.doc));
+                setSaid(`Restored ${s.name}`);
+              }}
+              onRename={(s) => {
+                const name = prompt("Snapshot name", s.name)?.trim();
+                if (name)
+                  setSnapshots((all) => all.map((x) => (x.id === s.id ? { ...x, name } : x)));
+              }}
+              onDelete={(s) => setSnapshots((all) => all.filter((x) => x.id !== s.id))}
+            />
+          )}
+        </aside>
+      )}
+    </>
+  );
+}
+
+/** The live region's line for an edit. */
+function describe(op: Op, d: Doc): string {
+  const name = (id: string) => d.blocks.find((b) => b.id === id)?.name ?? "block";
+  switch (op.op) {
+    case "add":
+      return `Added ${op.block.name}`;
+    case "move":
+      return `Moved ${op.ids.length > 1 ? `${op.ids.length} blocks` : name(op.ids[0])}`;
+    case "trim":
+      return `Trimmed ${name(op.id)}`;
+    case "delete":
+      return `Deleted ${op.ids.length > 1 ? `${op.ids.length} blocks` : name(op.ids[0])}`;
+    case "duplicate":
+      return "Duplicated";
+    case "split":
+      return `Split ${name(op.id)}`;
+    case "link":
+      return `Tied ${name(op.block)} to ${op.to.map(name).join(", ")}`;
+    case "unlink":
+      return `Unlinked ${name(op.block)}`;
+    case "transition":
+      return op.kind === "cut" ? "Made a cut" : `Set a ${op.kind}`;
+    default:
+      return "Changed the board";
+  }
+}
+
+const MagnetGlyph = () => (
+  <svg
+    width="13"
+    height="13"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2.2"
+    strokeLinecap="round"
+    aria-hidden
+  >
+    <path d="M6 4v8a6 6 0 0 0 12 0V4" />
+    <path d="M6 8h4M14 8h4" />
+  </svg>
+);
+const Play10 = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+    <path d="M7 4v16l13-8z" />
+  </svg>
+);
+
+/** A new board (frame 11): lanes in time; a brief (with the Assistant) or a lane. */
+function EmptyBoard({ onLane }: { onLane: () => void }) {
+  return (
+    <div className="mb items-center justify-center gap-3 py-16 text-center">
+      <h2 className="m-0 font-display text-xl font-bold">A new board</h2>
+      <p className="m-0 text-[13px] text-t2">Lanes in time. Start from a brief, or add a lane.</p>
+      <div className="flex flex-wrap justify-center gap-2">
+        <button
+          type="button"
+          className="chip bevel rounded-[10px] bg-s4"
+          disabled
+          title="Comes with the Assistant on boards"
+        >
+          Build from a brief
+        </button>
+        <button type="button" className="chip bevel rounded-[10px] bg-s4" onClick={onLane}>
+          <Plus size={13} aria-hidden />
+          Lane
+        </button>
+        <button
+          type="button"
+          className="chip bevel rounded-[10px] bg-s4"
+          disabled
+          title="Comes with the asset dialog"
+        >
+          <Plus size={13} aria-hidden />
+          Asset
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------------------------------------ the side panel
+
+/** One block's details (frame 1's side panel), with what to do when it failed or is out of date (frame 11). */
+function BlockPanel({ d, b, takes, act }: { d: Doc; b: Block; takes: Takes; act: Act }) {
+  const fps = d.target.fps;
+  const st = statusOf(d, b, takes);
+  const take = shown(b, takes);
+  const lane = d.lanes.find((l) => l.id === b.lane);
+  const nth = (id?: string) => (id ? b.takes.indexOf(id) + 1 : 0);
+  const runningTake = b.takes.map((id) => takes[id]).findLast((t) => t?.status === "running");
+  const tied = d.links.filter((l) => l.block === b.id || l.to.includes(b.id));
+  const into =
+    d.transitions.find((t) => t.between?.[1] === b.id) ??
+    d.transitions.find((t) => t.start === b.lane && inLane(d, b.lane)[0]?.id === b.id);
+  const out = d.transitions.find((t) => t.between?.[0] === b.id);
+  const jn = (t?: { kind: string; length: number }) =>
+    t ? `${t.kind[0].toUpperCase()}${t.kind.slice(1)} ${secs(t.length, fps)}` : "Cut";
+  const audio = b.kind === "music" || b.kind === "sound";
+  const short = (id: string) => d.blocks.find((x) => x.id === id)?.name ?? "";
+  return (
+    <>
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center gap-2">
+          <span className={`kb k-${b.kind}`}>{KIND_NAME[b.kind]}</span>
+          <h2>{b.name}</h2>
+        </div>
+        <span className="text-[12px] text-t2">
+          {lane?.name} ·{" "}
+          <span className="mono">
+            {clock(b.at, fps)} – {clock(end(b), fps)}
+          </span>
+        </span>
+      </div>
+      <div className="pic" style={{ background: take?.art ?? "var(--s2)" }}>
+        {runningTake ? (
+          <span className="mst run rounded-full bg-black/60 px-2 py-0.5">
+            Take {nth(runningTake.id)} · {Math.round(runningTake.progress ?? 0)}%
+          </span>
+        ) : take ? (
+          <span className="rounded-full bg-black/60 px-2 py-0.5 text-[11px] text-white">
+            Take {nth(take.id)}
+            {b.pinned === take.id ? " · pinned" : ""}
+          </span>
+        ) : (
+          <span className="text-[12px] text-t2">No take yet</span>
+        )}
+      </div>
+      {st.s === "failed" && (
+        <div className="warn" role="alert" style={{ boxShadow: "inset 0 0 0 1px #ff8a80" }}>
+          <span>
+            {b.name.split(" · ")[0]} failed · {st.error}
+          </span>
+          <span className="grow" />
+          <button type="button" className="chip" onClick={() => act.run([b.id])}>
+            Retry
+          </button>
+        </div>
+      )}
+      {st.s === "old" && (
+        <div className="warn" role="alert">
+          <span>{b.name.split(" · ")[0]} is out of date</span>
+          <span className="grow" />
+          <button type="button" className="chip" onClick={() => act.run([b.id])}>
+            Run
+          </button>
+          {take && b.pinned !== take.id && (
+            <button
+              type="button"
+              className="chip"
+              onClick={() => act.edit({ op: "block", id: b.id, set: { pinned: take.id } })}
+            >
+              Pin take
+            </button>
+          )}
+        </div>
+      )}
+      {(b.request.refs?.length ?? 0) > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <h3>Inputs</h3>
+          <div className="wrap">
+            {b.request.refs!.map((r, i) => (
+              <span
+                key={i}
+                className={`rc big ${"block" in r ? "lk" : r.asset === "mara" ? "ch" : ""}`}
+              >
+                {refText(d, r)}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+      {(b.request.prompt || b.request.line) && (
+        <p className="m-0 text-[13px] leading-[18px] text-t1b">
+          {b.request.line ? `"${b.request.line}"` : b.request.prompt}
+        </p>
+      )}
+      <div className="kv">
+        <div>
+          <span>Model</span>
+          <b>{b.request.model ?? "Not picked"}</b>
+        </div>
+        <div>
+          <span>Length</span>
+          <b className="mono">{secs(b.length, fps)}</b>
+        </div>
+        {lane?.role === "shots" && (
+          <>
+            <div>
+              <span>In</span>
+              <b>{jn(into)}</b>
+            </div>
+            <div>
+              <span>Out</span>
+              <b>{jn(out)}</b>
+            </div>
+          </>
+        )}
+        <div>
+          <span>Status</span>
+          <b>
+            <StatusChip d={d} b={b} takes={takes} />
+          </b>
+        </div>
+      </div>
+      {tied.length > 0 && (
+        <div className="flex flex-col gap-1.5">
+          <h3>Tied</h3>
+          {tied.map((l) => {
+            const other = l.block === b.id ? l.to[0] : l.block;
+            const x = d.blocks.find((y) => y.id === other)!;
+            return (
+              <div key={l.block} className="nr">
+                <span className="lkm" aria-hidden>
+                  <LinkGlyph />
+                </span>
+                <span className={`kb k-${x.kind}`}>{KIND_NAME[x.kind]}</span>
+                {l.block === b.id
+                  ? `${x.name}${l.to.length > 1 ? ` +${l.to.length - 1}` : ""}`
+                  : x.name}
+                <span className="mono">
+                  {l.block === b.id
+                    ? "moves with it"
+                    : l.to.length > 1
+                      ? `${short(l.to[0]).split(" · ")[0]}–${short(l.to.at(-1)!).split(" ")[1]}`
+                      : "moves with it"}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <div className="flex flex-col gap-1.5">
+        <h3>Effects</h3>
+        <div className="wrap">
+          {b.effects.map((e, i) => (
+            <button
+              key={i}
+              type="button"
+              className={`fx ${e.off ? "off" : ""}`}
+              style={{ fontSize: 11, lineHeight: "22px", padding: "0 9px" }}
+              onClick={(ev) => openMenu(ev, effectMenu(act, b, i))}
+              onContextMenu={(ev) => openMenu(ev, effectMenu(act, b, i))}
+            >
+              {e.name}
+            </button>
+          ))}
+          <button
+            type="button"
+            className="chip bevel h-[30px] rounded-[10px] bg-s4 px-2.5 text-[12px]"
+            onClick={(e) =>
+              openMenu(e, {
+                title: "Add effect",
+                items: EFFECTS.map((x) => ({
+                  label: x.name,
+                  onPick: () => act.edit({ op: "effect", ids: [b.id], effect: x }),
+                })),
+              })
+            }
+          >
+            <Plus size={13} aria-hidden />
+            Effect
+          </button>
+        </div>
+      </div>
+      <button type="button" className="act" disabled title="Comes with the block dialog">
+        <Lock size={13} className="mr-2 text-t2" aria-hidden />
+        Open
+      </button>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          className="chip bevel flex-1 justify-center rounded-[10px] bg-s4"
+          disabled={audio}
+          title={audio ? NOT_YET : undefined}
+          onClick={() => act.run([b.id])}
+        >
+          Run
+        </button>
+        <button
+          type="button"
+          className="chip bevel flex-1 justify-center rounded-[10px] bg-s4"
+          disabled={audio}
+          title={audio ? NOT_YET : undefined}
+          onClick={() =>
+            act.run(
+              inLane(d, b.lane)
+                .filter((x) => x.at <= b.at)
+                .map((x) => x.id),
+            )
+          }
+        >
+          Run up to here
+        </button>
+      </div>
+      {!audio && (
+        <span className="est" title="From your own recent runs of this model">
+          <Clock3 size={13} aria-hidden />
+          <b>{estText(EST_S[b.kind as Kind])}</b> · {EST_HOST}
+        </span>
+      )}
+      <p className="m-0 text-[11px] text-t2">
+        {mod("D")} duplicates · S splits at the playhead · ⌫ deletes
+      </p>
+    </>
+  );
+}
+
+/** Nothing selected: the board in numbers and its snapshots (frame 11), kept in this browser for now. */
+function BoardPanel({
+  d,
+  takes,
+  snapshots,
+  onSave,
+  onRestore,
+  onRename,
+  onDelete,
+}: {
+  d: Doc;
+  takes: Takes;
+  snapshots: Snapshot[];
+  onSave: () => void;
+  onRestore: (s: Snapshot) => void;
+  onRename: (s: Snapshot) => void;
+  onDelete: (s: Snapshot) => void;
+}) {
+  const fps = d.target.fps;
+  const by = (s: string) => d.blocks.filter((b) => statusOf(d, b, takes).s === s).length;
+  return (
+    <>
+      <h2>Board</h2>
+      <div className="kv">
+        <div>
+          <span>Lanes</span>
+          <b>{d.lanes.length}</b>
+        </div>
+        <div>
+          <span>Blocks</span>
+          <b>{d.blocks.length}</b>
+        </div>
+        <div>
+          <span>Length</span>
+          <b className="mono">{clock(duration(d), fps, true)}</b>
+        </div>
+        <div>
+          <span>Out of date</span>
+          <b>{by("old")}</b>
+        </div>
+      </div>
+      <p className="m-0 text-[12px] text-t2">Select a block to see its details.</p>
+      <div className="flex items-center gap-2">
+        <h3 className="mr-auto">Snapshots · {snapshots.length}</h3>
+        <button
+          type="button"
+          className="chip bevel h-[30px] rounded-[10px] bg-s4 px-2.5 text-[12px]"
+          onClick={onSave}
+        >
+          <Plus size={13} aria-hidden />
+          Save snapshot
+        </button>
+      </div>
+      {snapshots.map((s) => (
+        <div
+          key={s.id}
+          className="nr"
+          onContextMenu={(e) =>
+            openMenu(
+              e,
+              snapshotMenu(s.name, {
+                restore: () => onRestore(s),
+                rename: () => onRename(s),
+                remove: () => onDelete(s),
+              }),
+            )
+          }
+        >
+          <span className="min-w-0 grow truncate">{s.name}</span>
+          <span className="mono">
+            {new Date(s.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          </span>
+          <button
+            type="button"
+            className="chip h-7 rounded-[9px] bg-s4 px-2.5 text-[12px]"
+            onClick={() => onRestore(s)}
+          >
+            Restore
+          </button>
+        </div>
+      ))}
+      {snapshots.length > 0 && (
+        <p className="m-0 text-[11px] text-t2">
+          Restore makes a new step you can undo; nothing is lost.
+        </p>
+      )}
+    </>
+  );
+}
