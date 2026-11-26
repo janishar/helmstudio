@@ -120,6 +120,7 @@ export function display(f: Field, raw: Raw): { label: string; value: string } {
   const label = f.param.label ?? f.param.name;
   const v = String(raw);
   if (f.model && f.param.name === "variant") return { label: "Model", value: pretty(v) };
+  if (f.param.type !== "enum" && isAuto(f.param, raw)) return { label, value: "Auto" };
   const t = f.nodeTitle.toLowerCase();
   const l = label.toLowerCase();
   if (l.endsWith(" " + t) && f.param.type === "enum")
@@ -127,6 +128,27 @@ export function display(f: Field, raw: Raw): { label: string; value: string } {
   // a whole float keeps one decimal, so it reads as a float ("CFG 3.0", docs/mock/VideoSource.dc.html)
   if (f.param.type === "float" && /^-?\d+$/.test(v)) return { label, value: `${v}.0` };
   return { label, value: f.param.type === "enum" ? optionText(f.param, v, f.kind) : v };
+}
+
+/** API 1.79: an `auto: true` number at 0 (the model picks it), or an enum at its `auto` value. */
+export const isAuto = (p: Param, raw: Raw) =>
+  ((p.type === "int" || p.type === "float") &&
+    p.auto === true &&
+    String(raw) !== "" &&
+    Number(raw) === 0) ||
+  (p.type === "enum" && raw === "auto");
+
+/** A music or sound chip's text (docs/mock/CreateMusicSound.dc.html): Auto, a length as a clock ("2:10"), a tempo
+ * "90 BPM", an enum's option. */
+export function chipText(f: Field, raw: Raw): string {
+  const p = f.param;
+  if (isAuto(p, raw)) return "Auto";
+  if (p.type === "float" && p.name === "seconds") {
+    const n = Math.round(Number(raw));
+    return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, "0")}`;
+  }
+  if (p.name === "bpm") return `${raw} BPM`;
+  return display(f, raw).value;
 }
 
 /** API 1.39 (contracts/README.md, Video: Distilled actions): why enum option `o` of field `f` cannot be picked now,
@@ -464,6 +486,8 @@ export function presetHelp(
  * field); `scope` holds the fields an expression may name (every field of the workflow: a placed field's `when` may
  * read an unplaced one, Qwen3-TTS style reads model.variant). Hidden fields are neither shown nor sent. */
 export function visible(fs: Field[], raws: Record<string, Raw>, scope: Field[] = fs): Field[] {
+  // a bare name is a param of the same node (as in rules: the lyrics' `instrumental == false`)
+  const getIn = (node: string) => (ref: string) => get(ref.includes(".") ? ref : `${node}.${ref}`);
   const get = (ref: string) => {
     const f = scope.find((x) => x.key === ref);
     if (!f) return undefined;
@@ -473,7 +497,7 @@ export function visible(fs: Field[], raws: Record<string, Raw>, scope: Field[] =
   return fs.filter((f) => {
     if (!f.param.when) return true;
     try {
-      return !!evaluate(f.param.when, get);
+      return !!evaluate(f.param.when, getIn(f.node));
     } catch {
       return true;
     }

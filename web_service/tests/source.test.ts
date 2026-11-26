@@ -18,10 +18,17 @@ import {
   itemRuleErrors,
   readValue,
   visible,
+  chipText,
+  isAuto,
 } from "@/lib/workflow";
 import {
+  actionOffers,
   actionSlot,
   audioMap,
+  audioSpanEdge,
+  rangeText,
+  soundActions,
+  videoOf,
   estimateLength,
   extendMap,
   familyGrid,
@@ -343,5 +350,72 @@ describe("the form of a template with media inputs", () => {
       "retake.span": { start: 0, end: 2.0416666666666665 },
     };
     expect(buildInputs(retake, rawsFrom(retake, inputs)).inputs).toEqual(inputs);
+  });
+});
+
+describe("music and sound takes (plan 38, docs/mock/CreateMusicSound.dc.html)", () => {
+  const offer = (action: string, family: string) =>
+    ({ workflow_id: `${family}-${action}`, title: family, action, family }) as S<"TakeOffer">;
+  it("names the strip's edits by class and picks the take's own family's offer first", () => {
+    expect(soundActions("music")).toEqual(["Repaint", "Cover", "Extend"]);
+    expect(soundActions("sound")).toEqual(["Repaint", "Vary", "Extend"]);
+    const by = actionOffers(
+      [offer("Repaint", "echo"), offer("Repaint", "ace-step"), offer("Extend", "echo")],
+      soundActions("music"),
+      "ace-step",
+    );
+    expect(by.Repaint?.family).toBe("ace-step");
+    expect(by.Cover).toBeUndefined();
+    expect(by.Extend?.family).toBe("echo");
+  });
+  it("reads a Repaint range as the board does and keeps its edges in the song, to the ms", () => {
+    expect(rangeText(48, 65)).toBe("0:48 – 1:05 · 17 s");
+    const v = { start: 10, end: 20 };
+    expect(audioSpanEdge(v, "start", 25, 130)).toEqual({ start: 19.5, end: 20 });
+    expect(audioSpanEdge(v, "end", 200, 130)).toEqual({ start: 10, end: 130 });
+    expect(audioSpanEdge(v, "start", 3.14159, 130)).toEqual({ start: 3.142, end: 20 });
+  });
+  it("finds the video a sound was made from (Save with the video), none for a sound from words", () => {
+    const w = {
+      nodes: { foley: { kind: "echo/foley" } },
+      node_schemas: {
+        "echo/foley": { params: [{ name: "source", type: "media", accepts: ["video"] }] },
+      },
+    } as unknown as S<"Workflow">;
+    const made = (inputs: Record<string, unknown>) =>
+      ({ made_with: { inputs } }) as unknown as S<"Take">;
+    expect(videoOf(made({ "foley.source": { take_id: "v1" } }), w)).toBe("v1");
+    expect(videoOf(made({}), w)).toBeUndefined();
+    expect(videoOf(made({ "foley.source": { take_id: "v1" } }), undefined)).toBeUndefined();
+  });
+  it("shows an auto value as Auto and a song's length as a clock", () => {
+    const f = (param: Record<string, unknown>) =>
+      ({ key: "m.x", node: "m", nodeTitle: "Music", param, canvas: false, model: false }) as never;
+    const len = f({ name: "seconds", type: "float", auto: true, min: 1, max: 600 });
+    expect(isAuto((len as { param: never }).param, "0")).toBe(true);
+    expect(chipText(len, "0")).toBe("Auto");
+    expect(chipText(len, "130")).toBe("2:10");
+    expect(chipText(f({ name: "bpm", type: "int", auto: true }), "90")).toBe("90 BPM");
+    expect(chipText(f({ name: "key", type: "enum", enum: ["auto", "a-minor"] }), "auto")).toBe(
+      "Auto",
+    );
+  });
+  it("a when's bare name is a param of the same node (the lyrics' instrumental == false)", () => {
+    const fs = [
+      {
+        key: "music.lyrics",
+        node: "music",
+        param: { name: "lyrics", type: "text", when: "instrumental == false" },
+        initial: "",
+      },
+      {
+        key: "music.instrumental",
+        node: "music",
+        param: { name: "instrumental", type: "bool" },
+        initial: false,
+      },
+    ] as never[];
+    expect(visible(fs, {}).length).toBe(2);
+    expect(visible(fs, { "music.instrumental": true }).length).toBe(1);
   });
 });

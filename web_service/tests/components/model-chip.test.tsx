@@ -32,3 +32,55 @@ describe("the model chip with one variant", () => {
     expect(screen.getByTitle("Only Base fp8 is downloaded")).toBeTruthy();
   });
 });
+
+describe("Music's and Sound's chips (docs/mock/CreateMusicSound.dc.html 2a-2e)", () => {
+  const lang: Field = {
+    key: "music.language",
+    node: "music",
+    nodeTitle: "Music",
+    param: {
+      name: "language",
+      type: "enum",
+      enum: ["auto", "en", "hi"],
+      default: "auto",
+    } as Field["param"],
+    initial: "auto",
+    canvas: false,
+    model: false,
+  };
+  it("the model chip names the open model; a missing setting greys in place; Instrumental greys Language", () => {
+    const picked: string[] = [];
+    render(
+      <Chips
+        fields={[lang]}
+        raws={{}}
+        onChange={() => undefined}
+        show={() => undefined}
+        kindModels={{
+          title: "MiniMax Music 3",
+          rows: [
+            { key: "a", title: "MiniMax Music 3", checked: true, onPick: () => picked.push("a") },
+            {
+              key: "b",
+              title: "ACE-Step 1.5 · 2B",
+              sub: "fast",
+              checked: false,
+              onPick: () => picked.push("b"),
+            },
+          ],
+        }}
+        values={[lang]}
+        off={{ "music.language": "Off while Instrumental is on" }}
+        greyed={[{ label: "BPM · key", why: "Not on MiniMax Music 3" }]}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "MiniMax Music 3" })).toBeTruthy();
+    const grey = screen.getByText("BPM · key");
+    expect([grey.getAttribute("aria-disabled"), grey.getAttribute("title")]).toEqual([
+      "true",
+      "Not on MiniMax Music 3",
+    ]);
+    const l = screen.getByText("Auto");
+    expect(l.getAttribute("title")).toBe("Off while Instrumental is on");
+  });
+});
