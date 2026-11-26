@@ -68,7 +68,7 @@ components:
     addon:
       title: Turbo LoRA
       tag: v1.2 · 8 steps
-      help: For text, image and first-last to video. The Turbo preset needs it; for Base and Base fp8.
+      help: For text, image and first-last to video. The Turbo preset needs it; Base only (not yet on Base fp8).
       source: {repo: lightx2v/Minimax-h3-Turbo, revision: c2bf13b837e33bd851b370285fc7db99482d2ab2,
                allow_patterns: [minimax_h3_fl2v_turbo_8step_v1.2_768p_bf16.safetensors],
                licence: minimax-h3-community, must_accept: true, gated: false, bytes: 1543291302}
@@ -77,12 +77,13 @@ components:
     files: minimax_h3_fl2v_turbo_8step_v1.2_768p_bf16.safetensors
     dtype: stored
     precision: [int8]
+    variants: [base]   # 2026-11-25: SGLang (Base fp8) fails at worker start with it; Create greys Turbo there
   turbo_ref:
     dir: MiniMax-H3-Turbo
     addon:
       title: Turbo Ref LoRA
       tag: v1.1 · 8 steps
-      help: For References. Turbo needs it when references are wired; for Base and Base fp8.
+      help: For References. Turbo needs it when references are wired; Base only (not yet on Base fp8).
       source: {repo: lightx2v/Minimax-h3-Turbo, revision: c2bf13b837e33bd851b370285fc7db99482d2ab2,
                allow_patterns: [minimax_h3_ref2v_turbo_8step_v1.1_768p_bf16.safetensors],
                licence: minimax-h3-community, must_accept: true, gated: false, bytes: 1383677808}
@@ -92,6 +93,7 @@ components:
     files: minimax_h3_ref2v_turbo_8step_v1.1_768p_bf16.safetensors
     dtype: stored
     precision: [int8]
+    variants: [base]
 stages:
   canvas:
     title: Canvas

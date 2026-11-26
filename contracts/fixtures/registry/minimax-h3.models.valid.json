@@ -93,8 +93,9 @@
           "component": "turbo",
           "title": "Turbo LoRA",
           "tag": "v1.2 · 8 steps",
-          "help": "For text, image and first-last to video. The Turbo preset needs it; for Base and Base fp8.",
+          "help": "For text, image and first-last to video. The Turbo preset needs it; Base only (not yet on Base fp8).",
           "dir": "MiniMax-H3-Turbo",
+          "variants": ["base"],
           "presence": "present",
           "bytes": 1543291302,
           "source": {
@@ -113,8 +114,9 @@
           "component": "turbo_ref",
           "title": "Turbo Ref LoRA",
           "tag": "v1.1 · 8 steps",
-          "help": "For References. Turbo needs it when references are wired; for Base and Base fp8.",
+          "help": "For References. Turbo needs it when references are wired; Base only (not yet on Base fp8).",
           "dir": "MiniMax-H3-Turbo",
+          "variants": ["base"],
           "presence": "missing",
           "source": {
             "repo": "lightx2v/Minimax-h3-Turbo",

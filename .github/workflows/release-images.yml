@@ -196,7 +196,7 @@ jobs:
   # ponytail: the arch list is a first pick (CUDA 13 has no sm < 75); each arch adds build time
   zonos3-cuda:
     needs: meta
-    if: needs.meta.outputs.on_main == 'true'
+    if: false  # alpha.7: enable after the GPU check (then add it back to release-files' needs and download step)
     runs-on: ubuntu-24.04
     container: nvidia/cuda:13.2.1-devel-ubuntu24.04
     env:
@@ -297,7 +297,7 @@ jobs:
 
   # the release files (the .dmg, compose.yml, the zonos3-server tarball, SHA256SUMS): one artifact on every run; on a tag also attached to its GitHub release, if one exists
   release-files:
-    needs: [meta, compose, smoke, mac, publish, zonos3-cuda]
+    needs: [meta, compose, smoke, mac, publish]
     if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && needs.meta.outputs.on_main == 'true' }}
     runs-on: ubuntu-24.04
     permissions: {contents: write}
@@ -308,9 +308,10 @@ jobs:
         with: {name: compose, path: files}
       - uses: actions/download-artifact@v4
         with: {name: dmg, path: files}
-      - uses: actions/download-artifact@v4
+      - if: false  # alpha.7: with the zonos3-cuda job
+        uses: actions/download-artifact@v4
         with: {name: zonos3-cuda, path: files}
-      - run: cd files && sha256sum ./*.dmg ./compose.yml ./zonos3-server-*.tar.gz | sed 's| \./| |' >SHA256SUMS && cat SHA256SUMS && ls -l
+      - run: cd files && sha256sum ./*.dmg ./compose.yml $(ls ./zonos3-server-*.tar.gz 2>/dev/null) | sed 's| \./| |' >SHA256SUMS && cat SHA256SUMS && ls -l
       - uses: actions/upload-artifact@v4
         with:
           name: release-${{ env.VERSION }}
