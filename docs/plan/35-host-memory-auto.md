@@ -2,8 +2,8 @@
 
 [← Plan index](../README.md)
 
-Status: **asked by the owner (2026-11-26: "use host setting, also show the option to select the aumatic mode")**.
-Board drawn; contracts and code not changed yet.
+Status: **built on branch alpha.5** (owner, 2026-11-26: "use host setting, also show the option to select the aumatic
+mode", then "start woking on the items"). API 1.75; As built below.
 
 ## 39. Automatic budget from the Mac's GPU limit
 
@@ -20,7 +20,8 @@ Boards: [Hosts](../mock/Hosts.dc.html), frames 1–4 below the page.
 
 - Above the reserve, **Memory budget** with a two-option segmented choice: **Automatic | Custom**.
 - Automatic, Mac with a GPU limit set: no slider; `Budget  60 GB · the Mac's GPU limit`.
-- Automatic, no limit set (or a CUDA host): `Budget  52 GB · RAM minus 12 GB` (on CUDA, `VRAM minus 2 GB`).
+- Automatic, no limit set (or a CUDA host): `Budget  52 GB · RAM minus 12 GB` (on CUDA, `VRAM minus 2 GB`); on a Mac
+  `· no GPU limit set` follows (owner).
 - Custom: today's Memory reserve slider (0.5 GB steps) and Budget, unchanged.
 - The info text: Automatic uses the macOS GPU memory limit when one is set, else RAM minus the default reserve; on
   an NVIDIA host, VRAM minus the default reserve. Custom is physical memory minus the reserve you set. Both are also
@@ -40,8 +41,27 @@ Boards: [Hosts](../mock/Hosts.dc.html), frames 1–4 below the page.
 - Steps: contract first (`openapi.yaml`, `registry.schema.json`, contracts/README.md's budget table), `make gen`,
   then runner, studio, web; tests for the auto budget on both paths and the 422 skip.
 
-### 39.4 Open questions
+### 39.4 Owner's answers (2026-11-26)
 
-- A GPU limit at or above physical RAM leaves nothing for macOS: cap auto at RAM − 4 GB, or trust the owner's setting?
-- The limit resets on reboot unless set at boot; should the form say so when `gpu_limit_gb` is null on a Mac?
-- Should the Automatic button be the default for new hosts later (today: Custom for all)?
+- A GPU limit above RAM − 4 GB counts as RAM − 4 GB (macOS keeps 4 GB): auto = min(limit, RAM − 4).
+- A Mac with no limit found says so briefly on the Budget line: `52 GB · RAM minus 12 GB · no GPU limit set`.
+- The default stays Custom for every host; nothing changes by itself.
+
+### 39.5 As built
+
+- Contract 1.75 (`4be21c56`): `ReserveMode` `auto | custom` on `HostSettingsPut` (optional: absent = unchanged, a new
+  row custom), `HostSettings` (required) and `HostAdmin.policy` (optional: absent from older runners = custom);
+  `Host.machine.gpu_limit_gb` (null when unset); registry `settings.reserve_mode` (optional), `policy.reserve_mode`,
+  `machine.gpu_limit_gb`; contracts/README.md "Automatic budget".
+- Runner (`7a4202d5`): `core.residency.gpu_limit_gb()` runs `sysctl -n iogpu.wired_limit_mb` (macOS only; 0 =
+  unset) at start and on each settings apply; `Settings.budget()` does the rule; the hosts key reports both.
+- Studio (`7a475e0d`): migration 00053 adds `host_settings.reserve_mode` (default custom). The 422 reserve check moved
+  inside the locked row update so it uses the effective mode (a PUT without the field on an auto host skips it too).
+  The KV value carries `reserve_mode` only for auto, so a runner older than 1.75 (whose schema refuses unknown
+  fields) keeps taking custom settings.
+- Web (`5bbb4e9b`): `components/admin/hosts.tsx` as frames 1–4; the Budget line's words come from `lib/hosts.ts`
+  `autoBudget` (limit and the capped case are known from `machine`; without a limit the default reserve is read off
+  the budget the runner reports, so for a few seconds after a switch it can show the old figure).
+- Contract tests (`dab63541`): `test_hosts_admin.py::test_reserve_mode_auto` on the fake host.
+- Not done: the CLI (`helm admin hosts settings`) sends no `reserve_mode` and so keeps the stored one; the info text
+  does not say the limit resets on reboot (not asked).
