@@ -68,9 +68,9 @@ e227a7ee) is replaced.
 13. **The whole concept in the first version** (owner, 2026-11-26: "Everything in the concept", asked whether alpha.6 gets a
     small first version or all of it): every lane (Assets, Storyboard, Shots, Voice, Music, sound effects), every
     transition and morph, effects, and every block ability (open, run, pin a take, @ references, run history, notes).
-14. **Music from a local open model** (owner, 2026-11-26: "Local open model"): the best open music model that runs on the
-    Mac (and NVIDIA) is picked with its licence shown to the owner first, then added as a new pack behind the standard
-    Music request.
+14. **Music and sound from local open models the owner picks** (owner, 2026-11-26: "Local open model", then "music and
+    sound i will find some model i will tell you the these new model"): the owner finds the music and sound-effect
+    models; each is then added as a new pack behind the standard request. Magic waits until then ("stop for now").
 15. **The standard request covers every pack we have**: Image (Qwen Image 2.1 and Turbo, MiniMax H3 Image), Video (LTX
     2.5, MiniMax H3), Voice (Qwen3-TTS, ZONOS3), Music (the new pack). Outside services stay later (decision 2).
 
