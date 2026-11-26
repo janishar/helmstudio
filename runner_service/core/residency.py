@@ -54,6 +54,19 @@ def ram_gb() -> float:
     return os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / 2**30
 
 
+def gpu_limit_gb() -> float | None:
+    """The macOS GPU memory limit (`sysctl iogpu.wired_limit_mb`) in GB; None when unset (0), not macOS or unreadable."""
+    if sys.platform != "darwin":
+        return None
+    try:
+        out = subprocess.run(["sysctl", "-n", "iogpu.wired_limit_mb"], check=False, capture_output=True, text=True,
+                             timeout=5)  # fmt: skip
+        mb = int(out.stdout.strip() or 0)
+    except OSError, ValueError, subprocess.SubprocessError:
+        return None
+    return round(mb / 1024, 1) if mb > 0 else None
+
+
 # rusage_info_v4: a 16-byte uuid, then u64 fields; phys_footprint is the 8th
 _RUSAGE = (ctypes.c_uint64 * 64)()
 

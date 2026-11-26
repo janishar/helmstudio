@@ -130,13 +130,13 @@ async def test_settings_apply_at_once_when_idle_and_after_the_run_when_busy(monk
     s = Settings(c, c.host)
     c.host.extra = lambda: res.state() | {"policy": s.policy()}
     assert s.policy() == {"after_run": config.AFTER_RUN, "idle_unload_min": round(config.IDLE_UNLOAD_S / 60),
-                          "reserve_gb": config.RESERVE_GB, "settings_version": None}  # fmt: skip
+                          "reserve_gb": config.RESERVE_GB, "reserve_mode": "custom", "settings_version": None}  # fmt: skip
     await s.offer(settings_value(after_run="keep_pinned", reserve_gb=16, idle_unload_min=0))
     assert list(res.entries) == [A]  # keep_pinned: what is not pinned goes now
     assert res.budget_gb == 48 and c.after_run == "keep_pinned" and c.idle_unload_s == 0
     key = json.loads(c.host.kv.data["fake.fake"])
     assert key["policy"] == {"after_run": "keep_pinned", "idle_unload_min": 0, "reserve_gb": 16,
-                             "settings_version": 3}  # fmt: skip
+                             "reserve_mode": "custom", "settings_version": 3}  # fmt: skip
     assert key["resident"][0]["pinned_why"] == "pin"
     c.ctx = object()  # busy: nothing changes mid-run
     await s.offer(settings_value(version=4, after_run="unload", pins=[]))
@@ -146,6 +146,29 @@ async def test_settings_apply_at_once_when_idle_and_after_the_run_when_busy(monk
     assert s.version == 4 and not res.entries and res.pin_refs == set()
     await s.offer(None)  # the key was deleted: the env's values again
     assert s.version is None and res.pin_refs is None and res.budget_gb == 64 - config.RESERVE_GB
+
+
+async def test_auto_follows_the_gpu_limit_else_the_env_reserve(monkeypatch):
+    """Plan 35: auto = the macOS GPU limit when set (read again on each apply), at most RAM - 4; unset = RAM -
+    RUNNER_RESERVE_GB; reserve_gb is kept but unused; custom again = RAM - reserve_gb."""
+    limit = [60.0]
+    monkeypatch.setattr("messaging.settings.ram_gb", lambda: 64.0)
+    monkeypatch.setattr("messaging.settings.gpu_limit_gb", lambda: limit[0])
+    res = Residency(52)
+    c = consumer(FakeJS(), residency=res)
+    s = Settings(c, c.host)
+    c.host.extra = lambda: res.state() | {"policy": s.policy()}
+    await s.offer(settings_value(version=1, reserve_gb=20, reserve_mode="auto"))
+    assert res.budget_gb == 60 and s.gpu_limit_gb == 60
+    assert json.loads(c.host.kv.data["fake.fake"])["policy"]["reserve_mode"] == "auto"
+    limit[0] = 64.0  # at or above RAM: macOS keeps 4 GB
+    await s.offer(settings_value(version=2, reserve_gb=20, reserve_mode="auto"))
+    assert res.budget_gb == 60
+    limit[0] = None  # unset (or after a reboot)
+    await s.offer(settings_value(version=3, reserve_gb=20, reserve_mode="auto"))
+    assert res.budget_gb == 64 - config.RESERVE_GB
+    await s.offer(settings_value(version=4, reserve_gb=20))  # no reserve_mode: custom
+    assert res.budget_gb == 44 and s.reserve_mode == "custom"
 
 
 async def test_an_older_version_never_replaces_a_newer_one_and_unload_clears_the_cache(monkeypatch):
@@ -178,7 +201,7 @@ def test_the_hosts_key_reports_disk_machine_token_and_policy(tmp_path):
 
     c = consumer(FakeJS())
     s = Settings(c, c.host)
-    extra = {"models_disk": models.disk(tmp_path / "not-yet"), "machine": models.machine("cpu", 7.9),
+    extra = {"models_disk": models.disk(tmp_path / "not-yet"), "machine": models.machine("cpu", 7.9) | {"gpu_limit_gb": 60.0},
              "hub_token": False, "policy": s.policy(), "device": host_device("cpu")}  # fmt: skip
     value = Host(None, extra=lambda: extra).value()
     assert schemas.registry_errors("host", value) == []

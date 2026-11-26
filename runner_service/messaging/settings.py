@@ -14,7 +14,7 @@ from nats.js.errors import NotFoundError
 import config
 from config import ENV, HOST
 from core.graph import GPU
-from core.residency import ident, ram_gb
+from core.residency import gpu_limit_gb, ident, ram_gb
 from messaging import schemas
 
 log = logging.getLogger("settings")
@@ -22,12 +22,16 @@ log = logging.getLogger("settings")
 BUCKET = "host_settings"
 RETRY = 60  # seconds between tries to open the bucket
 POLL = 5  # seconds between reads of the key
+MAC_FLOOR_GB = 4  # auto: a GPU limit leaves macOS at least this much RAM (owner, plan 35)
 
 
 class Settings:
     def __init__(self, consumer, host) -> None:
         self.consumer, self.host = consumer, host
         self.pending: tuple | None = None  # (value or None,) waiting for the run to end
+        self.gpu_limit_gb = (
+            gpu_limit_gb()
+        )  # the hosts key's machine.gpu_limit_gb; read again on each apply
         self.defaults()
 
     def defaults(self) -> None:
@@ -35,12 +39,23 @@ class Settings:
         self.after_run = config.AFTER_RUN
         self.idle_unload_min = round(config.IDLE_UNLOAD_S / 60)
         self.reserve_gb = config.RESERVE_GB
+        self.reserve_mode = "custom"
         self.pins: set[tuple] | None = None  # None: RUNNER_PIN
 
     def policy(self) -> dict:
         """The hosts key's `policy`."""
         return {"after_run": self.after_run, "idle_unload_min": self.idle_unload_min,
-                "reserve_gb": self.reserve_gb, "settings_version": self.version}  # fmt: skip
+                "reserve_gb": self.reserve_gb, "reserve_mode": self.reserve_mode,
+                "settings_version": self.version}  # fmt: skip
+
+    def budget(self, total: float) -> float:
+        """The budget cut from `total` (the device's memory; CUDA: VRAM) under the policy (contracts/README.md,
+        Automatic budget): auto = the macOS GPU limit when set, at most RAM - MAC_FLOOR_GB, else total -
+        RUNNER_RESERVE_GB; custom = total - reserve_gb. Never negative."""
+        if self.reserve_mode == "auto" and self.gpu_limit_gb:
+            return max(0.0, min(self.gpu_limit_gb, ram_gb() - MAC_FLOOR_GB))
+        reserve = config.RESERVE_GB if self.reserve_mode == "auto" else self.reserve_gb
+        return max(0.0, total - reserve)
 
     async def offer(self, value: dict | None) -> None:
         """A new key value (None: deleted): applied now when idle, else after the run."""
@@ -74,15 +89,18 @@ class Settings:
         else:
             self.version, self.after_run = value["version"], value["after_run"]
             self.idle_unload_min, self.reserve_gb = value["idle_unload_min"], value["reserve_gb"]
+            self.reserve_mode = value.get("reserve_mode", "custom")
             self.pins = {ident(p) for p in value["pins"] if p["env"] == ENV}
         c, res = self.consumer, self.consumer.residency
         c.after_run = self.after_run
         if self.after_run == "unload":  # cached node results would let the next run load nothing
             c.cache.clear()
         c.idle_unload_s = self.idle_unload_min * 60 if value is not None else config.IDLE_UNLOAD_S
-        if res is not None:
-            # on CUDA the reserve is cut from VRAM; one above it leaves no budget, never a negative one (off-contract)
-            res.budget_gb = max(0.0, (res.total_gb or ram_gb()) - self.reserve_gb)
+        self.gpu_limit_gb = await asyncio.to_thread(
+            gpu_limit_gb
+        )  # the owner may have changed it since
+        if res is not None:  # on CUDA the reserve is cut from VRAM
+            res.budget_gb = self.budget(res.total_gb or ram_gb())
             res.pin_refs = self.pins
             if self.after_run != "keep_warm":  # unload: everything; keep_pinned: what is not pinned
                 await asyncio.get_running_loop().run_in_executor(

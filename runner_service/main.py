@@ -209,7 +209,7 @@ async def main() -> None:
         out["device"] = loader.device_info() if loader else host_device("cpu")
         if device == "cuda":  # host RAM is the second limit
             out["host_ram"] = loader.host_ram()
-        return out | {"models_disk": models.disk(config.MODELS), "machine": machine,
+        return out | {"models_disk": models.disk(config.MODELS), "machine": machine | {"gpu_limit_gb": settings.gpu_limit_gb},
                       "hub_token": tok.is_file() and tok.stat().st_size > 0,
                       "policy": settings.policy()} | ({"media": can_media} if can_media else {})  # fmt: skip
 
