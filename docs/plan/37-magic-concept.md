@@ -16,9 +16,8 @@ scheduled: not alpha.5; a release is picked when the concept is done. The wirefr
    remove current features … right now only be powering the magic screen").
 3. **The whole main area**, with a floating player, small by default, resizable (owner: "b. The whole main area"; "a,
    floating player resizable but small by default").
-4. **From n8n** (owner: "can we borrow something from n8n?"), proposed: each block's Input | Output view, Run one / Run up to
-   here, a pinned take, references between blocks, "+" to add the next one, Run history, notes, templates, keys for outside
-   services later.
+4. ~~From n8n~~: dropped (owner, 2026-11-26: "drop n8n image as per our framework"). Magic is designed on its own lane
+   framework; nothing is copied from n8n's look or model.
 5. **Lanes, not a free canvas** (owner, 2026-11-26: "imagine a lines in parallel, i drop at any point it opens a dialog to add
    elemnt like audio, image, video, dialog etc and i select the duration and options … don't copy timeline its a new screen
    with preview of each node. i will be able to add things in parallel and serial. the charecter etc will be in the @
@@ -54,5 +53,6 @@ scheduled: not alpha.5; a release is picked when the concept is done. The wirefr
 
 ## Open
 
-- Which n8n ideas go in the first version.
+- What a block can do in the first version (open it, run it, pin a take, @ references, run history, notes), in Magic's own
+  terms.
 - Where the standard request lives (contract, adapters in the runner) and the first models it covers.
