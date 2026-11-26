@@ -7,7 +7,8 @@
 // action Save as voice opens it with that take. An element's Voice tile comes with API 1.32.
 import { useEffect, useRef, useState } from "react";
 import { ChevronRight, Mic, MoreVertical, Pause, Play, Scissors, Wand2 } from "lucide-react";
-import { X } from "lucide-react";
+import { Check, Pencil, Trash2, X } from "lucide-react";
+import { openMenu, type Item as Entry } from "@/components/context-menu";
 import { ErrorNote, Info, Modal, UploadStatus } from "@/components/kit";
 import { VisualPicker } from "@/components/create/visual-picker";
 import { TileWords, tileClass } from "@/components/create/elements";
@@ -478,11 +479,53 @@ function VoiceList({
     return `from ${title.length > 24 ? `${title.slice(0, 23).trimEnd()}…` : title} · ${clipText(c)}`;
   };
 
-  const preview = (x: Item, label: string) => {
+  const urlOf = (x: Item) => {
     // a voice with a clip plays its part of the take (a media fragment: the browser stops at out)
     const c = x.voice?.clip;
     const file = safeUrl(x.thumb_url);
-    const url = file && c ? `${file}#t=${c.in},${c.out}` : file;
+    return file && c ? `${file}#t=${c.in},${c.out}` : file;
+  };
+  // docs/mock/ContextMenus.dc.html frame 11: Play, Use (the click); yours also Rename and Delete (the ⋮ menu's)
+  const voiceMenu = (e: React.MouseEvent, x: Item) => {
+    const url = urlOf(x);
+    const r = reason(x);
+    const items: Entry[] = [
+      {
+        label: playing === x.id ? "Pause" : "Play",
+        icon: playing === x.id ? Pause : Play,
+        off: url ? undefined : "No sample",
+        onPick: () => url && toggle(x.id, url),
+      },
+      { label: "Use", icon: Check, off: r ?? undefined, onPick: () => onUse(x.id) },
+    ];
+    if (x.source === "mine")
+      items.push(
+        "-",
+        {
+          label: "Rename",
+          icon: Pencil,
+          onPick: () => {
+            setMenu(null);
+            setConfirming(null);
+            setDraft(x.name);
+            setRenaming(x.id);
+          },
+        },
+        {
+          label: "Delete",
+          icon: Trash2,
+          danger: true,
+          onPick: () => {
+            setMenu(null);
+            setRenaming(null);
+            setConfirming(x.id);
+          },
+        },
+      );
+    if (renaming !== x.id && openMenu(e, { title: x.name, items }) && !r) setPicked(x.id);
+  };
+  const preview = (x: Item, label: string) => {
+    const url = urlOf(x);
     return url ? (
       <PlayButton label={label} on={playing === x.id} onClick={() => toggle(x.id, url)} />
     ) : null;
@@ -739,7 +782,11 @@ function VoiceList({
                     className={`m-0 grid list-none grid-cols-3 gap-2.5 p-0.5 ${many ? "max-h-[274px] overflow-y-auto" : foldable ? "max-h-[178px] overflow-y-auto" : ""}`}
                   >
                     {shown.map((x) => (
-                      <li key={x.id} className={card(picked === x.id, reason(x))}>
+                      <li
+                        key={x.id}
+                        className={card(picked === x.id, reason(x))}
+                        onContextMenu={(e) => voiceMenu(e, x)}
+                      >
                         {preview(x, `Play the preview of ${x.name}`)}
                         {pickButton(x, voiceLine(x))}
                       </li>
@@ -752,7 +799,11 @@ function VoiceList({
         : mine
             .filter((x) => matches(x, q))
             .map((x) => (
-              <li key={x.id} className={card(picked === x.id, reason(x))}>
+              <li
+                key={x.id}
+                className={card(picked === x.id, reason(x))}
+                onContextMenu={(e) => voiceMenu(e, x)}
+              >
                 {preview(x, `Play ${x.name}`)}
                 {renaming === x.id ? (
                   <span className="flex min-w-0 flex-auto flex-col gap-1.5">

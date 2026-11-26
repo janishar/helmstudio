@@ -3,7 +3,8 @@
 // progress), the quota, rename and delete; shared: the files on the hosts' disks (the header's host filter), which an
 // admin deletes from one host at a time. Tiles are the visual picker's.
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Pencil, X } from "lucide-react";
+import { Pencil, Trash2, X } from "lucide-react";
+import { openMenu, type Item } from "@/components/context-menu";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { UploadTile } from "@/components/create/loras";
 import { Pic, Tile } from "@/components/create/visual-picker";
@@ -41,6 +42,8 @@ export function LorasTab({
   const [picked, setPicked] = useState("");
   const [uploads, setUploads] = useState<{ key: number; state: UploadState }[]>([]);
   const [deleting, setDeleting] = useState<Lora | null>(null);
+  // a shared tile's Delete from host… (right-click): the panel's own confirm
+  const [hostAsk, setHostAsk] = useState(0);
   const [error, setError] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
   const nameInput = useRef<HTMLInputElement>(null);
@@ -82,9 +85,39 @@ export function LorasTab({
     }
   }
 
+  const rename = (l: Lora) => {
+    setPicked(l.id);
+    setTimeout(() => nameInput.current?.focus(), 0);
+  };
+  // docs/mock/ContextMenus.dc.html frame 11: yours Rename and Delete; shared (admin) Delete from host…
+  const menu = (l: Lora): Item[] =>
+    l.source === "mine"
+      ? [
+          { label: "Rename", icon: Pencil, onPick: () => rename(l) },
+          "-",
+          { label: "Delete", icon: Trash2, danger: true, onPick: () => setDeleting(l) },
+        ]
+      : admin && l.hosts.length
+        ? [
+            {
+              label: "Delete from host…",
+              icon: Trash2,
+              danger: true,
+              off: l.prefused ? `Part of ${l.prefused} (pre-fused)` : undefined,
+              onPick: () => {
+                setPicked(l.id);
+                setHostAsk((n) => n + 1);
+              },
+            },
+          ]
+        : [];
   const tile = (l: Lora) => (
     <li
       key={l.id}
+      onContextMenu={(e) => {
+        const items = menu(l);
+        if (items.length && openMenu(e, { title: l.name, items })) setPicked(l.id);
+      }}
       className={`relative flex min-w-0 flex-col gap-1.5 ${l.state === "ready" ? "" : "opacity-50"} ${l.id === lora?.id ? "[&_i]:border-2 [&_i]:border-solid [&_i]:border-a1 [&_img]:outline-2 [&_img]:outline-offset-2 [&_img]:outline-a1" : ""}`}
     >
       <Tile
@@ -100,10 +133,7 @@ export function LorasTab({
             type="button"
             aria-label={`Rename ${l.name}`}
             className="grid size-6 place-items-center rounded-lg bg-s3 text-t2 hover:text-t1"
-            onClick={() => {
-              setPicked(l.id);
-              setTimeout(() => nameInput.current?.focus(), 0);
-            }}
+            onClick={() => rename(l)}
           >
             <Pencil size={12} aria-hidden />
           </button>
@@ -234,6 +264,7 @@ export function LorasTab({
           hosts={hosts}
           nameInput={nameInput}
           onDelete={() => setDeleting(lora)}
+          hostAsk={hostAsk}
         />
       )}
       <Modal open={!!deleting} onClose={() => setDeleting(null)} title="Delete this LoRA?">
@@ -267,12 +298,15 @@ function LoraPanel({
   hosts,
   nameInput,
   onDelete,
+  hostAsk = 0,
 }: {
   l: Lora;
   admin: boolean;
   hosts: S<"ModelHost">[];
   nameInput: React.RefObject<HTMLInputElement | null>;
   onDelete: () => void;
+  /** the tile's right-click Delete from host…: each new count opens the confirm */
+  hostAsk?: number;
 }) {
   const hydrated = useHydrated();
   const [name, setName] = useState(l.name);
@@ -281,6 +315,11 @@ function LoraPanel({
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const mine = l.source === "mine";
+  const [asked, setAsked] = useState(hostAsk);
+  if (hostAsk !== asked) {
+    setAsked(hostAsk);
+    setConfirm(true);
+  }
   async function rename() {
     try {
       await renameLora(l.id, name.trim());

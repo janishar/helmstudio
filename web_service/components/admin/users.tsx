@@ -3,6 +3,8 @@
 // locked: its roles, password and state come from ADMIN_EMAIL / ADMIN_PASSWORD in auth_service's .env.
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { KeyRound, Power, ShieldCheck } from "lucide-react";
+import { openMenu } from "@/components/context-menu";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { useUser } from "@/components/shell";
 import { api, message, ok, type S } from "@/lib/api";
@@ -155,7 +157,27 @@ function UserRow({
     }
   }
   return (
-    <tr className="[&:last-child>td]:border-b-0">
+    <tr
+      className="[&:last-child>td]:border-b-0"
+      // docs/mock/ContextMenus.dc.html frame 12: the row's buttons; the root admin's row has none
+      onContextMenu={(e) =>
+        !root &&
+        openMenu(e, {
+          title: `${u.name} · ${u.email}`,
+          items: [
+            { label: "Roles…", icon: ShieldCheck, onPick: () => setDialog("roles") },
+            { label: "Reset password…", icon: KeyRound, onPick: () => setDialog("password") },
+            "-",
+            {
+              label: u.disabled ? "Enable" : "Disable",
+              icon: Power,
+              danger: !u.disabled,
+              onPick: () => void toggle(),
+            },
+          ],
+        })
+      }
+    >
       <td className={`${cell} font-semibold`}>{u.name}</td>
       <td className={`${cell} mono max-w-[220px] truncate text-[12px] text-t2`} title={u.email}>
         {u.email}

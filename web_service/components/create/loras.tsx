@@ -5,7 +5,8 @@
 // family greyed with the reason, upload of an own .safetensors with progress, rename and delete with confirm.
 // Generic: it reads the rows param's item schema (a `Lora` field, a float, an enum), nothing of one family.
 import { useEffect, useRef, useState } from "react";
-import { Pencil, X } from "lucide-react";
+import { Pencil, Plus, Trash2, X } from "lucide-react";
+import { openMenu } from "@/components/context-menu";
 import { ErrorNote, Modal } from "@/components/kit";
 import { Pic, Tile, VisualPicker } from "@/components/create/visual-picker";
 import { message, type S } from "@/lib/api";
@@ -422,7 +423,40 @@ function Picker({
             });
         };
         return (
-          <li key={l.id} className="relative flex min-w-0 flex-col gap-1.5">
+          <li
+            key={l.id}
+            className="relative flex min-w-0 flex-col gap-1.5"
+            onContextMenu={(e) =>
+              renaming?.id !== l.id &&
+              // docs/mock/ContextMenus.dc.html frame 11: Add onto the stack; yours Rename and Delete (its inline confirm)
+              openMenu(e, {
+                title: l.name,
+                items: [
+                  {
+                    label: "Add",
+                    icon: Plus,
+                    off: why ?? undefined,
+                    onPick: () => {
+                      onPick([l.id]);
+                      onClose();
+                    },
+                  },
+                  l.source === "mine" && "-",
+                  l.source === "mine" && {
+                    label: "Rename",
+                    icon: Pencil,
+                    onPick: () => setRenaming({ id: l.id, name: l.name }),
+                  },
+                  l.source === "mine" && {
+                    label: "Delete",
+                    icon: Trash2,
+                    danger: true,
+                    onPick: () => setDeleting(l.id),
+                  },
+                ],
+              })
+            }
+          >
             {renaming?.id === l.id ? (
               <div
                 className="flex flex-col gap-1.5"

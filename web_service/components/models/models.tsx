@@ -10,6 +10,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { until, useDialogWait, useScreenTools } from "@/components/assistant/tools";
 import { modelsTools, type Row } from "@/components/models/assistant";
 import { ErrorNote, Info, Modal } from "@/components/kit";
+import { openMenu } from "@/components/context-menu";
+import { Download, FileText, PanelRight, Trash2, X } from "lucide-react";
 import { LorasTab } from "@/components/models/loras";
 import { useUser } from "@/components/shell";
 import { api, message, ok, type S } from "@/lib/api";
@@ -40,6 +42,12 @@ type Model = S<"Model">;
 type Variant = S<"ModelVariant">;
 type VariantHost = S<"ModelVariantHost">;
 type Addon = S<"ModelAddon">;
+/** A right-click item the screen asks the selected variant's panel to open (its dialog). */
+type Ask = { m: string; v: string; d: "download" | "delete" | "licence" };
+
+/** The panel's target host at first: the assistant's, the picked host, else the first host it is not on. */
+const firstTarget = (list: List, v: Variant, aim: string, host: string) =>
+  aim || host || v.hosts.find((h) => h.state !== "present")?.host || list.hosts[0]?.host || "";
 
 /** The model list, polled (fast while downloading) when the tab is visible; admins also get the model jobs. */
 function useModels(admin: boolean) {
@@ -82,6 +90,8 @@ export function ModelsScreen({ tab }: { tab: "models" | "loras" }) {
   const [sel, setSel] = useState<{ model: string; variant: string } | null>(null);
   // the assistant's openRow: the row's target host, and the row as the panel shows it
   const [aim, setAim] = useState("");
+  const [ask, setAsk] = useState<Ask | null>(null);
+  const [menuError, setMenuError] = useState("");
   const row = useRef<Row | null>(null);
   const bind = useCallback((r: Row | null) => {
     row.current = r;
@@ -112,6 +122,60 @@ export function ModelsScreen({ tab }: { tab: "models" | "loras" }) {
       reload,
     }),
   );
+  // a variant card's right-click (docs/mock/ContextMenus.dc.html frame 10): selects it, then the panel's actions
+  function cardMenu(e: React.MouseEvent, m: Model, v: Variant) {
+    if (!list) return;
+    const run = (d: Ask["d"]) => () => setAsk({ m: m.id, v: v.id, d });
+    // the open panel's target host when it shows this variant, else the one it opens on
+    const r = row.current;
+    const target = r?.m.id === m.id && r.v.id === v.id ? r.target : firstTarget(list, v, aim, host);
+    const plan = downloadPlan(list, v, target);
+    const on = v.hosts.find((h) => h.host === target);
+    const h = openMenu(e, {
+      title: `${m.title} · ${v.title}`,
+      items: [
+        { label: "Open", icon: PanelRight, onPick: () => setSel({ model: m.id, variant: v.id }) },
+        {
+          label: "Licence",
+          icon: FileText,
+          off: plan.licence ? undefined : "No licence named",
+          onPick: run("licence"),
+        },
+        admin && "-",
+        admin &&
+          (on?.state === "downloading" && on.job
+            ? {
+                label: "Cancel download",
+                icon: X,
+                // the panel's Cancel download's call
+                onPick: () =>
+                  void ok(
+                    api.POST("/v1/studio/admin/model-jobs/{job_id}/cancel", {
+                      params: { path: { job_id: on.job!.id } },
+                    }),
+                  )
+                    .then(() => (setMenuError(""), reload()))
+                    .catch((e) => setMenuError(message(e))),
+              }
+            : {
+                label: "Download to host…",
+                icon: Download,
+                off: plan.blocked
+                  ? plan.blocked[0].toUpperCase() + plan.blocked.slice(1)
+                  : undefined,
+                onPick: run("download"),
+              }),
+        admin && {
+          label: "Delete from host…",
+          icon: Trash2,
+          danger: true,
+          off: canDelete(v, target) ? undefined : `Not on ${target}`,
+          onPick: run("delete"),
+        },
+      ],
+    });
+    if (h) setSel({ model: m.id, variant: v.id });
+  }
   const states = new Set(
     models.flatMap((m) => parts(m).flatMap((v) => v.hosts.map((h) => h.state))),
   );
@@ -179,6 +243,7 @@ export function ModelsScreen({ tab }: { tab: "models" | "loras" }) {
           {states.has("mismatch") && <Legend dot="bg-bad" text="hash mismatch" />}
         </div>
         {error && <ErrorNote onRetry={reload}>{error}</ErrorNote>}
+        {menuError && <ErrorNote>{menuError}</ErrorNote>}
         {list && !models.length && <p className="text-t2">No host has published any model yet.</p>}
         {models.map((m) => (
           <ModelSection
@@ -187,6 +252,7 @@ export function ModelsScreen({ tab }: { tab: "models" | "loras" }) {
             selected={m.id === model?.id}
             picked={m.id === model?.id ? variant?.id : undefined}
             onPick={(v) => setSel({ model: m.id, variant: v })}
+            onMenu={(e, v) => cardMenu(e, m, v)}
             addons={
               list && (m.addons ?? []).length > 0 ? (
                 <Addons list={list} m={m} admin={admin} onChanged={reload} />
@@ -207,6 +273,7 @@ export function ModelsScreen({ tab }: { tab: "models" | "loras" }) {
           host={host}
           jobs={jobs}
           onChanged={reload}
+          ask={ask?.m === model.id && ask.v === variant.id ? ask : null}
         />
       )}
     </>
@@ -233,12 +300,14 @@ function ModelSection({
   selected,
   picked,
   onPick,
+  onMenu,
   addons,
 }: {
   m: Model;
   selected: boolean;
   picked: string | undefined;
   onPick: (variant: string) => void;
+  onMenu?: (e: React.MouseEvent, v: Variant) => void;
   /** the model's optional add-ons, under its variants */
   addons?: React.ReactNode;
 }) {
@@ -280,6 +349,7 @@ function ModelSection({
             v={v}
             picked={picked === v.id}
             onPick={() => onPick(v.id)}
+            onMenu={onMenu && ((e) => onMenu(e, v))}
           />
         ))}
       </div>
@@ -346,7 +416,31 @@ function AddonCard({
   const del = a.hosts.find((h) => canDelete(a, h.host))?.host;
   const btn = "h-7 rounded-lg bg-s4 px-2.5 text-[12px] font-medium disabled:opacity-50";
   return (
-    <div className="flex min-w-0 flex-col gap-2 rounded-xl border border-dashed border-line bg-s2 px-3 py-2.5">
+    <div
+      onContextMenu={(e) =>
+        admin &&
+        openMenu(e, {
+          title: `${m.title} · ${a.title}`,
+          items: [
+            {
+              label: "Download…",
+              icon: Download,
+              off: down ? undefined : "Nothing to download",
+              onPick: () => setDialog("download"),
+            },
+            "-",
+            {
+              label: "Delete…",
+              icon: Trash2,
+              danger: true,
+              off: del ? undefined : "On no host",
+              onPick: () => setDialog("delete"),
+            },
+          ],
+        })
+      }
+      className="flex min-w-0 flex-col gap-2 rounded-xl border border-dashed border-line bg-s2 px-3 py-2.5"
+    >
       <div className="flex items-center gap-2">
         <span className="tag">add-on</span>
         <b className="text-[13px]">{a.title}</b>
@@ -442,17 +536,20 @@ function VariantCard({
   v,
   picked,
   onPick,
+  onMenu,
 }: {
   m: Model;
   v: Variant;
   picked: boolean;
   onPick: () => void;
+  onMenu?: (e: React.MouseEvent) => void;
 }) {
   const tags = precisionTags(v.precisions, variantStored(v));
   const note = deviceNote(m, v);
   return (
     <div
       onClick={onPick}
+      onContextMenu={onMenu}
       className={`flex min-w-0 cursor-pointer flex-col gap-2.5 rounded-[18px_18px_18px_8px] bg-[linear-gradient(180deg,var(--s3),var(--s2))] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,.08),0_12px_22px_-12px_color-mix(in_srgb,var(--shd)_80%,transparent)] ${picked ? "outline-2 outline-t2" : ""}`}
     >
       <div className="flex items-center gap-2">
@@ -578,6 +675,7 @@ function VariantPanel({
   onChanged,
   aim,
   bind,
+  ask,
 }: {
   list: List;
   m: Model;
@@ -586,15 +684,15 @@ function VariantPanel({
   host: string;
   jobs: S<"ModelJob">[];
   onChanged: () => void;
+  /** a right-click item's dialog to open (the card's menu): each new one opens once */
+  ask?: Ask | null;
   /** the target host the assistant opened the row on */
   aim?: string;
   bind?: (r: Row | null) => void;
 }) {
   const targets = list.hosts.map((h) => h.host);
-  const [target, setTarget] = useState(
-    aim || host || v.hosts.find((h) => h.state !== "present")?.host || targets[0] || "",
-  );
-  const [dialog, setDialog] = useState<"download" | "delete" | null>(null);
+  const [target, setTarget] = useState(firstTarget(list, v, aim ?? "", host));
+  const [dialog, setDialog] = useState<"download" | "delete" | "licence" | null>(null);
   // the assistant's Download: this row's own dialog, resolved with its job when it closes
   const dl = useDialogWait<S<"ModelJob">>();
   const closeDownload = () => {
@@ -623,6 +721,11 @@ function VariantPanel({
     (j) => j.host === target && j.model === m.id && !j.addon && (j.variant ?? v.id) === v.id,
   );
   const plan = downloadPlan(list, v, target);
+  const [asked, setAsked] = useState(ask);
+  if (ask !== asked) {
+    setAsked(ask);
+    if (ask) setDialog(ask.d);
+  }
 
   async function cancel(id: string) {
     try {
@@ -769,6 +872,18 @@ function VariantPanel({
             Delete from host
           </button>
         </div>
+      )}
+      {plan.licence && (
+        <Modal
+          open={dialog === "licence"}
+          onClose={() => setDialog(null)}
+          title={`Licence · ${plan.licence.title}`}
+          width="w-[min(94vw,560px)]"
+        >
+          <pre className="mono m-0 max-h-[50vh] overflow-auto rounded-[10px] bg-inset px-3 py-2.5 text-[12px] leading-[18px] whitespace-pre-wrap">
+            {plan.licence.text}
+          </pre>
+        </Modal>
       )}
       <Modal
         open={dialog === "download"}

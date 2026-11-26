@@ -9,7 +9,8 @@
 // never shown again; Replace key and Remove key once Found.
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useId, useRef, useState } from "react";
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, Pencil, Power, Trash2, Zap } from "lucide-react";
+import { openMenu } from "@/components/context-menu";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { HubHead, hubHref } from "@/components/hub";
 import { useUser } from "@/components/shell";
@@ -164,7 +165,32 @@ export function ProvidersAdmin() {
             </thead>
             <tbody>
               {list?.providers.map((p) => (
-                <tr key={p.name}>
+                <tr
+                  key={p.name}
+                  // docs/mock/ContextMenus.dc.html frame 12: the ⋯ menu's items
+                  onContextMenu={(e) =>
+                    openMenu(e, {
+                      title: p.title || p.name,
+                      items: [
+                        { label: "Test", icon: Zap, onPick: () => void test(p) },
+                        { label: "Edit", icon: Pencil, onPick: () => setForm(formOf(p)) },
+                        "-",
+                        {
+                          label: p.enabled ? "Disable" : "Enable",
+                          icon: Power,
+                          danger: p.enabled,
+                          onPick: () => void toggle(p),
+                        },
+                        {
+                          label: "Delete…",
+                          icon: Trash2,
+                          danger: true,
+                          onPick: () => setDeleting(p),
+                        },
+                      ],
+                    })
+                  }
+                >
                   <td className={cell}>
                     <b className="font-semibold">{p.title || p.name}</b>
                     <br />

@@ -5,7 +5,10 @@
 // model-provider plugin that is on, Add as provider (a personal plugin's provider is its admin's own). From API 1.64
 // skills (board SKILLS): built in or yours (~/.helm/plugins), a faded row with only Remove when it can't be used.
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useState } from "react";
+import { Bot, Plus, Server, Trash2 } from "lucide-react";
+import { openMenu } from "@/components/context-menu";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { HubHead, hubHref } from "@/components/hub";
 import { ApiError, api, message, ok, type S } from "@/lib/api";
@@ -53,6 +56,39 @@ export function PluginsScreen() {
   const [sel, setSel] = useState("");
   const [added, setAdded] = useState<{ plugin: string; title: string } | null>(null); // its aside says so
   const [removing, setRemoving] = useState<Plugin | null>(null);
+  const router = useRouter();
+  // docs/mock/ContextMenus.dc.html frame 12: the row's buttons and the aside's links; a faded row has Remove only
+  const rowMenu = (e: React.MouseEvent, p: Plugin) => {
+    const remove = { label: "Remove…", icon: Trash2, danger: true, onPick: () => setRemoving(p) };
+    const h = openMenu(e, {
+      title: p.title,
+      items: unusable(p)
+        ? [remove]
+        : [
+            p.provider
+              ? {
+                  label: "Open in Providers",
+                  icon: Server,
+                  onPick: () => router.push(hubHref("providers")),
+                }
+              : {
+                  label: "Add as provider",
+                  icon: Plus,
+                  off:
+                    p.kind !== "model-provider"
+                      ? "Not a model provider"
+                      : p.status !== "running"
+                        ? "Not running"
+                        : undefined,
+                  onPick: () => setSel(p.name),
+                },
+            { label: "Open Assistant", icon: Bot, onPick: () => router.push(hubHref("assistant")) },
+            "-",
+            remove,
+          ],
+    });
+    if (h) setSel(p.name);
+  };
   const load = useCallback(() => {
     ok(api.GET("/v1/studio/admin/plugins"))
       .then((l) => {
@@ -183,6 +219,7 @@ export function PluginsScreen() {
                       aria-selected={on}
                       className={`${on ? "bg-s3" : ""} ${dead ? "opacity-[0.62]" : ""}`}
                       onClick={() => setSel(p.name)}
+                      onContextMenu={(e) => rowMenu(e, p)}
                     >
                       <td className={cell}>
                         <button

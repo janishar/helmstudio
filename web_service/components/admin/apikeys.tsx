@@ -2,6 +2,8 @@
 // Admin › API keys (docs/mock/ApiKeys.dc.html): every application key with its prefix, dates and state, Revoke with
 // confirm; the New key panel gives the server command that makes one (it prints the full key once).
 import { useCallback, useEffect, useState } from "react";
+import { Copy, Trash2 } from "lucide-react";
+import { openMenu } from "@/components/context-menu";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { SystemTabs } from "@/components/admin/users";
 import { api, message, ok, type S } from "@/lib/api";
@@ -93,7 +95,31 @@ export function ApiKeysAdmin() {
             </thead>
             <tbody className="[&>tr:last-child>td]:border-b-0">
               {keyOrder(keys ?? []).map((k) => (
-                <tr key={k.id} className="whitespace-nowrap">
+                <tr
+                  key={k.id}
+                  className="whitespace-nowrap"
+                  // docs/mock/ContextMenus.dc.html frame 12: Copy prefix (new) and Revoke…; a revoked key has none
+                  onContextMenu={(e) =>
+                    !k.revoked_at &&
+                    openMenu(e, {
+                      title: `${k.client} · ${k.prefix}…`,
+                      items: [
+                        {
+                          label: "Copy prefix",
+                          icon: Copy,
+                          onPick: () => void navigator.clipboard?.writeText(k.prefix),
+                        },
+                        "-",
+                        {
+                          label: "Revoke…",
+                          icon: Trash2,
+                          danger: true,
+                          onPick: () => setRevoking(k),
+                        },
+                      ],
+                    })
+                  }
+                >
                   <td className={`${cell} font-semibold ${k.revoked_at ? "text-t2" : ""}`}>
                     {k.client}
                     {CLIENT_NOTE[k.client] && <Info>{CLIENT_NOTE[k.client]}</Info>}

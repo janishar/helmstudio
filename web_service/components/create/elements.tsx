@@ -3,7 +3,8 @@
 // insert at the caret, New element, edit, delete with confirm) and the editor (name, handle, group, text, 1-4
 // images from the gallery picker). Saved through /v1/studio/library.
 import { useEffect, useRef, useState } from "react";
-import { Mic, Pencil, UsersRound, X } from "lucide-react";
+import { AtSign, Mic, Pencil, Trash2, UsersRound, X } from "lucide-react";
+import { openMenu } from "@/components/context-menu";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { VisualPicker } from "@/components/create/visual-picker";
 import { GalleryPicker } from "@/components/gallery/picker";
@@ -212,6 +213,25 @@ function Picker({
         return (
           <li
             key={e.id}
+            // docs/mock/ContextMenus.dc.html frame 11: the click, Edit, Delete (its inline confirm)
+            onContextMenu={(ev) =>
+              openMenu(ev, {
+                title: `@${e.handle} · ${e.name}`,
+                items: [
+                  {
+                    label: `Put @${e.handle} in the prompt`,
+                    icon: AtSign,
+                    onPick: () => {
+                      if (e.handle) onInsert(e.handle);
+                      onClose();
+                    },
+                  },
+                  { label: "Edit", icon: Pencil, onPick: () => setEditing(e) },
+                  "-",
+                  { label: "Delete", icon: Trash2, danger: true, onPick: () => setDeleting(e.id) },
+                ],
+              })
+            }
             className={`flex items-center gap-3 rounded-[18px_18px_18px_8px] border p-2.5 ${on ? "border-a1 bg-s2" : "border-s5 bg-s1"}`}
           >
             <button

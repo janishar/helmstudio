@@ -4,7 +4,8 @@
 // loaded after a run, the idle timeout, the memory reserve), applied by its runners live, and Evict all. Refreshed
 // every 3 s while the tab is visible.
 import { useCallback, useEffect, useState } from "react";
-import { Monitor, Server, X } from "lucide-react";
+import { Monitor, Pin, PinOff, Server, X } from "lucide-react";
+import { openMenu } from "@/components/context-menu";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { SystemTabs } from "@/components/admin/users";
 import { api, message, ok, type S } from "@/lib/api";
@@ -29,6 +30,20 @@ import {
 } from "@/lib/hosts";
 
 type Confirm = { host: string; title: string; text: string; body: S<"HostUnload"> };
+const ALL =
+  "Unloads every component on this host, pinned ones included, and its cached handles. A running run finishes first. Pins stay set.";
+const unloadAll = (host: string): Confirm => ({
+  host,
+  title: `Unload all on ${host}?`,
+  text: ALL,
+  body: { all: true },
+});
+const evictAll = (host: string): Confirm => ({
+  host,
+  title: `Evict all on ${host}?`,
+  text: ALL,
+  body: { all: true },
+});
 
 /** The hosts, polled every 3 s while visible; `reload` reads them at once (after a change). */
 function useAdminHosts() {
@@ -171,14 +186,7 @@ export function HostsAdmin() {
           key={card.host}
           c={card}
           onSaved={reload}
-          onEvict={() =>
-            setConfirm({
-              host: card.host,
-              title: `Evict all on ${card.host}?`,
-              text: "Unloads every component on this host, pinned ones included, and its cached handles. A running run finishes first. Pins stay set.",
-              body: { all: true },
-            })
-          }
+          onEvict={() => setConfirm(evictAll(card.host))}
         />
       )}
       <Modal open={!!confirm} onClose={() => setConfirm(null)} title={confirm?.title ?? ""}>
@@ -228,9 +236,32 @@ function HostSection({
   const pct = (gb: number) => (c.budget_gb ? `${Math.min(100, (gb / c.budget_gb) * 100)}%` : "0%");
   const cachedEnvs = c.envs.filter((e) => (e.cached_gb ?? 0) > 0);
   const pending = c.envs.some((e) => e.admin?.unload_pending);
+  const off = c.state === "offline" ? "Offline" : undefined;
   return (
     <section
       aria-label={`${c.host} ${machineText(c.machine)}`}
+      // docs/mock/ContextMenus.dc.html frame 12: the card's Unload all and the settings' Evict all, with their cards
+      onContextMenu={(ev) =>
+        openMenu(ev, {
+          title: c.host,
+          items: [
+            {
+              label: "Unload all…",
+              icon: X,
+              danger: true,
+              off,
+              onPick: () => onConfirm(unloadAll(c.host)),
+            },
+            {
+              label: "Evict all…",
+              icon: X,
+              danger: true,
+              off,
+              onPick: () => onConfirm(evictAll(c.host)),
+            },
+          ],
+        })
+      }
       className={`panel flex min-w-0 flex-col gap-3.5 p-4 ${selected ? "outline-2 outline-offset-3 outline-a1" : ""}`}
     >
       <div className="flex items-center gap-3">
@@ -374,14 +405,7 @@ function HostSection({
             type="button"
             className="chip bevel h-[30px]"
             disabled={c.state === "offline"}
-            onClick={() =>
-              onConfirm({
-                host: c.host,
-                title: `Unload all on ${c.host}?`,
-                text: "Unloads every component on this host, pinned ones included, and its cached handles. A running run finishes first. Pins stay set.",
-                body: { all: true },
-              })
-            }
+            onClick={() => onConfirm(unloadAll(c.host))}
           >
             Unload all
           </button>
@@ -391,9 +415,34 @@ function HostSection({
           const pinned = isPinned(c, e);
           const ref = pinRef(e);
           const baked = e.r.loras?.length ?? 0;
+          const why = ref ? undefined : "This baked set cannot be named";
+          const unload = () =>
+            ref &&
+            onConfirm({
+              host: c.host,
+              title: `Unload ${name}?`,
+              text: `${e.env} unloads it${pinned ? " even though it is pinned; the pin stays set" : ""}. A running run finishes first.`,
+              body: { entries: [ref] },
+            });
           return (
             <div
               key={i}
+              onContextMenu={(ev) => {
+                ev.stopPropagation(); // not the card's menu
+                openMenu(ev, {
+                  title: name,
+                  items: [
+                    {
+                      label: pinned ? "Unpin" : "Pin",
+                      icon: pinned ? PinOff : Pin,
+                      off: why,
+                      onPick: () => onPin(e),
+                    },
+                    "-",
+                    { label: "Unload…", icon: X, danger: true, off: why, onPick: unload },
+                  ],
+                });
+              }}
               className="flex min-h-11 items-center gap-2.5 rounded-[14px_14px_14px_6px] bg-s2 py-1.5 pr-2 pl-3"
             >
               <div className="flex min-w-0 flex-auto flex-col">
@@ -427,15 +476,7 @@ function HostSection({
                 aria-label={`Unload ${name}`}
                 disabled={!ref}
                 className="grid size-[30px] shrink-0 place-items-center rounded-[10px] border-0 bg-s4 p-0 text-t2"
-                onClick={() =>
-                  ref &&
-                  onConfirm({
-                    host: c.host,
-                    title: `Unload ${name}?`,
-                    text: `${e.env} unloads it${pinned ? " even though it is pinned; the pin stays set" : ""}. A running run finishes first.`,
-                    body: { entries: [ref] },
-                  })
-                }
+                onClick={unload}
               >
                 <X size={14} aria-hidden />
               </button>
