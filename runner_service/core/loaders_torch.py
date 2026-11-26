@@ -575,13 +575,31 @@ def load(
     return module.eval().requires_grad_(False)
 
 
+# weight files a component may list: safetensors (streamed by load), and torch.save checkpoints (plan 38: MMAudio's
+# .pth, open_clip's .bin, BigVGAN's .pt), read only by a pack's own load_component through state_dict()
+WEIGHTS = (".safetensors", ".pth", ".bin", ".pt")
+
+
+def state_dict(path) -> dict:
+    """A torch.save checkpoint, memory-mapped on the CPU (its tensors are read from the file as they are used, never
+    copied into RAM whole) and unpickled with weights_only (no code runs)."""
+    return torch.load(path, map_location="cpu", mmap=True, weights_only=True)
+
+
 def load_component(model, component: str, ctx):
     """Load one component of a Model handle (core.pack.ModelRef) for ctx's run: the pack builds it on meta, the
-    loader fills it, reporting progress with phase "loading <component>"."""
+    loader fills it, reporting progress with phase "loading <component>". A pack whose checkpoints are not
+    safetensors defines `load_component(component, model, ctx)` (as core.loaders_mlx's hook): the core then calls it
+    after the same files check and phase, and the pack builds, fills and places the module itself."""
     spec, precision = model.pack.component(component), model.precision_of(component)
-    files = [p for p in model.files(component) if p.suffix == ".safetensors"]
+    files = [p for p in model.files(component) if p.suffix in WEIGHTS]
     if not files:
         raise RunError(f"{component}: no weights for {model.owner(component)} in the models folder")
+    if own := getattr(model.pack.module, "load_component", None):
+        ctx.progress(1, 1, f"loading {component}")
+        return own(component, model, ctx)
+    if any(p.suffix != ".safetensors" for p in files):
+        raise RunError(f"{component}: {files[0].suffix} weights need the pack's own load_component")
     meta = model.pack.module.build(component, model)
     bake: dict[str, list] = {}
     if baked := model.baked(
