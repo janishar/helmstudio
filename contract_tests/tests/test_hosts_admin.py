@@ -114,6 +114,33 @@ def test_settings_refusals(admin, api):
     assert admin.put(f"{ADMIN}/hosts/nohost/pins", json={"pins": []}).status_code == 404
 
 
+def fake_key(admin) -> dict:
+    hosts = ok(admin.get(f"{STUDIO}/hosts"))["hosts"]
+    return next(h for h in hosts if (h["host"], h["env"]) == (HOST, ENV))
+
+
+def test_reserve_mode_auto(admin, tiny):
+    """API 1.75 (plan 35): auto skips the reserve check and keeps reserve_gb; the fake host (Linux, no GPU limit)
+    budgets RAM - RUNNER_RESERVE_GB (1); a PUT without reserve_mode keeps the mode; custom again cuts reserve_gb."""
+    s = put_settings(admin, reserve_gb=1024, reserve_mode="auto")
+    assert s["reserve_mode"] == "auto" and s["reserve_gb"] == 1024, s
+    h = fake_key(admin)
+    assert h["admin"]["policy"]["reserve_mode"] == "auto", h["admin"]
+    assert h["machine"].get("gpu_limit_gb") is None, h["machine"]
+    assert h["memory"]["budget_gb"] == pytest.approx(h["machine"]["ram_gb"] - 1, abs=0.2), h
+    assert put_settings(admin, reserve_gb=1024)["reserve_mode"] == "auto"  # an older client's PUT
+    s = put_settings(admin, reserve_gb=2, reserve_mode="custom")
+    h = fake_key(admin)
+    assert s["reserve_mode"] == "custom" and h["admin"]["policy"]["reserve_mode"] == "custom", h[
+        "admin"
+    ]
+    assert h["memory"]["budget_gb"] == pytest.approx(h["machine"]["ram_gb"] - 2, abs=0.2), h
+    r = admin.put(f"{ADMIN}/hosts/{HOST}/settings", json=WARM | {"reserve_mode": "sometimes"})
+    assert r.status_code == 422 and r.json()["detail"] == "reserve_mode must be auto or custom", (
+        r.text
+    )
+
+
 def test_pin_precision_fp32(admin, tiny):
     """API 1.20: fp32 is a Precision (a component kept at its stored float32); the runner takes the pin as is."""
     s = put_pins(admin, [PIN | {"precision": "fp32"}])
