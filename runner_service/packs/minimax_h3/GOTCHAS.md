@@ -152,7 +152,7 @@ The pack runs the pinned h3 binary (`vendor/h3c`, h3.c 4cafd17, `make h3`) as a 
   e6e6dac2) and before the host gaps were fixed the same afternoon: no gcc / build-essential, no python3.12-dev, a
   long hostname, and no cu13 `lib64` / `libcudart.so` links (all of which the CUDA image had). The likely cause is one
   of those gaps (SGLang's JIT kernels fail at worker start), not the LoRA, which ran clean on 11-22 in the image.
-  alpha.6 lifts the limit again; sgl.preflight now makes the links and refuses a long hostname or a missing gcc.
+  alpha.6 row 1 lifts the limit again; row 3 (sgl.preflight) makes the links and refuses a long hostname or a missing gcc.
   Unproven until the GPU check: if Turbo still fails, the stderr tail shows the cause, and `variants: [base]` goes
   back until it is fixed.
 - **Preset order by time** (owner 24.12 point 3: swap Turbo and Fast if Fast is quicker): measured 2026-11-22 through
