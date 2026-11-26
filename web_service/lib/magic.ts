@@ -1,0 +1,697 @@
+// Magic's board (plan 39 §45.6, phase B): the document one board is, and the named ops that edit it. Pure: no React, no
+// storage. Phase B keeps the document in this browser; phase C sends the same ops to studio (`POST …/edits` with a
+// base_revision), so the shapes here are the contract's to be: lanes, blocks, links, transitions, assets, notes.
+// Times are frames at the board's fps.
+import { normalize, type Doc as SeqDoc, type Norm, type Takes as SeqTakes } from "@/lib/timeline";
+
+export type Kind = "frame" | "image" | "video" | "voice" | "music" | "sound";
+export type Role = "storyboard" | "shots" | "voice" | "music" | "sound" | "free";
+export type TransitionKind = "cut" | "dissolve" | "fade" | "wipe" | "morph";
+
+export type Target = { width: number; height: number; fps: number; sample_rate: number };
+/** A lane; its place in `lanes` is its order. `kind`: the kind Add picks first (any kind goes on any lane). */
+export type Lane = { id: string; name: string; role: Role; hidden?: boolean; kind?: Kind };
+/** An @ pick inside a request: an asset, or another block's first frame, last frame or take. */
+export type Ref = { asset: string } | { block: string; part: "first" | "last" | "take" };
+/** The standard generation request (phase D fills it per kind; Advanced is the model's own params). */
+export type MagicRequest = {
+  kind: Kind;
+  model?: string;
+  prompt?: string;
+  /** a voice block's line; a dialogue's turns (owner: Dialogue is a Voice block with turns) */
+  line?: string;
+  turns?: { speaker: string; text: string }[];
+  /** a voice block's voice (an asset id), a frame's style */
+  voice?: string;
+  style?: "sketch" | "rough" | "full";
+  /** a sound made from a shot's video */
+  from?: string;
+  refs?: Ref[];
+  advanced?: Record<string, unknown>;
+};
+/** An effect badge; baked when sent. */
+export type Effect = { name: string; params?: Record<string, number | string>; off?: boolean };
+export type Block = {
+  id: string;
+  lane: string;
+  at: number;
+  length: number;
+  kind: Kind;
+  name: string;
+  request: MagicRequest;
+  /** take ids from its runs, oldest first */
+  takes: string[];
+  pinned?: string;
+  note?: string;
+  effects: Effect[];
+  /** a shot made from a storyboard frame */
+  from_frame?: string;
+};
+/** A voice or music block tied to a shot, or to a run of shots (music stretches with the run). */
+export type Link = { block: string; to: string[] };
+export type Transition = {
+  id: string;
+  between?: [string, string];
+  start?: string;
+  end?: string;
+  kind: TransitionKind;
+  length: number;
+};
+export type Asset = {
+  id: string;
+  kind: "character" | "prop" | "place";
+  handle: string;
+  name: string;
+  sheet: string[];
+  voice_id?: string;
+  note?: string;
+  imported_from?: string;
+};
+export type Doc = {
+  target: Target;
+  lanes: Lane[];
+  blocks: Block[];
+  links: Link[];
+  transitions: Transition[];
+  assets: Asset[];
+  notes: string[];
+};
+
+/** Insert pushes what is after the point along (and a move closes the gap it leaves); Overwrite covers it. */
+export type Mode = "insert" | "overwrite";
+
+export type Op =
+  | { op: "add"; block: Omit<Block, "id"> & { id?: string }; mode: Mode }
+  | { op: "move"; ids: string[]; dt: number; lane?: string; mode: Mode }
+  | { op: "trim"; id: string; at?: number; length?: number }
+  | { op: "delete"; ids: string[]; mode: Mode }
+  | { op: "duplicate"; ids: string[] }
+  | { op: "split"; id: string; at: number }
+  | { op: "link"; block: string; to: string[] }
+  | { op: "unlink"; block: string }
+  | {
+      op: "transition";
+      between?: [string, string];
+      start?: string;
+      end?: string;
+      kind: TransitionKind;
+      length?: number;
+    }
+  | { op: "effect"; ids: string[]; effect: Effect }
+  | { op: "effect_set"; id: string; index: number; effect: Effect | null }
+  | { op: "block"; id: string; set: Partial<Pick<Block, "name" | "note" | "request" | "pinned">> }
+  | { op: "lane_add"; lane: Omit<Lane, "id"> & { id?: string }; after?: string }
+  | { op: "lane"; id: string; set: Partial<Omit<Lane, "id">> }
+  | { op: "lane_move"; id: string; by: -1 | 1 }
+  | { op: "lane_delete"; id: string }
+  | { op: "asset_delete"; id: string };
+
+export type Applied = { doc: Doc } | { error: string };
+
+export const end = (b: Block) => b.at + b.length;
+const clone = (d: Doc): Doc => structuredClone(d);
+
+/** A fresh id with this prefix, not used in the document. */
+export function freshId(d: Doc, prefix: string): string {
+  const used = new Set([
+    ...d.blocks.map((b) => b.id),
+    ...d.lanes.map((l) => l.id),
+    ...d.transitions.map((t) => t.id),
+  ]);
+  let n = 1;
+  while (used.has(`${prefix}${n}`)) n++;
+  return `${prefix}${n}`;
+}
+
+/** The lane's blocks in time. */
+export const inLane = (d: Doc, lane: string) =>
+  d.blocks.filter((b) => b.lane === lane).sort((a, b) => a.at - b.at);
+
+/** Frames → "8 s", "6.5 s". */
+export const secs = (frames: number, fps: number) => `${+(frames / fps).toFixed(1)} s`;
+
+/** Frames → "0:10.5" (one decimal) or "0:24" (whole: `whole`). */
+export function clock(frames: number, fps: number, whole = false): string {
+  const s = Math.max(0, frames / fps);
+  const m = Math.floor(s / 60);
+  const r = s - m * 60;
+  return `${m}:${whole ? String(Math.floor(r)).padStart(2, "0") : r.toFixed(1).padStart(4, "0")}`;
+}
+
+// ------------------------------------------------------------------------------------------------ placing blocks
+
+/** Removes `ids` from the document; Insert closes each gap on its lane. Returns, per lane, the map from an old time
+ * to its time after the gaps closed (identity for Overwrite). */
+function lift(d: Doc, ids: Set<string>, mode: Mode): Record<string, (t: number) => number> {
+  const gone = d.blocks.filter((b) => ids.has(b.id));
+  d.blocks = d.blocks.filter((b) => !ids.has(b.id));
+  const maps: Record<string, (t: number) => number> = {};
+  if (mode === "overwrite") return maps;
+  for (const lane of new Set(gone.map((b) => b.lane))) {
+    const holes = gone.filter((b) => b.lane === lane);
+    // a time inside a hole goes to the hole's start; past the lane's last block, a drop point stays where it is (a
+    // move into empty space after everything is not pulled back by the gap it leaves)
+    const last = Math.max(0, ...d.blocks.filter((b) => b.lane === lane).map(end));
+    const close = (t: number) =>
+      t - holes.reduce((n, h) => n + (end(h) <= t ? h.length : h.at < t ? t - h.at : 0), 0);
+    maps[lane] = (t) => (t > last ? t : close(t));
+    for (const b of d.blocks) if (b.lane === lane) b.at = close(b.at);
+  }
+  return maps;
+}
+
+/** Makes room for [at, at + len) on `lane`: Insert pushes what starts there or later along (a block the point falls
+ * inside moves the point to its end); Overwrite cuts the span out (covered blocks go, others are trimmed or split).
+ * Returns where the group starts. */
+function room(d: Doc, lane: string, at: number, len: number, mode: Mode): number {
+  const here = d.blocks.filter((b) => b.lane === lane);
+  if (mode === "insert") {
+    // ponytail: a point inside a block goes to its end; splitting it to insert there is the Overwrite tool's job
+    const inside = here.find((b) => b.at < at && at < end(b));
+    const start = inside ? end(inside) : at;
+    for (const b of here) if (b.at >= start) b.at += len;
+    return start;
+  }
+  const stop = at + len;
+  for (const b of here) {
+    if (b.at >= stop || end(b) <= at) continue;
+    if (b.at >= at && end(b) <= stop) d.blocks = d.blocks.filter((x) => x !== b);
+    else if (b.at < at && end(b) > stop) {
+      // split: the part after the span is a new block with the same request and takes
+      const rest = { ...structuredClone(b), id: freshId(d, "b"), at: stop, length: end(b) - stop };
+      b.length = at - b.at;
+      d.blocks.push(rest);
+    } else if (b.at < at) b.length = at - b.at;
+    else {
+      b.length = end(b) - stop;
+      b.at = stop;
+    }
+  }
+  return at;
+}
+
+/** Puts `group` (blocks already off the document) on `lane` from `at`, keeping their spacing. */
+function place(d: Doc, group: Block[], lane: string, at: number, mode: Mode) {
+  const lo = Math.min(...group.map((b) => b.at));
+  const hi = Math.max(...group.map(end));
+  const start = Math.max(0, at);
+  let s = start;
+  if (mode === "insert") s = room(d, lane, start, hi - lo, mode);
+  else for (const b of group) room(d, lane, start + b.at - lo, b.length, mode);
+  for (const b of group) d.blocks.push({ ...b, lane, at: s + b.at - lo });
+}
+
+// ------------------------------------------------------------------------------------------------ ties and joins
+
+/** Moves each tied block with its shot: by the shot's own move (a run of shots: the first one's), or fitted to the
+ * run when it was fitted before. `before`: the blocks as they were; `moved`: blocks the op moved itself. */
+function follow(d: Doc, before: Map<string, Block>, moved: Set<string>) {
+  const now = new Map(d.blocks.map((b) => [b.id, b]));
+  for (const l of d.links) {
+    const b = now.get(l.block);
+    if (!b || moved.has(b.id)) continue;
+    const was = l.to.map((id) => before.get(id));
+    const is = l.to.map((id) => now.get(id));
+    if (was.some((x) => !x) || is.some((x) => !x)) continue;
+    const span = (xs: (Block | undefined)[]) => [
+      Math.min(...xs.map((x) => x!.at)),
+      Math.max(...xs.map((x) => end(x!))),
+    ];
+    const [a0, e0] = span(was);
+    const [a1, e1] = span(is);
+    const old = before.get(b.id) ?? b;
+    if (l.to.length > 1 && old.at === a0 && end(old) === e0) {
+      b.at = a1;
+      b.length = e1 - a1;
+    } else b.at = old.at + (is[0]!.at - was[0]!.at);
+  }
+}
+
+/** Drops what points at blocks or lanes that are gone, and joins that no longer touch; blocks in lane, time order. */
+function tidy(d: Doc): Doc {
+  const ids = new Set(d.blocks.map((b) => b.id));
+  const lanes = new Set(d.lanes.map((l) => l.id));
+  d.links = d.links.filter((l) => ids.has(l.block) && l.to.every((t) => ids.has(t)));
+  const byId = new Map(d.blocks.map((b) => [b.id, b]));
+  d.transitions = d.transitions.filter((t) => {
+    if (t.between) {
+      const [a, b] = t.between.map((x) => byId.get(x));
+      return !!a && !!b && a.lane === b.lane && end(a) === b.at;
+    }
+    return lanes.has(t.start ?? t.end ?? "");
+  });
+  const order = new Map(d.lanes.map((l, i) => [l.id, i]));
+  d.blocks.sort((a, b) => order.get(a.lane)! - order.get(b.lane)! || a.at - b.at);
+  return d;
+}
+
+// ------------------------------------------------------------------------------------------------ the ops
+
+/** Applies one op, all or nothing (as studio will): the new document, or why it can't. */
+export function apply(doc: Doc, op: Op): Applied {
+  const d = clone(doc);
+  const before = new Map(doc.blocks.map((b) => [b.id, b]));
+  const get = (id: string) => d.blocks.find((b) => b.id === id);
+  const lane = (id: string) => d.lanes.find((l) => l.id === id);
+  switch (op.op) {
+    case "add": {
+      if (!lane(op.block.lane)) return { error: "That lane is gone." };
+      if (op.block.length < 1) return { error: "A block needs a length." };
+      const b = { ...structuredClone(op.block), id: op.block.id ?? freshId(d, "b") } as Block;
+      place(d, [b], b.lane, b.at, op.mode);
+      follow(d, before, new Set([b.id]));
+      return { doc: tidy(d) };
+    }
+    case "move": {
+      const group = op.ids.map(get).filter((b): b is Block => !!b);
+      if (!group.length) return { error: "Nothing to move." };
+      const from = new Set(group.map((b) => b.lane));
+      if (op.lane && !lane(op.lane)) return { error: "That lane is gone." };
+      if (op.lane && from.size > 1 && [...from].some((l) => l !== op.lane))
+        return { error: "Move blocks from one lane at a time." };
+      const copies = group.map((b) => structuredClone(b));
+      const maps = lift(d, new Set(op.ids), op.mode);
+      // per target lane, the group's blocks on it; a drop point counts in the lane as it looked while dragging
+      for (const l of op.lane ? [op.lane] : [...from]) {
+        const part = copies.filter((b) => op.lane || b.lane === l);
+        const at = Math.max(0, Math.min(...part.map((b) => b.at)) + op.dt);
+        place(d, part, l, (maps[l] ?? ((t: number) => t))(at), op.mode);
+      }
+      follow(d, before, new Set(op.ids));
+      return { doc: tidy(d) };
+    }
+    case "trim": {
+      const b = get(op.id);
+      if (!b) return { error: "That block is gone." };
+      const at = op.at ?? b.at;
+      const length = op.length ?? end(b) - at;
+      if (at < 0 || length < 1) return { error: "A block needs a length." };
+      const others = d.blocks.filter((x) => x.lane === b.lane && x !== b);
+      if (others.some((x) => x.at < at + length && end(x) > at))
+        return { error: "It would cover the block next to it." };
+      b.at = at;
+      b.length = length;
+      follow(d, before, new Set([b.id]));
+      return { doc: tidy(d) };
+    }
+    case "delete": {
+      if (!op.ids.some(get)) return { error: "Nothing to delete." };
+      lift(d, new Set(op.ids), op.mode);
+      follow(d, before, new Set());
+      return { doc: tidy(d) };
+    }
+    case "duplicate": {
+      const group = op.ids.map(get).filter((b): b is Block => !!b);
+      if (!group.length) return { error: "Nothing to duplicate." };
+      for (const l of new Set(group.map((b) => b.lane))) {
+        const part = group.filter((b) => b.lane === l);
+        const copies: Block[] = [];
+        for (const b of part) {
+          // fresh one by one: each copy's id is taken before the next is made
+          const c = { ...structuredClone(b), id: freshId(d, "b"), name: `${b.name} copy` };
+          delete c.pinned;
+          d.blocks.push(c);
+          copies.push(c);
+        }
+        d.blocks = d.blocks.filter((b) => !copies.includes(b));
+        place(d, copies, l, Math.max(...part.map(end)), "insert");
+      }
+      follow(d, before, new Set());
+      return { doc: tidy(d) };
+    }
+    case "split": {
+      const b = get(op.id);
+      if (!b || !(b.at < op.at && op.at < end(b))) return { error: "The playhead isn't on it." };
+      const rest: Block = {
+        ...structuredClone(b),
+        id: freshId(d, "b"),
+        at: op.at,
+        length: end(b) - op.at,
+      };
+      b.length = op.at - b.at;
+      d.blocks.push(rest);
+      return { doc: tidy(d) };
+    }
+    case "link": {
+      const b = get(op.block);
+      if (!b || !op.to.length || op.to.some((t) => !get(t) || t === op.block))
+        return { error: "Tie it to a shot." };
+      d.links = [...d.links.filter((l) => l.block !== op.block), { block: op.block, to: op.to }];
+      return { doc: tidy(d) };
+    }
+    case "unlink":
+      d.links = d.links.filter((l) => l.block !== op.block);
+      return { doc: d };
+    case "transition": {
+      const same = (t: Transition) =>
+        op.between
+          ? t.between?.join() === op.between.join()
+          : op.start
+            ? t.start === op.start
+            : t.end === op.end;
+      const was = d.transitions.find(same);
+      d.transitions = d.transitions.filter((t) => !same(t));
+      if (op.between) {
+        const [a, b] = op.between.map(get);
+        if (!a || !b || a.lane !== b.lane || end(a) !== b.at)
+          return { error: "Those blocks don't meet." };
+      }
+      // a cut between two blocks is no transition; at a lane's start or end, a cut is none either
+      if (op.kind !== "cut")
+        d.transitions.push({
+          id: was?.id ?? freshId(d, "t"),
+          ...(op.between
+            ? { between: op.between }
+            : op.start
+              ? { start: op.start }
+              : { end: op.end }),
+          kind: op.kind,
+          length: op.length ?? was?.length ?? DEFAULT_LENGTH[op.kind] * d.target.fps,
+        });
+      return { doc: tidy(d) };
+    }
+    case "effect": {
+      for (const id of op.ids) get(id)?.effects.push({ ...op.effect });
+      return { doc: d };
+    }
+    case "effect_set": {
+      const b = get(op.id);
+      if (!b?.effects[op.index]) return { error: "That effect is gone." };
+      if (op.effect) b.effects[op.index] = op.effect;
+      else b.effects.splice(op.index, 1);
+      return { doc: d };
+    }
+    case "block": {
+      const b = get(op.id);
+      if (!b) return { error: "That block is gone." };
+      Object.assign(b, structuredClone(op.set));
+      if ("pinned" in op.set && !op.set.pinned) delete b.pinned;
+      return { doc: d };
+    }
+    case "lane_add": {
+      const l = { ...op.lane, id: op.lane.id ?? freshId(d, "l") } as Lane;
+      const i = op.after ? d.lanes.findIndex((x) => x.id === op.after) + 1 : d.lanes.length;
+      d.lanes.splice(i || d.lanes.length, 0, l);
+      return { doc: d };
+    }
+    case "lane": {
+      const l = lane(op.id);
+      if (!l) return { error: "That lane is gone." };
+      if (op.set.name !== undefined && !op.set.name.trim())
+        return { error: "Give the lane a name." };
+      Object.assign(l, op.set);
+      return { doc: d };
+    }
+    case "lane_move": {
+      const i = d.lanes.findIndex((l) => l.id === op.id);
+      const j = i + op.by;
+      if (i < 0 || j < 0 || j >= d.lanes.length) return { error: "It can't go further." };
+      [d.lanes[i], d.lanes[j]] = [d.lanes[j], d.lanes[i]];
+      return { doc: tidy(d) };
+    }
+    case "lane_delete": {
+      if (!lane(op.id)) return { error: "That lane is gone." };
+      d.lanes = d.lanes.filter((l) => l.id !== op.id);
+      d.blocks = d.blocks.filter((b) => b.lane !== op.id);
+      return { doc: tidy(d) };
+    }
+    case "asset_delete": {
+      d.assets = d.assets.filter((a) => a.id !== op.id);
+      for (const b of d.blocks)
+        if (b.request.refs)
+          b.request.refs = b.request.refs.filter((r) => !("asset" in r) || r.asset !== op.id);
+      return { doc: d };
+    }
+  }
+}
+
+/** Seconds a new transition of each kind lasts. */
+export const DEFAULT_LENGTH: Record<TransitionKind, number> = {
+  cut: 0,
+  dissolve: 0.5,
+  fade: 1,
+  wipe: 0.5,
+  morph: 1,
+};
+
+// ------------------------------------------------------------------------------------------------ snapping
+
+export type SnapKind = "edge" | "playhead" | "ruler";
+/** Where a time snaps: the nearest block edge (blocks in `skip` aside), the playhead or a whole second on the ruler,
+ * within `tol` frames; edges and the playhead win over the ruler. */
+export function snap(
+  d: Doc,
+  t: number,
+  tol: number,
+  playhead: number,
+  skip: Set<string> = new Set(),
+): { t: number; kind: SnapKind } | null {
+  const pts: { t: number; kind: SnapKind }[] = [{ t: playhead, kind: "playhead" }];
+  for (const b of d.blocks)
+    if (!skip.has(b.id)) pts.push({ t: b.at, kind: "edge" }, { t: end(b), kind: "edge" });
+  let best: { t: number; kind: SnapKind } | null = null;
+  for (const p of pts)
+    if (Math.abs(p.t - t) <= tol && (!best || Math.abs(p.t - t) < Math.abs(best.t - t))) best = p;
+  if (best) return best;
+  const sec = Math.round(t / d.target.fps) * d.target.fps;
+  return Math.abs(sec - t) <= tol / 2 ? { t: sec, kind: "ruler" } : null;
+}
+
+/** A dragged group's start snapped by either of its ends (the group is `len` long). */
+export function snapGroup(
+  d: Doc,
+  at: number,
+  len: number,
+  tol: number,
+  playhead: number,
+  skip: Set<string>,
+): { at: number; snapped: { t: number; kind: SnapKind } | null } {
+  const a = snap(d, at, tol, playhead, skip);
+  const b = snap(d, at + len, tol, playhead, skip);
+  if (a && (!b || Math.abs(a.t - at) <= Math.abs(b.t - at - len))) return { at: a.t, snapped: a };
+  if (b) return { at: b.t - len, snapped: b };
+  return { at, snapped: null };
+}
+
+// ------------------------------------------------------------------------------------------------ what the board shows
+
+/** A join on a lane: two blocks that meet (`between`), or the lane's start or end (its first or last block). */
+export type Join = {
+  key: string;
+  at: number;
+  lane: string;
+  between?: [string, string];
+  start?: string;
+  end?: string;
+  kind: TransitionKind;
+  length: number;
+};
+
+/** The lane's joins with their transitions (a meeting without one is a cut); a start or end only when it has one. */
+export function joins(d: Doc, laneId: string): Join[] {
+  const bs = inLane(d, laneId);
+  const out: Join[] = [];
+  const find = (f: (t: Transition) => boolean) => d.transitions.find(f);
+  const st = find((t) => t.start === laneId);
+  if (st && bs.length)
+    out.push({
+      key: `s:${laneId}`,
+      at: bs[0].at,
+      lane: laneId,
+      start: laneId,
+      kind: st.kind,
+      length: st.length,
+    });
+  for (let i = 0; i + 1 < bs.length; i++) {
+    const [a, b] = [bs[i], bs[i + 1]];
+    if (end(a) !== b.at) continue;
+    const t = find((x) => x.between?.[0] === a.id && x.between?.[1] === b.id);
+    out.push({
+      key: `${a.id}>${b.id}`,
+      at: b.at,
+      lane: laneId,
+      between: [a.id, b.id],
+      kind: t?.kind ?? "cut",
+      length: t?.length ?? 0,
+    });
+  }
+  const en = find((t) => t.end === laneId);
+  if (en && bs.length)
+    out.push({
+      key: `e:${laneId}`,
+      at: end(bs.at(-1)!),
+      lane: laneId,
+      end: laneId,
+      kind: en.kind,
+      length: en.length,
+    });
+  return out;
+}
+
+/** A tied block that runs past its shot ("Line 1 runs 3 s past Shot 1"). */
+export type Overrun = { block: string; shot: string; by: number };
+export function overruns(d: Doc): Overrun[] {
+  const byId = new Map(d.blocks.map((b) => [b.id, b]));
+  const out: Overrun[] = [];
+  for (const l of d.links) {
+    const b = byId.get(l.block);
+    const last = byId.get(l.to.at(-1)!);
+    if (b && last && l.to.length === 1 && end(b) > end(last))
+      out.push({ block: b.id, shot: last.id, by: end(b) - end(last) });
+  }
+  return out;
+}
+
+/** The board's length: its last block's end. */
+export const duration = (d: Doc) => Math.max(0, ...d.blocks.map(end));
+
+/** The blocks an asset is used in (its @ picks, a voice that is it). */
+export const usedIn = (d: Doc, asset: string) =>
+  d.blocks.filter(
+    (b) =>
+      b.request.voice === asset ||
+      (b.request.refs ?? []).some((r) => "asset" in r && r.asset === asset),
+  );
+
+// ------------------------------------------------------------------------------------------------ takes and status
+
+/** A take as the board needs it. Phase B's are fake (lib/magic-fixture.ts); phase C reads them from studio. */
+export type TakeInfo = {
+  id: string;
+  block: string;
+  status: "running" | "done" | "failed";
+  progress?: number;
+  /** the block's inputs when its run started (studio keeps a hash on the run, §45.7) */
+  inputs: string;
+  error?: string;
+  seed?: number;
+  /** the picture (a CSS background) of a fake take */
+  art?: string;
+};
+export type Takes = Record<string, TakeInfo>;
+
+/** The take a block shows: its pinned one, else its latest done one. */
+export function shown(b: Block, takes: Takes): TakeInfo | undefined {
+  if (b.pinned && takes[b.pinned]?.status === "done") return takes[b.pinned];
+  return [...b.takes]
+    .reverse()
+    .map((id) => takes[id])
+    .find((t) => t?.status === "done");
+}
+
+/** What a block's take depends on: its request, the frame it was made from, the takes of blocks it @-picks. */
+export function inputsOf(d: Doc, b: Block, takes: Takes): string {
+  const byId = new Map(d.blocks.map((x) => [x.id, x]));
+  const take = (id?: string) => {
+    const x = id ? byId.get(id) : undefined;
+    return x ? (shown(x, takes)?.id ?? null) : null;
+  };
+  const picks = (b.request.refs ?? []).map((r) => ("block" in r ? take(r.block) : r.asset));
+  return JSON.stringify([b.request, take(b.from_frame), picks]);
+}
+
+export type Status =
+  | { s: "draft" }
+  | { s: "running"; progress: number }
+  | { s: "done" }
+  | { s: "old" }
+  | { s: "failed"; error: string };
+
+/** Derived, never stored (§45.7): running when a run of it is going, failed when its last run failed and nothing is
+ * done, draft with no take, out of date when its inputs changed after the take shown was made, else done. */
+export function statusOf(d: Doc, b: Block, takes: Takes): Status {
+  const ts = b.takes.map((id) => takes[id]).filter(Boolean);
+  const run = ts.findLast((t) => t.status === "running");
+  if (run) return { s: "running", progress: run.progress ?? 0 };
+  const t = shown(b, takes);
+  if (!t) {
+    const last = ts.at(-1);
+    return last?.status === "failed"
+      ? { s: "failed", error: last.error ?? "failed" }
+      : { s: "draft" };
+  }
+  return t.inputs === inputsOf(d, b, takes) ? { s: "done" } : { s: "old" };
+}
+
+// ------------------------------------------------------------------------------------------------ undo
+
+/** The board's history in this browser: Undo and Redo step through documents. Studio writes (a run adding a take)
+ * change every document in it instead, so undo never takes a take back (§45.12). */
+export type History = { past: Doc[]; now: Doc; future: Doc[] };
+export const MAX_UNDO = 100;
+export const history = (now: Doc): History => ({ past: [], now, future: [] });
+export const commit = (h: History, doc: Doc): History => ({
+  past: [...h.past, h.now].slice(-MAX_UNDO),
+  now: doc,
+  future: [],
+});
+export const undo = (h: History): History =>
+  h.past.length
+    ? { past: h.past.slice(0, -1), now: h.past.at(-1)!, future: [h.now, ...h.future] }
+    : h;
+export const redo = (h: History): History =>
+  h.future.length ? { past: [...h.past, h.now], now: h.future[0], future: h.future.slice(1) } : h;
+export const everywhere = (h: History, f: (d: Doc) => Doc): History => ({
+  past: h.past.map(f),
+  now: f(h.now),
+  future: h.future.map(f),
+});
+
+// ------------------------------------------------------------------------------------------------ the player
+
+/** The board as a sequence for the Timeline's player (lib/timeline-preview.ts): the Shots lane on V1 (gaps as empty
+ * slots, dissolves as they are), voice, music and sound lanes on audio tracks. Phase G's Send builds on it. */
+export function toSequence(d: Doc, takes: Takes, dissolves = true) {
+  const fps = d.target.fps;
+  const s = (f: number) => f / fps;
+  const shots = d.lanes.find((l) => l.role === "shots");
+  const v1: Record<string, unknown>[] = [];
+  let t = 0;
+  for (const b of shots ? inLane(d, shots.id) : []) {
+    if (b.at > t) v1.push({ id: `gap${t}`, take_id: null, hold: s(b.at - t) });
+    const take = shown(b, takes);
+    const tr =
+      dissolves && d.transitions.find((x) => x.between?.[1] === b.id && x.kind === "dissolve");
+    v1.push({
+      id: b.id,
+      take_id: take?.id ?? null,
+      ...(take ? { in: 0, out: s(b.length) } : { hold: s(b.length) }),
+      ...(tr ? { transition_in: { type: "dissolve", frames: tr.length } } : {}),
+    });
+    t = end(b);
+  }
+  const audio = d.lanes
+    .filter((l) => ["voice", "music", "sound"].includes(l.role))
+    .slice(0, 8)
+    .map((l) => ({
+      kind: "audio" as const,
+      clips: inLane(d, l.id).flatMap((b) => {
+        const take = shown(b, takes);
+        return take ? [{ id: b.id, take_id: take.id, in: 0, out: s(b.length), at: s(b.at) }] : [];
+      }),
+    }));
+  const facts = Object.fromEntries(
+    d.blocks.flatMap((b) => {
+      const take = shown(b, takes);
+      if (!take) return [];
+      const kind =
+        b.kind === "video" ? "video" : b.kind === "frame" || b.kind === "image" ? "image" : "audio";
+      return [[take.id, { kind, duration_s: s(b.length), has_audio: false }]];
+    }),
+  );
+  return {
+    doc: { target: d.target, tracks: [{ kind: "video" as const, clips: v1 }, ...audio] },
+    facts,
+  };
+}
+
+/** The board as the player's normalized sequence: with its dissolves when the takes have the handles for them, else
+ * without (a dissolve needs media past each cut); null when it can't play at all. */
+export function playable(d: Doc, takes: Takes): { doc: Norm; facts: SeqTakes } | null {
+  for (const withDissolves of [true, false]) {
+    const { doc, facts } = toSequence(d, takes, withDissolves);
+    const n = normalize(doc as unknown as SeqDoc, facts as SeqTakes);
+    if ("document" in n) return { doc: n.document, facts: facts as SeqTakes };
+  }
+  return null;
+}
