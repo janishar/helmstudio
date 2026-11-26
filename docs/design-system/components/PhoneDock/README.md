@@ -1,0 +1,10 @@
+# PhoneDock
+
+The rail on a phone (shell.tsx below 768px): one sideways bar across the top, no logo.
+
+- Bar `hs-dock`: a `panel` with 30px corners, 14px in from the sides and top, 4/12px padding, items 14px apart, scrolls sideways.
+- Items are the Rail's `dock-item`s (58×64, the 36px 3D tile, 10/500 label; current `t1` with the white ring, others dimmed). The admin group lies flat (8px apart, 4px side padding) on its 55% `s3` ground; the separator is a 1px × 32px `s4` rule.
+- The Assistant item shows a 10px amber `#f2c14e` dot top right (ringed in `s1`) when a card waits for you; open, its tile is lit and ringed like the current page.
+- Every tap target is at least 44px; sheets open from the bottom.
+
+The consumer provides the sections the person may see. Icons and tiles match the desktop Rail.

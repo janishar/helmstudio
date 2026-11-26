@@ -1,0 +1,24 @@
+<!-- @dsCard group="Timeline" height=260 -->
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>TimelineTools · preview</title></head>
+<body>
+<div style="padding:16px;display:flex;flex-direction:column;gap:20px">
+<div class="tl-bar">
+  <div class="tl-seg" role="radiogroup" aria-label="Tool"><button class="tl-tb" type="button" role="radio" aria-checked="true" tabindex="0"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l12 8-5.5 1.5L10 18z"/></svg><span>Select</span><kbd>A</kbd></button><button class="tl-tb" type="button" role="radio" aria-checked="false" tabindex="-1"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H6v16h3M15 4h3v16h-3"/></svg><span>Trim</span><kbd>T</kbd></button><button class="tl-tb" type="button" role="radio" aria-checked="false" tabindex="-1"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8l-4 4z"/><path d="M12 9v12" stroke-dasharray="2 2"/></svg><span>Blade</span><kbd>B</kbd></button><button class="tl-tb" type="button" role="radio" aria-checked="false" tabindex="-1"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6v12M20 6v12M4 12h16"/><path d="m8 9-3 3 3 3M16 9l3 3-3 3"/></svg><span>Range</span><kbd>R</kbd></button><button class="tl-tb" type="button" role="radio" aria-checked="false" tabindex="-1"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="7" width="10" height="10" rx="2"/><path d="M2 12h3M19 12h3M12 2v3M12 19v3"/></svg><span>Overwrite</span><kbd>P</kbd></button></div>
+  <span class="tl-sep"></span>
+  <button class="tl-tg" type="button" aria-pressed="true" aria-label="Snapping"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4v8a6 6 0 0 0 12 0V4"/><path d="M6 8h4M14 8h4"/></svg></button>
+  <button class="tl-tg" type="button" aria-pressed="false" aria-label="Hover scrub"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M3 12c3-4 6-6 9-6s6 2 9 6c-3 4-6 6-9 6s-6-2-9-6z" opacity=".55"/></svg></button>
+  <span style="flex-grow:1"></span>
+  <div class="tl-zf" role="group" aria-label="Zoom"><button type="button" aria-label="Zoom out"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/></svg></button><span class="tl-zv">100%</span><button type="button" aria-label="Zoom in"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5v14"/></svg></button><button class="fit" type="button" aria-label="Zoom to fit"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span>Fit</span></button></div>
+  <button class="tl-tg" type="button" aria-label="Keyboard shortcuts">?</button>
+</div>
+<div class="tl-ks">
+  <div><h3 class="heading">Tools</h3><dl><div><dt><kbd>A</kbd></dt><dd>Select</dd></div><div><dt><kbd>T</kbd></dt><dd>Trim · roll · slip (⌥ slide)</dd></div><div><dt><kbd>B</kbd></dt><dd>Blade</dd></div></dl></div>
+  <div><h3 class="heading">Edit</h3><dl><div><dt><kbd>⌘B</kbd></dt><dd>Blade at playhead</dd></div><div><dt><kbd>Delete</kbd></dt><dd>Ripple delete</dd></div></dl></div>
+  <div><h3 class="heading">Play</h3><dl><div><dt><kbd>Space</kbd></dt><dd>Play · pause</dd></div><div><dt><kbd>J K L</kbd></dt><dd>Back · stop · forward</dd></div></dl></div>
+  <div><h3 class="heading">View</h3><dl><div><dt><kbd>N</kbd></dt><dd>Snapping</dd></div><div><dt><kbd>?</kbd></dt><dd>This sheet</dd></div></dl></div>
+</div>
+</div>
+</body>
+</html>

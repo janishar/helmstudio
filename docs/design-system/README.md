@@ -61,3 +61,10 @@ The app speaks in short, plain words. It is a tool, not a host: no greetings, no
 ## Components
 
 The components here are static renditions of the app's own classes in `components/bundle.css`; there is no JavaScript bundle. Load `tokens.css`, then `bundle.css`, and use the class names each component's guideline gives. Parts marked "board only, not built" come from the approved boards and are not in the app yet.
+
+- **Timeline**: TimelineLanes (ruler, lane heads, playhead `tl-ph`), TimelineClip (`tl-clip` and its looks: `a1` image, `a2` video, sky audio, dashed empty or offline), TimelineTools (`tl-bar`, the five tools, Snapping, Zoom, the shortcuts sheet) and TimelineOverlays (`tl-tag`, snap, blade, trim and slip). Overlays never take the pointer.
+- **Assistant**: AssistantDrawer (`ast drw`; `ast sheet` on a phone), AssistantCard (`cf`, Pick one `opts`), AssistantChats, AssistantMinBar (`ast-min`) and MentionsPicker (the @ lists). Anything that uses the GPU waits for a card.
+- **Pipelines**: Chain (`chain`, `pl`), GraphNode (`gn`, ports and wire colours) and RunStrip (the Graph's buttons, legend and live preview).
+- **Settings pages**: SettingsSection (`apage`, `sec`), PeopleRow (`who`, `trow`, the Users table), ProviderPick (`pk`) and SetupSteps (`stp2`, `stp`, `sw`).
+- **Media and screens**: MediaViewer, DropZone, SignIn and PhoneDock.
+- The code writes a few colours as literals, not tokens: amber `#f2c14e` (waiting, warnings), coral `#ff8a80` (Assistant errors and danger), sky `#86cdea` (audio clips, number wires), the Assistant's green mark `#d8f58c` → `#3c9a2e`. Use them only where these components use them. They are fixed for every theme: on `parchment` amber, coral and sky text on `s1` and `s2` are 1.6 to 2.3:1, under the 4.5:1 floor; kept as the code has them, to be moved into tokens with a light-theme value.

@@ -1,0 +1,23 @@
+<!-- @dsCard group="Screens" height=560 -->
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>SignIn · preview</title></head>
+<body>
+<div class="hs-auth" style="height:540px">
+  <div class="hs-auth-theme"><label class="label" for="th">Theme</label><select id="th"><option>Forest ink</option><option>Parchment</option></select></div>
+  <div aria-hidden="true">
+    <div class="hs-auth-take" style="left:4%;top:12%;width:170px;height:110px;transform:rotate(-8deg)"><span>Qwen Image 2.1</span></div>
+    <div class="hs-auth-take" style="left:74%;top:10%;width:130px;height:170px;transform:rotate(7deg)"><span>▶ LTX-2.5</span></div>
+    <div class="hs-auth-take" style="left:72%;top:62%;width:170px;height:100px;transform:rotate(-6deg)"><span>take</span></div>
+  </div>
+  <form class="hs-auth-card" aria-label="Sign in" onsubmit="return false">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px"><span class="hs-logo l44" aria-hidden="true"><svg width="28" height="28" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 16C8 12.4 10.4 10.6 13.3 10.6S18.4 12.6 18.4 16V21" style="fill:none;stroke-width:3.2;stroke-linecap:round;stroke:currentColor"/><path d="M8 7V21" style="fill:none;stroke-width:3.2;stroke-linecap:round;stroke:currentColor"/><path d="M5.3 1.6H10.7A.9.9 0 0 1 11.6 2.5V5L8 8.4L4.4 5V2.5A.9.9 0 0 1 5.3 1.6Z" style="fill:currentColor"/></svg></span><h1>helmstudio</h1></div>
+    <p role="alert">Wrong email or password.</p>
+    <div style="display:flex;flex-direction:column;gap:6px"><label class="label" for="e">Email</label><input id="e" class="in" type="email" value="you@studio.test" autocomplete="off"></div>
+    <div style="display:flex;flex-direction:column;gap:6px"><label class="label" for="p">Password</label><input id="p" class="in" type="password" autocomplete="off"></div>
+    <button class="key" type="submit">Sign in</button>
+    <p style="margin:4px 0 0;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--t2)">No account? Ask your admin.</p>
+  </form>
+</div>
+</body>
+</html>
