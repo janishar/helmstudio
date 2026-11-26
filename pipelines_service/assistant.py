@@ -395,11 +395,13 @@ _SPOKEN = re.compile(r"(?:^|\.)(?:prompt|text|script)$")
 
 
 def _voice_unwritten(s: State, calls: list) -> bool:
-    """A generate in this answer after a switch to an audio workflow with no change since: the old image prompt
-    would be spoken. Over this message's done calls, then the answer's, by the screen's workflows list."""
+    """A generate in this answer after a switch to a voice workflow (audio of class voice, or of no class: API 1.79,
+    music and sound prompts are not spoken) with no change since: the old image prompt would be spoken. Over this
+    message's done calls, then the answer's, by the screen's workflows list."""
     media = {}
     for w in ((s.get("screen") or {}).get("fields") or {}).get("workflows") or []:
-        media[w["id"]] = media[w["title"].lower()] = w.get("media")
+        spoken = w.get("media") == "audio" and w.get("sound", "voice") == "voice"
+        media[w["id"]] = media[w["title"].lower()] = spoken
     if not media:
         return False
     msg = f"{s['thread_id']}:{s['msg']}:"
@@ -412,7 +414,7 @@ def _voice_unwritten(s: State, calls: list) -> bool:
     for i, c in enumerate(done + calls):
         if c["name"] == "switchTo":
             w = c["args"]["workflow"]
-            voice = (media.get(w) or media.get(w.lower())) == "audio"
+            voice = bool(media.get(w) or media.get(w.lower()))
         elif c["name"] == "change" and _SPOKEN.search(c["args"]["key"]):
             voice = False
         elif c["name"] == "generate" and voice and i >= len(done):

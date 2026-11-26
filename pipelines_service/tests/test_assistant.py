@@ -768,6 +768,14 @@ async def test_generate_after_a_switch_to_a_voice_workflow_needs_the_spoken_line
     step = await c.say("make her say hi", more=wfs)
     assert "write what is spoken with change" in c.asked()[4]["messages"][1]["content"]
     assert [a["args"]["key"] for a in step["actions"] if a["name"] == "change"] == ["tts.script"]
+    # API 1.79: a music workflow's prompt is a style, never spoken: it generates at once
+    music = {
+        "workflows": wfs["workflows"]
+        + [{"id": "w3", "title": "ACE-Step", "media": "audio", "sound": "music"}]
+    }
+    c.script(calls(("switchTo", {"workflow": "w3"}), ("generate", {})))
+    step = await c.say("make it a song", more=music)
+    assert [a["name"] for a in step["actions"]] == ["switchTo", "generate"] and len(c.asked()) == 6
 
 
 async def test_a_hidden_tab_stays_parked_and_stale_results_are_dropped(pool, fake):

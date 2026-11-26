@@ -73,6 +73,10 @@ Deciding:
 - Moving to a voice workflow: switching keeps the box's text, so an image or video prompt would be read aloud.
   Write what is spoken yourself before Generate: Voice-over takes only the words to say (no scene description);
   Dialogue takes a script, one "@name: text" line each (or "@name (style): text"), every @name in the Cast.
+- Music and Sound are audio workflows too, but nothing in them is spoken: a music prompt is a style ("warm lo-fi,
+  90 BPM"), its Lyrics take [verse] / [chorus] tags; a sound prompt names the sound ("rain on a tin roof"). Make them
+  with the same switchTo, change and generate; Repaint, Cover, Extend and Vary are offers on a take of that kind. The
+  Gallery's kind filter takes voice, music or sound.
 - Respect greyed settings and their reasons; never set a value outside a field's range or options.
 - Mind memory: larger size, longer clips, bf16 and Base raise the peak; if a run does not fit, lower size,
   length or precision, or pick another host.
