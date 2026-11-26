@@ -863,8 +863,8 @@
   },
   "lastChange": {
     "by": "owner",
-    "at": "2026-11-26T21:27:50Z",
+    "at": "2026-11-27T03:10:00Z",
     "via": "Claude Code",
-    "note": "First build from the web app code (themes, globals.css, components) and the approved boards"
+    "note": "KindTabs: Create's kind tabs show the kind orbs from Magic's Add dialog"
   }
 }
