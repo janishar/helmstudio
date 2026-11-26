@@ -92,6 +92,7 @@ describe("Create on LTX video", () => {
       }),
     ).toBeTruthy();
     // the chip's menu picks the variant (no Model tile in the Inspector), as rows (docs/mock/RunOn.dc.html)
+    fireEvent.click(within(composer).getByRole("button", { name: "Distilled · int8" }));
     const menu = composer.querySelector<HTMLElement>("#model-pick")!;
     expect(menu.getAttribute("aria-label")).toBe("Model");
     expect([...menu.querySelectorAll("[role=menuitemradio]")].map((b) => b.textContent)).toEqual([
@@ -191,7 +192,7 @@ describe("Create on LTX video", () => {
     start(ltx("ltx-retake"));
     const composer = screen.getByRole("form", { name: "Composer" });
     // API 1.39 (docs/mock/LtxFeatures frame 6): the chip opens the version menu, Distilled · Dev
-    expect(await within(composer).findByText("Distilled · int8")).toBeTruthy();
+    fireEvent.click(await within(composer).findByRole("button", { name: "Distilled · int8" }));
     const dev = screen.getByRole("menuitemradio", { name: /^Dev/, hidden: true });
     // a label without its state looks pressed, and clicking it lets go
     const regen = within(composer).getByRole("button", { name: "Regenerate audio" });

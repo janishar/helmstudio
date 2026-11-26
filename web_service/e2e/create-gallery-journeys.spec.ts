@@ -324,3 +324,40 @@ test("j13 see what my clip was made from and jump to that picture", async () => 
   await expect(panel().getByRole("paragraph")).toHaveText("a red fox in snow");
   await expect(card("Fox, the keeper")).toHaveAttribute("aria-pressed", "true");
 });
+
+test("j14 settings in popups: a chip's popup edits its setting, Esc closes it, All settings opens the drawer", async () => {
+  // alpha.5 item 10 (docs/mock/TextToVideo.dc.html frames 1-6): the drawer is closed by default, remembered
+  await page.goto("/");
+  await page.evaluate(() => localStorage.removeItem("create-settings-drawer"));
+  await page.reload();
+  await page.getByRole("tab", { name: "Video" }).click();
+  await page.getByRole("button", { name: /^Workflow:/ }).click();
+  await page.getByRole("menuitemradio", { name: "Echo video", exact: true }).click();
+  await expect(page.getByRole("button", { name: /^Workflow: Echo video\./ })).toBeVisible();
+  const composer = page.getByRole("form", { name: "Composer" });
+  const sliders = composer.getByRole("button", { name: "All settings" });
+  await expect(sliders).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByRole("complementary", { name: "Inspector" })).toHaveCount(0);
+  // the size chip: its popup, a change shows on the chip at once
+  const size = composer.locator("[aria-controls=canvas-pop]");
+  await size.click();
+  const canvas = page.getByRole("dialog", { name: "Canvas" });
+  await expect(canvas).toBeVisible();
+  const before = await size.textContent();
+  await canvas.getByRole("button", { name: "1:1" }).click();
+  await expect(size).not.toHaveText(before!);
+  await expect(size).toHaveText(/^(\d+) × \1$/);
+  await shot("j14-size-popup");
+  await page.keyboard.press("Escape");
+  await expect(canvas).toBeHidden();
+  await expect(size).toBeFocused();
+  // All settings opens the drawer; a reload keeps it open; the sliders button closes it
+  await size.click();
+  await canvas.getByRole("button", { name: "All settings" }).click();
+  await expect(page.getByRole("complementary", { name: "Inspector" })).toBeVisible();
+  await expect(sliders).toHaveAttribute("aria-expanded", "true");
+  await page.reload();
+  await expect(page.getByRole("complementary", { name: "Inspector" })).toBeVisible();
+  await sliders.click();
+  await expect(page.getByRole("complementary", { name: "Inspector" })).toHaveCount(0);
+});

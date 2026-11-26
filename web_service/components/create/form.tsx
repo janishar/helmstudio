@@ -1,7 +1,7 @@
 "use client";
 // Form controls rendered from node schemas: text params go in the composer, the rest in the inspector, grouped
 // generically (the canvas node, label-over-value tiles, switches, the rest); the composer's chips summarise them.
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ChevronRight, Dices } from "lucide-react";
 import { Info } from "@/components/kit";
 import { PromptArea } from "@/components/create/prompt";
@@ -36,6 +36,7 @@ import {
   ASPECTS,
   aspectOf,
   display,
+  fpsKey,
   megapixelChoices,
   megapixelsOf,
   optionText,
@@ -648,12 +649,15 @@ function CanvasPicker({
   onChange,
   compact,
   stage1,
+  popup,
 }: {
   c: NonNullable<ReturnType<typeof canvasOf>>;
   errors: Record<string, string>;
   onChange: (key: string, raw: Raw) => void;
   compact?: boolean;
   stage1?: Stage1;
+  /** in a chip's popup (alpha.5 item 10, docs/mock/TextToVideo.dc.html frame 4): Aspect and Size as options */
+  popup?: boolean;
 }) {
   const { width, height, mode, w, h } = c;
   // compact: which tile's choices are open
@@ -685,6 +689,77 @@ function CanvasPicker({
       <b className="font-semibold">{value}</b>
     </button>
   );
+  const autoBtn = mode && (
+    <button
+      type="button"
+      className="opt bevel"
+      aria-pressed={aspect === "Auto"}
+      title={
+        mode.param.help ??
+        "The workflow's own size; with references, about 1 MP at the last one's aspect"
+      }
+      onClick={() => {
+        onChange(mode.key, "auto");
+        onChange(width.key, toRaw(width.initial, width.param));
+        onChange(height.key, toRaw(height.initial, height.param));
+      }}
+    >
+      Auto
+    </button>
+  );
+  const aspects = ASPECTS.map(([label, ratio]) => (
+    <button
+      key={label}
+      type="button"
+      className="opt bevel"
+      aria-pressed={aspect === label}
+      onClick={() => set(fit(ratio, mp))}
+    >
+      {label}
+    </button>
+  ));
+  // a video's line has no megapixels (the Size tile says them); a two-stage one adds stage 1's size
+  // (docs/mock/TextToVideo.dc.html)
+  const line = (
+    <span className="mono text-[12px] text-t2">
+      {w} × {h}
+      {!compact && ` · ${mpText(w, h)}`}
+      {c.fromRef
+        ? ` · from the ${c.first ? "first" : "last"} reference`
+        : grid > 1 && ` · on the ${grid} px grid`}
+      {stage1 &&
+        ` · ${stage1.clip ? "one-stage: the clip is" : "stage 1 runs at"} ${Math.round(w / stage1.by)} × ${Math.round(h / stage1.by)}`}
+    </span>
+  );
+  if (popup)
+    return (
+      <>
+        <div role="group" aria-label="Aspect" className="flex flex-col gap-1.5">
+          <span className="heading">Aspect</span>
+          <div className="flex flex-wrap gap-1.5">
+            {autoBtn}
+            {aspects}
+          </div>
+        </div>
+        <div role="group" aria-label="Size" className="flex flex-col gap-1.5">
+          <span className="heading">Size</span>
+          <div className="flex flex-wrap gap-1.5">
+            {choices.map((x) => (
+              <button
+                key={x}
+                type="button"
+                className="opt bevel"
+                aria-pressed={mp === x}
+                onClick={() => set(fit(ratio, x))}
+              >
+                {x} MP
+              </button>
+            ))}
+          </div>
+        </div>
+        {line}
+      </>
+    );
   return (
     <>
       {compact && (
@@ -700,35 +775,8 @@ function CanvasPicker({
         className={`grid gap-1.5 ${mode ? "grid-cols-5" : "grid-cols-4"}`}
         hidden={compact && opened !== "aspect"}
       >
-        {mode && (
-          <button
-            type="button"
-            className="opt bevel"
-            aria-pressed={aspect === "Auto"}
-            title={
-              mode.param.help ??
-              "The workflow's own size; with references, about 1 MP at the last one's aspect"
-            }
-            onClick={() => {
-              onChange(mode.key, "auto");
-              onChange(width.key, toRaw(width.initial, width.param));
-              onChange(height.key, toRaw(height.initial, height.param));
-            }}
-          >
-            Auto
-          </button>
-        )}
-        {ASPECTS.map(([label, ratio]) => (
-          <button
-            key={label}
-            type="button"
-            className="opt bevel"
-            aria-pressed={aspect === label}
-            onClick={() => set(fit(ratio, mp))}
-          >
-            {label}
-          </button>
-        ))}
+        {autoBtn}
+        {aspects}
       </div>
       {/* the size: a stepped slider, one stop per choice (seven chips did not fit the aside's width) */}
       <div className="flex flex-col gap-1.5" hidden={compact && opened !== "size"}>
@@ -752,17 +800,7 @@ function CanvasPicker({
           <span>{choices.at(-1)} MP</span>
         </span>
       </div>
-      <span className="mono text-[12px] text-t2">
-        {/* a video's line has no megapixels (the Size tile says them); a two-stage one adds stage 1's size
-            (docs/mock/TextToVideo.dc.html) */}
-        {w} × {h}
-        {!compact && ` · ${mpText(w, h)}`}
-        {c.fromRef
-          ? ` · from the ${c.first ? "first" : "last"} reference`
-          : grid > 1 && ` · on the ${grid} px grid`}
-        {stage1 &&
-          ` · ${stage1.clip ? "one-stage: the clip is" : "stage 1 runs at"} ${Math.round(w / stage1.by)} × ${Math.round(h / stage1.by)}`}
-      </span>
+      {line}
       <FieldError k={width.key} errors={errors} />
       <FieldError k={height.key} errors={errors} />
     </>
@@ -786,7 +824,10 @@ function Duration({
   onChange,
   resolved,
   plain,
+  id = idOf(f.key),
 }: {
+  /** the control's id: a chip's popup gives its own, so the drawer's stays unique */
+  id?: string;
   f: Field;
   raw: Raw;
   fps: number;
@@ -796,7 +837,6 @@ function Duration({
   /** without the (i) (a video workflow's Length, docs/mock/TextToVideo.dc.html) */
   plain?: boolean;
 }) {
-  const id = idOf(f.key);
   const g = gridOf(f.param);
   const auto = raw === "auto";
   const n = Number(raw);
@@ -1411,8 +1451,134 @@ function Line({
   );
 }
 
-/** The composer's quick chips: the model node's choices (the node that outputs a Model), the canvas, the seed (with Random). Each opens
- * its inspector control through `show` (a field key, or "canvas"). */
+/** Narrow windows and phones: the side panel sits under the page, not beside it (Tailwind's md). */
+const NARROW = "(max-width: 767px)";
+export const useNarrow = () =>
+  useSyncExternalStore(
+    (f) => {
+      const m = typeof matchMedia === "function" ? matchMedia(NARROW) : null;
+      m?.addEventListener("change", f);
+      return () => m?.removeEventListener("change", f);
+    },
+    () => typeof matchMedia === "function" && matchMedia(NARROW).matches,
+    () => false,
+  );
+
+/** A chip and its popup, anchored under it (alpha.5 item 10, docs/mock/TextToVideo.dc.html frames 2-5): one open at
+ * a time (`open` is the parent's), Esc or a click outside closes it and focus goes back to the chip; `all` adds the
+ * All settings link at its foot. */
+function ChipPop({
+  id,
+  label,
+  text,
+  title,
+  open,
+  setOpen,
+  all,
+  width = "w-75",
+  children,
+}: {
+  id: string;
+  label: string;
+  text: React.ReactNode;
+  title?: string;
+  open: boolean;
+  setOpen: (id: string | null) => void;
+  all?: () => void;
+  width?: string;
+  children: React.ReactNode;
+}) {
+  const pop = useRef<HTMLDivElement>(null);
+  const chipEl = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const el = pop.current;
+    if (!el) return;
+    if (!open) {
+      if (el.matches?.(":popover-open")) el.hidePopover?.();
+      return;
+    }
+    el.showPopover?.();
+    el.querySelector<HTMLElement>(
+      "[aria-checked=true], [aria-pressed=true], input:not(:disabled), button",
+    )?.focus();
+    const close = (back: boolean) => {
+      setOpen(null);
+      if (back) chipEl.current?.focus();
+    };
+    const down = (e: PointerEvent) => {
+      const t = e.target as Node;
+      if (!el.contains(t) && !chipEl.current?.contains(t)) close(false);
+    };
+    const key = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        close(true);
+      }
+    };
+    document.addEventListener("pointerdown", down, true);
+    document.addEventListener("keydown", key);
+    return () => {
+      document.removeEventListener("pointerdown", down, true);
+      document.removeEventListener("keydown", key);
+    };
+  }, [open, setOpen]);
+  return (
+    <>
+      <button
+        ref={chipEl}
+        type="button"
+        className={`${CHIP} aria-expanded:bg-s5`}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={id}
+        title={title}
+        style={{ anchorName: `--${id}` } as React.CSSProperties}
+        onClick={() => setOpen(open ? null : id)}
+      >
+        {text}
+      </button>
+      <div
+        id={id}
+        ref={pop}
+        popover="manual"
+        role="dialog"
+        aria-label={label}
+        className={`pop ${width}`}
+        style={
+          {
+            positionAnchor: `--${id}`,
+            positionArea: "bottom span-right",
+            marginTop: 6,
+          } as React.CSSProperties
+        }
+      >
+        {open && (
+          <div className="flex flex-col gap-2.5">
+            {children}
+            {all && (
+              <button
+                type="button"
+                className="h-7 self-start rounded-lg px-2.5 text-[12px] text-t2 underline underline-offset-3"
+                onClick={() => {
+                  setOpen(null);
+                  all();
+                }}
+              >
+                All settings
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+const CHIP = "chip bevel rounded-[10px] bg-s4";
+
+/** The composer's quick chips: the model node's choices (the node that outputs a Model), the canvas, the length, the
+ * seed (with Random). Each opens a popup with its setting (alpha.5 item 10); on narrow windows, and from a popup's
+ * All settings, `show` opens the drawer at its section (a field key, or "canvas"). */
 export function Chips({
   fields,
   raws,
@@ -1426,17 +1592,23 @@ export function Chips({
   runOn,
   versions,
   blocks = {},
+  valueBlocks = {},
+  stage1,
 }: Omit<FormProps, "errors"> & {
   /** the nodes whose optional add-on is missing (API 1.36), each with why: its bypass chip is greyed, held on */
   blocks?: Record<string, string>;
+  /** (API 1.41) field → value → why: a precision whose add-on is missing is greyed in the model popup */
+  valueBlocks?: Record<string, Record<string, string>>;
+  /** what the Size popup's pixel line says of stage 1 (as the drawer's Canvas) */
+  stage1?: Stage1;
   show: (key: string) => void;
   /** a video workflow's chips (docs/mock/TextToVideo.dc.html): the size as w × h, no seed chip */
   compact?: boolean;
   /** bool params placed on the composer (`studio.quick`): a chip each that switches it ("Audio on") */
   toggles?: Field[];
   /** the workflow's model choices (variant, precision): the chip names them all ("Base · int8"); a placed variant
-   * with several values is picked from the chip's menu, as rows (docs/mock/RunOn.dc.html, 2); the rest are the
-   * inspector's tiles (Quality) */
+   * with several values is picked from the chip's menu, as rows (docs/mock/RunOn.dc.html, 2), a placed precision
+   * as options (TextToVideo frame 2); the rest are the inspector's tiles (Quality) */
   models?: Field[];
   /** the family's title: the chip's tooltip leads with it (the chip itself does not repeat it) */
   family?: string;
@@ -1459,93 +1631,115 @@ export function Chips({
     why?: string | null;
   } | null;
 }) {
+  const [pop, setPop] = useState<string | null>(null);
+  const narrow = useNarrow();
   const s = sections(fields);
   const model = (models ?? s.tiles).filter((f) => f.model && f.param.type === "enum");
   const first = model[0];
   const c = canvasOf(fields, raws, useAutoRef(fields, raws));
   const seed = compact ? undefined : s.tiles.find((f) => f.param.type === "seed");
   const frames = s.duration.filter((f) => f.param.type === "frames");
-  const chip = "chip bevel rounded-[10px] bg-s4";
+  const chip = CHIP;
   const random = seed && rawOf(seed, raws) === "";
-  // the chip's menu: the placed variants that have more than one value
-  const pickable = model.filter(
-    (f) =>
-      f.param.name === "variant" &&
-      fields.some((x) => x.key === f.key) &&
-      (f.param.enum?.length ?? 0) > 1,
-  );
+  const placed = (f: Field) =>
+    fields.some((x) => x.key === f.key) && (f.param.enum?.length ?? 0) > 1;
+  // the chip's menu: the placed variants that have more than one value, then the placed precisions
+  const pickable = model.filter((f) => f.param.name === "variant" && placed(f));
+  const precisions = model.filter((f) => f.param.name !== "variant" && placed(f));
   const choosable = model.filter((f) => (f.param.enum?.length ?? 0) > 1 || f === first);
   const named = prettyModel((spoken ? choosable : model).map((f) => String(rawOf(f, raws))));
   const modelText = named.join(" · ");
   const modelTitle = [family, ...model.map((f) => f.param.label ?? f.param.name)]
     .filter(Boolean)
     .join(" · ");
+  const sizeLabel = c
+    ? compact
+      ? `${c.w} × ${c.h}`
+      : c.fromRef
+        ? `Auto · ${sizeText(c.w, c.h, c.width.param.step)}`
+        : sizeText(c.w, c.h, c.width.param.step)
+    : "";
   return (
     <>
-      {first && pickable.length > 0 && (
-        <>
-          <button
-            type="button"
-            popoverTarget="model-pick"
-            className={chip}
-            title={modelTitle}
-            style={{ anchorName: "--model-pick" } as React.CSSProperties}
-          >
-            {modelText}
-          </button>
-          <div
-            id="model-pick"
-            popover="auto"
-            role="dialog"
-            aria-label="Model"
-            className="pop w-72"
-            style={
-              {
-                positionAnchor: "--model-pick",
-                positionArea: "top span-right",
-                marginBottom: 6,
-              } as React.CSSProperties
-            }
-          >
-            {pickable.map((f) => (
-              <div
-                key={f.key}
-                role="group"
-                aria-label={display(f, "").label}
-                className="mb-2.5 flex flex-col gap-0.5"
-              >
-                <span className="flex items-center pb-1 text-[12px] text-t2">
-                  {display(f, "").label}
-                  {f.param.help && <Info>{f.param.help}</Info>}
-                </span>
+      {first && (pickable.length > 0 || precisions.length > 0) && (
+        <ChipPop
+          id="model-pick"
+          label="Model"
+          text={modelText}
+          title={modelTitle}
+          open={pop === "model-pick"}
+          setOpen={setPop}
+          width="w-72"
+          all={() => show((precisions[0] ?? first).key)}
+        >
+          {pickable.map((f) => (
+            <div
+              key={f.key}
+              role="group"
+              aria-label={display(f, "").label}
+              className="flex flex-col gap-0.5"
+            >
+              <span className="flex items-center pb-1 text-[12px] text-t2">
+                {display(f, "").label}
+                {f.param.help && <Info>{f.param.help}</Info>}
+              </span>
+              {f.param.enum?.map((o) => {
+                const r = versions?.(f, o);
+                const end = r?.why ?? r?.dim ?? r?.note;
+                return (
+                  <button
+                    key={o}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={rawOf(f, raws) === o}
+                    className={`mi ${r?.dim || r?.why ? "dim" : ""}`}
+                    aria-disabled={r?.why ? true : undefined}
+                    title={r?.why ? addonHint(r.why) : undefined}
+                    onClick={() => !r?.why && onChange(f.key, o)}
+                  >
+                    <span>
+                      {r?.title ?? pretty(o)}
+                      {r?.sub && <small>{r.sub}</small>}
+                    </span>
+                    {end && <em>{end}</em>}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+          {precisions.map((f) => (
+            <div
+              key={f.key}
+              role="group"
+              aria-label={display(f, "").label}
+              className="flex flex-col gap-1.5"
+            >
+              <span className="text-[12px] text-t2">{display(f, "").label}</span>
+              <div className="flex flex-wrap gap-1.5">
                 {f.param.enum?.map((o) => {
-                  const r = versions?.(f, o);
-                  const end = r?.why ?? r?.dim ?? r?.note;
+                  const why = valueBlocks[f.key]?.[o];
                   return (
                     <button
                       key={o}
                       type="button"
-                      role="menuitemradio"
-                      aria-checked={rawOf(f, raws) === o}
-                      className={`mi ${r?.dim || r?.why ? "dim" : ""}`}
-                      aria-disabled={r?.why ? true : undefined}
-                      title={r?.why ? addonHint(r.why) : undefined}
-                      onClick={() => !r?.why && onChange(f.key, o)}
+                      className={`opt bevel min-w-16 px-3 text-[13px] ${why ? "cursor-not-allowed" : ""}`}
+                      aria-pressed={rawOf(f, raws) === o}
+                      aria-disabled={why ? true : undefined}
+                      title={why ? addonHint(why) : undefined}
+                      onClick={() => !why && onChange(f.key, o)}
                     >
-                      <span>
-                        {r?.title ?? pretty(o)}
-                        {r?.sub && <small>{r.sub}</small>}
+                      <span className={why ? "opacity-55" : undefined}>
+                        {optionText(f.param, o, f.kind)}
                       </span>
-                      {end && <em>{end}</em>}
                     </button>
                   );
                 })}
               </div>
-            ))}
-          </div>
-        </>
+            </div>
+          ))}
+        </ChipPop>
       )}
-      {first && !pickable.length && (
+      {first && !pickable.length && !precisions.length && (
         <span
           className={`${chip} inline-flex items-center`}
           title={
@@ -1562,34 +1756,108 @@ export function Chips({
         </span>
       )}
       {runOn}
-      {c && (
-        <button type="button" className={chip} onClick={() => show("canvas")}>
-          {compact
-            ? `${c.w} × ${c.h}`
-            : c.fromRef
-              ? `Auto · ${sizeText(c.w, c.h, c.width.param.step)}`
-              : sizeText(c.w, c.h, c.width.param.step)}
-        </button>
-      )}
+      {c &&
+        (narrow ? (
+          <button type="button" className={chip} onClick={() => show("canvas")}>
+            {sizeLabel}
+          </button>
+        ) : (
+          <ChipPop
+            id="canvas-pop"
+            label="Canvas"
+            text={sizeLabel}
+            open={pop === "canvas-pop"}
+            setOpen={setPop}
+            all={() => show("canvas")}
+          >
+            <CanvasPicker
+              c={c}
+              errors={{}}
+              onChange={onChange}
+              compact={compact}
+              stage1={stage1}
+              popup
+            />
+          </ChipPop>
+        ))}
       {frames.map((f) => {
         const fps = fpsOf(f, fields, raws);
+        const text = [
+          rawOf(f, raws) === "auto" ? "Auto" : secondsText(seconds(Number(rawOf(f, raws)), fps)),
+          fps && `${fps} fps`,
+        ]
+          .filter(Boolean)
+          .join(" · ");
+        const title = f.param.label ?? f.param.name;
+        if (narrow)
+          return (
+            <button
+              key={f.key}
+              type="button"
+              className={chip}
+              title={title}
+              onClick={() => show(f.key)}
+            >
+              {text}
+            </button>
+          );
+        // Frame rate only when the workflow has an fps setting; else the chip just reads it
+        const rate = fields.find((x) => x.key === fpsKey(f));
+        const rates = rate && (allowedInts(rate, raws)?.map(String) ?? rate.param.enum);
+        const id = `len-pop-${idOf(f.key)}`;
         return (
-          <button
+          <ChipPop
             key={f.key}
-            type="button"
-            className={chip}
-            title={f.param.label ?? f.param.name}
-            onClick={() => show(f.key)}
+            id={id}
+            label="Duration"
+            text={text}
+            title={title}
+            open={pop === id}
+            setOpen={setPop}
+            all={() => show(f.key)}
           >
-            {[
-              rawOf(f, raws) === "auto"
-                ? "Auto"
-                : secondsText(seconds(Number(rawOf(f, raws)), fps)),
-              fps && `${fps} fps`,
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-          </button>
+            <Duration
+              id={`${id}-in`}
+              f={f}
+              raw={rawOf(f, raws)}
+              fps={fps}
+              onChange={onChange}
+              plain
+            />
+            {rate &&
+              (rates?.length ? (
+                <div
+                  role="group"
+                  aria-label={rate.param.label ?? rate.param.name}
+                  className="flex flex-col gap-1.5"
+                >
+                  <span className="text-[12px] text-t2">{rate.param.label ?? rate.param.name}</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {rates.map((o) => (
+                      <button
+                        key={o}
+                        type="button"
+                        className="opt bevel min-w-16 px-3 text-[13px]"
+                        aria-pressed={String(rawOf(rate, raws)) === o}
+                        onClick={() => onChange(rate.key, o)}
+                      >
+                        {rate.param.type === "enum"
+                          ? optionText(rate.param, o, rate.kind)
+                          : `${o} fps`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <Editor
+                  f={rate}
+                  raw={rawOf(rate, raws)}
+                  onChange={onChange}
+                  close={() => setPop(null)}
+                  focus={false}
+                />
+              ))}
+          </ChipPop>
         );
       })}
       {toggles.map((f) => {

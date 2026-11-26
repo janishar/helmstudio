@@ -140,8 +140,9 @@ describe("Create: the empty screen", () => {
     serve();
     start([], qwen);
     expect(screen.getByRole("complementary", { name: "Elements" })).toBeTruthy();
-    // the size chip opens its control, which lives in the Inspector
+    // the size chip's popup (alpha.5 item 10): its All settings opens the Inspector at the Canvas
     fireEvent.click(screen.getByRole("button", { name: "1:1 · 1 MP" }));
+    fireEvent.click(within(document.getElementById("canvas-pop")!).getByText("All settings"));
     expect(screen.getByRole("complementary", { name: "Inspector" })).toBeTruthy();
     // the rest of the empty screen stays
     expect(screen.getByRole("heading", { level: 1 })).toBeTruthy();
@@ -186,7 +187,7 @@ describe("Create: the empty screen", () => {
     serve();
     answer("POST", { "/v1/studio/sessions": () => ({ data: { id: "s2", title: null } }) });
     start([], qwen);
-    fireEvent.click(screen.getByRole("button", { name: "1:1 · 1 MP" }));
+    fireEvent.click(screen.getByRole("button", { name: "All settings", expanded: false }));
     expect(screen.getByRole("complementary", { name: "Inspector" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /New session/, hidden: true }));
     expect(await screen.findByRole("complementary", { name: "Elements" })).toBeTruthy();

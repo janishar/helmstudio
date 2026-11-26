@@ -2,7 +2,7 @@
 // Create: one session's runs of one workflow (docs/mock/Main.dc.html). The form comes from the workflow's node
 // schemas; progress comes live from the session's event stream (SSE through the BFF, ?since= polling when the stream
 // can't be held).
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
 import {
   AtSign,
@@ -13,6 +13,7 @@ import {
   Pause,
   Play,
   Plus,
+  SlidersHorizontal,
   Star,
   X,
 } from "lucide-react";
@@ -252,6 +253,16 @@ export type CreateInitial = {
 
 /** The browser's key of a session's half-written prompt or script ("" before the first session), one per side
  * (picture, sound: sideOf), so neither replaces the other. */
+/** Whether the settings drawer is open, in this browser (alpha.5 item 10). */
+const DRAWER = "create-settings-drawer";
+const noSub = () => () => undefined;
+const storedDrawer = () => {
+  try {
+    return localStorage.getItem(DRAWER) === "1";
+  } catch {
+    return false;
+  }
+};
 const draftKey = (session: string | null, side: Side) => `create-draft:${session ?? ""}:${side}`;
 
 /** The Create screen; `initialSession` comes from `?s=`, `reuse` (a take id whose settings fill the form) from
@@ -321,6 +332,17 @@ export function Create({
   // whether a chip opened the Inspector in the aside in place of the Elements panel
   const [inlineGroup, setInlineGroup] = useState<S<"LibraryGroup"> | null>(null);
   const [inspect, setInspect] = useState(false);
+  // the settings drawer (alpha.5 item 10, docs/mock/TextToVideo.dc.html): closed by default, remembered in this browser
+  const stored = useSyncExternalStore(noSub, storedDrawer, () => false);
+  const [drawerSet, setDrawerState] = useState<boolean | null>(null);
+  const drawer = drawerSet ?? stored;
+  const setDrawer = (on: boolean) => {
+    setDrawerState(on);
+    try {
+      if (on) localStorage.setItem(DRAWER, "1");
+      else localStorage.removeItem(DRAWER);
+    } catch {}
+  };
   // a reused take's look ids, put under their groups once the looks are known
   const [reusedLooks, setReusedLooks] = useState<string[] | null>(null);
   // what Reuse said about the elements the take was made with (changed, deleted, renamed since)
@@ -1032,6 +1054,7 @@ export function Create({
   /** Opens a field's inspector control (or the canvas picker) and moves focus to it. */
   const show = (key: string) => {
     setInspect(true);
+    setDrawer(true);
     if (key !== "canvas") setOpenKey(key);
     requestAnimationFrame(() => {
       // a size no aspect chip matches leaves none pressed: then the first one
@@ -1290,12 +1313,15 @@ export function Create({
   // the tile opened last, else the first look tile
   const openGroup =
     inlineGroup && lookTiles.includes(inlineGroup) ? inlineGroup : (lookTiles[0] ?? null);
-  const elementsAside =
-    empty &&
-    !audio &&
-    !!textFields[0] &&
-    !inspect &&
-    !fields.some((f) => f.param.type !== "text" && errors[f.key]);
+  // ponytail: by kind (LTX's upscaler doubles the stage-1 latent); a schema hint would make it generic.
+  // Bypassed (the Recipe's one-stage) the clip itself is stage 1's size
+  const stage1 =
+    video && upscale ? { by: 2, clip: (raws[`${upscale}.bypass`] ?? false) === true } : undefined;
+  const settingErrors = fields.some((f) => f.param.type !== "text" && errors[f.key]);
+  const elementsAside = empty && !audio && !!textFields[0] && !inspect && !settingErrors;
+  // the Inspector shows while the drawer is open (a setting's error opens it too); the empty screen's Elements panel
+  // keeps the aside until a chip or the sliders button asks for the Inspector
+  const inspector = !elementsAside && (drawer || inspect || settingErrors);
   const insert = (h: string) =>
     scriptField
       ? // a new line for the element at the script's end (the board's @ chip by the model chip)
@@ -2072,6 +2098,8 @@ export function Create({
                 spoken={audio}
                 versions={(f, o) => versionRow(modelList, runOn, f, o, allNeeds)}
                 blocks={blocks}
+                valueBlocks={valueBlocks}
+                stage1={stage1}
                 runOn={
                   <RunOnChip
                     list={machineList}
@@ -2121,6 +2149,20 @@ export function Create({
                   </button>
                 </div>
               )}
+              <button
+                type="button"
+                className="chip bevel grid w-9 place-items-center rounded-[10px] bg-s4 px-0 aria-expanded:bg-s5 aria-expanded:shadow-[inset_0_0_0_1px_var(--a2)]"
+                aria-label="All settings"
+                title="All settings"
+                aria-expanded={inspector}
+                aria-controls="create-settings"
+                onClick={() => {
+                  setDrawer(!inspector);
+                  setInspect(!inspector);
+                }}
+              >
+                <SlidersHorizontal size={16} strokeWidth={1.75} aria-hidden />
+              </button>
               {/* the Seeds stepper sits with the chips, Generate at the end, bottom right even when the row wraps
                   (docs/mock/Direct.dc.html) */}
               <button
@@ -2232,48 +2274,45 @@ export function Create({
         )}
       </main>
 
-      <aside
-        aria-label={elementsAside ? "Elements" : "Inspector"}
-        className="aside m-3.5 flex flex-[1_1_320px] flex-col gap-[22px] px-[18px] pt-4 pb-6 md:ml-0"
-      >
-        {elementsAside ? (
-          <ElementsPanel inPrompt={handles} onInsert={insert} />
-        ) : (
-          <Inspector
-            groups={groups}
-            resolved={shown?.workflow_id === workflow?.id ? shown?.resolved?.params : undefined}
-            presets={workflow?.studio?.presets}
-            presetOrder={presetNames(workflow?.studio)}
-            presetHelp={presetHelp(workflow?.studio, all, raws)}
-            presetScope={all}
-            fields={fields}
-            raws={raws}
-            errors={errors}
-            onChange={change}
-            open={openKey}
-            setOpen={setOpenKey}
-            uploads={uploads}
-            compact={video}
-            grid={grid}
-            // ponytail: by kind (LTX's upscaler doubles the stage-1 latent); a schema hint would make it generic.
-            // Bypassed (the Recipe's one-stage) the clip itself is stage 1's size
-            stage1={
-              video && upscale
-                ? { by: 2, clip: (raws[`${upscale}.bypass`] ?? false) === true }
-                : undefined
-            }
-            familyTitle={
-              palette?.groups.find((g) => g.family === workflow?.family)?.title ??
-              (workflow?.source === "mine" ? undefined : workflow?.title)
-            }
-            voice={audio ? voiceCtx : undefined}
-            blocks={blocks}
-            valueBlocks={valueBlocks}
-            addonOwner={modelList?.models.find((m) => m.family === workflow?.family)?.title}
-          />
-        )}
-        {audio && !elementsAside && <SpeechOutput take={rateTake} text={texts[0] ?? ""} />}
-      </aside>
+      {(elementsAside || inspector) && (
+        <aside
+          id="create-settings"
+          aria-label={elementsAside ? "Elements" : "Inspector"}
+          className="aside m-3.5 flex flex-[1_1_320px] flex-col gap-[22px] px-[18px] pt-4 pb-6 md:ml-0"
+        >
+          {elementsAside ? (
+            <ElementsPanel inPrompt={handles} onInsert={insert} />
+          ) : (
+            <Inspector
+              groups={groups}
+              resolved={shown?.workflow_id === workflow?.id ? shown?.resolved?.params : undefined}
+              presets={workflow?.studio?.presets}
+              presetOrder={presetNames(workflow?.studio)}
+              presetHelp={presetHelp(workflow?.studio, all, raws)}
+              presetScope={all}
+              fields={fields}
+              raws={raws}
+              errors={errors}
+              onChange={change}
+              open={openKey}
+              setOpen={setOpenKey}
+              uploads={uploads}
+              compact={video}
+              grid={grid}
+              stage1={stage1}
+              familyTitle={
+                palette?.groups.find((g) => g.family === workflow?.family)?.title ??
+                (workflow?.source === "mine" ? undefined : workflow?.title)
+              }
+              voice={audio ? voiceCtx : undefined}
+              blocks={blocks}
+              valueBlocks={valueBlocks}
+              addonOwner={modelList?.models.find((m) => m.family === workflow?.family)?.title}
+            />
+          )}
+          {audio && !elementsAside && <SpeechOutput take={rateTake} text={texts[0] ?? ""} />}
+        </aside>
+      )}
       {lib.node}
     </>
   );

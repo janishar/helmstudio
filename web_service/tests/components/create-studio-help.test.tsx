@@ -128,6 +128,7 @@ describe("Create: the Studio block's help, preset order and planned peak", () =>
     serve(null);
     start(ltx("ltx-extend"));
     expect(within(section("Quality")).queryByRole("button", { name: /CFG · STG/ })).toBeNull();
+    fireEvent.click(document.querySelector<HTMLElement>("[aria-controls=model-pick]")!);
     fireEvent.click(screen.getByRole("menuitemradio", { name: /^Dev/, hidden: true }));
     const quality = section("Quality");
     const tile = within(quality).getByRole("button", { name: /CFG · STG\s*3\.0 · 1\.0/ });

@@ -148,16 +148,25 @@ const rows = () =>
     checked: b.getAttribute("aria-checked") === "true",
     disabled: b.getAttribute("aria-disabled") === "true",
   }));
-const versions = () =>
-  [...document.querySelectorAll<HTMLElement>("#model-pick [role=menuitemradio]")].map(
+// the model chip's popup renders its rows while open (alpha.5 item 10)
+const openModel = () => {
+  const chip = document.querySelector<HTMLElement>("[aria-controls=model-pick]")!;
+  if (chip.getAttribute("aria-expanded") !== "true") fireEvent.click(chip);
+};
+const versions = () => {
+  openModel();
+  return [...document.querySelectorAll<HTMLElement>("#model-pick [role=menuitemradio]")].map(
     (b) => `${b.textContent}${b.classList.contains("dim") ? " (dim)" : ""}`,
   );
-const pickVersion = (title: string) =>
+};
+const pickVersion = (title: string) => {
+  openModel();
   fireEvent.click(
     [...document.querySelectorAll<HTMLElement>("#model-pick [role=menuitemradio]")].find((b) =>
       b.textContent?.startsWith(title),
     )!,
   );
+};
 const generate = (c: HTMLElement) => c.querySelector<HTMLButtonElement>('button[type="submit"]')!;
 
 describe("Create: an add-on scoped to a variant (API 1.40)", () => {
@@ -264,7 +273,7 @@ describe("Create: Run on", () => {
     const { composer } = start("idle", plain as S<"Workflow">);
     await waitFor(() => expect(versions()).toHaveLength(2));
     const chip = within(composer).getByRole("button", { name: "Distilled · int8" });
-    expect(chip.getAttribute("popovertarget")).toBe("model-pick");
+    expect(chip.getAttribute("aria-controls")).toBe("model-pick");
   });
 
   it("the chosen host went offline: the chip warns, Generate says so and queues nothing", async () => {
