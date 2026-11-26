@@ -1,4 +1,4 @@
-# 37. Magic: concept (draft, in discussion)
+# 37. Magic: concept (parked for version 2)
 
 Owner, 2026-11-26: "plan an switch ui for this timeline which opens a node editor … this will be a real playground for the
 assistant", then "first lets have a concept discussion with me". This file keeps what was decided in that discussion. Not
@@ -70,3 +70,22 @@ e227a7ee) is replaced.
 - What a block can do in the first version (open it, run it, pin a take, @ references, run history, notes), in Magic's own
   terms.
 - Where the standard request lives (contract, adapters in the runner) and the first models it covers.
+
+## Parked for version 2
+
+Owner, 2026-11-26: "we will revisit then in version 2". Nothing is built for alpha.5 or the alphas after it. Suggestions to
+weigh then:
+
+1. Play the storyboard as a rough cut (frames in order with their lines and music) before making any video.
+2. Say plainly which models keep a character the same (today: an asset feeds the storyboard frame, which becomes the shot's
+   first frame).
+3. Build the standard generation layer first, on its own: Qwen Image, LTX, Qwen3-TTS or Zonos3; Music needs a model or a
+   service first.
+4. Show the GPU time up front: the whole board, each lane, the run order.
+5. Board snapshots to compare or go back.
+6. List a board's sends to the Timeline and name them clearly.
+7. Reuse the Timeline's player.
+8. The Assistant's tools in the first version.
+9. A small first version: Assets, Storyboard with the rough cut, Shots, Voice tied to shots, dissolve and cut, Send to
+   Timeline, the Assistant; music, effects, morphs, sound effects and outside services later.
+10. Start a board from a brief.
