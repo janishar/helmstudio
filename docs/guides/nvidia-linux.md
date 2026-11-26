@@ -24,7 +24,8 @@ source, on the card's own driver (like the Mac's `make runners`). On Windows do 
   first video takes a few minutes longer while it compiles. The runner makes the two CUDA links SGLang's kernels
   expect in its venv by itself, and refuses to start SGLang without gcc or with a long hostname (a cloud VM's full
   internal name, e.g. 65 characters, breaks SGLang's start with "File name too long"): give the machine a short
-  one, `sudo hostnamectl set-hostname gpu1`. `make sglang` checks both and prints the fix.
+  one, `sudo hostnamectl set-hostname gpu1`. `make sglang` checks both and prints the fix. An SGLang venv of your
+  own on the system's Python also needs its headers: `sudo apt install python3.12-dev`.
 
 ## 2. Run
 
@@ -38,9 +39,17 @@ GPU_HOST=gpu1 HELMSTUDIO_MODELS=/path/to/models make runners-nvidia
 Then open http://localhost:8300. From another computer, tunnel the same port (`ssh -N -L 8300:127.0.0.1:8300 <machine>`,
 then http://localhost:8300 there): the web app accepts sign-in only at its own address, so a different local port
 fails with a server error; to use another address set `PUBLIC_BASE_URL` (and `HELMSTUDIO_PORT`) in `.env`. `make runners-nvidia` starts env torch, and env native when SGLang is found
-(`SGLANG_BIN`, else `~/sglang` from `make sglang`, else `sglang` on PATH). ZONOS3 comes ready: when `runner_service/vendor/zonos3/build/zonos3-server` is missing, `make runners-nvidia` first fetches the release's prebuilt CUDA 13 server (Linux x86_64, checked against the release's SHA256SUMS; `make -C runner_service zonos3-get`) and then starts env native for it too. It needs glibc 2.39 or later (Ubuntu 24.04, or WSL2 Ubuntu 24.04). A checkout with no release file (a dev branch) prints how to build it: `make -C runner_service zonos3-cuda`, with nvcc 12.8 or later. The host name is `GPU_HOST` (default: the first of `GPU_HOSTS`, else the one
-host `make up` made, else the machine's short name); it must be one `make up GPU_HOSTS=…` made. Logs:
-`runner_service/.run/runner-<host>-<env>.log`. Stop: `make runners-nvidia-stop`, then `make down`.
+(`SGLANG_BIN`, else `~/sglang` from `make sglang`, else `sglang` on PATH). The host name is `GPU_HOST` (default:
+the first of `GPU_HOSTS`, else the one host `make up` made, else the machine's short name); it must be one
+`make up GPU_HOSTS=…` made. Logs: `runner_service/.run/runner-<host>-<env>.log`. Stop: `make runners-nvidia-stop`,
+then `make down`.
+
+**ZONOS3 comes ready.** When `runner_service/vendor/zonos3/build/zonos3-server` is missing, `make runners-nvidia`
+first downloads the release's prebuilt CUDA 13 server (Linux x86_64, with CUDA's cudart and cuBLAS inside), checks it
+against the release's SHA256SUMS, and then starts env native for it too. To fetch it alone:
+`make -C runner_service zonos3-get`. It needs glibc 2.39 or later (Ubuntu 24.04, also in WSL2). A checkout with no
+release file (a dev branch) prints how to build it instead: `make -C runner_service zonos3-cuda`, with nvcc 12.8 or
+later.
 
 **With the Docker release stack** (deploy/release/compose.yml, no build): start it as its README says, then in a
 clone run only the runners against it:

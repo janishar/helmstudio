@@ -190,7 +190,7 @@ runners-nvidia:   ## the NVIDIA host runners in the background (needs make up GP
 	docker run --rm -v $${HELMSTUDIO_PROJECT:-helmstudio}_keys:/k:ro -v $(SECRETS):/o --entrypoint sh nats:2.15.3-alpine3.22 \
 	  -c "cp /k/nats_runner_$${h}_*_password /k/s3_runner_$${h}_* /o/ && chown $$(id -u):$$(id -g) /o/* && chmod 600 /o/*" || exit 2;) [ -f $(SECRETS)/nats_runner_$${h}_torch_password ] || { echo "no credentials for host $$h: make up GPU_HOSTS=$$h"; exit 2; }; \
 	z=runner_service/vendor/zonos3/build/zonos3-server; [ "$$(uname -s)" != Linux ] || [ -x $$z ] || \
-	  make --no-print-directory -C runner_service zonos3-get || true; \
+	  $(MAKE) --no-print-directory -C runner_service zonos3-get || true; \
 	envs=torch; if [ -n "$(SGLANG_FOUND)" ] || [ -x $$z ]; then envs="torch native"; fi; \
 	mkdir -p $(RUN_DIR); for e in $$envs; do \
 	pid=$$(cat $(RUN_DIR)/runner-$$h-$$e.pid 2>/dev/null); \

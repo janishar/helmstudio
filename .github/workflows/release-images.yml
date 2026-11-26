@@ -222,8 +222,8 @@ jobs:
       - name: smoke test (no GPU)
         run: |
           mkdir t && tar -xzf out/*.tar.gz -C t && ldd t/zonos3-server | tee ldd.txt
-          ! grep 'not found' ldd.txt | grep -v '^\s*libcuda\.so\.1 '
-          ! grep '=> /' ldd.txt | grep -v -e "=> $PWD/t/lib/" -e '=> /lib/' -e '=> /usr/lib/' -e '=> /lib64/'
+          ! grep 'not found' ldd.txt | grep -v '^\s*libcuda\.so\.1 ' || exit 1  # `!` alone never fails a step under sh -e
+          ! grep '=> /' ldd.txt | grep -v -e "=> $PWD/t/lib/" -e '=> /lib/' -e '=> /usr/lib/' -e '=> /lib64/' || exit 1
           mkdir stub && ln -s /usr/local/cuda/lib64/stubs/libcuda.so stub/libcuda.so.1
           LD_LIBRARY_PATH=$PWD/stub t/zonos3-server --help
       - uses: actions/upload-artifact@v4

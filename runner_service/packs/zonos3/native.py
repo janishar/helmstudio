@@ -222,7 +222,9 @@ def utter(ctx, port: int, text: str, seed: int, params: dict, voice: dict, step=
 
 def _ready(node: str) -> None:
     if not BINARY.is_file():
-        raise RunError(f"{node}: zonos3-server is not built (make zonos3 in runner_service)")
+        raise RunError(
+            f"{node}: zonos3-server is not built (make zonos3 in runner_service; on NVIDIA Linux make zonos3-get)"
+        )
 
 
 def _serve(ctx, gguf: Path):

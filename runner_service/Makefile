@@ -64,6 +64,7 @@ ZONOS3_TAR = zonos3-server-$(ZONOS3_RELEASE:v%=%)-linux-x86_64-cuda13.tar.gz
 SHA256 ?= $(shell command -v sha256sum >/dev/null && echo sha256sum || echo 'shasum -a 256')
 zonos3-get:
 	@d=$(ZONOS3_BUILD)/.get; mkdir -p $$d; rm -f $$d/$(ZONOS3_TAR) $$d/SHA256SUMS; \
+	echo "fetching $(ZONOS3_TAR) from $(ZONOS3_URL)"; \
 	if ! curl -fsSL -o $$d/$(ZONOS3_TAR) "$(ZONOS3_URL)/$(ZONOS3_TAR)" || \
 	  ! curl -fsSL -o $$d/SHA256SUMS "$(ZONOS3_URL)/SHA256SUMS"; then \
 	  echo "no prebuilt zonos3-server for '$(ZONOS3_RELEASE)' (a dev checkout?): make -C runner_service zonos3-cuda (nvcc 12.8+)"; \
