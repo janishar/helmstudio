@@ -513,6 +513,8 @@ def refresh_seen() -> None:
     import config
 
     global seen
+    if not config.ROOTS:  # one folder: nothing can be unplugged
+        return
     path = config.CACHE / "folders-seen.json"
     if not seen:
         try:
