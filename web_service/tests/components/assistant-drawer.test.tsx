@@ -1477,6 +1477,19 @@ describe("alpha.2: size, answers that read well, polish (board frames 9, 10, 14)
     side.remove();
   });
 
+  it("a page's own side panel arriving with a route change leaves it open", async () => {
+    serve();
+    const r = await openDrawer();
+    path = "/gallery";
+    r.rerender(
+      <AppShell user={user}>
+        <aside className="aside" />
+      </AppShell>,
+    );
+    await new Promise((f) => setTimeout(f, 50));
+    expect(drawer()).toBeTruthy();
+  });
+
   it("the bar's states: Working with Stop, Waiting for you and what, a new answer", async () => {
     const posts = serve({ existing: thread({ state: "working", client_id: ME }) });
     await openDrawer();
