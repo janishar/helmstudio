@@ -1,0 +1,56 @@
+{
+  "id": "sa3-vary",
+  "title": "Stable Audio 3 Vary",
+  "action": "Vary",
+  "family": "stable-audio-3",
+  "env": "torch",
+  "media": "audio",
+  "nodes": {
+    "prompt": {
+      "kind": "prompt",
+      "params": {
+        "text": ""
+      }
+    },
+    "seed": {
+      "kind": "seed",
+      "params": {
+        "seed": -1
+      }
+    },
+    "model": {
+      "kind": "stable-audio-3/model",
+      "params": {
+        "variant": "small-sfx",
+        "precision": "bf16"
+      }
+    },
+    "vary": {
+      "kind": "stable-audio-3/vary",
+      "in": {
+        "model": "model.model",
+        "text": "prompt.text",
+        "seed": "seed.seed"
+      },
+      "params": {
+        "source": null,
+        "change": 0.7
+      }
+    },
+    "output": {
+      "kind": "output",
+      "in": {
+        "media": "vary.audio"
+      }
+    }
+  },
+  "studio": {
+    "composer": [
+      "prompt.text"
+    ],
+    "quick": [
+      "vary.change",
+      "seed.seed"
+    ]
+  }
+}

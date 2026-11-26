@@ -1,0 +1,55 @@
+{
+  "id": "sa3-repaint",
+  "title": "Stable Audio 3 Repaint",
+  "action": "Repaint",
+  "family": "stable-audio-3",
+  "env": "torch",
+  "media": "audio",
+  "nodes": {
+    "prompt": {
+      "kind": "prompt",
+      "params": {
+        "text": ""
+      }
+    },
+    "seed": {
+      "kind": "seed",
+      "params": {
+        "seed": -1
+      }
+    },
+    "model": {
+      "kind": "stable-audio-3/model",
+      "params": {
+        "variant": "small-sfx",
+        "precision": "bf16"
+      }
+    },
+    "repaint": {
+      "kind": "stable-audio-3/repaint",
+      "in": {
+        "model": "model.model",
+        "text": "prompt.text",
+        "seed": "seed.seed"
+      },
+      "params": {
+        "source": null,
+        "span": null
+      }
+    },
+    "output": {
+      "kind": "output",
+      "in": {
+        "media": "repaint.audio"
+      }
+    }
+  },
+  "studio": {
+    "composer": [
+      "prompt.text"
+    ],
+    "quick": [
+      "seed.seed"
+    ]
+  }
+}

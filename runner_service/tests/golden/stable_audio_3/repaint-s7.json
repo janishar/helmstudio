@@ -1,0 +1,19 @@
+{
+  "workflow": "sa3-repaint",
+  "prompt": "glass shattering on a stone floor",
+  "span": [
+    0.5,
+    1.5
+  ],
+  "seed": 7,
+  "length_s": 2.0,
+  "channels": 2,
+  "sample_rate": 44100,
+  "rms": 0.03228,
+  "peak": 0.28824,
+  "reference": "stable-audio-3 4007b6f StableAudioModel.generate, mps, fp32 (T5Gemma bf16)",
+  "torch": "2.15.0",
+  "load_s": 5.6,
+  "gen_s": 0.43,
+  "peak_footprint_gb": 4.4
+}
