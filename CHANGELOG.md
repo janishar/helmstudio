@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.1.0-alpha.5 (2026-11-26)
+
+A move-anywhere Assistant, Create settings in popups, Timeline clones and our own right-click menus.
+
+### What's new
+
+- **Move the Assistant.** Drag its pill or header to float the drawer anywhere; Dock (or a double-click) puts it
+  back at the right edge. Remembered per user in this browser. Close stays on screen while a chip shows, and a
+  page's side form minimizes the docked drawer.
+- **Create settings in popups.** Each chip under the prompt (model · precision, Run on, size, length · fps, audio)
+  opens a small popup for just that setting; the sliders button opens all the settings on the right, open by
+  default. Create offers only the variants a live host has.
+- **Timeline.** A **Clone** button in the Sequences dialog copies a sequence with all its clips, markers, cast and
+  look, using the same takes. An untitled sequence is named from its shots' prompts, like Create's sessions; a name
+  you typed is kept. The sliders button in the tracks tool bar opens and closes the side panel. New shot has a ×,
+  and **+ New sequence** in the Sequences dialog works again.
+- **Our own right-click menus, app-wide.** Timeline, Gallery, Create, the Graph view and Pipelines, Assistant chat,
+  Models, the LoRA, voice and element libraries, Hub and System lists, with shortcuts shown. Text fields get Cut,
+  Copy, Paste, Select all and Insert @… (spelling in the Mac app). Shift + right-click keeps the browser's menu.
+- **Host memory, Automatic or Custom.** System › Hosts picks the memory reserve: Automatic uses the Mac's GPU limit
+  (`iogpu.wired_limit_mb`) when it is set, Custom keeps your own number.
+- **The Mac app window never scrolls;** only the panels inside it do.
+
+### Known limits
+
+- Windows is untested.
+- NVIDIA: ZONOS3 on NVIDIA is not ready yet, and MiniMax H3 video needs SGLang you install by hand; both move to
+  0.1.0-alpha.6.
+- Create's "Use in ›" menu on a take has no "Last / First frame in…" yet.
+- Shift+F10 in a text field opens the menu at the field's corner, not at the cursor.
+- The Mac app needs Apple Silicon and is ad-hoc signed (no Developer ID): open it the first time with right-click ›
+  Open. From 0.1.0-alpha.1 it is one manual `.dmg` replace.
+- No uninstall tool for the app; delete its folders by hand (docs/guides/mac-app.md).
+- A separate NVIDIA machine joining a Mac's stack is set up by hand (deploy/gpu-host/README.md).
+- Your Claude subscription runs on the Mac only, and needs Claude Code installed and signed in by you.
+- Web search uses unofficial search pages: it can be rate-limited or break.
+- The Assistant sees a video as its poster frame only (use the frames tool to look closer).
+- An Assistant steer is kept only in memory: if pipelines restarts mid-answer, it becomes the next message.
+- Models are downloaded separately (on the Models screen) and keep their own licences; no weights ship with
+  helmstudio.
+
 ## 0.1.0-alpha.4 (2026-11-25)
 
 The Assistant gets its own place, and helmstudio installs on Windows and Linux with Docker.

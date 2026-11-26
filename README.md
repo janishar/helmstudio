@@ -37,12 +37,13 @@
 ## What you can do
 
 - **Create images, video and voice.** Pick a model, write a prompt, make takes. Call characters and places by name
-  with `@`, and set a look (film, camera, colour, lighting) once.
+  with `@`, and set a look (film, camera, colour, lighting) once. Each setting chip under the prompt opens a small
+  popup; one button opens them all.
 - **Work with the Assistant.** An in-app assistant drives every screen: it fills the form, wires the graph, places
   clips and asks before anything that costs GPU time. Each step it takes has its own Undo. It sees the images you
   attach or `@`-mention, shows takes right in its answers, keeps your film's shot list across chats, and reads each
-  model's guide (its good settings and pitfalls) before it uses it. Open it from the Assistant drawer; the first
-  launch opens it with a setup message.
+  model's guide (its good settings and pitfalls) before it uses it. Open it from the Assistant drawer, dock it or
+  drag it anywhere on the screen; the first launch opens it with a setup message.
 - **Set up AI in one place.** Admins get **Hub** (the Assistant, In pipelines with the default model for pipeline AI
   steps, Providers, Plugins) and **System** (Users, Hosts, API keys).
 - **Let it run in Auto mode.** Turn on Auto in a chat and the Assistant makes safe local takes and safe saves
@@ -61,9 +62,12 @@
 - **Keep everything in the Gallery.** Every take keeps the exact settings and inputs that made it. Send any take to
   Create, a pipeline or the timeline.
 - **Cut on the Timeline.** Put takes in a sequence, direct new shots and voice lines in place, trim, blade and
-  ripple, and export an MP4.
+  ripple, and export an MP4. Clone a sequence to try another cut; an untitled one is named from its shots.
+- **Right-click anything.** Clips, takes, nodes, chat answers, models and list rows each have their own menu with
+  its shortcuts; text fields get Cut, Copy, Paste and Insert @….
 - **Manage models.** Download weights per machine, pick variants (Base, Turbo, Distilled, community fp8 / int8),
-  add optional add-ons, and upload LoRAs to a shared library.
+  add optional add-ons, and upload LoRAs to a shared library. Each host's memory budget is Automatic (the Mac's GPU
+  limit) or your own number.
 - **Use it from Claude.** `helm mcp` gives Claude Code, Claude Desktop and other MCP clients the same tools as the
   Assistant. Costly or destructive tools ask first.
 - **Host it for a team.** Self-hosted and multi-user. An admin adds accounts; each person sees only their own work.
