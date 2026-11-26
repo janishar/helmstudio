@@ -55,8 +55,18 @@ menu of [ContextMenus](../mock/ContextMenus.dc.html).
 6. **MMAudio's weights are not safetensors** (`.pth`, `.bin`, `.pt`); the torch loader and `core/pack.py` sizes are
    safetensors only. A small core change (a torch pack `load_component` hook, as `loaders_mlx` has, and a size for
    other files) beats converting 6 GB of weights.
-7. **ACE-Step caps transformers < 4.58**; the runner is on 5.23. Vendor its modules (as qwen3_tts did) and run them on
-   5.23. It also "syncs" its modeling `.py` files into the checkpoint folder: the vendored copy never writes there.
+7. **No vendoring for three of the four models.** The runner's locked diffusers 0.43.0 (`uv.lock`) already holds
+   `AceStepPipeline` (`pipelines/ace_step`: text2music, repaint, cover, extract, lego, complete; `src_audio`,
+   `reference_audio`, `repainting_start/end`, `audio_cover_strength`, `audio_codes`), MiniMax Music 3
+   (`modular_pipelines/minimax_music3`, its transformer, vocoder and RVQ depth decoder) and
+   `StableAudio3Pipeline` / `StableAudio3AudioToAudioPipeline` / `StableAudio3InpaintPipeline`
+   (`pipelines/stable_audio_3`). They run on transformers 5.23 and torch 2.15, so ACE-Step's own cap
+   (transformers < 4.58) never applies and nothing writes into the checkpoint folders. The packs build these classes on
+   meta, as qwen_image and minimax_h3_image do. ACE-Step's and Stable Audio's files on disk are the original layout:
+   `rename()` maps the keys, ported from `~/GenAI/model-samples/src/diffusers-minimax/scripts/`
+   (`convert_ace_step_to_diffusers.py`; SA3 checked against the StableAudio3 classes, since `convert_stable_audio.py`
+   may cover SA1 only). Only MMAudio is vendored (not in diffusers), from `~/GenAI/model-samples/src/MMAudio` at
+   974010a.
 8. **The board's memory figures are off for two models**: MiniMax Music 3 measured 26.6 GB peak (board 20 GB), MMAudio
    8 GB text only and 15.1 GB with a video (board 12 GB). The board's figures follow the measured `peak_gb` (fixed in P4
    with the UI; the drawer readout comes from the registry, so it cannot drift again).
@@ -68,8 +78,20 @@ menu of [ContextMenus](../mock/ContextMenus.dc.html).
     "LRC" pass), not from the model output itself: only ACE-Step takes with tagged lyrics show them.
 12. **No new runner env.** All four packs run in the shared torch venv (one more env costs a NATS user, secrets,
     Makefile targets, health ports and `desktop/stack.json`). The `sgl.py` child-venv pattern is the fallback only.
-13. **The design system's local copy** `docs/design-system/` named in CLAUDE.md is not in the repo yet; P5 updates the
-    Design System artifact and adds the copy.
+13. **The design system's local copy** is in `docs/design-system/` (commit 7f788b54); P5 updates the Design System
+    artifact and that copy together.
+14. **`extend_room` is LTX's rule on every `*/extend` node** (`check.py`, studio `api/studio/media.go`): its 321-frame
+    room would refuse or mis-fill an audio extend. The rule is limited to video sources; audio extends cap at the
+    600 s Audio limit.
+15. **An offer needs exactly one unwired placed media input.** A Cover with a second audio input (a reference song)
+    would never be offered: that reference sits on an `optional` node outside the studio block, or is left out.
+16. **Timeline clip actions offer only the same family's workflows** (README Take actions), so a MiniMax clip would get
+    no Repaint there. Clip actions for audio match by sound class, as the Create and Gallery offers do.
+17. **Audio inputs are decoded in each pack today** (zonos3 `native.py`, ltx `common.py` call ffmpeg themselves). One
+    shared `pcm(data, rate, channels)` and `mux(mp4, wav)` (H.264 copied, AAC added, facts from `core.media.probe`) go
+    in `core/media.py`.
+18. **Long LM loops need cancel points and their own limits.** MiniMax's LM runs 750 frames at 0.11 s: a cancel check
+    per frame, `max_seconds` and `stall_s` per stage, and `peak_gb` from the stage's own params (duration).
 
 ### 44.4 Facts (measured, M5 Pro 64 GB, torch 2.15, MPS)
 
@@ -158,8 +180,11 @@ Not in (backlog by name):
   `licences/`, `GOTCHAS.md`, `vendor/` with `VENDORED.md` and sha256s:
   - `packs/ace_step/`: family `ace-step`; variants `turbo-2b` (default, fp32) and `xl-turbo` (bf16, `shares: [lm,
     text_encoder, vae]` from ACE-Step-1.5; `files` the 4 shards). Components transformer, lm (Qwen3 1.7B), text_encoder
-    (Qwen3-Embedding-0.6B), vae. Stages `plan` (LM: metas/caption then 5 Hz codes; `reports`; seeded; bypass = "Let it
-    rewrite" off), `compose` (DiT, phases n/8; repaint, cover and extend by params), `decode` (VAE; lyric timestamps
+    (Qwen3-Embedding-0.6B), vae. Built from diffusers' `AceStepPipeline` classes with `rename()` (44.3.7); `silence_latent.pt` read by the stage
+    with `torch.load`. Stages `plan` (`uses [lm]`, `alone`; LM loaded with transformers, causal-LM head and audio-code
+    tokens checked on 5.23: metas/caption then 5 Hz codes, handed on as a family Conditioning to
+    `audio_codes`; `reports`; seeded; bypass = "Let it rewrite" off), `compose` (DiT, phases n/8; repaint, cover and
+    extend by `task_type`), `decode` (VAE; lyric timestamps
     give sections). Workflows `ace-step-music`, `ace-step-repaint` ("Repaint"), `ace-step-cover` ("Cover", `strength`
     = Keep the song), `ace-step-extend` ("Extend", seconds, End / Start; a repaint past the end). Repaint, Cover and
     Extend have no plan node (upstream DIRECT_CONDITIONING_TASKS). The LM stays resident (75% of the time).
@@ -168,7 +193,7 @@ Not in (backlog by name):
     matches PR commit dafe3733; vendor that module if not). Stages `lm` (phases by frame) and `flow`, `vocode`.
     Instrumental by the prompt rule and `[instrumental]` lyrics. One workflow `minimax-music3`.
   - `packs/stable_audio_3/`: family `stable-audio-3`; `model.safetensors` split into dit and autoencoder by rename
-    prefixes, plus t5gemma; fp32; vendored `stable_audio_3`; `gated: true`, `must_accept`. Workflows `sa3-sound`,
+    prefixes, plus t5gemma; fp32; diffusers' StableAudio3 text, audio-to-audio and inpaint pipelines; `gated: true`, `must_accept`. Workflows `sa3-sound`,
     `sa3-repaint` (inpaint, mask = span), `sa3-vary` ("Vary", init audio, Change = noise strength), `sa3-extend`
     (continuation); From a sound = a rows param of one media, min 0, max 1.
   - `packs/mmaudio/`: family `mmaudio`; components net (`.pth`), ext autoencoder, synchformer, clip (`dir`, DFN5B),
@@ -176,14 +201,14 @@ Not in (backlog by name):
     synchformer, features_utils (not gradio, hydra, tensorboard). Workflows `mmaudio-sound` (text) and
     `mmaudio-video` (a video in; two outputs: Audio, and Video muxed in-stage with ffmpeg: H.264 copied, AAC added, cut
     to the length; trims the source 0.2 s long for the 25 fps sync).
-  - Core: `core/nodes.py` stereo `_wav`; `core/loaders_torch.py` a pack `load_component(component, model, ctx)` hook
+  - Core: `core/nodes.py` stereo `_wav`; `core/media.py` `pcm()` and `mux()` (44.3.17); `core/loaders_torch.py` a pack `load_component(component, model, ctx)` hook
     and `.pth/.bin/.pt` reads; `core/pack.py` size for non-safetensors (file bytes at the target dtype) and the `sound`
     key; `core/graph.py` span and `media_fit` for audio; `core/media.py` and the media worker: `mux`.
   - `packs/echo/`: fake music and sound stages (stereo), an Audio+Video stage, audio repaint and extend, the planner's
     reports, sections; so the contract suite runs on the fake runner.
-  - `pyproject.toml` / `uv.lock`: vector-quantize-pytorch, pytorch-wavelets, setuptools 80 (pinned below 81 for
-    `pkg_resources`; DCW silently turns off otherwise), soundfile, einops-exts, open_clip_torch; ruff excludes the
-    vendor folders. torch 2.15 stays the pin. `docs/plan/14-dependencies.md` owns the versions.
+  - `pyproject.toml` / `uv.lock`: open_clip_torch (with timm) for MMAudio; numpy stays >= 2 (MMAudio's < 2.1 pin is
+    not needed); any other dependency only if the diffusers path proves it needs one (P2 checks; the samples' venvs
+    needed setuptools 80 for ACE-Step's DCW, which is repo code); ruff excludes MMAudio's vendor folder. torch 2.15 stays the pin. `docs/plan/14-dependencies.md` owns the versions.
 - **studio_service.** `graph.go` / `workflows.go` (sound, media filter), `projector.go` (sound, channels, sections),
   `api/gallery/service.go` (kind filter), `upload.go` (sound), `api/gallery/media.go` (offers by class, span on audio),
   `api/studio/media.go` (audio span source), `mentions.go` (voice by class), the mux endpoint and job (beside the frame
@@ -225,9 +250,9 @@ and risk, not a promise.
 | # | Phase | Needs | Parallel | Hours | Tests and gates |
 |---|---|---|---|---|---|
 | P1 | **Contract and take classes**: 44.6 contract and data; echo fake stages; studio sound/filters/offers/span/mux; pipelines and CLI voice re-scope; `make gen` everywhere; web gen types only | nothing | first; plan 39 C rebases on it | 10 | `make contracts-check`; runner, studio, pipelines, cli `make test lint`; new `contract_tests/tests/test_music_sound.py` plus `test_takes.py`, `test_voices.py`, `test_uploads.py`, `test_workflows.py`, `test_video_source.py`; studio DB tests on `.tools/test-db` |
-| P2a | **ACE-Step pack** (2B + XL as variants; XL bf16 on the Mac), vendored on transformers 5.23; core stereo `_wav` | P1 | with P2b–d | 14 | `test_packs.py`, `test_ace_step.py` (CPU), `-m gpu` golden (`record_ace_step.py`), `make test-torch` |
+| P2a | **ACE-Step pack** (2B + XL as variants; XL bf16 on the Mac) on diffusers' `AceStepPipeline` with `rename()`; the planner stage; core stereo `_wav` and `core/media.py` `pcm()` | P1 | with P2b–d | 14 | `test_packs.py`, `test_ace_step.py` (CPU), `-m gpu` golden (`record_ace_step.py`), `make test-torch` |
 | P2b | **MiniMax Music 3 pack** (diffusers 0.43 modular pipeline) | P1 | yes | 6 | as P2a for `minimax_music3` |
-| P2c | **Stable Audio 3 pack** (vendored, split safetensors, gated) | P1 | yes | 6 | as P2a for `stable_audio_3` |
+| P2c | **Stable Audio 3 pack** (diffusers StableAudio3 pipelines, `rename()` split of one safetensors, gated) | P1 | yes | 6 | as P2a for `stable_audio_3` |
 | P2d | **MMAudio pack with its helpers**; core torch `load_component` hook and non-safetensors size; in-stage mux | P1 | yes (core edit owned by P2d only) | 10 | as P2a for `mmaudio`; core loader tests |
 | P3 | **Workflows and actions**: generate, Repaint, Cover, Extend, Vary, video → sound and the video-with-sound take; the `mux` media worker; offers on real packs; registry fixtures and guides | P2a–d | after P2 | 8 | `make contracts-check`; `test_guides.py`, `test_registry.py`; contract tests for offers by class, audio span, mux 202/422/404 |
 | P4 | **Create UI** (frames 1–5): kinds, chips and popups, drawer blocks, stage markers and range, strip actions, variations grid, MMAudio two takes, menus; board memory figures fixed to `peak_gb` | P1 (fake runner); real packs for the last check | can start with P2 on echo | 16 | web `make test lint` (`audio-create`, `create-popups`, `model-chip`, `run-strip`, `create-use-in`, `context-menus-*`, `video-create` suites); e2e journeys (44.8) |
@@ -242,14 +267,17 @@ Files per phase:
   `contracts/messages/cmd.media.job.schema.json`, `contracts/messages/defs.schema.json`, `contracts/tools/catalog.json`,
   `contracts/README.md`, `contracts/check.py`, `contracts/fixtures/registry/echo.*.valid.json`,
   `contracts/fixtures/video/{uses,sources}.json`, HTTP fixtures for Take, Upload, Workflow;
-  `runner_service/packs/echo/` (model.yaml, fake.py, workflows), `runner_service/packs/{qwen3_tts,zonos3}/model.yaml`
+  `runner_service/packs/echo/` (model.yaml, fake.py, workflows), `extend_room` limited to video sources in
+  `contracts/check.py`, `studio_service/api/studio/media.go` and `runner_service/core/graph.py`, clip actions by class
+  (`contracts/README.md` Take actions, `studio_service/api/timeline/`), `runner_service/packs/{qwen3_tts,zonos3}/model.yaml`
   (`sound: voice`), `runner_service/core/{pack,graph,nodes}.py`, `runner_service/gen/`;
   `studio_service/migrations/00055_take_sound.sql`, `studio_service/api/gallery/{service,upload,media}.go`,
   `studio_service/api/studio/{projector,graph,workflows,media,mentions}.go`, the mux route and job beside the frame
   job, `studio_service/registry/registry.go`, `studio_service/gen/`; `pipelines_service/assistant.py`,
   `assistant_knowledge.md`; `cli/mcp.go`, `cli/takes.go`, `cli/gen`; `web_service/gen/api.ts`;
   `contract_tests/tests/test_music_sound.py` and the touched tests.
-- **P2a**: `runner_service/packs/ace_step/` (model.yaml, torch.py, vendor/, assistant.md, licences/, GOTCHAS.md),
+- **P2a**: `runner_service/packs/ace_step/` (model.yaml, torch.py, assistant.md, licences/, GOTCHAS.md; no vendor/),
+  `runner_service/core/{nodes,media}.py` (stereo, `pcm`),
   `contracts/fixtures/registry/ace-step.{nodes,workflows,models}.valid.json`, `contracts/check.py` CANONICAL,
   `runner_service/tests/{test_packs,test_ace_step,test_ace_step_golden}.py`, `tests/golden/record_ace_step.py`,
   `tests/golden/ace_step/`, `runner_service/pyproject.toml`, `uv.lock`.
@@ -291,8 +319,9 @@ Files per phase:
 
 ### 44.9 Risks
 
-1. **ACE-Step on transformers 5.23** (the vendored port, never the repo's pin). Fallback: a native child in its own
-   venv (`sgl.py` pattern), cold-loading 20–56 s every run.
+1. **The `rename()` maps** from ACE-Step's and Stable Audio's original layouts to the diffusers classes are unproven,
+   and Extend as a repaint past the source's end in `AceStepPipeline` is unverified. Fallbacks: the diffusers-format
+   repos (a download), then a native child in its own venv (`sgl.py` pattern, cold-loading 20–56 s every run).
 2. **MMAudio's `.pth` weights** against the safetensors-only loader: the hook must keep the meta-device streaming for
    the safetensors packs unchanged.
 3. **Stereo Audio** across voice clone, the Timeline and LTX audio-to-video: downmix where mono is needed; contract
@@ -323,3 +352,7 @@ Files per phase:
 11. Count per workflow from the registry (Sound 4, max 8; others unchanged at 4). **Applied**.
 12. Section markers only on ACE-Step takes with tagged lyrics (lyric timestamps); none on MiniMax or instrumental takes.
     **Applied**.
+13. Timeline clip actions on audio match by sound class (so a MiniMax clip gets ACE-Step's Repaint, Cover, Extend),
+    not by family. **Applied** (44.3.16).
+14. ACE-Step, MiniMax Music 3 and Stable Audio 3 run on the locked diffusers 0.43 classes with `rename()` from the
+    weights already on disk, not the diffusers-format repos. **Applied** (44.3.7); the repos are the fallback.
