@@ -57,6 +57,13 @@ e227a7ee) is replaced.
 11. **Voice and music move with their shot** (owner: "handle the voice and music to align with a shot", then "a, move with
     the shot"): a line or music cue dropped under a shot is tied to it (a small link mark); moving the shot moves them,
     shortening it warns when a line no longer fits; unlink to place one freely.
+12. **Assets row** (owner, 2026-11-26: "think one more line above storyboard Asset it will have the ability to create characters,
+    and props, reference them in story boards"; then "b will be good else it will be a lot. open option to imprt from the
+    create gallery"): a row above Storyboard, off the time ruler, of the board's own assets: Character (a sheet of views and
+    expressions, a voice), Prop, Place. + Asset makes one (describe and generate, or drop images). They are the board's own,
+    not Create's Elements; **Import** brings a take from the Create gallery (or an Element) in as a copy. Blocks pick them with
+    @; hovering an asset lights the frames and shots that use it ("used in 3 frames · 2 shots"); changing one marks them out of
+    date. The Assistant can make the cast and props from the brief first.
 
 ## Open
 
