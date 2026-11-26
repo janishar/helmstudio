@@ -48,10 +48,11 @@ scheduled: not alpha.5; a release is picked when the concept is done. The wirefr
 10. **The Assistant runs small things by itself** (owner: "free for small things, ask above the limit"): storyboard frames
     and short drafts run without asking; anything over a GPU-time limit the user sets asks first, showing the estimate
     ("3 shots, about 6 min").
+11. **Voice and music move with their shot** (owner: "handle the voice and music to align with a shot", then "a, move with
+    the shot"): a line or music cue dropped under a shot is tied to it (a small link mark); moving the shot moves them,
+    shortening it warns when a line no longer fits; unlink to place one freely.
 
 ## Open
 
-- Voice and music lined up with shots (owner: "handle the voice and music to align with a shot"): lanes in time may cover it;
-  open whether a line moves with its shot.
 - Which n8n ideas go in the first version.
 - Where the standard request lives (contract, adapters in the runner) and the first models it covers.
