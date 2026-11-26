@@ -288,7 +288,13 @@ class Library:
     `blocks`: family → its registry lora block (the families this runner's packs publish)."""
 
     def __init__(
-        self, models: Path, cache: Path, *, store=None, host: str = "", cache_gb: float = 20.0
+        self,
+        models: Path | None,
+        cache: Path,
+        *,
+        store=None,
+        host: str = "",
+        cache_gb: float = 20.0,
     ):
         self.models, self.dir, self.store, self.host = models, cache / "loras", store, host
         self.cap = int(cache_gb * 2**30)
@@ -306,7 +312,18 @@ class Library:
             known = json.loads(known_path.read_text())
         except OSError, ValueError:
             known = {}
-        files = sorted({*self.models.glob("loras/*.safetensors"), *self.models.glob("*/loras/*.safetensors")})  # fmt: skip
+        from core import pack as packs
+
+        # API 1.78: every connected model folder of the list when `models` is None
+        tops = [self.models] if self.models else packs.connected()
+        files = sorted(
+            {
+                f
+                for m in tops
+                for g in ("loras/*.safetensors", "*/loras/*.safetensors")
+                for f in m.glob(g)
+            }
+        )
         ignore = [g for b in blocks.values() for g in b["ignore"]]
         shared, files_, entries, kept = (
             {},

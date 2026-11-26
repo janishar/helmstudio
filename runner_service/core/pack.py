@@ -11,6 +11,8 @@ import importlib
 import json
 import struct
 import sys
+import threading
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
@@ -207,9 +209,9 @@ class ModelRef:
         """The variant's model folder (with `component`: the folder of the variant owning its files, or the
         component's own `dir`), for the small non-weight files a pack reads itself (configs, tokenizer, scheduler)."""
         if component and (own := self.pack.component(component).get("dir")):
-            return models_root() / own
+            return place(own)
         variant = self.owner(component) if component else self.variant
-        return models_root() / self.pack.spec["variants"][variant]["dir"]
+        return place(self.pack.spec["variants"][variant]["dir"])
 
     def fingerprint(self, components) -> list:
         """What a cache key holds for this Model input: per component, its key and each file's size and mtime."""
@@ -271,10 +273,98 @@ def variant_precisions(pack: Pack, variant: str) -> list[str]:
     return [p for p in PRECISIONS if p in offered]
 
 
-def models_root() -> Path:
+# --- model folders (API 1.78, contracts/README.md "Model folders"): an ordered list of roots; a model folder loads
+# from the first connected root with a complete copy. A root that is not a directory now is skipped, never created.
+
+_scope = threading.local()  # rooted(): (root, strict) of this thread's job or scan
+
+
+def shown(path: Path) -> str:
+    """`path` with the home directory written `~`."""
+    home = str(Path.home())
+    return "~" + str(path)[len(home) :] if str(path).startswith(home + "/") else str(path)
+
+
+def folder_id(text: str) -> str:
+    """A folder's id: the first 12 hex of the SHA-256 of its path as stored."""
+    return hashlib.sha256(text.encode()).hexdigest()[:12]
+
+
+def roots() -> list[tuple[str, Path]]:
+    """(path as stored, path) of each model folder in priority order: host_settings `folders`, else the one
+    HELMSTUDIO_MODELS."""
     import config
 
-    return config.MODELS
+    return [(x, Path(x).expanduser()) for x in config.ROOTS] or [
+        (shown(config.MODELS), config.MODELS)
+    ]
+
+
+def connected() -> list[Path]:
+    return [r for _, r in roots() if r.is_dir()]
+
+
+def downloads_root() -> Path:
+    """The downloads folder, else the next connected one after it (the list wraps), else the downloads folder."""
+    import config
+
+    rs = [r for _, r in roots()]
+    i = config.DOWNLOADS if 0 <= config.DOWNLOADS < len(rs) else 0
+    return next((r for r in rs[i:] + rs[:i] if r.is_dir()), rs[i])
+
+
+def models_root() -> Path:
+    """Where writes go: the root of a strict rooted() scope, else the downloads folder."""
+    s = getattr(_scope, "root", None)
+    return s[0] if s and s[1] else downloads_root()
+
+
+def complete(path: Path) -> bool:
+    """A model folder with files and no unfinished download (core.models.MARKER)."""
+    from core.models import MARKER
+
+    try:
+        return not (path / MARKER).exists() and any(
+            not x.name.startswith(".") for x in path.iterdir()
+        )
+    except OSError:
+        return False
+
+
+def found(rel: str) -> Path | None:
+    """The first connected root's complete copy of `rel`, whatever the scope; None when none has one."""
+    return next((r / rel for r in connected() if complete(r / rel)), None)
+
+
+def place(rel: str) -> Path:
+    """Where the model folder `rel` is read from: the first connected root with a complete copy, else the first
+    with some of it, else the downloads folder. In a strict rooted() scope: that root; a loose one prefers its root
+    when the folder is there. ponytail: complete = files and no marker, not every glob; a partial copy first in the
+    list that lacks a weight still wins over a full one later."""
+    if (s := getattr(_scope, "root", None)) and (s[1] or (s[0] / rel).exists()):
+        return s[0] / rel
+    live = connected()
+    return (
+        found(rel)
+        or next((r / rel for r in live if (r / rel).exists()), None)
+        or models_root() / rel
+    )
+
+
+def root_of(path: Path) -> tuple[str, Path] | None:
+    """The (stored, path) root holding `path`, the first that does."""
+    return next(((t, r) for t, r in roots() if path.is_relative_to(r)), None)
+
+
+@contextmanager
+def rooted(root: Path, strict: bool = True):
+    """Within it this thread reads and writes model folders in `root` only (strict: a job's download or delete), or
+    prefers `root` (loose: a scan of one copy)."""
+    old, _scope.root = getattr(_scope, "root", None), (root, strict)
+    try:
+        yield
+    finally:
+        _scope.root = old
 
 
 def share_owner(pack: Pack, variant: str) -> str:
@@ -288,9 +378,9 @@ def owns_copy(pack: Pack, variant: str, component: str) -> bool:
     owner's folder, as a hand-made share) is not a copy."""
     from core.models import linked
 
-    first = share_owner(pack, variant)
-    root = models_root() / pack.spec["variants"][variant]["dir"]
-    if variant != first and root == models_root() / pack.spec["variants"][first]["dir"]:
+    first, d = share_owner(pack, variant), pack.spec["variants"][variant]["dir"]
+    root = place(d)
+    if variant != first and d == pack.spec["variants"][first]["dir"]:
         return False  # one folder for both (LTX dev beside distilled): one copy, the lender's
     globs = component_globs(pack, variant, component)
     return any(p.is_file() and not p.is_symlink() and not linked(root, p.relative_to(root).as_posix())
@@ -310,9 +400,7 @@ def component_globs(pack: Pack, variant: str, component: str) -> list[str]:
 def component_files(pack: Pack, variant: str, component: str) -> list[Path]:
     """The files of a component in a variant's folder (or the component's own `dir`: a model of its own the family
     loads, as MiniMax's prompt enhancer), sorted per glob."""
-    root = models_root() / (
-        pack.component(component).get("dir") or pack.spec["variants"][variant]["dir"]
-    )
+    root = place(pack.component(component).get("dir") or pack.spec["variants"][variant]["dir"])
     return [p for g in component_globs(pack, variant, component) for p in sorted(root.glob(g))]
 
 

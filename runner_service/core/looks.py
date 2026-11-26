@@ -127,10 +127,13 @@ def thumb_key(family: str, look: dict) -> str:
     return f"packs/{family}/looks/{look['id']}-{img['sha256'][:16]}.{img['ext']}"
 
 
-def lora_id(pack, file: str, library, models: Path) -> str | None:
+def lora_id(pack, file: str, library, models: Path | list[Path]) -> str | None:
     """The SHA-256 of `file` in the host's shared LoRA index, looked up in <models>/loras/ and the loras/ folder of
     each of the family's model folders, whatever family it indexes to (another one is logged); else None (logged)."""
-    folders = [models / "loras"] + [models / v["dir"] / "loras" for v in pack.spec.get("variants", {}).values()]  # fmt: skip
+    tops = (
+        models if isinstance(models, list) else [models]
+    )  # API 1.78: every connected model folder
+    folders = [f for m in tops for f in [m / "loras"] + [m / v["dir"] / "loras" for v in pack.spec.get("variants", {}).values()]]  # fmt: skip
     families = {e["id"]: e["family"] for e in library.entries}
     for p in (f / file for f in folders):
         if (sha := library.files.get(p)) is None:
@@ -142,7 +145,7 @@ def lora_id(pack, file: str, library, models: Path) -> str | None:
     return None
 
 
-def entries(loaded, library, models: Path) -> list[dict]:
+def entries(loaded, library, models: Path | list[Path]) -> list[dict]:
     """The registry value's `looks`: every pack's looks (Pack.looks), by pack, then file, then file order."""
     out = []
     for p in loaded:

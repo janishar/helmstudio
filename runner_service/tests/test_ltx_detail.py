@@ -54,7 +54,7 @@ def test_the_detailer_is_an_optional_add_on_whose_published_source_has_no_dir(
 ):
     from core import models
 
-    monkeypatch.setattr(packs, "models_root", lambda: tmp_path)
+    monkeypatch.setattr("config.MODELS", tmp_path)
     p = SimpleNamespace(spec=SPEC, component=lambda c: SPEC["components"][c])
     assert packs.addons(p) == ["ic_lora", "distilled_lora"]
     assert models.addon_dest(p, "ic_lora") == tmp_path / "ltx-2.5/loras"
@@ -79,7 +79,7 @@ def test_the_distilled_lora_is_devs_add_on_not_a_file_of_distilled(tmp_path, mon
     it out, the file in its folder is not Distilled's, and the detailer is scoped to Distilled."""
     from core import models
 
-    monkeypatch.setattr(packs, "models_root", lambda: tmp_path)
+    monkeypatch.setattr("config.MODELS", tmp_path)
     p = SimpleNamespace(spec=SPEC, component=lambda c: SPEC["components"][c])
     lora = SPEC["components"]["distilled_lora"]["files"]
     src = SPEC["variants"]["distilled"]["source"]
@@ -138,7 +138,7 @@ def test_the_ltx_pack_names_no_weight_file_in_code():
 def test_ic_lora_adds_the_detailer_as_an_adapter_use(tmp_path, monkeypatch):
     from core import models
 
-    monkeypatch.setattr(packs, "models_root", lambda: tmp_path)
+    monkeypatch.setattr("config.MODELS", tmp_path)
     monkeypatch.setattr(models, "hashes", models.Hashes())
     pack = packs.Pack("ltx", LTX, SPEC, "mlx", None, "")
     model = packs.ModelRef(pack, "distilled", "int8")

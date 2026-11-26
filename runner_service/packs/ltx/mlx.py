@@ -1338,7 +1338,7 @@ def distill(ctx, params: dict, inputs: dict) -> dict:
     """The dev model with the pack's pre-fused distilled LoRA as one bake row at strength 1 (the old
     `_fuse_distilled_lora`: dequantize, + the delta in float32, requantize): a second transformer entry in residency,
     reported with that LoRA. Pure: graph.keys builds it without a run (ctx None)."""
-    from core.pack import LoraUse, models_root
+    from core.pack import LoraUse, place
 
     model = inputs["model"]
     if is_distilled(
@@ -1351,7 +1351,7 @@ def distill(ctx, params: dict, inputs: dict) -> dict:
     lora_id = next(
         (x["lora_id"] for x in lora_block_prefused(model.pack) if x["variant"] == "distilled"), ""
     )
-    f = models_root() / model.pack.spec["variants"]["distilled"]["dir"] / spec["file"]
+    f = place(model.pack.spec["variants"]["distilled"]["dir"]) / spec["file"]
     use = LoraUse(
         lora_id, "shared", f.stem, lora_id, f.stat().st_size if f.is_file() else 0, 1.0, "bake"
     )

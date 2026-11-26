@@ -29,6 +29,7 @@ class Settings:
     def __init__(self, consumer, host) -> None:
         self.consumer, self.host = consumer, host
         self.pending: tuple | None = None  # (value or None,) waiting for the run to end
+        self.rescan = None  # main's: rebuild the models and loras keys
         self.gpu_limit_gb = (
             gpu_limit_gb()
         )  # the hosts key's machine.gpu_limit_gb; read again on each apply
@@ -41,6 +42,7 @@ class Settings:
         self.reserve_gb = config.RESERVE_GB
         self.reserve_mode = "custom"
         self.pins: set[tuple] | None = None  # None: RUNNER_PIN
+        config.ROOTS, config.DOWNLOADS = [], 0  # API 1.78: HELMSTUDIO_MODELS alone
 
     def policy(self) -> dict:
         """The hosts key's `policy`."""
@@ -84,6 +86,7 @@ class Settings:
             await self.apply(value)
 
     async def apply(self, value: dict | None) -> None:
+        before = (list(config.ROOTS), config.DOWNLOADS)
         if value is None:
             self.defaults()
         else:
@@ -91,6 +94,11 @@ class Settings:
             self.idle_unload_min, self.reserve_gb = value["idle_unload_min"], value["reserve_gb"]
             self.reserve_mode = value.get("reserve_mode", "custom")
             self.pins = {ident(p) for p in value["pins"] if p["env"] == ENV}
+            config.ROOTS = list(
+                value.get("folders", [])
+            )  # API 1.78: the model folders in priority order
+            config.DOWNLOADS = value.get("downloads", 0)
+        moved = before != (config.ROOTS, config.DOWNLOADS)
         c, res = self.consumer, self.consumer.residency
         c.after_run = self.after_run
         if self.after_run == "unload":  # cached node results would let the next run load nothing
@@ -107,7 +115,10 @@ class Settings:
                     GPU, res.unload, self.after_run == "keep_pinned"
                 )
         log.info("host settings applied: %s", self.policy())
-        await self.host.put()
+        if moved and self.rescan:  # the models and loras keys as the new folders hold them
+            await self.rescan()
+        else:
+            await self.host.put()
 
     async def watch(self, js, stop: asyncio.Event) -> None:
         """Read the key every POLL seconds until `stop` and offer each new revision (a direct get of its own key: a

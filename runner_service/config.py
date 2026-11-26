@@ -51,6 +51,10 @@ def plain_with_ca() -> str | None:
 
 # model weights: plain folders on this host's disk, never in an image or the object store
 MODELS = Path(os.environ.get("HELMSTUDIO_MODELS", "~/GenAI/models")).expanduser()
+# API 1.78 (contracts/README.md, Model folders): the host's model folders in priority order, as stored (host_settings
+# `folders`, set by messaging/settings.py); empty = MODELS alone. DOWNLOADS: the index of the downloads folder
+ROOTS: list[str] = []
+DOWNLOADS = 0
 # residency manager: budget = physical RAM - RESERVE_GB; what stays loaded after a run
 RESERVE_GB = float(os.environ.get("RUNNER_RESERVE_GB", "12"))  # on CUDA: VRAM - RESERVE_GB
 RAM_RESERVE_GB = float(

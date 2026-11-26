@@ -144,6 +144,7 @@ def guides(loaded, workflows: list, node_schemas: dict) -> list[dict]:
 def models_value(loaded, impls: dict, node_schemas: dict, env: str = ENV) -> dict:
     """The `models` value as the disk is now (core.models.entry per pack, `memory` for present variants, the
     licences); `prefused` stays empty until fill_prefused. Rebuilt by every rescan."""
+    models.refresh_seen()  # API 1.78: what each connected model folder holds, for `unplugged`
     entries = [packs.models_entry(p) for p in loaded]
     for p, entry in zip(loaded, entries, strict=True):
         for variant in entry.get("variants", []):
@@ -356,7 +357,7 @@ def fill_prefused(values: dict[str, dict], loaded, files: dict) -> None:
     for p in loaded:
         if (block := packs.lora_block(p)) is None or "prefused" not in block:
             continue
-        found = [(x, packs.models_root() / p.spec["variants"][x["variant"]]["dir"] / x["file"])
+        found = [(x, packs.place(p.spec["variants"][x["variant"]]["dir"]) / x["file"])
                  for x in p.spec["lora"]["prefused"]]  # fmt: skip
         block["prefused"] = [
             {"lora_id": files[f], "variant": x["variant"]} for x, f in found if f in files

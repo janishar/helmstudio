@@ -717,7 +717,7 @@ def test_qwens_enhancers_are_per_task_add_ons_named_as_the_boards(tmp_path, monk
     spec = yaml.safe_load(
         (Path(pack.__file__).parents[1] / "packs/qwen_image/model.yaml").read_text()
     )
-    monkeypatch.setattr(pack, "models_root", lambda: tmp_path)
+    monkeypatch.setattr("config.MODELS", tmp_path)
     p = SimpleNamespace(spec=spec, component=lambda c: spec["components"][c])
     got = {c: models.addon_entry(p, c) for c in pack.addons(p)}
     assert {c: (a["title"], a["short"], a["tag"], a["refs"]) for c, a in got.items()} == {

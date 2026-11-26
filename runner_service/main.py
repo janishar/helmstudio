@@ -166,8 +166,8 @@ async def main() -> None:
     residency, device, loader = residency_for(packs)
     machine = models.machine(device, ram_gb())
     store = Store()
-    library = lora.Library(
-        config.MODELS, config.CACHE, store=store, host=HOST, cache_gb=config.LORA_CACHE_GB
+    library = lora.Library(  # None: the loras/ of every connected model folder (API 1.78)
+        None, config.CACHE, store=store, host=HOST, cache_gb=config.LORA_CACHE_GB
     )
     blocks = registry.lora_blocks(packs)
     values["loras"] = registry.scanned_value("loras", await asyncio.to_thread(library.scan, blocks))
@@ -209,7 +209,7 @@ async def main() -> None:
         out["device"] = loader.device_info() if loader else host_device("cpu")
         if device == "cuda":  # host RAM is the second limit
             out["host_ram"] = loader.host_ram()
-        return out | {"models_disk": models.disk(config.MODELS), "machine": machine | {"gpu_limit_gb": settings.gpu_limit_gb},
+        return out | {"models_disk": models.disk(models.packs.downloads_root()), "models_disks": models.disks(), "machine": machine | {"gpu_limit_gb": settings.gpu_limit_gb},
                       "hub_token": tok.is_file() and tok.stat().st_size > 0,
                       "policy": settings.policy()} | ({"media": can_media} if can_media else {})  # fmt: skip
 
@@ -242,6 +242,8 @@ async def main() -> None:
                 values.update(changed)
                 await registry.publish(js, changed)
             await host.put()
+
+    settings.rescan = rescan  # API 1.78: a new folder list rescans at once
 
     async def rescans(stop: asyncio.Event) -> None:
         while not stop.is_set():
@@ -341,6 +343,18 @@ async def main() -> None:
             await msg.respond(json.dumps(reply).encode())
 
         await nc.subscribe(f"runner.plugins.key.{HOST}", cb=on_key)
+
+        # API 1.78: what each model folder path is here now (req.runner.folders.check), before studio stores a list
+        async def on_folders(msg) -> None:
+            try:
+                paths = json.loads(msg.data or b"{}").get("paths")
+            except ValueError, AttributeError:
+                paths = None
+            await msg.respond(
+                json.dumps(await asyncio.to_thread(models.check_folders, paths)).encode()
+            )
+
+        await nc.subscribe(f"runner.folders.check.{HOST}", cb=on_folders)
     server = await health.serve(nc)
     log.info("runner %s.%s ready on %s (device %s)", HOST, ENV, SUBJECT, device)
     try:

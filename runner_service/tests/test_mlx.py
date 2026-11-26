@@ -156,7 +156,7 @@ def test_ltx_sizes_come_from_the_headers(tmp_path, monkeypatch):
     """dtype stored keeps each tensor's bytes; rename's None keys do not count; MLX int8 / int4 is bits / 8 per value
     plus a bf16 scale and bias per group of 64."""
     _, _, p = ltx()
-    monkeypatch.setattr(pack, "models_root", lambda: tmp_path)
+    monkeypatch.setattr("config.MODELS", tmp_path)
     pack._sizes.clear()
     dit = tmp_path / "ltx-2.5/diffusion_models/ltx-2.5-22b-distilled-transformer-bf16.safetensors"
     safetensors_file(dit, {
@@ -1053,7 +1053,7 @@ def test_distilled_actions_pass_distill_through_and_key_the_encode_by_variant():
     import config
 
     dev = pack.ModelRef(p, "dev", "int8")
-    with mock.patch.object(pack, "models_root", lambda: Path("/nonexistent")):
+    with mock.patch("config.MODELS", Path("/nonexistent")):
         assert ltx_mlx.check_distill({}, {"model"}, {"model": dev}) == (
             f": Distilled LoRA not downloaded on host {config.HOST}"
         )

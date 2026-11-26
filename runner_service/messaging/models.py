@@ -158,6 +158,24 @@ class ModelJobs:
             raise JobError("not_found", f"{model} is not published by {HOST}.{ENV}")
         return p
 
+    @staticmethod
+    def root(fid: str):
+        """The connected folder of the list with id `fid` (API 1.78)."""
+        r = next((r for t, r in packs.roots() if packs.folder_id(t) == fid), None)
+        if r is None:
+            raise JobError("not_found", f"folder {fid} is not a folder of {HOST}")
+        if not r.is_dir():
+            raise JobError("not_found", f"{models.folder_name(r)} is not connected on {HOST}")
+        return r
+
+    @staticmethod
+    def within(root, fn, *a, **kw):
+        """fn(*a, **kw) with this thread's model folders in `root` only (None: as the resolver reads them)."""
+        if root is None:
+            return fn(*a, **kw)
+        with packs.rooted(root):
+            return fn(*a, **kw)
+
     def addon(self, p, data: dict) -> str | None:
         """The job's add-on (API 1.36), checked: one of the model's."""
         if (c := data.get("addon")) is not None and c not in models.listed_addons(p):
@@ -186,10 +204,12 @@ class ModelJobs:
         log.info("model job %s: %s %s from %s, token: %s", job_id, p.spec["id"], addon or vid, src["repo"],
                  "present" if token else "absent")  # fmt: skip
         progress = download.Progress()
+        # API 1.78: into the job's folder, else the downloads folder (else the next connected one)
+        root = self.root(data["folder"]) if "folder" in data else packs.models_root()
         stop = await cancels.watch(self.cancels_kv, job_id, progress.cancel.set)
         task = asyncio.create_task(asyncio.to_thread(
-            download.download, p, vid, endpoint=self.endpoint, token=token, cache=self.cache, host=HOST,
-            progress=progress, addon=addon))  # fmt: skip
+            self.within, root, download.download, p, vid, endpoint=self.endpoint, token=token, cache=self.cache,
+            host=HOST, progress=progress, addon=addon))  # fmt: skip
         try:
             sent, at, last = None, 0.0, None
             while True:
@@ -217,24 +237,46 @@ class ModelJobs:
         res = self.consumer.residency
         return [k for k in (res.entries if res else ()) if test(k)]
 
+    def targets(self, data: dict, d: str) -> tuple[list, bool]:
+        """(the roots a delete works in: [None] = the copy a run loads, whether that copy is among them: the
+        loaded and in-use checks apply only then). API 1.78 `folders`."""
+        if not (ids := data.get("folders")):
+            return [None], True
+        roots = [self.root(i) for i in ids]
+        used = packs.root_of(packs.place(d))
+        return roots, used is not None and used[1] in roots
+
     async def delete(self, job_id: str, data: dict, events: ModelEvents) -> dict:
         p = self.find(data["model"])
         if addon := self.addon(p, data):
-            return await self.delete_addon(job_id, p, addon)
+            return await self.delete_addon(job_id, p, addon, data)
         variants = p.spec.get("variants", {})
         if (v := data.get("variant")) is not None and v not in variants:
             raise JobError("not_found", f"{p.spec['title']} has no variant {v}")
         deleted = {v} if v else set(variants)
-        kept, only = models.kept_components(p, deleted)
+        roots, used = self.targets(data, variants[v or next(iter(variants))]["dir"])
+        out = {"files": 0, "freed_bytes": 0}
+        for r in roots:
+            one = await self._delete(job_id, p, variants, deleted, r, used)
+            out["files"] += one["files"]
+            out["freed_bytes"] += one["freed_bytes"]
+            if one.get("kept"):
+                out["kept"] = out.get("kept", []) + [
+                    k for k in one["kept"] if k not in out.get("kept", [])
+                ]
+        return out
+
+    async def _delete(self, job_id, p, variants, deleted, root, checks) -> dict:
+        """The variants `deleted` in `root` (None: where a run loads them); `checks`: refuse while loaded or used."""
+        kept, only = self.within(root, models.kept_components, p, deleted)
         # residency names a shared component by its owner variant: one kept on disk stays loadable (studio's rule;
         # kept is not empty only when the one deleted variant is a lender)
-        if loaded := self._loaded(lambda k: k[0] == p.spec["id"] and k[1] in deleted
-                                  and k[2] not in kept and k[2] not in packs.addons(p)):  # fmt: skip
+        if checks and (loaded := self._loaded(lambda k: k[0] == p.spec["id"] and k[1] in deleted
+                                              and k[2] not in kept and k[2] not in packs.addons(p))):  # fmt: skip
             raise JobError("in_use", f"{p.spec['title']} {loaded[0][1]} {loaded[0][2]} is loaded on "
                                      f"{HOST}.{ENV}: unload it first")  # fmt: skip
-        res = self.consumer.residency
-        if self.consumer.ctx is not None and res and any(k[0] == p.spec["id"] for k in res.used):
-            raise JobError("in_use", f"a run on {HOST}.{ENV} uses {p.spec['title']}")
+        if checks:
+            self._unused(p)
 
         def work() -> tuple[int, int]:
             files = freed = 0
@@ -248,7 +290,7 @@ class ModelJobs:
             return files, freed
 
         try:
-            files, freed = await asyncio.to_thread(work)
+            files, freed = await asyncio.to_thread(self.within, root, work)
         except models.InUse as e:
             raise JobError("in_use", str(e)) from None
         log.info(
@@ -256,18 +298,27 @@ class ModelJobs:
         )
         return {"files": files, "freed_bytes": freed} | ({"kept": kept} if kept else {})
 
-    async def delete_addon(self, job_id: str, p, c: str) -> dict:
-        """An add-on's files (API 1.36), refused while it is loaded or a run uses the model here."""
-        if loaded := self._loaded(lambda k: k[0] == p.spec["id"] and k[2] == c):
+    def _unused(self, p) -> None:
+        res = self.consumer.residency
+        if self.consumer.ctx is not None and res and any(k[0] == p.spec["id"] for k in res.used):
+            raise JobError("in_use", f"a run on {HOST}.{ENV} uses {p.spec['title']}")
+
+    async def delete_addon(self, job_id: str, p, c: str, data: dict) -> dict:
+        """An add-on's files (API 1.36), refused while it is loaded or a run uses the model here (API 1.78: only
+        when the copy a run loads is among the job's `folders`)."""
+        roots, checks = self.targets(data, models.addon_dir(p, c))
+        if checks and (loaded := self._loaded(lambda k: k[0] == p.spec["id"] and k[2] == c)):
             raise JobError(
                 "in_use",
                 f"{p.spec['title']} {loaded[0][1]} {c} is loaded on {HOST}.{ENV}: unload it first",
             )
-        res = self.consumer.residency
-        if self.consumer.ctx is not None and res and any(k[0] == p.spec["id"] for k in res.used):
-            raise JobError("in_use", f"a run on {HOST}.{ENV} uses {p.spec['title']}")
+        if checks:
+            self._unused(p)
+        files = freed = 0
         try:
-            files, freed = await asyncio.to_thread(models.delete_addon, p, c)
+            for r in roots:
+                f, b = await asyncio.to_thread(self.within, r, models.delete_addon, p, c)
+                files, freed = files + f, freed + b
         except models.InUse as e:
             raise JobError("in_use", str(e)) from None
         log.info(
@@ -283,16 +334,16 @@ class ModelJobs:
         name = lib.shared[sha].stem if sha in lib.shared else paths[0].stem
         for p in self.packs:
             for x in (p.spec.get("lora") or {}).get("prefused", []):
-                f = packs.models_root() / p.spec["variants"][x["variant"]]["dir"] / x["file"]
+                f = packs.place(p.spec["variants"][x["variant"]]["dir"]) / x["file"]
                 if f in paths:
                     raise JobError("in_use", f"LoRA {name} is pre-fused into {p.spec['title']}")
         if self._loaded(lambda k: len(k) > 4 and any(s == sha for s, _ in k[4])):
             raise JobError(
                 "in_use", f"LoRA {name} is baked into a loaded component: unload it first"
             )
-        root, freed = packs.models_root(), 0
+        freed = 0
         for f in paths:
-            if not models.inside(root, f):
+            if not any(models.inside(r, f) for r in packs.connected()):
                 raise JobError("internal", f"LoRA {name} is outside the models root")
             freed += f.lstat().st_size
             await asyncio.to_thread(f.unlink, True)

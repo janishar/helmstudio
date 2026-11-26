@@ -207,14 +207,16 @@ def plan(pack, vid: str, api, progress: Progress) -> tuple[list[Item], list[str]
                   for p in matching(mtree, more["allow_patterns"])]  # fmt: skip
     reused, separate, lacking = [], [], []
     owner = models.folder(pack, first)
-    have = {r.as_posix() for r in models.own_files(owner)} if first != vid else set()
+    # API 1.78: the lender's complete copy in any connected folder is reused (read there), never fetched again
+    lender = packs.found(spec["variants"][first]["dir"]) or owner
+    have = {r.as_posix() for r in models.own_files(lender)} if first != vid else set()
     for c in [
         c for c in v.get("shares", []) if c in packs.needed(pack, vid)
     ]:  # an add-on downloads on its own
         theirs = {p: tree[p] for p in matching(tree, component_patterns(pack, c, first))}
         lfs = {p: sha for p, (_, sha) in theirs.items() if sha}
         if packs.owns_copy(pack, vid, c) or (lfs and set(lfs) <= have and any(
-                file_sha(owner, p, progress.check) != sha for p, sha in lfs.items())):  # fmt: skip
+                file_sha(lender, p, progress.check) != sha for p, sha in lfs.items())):  # fmt: skip
             separate.append(c)  # the owner's copy differs: this variant's own, in its folder
             items += [Item(src["repo"], commit, p, *theirs[p], own) for p in sorted(theirs)]
         elif matching(have, models.globs(pack, c, first)):
@@ -295,7 +297,13 @@ def download(pack, vid: str | None, *, endpoint: str, token: str | None, cache: 
     evt.model.status `result`. JobError, Cancelled."""
     from huggingface_hub import HfApi, hf_hub_download
 
+    import config
+
     spec = pack.spec
+    if config.ROOTS and not packs.models_root().is_dir():  # API 1.78: a folder is never created
+        raise JobError(
+            "not_found", f"{models.folder_name(packs.models_root())} is not connected on {host}"
+        )
     if addon:
         src = pack.component(addon)["addon"].get("source")
         what = f"{spec['title']} {pack.component(addon)['addon']['title']}"
