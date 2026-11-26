@@ -4,6 +4,7 @@
 // zoom field with −, + and Fit on the right, and the ? button; the shortcut sheet (the board's dialog); Slip's source
 // window (the shared state "Slip with the source window").
 import { useEffect, useRef } from "react";
+import { SlidersHorizontal } from "lucide-react";
 import { Modal } from "@/components/kit";
 import { TOOLS, type Tool } from "@/lib/timeline-tools";
 import { timecode } from "@/lib/timeline";
@@ -69,6 +70,8 @@ export function ToolRow({
   onZoomIn,
   onFit,
   onSheet,
+  panel,
+  onPanel,
 }: {
   tool: Tool;
   onTool: (t: Tool) => void;
@@ -82,6 +85,9 @@ export function ToolRow({
   onZoomIn: () => void;
   onFit: () => void;
   onSheet: () => void;
+  /** the side panel on the right (alpha.5 item 11, docs/mock/Timeline.dc.html "Side panel toggle frames") */
+  panel?: boolean;
+  onPanel?: () => void;
 }) {
   const group = useRef<HTMLDivElement>(null);
   const arrow = (e: React.KeyboardEvent) => {
@@ -143,6 +149,20 @@ export function ToolRow({
           <path d="M3 12c3-4 6-6 9-6s6 2 9 6c-3 4-6 6-9 6s-6-2-9-6z" opacity=".55" />
         </Svg>
       </button>
+      {onPanel && (
+        // Create's sliders button (its icon and pressed look), right after the two toggles
+        <button
+          type="button"
+          className="chip bevel grid w-9 place-items-center rounded-[10px] bg-s4 px-0 aria-expanded:bg-s5 aria-expanded:shadow-[inset_0_0_0_1px_var(--a2)]"
+          aria-label="Side panel"
+          title="Side panel"
+          aria-expanded={!!panel}
+          aria-controls="timeline-side"
+          onClick={onPanel}
+        >
+          <SlidersHorizontal size={16} strokeWidth={1.75} aria-hidden />
+        </button>
+      )}
       <span className="grow" />
       <div role="group" aria-label="Zoom" className="tl-zf">
         <button

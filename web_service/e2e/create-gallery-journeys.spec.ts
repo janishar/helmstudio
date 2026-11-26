@@ -326,9 +326,10 @@ test("j13 see what my clip was made from and jump to that picture", async () => 
 });
 
 test("j14 settings in popups: a chip's popup edits its setting, Esc closes it, All settings opens the drawer", async () => {
-  // alpha.5 item 10 (docs/mock/TextToVideo.dc.html frames 1-6): the drawer is closed by default, remembered
+  // alpha.5 item 10 (docs/mock/TextToVideo.dc.html frames 1-6): the drawer starts closed here (a closed
+  // drawer is remembered; open is the default, alpha.5 item 11)
   await page.goto("/");
-  await page.evaluate(() => localStorage.removeItem("create-settings-drawer"));
+  await page.evaluate(() => localStorage.setItem("create-settings-drawer", "0"));
   await page.reload();
   const echoVideo = async () => {
     await page.getByRole("tab", { name: "Video" }).click();
@@ -367,7 +368,7 @@ test("j14 settings in popups: a chip's popup edits its setting, Esc closes it, A
   await expect(page.getByRole("complementary", { name: "Inspector" })).toBeVisible();
   await sliders.click();
   await expect(page.getByRole("complementary")).toHaveCount(0);
-  expect(await page.evaluate(() => localStorage.getItem("create-settings-drawer"))).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem("create-settings-drawer"))).toBe("0");
   // a phone-width window: the size and length chips still open their popups, fully on screen (frame 7b)
   const wide = page.viewportSize()!;
   await page.setViewportSize({ width: 375, height: 760 });

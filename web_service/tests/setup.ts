@@ -6,8 +6,7 @@ afterEach(() => {
   leftForm.current = null;
 });
 
-// Create's settings drawer is closed by default (alpha.5 item 10); the Create tests written before it read the
-// Inspector, so they start with it open. create-popups.test.tsx clears this to test the default.
+// Create's settings drawer is open by default (alpha.5 item 11); each test starts with it open, whatever the last one left.
 beforeEach(() => {
   try {
     globalThis.localStorage?.setItem("create-settings-drawer", "1");

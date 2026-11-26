@@ -66,8 +66,9 @@ always open on the right, or the Elements panel in its place.
 
 - **One button**, a sliders icon (`All settings`), at the end of the chips, after the seeds. It opens and closes
   the settings drawer on the right: today's Inspector, unchanged. Pressed look while open.
-- **Closed by default.** The stage and composer take the page width. Open or closed is remembered per user in this
-  browser (`localStorage`).
+- **Open by default** (alpha.5 item 11, owner 2026-11-26: "keep the setting open by default"; it was closed by
+  default when first built). Closed, the stage and composer take the page width. Open or closed is remembered per
+  user in this browser (`localStorage`, `"0"` for closed).
 - **A popup per chip**, anchored under it, editing only that setting. One at a time; Esc or a click outside closes
   it; a change shows on the chip at once. Each popup reuses the drawer's own controls:
 
@@ -90,8 +91,8 @@ always open on the right, or the Elements panel in its place.
   same: their size chip (`16:9 · 4 MP`) opens the Canvas popup.
 - `create.tsx`: an `inspect` open state (remembered) behind the sliders button; the aside shows when it is open or
   the Elements panel is asked for.
-- Tests: a chip opens only its popup; a change updates the chip; Esc closes; the button toggles the drawer; closed
-  on first load.
+- Tests: a chip opens only its popup; a change updates the chip; Esc closes; the button toggles the drawer; open
+  on first load (closed until alpha.5 item 11).
 - Follow-up (owner, 2026-11-26): the empty screen follows the drawer (the Inspector if it was left open, else no
   aside; the Elements panel left the aside, Elements open from the Elements tile or Insert element, as after a run).
   Size and Length use their popups on narrow windows and phones too (board frame 7b); a popup stays on screen

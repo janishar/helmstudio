@@ -108,7 +108,7 @@ const start = (runs: S<"Run">[] = [], w = echo) =>
 
 describe("Create: the empty screen", () => {
   it("shows the title, the composer and the open group's looks; no aside with the drawer closed", async () => {
-    localStorage.removeItem("create-settings-drawer");
+    localStorage.setItem("create-settings-drawer", "0");
     serve();
     start();
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("What will you make?");
@@ -146,7 +146,7 @@ describe("Create: the empty screen", () => {
   });
 
   it("a settings chip brings the Inspector into the aside", async () => {
-    localStorage.removeItem("create-settings-drawer");
+    localStorage.setItem("create-settings-drawer", "0");
     serve();
     start([], qwen);
     expect(screen.queryByRole("complementary")).toBeNull();
@@ -193,7 +193,7 @@ describe("Create: the empty screen", () => {
   });
 
   it("a new session keeps the drawer as it was left", async () => {
-    localStorage.removeItem("create-settings-drawer");
+    localStorage.setItem("create-settings-drawer", "0");
     serve();
     answer("POST", { "/v1/studio/sessions": () => ({ data: { id: "s2", title: null } }) });
     start([], qwen);

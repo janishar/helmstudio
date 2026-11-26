@@ -256,9 +256,9 @@ const DRAWER = "create-settings-drawer";
 const noSub = () => () => undefined;
 const storedDrawer = () => {
   try {
-    return localStorage.getItem(DRAWER) === "1";
+    return localStorage.getItem(DRAWER) !== "0";
   } catch {
-    return false;
+    return true;
   }
 };
 /** The browser's key of a session's half-written prompt or script ("" before the first session), one per side
@@ -330,15 +330,15 @@ export function Create({
   const [lookGroup, setLookGroup] = useState<S<"LibraryGroup"> | null>(null);
   // the empty screen (no run, no take: docs/mock/Direct.dc.html): the look group shown under the composer
   const [inlineGroup, setInlineGroup] = useState<S<"LibraryGroup"> | null>(null);
-  // the settings drawer (alpha.5 item 10, docs/mock/TextToVideo.dc.html): closed by default, remembered in this browser
-  const stored = useSyncExternalStore(noSub, storedDrawer, () => false);
+  // the settings drawer (alpha.5 item 10, docs/mock/TextToVideo.dc.html): open by default (owner, 2026-11-26:
+  // "keep the setting open by default"), a closed one remembered in this browser ("0")
+  const stored = useSyncExternalStore(noSub, storedDrawer, () => true);
   const [drawerSet, setDrawerState] = useState<boolean | null>(null);
   const drawer = drawerSet ?? stored;
   const setDrawer = (on: boolean) => {
     setDrawerState(on);
     try {
-      if (on) localStorage.setItem(DRAWER, "1");
-      else localStorage.removeItem(DRAWER);
+      localStorage.setItem(DRAWER, on ? "1" : "0");
     } catch {}
   };
   // a reused take's look ids, put under their groups once the looks are known

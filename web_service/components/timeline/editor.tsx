@@ -6,7 +6,7 @@
 // was made on (plan 24 28.8 A; the server's answer replaces the draft); a 409 reloads, says so and re-applies the
 // edit to the new revision once.
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { ActionsNote, ClipActions } from "@/components/timeline/actions";
@@ -107,6 +107,17 @@ function linkedTo(d: Norm, cid: string): string[] {
 }
 
 /** The editor; `id` is the sequence to open (else the one opened last, else the newest). */
+
+/** Whether the Timeline's side panel is closed ("0"), in this browser (alpha.5 item 11). */
+const PANEL = "timeline-side-panel";
+const noSub = () => () => undefined;
+const readPanel = () => {
+  try {
+    return localStorage.getItem(PANEL) !== "0";
+  } catch {
+    return true;
+  }
+};
 export function TimelineEditor({ id }: { id?: string }) {
   const router = useRouter();
   const [tl, setTl] = useState<Timeline | null>(null);
@@ -124,6 +135,22 @@ export function TimelineEditor({ id }: { id?: string }) {
   const [snap, setSnap] = useState(true);
   const [scrub, setScrub] = useState(true);
   const [sheet, setSheet] = useState(false);
+  // the side panel on the right (alpha.5 item 11): open by default, a closed one remembered in this browser ("0");
+  // selecting a clip or a track while it is closed opens it
+  const storedPanel = useSyncExternalStore(noSub, readPanel, () => true);
+  const [panelSet, setPanelState] = useState<boolean | null>(null);
+  const panel = panelSet ?? storedPanel;
+  const setPanel = (on: boolean) => {
+    setPanelState(on);
+    try {
+      localStorage.setItem(PANEL, on ? "1" : "0");
+    } catch {}
+  };
+  const [picked, setPicked] = useState({ sel, track });
+  if (picked.sel !== sel || picked.track !== track) {
+    setPicked({ sel, track });
+    if (!panel && (sel.length || track)) setPanelState(true);
+  }
   // the visible track width (px), the live region's last edit, the selected marker
   const [viewW, setViewW] = useState(0);
   const [said, setSaid] = useState("");
@@ -1199,6 +1226,8 @@ export function TimelineEditor({ id }: { id?: string }) {
               onZoomIn={() => zoomTo(pps * 1.25)}
               onFit={fit}
               onSheet={() => setSheet(true)}
+              panel={panel}
+              onPanel={() => setPanel(!panel)}
             />
           }
         />
@@ -1224,111 +1253,114 @@ export function TimelineEditor({ id }: { id?: string }) {
         />
       </main>
 
-      <aside
-        aria-label="Clip inspector"
-        className="aside m-3.5 flex flex-[1_1_320px] flex-col gap-5 px-[18px] pt-4 pb-6 md:ml-0"
-      >
-        {one ? (
-          <ClipPanel
-            key={`${one.c.id}:${JSON.stringify(ask?.kind ? ask : null)}`}
-            ask={ask?.kind ? ask : undefined}
-            onForm={ask?.kind ? setForm : undefined}
-            tl={tl}
-            doc={doc}
-            clip={one.c}
-            ti={one.ti}
-            progress={progress[one.c.id]}
-            replacing={replacing}
-            onReplacing={setReplacing}
-            range={range}
-            workflows={workflows}
-            onShotStarted={(nt) => {
-              tlRef.current = nt;
-              setTl(nt);
-              setDraft(null);
-            }}
-            onCommit={commit}
-            onShot={(s) => setShot(s)}
-            onRerender={() => setDialog("rerender")}
-            onDeselect={() => setSel([])}
-            opened={opened}
-            onOpened={setOpened}
-            onSaveVoice={setVoiceTake}
-          />
-        ) : selected.length > 1 ? (
-          <div className="flex flex-col gap-2">
-            <h2 className="m-0 font-display text-base font-bold tracking-[0.03em]">
-              {selected.length} clips
-            </h2>
-            {selected.every((x) => x.ti === 0) && (
-              <button type="button" className="act" onClick={() => setDialog("rerender")}>
-                Re-render…
-              </button>
-            )}
-            <button type="button" className="act text-bad" onClick={() => remove()}>
-              Remove clips
-            </button>
-          </div>
-        ) : marker && doc.markers?.some((m) => m.id === marker) ? (
-          <MarkerPanel
-            marker={doc.markers.find((m) => m.id === marker)!}
-            onCommit={commit}
-            onRemoved={() => setMarker(null)}
-          />
-        ) : track ? (
-          <TrackPanel
-            track={doc.tracks.find((x) => x.name === track)!}
-            onCommit={commit}
-            onAdd={() => setPicker({ track })}
-            onRemove={() => askRemove(track)}
-          />
-        ) : (
-          <div className="flex flex-col gap-2">
-            <h2 className="m-0 font-display text-base font-bold tracking-[0.03em]">{tl.name}</h2>
-            <span className="text-[12px] text-t2">
-              Select a clip to trim, dissolve, set its gain or replace it. Keys: Space plays, ← →
-              step a frame, [ ] trim, Alt+← → move, S splits, M adds a marker, Delete removes; ?
-              lists them all.
-            </span>
-            {v1.some((c) => c.take_id && !c.offline) && (
-              <button type="button" className="act" onClick={() => setDialog("rerender")}>
-                Re-render the sequence…
-              </button>
-            )}
-          </div>
-        )}
-
-        <div className="flex flex-col gap-2.5">
-          <h3 className="heading">{track ? `Add clips to ${track}` : "Add clips"}</h3>
-          {!track && recent.length > 0 && (
-            <div className="grid grid-cols-3 gap-2">
-              {recent.map((r) => (
-                <button
-                  key={r.id}
-                  type="button"
-                  aria-label={`Add take ${r.title}`}
-                  onClick={() => addClips([r.id])}
-                  className="mono aspect-[16/10] overflow-hidden rounded-lg border border-dashed border-dash bg-s1 bg-cover bg-center text-[10px] text-t2"
-                  style={{
-                    backgroundImage: safeUrl(r.thumb_url)
-                      ? `url("${safeUrl(r.thumb_url)}")`
-                      : undefined,
-                  }}
-                >
-                  <span className="rounded bg-s1/80 px-1">{r.title}</span>
+      {panel && (
+        <aside
+          id="timeline-side"
+          aria-label="Clip inspector"
+          className="aside m-3.5 flex flex-[1_1_320px] flex-col gap-5 px-[18px] pt-4 pb-6 md:ml-0"
+        >
+          {one ? (
+            <ClipPanel
+              key={`${one.c.id}:${JSON.stringify(ask?.kind ? ask : null)}`}
+              ask={ask?.kind ? ask : undefined}
+              onForm={ask?.kind ? setForm : undefined}
+              tl={tl}
+              doc={doc}
+              clip={one.c}
+              ti={one.ti}
+              progress={progress[one.c.id]}
+              replacing={replacing}
+              onReplacing={setReplacing}
+              range={range}
+              workflows={workflows}
+              onShotStarted={(nt) => {
+                tlRef.current = nt;
+                setTl(nt);
+                setDraft(null);
+              }}
+              onCommit={commit}
+              onShot={(s) => setShot(s)}
+              onRerender={() => setDialog("rerender")}
+              onDeselect={() => setSel([])}
+              opened={opened}
+              onOpened={setOpened}
+              onSaveVoice={setVoiceTake}
+            />
+          ) : selected.length > 1 ? (
+            <div className="flex flex-col gap-2">
+              <h2 className="m-0 font-display text-base font-bold tracking-[0.03em]">
+                {selected.length} clips
+              </h2>
+              {selected.every((x) => x.ti === 0) && (
+                <button type="button" className="act" onClick={() => setDialog("rerender")}>
+                  Re-render…
                 </button>
-              ))}
+              )}
+              <button type="button" className="act text-bad" onClick={() => remove()}>
+                Remove clips
+              </button>
+            </div>
+          ) : marker && doc.markers?.some((m) => m.id === marker) ? (
+            <MarkerPanel
+              marker={doc.markers.find((m) => m.id === marker)!}
+              onCommit={commit}
+              onRemoved={() => setMarker(null)}
+            />
+          ) : track ? (
+            <TrackPanel
+              track={doc.tracks.find((x) => x.name === track)!}
+              onCommit={commit}
+              onAdd={() => setPicker({ track })}
+              onRemove={() => askRemove(track)}
+            />
+          ) : (
+            <div className="flex flex-col gap-2">
+              <h2 className="m-0 font-display text-base font-bold tracking-[0.03em]">{tl.name}</h2>
+              <span className="text-[12px] text-t2">
+                Select a clip to trim, dissolve, set its gain or replace it. Keys: Space plays, ← →
+                step a frame, [ ] trim, Alt+← → move, S splits, M adds a marker, Delete removes; ?
+                lists them all.
+              </span>
+              {v1.some((c) => c.take_id && !c.offline) && (
+                <button type="button" className="act" onClick={() => setDialog("rerender")}>
+                  Re-render the sequence…
+                </button>
+              )}
             </div>
           )}
-          <button
-            type="button"
-            className="chip bevel w-fit rounded-[10px]"
-            onClick={() => setPicker({ track: track ?? "V1" })}
-          >
-            Browse gallery
-          </button>
-        </div>
-      </aside>
+
+          <div className="flex flex-col gap-2.5">
+            <h3 className="heading">{track ? `Add clips to ${track}` : "Add clips"}</h3>
+            {!track && recent.length > 0 && (
+              <div className="grid grid-cols-3 gap-2">
+                {recent.map((r) => (
+                  <button
+                    key={r.id}
+                    type="button"
+                    aria-label={`Add take ${r.title}`}
+                    onClick={() => addClips([r.id])}
+                    className="mono aspect-[16/10] overflow-hidden rounded-lg border border-dashed border-dash bg-s1 bg-cover bg-center text-[10px] text-t2"
+                    style={{
+                      backgroundImage: safeUrl(r.thumb_url)
+                        ? `url("${safeUrl(r.thumb_url)}")`
+                        : undefined,
+                    }}
+                  >
+                    <span className="rounded bg-s1/80 px-1">{r.title}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <button
+              type="button"
+              className="chip bevel w-fit rounded-[10px]"
+              onClick={() => setPicker({ track: track ?? "V1" })}
+            >
+              Browse gallery
+            </button>
+          </div>
+        </aside>
+      )}
 
       <SaveVoice takeId={voiceTake} onClose={() => setVoiceTake(null)} />
       {lib.node}

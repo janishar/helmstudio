@@ -49,6 +49,33 @@ it("the tool row: five radios, one tab stop, arrows move; toggles and zoom", () 
   expect(fns.onSheet).toHaveBeenCalled();
 });
 
+it("the tool row's side panel button comes right after the two toggles (alpha.5 item 11)", () => {
+  const onPanel = vi.fn();
+  const noop = vi.fn();
+  render(
+    <ToolRow
+      tool="select"
+      onTool={noop}
+      snap
+      onSnap={noop}
+      scrub
+      onScrub={noop}
+      zoom="22 s"
+      onZoomOut={noop}
+      onZoomIn={noop}
+      onFit={noop}
+      onSheet={noop}
+      panel={false}
+      onPanel={onPanel}
+    />,
+  );
+  const btn = screen.getByRole("button", { name: "Side panel" });
+  expect(btn.getAttribute("aria-expanded")).toBe("false");
+  expect(screen.getByRole("button", { name: "Hover scrub" }).nextElementSibling).toBe(btn);
+  fireEvent.click(btn);
+  expect(onPanel).toHaveBeenCalled();
+});
+
 const doc: Norm = {
   target: { width: 256, height: 128, fps: 24, sample_rate: 48000 },
   tracks: [

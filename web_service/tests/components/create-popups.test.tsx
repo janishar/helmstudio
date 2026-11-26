@@ -28,7 +28,7 @@ beforeAll(() => {
     this.open = false;
   };
 });
-beforeEach(() => localStorage.removeItem("create-settings-drawer"));
+beforeEach(() => localStorage.setItem("create-settings-drawer", "0"));
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -88,22 +88,23 @@ const isOpen = (id: string) => chipOf(id).getAttribute("aria-expanded") === "tru
 const lengthId = () => document.querySelector<HTMLElement>("[id^=len-pop-]:not([id$=-in])")!.id;
 
 describe("Create: settings in popups", () => {
-  it("the drawer is closed by default; the sliders button opens it, and it is remembered", async () => {
+  it("the drawer is open by default; the sliders button closes it, and closed is remembered", async () => {
+    localStorage.removeItem("create-settings-drawer");
     const composer = start();
     await within(composer).findByRole("button", { name: "Distilled · int8" });
-    expect(inspector()).toBeNull();
-    const btn = sliders();
-    expect(btn.getAttribute("aria-expanded")).toBe("false");
-    fireEvent.click(btn);
     expect(inspector()).toBeTruthy();
+    const btn = sliders();
     expect(btn.getAttribute("aria-expanded")).toBe("true");
-    expect(localStorage.getItem("create-settings-drawer")).toBe("1");
+    fireEvent.click(btn);
+    expect(inspector()).toBeNull();
+    expect(btn.getAttribute("aria-expanded")).toBe("false");
+    expect(localStorage.getItem("create-settings-drawer")).toBe("0");
     cleanup();
     start();
-    expect(inspector()).toBeTruthy();
-    fireEvent.click(sliders());
     expect(inspector()).toBeNull();
-    expect(localStorage.getItem("create-settings-drawer")).toBeNull();
+    fireEvent.click(sliders());
+    expect(inspector()).toBeTruthy();
+    expect(localStorage.getItem("create-settings-drawer")).toBe("1");
   });
 
   it("each chip opens only its popup; a change shows on the chip at once", async () => {

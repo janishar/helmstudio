@@ -597,6 +597,31 @@ describe("the tools (plan 23)", () => {
   });
 });
 
+describe("the side panel (alpha.5 item 11)", () => {
+  it("is open by default; the sliders button closes it, closed is remembered, and a pick opens it", async () => {
+    localStorage.removeItem("timeline-side-panel");
+    start();
+    await ready();
+    const btn = () => screen.getByRole("button", { name: "Side panel" });
+    const side = () => screen.queryByRole("complementary", { name: "Clip inspector" });
+    expect(btn().getAttribute("aria-expanded")).toBe("true");
+    expect(side()).toBeTruthy();
+    fireEvent.click(btn());
+    expect(side()).toBeNull();
+    expect(btn().getAttribute("aria-expanded")).toBe("false");
+    expect(localStorage.getItem("timeline-side-panel")).toBe("0");
+    cleanup();
+    start();
+    await ready();
+    expect(side()).toBeNull();
+    fireEvent.click(document.querySelector<HTMLElement>(".tl-clip")!); // selecting a clip
+    expect(side()).toBeTruthy();
+    fireEvent.click(btn());
+    fireEvent.click(btn());
+    expect(localStorage.getItem("timeline-side-panel")).toBe("1");
+  });
+});
+
 describe("editText", () => {
   it("says the edits in runs, as the board's lines", () => {
     expect(

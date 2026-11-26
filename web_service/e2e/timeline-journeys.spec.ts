@@ -200,7 +200,9 @@ test("j06 undo the split, redo it, then the same with the keyboard", async () =>
   await expect(v1()).toHaveCount(3);
   await redo.click();
   await expect(v1()).toHaveCount(4);
-  await page.getByRole("main").click({ position: { x: 5, y: 5 } });
+  // the main's top right padding (its top left is under the rail's wrapper, which takes the click)
+  const m = (await page.getByRole("main").boundingBox())!;
+  await page.mouse.click(m.x + m.width - 5, m.y + 5);
   await page.keyboard.press("ControlOrMeta+z");
   await expect(v1()).toHaveCount(3);
   await page.keyboard.press("ControlOrMeta+Shift+z");
@@ -362,4 +364,26 @@ test("j12 zoom in and out, fit, see the shortcuts and drop a marker", async () =
   await page.keyboard.press("m");
   await expect(page.getByRole("button", { name: /^Marker at / })).toBeVisible();
   await shot("j12-marker");
+});
+
+test("j13 hide the side panel for a wider timeline; it stays hidden and a clip brings it back", async () => {
+  // alpha.5 item 11 (docs/mock/Timeline.dc.html "Side panel toggle frames"): open by default, remembered here
+  await closeDialogs();
+  const btn = page.getByRole("button", { name: "Side panel" });
+  await expect(btn).toHaveAttribute("aria-expanded", "true");
+  await expect(inspector()).toBeVisible();
+  const narrow = (await page.locator("main#main").boundingBox())!.width;
+  await btn.click();
+  await expect(inspector()).toHaveCount(0);
+  await expect(btn).toHaveAttribute("aria-expanded", "false");
+  expect((await page.locator("main#main").boundingBox())!.width).toBeGreaterThan(narrow);
+  await shot("j13-panel-closed");
+  await page.reload();
+  await expect(clip(0)).toBeVisible();
+  await expect(inspector()).toHaveCount(0);
+  await clip(0).click();
+  await expect(inspector()).toBeVisible();
+  await btn.click();
+  await btn.click();
+  await expect(inspector()).toBeVisible();
 });
