@@ -128,7 +128,8 @@ export function MagicBoard({ initial }: { initial?: Store }) {
     setSel([]);
   };
 
-  const [sel, setSel] = useState<string[]>([]);
+  // frame 1 opens with Shot 2 selected, its details in the side panel
+  const [sel, setSel] = useState<string[]>(() => (!initial && doc.blocks.some((b) => b.id === "s2") ? ["s2"] : []));
   const [mode, setMode] = useState<Mode>("insert");
   const [snapOn, setSnapOn] = useState(true);
   const [pps, setPps] = useState(26);
@@ -475,8 +476,11 @@ export function MagicBoard({ initial }: { initial?: Store }) {
             disabled
             title="Comes once boards are kept in studio"
           >
-            Send to Timeline
-            <small className="mono text-[11px] font-medium tracking-normal">new sequence</small>
+            <span className="max-md:hidden">Send to Timeline</span>
+            <span className="md:hidden">Send</span>
+            <small className="mono text-[11px] font-medium tracking-normal max-md:hidden">
+              new sequence
+            </small>
           </button>
         </div>
 
