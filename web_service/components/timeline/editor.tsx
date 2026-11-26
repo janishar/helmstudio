@@ -106,8 +106,6 @@ function linkedTo(d: Norm, cid: string): string[] {
   ];
 }
 
-/** The editor; `id` is the sequence to open (else the one opened last, else the newest). */
-
 /** Whether the Timeline's side panel is closed ("0"), in this browser (alpha.5 item 11). */
 const PANEL = "timeline-side-panel";
 const noSub = () => () => undefined;
@@ -118,6 +116,7 @@ const readPanel = () => {
     return true;
   }
 };
+/** The editor; `id` is the sequence to open (else the one opened last, else the newest). */
 export function TimelineEditor({ id }: { id?: string }) {
   const router = useRouter();
   const [tl, setTl] = useState<Timeline | null>(null);

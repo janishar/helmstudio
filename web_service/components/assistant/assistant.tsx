@@ -2295,13 +2295,25 @@ function Drawer({ a }: { a: AssistantApi }) {
     if (floating) return;
     const SIDE = "aside.aside:not(.beside-drawer)";
     let had = !!document.querySelector(SIDE);
+    // a panel that loads after the route change (the Timeline's) arrives before any click or key on the page; a side
+    // form is opened by one (alpha.5 item 11 review)
+    let acted = false;
+    const act = (e: Event) => {
+      if (!(e.target instanceof Element && e.target.closest(".ast"))) acted = true;
+    };
     const mo = new MutationObserver(() => {
       const has = !!document.querySelector(SIDE);
-      if (has && !had) minimize();
+      if (has && !had && acted) minimize();
       had = has;
     });
     mo.observe(document.body, { childList: true, subtree: true });
-    return () => mo.disconnect();
+    document.addEventListener("pointerdown", act, true);
+    document.addEventListener("keydown", act, true);
+    return () => {
+      mo.disconnect();
+      document.removeEventListener("pointerdown", act, true);
+      document.removeEventListener("keydown", act, true);
+    };
   }, [minimize, pathname, floating]);
   const closeChats = useCallback(() => setChats(false), []);
   const openChats = () => {

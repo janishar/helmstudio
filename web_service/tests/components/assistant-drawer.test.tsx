@@ -1468,6 +1468,7 @@ describe("alpha.2: size, answers that read well, polish (board frames 9, 10, 14)
     beside.className = "aside beside-drawer";
     document.body.append(beside);
     await waitFor(() => expect(drawer()).toBeTruthy());
+    fireEvent.pointerDown(document.body); // the click on the page that opens it
     const side = document.createElement("aside");
     side.className = "aside";
     document.body.append(side);
@@ -1488,6 +1489,20 @@ describe("alpha.2: size, answers that read well, polish (board frames 9, 10, 14)
     );
     await new Promise((f) => setTimeout(f, 50));
     expect(drawer()).toBeTruthy();
+  });
+
+  it("a page's side panel that loads after the route change (the Timeline's) leaves it open", async () => {
+    serve();
+    const r = await openDrawer();
+    path = "/timeline";
+    r.rerender(<AppShell user={user}>Loading the timeline…</AppShell>);
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Message the assistant" })); // typing in the drawer is not the page
+    const side = document.createElement("aside");
+    side.className = "aside";
+    document.body.append(side);
+    await new Promise((f) => setTimeout(f, 50));
+    expect(drawer()).toBeTruthy();
+    side.remove();
   });
 
   it("the bar's states: Working with Stop, Waiting for you and what, a new answer", async () => {
