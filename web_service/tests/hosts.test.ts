@@ -103,11 +103,13 @@ describe("Admin › Hosts", () => {
       after_run: "keep_warm",
       idle_unload_min: 10,
       reserve_gb: 12,
+      reserve_mode: "custom",
     });
     expect(settingsOf({ ...bare, policy: null })).toEqual({
       after_run: "keep_warm",
       idle_unload_min: 10,
       reserve_gb: 0,
+      reserve_mode: "custom",
     });
   });
   it("words components and times", () => {
@@ -121,7 +123,7 @@ describe("Admin › Hosts", () => {
 });
 
 import two from "../../contracts/fixtures/http/HostList.valid.3.json";
-import { deviceLine } from "@/lib/hosts";
+import { autoBudget, deviceLine } from "@/lib/hosts";
 
 describe("two hosts, one with a discrete GPU", () => {
   const all = two.hosts as S<"Host">[];
@@ -135,6 +137,19 @@ describe("two hosts, one with a discrete GPU", () => {
     expect(deviceLine({ machine: { ...gcp.machine!, os: "macos" }, device: undefined })).toBe(
       "Apple Silicon · 176 GB",
     );
+  });
+  it("words Automatic's budget by the rule that applies (plan 35)", () => {
+    const m = { ...gcp.machine!, os: "macos" as const, accel: "metal" as const, ram_gb: 64 };
+    expect(
+      autoBudget({ machine: { ...m, gpu_limit_gb: 60 }, device: undefined, budget_gb: 52 }),
+    ).toBe("60 GB · the Mac's GPU limit");
+    expect(
+      autoBudget({ machine: { ...m, gpu_limit_gb: 64 }, device: undefined, budget_gb: 52 }),
+    ).toBe("60 GB · RAM minus 4 GB");
+    expect(
+      autoBudget({ machine: { ...m, gpu_limit_gb: null }, device: undefined, budget_gb: 52 }),
+    ).toBe("52 GB · RAM minus 12 GB · no GPU limit set");
+    expect(autoBudget(gcp)).toBe("93.6 GB · VRAM minus 2 GB");
   });
   it("leaves a component held in host RAM out of the memory bar", () => {
     expect(gcp.entries).toHaveLength(2);

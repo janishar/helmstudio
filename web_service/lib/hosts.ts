@@ -191,7 +191,25 @@ export function settingsOf(card: HostCard): S<"HostSettingsPut"> {
     after_run: s?.after_run ?? "keep_warm",
     idle_unload_min: s?.idle_unload_min ?? 10,
     reserve_gb: s?.reserve_gb ?? 0,
+    reserve_mode: s?.reserve_mode ?? "custom",
   };
+}
+
+/** Automatic's Budget line (plan 35; contracts/README.md, Automatic budget): "60 GB · the Mac's GPU limit", on a Mac
+ * without one "52 GB · RAM minus 12 GB · no GPU limit set", on CUDA "93.6 GB · VRAM minus 2 GB". A limit at or above
+ * RAM − 4 is capped there. Without a limit the default reserve is the runner's env: read off the budget it reports. */
+export function autoBudget(c: Pick<HostCard, "machine" | "device" | "budget_gb">): string {
+  const ram = c.machine?.ram_gb ?? 0;
+  const limit = c.machine?.gpu_limit_gb;
+  if (limit) {
+    return limit <= ram - 4
+      ? `${limit} GB · the Mac's GPU limit`
+      : `${round1(ram - 4)} GB · RAM minus 4 GB`;
+  }
+  const cuda = c.device?.kind === "cuda";
+  const total = cuda ? c.device!.memory_total_gb : ram;
+  const rule = `${cuda ? "VRAM" : "RAM"} minus ${round1(total - c.budget_gb)} GB`;
+  return `${c.budget_gb} GB · ${rule}${c.machine?.os === "macos" ? " · no GPU limit set" : ""}`;
 }
 
 /** "transformer", "text encoder", "VAE". */

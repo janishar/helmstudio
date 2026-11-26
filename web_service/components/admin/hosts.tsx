@@ -13,6 +13,7 @@ import {
   AFTER_RUN,
   afterRunTag,
   ago,
+  autoBudget,
   componentText,
   deviceLine,
   duration,
@@ -308,7 +309,11 @@ function HostSection({
               cached handles
             </span>
           )}
-          {c.policy && <span className="mono">reserve {c.policy.reserve_gb} GB</span>}
+          {c.policy && (
+            <span className="mono">
+              reserve {c.policy.reserve_mode === "auto" ? "auto" : `${c.policy.reserve_gb} GB`}
+            </span>
+          )}
         </div>
       </div>
       {c.run ? (
@@ -571,30 +576,60 @@ function SettingsPanel({
         </div>
       </fieldset>
       <div className="flex flex-col gap-1.5">
-        <label htmlFor="h-reserve" className="label flex items-center">
-          Memory reserve, GB
+        <span className="label flex items-center">
+          Memory budget
           <Info>
-            Budget is physical memory (the GPU&apos;s memory on a CUDA host) minus this reserve,
-            also checked against live system memory pressure.
+            Automatic uses the macOS GPU memory limit when one is set, else RAM minus the default
+            reserve. On an NVIDIA host it is VRAM minus the default reserve. Custom is physical
+            memory minus the reserve you set. Both are also checked against live system memory
+            pressure.
           </Info>
-        </label>
-        <div className="flex items-center gap-2.5">
-          <input
-            id="h-reserve"
-            type="range"
-            min={0}
-            max={reserveMax}
-            step={0.5}
-            value={draft.reserve_gb}
-            onChange={(e) => change({ reserve_gb: +e.target.value })}
-            className="min-w-0 flex-auto accent-[var(--a1)]"
-          />
-          <span className="mono shrink-0 text-[12px]">{draft.reserve_gb} GB</span>
+        </span>
+        <div className="seg" role="group" aria-label="Memory budget">
+          {(["auto", "custom"] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              aria-pressed={draft.reserve_mode === m}
+              onClick={() => change({ reserve_mode: m })}
+            >
+              {m === "auto" ? "Automatic" : "Custom"}
+            </button>
+          ))}
         </div>
-        <div className={ROW}>
-          <span className="text-t2">Budget</span>
-          <span className={VAL}>{c.budget_gb} GB</span>
-        </div>
+        {draft.reserve_mode === "auto" ? (
+          <div className={ROW}>
+            <span className="text-t2">Budget</span>
+            <span className={VAL}>{autoBudget(c)}</span>
+          </div>
+        ) : (
+          <>
+            <label htmlFor="h-reserve" className="label flex items-center pt-1.5">
+              Memory reserve, GB
+              <Info>
+                Budget is physical memory (the GPU&apos;s memory on a CUDA host) minus this reserve,
+                also checked against live system memory pressure.
+              </Info>
+            </label>
+            <div className="flex items-center gap-2.5">
+              <input
+                id="h-reserve"
+                type="range"
+                min={0}
+                max={reserveMax}
+                step={0.5}
+                value={draft.reserve_gb}
+                onChange={(e) => change({ reserve_gb: +e.target.value })}
+                className="min-w-0 flex-auto accent-[var(--a1)]"
+              />
+              <span className="mono shrink-0 text-[12px]">{draft.reserve_gb} GB</span>
+            </div>
+            <div className={ROW}>
+              <span className="text-t2">Budget</span>
+              <span className={VAL}>{c.budget_gb} GB</span>
+            </div>
+          </>
+        )}
       </div>
       {error && <ErrorNote>{error}</ErrorNote>}
       <div className="flex flex-col gap-2 rounded-[18px_18px_18px_8px] bg-s2 p-3">
