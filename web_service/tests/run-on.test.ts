@@ -409,7 +409,7 @@ describe("an add-on per value (API 1.41)", () => {
     expect(machineReason(mac, "native", [], held)).toBe("Turbo Ref LoRA not downloaded on mac");
   });
 
-  it("greys it on a variant its add-on is not for: SGLang's Base fp8 takes no Turbo LoRA", () => {
+  it("greys it on a variant its add-on is not for (an add-on scoped to Base; none is today)", () => {
     const l = list({ mac: "present" }, {});
     const [m] = l.models;
     const scoped = {

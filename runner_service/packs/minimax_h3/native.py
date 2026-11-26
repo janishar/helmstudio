@@ -197,7 +197,7 @@ def lora_file(node: str, model, params: dict, inputs: dict) -> Path | None:
     (c,) = names  # one file per value and partition (h3 merges one LoRA)
     spec = model.pack.component(c)
     a = spec["addon"]
-    # Base fp8 (SGLang) takes no Turbo LoRA yet: the add-ons are Base's (model.yaml `variants`)
+    # an add-on scoped to some variants (model.yaml `variants`; none today) is refused on the others
     if model.variant not in spec.get("variants", [model.variant]):
         title = model.pack.spec["variants"][model.variant]["title"]
         raise RunError(f"{node}: {a.get('short', a['title'])} does not run on {title}")

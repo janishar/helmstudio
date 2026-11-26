@@ -125,15 +125,19 @@ def test_sglang_gets_the_partitions_file_as_lora_path(tmp_path, monkeypatch):
 
     inputs = {"model": m, "prompt": "a fox", "seed": 1, "canvas": {"width": 864, "height": 480},
               "duration": {"frames": 124, "fps": 24}}  # fmt: skip
-    params = {"steps": 8, "lora": "none", "refs": [], "flow_shift": 12, "audio_flow_shift": 3}
+    params = {"steps": 8, "lora": "turbo", "refs": [], "flow_shift": 12, "audio_flow_shift": 3}
     native.generate(Ctx(), params, inputs)
-    assert got["lora"] is None and got["b"]["num_inference_steps"] == 8
+    assert (
+        got["lora"] == (tmp_path / FILES["turbo"]).resolve()
+        and got["b"]["num_inference_steps"] == 8
+    )
     assert (
         "flow_shift" not in got["b"] and "audio_flow_shift" not in got["b"]
     )  # the model's shifts: none sent
-    # 2026-11-25: SGLang fails at worker start with the Turbo LoRA; the add-ons are Base's (model.yaml variants)
+    # an add-on scoped to other variants (model.yaml `variants`; none today) is refused with the variant's title
+    monkeypatch.setitem(m.pack.component("turbo"), "variants", ["base"])
     with pytest.raises(native.RunError, match="Turbo LoRA does not run on Base fp8"):
-        native.generate(Ctx(), params | {"lora": "turbo"}, inputs)
+        native.generate(Ctx(), params, inputs)
 
 
 def test_the_peak_gains_4_5_gb_on_turbo():

@@ -147,6 +147,14 @@ The pack runs the pinned h3 binary (`vendor/h3c`, h3.c 4cafd17, `make h3`) as a 
 
   On this GPU the server start dominates a short run, so Turbo saves little time on Text, and the FP8 base is already
   clean at 8 steps without it. Turbo adds ~1.3 GB (dynamic LoRA). Mac clips for scale: base50 65.0, Fast 38.9.
+- **2026-11-25: Turbo failed at worker start on the first host-native run** (no CUDA image), so dea67313 limited
+  the add-ons to Base (`variants: [base]`). That failure was seen before the runner kept SGLang's stderr (20534a75,
+  e6e6dac2) and before the host gaps were fixed the same afternoon: no gcc / build-essential, no python3.12-dev, a
+  long hostname, and no cu13 `lib64` / `libcudart.so` links (all of which the CUDA image had). The likely cause is one
+  of those gaps (SGLang's JIT kernels fail at worker start), not the LoRA, which ran clean on 11-22 in the image.
+  alpha.6 lifts the limit again; sgl.preflight now makes the links and refuses a long hostname or a missing gcc.
+  Unproven until the GPU check: if Turbo still fails, the stderr tail shows the cause, and `variants: [base]` goes
+  back until it is fixed.
 - **Preset order by time** (owner 24.12 point 3: swap Turbo and Fast if Fast is quicker): measured 2026-11-22 through
   the pack at 864 × 480 × 124, seed 42, one after the other (the contract suite building on the same Mac, so both
   slower than the spike's 340 s): Fast 344.5 s (peak 19.1 GB), Turbo 420.0 s (peak 24.6 GB, the runner's measure;
