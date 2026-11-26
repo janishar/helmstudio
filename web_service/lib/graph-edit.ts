@@ -5,6 +5,7 @@ import {
   dropPort,
   endType,
   newId,
+  portType,
   splitRef,
   type Doc,
   type DocNode,
@@ -63,6 +64,35 @@ export function addFromDrop(
   if (Object.keys(add).length)
     next = withNode(next, id, (n) => ({ ...n, in: { ...have, ...add } }));
   return { doc: next, id };
+}
+
+/** A node picked for a wire (the wire's menu, Add a node on it…; `wire` as the view names edges, `<node>.<key>`):
+ * added from the wire's source as a dropped wire is, then the wire's target fed from the new node's output of that
+ * type, so the node sits between. */
+export function addOnWire(
+  doc: Doc,
+  palette: Palette,
+  wire: string,
+  kind: string,
+  position?: Pos,
+): { doc: Doc; id: string } {
+  const [node, key] = splitRef(wire);
+  const ref = doc.nodes[node]?.in?.[key];
+  if (!ref) return addNode(doc, palette, kind, null, position);
+  const [src, out] = splitRef(ref);
+  const r = addFromDrop(doc, palette, { node: src, port: out, side: "output" }, kind, position);
+  const t = portType(palette[doc.nodes[node].kind], key);
+  const port = t && dropPort(palette[kind], "input", t);
+  return port ? { doc: connect(r.doc, node, key, `${r.id}.${port}`), id: r.id } : r;
+}
+
+/** A copy of a node (its params, wires in and bypass), a little below and right of it. */
+export function duplicateNode(doc: Doc, id: string): { doc: Doc; id: string } {
+  const n = doc.nodes[id];
+  const copy = newId(doc, n.kind);
+  const node: DocNode = structuredClone(n);
+  if (n.position) node.position = { x: n.position.x + 40, y: n.position.y + 40 };
+  return { doc: { ...doc, nodes: { ...doc.nodes, [copy]: node } }, id: copy };
 }
 
 /** The nodes gone, with every wire from them and their Studio paths and preset keys. */

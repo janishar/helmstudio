@@ -99,7 +99,8 @@ import {
 import { followEvents } from "@/lib/runs";
 import { Registry, awaitIt, navigateTo, undoRuns } from "@/components/assistant/tools";
 import { Options, Refs } from "@/components/assistant/answer";
-import { atQuery, liveOptions, splitOptions, withPicks } from "@/lib/answer-refs";
+import { atQuery, liveOptions, refText, splitOptions, withPicks } from "@/lib/answer-refs";
+import { mod, openMenu, type Item } from "@/components/context-menu";
 import {
   AtPicker,
   AttChip,
@@ -835,6 +836,8 @@ function Inlines({ text, seek, refs }: { text: string; seek?: Seek; refs?: RefsH
   );
 }
 
+const copyText = (text: string) => void navigator.clipboard?.writeText(text).catch(() => undefined);
+
 function CopyButton({
   text,
   label,
@@ -1266,20 +1269,31 @@ function Broken({ raw, retry }: { raw: string; retry?: () => void }) {
   useEffect(() => {
     if (open) rawRef.current?.scrollIntoView({ block: "nearest" });
   }, [open]);
+  const again = () => {
+    setRetried(true); // once: a second click would send it again
+    retry?.();
+  };
+  const items: Item[] = [
+    {
+      label: "Retry",
+      icon: RotateCcw,
+      off: retry && !retried ? undefined : "Only after a broken answer",
+      onPick: again,
+    },
+  ];
   return (
-    <div role="note" className="msg note">
+    <div
+      role="note"
+      className="msg note"
+      onContextMenu={(e) =>
+        !getSelection()?.toString().trim() && openMenu(e, { title: "Assistant's answer", items })
+      }
+    >
       <p>The model gave a broken answer twice.</p>
       <div className="ma">
         {/* Retry (item 24, board frame 10d): your last message again; nothing ran the first time */}
         {retry && !retried && (
-          <button
-            type="button"
-            className="un det"
-            onClick={() => {
-              setRetried(true); // once: a second click would send it again
-              retry();
-            }}
-          >
+          <button type="button" className="un det" onClick={again}>
             <RotateCcw size={12} aria-hidden />
             Retry
           </button>
@@ -1450,8 +1464,30 @@ function Thread({ a, entries }: { a: AssistantApi; entries: Entry[] }) {
     // a Using skill line leads the reply, the files it read in its box (board frame 16)
     const { used, rest } = skillLines(lines);
     const parts = said.map((w) => ({ w, ...splitOptions(w.text ?? "") }));
+    // its right-click menu (alpha.5 item 17, board frame 9): Copy, Retry (only on a broken answer), Undo what it did
+    const undoable = rest.filter(
+      (l) => l.undo && l.status === "done" && !a.undone[l.id] && a.canUndo(l),
+    );
+    const menu = (e: React.MouseEvent) =>
+      !e.defaultPrevented &&
+      !getSelection()?.toString().trim() &&
+      openMenu(e, {
+        title: "Assistant's answer",
+        items: [
+          copy && { label: "Copy", icon: Copy, keys: mod("C"), onPick: () => copyText(copy()) },
+          { label: "Retry", icon: RotateCcw, off: "Only after a broken answer" },
+          undoable.length > 0 && "-",
+          undoable.length > 0 && {
+            label: "Undo what it did",
+            icon: Undo2,
+            onPick: async () => {
+              for (const l of undoable.toReversed()) await a.toggleUndo(l);
+            },
+          },
+        ],
+      });
     out.push(
-      <div key={`b${key}`} className="msg">
+      <div key={`b${key}`} className="msg" onContextMenu={menu}>
         {used.map((u) => (
           <SkillLine key={u.line.id} line={u.line} reads={u.reads} />
         ))}
@@ -1541,7 +1577,24 @@ function Thread({ a, entries }: { a: AssistantApi; entries: Entry[] }) {
         );
       else if (e.kind === "user")
         out.push(
-          <div key={e.id} className="msg me">
+          <div
+            key={e.id}
+            className="msg me"
+            onContextMenu={(ev) =>
+              !getSelection()?.toString().trim() &&
+              openMenu(ev, {
+                title: "Your message",
+                items: [
+                  {
+                    label: "Copy",
+                    icon: Copy,
+                    keys: mod("C"),
+                    onPick: () => copyText(refText(e.text ?? "")),
+                  },
+                ],
+              })
+            }
+          >
             <Said e={e} />
             {e.steer === "next" && (
               <small>

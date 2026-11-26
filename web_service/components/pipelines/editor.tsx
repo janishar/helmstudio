@@ -577,6 +577,11 @@ export function PipelineEditor({
             models={models}
             progress={progress}
             added={ai.added}
+            onOpenMemory={() => setMemoryOpen(true)}
+            history={{
+              undo: h.past.length ? () => dispatch({ type: "undo" }) : undefined,
+              redo: h.future.length ? () => dispatch({ type: "redo" }) : undefined,
+            }}
           />
         </div>
         {last && run && (

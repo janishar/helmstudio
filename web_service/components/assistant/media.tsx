@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  ArrowRight,
   ArrowUpRight,
   Book,
   ChevronDown,
@@ -17,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { usePlayer } from "@/components/create/audio";
+import { openMenu, type Item } from "@/components/context-menu";
 import { ElementEditor } from "@/components/create/elements";
 import { useTakePages } from "@/components/gallery/gallery";
 import { useGridWindow } from "@/components/gallery/window";
@@ -28,7 +30,7 @@ import { safeUrl } from "@/lib/format";
 import { skillsMatching } from "@/lib/skills";
 import { useLibrary } from "@/lib/library";
 import { offerLabel } from "@/lib/source";
-import { useTakes, useUses } from "@/lib/take-cache";
+import { usesOf, useTakes, useUses } from "@/lib/take-cache";
 import type { S } from "@/lib/api";
 import type { Filter } from "@/lib/takes";
 
@@ -47,6 +49,10 @@ const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).
 export function TakeMedia({ id }: { id: string }) {
   const take = useTakes([id])(id);
   const [open, setOpen] = useState(false);
+  const [making, setMaking] = useState(false);
+  const [error, setError] = useState("");
+  const router = useRouter();
+  const box = useRef<HTMLDivElement>(null);
   if (take === undefined) return <div className="med" aria-busy="true" style={{ height: 40 }} />;
   if (take === null)
     return (
@@ -58,8 +64,54 @@ export function TakeMedia({ id }: { id: string }) {
     );
   const secs = take.video?.duration_s ?? take.audio?.duration_s;
   const title = take.title + (take.kind === "video" && secs ? ` · ${Math.round(secs)} s` : "");
+  const session = take.session_id ? `s=${encodeURIComponent(take.session_id)}&` : "";
+  const toTimeline = () => {
+    setError("");
+    addToTimeline([take.id], take.kind === "audio")
+      .then((tl) => router.push(`/timeline?t=${encodeURIComponent(tl.id)}`))
+      .catch((e) => setError(message(e)));
+  };
+  // its right-click menu (alpha.5 item 17, board frame 9): Open, Play, Use in › (the Use in… list)
+  const menu = (offers: S<"TakeOffer">[] | null) => {
+    const uses: Item[] = [
+      ...(offers === null
+        ? [{ label: "…", off: "Reading what it fits" }]
+        : offers.map((o) => ({
+            label: offerLabel(o),
+            onPick: () =>
+              router.push(
+                `/?${session}use=${encodeURIComponent(take.id)}&w=${encodeURIComponent(o.workflow_id)}`,
+              ),
+          }))),
+      { label: "Timeline · at the playhead", onPick: toTimeline },
+      take.kind === "image" && { label: "Save as element", onPick: () => setMaking(true) },
+    ];
+    return {
+      title: take.title,
+      items: [
+        take.kind !== "audio" && { label: "Open", icon: ArrowUpRight, onPick: () => setOpen(true) },
+        take.kind !== "image" && {
+          label: "Play",
+          icon: Play,
+          // the take's own Play
+          onPick: () => box.current?.querySelector<HTMLButtonElement>(".ply")?.click(),
+        },
+        { label: "Use in", icon: ArrowRight, items: uses },
+      ],
+    };
+  };
   return (
-    <div className="med">
+    <div
+      ref={box}
+      className="med"
+      onContextMenu={(e) => {
+        const h = openMenu(e, menu(null));
+        if (h)
+          usesOf(take.id)
+            .then((o) => h.update(menu(o)))
+            .catch(() => h.update(menu([])));
+      }}
+    >
       {take.kind === "image" ? (
         <span
           className="pv pic"
@@ -80,9 +132,15 @@ export function TakeMedia({ id }: { id: string }) {
             Open
           </button>
         )}
-        <UseIn take={take} />
+        <UseIn take={take} onMake={() => setMaking(true)} />
       </div>
+      {error && (
+        <span role="alert" className="text-[12px] text-bad">
+          {error}
+        </span>
+      )}
       {open && <FullScreen take={take} onClose={() => setOpen(false)} onStep={() => undefined} />}
+      <ElementEditor open={making} onClose={() => setMaking(false)} takes={[take]} />
     </div>
   );
 }
@@ -201,9 +259,8 @@ function Sound({ take }: { take: Take }) {
 
 /** Use in… (frame 12a): the take's offers (the Gallery's Use in…: the workflows it fits, opened on Create in the
  * take's session with it in place), the timeline, and Save as element for an image. */
-function UseIn({ take }: { take: Take }) {
+function UseIn({ take, onMake }: { take: Take; onMake: () => void }) {
   const [open, setOpen] = useState(false);
-  const [making, setMaking] = useState(false);
   const [error, setError] = useState("");
   const session = take.session_id ? `s=${encodeURIComponent(take.session_id)}&` : "";
   const uses = useUses(open ? take.id : undefined);
@@ -269,7 +326,7 @@ function UseIn({ take }: { take: Take }) {
               className="pr"
               onClick={() => {
                 setOpen(false);
-                setMaking(true);
+                onMake();
               }}
             >
               <span>Save as element</span>
@@ -282,7 +339,6 @@ function UseIn({ take }: { take: Take }) {
           )}
         </div>
       )}
-      <ElementEditor open={making} onClose={() => setMaking(false)} takes={[take]} />
     </div>
   );
 }

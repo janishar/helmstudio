@@ -31,7 +31,21 @@ import {
   type Node,
   type NodeProps,
 } from "@xyflow/react";
-import { Check, Eye, Plus, TriangleAlert } from "lucide-react";
+import {
+  Check,
+  CircleSlash,
+  Copy,
+  Eye,
+  GitCommitHorizontal,
+  LayoutGrid,
+  Plus,
+  Redo2,
+  Trash2,
+  TriangleAlert,
+  Undo2,
+  Unplug,
+} from "lucide-react";
+import { mod, openMenu } from "@/components/context-menu";
 import { Thumb } from "@/components/media";
 import { Head, Panel, Problems, envText, nodeName, valueText } from "@/components/graph/panel";
 import { api, ApiError, errorText, message, ok, type S } from "@/lib/api";
@@ -44,6 +58,7 @@ import {
   mergeProblems,
   outType,
   paletteFrom,
+  passthrough,
   portType,
   splitRef,
   wireDrop,
@@ -57,7 +72,9 @@ import {
   NODE_W,
   addFromDrop,
   addNode,
+  addOnWire,
   connect,
+  duplicateNode,
   elkInput,
   elkPositions,
   history,
@@ -67,6 +84,7 @@ import {
   nodeHeight,
   removeNodes,
   removeWires,
+  setBypass,
   sizeParams,
 } from "@/lib/graph-edit";
 import { sizeText } from "@/components/create/form";
@@ -230,9 +248,14 @@ function Graph({
   };
   const holds = (id: string) => base.current.id === id;
 
-  const [search, setSearch] = useState<{ x: number; y: number; at: Pos; from?: WireEnd } | null>(
-    null,
-  );
+  // `wire`: Add a node on it… (the node goes between the wire's ends)
+  const [search, setSearch] = useState<{
+    x: number;
+    y: number;
+    at: Pos;
+    from?: WireEnd;
+    wire?: string;
+  } | null>(null);
 
   // a document without positions is laid out by elkjs; the positions join the document with its first edit
   const missing = Object.values(doc.nodes).some((n) => !n.position);
@@ -472,11 +495,115 @@ function Graph({
   }, [doc, auto, schemas]);
 
   const selected = nodes.find((n) => n.selected)?.id ?? null;
+  const selectedRef = useRef(selected);
+  useEffect(() => {
+    selectedRef.current = selected;
+  });
   const canvas = useRef<HTMLDivElement>(null);
+
+  // the right-click menus (alpha.5 item 17, docs/mock/ContextMenus.dc.html frame 8): right-click selects first
+  const duplicate = useCallback(
+    (id: string) =>
+      edit((d) => {
+        if (!d.nodes[id]) return d;
+        const r = duplicateNode(d, id);
+        pick.current = r.id;
+        return r.doc;
+      }),
+    [edit],
+  );
+  const selectOnly = (node: string | null, edge: string | null) => {
+    setNodes((ns) =>
+      ns.map((n) => (n.selected === (n.id === node) ? n : { ...n, selected: n.id === node })),
+    );
+    setEdges((es) =>
+      es.map((x) => (x.selected === (x.id === edge) ? x : { ...x, selected: x.id === edge })),
+    );
+  };
+  const redoKeys = `⇧${mod("Z")}`;
+  const nodeMenu = (e: React.MouseEvent, id: string) => {
+    const n = doc.nodes[id];
+    const s = schemas[n?.kind];
+    if (!n) return;
+    const picked = nodes.filter((x) => x.selected).map((x) => x.id);
+    const ids = picked.includes(id) ? picked : [id];
+    const h = openMenu(e, {
+      title: nodeName(doc, schemas, id),
+      items: [
+        s &&
+          passthrough(s) && {
+            label: n.bypass ? "Bypassed" : "Bypass",
+            icon: CircleSlash,
+            checked: !!n.bypass,
+            onPick: () => edit((d) => setBypass(d, id, !n.bypass)),
+          },
+        { label: "Duplicate", icon: Copy, keys: mod("D"), onPick: () => duplicate(id) },
+        "-",
+        {
+          label: "Delete node",
+          icon: Trash2,
+          keys: "Delete",
+          danger: true,
+          onPick: () => edit((d) => removeNodes(d, ids)),
+        },
+      ],
+    });
+    if (h && !picked.includes(id)) selectOnly(id, null);
+  };
+  const wireMenu = (e: React.MouseEvent, edge: Edge) => {
+    const [node, key] = splitRef(edge.id);
+    const ref = doc.nodes[node]?.in?.[key];
+    if (!ref) return;
+    const [src, out] = splitRef(ref);
+    const at = { x: e.clientX, y: e.clientY };
+    const h = openMenu(e, {
+      title: `${out} → ${nodeName(doc, schemas, node)} · ${key}`,
+      items: [
+        {
+          label: "Add a node on it…",
+          icon: GitCommitHorizontal,
+          onPick: () => openSearch({ node: src, port: out, side: "output" }, at, edge.id),
+        },
+        "-",
+        {
+          label: "Remove wire",
+          icon: Unplug,
+          keys: "Delete",
+          danger: true,
+          onPick: () => edit((d) => removeWires(d, [edge.id])),
+        },
+      ],
+    });
+    if (h) selectOnly(null, edge.id);
+  };
+  const paneMenu = (e: React.MouseEvent | MouseEvent) => {
+    const at = { x: e.clientX, y: e.clientY };
+    openMenu(e as React.MouseEvent, {
+      items: [
+        { label: "Add node…", icon: Plus, keys: "A", onPick: () => openSearch(undefined, at) },
+        { label: "Tidy layout", icon: LayoutGrid, onPick: () => void tidy() },
+        "-",
+        {
+          label: "Undo",
+          icon: Undo2,
+          keys: mod("Z"),
+          off: h.past.length ? undefined : "Nothing to undo",
+          onPick: () => dispatch({ type: "undo" }),
+        },
+        {
+          label: "Redo",
+          icon: Redo2,
+          keys: redoKeys,
+          off: h.future.length ? undefined : "Nothing to redo",
+          onPick: () => dispatch({ type: "redo" }),
+        },
+      ],
+    });
+  };
 
   /** Opens the node search at a point of the screen (the canvas centre by default). */
   const openSearch = useCallback(
-    (from?: WireEnd, client?: { x: number; y: number }) => {
+    (from?: WireEnd, client?: { x: number; y: number }, wire?: string) => {
       const r = canvas.current!.getBoundingClientRect();
       const c = client ?? { x: r.left + r.width / 2 - 140, y: r.top + r.height / 3 };
       setSearch({
@@ -484,6 +611,7 @@ function Graph({
         y: Math.max(8, Math.min(c.y - r.top, r.height - 340)),
         at: rf.screenToFlowPosition(c),
         from,
+        wire,
       });
     },
     [rf],
@@ -506,6 +634,9 @@ function Graph({
       } else if (mod && e.key === "Enter") {
         e.preventDefault();
         if (!blocked && !busy) void generateNow();
+      } else if (mod && e.key.toLowerCase() === "d" && selectedRef.current) {
+        e.preventDefault();
+        duplicate(selectedRef.current);
       } else if (!mod && !e.altKey && e.key.toLowerCase() === "a") {
         e.preventDefault();
         openSearch();
@@ -513,15 +644,17 @@ function Graph({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [openSearch, generateNow, blocked, busy]);
+  }, [openSearch, generateNow, blocked, busy, duplicate]);
 
   const add = (kind: string) => {
     if (!search) return;
     const at = { x: search.at.x, y: search.at.y };
     edit((d) => {
-      const r = search.from
-        ? addFromDrop(d, palette, search.from, kind, at)
-        : addNode(d, palette, kind, selected, at);
+      const r = search.wire
+        ? addOnWire(d, palette, search.wire, kind, at)
+        : search.from
+          ? addFromDrop(d, palette, search.from, kind, at)
+          : addNode(d, palette, kind, selected, at);
       pick.current = r.id;
       return r.doc;
     });
@@ -714,10 +847,9 @@ function Graph({
                   { x: pt.clientX, y: pt.clientY },
                 );
               }}
-              onPaneContextMenu={(e) => {
-                e.preventDefault();
-                openSearch(undefined, { x: e.clientX, y: e.clientY });
-              }}
+              onPaneContextMenu={paneMenu}
+              onNodeContextMenu={(e, n) => nodeMenu(e, n.id)}
+              onEdgeContextMenu={wireMenu}
               onPaneClick={() => setSearch(null)}
               deleteKeyCode={["Backspace", "Delete"]}
               zoomOnDoubleClick={false}
@@ -873,9 +1005,9 @@ function Graph({
               <Problems list={problems} />
             </div>
             <p className="m-0 text-[13px] text-t2">
-              Select a node to edit it. Add one with Add node, A, a double-click or a right-click on
-              the canvas; drag from a port to connect, or drop a wire on the canvas to pick a node
-              for it. ⌘Z undoes.
+              Select a node to edit it. Add one with Add node, A, a double-click on the canvas or
+              its right-click menu; drag from a port to connect, or drop a wire on the canvas to
+              pick a node for it. ⌘Z undoes.
             </p>
           </>
         )}

@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { api, type S } from "@/lib/api";
 import { done, type Handler } from "@/lib/assistant";
+import { closeMenu } from "@/components/context-menu";
 import { answer } from "./helpers";
 
 let path = "/";
@@ -49,6 +50,7 @@ beforeEach(() => {
   localStorage.clear();
 });
 afterEach(() => {
+  act(closeMenu);
   cleanup();
   vi.restoreAllMocks();
 });
@@ -1067,6 +1069,13 @@ describe("older chats and a broken answer (board frame 7)", () => {
     );
     expect(posts.filter((p) => p.kind === "message")).toHaveLength(1);
     expect(within(note).queryByRole("button", { name: "Retry" })).toBeNull();
+    // its right-click Retry (alpha.5 item 17, frame 9) is the same, greyed once it has run
+    fireEvent.contextMenu(note, { button: 2, clientX: 20, clientY: 20 });
+    const menuRetry = [...document.querySelectorAll<HTMLElement>(".cm [data-lv]")].find(
+      (b) => b.textContent === "Retry",
+    )!;
+    expect(menuRetry.title).toBe("Only after a broken answer");
+    act(closeMenu);
     const details = within(note).getByRole("button", { name: "Details" });
     expect(details.getAttribute("aria-expanded")).toBe("false");
     expect(within(note).queryByText(/launch_rockets/)).toBeNull();

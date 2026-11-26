@@ -1341,6 +1341,15 @@ export function forgetMemory(doc: PDoc, judge: string): PDoc {
   return setNode(doc, judge, rest);
 }
 
+/** A copy of a node (its settings and what it reads; no edge out), a little below and right of it. */
+export function duplicatePipelineNode(doc: PDoc, id: string): { doc: PDoc; id: string } {
+  const n = doc.nodes[id];
+  const copy = newNodeId(doc, n.kind);
+  const node: PNode = structuredClone(n);
+  if (n.position) node.position = { x: n.position.x + 40, y: n.position.y + 40 };
+  return { doc: { ...doc, nodes: { ...doc.nodes, [copy]: node } }, id: copy };
+}
+
 /** A node's title on its card set (blank: the derived one). */
 export function renameNode(doc: PDoc, id: string, title: string): PDoc {
   const n = doc.nodes[id];

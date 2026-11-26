@@ -49,6 +49,12 @@ export function useTakes(ids: string[]): (id: string) => Take | null | undefined
   return (id) => cache.get(id);
 }
 
+/** "Use in…" offers of a take (GET /v1/studio/takes/{id}/uses: the workflows it fits, inputs prefilled). */
+export const usesOf = (id: string) =>
+  ok(api.GET("/v1/studio/takes/{take_id}/uses", { params: { path: { take_id: id } } })).then(
+    (r) => r.uses,
+  );
+
 /** "Use in…" offers of a take (GET /v1/studio/takes/{id}/uses: the workflows it fits, inputs prefilled); null
  * while loading or when they could not be read. */
 export function useUses(takeId: string | undefined): S<"TakeOffer">[] | null {
@@ -56,8 +62,8 @@ export function useUses(takeId: string | undefined): S<"TakeOffer">[] | null {
   useEffect(() => {
     if (!takeId) return;
     let stop = false;
-    ok(api.GET("/v1/studio/takes/{take_id}/uses", { params: { path: { take_id: takeId } } }))
-      .then((r) => !stop && setGot({ id: takeId, uses: r.uses }))
+    usesOf(takeId)
+      .then((uses) => !stop && setGot({ id: takeId, uses }))
       .catch(() => undefined);
     return () => {
       stop = true;

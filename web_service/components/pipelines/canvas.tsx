@@ -27,13 +27,15 @@ import {
   type Node,
   type NodeProps,
 } from "@xyflow/react";
-import { Check } from "lucide-react";
+import { Brain, Check, Copy, Pencil, Plus, Redo2, Trash2, Undo2 } from "lucide-react";
+import { mod, openMenu as openCm } from "@/components/context-menu";
 import type { S } from "@/lib/api";
 import {
   addPipelineNode,
   analyse,
   connectNodes,
   disconnectNodes,
+  duplicatePipelineNode,
   forgetMemory,
   isAgent,
   movePipelineNodes,
@@ -101,6 +103,10 @@ export type CanvasProps = {
   models?: Record<string, string>;
   /** the nodes the assistant added (ringed) */
   added?: string[];
+  /** a judge's memory opened (the panel's Open memory) */
+  onOpenMemory?: () => void;
+  /** the editor's undo and redo (the empty canvas's menu) */
+  history?: { undo?: () => void; redo?: () => void };
 };
 
 export function PipelineCanvas(props: CanvasProps) {
@@ -125,6 +131,8 @@ function Canvas({
   custom = [],
   models,
   added,
+  onOpenMemory,
+  history,
 }: CanvasProps) {
   const rf = useReactFlow();
   const readOnly = !edit;
@@ -162,6 +170,8 @@ function Canvas({
     },
     [rf, readOnly],
   );
+  // ⌘D duplicates the selected card (its menu's Duplicate)
+  const dupRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     if (readOnly) return;
     const onKey = (e: KeyboardEvent) => {
@@ -170,6 +180,9 @@ function Canvas({
       if (!e.metaKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === "a") {
         e.preventDefault();
         openMenu();
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "d" && dupRef.current) {
+        e.preventDefault();
+        dupRef.current();
       }
     };
     window.addEventListener("keydown", onKey);
@@ -242,6 +255,92 @@ function Canvas({
     });
     setEdges(() => edgesOf(doc, marks));
   }, [doc, auto, readOnly, marks, titles]);
+
+  // the right-click menus (alpha.5 item 17, docs/mock/ContextMenus.dc.html frame 8): right-click selects first
+  const duplicate = (id: string) =>
+    change((d) => {
+      if (!d.nodes[id]) return d;
+      const r = duplicatePipelineNode(d, id);
+      onSelect(r.id);
+      return r.doc;
+    });
+  useEffect(() => {
+    dupRef.current =
+      selected && doc.nodes[selected] && doc.nodes[selected].kind !== "inputs"
+        ? () => duplicate(selected)
+        : null;
+  });
+  const nodeMenu = (e: React.MouseEvent, id: string) => {
+    const n = doc.nodes[id];
+    if (!n) return;
+    const memory = n.kind === "judge" && !!n.memory && onOpenMemory;
+    if (readOnly && !memory) return;
+    const picked = nodes.filter((x) => x.selected).map((x) => x.id);
+    const ids = picked.includes(id) ? picked : [id];
+    const h = openCm(e, {
+      title: nodeLabel(doc, id, titles),
+      items: [
+        !readOnly && {
+          label: "Rename",
+          icon: Pencil,
+          // the title's own double-click
+          onPick: () =>
+            box.current
+              ?.querySelector(`.react-flow__node[data-id="${id}"] [data-rename]`)
+              ?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })),
+        },
+        memory && { label: "Open memory", icon: Brain, onPick: onOpenMemory },
+        !readOnly && {
+          label: "Duplicate",
+          icon: Copy,
+          keys: mod("D"),
+          off: n.kind === "inputs" ? "A pipeline has one Inputs node" : undefined,
+          onPick: () => duplicate(id),
+        },
+        "-",
+        !readOnly && {
+          label: "Delete step",
+          icon: Trash2,
+          keys: "Delete",
+          danger: true,
+          onPick: () => {
+            if (selected && ids.includes(selected)) onSelect(null);
+            change((d) => removePipelineNodes(d, ids));
+          },
+        },
+      ],
+    });
+    if (h && !picked.includes(id)) {
+      setNodes((ns) =>
+        ns.map((x) => (x.selected === (x.id === id) ? x : { ...x, selected: x.id === id })),
+      );
+      onSelect(id);
+    }
+  };
+  const paneMenu = (e: React.MouseEvent | MouseEvent) => {
+    if (readOnly) return;
+    const at = { x: e.clientX, y: e.clientY };
+    openCm(e as React.MouseEvent, {
+      items: [
+        { label: "Add node…", icon: Plus, keys: "A", onPick: () => openMenu(at) },
+        "-",
+        {
+          label: "Undo",
+          icon: Undo2,
+          keys: mod("Z"),
+          off: history?.undo ? undefined : "Nothing to undo",
+          onPick: history?.undo,
+        },
+        {
+          label: "Redo",
+          icon: Redo2,
+          keys: `⇧${mod("Z")}`,
+          off: history?.redo ? undefined : "Nothing to redo",
+          onPick: history?.redo,
+        },
+      ],
+    });
+  };
 
   return (
     <CanvasCtx value={ctx}>
@@ -321,10 +420,8 @@ function Canvas({
                 s.fromHandle.id.slice(2) as Via,
               ]);
             }}
-            onPaneContextMenu={(e) => {
-              e.preventDefault();
-              openMenu({ x: e.clientX, y: e.clientY });
-            }}
+            onPaneContextMenu={paneMenu}
+            onNodeContextMenu={(e, n) => nodeMenu(e, n.id)}
             onPaneClick={() => {
               setMenu(null);
               onSelect(null);
@@ -500,6 +597,7 @@ function CardTitle({ id, head, label }: { id: string; head: string; label: strin
     );
   return (
     <span
+      data-rename
       title={g.rename ? `${head} (double-click to rename)` : head}
       onDoubleClick={g.rename ? () => setDraft(label) : undefined}
     >

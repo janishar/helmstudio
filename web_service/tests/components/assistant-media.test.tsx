@@ -4,7 +4,8 @@
 // the picker (skills, elements, then takes and uploads) and a pick is sent as a ref, never shown as an id; a pasted image
 // uploads, shows in the box, says once that a text-only model uses Look at, and is sent as the message's takes.
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { closeMenu } from "@/components/context-menu";
 import type { S } from "@/lib/api";
 import { answer } from "./helpers";
 
@@ -43,6 +44,7 @@ beforeEach(() => {
   localStorage.clear();
 });
 afterEach(() => {
+  act(closeMenu);
   cleanup();
   vi.restoreAllMocks();
 });
@@ -170,6 +172,69 @@ describe("media in answers (frame 12a)", () => {
     fireEvent.click(within(d).getByRole("button", { name: "Open" }));
     expect(await screen.findByRole("dialog", { name: "Fox at dusk · take 2" })).toBeTruthy();
     expect(d.textContent).not.toMatch(/9a1b|\[\[/);
+  });
+});
+
+// alpha.5 item 17 (docs/mock/ContextMenus.dc.html frame 9): the chat's right-click menus
+describe("right-click menus (frame 9)", () => {
+  const level = (lv: number) =>
+    [...document.querySelectorAll<HTMLElement>(`.cm [data-lv="${lv}"]`)].map(
+      (b) => b.querySelector(".lb")!.textContent,
+    );
+  const item = (name: string) =>
+    [...document.querySelectorAll<HTMLElement>(".cm [data-lv]")].find(
+      (b) => b.querySelector(".lb")!.textContent === name,
+    )!;
+  const rightClick = (el: Element) =>
+    fireEvent.contextMenu(el, { button: 2, clientX: 40, clientY: 40 });
+
+  it("a take: Open, Use in › its list", async () => {
+    serve([
+      said(1, "user", `Animate [[take:${TAKE}]] slowly`),
+      said(2, "assistant", `Take 2, the **sharpest**:\n[[take:${TAKE}]]`),
+    ]);
+    const d = await openDrawer();
+    const img = await within(d).findByRole("img", { name: "Fox at dusk · take 2" });
+    rightClick(img);
+    expect(document.querySelector(".cm .hd")?.textContent).toBe("Fox at dusk · take 2");
+    expect(level(0)).toEqual(["Open", "Use in"]);
+    fireEvent.click(item("Use in"));
+    await waitFor(() =>
+      expect(level(1)).toEqual([
+        "Video · First frame",
+        "Timeline · at the playhead",
+        "Save as element",
+      ]),
+    );
+    act(closeMenu);
+    rightClick(img);
+    fireEvent.click(item("Open"));
+    expect(await screen.findByRole("dialog", { name: "Fox at dusk · take 2" })).toBeTruthy();
+  });
+
+  it("an answer: Copy, Retry greyed; your message: Copy", async () => {
+    const write = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: write },
+      configurable: true,
+    });
+    serve([
+      said(1, "user", `Animate [[take:${TAKE}]] slowly`),
+      said(2, "assistant", "Done, the **fox** is longer."),
+    ]);
+    const d = await openDrawer();
+    rightClick(await within(d).findByText("fox"));
+    expect(document.querySelector(".cm .hd")?.textContent).toBe("Assistant's answer");
+    expect(level(0)).toEqual(["Copy", "Retry"]);
+    expect(item("Retry").title).toBe("Only after a broken answer");
+    fireEvent.click(item("Copy"));
+    expect(write).toHaveBeenLastCalledWith("Done, the fox is longer.");
+    rightClick(await within(d).findByText(/slowly/));
+    expect(level(0)).toEqual(["Copy"]);
+    fireEvent.click(item("Copy"));
+    await waitFor(() =>
+      expect(write).toHaveBeenLastCalledWith("Animate Fox at dusk · take 2 slowly"),
+    );
   });
 });
 
