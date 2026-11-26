@@ -30,6 +30,7 @@ type take struct {
 	Audio *struct {
 		DurationS float64 `json:"duration_s"`
 	} `json:"audio"` // an audio take only
+	Sound string `json:"sound"` // API 1.79, an audio take's class: music, sound or voice
 }
 
 func (t take) line() string {
@@ -45,7 +46,11 @@ func (t take) line() string {
 	} else if t.Audio != nil {
 		length = fmt.Sprintf("%.1fs", t.Audio.DurationS)
 	}
-	return fmt.Sprintf("%s %s %-5s %-6s %-9s %-6s %s %s", t.ID, star, t.Kind, t.Source, size, length, t.CreatedAt, t.Title)
+	kind := t.Kind
+	if t.Sound != "" { // API 1.79: an audio take shows its class (music, sound, voice)
+		kind = t.Sound
+	}
+	return fmt.Sprintf("%s %s %-5s %-6s %-9s %-6s %s %s", t.ID, star, kind, t.Source, size, length, t.CreatedAt, t.Title)
 }
 
 // takes lists one page of the caller's gallery, newest first.
@@ -54,7 +59,11 @@ func takesCmd(args []string, stdout, stderr io.Writer) error {
 	fs.SetOutput(stderr)
 	q := url.Values{}
 	for flagName, param := range map[string]string{"kind": "kind", "source": "source", "session": "session_id", "q": "q", "cursor": "cursor"} {
-		fs.Func(flagName, "filter: "+param, func(v string) error { q.Set(param, v); return nil })
+		usage := "filter: " + param
+		if param == "kind" {
+			usage = "filter: image, video, audio, or (API 1.79) music, sound or voice"
+		}
+		fs.Func(flagName, usage, func(v string) error { q.Set(param, v); return nil })
 	}
 	starred := fs.Bool("starred", false, "only starred takes")
 	limit := fs.Int("limit", 60, "takes per page (1-200)")

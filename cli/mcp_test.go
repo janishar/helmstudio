@@ -179,6 +179,26 @@ func TestMCPRunWaitAndTake(t *testing.T) {
 	}
 }
 
+// API 1.79: search_takes takes a sound class as its kind (the catalog's enum) and sends it as is.
+func TestMCPSearchTakesByClass(t *testing.T) {
+	f, cs, _ := mcpSession(t, "")
+	var got string
+	f.extra["GET /v1/studio/takes"] = func(w http.ResponseWriter, r *http.Request) {
+		got = r.URL.Query().Get("kind")
+		fmt.Fprint(w, `{"takes":[],"next_cursor":null}`)
+	}
+	if res, _ := call(t, cs, "search_takes", map[string]any{"kind": "music"}); res.IsError || got != "music" {
+		t.Fatalf("search_takes %s, kind %q", text(res), got)
+	}
+	if res, _ := call(t, cs, "search_takes", map[string]any{"kind": "song"}); !res.IsError {
+		t.Fatal("a kind outside the catalog's enum was sent")
+	}
+	line := take{ID: "t1", Kind: "audio", Source: "create", Sound: "music", CreatedAt: "now", Title: "a song"}.line()
+	if !strings.Contains(line, " music create ") {
+		t.Fatal(line)
+	}
+}
+
 func TestMCPErrorsAreTheDetail(t *testing.T) {
 	f, cs, _ := mcpSession(t, "")
 	f.extra["GET /v1/studio/takes/aaaaaaaa-0000-4000-8000-000000000000"] = func(w http.ResponseWriter, _ *http.Request) {
