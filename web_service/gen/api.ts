@@ -7426,6 +7426,8 @@ export interface components {
             title: string;
             /** @description the board's `image`, `video + audio` */
             media: ("image" | "video" | "audio")[];
+            /** @description from 1.79: an audio model's class (registry models[].sound: music, sound or voice; the Models page's cube colour); absent otherwise */
+            sound?: components["schemas"]["SoundClass"];
             /** @description every runtime the pack has; only mlx or native (from 1.21: a pack whose stage runs a child process, the MiniMax H3 video model) = runs on Apple silicon only (the board's `Mac only`) */
             runtimes: {
                 runtime: string;

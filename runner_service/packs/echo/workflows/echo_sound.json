@@ -1,0 +1,46 @@
+{
+  "id": "echo-sound",
+  "title": "Echo sound",
+  "family": "echo",
+  "env": "fake",
+  "media": "audio",
+  "nodes": {
+    "prompt": {
+      "kind": "prompt",
+      "params": {
+        "text": ""
+      }
+    },
+    "sound": {
+      "kind": "echo/sound",
+      "in": {
+        "text": "prompt.text"
+      },
+      "params": {
+        "avoid": "",
+        "seconds": 2,
+        "seed": -1,
+        "delay_ms": 300
+      }
+    },
+    "output": {
+      "kind": "output",
+      "in": {
+        "media": "sound.audio"
+      }
+    }
+  },
+  "studio": {
+    "composer": [
+      "prompt.text",
+      "sound.avoid"
+    ],
+    "quick": [
+      "sound.seconds"
+    ],
+    "count": {
+      "default": 4,
+      "max": 8
+    }
+  }
+}

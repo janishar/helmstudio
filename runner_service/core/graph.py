@@ -328,6 +328,8 @@ def _check_param(spec: dict, value) -> str | None:
         size = value
         if t == "int" and "values" in spec and value not in spec["values"]:
             return f": must be one of {', '.join(map(str, spec['values']))}"
+        if spec.get("auto") is True and value == 0:  # API 1.79: 0 is Auto, below min too
+            return None
     if "min" in spec and size < spec["min"]:
         return f"is below the minimum {spec['min']}"
     if "max" in spec and size > spec["max"]:
@@ -692,7 +694,29 @@ def workflow_media(nodes: dict, schemas: dict) -> str:
         )
         s = schemas.get(nodes[src]["kind"]) if src in nodes else None
         got |= {o["type"] for o in s["outputs"] if o["name"] == out} if s else set()
+    if workflow_sound(nodes, schemas):  # API 1.79: a classed sound wins over a second Video output
+        got.discard("Video")
     return next((t.lower() for t in ("Video", "Image", "Audio") if t in got), "image")
+
+
+def workflow_sound(nodes: dict, schemas: dict) -> str | None:
+    """API 1.79 (check.py workflow_sound): the `sound` of the first node (output node id order) whose Audio output
+    an output node takes, else None."""
+    for nid in sorted(nodes):
+        n = nodes[nid]
+        src, _, out = (
+            n.get("in", {}).get("media", "").partition(".")
+            if n["kind"] == "output"
+            else ("", "", "")
+        )
+        s = schemas.get(nodes[src]["kind"]) if src in nodes else None
+        if (
+            s
+            and s.get("sound")
+            and any(o["name"] == out and o["type"] == "Audio" for o in s["outputs"])
+        ):
+            return s["sound"]
+    return None
 
 
 def voice_reason(spec: dict, kind: str, v: dict) -> str | None:

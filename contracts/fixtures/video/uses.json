@@ -966,17 +966,15 @@
       "expect": {
         "uses": [
           {
-            "workflow_id": "echo-a2v",
-            "title": "Echo audio to video",
-            "action": "Audio to video",
+            "workflow_id": "echo-music-extend",
+            "title": "Echo music extend",
+            "action": "Extend",
             "family": "echo",
-            "media": "video",
-            "param": "a2v.source",
+            "media": "audio",
+            "param": "lengthen.source",
             "inputs": {
-              "a2v.source": {
-                "take_id": "22222222-0000-4000-8000-000000000011",
-                "in": 0,
-                "out": 13.375
+              "lengthen.source": {
+                "take_id": "22222222-0000-4000-8000-000000000011"
               }
             }
           },
@@ -998,15 +996,17 @@
             }
           },
           {
-            "workflow_id": "echo-music-extend",
-            "title": "Echo music extend",
-            "action": "Extend",
+            "workflow_id": "echo-a2v",
+            "title": "Echo audio to video",
+            "action": "Audio to video",
             "family": "echo",
-            "media": "audio",
-            "param": "lengthen.source",
+            "media": "video",
+            "param": "a2v.source",
             "inputs": {
-              "lengthen.source": {
-                "take_id": "22222222-0000-4000-8000-000000000011"
+              "a2v.source": {
+                "take_id": "22222222-0000-4000-8000-000000000011",
+                "in": 0,
+                "out": 13.375
               }
             }
           }
@@ -1026,17 +1026,15 @@
       "expect": {
         "uses": [
           {
-            "workflow_id": "echo-a2v",
-            "title": "Echo audio to video",
-            "action": "Audio to video",
+            "workflow_id": "echo-music-extend",
+            "title": "Echo music extend",
+            "action": "Extend",
             "family": "echo",
-            "media": "video",
-            "param": "a2v.source",
+            "media": "audio",
+            "param": "lengthen.source",
             "inputs": {
-              "a2v.source": {
-                "take_id": "22222222-0000-4000-8000-000000000011",
-                "in": 12.5,
-                "out": 20.0
+              "lengthen.source": {
+                "take_id": "22222222-0000-4000-8000-000000000011"
               }
             }
           },
@@ -1058,15 +1056,17 @@
             }
           },
           {
-            "workflow_id": "echo-music-extend",
-            "title": "Echo music extend",
-            "action": "Extend",
+            "workflow_id": "echo-a2v",
+            "title": "Echo audio to video",
+            "action": "Audio to video",
             "family": "echo",
-            "media": "audio",
-            "param": "lengthen.source",
+            "media": "video",
+            "param": "a2v.source",
             "inputs": {
-              "lengthen.source": {
-                "take_id": "22222222-0000-4000-8000-000000000011"
+              "a2v.source": {
+                "take_id": "22222222-0000-4000-8000-000000000011",
+                "in": 12.5,
+                "out": 20.0
               }
             }
           }
@@ -1108,6 +1108,19 @@
       "expect": {
         "uses": [
           {
+            "workflow_id": "echo-vary",
+            "title": "Echo vary",
+            "action": "Vary",
+            "family": "echo",
+            "media": "audio",
+            "param": "vary.source",
+            "inputs": {
+              "vary.source": {
+                "take_id": "22222222-0000-4000-8000-000000000013"
+              }
+            }
+          },
+          {
             "workflow_id": "echo-a2v",
             "title": "Echo audio to video",
             "action": "Audio to video",
@@ -1119,19 +1132,6 @@
                 "take_id": "22222222-0000-4000-8000-000000000013",
                 "in": 0,
                 "out": 2.0
-              }
-            }
-          },
-          {
-            "workflow_id": "echo-vary",
-            "title": "Echo vary",
-            "action": "Vary",
-            "family": "echo",
-            "media": "audio",
-            "param": "vary.source",
-            "inputs": {
-              "vary.source": {
-                "take_id": "22222222-0000-4000-8000-000000000013"
               }
             }
           }
@@ -1146,6 +1146,19 @@
       "take": "22222222-0000-4000-8000-000000000015",
       "expect": {
         "uses": [
+          {
+            "workflow_id": "echo-sound-video",
+            "title": "Echo sound from a video",
+            "action": "Add sound",
+            "family": "echo",
+            "media": "audio",
+            "param": "foley.source",
+            "inputs": {
+              "foley.source": {
+                "take_id": "22222222-0000-4000-8000-000000000015"
+              }
+            }
+          },
           {
             "workflow_id": "echo-retake",
             "title": "Echo retake",
@@ -1187,19 +1200,6 @@
             "param": "extend.source",
             "inputs": {
               "extend.source": {
-                "take_id": "22222222-0000-4000-8000-000000000015"
-              }
-            }
-          },
-          {
-            "workflow_id": "echo-sound-video",
-            "title": "Echo sound from a video",
-            "action": "Add sound",
-            "family": "echo",
-            "media": "audio",
-            "param": "foley.source",
-            "inputs": {
-              "foley.source": {
                 "take_id": "22222222-0000-4000-8000-000000000015"
               }
             }

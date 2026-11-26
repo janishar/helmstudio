@@ -50,7 +50,7 @@ async def test_echo_voice_over_stores_a_wav_and_reports_an_audio_output(n):
     assert read_wav(data) == (1, 2, 24000, 48000)
 
 
-def test_output_writes_pcm_or_a_mono_wav_and_refuses_stereo():
+def test_output_writes_pcm_or_a_mono_or_stereo_wav_and_refuses_more_channels():
     got = []
     ctx = types.SimpleNamespace(node="output", output=lambda data, **kw: got.append((data, kw)))
     pcm = bytes(2 * 8000)
@@ -63,11 +63,18 @@ def test_output_writes_pcm_or_a_mono_wav_and_refuses_stereo():
     )  # a WAV file: its own facts
     assert got[-1] == (data, kw)
     buf = io.BytesIO()
-    with wave.open(buf, "wb") as w:
-        w.setnchannels(2), w.setsampwidth(2), w.setframerate(24000), w.writeframes(bytes(400))
-    with pytest.raises(RunError, match="output: audio must be PCM 16-bit mono"):
+    with wave.open(buf, "wb") as w:  # API 1.79: stereo is stored as it is, its channels reported
+        w.setnchannels(2), w.setsampwidth(2), w.setframerate(24000), w.writeframes(bytes(4 * 2400))
+    nodes.output(ctx, {}, {"media": {"wav": buf.getvalue(), "sample_rate": 24000, "duration_s": 0}})
+    assert got[-1][1]["audio"] == {"duration_s": 0.1, "sample_rate": 24000, "channels": 2}
+    assert read_wav(got[-1][0]) == (2, 2, 24000, 2400)
+    nodes.output(ctx, {}, {"media": {"wav": bytes(4 * 4800), "sample_rate": 48000, "channels": 2, "duration_s": 0,
+                                     "sections": [{"label": "verse", "start_s": 0, "end_s": 0.1}]}})  # fmt: skip
+    assert got[-1][1]["audio"] == {"duration_s": 0.1, "sample_rate": 48000, "channels": 2,
+                                   "sections": [{"label": "verse", "start_s": 0, "end_s": 0.1}]}  # fmt: skip
+    with pytest.raises(RunError, match="output: audio must be PCM 16-bit mono or stereo"):
         nodes.output(
-            ctx, {}, {"media": {"wav": buf.getvalue(), "sample_rate": 24000, "duration_s": 0}}
+            ctx, {}, {"media": {"wav": pcm, "sample_rate": 16000, "channels": 6, "duration_s": 0}}
         )
     with pytest.raises(RunError, match="outside 8-96 kHz"):
         nodes.output(ctx, {}, {"media": {"wav": b"", "sample_rate": 24000, "duration_s": 0}})
@@ -126,9 +133,9 @@ def test_a_registry_workflow_holds_a_null_voice():
 def test_workflow_media_follows_the_contract_fixture():
     fx = json.loads((FIXTURES / "voices/media.json").read_text())
     for c in fx["cases"]:
-        assert (
-            graph.workflow_media(fx["workflows"][c["workflow"]]["nodes"], PALETTE) == c["expect"]
-        ), c
+        nodes = fx["workflows"][c["workflow"]]["nodes"]
+        assert graph.workflow_media(nodes, PALETTE) == c["expect"], c
+        assert "sound" not in c or graph.workflow_sound(nodes, PALETTE) == c["sound"], c  # API 1.79
 
 
 def test_seconds_follows_the_contract_fixture():

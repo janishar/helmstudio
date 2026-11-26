@@ -1,0 +1,55 @@
+{
+  "id": "echo-music",
+  "title": "Echo music",
+  "family": "echo",
+  "env": "fake",
+  "media": "audio",
+  "nodes": {
+    "prompt": {
+      "kind": "prompt",
+      "params": {
+        "text": ""
+      }
+    },
+    "music": {
+      "kind": "echo/music",
+      "in": {
+        "text": "prompt.text"
+      },
+      "params": {
+        "lyrics": "",
+        "instrumental": false,
+        "seconds": 0,
+        "bpm": 0,
+        "seed": -1,
+        "delay_ms": 300
+      }
+    },
+    "output": {
+      "kind": "output",
+      "in": {
+        "media": "music.audio"
+      }
+    }
+  },
+  "studio": {
+    "composer": [
+      "prompt.text",
+      "music.lyrics"
+    ],
+    "quick": [
+      "music.instrumental",
+      "music.seconds",
+      "music.bpm"
+    ],
+    "groups": [
+      {
+        "label": "Length · BPM",
+        "items": [
+          "music.seconds",
+          "music.bpm"
+        ]
+      }
+    ]
+  }
+}

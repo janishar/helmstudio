@@ -2,6 +2,7 @@
 
 import array
 import importlib.util
+import io
 import json
 import math
 import re
@@ -10,6 +11,7 @@ import sys
 import tempfile
 import textwrap
 import time
+import wave
 import zlib
 from pathlib import Path
 
@@ -291,6 +293,113 @@ def dialogue(ctx, params: dict, inputs: dict) -> dict:
     pcm, cues = media.stitch(lines, spoken, SPEECH_RATE)
     return {"audio": {"wav": pcm, "sample_rate": SPEECH_RATE, "duration_s": len(pcm) / 2 / SPEECH_RATE,
                       "cues": cues}}  # fmt: skip
+
+
+MUSIC_RATE, SOUND_RATE = 48000, 44100  # ACE-Step's rate; Stable Audio 3's and MMAudio's
+AUTO_S, AUTO_BPM = 10.0, 90  # the fake planner's picks (Auto)
+TAG = re.compile(r"^\s*\[([A-Za-z][A-Za-z0-9 -]{0,39})\]\s*$", re.MULTILINE)
+
+
+def _stereo(seconds: float, rate: int, hz: float, phase: float = 0.0) -> bytes:
+    """`seconds` of a sine at `hz` on the left and 1.5 hz on the right, PCM 16-bit interleaved stereo."""
+    n = round(seconds * rate)
+    return array.array("h", (round(9000 * math.sin(phase + 2 * math.pi * f * i / rate))
+                             for i in range(n) for f in (hz, 1.5 * hz))).tobytes()  # fmt: skip
+
+
+def _pitch(text: str, seed: int) -> float:
+    return 110 + (zlib.crc32(text.encode()) + seed) % 440
+
+
+def _audio(pcm: bytes, rate: int, **extra) -> dict:
+    return {
+        "audio": {"wav": pcm, "sample_rate": rate, "channels": 2, "duration_s": len(pcm) / 4 / rate}
+        | extra
+    }
+
+
+def sections(lyrics: str, seconds: float) -> list[dict]:
+    """One section per `[tag]` line of the lyrics, in order, evenly spread over the song (the fake lyric timestamps;
+    none without a tag)."""
+    tags = [t.strip().lower() for t in TAG.findall(lyrics)][:40]
+    step = seconds / len(tags) if tags else 0
+    return [
+        {"label": t, "start_s": round(i * step, 3), "end_s": round((i + 1) * step, 3)}
+        for i, t in enumerate(tags)
+    ]
+
+
+def music(ctx, params: dict, inputs: dict) -> dict:
+    """echo/music: Length (Auto: AUTO_S) of two tones, the sections of the lyrics' tags (none when instrumental), and
+    the plan line `<bpm> BPM · A minor · 4/4 · m:ss · en` as its report."""
+    seconds, bpm = params["seconds"] or AUTO_S, params["bpm"] or AUTO_BPM
+    _steps(ctx, params)
+    pcm = _stereo(seconds, MUSIC_RATE, _pitch(inputs["text"], params["seed"]))
+    parts = [] if params["instrumental"] else sections(params["lyrics"], seconds)
+    plan = f"{bpm} BPM · A minor · 4/4 · {int(seconds) // 60}:{int(seconds) % 60:02d} · en"
+    return _audio(pcm, MUSIC_RATE, **({"sections": parts} if parts else {})) | {"plan": plan}
+
+
+def sound(ctx, params: dict, inputs: dict) -> dict:
+    """echo/sound: Length seconds of two tones at 44.1 kHz stereo."""
+    _steps(ctx, params)
+    return _audio(
+        _stereo(params["seconds"], SOUND_RATE, _pitch(inputs["text"], params["seed"])), SOUND_RATE
+    )
+
+
+def foley(ctx, params: dict, inputs: dict) -> dict:
+    """echo/foley: a sound as long as the source video, and the source with that sound (core.media.mux)."""
+    src = params["source"]
+    _steps(ctx, params)
+    pcm = _stereo(src["duration_s"], SOUND_RATE, _pitch(inputs["text"], params["seed"]))
+    out = _audio(pcm, SOUND_RATE)
+    wav = io.BytesIO()
+    with wave.open(wav, "wb") as w:
+        w.setnchannels(2)
+        w.setsampwidth(2)
+        w.setframerate(SOUND_RATE)
+        w.writeframes(pcm)
+    poster = draw(f"{inputs['text']} [sound]", src["width"], src["height"])
+    clip = _clip(poster, src["frames"], round(src["fps"]), media.mux(src["data"], wav.getvalue()))
+    clip["video"].pop("source_map")
+    return out | clip
+
+
+def _source(params: dict, rate: int) -> bytes:
+    return media.pcm(params["source"]["data"], rate, 2)
+
+
+def repaint(ctx, params: dict, inputs: dict) -> dict:
+    """echo/repaint: the source at 48 kHz stereo with [span.start, span.end) replaced by a tone of the text."""
+    span = params["span"]
+    _steps(ctx, params)
+    pcm = _source(params, MUSIC_RATE)
+    a, b = (min(len(pcm), round(t * MUSIC_RATE) * 4) for t in (span["start"], span["end"]))
+    tone = _stereo((b - a) / 4 / MUSIC_RATE, MUSIC_RATE, _pitch(inputs["text"], params["seed"]))
+    return _audio(pcm[:a] + tone[: b - a] + pcm[b:], MUSIC_RATE)
+
+
+def vary(ctx, params: dict, inputs: dict) -> dict:
+    """echo/vary: the source at 44.1 kHz stereo, each sample moved toward a tone of the text by Change."""
+    _steps(ctx, params)
+    src = array.array("h", _source(params, SOUND_RATE))
+    tone = array.array(
+        "h", _stereo(len(src) / 2 / SOUND_RATE, SOUND_RATE, _pitch(inputs["text"], params["seed"]))
+    )
+    c = params["change"]
+    return _audio(array.array("h", (round((1 - c) * x + c * y) for x, y in zip(src, tone, strict=False))).tobytes(),
+                  SOUND_RATE)  # fmt: skip
+
+
+def lengthen(ctx, params: dict, inputs: dict) -> dict:
+    """echo/lengthen: the source at 48 kHz stereo with Add seconds of a tone before (start) or after (end) it."""
+    _steps(ctx, params)
+    pcm = _source(params, MUSIC_RATE)
+    tone = _stereo(params["seconds"], MUSIC_RATE, _pitch(inputs["text"], params["seed"]))
+    if len(pcm) + len(tone) > media.MAX_TAKE_S * MUSIC_RATE * 4:
+        raise RunError(f"{ctx.node}.seconds: the song would last over {media.MAX_TAKE_S} s")
+    return _audio(pcm + tone if params["where"] == "end" else tone + pcm, MUSIC_RATE)
 
 
 def lora_stack(ctx, params: dict, inputs: dict) -> dict:

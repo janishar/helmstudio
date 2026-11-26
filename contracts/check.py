@@ -2748,6 +2748,8 @@ def check_voices(registry: Registry, palette: dict) -> None:
             nodes = fx["workflows"][case["workflow"]]["nodes"]
             if name == "media.json":
                 got = workflow_media(nodes, palette)
+                if "sound" in case and (sound := workflow_sound(nodes, palette)) != case["sound"]:  # API 1.79
+                    fail(f"fixtures/voices/media.json {case['description']!r}: sound {sound!r}, want {case['sound']!r}")
             elif name == "fit.json":
                 if errs := list(item_v.iter_errors(case["item"])):
                     fail(f"fixtures/voices/fit.json {case['description']!r}: item: {errs[0].message}")

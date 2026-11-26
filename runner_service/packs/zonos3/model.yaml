@@ -7,6 +7,7 @@ id: zonos3-mini
 family: zonos3
 title: ZONOS3
 media: [audio]
+sound: voice                     # API 1.79: its takes are speech (contracts/README.md, Music and sound)
 runtimes:
   native: {env: native, devices: [mps, cuda]}   # Metal (`make zonos3`) or CUDA (`make zonos3-cuda`, Dockerfile.cuda)
 licences:

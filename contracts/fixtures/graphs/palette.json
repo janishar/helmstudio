@@ -3894,6 +3894,7 @@
           "kind": "qwen3-tts/speak",
           "title": "Speak",
           "family": "qwen3-tts",
+          "sound": "voice",
           "params": [
             {
               "name": "voice",
@@ -3976,6 +3977,7 @@
           "kind": "qwen3-tts/dialogue",
           "title": "Dialogue",
           "family": "qwen3-tts",
+          "sound": "voice",
           "params": [
             {
               "name": "script",
@@ -4137,6 +4139,7 @@
           "kind": "zonos3/speak",
           "title": "Speak",
           "family": "zonos3",
+          "sound": "voice",
           "params": [
             {
               "name": "voice",
@@ -4284,6 +4287,7 @@
           "kind": "zonos3/dialogue",
           "title": "Dialogue",
           "family": "zonos3",
+          "sound": "voice",
           "params": [
             {
               "name": "script",

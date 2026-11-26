@@ -609,3 +609,41 @@ async def test_a_frame_job_writes_the_frames_thumb(clips, tmp_path):
         512,
     )
     assert store.objects[thumb["key"]][1] == "image/webp"
+
+
+def _wav(rate: int, channels: int, frames: int) -> bytes:
+    import wave
+
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(channels), w.setsampwidth(2), w.setframerate(rate)
+        w.writeframes(
+            bytes(range(256)) * (frames * 2 * channels // 256) + bytes(frames * 2 * channels % 256)
+        )
+    return buf.getvalue()
+
+
+def test_pcm_decodes_any_audio_at_the_rate_and_channels_asked():
+    """API 1.79 (contracts/README.md, Music and sound): a mono WAV as stereo at 48 kHz and back to mono at 24 kHz."""
+    src = _wav(24000, 1, 24000)  # 1 s mono
+    stereo = media.pcm(src, 48000, 2)
+    assert abs(len(stereo) - 48000 * 4) <= 4 * 64
+    mono = media.pcm(_wav(48000, 2, 48000), 24000, 1)
+    assert abs(len(mono) - 24000 * 2) <= 2 * 64
+    with pytest.raises(MediaError) as e:
+        media.pcm(b"not audio", 24000, 1)
+    assert e.value.cls == "ffmpeg" and "/" not in str(e.value)
+
+
+def test_mux_keeps_the_picture_and_fits_the_sound_to_its_length(tmp_path):
+    """API 1.79 (Save with the video): H.264 copied, the sound AAC stereo, padded (shorter) or cut (longer) to the
+    picture's length."""
+    poster = Image.new("RGB", (64, 32), "red")
+    clip = mp4.mp4(poster, 48, 24)  # 2 s
+    for seconds in (0.5, 5):
+        out = tmp_path / f"{seconds}.mp4"
+        out.write_bytes(media.mux(clip, _wav(44100, 2, round(44100 * seconds))))
+        info = media.probe(out)
+        assert info["video"]["codec_name"] == "h264" and info["audio"]["codec_name"] == "aac"
+        assert info["audio"]["channels"] == 2 and info["frames"] == 48
+        assert abs(float(info["audio"]["duration"]) - 2.0) < 0.1

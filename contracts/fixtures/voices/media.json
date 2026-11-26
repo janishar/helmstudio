@@ -163,6 +163,87 @@
           }
         }
       }
+    },
+    "foley": {
+      "title": "Foley",
+      "family": "echo",
+      "env": "fake",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "foley": {
+          "kind": "echo/foley",
+          "in": {
+            "text": "prompt.text"
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "foley.audio"
+          }
+        },
+        "output_video": {
+          "kind": "output",
+          "in": {
+            "media": "foley.video"
+          }
+        }
+      }
+    },
+    "foley_video": {
+      "title": "Foley video",
+      "family": "echo",
+      "env": "fake",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "foley": {
+          "kind": "echo/foley",
+          "in": {
+            "text": "prompt.text"
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "foley.video"
+          }
+        }
+      }
+    },
+    "music": {
+      "title": "Music",
+      "family": "echo",
+      "env": "fake",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "music": {
+          "kind": "echo/music",
+          "in": {
+            "text": "prompt.text"
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "music.audio"
+          }
+        }
+      }
     }
   },
   "cases": [
@@ -195,6 +276,24 @@
       "description": "an Audio and an Image output make image takes (the Audio output's node id sorts first)",
       "workflow": "mixed",
       "expect": "image"
+    },
+    {
+      "description": "1.79: a classed Audio output beside a Video one makes audio of its class (MMAudio's video workflow)",
+      "workflow": "foley",
+      "expect": "audio",
+      "sound": "sound"
+    },
+    {
+      "description": "1.79: the same node's Video output alone makes video, no class",
+      "workflow": "foley_video",
+      "expect": "video",
+      "sound": null
+    },
+    {
+      "description": "1.79: a song makes audio of class music",
+      "workflow": "music",
+      "expect": "audio",
+      "sound": "music"
     }
   ]
 }

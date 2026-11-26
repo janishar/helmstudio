@@ -702,6 +702,9 @@ def lora_block(pack: Pack) -> dict | None:
     return pack.cache["lora_block"]
 
 
+SOUNDS = {"music", "sound", "voice"}  # API 1.79: the sound classes (defs soundClass)
+
+
 def model_node(pack: Pack):
     def model(ctx, params: dict, inputs: dict) -> dict:
         return {
@@ -714,10 +717,12 @@ def model_node(pack: Pack):
 
 
 def models_entry(pack: Pack) -> dict:
-    """The pack's entry in the `models` registry value, as on disk now (core.models.entry)."""
+    """The pack's entry in the `models` registry value, as on disk now (core.models.entry), with (API 1.79) the
+    pack's `sound` class."""
     from core import models
 
-    return models.entry(pack)
+    entry = models.entry(pack)
+    return entry | ({"sound": pack.spec["sound"]} if pack.spec.get("sound") else {})
 
 
 # --- loading
@@ -756,6 +761,15 @@ def _nodes(stages: dict, family: str | None, code: str, pack: Pack | None, modul
             raise ValueError(
                 f"{schema['kind']}: addons names no add-on {sorted(bad) if pack else list(extra)}"
             )
+        # API 1.79 (contracts/README.md, Music and sound): a node with an Audio output carries its class, the stage's
+        # `sound` else the pack's
+        audio = any(o["type"] == "Audio" for o in schema["outputs"])
+        if "sound" in stage and (stage["sound"] not in SOUNDS or not audio):
+            raise ValueError(
+                f"{schema['kind']}: sound must be music, sound or voice, on a stage with an Audio output"
+            )
+        if audio and (sound := stage.get("sound") or (pack.spec.get("sound") if pack else None)):
+            schema["sound"] = sound
         if pack and (need := list(dict.fromkeys(c for c in (*uses, *extra) if c in addons(pack)))):
             schema["addons"] = need  # API 1.36: a run with the node needs them on its host
         if bad := value_addon_errors(schema, addons(pack) if pack else []):

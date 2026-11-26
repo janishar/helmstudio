@@ -6,6 +6,7 @@ id: qwen3-tts-1.7b
 family: qwen3-tts
 title: Qwen3-TTS
 media: [audio]
+sound: voice                     # API 1.79: its takes are speech (contracts/README.md, Music and sound)
 runtimes:
   torch: {env: torch, devices: [mps, cuda]}   # official bf16 on both (M9: no quantized variant, 1.7B gains nothing)
 licences:

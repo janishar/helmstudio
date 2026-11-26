@@ -318,3 +318,42 @@ def lines_problem(lines: list[dict]) -> str | None:
         if planned > MAX_TAKE_S
         else None
     )
+
+
+def _ffmpeg(args: list[str], stdin: bytes | None = None, timeout: int = 300) -> bytes:
+    """Run ffmpeg on local temp files only (-protocol_whitelist file); its stdout. MediaError ffmpeg on failure."""
+    r = subprocess.run([FFMPEG or "ffmpeg", "-v", "error", "-nostdin", "-y", *args], input=stdin,
+                       capture_output=True, check=False, timeout=timeout)  # fmt: skip
+    if r.returncode:
+        raise MediaError("ffmpeg", last_line(r.stderr.decode(errors="replace")))
+    return r.stdout
+
+
+def pcm(data: bytes, rate: int, channels: int) -> bytes:
+    """API 1.79 (packs share it, contracts/README.md Music and sound): an audio file's sound (a WAV, mp3 or m4a, or a
+    video's sound track) as PCM signed 16-bit little-endian samples at `rate` Hz, `channels` 1 (mono, downmixed) or 2
+    (stereo; a mono source on both)."""
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix="pcm-") as tmp:
+        src = Path(tmp) / "source"
+        src.write_bytes(data)
+        return _ffmpeg(["-protocol_whitelist", "file", "-i", str(src), "-map", "0:a:0", "-f", "s16le",
+                        "-acodec", "pcm_s16le", "-ar", str(rate), "-ac", str(channels), "pipe:1"])  # fmt: skip
+
+
+def mux(mp4: bytes, wav: bytes) -> bytes:
+    """API 1.79 (Save with the video, MMAudio's video take): the MP4's picture copied (H.264) with `wav` (any audio
+    file ffmpeg reads) as its only sound, AAC 48 kHz stereo, padded with silence or cut to the picture's length;
+    moov first. The facts of the result come from probe()."""
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix="mux-") as tmp:
+        tmp = Path(tmp)
+        (tmp / "video.mp4").write_bytes(mp4)
+        (tmp / "sound").write_bytes(wav)
+        _ffmpeg(["-protocol_whitelist", "file", "-i", str(tmp / "video.mp4"), "-protocol_whitelist", "file",
+                 "-i", str(tmp / "sound"), "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-af", "apad",
+                 "-c:a", "aac", "-ar", "48000", "-ac", "2", "-shortest", "-movflags", "+faststart",
+                 str(tmp / "out.mp4")])  # fmt: skip
+        return (tmp / "out.mp4").read_bytes()

@@ -7188,6 +7188,7 @@ components:
         family: {type: string, examples: [qwen-image]}
         title: {type: string, examples: [Qwen Image 2.1]}
         media: {type: array, items: {type: string, enum: [image, video, audio]}, description: 'the board''s `image`, `video + audio`'}
+        sound: {$ref: '#/components/schemas/SoundClass', description: 'from 1.79: an audio model''s class (registry models[].sound: music, sound or voice; the Models page''s cube colour); absent otherwise'}
         runtimes: {type: array, items: {type: object, required: [runtime, env], properties: {runtime: {type: string}, env: {type: string}, devices: {type: array, items: {type: string, enum: [cuda, mps, cpu]}, description: 'from 1.18: the devices it runs on (model.yaml `runtimes.<r>.devices`); absent = every device of that runtime'}}}, description: 'every runtime the pack has; only mlx or native (from 1.21: a pack whose stage runs a child process, the MiniMax H3 video model) = runs on Apple silicon only (the board''s `Mac only`)'}
         variants: {type: array, items: {$ref: '#/components/schemas/ModelVariant'}}
         addons: {type: array, items: {$ref: '#/components/schemas/ModelAddon'}, description: 'from 1.36: its optional add-ons (contracts/README.md, Optional add-ons), the freshest key''s order; empty for most models'}
