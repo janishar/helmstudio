@@ -23,4 +23,7 @@
 - **Patterns kept from the reference:** errors are `{"detail": string}`; another user's id is 404; long work is 202;
   owner scoping by row-level security (`WithUser`); outbox → `CMD` → worker → `EVT` → projector → SSE; object keys
   under `u/<owner_id>/`, never bytes or URLs in messages.
+- **Right-click menus.** Every new feature that adds something you act on (a card, a row, a block, a clip, a node) ships
+  with its right-click menu in the shared menu, and its board shows that menu (owner, 2026-11-26: "new features will come
+  with menu as well in future"; docs/mock/ContextMenus.dc.html).
 - **Docs live under docs/**, organised by topic; never a loose plan or spec file at the root.
