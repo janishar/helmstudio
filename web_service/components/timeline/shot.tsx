@@ -4,7 +4,7 @@
 // with the sequence's defaults (the cast typed into the prompt as mentions, the looks sent as RunRequest.looks) and
 // offers start/end keyframes only when the workflow (or its family's image-to-video template) has them.
 import Link from "next/link";
-import { Minus, Plus } from "lucide-react";
+import { Minus, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ErrorNote } from "@/components/kit";
 import { PromptArea } from "@/components/create/prompt";
@@ -323,7 +323,7 @@ export function ShotComposer({
   return (
     <section
       aria-label="New shot"
-      // the board draws no Close: Escape (or New shot again) leaves the composer
+      // × (owner, 2026-11-26: "new shot is missing close button"), Escape or New shot again leaves the composer
       onKeyDown={(e) => {
         if (e.key === "Escape" && !popOpen(e.currentTarget.querySelector("[popover]"))) onClose();
       }}
@@ -356,6 +356,15 @@ export function ShotComposer({
             End on first frame of {name(to)}
           </button>
         )}
+        <button
+          type="button"
+          aria-label="Close New shot"
+          title="Close (Esc)"
+          onClick={onClose}
+          className="grid size-7 shrink-0 place-items-center rounded-lg hover:bg-s3"
+        >
+          <X size={16} aria-hidden />
+        </button>
       </div>
       {promptField && (
         <>

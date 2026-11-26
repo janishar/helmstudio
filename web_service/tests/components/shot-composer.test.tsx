@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // New shot (components/timeline/shot.tsx; docs/mock/Timeline.dc.html "New shot"): the model chip, the Seeds stepper
-// (the first seed fills the slot, the others run in the sequence's session) and no Close (Escape leaves).
+// (the first seed fills the slot, the others run in the sequence's session) and its × or Escape leaving it.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { ShotComposer } from "@/components/timeline/shot";
@@ -126,12 +126,11 @@ function mount() {
 }
 
 describe("ShotComposer", () => {
-  it("names the model on the workflow chip and draws no Close", () => {
+  it("names the model on the workflow chip", () => {
     serve();
     mount();
     // the fixture's model node has only a variant: no precision to name
     expect(screen.getByRole("button", { name: "Distilled" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
     expect(screen.getByRole("group", { name: "Seeds to queue" }).textContent).toContain("1 / 4");
   });
 
@@ -139,6 +138,13 @@ describe("ShotComposer", () => {
     serve();
     const { close } = mount();
     fireEvent.keyDown(screen.getByRole("region", { name: "New shot" }), { key: "Escape" });
+    expect(close).toHaveBeenCalled();
+  });
+
+  it('its × leaves the composer (owner: "new shot is missing close button")', () => {
+    serve();
+    const { close } = mount();
+    fireEvent.click(screen.getByRole("button", { name: "Close New shot" }));
     expect(close).toHaveBeenCalled();
   });
 
