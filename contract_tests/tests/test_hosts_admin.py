@@ -67,7 +67,8 @@ def tiny(admin):
     unload_all(admin)
     yield
     put_pins(admin, [])
-    put_settings(admin)
+    # a failed test_reserve_mode_auto leaves no auto behind
+    put_settings(admin, reserve_mode="custom")
 
 
 def entry(client, component: str) -> dict | None:
