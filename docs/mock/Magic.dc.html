@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Magic: the recipe graph</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Bricolage+Grotesque:wght@600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* themes */
+[data-theme="forest"]{--g:#0e1512;--in:#090e0c;--p0:#131c17;--s1:#16201b;--s2:#1e2a24;--s3:#26342d;--s4:#2c3b33;--s5:#32433a;--ln:#3d5146;--dash:#5a7265;--t2:#a9b8ab;--t1:#f0f2e8;--t1b:#dfe5d8;--ib:#354a3f;--it:#cfdacb;--a1:#b9e37a;--on1:#17200a;--a2:#ff8552;--on2:#2b0c02;--shd:#000000}
+[data-theme="ocean"]{--g:#0c1320;--in:#080d17;--p0:#101a2a;--s1:#131d2e;--s2:#1c2940;--s3:#24344f;--s4:#2b3d5c;--s5:#33486b;--ln:#40587f;--dash:#5e779e;--t2:#9fb0c6;--t1:#eaf0f7;--t1b:#d6dfeb;--ib:#33486b;--it:#cdd8e6;--a1:#ff8a6b;--on1:#2b0d05;--a2:#7cc7f2;--on2:#06202e;--shd:#000000}
+[data-theme="aubergine"]{--g:#15101a;--in:#0f0b13;--p0:#1a1421;--s1:#1f1826;--s2:#2b2135;--s3:#352a41;--s4:#3f324d;--s5:#4a3b5a;--ln:#5c4a6e;--dash:#7a678c;--t2:#b3a6b8;--t1:#f3ecf2;--t1b:#e2d8e3;--ib:#4a3b5a;--it:#d9cedc;--a1:#ffb36b;--on1:#2b1500;--a2:#d59bf6;--on2:#230a33;--shd:#000000}
+[data-theme="espresso"]{--g:#17110d;--in:#0f0b08;--p0:#1c1510;--s1:#211914;--s2:#2e231c;--s3:#3a2d24;--s4:#45362b;--s5:#514033;--ln:#655141;--dash:#84705e;--t2:#b8a896;--t1:#f5ece0;--t1b:#e5d9c9;--ib:#514033;--it:#dccfbd;--a1:#f2b84b;--on1:#2a1c00;--a2:#ff8552;--on2:#2b0c02;--shd:#000000}
+[data-theme="oxblood"]{--g:#170e10;--in:#0f0809;--p0:#1c1113;--s1:#221517;--s2:#301d20;--s3:#3c2529;--s4:#472d31;--s5:#54363a;--ln:#694549;--dash:#896266;--t2:#bfa8a6;--t1:#f6ecea;--t1b:#e6d8d6;--ib:#54363a;--it:#dccccb;--a1:#f6c177;--on1:#2b1a00;--a2:#ff7d96;--on2:#33060f;--shd:#000000}
+[data-theme="indigo"]{--g:#0e0f22;--in:#090a18;--p0:#12142b;--s1:#161832;--s2:#20234a;--s3:#292d5c;--s4:#32376c;--s5:#3c417d;--ln:#4b5194;--dash:#6a70b0;--t2:#a5a9cf;--t1:#eceefc;--t1b:#d9dcf3;--ib:#3c417d;--it:#d0d3ee;--a1:#ffc145;--on1:#2b1d00;--a2:#ff7fa8;--on2:#33061a;--shd:#000000}
+[data-theme="parchment"]{--g:#f3ede2;--in:#e9e1d3;--p0:#f8f3ea;--s1:#fbf7ef;--s2:#ffffff;--s3:#efe7d9;--s4:#e6ddcd;--s5:#dcd1be;--ln:#cdbfa8;--dash:#a8987f;--t2:#6e6455;--t1:#1f1a14;--t1b:#3a3228;--ib:#dcd1be;--it:#3a3228;--a1:#c8553d;--on1:#ffffff;--a2:#2f5d8a;--on2:#ffffff;--shd:#b8a688}
+body{margin:0}
+nav button{flex-direction:column!important;width:58px!important;height:54px!important;gap:3px;font-size:10px;font-weight:500}
+nav button::after{content:attr(aria-label)}
+*{text-transform:none!important}
+nav button{height:64px!important;gap:5px!important;background:transparent!important}
+nav button svg{width:36px;height:36px;padding:8px;box-sizing:border-box;border-radius:12px;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.5),inset 0 -4px 6px color-mix(in srgb, var(--shd) 35%, transparent),0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)}
+nav button[aria-label="Create"] svg{background:linear-gradient(155deg,#a393ff,#4a2fe0)}
+nav button[aria-label="Pipelines"] svg{background:linear-gradient(155deg,#6cc4ff,#1f5fe0)}
+nav button[aria-label="Gallery"] svg{background:linear-gradient(155deg,#ffb07a,#e0457a)}
+nav button[aria-label="Timeline"] svg{background:linear-gradient(155deg,#ffe07a,#f08a1c)}
+nav button[aria-label="Models"] svg{background:linear-gradient(155deg,#7af5d6,#12967f)}
+/* the shipped alpha.4 rail (shell.tsx): Hub and System grouped for admins, then a divider, Assistant (the drawer) and Settings */
+nav button[aria-label="Hub"] svg{background:linear-gradient(155deg,#d8f58c,#3c9a2e)}
+nav button[aria-label="System"] svg{background:linear-gradient(155deg,#c9ced9,#5b6478)}
+nav button[aria-label="Assistant"] svg{background:linear-gradient(155deg,#b9f0d0,#2f8f6a)}
+nav button[aria-label="Assistant"][aria-expanded="true"]{color:var(--t1)!important}
+nav button[aria-label="Assistant"][aria-expanded="true"] svg{filter:none;outline:2px solid rgba(255,255,255,.85);outline-offset:2px}
+.rsep{width:32px;height:1px;background:var(--s4);display:block}
+.rgrp{display:flex;flex-direction:column;align-items:center;gap:8px;width:56px;padding:6px 0;box-sizing:border-box;border-radius:16px;background:color-mix(in srgb,var(--s3) 55%,transparent)}
+nav button:not([aria-current]) svg{filter:saturate(.55) brightness(.8)}
+nav button[aria-current]{color:var(--t1)!important}
+nav button[aria-current] svg{outline:2px solid rgba(255,255,255,.85);outline-offset:2px}
+main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.09),inset 0 -2px 0 color-mix(in srgb, var(--shd) 30%, transparent),0 2px 5px color-mix(in srgb, var(--shd) 45%, transparent)}
+[style*="border-radius: 16px"],[style*="border-radius: 18px"],[style*="border-radius: 14px"]{box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 28px 48px -18px color-mix(in srgb, var(--shd) 85%, transparent),0 10px 18px -10px color-mix(in srgb, var(--shd) 60%, transparent)}
+aside{box-shadow:-28px 0 48px -28px color-mix(in srgb, var(--shd) 80%, transparent)}
+.n{background:linear-gradient(180deg,var(--s3),var(--s1))!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 20px 34px -12px color-mix(in srgb, var(--shd) 85%, transparent)!important}
+.pi,.po{box-shadow:0 0 8px currentColor}
+input[type=range]{filter:drop-shadow(0 2px 3px color-mix(in srgb, var(--shd) 60%, transparent))}
+button{font:inherit;color:inherit;cursor:pointer}
+a{color:var(--t2)}a:hover{color:var(--t1)}
+nav{gap:14px!important}
+.i{width:18px;height:18px;margin-left:6px;border-radius:50%;border:0;background:var(--ib);color:var(--it);font:600 11px/18px Inter,sans-serif;padding:0;vertical-align:middle;flex:0 0 auto}
+[style*="border-radius: 16px"],[style*="border-radius: 18px"],.set,.crit,.tile{background-image:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,0) 46%)}
+.chip{height:36px;padding:0 12px;border-radius:10px;border:0;background:var(--s4);font-size:13px;font-weight:500}
+.lane{display:flex;align-items:stretch;height:56px}
+.lane>span:first-child{flex:0 0 72px;display:flex;align-items:center;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t2)}
+.clip{outline:3px solid var(--s1);outline-offset:-1px;flex:0 0 auto;box-sizing:border-box;height:56px;border-radius:8px;padding:6px 8px;text-align:left;font-size:11px;line-height:14px;overflow:hidden;display:flex;flex-direction:column;justify-content:space-between}
+.clip b{font-weight:600;font-size:12px;white-space:nowrap}
+.clip small{font-family:'JetBrains Mono',monospace;font-size:10px;white-space:nowrap}
+.act{height:40px;border-radius:10px;border:0;background:var(--s3);font-size:13px;font-weight:500;text-align:left;padding:0 12px}
+/* organic layer */
+[style*="min-height: 960px"]{background-image:radial-gradient(1100px 620px at 14% -12%,rgba(255,196,120,.11),transparent 62%),radial-gradient(900px 640px at 108% 112%,color-mix(in srgb, var(--a1) 7%, transparent),transparent 60%),repeating-linear-gradient(118deg,rgba(255,255,255,.014) 0 1px,transparent 1px 4px)}
+nav{margin:14px 0 14px 14px;border:0!important;border-radius:30px;background:var(--s1);align-self:flex-start;padding:14px 4px!important;flex:0 0 68px!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 24px 40px -18px color-mix(in srgb, var(--shd) 80%, transparent)}
+aside{margin:14px 14px 14px 0;border:0!important;border-radius:34px 34px 34px 14px;background:var(--p0)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 28px 48px -20px color-mix(in srgb, var(--shd) 85%, transparent)!important}
+main [style*="border-radius: 16px"]{border-radius:28px 28px 28px 12px!important;border-color:transparent!important}
+main [style*="border-radius: 18px"]{border-radius:32px!important;border-color:transparent!important}
+aside [style*="border-radius: 14px"],aside [style*="border-radius: 12px"],.set,.crit{border-radius:18px 18px 18px 8px!important;border-color:transparent!important}
+.n{border-radius:20px 20px 20px 8px!important;border-color:rgba(255,255,255,.08)}
+button[style*="border-radius: 14px"]{border-radius:20px 20px 20px 8px!important}
+main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -2px 0 color-mix(in srgb, var(--shd) 28%, transparent),0 3px 6px color-mix(in srgb, var(--shd) 35%, transparent)}
+.pic{background-size:cover!important;background-position:center!important;background-repeat:no-repeat!important;color:#fff!important;text-shadow:0 1px 3px rgba(0,0,0,.9)}.pic.pnb{border-color:transparent!important}
+.sbt{width:36px;padding:0}
+.sbt[aria-expanded="true"]{background:var(--s5);box-shadow:inset 0 0 0 1px var(--a2)!important}
+.note{font-size:12px;color:var(--t2);margin:0}</style>
+<style>
+/* Logo A in its own panel above the rail: same form as the rail (width, background, radius, shadow), 14 px apart */
+.rail{flex:0 0 68px;align-self:flex-start;display:flex;flex-direction:column;gap:14px;margin:14px 0 14px 14px}
+.rail>nav,.rail-logo{margin:0!important;flex:none!important;box-sizing:border-box;width:68px;border-radius:30px;background:var(--s1);box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 24px 40px -18px color-mix(in srgb, var(--shd) 80%, transparent)}
+.rail-logo{display:flex;justify-content:center;padding:14px 4px}
+.brand{width:36px;height:36px;border-radius:12px 12px 12px 5px;display:flex;align-items:center;justify-content:center;color:var(--on1);background:linear-gradient(155deg,var(--a1),var(--a2));box-shadow:inset 0 1px 0 rgba(255,255,255,.5),inset 0 -4px 6px color-mix(in srgb, var(--shd) 35%, transparent),0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)}
+</style>
+<style>
+/* Magic board: the recipe-graph canvas, nodes, ports, the floating player, frames */
+.board{display:flex;flex-direction:column}
+.frames{display:flex;flex-direction:column;gap:56px;padding:40px 32px 72px;border-top:1px dashed var(--ln)}
+.frame{display:flex;flex-direction:column;gap:12px;min-width:0}
+.frame>.note,.appnote .note{max-width:1100px;font-size:13px;line-height:19px}
+.fh{margin:0;font-family:'Bricolage Grotesque',Inter,sans-serif;font-size:20px;font-weight:700}
+.appnote{padding:20px 32px 28px;display:flex;flex-direction:column;gap:8px}
+.q{color:var(--t1)}
+.mono{font-family:'JetBrains Mono',monospace}
+.chip{display:inline-flex;align-items:center;gap:6px}
+.chip.on{background:var(--s5);box-shadow:inset 0 0 0 1px var(--a1)!important}
+.seg{display:inline-flex;height:36px;padding:3px;box-sizing:border-box;border-radius:12px;background:var(--s2)}
+.seg button{height:30px;padding:0 14px;border-radius:9px;border:0;background:transparent;font-size:13px;font-weight:500;color:var(--t2);box-shadow:none!important}
+.seg button[aria-pressed="true"]{background:var(--s5);color:var(--t1);font-weight:600;box-shadow:inset 0 1px 0 rgba(255,255,255,.1)!important}
+.seg button[aria-disabled="true"]{opacity:.45;cursor:not-allowed}
+.key{height:48px;padding:0 20px;border-radius:12px;border:0;background:var(--a1);color:var(--on1);background-image:linear-gradient(180deg,rgba(255,255,255,.35),rgba(255,255,255,0) 55%);box-shadow:inset 0 1px 0 rgba(255,255,255,.6),inset 0 -5px 0 color-mix(in srgb,var(--shd) 25%,transparent),0 14px 26px -8px color-mix(in srgb,var(--shd) 75%,transparent)!important;font-family:'Bricolage Grotesque',Inter,sans-serif;font-weight:700;font-size:14px;letter-spacing:.04em}
+.key.sm{height:36px;padding:0 14px;font-size:13px}
+/* canvas */
+.cv{position:relative;flex-grow:1;min-height:0;border-radius:28px 28px 28px 12px;background-color:var(--in);background-image:radial-gradient(color-mix(in srgb,var(--ln) 70%,transparent) 1px,transparent 1.4px);background-size:22px 22px;overflow:hidden}
+.cv>svg.edges{position:absolute;left:0;top:0;pointer-events:none;z-index:3;overflow:visible}
+.nd{position:absolute;box-sizing:border-box;padding:8px 10px;display:flex;flex-direction:column;gap:6px;font-size:12px;line-height:16px;z-index:2}
+.nd.sel{outline:2px solid var(--t1);outline-offset:2px}
+.nh{display:flex;align-items:center;gap:6px;font-size:10px;line-height:14px;font-weight:600;letter-spacing:.04em;color:var(--t2)}
+.nh .k{padding:1px 6px;border-radius:6px;background:var(--s1);color:var(--t1b)}
+.nt{font-weight:600;font-size:13px;line-height:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nm{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.th{border-radius:8px;height:80px;flex:0 0 auto}
+.fstr{display:flex;gap:2px;border-radius:8px;overflow:hidden;padding:5px 0;background:repeating-linear-gradient(90deg,#000 0 4px,#2a2a2a 4px 7px) top/100% 4px no-repeat,repeating-linear-gradient(90deg,#000 0 4px,#2a2a2a 4px 7px) bottom/100% 4px no-repeat,#000}
+.fstr span{flex:1 1 0;border-radius:2px}
+.wv{border-radius:8px;background:var(--s1);padding:6px;display:flex;align-items:center;justify-content:center}
+.st{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:600;white-space:nowrap}
+.st::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor;display:block}
+.st.done{color:var(--a1)}.st.run{color:var(--a2)}.st.old{color:#e8c468}
+.st.old::before{background:transparent;box-shadow:inset 0 0 0 2px currentColor}
+.nd.old{box-shadow:inset 0 0 0 1px #e8c468,0 20px 34px -12px color-mix(in srgb,var(--shd) 85%,transparent)!important}
+.pg{height:4px;border-radius:2px;background:var(--s5);display:block}.pg>span{display:block;height:4px;border-radius:2px;background:var(--a2)}
+.rc{display:inline-flex;align-items:center;gap:4px;max-width:100%;box-sizing:border-box;padding:2px 8px;border-radius:999px;background:color-mix(in srgb,var(--a2) 20%,var(--s4));font-size:11px;line-height:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--t1)}
+.rc.ch{background:color-mix(in srgb,var(--a1) 18%,var(--s4))}
+.bd{display:inline-flex;align-items:center;gap:4px;padding:1px 7px;border-radius:999px;background:var(--s5);font-size:10px;line-height:15px;font-weight:600;color:var(--t1);white-space:nowrap}
+.bd.ed{background:color-mix(in srgb,#86cdea 30%,var(--s4))}
+.grp{position:absolute;box-sizing:border-box;border:1.5px dashed var(--dash);border-radius:24px 24px 24px 10px;background:color-mix(in srgb,var(--s2) 35%,transparent);z-index:1}
+.grp>.gl{position:absolute;left:14px;top:9px;display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;color:var(--t2)}
+.sticky{position:absolute;box-sizing:border-box;padding:10px 12px;border-radius:14px 14px 14px 4px;background:#e8d88a;color:#2a2408;font-size:12px;line-height:17px;transform:rotate(-1.2deg);box-shadow:0 14px 22px -10px rgba(0,0,0,.7);z-index:2}
+.sticky b{display:block;font-size:11px;letter-spacing:.04em;margin-bottom:2px}
+.lr{position:absolute;left:0;right:0;display:flex;align-items:center;gap:6px;padding:0 10px;height:24px;font-size:11px}
+.lr .mono{font-size:10px;color:var(--t2);margin-left:auto}
+.tools{position:absolute;left:16px;bottom:14px;display:flex;align-items:center;gap:6px;padding:6px;border-radius:16px 16px 16px 6px;background:var(--s2);box-shadow:0 18px 30px -12px color-mix(in srgb,var(--shd) 85%,transparent);z-index:4}
+.tools .chip{height:32px;padding:0 10px;font-size:12px}
+.tools .sep{width:1px;height:20px;background:var(--s5)}
+.plus{position:absolute;width:22px;height:22px;border-radius:50%;border:0;padding:0;background:var(--s5);color:var(--t1);font:600 15px/22px Inter,sans-serif;z-index:4;box-shadow:0 0 0 2px var(--in),0 4px 10px rgba(0,0,0,.5)!important}
+/* floating player */
+.fp{position:absolute;box-sizing:border-box;border-radius:18px 18px 18px 8px;background:var(--s2);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 26px 44px -14px color-mix(in srgb,var(--shd) 90%,transparent);overflow:hidden;display:flex;flex-direction:column;z-index:5}
+.fp .bar{display:flex;align-items:center;gap:6px;height:26px;padding:0 6px 0 8px;font-size:11px;color:var(--t2);cursor:grab}
+.fp .bar button,.fp .ctl button{height:22px;min-width:22px;padding:0 6px;border-radius:7px;border:0;background:var(--s4);font-size:11px;box-shadow:none!important}
+.fp .vid{flex:1 1 auto;position:relative;display:flex;align-items:flex-end}
+.fp .ctl{display:flex;align-items:center;gap:8px;height:38px;padding:0 10px;font-size:11px}
+.fp .scrub{flex-grow:1;height:4px;border-radius:2px;background:var(--s5);position:relative}
+.fp .scrub>span{position:absolute;left:0;top:0;height:4px;border-radius:2px;background:var(--t1)}
+.fp .pb{width:28px;height:28px;border-radius:999px;border:0;padding:0;background:var(--t1);color:var(--g);display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.fp .rz{position:absolute;right:3px;bottom:3px;width:12px;height:12px;background:linear-gradient(135deg,transparent 45%,var(--t2) 45% 55%,transparent 55% 70%,var(--t2) 70% 80%,transparent 80%)}
+/* side panel */
+.side{flex:0 0 320px;box-sizing:border-box;margin:14px 14px 14px 0;padding:16px 18px 20px;border-radius:34px 34px 34px 14px;background:var(--p0);box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 28px 48px -20px color-mix(in srgb,var(--shd) 85%,transparent);display:flex;flex-direction:column;gap:16px;overflow:hidden}
+.side h2,.pane h2{margin:0;font-family:'Bricolage Grotesque',Inter,sans-serif;font-size:16px;font-weight:700;letter-spacing:.03em}
+.side h3,.pane h3{margin:0;font-size:12px;font-weight:600;letter-spacing:.04em;color:var(--t2);display:flex;align-items:center;gap:6px}
+.kv{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.kv>div{padding:8px 10px;border-radius:12px;background:var(--s2);min-width:0}
+.kv span{display:block;font-size:11px;color:var(--t2)}
+.kv b{font-weight:600;font-size:13px}
+.act{height:38px}
+.tk{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.tk>div{position:relative;aspect-ratio:16/10;border-radius:8px}
+.tk .bd{position:absolute;left:5px;bottom:5px}
+/* opened node: input | settings | output */
+.open{display:grid;grid-template-columns:300px minmax(0,1fr) 380px;gap:14px;align-items:stretch;padding:14px;border-radius:32px 32px 32px 12px;background:var(--s1);box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 28px 48px -18px color-mix(in srgb,var(--shd) 85%,transparent)}
+.ohd{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:4px 6px 2px}
+.ohd h2{margin:0;font-family:'Bricolage Grotesque',Inter,sans-serif;font-size:18px;font-weight:700}
+.pane{box-sizing:border-box;padding:14px 16px 16px;border-radius:22px 22px 22px 8px;background:var(--p0);display:flex;flex-direction:column;gap:12px;min-width:0}
+.pane.mid{background:var(--s2)}
+.inp{display:flex;gap:10px;align-items:center;padding:8px;border-radius:12px;background:var(--s2)}
+.inp .pic{width:72px;height:46px;border-radius:7px;flex:0 0 auto}
+.inp>span{display:flex;flex-direction:column;gap:3px;min-width:0}
+.inp small{font-size:11px;color:var(--t2)}
+.fld{display:flex;flex-direction:column;gap:5px;min-width:0}
+.fld>label,.fld>.lb{font-size:12px;color:var(--t2);display:flex;align-items:center;gap:6px}
+.box{height:36px;box-sizing:border-box;padding:0 10px;border-radius:10px;background:var(--s4);display:flex;align-items:center;gap:6px;font-size:13px}
+.ta{width:100%;box-sizing:border-box;resize:none;border:0;border-radius:10px;background:var(--s4);color:var(--t1);font:inherit;font-size:13px;line-height:19px;padding:8px 10px}
+.g4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.fld.off{opacity:.5}
+.fld.off .box{background:var(--s3);cursor:not-allowed}
+.why{font-size:11px;color:#e8c468;line-height:15px}
+.adv{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:12px;background:var(--s3);font-size:13px;font-weight:500}
+.adv small{color:var(--t2);font-weight:400;font-size:12px}
+.take{position:relative;border-radius:12px;padding:6px;background:var(--s2);display:flex;flex-direction:column;gap:6px}
+.take.pk{box-shadow:inset 0 0 0 2px var(--a1)}
+.take .pic{aspect-ratio:16/9;border-radius:8px;display:flex;align-items:center;justify-content:center}
+.take .row{display:flex;align-items:center;gap:6px;font-size:12px}
+.take .pbt{width:34px;height:34px;border-radius:999px;border:0;background:rgba(0,0,0,.55);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:none!important}
+/* + menu */
+.menu{box-sizing:border-box;width:320px;padding:8px;border-radius:18px 18px 18px 8px;background:var(--s2);border:1px solid var(--s5);box-shadow:0 24px 40px -12px color-mix(in srgb,var(--shd) 80%,transparent);display:flex;flex-direction:column;gap:2px}
+.menu .hd{padding:8px 12px 2px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--t2)}
+.mi{text-align:left;padding:7px 12px;border-radius:10px;border:0;background:transparent;box-shadow:none!important;font-size:13px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.mi small{font-size:11px;color:var(--t2)}
+.mi[aria-selected="true"]{background:var(--s4);font-weight:600}
+.srch{display:flex;align-items:center;gap:8px;height:38px;padding:0 12px;margin-bottom:4px;border-radius:12px;background:var(--s4);font-size:13px;color:var(--t2)}
+/* run history */
+.rh{display:grid;grid-template-columns:minmax(0,1fr) 420px;gap:14px;align-items:start}
+.tbl{width:100%;border-collapse:separate;border-spacing:0 4px;font-size:13px}
+.tbl th{text-align:left;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--t2);padding:4px 12px}
+.tbl td{padding:10px 12px;background:var(--s2)}
+.tbl td:first-child{border-radius:12px 0 0 12px}.tbl td:last-child{border-radius:0 12px 12px 0}
+.tbl tr.sel td{background:var(--s4);box-shadow:inset 0 1px 0 var(--a1),inset 0 -1px 0 var(--a1)}
+.tbl tr.sel td:first-child{box-shadow:inset 1px 1px 0 var(--a1),inset 0 -1px 0 var(--a1)}
+.tbl tr.sel td:last-child{box-shadow:inset -1px 1px 0 var(--a1),inset 0 -1px 0 var(--a1)}
+.nr{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:12px;background:var(--s2);font-size:13px}
+.nr .mono{margin-left:auto;font-size:11px;color:var(--t2)}
+.nr.skip{opacity:.55}
+.diff{padding:8px 10px;border-radius:12px;background:var(--s1);font-size:12px;line-height:18px}
+.diff del{color:#ff9b8a}.diff ins{color:var(--a1);text-decoration:none}
+.stage{position:relative;border-radius:22px 22px 22px 8px;background-color:var(--in);background-image:radial-gradient(color-mix(in srgb,var(--ln) 70%,transparent) 1px,transparent 1.4px);background-size:22px 22px;overflow:hidden}
+.cap{position:absolute;font-size:11px;font-weight:600;color:var(--t2);letter-spacing:.04em}
+</style>
+</helmet>
+<div data-theme="{{theme}}" style="background: var(--g); color: var(--t1); font-family: Inter, system-ui, sans-serif; font-size: 14px; line-height: 20px; width: 1440px">
+<div class="board">
+<div class="app" style="display: flex; width: 1440px; height: 960px; min-height: 960px; overflow: hidden">
+<div class="rail">
+<div class="rail-logo"><a class="brand" href="#" aria-label="helmstudio, home (Create)" title="helmstudio"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24"><path d="M8 16C8 12.4 10.4 10.6 13.3 10.6S18.4 12.6 18.4 16V21" style="fill:none;stroke:currentColor;stroke-width:3.2;stroke-linecap:round"/><path d="M8 7V21" style="stroke:currentColor;stroke-width:3.2;stroke-linecap:round"/><path d="M5.3 1.6H10.7A.9.9 0 0 1 11.6 2.5V5L8 8.4L4.4 5V2.5A.9.9 0 0 1 5.3 1.6Z" style="fill:currentColor"/></svg></a></div>
+<nav aria-label="Sections" style="flex: 0 0 64px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 0; border-right: 1px solid var(--s3)">
+<button aria-label="Create" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"></path><path d="M20 2v4"></path><path d="M22 4h-4"></path><circle cx="4" cy="20" r="2"></circle></svg></button>
+<button aria-label="Pipelines" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="8" x="3" y="3" rx="2"></rect><path d="M7 11v4a2 2 0 0 0 2 2h4"></path><rect width="8" height="8" x="13" y="13" rx="2"></rect></svg></button>
+<button aria-label="Gallery" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m22 11-1.296-1.296a2.4 2.4 0 0 0-3.408 0L11 16"></path><path d="M4 8a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2"></path><circle cx="13" cy="7" r="1" fill="currentColor"></circle><rect x="8" y="2" width="14" height="14" rx="2"></rect></svg></button>
+<button aria-label="Timeline" aria-current="page" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: var(--s2); color: var(--a1); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m12.296 3.464 3.02 3.956"></path><path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3z"></path><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><path d="m6.18 5.276 3.1 3.899"></path></svg></button>
+<button aria-label="Models" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2.97 12.92A2 2 0 0 0 2 14.63v3.24a2 2 0 0 0 .97 1.71l3 1.8a2 2 0 0 0 2.06 0L12 19v-5.5l-5-3-4.03 2.42Z"></path><path d="m7 16.5-4.74-2.85"></path><path d="m7 16.5 5-3"></path><path d="M7 16.5v5.17"></path><path d="M12 13.5V19l3.97 2.38a2 2 0 0 0 2.06 0l3-1.8a2 2 0 0 0 .97-1.71v-3.24a2 2 0 0 0-.97-1.71L17 10.5l-5 3Z"></path><path d="m17 16.5-5-3"></path><path d="m17 16.5 4.74-2.85"></path><path d="M17 16.5v5.17"></path><path d="M7.97 4.42A2 2 0 0 0 7 6.13v4.37l5 3 5-3V6.13a2 2 0 0 0-.97-1.71l-3-1.8a2 2 0 0 0-2.06 0l-3 1.8Z"></path><path d="M12 8 7.26 5.15"></path><path d="m12 8 4.74-2.85"></path><path d="M12 13.5V8"></path></svg></button>
+<span class="rsep" aria-hidden="true"></span>
+<button aria-label="Assistant" aria-expanded="false" title="Assistant (⌘J)" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8" rx="2"></rect><path d="M2 14h2M20 14h2M15 13v2M9 13v2"></path></svg></button>
+<details style="position: relative; margin-top: 6px">
+<summary aria-label="Settings" style="list-style: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10px; font-weight: 500; color: var(--t2)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 36px; height: 36px; padding: 8px; box-sizing: border-box; border-radius: 12px; color: #fff; background: linear-gradient(155deg, #a7b0c2, #4b5468); box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"></path><circle cx="12" cy="12" r="3"></circle></svg>Settings</summary>
+<div style="position: absolute; left: 70px; bottom: 0; z-index: 5; width: 220px; box-sizing: border-box; padding: 14px; border-radius: 18px 18px 18px 8px; background: var(--s2); box-shadow: 0 24px 40px -12px color-mix(in srgb, var(--shd) 80%, transparent); display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 12px; font-weight: 600; color: var(--t2)">Settings</span>
+<label for="theme" style="font-size: 13px; color: var(--t1)">Theme</label>
+<select id="theme" value="{{theme}}" onChange="{{setTheme}}" style="width: 100%; height: 36px; padding: 0 10px; border-radius: 10px; border: 0; background: var(--s4); color: var(--t1); font: inherit; font-size: 13px">
+<option value="forest">Forest ink</option>
+<option value="ocean">Deep ocean</option>
+<option value="aubergine">Aubergine dusk</option>
+<option value="espresso">Espresso</option>
+<option value="oxblood">Oxblood</option>
+<option value="indigo">Indigo night</option>
+<option value="parchment">Parchment (light)</option>
+</select>
+</div>
+</details>
+</nav>
+</div>
+
+<main style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 14px; padding: 16px 20px 20px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; height: 56px">
+<button style="height: 40px; padding: 0 12px; border-radius: 10px; border: 0; background: transparent; display: flex; align-items: center; gap: 8px; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 18px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em">[YOUR SEQUENCE]<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></button>
+<span style="padding: 4px 10px; border-radius: 999px; background: var(--s2); color: var(--t2); font-family: 'JetBrains Mono', monospace; font-size: 12px">1280 × 704 · 24 fps · 0:16</span>
+<div class="seg" role="group" aria-label="View"><button aria-pressed="false">Tracks</button><button aria-pressed="true">Magic</button></div>
+<div style="flex-grow: 1"></div>
+<button class="chip" title="One history for both views">Undo</button>
+<button class="chip">Redo</button>
+<button style="height: 56px; padding: 0 24px; border-radius: 14px; border: 0; background: var(--a1); color: var(--on1); background-image: linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 55%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), inset 0 -5px 0 color-mix(in srgb, var(--shd) 25%, transparent), 0 14px 26px -8px color-mix(in srgb, var(--shd) 75%, transparent); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px"><span style="font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.04em; text-transform: uppercase">Export</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500">re-encode · 1 dissolve</span></button>
+</div>
+<div class="cv" aria-label="Magic canvas"><div class="sticky" style="left:16px;top:16px;width:250px"><b>Note</b>Scene 1, the bus stop at dusk. Keep the rain light; Mara never looks at the camera.</div><div class="grp" style="left:184px;top:240px;width:470px;height:248px"><span class="gl"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>Scene · Bus stop · 2 shots<span class="bd">Collapse</span></span></div><div class="nd n " style="left:16px;top:262px;width:150px;height:170px"><div class="nh"><span class="k">Character</span><span style="flex-grow:1"></span><span class="st done">done</span></div><div class="nt">@mara</div><div class="th pic pnb" style="height:64px;background-image:url(img/mara-portrait.jpg)"></div><div style="display:flex;gap:4px;flex-wrap:wrap"><span class="rc ch">image</span><span class="rc ch">voice · warm</span></div></div><div class="nd n " style="left:198px;top:284px;width:150px;height:190px"><div class="nh"><span class="k">Generate</span>Video<span style="flex-grow:1"></span><span class="st done">done</span></div><div class="nt">Shot 1</div><div class="th pic pnb" style="background-image:url(img/mara-bus.jpg)"></div><div class="nm">LTX-2.5 · 6.0 s</div></div><div class="nd n" style="left:360px;top:340px;width:78px;height:72px;align-items:center;justify-content:center;text-align:center;gap:2px"><div class="nh"><span class="k">Transition</span></div><div class="nt" style="font-size:12px">Dissolve</div><div class="nm">12 f</div></div><div class="nd n sel" style="left:450px;top:284px;width:190px;height:196px"><div class="nh"><span class="k">Generate</span>Video<span style="flex-grow:1"></span><span class="st run">62%</span></div><div class="nt">Shot 2</div><div class="th pic pnb" style="height:70px;background-image:url(img/mara-umbrella.jpg)"></div><span class="rc"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>first frame: last frame of Shot 1</span><span class="pg"><span style="width:62%"></span></span><div class="nm">LTX-2.5 · 5.0 s · 2 takes</div></div><div class="nd n " style="left:672px;top:284px;width:150px;height:190px"><div class="nh"><span class="k">Clip</span><span style="flex-grow:1"></span><span class="bd ed">edits</span></div><div class="nt">Shot 3</div><div class="fstr" style="height:72px"><span class="pic" style="background-image:url(img/mara-street.jpg)"></span><span class="pic" style="background-image:url(img/mara-puddle.jpg)"></span><span class="pic" style="background-image:url(img/mara-looks-back.jpg)"></span></div><div class="nm">Gallery · 5.5 s</div></div><div class="nd n" style="left:690px;top:520px;width:114px;height:74px;gap:3px"><div class="nh"><span class="k">Effect</span><span style="flex-grow:1"></span></div><div class="nt" style="font-size:12px">Fade out</div><div class="nm">1.0 s</div></div><div class="nd n " style="left:16px;top:560px;width:210px;height:190px"><div class="nh"><span class="k">Script</span><span style="flex-grow:1"></span><span class="st done">done</span></div><div class="nt">Voice-over lines</div><div style="display:flex;flex-direction:column;gap:4px;font-size:11px;line-height:15px"><span><span class="mono" style="color:var(--t2)">1 </span>Mara: The last bus is late again.</span><span><span class="mono" style="color:var(--t2)">2 </span>Mara: Fine. I'll walk.</span><span><span class="mono" style="color:var(--t2)">3 </span>Mara: It's only rain.</span></div><div class="nm">3 lines → Voice</div></div><div class="nd n " style="left:250px;top:540px;width:200px;height:176px"><div class="nh"><span class="k">Generate</span>Voice<span style="flex-grow:1"></span><span class="st done">done</span></div><div class="nt">Voice-over</div><span class="rc"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>@mara's voice</span><div class="wv"><svg aria-hidden="true" width="168" height="34" viewBox="0 0 168 34" style="display:block;fill:var(--a1)"><rect x="0.0" y="12.1" width="2.2" height="9.7" rx="1"/><rect x="4.0" y="4.8" width="2.2" height="24.4" rx="1"/><rect x="8.0" y="6.8" width="2.2" height="20.4" rx="1"/><rect x="12.0" y="6.4" width="2.2" height="21.2" rx="1"/><rect x="16.0" y="11.1" width="2.2" height="11.8" rx="1"/><rect x="20.0" y="11.1" width="2.2" height="11.8" rx="1"/><rect x="24.0" y="0.6" width="2.2" height="32.7" rx="1"/><rect x="28.0" y="11.7" width="2.2" height="10.5" rx="1"/><rect x="32.0" y="12.5" width="2.2" height="9.0" rx="1"/><rect x="36.0" y="8.1" width="2.2" height="17.8" rx="1"/><rect x="40.0" y="5.6" width="2.2" height="22.9" rx="1"/><rect x="44.0" y="12.6" width="2.2" height="8.9" rx="1"/><rect x="48.0" y="9.0" width="2.2" height="16.0" rx="1"/><rect x="52.0" y="6.5" width="2.2" height="20.9" rx="1"/><rect x="56.0" y="10.4" width="2.2" height="13.2" rx="1"/><rect x="60.0" y="10.0" width="2.2" height="14.1" rx="1"/><rect x="64.0" y="4.3" width="2.2" height="25.5" rx="1"/><rect x="68.0" y="3.1" width="2.2" height="27.7" rx="1"/><rect x="72.0" y="2.4" width="2.2" height="29.2" rx="1"/><rect x="76.0" y="11.2" width="2.2" height="11.5" rx="1"/><rect x="80.0" y="11.7" width="2.2" height="10.7" rx="1"/><rect x="84.0" y="10.7" width="2.2" height="12.6" rx="1"/><rect x="88.0" y="12.3" width="2.2" height="9.4" rx="1"/><rect x="92.0" y="4.2" width="2.2" height="25.5" rx="1"/><rect x="96.0" y="12.2" width="2.2" height="9.5" rx="1"/><rect x="100.0" y="11.2" width="2.2" height="11.5" rx="1"/><rect x="104.0" y="8.0" width="2.2" height="18.1" rx="1"/><rect x="108.0" y="7.4" width="2.2" height="19.3" rx="1"/><rect x="112.0" y="10.2" width="2.2" height="13.6" rx="1"/><rect x="116.0" y="0.0" width="2.2" height="34.0" rx="1"/><rect x="120.0" y="9.5" width="2.2" height="14.9" rx="1"/><rect x="124.0" y="0.0" width="2.2" height="34.0" rx="1"/><rect x="128.0" y="3.7" width="2.2" height="26.6" rx="1"/><rect x="132.0" y="5.7" width="2.2" height="22.5" rx="1"/><rect x="136.0" y="0.0" width="2.2" height="34.0" rx="1"/><rect x="140.0" y="7.7" width="2.2" height="18.7" rx="1"/><rect x="144.0" y="10.7" width="2.2" height="12.7" rx="1"/><rect x="148.0" y="10.8" width="2.2" height="12.5" rx="1"/><rect x="152.0" y="9.8" width="2.2" height="14.4" rx="1"/><rect x="156.0" y="9.4" width="2.2" height="15.2" rx="1"/><rect x="160.0" y="6.1" width="2.2" height="21.8" rx="1"/><rect x="164.0" y="11.3" width="2.2" height="11.4" rx="1"/></svg></div><div class="nm">Qwen3-TTS · 9.2 s</div></div><div class="nd n old" style="left:480px;top:660px;width:200px;height:120px"><div class="nh"><span class="k">Generate</span>Music<span style="flex-grow:1"></span><span class="st old">out of date</span></div><div class="nt">Score</div><div class="wv"><svg aria-hidden="true" width="168" height="22" viewBox="0 0 168 22" style="display:block;fill:#86cdea"><rect x="0.0" y="4.4" width="2.2" height="13.3" rx="1"/><rect x="4.0" y="7.3" width="2.2" height="7.3" rx="1"/><rect x="8.0" y="2.9" width="2.2" height="16.2" rx="1"/><rect x="12.0" y="1.9" width="2.2" height="18.2" rx="1"/><rect x="16.0" y="3.4" width="2.2" height="15.2" rx="1"/><rect x="20.0" y="8.1" width="2.2" height="5.9" rx="1"/><rect x="24.0" y="6.9" width="2.2" height="8.2" rx="1"/><rect x="28.0" y="7.2" width="2.2" height="7.5" rx="1"/><rect x="32.0" y="2.9" width="2.2" height="16.3" rx="1"/><rect x="36.0" y="6.3" width="2.2" height="9.3" rx="1"/><rect x="40.0" y="4.4" width="2.2" height="13.3" rx="1"/><rect x="44.0" y="7.2" width="2.2" height="7.5" rx="1"/><rect x="48.0" y="6.9" width="2.2" height="8.1" rx="1"/><rect x="52.0" y="3.9" width="2.2" height="14.2" rx="1"/><rect x="56.0" y="7.9" width="2.2" height="6.3" rx="1"/><rect x="60.0" y="5.9" width="2.2" height="10.3" rx="1"/><rect x="64.0" y="8.1" width="2.2" height="5.8" rx="1"/><rect x="68.0" y="6.3" width="2.2" height="9.5" rx="1"/><rect x="72.0" y="0.0" width="2.2" height="22.0" rx="1"/><rect x="76.0" y="7.9" width="2.2" height="6.2" rx="1"/><rect x="80.0" y="2.3" width="2.2" height="17.5" rx="1"/><rect x="84.0" y="4.4" width="2.2" height="13.2" rx="1"/><rect x="88.0" y="3.2" width="2.2" height="15.7" rx="1"/><rect x="92.0" y="3.7" width="2.2" height="14.6" rx="1"/><rect x="96.0" y="5.5" width="2.2" height="11.0" rx="1"/><rect x="100.0" y="6.2" width="2.2" height="9.6" rx="1"/><rect x="104.0" y="5.2" width="2.2" height="11.6" rx="1"/><rect x="108.0" y="2.4" width="2.2" height="17.3" rx="1"/><rect x="112.0" y="6.7" width="2.2" height="8.6" rx="1"/><rect x="116.0" y="7.4" width="2.2" height="7.2" rx="1"/><rect x="120.0" y="8.0" width="2.2" height="6.1" rx="1"/><rect x="124.0" y="5.4" width="2.2" height="11.1" rx="1"/><rect x="128.0" y="6.8" width="2.2" height="8.4" rx="1"/><rect x="132.0" y="0.9" width="2.2" height="20.2" rx="1"/><rect x="136.0" y="5.6" width="2.2" height="10.9" rx="1"/><rect x="140.0" y="0.1" width="2.2" height="21.8" rx="1"/><rect x="144.0" y="7.2" width="2.2" height="7.5" rx="1"/><rect x="148.0" y="7.3" width="2.2" height="7.4" rx="1"/><rect x="152.0" y="4.8" width="2.2" height="12.4" rx="1"/><rect x="156.0" y="4.9" width="2.2" height="12.1" rx="1"/><rect x="160.0" y="4.0" width="2.2" height="14.1" rx="1"/><rect x="164.0" y="7.6" width="2.2" height="6.8" rx="1"/></svg></div><div class="nm">length changed · 0:16 · re-run</div></div><button class="plus" style="left:692px;top:722px" aria-label="Add the next node" title="Add the next node">+</button><div class="nd n" style="left:836px;top:510px;width:132px;height:262px;padding:0"><div style="padding:8px 10px"><div class="nh"><span class="k">Output</span><span style="color:var(--t1);font-size:12px">Sequence</span></div></div><div class="lr" style="top:38px">Video<span class="mono">V1</span></div><div class="fstr" style="position:absolute;left:10px;right:10px;top:64px"><span class="pic" style="background-image:url(img/mara-bus.jpg)"></span><span class="pic" style="background-image:url(img/mara-umbrella.jpg)"></span><span class="pic" style="background-image:url(img/mara-street.jpg)"></span></div><div class="lr" style="top:118px">Audio 1<span class="mono">A1</span></div><div class="lr" style="top:198px">Audio 2<span class="mono">A2</span></div><div class="nm" style="position:absolute;left:10px;bottom:8px">0:16 · <span style="color:var(--a2)">1 to run</span></div></div><svg class="edges" width="984" height="854" aria-hidden="true"><path d="M91,262 C91,232 116,226 160,226 L500,226 C538,226 545,244 545,284" fill="none" stroke="var(--a2)" stroke-width="2" stroke-dasharray="5 4"/><g><rect x="284.0" y="216" width="92" height="20" rx="10" fill="var(--s4)"/><text x="330" y="230" text-anchor="middle" font-size="10.5" font-family="Inter, sans-serif" font-weight="500" fill="var(--t1)">@mara · image</text></g><path d="M166,330 L198,330" fill="none" stroke="var(--a2)" stroke-width="2"/><path d="M348,376 L360,376" fill="none" stroke="var(--t2)" stroke-width="2"/><path d="M438,376 L450,376" fill="none" stroke="var(--t2)" stroke-width="2"/><path d="M640,376 L672,376" fill="none" stroke="var(--t2)" stroke-width="2"/><path d="M273,474 C273,506 545,510 545,480" fill="none" stroke="var(--a2)" stroke-width="2" stroke-dasharray="5 4"/><g><rect x="339.0" y="490" width="140" height="20" rx="10" fill="var(--s4)"/><text x="409" y="504" text-anchor="middle" font-size="10.5" font-family="Inter, sans-serif" font-weight="500" fill="var(--t1)">last frame → first frame</text></g><path d="M747,474 L747,520" fill="none" stroke="var(--t2)" stroke-width="2" stroke-dasharray="5 4"/><path d="M822,376 C872,376 796,560 836,560" fill="none" stroke="var(--t2)" stroke-width="2"/><path d="M226,640 L250,640" fill="none" stroke="var(--t2)" stroke-width="2"/><path d="M450,640 L836,640" fill="none" stroke="var(--t2)" stroke-width="2"/><path d="M680,700 C760,700 760,720 836,720" fill="none" stroke="var(--t2)" stroke-width="2"/><path d="M680,700 C690,712 694,722 698,728" fill="none" stroke="var(--t2)" stroke-width="2" stroke-dasharray="5 4"/><circle cx="91" cy="262" r="5" fill="var(--in)" stroke="var(--a2)" stroke-width="2"/><circle cx="166" cy="330" r="5" fill="var(--in)" stroke="var(--a2)" stroke-width="2"/><circle cx="198" cy="330" r="5" fill="var(--in)" stroke="var(--a2)" stroke-width="2"/><circle cx="545" cy="284" r="5" fill="var(--in)" stroke="var(--a2)" stroke-width="2"/><circle cx="273" cy="474" r="5" fill="var(--in)" stroke="var(--a2)" stroke-width="2"/><circle cx="545" cy="480" r="5" fill="var(--in)" stroke="var(--a2)" stroke-width="2"/><circle cx="348" cy="376" r="5" fill="var(--in)" stroke="var(--t2)" stroke-width="2"/><circle cx="360" cy="376" r="5" fill="var(--in)" stroke="var(--t2)" stroke-width="2"/><circle cx="438" cy="376" r="5" fill="var(--in)" stroke="var(--t2)" stroke-width="2"/><circle cx="450" cy="376" r="5" fill="var(--in)" stroke="var(--t2)" stroke-width="2"/><circle cx="640" cy="376" r="5" fill="var(--in)" stroke="var(--t2)" stroke-width="2"/><circle cx="672" cy="376" r="5" fill="var(--in)" stroke="var(--t2)" stroke-width="2"/><circle cx="822" cy="376" r="5" fill="var(--in)" stroke="var(--t2)" stroke-width="2"/><circle cx="747" cy="474" r="5" fill="var(--in)" stroke="var(--t2)" stroke-width="2"/><circle cx="747" cy="520" r="5" fill="var(--in)" stroke="var(--t2)" stroke-width="2"/><circle cx="836" cy="560" r="5" fill="var(--in)" stroke="var(--t2)" stroke-width="2"/><circle cx="226" cy="640" r="5" fill="var(--in)" stroke="var(--t2)" stroke-width="2"/><circle cx="250" cy="640" r="5" fill="var(--in)" stroke="var(--t2)" stroke-width="2"/><circle cx="450" cy="640" r="5" fill="var(--in)" stroke="var(--t2)" stroke-width="2"/><circle cx="836" cy="640" r="5" fill="var(--in)" stroke="var(--t2)" stroke-width="2"/><circle cx="680" cy="700" r="5" fill="var(--in)" stroke="var(--t2)" stroke-width="2"/><circle cx="836" cy="720" r="5" fill="var(--in)" stroke="var(--t2)" stroke-width="2"/></svg><div class="fp" style="position:absolute;left:688px;top:14px;width:280px;height:222px"><div class="bar"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg><span>Player · the sequence</span><span style="flex-grow:1"></span><button aria-label="Shrink to a bar">–</button><button aria-label="Pop out">⤢</button></div><div class="vid pic pnb" style="background-image:url(img/mara-umbrella.jpg)"><span class="mono" style="margin:6px 8px;font-size:10px;padding:1px 6px;border-radius:6px;background:rgba(0,0,0,.55)">Shot 2 · take 43</span></div><div class="ctl"><button class="pb" aria-label="Play"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8L7 4Z"></path></svg></button><span class="mono">0:05.12 <span style="color:var(--t2)">/ 0:16</span></span><span class="scrub"><span style="width:32%"></span></span></div><span class="rz" aria-label="Resize"></span></div><div class="tools"><button class="chip" aria-label="Zoom out">−</button><span class="mono" style="font-size:12px;padding:0 4px">100%</span><button class="chip" aria-label="Zoom in">+</button><button class="chip">Fit</button><span class="sep"></span><button class="key sm">Run changed · 2</button><button class="chip">Run history</button><button class="chip">Templates</button></div></div>
+</main>
+<aside class="side" aria-label="Selected node">
+<div style="display:flex;flex-direction:column;gap:4px"><h2>Shot 2</h2><span style="font-size:12px;color:var(--t2)">Generate · Video · Auto → LTX-2.5 · in Scene · Bus stop</span></div>
+<div style="display:flex;flex-direction:column;gap:6px"><span class="st run">running · sample 2 of 2 · 1:58 left</span><span class="pg"><span style="width:62%"></span></span></div>
+<div style="display:flex;flex-direction:column;gap:8px"><h3>Inputs</h3><div style="display:flex;flex-wrap:wrap;gap:6px"><span class="rc ch"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>@mara · image</span><span class="rc"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>last frame of Shot 1</span></div></div>
+<div style="display:flex;flex-direction:column;gap:6px"><h3>Prompt</h3><span style="font-size:13px;line-height:19px">@mara opens her umbrella as the bus pulls away, rain in the street lights</span></div>
+<div class="kv"><div><span>Aspect · size</span><b>16:9 · 1280 × 704</b></div><div><span>Length · fps</span><b>5.0 s · 24</b></div><div><span>Quality</span><b>Balanced</b></div><div><span>Takes</span><b>2</b></div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><h3>Takes</h3><div class="tk">
+<div class="pic pnb" style="background-image:url(img/mara-umbrella.jpg);box-shadow:inset 0 0 0 2px var(--a1)"><span class="bd"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"/></svg>picked</span></div>
+<div class="pic pnb" style="background-image:url(img/mara-street.jpg)"><span class="bd"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>pinned</span></div>
+<div style="background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--t2)">running</div></div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><button class="act">Open node</button><div class="g2"><button class="act">Run node</button><button class="act">Run up to here</button></div></div>
+<span style="font-size:12px;color:var(--t2)">In Tracks: V1 · 0:05.5 to 0:10.5</span>
+</aside>
+</div>
+<div class="appnote">
+<h2 class="fh">1 · Magic, the whole main area</h2>
+<p class="note">Concept wireframe (owner, 2026-11-26, "make a mock wireframe"). Magic is a recipe graph; the tracks are its result (owner chose <span class="q">"B, the recipe graph"</span>). One sequence, two views: the Tracks | Magic switch in the top bar, one Undo and Redo for both.</p>
+<p class="note">Magic takes <span class="q">"b. The whole main area"</span>. The player floats on the canvas, <span class="q">"resizable but small by default"</span>: top-right, draggable by its grip, shrinks to a bar (frame 5).</p>
+<p class="note">The film reads left to right: Character @mara feeds Shot 1 and Shot 2 (orange dashed lines are references); Shot 1, a dissolve, Shot 2 (its first frame is Shot 1's last frame, shown as a chip and a line), then Shot 3, a plain Clip with an "edits" badge for the trim and cut made in Tracks. Fade out is an Effect hung under Shot 3. The Script feeds Voice-over; Voice-over and the Score go into Output's audio lanes.</p>
+<p class="note">Each node shows its status: done (green), running with progress (orange), out of date (yellow ring; the Score's length changed). Media nodes show a thumbnail, a filmstrip or a waveform. Scene · Bus stop is a group (a sub-graph) that collapses to one node. The sticky note is a note on the canvas, not a node.</p>
+<p class="note">Tool strip: zoom, Fit, Run changed (runs only the out-of-date nodes and what follows them), Run history (frame 4), Templates. The "+" on an output adds the next node (frame 3). The side panel shows the picked node; Open node opens frame 2.</p>
+<p class="note">Borrowed from n8n (owner asked <span class="q">"can we borrow something from n8n?"</span>; proposed, shown here): Input | Output view per node; Run node and Run up to here; a pin on a take; references as chips; "+" on an output; Run history; sticky notes; Scene as a sub-graph; Templates; credentials for API services later (not drawn).</p>
+</div>
+<div class="frames">
+<section class="frame" aria-label="A Generate node opened">
+<div class="open">
+<div class="ohd"><button class="chip">← Canvas</button><h2>Shot 2</h2><span class="bd">Generate</span><span class="st run">running 62%</span><span style="flex-grow:1"></span><button class="chip">Previous node</button><button class="chip">Next node</button></div>
+<div class="pane">
+<h3>Inputs</h3>
+<div class="inp"><span class="pic pnb" style="background-image:url(img/mara-portrait.jpg)"></span><span><span class="rc ch"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>@mara · image</span><small>from Character @mara · reference image</small></span></div>
+<div class="inp"><span class="pic pnb" style="background-image:url(img/mara-bus.jpg)"></span><span><span class="rc"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>last frame of Shot 1</span><small>first frame · from Shot 1, take 41, 6.0 s</small></span></div>
+<button class="chip" style="border:1px dashed var(--dash);background:transparent;justify-content:center">Add input</button>
+<p class="note">Drop a node's output here, or type @ in the prompt. Each input is a chip that names where it comes from.</p>
+</div>
+<div class="pane mid">
+<h3>Settings</h3>
+<div class="g2">
+<div class="fld"><span class="lb">Kind</span><div class="seg"><button aria-pressed="true">Video</button><button aria-pressed="false">Image</button><button aria-pressed="false">Voice</button><button aria-pressed="false">Music</button></div></div>
+<div class="fld"><span class="lb">Model<button class="i" aria-label="More information" title="Auto picks a model that can do every field set here.">i</button></span><div class="box">Auto <span style="color:var(--t2)">→ LTX-2.5 Distilled</span><span style="flex-grow:1"></span><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></div></div>
+</div>
+<div class="fld"><label for="p2">Prompt</label><textarea id="p2" class="ta" rows="2">@mara opens her umbrella as the bus pulls away, rain in the street lights</textarea></div>
+<div class="g4">
+<div class="fld"><span class="lb">Aspect</span><div class="box">16:9<svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></div></div>
+<div class="fld"><span class="lb">Size</span><div class="box mono" style="font-size:12px">1280 × 704</div></div>
+<div class="fld"><span class="lb">Length</span><div class="box mono" style="font-size:12px">5.0 s</div></div>
+<div class="fld"><span class="lb">fps</span><div class="box mono" style="font-size:12px">24</div></div>
+</div>
+<div class="g4">
+<div class="fld" style="grid-column:span 2"><span class="lb">Quality</span><div class="seg"><button aria-pressed="false">Fast</button><button aria-pressed="true">Balanced</button><button aria-pressed="false">Best</button></div></div>
+<div class="fld"><span class="lb">Takes</span><div class="box mono" style="font-size:12px">− 2 +</div></div>
+<div class="fld"><span class="lb">Seed</span><div class="box mono" style="font-size:12px">Random</div></div>
+</div>
+<div class="fld off"><span class="lb">Negative prompt</span><div class="box" style="color:var(--t2)">text, watermark</div><span class="why">LTX-2.5 Distilled can't use a negative prompt. Pick Dev, or leave it; it is kept for the next model.</span></div>
+<div class="adv"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>Advanced<small>LTX-2.5 extras: recipe, LoRA, steps, guidance</small></div>
+</div>
+<div class="pane">
+<h3>Output<span style="flex-grow:1"></span><span class="mono" style="font-weight:400">2 takes</span></h3>
+<div class="take pk"><div class="pic pnb" style="background-image:url(img/mara-umbrella.jpg)"><button class="pbt" aria-label="Play take 43"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8L7 4Z"></path></svg></button></div><div class="row"><b>take 43</b><span class="bd" style="background:color-mix(in srgb,var(--a1) 30%,var(--s4))"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"/></svg>picked</span><span style="flex-grow:1"></span><span class="mono" style="font-size:11px;color:var(--t2)">5.0 s</span></div></div>
+<div class="take"><div class="pic pnb" style="background-image:url(img/mara-street.jpg)"><button class="pbt" aria-label="Play take 42"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8L7 4Z"></path></svg></button></div><div class="row"><b>take 42</b><span class="bd"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>pinned</span><span style="flex-grow:1"></span><button class="chip" style="height:28px;font-size:12px">Pick</button></div></div>
+<div class="take" style="opacity:.8"><div class="pic" style="aspect-ratio:auto;height:44px;background:var(--s3);color:var(--t2);font-size:12px">take 3 · running · 1:58 left</div></div>
+<div class="g2"><button class="key sm">Run node</button><button class="chip" style="justify-content:center">Run up to here</button></div>
+</div>
+</div>
+<p class="note">2 · A Generate node opened (n8n's Input | Output view): inputs on the left, settings in the middle, takes out on the right, each playable.</p>
+<p class="note">One standard request per kind (Image, Video, Voice, Music), <span class="q">"a, strict standard"</span>: the same fields on every model. Model extras live under Advanced. A field the picked model can't do is greyed with the reason. It is a new layer that removes no current feature, and for now it only powers Magic.</p>
+<p class="note">Picked is the take that goes into the film. A pin keeps a take through re-runs. Run node runs this node only; Run up to here also runs the out-of-date nodes it needs.</p>
+</section>
+<section class="frame" aria-label="The plus menu">
+<div class="stage" style="height:660px">
+<div class="nd n " style="left:82px;top:56px;width:150px;height:190px"><div class="nh"><span class="k">Clip</span><span style="flex-grow:1"></span><span class="bd ed">edits</span></div><div class="nt">Shot 3</div><div class="fstr" style="height:72px"><span class="pic" style="background-image:url(img/mara-street.jpg)"></span><span class="pic" style="background-image:url(img/mara-puddle.jpg)"></span><span class="pic" style="background-image:url(img/mara-looks-back.jpg)"></span></div><div class="nm">from Gallery · 5.5 s</div></div>
+<button class="plus" style="left:331px;top:139px;background:var(--a1);color:var(--on1)" aria-label="Add the next node" aria-expanded="true">+</button>
+<svg aria-hidden="true" width="1376" height="560" style="position:absolute;left:0;top:0;overflow:visible;z-index:3;pointer-events:none"><path d="M232,150 L330,150" fill="none" stroke="var(--t2)" stroke-width="2" stroke-dasharray="5 4"/><circle cx="232" cy="150" r="5" fill="var(--in)" stroke="var(--t2)" stroke-width="2"/><path d="M354,150 C410,150 420,60 466,60" fill="none" stroke="var(--dash)" stroke-width="1.5" stroke-dasharray="3 4"/></svg>
+<div class="menu" role="listbox" aria-label="Add a node" style="position:absolute;left:470px;top:24px"><div class="srch">Search nodes</div><span class="hd">Generate</span><button class="mi" role="option" aria-selected="true"><span>Video</span><small>Auto or a model</small></button><button class="mi" role="option" aria-selected="false"><span>Image</span><small></small></button><button class="mi" role="option" aria-selected="false"><span>Voice</span><small></small></button><button class="mi" role="option" aria-selected="false"><span>Music</span><small></small></button><span class="hd">Edit</span><button class="mi" role="option" aria-selected="false"><span>Transition</span><small>dissolve, wipe, cut</small></button><button class="mi" role="option" aria-selected="false"><span>Effect</span><small>fade, speed, color</small></button><span class="hd">Story</span><button class="mi" role="option" aria-selected="false"><span>Character</span><small>image and voice</small></button><button class="mi" role="option" aria-selected="false"><span>Script</span><small>lines → Voice</small></button><button class="mi" role="option" aria-selected="false"><span>Scene</span><small>a group</small></button><button class="mi" role="option" aria-selected="false"><span>Note</span><small>sticky</small></button><span class="hd">Sources</span><button class="mi" role="option" aria-selected="false"><span>Clip from Gallery</span><small></small></button><button class="mi" role="option" aria-selected="false"><span>Upload</span><small></small></button></div>
+<div class="cap" style="left:820px;top:40px;max-width:420px;line-height:17px;font-weight:400">Typing filters the list (for example "fade" shows Effect · fade). The picked node is placed to the right of Shot 3 and wired to its output. Generate Video picked here starts with Shot 3's last frame as its first-frame input.</div>
+</div>
+<p class="note">3 · The "+" on a node's output opens a small searchable list, grouped: Generate (Video, Image, Voice, Music), Edit (Transition, Effect), Story (Character, Script, Scene, Note), Sources (Clip from Gallery, Upload). The same list opens on a right-click on the canvas.</p>
+</section>
+<section class="frame" aria-label="Run history">
+<div class="open" style="grid-template-columns:minmax(0,1fr) 440px">
+<div class="ohd"><h2>Run history</h2><span class="bd">[YOUR SEQUENCE]</span><span style="flex-grow:1"></span><div class="seg"><button aria-pressed="true">All</button><button aria-pressed="false">Failed</button></div><button class="chip">Close</button></div>
+<div class="pane" style="background:var(--s1);padding:6px 8px">
+<table class="tbl"><thead><tr><th>When</th><th>What changed</th><th>Nodes run</th><th>Time</th><th>Takes</th><th></th></tr></thead><tbody><tr class=""><td class="mono" style="font-size:12px;white-space:nowrap">Today 14:32</td><td>Shot 2 prompt edited</td><td>Shot 2 · Output</td><td class="mono" style="font-size:12px">1:58 left</td><td class="mono" style="font-size:12px">1 of 2</td><td><span class="st run">running</span></td></tr><tr class=""><td class="mono" style="font-size:12px;white-space:nowrap">Today 14:05</td><td>Score length 0:12 → 0:16</td><td>Score</td><td class="mono" style="font-size:12px">0:48</td><td class="mono" style="font-size:12px">2</td><td><span class="st done">done</span></td></tr><tr class="sel"><td class="mono" style="font-size:12px;white-space:nowrap">Today 13:40</td><td>Voice-over line 2 edited</td><td>Voice-over · Output</td><td class="mono" style="font-size:12px">0:22</td><td class="mono" style="font-size:12px">3</td><td><span class="st done">done</span></td></tr><tr class=""><td class="mono" style="font-size:12px;white-space:nowrap">Today 13:10</td><td>Run all</td><td>7 nodes</td><td class="mono" style="font-size:12px">9:46</td><td class="mono" style="font-size:12px">9</td><td><span class="st done">done</span></td></tr><tr class=""><td class="mono" style="font-size:12px;white-space:nowrap">Yesterday 18:02</td><td>Shot 3 trimmed in Tracks</td><td>Output</td><td class="mono" style="font-size:12px">0:04</td><td class="mono" style="font-size:12px">—</td><td><span class="st done">done</span></td></tr><tr class=""><td class="mono" style="font-size:12px;white-space:nowrap">Yesterday 17:40</td><td>Template "Three-shot scene" added</td><td>—</td><td class="mono" style="font-size:12px">—</td><td class="mono" style="font-size:12px">—</td><td><span class="st old">no run</span></td></tr></tbody></table>
+</div>
+<div class="pane">
+<div style="display:flex;flex-direction:column;gap:4px"><h2>Today 13:40</h2><span style="font-size:12px;color:var(--t2)">Run changed · 0:22 · on mac</span></div>
+<h3>What changed</h3>
+<div class="diff">Voice-over · line 2<br><del>Mara: I'll walk.</del><br><ins>Mara: Fine. I'll walk.</ins></div>
+<h3>Nodes</h3>
+<div class="nr"><span class="st done">ran</span>Voice-over<span class="mono">0:18 · 3 takes</span></div>
+<div class="nr"><span class="st done">ran</span>Output · audio mix<span class="mono">0:04</span></div>
+<div class="nr skip"><span class="st done">kept</span>Shot 1, Shot 2, Shot 3, Score<span class="mono">not changed</span></div>
+<div class="nr"><span class="pic pnb" style="width:20px;height:20px;border-radius:6px;background:var(--s4);display:flex;align-items:center;justify-content:center;color:var(--t2)!important"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8L7 4Z"></path></svg></span>Play the sequence as it was then<span class="mono">0:16</span></div>
+<div class="g2"><button class="chip" style="justify-content:center">Show on canvas</button><button class="chip" style="justify-content:center">Use these takes</button></div>
+</div>
+</div>
+<p class="note">4 · Run history lists every run of this sequence: when, what changed, the nodes run, the time and the takes made. Picking a run shows the change, which nodes ran and which were kept. Use these takes puts that run's takes back as picked (one Undo away, like any edit).</p>
+</section>
+<section class="frame" aria-label="The floating player">
+<div class="stage" style="height:470px">
+<span class="cap" style="left:24px;top:20px">SMALL · DEFAULT · 280 × 222</span>
+<div class="fp" style="position:absolute;left:24px;top:44px;width:280px;height:222px"><div class="bar"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg><span>Player · the sequence</span><span style="flex-grow:1"></span><button aria-label="Shrink to a bar">–</button><button aria-label="Pop out">⤢</button></div><div class="vid pic pnb" style="background-image:url(img/mara-umbrella.jpg)"><span class="mono" style="margin:6px 8px;font-size:10px;padding:1px 6px;border-radius:6px;background:rgba(0,0,0,.55)">Shot 2 · take 43</span></div><div class="ctl"><button class="pb" aria-label="Play"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8L7 4Z"></path></svg></button><span class="mono">0:05.12 <span style="color:var(--t2)">/ 0:16</span></span><span class="scrub"><span style="width:32%"></span></span></div><span class="rz" aria-label="Resize"></span></div>
+<span class="cap" style="left:344px;top:20px">RESIZED · DRAG THE CORNER</span>
+<div class="fp" style="position:absolute;left:344px;top:44px;width:600px;height:402px"><div class="bar"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg><span>Player · the sequence</span><span style="flex-grow:1"></span><button aria-label="Shrink to a bar">–</button><button aria-label="Pop out">⤢</button></div><div class="vid pic pnb" style="background-image:url(img/mara-umbrella.jpg)"><span class="mono" style="margin:6px 8px;font-size:10px;padding:1px 6px;border-radius:6px;background:rgba(0,0,0,.55)">Shot 2 · take 43</span></div><div class="ctl"><button class="pb" aria-label="Play"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8L7 4Z"></path></svg></button><span class="mono">0:09.04 <span style="color:var(--t2)">/ 0:16</span></span><span class="scrub"><span style="width:57%"></span></span><button>1×</button><button>Loop</button></div><span class="rz" aria-label="Resize"></span></div>
+<span class="cap" style="left:984px;top:20px">SHRUNK TO A BAR</span>
+<div class="fp" style="position:absolute;left:984px;top:44px;width:360px;height:44px;flex-direction:row;align-items:center;gap:8px;padding:0 8px"><span style="color:var(--t2);cursor:grab"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span><button class="pb" aria-label="Play" style="width:28px;height:28px;border-radius:999px;border:0;background:var(--t1);color:var(--g);display:flex;align-items:center;justify-content:center"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8L7 4Z"></path></svg></button><span class="mono" style="font-size:11px">0:05.12 <span style="color:var(--t2)">/ 0:16</span></span><span class="scrub" style="flex-grow:1;height:4px;border-radius:2px;background:var(--s5);position:relative"><span style="position:absolute;left:0;top:0;height:4px;width:32%;border-radius:2px;background:var(--t1)"></span></span><button class="chip" style="height:26px;padding:0 8px;font-size:11px" aria-label="Expand player">Expand</button></div>
+<span class="cap" style="left:984px;top:110px;max-width:360px;line-height:17px;font-weight:400;letter-spacing:0">The bar keeps play, time and the scrub; Expand gives back the last size. Size and place are kept per person.</span>
+</div>
+<p class="note">5 · The floating player. Small by default, top-right of the canvas; drag its grip to move it, drag the corner to make it larger, "–" shrinks it to a bar. It plays the whole sequence across cuts, like the Timeline preview; while a node is picked it can jump to that node's part.</p>
+</section>
+<section class="frame" aria-label="Tracks view of the same sequence" style="margin:0 -32px">
+<div class="app" style="display: flex; width: 1440px; height: 960px; min-height: 960px; overflow: hidden">
+<div class="rail">
+<div class="rail-logo"><a class="brand" href="#" aria-label="helmstudio, home (Create)" title="helmstudio"><svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24"><path d="M8 16C8 12.4 10.4 10.6 13.3 10.6S18.4 12.6 18.4 16V21" style="fill:none;stroke:currentColor;stroke-width:3.2;stroke-linecap:round"/><path d="M8 7V21" style="stroke:currentColor;stroke-width:3.2;stroke-linecap:round"/><path d="M5.3 1.6H10.7A.9.9 0 0 1 11.6 2.5V5L8 8.4L4.4 5V2.5A.9.9 0 0 1 5.3 1.6Z" style="fill:currentColor"/></svg></a></div>
+<nav aria-label="Sections" style="flex: 0 0 64px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 0; border-right: 1px solid var(--s3)">
+<button aria-label="Create" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"></path><path d="M20 2v4"></path><path d="M22 4h-4"></path><circle cx="4" cy="20" r="2"></circle></svg></button>
+<button aria-label="Pipelines" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="8" x="3" y="3" rx="2"></rect><path d="M7 11v4a2 2 0 0 0 2 2h4"></path><rect width="8" height="8" x="13" y="13" rx="2"></rect></svg></button>
+<button aria-label="Gallery" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m22 11-1.296-1.296a2.4 2.4 0 0 0-3.408 0L11 16"></path><path d="M4 8a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2"></path><circle cx="13" cy="7" r="1" fill="currentColor"></circle><rect x="8" y="2" width="14" height="14" rx="2"></rect></svg></button>
+<button aria-label="Timeline" aria-current="page" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: var(--s2); color: var(--a1); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m12.296 3.464 3.02 3.956"></path><path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3z"></path><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><path d="m6.18 5.276 3.1 3.899"></path></svg></button>
+<button aria-label="Models" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2.97 12.92A2 2 0 0 0 2 14.63v3.24a2 2 0 0 0 .97 1.71l3 1.8a2 2 0 0 0 2.06 0L12 19v-5.5l-5-3-4.03 2.42Z"></path><path d="m7 16.5-4.74-2.85"></path><path d="m7 16.5 5-3"></path><path d="M7 16.5v5.17"></path><path d="M12 13.5V19l3.97 2.38a2 2 0 0 0 2.06 0l3-1.8a2 2 0 0 0 .97-1.71v-3.24a2 2 0 0 0-.97-1.71L17 10.5l-5 3Z"></path><path d="m17 16.5-5-3"></path><path d="m17 16.5 4.74-2.85"></path><path d="M17 16.5v5.17"></path><path d="M7.97 4.42A2 2 0 0 0 7 6.13v4.37l5 3 5-3V6.13a2 2 0 0 0-.97-1.71l-3-1.8a2 2 0 0 0-2.06 0l-3 1.8Z"></path><path d="M12 8 7.26 5.15"></path><path d="m12 8 4.74-2.85"></path><path d="M12 13.5V8"></path></svg></button>
+<span class="rsep" aria-hidden="true"></span>
+<button aria-label="Assistant" aria-expanded="false" title="Assistant (⌘J)" style="width: 44px; height: 44px; border-radius: 12px; border: 0; background: transparent; color: var(--t2); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8" rx="2"></rect><path d="M2 14h2M20 14h2M15 13v2M9 13v2"></path></svg></button>
+<details style="position: relative; margin-top: 6px">
+<summary aria-label="Settings" style="list-style: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10px; font-weight: 500; color: var(--t2)"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 36px; height: 36px; padding: 8px; box-sizing: border-box; border-radius: 12px; color: #fff; background: linear-gradient(155deg, #a7b0c2, #4b5468); box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent)"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"></path><circle cx="12" cy="12" r="3"></circle></svg>Settings</summary>
+<div style="position: absolute; left: 70px; bottom: 0; z-index: 5; width: 220px; box-sizing: border-box; padding: 14px; border-radius: 18px 18px 18px 8px; background: var(--s2); box-shadow: 0 24px 40px -12px color-mix(in srgb, var(--shd) 80%, transparent); display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 12px; font-weight: 600; color: var(--t2)">Settings</span>
+<label for="theme" style="font-size: 13px; color: var(--t1)">Theme</label>
+<select id="theme" value="{{theme}}" onChange="{{setTheme}}" style="width: 100%; height: 36px; padding: 0 10px; border-radius: 10px; border: 0; background: var(--s4); color: var(--t1); font: inherit; font-size: 13px">
+<option value="forest">Forest ink</option>
+<option value="ocean">Deep ocean</option>
+<option value="aubergine">Aubergine dusk</option>
+<option value="espresso">Espresso</option>
+<option value="oxblood">Oxblood</option>
+<option value="indigo">Indigo night</option>
+<option value="parchment">Parchment (light)</option>
+</select>
+</div>
+</details>
+</nav>
+</div>
+
+<main style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 14px; padding: 16px 20px 20px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; height: 56px">
+<button style="height: 40px; padding: 0 12px; border-radius: 10px; border: 0; background: transparent; display: flex; align-items: center; gap: 8px; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 18px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em">[YOUR SEQUENCE]<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></button>
+<span style="padding: 4px 10px; border-radius: 999px; background: var(--s2); color: var(--t2); font-family: 'JetBrains Mono', monospace; font-size: 12px">1280 × 704 · 24 fps · 0:16</span>
+<div class="seg" role="group" aria-label="View"><button aria-pressed="true">Tracks</button><button aria-pressed="false">Magic</button></div>
+<div style="flex-grow: 1"></div>
+<button class="chip" title="One history for both views">Undo</button>
+<button class="chip">Redo</button>
+<button style="height: 56px; padding: 0 24px; border-radius: 14px; border: 0; background: var(--a1); color: var(--on1); background-image: linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 55%); box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), inset 0 -5px 0 color-mix(in srgb, var(--shd) 25%, transparent), 0 14px 26px -8px color-mix(in srgb, var(--shd) 75%, transparent); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px"><span style="font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.04em; text-transform: uppercase">Export</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500">re-encode · 1 dissolve</span></button>
+</div>
+<div style="flex-grow: 1; min-height: 230px; border-radius: 16px; background: var(--in); border: 1px solid var(--s3); padding: 18px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px">
+<div class="pic pnb" style="width: 100%; max-width: 480px; aspect-ratio: 16 / 9; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 13px; background-image: url(img/mara-umbrella.jpg)">Sequence preview</div>
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 13px">0:05.12 <span style="color: var(--t2)">/ 0:16.00</span></span></div><div style="border-radius: 16px; background: var(--s1); border: 1px solid var(--s3); padding: 12px 14px 14px; overflow: hidden">
+<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:10px"><button class="chip">Blade</button><button class="chip">Snapping</button><button class="chip">Linked</button><span style="flex-grow:1"></span><span class="mono" style="font-size:11px;color:var(--t2)">same sequence as Magic · one history</span></div>
+<div style="position: relative; display: flex; flex-direction: column; gap: 6px">
+<div aria-hidden="true" style="display: flex; padding-left: 72px; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--t2); height: 18px"><span style="flex: 0 0 208px">0:00</span><span style="flex: 0 0 208px">0:04</span><span style="flex: 0 0 208px">0:08</span><span style="flex: 0 0 208px">0:12</span><span style="flex: 0 0 208px">0:16</span></div>
+<div class="lane"><span>V1</span>
+<div class="clip" style="width:312px;border:1px solid var(--a1);background:color-mix(in srgb,var(--a1) 14%,transparent)"><b>Shot 1</b><small>LTX · 6.0 s</small></div>
+<div class="clip" style="width:260px;margin-left:-14px;border:2px solid var(--t1);background:rgba(255,122,89,0.22)"><b>Shot 2</b><small>LTX · 5.0 s · dissolve in 12 f · running</small></div>
+<div class="clip" style="width:286px;border:1px solid #86cdea;background:rgba(62,224,255,0.12)"><b>Shot 3 <span class="bd ed" style="vertical-align:1px">edits</span></b><small>Gallery · 5.5 s · fade out 1.0 s</small></div>
+</div>
+<div class="lane" style="height: 36px"><span>A1</span>
+<span style="flex: 0 0 52px"></span>
+<div class="clip" style="width:145px;height:36px;border:1px solid var(--ln);background:var(--s2);justify-content:center"><small>line 1 · Mara</small></div>
+<span style="flex: 0 0 72px"></span>
+<div class="clip" style="width:114px;height:36px;border:1px solid var(--ln);background:var(--s2);justify-content:center"><small>line 2</small></div>
+<span style="flex: 0 0 104px"></span>
+<div class="clip" style="width:104px;height:36px;border:1px solid var(--ln);background:var(--s2);justify-content:center"><small>line 3</small></div>
+</div>
+<div class="lane" style="height: 36px"><span>A2</span>
+<div class="clip" style="width:832px;height:36px;border:1px dashed #e8c468;background:rgba(232,196,104,0.10);justify-content:center"><small>Score · out of date · −6 dB</small></div>
+</div>
+<span aria-hidden="true" style="position: absolute; left: 342px; top: 14px; bottom: 0; width: 2px; background: var(--t1); display: block"></span>
+</div></div>
+</main>
+<aside class="side" aria-label="Clip inspector">
+<div style="display:flex;flex-direction:column;gap:4px"><h2>Shot 3</h2><span style="font-size:12px;color:var(--t2)">Clip from Gallery · Magic node "Shot 3"</span></div>
+<div class="kv"><div><span>In</span><b class="mono">0:10.50</b></div><div><span>Out</span><b class="mono">0:16.00</b></div><div><span>Effect</span><b>Fade out · 1.0 s</b></div><div><span>Gain</span><b class="mono">0 dB</b></div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><h3>Edits made here</h3>
+<div class="nr">Trim start<span class="mono">+0.4 s</span></div><div class="nr">Cut at<span class="mono">0:02.1</span></div>
+<p class="note">Edits stay on the clip. In Magic they show as the "edits" badge on its node; a re-run of an upstream node keeps them.</p></div>
+<button class="act">Show in Magic</button>
+</aside>
+</div>
+<div style="padding:0 32px"><p class="note" style="max-width:1100px;font-size:13px;line-height:19px">6 · Tracks, the same sequence with the switch on Tracks. Shots 1 to 3 on V1 with the dissolve, the three voice lines on A1, the Score on A2 (still out of date). Hand edits made here (trim, cut) stay on the clip and show as the "edits" badge on its Magic node. A clip added here by hand shows in Magic as a plain Clip node. Undo steps back through edits from both views.</p></div>
+</section>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":5342}}'>
+class Component extends DCLogic {
+state = { theme: null };
+renderVals() {
+return {
+theme: this.state.theme ?? this.props.theme ?? 'forest',
+setTheme: (e) => this.setState({ theme: e.target.value })
+};
+}
+}
+</script>
+</body>
+</html>
