@@ -4,6 +4,7 @@ import pytest
 from conftest import CONTRACTS, GEN, IMPLS, VALUES, FakeKV
 
 from core import registry
+from core.graph import workflow_sound
 from core.residency import Residency
 from messaging import schemas
 from messaging.hosts import KEY, Host
@@ -22,6 +23,37 @@ def test_fake_registry_values_are_on_contract_and_the_canonical_fixtures():
 
 def test_every_published_node_kind_has_an_implementation():
     assert registry.node_schemas(VALUES).keys() == IMPLS.keys()
+
+
+SOUND = {
+    "ace-step": "music",
+    "minimax-music3": "music",
+    "stable-audio-3": "sound",
+    "mmaudio": "sound",
+}
+
+
+def test_torch_registry_joins_the_four_music_and_sound_families():
+    """Plan 38 P3: one torch runner publishes ACE-Step, MiniMax Music 3, Stable Audio 3 and MMAudio together, on
+    contract; each family's model is its canonical fixture's (the variants' sizes are the host's: the packs' own tests)
+    and every workflow of it is of the model's class (MMAudio's video workflow too: sound)."""
+    pytest.importorskip("torch")
+    values, impls, _ = registry.build("torch")
+    for kind, value in values.items():
+        assert schemas.registry_errors(kind, value) == [], kind
+    assert registry.node_schemas(values).keys() == impls.keys()
+    nodes = registry.node_schemas(values)
+    for fam, cls in SOUND.items():
+        (got,) = [m for m in values["models"]["models"] if m["family"] == fam]
+        (want,) = json.loads(
+            (CONTRACTS / f"fixtures/registry/{fam}.models.valid.json").read_text()
+        )["models"]
+        top = ("id", "family", "title", "media", "runtimes", "sound")
+        assert {k: got.get(k) for k in top} == {k: want.get(k) for k in top} and got["sound"] == cls
+        wfs = [w for w in values["workflows"]["workflows"] if w["family"] == fam]
+        assert wfs and {w["id"]: workflow_sound(w["nodes"], nodes) for w in wfs} == {
+            w["id"]: cls for w in wfs
+        }
 
 
 @pytest.mark.skipif(not CONTRACTS.is_dir(), reason="contracts/ is not next to the service")
