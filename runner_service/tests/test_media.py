@@ -647,3 +647,46 @@ def test_mux_keeps_the_picture_and_fits_the_sound_to_its_length(tmp_path):
         assert info["video"]["codec_name"] == "h264" and info["audio"]["codec_name"] == "aac"
         assert info["audio"]["channels"] == 2 and info["frames"] == 48
         assert abs(float(info["audio"]["duration"]) - 2.0) < 0.1
+
+
+def mux_command(video: str, sound: str) -> dict:
+    cmd = copy.deepcopy(BASE)
+    cmd["data"] = {"kind": "mux", "output_prefix": f"{U}muxes/{BASE['job_id']}/",
+                   "inputs": [{"key": f"{U}{video}", "kind": "video"}, {"key": f"{U}{sound}", "kind": "audio"}]}  # fmt: skip
+    assert schemas.message_errors(cmd) == []
+    return cmd
+
+
+@pytest.mark.parametrize("seconds", [0.5, 5])
+async def test_a_mux_job_keeps_the_picture_with_the_sound_fitted_to_its_length(clips, seconds):
+    """API 1.79 (Save with the video): mux.mp4 with the picture copied, AAC stereo cut or padded to 1 s, its poster
+    (frame 0) and last frame; no thumb (the schema has none for a mux)."""
+    store = store_of(clips, **{"runs/v/1/0.mp4": "t"})
+    store.objects[f"{U}runs/a/1/0.wav"] = (_wav(44100, 2, round(44100 * seconds)), "audio/wav")
+    events = await run(mux_command("runs/v/1/0.mp4", "runs/a/1/0.wav"), store)
+    end = events[-1]["data"]
+    assert end["status"] == "succeeded" and end["encoder"] == "copy"
+    r = end["result"]
+    assert (
+        r["key"].endswith("/mux.mp4")
+        and (r["width"], r["height"]) == (128, 64)
+        and "thumb" not in r
+    )
+    v = r["video"]
+    assert v["frames"] == 25 and v["fps"] == 24 and v["has_audio"]
+    frames = decoded(clips["t"], 128, 64)
+    assert Image.open(io.BytesIO(store.objects[v["poster"]["key"]][0])).tobytes() == frames[0]
+    assert Image.open(io.BytesIO(store.objects[v["last"]["key"]][0])).tobytes() == frames[24]
+    with tempfile.NamedTemporaryFile(suffix=".mp4") as f:
+        f.write(store.objects[r["key"]][0])
+        f.flush()
+        info = media.probe(f.name)
+    assert info["video"]["codec_name"] == "h264" and info["audio"]["codec_name"] == "aac"
+    assert info["audio"]["channels"] == 2 and int(info["audio"]["sample_rate"]) == 48000
+    assert abs(float(info["audio"]["duration"]) - 25 / 24) < 0.1
+
+
+async def test_a_mux_job_whose_sound_is_a_video_fails_input(clips):
+    store = store_of(clips, **{"runs/v/1/0.mp4": "t", "runs/a/1/0.wav": "a"})
+    end = (await run(mux_command("runs/v/1/0.mp4", "runs/a/1/0.wav"), store))[-1]["data"]
+    assert end["status"] == "failed" and end["failure"]["class"] == "input"

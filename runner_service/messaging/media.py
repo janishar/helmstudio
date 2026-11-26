@@ -8,7 +8,9 @@ weight holder.
   `expect` (any fact differs: conform_args), the placeholders substituted and the argument list checked (invalid),
   ffmpeg in its own process group with progress from `-progress pipe:1`, the output verified, poster (a tenth in)
   and last frame written; frame: that exact frame as a PNG (each with its thumbnail, API 1.48); thumbs: each input's
-  thumbnail (README, Thumbnails) → uploads under output_prefix → one terminal status →
+  thumbnail (README, Thumbnails); mux (API 1.79, README Music and sound: Save with the video): the video's picture
+  copied with the audio as its AAC stereo sound fitted to the picture's length, poster at frame 0 and the last frame
+  → uploads under output_prefix → one terminal status →
   ack (after the status is acked). The temp dir is removed on every path. A redelivery starts over."""
 
 import asyncio
@@ -97,6 +99,10 @@ class MediaJobs:
                     await events.publish("status", {"status": "running", "encoder": planned})
                     result, encoder = await self.export(data, events, tmp, cancel)
                     extra = {"encoder": encoder}
+                elif data["kind"] == "mux":
+                    await events.publish("status", {"status": "running", "encoder": "copy"})
+                    result = await self.mux(data, events, tmp, cancel)
+                    extra = {"encoder": "copy"}
                 else:
                     await events.publish("status", {"status": "running"})
                     job = self.thumbs if data["kind"] == "thumbs" else self.frame
@@ -251,6 +257,61 @@ class MediaJobs:
         if reason:
             result["reason"] = reason
         return result, encoder
+
+    async def mux(self, data: dict, events: MediaEvents, tmp: Path, cancel: asyncio.Event) -> dict:
+        """API 1.79: inputs[0]'s picture copied with inputs[1] as its only sound (core.media.mux's arguments, here on
+        files with progress and cancel), mux.mp4 with mux.poster.png (frame 0) and mux.last.png."""
+        (video, sound), (vinfo, _) = await self._fetch(data["inputs"][:2], tmp, cancel)
+        total = vinfo["frames"]
+        if total < 1:
+            raise MediaError("input", "the video has no frames")
+        out = tmp / "mux.mp4"
+        argv = ["-hide_banner", "-nostdin", "-loglevel", "error", "-y", "-progress", "pipe:1", "-nostats",
+                "-protocol_whitelist", "file", "-i", str(video), "-protocol_whitelist", "file", "-i", str(sound),
+                "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-af", "apad", "-c:a", "aac", "-ar", "48000",
+                "-ac", "2", "-shortest", "-movflags", "+faststart", "-f", "mp4", str(out)]  # fmt: skip
+        await self._ffmpeg(argv, total, events, cancel, tmp)
+        if cancel.is_set():
+            raise Cancelled
+        try:
+            info = await asyncio.to_thread(media.probe, out) if out.is_file() else None
+        except MediaError:
+            info = None
+        if info is None or info["video"] is None or info["audio"] is None:
+            raise MediaError("verify", "the output has no picture or no sound")
+        v, frames = info["video"], info["frames"]
+        if abs(frames - total) > 1:
+            raise MediaError("verify", f"the output has {frames} frames, not {total}")
+        prefix, pictures = data["output_prefix"], {}
+        for name, index in (("poster", 0), ("last", frames - 1)):
+            png = tmp / f"{name}.png"
+            try:
+                await asyncio.to_thread(media.frame_png, out, index, png)
+            except MediaError as e:
+                raise MediaError("verify", str(e)) from None
+            key, body = f"{prefix}mux.{name}.png", png.read_bytes()
+            await self.store.put(key, body, "image/png")
+            pictures[name] = {
+                "key": key,
+                "width": v["width"],
+                "height": v["height"],
+                "bytes": len(body),
+            }
+        key = f"{prefix}mux.mp4"
+        size, etag = await self.store.upload(key, out, "video/mp4")
+        fps = float(Fraction(v.get("r_frame_rate", "0/1")))
+        if fps <= 0:
+            raise MediaError("verify", "the output has no frame rate")
+        video = {"duration_s": frames / fps, "fps": fps, "frames": frames, "has_audio": True, **pictures,
+                 "stream": info["stream"]}  # fmt: skip
+        return {
+            "key": key,
+            "width": v["width"],
+            "height": v["height"],
+            "bytes": size,
+            "etag": etag,
+            "video": video,
+        }
 
     @staticmethod
     def verify(out: Path, ex: dict) -> dict:
