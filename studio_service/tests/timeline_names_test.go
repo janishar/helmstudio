@@ -33,6 +33,14 @@ func TestTimelineClone(t *testing.T) {
 	if got := e.call(userA, "GET", "/v1/studio/timelines/"+id, nil, 200); got["revision"] != src["revision"] {
 		t.Fatal("the original is unchanged", got)
 	}
+	// a pending shot is not carried: its slot stays empty in the clone, the original keeps it
+	shot := e.call(userA, "POST", "/v1/studio/timelines/"+id+"/shots", map[string]any{"slot": map[string]any{"at": 0, "length": 1},
+		"run": map[string]any{"workflow_id": "echo-video", "inputs": map[string]any{"prompt.text": "gulls"}}}, 202)
+	pending := e.call(userA, "POST", "/v1/studio/timelines", map[string]any{"from_timeline_id": id}, 201)
+	if got := v1(pending); len(got) != 3 || got[0].(map[string]any)["shot"] != nil || got[0].(map[string]any)["take_id"] != nil ||
+		v1(shot["timeline"].(map[string]any))[0].(map[string]any)["shot"] == nil {
+		t.Fatal(got)
+	}
 	e.call(userB, "POST", "/v1/studio/timelines", map[string]any{"from_timeline_id": id}, 404)
 	if got := e.call(userA, "POST", "/v1/studio/timelines", map[string]any{"from_timeline_id": id, "take_ids": []string{a}}, 422); got["detail"] != "from_timeline_id: target and take_ids are not allowed with it" {
 		t.Fatal(got)
@@ -135,5 +143,13 @@ func TestTimelineNamedByItsShot(t *testing.T) {
 	e.emitTo(group, userA, sessionID, runID, "output", 2, out)
 	if got := e.call(userA, "GET", base, nil, 200); got["name"] != "Old fisherman on a pier" || got["title_source"] != "prompt" {
 		t.Fatal(got)
+	}
+	// a rename wins over a late answer for the shot's own run: no model `session` event reaches an open editor
+	e.call(userA, "PATCH", base, map[string]any{"name": "Pier"}, 200)
+	e.named(group, userA, sessionID, runID, "Late title")
+	for _, item := range e.call(userA, "GET", "/v1/studio/sessions/"+sessionID+"/events?since=0", nil, 200)["events"].([]any) {
+		if ev := item.(map[string]any); ev["type"] == "session" && ev["data"].(map[string]any)["title_source"] == "model" {
+			t.Fatal(ev)
+		}
 	}
 }

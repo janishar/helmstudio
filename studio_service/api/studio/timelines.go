@@ -784,6 +784,12 @@ func (s *Service) PatchTimeline(ctx context.Context, caller common.Caller, id st
 		source, namedBy := row.TitleSource, row.NamedBy
 		if body.Name != nil { // a rename is the user's (API 1.76): the namer never replaces it
 			source, namedBy = "user", nil
+			if row.SessionID != nil { // nor its session's title (a late answer for a shot's run writes no event)
+				if _, err := tx.Exec(ctx, `UPDATE sessions SET title_source = 'user', named_by = NULL WHERE id = $1
+					AND title_source IN ('default', 'prompt')`, *row.SessionID); err != nil {
+					return err
+				}
+			}
 		}
 		updated, err := one[timelineRow](ctx, tx, `UPDATE timelines SET name = $2, defaults = $3, title_source = $4,
 			named_by = $5, updated_at = clock_timestamp() WHERE id = $1 RETURNING `+timelineCols, row.ID, name, defaults,

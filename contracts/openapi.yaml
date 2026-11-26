@@ -2782,7 +2782,7 @@ paths:
       tags: [studio]
       operationId: studioPatchTimeline
       summary: 'Rename, or set the defaults for new shots (no revision; not undone)'
-      description: 'From 1.76 a rename makes `title_source` user (`named_by` null): the namer never replaces it.'
+      description: 'From 1.76 a rename makes `title_source` user (`named_by` null), its session''s too: the namer never replaces it.'
       parameters: [{$ref: '#/components/parameters/TimelineId'}]
       requestBody:
         required: true
