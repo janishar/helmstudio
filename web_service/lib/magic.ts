@@ -219,6 +219,8 @@ function follow(d: Doc, before: Map<string, Block>, moved: Set<string>) {
     ];
     const [a0, e0] = span(was);
     const [a1, e1] = span(is);
+    // its shots stayed put: leave it where the op put it (Insert on its own lane may have pushed it along)
+    if (a0 === a1 && e0 === e1 && was.every((x, i) => x!.at === is[i]!.at)) continue;
     const old = before.get(b.id) ?? b;
     if (l.to.length > 1 && old.at === a0 && end(old) === e0) {
       b.at = a1;
@@ -330,6 +332,8 @@ export function apply(doc: Doc, op: Op): Applied {
       };
       b.length = op.at - b.at;
       d.blocks.push(rest);
+      // the join after it now follows the second part
+      for (const t of d.transitions) if (t.between?.[0] === b.id) t.between = [rest.id, t.between[1]];
       return { doc: tidy(d) };
     }
     case "link": {

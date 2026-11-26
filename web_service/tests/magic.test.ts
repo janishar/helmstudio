@@ -174,6 +174,32 @@ describe("move", () => {
   });
 });
 
+describe("review fixes", () => {
+  it("Insert on a tied line's own lane pushes it along; its tie does not pull it back over the new block", () => {
+    const d = ok(board(), {
+      op: "add",
+      mode: "insert",
+      block: {
+        lane: "lines",
+        at: 9 * S,
+        length: 2 * S,
+        kind: "voice",
+        name: "N",
+        request: { kind: "voice" },
+        takes: [],
+        effects: [],
+      },
+    });
+    expect(span(d, "L")).toEqual([11, 17]);
+  });
+
+  it("split keeps the join after the block on its second part", () => {
+    const withT = ok(board(), { op: "transition", between: ["B", "C"], kind: "dissolve" });
+    const d = ok(withT, { op: "split", id: "B", at: 12 * S });
+    expect(joins(d, "shots").map((j) => j.kind)).toEqual(["cut", "cut", "dissolve"]);
+  });
+});
+
 describe("snap", () => {
   it("to block edges and the playhead within the tolerance, else a whole second on the ruler", () => {
     const d = board();
