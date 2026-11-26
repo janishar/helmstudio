@@ -1,5 +1,6 @@
 {
   "after_run": "keep_pinned",
   "idle_unload_min": 0,
-  "reserve_gb": 4
+  "reserve_gb": 4,
+  "reserve_mode": "auto"
 }

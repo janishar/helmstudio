@@ -2567,7 +2567,10 @@ export interface paths {
          *     reports it in its hosts key (`policy.settings_version`; `HostSettings.applied`). A first PUT creates the row
          *     with no pins. 404 for a host with no present hosts key. 422 `reserve_gb leaves no memory on <host>` (reserve_gb
          *     ≥ the smallest memory the host's keys cut their budget from: `device.memory_total_gb` (VRAM) for a key whose
-         *     `device.kind` is cuda, else `machine.ram_gb`).
+         *     `device.kind` is cuda, else `machine.ram_gb`; from 1.75 not checked when `reserve_mode` is auto). From 1.75
+         *     `reserve_mode` (plan 35): auto = the budget follows the macOS GPU limit when one is set (`machine.gpu_limit_gb`,
+         *     at most RAM − 4 GB), else device memory − RUNNER_RESERVE_GB; custom = device memory − `reserve_gb` (as before).
+         *     Absent on the PUT = unchanged (a new row: custom).
          */
         put: operations["studioAdminPutHostSettings"];
         post?: never;
@@ -4798,6 +4801,8 @@ export interface components {
                 /** @enum {string} */
                 packaging: "native" | "container";
                 ram_gb: number;
+                /** @description from 1.75: the macOS GPU memory limit (sysctl iogpu.wired_limit_mb) when one is set; null when unset, on other hosts and from older runners (absent) */
+                gpu_limit_gb?: number | null;
             };
             admin?: components["schemas"]["HostAdmin"];
         };
@@ -4810,6 +4815,7 @@ export interface components {
                 after_run: components["schemas"]["AfterRun"];
                 idle_unload_min: number;
                 reserve_gb: number;
+                reserve_mode?: components["schemas"]["ReserveMode"];
                 settings_version: number | null;
             } | null;
             /** @description busy: the run released to this env that holds the host (studio's own table); null otherwise */
@@ -7498,9 +7504,15 @@ export interface components {
             after_run: components["schemas"]["AfterRun"];
             /** @description keep_warm: minutes idle before everything but the pins is unloaded; 0 = never */
             idle_unload_min: number;
-            /** @description the host's budget is its RAM (on cuda: its VRAM) minus this */
+            /** @description custom: the host's budget is its RAM (on cuda: its VRAM) minus this; kept in auto (used again on a switch back to custom) */
             reserve_gb: number;
+            reserve_mode?: components["schemas"]["ReserveMode"];
         };
+        /**
+         * @description from 1.75 (plan 35): auto = the macOS GPU limit when set (at most RAM − 4 GB), else device memory − RUNNER_RESERVE_GB; custom = device memory − reserve_gb (the default). Absent = custom (a PUT: unchanged)
+         * @enum {string}
+         */
+        ReserveMode: "auto" | "custom";
         HostPins: {
             pins: components["schemas"]["PinRef"][];
         };
@@ -7510,6 +7522,7 @@ export interface components {
             after_run: components["schemas"]["AfterRun"];
             idle_unload_min: number;
             reserve_gb: number;
+            reserve_mode: components["schemas"]["ReserveMode"];
             pins: components["schemas"]["PinRef"][];
             /** @description every fresh hosts key of the host (but a local server's `server` env, which holds no weights) reports `policy.settings_version` = version */
             applied: boolean;

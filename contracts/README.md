@@ -600,6 +600,13 @@ Qwen Image on CUDA; LTX and the llm pack stay MLX). Multi-GPU in one host is out
 mock's `Linux · CUDA` card: `38.2 of 76 GB`, `reserve 4 GB` on an 80 GB card); the GPU host's env example sets
 `RUNNER_RESERVE_GB=2`. Host RAM has no admin setting in v1 (`RUNNER_RAM_RESERVE_GB` only).
 
+**Automatic budget** (API 1.75, plan 35): the host's `reserve_mode` (`custom` = the table above, the default; `auto`).
+In auto the runner reads the macOS GPU memory limit (`sysctl -n iogpu.wired_limit_mb`; 0 or no such key = unset) at
+start and on each settings change and reports it as `machine.gpu_limit_gb` (null when unset and on other hosts).
+`budget_gb` = min(that limit, RAM − 4) when it is set, else device memory − `RUNNER_RESERVE_GB` (the env default:
+`reserve_gb` is not used, only kept for a switch back to custom). `policy.reserve_mode` says which rule is in effect
+(absent from older runners = custom).
+
 **What admission counts** (The hand-over, per host, unchanged in form):
 - A component's `gb` is its size **in device memory** at its precision, as the host's own runner declares it in its
   models key and hosts value: each runner plans for its own device, so one variant may plan differently on two hosts
@@ -3265,7 +3272,8 @@ studio or the web.
   unload, holds no pins and does not count for `applied`.
 - **Settings are per host** (the board's settings panel "apply to every env on it"; plan 6.2 "one setting per host"):
   `after_run` (unload | keep_warm | keep_pinned, the RUNNER_AFTER_RUN values), `idle_unload_min` (RUNNER_IDLE_UNLOAD_S /
-  60; 0 = never), `reserve_gb` (RUNNER_RESERVE_GB) and `pins`. Studio's table is the truth; on every change (and at
+  60; 0 = never), `reserve_gb` (RUNNER_RESERVE_GB), from API 1.75 `reserve_mode` (auto | custom, Automatic budget
+  above; absent on a PUT = unchanged, a new row custom; studio writes it to the key only for auto) and `pins`. Studio's table is the truth; on every change (and at
   start) studio writes KV bucket `host_settings` key `<host>` (`$defs/settings`, `version` + 1) under the host's lock,
   before the change commits (a failed write is a 503 and stores nothing), so the key never ends on an older version;
   a runner ignores a value whose version is not newer than the one it applied or holds pending. Each runner of the

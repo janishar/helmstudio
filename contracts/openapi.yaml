@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.74.0
+  version: 1.75.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -2617,7 +2617,10 @@ paths:
         reports it in its hosts key (`policy.settings_version`; `HostSettings.applied`). A first PUT creates the row
         with no pins. 404 for a host with no present hosts key. 422 `reserve_gb leaves no memory on <host>` (reserve_gb
         ≥ the smallest memory the host's keys cut their budget from: `device.memory_total_gb` (VRAM) for a key whose
-        `device.kind` is cuda, else `machine.ram_gb`).
+        `device.kind` is cuda, else `machine.ram_gb`; from 1.75 not checked when `reserve_mode` is auto). From 1.75
+        `reserve_mode` (plan 35): auto = the budget follows the macOS GPU limit when one is set (`machine.gpu_limit_gb`,
+        at most RAM − 4 GB), else device memory − RUNNER_RESERVE_GB; custom = device memory − `reserve_gb` (as before).
+        Absent on the PUT = unchanged (a new row: custom).
       parameters: [{$ref: '#/components/parameters/HostName'}]
       requestBody:
         required: true
@@ -4829,6 +4832,7 @@ components:
             accel: {type: string, enum: [metal, cuda, cpu]}
             packaging: {type: string, enum: [native, container]}
             ram_gb: {type: number, minimum: 0}
+            gpu_limit_gb: {type: [number, 'null'], minimum: 0, description: 'from 1.75: the macOS GPU memory limit (sysctl iogpu.wired_limit_mb) when one is set; null when unset, on other hosts and from older runners (absent)'}
         admin: {$ref: '#/components/schemas/HostAdmin'}
     HostAdmin:
       type: object
@@ -4846,6 +4850,7 @@ components:
                 after_run: {$ref: '#/components/schemas/AfterRun'}
                 idle_unload_min: {type: integer, minimum: 0}
                 reserve_gb: {type: number, minimum: 0}
+                reserve_mode: {$ref: '#/components/schemas/ReserveMode'}
                 settings_version: {type: [integer, 'null'], minimum: 1}
             - type: 'null'
           description: 'what this env''s runner applies now (its hosts key''s `policy`); null from a runner that does not report it'
@@ -7247,7 +7252,12 @@ components:
       properties:
         after_run: {$ref: '#/components/schemas/AfterRun'}
         idle_unload_min: {type: integer, minimum: 0, maximum: 1440, description: 'keep_warm: minutes idle before everything but the pins is unloaded; 0 = never'}
-        reserve_gb: {type: number, minimum: 0, maximum: 1024, multipleOf: 0.5, description: 'the host''s budget is its RAM (on cuda: its VRAM) minus this'}
+        reserve_gb: {type: number, minimum: 0, maximum: 1024, multipleOf: 0.5, description: 'custom: the host''s budget is its RAM (on cuda: its VRAM) minus this; kept in auto (used again on a switch back to custom)'}
+        reserve_mode: {$ref: '#/components/schemas/ReserveMode'}
+    ReserveMode:
+      type: string
+      enum: [auto, custom]
+      description: 'from 1.75 (plan 35): auto = the macOS GPU limit when set (at most RAM − 4 GB), else device memory − RUNNER_RESERVE_GB; custom = device memory − reserve_gb (the default). Absent = custom (a PUT: unchanged)'
     HostPins:
       type: object
       required: [pins]
@@ -7255,13 +7265,14 @@ components:
       properties: {pins: {type: array, maxItems: 64, items: {$ref: '#/components/schemas/PinRef'}}}
     HostSettings:
       type: object
-      required: [host, version, after_run, idle_unload_min, reserve_gb, pins, applied, updated_at]
+      required: [host, version, after_run, idle_unload_min, reserve_gb, reserve_mode, pins, applied, updated_at]
       properties:
         host: {type: string}
         version: {type: integer, minimum: 1}
         after_run: {$ref: '#/components/schemas/AfterRun'}
         idle_unload_min: {type: integer, minimum: 0, maximum: 1440}
         reserve_gb: {type: number, minimum: 0}
+        reserve_mode: {$ref: '#/components/schemas/ReserveMode'}
         pins: {type: array, items: {$ref: '#/components/schemas/PinRef'}}
         applied: {type: boolean, description: 'every fresh hosts key of the host (but a local server''s `server` env, which holds no weights) reports `policy.settings_version` = version'}
         updated_at: {type: string, format: date-time}

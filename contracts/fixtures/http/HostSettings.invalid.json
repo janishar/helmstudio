@@ -4,6 +4,7 @@
   "after_run": "keep",
   "idle_unload_min": 10,
   "reserve_gb": 12,
+  "reserve_mode": "custom",
   "pins": [
     {
       "env": "mlx",

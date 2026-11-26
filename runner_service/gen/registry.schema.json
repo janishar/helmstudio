@@ -2670,6 +2670,14 @@
               "type": "number",
               "minimum": 0,
               "description": "physical memory"
+            },
+            "gpu_limit_gb": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0,
+              "description": "from API 1.75: the macOS GPU memory limit (sysctl -n iogpu.wired_limit_mb / 1024) when one is set, read at start and on each settings change; null when unset and on other hosts. Absent from older runners"
             }
           }
         },
@@ -2704,6 +2712,13 @@
               "type": "number",
               "minimum": 0,
               "maximum": 1024
+            },
+            "reserve_mode": {
+              "enum": [
+                "auto",
+                "custom"
+              ],
+              "description": "from API 1.75 (plan 35): auto = budget_gb is the macOS GPU limit when one is set (at most RAM - 4), else device memory - RUNNER_RESERVE_GB; custom = device memory - reserve_gb. Absent (older runners) = custom"
             },
             "settings_version": {
               "type": [
@@ -3451,7 +3466,14 @@
           "type": "number",
           "minimum": 0,
           "maximum": 1024,
-          "description": "memory.budget_gb = machine.ram_gb − reserve_gb"
+          "description": "custom: memory.budget_gb = machine.ram_gb (on cuda: VRAM) − reserve_gb; kept in auto"
+        },
+        "reserve_mode": {
+          "enum": [
+            "auto",
+            "custom"
+          ],
+          "description": "from API 1.75 (plan 35): auto = the macOS GPU limit when one is set (at most RAM − 4), else device memory − RUNNER_RESERVE_GB. Absent = custom (studio writes it only for auto, so an older runner keeps taking custom values)"
         },
         "pins": {
           "type": "array",
