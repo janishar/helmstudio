@@ -122,7 +122,7 @@ func TestMediaInputs(t *testing.T) {
 		offer := u.(map[string]any)
 		offered = append(offered, offer["workflow_id"].(string)+":"+offer["param"].(string))
 	}
-	if strings.Join(offered, " ") != "echo-retake:retake.source echo-a2v:a2v.source echo-extend:extend.source" {
+	if strings.Join(offered, " ") != "echo-sound-video:foley.source echo-retake:retake.source echo-a2v:a2v.source echo-extend:extend.source" {
 		t.Fatal(uses)
 	}
 	e.call(userB, "GET", "/v1/studio/takes/"+video+"/uses", nil, 404)

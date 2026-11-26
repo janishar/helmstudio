@@ -73,6 +73,7 @@ type Model struct {
 	Family   string             `json:"family"`
 	Title    string             `json:"title"`
 	Media    []string           `json:"media"`
+	Sound    string             `json:"sound,omitempty"` // API 1.79: an audio model's class (music, sound, voice)
 	Runtimes []registry.Runtime `json:"runtimes"`
 	Variants []ModelVariant     `json:"variants"`
 	Addons   []ModelAddon       `json:"addons"` // API 1.36
@@ -193,7 +194,7 @@ func (b *ModelFoldersPut) Validate() string {
 	for _, f := range b.Folders {
 		p := strings.TrimRight(f.Path, "/")
 		switch {
-		case p == "" || len(f.Path) > 400 || !(strings.HasPrefix(f.Path, "/") || strings.HasPrefix(f.Path, "~/")):
+		case p == "" || p == "~" || len(f.Path) > 400 || !(strings.HasPrefix(f.Path, "/") || strings.HasPrefix(f.Path, "~/")):
 			return "paths must be absolute or start with ~/"
 		case slices.Contains(strings.Split(p, "/"), "..") || strings.ContainsAny(p, "\x00\n\r"):
 			return f.Path + " is not a plain path"

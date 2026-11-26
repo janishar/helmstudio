@@ -141,6 +141,9 @@ func decodeCursor(text string) (*cursor, bool) {
 // takeOrders are GET /takes's `order` values (API 1.44), the default first.
 var takeOrders = []string{"newest", "oldest", "starred", "name"}
 
+// takeKinds are GET /takes's `kind` values: a take kind, or (API 1.79) a sound class (audio takes of that class).
+var takeKinds = []string{"", "image", "video", "audio", "music", "sound", "voice"}
+
 // takeSources are TakeSource's values (contracts/openapi.yaml): import from 1.16, export and frame from 1.17.
 var takeSources = []string{"create", "upload", "pipeline", "import", "export", "frame"}
 
@@ -148,8 +151,8 @@ var takeSources = []string{"create", "upload", "pipeline", "import", "export", "
 // detail. sessionParam false ignores session_id and batch_id (GET /sessions/{id}/takes sets the session from the path).
 func ParseFilter(query url.Values, sessionParam bool) (Filter, string) {
 	filter := Filter{Limit: 60, Kind: query.Get("kind"), Source: query.Get("source")}
-	if filter.Kind != "" && filter.Kind != "image" && filter.Kind != "video" && filter.Kind != "audio" {
-		return filter, "kind must be image, video or audio"
+	if !slices.Contains(takeKinds, filter.Kind) {
+		return filter, "kind must be image, video, audio, music, sound or voice"
 	}
 	if filter.Source != "" && !slices.Contains(takeSources, filter.Source) {
 		return filter, "source must be " + strings.Join(takeSources[:len(takeSources)-1], ", ") + " or " + takeSources[len(takeSources)-1]
@@ -216,7 +219,11 @@ func (s *Service) List(ctx context.Context, caller common.Caller, filter Filter)
 		}
 		conds = append(conds, cond)
 	}
-	if filter.Kind != "" {
+	switch filter.Kind {
+	case "":
+	case "music", "sound", "voice": // API 1.79: audio takes of that class
+		where(`t.kind = 'audio' AND coalesce(t.sound, 'voice') = $?`, filter.Kind) // null: an audio take written without one
+	default:
 		where(`t.kind = $?`, filter.Kind)
 	}
 	if filter.Source != "" {
@@ -790,6 +797,12 @@ func TakeDTO(signer *common.Signer, row model.Take) dto.Take {
 	}
 	_ = json.Unmarshal(row.MadeWith, &out.MadeWith)
 	_ = json.Unmarshal(row.Audio, &out.Audio) // null leaves them nil
+	if row.Kind == "audio" {                  // API 1.79: always sent on an audio take
+		out.Sound = "voice"
+		if row.Sound != nil {
+			out.Sound = *row.Sound
+		}
+	}
 	_ = json.Unmarshal(row.SourceMap, &out.SourceMap)
 	if out.Parents == nil {
 		out.Parents = []string{}

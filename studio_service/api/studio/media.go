@@ -185,11 +185,12 @@ func checkMedia(ctx context.Context, tx pgx.Tx, store storage.Store, ownerID str
 // snaps them in place: the 422 detail of the first bad one, "" when all are good. Each value fits its param
 // (media_fit) and a trim part lies inside the take within min_s..max_s (in 0, out min(d, max_s) when left out); a rows
 // param's items together keep its max_total_s (API 1.22); a span needs the workflow's one video source (a media
-// param, never a rows item).
+// param, never a rows item), or from API 1.79 without one its one audio source.
 func mediaRules(nodes map[string]registry.Node, schemas map[string]registry.NodeSchema, takes map[string]gallery.MediaTake) string {
 	slots := mediaSlots(nodes, schemas)
-	var source *gallery.MediaTake // the one media param that accepts video: the spans' source
-	sources, total := 0, 0.0
+	// the spans' source: the one media param that accepts video, else (API 1.79) the one that accepts audio
+	var source, heard *gallery.MediaTake
+	sources, heards, total := 0, 0, 0.0
 	for i, slot := range slots {
 		id, _ := slot.Value["take_id"].(string)
 		take, ok := takes[id]
@@ -202,6 +203,9 @@ func mediaRules(nodes map[string]registry.Node, schemas map[string]registry.Node
 		if slot.Rows == "" && slices.Contains(slot.Param.Accepts, "video") { // never an item's field
 			sources++
 			source = &take
+		} else if slot.Rows == "" && slices.Contains(slot.Param.Accepts, "audio") {
+			heards++
+			heard = &take
 		}
 		value, detail := snapMedia(slot.Param, take, slot.Value)
 		if detail != "" {
@@ -223,6 +227,9 @@ func mediaRules(nodes map[string]registry.Node, schemas map[string]registry.Node
 			return fmt.Sprintf("%s: the takes last %.1f s in all; at most %.1f s", slot.Rows, total, slot.Total)
 		}
 		total = 0
+	}
+	if sources == 0 && heards == 1 { // API 1.79: a span on a song (Repaint), snapped to whole milliseconds
+		sources, source = 1, heard
 	}
 	for _, path := range slices.Sorted(maps.Keys(paramsOf(nodes, schemas, "span"))) {
 		id, name, _ := strings.Cut(path, ".")

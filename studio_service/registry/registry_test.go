@@ -1,6 +1,7 @@
 package registry
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
@@ -73,8 +74,11 @@ func TestWorkflows(t *testing.T) {
 		ids = append(ids, w.ID)
 	}
 	if list := r.Workflows(); !slices.Equal(ids, []string{"echo", "echo-a2v", "echo-ask", "echo-dialogue", "echo-extend", "echo-image-to-video",
-		"echo-retake", "echo-tiny", "echo-video", "echo-voice-over"}) || list[2].Media != "text" || !IsText(list[2].Nodes) || IsText(list[0].Nodes) ||
-		list[6].NodeSchemas["echo/retake"].Params[0].Accepts[0] != "video" {
+		"echo-music", "echo-music-extend", "echo-repaint", "echo-retake", "echo-sound", "echo-sound-video", "echo-tiny", "echo-vary",
+		"echo-video", "echo-voice-over"}) || list[2].Media != "text" || !IsText(list[2].Nodes) || IsText(list[0].Nodes) ||
+		list[9].NodeSchemas["echo/retake"].Params[0].Accepts[0] != "video" ||
+		WorkflowSound(list[6].Nodes, list[6].NodeSchemas) != "music" || WorkflowSound(list[11].Nodes, list[11].NodeSchemas) != "sound" ||
+		WorkflowSound(list[15].Nodes, list[15].NodeSchemas) != "voice" { // API 1.79: the class of the node feeding the Audio output
 		t.Fatalf("the echo workflows (echo-ask text), no lost: %v", ids)
 	}
 	if _, ok := r.Workflow("lost"); ok {
@@ -404,5 +408,24 @@ func TestStarterVoiceChecks(t *testing.T) {
 	}, ",")+`]}`))
 	if got := r.Voices(now); len(got) != 1 || got["echo/ok"].Name != "Ada" {
 		t.Fatalf("%+v", got)
+	}
+}
+
+// API 1.79: an int's or float's `auto: true` reads and writes back as true; a frames param's bounds as before.
+func TestAutoZero(t *testing.T) {
+	var p Param
+	if err := json.Unmarshal([]byte(`{"name": "bpm", "type": "int", "default": 0, "auto": true}`), &p); err != nil ||
+		p.Auto == nil || !p.Auto.Zero {
+		t.Fatal(p.Auto, err)
+	}
+	if out, _ := json.Marshal(p.Auto); string(out) != "true" {
+		t.Fatal(string(out))
+	}
+	if err := json.Unmarshal([]byte(`{"name": "frames", "type": "frames", "default": 9, "auto": {"min_s": 1, "max_s": 5}}`), &p); err != nil ||
+		p.Auto.Zero || p.Auto.MaxS != 5 {
+		t.Fatal(p.Auto, err)
+	}
+	if out, _ := json.Marshal(p.Auto); string(out) != `{"min_s":1,"max_s":5}` {
+		t.Fatal(string(out))
 	}
 }

@@ -141,6 +141,7 @@ type Take struct {
 	Export  json.RawMessage `json:"export,omitempty"`
 	// API 1.19: an audio take's length; a video made from a media take: how it lines up with that take
 	Audio     *AudioInfo `json:"audio,omitempty"`
+	Sound     string     `json:"sound,omitempty"` // API 1.79, kind audio only: music, sound or voice
 	SourceMap *SourceMap `json:"source_map,omitempty"`
 	// API 1.70, source tool: the plugin tool that made it {plugin, tool, input}
 	Tool json.RawMessage `json:"tool,omitempty"`
@@ -153,7 +154,20 @@ type AudioInfo struct {
 	SampleRate *int    `json:"sample_rate,omitempty"`
 	// API 1.32, a dialogue's take only: one cue per line, in order, in the take's own seconds
 	Cues []AudioCue `json:"cues,omitempty"`
+	// API 1.79 (contracts/README.md, Music and sound): 2 for a stereo WAV (absent: mono), a song's sections in order
+	Channels *int           `json:"channels,omitempty"`
+	Sections []AudioSection `json:"sections,omitempty"`
 }
+
+// AudioSection is one part of a song in its take (API 1.79, defs section): its lyrics tag and [start_s, end_s).
+type AudioSection struct {
+	Label  string  `json:"label"`
+	StartS float64 `json:"start_s"`
+	EndS   float64 `json:"end_s"`
+}
+
+// SoundClasses are SoundClass's values (API 1.79): what an audio take or workflow is.
+var SoundClasses = []string{"music", "sound", "voice"}
 
 // AudioCue is one dialogue line's place in its take (API 1.32, defs cue).
 type AudioCue struct {
@@ -351,6 +365,7 @@ type UploadCreate struct {
 	ContentType string   `json:"content_type"`
 	Bytes       int64    `json:"bytes"`
 	DurationS   *float64 `json:"duration_s"` // audio only (required): its length as the browser decoded it
+	Sound       string   `json:"sound"`      // API 1.79, audio only: its class (absent: voice)
 	unknown     string
 }
 
@@ -363,7 +378,7 @@ func (b *UploadCreate) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, (*plain)(b)); err != nil {
 		return err
 	}
-	b.unknown = unknownField(data, "filename", "content_type", "bytes", "duration_s")
+	b.unknown = unknownField(data, "filename", "content_type", "bytes", "duration_s", "sound")
 	return nil
 }
 
@@ -386,6 +401,10 @@ func (b *UploadCreate) Validate() string {
 		return "duration_s is required for audio"
 	case b.Audio() && *b.DurationS > MaxAudioS:
 		return "audio is longer than 600 s"
+	case b.Sound != "" && !b.Audio():
+		return "only audio has a sound class"
+	case b.Sound != "" && !slices.Contains(SoundClasses, b.Sound):
+		return "sound must be music, sound or voice"
 	}
 	return ""
 }

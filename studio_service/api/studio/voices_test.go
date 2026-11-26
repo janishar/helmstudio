@@ -52,10 +52,19 @@ func TestVoiceMediaFixtures(t *testing.T) {
 	schemas := paletteSchemas(t)
 	workflows, cases := voiceFixture[struct {
 		Description, Workflow, Expect string
+		Sound                         json.RawMessage // API 1.79: the class (null: none), when the case names it
 	}](t, "media.json")
 	for _, c := range cases {
 		if got := workflowMedia(workflows[c.Workflow], schemas); got != c.Expect {
 			t.Errorf("%s: got %s, want %s", c.Description, got, c.Expect)
+		}
+		if c.Sound == nil {
+			continue
+		}
+		var want string
+		_ = json.Unmarshal(c.Sound, &want)
+		if got := registry.WorkflowSound(workflows[c.Workflow], schemas); got != want {
+			t.Errorf("%s: sound %q, want %q", c.Description, got, want)
 		}
 	}
 }

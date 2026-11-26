@@ -30,6 +30,7 @@ type MediaTake struct {
 	Frames    int     `json:"frames"`
 	DurationS float64 `json:"duration_s"`
 	HasAudio  bool    `json:"has_audio"`
+	Sound     string  `json:"sound,omitempty"` // API 1.79, an audio take's class (FactsOf; "" for Facts)
 }
 
 // Facts reads a take row's media facts: a video's from takes.video, an audio take's length from takes.audio.
@@ -48,9 +49,13 @@ func Facts(id, kind string, width, height *int, video, audio json.RawMessage) Me
 	return out
 }
 
-// FactsOf is Facts of a gallery row.
+// FactsOf is Facts of a gallery row, with (API 1.79) an audio take's class (null: voice).
 func FactsOf(row model.Take) MediaTake {
-	return Facts(row.ID, row.Kind, row.Width, row.Height, row.Video, row.Audio)
+	out := Facts(row.ID, row.Kind, row.Width, row.Height, row.Video, row.Audio)
+	if row.Kind == "audio" {
+		out.Sound = cmp.Or(deref(row.Sound), "voice")
+	}
+	return out
 }
 
 func deref[T any](p *T) T {
@@ -116,10 +121,13 @@ func ExtendRoom(t MediaTake, rng *[2]float64) (map[string]any, bool) {
 // Offers is "Use in…" (take_uses): every workflow, in the order given, with exactly one input of the take's sort that
 // counts (Counts) (an image: an image param or Image rows; a video or audio take: a media param
 // whose accepts names its kind, or audio for a video with sound) that the take fits, with the inputs pre-filled. rng:
-// (in, out) in the take's own seconds (a Timeline clip or selection), nil = the whole take.
+// (in, out) in the take's own seconds (a Timeline clip or selection), nil = the whole take. From API 1.79
+// (contracts/README.md, Music and sound) a workflow with a sound class takes a take as sound into a media param only
+// when it is an audio take of that class (a video's sound never; rows take any class).
 func Offers(t MediaTake, workflows []registry.Workflow, rng *[2]float64) []dto.TakeOffer {
 	out := []dto.TakeOffer{}
 	for _, wf := range workflows {
+		class := registry.WorkflowSound(wf.Nodes, wf.NodeSchemas)
 		type at struct {
 			node string
 			p    registry.Param
@@ -132,7 +140,8 @@ func Offers(t MediaTake, workflows []registry.Workflow, rng *[2]float64) []dto.T
 				}
 				_, image := p.ImageInput()
 				_, field, rows := registry.MediaRowsField(p)
-				if (t.Kind == "image" && image) || (t.Kind != "image" && p.Type == "media" &&
+				byClass := class == "" || slices.Contains(p.Accepts, "video") || t.Sound == class // API 1.79
+				if (t.Kind == "image" && image) || (t.Kind != "image" && p.Type == "media" && byClass &&
 					(slices.Contains(p.Accepts, t.Kind) || (t.Kind == "video" && slices.Contains(p.Accepts, "audio")))) ||
 					// API 1.32: rows of one media field, by the take's own kind only
 					(t.Kind != "image" && rows && slices.Contains(field.Accepts, t.Kind)) {
@@ -264,7 +273,8 @@ func mediaInputs(t MediaTake, wf registry.Workflow, p registry.Param, path strin
 		ref["in"], ref["out"] = a, end
 	}
 	inputs := map[string]any{path: ref}
-	if t.Kind != "video" || !slices.Contains(p.Accepts, "video") {
+	picture := t.Kind == "video" && slices.Contains(p.Accepts, "video")
+	if !picture && (t.Kind != "audio" || !slices.Contains(p.Accepts, "audio")) { // API 1.79: a span on audio too
 		return inputs, true
 	}
 	for _, id := range slices.Sorted(maps.Keys(wf.Nodes)) {
@@ -273,7 +283,8 @@ func mediaInputs(t MediaTake, wf registry.Workflow, p registry.Param, path strin
 				inputs[id+"."+q.Name] = map[string]any{"start": a, "end": b}
 			}
 		}
-		if !strings.HasSuffix(wf.Nodes[id].Kind, "/extend") { // ltx/extend, the fake echo/extend
+		// ltx/extend, the fake echo/extend: the room is a video source's rule (API 1.79: never an audio extend's)
+		if !picture || !strings.HasSuffix(wf.Nodes[id].Kind, "/extend") {
 			continue
 		}
 		room, ok := ExtendRoom(t, rng)

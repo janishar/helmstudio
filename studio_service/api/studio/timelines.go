@@ -1394,6 +1394,9 @@ func (s *Service) ClipActions(ctx context.Context, caller common.Caller, id, cli
 		}
 	}
 	for _, o := range gallery.Offers(take, workflows, &rng) {
+		if o.Media == "audio" { // API 1.79: a video clip's actions make videos (Add sound waits: plan 38 44.10.13)
+			continue
+		}
 		out.Actions = append(out.Actions, timeline.Action{TakeOffer: o})
 	}
 	return out, nil

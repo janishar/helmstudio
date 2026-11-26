@@ -36,8 +36,11 @@ type Param struct {
 	Item    map[string]json.RawMessage `json:"item,omitempty"`
 	Mention string                     `json:"mention,omitempty"` // rows only: how the prompt names item n, e.g. <image{n}>
 	FPS     string                     `json:"fps,omitempty"`     // frames only: the same node's frame-rate param
-	// frames only: present = the value "auto" is allowed (the model predicts the length within min_s..max_s)
+	// frames only: present = the value "auto" is allowed (the model predicts the length within min_s..max_s); from
+	// API 1.79 an int's or float's `auto: true` (Auto.Zero): the value 0 means Auto, allowed below min
 	Auto *Auto `json:"auto,omitempty"`
+	// text only (API 1.79): the lyrics tag chips over the field, served as is
+	Tags []string `json:"tags,omitempty"`
 	// int only: the only allowed values; ValuesBy narrows them (from API 1.39 an enum's too) per value of an enum param
 	// of the same node or, from 1.39, of another node ("model.variant")
 	Values   []int64   `json:"values,omitempty"`
@@ -98,10 +101,31 @@ func (p Param) ValueAddons(value string, wired func(string) bool) []string {
 	return p.Addons[value]
 }
 
-// Auto is a frames param's auto length bounds in seconds.
+// Auto is a frames param's auto length bounds in seconds, or (API 1.79, JSON `true`) an int's or float's Auto: 0.
 type Auto struct {
 	MinS float64 `json:"min_s"`
 	MaxS float64 `json:"max_s"`
+	Zero bool    `json:"-"`
+}
+
+// UnmarshalJSON reads `true` (an int's or float's Auto) or the frames bounds.
+func (a *Auto) UnmarshalJSON(b []byte) error {
+	if string(b) == "true" {
+		*a = Auto{Zero: true}
+		return nil
+	}
+	type bounds Auto
+	*a = Auto{}
+	return json.Unmarshal(b, (*bounds)(a))
+}
+
+// MarshalJSON writes it back as it came.
+func (a Auto) MarshalJSON() ([]byte, error) {
+	if a.Zero {
+		return []byte("true"), nil
+	}
+	type bounds Auto
+	return json.Marshal(bounds(a))
 }
 
 // ValuesBy is an int's (from API 1.39 an enum's) allowed values per value of enum param Param: the node's own, or
@@ -247,8 +271,10 @@ type NodeSchema struct {
 	Addons []string `json:"addons,omitempty"`
 	Phases []Phase  `json:"phases,omitempty"`
 	// API 1.47: a native stage's peak_gb formula (studio plans its runs by it) and its references' sound limits
-	PeakGB  string  `json:"peak_gb,omitempty"`
-	Sounds  *Sounds `json:"sounds,omitempty"`
+	PeakGB string  `json:"peak_gb,omitempty"`
+	Sounds *Sounds `json:"sounds,omitempty"`
+	// API 1.79 (contracts/README.md, Music and sound): a node with an Audio output: its sound class (Workflow.sound)
+	Sound   string  `json:"sound,omitempty"`
 	Params  []Param `json:"params"`
 	Inputs  []Port  `json:"inputs"`
 	Outputs []Port  `json:"outputs"`
@@ -512,6 +538,7 @@ type Model struct {
 	Variants []Variant  `json:"variants"` // absent for a model without variants (echo)
 	Lora     *LoraBlock `json:"lora,omitempty"`
 	Media    []string   `json:"media,omitempty"`    // API 1.16
+	Sound    string     `json:"sound,omitempty"`    // API 1.79: an audio model's class (music, sound, voice)
 	Runtimes []Runtime  `json:"runtimes,omitempty"` // API 1.16: every runtime of the pack
 	Addons   []Addon    `json:"addons,omitempty"`   // API 1.36: its optional add-ons on the host
 	// API 1.39: the components the model node's compute applies to (absent: it applies to none here)
@@ -1573,4 +1600,23 @@ func set[V any](m *map[string]V, key string, value V) {
 		*m = map[string]V{}
 	}
 	(*m)[key] = value
+}
+
+// WorkflowSound is a graph's sound class (API 1.79, contracts/README.md "Music and sound"; check.py workflow_sound):
+// the `sound` of the first node, in output node id order, whose Audio output an output node takes; "" without one.
+func WorkflowSound(nodes map[string]Node, schemas map[string]NodeSchema) string {
+	for _, id := range slices.Sorted(maps.Keys(nodes)) {
+		ref, ok := nodes[id].In["media"]
+		if nodes[id].Kind != "output" || !ok {
+			continue
+		}
+		srcID, out, _ := strings.Cut(ref, ".")
+		schema := schemas[nodes[srcID].Kind]
+		for _, port := range schema.Outputs {
+			if port.Name == out && port.Type == "Audio" && schema.Sound != "" {
+				return schema.Sound
+			}
+		}
+	}
+	return ""
 }

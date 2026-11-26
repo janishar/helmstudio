@@ -1,6 +1,7 @@
 package gallery
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -66,9 +67,9 @@ func (s *Service) CreatePluginTake(ctx context.Context, caller common.Caller, bo
 	now := time.Now().UTC()
 	wait := importWait{CreatedAt: now, Width: body.Width, Height: body.Height, Video: body.Video}
 	tool, _ := json.Marshal(map[string]any{"plugin": caller.Plugin, "tool": body.Tool, "input": body.Input, "call": caller.Call})
-	var audio any
+	var audio, sound any
 	if body.Kind == "audio" {
-		audio = dto.AudioInfo{DurationS: body.DurationS}
+		audio, sound = dto.AudioInfo{DurationS: body.DurationS}, cmp.Or(body.Sound, "voice") // API 1.79: its class
 	}
 	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
 		var n int
@@ -80,8 +81,8 @@ func (s *Service) CreatePluginTake(ctx context.Context, caller common.Caller, bo
 			return errNotFound
 		}
 		if _, err := tx.Exec(ctx, `INSERT INTO takes (id, owner_id, kind, source, title, key, content_type, bytes, ready,
-			import_wait, tool, audio) VALUES ($1, $2, $3, 'tool', $4, $5, $6, $7, false, $8, $9, $10)`,
-			id, caller.ID, body.Kind, body.Title, key, body.ContentType, body.Bytes, wait, tool, audio); err != nil {
+			import_wait, tool, audio, sound) VALUES ($1, $2, $3, 'tool', $4, $5, $6, $7, false, $8, $9, $10, $11)`,
+			id, caller.ID, body.Kind, body.Title, key, body.ContentType, body.Bytes, wait, tool, audio, sound); err != nil {
 			return err
 		}
 		for i, parent := range body.Parents {

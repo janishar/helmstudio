@@ -2,6 +2,7 @@ package gallery
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/md5"
 	"encoding/binary"
@@ -46,14 +47,15 @@ func (s *Service) CreateUpload(ctx context.Context, caller common.Caller, body *
 	id := utility.NewID()
 	key := common.OwnerPrefix(caller.ID) + "uploads/" + id + "." + dto.UploadTypes[body.ContentType]
 	var expiry time.Time
-	kind, audio := "image", (*dto.AudioInfo)(nil)
+	kind, audio, sound := "image", (*dto.AudioInfo)(nil), (*string)(nil)
 	if body.Audio() { // API 1.19: its length as declared; the runner reads the file itself
-		kind, audio = "audio", &dto.AudioInfo{DurationS: *body.DurationS}
+		class := cmp.Or(body.Sound, "voice") // API 1.79: the tab's or filter's class
+		kind, audio, sound = "audio", &dto.AudioInfo{DurationS: *body.DurationS}, &class
 	}
 	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
-		err := tx.QueryRow(ctx, `INSERT INTO takes (id, owner_id, kind, source, title, key, content_type, bytes, ready, audio)
-			VALUES ($1, $2, $3, 'upload', $4, $5, $6, $7, false, $8) RETURNING created_at`,
-			id, caller.ID, kind, body.Title(), key, body.ContentType, body.Bytes, audio).Scan(&expiry)
+		err := tx.QueryRow(ctx, `INSERT INTO takes (id, owner_id, kind, source, title, key, content_type, bytes, ready, audio, sound)
+			VALUES ($1, $2, $3, 'upload', $4, $5, $6, $7, false, $8, $9) RETURNING created_at`,
+			id, caller.ID, kind, body.Title(), key, body.ContentType, body.Bytes, audio, sound).Scan(&expiry)
 		expiry = expiry.Add(UploadLink)
 		return err
 	})

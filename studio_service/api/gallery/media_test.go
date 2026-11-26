@@ -22,11 +22,15 @@ func asJSON(t *testing.T, v any) any {
 	return out
 }
 
-// The ltx, qwen-image, minimax-h3-image and minimax-h3 templates with their schemas, as check.py check_media reads them.
-func mediaWorkflows(t *testing.T) []registry.Workflow {
+// The ltx, qwen-image, minimax-h3-image and minimax-h3 templates with their schemas, as check.py check_media reads them,
+// or (API 1.79) the registries a case names ("" is echo's).
+func mediaWorkflows(t *testing.T, families ...string) []registry.Workflow {
 	dir := filepath.Join("..", "..", "..", "contracts", "fixtures", "registry")
 	var out []registry.Workflow
-	for _, family := range []string{"ltx.", "qwen-image.", "minimax-h3-image.", "minimax-h3."} {
+	if families == nil {
+		families = []string{"ltx.", "qwen-image.", "minimax-h3-image.", "minimax-h3."}
+	}
+	for _, family := range families {
 		var nodes struct{ Nodes []registry.NodeSchema }
 		var workflows struct{ Workflows []registry.Workflow }
 		for name, into := range map[string]any{"nodes": &nodes, "workflows": &workflows} {
@@ -58,6 +62,7 @@ func TestUsesFixtures(t *testing.T) {
 			Description string
 			Take        string
 			Range       *[2]float64
+			Registries  []string
 			Param       *registry.Param
 			Expect      json.RawMessage
 		}
@@ -73,7 +78,11 @@ func TestUsesFixtures(t *testing.T) {
 	for _, c := range fx.Cases {
 		take := fx.Takes[c.Take]
 		take.ID = c.Take
-		var got any = map[string]any{"uses": Offers(take, workflows, c.Range)}
+		wfs := workflows
+		if c.Registries != nil {
+			wfs = mediaWorkflows(t, c.Registries...)
+		}
+		var got any = map[string]any{"uses": Offers(take, wfs, c.Range)}
 		if c.Param != nil {
 			var fit any
 			if text := MediaFit(*c.Param, take); text != "" {

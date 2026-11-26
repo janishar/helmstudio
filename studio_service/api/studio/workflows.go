@@ -82,7 +82,8 @@ func templateDoc(workflow registry.Workflow) dto.WorkflowDoc {
 // templateDTO maps a template (its media as published); problems nil leaves them out.
 func (s *Service) templateDTO(workflow registry.Workflow, problems *[]dto.Problem) dto.Workflow {
 	return dto.Workflow{ID: workflow.ID, Title: workflow.Title, Action: workflow.Action, Family: workflow.Family, Env: workflow.Env,
-		Media: cmp.Or(workflow.Media, "image"), Nodes: workflow.Nodes, NodeSchemas: workflow.NodeSchemas, Source: "template",
+		Media: cmp.Or(workflow.Media, "image"), Sound: registry.WorkflowSound(workflow.Nodes, workflow.NodeSchemas),
+		Nodes: workflow.Nodes, NodeSchemas: workflow.NodeSchemas, Source: "template",
 		Studio: templateDoc(workflow).Studio, Problems: problems,
 		Keyframes: timeline.ShotKeyframes(workflow.Nodes, workflow.NodeSchemas, templateDoc(workflow).Studio.FrameParams())}
 }
@@ -92,7 +93,7 @@ func (s *Service) mineDTO(row model.UserWorkflow, problems *[]dto.Problem) dto.W
 	doc := rowDoc(row)
 	schemas := s.schemasOf(doc.Nodes)
 	return dto.Workflow{ID: row.ID, Title: doc.Title, Family: doc.Family, Env: doc.Env, Nodes: doc.Nodes,
-		Media: workflowMedia(doc.Nodes, schemas), NodeSchemas: schemas, Source: "mine", Studio: doc.Studio, BasedOn: row.BasedOn,
+		Media: workflowMedia(doc.Nodes, schemas), Sound: registry.WorkflowSound(doc.Nodes, schemas), NodeSchemas: schemas, Source: "mine", Studio: doc.Studio, BasedOn: row.BasedOn,
 		Version: &row.Version, CreatedAt: &row.CreatedAt, UpdatedAt: &row.UpdatedAt, Problems: problems,
 		Keyframes: timeline.ShotKeyframes(doc.Nodes, schemas, doc.Studio.FrameParams())}
 }
@@ -195,11 +196,20 @@ func (s *Service) ListWorkflows(ctx context.Context, caller common.Caller, sourc
 	if source != "" && source != "template" && source != "mine" {
 		return out, network.NewUnprocessableError("source must be template or mine", nil)
 	}
-	if media != "" && media != "image" && media != "video" && media != "audio" {
-		return out, network.NewUnprocessableError("media must be image, video or audio", nil)
+	if !slices.Contains([]string{"", "image", "video", "audio", "music", "sound", "voice"}, media) {
+		return out, network.NewUnprocessableError("media must be image, video, audio, music, sound or voice", nil)
+	}
+	fits := func(workflow dto.Workflow) bool { // API 1.79: a class is audio of that class (no class counts as voice)
+		switch media {
+		case "", workflow.Media:
+			return true
+		case "music", "sound", "voice":
+			return workflow.Media == "audio" && cmp.Or(workflow.Sound, "voice") == media
+		}
+		return false
 	}
 	keep := func(workflow dto.Workflow) {
-		if workflow.Media != "text" && (media == "" || workflow.Media == media) { // text workflows are internal
+		if workflow.Media != "text" && fits(workflow) { // text workflows are internal
 			out.Workflows = append(out.Workflows, workflow)
 		}
 	}

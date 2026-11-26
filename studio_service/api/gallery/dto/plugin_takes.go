@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -45,6 +46,7 @@ type PluginTakeCreate struct {
 	Width       int             `json:"width"`
 	Height      int             `json:"height"`
 	DurationS   float64         `json:"duration_s"`
+	Sound       string          `json:"sound"` // API 1.79, an audio take's class (absent: voice)
 	Video       *ImportVideo    `json:"video"`
 	unknown     string
 }
@@ -56,7 +58,7 @@ func (b *PluginTakeCreate) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	b.unknown = unknownField(data, "parents", "tool", "input", "title", "kind", "content_type", "bytes", "width",
-		"height", "duration_s", "video")
+		"height", "duration_s", "video", "sound")
 	return nil
 }
 
@@ -66,6 +68,10 @@ func (b *PluginTakeCreate) Validate() string {
 	switch {
 	case b.unknown != "":
 		return b.unknown + ": not a field of PluginTakeCreate"
+	case b.Sound != "" && b.Kind != "audio": // API 1.79
+		return "only audio has a sound class"
+	case b.Sound != "" && !slices.Contains(SoundClasses, b.Sound):
+		return "sound must be music, sound or voice"
 	case len(b.Parents) < 1 || len(b.Parents) > 8:
 		return "parents: 1 to 8 take ids"
 	case !toolNameRe.MatchString(b.Tool):

@@ -188,7 +188,14 @@ func TestWorkflowMediaAndFrames(t *testing.T) {
 	if got := ids("?media=image"); slices.Contains(got, "ltx-text-to-video:video") || !slices.Contains(got, "qwen-image:image") {
 		t.Fatal(got)
 	}
-	if got := e.call(userA, "GET", "/v1/studio/workflows?media=sound", nil, 422); got["detail"] != "media must be image, video or audio" {
+	if got := e.call(userA, "GET", "/v1/studio/workflows?media=song", nil, 422); got["detail"] != "media must be image, video, audio, music, sound or voice" {
+		t.Fatal(got)
+	}
+	// API 1.79: a sound class keeps the audio workflows of that class (echo-sound-video's Video output does not count)
+	if got := ids("?media=sound"); !slices.Equal(got, []string{"echo-sound-video:audio", "echo-sound:audio", "echo-vary:audio"}) {
+		t.Fatal(got)
+	}
+	if got := ids("?media=music"); !slices.Equal(got, []string{"echo-music-extend:audio", "echo-music:audio", "echo-repaint:audio"}) {
 		t.Fatal(got)
 	}
 

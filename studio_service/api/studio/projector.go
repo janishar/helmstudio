@@ -220,10 +220,16 @@ func (p *Projector) applyOutput(ctx context.Context, tx pgx.Tx, run model.Run, e
 		th.Width < 1 || th.Height < 1 || th.Bytes < 1) {
 		data.Thumb = nil // API 1.48: only <prefix><index>.thumb.webp of an image or a video (README, Thumbnails)
 	}
+	var sound string // API 1.79: an audio take's class is its workflow's (contracts/README.md, Music and sound)
+	if data.Kind == "audio" {
+		var graph map[string]registry.Node
+		_ = json.Unmarshal(run.Nodes, &graph)
+		sound = registry.WorkflowSound(graph, p.Workflows.Schemas())
+	}
 	takeID, err := gallery.Record(ctx, tx, gallery.Output{OwnerID: run.OwnerID, SessionID: run.SessionID, RunID: run.ID,
 		Index: data.Index, Key: data.Key, Kind: data.Kind, Width: data.Width, Height: data.Height, Bytes: data.Bytes,
 		Etag: data.Etag, MadeWith: made, BatchID: run.BatchID, Parents: lineage, Video: data.Video, SourceMap: data.SourceMap,
-		Audio: data.Audio, Thumb: data.Thumb})
+		Audio: data.Audio, Thumb: data.Thumb, Sound: sound})
 	if err == nil && data.Index == 0 {
 		err = fillShot(ctx, tx, run, takeID) // API 1.17: the run's first take fills its slot
 		if err == nil {
@@ -307,6 +313,17 @@ func badAudio(data message.Output) bool {
 			return true
 		}
 		end = c.EndS
+	}
+	if a.Channels != nil && *a.Channels != 1 && *a.Channels != 2 || len(a.Sections) > 40 { // API 1.79
+		return true
+	}
+	end = 0 // API 1.79: a song's sections in order, each inside the take, never overlapping
+	for _, s := range a.Sections {
+		if s.Label == "" || utf8.RuneCountInString(s.Label) > 40 || s.StartS < end-1e-6 || s.EndS <= s.StartS ||
+			s.EndS > a.DurationS+1e-6 {
+			return true
+		}
+		end = s.EndS
 	}
 	return false
 }

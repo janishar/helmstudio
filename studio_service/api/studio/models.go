@@ -135,7 +135,7 @@ func buildModels(values []registry.Host, published map[string]registry.Published
 	}
 	used := map[string]bool{}
 	for id, m := range described {
-		model := dto.Model{ID: id, Family: m.Family, Title: m.Title, Media: orEmpty(m.Media),
+		model := dto.Model{ID: id, Family: m.Family, Title: m.Title, Media: orEmpty(m.Media), Sound: m.Sound,
 			Runtimes: orEmpty(m.Runtimes), Variants: []dto.ModelVariant{}, Addons: []dto.ModelAddon{}}
 		for _, vid := range variantIDs[id] {
 			var desc registry.Variant
