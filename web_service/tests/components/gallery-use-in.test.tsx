@@ -95,4 +95,44 @@ describe("Gallery: Use in…", () => {
     const link = within((await useIn()).parentElement!).getByRole("link");
     expect(link.getAttribute("href")).toBe(`/?use=${b.id}&w=qwen-edit`);
   });
+
+  it("a music take: its cover, the Song row, Lyrics, and Repaint · Cover · Extend apart from Use in…", async () => {
+    const t = take({
+      title: "Rain on the window",
+      kind: "audio",
+      sound: "music",
+      content_type: "audio/wav",
+      width: null,
+      height: null,
+      audio: { duration_s: 130 },
+      made_with: {
+        workflow_id: "ace",
+        workflow_title: "ACE-Step 1.5",
+        prompt: "warm lo-fi",
+        seed: 31,
+        model: null,
+        inputs: { "music.bpm": 90, "music.key": "A minor", "music.lyrics": "[verse]\nla la" },
+      },
+    });
+    serve({
+      [t.id]: [
+        offer({ workflow_id: "ace-repaint", action: "Repaint", title: "ACE-Step", media: "audio" }),
+        offer({ workflow_id: "ace-cover", action: "Cover", title: "ACE-Step", media: "audio" }),
+        offer({ workflow_id: "ace-extend", action: "Extend", title: "ACE-Step", media: "audio" }),
+        offer({ workflow_id: "ltx-a2v", action: "Audio to video", title: "LTX" }),
+      ],
+    });
+    render(<Gallery initial={page(t)} />);
+    const panel = screen.getByRole("complementary", { name: "Selected take" });
+    expect(panel.querySelector('[data-sound="music"]')).toBeTruthy();
+    expect(within(panel).getByText("2:10 · 90 BPM · A minor")).toBeTruthy();
+    expect(within(panel).getByText("Lyrics")).toBeTruthy();
+    const links = within((await useIn()).parentElement!).getAllByRole("link");
+    expect(links.map((l) => l.textContent)).toEqual(["Audio to video · LTX"]);
+    const edits = ["Repaint", "Cover", "Extend"].map((n) =>
+      within(panel).getByRole("link", { name: n }),
+    );
+    expect(edits[1].getAttribute("href")).toBe(`/?use=${t.id}&w=ace-cover`);
+    expect(within(panel).queryByRole("button", { name: "Save as look" })).toBeNull();
+  });
 });

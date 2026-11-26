@@ -112,6 +112,12 @@ describe("the Gallery's actions", () => {
       text: "Filtered: Video · Starred",
     });
     await waitFor(() => expect(queries.at(-1)).toMatchObject({ kind: "video", starred: true }));
+    expect(out(await call("filter", { kind: "music" }))).toMatchObject({ text: "Filtered: Music" });
+    await waitFor(() => expect(queries.at(-1)).toMatchObject({ kind: "music" }));
+    expect(screen.getByRole("button", { name: "Music" }).getAttribute("aria-pressed")).toBe("true");
+    expect(out(await call("filter", { kind: "video", starred: true }))).toMatchObject({
+      text: "Filtered: Video · Starred",
+    });
     expect(out(await call("filter", { source: "nowhere" }))).toMatchObject({ status: "failed" });
     const o = await call("sort", { order: "oldest" });
     expect(out(o)).toMatchObject({ text: "Sorted: Oldest" });

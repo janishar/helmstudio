@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   ArrowRight,
+  AudioLines,
   Check,
   Download,
   FileText,
@@ -14,11 +15,13 @@ import {
   Maximize,
   Palette,
   Pencil,
+  Play as PlayIcon,
   Plus,
   RotateCcw,
   Star,
   Trash2,
   UserRound,
+  Wand2,
   Workflow,
   X,
 } from "lucide-react";
@@ -58,7 +61,12 @@ import {
   appendPage,
   fits,
   lastProject,
+  lyricsOf,
   sizeSeed,
+  songLine,
+  soundOf,
+  soundTakeOf,
+  splitOffers,
   subLine,
   takeQuery,
   templateLine,
@@ -79,11 +87,15 @@ type Upload = {
 /** A page of the grid. */
 export const PAGE = 60;
 
-const KINDS: [S<"TakeKind">, string][] = [
+/** API 1.79 (docs/mock/CreateMusicSound.dc.html frame 6): Voice, Music and Sound in place of Audio. */
+const KINDS: [NonNullable<Filter["kind"]>, string][] = [
   ["image", "Images"],
   ["video", "Video"],
-  ["audio", "Audio"],
+  ["voice", "Voice"],
+  ["music", "Music"],
+  ["sound", "Sound"],
 ];
+const CLASSES: readonly string[] = ["music", "sound", "voice"];
 const SOURCES: [S<"TakeSource">, string][] = [
   ["create", "From Create"],
   ["pipeline", "From Pipelines"],
@@ -224,7 +236,7 @@ export function TakeCard({
       disabled={disabled}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
-      className="bevel flex w-full flex-col gap-1.5 rounded-[10px] bg-transparent text-left disabled:opacity-50"
+      className="group bevel flex w-full flex-col gap-1.5 rounded-[10px] bg-transparent text-left disabled:opacity-50"
     >
       <span className="relative block w-full">
         {t.kind === "image" || t.kind === "video" || t.kind === "audio" ? (
@@ -367,7 +379,11 @@ export function Gallery({
         setUploads((list) => list.map((x) => (x.id === id ? { ...x, ...u } : x)));
       const stop = new AbortController();
       setUploads((list) => [...list, { id, name: f.name, p: UPLOAD_START, stop }]);
-      uploadFile(f, (p) => set({ p }), undefined, { audio: true, signal: stop.signal })
+      // an audio file takes the class of the filter it is dropped on (API 1.79; else voice)
+      const sound = CLASSES.includes(filter.kind ?? "")
+        ? (filter.kind as S<"SoundClass">)
+        : undefined;
+      uploadFile(f, (p) => set({ p }), undefined, { audio: true, signal: stop.signal, sound })
         .then((t) => {
           setUploads((list) => list.filter((x) => x.id !== id));
           if (fits(t, filter) && !query.trim())
@@ -399,6 +415,8 @@ export function Gallery({
   const addTo = (ids: string[], audio = false) =>
     void act(async () => setAdded({ ...(await addToTimeline(ids, audio)), n: ids.length }));
   const [frameAt, setFrameAt] = useState<{ id: string; at: "first" | "last" } | null>(null);
+  // a menu's Play: the panel plays that take once it shows it
+  const [play, setPlay] = useState<string | null>(null);
   const starAll = (ids: string[]) =>
     void bulk(
       (id) => patch(id, { starred: true }),
@@ -460,7 +478,7 @@ export function Gallery({
               },
             ]
           : [];
-      const list: Item[] = (offers ?? []).map((o) => ({
+      const list: Item[] = splitOffers(t, offers ?? []).rest.map((o) => ({
         label: offerLabel(o),
         onPick: () =>
           router.push(
@@ -476,9 +494,31 @@ export function Gallery({
         items: [...list, ...(list.length && frames.length ? ["-" as const] : []), ...frames],
       };
     };
-    const menu = (offers: S<"TakeOffer">[] | null) => ({
+    const openOffer = (o: S<"TakeOffer">) =>
+      router.push(
+        `/?${session}use=${encodeURIComponent(t.id)}&w=${encodeURIComponent(o.workflow_id)}`,
+      );
+    // music and sound (docs/mock/CreateMusicSound.dc.html 6a-6c): Play, the edits, Sound only; no looks or pipelines
+    const sound = soundOf(t);
+    const plain = sound === "music" || sound === "sound";
+    const menu = (offers: S<"TakeOffer">[] | null, alone?: Take) => ({
       title: t.title,
       items: [
+        t.kind !== "image" && {
+          label: "Play",
+          icon: PlayIcon,
+          keys: "Space",
+          onPick: () => {
+            setCurrentId(t.id);
+            setPlay(t.id);
+          },
+        },
+        t.kind === "video" && {
+          label: "Full screen",
+          icon: Maximize,
+          keys: "F",
+          onPick: () => setFull(true),
+        },
         inItem(offers),
         canEdit(tools, t) && {
           label: "Edit",
@@ -491,6 +531,16 @@ export function Gallery({
           icon: RotateCcw,
           onPick: () => router.push(`/?${session}reuse=${encodeURIComponent(t.id)}`),
         },
+        ...splitOffers(t, offers ?? []).edits.map((o) => ({
+          label: `${o.action}…`,
+          icon: Wand2,
+          onPick: () => openOffer(o),
+        })),
+        alone && {
+          label: "Sound only",
+          icon: AudioLines,
+          onPick: () => setCurrentId(alone.id),
+        },
         "-",
         {
           label: t.starred ? "Unstar" : "Star",
@@ -498,19 +548,25 @@ export function Gallery({
           onPick: () => void act(async () => replace(await patch(t.id, { starred: !t.starred }))),
         },
         { label: "Rename", icon: Pencil, onPick: () => setModal("rename") },
-        { label: "Full screen", icon: Maximize, keys: "F", onPick: () => setFull(true) },
+        t.kind === "image" && {
+          label: "Full screen",
+          icon: Maximize,
+          keys: "F",
+          onPick: () => setFull(true),
+        },
         t.kind === "image" && {
           label: "Save as element",
           icon: UserRound,
           onPick: () => setMaking([t]),
         },
-        m && { label: "Save as look", icon: Palette, onPick: () => setLookOf(t) },
-        m && {
-          label: "Save as pipeline",
-          icon: Workflow,
-          onPick: () =>
-            void act(async () => router.push(`/pipelines/${(await pipelineOf(t.id)).id}`)),
-        },
+        m && !plain && { label: "Save as look", icon: Palette, onPick: () => setLookOf(t) },
+        m &&
+          !plain && {
+            label: "Save as pipeline",
+            icon: Workflow,
+            onPick: () =>
+              void act(async () => router.push(`/pipelines/${(await pipelineOf(t.id)).id}`)),
+          },
         url && {
           label: "Export file",
           icon: Download,
@@ -525,12 +581,22 @@ export function Gallery({
         { label: "Delete", icon: Trash2, danger: true, onPick: () => setModal("delete") },
       ] as Item[],
     });
-    const h = openMenu(e, menu(null));
+    const near = soundTakeOf(t, takes ?? []);
+    const h = openMenu(e, menu(null, near));
     if (!h) return;
     setCurrentId(t.id);
-    usesOf(t.id)
-      .then((o) => h.update(menu(o)))
-      .catch(() => h.update(menu([])));
+    // a video's sound take may not be in the list loaded: its session's sound takes are looked through once
+    const alone: Promise<Take | undefined> =
+      near || t.kind !== "video" || !t.run_id || !t.session_id
+        ? Promise.resolve(near)
+        : ok(
+            api.GET("/v1/studio/takes", {
+              params: { query: { session_id: t.session_id, kind: "sound", limit: 100 } },
+            }),
+          )
+            .then((p) => soundTakeOf(t, p.takes))
+            .catch(() => undefined);
+    Promise.all([usesOf(t.id).catch(() => []), alone]).then(([o, a]) => h.update(menu(o, a)));
   }
 
   const toggle = (id: string) =>
@@ -870,6 +936,8 @@ export function Gallery({
             onFull={() => setFull(true)}
             onMakeElement={() => setMaking([current])}
             frameStart={frameAt?.id === current.id ? frameAt.at : undefined}
+            play={play === current.id}
+            onPlayed={() => setPlay(null)}
             onSaveLook={() => setLookOf(current)}
             onEdit={
               canEdit(tools, current)
@@ -986,9 +1054,14 @@ function TakePanel({
   onEdit,
   onPick,
   frameStart,
+  play,
+  onPlayed,
 }: {
   /** a menu's Last / First frame in…: opens it */
   frameStart?: "first" | "last";
+  /** a menu's Play: plays the take now (then onPlayed) */
+  play?: boolean;
+  onPlayed?: () => void;
   take: Take;
   onStar: () => void;
   onRename: () => void;
@@ -1035,25 +1108,66 @@ function TakePanel({
   }
   const saveError = saving?.id === t.id ? saving.error : "";
   const offers = useUses(t.id);
+  const { edits, rest } = splitOffers(t, offers ?? []);
+  const sound = soundOf(t);
+  const song = sound === "music" ? songLine(t) : "";
+  const lyrics = sound === "music" ? lyricsOf(t) : "";
+  const plain = sound === "music" || sound === "sound";
+  const media = useRef<HTMLMediaElement>(null);
+  // Play from the menu, and Space while the grid (or nothing) has the focus: plays or pauses the take shown
+  useEffect(() => {
+    if (!play) return;
+    void media.current?.play().catch(() => undefined);
+    onPlayed?.();
+  }, [play, onPlayed]);
+  useEffect(() => {
+    if (t.kind === "image") return;
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement;
+      if (e.key !== " " || !(el === document.body || el.closest('[role="list"]'))) return;
+      const m = media.current;
+      if (!m) return;
+      e.preventDefault();
+      if (m.paused) void m.play().catch(() => undefined);
+      else m.pause();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [t.kind]);
   return (
     <>
-      <div className="relative flex aspect-video shrink-0 items-center justify-center overflow-hidden rounded-[18px_18px_18px_8px] text-[13px] text-t2">
-        <Media
-          key={t.id}
-          take={t}
-          url={url}
-          className="max-h-full max-w-full rounded-[10px] object-contain"
-        />
-        <button
-          type="button"
-          aria-label="Full screen"
-          title="Full screen (F)"
-          onClick={onFull}
-          className="absolute right-2 bottom-2 grid size-8 place-items-center rounded-lg bg-s3 text-t1"
-        >
-          <Maximize aria-hidden size={16} strokeWidth={1.75} />
-        </button>
-      </div>
+      {t.kind === "audio" ? (
+        // docs/mock/CreateMusicSound.dc.html frame 6: the cover or orb large, the player under it
+        <div className="flex shrink-0 flex-col gap-2">
+          <Thumb take={t} imgClassName="block aspect-video w-full rounded-[18px_18px_18px_8px]" />
+          <audio
+            ref={media as React.Ref<HTMLAudioElement>}
+            key={t.id}
+            src={url}
+            controls
+            className="w-full"
+          />
+        </div>
+      ) : (
+        <div className="relative flex aspect-video shrink-0 items-center justify-center overflow-hidden rounded-[18px_18px_18px_8px] text-[13px] text-t2">
+          <Media
+            key={t.id}
+            take={t}
+            url={url}
+            videoRef={media as React.Ref<HTMLVideoElement>}
+            className="max-h-full max-w-full rounded-[10px] object-contain"
+          />
+          <button
+            type="button"
+            aria-label="Full screen"
+            title="Full screen (F)"
+            onClick={onFull}
+            className="absolute right-2 bottom-2 grid size-8 place-items-center rounded-lg bg-s3 text-t1"
+          >
+            <Maximize aria-hidden size={16} strokeWidth={1.75} />
+          </button>
+        </div>
+      )}
 
       <div className="flex flex-col gap-1.5">
         <h2 className="heading">{m ? "Made with" : t.source === "tool" ? "Edited" : "Uploaded"}</h2>
@@ -1078,13 +1192,26 @@ function TakePanel({
         {size && <Row label={m?.seed != null ? "Size · seed" : "Size"} value={size} />}
         {m?.render_s != null && <Row label="Render time" value={renderTime(m.render_s)} />}
         {t.video && <Row label="Length" value={videoLine(t.video)} />}
-        {t.audio && (
-          <Row
-            label="Kind · length"
-            value={`Upload · ${t.content_type === "audio/mpeg" ? "mp3" : "wav"} · ${t.audio.duration_s.toFixed(1)} s`}
-          />
+        {song ? (
+          <Row label="Song" value={song} />
+        ) : (
+          t.audio && (
+            <Row
+              label="Kind · length"
+              value={`${t.source === "upload" ? `Upload · ${t.content_type === "audio/mpeg" ? "mp3" : "wav"}` : sound === "sound" ? "Sound" : "Voice"} · ${t.audio.duration_s.toFixed(1)} s`}
+            />
+          )
         )}
       </div>
+
+      {lyrics && (
+        <details className="flex flex-col gap-1.5">
+          <summary className="heading cursor-pointer">Lyrics</summary>
+          <p className="mono m-0 mt-1.5 text-[12px] break-words whitespace-pre-line text-t2">
+            {lyrics}
+          </p>
+        </details>
+      )}
 
       {(t.parents.length > 0 || used.length > 0 || !!m?.elements?.length) && (
         <div className="flex flex-col gap-1.5">
@@ -1123,7 +1250,7 @@ function TakePanel({
         </div>
       )}
 
-      {!!offers?.length && (
+      {!!rest.length && (
         <div className="flex flex-col gap-2">
           <h2 className="heading flex items-center">
             Use in…
@@ -1133,7 +1260,7 @@ function TakePanel({
               picked from here.
             </Info>
           </h2>
-          {offers.map((o, i) => (
+          {rest.map((o, i) => (
             <Link
               key={`${o.workflow_id} ${o.param}`}
               href={`/?${session}use=${encodeURIComponent(t.id)}&w=${encodeURIComponent(o.workflow_id)}`}
@@ -1165,6 +1292,21 @@ function TakePanel({
         </div>
       )}
 
+      {!!edits.length && (
+        // a music or sound take's edits (frame 6): Repaint, Cover or Vary, Extend open Create with the offer
+        <div className="grid grid-cols-3 gap-2">
+          {edits.map((o) => (
+            <Link
+              key={o.workflow_id}
+              href={`/?${session}use=${encodeURIComponent(t.id)}&w=${encodeURIComponent(o.workflow_id)}`}
+              className="act"
+            >
+              {o.action}
+            </Link>
+          ))}
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-2">
         {/* an audio take goes on an audio track (API 1.32) */}
         <AddToTimeline key={t.id} takeIds={[t.id]} audio={t.kind === "audio"} />
@@ -1184,12 +1326,12 @@ function TakePanel({
             Save as element
           </button>
         )}
-        {m && (
+        {m && !plain && (
           <button type="button" className="act" onClick={onSaveLook}>
             Save as look
           </button>
         )}
-        {m && (
+        {m && !plain && (
           <button
             type="button"
             className="act"
