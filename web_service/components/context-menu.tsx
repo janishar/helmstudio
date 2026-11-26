@@ -129,8 +129,10 @@ function MenuRoot({ o }: { o: Open }) {
   useLayoutEffect(() => {
     const m = ref.current;
     if (!m) return;
+    // the list takes focus (the outer div can't), so ↑ ↓, a letter and Esc work after a right-click too
     const first = m.querySelector<HTMLElement>('[data-lv="0"]');
-    (o.kbd && first ? first : m).focus({ preventScroll: true });
+    const list = m.querySelector<HTMLElement>('[role="menu"]');
+    (o.kbd && first ? first : (list ?? m)).focus({ preventScroll: true });
     const outside = (e: Event) => !o.el.contains(e.target as Node) && closeMenu();
     const gone = () => closeMenu();
     addEventListener("pointerdown", outside, true);
@@ -327,6 +329,7 @@ let pasteBlocked = false;
 const BLOCKED = `Paste with ${mod("V")}: the browser blocked the clipboard`;
 const NO_TEXT = "Select some text first";
 const READ_ONLY = "This field is read-only";
+const HIDDEN = "Hidden text can't be copied";
 
 async function paste(f: Field) {
   try {
@@ -347,19 +350,21 @@ export function textItems(f: Field): Item[] {
   const ro = readOnly(f);
   const sel = selected(f);
   const mentions = !ro && !!f.closest("[data-mentions]");
+  // a password or key field: never onto the clipboard, as the browser's own menu has it
+  const hidden = f instanceof HTMLInputElement && f.type === "password" ? HIDDEN : undefined;
   return [
     {
       label: "Cut",
       icon: Scissors,
       keys: mod("X"),
-      off: ro ? READ_ONLY : !sel ? NO_TEXT : undefined,
+      off: ro ? READ_ONLY : (hidden ?? (!sel ? NO_TEXT : undefined)),
       onPick: () => copy(sel, f, true),
     },
     {
       label: "Copy",
       icon: Copy,
       keys: mod("C"),
-      off: !sel ? NO_TEXT : undefined,
+      off: hidden ?? (!sel ? NO_TEXT : undefined),
       onPick: () => copy(sel, f),
     },
     {

@@ -86,7 +86,9 @@ describe("the menu", () => {
     const t = screen.getByText("target");
     t.focus();
     rightClick(t);
-    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+    // a right-click moves focus into the menu, so its keys reach it (not the field or a dialog under it)
+    expect(screen.getByRole("menu")).toBe(document.activeElement);
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
     expect(screen.queryByRole("menu")).toBeNull();
     expect(document.activeElement).toBe(t);
     rightClick(t);
@@ -208,6 +210,20 @@ describe("text fields", () => {
     expect(screen.getByRole("menuitem", { name: /Cut/ }).title).toBe("This field is read-only");
     expect(screen.getByRole("menuitem", { name: /Paste/ }).title).toBe("This field is read-only");
     expect(screen.getByRole("menuitem", { name: /Copy/ }).getAttribute("aria-disabled")).toBeNull();
+  });
+
+  it("a password or key field: Cut and Copy greyed even with a selection, Paste runs", () => {
+    render(<input aria-label="key" type="password" defaultValue="sk-secret" />);
+    const f = screen.getByLabelText<HTMLInputElement>("key");
+    f.setSelectionRange(0, 9);
+    rightClick(f);
+    expect(screen.getByRole("menuitem", { name: /Cut/ }).title).toBe("Hidden text can't be copied");
+    expect(screen.getByRole("menuitem", { name: /Copy/ }).title).toBe(
+      "Hidden text can't be copied",
+    );
+    expect(
+      screen.getByRole("menuitem", { name: /Paste/ }).getAttribute("aria-disabled"),
+    ).toBeNull();
   });
 
   it("Paste reads the clipboard and types it at the caret; a refused read greys Paste with the reason", async () => {

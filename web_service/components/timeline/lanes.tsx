@@ -922,7 +922,8 @@ export function Lanes({
               aria-valuetext={shortTime(g.s(frame))}
               className="mono relative h-[22px] flex-1 cursor-pointer text-[10px] text-t2"
               onPointerDown={(e) => {
-                if (tool === "range") return;
+                // a right-click opens the ruler's menu and leaves the playhead (alpha.5 item 17)
+                if (tool === "range" || e.button !== 0) return;
                 seekAt(e);
                 e.currentTarget.setPointerCapture(e.pointerId);
               }}
