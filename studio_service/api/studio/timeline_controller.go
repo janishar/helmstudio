@@ -137,6 +137,14 @@ func (c *controller) mountTimelines(group *gin.RouterGroup) {
 		}
 		reply(ctx, status, out, err)
 	})
+	group.POST("/takes/:id/mux", func(ctx *gin.Context) { // API 1.79: Save with the video
+		body, err := strictBody[dto.TakeMuxRequest](ctx, false)
+		var out dto.TakeMux
+		if err == nil {
+			out, err = c.service.TakeMux(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"), body)
+		}
+		reply(ctx, http.StatusAccepted, out, err)
+	})
 }
 
 // timelineIDBody decodes a strict body and answers fn(:id) with status; a broken timeline rule is the 422 with

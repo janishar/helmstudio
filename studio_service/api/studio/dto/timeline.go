@@ -422,6 +422,24 @@ func (b *TakeFrameRequest) Validate() string {
 	return ""
 }
 
+// TakeMuxRequest is POST /takes/{id}/mux (API 1.79): the video take whose picture keeps this audio take as its sound.
+type TakeMuxRequest struct {
+	VideoTakeID string `json:"video_take_id"`
+}
+
+// Validate wants a take id.
+func (b *TakeMuxRequest) Validate() string {
+	if !utility.IsUUID(b.VideoTakeID) {
+		return "video_take_id must be a take id"
+	}
+	return ""
+}
+
+// TakeMux is its 202: the mux job.
+type TakeMux struct {
+	Job MediaJob `json:"job"`
+}
+
 // ------------------------------------------------------------------ answers
 
 // TimelineTake is a take the document names, signed.
@@ -554,6 +572,7 @@ type MediaJob struct {
 	CreatedAt    time.Time  `json:"created_at"`
 	StartedAt    *time.Time `json:"started_at"`
 	FinishedAt   *time.Time `json:"finished_at"`
+	VideoTakeID  *string    `json:"video_take_id,omitempty"` // API 1.79, mux only
 }
 
 // MediaJobList is GET …/exports.

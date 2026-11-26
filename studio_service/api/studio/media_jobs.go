@@ -64,16 +64,18 @@ type mediaRow struct {
 	CreatedAt, HeardAt                   time.Time
 	StartedAt, FinishedAt                *time.Time
 	TakeIDs                              []string // thumbs: its takes, in input order
+	VideoTakeID                          *string  // mux (API 1.79): the video take; SourceTakeID is the audio
 }
 
 const mediaCols = `id::text, owner_id::text, kind, status, host, env, timeline_id::text, timeline_name, revision, parents,
 	source_take_id::text, at, mode, reason, frames, progress, take_id::text, failure, created_at, heard_at, started_at,
-	finished_at, take_ids::text[]`
+	finished_at, take_ids::text[], video_take_id::text`
 
 func (r mediaRow) dto() dto.MediaJob {
 	return dto.MediaJob{ID: r.ID, Kind: r.Kind, Status: r.Status, Host: r.Host, Env: r.Env, TimelineID: r.TimelineID,
 		Revision: r.Revision, SourceTakeID: r.SourceTakeID, Mode: r.Mode, Reason: r.Reason, Progress: nullable(r.Progress),
-		TakeID: r.TakeID, Failure: nullable(r.Failure), CreatedAt: r.CreatedAt, StartedAt: r.StartedAt, FinishedAt: r.FinishedAt}
+		TakeID: r.TakeID, Failure: nullable(r.Failure), CreatedAt: r.CreatedAt, StartedAt: r.StartedAt, FinishedAt: r.FinishedAt,
+		VideoTakeID: r.VideoTakeID}
 }
 
 // mediaCommand is cmd.media.job's data.
@@ -154,9 +156,9 @@ func insertMediaJob(ctx context.Context, tx pgx.Tx, j mediaRow, command mediaCom
 			MaxOpenMediaJobs), nil)
 	}
 	row, err := one[mediaRow](ctx, tx, `INSERT INTO media_jobs (id, owner_id, kind, host, env, timeline_id, timeline_name,
-		revision, parents, source_take_id, at, mode, reason, frames, take_ids) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-		$11, $12, $13, $14, $15) RETURNING `+mediaCols, j.ID, j.OwnerID, j.Kind, j.Host, j.Env, j.TimelineID, j.TimelineName,
-		j.Revision, j.Parents, j.SourceTakeID, j.At, j.Mode, j.Reason, j.Frames, j.TakeIDs)
+		revision, parents, source_take_id, at, mode, reason, frames, take_ids, video_take_id) VALUES ($1, $2, $3, $4, $5, $6, $7,
+		$8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING `+mediaCols, j.ID, j.OwnerID, j.Kind, j.Host, j.Env, j.TimelineID,
+		j.TimelineName, j.Revision, j.Parents, j.SourceTakeID, j.At, j.Mode, j.Reason, j.Frames, j.TakeIDs, j.VideoTakeID)
 	if err != nil {
 		return row, err
 	}
@@ -688,6 +690,67 @@ func insertFrameTake(ctx context.Context, tx pgx.Tx, ownerID, id string, video g
 	return one[gallerymodel.Take](ctx, tx, `SELECT `+gallerymodel.TakeCols+` FROM takes t WHERE t.id = $1`, id)
 }
 
+// ------------------------------------------------------------------ mux (API 1.79)
+
+// TakeMux answers POST /takes/{id}/mux (Save with the video): the job that makes a video take of video_take_id's
+// picture with this audio take as its sound. Idempotent per pair: an open job, or one whose take is kept, is answered.
+func (s *Service) TakeMux(ctx context.Context, caller common.Caller, id string, body *dto.TakeMuxRequest) (dto.TakeMux, error) {
+	if !utility.IsUUID(id) {
+		return dto.TakeMux{}, errNotFound
+	}
+	var out dto.TakeMux
+	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
+		_, rows, err := loadTakes(ctx, tx, caller.ID, []string{id, body.VideoTakeID})
+		if err != nil {
+			return err
+		}
+		audio, ok := rows[id]
+		video, okv := rows[body.VideoTakeID]
+		switch {
+		case !ok || !okv:
+			return errNotFound
+		case audio.Kind != "audio":
+			return network.NewUnprocessableError("take "+id+" is not audio", nil)
+		case video.Kind != "video":
+			return network.NewUnprocessableError("take "+video.ID+" is not a video", nil)
+		}
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('mux:' || $1 || ':' || $2))`, id, video.ID); err != nil {
+			return err
+		}
+		job, err := one[mediaRow](ctx, tx, `SELECT `+mediaCols+` FROM media_jobs j WHERE kind = 'mux' AND source_take_id = $1
+			AND video_take_id = $2 AND (status IN ('queued', 'running') OR (status = 'succeeded' AND EXISTS (SELECT 1 FROM takes t
+			WHERE t.id = j.take_id AND t.deleted_at IS NULL))) ORDER BY created_at DESC LIMIT 1`, id, video.ID)
+		if errors.Is(err, errNotFound) {
+			env, live := s.mediaEnv(nil)
+			if !live {
+				return network.NewConflictError(noHost, nil)
+			}
+			jobID := utility.NewID()
+			job, err = insertMediaJob(ctx, tx, mediaRow{ID: jobID, OwnerID: caller.ID, Kind: "mux", Host: env.Host, Env: env.Env,
+				SourceTakeID: &audio.ID, VideoTakeID: &video.ID},
+				mediaCommand{Kind: "mux", Inputs: []timeline.MediaInput{{Key: video.Key, Kind: "video"}, {Key: audio.Key, Kind: "audio"}},
+					OutputPrefix: common.OwnerPrefix(caller.ID) + "muxes/" + jobID + "/"})
+		}
+		out.Job = job.dto()
+		return err
+	})
+	return out, err
+}
+
+// insertMuxTake stores a mux's video take: source create, the video's title, session and made_with, parents [video,
+// audio]; its thumbnail comes from the thumbs job.
+func insertMuxTake(ctx context.Context, tx pgx.Tx, job mediaRow, id string, r *mediaResult) error {
+	if _, err := tx.Exec(ctx, `INSERT INTO takes (id, owner_id, kind, source, title, key, content_type, width, height, bytes,
+		etag, video, ready, session_id, made_with) SELECT $1, $2, 'video', 'create', v.title, $4, 'video/mp4', $5, $6, $7, $8, $9,
+		true, v.session_id, v.made_with FROM takes v WHERE v.id = $3`, id, job.OwnerID, *job.VideoTakeID, r.Key, r.Width, r.Height,
+		r.Bytes, r.Etag, r.Video); err != nil {
+		return err
+	}
+	_, err := tx.Exec(ctx, `INSERT INTO take_parents (take_id, parent_id, owner_id, idx) VALUES ($1, $2, $4, 0), ($1, $3, $4, 1)`,
+		id, *job.VideoTakeID, *job.SourceTakeID, job.OwnerID)
+	return err
+}
+
 // ------------------------------------------------------------------ the projector of evt.media.*
 
 type mediaStatus struct {
@@ -877,6 +940,15 @@ func storeMediaTake(ctx context.Context, tx pgx.Tx, store storage.Store, job med
 				video.ID, frame)
 		}
 		return id, "", err
+	}
+	if job.Kind == "mux" {
+		prefix := common.OwnerPrefix(job.OwnerID) + "muxes/" + job.ID + "/"
+		v := r.Video
+		if !inside(r.Key, prefix, "mux.mp4") || v == nil || !inside(v.Poster.Key, prefix, "mux.poster.png") ||
+			v.Last == nil || !inside(v.Last.Key, prefix, "mux.last.png") {
+			return "", "the result is outside the job's prefix", nil
+		}
+		return id, "", insertMuxTake(ctx, tx, job, id, r)
 	}
 	prefix := common.OwnerPrefix(job.OwnerID) + "exports/" + job.ID + "/"
 	v := r.Video
