@@ -1,0 +1,23 @@
+{
+  "name": "song-10s-s42",
+  "prompt": "warm indie pop, acoustic guitar, female vocal, 100 bpm",
+  "lyrics": "[verse]\nMorning light on the harbour wall\nBoats come home and the seagulls call\n[chorus]\nHold the tide, hold it still\nI will wait by the window sill",
+  "seconds": 10.0,
+  "seed": 42,
+  "instrumental": false,
+  "sha256": "9dff99289d4eb028e6c9db1164bb572439fe7e6e36b1645d3857616b93d4dc8c",
+  "sample_rate": 44100,
+  "channels": 2,
+  "duration_s": 9.9962,
+  "rms": 0.1328,
+  "peak": 0.9219,
+  "load_s": 52.9,
+  "generate_s": 52.7,
+  "versions": {
+    "torch": "2.15.0",
+    "diffusers": "0.43.0",
+    "transformers": "5.23.0",
+    "python": "3.14.10"
+  },
+  "device": "mps, arm64, Darwin 27.2.0"
+}

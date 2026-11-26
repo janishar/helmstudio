@@ -1,0 +1,214 @@
+{
+  "schema_version": 1,
+  "host": "mac",
+  "env": "torch",
+  "published_at": "2026-11-21T10:00:00Z",
+  "published_by": "runner torch 0.3.0",
+  "nodes": [
+    {
+      "kind": "prompt",
+      "title": "Prompt",
+      "family": null,
+      "params": [
+        {
+          "name": "text",
+          "type": "text",
+          "label": "Prompt",
+          "default": "",
+          "min": 0,
+          "max": 4000
+        }
+      ],
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "text",
+          "type": "Text"
+        }
+      ],
+      "help": "The text the workflow starts from."
+    },
+    {
+      "kind": "seed",
+      "title": "Seed",
+      "family": null,
+      "params": [
+        {
+          "name": "seed",
+          "type": "seed",
+          "label": "Seed",
+          "default": -1,
+          "min": -1,
+          "max": 9007199254740991,
+          "step": 1
+        }
+      ],
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "seed",
+          "type": "Seed"
+        }
+      ],
+      "help": "The noise seed; -1 picks a random one, reported with the result."
+    },
+    {
+      "kind": "minimax-music3/model",
+      "title": "MiniMax Music 3",
+      "family": "minimax-music3",
+      "params": [
+        {
+          "name": "variant",
+          "type": "enum",
+          "enum": [
+            "base"
+          ],
+          "default": "base",
+          "label": "Variant"
+        },
+        {
+          "name": "precision",
+          "type": "enum",
+          "enum": [
+            "bf16"
+          ],
+          "default": "bf16"
+        }
+      ],
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "Model"
+        }
+      ],
+      "help": "The weights to load."
+    },
+    {
+      "kind": "minimax-music3/lm",
+      "title": "Compose",
+      "family": "minimax-music3",
+      "params": [
+        {
+          "name": "lyrics",
+          "type": "text",
+          "label": "Lyrics",
+          "default": "",
+          "min": 0,
+          "max": 4000,
+          "tags": [
+            "verse",
+            "chorus",
+            "bridge",
+            "intro",
+            "outro"
+          ],
+          "when": "instrumental == false",
+          "help": "Section tags in square brackets, each on its own line: [verse], [chorus]. Text after a tag on the same line is dropped."
+        },
+        {
+          "name": "instrumental",
+          "type": "bool",
+          "label": "Instrumental",
+          "default": false
+        },
+        {
+          "name": "seconds",
+          "type": "float",
+          "label": "Length",
+          "default": 0,
+          "auto": true,
+          "min": 10,
+          "max": 300,
+          "step": 1,
+          "help": "The longest the song may run; Auto: up to 5 minutes, the model ends it. About 5 s of work per second of song on a Mac."
+        }
+      ],
+      "inputs": [
+        {
+          "name": "model",
+          "type": "Model"
+        },
+        {
+          "name": "prompt",
+          "type": "Text"
+        },
+        {
+          "name": "seed",
+          "type": "Seed"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "cond",
+          "type": "Conditioning"
+        }
+      ],
+      "component": "language model",
+      "help": "Writes the song as audio codes, 25 frames a second, with the 8B language model and the RVQ depth decoder (guidance 1.5, top-k 50, from the seed). Instrumental (or no lyrics) asks for no vocals in the style and sings only [instrumental]. The model may end the song before Length."
+    },
+    {
+      "kind": "minimax-music3/flow",
+      "title": "Flow",
+      "family": "minimax-music3",
+      "params": [],
+      "inputs": [
+        {
+          "name": "model",
+          "type": "Model"
+        },
+        {
+          "name": "cond",
+          "type": "Conditioning"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "latent",
+          "type": "Latent"
+        }
+      ],
+      "component": "transformer",
+      "help": "Turns the codes into the Flow-VAE latent with the 2.4B flow-matching transformer: 30 Euler steps at guidance 1.7 per 200-frame window (8 s, a 4 s hop)."
+    },
+    {
+      "kind": "minimax-music3/vocode",
+      "title": "Decode",
+      "family": "minimax-music3",
+      "params": [],
+      "inputs": [
+        {
+          "name": "model",
+          "type": "Model"
+        },
+        {
+          "name": "latent",
+          "type": "Latent"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "audio",
+          "type": "Audio"
+        }
+      ],
+      "component": "vocoder",
+      "help": "Turns the latent into 44.1 kHz stereo audio with the vocoder, window by window, and stitches the windows.",
+      "sound": "music"
+    },
+    {
+      "kind": "output",
+      "title": "Output",
+      "family": null,
+      "params": [],
+      "inputs": [
+        {
+          "name": "media",
+          "type": "Media"
+        }
+      ],
+      "outputs": [],
+      "help": "Stores its input as a run output: an image, a video or (from API 1.30) an audio take."
+    }
+  ]
+}

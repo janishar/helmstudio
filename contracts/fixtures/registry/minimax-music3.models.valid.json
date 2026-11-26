@@ -1,0 +1,148 @@
+{
+  "schema_version": 1,
+  "host": "mac",
+  "env": "torch",
+  "published_at": "2026-11-21T10:00:00Z",
+  "published_by": "runner torch 0.3.0",
+  "models": [
+    {
+      "id": "minimax-music3",
+      "family": "minimax-music3",
+      "title": "MiniMax Music 3",
+      "media": [
+        "audio"
+      ],
+      "runtimes": [
+        {
+          "runtime": "torch",
+          "env": "torch",
+          "devices": [
+            "mps",
+            "cuda"
+          ]
+        }
+      ],
+      "variants": [
+        {
+          "id": "base",
+          "presence": "present",
+          "bytes": 28556113328,
+          "precisions": [
+            "bf16"
+          ],
+          "title": "Base",
+          "dir": "MiniMax-Music3",
+          "source": {
+            "repo": "MiniMaxAI/MiniMax-Music3",
+            "revision": "1b525ccb685ae809f33027c51c351eeb5833cf72",
+            "allow_patterns": [
+              "modular_model_index.json",
+              "LICENSE",
+              "language_model/*",
+              "rvq_depth_decoder/*",
+              "condition_encoder/*",
+              "transformer/*",
+              "vocoder/*",
+              "tokenizer/*",
+              "scheduler/*"
+            ],
+            "licence": "minimax-music3-community",
+            "must_accept": true,
+            "gated": false,
+            "bytes": 28517608999
+          },
+          "components": [
+            {
+              "component": "language_model",
+              "from_variant": "base",
+              "precisions": [
+                "bf16"
+              ],
+              "stored": "bf16",
+              "bytes": 17168997392
+            },
+            {
+              "component": "rvq_depth_decoder",
+              "from_variant": "base",
+              "precisions": [
+                "bf16"
+              ],
+              "stored": "bf16",
+              "bytes": 1292055248
+            },
+            {
+              "component": "condition_encoder",
+              "from_variant": "base",
+              "precisions": [
+                "bf16"
+              ],
+              "stored": "fp32",
+              "bytes": 100671852
+            },
+            {
+              "component": "transformer",
+              "from_variant": "base",
+              "precisions": [
+                "bf16"
+              ],
+              "stored": "fp32",
+              "bytes": 9727672184
+            },
+            {
+              "component": "vocoder",
+              "from_variant": "base",
+              "precisions": [
+                "bf16"
+              ],
+              "stored": "fp32",
+              "bytes": 216695272
+            }
+          ],
+          "memory": [
+            {
+              "precision": "bf16",
+              "peak_gb": 26.92,
+              "components": [
+                {
+                  "component": "language_model",
+                  "variant": "base",
+                  "precision": "bf16",
+                  "gb": 15.99
+                },
+                {
+                  "component": "rvq_depth_decoder",
+                  "variant": "base",
+                  "precision": "bf16",
+                  "gb": 1.2
+                },
+                {
+                  "component": "condition_encoder",
+                  "variant": "base",
+                  "precision": "bf16",
+                  "gb": 0.05
+                },
+                {
+                  "component": "transformer",
+                  "variant": "base",
+                  "precision": "bf16",
+                  "gb": 4.53
+                },
+                {
+                  "component": "vocoder",
+                  "variant": "base",
+                  "precision": "bf16",
+                  "gb": 0.1
+                }
+              ],
+              "planned_at": {
+                "mp": 0.0,
+                "frames": 0
+              }
+            }
+          ]
+        }
+      ],
+      "sound": "music"
+    }
+  ]
+}

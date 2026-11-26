@@ -1,0 +1,82 @@
+# MiniMax Music 3 on torch (plan 38, 44.6): a song from a style and lyrics, on diffusers 0.43's modular
+# minimax_music3 blocks (the same code as the model card's PR commit dafe3733, refactored: GOTCHAS.md), split into its
+# three steps: lm (the 8B language model and the RVQ depth decoder, frame by frame at 25 Hz), flow (flow matching in
+# 200-frame windows) and vocode (the Flow-VAE vocoder, 44.1 kHz stereo). Generates exactly the canonical
+# minimax-music3 fixtures (contracts/fixtures/registry/minimax-music3.*.valid.json; tests/test_packs.py).
+# peak_gb: measured on MPS (M5 Pro 64 GB, torch 2.15, bf16) with tests/test_minimax_music3_golden.py (GOTCHAS.md).
+id: minimax-music3
+family: minimax-music3
+title: MiniMax Music 3
+media: [audio]
+sound: music                     # API 1.79: its takes are music (contracts/README.md, Music and sound)
+runtimes:
+  torch: {env: torch, devices: [mps, cuda]}   # validated on MPS; CUDA is the model card's own device (untested here)
+licences:
+  minimax-music3-community: {title: MiniMax-Music3 Community License, url: https://huggingface.co/MiniMaxAI/MiniMax-Music3}
+model:
+  help: The weights to load.
+  variant: {label: Variant}
+variants:
+  base:
+    dir: MiniMax-Music3
+    title: Base
+    # the diffusers folders only: the repo also holds SGLang-Omni's layout (qwen_7B/, flowmatching_vae.pth, dav.pth,
+    # 28.8 GB) the runner never reads (plan 38, 44.3.22). Bytes: these files at this revision (the HF tree).
+    source: {repo: MiniMaxAI/MiniMax-Music3, revision: 1b525ccb685ae809f33027c51c351eeb5833cf72,
+             allow_patterns: [modular_model_index.json, LICENSE, "language_model/*", "rvq_depth_decoder/*",
+                              "condition_encoder/*", "transformer/*", "vocoder/*", "tokenizer/*", "scheduler/*"],
+             licence: minimax-music3-community, must_accept: true, gated: false, bytes: 28517608999}
+components:
+  language_model: {files: "language_model/*.safetensors", dtype: bf16, precision: [bf16]}       # Qwen3 8B, stored bf16
+  rvq_depth_decoder: {files: "rvq_depth_decoder/*.safetensors", dtype: bf16, precision: [bf16]}
+  # stored fp32, cast to bf16 as the model card loads them (every component bf16)
+  condition_encoder: {files: "condition_encoder/*.safetensors", dtype: bf16, precision: [bf16]}
+  transformer: {files: "transformer/*.safetensors", dtype: bf16, precision: [bf16]}
+  vocoder: {files: "vocoder/*.safetensors", dtype: bf16, precision: [bf16]}
+stages:
+  lm:
+    title: Compose
+    component: language model
+    help: "Writes the song as audio codes, 25 frames a second, with the 8B language model and the RVQ depth decoder (guidance 1.5, top-k 50, from the seed). Instrumental (or no lyrics) asks for no vocals in the style and sings only [instrumental]. The model may end the song before Length."
+    uses: [language_model, rvq_depth_decoder]
+    inputs: {model: Model, prompt: Text, seed: Seed}
+    outputs: {cond: Conditioning}
+    params:
+      lyrics: {type: text, label: Lyrics, default: "", min: 0, max: 4000, tags: [verse, chorus, bridge, intro, outro],
+               when: "instrumental == false",
+               help: "Section tags in square brackets, each on its own line: [verse], [chorus]. Text after a tag on the same line is dropped."}
+      instrumental: {type: bool, label: Instrumental, default: false}
+      seconds: {type: float, label: Length, default: 0, auto: true, min: 10, max: 300, step: 1,
+                help: "The longest the song may run; Auto: up to 5 minutes, the model ends it. About 5 s of work per second of song on a Mac."}
+    # the KV cache of the 8B model grows with the song (36 layers x 8 heads x 128 x 2 x bf16, cond + uncond: 0.29 MB a
+    # frame, 7.4 MB a second); Auto plans at 300 s. Measured 2.9 GB above the components at 10 s (GOTCHAS.md)
+    peak_gb: "2.8 + 0.0075 * (seconds if seconds > 0 else 300)"
+    stall_s: 300                  # a cancel point every frame (40 ms of song) and every loaded tensor
+  flow:
+    title: Flow
+    component: transformer
+    help: "Turns the codes into the Flow-VAE latent with the 2.4B flow-matching transformer: 30 Euler steps at guidance 1.7 per 200-frame window (8 s, a 4 s hop)."
+    uses: [condition_encoder, transformer]
+    inputs: {model: Model, cond: Conditioning}
+    outputs: {latent: Latent}
+    peak_gb: "3"                  # one window at a time, flat in length: measured 3.0 GB above the components
+    stall_s: 300
+  vocode:
+    title: Decode
+    component: vocoder
+    help: "Turns the latent into 44.1 kHz stereo audio with the vocoder, window by window, and stitches the windows."
+    uses: [vocoder]
+    inputs: {model: Model, latent: Latent}
+    outputs: {audio: Audio}
+    peak_gb: "3"                  # measured 3.0 GB above the components (10 s; the samples' 30 s the same)
+    stall_s: 300
+
+# The assistant's recipes (API 1.71, contracts/README.md "Assistant: model guides"): named settings as data, values by
+# <node>.<param>, each checked against its workflow's node schemas (tests/test_guides.py). assistant.md says when.
+recipes:
+  - {name: song, title: Song, workflow: minimax-music3, params: {lm.instrumental: false, lm.seconds: 0},
+     note: "Style: genre, mood, voice, instruments, tempo in words; lyrics with [verse] and [chorus] tags."}
+  - {name: short-draft, title: Short draft, workflow: minimax-music3, params: {lm.seconds: 30},
+     note: "30 s in about 2:30 on a Mac: try a style before the whole song."}
+  - {name: instrumental, title: Instrumental, workflow: minimax-music3, params: {lm.instrumental: true, lm.seconds: 60},
+     note: "Name the lead instrument in the style (strings carry the melody, then piano)."}
