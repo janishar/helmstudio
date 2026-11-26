@@ -4478,6 +4478,292 @@
           "peak_gb": "2.0"
         }
       ]
+    },
+    {
+      "family": "stable-audio-3",
+      "title": "Stable Audio 3",
+      "nodes": [
+        {
+          "kind": "stable-audio-3/model",
+          "title": "Stable Audio 3",
+          "family": "stable-audio-3",
+          "params": [
+            {
+              "name": "variant",
+              "type": "enum",
+              "enum": [
+                "small-sfx"
+              ],
+              "default": "small-sfx",
+              "label": "Variant"
+            },
+            {
+              "name": "precision",
+              "type": "enum",
+              "enum": [
+                "bf16"
+              ],
+              "default": "bf16",
+              "label": "Precision",
+              "help": "The DiT and autoencoder run fp32 (as the maker's code on a Mac), the T5Gemma text encoder bf16 as stored."
+            }
+          ],
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            }
+          ],
+          "help": "The weights to load.",
+          "envs": [
+            "torch"
+          ]
+        },
+        {
+          "kind": "stable-audio-3/sound",
+          "title": "Sound",
+          "family": "stable-audio-3",
+          "params": [
+            {
+              "name": "seconds",
+              "type": "float",
+              "label": "Length",
+              "default": 4,
+              "min": 0.5,
+              "max": 30,
+              "step": 0.5,
+              "help": "Seconds of sound."
+            },
+            {
+              "name": "from_sound",
+              "type": "rows",
+              "label": "From a sound",
+              "default": [],
+              "min": 0,
+              "max": 1,
+              "item": {
+                "audio": {
+                  "type": "media",
+                  "label": "Sound",
+                  "default": null,
+                  "accepts": [
+                    "audio"
+                  ],
+                  "max_s": 30,
+                  "help": "An audio take, or a video's sound, to start from; cut or padded to the Length."
+                }
+              },
+              "help": "A sound to start from instead of noise (optional)."
+            },
+            {
+              "name": "change",
+              "type": "float",
+              "label": "Change",
+              "default": 0.7,
+              "min": 0.05,
+              "max": 1,
+              "step": 0.05,
+              "help": "With From a sound: how far the result may move from it (1: a new sound)."
+            }
+          ],
+          "inputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            },
+            {
+              "name": "text",
+              "type": "Text"
+            },
+            {
+              "name": "seed",
+              "type": "Seed"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "audio",
+              "type": "Audio"
+            }
+          ],
+          "component": "transformer",
+          "help": "Makes a sound effect from the prompt, 8 steps, 44.1 kHz stereo, levels as the model gives them. From a sound: starts from that sound instead of noise, Change saying how far it may go.",
+          "sound": "sound",
+          "envs": [
+            "torch"
+          ]
+        },
+        {
+          "kind": "stable-audio-3/repaint",
+          "title": "Repaint",
+          "family": "stable-audio-3",
+          "params": [
+            {
+              "name": "source",
+              "type": "media",
+              "label": "Sound",
+              "default": null,
+              "accepts": [
+                "audio"
+              ],
+              "max_s": 30,
+              "help": "The sound take to repaint."
+            },
+            {
+              "name": "span",
+              "type": "span",
+              "label": "Repaint",
+              "default": null,
+              "help": "The part to make again, in the sound's seconds."
+            }
+          ],
+          "inputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            },
+            {
+              "name": "text",
+              "type": "Text"
+            },
+            {
+              "name": "seed",
+              "type": "Seed"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "audio",
+              "type": "Audio"
+            }
+          ],
+          "component": "transformer",
+          "help": "Makes the span of the source again from the prompt and keeps the rest, as long as the source.",
+          "sound": "sound",
+          "envs": [
+            "torch"
+          ]
+        },
+        {
+          "kind": "stable-audio-3/vary",
+          "title": "Vary",
+          "family": "stable-audio-3",
+          "params": [
+            {
+              "name": "source",
+              "type": "media",
+              "label": "Sound",
+              "default": null,
+              "accepts": [
+                "audio"
+              ],
+              "max_s": 30,
+              "help": "The sound take to vary."
+            },
+            {
+              "name": "change",
+              "type": "float",
+              "label": "Change",
+              "default": 0.7,
+              "min": 0.05,
+              "max": 1,
+              "step": 0.05,
+              "help": "How far the variation may move from the source (1: a new sound)."
+            }
+          ],
+          "inputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            },
+            {
+              "name": "text",
+              "type": "Text"
+            },
+            {
+              "name": "seed",
+              "type": "Seed"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "audio",
+              "type": "Audio"
+            }
+          ],
+          "component": "transformer",
+          "help": "Makes the source again from the prompt, starting from it: low Change stays close, 1 is a new sound. As long as the source.",
+          "sound": "sound",
+          "envs": [
+            "torch"
+          ]
+        },
+        {
+          "kind": "stable-audio-3/extend",
+          "title": "Extend",
+          "family": "stable-audio-3",
+          "params": [
+            {
+              "name": "source",
+              "type": "media",
+              "label": "Sound",
+              "default": null,
+              "accepts": [
+                "audio"
+              ],
+              "max_s": 30,
+              "help": "The sound take to extend."
+            },
+            {
+              "name": "seconds",
+              "type": "float",
+              "label": "Add",
+              "default": 4,
+              "min": 0.5,
+              "max": 30,
+              "step": 0.5,
+              "help": "Seconds to add."
+            },
+            {
+              "name": "where",
+              "type": "enum",
+              "label": "Where",
+              "default": "end",
+              "enum": [
+                "end",
+                "start"
+              ]
+            }
+          ],
+          "inputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            },
+            {
+              "name": "text",
+              "type": "Text"
+            },
+            {
+              "name": "seed",
+              "type": "Seed"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "audio",
+              "type": "Audio"
+            }
+          ],
+          "component": "transformer",
+          "help": "Adds seconds made from the prompt after the source's end (End) or before its start (Start), the source kept; at most 60 s in all.",
+          "sound": "sound",
+          "envs": [
+            "torch"
+          ]
+        }
+      ]
     }
   ]
 }

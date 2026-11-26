@@ -1,0 +1,58 @@
+{
+  "id": "sa3-extend",
+  "title": "Stable Audio 3 Extend",
+  "action": "Extend",
+  "family": "stable-audio-3",
+  "env": "torch",
+  "media": "audio",
+  "nodes": {
+    "prompt": {
+      "kind": "prompt",
+      "params": {
+        "text": ""
+      }
+    },
+    "seed": {
+      "kind": "seed",
+      "params": {
+        "seed": -1
+      }
+    },
+    "model": {
+      "kind": "stable-audio-3/model",
+      "params": {
+        "variant": "small-sfx",
+        "precision": "bf16"
+      }
+    },
+    "extend": {
+      "kind": "stable-audio-3/extend",
+      "in": {
+        "model": "model.model",
+        "text": "prompt.text",
+        "seed": "seed.seed"
+      },
+      "params": {
+        "source": null,
+        "seconds": 4,
+        "where": "end"
+      }
+    },
+    "output": {
+      "kind": "output",
+      "in": {
+        "media": "extend.audio"
+      }
+    }
+  },
+  "studio": {
+    "composer": [
+      "prompt.text"
+    ],
+    "quick": [
+      "extend.seconds",
+      "extend.where",
+      "seed.seed"
+    ]
+  }
+}
