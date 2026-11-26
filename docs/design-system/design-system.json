@@ -863,8 +863,8 @@
  },
  "lastChange": {
   "by": "owner",
-  "at": "2026-11-26T22:24:29Z",
+  "at": "2026-11-26T22:33:07Z",
   "via": "Claude Code",
-  "note": "The app greens under every preview and the cover; Music and Sound parts (plan 38 P0: ModelPopup, TempoKey, LyricsBox, RangeBar, Variations, greyed and Auto chips, stage tabs, paired tile, menu rows); Rail with Magic; KindTabs 63px, five kinds"
+  "note": "Review fixes: ContextMenu music menu clear of the open submenu; TempoKey on ACE-Step 1.5 · 2B (BPM and key are not on MiniMax Music 3)"
  }
 }
