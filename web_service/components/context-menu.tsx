@@ -26,6 +26,8 @@ export type MenuItem = {
   items?: Item[];
   /** the Mac app's spelling suggestions */
   bold?: boolean;
+  /** a section's name inside the menu (ModelFolders 5c "Copies on mac"): not an item */
+  heading?: boolean;
 };
 /** "-" is a separator; false / null / undefined are left out (`cond && {…}`). */
 export type Item = MenuItem | "-" | false | null | undefined;
@@ -188,6 +190,7 @@ function List({
     if (r.bottom > innerHeight - 4) m.style.top = `${innerHeight - 4 - r.bottom}px`;
     if (focusFirst) m.querySelector<HTMLElement>(`[data-lv="${lv}"]`)?.focus();
   }, [lv, focusFirst]);
+  const acts = list.filter((x): x is MenuItem => x !== "-" && !x.heading);
   const buttons = () => [
     ...(ref.current?.querySelectorAll<HTMLElement>(`[data-lv="${lv}"]`) ?? []),
   ];
@@ -202,7 +205,7 @@ function List({
         const bs = buttons();
         const i = bs.indexOf(document.activeElement as HTMLElement);
         const go = (j: number) => bs[(j + bs.length) % bs.length]?.focus();
-        const it = list.filter((x) => x !== "-")[i] as MenuItem | undefined;
+        const it = acts[i] as MenuItem | undefined;
         if (e.key === "ArrowDown") go(i + 1);
         else if (e.key === "ArrowUp") go(i < 0 ? -1 : i - 1);
         else if (e.key === "Home") go(0);
@@ -214,9 +217,7 @@ function List({
         else if (e.key.length === 1 && /\S/.test(e.key) && !e.metaKey && !e.ctrlKey) {
           // a typed letter: the next item starting with it
           const k = e.key.toLowerCase();
-          const labels = list
-            .filter((x) => x !== "-")
-            .map((x) => (x as MenuItem).label.toLowerCase());
+          const labels = acts.map((x) => x.label.toLowerCase());
           const j = [...labels.keys()]
             .map((n) => (i + 1 + n) % labels.length)
             .find((n) => labels[n].startsWith(k));
@@ -230,6 +231,12 @@ function List({
       {title && <span className="hd">{title}</span>}
       {list.map((x, n) => {
         if (x === "-") return <span key={n} className="sep" role="separator" />;
+        if (x.heading)
+          return (
+            <span key={n} className="hd pt-0.5">
+              {x.label}
+            </span>
+          );
         const Icon = x.icon;
         const on = sub?.i === n;
         return (
@@ -269,7 +276,7 @@ function List({
                 focusFirst={sub.focus}
                 onBack={() => {
                   setSub(null);
-                  buttons()[list.filter((y) => y !== "-").indexOf(x)]?.focus();
+                  buttons()[acts.indexOf(x)]?.focus();
                 }}
               />
             )}

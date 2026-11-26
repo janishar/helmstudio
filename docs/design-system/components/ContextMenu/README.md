@@ -8,6 +8,7 @@ Our own right-click menu (context-menu.tsx, docs/mock/ContextMenus.dc.html): one
 - Separators: 1px `s5`, 4px 6px margin; never first, last or twice.
 - Greyed row (`aria-disabled`): 0.55 opacity, the reason in its `title` on hover ("Reading what it fits").
 - Danger row (Delete): `bad` text and icon, always last after a separator.
+- Section heading inside the menu (`hd`, `heading: true`): names the rows under it, after a separator; not an item, the keys skip it (the model card's "Copies on mac" with Mac `used` and T9 `spare`, ModelFolders 5c).
 - Submenu (`cm sub`): `size-submenu` wide, beside its row, 4px off; flips left near the edge.
 - Keys: ↑ ↓, → ← for submenus, Enter, Esc, a typed letter jumps to the next row starting with it. Shift + right-click is the browser's own menu. Text fields get Cut, Copy, Paste, Select all, Insert @… (and the Mac app's spelling); empty space gets none.
 

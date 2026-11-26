@@ -243,3 +243,87 @@ describe("Create's model data", () => {
     expect(downloaded(list, null)).toBe(true); // a core workflow
   });
 });
+
+describe("model folders (API 1.78, ModelFolders board)", async () => {
+  const two = (await import("../../contracts/fixtures/http/ModelList.valid.2.json"))
+    .default as unknown as S<"ModelList">;
+  const m = await import("@/lib/models");
+  const MAC = "3f2a9c1e7b04";
+  const T9 = "a81d0e5c22f9";
+  const host = (h: Partial<S<"ModelVariantHost">>) =>
+    ({ host: "mac", state: "present", bytes: 1, job: null, ...h }) as S<"ModelVariantHost">;
+  const copy = (folder: string, state: S<"ModelCopy">["state"] = "present") =>
+    ({ folder, state, bytes: 1, freed_bytes: 1 }) as S<"ModelCopy">;
+  const ordered = (first: string) => ({
+    ...two,
+    hosts: two.hosts.map((h) =>
+      h.host === "mac"
+        ? { ...h, folders: [...h.folders!].sort((a) => (a.id === first ? -1 : 1)) }
+        : h,
+    ),
+  });
+
+  it("copyNote: the disk tag only with two folders; also on, not connected, using", () => {
+    expect(m.copyNote(two, host({ host: "gpu1" }))).toEqual({ tag: null, note: null });
+    expect(m.copyNote(two, host({ folder: MAC, copies: [copy(MAC)] }))).toEqual({
+      tag: "Mac",
+      note: null,
+    });
+    expect(m.copyNote(two, host({ folder: MAC, copies: [copy(MAC), copy(T9)] })).note).toBe(
+      "also on ALI T9",
+    );
+    const away = host({ folder: MAC, copies: [copy(MAC), copy(T9, "unplugged")] });
+    expect(m.copyNote(two, away).note).toBe("ALI T9 not connected");
+    // T9 first in the list and unplugged: it fell back to Mac
+    expect(m.copyNote(ordered(T9), away).note).toBe("ALI T9 not connected · using Mac");
+    const only = host({ state: "unplugged", folder: null, copies: [copy(T9, "unplugged")] });
+    expect(m.copyNote(two, only)).toEqual({ tag: null, note: "ALI T9 not connected" });
+    expect(m.hostText(two, only)).toBe("ALI T9 not connected");
+    expect(m.hostText(two, host({ folder: MAC, copies: [copy(MAC)] }))).toBe("present · Mac");
+  });
+
+  it("downloadFolders: the downloads folder first and picked, else the next connected writable", () => {
+    expect(m.downloadFolders(two, "mac")).toMatchObject({ pick: MAC });
+    expect(m.downloadFolders(two, "gpu1")).toEqual({ folders: [], pick: null });
+    const t9dl = {
+      ...two,
+      hosts: two.hosts.map((h) =>
+        h.host === "mac"
+          ? { ...h, folders: h.folders!.map((f) => ({ ...f, downloads: f.id === T9 })) }
+          : h,
+      ),
+    };
+    const r = m.downloadFolders(t9dl, "mac");
+    expect(r.folders.map((f) => f.id)).toEqual([T9, MAC]);
+    expect(r.pick).toBe(MAC); // T9 is the downloads folder but unplugged
+  });
+
+  it("deleteCopies: the used copy first", () => {
+    const rows = m.deleteCopies(two, host({ folder: T9, copies: [copy(MAC), copy(T9)] }));
+    expect(rows.map((r) => [r.copy.folder, r.used])).toEqual([
+      [T9, true],
+      [MAC, false],
+    ]);
+  });
+
+  it("folderOf: the folder its runs load from", () => {
+    const v = { dir: "X", hosts: [host({ folder: T9 })] };
+    expect(m.folderOf(two, v, "mac")).toBe("/Volumes/ALI T9/models/X");
+    expect(m.folderOf(two, { dir: "X" }, "mac")).toBe("~/GenAI/models/X");
+  });
+
+  it("pathProblem, pathName, diskText", () => {
+    expect(m.pathProblem("models", [])).toBe("paths must be absolute or start with ~/");
+    expect(m.pathProblem("/a/../b", [])).toBe("paths must be absolute or start with ~/");
+    expect(m.pathProblem("~/m/", ["~/m"])).toBe("~/m/ is listed twice");
+    expect(m.pathProblem("/Volumes/T9/models", ["~/m"])).toBeNull();
+    expect(m.pathName("/Volumes/ALI T9/models", "mac")).toBe("ALI T9");
+    expect(m.pathName("/srv/models", "gpu1")).toBe("gpu1");
+    expect([43e9, 1.8e12, 2e12, 640e6].map(m.diskText)).toEqual([
+      "43 GB",
+      "1.8 TB",
+      "2 TB",
+      "640 MB",
+    ]);
+  });
+});

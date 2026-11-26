@@ -461,6 +461,29 @@ test("a10 download a model to a host, then delete it again", async () => {
   await expect(side).toContainText(/fake\s*missing/, { timeout: 120_000 });
 });
 
+test("a10b model folders: add the fake host's second folder, see it on the strip, remove it again", async () => {
+  test.setTimeout(120_000);
+  await admin.goto("/models");
+  await admin.getByLabel("Host", { exact: true }).selectOption("fake");
+  const strip = admin.getByRole("group", { name: "Folders on fake" });
+  await expect(strip).toContainText("/models");
+  await strip.getByRole("button", { name: "Edit…" }).click();
+  const dlg = admin.getByRole("dialog", { name: "Folders · fake" });
+  await dlg.getByRole("textbox", { name: "Folder path" }).fill("/models2");
+  await dlg.getByRole("button", { name: "Add" }).click();
+  await expect(dlg.getByRole("listitem")).toHaveCount(2);
+  await shot(admin, "a10b-edit-folders");
+  await dlg.getByRole("button", { name: "Save" }).click();
+  await expect(dlg).toBeHidden();
+  // the runner applies the list and reports both (the 15 s poll)
+  await expect(strip).toContainText("/models2", { timeout: 60_000 });
+  await shot(admin, "a10b-two-folders");
+  await strip.getByTitle("/models2").click({ button: "right" });
+  await admin.getByRole("menuitem", { name: "Remove…" }).click();
+  await admin.getByRole("alertdialog").getByRole("button", { name: "Remove" }).click();
+  await expect(strip).not.toContainText("/models2", { timeout: 60_000 });
+});
+
 test("a11 a user changes their password, signs out and back in", async () => {
   const p = personPage;
   // a07 reset the password and disabled the account, which signed this tab out: sign in with the new one

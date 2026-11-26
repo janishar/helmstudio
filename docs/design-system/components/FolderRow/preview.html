@@ -1,0 +1,29 @@
+<!-- @dsCard group="Models" height=200 -->
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>FolderRow · preview</title>
+<style>
+.fl{display:flex;flex-direction:column;gap:6px;padding:16px;max-width:680px}
+.frow{display:grid;grid-template-columns:18px 24px minmax(0,1fr) 150px 108px 28px;align-items:center;gap:10px;padding:10px 10px 10px 8px;border-radius:12px;background:var(--s3)}
+.frow.lift{background:var(--s4);box-shadow:0 14px 26px -10px color-mix(in srgb,var(--shd) 85%,transparent),0 0 0 1px var(--a2);transform:translateY(-3px)}
+.frow.off{background:transparent;box-shadow:inset 0 0 0 1px var(--ln)}
+.frow.off .pth,.frow.off .no{opacity:.6}
+.grip{color:var(--t2);font:700 13px/1 Inter,sans-serif;letter-spacing:-2px}
+.frow .no{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--s5);font:600 11px/22px Inter,sans-serif}
+.pth{display:flex;flex-direction:column;gap:2px;min-width:0}
+.pth b{font-size:13px;font-weight:600;display:flex;gap:8px;align-items:center}
+.pth b i{font-style:normal;font-size:11px;font-weight:400;color:var(--a1)}
+.pth span{font-family:var(--font-mono);font-size:11px;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fs{display:flex;flex-direction:column;gap:4px;font-family:var(--font-mono);font-size:11px;color:var(--t2)}
+.fs .bar{display:block;height:4px;border-radius:2px;background:var(--in);overflow:hidden}.fs .bar span{display:block;height:100%;background:var(--a1)}
+.rd{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--t2)}.rd input{accent-color:var(--a1);margin:0}
+.x{width:26px;height:26px;border:0;border-radius:8px;background:transparent;color:var(--t2)}
+</style></head>
+<body>
+<div class="fl" role="list">
+  <div class="frow lift" role="listitem" aria-label="T9"><span class="grip" aria-hidden="true">⋮⋮</span><span class="no">1</span><span class="pth"><b>T9<i>Connected</i></b><span>/Volumes/ALI T9/models</span></span><div class="fs"><span>205 GB free of 1.8 TB</span><span class="bar"><span style="width:89%"></span></span></div><label class="rd"><input type="radio" name="p">Downloads</label><button class="x" type="button" aria-label="Remove T9">✕</button></div>
+  <div class="frow" role="listitem" aria-label="Mac"><span class="grip" aria-hidden="true">⋮⋮</span><span class="no">2</span><span class="pth"><b>Mac<i>Connected</i></b><span>~/GenAI/models</span></span><div class="fs"><span>43 GB free of 994 GB</span><span class="bar"><span style="width:96%"></span></span></div><label class="rd"><input type="radio" name="p" checked>Downloads</label><button class="x" type="button" aria-label="Remove Mac">✕</button></div>
+  <div class="frow off" role="listitem" aria-label="Studio"><span class="grip" aria-hidden="true">⋮⋮</span><span class="no">3</span><span class="pth"><b>Studio</b><span>/Volumes/Studio/models</span></span><span class="fs">Not connected</span><label class="rd"><input type="radio" name="p" disabled>Downloads</label><button class="x" type="button" aria-label="Remove Studio">✕</button></div>
+</div>
+</body>
+</html>

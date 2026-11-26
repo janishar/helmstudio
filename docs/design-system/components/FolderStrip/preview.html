@@ -1,0 +1,24 @@
+<!-- @dsCard group="Models" height=150 -->
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>FolderStrip · preview</title>
+<style>
+.fold{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 8px 8px 14px;border-radius:18px 18px 18px 8px;background:var(--s1)}
+.fold .h{font-size:12px;font-weight:600;letter-spacing:.04em;color:var(--t2)}
+.fr{display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 12px 0 6px;border-radius:999px;background:var(--s3);font-size:13px;font-weight:500}
+.fr .no{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:999px;background:var(--s5);font:600 11px/22px Inter,sans-serif}
+.fr .m{font-family:var(--font-mono);font-size:12px;color:var(--t2)}
+.fr.off{background:transparent;box-shadow:inset 0 0 0 1px var(--ln);color:var(--t2)}
+.dl{padding:1px 7px;border-radius:999px;background:color-mix(in srgb,var(--a1) 24%,var(--s4));font-size:11px;font-weight:500}
+.hostc{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:var(--s1);font-size:12px}
+.hostc .dot{width:8px;height:8px;border-radius:50%;background:var(--a1)}
+.dk{padding:0 6px;border-radius:6px;background:var(--s4);font:500 10px/16px var(--font-mono);color:var(--t1b)}
+.also{font-size:11px;color:var(--t2)}
+</style></head>
+<body>
+<div style="padding:16px;display:flex;flex-direction:column;gap:12px">
+  <div class="fold" role="group" aria-label="Folders on mac"><span class="h">Folders · mac</span><span class="fr"><span class="no">1</span>Mac<span class="m">~/GenAI/models</span><span class="m">43 GB free</span><span class="dl">Downloads</span></span><span class="fr off"><span class="no">2</span>T9<span class="m">/Volumes/ALI T9/models</span><span>Not connected</span></span><span style="flex-grow:1"></span><button class="chip bevel" type="button">Edit…</button></div>
+  <div class="hs-row" style="padding:0"><span class="hostc"><span class="dot"></span>mac<span class="dk" title="Loaded from this folder">Mac</span><span class="also">also on T9</span></span><span class="hostc"><span class="dot"></span>mac<span class="dk" title="Loaded from this folder">Mac</span><span class="also">T9 not connected · using Mac</span></span></div>
+</div>
+</body>
+</html>
