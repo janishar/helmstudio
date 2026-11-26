@@ -166,7 +166,7 @@ runners-stop:     ## stops the native runners (each by its pid file; only a proc
 # restarts alone.
 # The runners of a Linux NVIDIA machine (or WSL2) on the host, from source (docs/guides/nvidia-linux.md): no CUDA
 # image ships. Env torch always; env native when SGLang is found (SGLANG_BIN, else ~/sglang from make sglang, else
-# `sglang` on PATH). Host GPU_HOST
+# `sglang` on PATH) or zonos3-server is (on Linux fetched first when missing: runner_service make zonos3-get). Host GPU_HOST
 # (default: the first of GPU_HOSTS, else the one GPU host deploy/secrets has, else the short hostname) with the NATS user and S3 identity that
 # make up GPU_HOSTS=<h> made, over plain nats:// and http:// on 127.0.0.1 (this machine's stack: no tunnel, no TLS).
 # Logs and pid files as the Mac's: runner_service/.run/runner-<h>-<env>.{pid,log}; make runners-nvidia-stop.
@@ -189,7 +189,10 @@ runners-nvidia:   ## the NVIDIA host runners in the background (needs make up GP
 	@h=$(GPU_HOST); $(if $(filter release,$(STACK)),mkdir -p $(SECRETS) && chmod 700 $(SECRETS) && \
 	docker run --rm -v $${HELMSTUDIO_PROJECT:-helmstudio}_keys:/k:ro -v $(SECRETS):/o --entrypoint sh nats:2.15.3-alpine3.22 \
 	  -c "cp /k/nats_runner_$${h}_*_password /k/s3_runner_$${h}_* /o/ && chown $$(id -u):$$(id -g) /o/* && chmod 600 /o/*" || exit 2;) [ -f $(SECRETS)/nats_runner_$${h}_torch_password ] || { echo "no credentials for host $$h: make up GPU_HOSTS=$$h"; exit 2; }; \
-	mkdir -p $(RUN_DIR); for e in torch $(if $(SGLANG_FOUND),native); do \
+	z=runner_service/vendor/zonos3/build/zonos3-server; [ "$$(uname -s)" != Linux ] || [ -x $$z ] || \
+	  make --no-print-directory -C runner_service zonos3-get || true; \
+	envs=torch; if [ -n "$(SGLANG_FOUND)" ] || [ -x $$z ]; then envs="torch native"; fi; \
+	mkdir -p $(RUN_DIR); for e in $$envs; do \
 	pid=$$(cat $(RUN_DIR)/runner-$$h-$$e.pid 2>/dev/null); \
 	if [ -n "$$pid" ] && ps -p $$pid -o command= | grep -q 'uv run'; then echo "runner $$e already runs ($$pid)"; continue; fi; \
 	(umask 077; printf 'nats://runner_%s_%s:%s@127.0.0.1:%s' $$h $$e "$$(cat $(SECRETS)/nats_runner_$${h}_$${e}_password)" \

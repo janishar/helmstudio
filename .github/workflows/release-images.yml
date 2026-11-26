@@ -3,7 +3,7 @@
 # baked in), a smoke test of that compose.yml on each kind of machine, and the Mac app's .dmg. It runs only for a
 # pushed tag v*; on a tag whose commit is not on main every job after the first is skipped (owner, 2026-11-25), and publishes only
 # after both smoke tests pass: one tag ghcr.io/janishar/helmstudio-<name>:<version> per image
-# (multi-arch), and the .dmg, compose.yml and SHA256SUMS attached to the GitHub release of that tag if it exists.
+# (multi-arch), and the .dmg, compose.yml, the NVIDIA zonos3-server and SHA256SUMS attached to the GitHub release of that tag if it exists.
 name: release-builds
 
 on:
@@ -190,6 +190,45 @@ jobs:
           path: dmg/
           compression-level: 0
 
+  # the prebuilt ZONOS3 server for NVIDIA hosts (alpha.6 row 2; runner_service make zonos3-get fetches it): built in
+  # CUDA's devel image (no GPU needed), cudart and cuBLAS (CUDA redistributables) in lib/ beside it, the licences; a
+  # smoke test that it links only lib/ and the system (libcuda.so.1 is the driver's) and starts on the stub driver.
+  # ponytail: the arch list is a first pick (CUDA 13 has no sm < 75); each arch adds build time
+  zonos3-cuda:
+    needs: meta
+    if: needs.meta.outputs.on_main == 'true'
+    runs-on: ubuntu-24.04
+    container: nvidia/cuda:13.2.1-devel-ubuntu24.04
+    env:
+      VERSION: ${{ needs.meta.outputs.version }}
+      ARCHS: 75-real;80-real;86-real;89-real;90-real;120a-real
+    steps:
+      - run: apt-get update && apt-get install -y --no-install-recommends cmake make g++ git curl ca-certificates
+      - uses: actions/checkout@v4
+      - run: |
+          curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.88.0
+          echo "$HOME/.cargo/bin" >>"$GITHUB_PATH"
+      - run: make -C runner_service zonos3-cuda ZONOS3_CUDA_ARCHS="$ARCHS"
+      - name: pack zonos3-server, cudart and cuBLAS, the licences
+        run: |
+          z=runner_service/vendor/zonos3 p=pkg
+          mkdir -p $p/lib out
+          cp $z/build/zonos3-server $z/LICENSE $z/NOTICE $p/ && cp -r $z/third_party/licenses $p/licenses
+          cp -P /usr/local/cuda/lib64/libcudart.so.13* /usr/local/cuda/lib64/libcublas.so.13* \
+            /usr/local/cuda/lib64/libcublasLt.so.13* $p/lib/
+          [ ! -f /usr/local/cuda/EULA.txt ] || cp /usr/local/cuda/EULA.txt $p/licenses/CUDA-EULA.txt
+          tar -czf "out/zonos3-server-$VERSION-linux-x86_64-cuda13.tar.gz" -C $p .
+          ls -l out
+      - name: smoke test (no GPU)
+        run: |
+          mkdir t && tar -xzf out/*.tar.gz -C t && ldd t/zonos3-server | tee ldd.txt
+          ! grep 'not found' ldd.txt | grep -v '^\s*libcuda\.so\.1 '
+          ! grep '=> /' ldd.txt | grep -v -e "=> $PWD/t/lib/" -e '=> /lib/' -e '=> /usr/lib/' -e '=> /lib64/'
+          mkdir stub && ln -s /usr/local/cuda/lib64/stubs/libcuda.so stub/libcuda.so.1
+          LD_LIBRARY_PATH=$PWD/stub t/zonos3-server --help
+      - uses: actions/upload-artifact@v4
+        with: {name: zonos3-cuda, path: out/, compression-level: 0}
+
   # ---------- a tag only, after both smoke tests: push each image by digest (from this run's cache), then one tag
 
   push:
@@ -256,9 +295,9 @@ jobs:
             --annotation "index:org.opencontainers.image.source=$SOURCE" $(for d in digests/*; do echo "$img@sha256:${d#digests/}"; done)
           docker buildx imagetools inspect "$img:${{ needs.meta.outputs.version }}"
 
-  # the release files (the .dmg, compose.yml, SHA256SUMS): one artifact on every run; on a tag also attached to its GitHub release, if one exists
+  # the release files (the .dmg, compose.yml, the zonos3-server tarball, SHA256SUMS): one artifact on every run; on a tag also attached to its GitHub release, if one exists
   release-files:
-    needs: [meta, compose, smoke, mac, publish]
+    needs: [meta, compose, smoke, mac, publish, zonos3-cuda]
     if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && needs.meta.outputs.on_main == 'true' }}
     runs-on: ubuntu-24.04
     permissions: {contents: write}
@@ -269,7 +308,9 @@ jobs:
         with: {name: compose, path: files}
       - uses: actions/download-artifact@v4
         with: {name: dmg, path: files}
-      - run: cd files && sha256sum ./*.dmg ./compose.yml | sed 's| \./| |' >SHA256SUMS && cat SHA256SUMS && ls -l
+      - uses: actions/download-artifact@v4
+        with: {name: zonos3-cuda, path: files}
+      - run: cd files && sha256sum ./*.dmg ./compose.yml ./zonos3-server-*.tar.gz | sed 's| \./| |' >SHA256SUMS && cat SHA256SUMS && ls -l
       - uses: actions/upload-artifact@v4
         with:
           name: release-${{ env.VERSION }}
