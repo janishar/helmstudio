@@ -151,20 +151,31 @@ export function Modal({
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  // closed because `open` went false: the parent already knows, and its onClose would undo what it did next (the
+  // Timeline's Sequences → + New sequence set the dialog to "new", then this close event set it back to none)
+  const shut = useRef(false);
   useEffect(() => {
     const d = ref.current;
     if (open && d && !d.open) {
+      shut.current = false;
       d.showModal();
       // showModal focuses the first button, the ×, and Safari rings it: keep the focus on the dialog instead
       if (document.activeElement === d.querySelector("[data-close]")) d.focus();
     }
-    if (!open && d?.open) d.close();
+    if (!open && d?.open) {
+      shut.current = true;
+      d.close();
+    }
   }, [open]);
   return (
     <dialog
       ref={ref}
       // only this dialog's own close: React bubbles a nested dialog's (a picker inside an editor) up its tree
-      onClose={(e) => e.target === e.currentTarget && onClose()}
+      onClose={(e) => {
+        if (e.target !== e.currentTarget) return;
+        if (shut.current) shut.current = false;
+        else onClose();
+      }}
       onClick={(e) => {
         // the backdrop's clicks land on the dialog itself, outside its box (its padding is inside)
         const d = e.currentTarget;
