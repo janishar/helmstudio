@@ -96,9 +96,9 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 .take:hover i .pl,.take.hv i .pl{display:flex}
 .cov .disc{position:absolute;right:-28px;top:50%;width:88px;height:88px;margin-top:-44px;border-radius:50%;background:radial-gradient(circle,var(--dl,#e9e2f0) 0 9px,#0d0b10 9px 10px,transparent 10px),repeating-radial-gradient(circle,#141018 0 2px,#262030 2px 3px);box-shadow:-6px 0 14px rgba(0,0,0,.45)}
 .cov .ct{position:absolute;left:10px;top:10px;right:66px;font:700 16px/18px 'Bricolage Grotesque',Inter,sans-serif;color:#fff;text-align:left;text-shadow:0 1px 3px rgba(0,0,0,.45)}
-/* picker cards are narrower than a Gallery card: a one-line title, a smaller orb */
-.pk i.cov .ct{right:44px;font-size:13px;line-height:15px;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
-.pk .orb{width:36px;height:36px;margin-top:-12px}.pk .orb svg{width:16px;height:16px}
+/* picker cards are narrower than a Gallery card: a two-line title, a smaller orb */
+.pk i.cov .ct{top:8px;right:44px;font-size:13px;line-height:14px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.pk .orb{width:28px;height:28px;margin-top:-2px;box-shadow:0 0 0 4px color-mix(in srgb,var(--k) 16%,transparent),0 0 18px 3px color-mix(in srgb,var(--k) 45%,transparent)}.pk .orb svg{width:14px;height:14px}.pk .o8 .ln{bottom:4px}
 :is(.take,.pk) i.cov em{color:rgba(255,255,255,.85)}
 :is(.take,.pk) i.cov u{right:auto;left:8px;top:auto;bottom:22px}
 :is(.take,.pk) i.t8 em{color:rgba(255,255,255,.85)}
@@ -108,11 +108,10 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 .o8 .ln{position:absolute;left:0;right:0;bottom:10px;text-align:center;font:500 11px/14px 'JetBrains Mono',monospace;color:var(--t1b)}
 .tt{position:relative;width:112px;height:72px;box-sizing:border-box;padding:6px 8px;border-radius:8px;border:1px solid var(--s5);color:var(--t2);font:11px 'JetBrains Mono',monospace;display:flex;flex-direction:column;justify-content:space-between;text-align:left;overflow:hidden}
 .tt[aria-pressed="true"]{border:2px solid var(--a2)}
-.tt .tv{position:relative;display:block;height:36px}
-.tt.t8{border-color:transparent;color:rgba(255,255,255,.88)}
-.tt.t8[aria-pressed="true"]{border-color:var(--a2)}
-.tt.t8.o8{color:var(--t2)}
-.tt.t8 .tv{display:flex;align-items:center}
+.tt.cov{border-color:transparent;color:rgba(255,255,255,.88)}
+.tt.cov[aria-pressed="true"]{border-color:var(--a2)}
+.tt .tv{position:relative;display:flex;align-items:center;height:36px}
+.tt .disc{width:44px;height:44px;margin-top:-22px;top:20px;right:auto;left:-16px}
 .tt .orb{width:26px;height:26px;margin:0 0 0 4px;box-shadow:0 0 0 3px color-mix(in srgb,var(--k) 16%,transparent),0 0 14px 2px color-mix(in srgb,var(--k) 45%,transparent)}.tt .orb svg{width:13px;height:13px}
 /* small thumbs (rows, chips, tiles): the same looks, scaled */
 .sm.cov,.sm.o8{border:0}
