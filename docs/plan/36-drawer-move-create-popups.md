@@ -108,24 +108,35 @@ always open on the right, or the Elements panel in its place.
 
 ## 43. Right-click menus (item 17)
 
-Owner, 2026-11-26: "is it possible to have our own double click menu", then "right click in mean", then "App-wide".
+Owner, 2026-11-26: "is it possible to have our own double click menu", then "right click in mean", then "App-wide";
+then "have we considered all the places for right click, and browser default can we overrive as per our design?",
+answered "Add all" (every place below) and "Ours everywhere" (text fields too).
 
-Board: [Right-click menus](../mock/ContextMenus.dc.html), frames 0–6. Board drawn; no code yet. Web only: no contract,
-message or service change.
+Board: [Right-click menus](../mock/ContextMenus.dc.html), frames 0–13. Board drawn; no code yet. Web and the Mac app
+(Electron) only: no contract, message or service change.
 
-- **Where.** Our menu replaces the browser's on media and editing surfaces: the Timeline's lanes, ruler, track headers
-  and selections; Gallery take cards and a Select several selection; Create's stage, strip tiles and session menu.
-  Text fields, selected text and Shift + right-click keep the browser's menu (copy, paste, spelling, Inspect).
+- **Where (all of these).** Timeline: a clip, a gap, a track header, the ruler, a selection (frames 1–3). Gallery: a
+  take, a selection (4). Create: the stage take, a strip tile, a session (5), an @ chip in a prompt (7). Both graphs
+  (Create's Graph view, a pipeline): a node or step, the empty canvas, a wire (8). Assistant chat: a message, a take
+  (9). Models: a model card (10). Libraries: a LoRA, a voice, an element (11). Hub and System: a provider, a plugin, a
+  user, a host and a resident component, an API key (12). Magic later (13). Empty page space has no menu.
+- **Text fields get ours too** (frame 6): Cut ⌘X, Copy ⌘C, Paste ⌘V, Select all ⌘A, and **Insert @…** in a prompt
+  that takes @ mentions. The Mac app puts the spelling suggestions and Add to dictionary first (Electron's
+  context-menu event). In the browser the first Paste asks for clipboard permission, once per site; Block greys Paste
+  with its reason and ⌘V still works. **Shift + right-click** always opens the browser's own menu.
 - **One shared component** in the app's menu look (the Create chip popups and Run on): a header naming what it acts
-  on; icon, label and shortcut key per item; groups with separators; the danger item last in red; greyed items keep
-  their place with the reason on hover; submenus only for lists (Use in ›, Replace with another take ›, Move to
-  track ›). Opens at the pointer and stays on screen; Esc or a click outside closes; arrows, Enter and a typed letter
-  move and pick; ⇧F10 or the context-menu key opens it on the focused item. The ⋯ buttons stay and open the same menu.
+  on; icon, label and shortcut key per item; groups with separators; danger items (Delete, Remove, Disable, Unload,
+  Revoke) last in red, each with the confirm card it has today (none where it has none: ⌘Z or Enable undoes it);
+  greyed items keep their place with the reason on hover; submenus only for lists. Opens at the pointer and stays on
+  screen; ↑ ↓, → ← for submenus, Enter, Esc, a typed letter; the menu key or ⇧F10 opens it on the focused item (in a
+  field, at the caret). The ⋯ buttons stay and open the same menu.
 - **Right-click selects first**: on an item outside the selection it selects that item alone; on the selection it
   acts on all of it. Time actions (New shot, Add marker, Mark in / out) act at the pointer's time.
-- **Only existing actions**, the same calls the inspector, shortcut sheet, Gallery panel and Create stage make. New
-  on the board: **Close gap** on an empty audio-track gap (no op closes a gap today). Magic's menus (frame 6) wait for
-  Magic (plan 37) and add Delete block and Add and run….
+- **Only existing actions**, the same calls the page's buttons, ⋯ menus and shortcuts make. **New** on the board:
+  Close gap (a gap on an audio track); Cut, Copy, Paste, Select all, Insert @… and the Mac app's spelling items as
+  menu items; on an @ chip Replace with ›, Write as text, Remove from prompt, New element @handle (prefilled);
+  Duplicate ⌘D on a node or step; Add a node on it… on a wire; Copy on your own chat message; Copy prefix on an API
+  key. Magic's menus wait for Magic (plan 37) and add Delete block and Add and run….
 
 ### 43.1 Open
 
