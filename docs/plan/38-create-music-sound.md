@@ -469,3 +469,7 @@ Files per phase (each phase owns these and nothing else; "tests" means the named
 18. The Assistant's take cards (`components/assistant/media.tsx`) keep today's audio look; the board's cover and orb
     cover the Gallery, pickers and strip only. **Applied** (review default); one line in P5 if the owner wants them
     there too.
+
+## Decided by the owner (2026-11-27)
+
+- After listening to the samples: "minimax i liked the best". Create's Music opens on **MiniMax Music 3** (owner picked "MiniMax default"): Generate shows its time estimate first; ACE-Step 1.5 2B and XL stay in the model popup for fast drafts and for editing (Repaint, Cover, Extend, BPM, key), which MiniMax cannot do. The board's frame 1 and the model popup (frame 2a) change to match in P4; until then the board shows ACE-Step first.
