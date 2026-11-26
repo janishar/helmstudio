@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import fixture from "../../contracts/fixtures/http/ModelList.valid.json";
+import { cube } from "@/components/models/models";
 import type { S } from "@/lib/api";
 import type { Field } from "@/lib/workflow";
 import {
@@ -325,5 +326,14 @@ describe("model folders (API 1.78, ModelFolders board)", async () => {
       "2 TB",
       "640 MB",
     ]);
+  });
+});
+
+describe("the cube colour (API 1.79 models[].sound)", () => {
+  it("music and sound models take their kind colour; others keep theirs", () => {
+    expect(cube({ ...qwen, media: ["audio"], sound: "music" })).toContain("var(--kind-music)");
+    expect(cube({ ...qwen, media: ["audio"], sound: "sound" })).toContain("var(--kind-sound)");
+    expect(cube(ltx)).toBe("linear-gradient(155deg, #ffb07a, #e0457a)");
+    expect(cube({ ...qwen, media: ["audio"], sound: "voice" })).toBe(cube(qwen));
   });
 });

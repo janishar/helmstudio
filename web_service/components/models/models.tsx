@@ -361,11 +361,19 @@ function Legend({ dot, text }: { dot: string; text: string }) {
   );
 }
 
-/** The model's cube colour by what it makes. */
-const cube = (m: Model) =>
-  m.media.includes("video")
-    ? "linear-gradient(155deg, #ffb07a, #e0457a)"
-    : "linear-gradient(155deg, #7af5d6, #12967f)";
+/** A kind colour's cube: light at the top left, deep at the bottom right (styles/tokens.css kind-*). */
+const kindCube = (k: string) =>
+  `linear-gradient(155deg, color-mix(in srgb, var(${k}) 55%, #fff), color-mix(in srgb, var(${k}) 60%, #000))`;
+
+/** The model's cube colour by what it makes: from API 1.79 a music or sound model in its kind colour (`sound`). */
+export const cube = (m: Model) =>
+  m.sound === "music"
+    ? kindCube("--kind-music")
+    : m.sound === "sound"
+      ? kindCube("--kind-sound")
+      : m.media.includes("video")
+        ? "linear-gradient(155deg, #ffb07a, #e0457a)"
+        : "linear-gradient(155deg, #7af5d6, #12967f)";
 
 function ModelSection({
   list,
