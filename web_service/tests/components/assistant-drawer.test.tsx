@@ -1252,12 +1252,12 @@ describe("steer while it answers (board frame 8)", () => {
     await screen.findByText(text);
   };
 
-  it("a · while it works the box stays open: Steer the answer…, Enter steers this answer, and Stop", async () => {
+  it("a · while it works the box stays open: Steer the answer…, Enter steers, and Stop", async () => {
     serveSteer([entry(1, { kind: "user", text: "Make a rainy London still" })]);
     await openDrawer();
     await waitFor(() => expect(box().getAttribute("placeholder")).toBe("Steer the answer…"));
     expect((box() as HTMLTextAreaElement).disabled).toBe(false);
-    expect(screen.getByText("steers this answer").textContent).toBe("Enter steers this answer");
+    expect(screen.getByText("steers").textContent).toBe("Enter steers");
     expect(screen.getByRole("button", { name: "Stop" })).toBeTruthy();
     // idle: as before
     act(() =>
@@ -1269,7 +1269,7 @@ describe("steer while it answers (board frame 8)", () => {
     );
     expect(box().getAttribute("placeholder")).toBe("Ask, or say what to do");
     expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
-    expect(screen.queryByText(/steers this answer/)).toBeNull();
+    expect(screen.queryByText(/^steers$/)).toBeNull();
   });
 
   it("b · sent: shown at once at the bottom, dimmed, at the next step; several wait in order", async () => {
@@ -1459,6 +1459,22 @@ describe("alpha.2: size, answers that read well, polish (board frames 9, 10, 14)
     fireEvent.click(screen.getByRole("button", { name: /^Close \(/ }));
     expect(drawer()).toBeNull();
     expect(screen.queryByRole("button", { name: /^Open the Assistant/ })).toBeNull();
+  });
+
+  it("a page's side form opening under the drawer minimizes it; one beside the drawer does not", async () => {
+    serve();
+    await openDrawer();
+    const beside = document.createElement("aside");
+    beside.className = "aside beside-drawer";
+    document.body.append(beside);
+    await waitFor(() => expect(drawer()).toBeTruthy());
+    const side = document.createElement("aside");
+    side.className = "aside";
+    document.body.append(side);
+    await waitFor(() => expect(drawer()).toBeNull());
+    expect(bar("Open the Assistant")).toBeTruthy();
+    beside.remove();
+    side.remove();
   });
 
   it("the bar's states: Working with Stop, Waiting for you and what, a new answer", async () => {

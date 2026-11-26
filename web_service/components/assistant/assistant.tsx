@@ -2238,6 +2238,20 @@ function Drawer({ a }: { a: AssistantApi }) {
   const [memory, setMemory] = useState(false);
   const [chats, setChats] = useState(false);
   const chatsBtn = useRef<HTMLButtonElement>(null);
+  // a page's side form (Edit, Add, a take's details) opening under the drawer minimizes it (owner, 2026-11-26); the
+  // forms drawn beside the drawer (.beside-drawer) and one already open when the drawer opened leave it be
+  const { minimize } = a;
+  useEffect(() => {
+    const SIDE = "aside.aside:not(.beside-drawer)";
+    let had = !!document.querySelector(SIDE);
+    const mo = new MutationObserver(() => {
+      const has = !!document.querySelector(SIDE);
+      if (has && !had) minimize();
+      had = has;
+    });
+    mo.observe(document.body, { childList: true, subtree: true });
+    return () => mo.disconnect();
+  }, [minimize]);
   const closeChats = useCallback(() => setChats(false), []);
   const openChats = () => {
     a.loadChats();
@@ -2486,7 +2500,10 @@ function Drawer({ a }: { a: AssistantApi }) {
             {/* while a chip shows (Working, Waiting) it takes the title's place, so every button fits; in the 340 px
                 drawer the Settings gear (plan 32) leaves room for the mark only, the word shows full screen and on a
                 phone */}
-            <h2 aria-label="Assistant" className={chip ? "shrink-0 grow-0" : ""}>
+            <h2
+              aria-label="Assistant"
+              className={chip ? (full || phone ? "shrink-0 grow-0" : "sr-only") : ""}
+            >
               <Bot aria-hidden strokeWidth={2} />
               {!chip && (full || phone) && <span className="truncate">Assistant</span>}
             </h2>
@@ -2842,7 +2859,7 @@ function Drawer({ a }: { a: AssistantApi }) {
                     </>
                   ) : a.steering ? (
                     <>
-                      <span className="kbd">Enter</span> steers this answer
+                      <span className="kbd">Enter</span> steers
                     </>
                   ) : picks ? (
                     !phone && (

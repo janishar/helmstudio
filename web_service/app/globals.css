@@ -911,6 +911,10 @@
   .ast .dh h2 svg {
     flex-shrink: 0;
   }
+  .ast .dh > .ib {
+    flex-shrink: 1; /* in the 340 px drawer the buttons give way before Close leaves the screen */
+    min-width: 24px;
+  }
   .ast .dh h2 svg {
     width: 26px;
     height: 26px;
@@ -1502,6 +1506,10 @@
   }
   .ast .cmpb small {
     flex: 1 1 auto;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
     font-size: 11px;
     color: var(--t2);
   }
