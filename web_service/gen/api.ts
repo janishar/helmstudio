@@ -3172,6 +3172,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/studio/takes/{take_id}/mux": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Save with the video (from 1.79): a new video take of a video take's picture with this audio take as its sound
+         * @description contracts/README.md, Music and sound: Save with the video. `take_id` is the audio take (kind audio), the body
+         *     names the video take. 202 with a media job (kind `mux`): the runner copies the picture (H.264), encodes the
+         *     sound as AAC and cuts or pads it to the video's length; on success the job's `take_id` is a new video take
+         *     (source `create`, `parents` [video, audio], the video's `made_with`). Idempotent per pair: asking again while it
+         *     runs, or after it made a take that is not deleted, answers that job. 404 for either take unknown, another
+         *     user's or deleted; 422 `take <id> is not audio` or `take <id> is not a video`; 409 `no live host can export
+         *     (ffmpeg)` when no env can run it.
+         */
+        post: operations["studioTakeMux"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/files/{path}": {
         parameters: {
             query?: never;
@@ -3513,7 +3539,7 @@ export interface components {
         VoiceRef: {
             voice_id: string;
         };
-        /** @description A `span` param's value (API 1.19): a time range on the workflow's one video media source, in that take's own seconds (Retake: the stretch to regenerate) */
+        /** @description A `span` param's value (API 1.19): a time range on the workflow's one video media source (from 1.79 or audio source: Repaint), in that take's own seconds (Retake: the stretch to regenerate) */
         SpanValue: {
             start: number;
             end: number;
@@ -3547,7 +3573,10 @@ export interface components {
          *     `accepts`; with `trim` the value may carry `in` / `out` (the UI draws the take's poster or waveform with a trim
          *     control and its duration); `grid` (a video's sides must be multiples of it), `max_s` (the longest it reads) and
          *     `max_frames` (the most frames of a video it reads) bound it. `span`: a time range `{start, end}` (`SpanValue`, default null; a run needs one) on the workflow's one
-         *     `media` param that accepts video; the UI draws it as a range control over that take's poster and duration.
+         *     `media` param that accepts video (from 1.79 or audio: a song's Repaint, snapped to whole milliseconds); the UI draws it as a range control over that take's poster or waveform and duration.
+         *     From 1.79 (contracts/README.md, Music and sound): an `int` or `float` may declare `auto: true` (the value 0 means Auto: the chip and
+         *     slider show "Auto" with a switch; the model picks it) and a `text` param `tags` (the lyrics tag chips Create
+         *     inserts at the caret as `[tag]`).
          *     From 1.22 (contracts/README.md, Media inputs: rows of media): a `rows` item field may be a `media` param (each
          *     item one video or audio take, `MediaRef`, required in every item; the rows editor draws the take's poster or a
          *     sound tile with its trim control); `min_s` (media) is the shortest it reads; `max_total_s` (rows with one media
@@ -3610,11 +3639,12 @@ export interface components {
             };
             /** @description frames only: the name of the same node's int or float param holding frames per second */
             fps?: string;
-            /** @description frames only: present = the value `"auto"` is allowed (the model predicts the length, clamped to min_s..max_s seconds and to min..max frames); absent = it is 422 (`<node>.<param>: auto length is not offered`) */
             auto?: {
                 min_s: number;
                 max_s: number;
-            };
+            } | true;
+            /** @description from 1.79, text only: the tag chips over the field (lyrics: verse, chorus, bridge, intro, outro), each inserted at the caret as `[<tag>]` */
+            tags?: string[];
             /** @description int only: the only allowed values, ascending (`<node>.<param>: must be one of 3, 8`) */
             values?: number[];
             /** @description int with values (from 1.39 an enum too): the allowed values per value of an enum param `param`, the same node's or, from 1.39, another node's in the `when` reference form `<node>.<param>` (`model.variant`, the graph's merged value; a graph without that node, or a value not listed, allows all of `values` / `enum`). The message names the subset (`sample2.steps: must be one of 3`, `extend.direction: must be one of after`). The UI shows a value outside the subset faded with its reason, `<value> needs <first value of the named param that allows it>` (`Before needs Dev`); a take offer whose pre-fill it refuses also sets the named param to that value (contracts/README.md, Video: Distilled actions) */
@@ -3652,6 +3682,8 @@ export interface components {
             title: string;
             /** @description null for a core node (prompt */
             family: string | null;
+            /** @description from 1.79, a node with an Audio output only: what its sound is (model.yaml `sound` of the stage, else of the pack); Workflow.sound is read from it */
+            sound?: components["schemas"]["SoundClass"];
             /** @description from 1.24: the model component the node loads, in words (transformer, text encoder, vae); the Graph inspector reads "<family> · runs on <runtime> · uses the <component>". Absent = it loads none */
             component?: string;
             help?: string;
@@ -3724,10 +3756,12 @@ export interface components {
             /** @description the runner env that executes it */
             env: string;
             /**
-             * @description always sent from API 1.11: a template's as published (registry `media`, absent = image), a user workflow's computed from its graph (contracts/README.md, Video); audio (API 1.30) when an output is wired from an Audio output (contracts/README.md, Voices); text (API 1.14) only for an ask workflow, served read-only by GET /v1/studio/workflows/{workflow_id}, never listed
+             * @description always sent from API 1.11: a template's as published (registry `media`, absent = image), a user workflow's computed from its graph (contracts/README.md, Video); audio (API 1.30) when an output is wired from an Audio output (contracts/README.md, Voices), from 1.79 also when an Audio output of a node with a `sound` class is wired beside a Video one (the class wins: MMAudio's video workflow); text (API 1.14) only for an ask workflow, served read-only by GET /v1/studio/workflows/{workflow_id}, never listed
              * @enum {string}
              */
             media?: "image" | "video" | "audio" | "text";
+            /** @description from 1.79, an audio workflow only (absent otherwise): the `sound` of the node schema whose Audio output an output node takes, computed for templates and user workflows alike (contracts/README.md, Music and sound); absent when that node has none */
+            sound?: components["schemas"]["SoundClass"];
             /** @description node id → node */
             nodes: {
                 [key: string]: components["schemas"]["GraphNode"];
@@ -3758,7 +3792,7 @@ export interface components {
             keyframes?: components["schemas"]["WorkflowKeyframes"] | null;
         };
         /**
-         * @description what a workflow's takes are; video when an `output` node's `media` is wired from a `Video` output, from 1.30 audio when from an `Audio` output, else image
+         * @description what a workflow's takes are; video when an `output` node's `media` is wired from a `Video` output, from 1.30 audio when from an `Audio` output, else image; from 1.79 a `Video` output does not count beside an `Audio` output of a node with a `sound` class (MMAudio's video workflow makes audio)
          * @enum {string}
          */
         WorkflowMedia: "image" | "video" | "audio";
@@ -3786,6 +3820,17 @@ export interface components {
             composer?: components["schemas"]["StudioPath"][];
             /** @description chips on the composer, in order: params, and library tiles (`elements`, `look:<group>`) that open the visual picker (contracts/README.md, Looks: composer tiles) */
             quick?: (components["schemas"]["StudioPath"] | components["schemas"]["StudioTile"])[];
+            /** @description from 1.79: quick chips shown as one chip with one popup (ACE-Step's "BPM · Key · Time"), at the first item's place; each item is a param path in `quick`, in at most one group (contracts/README.md, Music and sound) */
+            groups?: {
+                /** @example BPM · Key · Time */
+                label: string;
+                items: components["schemas"]["StudioPath"][];
+            }[];
+            /** @description from 1.79: how many takes one Generate makes (Stable Audio 3's variations: 4, at most 8); absent = Create's own count */
+            count?: {
+                default: number;
+                max: number;
+            };
             /** @description the inspector's sections, in order */
             inspector?: {
                 /** @example Quality */
@@ -4896,6 +4941,11 @@ export interface components {
         /** @enum {string} */
         TakeKind: "image" | "video" | "audio";
         /**
+         * @description from 1.79 (contracts/README.md, Music and sound): what an audio take or workflow is: music (songs), sound (effects, ambience) or voice (speech); a class on kind audio, never a take kind of its own
+         * @enum {string}
+         */
+        SoundClass: "music" | "sound" | "voice";
+        /**
          * @description create: an output of a Create run; upload: a file the user uploaded; pipeline: an output of a batch run (every batch runs on the pipeline engine, plan 9.1); import (from 1.16): an item of the old helmstudio gallery, brought in by `helm import` (`legacy`); export (from 1.17): a sequence's export (`export`); frame (from 1.17): a video take's first or last frame (`frame_of`); tool (from 1.70): made by a plugin tool from takes of yours (`tool`, `parents` = those takes; contracts/README.md, Plugins: takes)
          * @enum {string}
          */
@@ -4958,6 +5008,8 @@ export interface components {
             video?: components["schemas"]["VideoInfo"];
             /** @description from 1.19, kind audio only: its length (from 1.30 a run's audio take also its sample rate) */
             audio?: components["schemas"]["AudioInfo"];
+            /** @description from 1.79, kind audio only (always sent then; absent otherwise): a run's take its workflow's `sound` (voice when the workflow has none), an upload's or a plugin take's as sent (default voice); audio takes made before 1.79 are voice */
+            sound?: components["schemas"]["SoundClass"];
             /** @description from 1.19, a video made from a media take (retake, extend, audio to video; absent otherwise): how its time lines up with that take */
             source_map?: components["schemas"]["SourceMap"];
             /** @description from 1.70, source tool only (absent otherwise; `made_with` null): the plugin tool that made it */
@@ -5007,6 +5059,20 @@ export interface components {
             sample_rate?: number;
             /** @description from 1.32, a dialogue's take only (from evt.run.output `audio.cues`): one per line, in order; the stage draws them as line markers, the Timeline as ticks on the clip (sequence time = clip `at` + cue − clip `in`) */
             cues?: components["schemas"]["AudioCue"][];
+            /**
+             * @description from 1.79, a run's audio take (from evt.run.output `audio`): 2 stereo; absent = mono (and for an upload, which studio does not decode)
+             * @enum {integer}
+             */
+            channels?: 1 | 2;
+            /** @description from 1.79, a song with tagged lyrics only (from evt.run.output `audio.sections`): its parts in order; the stage draws them as section markers (a click seeks; Repaint takes a section's range) */
+            sections?: components["schemas"]["AudioSection"][];
+        };
+        /** @description from 1.79: one part of a song (defs `section`): its lyrics tag, [start_s, end_s) in the take's own seconds */
+        AudioSection: {
+            /** @example chorus */
+            label: string;
+            start_s: number;
+            end_s: number;
         };
         /** @description from 1.32: one dialogue line in its take (defs `cue`): line from 1, [start_s, end_s) in the take's own seconds, the speaker's voice id (a deleted voice's id stays), the text as spoken */
         AudioCue: {
@@ -5447,6 +5513,8 @@ export interface components {
             bytes: number;
             /** @description audio only (required): its length as the browser decoded it; studio records it, the runner reads the file itself */
             duration_s?: number;
+            /** @description from 1.79, audio only (with an image it is 422 `only audio has a sound class`): the class of the Create tab or Gallery filter it comes from; absent = voice */
+            sound?: components["schemas"]["SoundClass"];
         };
         /** @description API 1.38 (contracts/README.md, Optimised uploads): what the web optimises an upload to */
         UploadLimits: {
@@ -8403,8 +8471,11 @@ export interface components {
             /** @description true: a hardware encoder (VideoToolbox or, from 1.18, NVENC); false: software (libx264); null without a host */
             hardware: boolean | null;
         };
-        /** @enum {string} */
-        MediaJobKind: "export" | "frame";
+        /**
+         * @description from 1.79 mux: Save with the video (POST /v1/studio/takes/{take_id}/mux)
+         * @enum {string}
+         */
+        MediaJobKind: "export" | "frame" | "mux";
         /** @enum {string} */
         MediaJobStatus: "queued" | "running" | "succeeded" | "failed" | "cancelled";
         MediaJob: {
@@ -8423,9 +8494,14 @@ export interface components {
             revision: number | null;
             /**
              * Format: uuid
-             * @description frame: the video take
+             * @description frame: the video take; from 1.79 mux: the audio take
              */
             source_take_id: string | null;
+            /**
+             * Format: uuid
+             * @description from 1.79, mux only (absent otherwise): the video take whose picture it keeps
+             */
+            video_take_id?: string | null;
             /**
              * @description export: what was planned (copy = picture stream copy); once it ended, what the runner did (copy can fall back to conform)
              * @enum {string|null}
@@ -8440,7 +8516,7 @@ export interface components {
             } | null;
             /**
              * Format: uuid
-             * @description succeeded: the take it made (an export: a video take, source export; a frame: an image take, source frame)
+             * @description succeeded: the take it made (an export: a video take, source export; a frame: an image take, source frame; from 1.79 a mux: a video take, source create, `parents` the video and the audio take)
              */
             take_id: string | null;
             failure: {
@@ -8464,6 +8540,15 @@ export interface components {
         TakeFrameRequest: {
             /** @enum {string} */
             at: "first" | "last";
+        };
+        /** @description from 1.79: Save with the video: the video take whose picture keeps this audio take as its sound */
+        TakeMuxRequest: {
+            /** Format: uuid */
+            video_take_id: string;
+        };
+        /** @description from 1.79: the mux job (kind mux); its `take_id` is the new video take once it succeeded */
+        TakeMux: {
+            job: components["schemas"]["MediaJob"];
         };
         /** @description exactly one: `take` (200), or `job` (202) whose `take_id` is the frame take once it succeeded */
         TakeFrame: {
@@ -8517,6 +8602,8 @@ export interface components {
             height?: number;
             /** @description an audio take's */
             duration_s?: number;
+            /** @description from 1.79, an audio take's class (422 `only audio has a sound class` on another kind); absent = voice */
+            sound?: components["schemas"]["SoundClass"];
             /** @description a video's length, frames, rate, sound and poster (as an import's) */
             video?: {
                 duration_s: number;
@@ -9089,8 +9176,8 @@ export interface operations {
             query?: {
                 /** @description only templates or only the caller's own; absent = both */
                 source?: components["schemas"]["WorkflowSource"];
-                /** @description only workflows whose takes are images, videos or (1.30) audio (the Image / Video / Audio switch); absent = all three. Another value is 422 */
-                media?: components["schemas"]["WorkflowMedia"];
+                /** @description only workflows whose takes are images, videos or (1.30) audio (the Image / Video / Audio switch); from 1.79 `music`, `sound` or `voice`: audio workflows of that class (`Workflow.sound`; contracts/README.md, Music and sound); absent = every media. Another value is 422 */
+                media?: "image" | "video" | "audio" | "music" | "sound" | "voice";
             };
             header?: never;
             path?: never;
@@ -10200,7 +10287,8 @@ export interface operations {
     studioListTakes: {
         parameters: {
             query?: {
-                kind?: components["schemas"]["TakeKind"];
+                /** @description a take kind, or from 1.79 a sound class: audio takes of that class (`Take.sound`; contracts/README.md, Music and sound) */
+                kind?: "image" | "video" | "audio" | "music" | "sound" | "voice";
                 source?: components["schemas"]["TakeSource"];
                 /** @description true = only starred, false = only unstarred */
                 starred?: boolean;
@@ -13469,6 +13557,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TakeFrame"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioTakeMux: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description take UUID (malformed = 404) */
+                take_id: components["parameters"]["TakeId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TakeMuxRequest"];
+            };
+        };
+        responses: {
+            /** @description the job that makes it */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TakeMux"];
                 };
             };
             401: components["responses"]["Unauthorized"];

@@ -40,5 +40,6 @@
   "audio": {
     "duration_s": 2.0,
     "sample_rate": 24000
-  }
+  },
+  "sound": "voice"
 }

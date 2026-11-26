@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.78.0
+  version: 1.79.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -27,7 +27,7 @@ servers:
 security:
   - {ApiKey: [], BearerJWT: []}
 tags:
-  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media); from 1.23 LoRA strengths 0..2 (looks saved before are clamped when read; contracts/README.md, Looks); from 1.24 the model component a node loads (NodeSchema.component); from 1.25 an inspector section''s help, the presets'' order (StudioLayout.preset_order) and a run''s planned peak before it is sent (POST /v1/studio/runs/plan); from 1.26 an inspector section''s choice tiles (LTX''s Recipe: two-stage or one-stage); from 1.28 a judge''s branch without `then` (Ask me) and a judge test on picked takes (POST /v1/studio/pipelines/{pipeline_id}/judge-tests); from 1.29 a V1 clip''s shot number (TimelineClip.number: "Shot 4"); from 1.30 voices: audio takes made by runs (the `Audio` port, `Workflow.media` audio), the `voice` param, saved voices in the library (designed voices and the packs'' starter voices; contracts/README.md, Voices); from 1.31 cloned voices (a 3–30 s clip of an audio take or a video''s sound, with consent), designed voices that keep a clip, Save as voice (`from_take` with `kind: voice`) and the zonos3 family (contracts/README.md, Voices: cloned voices); from 1.32 dialogue and Timeline audio: dialogue scripts (`script` text params expanded into `lines` rows whose items carry a voice), an element''s `voice_id`, cues on a dialogue''s take, audio takes on the audio tracks, New line (POST /v1/studio/timelines/{timeline_id}/lines), Make shot (a slot `exact` at an audio clip''s time), an export plan''s `sounds`, offers and pipeline binds into rows of one media field, `library.read` voices and the write node''s `form: script` (contracts/README.md, Dialogue and Timeline audio); from 1.44 the in-app assistant: chats, their events and memory, the admin''s assistant settings, search providers (kind `search`) and the Gallery''s `order` (contracts/README.md, Assistant); from 1.47 rules (refusals as data, ParamSchema.rules), option help (ParamSchema.option_help), a native node''s peak formula and sound limits (NodeSchema.peak_gb, sounds: the planned peak per run) and the Preset heading''s help (StudioLayout.preset_help); from 1.48 thumbnails: every list''s `thumb_url` is a small WebP of the image or the poster once made, `RunOutput.thumb_url` (contracts/README.md, Thumbnails); from 1.49 timeline edits by named ops (POST …/timelines/{timeline_id}/edits: a dry run, a diff, studio-made clip ids), the revision history and restore to any kept revision, the agent view (`view=agent`) and a stored frame at a sequence time (contracts/README.md, Timeline: edits by ops); from 1.50 the Timeline tools'' ops (roll, slip, slide, overwrite, split_all, remove_range, lift_range, an audio track''s ripple remove), linked sound clips (`TimelineClip.link`) and markers (`TimelineDoc.markers`, the marker ops; contracts/README.md, Timeline rules: tools, linked clips, markers); from 1.51 provider presets (GET /v1/studio/admin/provider-presets, a preset''s Fetch, a key file''s status, `Provider.compat` and `preset`; contracts/README.md, Model sources: presets); from 1.52 saving a provider key (PUT and DELETE /v1/studio/admin/provider-keys/{key_secret}, `ProviderKey.writable`; contracts/README.md, Model sources: Keys); from 1.53 thinking per model (`Provider.thinking`, `thinking_levels`, `ProviderPut.thinking`, `ProviderTest.thinking`, `ProviderPreset.thinking`, a model source''s `thinking`; contracts/README.md, Model sources: thinking); from 1.55 a provider''s fixed extra headers (`ProviderCompat.headers`: Anthropic''s anthropic-version; contracts/README.md, Model sources: compat); from 1.56 generous assistant defaults (AssistantLimits defaults 2000 model calls and 20000000 tokens a day, 200 look_at an hour, 30 messages a minute; AssistantCaps per message up to 40 model calls, 100 tool calls, 8 memory writes; a call''s n up to 99; contracts/README.md, Assistant); from 1.59 steering an answer (a message while a turn works joins it: `AssistantAccepted.steer`, `AssistantEntry.steer`; Stop: kind `stop`; contracts/README.md, Assistant: steer); from 1.59.1 steer fixes: waiting steers go first in a new turn, a stopped turn takes them as read, one message id per Stop (contracts/README.md, Assistant: steer); from 1.60 a take''s render time (`MadeWith.render_s`: the Create take, the Gallery''s Made with, the Timeline clip inspector and the sequence total); from 1.61 plugins: the admin''s Plugins page (GET /v1/studio/admin/plugins, Rescan, on and off, Remove, Add as provider), Only-you providers (`Provider.owner_id`, `plugin`; `AssistantSettings.personal`) and plugin tools in the assistant (a `plugin` card; contracts/README.md, Plugins); from 1.62 Stop cancels the model call in flight, and the assistant''s plain-words memory and voice-line checks (contracts/README.md, Assistant: steer; Assistant: tools); from 1.64 skills: plugins of kind `skill` (built in and from ~/.helm/plugins, folders and .zip files), GET /v1/studio/skills, a skill''s guide and files, the assistant''s use_skill and read_skill_file and its "Using skill" line (`AssistantLine.skill`; contracts/README.md, Skills); from 1.65 media in the assistant chat: a message''s attached images (`AssistantPost.takes`, `AssistantEntry.takes`), @-picked takes as [[take:<id>]] refs in your text, a model that sees images (`AssistantStatus.sees`, a preset''s `vision`) and takes shown as media in answers (contracts/README.md, Assistant: media and vision); from 1.66 the assistant''s context window per model (`AssistantSettings.window_tokens`) and its prompt cache hit rate per model (GET /v1/studio/admin/assistant/cache; contracts/README.md, Assistant: context and cache); from 1.67 plugins that start themselves: a manifest''s `run`, the host''s runner starts and keeps its service up while it is on (`Plugin.starts`, statuses starting and failed; contracts/README.md, Plugins: starts itself); from 1.70 plugins that read and make takes: a manifest''s `takes`, the call''s pass signed and checked by studio, /v1/studio/plugin/takes (read one of yours, make a new take from yours: source `tool`, `Take.tool`), a plugin line''s `take_ids` (Undo deletes them), the media-tools plugin and the Gallery''s Edit (GET /v1/studio/plugins/{plugin}, POST …/tools/{tool}: a takes plugin''s tool run for you; `Plugin.takes`, `needs`, a tool''s `title` and `summary`) (contracts/README.md, Plugins: takes); from 1.71 model guides: each model pack''s assistant guide and recipes (GET /v1/studio/model-guides/{family}), a card per downloaded family in the assistant''s prompt and its read_model_guide (contracts/README.md, Assistant: model guides); from 1.72 the Assistant as a first-class feature: `AssistantStatus.set_up`, `can_set_up`, `first_launch`, `tools` and `provider.model`, and POST /v1/studio/assistant/first-launch (contracts/README.md, Assistant: setup and first launch); from 1.78 model folders: several folders per host in priority order (PUT /v1/studio/admin/hosts/{host}/folders, `HostSettings.folders`, `ModelHost.folders`, a variant host''s `folder` and `copies`, state `unplugged`, a download''s `folder`, a delete''s `folder`; contracts/README.md, Model folders)'}
+  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media); from 1.23 LoRA strengths 0..2 (looks saved before are clamped when read; contracts/README.md, Looks); from 1.24 the model component a node loads (NodeSchema.component); from 1.25 an inspector section''s help, the presets'' order (StudioLayout.preset_order) and a run''s planned peak before it is sent (POST /v1/studio/runs/plan); from 1.26 an inspector section''s choice tiles (LTX''s Recipe: two-stage or one-stage); from 1.28 a judge''s branch without `then` (Ask me) and a judge test on picked takes (POST /v1/studio/pipelines/{pipeline_id}/judge-tests); from 1.29 a V1 clip''s shot number (TimelineClip.number: "Shot 4"); from 1.30 voices: audio takes made by runs (the `Audio` port, `Workflow.media` audio), the `voice` param, saved voices in the library (designed voices and the packs'' starter voices; contracts/README.md, Voices); from 1.31 cloned voices (a 3–30 s clip of an audio take or a video''s sound, with consent), designed voices that keep a clip, Save as voice (`from_take` with `kind: voice`) and the zonos3 family (contracts/README.md, Voices: cloned voices); from 1.32 dialogue and Timeline audio: dialogue scripts (`script` text params expanded into `lines` rows whose items carry a voice), an element''s `voice_id`, cues on a dialogue''s take, audio takes on the audio tracks, New line (POST /v1/studio/timelines/{timeline_id}/lines), Make shot (a slot `exact` at an audio clip''s time), an export plan''s `sounds`, offers and pipeline binds into rows of one media field, `library.read` voices and the write node''s `form: script` (contracts/README.md, Dialogue and Timeline audio); from 1.44 the in-app assistant: chats, their events and memory, the admin''s assistant settings, search providers (kind `search`) and the Gallery''s `order` (contracts/README.md, Assistant); from 1.47 rules (refusals as data, ParamSchema.rules), option help (ParamSchema.option_help), a native node''s peak formula and sound limits (NodeSchema.peak_gb, sounds: the planned peak per run) and the Preset heading''s help (StudioLayout.preset_help); from 1.48 thumbnails: every list''s `thumb_url` is a small WebP of the image or the poster once made, `RunOutput.thumb_url` (contracts/README.md, Thumbnails); from 1.49 timeline edits by named ops (POST …/timelines/{timeline_id}/edits: a dry run, a diff, studio-made clip ids), the revision history and restore to any kept revision, the agent view (`view=agent`) and a stored frame at a sequence time (contracts/README.md, Timeline: edits by ops); from 1.50 the Timeline tools'' ops (roll, slip, slide, overwrite, split_all, remove_range, lift_range, an audio track''s ripple remove), linked sound clips (`TimelineClip.link`) and markers (`TimelineDoc.markers`, the marker ops; contracts/README.md, Timeline rules: tools, linked clips, markers); from 1.51 provider presets (GET /v1/studio/admin/provider-presets, a preset''s Fetch, a key file''s status, `Provider.compat` and `preset`; contracts/README.md, Model sources: presets); from 1.52 saving a provider key (PUT and DELETE /v1/studio/admin/provider-keys/{key_secret}, `ProviderKey.writable`; contracts/README.md, Model sources: Keys); from 1.53 thinking per model (`Provider.thinking`, `thinking_levels`, `ProviderPut.thinking`, `ProviderTest.thinking`, `ProviderPreset.thinking`, a model source''s `thinking`; contracts/README.md, Model sources: thinking); from 1.55 a provider''s fixed extra headers (`ProviderCompat.headers`: Anthropic''s anthropic-version; contracts/README.md, Model sources: compat); from 1.56 generous assistant defaults (AssistantLimits defaults 2000 model calls and 20000000 tokens a day, 200 look_at an hour, 30 messages a minute; AssistantCaps per message up to 40 model calls, 100 tool calls, 8 memory writes; a call''s n up to 99; contracts/README.md, Assistant); from 1.59 steering an answer (a message while a turn works joins it: `AssistantAccepted.steer`, `AssistantEntry.steer`; Stop: kind `stop`; contracts/README.md, Assistant: steer); from 1.59.1 steer fixes: waiting steers go first in a new turn, a stopped turn takes them as read, one message id per Stop (contracts/README.md, Assistant: steer); from 1.60 a take''s render time (`MadeWith.render_s`: the Create take, the Gallery''s Made with, the Timeline clip inspector and the sequence total); from 1.61 plugins: the admin''s Plugins page (GET /v1/studio/admin/plugins, Rescan, on and off, Remove, Add as provider), Only-you providers (`Provider.owner_id`, `plugin`; `AssistantSettings.personal`) and plugin tools in the assistant (a `plugin` card; contracts/README.md, Plugins); from 1.62 Stop cancels the model call in flight, and the assistant''s plain-words memory and voice-line checks (contracts/README.md, Assistant: steer; Assistant: tools); from 1.64 skills: plugins of kind `skill` (built in and from ~/.helm/plugins, folders and .zip files), GET /v1/studio/skills, a skill''s guide and files, the assistant''s use_skill and read_skill_file and its "Using skill" line (`AssistantLine.skill`; contracts/README.md, Skills); from 1.65 media in the assistant chat: a message''s attached images (`AssistantPost.takes`, `AssistantEntry.takes`), @-picked takes as [[take:<id>]] refs in your text, a model that sees images (`AssistantStatus.sees`, a preset''s `vision`) and takes shown as media in answers (contracts/README.md, Assistant: media and vision); from 1.66 the assistant''s context window per model (`AssistantSettings.window_tokens`) and its prompt cache hit rate per model (GET /v1/studio/admin/assistant/cache; contracts/README.md, Assistant: context and cache); from 1.67 plugins that start themselves: a manifest''s `run`, the host''s runner starts and keeps its service up while it is on (`Plugin.starts`, statuses starting and failed; contracts/README.md, Plugins: starts itself); from 1.70 plugins that read and make takes: a manifest''s `takes`, the call''s pass signed and checked by studio, /v1/studio/plugin/takes (read one of yours, make a new take from yours: source `tool`, `Take.tool`), a plugin line''s `take_ids` (Undo deletes them), the media-tools plugin and the Gallery''s Edit (GET /v1/studio/plugins/{plugin}, POST …/tools/{tool}: a takes plugin''s tool run for you; `Plugin.takes`, `needs`, a tool''s `title` and `summary`) (contracts/README.md, Plugins: takes); from 1.71 model guides: each model pack''s assistant guide and recipes (GET /v1/studio/model-guides/{family}), a card per downloaded family in the assistant''s prompt and its read_model_guide (contracts/README.md, Assistant: model guides); from 1.72 the Assistant as a first-class feature: `AssistantStatus.set_up`, `can_set_up`, `first_launch`, `tools` and `provider.model`, and POST /v1/studio/assistant/first-launch (contracts/README.md, Assistant: setup and first launch); from 1.78 model folders: several folders per host in priority order (PUT /v1/studio/admin/hosts/{host}/folders, `HostSettings.folders`, `ModelHost.folders`, a variant host''s `folder` and `copies`, state `unplugged`, a download''s `folder`, a delete''s `folder`; contracts/README.md, Model folders); from 1.79 music and sound: a sound class on audio takes and workflows (`SoundClass` music, sound or voice: `Take.sound`, `Workflow.sound`, `NodeSchema.sound`, the `kind` and `media` filters by class, an upload''s and a plugin take''s `sound`), offers by class, stereo audio and a song''s sections (`AudioInfo.channels`, `sections`), a `span` on an audio input, Auto int and float values (`auto: true`), lyrics tags (`ParamSchema.tags`), chip groups and a per-workflow count (`StudioLayout.groups`, `count`) and Save with the video (POST /v1/studio/takes/{take_id}/mux, media job kind `mux`; contracts/README.md, Music and sound)'}
   - {name: files, description: signed file downloads and uploads}
   - name: auth
     description: 'auth_service: users, sessions (JWT access + rotating refresh tokens), roles, client API keys'
@@ -110,7 +110,7 @@ paths:
         `updated_at` first. `problems` is never in a list (only `GET /v1/studio/workflows/{workflow_id}`).
       parameters:
         - {name: source, in: query, required: false, schema: {$ref: '#/components/schemas/WorkflowSource'}, description: 'only templates or only the caller''s own; absent = both'}
-        - {name: media, in: query, required: false, schema: {$ref: '#/components/schemas/WorkflowMedia'}, description: 'only workflows whose takes are images, videos or (1.30) audio (the Image / Video / Audio switch); absent = all three. Another value is 422'}
+        - {name: media, in: query, required: false, schema: {type: string, enum: [image, video, audio, music, sound, voice]}, description: 'only workflows whose takes are images, videos or (1.30) audio (the Image / Video / Audio switch); from 1.79 `music`, `sound` or `voice`: audio workflows of that class (`Workflow.sound`; contracts/README.md, Music and sound); absent = every media. Another value is 422'}
       responses:
         '200': {description: workflows, content: {application/json: {schema: {$ref: '#/components/schemas/WorkflowList'}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -998,7 +998,7 @@ paths:
         first, each part newest first), `name` (the title, case-insensitively, then newest first). A cursor belongs to
         its order: one from another order is 422.
       parameters:
-        - {name: kind, in: query, required: false, schema: {$ref: '#/components/schemas/TakeKind'}}
+        - {name: kind, in: query, required: false, schema: {type: string, enum: [image, video, audio, music, sound, voice]}, description: 'a take kind, or from 1.79 a sound class: audio takes of that class (`Take.sound`; contracts/README.md, Music and sound)'}
         - {name: source, in: query, required: false, schema: {$ref: '#/components/schemas/TakeSource'}}
         - {name: starred, in: query, required: false, schema: {type: boolean}, description: 'true = only starred, false = only unstarred'}
         - {name: session_id, in: query, required: false, schema: {type: string, format: uuid}, description: only takes of this session}
@@ -3209,6 +3209,31 @@ paths:
         '422': {$ref: '#/components/responses/Unprocessable'}
         '503': {$ref: '#/components/responses/Unavailable'}
 
+  /v1/studio/takes/{take_id}/mux:
+    post:
+      tags: [studio]
+      operationId: studioTakeMux
+      summary: 'Save with the video (from 1.79): a new video take of a video take''s picture with this audio take as its sound'
+      description: |
+        contracts/README.md, Music and sound: Save with the video. `take_id` is the audio take (kind audio), the body
+        names the video take. 202 with a media job (kind `mux`): the runner copies the picture (H.264), encodes the
+        sound as AAC and cuts or pads it to the video's length; on success the job's `take_id` is a new video take
+        (source `create`, `parents` [video, audio], the video's `made_with`). Idempotent per pair: asking again while it
+        runs, or after it made a take that is not deleted, answers that job. 404 for either take unknown, another
+        user's or deleted; 422 `take <id> is not audio` or `take <id> is not a video`; 409 `no live host can export
+        (ffmpeg)` when no env can run it.
+      parameters: [{$ref: '#/components/parameters/TakeId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/TakeMuxRequest'}}}
+      responses:
+        '202': {description: the job that makes it, content: {application/json: {schema: {$ref: '#/components/schemas/TakeMux'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
   # ------------------------------------------------------------------ files
   /files/{path}:
     get:
@@ -3702,7 +3727,7 @@ components:
         voice_id: {type: string, pattern: '^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9-]{0,63})$'}
     SpanValue:
       type: object
-      description: 'A `span` param''s value (API 1.19): a time range on the workflow''s one video media source, in that take''s own seconds (Retake: the stretch to regenerate)'
+      description: 'A `span` param''s value (API 1.19): a time range on the workflow''s one video media source (from 1.79 or audio source: Repaint), in that take''s own seconds (Retake: the stretch to regenerate)'
       required: [start, end]
       additionalProperties: false
       properties:
@@ -3746,7 +3771,10 @@ components:
         `accepts`; with `trim` the value may carry `in` / `out` (the UI draws the take's poster or waveform with a trim
         control and its duration); `grid` (a video's sides must be multiples of it), `max_s` (the longest it reads) and
         `max_frames` (the most frames of a video it reads) bound it. `span`: a time range `{start, end}` (`SpanValue`, default null; a run needs one) on the workflow's one
-        `media` param that accepts video; the UI draws it as a range control over that take's poster and duration.
+        `media` param that accepts video (from 1.79 or audio: a song's Repaint, snapped to whole milliseconds); the UI draws it as a range control over that take's poster or waveform and duration.
+        From 1.79 (contracts/README.md, Music and sound): an `int` or `float` may declare `auto: true` (the value 0 means Auto: the chip and
+        slider show "Auto" with a switch; the model picks it) and a `text` param `tags` (the lyrics tag chips Create
+        inserts at the caret as `[tag]`).
         From 1.22 (contracts/README.md, Media inputs: rows of media): a `rows` item field may be a `media` param (each
         item one video or audio take, `MediaRef`, required in every item; the rows editor draws the take's poster or a
         sound tile with its trim control); `min_s` (media) is the shortest it reads; `max_total_s` (rows with one media
@@ -3794,10 +3822,13 @@ components:
           description: 'from 1.47, enum or int with `values`: value (as text) → its line under the value in the param''s menu (MiniMax H3''s LoRA: `none` → `the model as it is`); absent = none'
         fps: {type: string, description: 'frames only: the name of the same node''s int or float param holding frames per second'}
         auto:
-          type: object
-          required: [min_s, max_s]
-          description: 'frames only: present = the value `"auto"` is allowed (the model predicts the length, clamped to min_s..max_s seconds and to min..max frames); absent = it is 422 (`<node>.<param>: auto length is not offered`)'
-          properties: {min_s: {type: number}, max_s: {type: number}}
+          oneOf:
+            - type: object
+              required: [min_s, max_s]
+              description: 'frames only: present = the value `"auto"` is allowed (the model predicts the length, clamped to min_s..max_s seconds and to min..max frames); absent = it is 422 (`<node>.<param>: auto length is not offered`)'
+              properties: {min_s: {type: number}, max_s: {type: number}}
+            - {const: true, description: 'from 1.79, int or float only: the value 0 means Auto (the model picks it; 0 is allowed below `min`)'}
+        tags: {type: array, minItems: 1, maxItems: 16, uniqueItems: true, items: {type: string, pattern: '^[a-z][a-z0-9 -]{0,23}$'}, description: 'from 1.79, text only: the tag chips over the field (lyrics: verse, chorus, bridge, intro, outro), each inserted at the caret as `[<tag>]`'}
         values: {type: array, items: {type: integer}, description: 'int only: the only allowed values, ascending (`<node>.<param>: must be one of 3, 8`)'}
         values_by:
           type: object
@@ -3827,6 +3858,7 @@ components:
         kind: {type: string, examples: [echo/echo]}
         title: {type: string}
         family: {type: [string, 'null'], description: null for a core node (prompt, output)}
+        sound: {$ref: '#/components/schemas/SoundClass', description: 'from 1.79, a node with an Audio output only: what its sound is (model.yaml `sound` of the stage, else of the pack); Workflow.sound is read from it'}
         component: {type: string, minLength: 1, maxLength: 40, description: 'from 1.24: the model component the node loads, in words (transformer, text encoder, vae); the Graph inspector reads "<family> · runs on <runtime> · uses the <component>". Absent = it loads none'}
         help: {type: string}
         addons: {type: array, items: {type: string}, description: 'from 1.36: the optional add-ons the node loads (a `component` of its family''s Model.addons); while one is not present the form greys the node''s controls (`<title> not downloaded`) and a run with the node not bypassed is refused on such a host (contracts/README.md, Optional add-ons). Absent = none'}
@@ -3888,7 +3920,8 @@ components:
         action: {type: string, description: 'from 1.19, templates only (registry `action`): the take action''s label when it is offered for a take ("Use in…", a clip''s actions): Animate, Edit, Extend, Retake a section; absent = the title'}
         family: {type: string}
         env: {type: string, description: the runner env that executes it}
-        media: {type: string, enum: [image, video, audio, text], description: 'always sent from API 1.11: a template''s as published (registry `media`, absent = image), a user workflow''s computed from its graph (contracts/README.md, Video); audio (API 1.30) when an output is wired from an Audio output (contracts/README.md, Voices); text (API 1.14) only for an ask workflow, served read-only by GET /v1/studio/workflows/{workflow_id}, never listed'}
+        media: {type: string, enum: [image, video, audio, text], description: 'always sent from API 1.11: a template''s as published (registry `media`, absent = image), a user workflow''s computed from its graph (contracts/README.md, Video); audio (API 1.30) when an output is wired from an Audio output (contracts/README.md, Voices), from 1.79 also when an Audio output of a node with a `sound` class is wired beside a Video one (the class wins: MMAudio''s video workflow); text (API 1.14) only for an ask workflow, served read-only by GET /v1/studio/workflows/{workflow_id}, never listed'}
+        sound: {$ref: '#/components/schemas/SoundClass', description: 'from 1.79, an audio workflow only (absent otherwise): the `sound` of the node schema whose Audio output an output node takes, computed for templates and user workflows alike (contracts/README.md, Music and sound); absent when that node has none'}
         nodes: {type: object, additionalProperties: {$ref: '#/components/schemas/GraphNode'}, description: node id → node}
         node_schemas: {type: object, additionalProperties: {$ref: '#/components/schemas/NodeSchema'}, description: 'kind → schema, for every kind in nodes the registry has (a kind no runner publishes is left out)'}
         source: {$ref: '#/components/schemas/WorkflowSource'}
@@ -3902,7 +3935,7 @@ components:
     WorkflowMedia:
       type: string
       enum: [image, video, audio]
-      description: 'what a workflow''s takes are; video when an `output` node''s `media` is wired from a `Video` output, from 1.30 audio when from an `Audio` output, else image'
+      description: 'what a workflow''s takes are; video when an `output` node''s `media` is wired from a `Video` output, from 1.30 audio when from an `Audio` output, else image; from 1.79 a `Video` output does not count beside an `Audio` output of a node with a `sound` class (MMAudio''s video workflow makes audio)'
     WorkflowList:
       type: object
       required: [workflows]
@@ -3930,6 +3963,25 @@ components:
           maxItems: 12
           items: {anyOf: [{$ref: '#/components/schemas/StudioPath'}, {$ref: '#/components/schemas/StudioTile'}]}
           description: 'chips on the composer, in order: params, and library tiles (`elements`, `look:<group>`) that open the visual picker (contracts/README.md, Looks: composer tiles)'
+        groups:
+          type: array
+          maxItems: 4
+          description: 'from 1.79: quick chips shown as one chip with one popup (ACE-Step''s "BPM · Key · Time"), at the first item''s place; each item is a param path in `quick`, in at most one group (contracts/README.md, Music and sound)'
+          items:
+            type: object
+            required: [label, items]
+            additionalProperties: false
+            properties:
+              label: {type: string, minLength: 1, maxLength: 40, examples: [BPM · Key · Time]}
+              items: {type: array, minItems: 2, maxItems: 6, items: {$ref: '#/components/schemas/StudioPath'}}
+        count:
+          type: object
+          required: [default, max]
+          additionalProperties: false
+          description: 'from 1.79: how many takes one Generate makes (Stable Audio 3''s variations: 4, at most 8); absent = Create''s own count'
+          properties:
+            default: {type: integer, minimum: 1, maximum: 8}
+            max: {type: integer, minimum: 1, maximum: 8}
         inspector:
           type: array
           maxItems: 12
@@ -4923,6 +4975,10 @@ components:
 
     # ---------------------------------------------------------- studio: takes (the gallery) and uploads
     TakeKind: {type: string, enum: [image, video, audio]}
+    SoundClass:
+      type: string
+      enum: [music, sound, voice]
+      description: 'from 1.79 (contracts/README.md, Music and sound): what an audio take or workflow is: music (songs), sound (effects, ambience) or voice (speech); a class on kind audio, never a take kind of its own'
     TakeSource:
       type: string
       enum: [create, upload, pipeline, import, export, frame, tool]
@@ -4936,7 +4992,7 @@ components:
       required: [id, kind, source, title, url, thumb_url, content_type, width, height, bytes, created_at, starred, session_id, run_id, made_with, parents]
       allOf:
         - {if: {properties: {kind: {const: video}}, required: [kind]}, then: {required: [video]}}
-        - {if: {properties: {kind: {const: audio}}, required: [kind]}, then: {required: [audio]}}
+        - {if: {properties: {kind: {const: audio}}, required: [kind]}, then: {required: [audio, sound]}, else: {not: {required: [sound]}}}
       properties:
         id: {type: string, format: uuid}
         kind: {$ref: '#/components/schemas/TakeKind'}
@@ -4965,6 +5021,7 @@ components:
         batch_id: {type: [string, 'null'], format: uuid, description: 'with source pipeline: the batch that made it (its collection); absent or null otherwise'}
         video: {$ref: '#/components/schemas/VideoInfo', description: 'kind video only (absent for an image): length, frame rate, audio and the poster'}
         audio: {$ref: '#/components/schemas/AudioInfo', description: 'from 1.19, kind audio only: its length (from 1.30 a run''s audio take also its sample rate)'}
+        sound: {$ref: '#/components/schemas/SoundClass', description: 'from 1.79, kind audio only (always sent then; absent otherwise): a run''s take its workflow''s `sound` (voice when the workflow has none), an upload''s or a plugin take''s as sent (default voice); audio takes made before 1.79 are voice'}
         source_map: {$ref: '#/components/schemas/SourceMap', description: 'from 1.19, a video made from a media take (retake, extend, audio to video; absent otherwise): how its time lines up with that take'}
         tool: {$ref: '#/components/schemas/TakeTool', description: 'from 1.70, source tool only (absent otherwise; `made_with` null): the plugin tool that made it'}
         decisions:
@@ -5003,6 +5060,17 @@ components:
         duration_s: {type: number, exclusiveMinimum: 0, maximum: 600, description: 'an upload: as the client declared it (contracts/README.md, Media inputs: audio uploads); from 1.30 a run''s audio take: from evt.run.output `audio` (samples / rate)'}
         sample_rate: {type: integer, minimum: 8000, maximum: 96000, description: 'from 1.30: the WAV''s rate (Hz), from evt.run.output `audio`; absent for an upload (studio does not decode it)'}
         cues: {type: array, minItems: 1, maxItems: 40, items: {$ref: '#/components/schemas/AudioCue'}, description: 'from 1.32, a dialogue''s take only (from evt.run.output `audio.cues`): one per line, in order; the stage draws them as line markers, the Timeline as ticks on the clip (sequence time = clip `at` + cue − clip `in`)'}
+        channels: {type: integer, enum: [1, 2], description: 'from 1.79, a run''s audio take (from evt.run.output `audio`): 2 stereo; absent = mono (and for an upload, which studio does not decode)'}
+        sections: {type: array, minItems: 1, maxItems: 40, items: {$ref: '#/components/schemas/AudioSection'}, description: 'from 1.79, a song with tagged lyrics only (from evt.run.output `audio.sections`): its parts in order; the stage draws them as section markers (a click seeks; Repaint takes a section''s range)'}
+    AudioSection:
+      type: object
+      description: 'from 1.79: one part of a song (defs `section`): its lyrics tag, [start_s, end_s) in the take''s own seconds'
+      required: [label, start_s, end_s]
+      additionalProperties: false
+      properties:
+        label: {type: string, minLength: 1, maxLength: 40, examples: [chorus]}
+        start_s: {type: number, minimum: 0, maximum: 600}
+        end_s: {type: number, exclusiveMinimum: 0, maximum: 600}
     AudioCue:
       type: object
       description: 'from 1.32: one dialogue line in its take (defs `cue`): line from 1, [start_s, end_s) in the take''s own seconds, the speaker''s voice id (a deleted voice''s id stays), the text as spoken'
@@ -5419,6 +5487,7 @@ components:
         content_type: {type: string, enum: [image/png, image/jpeg, image/webp, audio/wav, audio/mpeg, audio/mp4], description: 'from 1.19 also WAV and MP3 (an audio take), from 1.38 m4a (AAC in MP4)'}
         bytes: {type: integer, minimum: 1, maximum: 52428800}
         duration_s: {type: number, exclusiveMinimum: 0, maximum: 600, description: 'audio only (required): its length as the browser decoded it; studio records it, the runner reads the file itself'}
+        sound: {$ref: '#/components/schemas/SoundClass', description: 'from 1.79, audio only (with an image it is 422 `only audio has a sound class`): the class of the Create tab or Gallery filter it comes from; absent = voice'}
     UploadLimits:
       type: object
       description: 'API 1.38 (contracts/README.md, Optimised uploads): what the web optimises an upload to'
@@ -8078,7 +8147,7 @@ components:
         host: {type: [string, 'null'], description: 'the env that would run it now (automatic choice, or the named host''s); null when none'}
         env: {type: [string, 'null']}
         hardware: {type: [boolean, 'null'], description: 'true: a hardware encoder (VideoToolbox or, from 1.18, NVENC); false: software (libx264); null without a host'}
-    MediaJobKind: {type: string, enum: [export, frame]}
+    MediaJobKind: {type: string, enum: [export, frame, mux], description: 'from 1.79 mux: Save with the video (POST /v1/studio/takes/{take_id}/mux)'}
     MediaJobStatus: {type: string, enum: [queued, running, succeeded, failed, cancelled]}
     MediaJob:
       type: object
@@ -8091,7 +8160,8 @@ components:
         env: {type: string}
         timeline_id: {type: [string, 'null'], format: uuid, description: 'export: the sequence'}
         revision: {type: [integer, 'null'], minimum: 1, description: 'export: the revision exported'}
-        source_take_id: {type: [string, 'null'], format: uuid, description: 'frame: the video take'}
+        source_take_id: {type: [string, 'null'], format: uuid, description: 'frame: the video take; from 1.79 mux: the audio take'}
+        video_take_id: {type: [string, 'null'], format: uuid, description: 'from 1.79, mux only (absent otherwise): the video take whose picture it keeps'}
         mode: {type: [string, 'null'], enum: [copy, conform, null], description: 'export: what was planned (copy = picture stream copy); once it ended, what the runner did (copy can fall back to conform)'}
         reason: {type: [string, 'null'], description: 'export: why the runner fell back to conform (a probe disagreed with the plan); null otherwise'}
         progress:
@@ -8099,7 +8169,7 @@ components:
             - {type: object, required: [frames, total], properties: {frames: {type: integer, minimum: 0}, total: {type: integer, minimum: 1}}}
             - {type: 'null'}
           description: 'export: frames written of the sequence''s frames (a succeeded export: all of them); null before the first progress and for frame jobs'
-        take_id: {type: [string, 'null'], format: uuid, description: 'succeeded: the take it made (an export: a video take, source export; a frame: an image take, source frame)'}
+        take_id: {type: [string, 'null'], format: uuid, description: 'succeeded: the take it made (an export: a video take, source export; a frame: an image take, source frame; from 1.79 a mux: a video take, source create, `parents` the video and the audio take)'}
         failure:
           oneOf:
             - {type: object, required: [class, detail], properties: {class: {type: string, enum: [input, invalid, ffmpeg, verify, internal, host_lost], description: 'from 1.18 host_lost: its host stopped responding (contracts/README.md, Several hosts: host loss); export again: another live host is chosen'}, detail: {type: string}}}
@@ -8117,6 +8187,20 @@ components:
       additionalProperties: false
       properties:
         at: {type: string, enum: [first, last]}
+    TakeMuxRequest:
+      type: object
+      description: 'from 1.79: Save with the video: the video take whose picture keeps this audio take as its sound'
+      required: [video_take_id]
+      additionalProperties: false
+      properties:
+        video_take_id: {type: string, format: uuid}
+    TakeMux:
+      type: object
+      description: 'from 1.79: the mux job (kind mux); its `take_id` is the new video take once it succeeded'
+      required: [job]
+      additionalProperties: false
+      properties:
+        job: {$ref: '#/components/schemas/MediaJob'}
     TakeFrame:
       type: object
       description: 'exactly one: `take` (200), or `job` (202) whose `take_id` is the frame take once it succeeded'
@@ -8168,6 +8252,7 @@ components:
         width: {type: integer, minimum: 1, maximum: 16384, description: 'an image''s or a video''s'}
         height: {type: integer, minimum: 1, maximum: 16384}
         duration_s: {type: number, exclusiveMinimum: 0, maximum: 21600, description: 'an audio take''s'}
+        sound: {$ref: '#/components/schemas/SoundClass', description: 'from 1.79, an audio take''s class (422 `only audio has a sound class` on another kind); absent = voice'}
         video:
           type: object
           description: 'a video''s length, frames, rate, sound and poster (as an import''s)'

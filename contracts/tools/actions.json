@@ -2269,7 +2269,10 @@
                 "enum": [
                   "image",
                   "video",
-                  "audio"
+                  "audio",
+                  "music",
+                  "sound",
+                  "voice"
                 ]
               },
               "source": {

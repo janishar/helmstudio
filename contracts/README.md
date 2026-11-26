@@ -1442,7 +1442,7 @@ resolve.audio-*.json`); `check.py` holds the reference (`workflow_media`, `voice
 
 - **Port `Audio`** (registry `portType`, openapi `PortType`): a plain value, speech as PCM samples with
   `sample_rate` and `duration_s`, never a handle. The core `output` node's `media` input (type `Media`) also accepts
-  it (Graph rules: fits). The runner stores it as `<output_prefix><n>.wav` (RIFF WAVE, PCM 16-bit, mono, the model's
+  it (Graph rules: fits). The runner stores it as `<output_prefix><n>.wav` (RIFF WAVE, PCM 16-bit, mono or from 1.79 stereo, the model's
   own rate; `Content-Type: audio/wav`) and sends one `evt.run.output`: `kind: audio`, `key` (`.wav`), `bytes`,
   `etag`, `seed`, `audio {duration_s = samples / sample_rate, sample_rate}`, no `width` / `height`. The projector
   stores the take `kind: audio`, `content_type` `audio/wav`, `width` / `height` null, `audio {duration_s,
@@ -1712,6 +1712,65 @@ timeline's fifth generating action (9). References in `check.py`: `script_lines`
   voice-over per shot (`each`, unchanged); the director can add rows with a script input (`rows.add`). Binds: a voice
   step's one take fits a `media` param (`audio.source`) or a rows param of one media field (`generate.audios`) as item
   1 (`bind_type`). No new pipeline node kinds.
+
+## Music and sound (API 1.79; alpha.6 item 6, plan 38, board docs/mock/CreateMusicSound.dc.html; normative)
+
+Music, Sound and Voice are a **sound class** on audio takes and workflows (`SoundClass`, defs `soundClass`), never take
+kinds of their own: `TakeKind` stays `image | video | audio`. `check.py` holds the reference (`workflow_sound`,
+`workflow_media`, `spoken`, `take_uses`, `group_errors`).
+
+- **Where a class comes from.** A pack's model.yaml `sound` (music, sound or voice) is published on its `models`
+  entry (`models[].sound`, the Models page's cube colour) and on every node schema with an `Audio` output
+  (`NodeSchema.sound`); a stage's own `sound` wins (echo holds all three: echo/speak and dialogue voice, echo/music,
+  repaint and lengthen music, echo/sound, foley and vary sound). qwen3-tts and zonos3 are voice.
+- **Workflow.sound** (computed, like `media`, for templates and user workflows): the `sound` of the first node, in
+  output node id order, whose Audio output an output node takes; absent without one. `media` is computed as before,
+  except that a `Video` output does not count beside a classed Audio one (MMAudio's video workflow, an Audio and a
+  Video output, makes audio and shows under Sound). `GET /v1/studio/workflows?media=music|sound|voice` lists the
+  audio workflows of that class.
+- **Take.sound** (kind audio only, always sent): a run's take its workflow's `sound` (voice when it has none); an
+  upload's and a plugin take's as sent (`UploadCreate.sound`, `PluginTakeCreate.sound`; absent = voice;
+  on another kind 422 `only audio has a sound class`). Audio takes made before 1.79 are voice. `GET /v1/studio/takes?
+  kind=music|sound|voice` lists the audio takes of that class (the Gallery's Voice, Music and Sound filters, the
+  assistant's `search_takes` and screen action `gallery.filter`).
+- **The voice rules re-scope.** What Voices says of an audio workflow (spoken text is never expanded, a mention is
+  refused, looks do not apply) holds for class voice (or no class): music and sound prompts expand mentions and looks
+  as an image workflow's do (an element's images are dropped: no reference rows). Studio `mentions.go` and `looks.go`,
+  the web's `lib/mentions.ts` and pipelines' assistant follow `spoken`.
+- **Stereo.** An `Audio` value may carry `channels` 2 (PCM 16-bit interleaved); the output node writes a stereo WAV
+  and `evt.run.output audio.channels` 2 (absent = mono), stored as `Take.audio.channels`. Voice clone and LTX audio to
+  video downmix a stereo source (the core's `pcm(data, rate, channels)` decodes any audio input at the rate and
+  channels a pack needs).
+- **Sections.** A song with tagged lyrics carries `audio.sections` (`[{label, start_s, end_s}]`, in order, from the
+  model's lyric timestamps: ACE-Step only), stored as `Take.audio.sections`; the stage draws them as markers.
+- **Offers by class** (Media inputs: offers). A workflow with a `sound` takes an audio take into a `media` param only
+  when the take is of that class, and never a video's sound (Repaint · ACE-Step only on music takes, Vary · Stable
+  Audio only on sound takes; a voice take gets neither). A video into a param that accepts video is no sound
+  (MMAudio's video workflow is offered on videos). Rows params (references) take any class.
+- **Span on audio.** A `span` may sit on a node whose workflow's media source accepts audio: offers fill it with the
+  whole take (a Timeline range: the range), studio snaps it to whole milliseconds. ltx's extend room (`extend_room`)
+  is a video source's rule only: an audio extend is capped by the 600 s take limit.
+- **Auto values.** An `int` or `float` param with `auto: true` takes 0 as Auto (allowed below `min`): the model
+  picks it (ACE-Step's BPM and Length); the chip and slider show Auto with a switch. An enum's Auto is a value `auto`.
+  The planner's picks come back as `reports` texts (`resolved.texts`).
+- **Lyrics tags.** A `text` param's `tags` are the chips over the field, each inserted at the caret as `[<tag>]`.
+- **Chip groups and count.** `StudioLayout.groups` show quick chips as one chip with one popup (each item a quick
+  param path, in one group at most); `StudioLayout.count {default, max}` is how many takes one Generate makes (Stable
+  Audio 3: 4, at most 8); absent = Create's own.
+- **Save with the video** (`POST /v1/studio/takes/{take_id}/mux`, body `{video_take_id}`): a media job of kind `mux`
+  (`cmd.media.job` inputs [video, audio], output prefix `u/<owner_id>/muxes/<job_id>/`): the runner copies the
+  picture (H.264), encodes the sound as AAC 48 kHz stereo, pads it with silence or cuts it to the picture's length
+  (the core's `mux(mp4, wav)`), writes `mux.mp4`, `mux.poster.png` (frame 0) and `mux.last.png`, and answers them in
+  `evt.media.status result` as an export does. The projector makes a video take (source `create`, `parents` [video,
+  audio], the video's `made_with`). 202 with the job; idempotent per pair (a running job, or one whose take is not
+  deleted, is answered again); 404 for either take unknown, another user's or deleted; 422 `take <id> is not audio` /
+  `take <id> is not a video`; 409 `no live host can export (ffmpeg)`. "Sound only" needs nothing new: the sibling take
+  of the same `run_id`.
+- **The echo fakes** (env fake, no GPU): workflows `echo-music` (stereo 48 kHz, sections from the lyrics' `[tag]`
+  lines evenly spread, the plan line as its `plan` report; Length and BPM Auto: 10 s, 90), `echo-sound` (44.1 kHz
+  stereo, count 4 of 8), `echo-sound-video` (a video in: a sound take and the video with it, two outputs),
+  `echo-repaint` (Repaint: the span replaced), `echo-vary` (Vary) and `echo-music-extend` (Extend: Add seconds at the
+  End or Start).
 
 ## User workflows (API 1.5)
 

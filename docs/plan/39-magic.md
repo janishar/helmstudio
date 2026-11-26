@@ -28,7 +28,7 @@ helmstudio Design System (its copy in `docs/design-system/`): the page shell, ch
 
 - [plan 37](37-magic-concept.md) decisions 1–15 and its suggestions 1–10.
 - [plan 38](38-create-music-sound.md) (Create's Music and Sound, alpha.6 item 6, §44; approved and building): its P1
-  is the contract (API 1.77.0, `SoundClass`, stereo Audio, the `mux` media job, `00055_take_sound.sql`); its P3 makes
+  is the contract (API 1.79.0, `SoundClass`, stereo Audio, the `mux` media job, `00056_take_sound.sql`); its P3 makes
   the music and sound workflows on the real packs. Magic's phase C rebases on P1 and phase H waits for P3 (44.7);
   everything else here does not wait.
 - The code: `studio_service/api/timeline/` (`edit.go`, `agent.go`, `makeshot.go`), `studio_service/api/studio/`
@@ -65,9 +65,9 @@ helmstudio Design System (its copy in `docs/design-system/`): the page shell, ch
 
 ### 45.4 Facts
 
-- Contract today: API 1.76.0. Plan 38's P1 makes it 1.77.0; Magic's steps are 1.78.0 onward, one minor version per
-  step (45.6). Migrations: the last is `00054_timeline_names.sql`, plan 38 takes `00055_take_sound.sql`, Magic's are
-  numbered after it at build time.
+- Contract today: API 1.78.0 (plan 40's model folders took 1.78.0 and `00055_host_folders.sql`). Plan 38's P1 makes
+  it 1.79.0; Magic's steps are 1.80.0 onward, one minor version per step (45.6). Migrations: plan 38 takes
+  `00056_take_sound.sql`, Magic's are numbered after it at build time.
 - Music and sound takes are stereo after plan 38 (Audio `channels`); the Timeline's audio tracks take them as plan 38
   leaves them, so Send needs nothing more for them.
 - Packs behind the standard request (decision 15): Image (Qwen Image 2.1 and Turbo, MiniMax H3 Image), Video (LTX 2.5,
@@ -116,7 +116,7 @@ outside service later is one more adapter behind the same request.
 | `assets[]` | id, kind (`character`, `prop`, `place`), handle, name, `sheet[]` (take ids: views, expressions), `voice_id`, note, `imported_from` (a take or Element id, for the record only) |
 | `notes[]` | board notes the Assistant reads |
 
-**Contract changes**, ordered after plan 38's P1 has landed in `openapi.yaml` (1.77.0; Magic takes 1.78.0 onward;
+**Contract changes**, ordered after plan 38's P1 has landed in `openapi.yaml` (1.79.0; Magic takes 1.80.0 onward;
 each step is its own version so the phases ship alone):
 
 1. Boards: `GET/POST /v1/studio/magic/boards`, `GET/PATCH/DELETE …/boards/{board_id}` (soft delete; 100 per user, 409),

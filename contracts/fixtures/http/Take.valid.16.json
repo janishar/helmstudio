@@ -17,5 +17,6 @@
   "parents": [],
   "audio": {
     "duration_s": 3.0
-  }
+  },
+  "sound": "voice"
 }

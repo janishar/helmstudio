@@ -116,23 +116,42 @@
           "description": "frames only: the name of the same node's int or float param that holds frames per second; the UI shows the length as frames / fps seconds"
         },
         "auto": {
-          "type": "object",
-          "required": [
-            "min_s",
-            "max_s"
-          ],
-          "additionalProperties": false,
-          "description": "frames only: present = the model can predict the clip's length from the prompt; the value \"auto\" asks for it. The prediction is clamped to min_s..max_s seconds and to the param's min..max frames, then put on the grid (contracts/README.md, Video: auto length). The UI draws the Duration slider's Auto length switch from it",
-          "properties": {
-            "min_s": {
-              "type": "number",
-              "exclusiveMinimum": 0
+          "description": "frames: the object below; from API 1.79 int or float: true (the value 0 means Auto: the model picks it; the chip and slider show Auto with a switch; 0 is allowed below `min`; contracts/README.md, Music and sound)",
+          "oneOf": [
+            {
+              "type": "object",
+              "required": [
+                "min_s",
+                "max_s"
+              ],
+              "additionalProperties": false,
+              "description": "frames only: present = the model can predict the clip's length from the prompt; the value \"auto\" asks for it. The prediction is clamped to min_s..max_s seconds and to the param's min..max frames, then put on the grid (contracts/README.md, Video: auto length). The UI draws the Duration slider's Auto length switch from it",
+              "properties": {
+                "min_s": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "max_s": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              }
             },
-            "max_s": {
-              "type": "number",
-              "exclusiveMinimum": 0
+            {
+              "const": true
             }
-          }
+          ]
+        },
+        "tags": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9 -]{0,23}$"
+          },
+          "description": "API 1.79, text only: the tag chips over the field (lyrics: verse, chorus, bridge, intro, outro), each inserted at the caret as `[<tag>]`"
         },
         "label": {
           "type": "string",
@@ -735,11 +754,37 @@
               }
             }
           },
+          "then": {
+            "properties": {
+              "auto": {
+                "type": "object"
+              }
+            }
+          },
           "else": {
-            "not": {
-              "required": [
-                "auto"
-              ]
+            "if": {
+              "properties": {
+                "type": {
+                  "enum": [
+                    "int",
+                    "float"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "auto": {
+                  "const": true
+                }
+              }
+            },
+            "else": {
+              "not": {
+                "required": [
+                  "auto"
+                ]
+              }
             }
           }
         },
@@ -961,6 +1006,22 @@
             "not": {
               "required": [
                 "script"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "text"
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "required": [
+                "tags"
               ]
             }
           }
@@ -1475,6 +1536,10 @@
           "maxLength": 40,
           "description": "from API 1.24: the model component the node loads, in words (model.yaml `stages.<name>.component`: transformer, text encoder, vae); the Graph inspector reads `<family> · runs on <runtime> · uses the <component>`. Absent = it loads none (core nodes, canvas, duration, the model and LoRA stack nodes)"
         },
+        "sound": {
+          "$ref": "messages/defs.schema.json#/$defs/soundClass",
+          "description": "API 1.79, a node with an Audio output only: what its sound is (model.yaml `sound` of the stage, else of the pack); studio and check.py read Workflow.sound from the node whose Audio output an output node takes (contracts/README.md, Music and sound)"
+        },
         "help": {
           "type": "string",
           "maxLength": 300
@@ -1690,6 +1755,10 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 80
+                  },
+                  "sound": {
+                    "$ref": "messages/defs.schema.json#/$defs/soundClass",
+                    "description": "API 1.79: the pack's model.yaml `sound`, for a model whose takes are audio (music, sound or voice); the Models page colours its cube by it. Absent = not an audio model (or one of several classes, echo)"
                   },
                   "variants": {
                     "type": "array",
@@ -3237,6 +3306,64 @@
                 ]
               }
             ]
+          }
+        },
+        "groups": {
+          "type": "array",
+          "maxItems": 4,
+          "description": "from 1.79: quick chips shown as one chip with one popup (ACE-Step's \"BPM · Key · Time\"), at the first item's place; each item is a param path in `quick`, in at most one group (contracts/README.md, Music and sound)",
+          "items": {
+            "type": "object",
+            "required": [
+              "label",
+              "items"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40,
+                "examples": [
+                  "BPM · Key · Time"
+                ]
+              },
+              "items": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 6,
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$",
+                  "description": "`<node id>.<param>`, or `<node id>.bypass` for a bypassable node (a switch)",
+                  "examples": [
+                    "sample.steps",
+                    "enhance.bypass"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "count": {
+          "type": "object",
+          "required": [
+            "default",
+            "max"
+          ],
+          "additionalProperties": false,
+          "description": "from 1.79: how many takes one Generate makes (Stable Audio 3's variations: 4, at most 8); absent = Create's own count",
+          "properties": {
+            "default": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8
+            },
+            "max": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8
+            }
           }
         },
         "inspector": {

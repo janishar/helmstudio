@@ -3405,6 +3405,41 @@
         }
       }
     },
+    "section": {
+      "type": "object",
+      "description": "API 1.79: one part of a song in its take (evt.run.output audio.sections, Take.audio.sections): its label as the lyrics tag it (verse, chorus, bridge, intro, outro, or the tag's own text), [start_s, end_s) in the take's own seconds; from a music model's lyric timestamps (ACE-Step), in order, never overlapping",
+      "required": [
+        "label",
+        "start_s",
+        "end_s"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "start_s": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 600
+        },
+        "end_s": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 600
+        }
+      }
+    },
+    "soundClass": {
+      "enum": [
+        "music",
+        "sound",
+        "voice"
+      ],
+      "description": "API 1.79 (contracts/README.md, Music and sound): what an audio take or workflow is: music (songs, ACE-Step, MiniMax Music 3), sound (effects and ambience, Stable Audio 3, MMAudio) or voice (speech, Qwen3-TTS, ZONOS3); a class on take kind audio, never a take kind of its own"
+    },
     "takeThumb": {
       "description": "API 1.48 (contracts/README.md, Thumbnails): a take's thumbnail, a WebP (quality 80, alpha kept) of the image or the poster with its short side 512 px (never upscaled) and its long side at most 1024; made only when it is smaller than the original and the original's short side is over 360 (until 2026-11-23: 512)",
       "type": "object",

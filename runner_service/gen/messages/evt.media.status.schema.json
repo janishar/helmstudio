@@ -81,7 +81,7 @@
         "result": {
           "type": "object",
           "additionalProperties": false,
-          "description": "succeeded: an export's or a frame's take (key, width, height, bytes); (1.48) a thumbs job's `thumbs` (no key)",
+          "description": "succeeded: an export's or a frame's take (key, width, height, bytes); (1.48) a thumbs job's `thumbs` (no key); (1.79) a mux's take: key mux.mp4 and its `video` (as an export's, poster mux.poster.png at frame 0, last mux.last.png)",
           "properties": {
             "key": {
               "allOf": [
@@ -89,7 +89,7 @@
                   "$ref": "defs.schema.json#/$defs/objectKey"
                 },
                 {
-                  "pattern": "/(export\\.mp4|frame\\.png)$"
+                  "pattern": "/(export\\.mp4|frame\\.png|mux\\.mp4)$"
                 }
               ]
             },
@@ -132,7 +132,7 @@
                 "last"
               ],
               "additionalProperties": false,
-              "description": "export: as evt.run.output video",
+              "description": "export and (1.79) mux: as evt.run.output video",
               "properties": {
                 "duration_s": {
                   "type": "number",

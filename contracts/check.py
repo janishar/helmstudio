@@ -97,7 +97,7 @@ HTTP_SCHEMAS = [
     "ModelList", "ModelDownload", "ModelJob", "ModelJobList", "HostSettings", "HostSettingsPut", "ModelFoldersPut", "HostPins", "HostUnload",
     "HostUnloadAccepted", "ImportTakeCreate", "ImportTake",
     "Timeline", "TimelineList", "TimelineCreate", "TimelineUpdate", "TimelineAddClips", "TimelineShotCreate",
-    "TimelineRerender", "ExportPlan", "MediaJob", "TakeFrame", "TakeUses", "ClipActions", "TimelineLineCreate",
+    "TimelineRerender", "ExportPlan", "MediaJob", "TakeFrame", "TakeMux", "TakeMuxRequest", "TakeUses", "ClipActions", "TimelineLineCreate",
     "TimelineEdits", "TimelineEditResult", "TimelineAgentView", "TimelineRevisionList", "TimelineFrame",  # 1.49
     "SessionList", "SessionNames", "SessionNamesPut",
     "AssistantPost", "AssistantThreadList", "AssistantThreadDetail", "AssistantThreadPatch", "AssistantEvent", "AssistantMemoryList",
@@ -278,6 +278,8 @@ def value_error(param: dict, v) -> str | None:
     if t == "int" and "values" in param and v not in param["values"]:
         return f"must be one of {', '.join(map(str, param['values']))}"
     n = len(v) if t in ("string", "text") else v
+    if t in ("int", "float") and param.get("auto") is True and v == 0:  # API 1.79: 0 is Auto, below min too
+        return None
     if t != "enum" and t != "bool" and not param.get("min", n) <= n <= param.get("max", n):
         return f"{v!r} is outside {param.get('min')}..{param.get('max')}"
     return None
@@ -348,7 +350,7 @@ def schema_errors(n: dict) -> list[str]:
                 out.append(f"{p['name']}: a cross-node values_by must allow the default for every value")
             elif not cross and p["default"] not in vb["values"].get(ep["default"], pool):
                 out.append(f"{p['name']}: the default is not allowed for {vb['param']} {ep['default']}")
-        if auto and not 0 < auto["min_s"] < auto["max_s"]:
+        if isinstance(auto, dict) and not 0 < auto["min_s"] < auto["max_s"]:
             out.append(f"{p['name']}: auto needs 0 < min_s < max_s")
         if set(p.get("not_with", [])) - {i["name"] for i in n["inputs"] if i.get("optional")}:
             out.append(f"{p['name']}: not_with must name optional inputs of the node")
@@ -370,6 +372,8 @@ def schema_errors(n: dict) -> list[str]:
                 out.append(f"{p['name']}: min_s is above max_s")
         if p.get("script") and not script_target(n):  # API 1.32 (README, Dialogue)
             out.append(f"{p['name']}: a script needs a rows param `lines` with voice, text, style and pause_s fields")
+    if n.get("sound") and not any(o["type"] == "Audio" for o in n["outputs"]):  # API 1.79
+        out.append("sound: only a node with an Audio output has a sound class")
     return out
 
 
@@ -420,6 +424,7 @@ def check_canonical_registries() -> None:
             # a template's studio block obeys the rules of a user workflow's (README, User workflows)
             errs += [f"studio: {p}" for p in graph_problems(wf, {k: v | {"envs": [wf["env"]]} for k, v in kinds.items()})
                      if p[0].startswith(("studio_", "preset_"))]
+            errs += group_errors(wf.get("studio") or {})
             for e in errs:
                 fail(f"fixtures/registry/{prefix}workflows.valid.json {wf['id']}: {e}")
             if not errs:
@@ -429,6 +434,17 @@ def check_canonical_registries() -> None:
         if (got := upload_limits(nodes)) != {"image_max_side": want}:
             fail(f"upload_limits: {got}, want image_max_side {want}")
     print("ok   upload_limits over the canonical registries")
+
+
+def group_errors(studio: dict) -> list[str]:
+    """API 1.79 (README, Music and sound): each `groups` item is a quick param path, in at most one group, and a
+    `count` default is at most its max."""
+    items = [x for g in studio.get("groups", []) for x in g["items"]]
+    out = [f"studio.groups: {x} is not a quick chip" for x in items if x not in studio.get("quick", [])]
+    out += [f"studio.groups: {x} is in two groups" for x in sorted({x for x in items if items.count(x) > 1})]
+    if (c := studio.get("count")) and c["default"] > c["max"]:
+        out.append("studio.count: the default is above the max")
+    return out
 
 
 def upload_limits(nodes: list[dict]) -> dict:
@@ -455,13 +471,33 @@ def workflow_media(nodes: dict, kinds: dict) -> str:
     image (README, Video; Voices). Not node order: the first type of that list that any output has."""
     if any(n["kind"] == "answer" and "text" in n.get("in", {}) for n in nodes.values()):
         return "text"
-    got = set()
-    for n in nodes.values():
+    got = {t for t, _ in output_sources(nodes, kinds)}
+    if workflow_sound(nodes, kinds):  # API 1.79: a classed sound wins over a second Video output (MMAudio's video)
+        got.discard("Video")
+    return next((t.lower() for t in ("Video", "Image", "Audio") if t in got), "image")
+
+
+def output_sources(nodes: dict, kinds: dict) -> list[tuple[str, dict]]:
+    """(type, source node schema) of every output node's media wire, node id order."""
+    out = []
+    for nid in sorted(nodes):
+        n = nodes[nid]
         ref = n.get("in", {}).get("media") if n["kind"] == "output" else None
         src = nodes.get(ref.split(".")[0]) if ref else None
         ks = kinds.get(src["kind"]) if src else None
-        got |= {o["type"] for o in ks["outputs"] if o["name"] == ref.split(".")[1]} if ks else set()
-    return next((t.lower() for t in ("Video", "Image", "Audio") if t in got), "image")
+        out += [(o["type"], ks) for o in ks["outputs"] if o["name"] == ref.split(".")[1]] if ks else []
+    return out
+
+
+def workflow_sound(nodes: dict, kinds: dict) -> str | None:
+    """API 1.79 (README, Music and sound): the `sound` of the first node (output node id order) whose Audio output an
+    output node takes; None when none has one."""
+    return next((ks["sound"] for t, ks in output_sources(nodes, kinds) if t == "Audio" and ks.get("sound")), None)
+
+
+def spoken(nodes: dict, kinds: dict) -> bool:
+    """The voice rules (README, Voices) hold for an audio workflow of class voice, or (API 1.79) of no class."""
+    return workflow_media(nodes, kinds) == "audio" and workflow_sound(nodes, kinds) in (None, "voice")
 LORA_ID = re.compile(r"^([0-9a-f]{64}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$")
 WIREABLE = {"int": "Int", "float": "Float", "seed": "Seed", "string": "Text", "text": "Text", "image": "Image"}
 RUN_ONLY = {"unknown_kind", "env_mismatch", "required_input", "no_output", "too_many_outputs", "too_many_seeds",
@@ -1418,7 +1454,7 @@ def look_fit(nodes: dict, palette: dict, item: dict, loras: dict[str, str]) -> s
     """Why the item cannot be applied to this graph (README, Looks: fit), None when it can. `loras`: LoRA id → detected
     family of every LoRA the caller can use now in the workflow's env."""
     needs = look_needs(item)
-    if workflow_media(nodes, palette) == "audio":  # API 1.30: spoken text is never expanded (README, Voices)
+    if spoken(nodes, palette):  # API 1.30: spoken text is never expanded (README, Voices); 1.79: class voice
         return "mentions are not read aloud; use a dialogue script" if item.get("kind") == "element" \
             else "looks do not apply to speech"
     if ("text" in needs or item.get("kind") == "element") and not prompt_params(nodes, palette):
@@ -1457,7 +1493,7 @@ def resolve_mentions(nodes: dict, palette: dict, library: list[dict], sizes: dic
     first = {}  # look id → its first place in the request, from 1
     for i, lid in enumerate(chosen, 1):
         first.setdefault(lid, i)
-    if workflow_media(nodes, palette) == "audio":  # API 1.30: nothing is expanded; a mention is refused (README, Voices)
+    if spoken(nodes, palette):  # API 1.30: nothing is expanded; a mention is refused (README, Voices); 1.79: class voice
         errors = [f"{path}: mentions are not read aloud; use a dialogue script" for _, path, _, parts in prompts
                   if mentioned(parts)]
         prompts = []
@@ -1982,10 +2018,15 @@ def take_uses(take: dict, workflows: list[dict], palette: dict, rng: tuple | Non
     media param whose `accepts` names its kind, or `audio` for a video with sound) that the take fits, with the inputs
     pre-filled. From API 1.22 an input counts only when the workflow's studio block places it (none: every input) and
     a rows param excluded by a wired `not_with` input does not count.
+    From API 1.79 (README, Music and sound): a workflow with a `sound` class takes an audio take into a `media` param
+    as sound only when the take is an audio take of that class (`sound`; a video's sound never; a rows param still
+    takes any class; a video into a param that accepts video is no sound), and every
+    `span` is filled for an audio take into an audio input too; ltx's extend room is a video source's rule only.
     rng: (in, out) in the take's own seconds (a Timeline clip or selection), else the whole take."""
     out = []
     for wf in workflows:
         found, shown = [], placed_paths(wf)
+        cls = workflow_sound(wf["nodes"], palette)
         for nid in sorted(wf["nodes"]):
             n, s = wf["nodes"][nid], palette.get(wf["nodes"][nid]["kind"])
             for p in (s["params"] if s and not n.get("bypass") and not n.get("optional") else []):
@@ -1995,6 +2036,8 @@ def take_uses(take: dict, workflows: list[dict], palette: dict, rng: tuple | Non
                     found.append((nid, p))
                 elif take["kind"] != "image" and p["type"] == "media" and (
                         take["kind"] in p["accepts"] or (take["kind"] == "video" and "audio" in p["accepts"])):
+                    if cls and "video" not in p["accepts"] and take.get("sound") != cls:
+                        continue  # 1.79: offers by class (no Repaint · ACE-Step on a voice take nor a video's sound)
                     found.append((nid, p))
                 elif take["kind"] != "image" and media_field(p) and take["kind"] in p["item"][media_field(p)]["accepts"]:
                     found.append((nid, p))  # 1.32: rows of one media field, by the take's own kind only
@@ -2024,6 +2067,9 @@ def take_uses(take: dict, workflows: list[dict], palette: dict, rng: tuple | Non
                 if ext and (room := extend_room(take, rng)) is None:
                     continue
                 inputs |= {f"{x}.{k}": v for x in ext for k, v in room.items()} if ext else {}
+            elif take["kind"] == "audio" and "audio" in p["accepts"]:  # 1.79: a span on an audio source (Repaint)
+                inputs |= {f"{x}.{q['name']}": {"start": a, "end": b} for x in sorted(wf["nodes"])
+                           for q in palette.get(wf["nodes"][x]["kind"], {}).get("params", []) if q["type"] == "span"}
         inputs |= offer_values_by(wf, palette, inputs)
         out.append({"workflow_id": wf["id"], "title": wf["title"]} | ({"action": wf["action"]} if "action" in wf else {})
                    | {"family": wf["family"], "media": wf.get("media", "image"), "param": path, "inputs": inputs})
@@ -2384,7 +2430,8 @@ def check_media(registry: Registry) -> None:
     fx = json.loads((g / "uses.json").read_text())
     for c in fx["cases"]:
         take = fx["takes"][c["take"]] | {"id": c["take"]}
-        got = {"uses": take_uses(take, wfs, pal, tuple(c["range"]) if "range" in c else None)}
+        cw, cp = (wfs, pal) if "registries" not in c else registries(c["registries"])  # 1.79: echo's or the voices'
+        got = {"uses": take_uses(take, cw, cp, tuple(c["range"]) if "range" in c else None)}
         if c.get("param"):
             got = {"error": media_fit(c["param"], take)}
         elif errs := list(uses_v.iter_errors(got)):
@@ -2405,6 +2452,13 @@ def check_media(registry: Registry) -> None:
         if (got := media_rows(nodes, pal, takes)) != c["expect"]:
             fail(f"fixtures/video/media-rows.json {c['description']!r}: got {json.dumps(got)}")
     print("ok   fixtures/video/media-rows.json")
+
+
+def registries(prefixes: list[str]) -> tuple[list[dict], dict]:
+    """The workflows and palette of these canonical registry fixtures ("" is echo's)."""
+    reg = HERE / "fixtures" / "registry"
+    pal = {n["kind"]: n for pre in prefixes for n in json.loads((reg / f"{pre}nodes.valid.json").read_text())["nodes"]}
+    return [w for pre in prefixes for w in json.loads((reg / f"{pre}workflows.valid.json").read_text())["workflows"]], pal
 
 
 def check_video(registry: Registry, palette: dict) -> None:

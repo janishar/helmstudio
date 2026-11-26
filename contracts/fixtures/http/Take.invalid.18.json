@@ -1,0 +1,36 @@
+{
+  "id": "9b2e1d33-5c6e-4f70-8b8c-2d3e4f5a6b7d",
+  "kind": "audio",
+  "source": "upload",
+  "title": "a song",
+  "url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/uploads/9b2e1d33-5c6e-4f70-8b8c-2d3e4f5a6b7c.wav?exp=1767225600&sig=ab12",
+  "thumb_url": "/files/u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/uploads/9b2e1d33-5c6e-4f70-8b8c-2d3e4f5a6b7c.wav?exp=1767225600&sig=ab12",
+  "content_type": "audio/wav",
+  "width": null,
+  "height": null,
+  "bytes": 576044,
+  "created_at": "2026-11-16T10:00:00Z",
+  "starred": false,
+  "session_id": null,
+  "run_id": null,
+  "made_with": null,
+  "parents": [],
+  "audio": {
+    "duration_s": 30.0,
+    "sample_rate": 48000,
+    "channels": 2,
+    "sections": [
+      {
+        "label": "verse",
+        "start_s": 0,
+        "end_s": 12.5
+      },
+      {
+        "label": "chorus",
+        "start_s": 12.5,
+        "end_s": 30
+      }
+    ]
+  },
+  "sound": "song"
+}

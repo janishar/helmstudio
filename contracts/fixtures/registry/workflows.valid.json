@@ -339,6 +339,249 @@
       }
     },
     {
+      "id": "echo-music",
+      "title": "Echo music",
+      "family": "echo",
+      "env": "fake",
+      "media": "audio",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "music": {
+          "kind": "echo/music",
+          "in": {
+            "text": "prompt.text"
+          },
+          "params": {
+            "lyrics": "",
+            "instrumental": false,
+            "seconds": 0,
+            "bpm": 0,
+            "seed": -1,
+            "delay_ms": 300
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "music.audio"
+          }
+        }
+      },
+      "studio": {
+        "composer": [
+          "prompt.text",
+          "music.lyrics"
+        ],
+        "quick": [
+          "music.instrumental",
+          "music.seconds",
+          "music.bpm"
+        ],
+        "groups": [
+          {
+            "label": "Length · BPM",
+            "items": [
+              "music.seconds",
+              "music.bpm"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "echo-sound",
+      "title": "Echo sound",
+      "family": "echo",
+      "env": "fake",
+      "media": "audio",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "sound": {
+          "kind": "echo/sound",
+          "in": {
+            "text": "prompt.text"
+          },
+          "params": {
+            "avoid": "",
+            "seconds": 2,
+            "seed": -1,
+            "delay_ms": 300
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "sound.audio"
+          }
+        }
+      },
+      "studio": {
+        "composer": [
+          "prompt.text",
+          "sound.avoid"
+        ],
+        "quick": [
+          "sound.seconds"
+        ],
+        "count": {
+          "default": 4,
+          "max": 8
+        }
+      }
+    },
+    {
+      "id": "echo-sound-video",
+      "title": "Echo sound from a video",
+      "action": "Add sound",
+      "family": "echo",
+      "env": "fake",
+      "media": "audio",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "foley": {
+          "kind": "echo/foley",
+          "in": {
+            "text": "prompt.text"
+          },
+          "params": {
+            "source": null,
+            "seed": -1,
+            "delay_ms": 300
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "foley.audio"
+          }
+        },
+        "output_video": {
+          "kind": "output",
+          "in": {
+            "media": "foley.video"
+          }
+        }
+      }
+    },
+    {
+      "id": "echo-repaint",
+      "title": "Echo repaint",
+      "action": "Repaint",
+      "family": "echo",
+      "env": "fake",
+      "media": "audio",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "repaint": {
+          "kind": "echo/repaint",
+          "in": {
+            "text": "prompt.text"
+          },
+          "params": {
+            "source": null,
+            "span": null,
+            "seed": -1,
+            "delay_ms": 300
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "repaint.audio"
+          }
+        }
+      }
+    },
+    {
+      "id": "echo-vary",
+      "title": "Echo vary",
+      "action": "Vary",
+      "family": "echo",
+      "env": "fake",
+      "media": "audio",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "vary": {
+          "kind": "echo/vary",
+          "in": {
+            "text": "prompt.text"
+          },
+          "params": {
+            "source": null,
+            "change": 0.5,
+            "seed": -1,
+            "delay_ms": 300
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "vary.audio"
+          }
+        }
+      }
+    },
+    {
+      "id": "echo-music-extend",
+      "title": "Echo music extend",
+      "action": "Extend",
+      "family": "echo",
+      "env": "fake",
+      "media": "audio",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "lengthen": {
+          "kind": "echo/lengthen",
+          "in": {
+            "text": "prompt.text"
+          },
+          "params": {
+            "source": null,
+            "seconds": 10,
+            "where": "end",
+            "seed": -1,
+            "delay_ms": 300
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "lengthen.audio"
+          }
+        }
+      }
+    },
+    {
       "id": "echo-ask",
       "title": "Ask (fake)",
       "family": "echo",

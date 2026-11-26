@@ -170,7 +170,7 @@ Not in (backlog by name):
 
 ### 44.6 Design
 
-#### Contract (API 1.77.0; contracts first, `make contracts-check`, then `make gen` per service)
+#### Contract (API 1.79.0, rebased from 1.77.0: plan 40's model folders took 1.78.0; contracts first, `make contracts-check`, then `make gen` per service)
 
 - **Sound class.** `SoundClass: music | sound | voice`.
   - Registry: pack-level `model.yaml` key `sound`, published as `models[].sound` (`registry.schema.json`). qwen3-tts,
@@ -213,7 +213,8 @@ Not in (backlog by name):
 
 #### Data
 
-- `studio_service/migrations/00055_take_sound.sql` (next free number at build time; plan 39 also adds migrations):
+- `studio_service/migrations/00056_take_sound.sql` (the next free number at build time; plan 40 took 00055, plan 39 also
+  adds migrations):
   `ALTER TABLE takes ADD COLUMN sound text CHECK (sound IN ('music','sound','voice'))`; backfill every existing audio
   take to `voice`; an index on `(owner_id, kind, sound)` for the filter.
 - `channels` and `sections` live in the existing take media JSON (no column).
@@ -338,7 +339,7 @@ Files per phase (each phase owns these and nothing else; "tests" means the named
     on video only, stereo `_wav`, `pcm()`, `mux()`), `packs/README.md` (`sound`, stereo), `pyproject.toml`, `uv.lock`
     (open_clip_torch with timm; ruff excludes `packs/mmaudio/vendor`), `gen/`, tests `test_graph.py`,
     `test_media_inputs.py`, `test_media.py` (`pcm`, `mux`), `test_voices.py`, `test_packs.py` (echo only).
-  - studio: `migrations/00055_take_sound.sql` (the next free number when it lands), `api/gallery/{service,upload,
+  - studio: `migrations/00056_take_sound.sql` (the next free number when it lands), `api/gallery/{service,upload,
     imports,plugin_takes,record,media}.go`, `api/gallery/dto/dto.go`, `api/gallery/model/model.go`,
     `api/studio/{projector,graph,workflows,media,mentions,looks}.go`,
     `registry/registry.go`, `gen/`, and the Go tests beside each.
@@ -427,8 +428,8 @@ Files per phase (each phase owns these and nothing else; "tests" means the named
 5. **Memory**: MiniMax Music 3 (26.6 GB) and XL beside another resident model can pass the 52 GB budget; the
    `peak_gb` values and the host memory plan unload first.
 6. **MiniMax speed** (5× real time): a 2-minute song takes 10 minutes; the estimate on Generate says so.
-7. **Clashes with plans 39 and 40** (both alpha.6, built at the same time). Contract and migrations: P1 lands 1.77.0
-   first, Magic and Model folders (1.78.0) rebase and renumber. Shared files, one phase at a time across the plans:
+7. **Clashes with plans 39 and 40** (both alpha.6, built at the same time). Contract and migrations: Model folders landed
+   1.78.0 first; P1 lands 1.79.0, and Magic (1.80.0 onward) rebases and renumbers. Shared files, one phase at a time across the plans:
    `runner_service/core/pack.py` (P1 and P2d here; plan 40 P2's folder resolver), `core/registry.py` and
    `core/download.py` (plan 40 P2; untouched here), `components/models/models.tsx` (P5 here, plan 40 P4: whichever runs
    second adds its lines), `components/create/assistant.ts` (P1 here, plan 39 F), `contracts/tools/{catalog,actions}.json`
