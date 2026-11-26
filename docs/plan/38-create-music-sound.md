@@ -68,8 +68,9 @@ menu of [ContextMenus](../mock/ContextMenus.dc.html).
    may cover SA1 only). Only MMAudio is vendored (not in diffusers), from `~/GenAI/model-samples/src/MMAudio` at
    974010a.
 8. **The board's memory figures are off for two models**: MiniMax Music 3 measured 26.6 GB peak (board 20 GB), MMAudio
-   8 GB text only and 15.1 GB with a video (board 12 GB). The board's figures follow the measured `peak_gb` (fixed in P4
-   with the UI; the drawer readout comes from the registry, so it cannot drift again).
+   8 GB text only and 15.1 GB with a video, 16.2 GB with the load (board 12 GB; item 27). The board's figures follow
+   the measured `peak_gb` (fixed in P4 with the UI; the drawer readout comes from the registry, so it cannot drift
+   again).
 9. **ACE-Step forces fp32 on MPS.** The pack sets dtype itself: XL in bf16 measured 24 GB peak against 35.6 GB, and
    twice as fast in diffusion. The 2B stays fp32 (23 GB, measured), XL runs bf16 on the Mac (owner's brief).
 10. **The planner LM is not reproducible by seed upstream** (the same seed gave a different key). The pack seeds the LM
@@ -78,20 +79,58 @@ menu of [ContextMenus](../mock/ContextMenus.dc.html).
     "LRC" pass), not from the model output itself: only ACE-Step takes with tagged lyrics show them.
 12. **No new runner env.** All four packs run in the shared torch venv (one more env costs a NATS user, secrets,
     Makefile targets, health ports and `desktop/stack.json`). The `sgl.py` child-venv pattern is the fallback only.
-13. **The design system's local copy** is in `docs/design-system/` (commit 7f788b54); P5 updates the Design System
-    artifact and that copy together.
+13. **The design system's local copy** is in `docs/design-system/` (commit 7f788b54). Its `kind-music` and
+    `kind-sound` tokens are marked "Board only, not built". P0 completes the artifact and the copy from the approved
+    board before any UI is built (CLAUDE.md: boards and code use the system), and P6 marks them built; P4 and P5 never
+    edit them, so no two phases write the system at once.
 14. **`extend_room` is LTX's rule on every `*/extend` node** (`check.py`, studio `api/studio/media.go`): its 321-frame
     room would refuse or mis-fill an audio extend. The rule is limited to video sources; audio extends cap at the
     600 s Audio limit.
 15. **An offer needs exactly one unwired placed media input.** A Cover with a second audio input (a reference song)
     would never be offered: that reference sits on an `optional` node outside the studio block, or is left out.
 16. **Timeline clip actions offer only the same family's workflows** (README Take actions), so a MiniMax clip would get
-    no Repaint there. Clip actions for audio match by sound class, as the Create and Gallery offers do.
+    no Repaint there. Review: today an audio-track clip answers Make shot only (`api/studio/timelines.go`
+    `ClipActions`, `api/timeline/makeshot.go`), so the rule bites only if audio clips get Repaint, Cover and Extend on
+    the Timeline, which the board does not show ("Timeline clips keep the waveform"). Left out of this plan; backlog
+    "Timeline: music and sound clip actions by class" (44.10.13).
 17. **Audio inputs are decoded in each pack today** (zonos3 `native.py`, ltx `common.py` call ffmpeg themselves). One
     shared `pcm(data, rate, channels)` and `mux(mp4, wav)` (H.264 copied, AAC added, facts from `core.media.probe`) go
     in `core/media.py`.
 18. **Long LM loops need cancel points and their own limits.** MiniMax's LM runs 750 frames at 0.11 s: a cancel check
     per frame, `max_seconds` and `stall_s` per stage, and `peak_gb` from the stage's own params (duration).
+
+From the plan review (2026-11-27, against the code and the board):
+
+19. **The voice rule has two more homes**: studio `api/studio/looks.go` (spoken text is never expanded, beside
+    `mentions.go`), and the web's own copy of `workflowMedia` and `spoken` in `web_service/lib/mentions.ts` (the graph
+    editor computes a user workflow's media in the client). Both re-scope with the class in P1.
+20. **Takes are inserted in five places**, not two: `api/gallery/record.go` (run outputs), `upload.go`, `imports.go`,
+    `plugin_takes.go` and `api/studio/media_jobs.go` (frame, and now mux); the DTO is `api/gallery/dto/dto.go`, the scan
+    `api/gallery/model/model.go`. Imports and plugin audio takes take an optional `sound` like uploads (unset is voice).
+21. **Every pack touches shared registry files.** `tests/test_packs.py` `test_published_nodes_equal_the_canonical_palette`
+    needs each published node kind in `contracts/fixtures/graphs/palette.json` (one file, a group per family), and
+    `check.py` `CANONICAL` (one line) and the `test_real_torch_packs_match_the_fixtures` list (one line) name every
+    torch family. Four packs built in one working tree would edit these files at once, and a pathspec commit would carry
+    another builder's half-done lines: the packs build in their own git worktrees and merge one at a time (44.7). The
+    Python dependencies of all four packs land once, in P1, so `uv.lock` is never merged.
+22. **Download entries on the Models page** come from each variant's `source` / `sources` (pinned revision,
+    `allow_patterns`). The MiniMax-Music3 repo also holds the SGLang-Omni layout (qwen_7B, `flowmatching_vae.pth`,
+    `dav.pth`, 28.7 GB) the runner never reads: its patterns list the diffusers folders only, or a download is twice the
+    bytes. MMAudio's list `weights/mmaudio_large_44k_v2.pth` and `ext_weights/` only, ACE-Step 1.5's the turbo DiT, LM,
+    text encoder and VAE folders, XL's its 4 shards; DFN5B and BigVGAN are `sources` with their own `dir`.
+23. **The Assistant's gallery filter is a screen action too**: `contracts/tools/actions.json` screen `gallery` action
+    `filter` has its own `kind` enum beside `catalog.json`'s; both gain the three classes. The Create screen's `MEDIA`
+    label map is `web_service/components/create/assistant.ts`, which plan 39 phase F also edits: it changes in P1, never
+    in P4.
+24. **Web styles are one file** (`web_service/styles/tokens.css`; components style inline), and
+    `tests/components/context-menus-places.test.tsx` covers both Create and the Gallery menus: each has one owner phase.
+25. **e2e is not part of `make test`**: the journeys run with `make -C web_service e2e` on `helmstudio-test`.
+26. **The mux job needs no pack**: it is ffmpeg in the media worker (beside `frame`, `thumbs`, export), so it builds as
+    phase M beside the packs, not after them. Kong needs no change (`/v1/studio` is one prefix route).
+27. **MMAudio's load peak**: 14 GB while the fp32 checkpoints are read on the CPU, 16.2 GB whole process with a video
+    (`/usr/bin/time`); `peak_gb` takes the larger of load and run, so the board and the drawer show 16 GB with a video.
+28. **Shared core files were split across parallel phases** (`core/nodes.py` and `core/media.py` in P2a, P2d and P3):
+    stereo `_wav`, `pcm()` and `mux()` land in P1, with the echo fakes that need them; the packs only call them.
 
 ### 44.4 Facts (measured, M5 Pro 64 GB, torch 2.15, MPS)
 
@@ -101,7 +140,7 @@ menu of [ContextMenus](../mock/ContextMenus.dc.html).
 | ACE-Step 1.5 XL turbo | 48 kHz stereo | DiT bf16 (cast from fp32 on disk), LM fp32 | 22.5 GB (24 brief) | 30 s in ≈ 16.5 s | fp32 was 32–35.6 GB; load 45 s from the T9 |
 | MiniMax Music 3 | 44.1 kHz stereo | all bf16 | 26.6 GB (28.5 brief) | ≈ 4.9× real time (30 s in 148 s) | text to music only; same seed repeats bit for bit; instrumental by prompt plus `[instrumental]` lyrics; may stop early |
 | Stable Audio 3 Small-SFX | 44.1 kHz stereo | fp32 | 4.4 GB | 6 s in 0.5 s | same seed repeats; HF gated; levels not normalised |
-| MMAudio large 44k v2 | 44.1 kHz mono | bf16 | 8 GB text, 15.1 GB with a video | 8 s in 3.8 s (text), 8.7 s (video) | load peak 14 GB (fp32 read on CPU); 25 fps sync, so trim the source 0.2 s long |
+| MMAudio large 44k v2 | 44.1 kHz mono | bf16 | 8 GB text, 15.1 GB with a video (16.2 GB with the load) | 8 s in 3.8 s (text), 8.7 s (video) | load peak 14 GB (fp32 read on CPU); 25 fps sync, so trim the source 0.2 s long |
 
 Durations up to 600 s are already allowed. Licences (declared, not a filter): ACE-Step MIT; MiniMax Music 3 Community
 License; Stable Audio 3 Stability AI Community plus Gemma terms (`gated`, `must_accept`); MMAudio weights CC-BY-NC 4.0;
@@ -127,6 +166,7 @@ Not in (backlog by name):
 - Stem separation, a lyrics writer by an LLM, mastering or loudness normalisation (levels stay as the model gives them).
 - CUDA runs: the packs declare `devices: [mps, cuda]`, but the CUDA goldens wait for a GCP slot.
 - MiniMax Music 3's own repaint or cover (the model has none).
+- Timeline: music and sound clip actions by class (44.10.13).
 
 ### 44.6 Design
 
@@ -141,10 +181,13 @@ Not in (backlog by name):
   - `GET /v1/studio/workflows?media=` also accepts `music | sound | voice` (matching `sound`).
   - `Take.sound` for audio takes; the projector sets it from the run's workflow. `GET /v1/takes?kind=` also accepts
     `music | sound | voice` (kind audio and that class).
-  - Upload: optional `sound` (default applied: the Create tab or Gallery filter it comes from; unset is voice).
-  - The tool catalog's gallery kind enum (`contracts/tools/catalog.json`) gains the three values.
+  - Upload, import and plugin take: optional `sound` (default applied: the Create tab or Gallery filter it comes
+    from; unset is voice).
+  - The gallery kind enums gain the three values: the tool catalog's (`contracts/tools/catalog.json`) and the screen
+    action `gallery.filter`'s (`contracts/tools/actions.json`). No new screen actions: the Assistant reaches Repaint,
+    Cover, Extend and Vary through `switchTo`, `change` and `generate` (44.10.15).
   - The voice rules re-scope to `sound = voice`: `check.py` (spoken-text expansion, mention refusal), studio
-    `mentions.go`, pipelines `assistant.py` (`voice = media == "audio"`).
+    `mentions.go` and `looks.go`, the web's `lib/mentions.ts`, pipelines `assistant.py` (`voice = media == "audio"`).
 - **Stereo.** Audio value `channels` (1|2, default 1); `evt.run.output` `audio.channels`; `AudioInfo.channels`.
   contracts/README.md Voices drops "mono". Voice clone and LTX audio-to-video downmix a stereo source.
 - **Sections.** `AudioInfo.sections: [{label, start_s, end_s}]`, beside `cues`; from the run output (ACE-Step's lyric
@@ -164,7 +207,8 @@ Not in (backlog by name):
   lacks shows greyed in place with "Not on <model>".
 - **Mux job.** `cmd.media.job` kind `mux` (inputs a video take and an audio take; output a new video take with both as
   parents). `POST /v1/studio/takes/{take_id}/mux` with `{video_take_id}` (the frame endpoint's shape): 202 with the
-  job; 422 when the take is not audio or the other not video; 404 for another user's take; idempotent per pair.
+  job; 422 when the take is not audio or the other not video; 404 for another user's take; 409 when no live host
+  can run ffmpeg (as frame); idempotent per pair.
   "Sound only" needs nothing new: the sibling take of the same `run_id`.
 
 #### Data
@@ -203,16 +247,19 @@ Not in (backlog by name):
     to the length; trims the source 0.2 s long for the 25 fps sync).
   - Core: `core/nodes.py` stereo `_wav`; `core/media.py` `pcm()` and `mux()` (44.3.17); `core/loaders_torch.py` a pack `load_component(component, model, ctx)` hook
     and `.pth/.bin/.pt` reads; `core/pack.py` size for non-safetensors (file bytes at the target dtype) and the `sound`
-    key; `core/graph.py` span and `media_fit` for audio; `core/media.py` and the media worker: `mux`.
+    key; `core/graph.py` span and `media_fit` for audio (all P1); the media worker's `mux` kind
+    (`messaging/media.py`, phase M).
   - `packs/echo/`: fake music and sound stages (stereo), an Audio+Video stage, audio repaint and extend, the planner's
     reports, sections; so the contract suite runs on the fake runner.
   - `pyproject.toml` / `uv.lock`: open_clip_torch (with timm) for MMAudio; numpy stays >= 2 (MMAudio's < 2.1 pin is
     not needed); any other dependency only if the diffusers path proves it needs one (P2 checks; the samples' venvs
     needed setuptools 80 for ACE-Step's DCW, which is repo code); ruff excludes MMAudio's vendor folder. torch 2.15 stays the pin. `docs/plan/14-dependencies.md` owns the versions.
-- **studio_service.** `graph.go` / `workflows.go` (sound, media filter), `projector.go` (sound, channels, sections),
-  `api/gallery/service.go` (kind filter), `upload.go` (sound), `api/gallery/media.go` (offers by class, span on audio),
-  `api/studio/media.go` (audio span source), `mentions.go` (voice by class), the mux endpoint and job (beside the frame
-  job), `registry/registry.go` (models sound).
+- **studio_service.** `graph.go` / `workflows.go` (sound, media filter), `projector.go` and `api/gallery/record.go`
+  (sound, channels, sections), `api/gallery/service.go` (kind filter), `upload.go`, `imports.go`, `plugin_takes.go`,
+  `dto/dto.go`, `model/model.go` (sound), `api/gallery/media.go` (offers by class, span on audio),
+  `api/studio/media.go` (audio span source), `mentions.go` and `looks.go` (voice by class), `registry/registry.go`
+  (models sound); phase M: the mux endpoint and job in `api/studio/media_jobs.go` beside the frame job, its route in
+  `controller.go`.
 - **pipelines_service.** `assistant.py` and `assistant_knowledge.md`: voice means `sound = voice`; the assistant can
   make music and sound through the same run request.
 - **cli.** `mcp.go`, `takes.go`: show the sound class; the `kind` filter values.
@@ -238,65 +285,101 @@ Not in (backlog by name):
   take menu Save with the video (the mux endpoint); video take menu Sound only (sibling by `run_id`).
 - **Frame 6 (Gallery).** KINDS Voice / Music / Sound, `lib/takes.ts` filter and `fits`, the gallery assistant's KIND
   map; card badge with class and length; panel rows Song and Lyrics (disclosure); menus as frames 3d, 4b, 5c, 5d.
+  The Models page (`components/models/models.tsx`) gives music and sound models their kind colour on the cube; their
+  download rows, sizes, licences and gated / must-accept come from the registry with no new UI.
 - **Frame 7 (looks).** `media.tsx` Thumb: album cover (gradient from a hash of the prompt, in the client) and orb
   (sound sky, voice amber), shared by the Gallery, pickers and strip; Timeline clips unchanged.
-- Untouched by the class approach: `components/timeline/*`, voices, dialogue, refs, mentions, `lib/timeline*`.
+- Untouched by the class approach: `components/timeline/*`, voices, dialogue, refs, `lib/timeline*` (the web's
+  `lib/mentions.ts` changes only its voice rule, in P1).
 
 ### 44.7 Phases
 
-Each phase ships alone; gates per CLAUDE.md on every phase, the full `make test` once at the end (P6). Hours are size
-and risk, not a promise.
+Each phase ships alone and is committed with a pathspec (`git commit -m … -- <its files>`). Gates per CLAUDE.md on
+every phase: the touched service's `make test lint`, `make contracts-check`, the contract tests the change touches
+(`make test T="…"`; studio DB tests on `.tools/test-db`); the full `make test` once, in P6. **No two phases that run at
+the same time own the same file**: the files per phase below are the whole list, and a builder needing a file another
+running phase owns asks that phase's builder. Hours are size and risk, not a promise. Every commit names "alpha.6 row
+6"; only P6 edits the release list (row 6 covers every change of this plan, the review fixes included).
 
-| # | Phase | Needs | Parallel | Hours | Tests and gates |
+| # | Phase | Needs | Runs beside | Hours | Tests and gates |
 |---|---|---|---|---|---|
-| P1 | **Contract and take classes**: 44.6 contract and data; echo fake stages; studio sound/filters/offers/span/mux; pipelines and CLI voice re-scope; `make gen` everywhere; web gen types only | nothing | first; plan 39 C rebases on it | 10 | `make contracts-check`; runner, studio, pipelines, cli `make test lint`; new `contract_tests/tests/test_music_sound.py` plus `test_takes.py`, `test_voices.py`, `test_uploads.py`, `test_workflows.py`, `test_video_source.py`; studio DB tests on `.tools/test-db` |
-| P2a | **ACE-Step pack** (2B + XL as variants; XL bf16 on the Mac) on diffusers' `AceStepPipeline` with `rename()`; the planner stage; core stereo `_wav` and `core/media.py` `pcm()` | P1 | with P2b–d | 14 | `test_packs.py`, `test_ace_step.py` (CPU), `-m gpu` golden (`record_ace_step.py`), `make test-torch` |
-| P2b | **MiniMax Music 3 pack** (diffusers 0.43 modular pipeline) | P1 | yes | 6 | as P2a for `minimax_music3` |
-| P2c | **Stable Audio 3 pack** (diffusers StableAudio3 pipelines, `rename()` split of one safetensors, gated) | P1 | yes | 6 | as P2a for `stable_audio_3` |
-| P2d | **MMAudio pack with its helpers**; core torch `load_component` hook and non-safetensors size; in-stage mux | P1 | yes (core edit owned by P2d only) | 10 | as P2a for `mmaudio`; core loader tests |
-| P3 | **Workflows and actions**: generate, Repaint, Cover, Extend, Vary, video → sound and the video-with-sound take; the `mux` media worker; offers on real packs; registry fixtures and guides | P2a–d | after P2 | 8 | `make contracts-check`; `test_guides.py`, `test_registry.py`; contract tests for offers by class, audio span, mux 202/422/404 |
-| P4 | **Create UI** (frames 1–5): kinds, chips and popups, drawer blocks, stage markers and range, strip actions, variations grid, MMAudio two takes, menus; board memory figures fixed to `peak_gb` | P1 (fake runner); real packs for the last check | can start with P2 on echo | 16 | web `make test lint` (`audio-create`, `create-popups`, `model-chip`, `run-strip`, `create-use-in`, `context-menus-*`, `video-create` suites); e2e journeys (44.8) |
-| P5 | **Gallery and other surfaces** (frames 6–7): filters, cards, panel, menus, pickers, assistant maps; the Design System artifact and `docs/design-system/` copy (cover, orb, group chip, lyrics tags, variation card, greyed chip) | P1 | with P4 | 8 | `gallery-filters`, `gallery-use-in`, `thumbs`, `assistant-gallery`, `media-rows` suites; e2e gallery journey |
-| P6 | **Review, full suite, browser check**: one combined review then a fix commit; the full `make test`; `-m gpu` goldens on the M5; a browser walk of frames 1–7 against the board on the dev stack (announced first); docs (packs/README.md, contracts/README.md, reference note, CHANGELOG, NOTICE, release row) | P3–P5 | last | 6 | the full `make test` once; goldens; browser check |
+| P0 | **Design System**: every new element of the board in the artifact and `docs/design-system/` together (album cover, sound and voice orbs, kind tabs Voice / Music / Sound, BPM · Key · Time group chip, greyed chip "Not on <model>", Auto chip and switch, lyrics tag chips, range bar with section markers, variation card and grid, stage tabs Sound / Video with sound, paired strip tile, the new menu rows); `tokens.css` gains `kind-music` / `kind-sound` and their `on-` texts from `tokens.json` | nothing | P1 | 3 | web `make test lint`; the artifact read back after publish |
+| P1 | **Contract and take classes**: 44.6 contract and data (the mux endpoint and `cmd.media.job` kind included); echo fake stages; core stereo `_wav`, `pcm()`, `mux()`; the four packs' Python dependencies; studio sound, filters, offers, span, voice rule; pipelines and CLI voice re-scope; web gen types, `lib/mentions.ts`, the Create `MEDIA` map; `make gen` everywhere | nothing | P0; the contract step first, then the service parts may split by service folder | 11 | `make contracts-check`; runner, studio, pipelines, cli, web `make test lint`; new `contract_tests/tests/test_music_sound.py`, plus `test_takes.py`, `test_voices.py`, `test_uploads.py`, `test_import.py`, `test_plugins.py`, `test_workflows.py`, `test_video_source.py`, `test_timeline_audio.py`, `test_take_isolation.py` (the class filter never shows another user's takes) |
+| M | **Mux job**: the media worker's `mux` kind, studio's endpoint, job and its new video take (both parents), idempotent per pair | P1 | P2a–d, P4, P5 | 4 | runner `make test lint` (`test_media.py`), studio `make test lint`; new `contract_tests/tests/test_mux.py` (202, the same job again, 422 not audio / not video, 409 no ffmpeg host) and `test_take_isolation.py` (another user's take is 404) |
+| P2a | **ACE-Step pack** (2B + XL as variants; XL bf16 on the Mac) on diffusers' `AceStepPipeline` with `rename()`; the planner stage; all four workflows | P1 | P2b–d, M, P4, P5 (own worktree) | 14 | `make test-torch` (`test_ace_step.py` CPU, `test_packs.py`), `make contracts-check`; `-m gpu` goldens (`record_ace_step.py`) on the M5 |
+| P2b | **MiniMax Music 3 pack** (diffusers 0.43 modular pipeline; cancel per LM frame) | P1 | as P2a | 6 | as P2a for `minimax_music3` |
+| P2c | **Stable Audio 3 pack** (diffusers StableAudio3 pipelines, `rename()` split of one safetensors, gated); its four workflows | P1 | as P2a | 6 | as P2a for `stable_audio_3` |
+| P2d | **MMAudio pack with its helpers** (vendored); core torch `load_component` hook and non-safetensors size; its two workflows, the video one muxing in-stage with `core.media.mux` | P1 | as P2a | 10 | as P2a for `mmaudio`; `test_loaders_torch.py` (a tiny `.pth`; the safetensors packs' meta streaming unchanged) |
+| P3 | **Join and offers on the real templates**: the canonical `uses` / `sources` cases on the four packs' templates (no Cover on a voice take, Vary only on sound, span on audio, MMAudio's video workflow classed as sound), the torch registry with all four families, NOTICE | P2a–d merged | M, P4, P5 | 3 | `make contracts-check`; runner `make test-torch` (`test_registry.py`, `test_packs.py`) |
+| P4 | **Create UI** (frames 1–5): kinds, chips and popups, drawer blocks, stage markers and range, strip actions, variations grid, MMAudio's two takes, menus; board memory figures fixed to `peak_gb` | P0, P1 (echo fakes); M for Save with the video | P2, P3, M, P5 | 16 | web `make test lint` (its suites below); a look at the dev stack only at P6 |
+| P5 | **Gallery and other surfaces** (frames 6–7): filters, cards, panel, menus, pickers, the gallery assistant map, Thumb cover and orb, the Models page cube colours | P0, P1 | P2, P3, M, P4 | 8 | web `make test lint` (its suites below) |
+| P6 | **e2e, review, full suite, browser check, docs**: the e2e journeys (44.8); one combined review, then one fix commit; the full `make test` once; `-m gpu` goldens of all four packs on the M5; a browser walk of frames 1–7 against the board on the dev stack (announced first; screenshots to the owner); the Design System's new elements marked built, and any drift found fixed in the artifact and copy together; docs | P3, P4, P5, M | last | 7 | the full `make test`; `make -C web_service e2e` on `helmstudio-test`; goldens; browser check |
 
-Order: P1 → P2a–d in parallel (four builders, or two: ACE-Step and MiniMax / SA3 and MMAudio) → P3; P4 and P5 run
-beside P2–P3 on the echo fakes. Plan 39 phase C rebases on P1; its phase H waits for P3. About 84 hours in all.
+Order: P0 and P1 together → then M, P2a–d, P4 and P5 all at once → P3 when the four packs have merged → P6. The packs
+(four builders, or two: ACE-Step and MiniMax / SA3 and MMAudio) each work in their own git worktree on a branch from
+alpha.6 after P1 (`EnterWorktree`; each worktree syncs its own torch venv from the uv cache), because every pack adds a
+line to the same three registry files (44.3.21). They merge into alpha.6 one at a time: rebase, resolve those one-line
+lists, rerun the pack's gates, fast-forward, push. M, P4 and P5 work in the main tree (disjoint files). Plan 39 phase
+C rebases on P1; its phase H waits for P3; its phase F waits for P1's `create/assistant.ts` change, and its UI phases
+write the Design System only when P0 or P6 is not writing it (one writer at a time; the artifact refuses a stale
+publish). About 88 hours in all.
 
-Files per phase:
-- **P1**: `contracts/openapi.yaml`, `contracts/registry.schema.json`, `contracts/messages/evt.run.output.schema.json`,
-  `contracts/messages/cmd.media.job.schema.json`, `contracts/messages/defs.schema.json`, `contracts/tools/catalog.json`,
-  `contracts/README.md`, `contracts/check.py`, `contracts/fixtures/registry/echo.*.valid.json`,
-  `contracts/fixtures/video/{uses,sources}.json`, HTTP fixtures for Take, Upload, Workflow;
-  `runner_service/packs/echo/` (model.yaml, fake.py, workflows), `extend_room` limited to video sources in
-  `contracts/check.py`, `studio_service/api/studio/media.go` and `runner_service/core/graph.py`, clip actions by class
-  (`contracts/README.md` Take actions, `studio_service/api/timeline/`), `runner_service/packs/{qwen3_tts,zonos3}/model.yaml`
-  (`sound: voice`), `runner_service/core/{pack,graph,nodes}.py`, `runner_service/gen/`;
-  `studio_service/migrations/00055_take_sound.sql`, `studio_service/api/gallery/{service,upload,media}.go`,
-  `studio_service/api/studio/{projector,graph,workflows,media,mentions}.go`, the mux route and job beside the frame
-  job, `studio_service/registry/registry.go`, `studio_service/gen/`; `pipelines_service/assistant.py`,
-  `assistant_knowledge.md`; `cli/mcp.go`, `cli/takes.go`, `cli/gen`; `web_service/gen/api.ts`;
-  `contract_tests/tests/test_music_sound.py` and the touched tests.
-- **P2a**: `runner_service/packs/ace_step/` (model.yaml, torch.py, assistant.md, licences/, GOTCHAS.md; no vendor/),
-  `runner_service/core/{nodes,media}.py` (stereo, `pcm`),
-  `contracts/fixtures/registry/ace-step.{nodes,workflows,models}.valid.json`, `contracts/check.py` CANONICAL,
-  `runner_service/tests/{test_packs,test_ace_step,test_ace_step_golden}.py`, `tests/golden/record_ace_step.py`,
-  `tests/golden/ace_step/`, `runner_service/pyproject.toml`, `uv.lock`.
-- **P2b**: the same set for `packs/minimax_music3/` and `minimax-music3.*` fixtures.
-- **P2c**: the same set for `packs/stable_audio_3/` and `stable-audio-3.*` fixtures.
-- **P2d**: the same set for `packs/mmaudio/` and `mmaudio.*` fixtures, plus `runner_service/core/loaders_torch.py`,
-  `core/pack.py`, `core/media.py`.
-- **P3**: `runner_service/packs/*/workflows/*.json` of the four packs, `runner_service/messaging/` media worker,
-  `runner_service/core/media.py` (`mux`), `contracts/fixtures/registry/guides.valid.json`,
-  `runner_service/tests/{test_guides,test_registry}.py`, `studio_service` mux projector, contract tests.
+Files per phase (each phase owns these and nothing else; "tests" means the named files only):
+- **P0**: the Design System artifact; `docs/design-system/` (`tokens.json`, `design-system.json`, `README.md`, the new
+  or changed `components/<X>/README.md` and `preview.html`, `components/bundle.css`); `web_service/styles/tokens.css`.
+- **P1**:
+  - contracts: `openapi.yaml`, `registry.schema.json`, `messages/{evt.run.output,cmd.media.job,defs}.schema.json`,
+    `tools/catalog.json`, `tools/actions.json`, `README.md`, `check.py` (sound, span on audio, offers by class,
+    `extend_room` on video only, the voice rule), `fixtures/registry/echo.*.valid.json` and `guides.valid.json` if the
+    echo guide changes, `fixtures/graphs/palette.json` (the echo kinds), `fixtures/video/{uses,sources}.json`,
+    `fixtures/tools/`, HTTP fixtures (Take, TakePage, Upload, UploadCreate, Workflow, the mux request and its 202 body).
+  - runner: `packs/echo/` (model.yaml, fake.py, workflows, assistant.md), `packs/{qwen3_tts,zonos3}/model.yaml`
+    (`sound: voice`), `core/{pack,graph,nodes,media}.py` (the `sound` key, span and `media_fit` on audio, `extend_room`
+    on video only, stereo `_wav`, `pcm()`, `mux()`), `packs/README.md` (`sound`, stereo), `pyproject.toml`, `uv.lock`
+    (open_clip_torch with timm; ruff excludes `packs/mmaudio/vendor`), `gen/`, tests `test_graph.py`,
+    `test_media_inputs.py`, `test_media.py` (`pcm`, `mux`), `test_voices.py`, `test_packs.py` (echo only).
+  - studio: `migrations/00055_take_sound.sql` (the next free number when it lands), `api/gallery/{service,upload,
+    imports,plugin_takes,record,media}.go`, `api/gallery/dto/dto.go`, `api/gallery/model/model.go`,
+    `api/studio/{projector,graph,workflows,media,mentions,looks}.go`,
+    `registry/registry.go`, `gen/`, and the Go tests beside each.
+  - pipelines: `assistant.py`, `assistant_knowledge.md`, `gen/`, its assistant tests. cli: `mcp.go`, `takes.go`,
+    `gen/`, `mcp_test.go`.
+  - web: `gen/api.ts`, `lib/mentions.ts`, `components/create/assistant.ts` (`MEDIA` labels), `tests/mentions.test.ts`.
+  - docs: `docs/plan/14-dependencies.md` (open_clip_torch, timm; torch, transformers and diffusers unchanged).
+  - contract_tests: `tests/test_music_sound.py` (new) and the touched tests in the table.
+- **M**: `runner_service/messaging/media.py`, `runner_service/tests/test_media.py`;
+  `studio_service/api/studio/media_jobs.go`, `controller.go` (the route), `api/studio/dto/` (the mux request), its Go
+  test; `contract_tests/tests/test_mux.py` (new), `test_take_isolation.py`.
+- **P2a** (worktree): `runner_service/packs/ace_step/` (model.yaml with `source` and `allow_patterns` per variant,
+  torch.py, workflows/, assistant.md, licences/, GOTCHAS.md; no vendor/),
+  `contracts/fixtures/registry/ace-step.{nodes,workflows,models}.valid.json`, `runner_service/tests/test_ace_step.py`
+  (CPU stubs, the download plan on `tests/fake_hub.py`), `test_ace_step_golden.py`, `tests/golden/record_ace_step.py`,
+  `tests/golden/ace_step/`; the one-line joins: `contracts/check.py` `CANONICAL`, `contracts/fixtures/graphs/palette.json`
+  (the family's group), `runner_service/tests/test_packs.py` (the families list).
+- **P2b** (worktree): the same set for `packs/minimax_music3/` and `minimax-music3.*` (allow_patterns: the diffusers
+  folders only, 44.3.22).
+- **P2c** (worktree): the same set for `packs/stable_audio_3/` and `stable-audio-3.*` (`gated`, `must_accept`; the
+  fake hub test checks the token is asked for).
+- **P2d** (worktree): the same set for `packs/mmaudio/` (with `vendor/`, `VENDORED.md`, sha256s; `must_accept`,
+  44.10.17) and `mmaudio.*`, plus
+  `runner_service/core/loaders_torch.py`, `core/pack.py` (non-safetensors sizes), `tests/test_loaders_torch.py`, and
+  `packs/README.md` (the `load_component` hook).
+- **P3**: `contracts/fixtures/video/{uses,sources}.json` (the real-template cases), `contracts/check.py` only if a
+  case needs a rule, `runner_service/tests/test_registry.py`, `NOTICE` (the vendored MMAudio and each model's licence).
 - **P4**: `web_service/lib/{media,workflow,runs,source,video}.ts`,
-  `web_service/components/create/{create,form,prompt,audio,source,workflows,memory-chip,assistant}.tsx|ts`,
-  `web_service/styles/*.css`, `web_service/tests/**`, `web_service/e2e/create-gallery-journeys.spec.ts`,
-  `docs/mock/CreateMusicSound.dc.html` (memory figures only).
+  `web_service/components/create/{create,form,prompt,audio,source,workflows,memory-chip}.tsx`; tests
+  `tests/{media,source,video}.test.ts`, `tests/components/{audio-create,create-popups,model-chip,run-strip,
+  video-create}.test.tsx`, `create-use-in.test.ts`, `tests/components/context-menus-create-sound.test.tsx` (new: the
+  take, variation, sound and video menus of frames 3d, 4b, 5c, 5d); `docs/mock/CreateMusicSound.dc.html` (memory
+  figures only). Not `components/media.tsx` (P5), `components/gallery/picker.tsx` (P5: the Video-filtered picker
+  already filters by `accepts`), `styles/tokens.css` (P0), `create/assistant.ts` (P1).
 - **P5**: `web_service/lib/takes.ts`, `web_service/components/gallery/{gallery,picker}.tsx`,
-  `components/gallery/assistant.ts`, `web_service/components/media.tsx`, `web_service/styles/*.css`, tests, the Design
-  System artifact and `docs/design-system/`.
-- **P6**: fix files from the review; `runner_service/packs/README.md`, `contracts/README.md`,
-  `docs/reference-notes/music-sound.md`, `docs/plan/14-dependencies.md`, `CHANGELOG.md`, `NOTICE`,
+  `components/gallery/assistant.ts`, `components/media.tsx` (Thumb: cover and orb), `components/models/models.tsx`
+  (cube colours); tests `tests/takes.test.ts`, `tests/components/{gallery-filters,gallery-use-in,thumbs,
+  assistant-gallery,media-rows,context-menus-places}.test.tsx`, `models.test.ts`.
+- **P6**: `web_service/e2e/music-sound-journeys.spec.ts` (new); fix files from the review (each owned by P6 then); the
+  Design System artifact and `docs/design-system/` ("built" marks); `contracts/README.md` and `runner_service/packs/README.md`
+  wording if the review finds gaps; `docs/reference-notes/music-sound.md` (new), `CHANGELOG.md`,
   `docs/release/0.1.0-alpha.6.md` row 6.
 
 ### 44.8 Tests
@@ -304,18 +387,31 @@ Files per phase:
 - **Goldens per new model path**, fixed seed, smallest size, `-m gpu` on the M5 against the sample scripts: ACE-Step 2B
   and XL text to music (10 s, plan on, seeded LM: the same seed twice gives the same file), Repaint, Cover, Extend;
   MiniMax Music 3 (10 s; bit-exact repeat as measured); SA3 sound, repaint, vary, extend (2 s); MMAudio text (2 s) and
-  from a 2 s video (sound and muxed video). Metrics: RMS and peak within tolerance, length, channels, rate.
-- **CPU tests per pack**: stub folders and tiny tensors; registry values against the canonical fixtures
-  (`test_packs.py`); the loader hook on a tiny `.pth`; stereo `_wav` round trip.
+  from a 2 s video (sound and muxed video). Metrics: RMS and peak within tolerance, length, channels, rate. Each case
+  keeps its metrics JSON and a short WAV (the first 2 s), so a pack's goldens stay under about 5 MB in git (today's
+  37 MB). Record scripts take the samples folder and the weights root as arguments, as `record_zonos3.py` does.
+- **CPU tests per pack** (no weights, no GPU, so they run anywhere): stub folders and tiny tensors; registry values
+  against the canonical fixtures (`test_packs.py`); the loader hook on a tiny `.pth`; stereo `_wav`, `pcm()` and
+  `mux()` round trips (P1).
+- **Downloads without the Hub**: each pack's test plans its download against `tests/fake_hub.py` (as
+  `test_model_jobs.py` does): the bytes, the allow_patterns (no SGLang files for MiniMax), the helpers' own `dir`
+  (MMAudio), XL's `shares`, a gated repo asking for the token (Stable Audio 3), `must_accept` (SA3, MMAudio). The
+  Models page needs no new UI: its rows come from the registry (`models.test.ts` covers the new cube colours only).
 - **Contract tests** (fake runner, `helmstudio-test`): the takes `kind` filter by class; Workflow `sound` and
   `?media=music`; uploads with `sound`; offers by class (no Cover on a voice take); span on an audio take; a run giving
   two takes (sound and video with sound); mux 202, 422, idempotent; sections and channels on the take; backfill to
   voice.
-- **Isolation for new endpoints**: another user's take in mux is 404; the filter never shows another user's takes.
-- **e2e journeys** (fake mode): make music, repaint a range, extend it; make 4 sounds, keep one, vary it; sound from a
-  video, open Video with sound, Sound only back; Gallery filter Music shows the cover card.
+- **Isolation for new endpoints** (`contract_tests/tests/test_take_isolation.py`): another user's take in mux, as
+  either input, is 404; the class filter never shows another user's takes; another user's workflow never classes into
+  the `?media=` list.
+- **Fake mode everywhere else**: the contract suite and e2e run on the echo pack (`env fake`), whose stages give
+  stereo music and sound, sections, the planner's reports and an Audio + Video run; nothing in `make test` needs a GPU.
+- **e2e journeys** (`web_service/e2e/music-sound-journeys.spec.ts`, `make -C web_service e2e` on `helmstudio-test`):
+  make music, repaint a range, extend it; make 4 sounds, keep one, vary it; sound from a video, open Video with sound,
+  Sound only back, Save with the video on an older sound take; Gallery filter Music shows the cover card; each new
+  right-click menu opens with its items.
 - **Browser check** of frames 1–7 against the board (P6), screenshots sent to the owner.
-- Gates per CLAUDE.md; the full `make test` once at the end.
+- Gates per CLAUDE.md (44.7); the full `make test` once at the end (P6).
 
 ### 44.9 Risks
 
@@ -331,7 +427,13 @@ Files per phase:
 5. **Memory**: MiniMax Music 3 (26.6 GB) and XL beside another resident model can pass the 52 GB budget; the
    `peak_gb` values and the host memory plan unload first.
 6. **MiniMax speed** (5× real time): a 2-minute song takes 10 minutes; the estimate on Generate says so.
-7. **Contract clash with plan 39**: both edit `openapi.yaml` and migrations; P1 lands first and plan 39 rebases.
+7. **Clashes with plans 39 and 40** (both alpha.6, built at the same time). Contract and migrations: P1 lands 1.77.0
+   first, Magic and Model folders (1.78.0) rebase and renumber. Shared files, one phase at a time across the plans:
+   `runner_service/core/pack.py` (P1 and P2d here; plan 40 P2's folder resolver), `core/registry.py` and
+   `core/download.py` (plan 40 P2; untouched here), `components/models/models.tsx` (P5 here, plan 40 P4: whichever runs
+   second adds its lines), `components/create/assistant.ts` (P1 here, plan 39 F), `contracts/tools/{catalog,actions}.json`
+   (P1 here, plan 39 F), the Design System and `docs/design-system/` (P0 and P6 here, plan 39's and plan 40 P4's UI
+   phases: one writer at a time).
 
 ### 44.10 Open points (defaults applied; the owner may change them)
 
@@ -352,7 +454,18 @@ Files per phase:
 11. Count per workflow from the registry (Sound 4, max 8; others unchanged at 4). **Applied**.
 12. Section markers only on ACE-Step takes with tagged lyrics (lyric timestamps); none on MiniMax or instrumental takes.
     **Applied**.
-13. Timeline clip actions on audio match by sound class (so a MiniMax clip gets ACE-Step's Repaint, Cover, Extend),
-    not by family. **Applied** (44.3.16).
+13. Timeline clip actions for music and sound clips (Repaint, Cover, Extend by class) are **not built**: the board
+    keeps Timeline clips as they are, and audio-track clips answer Make shot today (44.3.16). **Applied** (review
+    default; was "match by class"); backlog by name if the owner wants them.
 14. ACE-Step, MiniMax Music 3 and Stable Audio 3 run on the locked diffusers 0.43 classes with `rename()` from the
     weights already on disk, not the diffusers-format repos. **Applied** (44.3.7); the repos are the fallback.
+15. No new Assistant screen actions for Keep, Keep all or Save with the video: the Assistant makes and changes music
+    and sound through `switchTo`, `change` and `generate`, and finds takes with the new filter values. **Applied**
+    (review default); new actions would add rows to `contracts/tools/actions.json` screen `create`.
+16. Imported and plugin audio takes default to voice when they name no class, as uploads do. **Applied** (review
+    default).
+17. MMAudio's weights are CC-BY-NC 4.0 and DFN5B's an Apple research licence: the MMAudio download also asks to accept
+    them (`must_accept`, as Stable Audio 3). **Applied** (review default); licences stay declared, not a filter.
+18. The Assistant's take cards (`components/assistant/media.tsx`) keep today's audio look; the board's cover and orb
+    cover the Gallery, pickers and strip only. **Applied** (review default); one line in P5 if the owner wants them
+    there too.
