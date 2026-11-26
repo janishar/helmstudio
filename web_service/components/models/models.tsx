@@ -621,6 +621,7 @@ function Dot({ state }: { state: VariantHost["state"] }) {
     partial:
       "bg-[linear-gradient(90deg,var(--a1)_50%,transparent_50%)] shadow-[inset_0_0_0_1.5px_var(--a1)]",
     mismatch: "bg-bad",
+    unplugged: "shadow-[inset_0_0_0_1.5px_var(--t2)] opacity-50", // API 1.78: only on a folder not connected
   }[state];
   return <span className={`size-2 shrink-0 rounded-full ${cls}`} />;
 }
