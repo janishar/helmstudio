@@ -21,13 +21,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import {
-  DownloadsTag,
-  FolderStrip,
-  inMacApp,
-  reveal,
-  revealOff,
-} from "@/components/models/folders";
+import { DownloadsTag, FolderStrip, reveal, revealOff } from "@/components/models/folders";
 import { LorasTab } from "@/components/models/loras";
 import { useUser } from "@/components/shell";
 import { api, message, ok, type S } from "@/lib/api";
@@ -164,8 +158,8 @@ export function ModelsScreen({ tab }: { tab: "models" | "loras" }) {
           off: plan.licence ? undefined : "No licence named",
           onPick: run("licence"),
         },
-        inMacApp() && {
-          label: "Show in Finder",
+        {
+          label: "Show in Finder", // greyed outside the Mac app, saying why (ModelFolders 5c)
           icon: FolderOpen,
           off: (on?.folder ? revealOff(target) : `Not on ${target}`) ?? undefined,
           onPick: () => reveal(folderOf(list, v, target)),
@@ -269,6 +263,11 @@ export function ModelsScreen({ tab }: { tab: "models" | "loras" }) {
     <>
       <main id="main" className="flex min-w-0 flex-[999_1_560px] flex-col gap-4 px-5 pt-4 pb-6">
         {header}
+        {/* ModelFolders frame 1: the strip above the legend */}
+        {list &&
+          strips.map((h) => (
+            <FolderStrip key={h} list={list} host={h} admin={admin} onChanged={reload} />
+          ))}
         <div className="flex flex-wrap gap-2">
           <Legend dot="bg-a1" text="present" />
           <Legend dot="shadow-[inset_0_0_0_1.5px_var(--t2)]" text="missing" />
@@ -287,10 +286,6 @@ export function ModelsScreen({ tab }: { tab: "models" | "loras" }) {
             </span>
           )}
         </div>
-        {list &&
-          strips.map((h) => (
-            <FolderStrip key={h} list={list} host={h} admin={admin} onChanged={reload} />
-          ))}
         {error && <ErrorNote onRetry={reload}>{error}</ErrorNote>}
         {menuError && <ErrorNote>{menuError}</ErrorNote>}
         {list && !models.length && <p className="text-t2">No host has published any model yet.</p>}
@@ -1423,7 +1418,7 @@ function DeleteDialog({
       {error && <ErrorNote>{error}</ErrorNote>}
       <div className="mt-3 flex justify-end gap-2">
         <button type="button" className="chip bevel" onClick={onClose}>
-          Keep it
+          {many ? "Cancel" : "Keep it"}
         </button>
         <button
           type="button"

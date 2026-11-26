@@ -566,7 +566,8 @@ def with_copies(make, d: str, freed) -> dict:
             if top in seen.get(fid, ()):
                 copies.append({"folder": fid, "state": "unplugged"})
             continue
-        if not (root / d).exists():
+        # a link is not a copy (and is never deleted)
+        if not (root / d).exists() or (root / d).is_symlink():
             continue
         with packs.rooted(root, strict=False):
             e = make()
@@ -747,7 +748,8 @@ def delete_in(base: Path, only: list[str] | None, addon: list[str]) -> tuple[int
             f"{os.path.relpath(base, root)} is a link or outside the models root: remove it by hand"
         )
 
-    lent = linked_from_outside(root, base)
+    # API 1.78: a link in any folder of the list keeps what it points to (one in ~/GenAI/models into the T9's copy)
+    lent = set().union(*(linked_from_outside(r, base) for r in {root, *packs.connected()}))
 
     def kept(rel: str) -> bool:
         side, copies = SIDECARS.as_posix() + "/", SGLANG_COPIES.as_posix() + "/"

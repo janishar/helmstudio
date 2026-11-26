@@ -332,8 +332,10 @@ def complete(path: Path) -> bool:
 
 
 def found(rel: str) -> Path | None:
-    """The first connected root's complete copy of `rel`, whatever the scope; None when none has one."""
-    return next((r / rel for r in connected() if complete(r / rel)), None)
+    """The first connected root's complete copy of `rel`, whatever the scope; None when none has one. A real copy
+    wins over a link to one (an old link into another folder of the list: that folder's copy is the one used)."""
+    live = [r / rel for r in connected() if complete(r / rel)]
+    return next((p for p in live if not p.is_symlink()), live[0] if live else None)
 
 
 def place(rel: str) -> Path:

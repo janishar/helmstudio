@@ -86,7 +86,14 @@ describe("Models", () => {
     const base = (await screen.findAllByRole("button", { name: "Base" }))[0];
     rightClick(base);
     expect(header()).toBe("Qwen Image 2.1 · Base");
-    expect(labels()).toEqual(["Open", "Licence", "Download to host…", "Delete from host…"]);
+    expect(labels()).toEqual([
+      "Open",
+      "Licence",
+      "Show in Finder",
+      "Download to host…",
+      "Delete from host…",
+    ]);
+    expect(item("Show in Finder").title).toBe("Not on gpu1"); // ModelFolders 5c: greyed, saying why
     expect(item("Delete from host…").className).toContain("danger");
     pick("Licence");
     expect(await screen.findByRole("dialog", { name: /^Licence · / })).toBeTruthy();

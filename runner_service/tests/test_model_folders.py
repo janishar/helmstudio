@@ -183,3 +183,17 @@ async def test_settings_set_the_list_and_rescan_once_it_changes(roots, monkeypat
     assert len(scans) == 1  # the list did not change
     await s.offer(None)  # the key deleted: HELMSTUDIO_MODELS alone
     assert config.ROOTS == [] and scans[-1] == []
+
+
+def test_a_link_into_another_folder_is_not_a_copy_and_keeps_its_target(roots, pack):
+    a, b, _ = roots
+    put(b)
+    (a / "Tiny").symlink_to(b / "Tiny")  # an old link in the first folder to the drive's copy
+    v = variant(pack)
+    assert v["folder"] == fid(b) and [c["folder"] for c in v["copies"]] == [fid(b)]
+    assert packs.place("Tiny") == b / "Tiny"
+    (a / "Other").mkdir()
+    (a / "Other/vae").symlink_to(b / "Tiny/vae")  # another model reads the drive copy's vae
+    (a / "Tiny").unlink()
+    ModelJobs.within(ModelJobs.root(fid(b)), models.delete_variant, pack, "base")
+    assert (b / "Tiny/vae/w.safetensors").is_file() and not (b / "Tiny/transformer").exists()

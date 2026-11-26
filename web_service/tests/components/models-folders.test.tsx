@@ -240,7 +240,14 @@ describe("Model folders: Edit folders (frame 2) and the row menu (5a)", () => {
     const dlg = await screen.findByRole("dialog", { name: "Folders · mac" });
     fireEvent.contextMenu(within(dlg).getByRole("listitem", { name: "Mac" }), { button: 2 });
     expect(document.querySelector(".cm .hd")!.textContent).toBe("Mac · ~/GenAI/models");
-    expect(labels()).toEqual(["Move up", "Move down", "Use for downloads", "Remove…"]);
+    expect(labels()).toEqual([
+      "Move up",
+      "Move down",
+      "Use for downloads",
+      "Open in Finder",
+      "Remove…",
+    ]);
+    expect(item("Open in Finder").title).toBe("In the Mac app"); // 5a: greyed items say why
     expect(item("Move up").title).toBe("Already first");
     expect(item("Use for downloads").title).toBe("Downloads go here");
     act(() => fireEvent.click(item("Move down")));

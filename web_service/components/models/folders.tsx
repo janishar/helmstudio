@@ -30,8 +30,6 @@ export function revealOff(host: string, connected = true): string | null {
   return connected ? null : "Not connected";
 }
 export const reveal = (path: string) => void mac()?.reveal?.(path);
-/** Show / Open in Finder is offered only in the Mac app. */
-export const inMacApp = () => !!mac()?.reveal;
 
 /** Replaces the host's list: the paths in priority order and the index downloads go to. */
 const putFolders = (host: string, paths: string[], downloads: number) =>
@@ -93,8 +91,8 @@ function folderItems(o: {
       ),
       onPick: o.useForDownloads,
     },
-    inMacApp() && {
-      label: "Open in Finder",
+    {
+      label: "Open in Finder", // greyed outside the Mac app, saying why (ModelFolders 5a)
       icon: FolderOpen,
       off: (known ? revealOff(o.host, known.connected) : "Not saved yet") ?? undefined,
       onPick: () => reveal(r.path),
