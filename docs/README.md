@@ -52,6 +52,7 @@ other sections point to it rather than restate it.
 | [Assistant first-class](plan/32-assistant-first-class.md) | §36 | alpha.4 draft: the Assistant gets its own page with every setting moved from Model providers and AI agents, setup in one flow, always in the dock, and a first-launch setup message |
 | [Assistant one place](plan/33-assistant-one-place.md) | §37 | alpha.4 draft: every AI agent setting on the Assistant page as tabs (Chat, In pipelines, Providers, Plugins); Admin keeps Users, Hosts, API keys |
 | [Release builds](plan/34-release-builds.md) | §38 | alpha.4: release images for Intel/AMD and Apple Silicon by GitHub Actions; one compose.yml for Windows and Linux with Docker |
+| [Host memory auto](plan/35-host-memory-auto.md) | §39 | System › Hosts: Memory budget Automatic (the Mac's GPU limit when set, else RAM minus the default reserve) or Custom (today's reserve); `reserve_mode` on host settings, `gpu_limit_gb` on `machine` (asked by the owner 2026-11-26, board drawn) |
 | [Production on this Mac](plan/26-production.md) | §36 | Compose project `helmstudio-prod` next to the dev stack: the base file plus `prod.yml` only (no fakes, no Echo), its own ports (Kong 8400), network, volumes, image tag and fresh secrets (`deploy/secrets-prod`), restarts, log caps, memory limits, the owner's admin; `make prod`, `make runners STACK=prod`; server deployment later (decided by the owner 2026-11-25) |
 
 ## Guides

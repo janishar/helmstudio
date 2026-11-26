@@ -88,6 +88,12 @@ td.m{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t2)}
 .in{width:100%;height:38px;box-sizing:border-box;border-radius:10px;border:0;background:var(--s4);color:var(--t1);font:inherit;font-size:13px;padding:0 12px}
 .tag{padding:2px 8px;border-radius:999px;background:var(--s4);font-size:11px;font-weight:500}
 .tag.adm{background:var(--a1);color:var(--on1)}
+.seg{display:flex;padding:3px;border-radius:10px;background:var(--s1);border:1px solid var(--s3)}
+.seg button{flex:1 1 0;height:34px;padding:0 14px;border-radius:8px;border:0;background:transparent;color:var(--t2);font-weight:500;box-shadow:none!important}
+.seg button[aria-pressed="true"]{background:var(--s5);color:var(--t1)}
+.note{margin:0;font-size:12px;color:var(--t2)}
+.frame{display:flex;flex-direction:column;gap:10px;min-width:0}
+.frame aside{margin:0!important;flex:none!important}
 
 [style*="min-height: 960px"]{background-image:radial-gradient(1100px 620px at 14% -12%,rgba(255,196,120,.11),transparent 62%),radial-gradient(900px 640px at 108% 112%,color-mix(in srgb, var(--a1) 7%, transparent),transparent 60%),repeating-linear-gradient(118deg,rgba(255,255,255,.014) 0 1px,transparent 1px 4px)}
 nav{margin:14px 0 14px 14px;border:0!important;border-radius:30px;background:var(--s1);align-self:flex-start;padding:14px 4px!important;flex:0 0 68px!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 24px 40px -18px color-mix(in srgb, var(--shd) 80%, transparent)}
@@ -242,6 +248,79 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 <div style="flex-grow: 1"></div>
 <button style="height: 48px; border-radius: 14px; border: 0; background: var(--a2); color: var(--on2); background-image: linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 55%); font-family: 'Bricolage Grotesque', Inter, sans-serif; font-weight: 700; font-size: 14px; letter-spacing: 0.04em; display: flex; align-items: center; justify-content: center">Evict all<span class="i" role="img" aria-label="More information" title="Unloads every component on this host, pinned ones included. A running run finishes first." style="background: color-mix(in srgb, var(--on2) 20%, transparent); color: var(--on2); display: inline-block; text-align: center">i</span></button>
 </aside>
+
+<div aria-label="Memory budget frames" style="flex: 1 1 100%; box-sizing: border-box; padding: 28px 32px 40px; border-top: 1px dashed var(--ln); display: flex; flex-direction: column; gap: 20px">
+<p class="note" style="max-width: 880px">Memory budget (plan 35): Automatic or Custom above the reserve in the host settings. Custom is today's reserve and stays the default, so nothing changes for existing hosts. Shown on a 64 GB Mac.</p>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 28px 32px; align-items: start">
+
+<!-- 1 -->
+<section class="frame" aria-label="Automatic, GPU limit set">
+<p class="note">1 · Automatic, macOS GPU limit set (iogpu.wired_limit_mb = 61440): no slider</p>
+<aside aria-label="Host settings" style="box-sizing: border-box; padding: 16px 18px 24px; background: var(--p0); display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; flex-direction: column; gap: 2px">
+<h2 style="margin: 0; display: flex; align-items: center; gap: 8px; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 16px; font-weight: 700">[HOST NAME]<button class="i" aria-label="More information" title="Settings for the selected host. They apply to every env on it.">i</button></h2>
+<span class="mono">Apple Silicon · 64 GB</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label style="font-size: 12px; color: var(--t2); display: flex; align-items: center">Memory budget<button class="i" aria-label="More information" title="Automatic uses the macOS GPU memory limit when one is set, else RAM minus the default reserve. On an NVIDIA host it is VRAM minus the default reserve. Custom is physical memory minus the reserve you set. Both are also checked against live system memory pressure.">i</button></label>
+<div class="seg" role="group" aria-label="Memory budget"><button aria-pressed="true">Automatic</button><button aria-pressed="false">Custom</button></div>
+<div class="row"><span style="color: var(--t2)">Budget</span><span>60 GB · the Mac's GPU limit</span></div>
+</div>
+</aside>
+</section>
+
+<!-- 2 -->
+<section class="frame" aria-label="Automatic, no GPU limit">
+<p class="note">2 · Automatic, no GPU limit set: RAM minus the default reserve. An NVIDIA host reads "VRAM minus 2 GB"</p>
+<aside aria-label="Host settings" style="box-sizing: border-box; padding: 16px 18px 24px; background: var(--p0); display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; flex-direction: column; gap: 2px">
+<h2 style="margin: 0; display: flex; align-items: center; gap: 8px; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 16px; font-weight: 700">[HOST NAME]<button class="i" aria-label="More information" title="Settings for the selected host. They apply to every env on it.">i</button></h2>
+<span class="mono">Apple Silicon · 64 GB</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label style="font-size: 12px; color: var(--t2); display: flex; align-items: center">Memory budget<button class="i" aria-label="More information" title="Automatic uses the macOS GPU memory limit when one is set, else RAM minus the default reserve. On an NVIDIA host it is VRAM minus the default reserve. Custom is physical memory minus the reserve you set. Both are also checked against live system memory pressure.">i</button></label>
+<div class="seg" role="group" aria-label="Memory budget"><button aria-pressed="true">Automatic</button><button aria-pressed="false">Custom</button></div>
+<div class="row"><span style="color: var(--t2)">Budget</span><span>52 GB · RAM minus 12 GB</span></div>
+</div>
+</aside>
+</section>
+
+<!-- 3 -->
+<section class="frame" aria-label="Custom">
+<p class="note">3 · Custom: today's reserve slider (0.5 GB steps) and Budget, unchanged</p>
+<aside aria-label="Host settings" style="box-sizing: border-box; padding: 16px 18px 24px; background: var(--p0); display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; flex-direction: column; gap: 2px">
+<h2 style="margin: 0; display: flex; align-items: center; gap: 8px; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 16px; font-weight: 700">[HOST NAME]<button class="i" aria-label="More information" title="Settings for the selected host. They apply to every env on it.">i</button></h2>
+<span class="mono">Apple Silicon · 64 GB</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label style="font-size: 12px; color: var(--t2); display: flex; align-items: center">Memory budget<button class="i" aria-label="More information" title="Automatic uses the macOS GPU memory limit when one is set, else RAM minus the default reserve. On an NVIDIA host it is VRAM minus the default reserve. Custom is physical memory minus the reserve you set. Both are also checked against live system memory pressure.">i</button></label>
+<div class="seg" role="group" aria-label="Memory budget"><button aria-pressed="false">Automatic</button><button aria-pressed="true">Custom</button></div>
+<label for="h-reserve-c" style="font-size: 12px; color: var(--t2); display: flex; align-items: center; padding-top: 6px">Memory reserve, GB<button class="i" aria-label="More information" title="Budget is physical memory minus this reserve, also checked against live system memory pressure.">i</button></label>
+<div style="display: flex; align-items: center; gap: 10px"><input id="h-reserve-c" type="range" min="0" max="32" step="0.5" value="12" style="flex: 1 1 auto; min-width: 0; accent-color: var(--a1)"><span class="mono" style="flex: 0 0 auto; color: var(--t1)">12 GB</span></div>
+<div class="row"><span style="color: var(--t2)">Budget</span><span>52 GB</span></div>
+</div>
+</aside>
+</section>
+
+<!-- 4 -->
+<section class="frame" aria-label="Host card memory line">
+<p class="note">4 · The host card's memory line under Automatic</p>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 16px; border-radius: 16px; background: var(--s1); border: 1px solid var(--s3)">
+<div class="row"><span>Memory</span><span>20.4 of 60 GB</span></div>
+<div class="bar" role="meter" aria-label="Memory used" aria-valuemin="0" aria-valuemax="60" aria-valuenow="20.4"><span style="width: 34%; background: var(--a1)"></span></div>
+<div style="display: flex; flex-wrap: wrap; gap: 12px; font-size: 11px; color: var(--t2)"><span><span class="key" style="background: var(--a1)"></span>components</span><span class="mono" style="font-size: 11px">reserve auto</span></div>
+</div>
+<p class="note">Custom stays as today:</p>
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 16px; border-radius: 16px; background: var(--s1); border: 1px solid var(--s3)">
+<div class="row"><span>Memory</span><span>20.4 of 52 GB</span></div>
+<div class="bar" role="meter" aria-label="Memory used" aria-valuemin="0" aria-valuemax="52" aria-valuenow="20.4"><span style="width: 39%; background: var(--a1)"></span></div>
+<div style="display: flex; flex-wrap: wrap; gap: 12px; font-size: 11px; color: var(--t2)"><span><span class="key" style="background: var(--a1)"></span>components</span><span class="mono" style="font-size: 11px">reserve 12 GB</span></div>
+</div>
+</section>
+
+</div>
+</div>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":960}}'>
