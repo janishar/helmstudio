@@ -14,7 +14,7 @@ from torch import nn
 
 from core import loaders_torch as lt
 from core import pack
-from core.graph import Cancelled
+from core.graph import Cancelled, RunError
 
 
 @pytest.mark.parametrize("rows", [1, 4, 300])  # torch's int8 kernel, and the dequantized matmul
@@ -421,3 +421,66 @@ def test_convrot_rotating_w_offline_and_x_at_run_time_gives_x_wt():
     assert ((m(xb).double() - ref).abs().max() / ref.abs().max()) < 0.03
     with pytest.raises(ValueError, match="not a multiple of 256"):
         lt.Int8Linear(nn.Linear(100, 4), rot_group=256)
+
+
+# --- plan 38: torch.save checkpoints (.pth, .bin, .pt) through a pack's own load_component
+
+
+def pth_pack(tmp_path, monkeypatch, module) -> pack.ModelRef:
+    """A one-component torch pack whose weights are a tiny torch.save file under a scratch models folder."""
+    import config
+
+    monkeypatch.setattr(config, "MODELS", tmp_path / "models")
+    (tmp_path / "models/Tiny").mkdir(parents=True)
+    torch.save(
+        {"weight": torch.arange(6.0).reshape(2, 3), "bias": torch.ones(2)},
+        tmp_path / "models/Tiny/w.pth",
+    )
+    spec = {"id": "tiny", "family": "tiny", "variants": {"v": {"dir": "Tiny"}},
+            "components": {"c": {"files": "w.pth", "dtype": "bf16", "precision": ["bf16"]}}}  # fmt: skip
+    return pack.ModelRef(pack.Pack("tiny", tmp_path, spec, "torch", module), "v", "bf16")
+
+
+def test_a_pack_hook_loads_a_pth_after_the_core_checks_and_phase(tmp_path, monkeypatch):
+    def load_component(component, model, ctx):
+        with torch.device("meta"):
+            m = nn.Linear(3, 2)
+        m.load_state_dict(
+            lt.state_dict(model.files(component)[0]), assign=True
+        )  # the mapped file's tensors
+        return m.to(ctx.device, lt.dtype_of(model.pack.component(component)["dtype"]))
+
+    m = pth_pack(tmp_path, monkeypatch, types.SimpleNamespace(load_component=load_component))
+    events = []
+    ctx = types.SimpleNamespace(
+        device="cpu", check=lambda: None, progress=lambda *a: events.append(a)
+    )
+    out = lt.load_component(m, "c", ctx)
+    assert events == [(1, 1, "loading c")]
+    assert out.weight.dtype == torch.bfloat16 and out.weight[1, 2].item() == 5.0
+
+
+def test_a_pth_without_the_hook_or_without_files_fails_the_load(tmp_path, monkeypatch):
+    m = pth_pack(tmp_path, monkeypatch, types.SimpleNamespace())
+    ctx = types.SimpleNamespace(device="cpu", check=lambda: None, progress=lambda *a: None)
+    with pytest.raises(RunError, match=r"^c: \.pth weights need the pack's own load_component$"):
+        lt.load_component(m, "c", ctx)
+    (tmp_path / "models/Tiny/w.pth").unlink()
+    with pytest.raises(RunError, match=r"^c: no weights for v in the models folder$"):
+        lt.load_component(m, "c", ctx)
+
+
+def test_state_dict_reads_weights_and_refuses_code(tmp_path):
+    torch.save({"w": torch.ones(4)}, tmp_path / "ok.pt")
+    assert lt.state_dict(tmp_path / "ok.pt")["w"].sum().item() == 4
+    torch.save(
+        {"w": torch.ones(1), "f": print}, tmp_path / "code.pt"
+    )  # a pickled callable: not weights
+    with pytest.raises(Exception, match="Weights only load failed"):
+        lt.state_dict(tmp_path / "code.pt")
+
+
+def test_a_pth_counts_its_bytes_as_fp32_at_the_dtype_with_no_transient(tmp_path, monkeypatch):
+    m = pth_pack(tmp_path, monkeypatch, types.SimpleNamespace())
+    size = (tmp_path / "models/Tiny/w.pth").stat().st_size
+    assert m.gb("c") == (size // 4 * 2 / 2**30, 0.0)

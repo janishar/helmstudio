@@ -1,0 +1,71 @@
+{
+  "id": "mmaudio-sound",
+  "title": "MMAudio Sound",
+  "family": "mmaudio",
+  "env": "torch",
+  "media": "audio",
+  "nodes": {
+    "prompt": {
+      "kind": "prompt",
+      "params": {
+        "text": ""
+      }
+    },
+    "seed": {
+      "kind": "seed",
+      "params": {
+        "seed": -1
+      }
+    },
+    "model": {
+      "kind": "mmaudio/model",
+      "params": {
+        "variant": "large_44k_v2",
+        "precision": "bf16"
+      }
+    },
+    "sound": {
+      "kind": "mmaudio/sound",
+      "in": {
+        "model": "model.model",
+        "text": "prompt.text",
+        "seed": "seed.seed"
+      },
+      "params": {
+        "avoid": "",
+        "seconds": 8,
+        "guidance": 4.5,
+        "steps": 25
+      }
+    },
+    "output": {
+      "kind": "output",
+      "in": {
+        "media": "sound.audio"
+      }
+    }
+  },
+  "studio": {
+    "composer": [
+      "prompt.text",
+      "sound.avoid"
+    ],
+    "quick": [
+      "sound.seconds",
+      "seed.seed"
+    ],
+    "inspector": [
+      {
+        "title": "Quality",
+        "items": [
+          "sound.guidance",
+          "sound.steps"
+        ]
+      }
+    ],
+    "count": {
+      "default": 4,
+      "max": 8
+    }
+  }
+}

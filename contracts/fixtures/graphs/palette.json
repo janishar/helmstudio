@@ -4640,6 +4640,207 @@
           ]
         }
       ]
+    },
+    {
+      "family": "mmaudio",
+      "title": "MMAudio",
+      "nodes": [
+        {
+          "kind": "mmaudio/model",
+          "title": "MMAudio",
+          "family": "mmaudio",
+          "params": [
+            {
+              "name": "variant",
+              "type": "enum",
+              "enum": [
+                "large_44k_v2"
+              ],
+              "default": "large_44k_v2",
+              "label": "Variant",
+              "help": "Large 44k v2: 44.1 kHz mono, the best of MMAudio's checkpoints."
+            },
+            {
+              "name": "precision",
+              "type": "enum",
+              "enum": [
+                "bf16"
+              ],
+              "default": "bf16"
+            }
+          ],
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            }
+          ],
+          "help": "The weights to load.",
+          "envs": [
+            "torch"
+          ]
+        },
+        {
+          "kind": "mmaudio/sound",
+          "title": "Sound",
+          "family": "mmaudio",
+          "params": [
+            {
+              "name": "avoid",
+              "type": "string",
+              "label": "Avoid",
+              "default": "",
+              "max": 400,
+              "help": "What the sound should not have (the negative prompt)."
+            },
+            {
+              "name": "seconds",
+              "type": "float",
+              "label": "Length",
+              "default": 8,
+              "min": 1,
+              "max": 30,
+              "step": 0.5,
+              "help": "The sound's length in seconds."
+            },
+            {
+              "name": "guidance",
+              "type": "float",
+              "label": "Guidance",
+              "default": 4.5,
+              "min": 1,
+              "max": 10,
+              "step": 0.5,
+              "help": "How closely the sound follows the text (cfg strength): higher is closer, less varied."
+            },
+            {
+              "name": "steps",
+              "type": "int",
+              "label": "Steps",
+              "default": 25,
+              "min": 10,
+              "max": 50,
+              "step": 1,
+              "help": "Flow-matching steps: more is slower, rarely better past 25."
+            }
+          ],
+          "inputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            },
+            {
+              "name": "text",
+              "type": "Text"
+            },
+            {
+              "name": "seed",
+              "type": "Seed"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "audio",
+              "type": "Audio"
+            }
+          ],
+          "component": "net",
+          "help": "A sound effect from a description: 44.1 kHz mono, Length seconds long. MMAudio was trained on 8 s clips; longer ones work but hold less detail.",
+          "sound": "sound",
+          "envs": [
+            "torch"
+          ]
+        },
+        {
+          "kind": "mmaudio/foley",
+          "title": "Sound from a video",
+          "family": "mmaudio",
+          "params": [
+            {
+              "name": "source",
+              "type": "media",
+              "label": "Video",
+              "default": null,
+              "accepts": [
+                "video"
+              ],
+              "min_s": 1,
+              "max_s": 30,
+              "help": "The video to give a sound; its own sound, if any, is replaced."
+            },
+            {
+              "name": "seconds",
+              "type": "float",
+              "label": "Length",
+              "default": 0,
+              "auto": true,
+              "min": 1,
+              "max": 30,
+              "step": 0.5,
+              "help": "Auto: from the video (its length; the last 0.04 s may stay silent: the 25 fps sync). Else its first seconds, and the video is cut to them."
+            },
+            {
+              "name": "avoid",
+              "type": "string",
+              "label": "Avoid",
+              "default": "",
+              "max": 400,
+              "help": "What the sound should not have (the negative prompt)."
+            },
+            {
+              "name": "guidance",
+              "type": "float",
+              "label": "Guidance",
+              "default": 4.5,
+              "min": 1,
+              "max": 10,
+              "step": 0.5,
+              "help": "How closely the sound follows the text (cfg strength): higher is closer, less varied."
+            },
+            {
+              "name": "steps",
+              "type": "int",
+              "label": "Steps",
+              "default": 25,
+              "min": 10,
+              "max": 50,
+              "step": 1,
+              "help": "Flow-matching steps: more is slower, rarely better past 25."
+            }
+          ],
+          "inputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            },
+            {
+              "name": "text",
+              "type": "Text"
+            },
+            {
+              "name": "seed",
+              "type": "Seed"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "audio",
+              "type": "Audio"
+            },
+            {
+              "name": "video",
+              "type": "Video"
+            }
+          ],
+          "component": "net",
+          "help": "The sound of a video (its picture read at 8 and 25 fps, steered by the text), and the video with that sound: the picture copied as it is, the sound added as AAC.",
+          "sound": "sound",
+          "envs": [
+            "torch"
+          ]
+        }
+      ]
     }
   ]
 }

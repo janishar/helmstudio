@@ -59,7 +59,7 @@ REQ_REPLY = [
     n for p in SCHEMA_FILES if (n := p.name.removesuffix(".schema.json")).startswith("req.")
 ]
 # Canonical registries a runner publishes verbatim: fixtures/registry/<prefix>{nodes,workflows}.valid.json
-CANONICAL = ["", "qwen-image.", "ltx.", "llm.", "server.", "minimax-h3-image.", "minimax-h3.", "qwen3-tts.", "zonos3.", "minimax-music3."]
+CANONICAL = ["", "qwen-image.", "ltx.", "llm.", "server.", "minimax-h3-image.", "minimax-h3.", "qwen3-tts.", "zonos3.", "minimax-music3.", "mmaudio."]
 REGISTRY_KEYS = [
     "nodes",
     "workflows",

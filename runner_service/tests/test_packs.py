@@ -24,7 +24,7 @@ def test_readme_example_generates_the_canonical_qwen_image_nodes(tmp_path, monke
 
 
 @pytest.mark.parametrize(
-    "family", ["qwen-image", "minimax-h3-image", "qwen3-tts", "minimax-music3"]
+    "family", ["qwen-image", "minimax-h3-image", "qwen3-tts", "minimax-music3", "mmaudio"]
 )
 def test_real_torch_packs_match_the_fixtures(family):
     """The torch runner publishes both families merged (contracts README): each family's canonical nodes, in its
