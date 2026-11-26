@@ -35,8 +35,10 @@ import { durationText, gridOf, secondsText, seconds } from "@/lib/media";
 import {
   ASPECTS,
   aspectOf,
+  chipText,
   display,
   fpsKey,
+  isAuto,
   megapixelChoices,
   megapixelsOf,
   optionText,
@@ -80,9 +82,12 @@ export function TextFields({
   errors,
   onChange,
   spoken,
+  kind,
 }: FormProps & {
   /** an audio workflow's text is spoken (docs/mock/CreateAudio.dc.html) */
   spoken?: boolean;
+  /** music or sound (docs/mock/CreateMusicSound.dc.html): the prompt is a song's style or the sound in words */
+  kind?: "music" | "sound";
 }) {
   // the prompt names references only where the param says how (`mention`)
   const ref = imageInputs(fields).find((f) => f.param.mention && refIds(f, raws[f.key]).length);
@@ -98,11 +103,15 @@ export function TextFields({
           maxLength={f.param.max}
           placeholder={
             f.param.name === "text"
-              ? spoken
-                ? "Type the words to speak"
-                : ref
-                  ? `Describe the edit; name the references ${mentionOf(ref.param, 1)}, ${mentionOf(ref.param, 2)}…`
-                  : "Describe what you want to see"
+              ? kind === "music"
+                ? "Style: genre, instruments, voice, mood"
+                : kind === "sound"
+                  ? "Describe the sound"
+                  : spoken
+                    ? "Type the words to speak"
+                    : ref
+                      ? `Describe the edit; name the references ${mentionOf(ref.param, 1)}, ${mentionOf(ref.param, 2)}…`
+                      : "Describe what you want to see"
               : (f.param.label ?? f.param.name)
           }
           rows={2}
@@ -1128,11 +1137,14 @@ function Editor({
   focus = true,
   setBy,
   facts,
+  noAuto,
 }: {
   f: Field;
   raw: Raw;
   onChange: (key: string, raw: Raw) => void;
   close: () => void;
+  /** a group's popup has one Auto for all its settings (TempoKey): none of its own */
+  noAuto?: boolean;
   choices?: string[];
   setBy?: (value: string) => string | undefined;
   facts?: (value: string) => OptionFacts;
@@ -1146,6 +1158,8 @@ function Editor({
   useEffect(() => {
     if (focus) ref.current?.querySelector<HTMLElement>("input, .opt")?.focus();
   }, [focus]);
+  // API 1.79 `auto: true`: 0 is Auto (the model or its plan picks it); the number shows empty, the slider idles
+  const auto = p.auto === true && Number(raw) === 0 && String(raw) !== "";
   const num = (
     <input
       id={id}
@@ -1155,8 +1169,8 @@ function Editor({
       min={p.type === "seed" ? 0 : p.min}
       max={p.max}
       step={p.step ?? (p.type === "float" ? "any" : undefined)}
-      placeholder={p.type === "seed" ? "Random" : undefined}
-      value={String(raw)}
+      placeholder={p.type === "seed" ? "Random" : auto ? "Auto" : undefined}
+      value={auto ? "" : String(raw)}
       onChange={(e) => onChange(f.key, e.target.value)}
     />
   );
@@ -1240,11 +1254,56 @@ function Editor({
               step={p.step ?? (p.type === "float" ? "any" : 1)}
               value={Number(raw) || p.min}
               onChange={(e) => onChange(f.key, e.target.value)}
-              className="w-full accent-a1"
+              className={`w-full ${p.auto === true ? "accent-a2" : "accent-a1"} ${auto ? "opacity-55" : ""}`}
+            />
+          )}
+          {p.auto === true && !noAuto && (
+            <AutoRow
+              on={auto}
+              note={p.help}
+              onChange={(on) => onChange(f.key, on ? "0" : String(p.min ?? 1))}
             />
           )}
         </>
       )}
+    </div>
+  );
+}
+
+/** The Auto row of an `auto` setting's editor (docs/mock/CreateMusicSound.dc.html 2c, 2d; TempoKey): "Auto", the
+ * line on what picks it, and an a2 switch. */
+export function AutoRow({
+  on,
+  note,
+  onChange,
+}: {
+  on: boolean;
+  note?: string;
+  onChange: (on: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="flex flex-col gap-0.5">
+        <span className="text-[13px] text-t1">Auto</span>
+        {note && <span className="text-[12px] text-t2">{note}</span>}
+      </span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={on}
+        aria-label="Auto"
+        onClick={() => onChange(!on)}
+        className="flex h-[26px] w-11 shrink-0 rounded-full border border-line p-0.5"
+        style={{ background: on ? "var(--a2)" : "var(--s1)" }}
+      >
+        <span
+          className="block size-5 rounded-full transition-transform"
+          style={{
+            background: on ? "var(--on2)" : "var(--t2)",
+            transform: on ? "translateX(18px)" : undefined,
+          }}
+        />
+      </button>
     </div>
   );
 }
@@ -1341,14 +1400,17 @@ function Slider({
 }) {
   const id = idOf(f.key);
   const p = f.param;
+  const auto = isAuto(p, raw);
   return (
     <div id={id + "-ed"} className="col-span-2 flex flex-col gap-2.5">
       <label htmlFor={id} className="flex justify-between gap-2">
         <span>{p.label ?? p.name}</span>
         {/* the board's plain number ("0.45", "2"), not a tile's "2.0"; a speaking rate as "0.95×"
-            (CreateAudioZonos3.dc.html) */}
+            (CreateAudioZonos3.dc.html); an Auto value as Auto (API 1.79), a length as a clock (Music's "2:10") */}
         <span className="mono text-[12px] text-t2">
-          {String(Math.round((Number(raw) || p.min!) * 100) / 100)}
+          {auto || (p.type === "float" && p.name === "seconds" && p.auto)
+            ? chipText(f, raw)
+            : String(Math.round((Number(raw) || p.min!) * 100) / 100)}
           {p.name === "speaking_rate" && "×"}
         </span>
       </label>
@@ -1361,9 +1423,17 @@ function Slider({
         value={Number(raw) || p.min}
         aria-invalid={!!error || undefined}
         onChange={(e) => onChange(f.key, e.target.value)}
-        className="w-full accent-a2"
+        className={`w-full accent-a2 ${auto ? "opacity-55" : ""}`}
       />
-      {p.help && <span className="text-[12px] text-t2">{p.help}</span>}
+      {p.auto === true ? (
+        <AutoRow
+          on={auto}
+          note={p.help}
+          onChange={(on) => onChange(f.key, on ? "0" : String(p.min ?? 1))}
+        />
+      ) : (
+        p.help && <span className="text-[12px] text-t2">{p.help}</span>
+      )}
       <FieldError k={f.key} errors={error ? { [f.key]: error } : {}} />
     </div>
   );
@@ -1568,6 +1638,17 @@ function ChipPop({
 
 const CHIP = "chip bevel rounded-[10px] bg-s4";
 
+/** A row of a music or sound model chip's popup (ModelPopup): the model, its line, picked or not. */
+export type KindModel = {
+  key: string;
+  title: string;
+  sub?: string;
+  checked: boolean;
+  /** why it cannot be picked (not downloaded) */
+  why?: string;
+  onPick: () => void;
+};
+
 /** The composer's quick chips: the model node's choices (the node that outputs a Model), the canvas, the length, the
  * seed (with Random). Each opens a popup with its setting (alpha.5 item 10), on narrow windows too (owner,
  * 2026-11-26); a popup's All settings `show`s the drawer at its section (a field key, or "canvas"). */
@@ -1586,7 +1667,23 @@ export function Chips({
   blocks = {},
   valueBlocks = {},
   stage1,
+  values = [],
+  groups = [],
+  greyed = [],
+  off = {},
+  kindModels,
 }: Omit<FormProps, "errors"> & {
+  /** music and sound (docs/mock/CreateMusicSound.dc.html): quick int, float and enum settings as chips, each with its
+   * popup (Length with Auto, Vocal language) */
+  values?: Field[];
+  /** quick settings shown as one chip with one popup (`studio.groups`, TempoKey: "BPM · key") */
+  groups?: { label: string; fields: Field[] }[];
+  /** chips another model of the kind has and this one lacks, greyed in place with why ("Not on MiniMax Music 3") */
+  greyed?: { label: string; why: string }[];
+  /** field → why its chip is greyed now (Language while Instrumental is on) */
+  off?: Record<string, string>;
+  /** the model chip of a music or sound kind (ModelPopup): the kind's models, each pickable, the open one first */
+  kindModels?: { title: string; rows: KindModel[] };
   /** the nodes whose optional add-on is missing (API 1.36), each with why: its bypass chip is greyed, held on */
   blocks?: Record<string, string>;
   /** (API 1.41) field → value → why: a precision whose add-on is missing is greyed in the model popup */
@@ -1652,7 +1749,44 @@ export function Chips({
     : "";
   return (
     <>
-      {first && (pickable.length > 0 || precisions.length > 0) && (
+      {kindModels && (
+        <ChipPop
+          id="model-pick"
+          label="Model"
+          text={kindModels.title}
+          title={family}
+          open={pop === "model-pick"}
+          setOpen={setPop}
+          width="w-80"
+          all={() => show(first?.key ?? "")}
+        >
+          <span className="heading">Model</span>
+          <div role="menu" aria-label="Models" className="flex flex-col gap-0.5">
+            {kindModels.rows.map((r) => (
+              <button
+                key={r.key}
+                type="button"
+                role="menuitemradio"
+                aria-checked={r.checked}
+                className={`mi ${r.why ? "dim" : ""}`}
+                aria-disabled={r.why ? true : undefined}
+                title={r.why}
+                onClick={() => {
+                  if (r.why) return;
+                  setPop(null);
+                  if (!r.checked) r.onPick();
+                }}
+              >
+                <span>
+                  {r.title}
+                  {r.sub && <small>{r.sub}</small>}
+                </span>
+              </button>
+            ))}
+          </div>
+        </ChipPop>
+      )}
+      {!kindModels && first && (pickable.length > 0 || precisions.length > 0) && (
         <ChipPop
           id="model-pick"
           label="Model"
@@ -1730,7 +1864,7 @@ export function Chips({
           ))}
         </ChipPop>
       )}
-      {first && !pickable.length && !precisions.length && (
+      {!kindModels && first && !pickable.length && !precisions.length && (
         <span
           className={`${chip} inline-flex items-center`}
           title={
@@ -1747,6 +1881,105 @@ export function Chips({
         </span>
       )}
       {runOn}
+      {values.map((f) => {
+        const id = `val-pop-${idOf(f.key)}`;
+        const label = f.param.label ?? f.param.name;
+        if (off[f.key])
+          return (
+            <span
+              key={f.key}
+              aria-disabled
+              title={off[f.key]}
+              className={`${chip} inline-flex cursor-not-allowed items-center text-t2 opacity-45`}
+            >
+              {chipText(f, rawOf(f, raws))}
+            </span>
+          );
+        return (
+          <ChipPop
+            key={f.key}
+            id={id}
+            label={label}
+            text={chipText(f, rawOf(f, raws))}
+            title={label}
+            open={pop === id}
+            setOpen={setPop}
+            all={() => show(f.key)}
+          >
+            <Editor f={f} raw={rawOf(f, raws)} onChange={onChange} close={() => setPop(null)} />
+          </ChipPop>
+        );
+      })}
+      {groups.map((g) => {
+        const id = `grp-pop-${idOf(g.label)}`;
+        const autos = g.fields.filter(
+          (f) => f.param.auto === true || f.param.enum?.includes("auto"),
+        );
+        const allAuto = autos.length > 0 && autos.every((f) => isAuto(f.param, rawOf(f, raws)));
+        // the values alone ("90 BPM · A minor"), 4/4 left out as the usual time; all on Auto: the group's name
+        const text =
+          g.fields
+            .filter((f) => !isAuto(f.param, rawOf(f, raws)) && rawOf(f, raws) !== "4/4")
+            .map((f) => chipText(f, rawOf(f, raws)))
+            .join(" · ") || g.label;
+        return (
+          <ChipPop
+            key={g.label}
+            id={id}
+            label={g.label}
+            text={text}
+            title={g.label}
+            open={pop === id}
+            setOpen={setPop}
+            all={() => show(g.fields[0].key)}
+          >
+            {g.fields.map((f, i) => (
+              <Editor
+                key={f.key}
+                f={f}
+                raw={rawOf(f, raws)}
+                onChange={onChange}
+                close={() => setPop(null)}
+                focus={i === 0}
+                noAuto
+              />
+            ))}
+            {autos.length > 0 && (
+              <AutoRow
+                on={allAuto}
+                note={
+                  autos.length > 1
+                    ? `The plan picks ${autos.length === 2 ? "both" : autos.length === 3 ? "all three" : "them all"}`
+                    : autos[0].param.help
+                }
+                onChange={(on) => {
+                  for (const f of autos)
+                    onChange(
+                      f.key,
+                      f.param.type === "enum"
+                        ? on
+                          ? "auto"
+                          : (f.param.enum!.find((o) => o !== "auto") ?? "auto")
+                        : on
+                          ? "0"
+                          : String(f.param.min ?? 1),
+                    );
+                }}
+              />
+            )}
+          </ChipPop>
+        );
+      })}
+      {greyed.map((g) => (
+        <span
+          key={g.label}
+          aria-disabled
+          title={g.why}
+          className={`${chip} inline-flex cursor-not-allowed items-center text-t2 opacity-45`}
+        >
+          {g.label}
+        </span>
+      ))}
       {c && (
         <ChipPop
           id="canvas-pop"

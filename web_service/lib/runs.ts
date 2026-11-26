@@ -179,7 +179,7 @@ export type Segment = {
   bar?: boolean;
 };
 
-/** The strip's last piece on an image or video workflow: the upload of the output (docs/mock/CreateMediaRefs.dc.html). */
+/** The strip's last piece on an image, video, music or sound workflow: the upload of the output (docs/mock/CreateMediaRefs.dc.html). */
 export const SAVING = "saving";
 
 /** A node's name in the strip and on the stage: its schema's title, numbered in graph order when the graph has
@@ -202,7 +202,10 @@ export function nodeLabel(w: S<"Workflow"> | undefined, node: string): string {
 export function segments(w: S<"Workflow">, run: Run, t?: RunTrack): Segment[] {
   const nodes = t?.nodes ?? {};
   const schema = (id: string) => w.node_schemas[w.nodes[id]?.kind];
-  const saving = w.media !== "audio" && w.media !== "text";
+  // music and sound save their file too (docs/mock/CreateMusicSound.dc.html: Plan, Compose, Decode, Saving); a voice
+  // has no Saving piece (CreateAudio.dc.html)
+  const saving =
+    w.media === "audio" ? w.sound === "music" || w.sound === "sound" : w.media !== "text";
   // an output node (no outputs of its own): its report is Saving's
   const sink = (id: string) => saving && !!schema(id) && !schema(id).outputs.length;
   const order = graphOrder(w).filter((id) => {

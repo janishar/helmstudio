@@ -9,12 +9,31 @@ export type MediaKind = NonNullable<Workflow["media"]>; // text: an ask workflow
 /** A workflow's media; absent (an API before 1.11) is image. */
 export const mediaOf = (w: Pick<Workflow, "media">): MediaKind => w.media ?? "image";
 
-/** The two sides whose texts never cross (alpha.2 item 14): picture (image, video) and sound (audio). */
-export const SIDES = ["picture", "sound"] as const;
+/** Create's kind tabs (plan 38, docs/mock/CreateMusicSound.dc.html): Image, Video, then the three sound classes of
+ * an audio workflow (Voice, Music, Sound: `Workflow.sound`, absent = voice). */
+export const KINDS = ["image", "video", "voice", "music", "sound"] as const;
+export type Kind = (typeof KINDS)[number];
+export const KIND_LABEL: Record<Kind, string> = {
+  image: "Image",
+  video: "Video",
+  voice: "Voice",
+  music: "Music",
+  sound: "Sound",
+};
+/** A workflow's tab: its media, or its sound class for audio (none = voice); an ask workflow is none. */
+export function kindOf(w?: Pick<Workflow, "media" | "sound">): Kind | undefined {
+  const m = w ? mediaOf(w) : "image";
+  if (m === "text") return undefined;
+  return m === "audio" ? (w?.sound ?? "voice") : m;
+}
+/** The sides whose texts never cross (alpha.2 item 14): picture (image, video) and each sound class; voice keeps the
+ * old "sound" key, so a script drafted before plan 38 still comes back. */
+export const SIDES = ["picture", "sound", "music", "effects"] as const;
 export type Side = (typeof SIDES)[number];
 /** A workflow's side; none (no workflow yet) is picture. */
-export const sideOf = (w?: Pick<Workflow, "media">): Side =>
-  w && mediaOf(w) === "audio" ? "sound" : "picture";
+const SIDE: Partial<Record<Kind, Side>> = { voice: "sound", music: "music", sound: "effects" };
+export const sideOf = (w?: Pick<Workflow, "media" | "sound">): Side =>
+  SIDE[kindOf(w) ?? "image"] ?? "picture";
 
 /** A workflow whose voice params take designed voices only (`only {voice: [design]}`: Qwen3-TTS Voice design). */
 const designsOnly = (w: Workflow) =>
@@ -22,31 +41,48 @@ const designsOnly = (w: Workflow) =>
     Object.values(n.only ?? {}).some((a) => a.length === 1 && a[0] === "design"),
   );
 
-/** The media the switch offers, in its order: only those some workflow has. */
-export const mediaKinds = (ws: Pick<Workflow, "media">[]): MediaKind[] =>
-  (["image", "video", "audio"] as const).filter((m) => ws.some((w) => mediaOf(w) === m));
+/** The tabs the switch offers, in its order: only those some workflow has. */
+export const createKinds = (ws: Pick<Workflow, "media" | "sound">[]): Kind[] =>
+  KINDS.filter((k) => ws.some((w) => kindOf(w) === k));
 
-/** The workflow the switch opens for `m`: the open one when it is of `m`, else the one of the session's newest run of
- * `m` (runs newest first), else the first template of `m` (one that only designs voices, its `only` voice [design],
- * last: Design a voice opens it), else the first workflow of `m`; undefined when none. */
+/** The family a kind opens on before any run (owner, 2026-11-27: "MiniMax default" for Music). */
+const FIRST: Partial<Record<Kind, string>> = { music: "minimax-music3", sound: "stable-audio-3" };
+
+/** The kind's templates a tab opens or its model popup lists: not a take action (Repaint, Cover, Extend, Vary,
+ * Add sound: offered on a take, `action`), the kind's default family first. */
+export const kindTemplates = (ws: Workflow[], k: Kind) =>
+  ws
+    .filter((w) => kindOf(w) === k && w.source !== "mine" && !w.action)
+    .sort((a, b) => +(b.family === FIRST[k]) - +(a.family === FIRST[k]));
+
+/** The workflow the switch opens for `k`: the open one when it is of `k`, else the one of the session's newest run
+ * of `k` (runs newest first), else the kind's first template (its default family first, a take action or one that
+ * only designs voices, its `only` voice [design], last: Design a voice opens it), else its first workflow; undefined
+ * when none. */
 export function workflowFor(
   ws: Workflow[],
   runs: Pick<S<"Run">, "workflow_id">[],
-  m: MediaKind,
+  k: Kind,
   current?: string,
 ): string | undefined {
-  const of = ws.filter((w) => mediaOf(w) === m);
+  const of = ws.filter((w) => kindOf(w) === k);
   const has = (id?: string) => of.some((w) => w.id === id);
   if (has(current)) return current;
   return (
     runs.find((r) => has(r.workflow_id))?.workflow_id ??
     (
-      of.find((w) => w.source !== "mine" && !designsOnly(w)) ??
+      kindTemplates(ws, k).find((w) => !designsOnly(w)) ??
       of.find((w) => w.source !== "mine") ??
       of[0]
     )?.id
   );
 }
+
+/** An audio take's sound line: "44.1 kHz stereo" (mono when one channel or absent). */
+export const soundText = (a?: Pick<S<"AudioInfo">, "sample_rate" | "channels">) =>
+  a?.sample_rate
+    ? `${+(a.sample_rate / 1000).toFixed(1)} kHz ${a.channels === 2 ? "stereo" : "mono"}`
+    : "";
 
 /** A frames param's grid: `min + k × step` up to `max`. */
 export const gridOf = (p: Param) => ({
