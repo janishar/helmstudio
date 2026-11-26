@@ -29,5 +29,6 @@
 - **Design system.** The [helmstudio Design System](https://claude.ai/artifact/ACz7ZcQyjdZ6NVFZc95Rk9) (tokens, type,
   components, card looks, right-click menu) is the reference for every UI element: boards and code use it, and every new
   or changed UI element updates it in the same piece of work (owner, 2026-11-27: "we will always refer to that system for
-  ui element and keep it uptodate to new additoin or changes").
+  ui element and keep it uptodate to new additoin or changes"). A copy of its files lives in
+  [docs/design-system/](docs/design-system/) (owner: "yes keep it docs/"); change both together.
 - **Docs live under docs/**, organised by topic; never a loose plan or spec file at the root.
