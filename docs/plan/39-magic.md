@@ -3,8 +3,8 @@
 [← Plan index](../README.md)
 
 Status: **planned (2026-11-27)**, release list [0.1.0-alpha.6](../release/0.1.0-alpha.6.md) item 5. The concept and its
-15 decisions are [plan 37](37-magic-concept.md); this file is how it is built. Boards next (owner's approval before any
-app code); no app code and no contract edit yet. Owner, 2026-11-27: "develop the whichever features can be made
+15 decisions are [plan 37](37-magic-concept.md); this file is how it is built. Boards drawn ([MagicBoard](../mock/MagicBoard.dc.html)); the owner's approval comes
+before any app code; no app code and no contract edit yet. Owner, 2026-11-27: "develop the whichever features can be made
 independent of each other", "in parallel", then "can we develop the magic screen in parallel?". Section §45 (§44 is left
 for plan 38).
 
@@ -20,15 +20,17 @@ helmstudio Design System (its copy in `docs/design-system/`): the page shell, ch
 
 | Board | Frames | State |
 |---|---|---|
-| [Magic](../mock/Magic.dc.html) | the concept wireframe, frames 1–8 (page, Add, a block opened, move and join, the Assistant, Send to Timeline, a storyboard frame, a character asset) | drawn as a wireframe; redrawn in the app's look next |
-| Magic (the app look) | the page with every lane; Add at a point (each kind: Image, Video, Voice, Music, Sound, Board frame); a shot block opened (the standard request, Advanced, takes, run history, notes); a voice line and a music cue tied to a shot (the link mark, the "no longer fits" warning); transitions (cut, dissolve, fade, wipe, morph) and effect badges; an asset opened and Import from the gallery; the storyboard as a rough cut; the GPU estimate and the ask card; snapshots; Send to Timeline and the sends list; empty, loading, failed, out of date; phone width | to draw |
-| [ContextMenus](../mock/ContextMenus.dc.html) frame 13 | a menu for each new actionable thing: a block (by kind), a lane header, the empty lane at a time, an asset, a transition point, a link mark, an effect badge, a snapshot, a send, a selection of blocks | "Magic later" today; drawn with the app-look board |
+| [Magic](../mock/Magic.dc.html) | the concept, frames 1–8 (page, Add, a block opened, move and join, the Assistant, Send to Timeline, a storyboard frame, a character asset), with the owner's changes below | the concept; kept |
+| [MagicBoard](../mock/MagicBoard.dc.html) (the app look) | 1 the page (every lane, the Assets row, joins, status, the floating player, the side panel, the zoom group); 2 Add at a point (each kind with its orb, Music and Sound greyed before plan 38, the standard request for Video, Video on another model with greyed fields, Voice, Music, Sound, Image); 3 a block opened (@ references, tied, notes, run history, Advanced, takes, pin); 4 move and join (snap, Insert, the tied line moving, every transition, the Morph block, effects); 5 voice and music tied to a shot (the "runs past" warning, the Tie dialog); 6 an asset opened and Import as a copy; 7 a storyboard frame opened (style, framing, Generate from board, Rough cut); 8 the Assistant's proposal, History and the ask card; 9 Send to Timeline and the sends list; 10 the right-click menus; 11 empty, loading, failed, out of date, snapshots, phone | drawn 2026-11-27; owner's review next |
+| [ContextMenus](../mock/ContextMenus.dc.html) frame 13 | points to MagicBoard frame 10: a menu for a block of each kind (video, voice, music, sound, a storyboard frame), a lane header, the empty lane at a time, an asset, a transition point, a link mark, an effect badge, several blocks, a snapshot, a send | replaced 2026-11-27 (its old sketch had Open in Timeline on a block, against decision 9) |
 
 ### 45.2 Sources
 
 - [plan 37](37-magic-concept.md) decisions 1–15 and its suggestions 1–10.
-- [plan 38](38-create-music-sound.md) (Create's Music and Sound, alpha.6 item 6): **not written yet** when this was
-  drafted. Magic's Music and Sound kinds wait for its packs and its contract phase; everything else here does not.
+- [plan 38](38-create-music-sound.md) (Create's Music and Sound, alpha.6 item 6, §44; approved and building): its P1
+  is the contract (API 1.77.0, `SoundClass`, stereo Audio, the `mux` media job, `00055_take_sound.sql`); its P3 makes
+  the music and sound workflows on the real packs. Magic's phase C rebases on P1 and phase H waits for P3 (44.7);
+  everything else here does not wait.
 - The code: `studio_service/api/timeline/` (`edit.go`, `agent.go`, `makeshot.go`), `studio_service/api/studio/`
   (`timeline_edits.go`, `runs.go`, `resolve.go`, `assistant_tools.go`), `studio_service/migrations/00019_timelines.sql`,
   `00031_timeline_edits.sql`, `web_service/components/timeline/` (`lanes.tsx`, `editor.tsx`, `assistant.ts`),
@@ -48,9 +50,9 @@ helmstudio Design System (its copy in `docs/design-system/`): the page shell, ch
 3. **The Timeline has one transition: a dissolve** (`transition_in`, `TimelineDissolve`, frames). Cut is no transition.
    Fade, wipe and morph do not exist there, and decision 9 keeps the Timeline unchanged, so Send to Timeline must bake
    them (45.9).
-4. **Take kinds are `image | video | audio`.** Music, sound and voice are all `audio`; the cover and orb looks come from
-   the take's workflow (its pack's media), not a new kind. Magic's block kinds (Image, Video, Voice, Music, Sound) are
-   Magic's own, mapped to workflows.
+4. **Take kinds are `image | video | audio`.** Music, sound and voice are all `audio`; plan 38 adds the sound class
+   (`Workflow.sound`, `Take.sound`: `music | sound | voice`), and the cover and orb looks come from it, not a new kind.
+   Magic's block kinds (Image, Video, Voice, Music, Sound) are Magic's own, mapped to workflows by `media` and `sound`.
 5. **A sequence owns a session** (`timelines.session_id`) and New shot runs go there, tracked in `timeline_shots`
    (clip → run). A board does the same: its own session, a block → run index.
 6. **No server-side time estimate exists.** `POST /v1/studio/runs/plan` answers the host and the planned peak GB, not
@@ -63,8 +65,11 @@ helmstudio Design System (its copy in `docs/design-system/`): the page shell, ch
 
 ### 45.4 Facts
 
-- Contract today: API 1.76.0. Plan 38's contract phase edits `contracts/openapi.yaml` now; Magic's versions come after
-  it lands (45.6).
+- Contract today: API 1.76.0. Plan 38's P1 makes it 1.77.0; Magic's steps are 1.78.0 onward, one minor version per
+  step (45.6). Migrations: the last is `00054_timeline_names.sql`, plan 38 takes `00055_take_sound.sql`, Magic's are
+  numbered after it at build time.
+- Music and sound takes are stereo after plan 38 (Audio `channels`); the Timeline's audio tracks take them as plan 38
+  leaves them, so Send needs nothing more for them.
 - Packs behind the standard request (decision 15): Image (Qwen Image 2.1 and Turbo, MiniMax H3 Image), Video (LTX 2.5,
   MiniMax H3), Voice (Qwen3-TTS, ZONOS3), Music (ACE-Step 1.5 2B and XL, MiniMax Music 3; plan 38), Sound (Stable Audio 3
   Small-SFX, MMAudio; plan 38).
@@ -111,8 +116,8 @@ outside service later is one more adapter behind the same request.
 | `assets[]` | id, kind (`character`, `prop`, `place`), handle, name, `sheet[]` (take ids: views, expressions), `voice_id`, note, `imported_from` (a take or Element id, for the record only) |
 | `notes[]` | board notes the Assistant reads |
 
-**Contract changes**, ordered after plan 38's contract phase has landed in `openapi.yaml` (Magic takes the next minor
-version after plan 38's; each step is its own version so the phases ship alone):
+**Contract changes**, ordered after plan 38's P1 has landed in `openapi.yaml` (1.77.0; Magic takes 1.78.0 onward;
+each step is its own version so the phases ship alone):
 
 1. Boards: `GET/POST /v1/studio/magic/boards`, `GET/PATCH/DELETE …/boards/{board_id}` (soft delete; 100 per user, 409),
    `POST …/edits` (named ops, `base_revision`, `dry_run`, the diff and warnings, studio-made ids), `…/revisions`,
@@ -147,7 +152,7 @@ and snapshots come free, and the Assistant's try-then-apply is the Timeline's.
 hook); web_service (the page, the lane editor, block and asset dialogs, menus, the Assistant screen actions); the packs'
 registry entries (`standard` blocks); pipelines_service (the Assistant's tool list and its ask rule); runner_service only
 for the baked-transitions media job (an ffmpeg job beside export). No new service, no new message type: runs are
-`cmd.run.execute`, the bake is a `cmd.media.job` of a new kind `bake`.
+`cmd.run.execute`, the bake is a `cmd.media.job` of a new kind `bake` (beside plan 38's `mux`).
 
 ### 45.7 Block status
 
@@ -194,16 +199,16 @@ Each phase ships alone; its board is approved before its code.
 
 | # | Phase | Needs | Parallel with plan 38? |
 |---|---|---|---|
-| A | **Boards**: the Magic app-look board and the ContextMenus Magic frame (45.1); owner's approval | nothing | yes: board files only |
+| A | **Boards**: MagicBoard and ContextMenus frame 13 (45.1), drawn; owner's approval | nothing | yes: board files only |
 | B | **Page shell and lane editor on fake blocks**: the rail item, the page, lanes, the ruler, playhead, Add at a point, move, snap, insert or overwrite, multi-select, links moving with shots, transition points, badges, the right-click menus, undo, the floating player (reusing the Timeline's) on a local document in the web with fake takes; no API | A | **yes**: web only, no contract |
-| C | **Contract 1–2 and studio boards**: tables, ops, revisions, snapshots, `view=agent`; B wired to the API | plan 38's contract phase landed | after plan 38's contract; then alongside its build |
+| C | **Contract 1–2 and studio boards**: tables, ops, revisions, snapshots, `view=agent`; B wired to the API | plan 38's P1 landed | after plan 38's P1; then alongside its build |
 | D | **The standard request for Image, Video, Voice**: `standard` blocks on Qwen Image, MiniMax H3 Image, LTX, MiniMax H3, Qwen3-TTS, ZONOS3; `/magic/kinds`; block dialogs with Advanced and greying; run, takes, pin, history, status; the estimate (contract 3–4) | C | yes: none of plan 38's packs |
 | E | **Assets and storyboard**: the Assets row, Import, @ picks and the "used in" light; storyboard frames, Generate from board, out of date; the rough cut (frames in order with their lines) | D | yes |
 | F | **The Assistant**: the server tools and screen actions, the proposal on the board, the ask rule (contract 7) | C for the edits, D for runs | yes |
 | G | **Send to Timeline**: the doc builder, cut and dissolve, the `bake` media job for fade and wipe, morph blocks, sends list (contract 5) | D | yes |
-| H | **Music and Sound kinds**: their `standard` blocks, Music and Sound lanes running, covers and orbs on blocks, MMAudio from a shot's video | plan 38's packs shipped | **no: waits for plan 38** |
+| H | **Music and Sound kinds**: their `standard` blocks, Music and Sound lanes running, covers and orbs on blocks (from `Take.sound`), MMAudio from a shot's video (plan 38's video → sound workflow; the block keeps the audio take) | plan 38's P3 | **no: waits for plan 38** |
 
-B and plan 38 can start now; C waits only for plan 38's contract edit; H waits for plan 38's packs. Until H, the Music
+B and plan 38 can start now; C waits only for plan 38's P1; H waits for plan 38's P3. Until H, the Music
 and Sound lanes take placed audio takes (an upload or a gallery take) and their Add dialog shows the kind greyed with
 "Comes with Create's Music and Sound".
 
@@ -241,6 +246,9 @@ and Sound lanes take placed audio takes (an upload or a gallery take) and their 
 4. A board's target: from its first shot (default), editable in the board's settings.
 5. The board's session: hidden from Create's session list (default), or listed as `Magic · <board>`.
 6. Free lanes: any kind on any lane (decision 5); the role only picks the default kind in Add (default).
+7. Dialogue: the approved concept's Add has a Dialogue kind ("lines, two or more"), and MagicBoard keeps it. Default: a
+   Dialogue block is a Voice block with turns (`lines[]`: a speaker @asset and the text each), each turn its own Voice
+   run on the speaker's voice, played one after another in the block; or drop it and use one Voice block per line.
 
 ## Changed by the owner (2026-11-27, on the lane board)
 
@@ -248,3 +256,4 @@ and Sound lanes take placed audio takes (an upload or a gallery take) and their 
 - The Add dialog shows an icon on every kind ("icons here as well").
 - Zoom is one group on the right of the board tools, as on the Timeline: zoom out, a slider, zoom in, the span in view, Fit (the whole board across). ⌘ + mouse wheel or a trackpad pinch zooms at the pointer; Shift + wheel scrolls across; ⌘− / ⌘= / ⇧Z ("zoom in / zoom out / fit option of the whole timelime horizontally", "also works with mouse wheel").
 - The side panel has the same sliders toggle as Create and the Timeline, open by default and remembered ("option to show hide this like other palces").
+- MagicBoard (the app look) carries all four (review, 2026-11-27).
