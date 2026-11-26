@@ -2287,10 +2287,12 @@ function Drawer({ a }: { a: AssistantApi }) {
   // a page's side form (Edit, Add, a take's details) opening under the drawer minimizes it (owner, 2026-11-26); the
   // forms drawn beside the drawer (.beside-drawer), one already open when the drawer opened and a page's own side
   // panel arriving with a route change (Create's Inspector, the Gallery's Selected take) leave it be: a layout effect
-  // per path, so the change's records are dropped (disconnect) before its observer sees them
-  const { minimize } = a;
+  // per path, so the change's records are dropped (disconnect) before its observer sees them. A floating drawer does
+  // not cover the side panel, so it stays (alpha.5 item 3 review)
+  const { minimize, floating } = a;
   const pathname = usePathname();
   useLayoutEffect(() => {
+    if (floating) return;
     const SIDE = "aside.aside:not(.beside-drawer)";
     let had = !!document.querySelector(SIDE);
     const mo = new MutationObserver(() => {
@@ -2300,7 +2302,7 @@ function Drawer({ a }: { a: AssistantApi }) {
     });
     mo.observe(document.body, { childList: true, subtree: true });
     return () => mo.disconnect();
-  }, [minimize, pathname]);
+  }, [minimize, pathname, floating]);
   const closeChats = useCallback(() => setChats(false), []);
   const openChats = () => {
     a.loadChats();

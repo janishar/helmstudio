@@ -1951,6 +1951,18 @@ describe("alpha.5: move the drawer (plan 36 §40, board frames 29 and 30)", () =
     expect(at()).toEqual(["230px", "194px"]);
   });
 
+  it("floating, a page's side form opening does not minimize it (it does not cover the panel)", async () => {
+    serve();
+    await openDrawer();
+    drag(pill(), [840, 20], [400, 200]);
+    const side = document.createElement("aside");
+    side.className = "aside";
+    document.body.append(side);
+    await new Promise((f) => setTimeout(f, 50));
+    expect(drawer()).toBeTruthy();
+    side.remove();
+  });
+
   it("a smaller window pulls it back on screen; under 1024 px it docks, and floats again when wider", async () => {
     serve();
     await openDrawer();
