@@ -560,6 +560,7 @@ export function readValue(p: Param, raw: Raw): { value: Value } | { error: strin
     if (p.type === "int" && !Number.isInteger(n)) return { error: "must be a whole number" };
     if (p.type === "int" && p.values && !p.values.includes(n))
       return { error: `must be one of ${p.values.join(", ")}` };
+    if (p.auto === true && n === 0) return { value: 0 }; // API 1.79: 0 is Auto, below min too
     if ((p.min != null && n < p.min) || (p.max != null && n > p.max))
       return { error: bounds(p.min, p.max, "") };
     return { value: n };

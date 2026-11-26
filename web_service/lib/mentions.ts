@@ -140,29 +140,46 @@ type Node = {
 };
 type Schemas = Record<
   string,
-  { params: Param[]; outputs?: { name: string; type: string }[] } | undefined
+  { params: Param[]; outputs?: { name: string; type: string }[]; sound?: string } | undefined
 >;
 
 /** Workflow.media (README, Video: a workflow's media; Voices; check.py workflow_media): text when an answer node's
  * text is wired, else video when any output's media is wired from a Video output, else image when any from an Image,
- * else audio when any from an Audio, else image; node order never matters. */
+ * else audio when any from an Audio, else image; node order never matters. From API 1.79 a Video output does not
+ * count beside a classed Audio one (Music and sound). */
 export function workflowMedia(nodes: Record<string, Node>, schemas: Schemas) {
   if (Object.values(nodes).some((n) => n.kind === "answer" && "text" in (n.in ?? {})))
     return "text";
-  const got = new Set<string>();
-  for (const n of Object.values(nodes)) {
-    const ref = n.kind === "output" ? n.in?.media : undefined;
-    if (!ref) continue;
-    const [src, out] = ref.split(".");
-    const s = nodes[src] && schemas[nodes[src].kind];
-    for (const o of s?.outputs ?? []) if (o.name === out) got.add(o.type);
-  }
+  const got = new Set(outputSources(nodes, schemas).map((o) => o.type));
+  if (workflowSound(nodes, schemas)) got.delete("Video");
   return (["Video", "Image", "Audio"].find((t) => got.has(t)) ?? "image").toLowerCase();
 }
 
-/** API 1.30 (README, Voices): an audio workflow's prompt is spoken, so nothing is expanded. */
+/** Every output node's media wire as (type, source schema), output node id order. */
+function outputSources(nodes: Record<string, Node>, schemas: Schemas) {
+  const out: { type: string; sound?: string }[] = [];
+  for (const id of Object.keys(nodes).sort()) {
+    const n = nodes[id];
+    const ref = n.kind === "output" ? n.in?.media : undefined;
+    if (!ref) continue;
+    const [src, port] = ref.split(".");
+    const s = nodes[src] && schemas[nodes[src].kind];
+    for (const o of s?.outputs ?? []) if (o.name === port) out.push({ type: o.type, sound: s?.sound });
+  }
+  return out;
+}
+
+/** Workflow.sound (API 1.79, README Music and sound; check.py workflow_sound): the `sound` of the first node, output
+ * node id order, whose Audio output an output node takes; undefined without one. */
+export function workflowSound(nodes: Record<string, Node>, schemas: Schemas) {
+  return outputSources(nodes, schemas).find((o) => o.type === "Audio" && o.sound)?.sound;
+}
+
+/** API 1.30 (README, Voices): a voice workflow's prompt is spoken, so nothing is expanded; from 1.79 class voice (or
+ * none) only: music and sound prompts expand as an image workflow's do. */
 const spoken = (nodes: Record<string, Node>, schemas: Schemas) =>
-  workflowMedia(nodes, schemas) === "audio";
+  workflowMedia(nodes, schemas) === "audio" &&
+  [undefined, "voice"].includes(workflowSound(nodes, schemas));
 
 const SPOKEN = "mentions are not read aloud; use a dialogue script";
 
