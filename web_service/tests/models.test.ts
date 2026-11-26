@@ -223,6 +223,18 @@ describe("Create's model data", () => {
     const none = { enums: {}, pins: {} };
     expect(precisionPins(fs, { "model.variant": "base-fp8" }, null)).toEqual(none); // list not known yet
   });
+  it("offers only the variants present on a live host", () => {
+    // Base fp8 alone is on the live mac (alpha.5 item 4): Base is not offered, and the form sends Base fp8 at fp8
+    const gone = { ...base, hosts: base.hosts.map((h) => ({ ...h, state: "missing" as const })) };
+    const fp8Only = { ...withFp8, models: [{ ...qwen, variants: [gone, fp8] }] } as S<"ModelList">;
+    expect(precisionPins(fs, {}, fp8Only)).toEqual({
+      enums: { "model.variant": ["base-fp8"], "model.precision": ["fp8"] },
+      pins: { "model.variant": "base-fp8", "model.precision": "fp8" },
+    });
+    // a dead host's files count for nothing: then no variant is present and all stay offered
+    const dead = { ...fp8Only, hosts: fp8Only.hosts.map((h) => ({ ...h, live: false })) };
+    expect(precisionPins(fs, {}, dead).enums["model.variant"]).toBeUndefined();
+  });
   it("knows a family with no variant present on a live host", () => {
     expect(downloaded(list, qwen.family)).toBe(true); // base present on the live mac
     const dead = { ...list, hosts: list.hosts.map((h) => ({ ...h, live: false })) };

@@ -203,7 +203,10 @@ export function canDelete(v: Pick<Part, "hosts">, host: string): boolean {
   return s === "present" || s === "partial" || s === "mismatch";
 }
 
-/** Create's model node precisions (API 1.33 RunsAt): each precision field whose node's chosen variant loads at only
+/** Create's model node choices. Variants first: a variant field offers only the variants present on a live host
+ * (`enums`; all of them while none is, as the workflow then reads "Not downloaded"), and a form holding another sends
+ * the field's default when present, else the first (`pins`). Then precisions (API 1.33 RunsAt): each precision field
+ * whose node's chosen variant loads at only
  * some of the field's values → those values (`enums`: the tile offers only them, so Base never offers Base fp8's fp8)
  * and, when the form's value is not one of them, the one to send instead (`pins`: the field's default when allowed,
  * else the first, as stored; one value left is always pinned). `raws` is what the form holds; a field it lacks keeps
@@ -216,15 +219,33 @@ export function precisionPins(
   const enums: Record<string, string[]> = {};
   const pins: Record<string, string> = {};
   if (!list) return { enums, pins };
+  const live = new Set(list.hosts.filter((h) => h.live).map((h) => h.host));
+  const variantsOf = (family: string | null | undefined) =>
+    list.models.filter((m) => m.family === family).flatMap((m) => m.variants);
+  for (const f of fields) {
+    if (!f.model || f.param.name !== "variant") continue;
+    const here = new Set(
+      variantsOf(f.family)
+        .filter((v) => v.hosts.some((h) => h.state === "present" && live.has(h.host)))
+        .map((v) => v.id),
+    );
+    const ok = (f.param.enum ?? []).filter((o) => here.has(o));
+    if (!ok.length || ok.length === f.param.enum?.length) continue;
+    enums[f.key] = ok;
+    const cur = String(raws[f.key] ?? f.initial ?? "");
+    if (!ok.includes(cur))
+      pins[f.key] = ok.includes(String(f.param.default)) ? String(f.param.default) : ok[0];
+  }
   for (const f of fields) {
     if (!f.model || f.param.name !== "precision") continue;
     const vf = fields.find((x) => x.node === f.node && x.param.name === "variant");
-    const vid = String((vf && raws[vf.key]) ?? vf?.initial ?? f.siblings?.variant ?? "");
-    const v = list.models
-      .filter((m) => m.family === f.family)
-      .flatMap((m) => m.variants)
-      .find((x) => x.id === vid);
-    const ok = (f.param.enum ?? []).filter((p) => (v?.precisions as string[] | undefined)?.includes(p));
+    const vid = String(
+      (vf && (pins[vf.key] ?? raws[vf.key])) ?? vf?.initial ?? f.siblings?.variant ?? "",
+    );
+    const v = variantsOf(f.family).find((x) => x.id === vid);
+    const ok = (f.param.enum ?? []).filter((p) =>
+      (v?.precisions as string[] | undefined)?.includes(p),
+    );
     if (!ok.length || ok.length === f.param.enum?.length) continue;
     enums[f.key] = ok;
     const cur = String(raws[f.key] ?? f.initial ?? "");
