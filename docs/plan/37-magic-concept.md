@@ -31,6 +31,11 @@ e227a7ee) is replaced.
      (`@Shot 1 · last frame`);
    - storyboard: a block can start as a board (a quick image, its @characters, a note) lined up with the shots, then
      Generate from board.
+   - a storyboard frame, opened (2026-11-26): the picture large in a style (Sketch, Rough, Full) with its takes, Redraw
+     or drop an image; who and where as @ picks whose pictures feed it; a note; framing (shot size, angle, move); the
+     length of the slot the shot fills. Generate from board makes the shot under it (picture as first frame, the rest as
+     its prompt and settings, editable before it runs) and stays tied: a change marks the shot out of date. Frames never
+     go to the Timeline; the Storyboard lane can be hidden.
 6. **Move and join** (owner: "i should be able to drag and move nodes around, transition etc will be new point in that
    view"): drag blocks in time and across lanes, snapping to edges, the playhead and the ruler; insert or overwrite; move
    several together. Transitions are points where two blocks meet (cut, dissolve, fade, wipe, a generated morph), and at a

@@ -230,6 +230,12 @@ nav button[aria-label="Magic"] svg{background:linear-gradient(155deg,#f2a8ff,#8a
 .pbar{position:absolute;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;padding:8px 8px 8px 16px;border-radius:18px 18px 18px 8px;background:var(--s2);box-shadow:0 0 0 1.5px var(--a1),0 24px 40px -12px #000;z-index:12;white-space:nowrap;font-size:13px}
 .toast{display:flex;align-items:center;gap:10px;padding:10px 10px 10px 14px;border-radius:16px 16px 16px 7px;background:var(--t1);color:var(--g);font-size:13px;font-weight:500;box-shadow:0 20px 36px -10px #000}
 .toast button{height:30px;padding:0 12px;border-radius:9px;border:0;background:var(--g);color:var(--t1);font-size:12px;font-weight:600}
+.sheet7{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:14px;padding:14px;border-radius:32px 32px 32px 12px;background:var(--s1);box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 28px 48px -18px #000}
+.skl{aspect-ratio:16/9;border-radius:12px;background-size:cover;background-position:center;filter:grayscale(1) contrast(1.9) brightness(1.25);opacity:.9;box-shadow:inset 0 0 0 1px rgba(255,255,255,.4)}
+.tk7{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.drop{display:flex;align-items:center;justify-content:center;gap:8px;height:44px;border-radius:12px;box-shadow:inset 0 0 0 1.5px var(--dash);font-size:12px;color:var(--t2)}
+.fld>.seg{align-self:flex-start}
+.tied{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:12px;background:color-mix(in srgb,#86cdea 14%,var(--s2));box-shadow:inset 0 0 0 1px #86cdea;font-size:12px}
 </style>
 </helmet>
 <div data-theme="{{theme}}" style="background: var(--g); color: var(--t1); font-family: Inter, system-ui, sans-serif; font-size: 14px; line-height: 20px; width: 1440px">
@@ -451,10 +457,41 @@ nav button[aria-label="Magic"] svg{background:linear-gradient(155deg,#f2a8ff,#8a
 </div>
 <p class="note">Owner: <span class="q">"separate with send to timeline"</span>, then it always makes a new sequence and never touches an existing one, so there is nothing to merge. The confirm says what goes; the toast names the new sequence and opens it. Back in Magic, the board is unchanged.</p>
 </section>
+<section class="frame" aria-label="A storyboard frame opened">
+<h2 class="fh">7 · A storyboard frame opened</h2>
+<div class="sheet7">
+<div class="shd"><span class="kb k-board" style="font-size:11px;line-height:18px;padding:0 7px">Board</span><h2>Frame 1 · waits, rain</h2><span class="mono" style="font-size:12px;color:var(--t2)">Storyboard · 0:00.0 – 0:08.0 · 8.0 s</span><span class="st done">Done</span><span style="flex-grow:1"></span><button class="chip">Close</button></div>
+<div class="pane mid">
+<div style="display:flex;align-items:center;gap:10px"><h3>Picture</h3><span style="flex-grow:1"></span><div class="seg" role="group" aria-label="Style"><button aria-pressed="true">Sketch</button><button>Rough</button><button>Full</button></div><button class="chip sm"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72"></path><path d="m14 7 3 3"></path></svg>Redraw</button></div>
+<div class="skl" role="img" aria-label="Frame 1, sketch of Mara at the bus stop" style="background-image:url(img/mara-bus.jpg)"></div>
+<h3>Takes</h3>
+<div class="tk7"><div class="take pk"><div class="skl" style="border-radius:8px;background-image:url(img/mara-bus.jpg)"></div><div class="row"><b>Take 2</b><span class="pin" title="Pinned take"><svg aria-hidden="true" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M12 17v5"></path><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"></path></svg></span><span style="color:var(--a1);font-size:11px;font-weight:600">Picked</span></div></div><div class="take"><div class="skl" style="border-radius:8px;background-image:url(img/mara-street.jpg)"></div><div class="row"><b>Take 1</b></div></div><div class="take"><div class="skl" style="border-radius:8px;background-image:url(img/mara-looks-back.jpg)"></div><div class="row"><b>Take 3</b></div></div></div>
+<div class="drop"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M12 5v14M5 12h14"></path></svg>or drop an image</div>
+</div>
+<div class="pane">
+<h3>Who and where · their pictures feed the frame</h3>
+<div class="g2">
+<div class="inp"><span class="pic pnb" style="background-image:url(img/mara-portrait.jpg)"></span><span><b style="font-size:13px">@mara</b><small>Character</small></span></div>
+<div class="inp"><span class="pic pnb" style="background-image:url(img/mara-street.jpg)"></span><span><b style="font-size:13px">@bus stop</b><small>Place</small></span></div>
+</div>
+<div class="fld"><span class="lb">Note</span><div class="pr" style="min-height:0">Mara waits under the shelter, rain on the glass</div></div>
+<h3>Framing</h3>
+<div class="fld"><span class="lb">Shot size</span><div class="seg"><button aria-pressed="true">Wide</button><button>Medium</button><button>Close-up</button></div></div>
+<div class="g2">
+<div class="fld"><span class="lb">Angle</span><div class="seg"><button aria-pressed="true">Eye level</button><button>Low</button><button>High</button></div></div>
+<div class="fld"><span class="lb">Move</span><div class="seg"><button>Still</button><button aria-pressed="true">Push in</button><button>Pan</button></div></div>
+</div>
+<div class="fld"><span class="lb">Length · the slot the shot fills</span><span class="box mono" style="width:110px">8.0 s</span></div>
+<div class="tied"><span class="lkm" title="Tied"><svg aria-hidden="true" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg></span><span>Tied to <b>Shot 1</b> · a change here marks Shot 1 out of date</span></div>
+<div class="foot" style="margin-top:auto"><span style="font-size:12px;line-height:16px;color:var(--t2);flex:1 1 200px">Makes Shot 1 under it: this picture as its first frame, the note, @picks, framing and length as its prompt and settings. You can edit before it runs.</span><button class="key sm">Generate from board</button></div>
+</div>
+</div>
+<p class="note">Double-click a storyboard block to open it. Left: the picture, large, in the chosen style, its takes with the picked one marked, Redraw, or drop your own image. Right: who and where (their pictures feed the frame), the note, the framing and the length. Generate from board makes the shot under it and stays tied to it. Storyboard frames never go to the Timeline: Send to Timeline takes shots and sound only. The Storyboard lane can be hidden. The Assistant makes frames by itself (small); turning them into shots asks above your limit.</p>
+</section>
 </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":5140}}'>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","default":"forest","options":["forest","ocean","aubergine","espresso","oxblood","indigo","parchment"]},"$preview":{"width":1440,"height":6134}}'>
 class Component extends DCLogic {
 state = { theme: null };
 renderVals() {
